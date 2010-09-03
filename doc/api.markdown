@@ -1815,7 +1815,15 @@ you can use the `require('querystring').parse` function, or pass
 
 ### request.headers
 
-Read only.
+The request's headers as a JavaScript object. The object's keys are
+lowercased header names. Read only.
+
+
+### request.rawHeaders
+
+The request's headers as a string. Each header is followed by a CRLF
+(`'\r\n'`). Read only.
+
 
 ### request.httpVersion
 
@@ -1874,6 +1882,13 @@ Example:
 
 This method must only be called once on a message and it must
 be called before `response.end()` is called.
+
+### response.rawHeaders
+
+The `response.rawHeaders` property allows you to specify the HTTP
+response headers as a string. Each header must be followed by a CRLF
+(`'\r\n'`). Set this property before calling `response.writeHead`.
+
 
 ### response.write(chunk, encoding='utf8')
 
