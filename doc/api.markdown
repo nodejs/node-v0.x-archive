@@ -1880,14 +1880,13 @@ Example:
       'Content-Type': 'text/plain'
     });
 
+The `headers` argument may be either a JavaScript object, as
+illustrated above, or a string of raw headers. In the case of a
+string, each header must be followed by a CRLF (`'\r\n'`). This is
+useful for proxying the `rawHeaders` property from another response.
+
 This method must only be called once on a message and it must
 be called before `response.end()` is called.
-
-### response.rawHeaders
-
-The `response.rawHeaders` property allows you to specify the HTTP
-response headers as a string. Each header must be followed by a CRLF
-(`'\r\n'`). Set this property before calling `response.writeHead`.
 
 
 ### response.write(chunk, encoding='utf8')
@@ -1976,15 +1975,18 @@ stream is not established until a request is issued.
 
 If the connection is secure, but no explicit CA certificates are passed in the credentials, then node.js will default to the publicly trusted list of CA certificates, as given in http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt
 
-### client.request(method='GET', path, [request_headers])
+### client.request(method='GET', path, [requestHeaders])
 
 Issues a request; if necessary establishes stream. Returns a `http.ClientRequest` instance.
 
 `method` is optional and defaults to 'GET' if omitted.
 
-`request_headers` is optional.
-Additional request headers might be added internally
-by Node. Returns a `ClientRequest` object.
+`requestHeaders` is optional, and may be either a JavaScript object,
+or a string of raw headers. In the case of a string, each header must
+be followed by a CRLF (`'\r\n'`). String headers are useful for
+proxying the `rawHeaders` property from another request.
+
+Additional request headers might be added internally by Node.
 
 Do remember to include the `Content-Length` header if you
 plan on sending a body. If you plan on streaming the body, perhaps
