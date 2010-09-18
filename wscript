@@ -339,7 +339,7 @@ def v8_cmd(bld, variant):
   else:
     snapshot = ""
 
-  cmd_R = 'python "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s library=static %s'
+  cmd_R = 'PYTHONPATH=; python "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s library=static %s'
 
   cmd = cmd_R % ( scons
                 , Options.options.jobs
