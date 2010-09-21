@@ -18,12 +18,7 @@ blddir = 'build'
 jobs=1
 if os.environ.has_key('JOBS'):
   jobs = int(os.environ['JOBS'])
-else:
-  try:
-    import multiprocessing
-    jobs = multiprocessing.cpu_count()
-  except:
-    pass
+
 
 def set_options(opt):
   # the gcc module provides a --debug-level option
@@ -187,6 +182,10 @@ def configure(conf):
       if libcrypto and libssl:
         conf.env["USE_OPENSSL"] = Options.options.use_openssl = True
         conf.env.append_value("CXXFLAGS", "-DHAVE_OPENSSL=1")
+      else:
+        conf.fatal("Could not autodetect OpenSSL support. " +
+                   "Make sure OpenSSL development packages are installed. " +
+                   "Use configure --without-ssl to disable this message.")
   else:
     Options.options.use_openssl = conf.env["USE_OPENSSL"] = False
 
@@ -474,6 +473,7 @@ def build(bld):
   node.install_path = '${PREFIX}/bin'
   node.chmod = 0755
   node.source = """
+    src/node_main.cc
     src/node.cc
     src/node_buffer.cc
     src/node_extensions.cc

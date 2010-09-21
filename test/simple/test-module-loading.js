@@ -1,6 +1,7 @@
 common = require("../common");
 assert = common.assert
-var path = require('path');
+var path = require('path'),
+    fs   = require('fs');
 
 common.debug("load test-module-loading.js");
 
@@ -64,38 +65,24 @@ try {
   assert.equal("blah", e.message);
 }
 
-var errorThrownAsync = false;
-require.async("../fixtures/throws_error1", function(err, a) {
-  if (err) {
-    errorThrownAsync = true;
-    assert.equal("blah", err.message);
-  }
-});
-
 assert.equal(require('path').dirname(__filename), __dirname);
 
-var asyncRun = false;
-require.async('../fixtures/a1', function (err, a) {
-  if (err) throw err;
-  assert.equal("A", a.A());
-  asyncRun = true;
-});
-
-common.debug('load custom file types with registerExtension');
-require.registerExtension('.test', function(content) {
+common.debug('load custom file types with extensions');
+require.extensions['.test'] = function (module, filename) {
+  var content = fs.readFileSync(filename).toString();
   assert.equal("this is custom source\n", content);
-
-  return content.replace("this is custom source", "exports.test = 'passed'");
-});
+  content = content.replace("this is custom source", "exports.test = 'passed'");
+  module._compile(content, filename);
+};
 
 assert.equal(require('../fixtures/registerExt').test, "passed");
 
 common.debug('load custom file types that return non-strings');
-require.registerExtension('.test', function(content) {
-  return {
+require.extensions['.test'] = function (module, filename) {
+  module.exports = {
     custom: 'passed'
   };
-});
+};
 
 assert.equal(require('../fixtures/registerExt2').custom, 'passed');
 common.debug("load modules by absolute id, then change require.paths, and load another module with the same absolute id.");
@@ -113,24 +100,14 @@ try {
   assert.equal(err.message, "Cannot find module '../fixtures/empty'");
 }
 
-var asyncRequireDir = false;
-require.async("../fixtures/empty", function (err, a) {
-  assert.ok(err);
-
-  if (err) {
-    asyncRequireDir = true;
-    assert.equal(err.message, "Cannot find module '../fixtures/empty'");
-  }
-});
-
 // Check load order is as expected
 common.debug('load order');
 
 var loadOrder = '../fixtures/module-load-order/',
     msg       = "Load order incorrect.";
 
-require.registerExtension('.reg',  function(content) { return content; });
-require.registerExtension('.reg2', function(content) { return content; });
+require.extensions['.reg'] = require.extensions['.js'];
+require.extensions['.reg2'] = require.extensions['.js'];
 
 assert.equal(require(loadOrder + 'file1').file1, 'file1',            msg);
 assert.equal(require(loadOrder + 'file2').file2, 'file2.js',         msg);
@@ -168,12 +145,6 @@ process.addListener("exit", function () {
   assert.equal("D done", d2.D());
 
   assert.equal(true, errorThrown);
-
-  assert.equal(true, asyncRun);
-
-  assert.equal(true, errorThrownAsync);
-
-  assert.equal(true, asyncRequireDir);
 
   console.log("exit");
 });

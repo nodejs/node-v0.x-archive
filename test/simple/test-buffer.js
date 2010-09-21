@@ -312,3 +312,14 @@ for (i = 0; i < l; i++) {
 sb = b.toString();
 assert.equal(sb.length, s.length);
 assert.equal(sb, s);
+
+
+// Single argument slice
+b = new Buffer("abcde");
+assert.equal("bcde", b.slice(1).toString());
+
+// byte length
+assert.equal(14, Buffer.byteLength("Il était tué"));
+assert.equal(14, Buffer.byteLength("Il était tué", "utf8"));
+assert.equal(12, Buffer.byteLength("Il était tué", "ascii"));
+assert.equal(12, Buffer.byteLength("Il était tué", "binary"));

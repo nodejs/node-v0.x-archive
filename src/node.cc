@@ -994,17 +994,6 @@ Local<Value> ExecuteString(Local<String> source, Local<Value> filename) {
   return scope.Close(result);
 }
 
-static Handle<Value> ByteLength(const Arguments& args) {
-  HandleScope scope;
-
-  if (args.Length() < 1 || !args[0]->IsString()) {
-    return ThrowException(Exception::Error(String::New("Bad argument.")));
-  }
-
-  Local<Integer> length = Integer::New(DecodeBytes(args[0], ParseEncoding(args[1], UTF8)));
-
-  return scope.Close(length);
-}
 
 static Handle<Value> Loop(const Arguments& args) {
   HandleScope scope;
@@ -1018,19 +1007,6 @@ static Handle<Value> Loop(const Arguments& args) {
   return Undefined();
 }
 
-static Handle<Value> Unloop(const Arguments& args) {
-  fprintf(stderr, "Deprecation: Don't use process.unloop(). It will be removed soon.\n");
-  HandleScope scope;
-  int how = EVUNLOOP_ONE;
-  if (args[0]->IsString()) {
-    String::Utf8Value how_s(args[0]->ToString());
-    if (0 == strcmp(*how_s, "all")) {
-      how = EVUNLOOP_ALL;
-    }
-  }
-  ev_unloop(EV_DEFAULT_ how);
-  return Undefined();
-}
 
 static Handle<Value> Chdir(const Arguments& args) {
   HandleScope scope;
@@ -1237,39 +1213,22 @@ v8::Handle<v8::Value> MemoryUsage(const v8::Arguments& args) {
 }
 
 
-v8::Handle<v8::Value> Kill(const v8::Arguments& args) {
+Handle<Value> Kill(const Arguments& args) {
   HandleScope scope;
 
-  if (args.Length() < 1 || !args[0]->IsNumber()) {
+  if (args.Length() != 2 || !args[0]->IsNumber() || !args[1]->IsNumber()) {
     return ThrowException(Exception::Error(String::New("Bad argument.")));
   }
 
   pid_t pid = args[0]->IntegerValue();
-
-  int sig = SIGTERM;
-
-  if (args.Length() >= 2) {
-    if (args[1]->IsNumber()) {
-      sig = args[1]->Int32Value();
-    } else if (args[1]->IsString()) {
-      Local<String> signame = args[1]->ToString();
-
-      Local<Value> sig_v = process->Get(signame);
-      if (!sig_v->IsNumber()) {
-        return ThrowException(Exception::Error(String::New("Unknown signal")));
-      }
-      sig = sig_v->Int32Value();
-    }
-  }
-
+  int sig = args[1]->Int32Value();
   int r = kill(pid, sig);
 
-  if (r != 0) {
-    return ThrowException(Exception::Error(String::New(strerror(errno))));
-  }
+  if (r != 0) return ThrowException(ErrnoException(errno, "kill"));
 
   return Undefined();
 }
+
 
 typedef void (*extInit)(Handle<Object> exports);
 
@@ -1483,11 +1442,27 @@ static Handle<Value> Binding(const Arguments& args) {
 
   if (binding_cache->Has(module)) {
     exports = binding_cache->Get(module)->ToObject();
-  }
-  else if ((modp = get_builtin_module(*module_v)) != NULL) {
+
+  } else if ((modp = get_builtin_module(*module_v)) != NULL) {
     exports = Object::New();
     modp->register_func(exports);
     binding_cache->Set(module, exports);
+
+  } else if (!strcmp(*module_v, "constants")) {
+    exports = Object::New();
+    DefineConstants(exports);
+    binding_cache->Set(module, exports);
+
+  } else if (!strcmp(*module_v, "io_watcher")) {
+    exports = Object::New();
+    IOWatcher::Initialize(exports);
+    binding_cache->Set(module, exports);
+
+  } else if (!strcmp(*module_v, "timer")) {
+    exports = Object::New();
+    Timer::Initialize(exports);
+    binding_cache->Set(module, exports);
+
   } else if (!strcmp(*module_v, "natives")) {
     exports = Object::New();
     // Explicitly define native sources.
@@ -1495,6 +1470,7 @@ static Handle<Value> Binding(const Arguments& args) {
     exports->Set(String::New("assert"),       String::New(native_assert));
     exports->Set(String::New("buffer"),       String::New(native_buffer));
     exports->Set(String::New("child_process"),String::New(native_child_process));
+    exports->Set(String::New("constants"),    String::New(native_constants));
     exports->Set(String::New("dgram"),        String::New(native_dgram));
     exports->Set(String::New("dns"),          String::New(native_dns));
     exports->Set(String::New("events"),       String::New(native_events));
@@ -1516,6 +1492,7 @@ static Handle<Value> Binding(const Arguments& args) {
     exports->Set(String::New("string_decoder"), String::New(native_string_decoder));
     binding_cache->Set(module, exports);
   } else {
+
     return ThrowException(Exception::Error(String::New("No such module")));
   }
 
@@ -1553,11 +1530,6 @@ static void Load(int argc, char *argv[]) {
   process->SetAccessor(String::New("title"),
                        ProcessTitleGetter,
                        ProcessTitleSetter);
-
-
-  // Add a reference to the global object
-  Local<Object> global = v8::Context::GetCurrent()->Global();
-  process->Set(String::NewSymbol("global"), global);
 
   // process.version
   process->Set(String::NewSymbol("version"), String::New(NODE_VERSION));
@@ -1624,9 +1596,7 @@ static void Load(int argc, char *argv[]) {
 
   // define various internal methods
   NODE_SET_METHOD(process, "loop", Loop);
-  NODE_SET_METHOD(process, "unloop", Unloop);
   NODE_SET_METHOD(process, "compile", Compile);
-  NODE_SET_METHOD(process, "_byteLength", ByteLength);
   NODE_SET_METHOD(process, "_needTickCallback", NeedTickCallback);
   NODE_SET_METHOD(process, "reallyExit", Exit);
   NODE_SET_METHOD(process, "chdir", Chdir);
@@ -1639,7 +1609,7 @@ static void Load(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "umask", Umask);
   NODE_SET_METHOD(process, "dlopen", DLOpen);
-  NODE_SET_METHOD(process, "kill", Kill);
+  NODE_SET_METHOD(process, "_kill", Kill);
   NODE_SET_METHOD(process, "memoryUsage", MemoryUsage);
 
   NODE_SET_METHOD(process, "binding", Binding);
@@ -1647,15 +1617,6 @@ static void Load(int argc, char *argv[]) {
   // Assign the EventEmitter. It was created in main().
   process->Set(String::NewSymbol("EventEmitter"),
                EventEmitter::constructor_template->GetFunction());
-
-
-  // Initialize the C++ modules..................filename of module
-  IOWatcher::Initialize(process);              // io_watcher.cc
-  // Not in use at the moment.
-  //IdleWatcher::Initialize(process);            // idle_watcher.cc
-  Timer::Initialize(process);                  // timer.cc
-  // coverity[stack_use_callee]
-  DefineConstants(process);                    // constants.cc
 
   // Compile, execute the src/node.js file. (Which was included as static C
   // string in node_natives.h. 'natve_node' is the string containing that
@@ -1682,6 +1643,8 @@ static void Load(int argc, char *argv[]) {
   // who do not like how 'src/node.js' setups the module system but do like
   // Node's I/O bindings may want to replace 'f' with their own function.
 
+  // Add a reference to the global object
+  Local<Object> global = v8::Context::GetCurrent()->Global();
   Local<Value> args[1] = { Local<Value>::New(process) };
 
   f->Call(global, 1, args);
@@ -1781,10 +1744,7 @@ static void AtExit() {
 }
 
 
-}  // namespace node
-
-
-int main(int argc, char *argv[]) {
+int Start(int argc, char *argv[]) {
   // Hack aroung with the argv pointer. Used for process.title = "blah".
   argv = node::OS::SetupArgs(argc, argv);
 
@@ -1819,7 +1779,7 @@ int main(int argc, char *argv[]) {
   // TODO(Ryan) I'm experiencing abnormally high load using Solaris's
   // EVBACKEND_PORT. Temporarally forcing select() until I debug.
   ev_default_loop(EVBACKEND_POLL);
-#elif defined(__APPLE_CC__) && __APPLE_CC__ >= 5659
+#elif defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
   ev_default_loop(EVBACKEND_KQUEUE);
 #else
   ev_default_loop(EVFLAG_AUTO);
@@ -1916,3 +1876,6 @@ int main(int argc, char *argv[]) {
 #endif  // NDEBUG
   return 0;
 }
+
+
+}  // namespace node
