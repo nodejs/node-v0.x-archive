@@ -2283,12 +2283,18 @@ the stream was closed due to a transmission
 error.
 
 
-### net.createConnection(port, host='127.0.0.1')
+### net.createConnection(port, host='127.0.0.1', options = {})
 
 Construct a new stream object and opens a stream to the specified `port`
 and `host`. If the second parameter is omitted, localhost is assumed.
 
 When the stream is established the `'connect'` event will be emitted.
+
+With the options it is possible so bind the socket to  to a specified 
+address:
+
+net.createConnection(80, "www.joyent.net", { bind: { host: "localhost", port: 4711 } })
+
 
 ### stream.connect(port, host='127.0.0.1')
 
