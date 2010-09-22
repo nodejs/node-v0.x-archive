@@ -27,7 +27,6 @@
 
 import test
 import os
-import shutil
 from shutil import rmtree
 from os import mkdir
 from os.path import join, dirname, exists
@@ -47,12 +46,14 @@ class SimpleTestCase(test.TestCase):
     self.mode = mode
   
   def tearDown(self):
+    super(SimpleTestCase, self).tearDown()
     try:
       rmtree(join(dirname(self.config.root), 'tmp'))
     except:
       pass
 
   def setUp(self):
+    super(SimpleTestCase, self).setUp()
     try:
       mkdir(join(dirname(self.config.root), 'tmp'))
     except:
