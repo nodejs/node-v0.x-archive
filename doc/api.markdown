@@ -1793,7 +1793,7 @@ Read only.
 
 ### request.trailers
 
-Read only; HTTP trailers (if present).
+Read only; HTTP trailers (if present). Only populated after the 'end' event.
 
 ### request.httpVersion
 
@@ -2099,7 +2099,7 @@ The response headers object.
 
 ### response.trailers
 
-The response trailers object.
+The response trailers object. Only populated after the 'end' event.
 
 ### response.setEncoding(encoding=null)
 
