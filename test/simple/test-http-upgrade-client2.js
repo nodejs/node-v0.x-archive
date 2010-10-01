@@ -28,7 +28,11 @@ function upgradeRequest(fn) {
     wasUpgrade = true;
     
     client.removeListener('upgrade', onUpgrade);
-    socket.end();    
+    socket.end();
+    
+    // Stop propagation and notify node, that "upgrade" event was caught
+    // Otherwise socket will be destroyed
+    return false;
   }
   client.on('upgrade', onUpgrade);
   

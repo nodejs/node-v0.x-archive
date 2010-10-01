@@ -14,6 +14,11 @@ server.addListener('upgrade', function (req, socket, upgradeHead) {
   // test that throwing an error from upgrade gets
   // is uncaught
   throw new Error('upgrade error');
+  
+  // Stop propagation and notify node, that "upgrade" event was caught
+  // Otherwise socket will be destroyed
+  // But actually this won't be called
+  return false;
 });
 
 gotError = false;

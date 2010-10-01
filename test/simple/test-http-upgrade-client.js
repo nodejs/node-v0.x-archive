@@ -46,6 +46,10 @@ hc.addListener('upgrade', function(res, socket, upgradeHead) {
     srv.close();
 
     gotUpgrade = true;
+    
+    // Stop propagation and notify node, that "upgrade" event was caught
+    // Otherwise socket will be destroyed
+    return false;
 });
 hc.request('GET', '/').end();
 

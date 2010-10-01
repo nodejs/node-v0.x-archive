@@ -45,6 +45,10 @@ function testServer(){
         socket.write(data, "utf8");
       }
     };
+    
+    // Stop propagation and notify node, that "upgrade" event was caught
+    // Otherwise socket will be destroyed
+    return false;
   });
 };
 
