@@ -1617,8 +1617,12 @@ class Hmac : public ObjectWrap {
       fprintf(stderr, "node-crypto : Unknown message digest %s\n", hashType);
       return false;
     }
+
+    ENGINE_load_builtin_engines();
+    ENGINE_register_all_complete();
+
     HMAC_CTX_init(&ctx);
-    HMAC_Init(&ctx, key, key_len, md);
+    HMAC_Init_ex(&ctx, key, key_len, md, NULL);
     initialised_ = true;
     return true;
 

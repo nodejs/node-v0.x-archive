@@ -11,6 +11,7 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 #include <openssl/hmac.h>
+#include <openssl/engine.h>
 
 #define EVP_F_EVP_DECRYPTFINAL 101
 
