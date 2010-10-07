@@ -80,6 +80,8 @@ var module = (function () {
     this.loaded = false;
     this.exited = false;
     this.children = [];
+    
+    this.moduleCache = moduleCache;
   };
 
   function createInternalModule (id, constructor) {
