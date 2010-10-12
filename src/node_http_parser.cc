@@ -56,6 +56,8 @@ static Persistent<String> report_sym;
 static Persistent<String> mkactivity_sym;
 static Persistent<String> checkout_sym;
 static Persistent<String> merge_sym;
+static Persistent<String> msearch_sym;
+static Persistent<String> notify_sym;
 static Persistent<String> unknown_method_sym;
 
 static Persistent<String> method_sym;
@@ -138,6 +140,8 @@ method_to_str(unsigned short m) {
     case HTTP_MKACTIVITY: return mkactivity_sym;
     case HTTP_CHECKOUT:   return checkout_sym;
     case HTTP_MERGE:      return merge_sym;
+    case HTTP_MSEARCH:    return msearch_sym;
+    case HTTP_NOTIFY:     return notify_sym;
     default:              return unknown_method_sym;
   }
 }
@@ -462,6 +466,8 @@ void InitHttpParser(Handle<Object> target) {
   mkactivity_sym = NODE_PSYMBOL("MKACTIVITY");
   checkout_sym = NODE_PSYMBOL("CHECKOUT");
   merge_sym = NODE_PSYMBOL("MERGE");
+  msearch_sym = NODE_PSYMBOL("M-SEARCH");
+  notify_sym = NODE_PSYMBOL("NOTIFY");
   unknown_method_sym = NODE_PSYMBOL("UNKNOWN_METHOD");
 
   method_sym = NODE_PSYMBOL("method");
