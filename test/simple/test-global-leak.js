@@ -7,6 +7,7 @@ var knownGlobals = [ setTimeout
                    , console
                    , Buffer
                    , process
+				   , define
                    , global
                    ];
 
