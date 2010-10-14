@@ -238,8 +238,17 @@ var module = (function () {
     return module.exports;
   };
 
+  // these variables are used to track current module instantiation for define()
   var currentModule = null;
   var currentRequire;
+  // this function is based on:
+  // http://wiki.commonjs.org/wiki/Modules/AsynchronousDefinition
+  // currently there are two possible API paths under consideration, define() and require.def(),
+  // but it appears define() has more support because it avoids any namespace conflict with
+  // browser based module loaders like RequireJS that use the "require" global (which is
+  // not a part of CommonJS, CommonJS only defines the "require" free variable), it is
+  // easier to type, and it is more readable (avoids abbreviation). Support for either define()
+  // or require.def() can easily be removed, but currently both are allowed.
   // this function is intentionally designated as a global for several reasons:
   // 1. This will not interfere with existing that defines a local variable "define"
   // 2. This more closely follows the browser-implementations for which the AMD/define() API was 
@@ -318,9 +327,9 @@ var module = (function () {
       return loadModule(path, self);
     }
   
-  // record the current module and require for use by define()
-  currentModule = this;
-  currentRequire = require;
+    // record the current module and require for use by define()
+    currentModule = this;
+    currentRequire = require;
     require.paths = modulePaths;
     require.main = process.mainModule;
     // Enable support to add extra extension types
@@ -328,8 +337,8 @@ var module = (function () {
     // TODO: Insert depreciation warning
     require.registerExtension = registerExtension;
     require.cache = moduleCache;
-  // Allow module definitions to be used from require.def() for legacy 
-  // or define(), assuming that is direction the API will go. 
+    // Allow module definitions to be used from require.def() for legacy 
+    // or define(), assuming that is direction the API will go. 
     require.def = global.define;
 
     var dirname = path.dirname(filename);
@@ -379,7 +388,7 @@ var module = (function () {
       }
       compiledWrapper.apply(self.exports, [self.exports, require, self, filename, dirname]);
     }
-  currentModule = null;
+    currentModule = null;
   };
 
 
