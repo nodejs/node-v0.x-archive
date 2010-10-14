@@ -238,6 +238,62 @@ var module = (function () {
     return module.exports;
   };
 
+  var currentModule = null;
+  var currentRequire;
+  // this function is intentionally designated as a global for several reasons:
+  // 1. This will not interfere with existing that defines a local variable "define"
+  // 2. This more closely follows the browser-implementations for which the AMD/define() API was 
+  //    designed to work with. Specifically define() can only be called during the module initial execution.
+  // 3. define could potentially be overriden/extended with alternate behavior without writing node.js.
+  global.define = function (id, injects, factory) {
+    if (currentModule == null) {
+	  throw new Error("define may only be called during module factory initiation");
+	}
+	var module = currentModule;
+	var require = currentRequire;
+	  if (!factory) {
+	    // two or less arguments
+	    factory = injects;
+		if (factory) {
+		  // two args
+		  if (typeof id === "string") {
+		    if (id !== module.id) {
+			  throw new Error("Can not assign module to a different id than the current file");
+			}
+			// default injects
+			injects = ["require", "exports", "module"];
+		  }
+		  else{
+		    // anonymous, deps included
+			injects = id;
+		  }
+		}
+		else {
+		  // only one arg, just the factory
+		  factory = id;
+		  injects = ["require", "exports", "module"];
+		}
+	  }
+	  if (typeof factory !== "function"){
+	    // we can just provide a plain object
+	    return module.exports = factory;
+	  }
+	  var returned = factory.apply(module.exports, injects.map(function(injection) {
+	    switch (injection) {
+		  // check for CommonJS injection variables
+		  case "require": return require;
+		  case "exports": return module.exports;
+		  case "module": return module;
+		  default:
+		    // a module dependency
+		    return require(injection);
+		}
+	  }));
+	  if(returned){
+	    // since AMD encapsulates a function/callback, it can allow the factory to return the exports.
+	    module.exports = returned;
+	  }
+	}
 
   Module.prototype.load = function (filename) {
     debug("load " + JSON.stringify(filename) + " for module " + JSON.stringify(this.id));
@@ -261,7 +317,9 @@ var module = (function () {
     function require (path) {
       return loadModule(path, self);
     }
-
+	
+	currentModule = this;
+	currentRequire = require;
     require.paths = modulePaths;
     require.main = process.mainModule;
     // Enable support to add extra extension types
@@ -269,6 +327,7 @@ var module = (function () {
     // TODO: Insert depreciation warning
     require.registerExtension = registerExtension;
     require.cache = moduleCache;
+    require.def = global.define;
 
     var dirname = path.dirname(filename);
 
@@ -283,6 +342,7 @@ var module = (function () {
           sandbox[k] = global[k];
         }
         sandbox.require     = require;
+        sandbox.define      = define;
         sandbox.exports     = self.exports;
         sandbox.__filename  = filename;
         sandbox.__dirname   = dirname;
@@ -296,6 +356,7 @@ var module = (function () {
         debug('load root module');
         // root module
         global.require    = require;
+        global.define     = define;
         global.exports    = self.exports;
         global.__filename = filename;
         global.__dirname  = dirname;
@@ -315,6 +376,7 @@ var module = (function () {
       }
       compiledWrapper.apply(self.exports, [self.exports, require, self, filename, dirname]);
     }
+	currentModule = null;
   };
 
 

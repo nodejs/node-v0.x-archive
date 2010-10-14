@@ -65,6 +65,15 @@ try {
   assert.equal("blah", e.message);
 }
 
+// test AMD module API
+assert.equal(require('../fixtures/define/anon').theAnswer, 42);
+assert.equal(require('../fixtures/define/anon').five, 5);
+assert.equal(require('../fixtures/define/wrapped').five, 5);
+assert.equal(require('../fixtures/define/wrapped').exports, require('../fixtures/define/wrapped'));
+assert.equal(require('../fixtures/define/full').twiceTheAnswer, 84);
+assert.equal(require('../fixtures/define/data').five, 5);
+
+
 assert.equal(require('path').dirname(__filename), __dirname);
 
 common.debug('load custom file types with extensions');
