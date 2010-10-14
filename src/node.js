@@ -262,7 +262,13 @@ var module = (function () {
       return loadModule(path, self);
     }
 
-    require.paths = modulePaths;
+    var parts = filename.split('/');
+    var paths = [];
+    for (var i = 0 , l = parts.length - 1 ; i < l ; i ++ ) {
+      parts.pop();
+      paths.push(parts.join('/') + '/.node_libraries');
+    }
+    require.paths = paths.concat(modulePaths);
     require.main = process.mainModule;
     // Enable support to add extra extension types
     require.extensions = extensions;
