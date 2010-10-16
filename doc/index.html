@@ -127,16 +127,16 @@ make install</pre>
         client connections can be handled concurrently.  Node tells the
         operating system (through <code>epoll</code>, <code>kqueue</code>,
         <code class="sh_none">/dev/poll</code>, or <code>select</code>)
-        that it should be notified when a new connection is made, and 
+        that it should be notified when a new connection is made, and
         then it goes to sleep. If someone new connects, then it executes
         the callback.  Each connection is only a small heap allocation.
       </p>
 
       <p>
         This is in contrast to today's more common concurrency model where
-        OS threads are employed. Thread-based networking is relatively 
+        OS threads are employed. Thread-based networking is relatively
         inefficient and very difficult to use.  See:
-        <a href="http://www.kegel.com/c10k.html">this</a> and 
+        <a href="http://www.kegel.com/c10k.html">this</a> and
         <a href="http://bulk.fefe.de/scalable-networking.pdf">this.</a>
 
         Node will show much better memory efficiency under high-loads
@@ -258,7 +258,7 @@ git config --global user.name "Ryan Dahl"
       </p>
 
       <p>
-        Before your code your code can be accepted you have to sign the
+        Before your code can be accepted you have to sign the
         <a href="http://nodejs.org/cla.html">contributor license agreement</a>.
       </p>
 
