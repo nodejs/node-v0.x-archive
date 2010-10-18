@@ -220,11 +220,19 @@ Handle<Value> Buffer::New(const Arguments &args) {
 
     TryCatch try_catch;
 
-    write->Call(args.This(), 2, argv);
+    Local<Value> length_val = write->Call(args.This(), 2, argv);
+
 
     if (try_catch.HasCaught()) {
       FatalException(try_catch);
     }
+
+    assert(length_val->IsInt32());
+    size_t length = static_cast<size_t>(length_val->Int32Value());
+    assert(length <= buffer->length());
+    buffer->length_ = length;
+    assert(buffer->length() == length);
+    args.This()->Set(length_symbol, length_val);
   }
 
   return args.This();
@@ -317,15 +325,16 @@ static const char *base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                   "abcdefghijklmnopqrstuvwxyz"
                                   "0123456789+/";
 static const int unbase64_table[] =
-  {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
+  {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-2,-1,-1,-2,-1,-1
   ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
-  ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63
+  ,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63
   ,52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-1,-1,-1
   ,-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14
   ,15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1
   ,-1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40
   ,41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1
   };
+#define unbase64(x) unbase64_table[(int)(x)]
 
 
 Handle<Value> Buffer::Base64Slice(const Arguments &args) {
@@ -535,16 +544,21 @@ Handle<Value> Buffer::AsciiWrite(const Arguments &args) {
   return scope.Close(Integer::New(written));
 }
 
-// var bytesWritten = buffer.base64Write(string, offset);
+
+// var bytesWritten = buffer.base64Write(string, offset, [maxLength]);
 Handle<Value> Buffer::Base64Write(const Arguments &args) {
   HandleScope scope;
 
-  assert(unbase64_table['/'] == 63);
-  assert(unbase64_table['+'] == 62);
-  assert(unbase64_table['T'] == 19);
-  assert(unbase64_table['Z'] == 25);
-  assert(unbase64_table['t'] == 45);
-  assert(unbase64_table['z'] == 51);
+  assert(unbase64('/') == 63);
+  assert(unbase64('+') == 62);
+  assert(unbase64('T') == 19);
+  assert(unbase64('Z') == 25);
+  assert(unbase64('t') == 45);
+  assert(unbase64('z') == 51);
+
+  assert(unbase64(' ') == -2);
+  assert(unbase64('\n') == -2);
+  assert(unbase64('\r') == -2);
 
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(args.This());
 
@@ -574,29 +588,47 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
   }
 
   char a, b, c, d;
-  char *dst = buffer->data();
+  char* start = buffer->data();
+  char* dst = start;
   const char *src = *s;
   const char *const srcEnd = src + s.length();
 
   while (src < srcEnd) {
-    const int remaining = srcEnd - src;
-    if (remaining == 0 || *src == '=') break;
-    a = unbase64_table[*src++];
+    int remaining = srcEnd - src;
 
-    if (remaining == 1 || *src == '=') break;
-    b = unbase64_table[*src++];
+    while (unbase64(*src) < 0 && src < srcEnd) {
+      src++;
+      remaining--;
+    }
+    if (remaining == 0 || *src == '=') break;
+    a = unbase64(*src++);
+
+    while (unbase64(*src) < 0 && src < srcEnd) {
+      src++;
+      remaining--;
+    }
+    if (remaining <= 1 || *src == '=') break;
+    b = unbase64(*src++);
     *dst++ = (a << 2) | ((b & 0x30) >> 4);
 
-    if (remaining == 2 || *src == '=') break;
-    c = unbase64_table[*src++];
+    while (unbase64(*src) < 0 && src < srcEnd) {
+      src++;
+      remaining--;
+    }
+    if (remaining <= 2 || *src == '=') break;
+    c = unbase64(*src++);
     *dst++ = ((b & 0x0F) << 4) | ((c & 0x3C) >> 2);
 
-    if (remaining == 3 || *src == '=') break;
-    d = unbase64_table[*src++];
+    while (unbase64(*src) < 0 && src < srcEnd) {
+      src++;
+      remaining--;
+    }
+    if (remaining <= 3 || *src == '=') break;
+    d = unbase64(*src++);
     *dst++ = ((c & 0x03) << 6) | (d & 0x3F);
   }
 
-  return scope.Close(Integer::New(size));
+  return scope.Close(Integer::New(dst - start));
 }
 
 
