@@ -63,7 +63,7 @@ process.nextTick = function (callback) {
 var module = (function () {
   var exports = {};
   // Set the environ variable NODE_MODULE_CONTEXTS=1 to make node load all
-  // modules in thier own context.
+  // modules in their own context.
   var contextLoad = false;
   if (+process.env["NODE_MODULE_CONTEXTS"] > 0) contextLoad = true;
   var Script;
