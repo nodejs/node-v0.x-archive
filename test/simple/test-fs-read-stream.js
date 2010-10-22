@@ -96,6 +96,16 @@ file4.addListener('end', function(data) {
 	assert.equal(contentRead, 'yz');
 });
 
+// starts at an offset position and reads until a specific position short of the
+// end of the file, has a small buffer size to ensure multiple reads occure
+var a = '';
+fs.createReadStream('../fixtures/x.txt', {bufferSize: 1, start: 1, end: 2})
+.on('data', function(data) {
+  a += data;
+}).on('end', function() {
+  common.assert.equal("yz", a);
+});
+
 try {
   fs.createReadStream(rangeFile, {start: 10, end: 2});
   assert.fail('Creating a ReadStream with incorrect range limits must throw.');
