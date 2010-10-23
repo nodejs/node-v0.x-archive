@@ -1573,7 +1573,6 @@ static void Load(int argc, char *argv[]) {
     arguments->Set(Integer::New(j), arg);
   }
   // assign it
-  process->Set(String::NewSymbol("ARGV"), arguments);
   process->Set(String::NewSymbol("argv"), arguments);
 
   // create process.env
@@ -1590,8 +1589,7 @@ static void Load(int argc, char *argv[]) {
     // assign them
     env->Set(field, value);
   }
-  // assign process.ENV
-  process->Set(String::NewSymbol("ENV"), env);
+  // assign process.env
   process->Set(String::NewSymbol("env"), env);
 
   process->Set(String::NewSymbol("pid"), Integer::New(getpid()));
