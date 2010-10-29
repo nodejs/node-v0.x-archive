@@ -43,7 +43,6 @@ void SecureContext::Initialize(Handle<Object> target) {
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("SecureContext"));
 
-  NODE_SET_PROTOTYPE_METHOD(t, "init", SecureContext::Init);
   NODE_SET_PROTOTYPE_METHOD(t, "setKey", SecureContext::SetKey);
   NODE_SET_PROTOTYPE_METHOD(t, "setCert", SecureContext::SetCert);
   NODE_SET_PROTOTYPE_METHOD(t, "addCACert", SecureContext::AddCACert);
@@ -56,20 +55,12 @@ void SecureContext::Initialize(Handle<Object> target) {
 
 Handle<Value> SecureContext::New(const Arguments& args) {
   HandleScope scope;
-  SecureContext *p = new SecureContext();
-  p->Wrap(args.Holder());
-  return args.This();
-}
-
-
-Handle<Value> SecureContext::Init(const Arguments& args) {
-  HandleScope scope;
-
-  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
-
+  SecureContext *sc = new SecureContext();
+  sc->Wrap(args.Holder());
+  
   OPENSSL_CONST SSL_METHOD *method = SSLv23_method();
 
-  if (args.Length() == 1) {
+  if (args.Length() >= 1 && !args[0]->IsUndefined()) {
     if (!args[0]->IsString())
     return ThrowException(Exception::TypeError(
           String::New("Bad parameter")));
@@ -108,7 +99,8 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
 
   sc->ca_store_ = X509_STORE_new();
   SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
-  return True();
+
+  return args.This();
 }
 
 
@@ -297,7 +289,7 @@ Handle<Value> SecureStream::New(const Arguments& args) {
 
   if (args.Length() < 1 || !args[0]->IsObject()) {
     return ThrowException(Exception::Error(String::New(
-      "First argument must be a crypto module Credentials")));
+      "First argument must be a crypto module secure context")));
   }
 
   SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args[0]->ToObject());

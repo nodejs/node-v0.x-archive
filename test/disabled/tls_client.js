@@ -13,7 +13,7 @@ var caPem = fs.readFileSync(common.fixturesDir+"/msca.pem");
 //var caPem = fs.readFileSync("ca.pem");
 
 try{
-  var credentials = crypto.createCredentials({ca:caPem});
+  var context = crypto.createContext({ca:caPem});
 } catch (e) {
   console.log("Not compiled with OPENSSL support.");
   process.exit();
@@ -22,7 +22,7 @@ try{
 client.setEncoding("UTF8");
 client.addListener("connect", function () {
   console.log("client connected.");
-  client.setSecure(credentials);
+  client.setSecure(context);
 });
 
 client.addListener("secure", function () {

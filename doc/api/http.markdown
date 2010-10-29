@@ -122,11 +122,13 @@ This function is asynchronous. The last parameter `callback` will be called
 when the server has been bound.
 
 
-### server.setSecure(credentials)
+### server.setSecure(context)
 
-Enables HTTPS support for the server, with the crypto module credentials specifying the private key and certificate of the server, and optionally the CA certificates for use in client authentication.
+Enables HTTPS support for the server, with the crypto module secure context specifying the private key and certificate of the server, and optionally the CA certificates for use in client authentication.
 
-If the credentials hold one or more CA certificates, then the server will request for the client to submit a client certificate as part of the HTTPS connection handshake. The validity and content of this can be accessed via verifyPeer() and getPeerCertificate() from the server's request.connection.
+If the secure context holds one or more CA certificates, then the server will request for the client to submit a client certificate as part of the HTTPS connection handshake. The validity and content of this can be accessed via verifyPeer() and getPeerCertificate() from the server's request.connection.
+
+Verifying certificates can be circumvented by creating a context that has `verifyRemote` set to `false`.
 
 ### server.close()
 
@@ -380,15 +382,15 @@ the request contained 'Expect: 100-continue'. This is an instruction that
 the client should send the request body.
 
 
-### http.createClient(port, host='localhost', secure=false, [credentials])
+### http.createClient(port, host='localhost', secure=false, [context])
 
 Constructs a new HTTP client. `port` and
 `host` refer to the server to be connected to. A
 stream is not established until a request is issued.
 
-`secure` is an optional boolean flag to enable https support and `credentials` is an optional credentials object from the crypto module, which may hold the client's private key, certificate, and a list of trusted CA certificates.
+`secure` is an optional boolean flag to enable https support and `context` is an optional secure context object from the crypto module, which may hold the client's private key, certificate, and a list of trusted CA certificates.
 
-If the connection is secure, but no explicit CA certificates are passed in the credentials, then node.js will default to the publicly trusted list of CA certificates, as given in http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt
+If the connection is secure, but no explicit CA certificates are passed in the secure context, then node.js will default to the publicly trusted list of CA certificates, as given in http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt. To suppress certificate verification, create a secure context with `verifyRemote` set to `false`.
 
 ### client.request(method='GET', path, [request_headers])
 

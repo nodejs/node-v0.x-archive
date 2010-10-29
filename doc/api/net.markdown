@@ -221,11 +221,11 @@ Either `'closed'`, `'open'`, `'opening'`, `'readOnly'`, or `'writeOnly'`.
 Sets the encoding (either `'ascii'`, `'utf8'`, or `'base64'`) for data that is
 received.
 
-### stream.setSecure([credentials])
+### stream.setSecure([context])
 
-Enables SSL support for the stream, with the crypto module credentials specifying the private key and certificate of the stream, and optionally the CA certificates for use in peer authentication.
+Enables SSL support for the stream, with the crypto module secure context specifying the private key and certificate of the stream, and optionally the CA certificates for use in peer authentication.
 
-If the credentials hold one ore more CA certificates, then the stream will request for the peer to submit a client certificate as part of the SSL connection handshake. The validity and content of this can be accessed via verifyPeer() and getPeerCertificate().
+If the secure context holds one ore more CA certificates, then the stream will request for the peer to submit a client certificate as part of the SSL connection handshake. The validity and content of this can be accessed via verifyPeer() and getPeerCertificate().
 
 ### stream.verifyPeer()
 

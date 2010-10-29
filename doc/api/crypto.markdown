@@ -6,13 +6,14 @@ The crypto module requires OpenSSL to be available on the underlying platform. I
 
 It also offers a set of wrappers for OpenSSL's hash, hmac, cipher, decipher, sign and verify methods.
 
-### crypto.createCredentials(details)
+### crypto.createContext(details)
 
-Creates a credentials object, with the optional details being a dictionary with keys:
+Creates a secure context object, with the optional details being a dictionary with keys:
 
 * `key` : a string holding the PEM encoded private key
 * `cert` : a string holding the PEM encoded certificate
 * `ca` : either a string or list of strings of PEM encoded CA certificates to trust.
+* `verifyRemote` : a boolean indicating whether the remote certificate should be verified. This defaults to true when the secure context is used as a client and to false when it is used from the server side.
 
 If no 'ca' details are given, then node.js will use the default publicly trusted list of CAs as given in 
 http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt

@@ -17,7 +17,7 @@ var certPem = fs.readFileSync(common.fixturesDir+"/test_cert.pem", 'ascii');
 var keyPem = fs.readFileSync(common.fixturesDir+"/test_key.pem", 'ascii');
 
 try{
-  var credentials = crypto.createCredentials({key:keyPem, cert:certPem, ca:caPem});
+  var context = crypto.createContext({key:keyPem, cert:certPem, ca:caPem});
 } catch (e) {
   console.log("Not compiled with OPENSSL support.");
   process.exit();

@@ -10,14 +10,14 @@ var keyPem = fs.readFileSync(common.fixturesDir + "/cert.pem");
 var certPem = fs.readFileSync(common.fixturesDir + "/cert.pem");
 
 try{
-  var credentials = crypto.createCredentials({key:keyPem, cert:certPem});
+  var context = crypto.createContext({key:keyPem, cert:certPem});
 } catch (e) {
   console.log("Not compiled with OPENSSL support.");
   process.exit();
 }
 var i = 0;
 var server = net.createServer(function (connection) {
-  connection.setSecure(credentials);
+  connection.setSecure(context);
   connection.setEncoding("binary");
 
   connection.addListener("secure", function () {

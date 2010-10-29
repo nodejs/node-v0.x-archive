@@ -27,7 +27,7 @@ var certPem = fs.readFileSync(common.fixturesDir+"/test_cert.pem", 'ascii');
 var keyPem = fs.readFileSync(common.fixturesDir+"/test_key.pem", 'ascii');
 
 try{
-  var credentials = crypto.createCredentials({key:keyPem, cert:certPem, ca:caPem});
+  var context = crypto.createContext({key:keyPem, cert:certPem, ca:caPem});
 } catch (e) {
   console.log("Not compiled with OPENSSL support.");
   process.exit();
@@ -77,7 +77,7 @@ var https_server = http.createServer(function (req, res) {
   }, 1);
 
 });
-https_server.setSecure(credentials);
+https_server.setSecure(context);
 https_server.listen(common.PORT);
 
 https_server.addListener("listening", function() {
@@ -86,7 +86,7 @@ https_server.addListener("listening", function() {
   c.setEncoding("utf8");
 
   c.addListener("connect", function () {
-    c.setSecure(credentials);
+    c.setSecure(context);
   });
 
   c.addListener("secure", function () {

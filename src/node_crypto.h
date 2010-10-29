@@ -26,7 +26,6 @@ class SecureContext : ObjectWrap {
 
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetKey(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetCert(const v8::Arguments& args);
   static v8::Handle<v8::Value> AddCACert(const v8::Arguments& args);
