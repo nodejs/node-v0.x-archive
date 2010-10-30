@@ -10,6 +10,7 @@ doc/changelog.html
 doc/node.1
 tools/nodejs.pc
 test/fixtures/hello.txt
+test/fixtures/cycles/folder/*
 tmp/
 node
 node_g
