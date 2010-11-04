@@ -75,7 +75,9 @@ var module = (function () {
     this.id = id;
     this.exports = {};
     this.parent = parent;
-
+    if(parent){
+      parent.children.push(this);
+    }
     this.filename = null;
     this.loaded = false;
     this.exited = false;
