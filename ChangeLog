@@ -413,9 +413,9 @@
 
 2010.10.23, Version 0.3.0 (unstable) 1582cfebd6719b2d2373547994b3dca5c8c569c0
 
-* Bugfix: Do not spin on aceept() with EMFILE
+* Bugfix: Do not spin on accept() with EMFILE
 
-* Improvments to readline.js (Trent Mick, Johan Euphrosine, Brian White)
+* Improvements to readline.js (Trent Mick, Johan Euphrosine, Brian White)
 
 * Safe constructors (missing 'new' doesn't segfault)
 
@@ -451,7 +451,7 @@
 
 * Commas last in sys.inspect
 
-* Constatnts moved from process object to require('constants')
+* Constants moved from process object to require('constants')
 
 * Fix parsing of linux memory (Vitali Lovich)
 
