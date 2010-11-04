@@ -55,3 +55,5 @@ assert.equal(path.normalize("a//b//./c"), "a/b/c");
 assert.equal(path.normalize("a//b//.", true), "a//b/");
 assert.equal(path.normalize("a//b//."), "a/b");
 
+assert.equal(path.normalize("~/a/b"), process.env.HOME + "/a/b");
+assert.equal(path.normalize("~/a~/b"), process.env.HOME + "/a~/b");
