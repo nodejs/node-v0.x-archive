@@ -36,7 +36,7 @@ ab_hello_world() {
 
   name="ab-hello-world-$type-$ressize"
 
-  dir=".benchmark_reports/$name/$rev/"
+  dir=".benchmark_reports/$name/$rev"
   if [ ! -d $dir ]; then
     mkdir -p $dir
   fi
