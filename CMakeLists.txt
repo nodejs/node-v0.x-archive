@@ -15,7 +15,7 @@ message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
 set(node_extra_src "src/platform_${platform}.cc")
 
-if(NOT EXISTS ${node_extra_src})
+if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${node_extra_src})
   set(node_extra_src "src/platform_none.cc")
 endif()
 
