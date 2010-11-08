@@ -274,9 +274,8 @@ if(NOT SHARED_V8)
     file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/deps/v8)
 
     foreach(FILE ${v8_sources})
-      ## Find a nicer way to do this
       add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/${FILE}
-        COMMAND cmake -E copy_if_different ${PROJECT_SOURCE_DIR}/${FILE} ${PROJECT_BINARY_DIR}/${FILE}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/${FILE} ${PROJECT_BINARY_DIR}/${FILE}
         DEPENDS ${PROJECT_SOURCE_DIR}/${FILE}
         )
       list(APPEND v8_sources_dest ${PROJECT_BINARY_DIR}/${FILE})
@@ -382,8 +381,8 @@ endif()
 
 add_custom_command(
   TARGET node POST_BUILD
-  COMMAND cmake -E make_directory ${PROJECT_BINARY_DIR}/${test_bin_dir}
-  COMMAND cmake -E copy_if_different ${node_bin} ${PROJECT_BINARY_DIR}/${test_bin_dir}
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/${test_bin_dir}
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${node_bin} ${PROJECT_BINARY_DIR}/${test_bin_dir}
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 add_custom_target(
