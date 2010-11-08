@@ -288,8 +288,6 @@ if(NOT SHARED_V8)
     set(v8snapshot snapshot=on)
   endif()
 
-  MESSAGE("** ${platform}")
-
   if(${platform} MATCHES darwin)
     execute_process(COMMAND hwprefs cpu_count OUTPUT_VARIABLE cpu_count)
   elseif(${platform} MATCHES linux)
@@ -378,6 +376,28 @@ else()
   set(test_bin_dir default)
   get_target_property(node_bin node LOCATION)
 endif()
+
+enable_testing()
+
+file(GLOB_RECURSE node_tests ${CMAKE_SOURCE_DIR}/test/*)
+
+set(ARGS "-Q -N")
+
+foreach(test IN LISTS node_tests)
+  if(test MATCHES ".*/test-[^./\ ]*.\\.js" AND NOT test MATCHES ".*disabled.*"
+      AND NOT test MATCHES ".*pummel.*")
+
+    # build a fancy name for each test
+    string(REPLACE ${CMAKE_SOURCE_DIR}/test/ "" test_name ${test})
+    string(REPLACE test- "" test_name ${test_name})
+    string(REPLACE ".js" "" test_name ${test_name})
+    string(REPLACE "/" "-" test_name ${test_name})
+
+    add_test(${test_name} ${node_bin} ${test})
+  endif()
+
+endforeach()
+
 
 add_custom_command(
   TARGET node POST_BUILD
