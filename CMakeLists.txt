@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 project(NODE)
 
-STRING(TOLOWER ${CMAKE_SYSTEM_NAME} platform)
+string(TOLOWER ${CMAKE_SYSTEM_NAME} platform)
 
 string(COMPARE EQUAL $(PROJECT_BINARY_DIR) ${PROJECT_SOURCE_DIR} in_source_build)
 if(NOT ${in_source_build})
@@ -41,7 +41,7 @@ elseif(${arch} MATCHES x86)
   set(v8arch ia32)
 endif()
 
-STRING(TOLOWER ${CMAKE_BUILD_TYPE} v8mode)
+string(TOLOWER ${CMAKE_BUILD_TYPE} v8mode)
 
 if(${platform} MATCHES sunos)
   add_definitions(-threads)
@@ -55,6 +55,7 @@ if(${platform} MATCHES darwin)
   set(CMAKE_EXE_LINKER_FLAGS -framework Carbon)
 endif()
 
+## What is this for??
 if(${CMAKE_BUILD_TYPE} MATCHES Debug)
 else()
 endif()
@@ -66,8 +67,8 @@ set(CMAKE_CXX_FLAGS_DEBUG "-O0 -Wall -g -Wextra -DDEBUG $ENV{CXXFLAGS}")
 set(CMAKE_C_FLAGS_RELEASE "-g -O3 -DNDEBUG $ENV{CFLAGS}")
 set(CMAKE_CXX_FLAGS_RELEASE "-g -O3 -DNDEBUG $ENV{CXXFLAGS}")
 
-INCLUDE(CheckFunctionExists)
-CHECK_FUNCTION_EXISTS(fdatasync HAVE_FDATASYNC)
+include(CheckFunctionExists)
+check_function_exists(fdatasync HAVE_FDATASYNC)
 
 if(HAVE_FDATASYNC)
   add_definitions(-DHAVE_FDATASYNC=1)
@@ -75,9 +76,13 @@ else()
   add_definitions(-DHAVE_FDATASYNC=0)
 endif()
 
-add_definitions(-DPLATFORM=${platform}
-  -DX_STACKSIZE=65536 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DEV_MULTIPLICITY=0
-)
+add_definitions(
+  -DPLATFORM=${platform}
+  -DX_STACKSIZE=65536
+  -D_LARGEFILE_SOURCE
+  -D_FILE_OFFSET_BITS=64
+  -DEV_MULTIPLICITY=0
+  )
 
 #
 # options
@@ -125,12 +130,12 @@ else()
 endif()
 
 if(SHARED_LIBEV)
-  FIND_LIBRARY(LIBEV_LIBRARY NAMES ev)
-  FIND_PATH(LIBEV_INCLUDE_DIR ev.h
+  find_library(LIBEV_LIBRARY NAMES ev)
+  find_path(LIBEV_INCLUDE_DIR ev.h
     PATH_SUFFIXES include/ev include
     ) # Find header
-  INCLUDE(FindPackageHandleStandardArgs)
-  FIND_PACKAGE_HANDLE_STANDARD_ARGS(libev DEFAULT_MSG LIBEV_LIBRARY LIBEV_INCLUDE_DIR)
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIBRARY LIBEV_INCLUDE_DIR)
   message("libev library: ${LIBEV_LIBRARY}")
 else()
   add_subdirectory(deps/libev)
@@ -138,12 +143,12 @@ else()
 endif()
 
 if(SHARED_CARES)
-  FIND_LIBRARY(LIBCARES_LIBRARY NAMES cares)
-  FIND_PATH(LIBCARES_INCLUDE_DIR ares.h
+  find_library(LIBCARES_LIBRARY NAMES cares)
+  find_path(LIBCARES_INCLUDE_DIR ares.h
     PATH_SUFFIXES include
     ) # Find header
-  INCLUDE(FindPackageHandleStandardArgs)
-  FIND_PACKAGE_HANDLE_STANDARD_ARGS(libcares DEFAULT_MSG LIBCARES_LIBRARY LIBCARES_INCLUDE_DIR)
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(libcares DEFAULT_MSG LIBCARES_LIBRARY LIBCARES_INCLUDE_DIR)
   message("libc-ares library: ${LIBCARES_LIBRARY}")
 else()
   add_subdirectory(deps/c-ares)
@@ -166,7 +171,7 @@ if(${OPENSSL_FOUND} MATCHES TRUE)
   set(extra_libs ${extra_libs} ${OPENSSL_LIBRARIES})
 endif()
 
-FILE(GLOB js2c_files ${PROJECT_SOURCE_DIR}/lib/*.js)
+file(GLOB js2c_files ${PROJECT_SOURCE_DIR}/lib/*.js)
 set(js2c_files ${PROJECT_SOURCE_DIR}/src/node.js ${js2c_files})
 file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/src)
 
@@ -188,8 +193,7 @@ message("CPPFLAGS: ${CPPFLAGS}")
 add_custom_command(
   OUTPUT ${PROJECT_BINARY_DIR}/src/node_natives.h
   COMMAND tools/js2c.py ${PROJECT_BINARY_DIR}/src/node_natives.h ${js2c_files}
-  DEPENDS ${js2c_files}
-  )
+  DEPENDS ${js2c_files})
 
 set(node_sources
   src/node.cc
@@ -209,8 +213,7 @@ set(node_sources
   src/node_timer.cc
   src/node_script.cc
   src/node_natives.h
-  ${node_extra_src}
-  )
+  ${node_extra_src})
 
 add_subdirectory(deps/libeio)
 add_subdirectory(deps/http_parser)
@@ -218,12 +221,32 @@ add_subdirectory(deps/http_parser)
 
 configure_file(src/node_config.h.in ${PROJECT_BINARY_DIR}/src/node_config.h)
 configure_file(config.h.cmake ${PROJECT_BINARY_DIR}/config.h)
-include_directories(${PROJECT_BINARY_DIR} ${PROJECT_BINARY_DIR}/src)
 
-include_directories(src ${LIBEV_INCLUDE_DIR} deps/libeio ${V8_INCLUDE_DIR} ${LIBCARES_INCLUDE_DIR} deps/http_parser)
+include_directories(
+  src
+  deps/libeio
+  deps/http_parser
+  ${V8_INCLUDE_DIR}
+  ${LIBEV_INCLUDE_DIR}
+  ${LIBCARES_INCLUDE_DIR}
+
+  ${PROJECT_BINARY_DIR}
+  ${PROJECT_BINARY_DIR}/src
+)
+
+
 add_executable(node ${node_sources})
-target_link_libraries(node ev eio cares http_parser ${V8_LIBRARY_PATH} ${CMAKE_THREAD_LIBS_INIT} ${extra_libs})
 set_target_properties(node PROPERTIES DEBUG_POSTFIX "_g")
+
+target_link_libraries(node
+  ev
+  eio
+  cares
+  http_parser
+  ${V8_LIBRARY_PATH}
+  ${CMAKE_THREAD_LIBS_INIT}
+  ${extra_libs})
+
 
 install(TARGETS node RUNTIME DESTINATION bin)
 install(FILES     
@@ -234,26 +257,28 @@ install(FILES
   src/node_events.h
   src/node_version.h
   src/node_config.h
-  DESTINATION include/node)
+
+  DESTINATION include/node
+)
 
 #
 # v8 specific
 #
 
 if(NOT SHARED_V8)
-
   file(GLOB_RECURSE v8_sources RELATIVE ${PROJECT_SOURCE_DIR} deps/v8/*)
 
   if(NOT ${in_source_build})
     file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/deps/v8)
 
     foreach(FILE ${v8_sources})
-      ADD_CUSTOM_COMMAND(OUTPUT ${PROJECT_BINARY_DIR}/${FILE}
+      ## Find a nicer way to do this
+      add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/${FILE}
         COMMAND cmake -E copy_if_different ${PROJECT_SOURCE_DIR}/${FILE} ${PROJECT_BINARY_DIR}/${FILE}
-        DEPENDS   ${PROJECT_SOURCE_DIR}/${FILE}
+        DEPENDS ${PROJECT_SOURCE_DIR}/${FILE}
         )
-       list(APPEND v8_sources_dest ${PROJECT_BINARY_DIR}/${FILE})
-     endforeach()
+      list(APPEND v8_sources_dest ${PROJECT_BINARY_DIR}/${FILE})
+    endforeach()
   else()
     set(v8_sources_dest ${v8_sources})
   endif()
@@ -262,15 +287,17 @@ if(NOT SHARED_V8)
     set(v8snapshot snapshot=on)
   endif()
 
+  MESSAGE("** ${platform}")
+
   if(${platform} MATCHES darwin)
     execute_process(COMMAND hwprefs cpu_count OUTPUT_VARIABLE cpu_count)
   elseif(${platform} MATCHES linux)
     execute_process(COMMAND cat /proc/cpuinfo
-     COMMAND grep processor
-     COMMAND sort
-     COMMAND uniq
-     COMMAND wc -l
-     OUTPUT_VARIABLE cpu_count)
+      COMMAND grep processor
+      COMMAND sort
+      COMMAND uniq
+      COMMAND wc -l
+      OUTPUT_VARIABLE cpu_count)
   endif()
 
   if(${cpu_count} GREATER 1)
@@ -287,13 +314,13 @@ if(NOT SHARED_V8)
     DEPENDS ${v8_sources_dest}
     )
 
-  ADD_CUSTOM_TARGET(v8_stock ALL DEPENDS ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn})
+  add_custom_target(v8_stock ALL DEPENDS ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn})
 
 
   add_library(v8 STATIC IMPORTED)
 
   set_property(TARGET v8 PROPERTY
-               IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn})
+    IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn})
 endif()
 
 if(NOT SHARED_V8)
@@ -355,8 +382,7 @@ add_custom_command(
   TARGET node POST_BUILD
   COMMAND cmake -E make_directory ${PROJECT_BINARY_DIR}/${test_bin_dir}
   COMMAND cmake -E copy_if_different ${node_bin} ${PROJECT_BINARY_DIR}/${test_bin_dir}
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-)
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 add_custom_target(
   test
@@ -394,13 +420,13 @@ add_custom_target(test-simple
   DEPENDS node
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   )
-     
+
 add_custom_target(test-pummel
   COMMAND python tools/test.py pummel
   DEPENDS node
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   )
-	
+
 add_custom_target(test-internet
   COMMAND python tools/test.py internet
   DEPENDS node
