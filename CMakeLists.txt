@@ -196,8 +196,10 @@ add_custom_command(
   DEPENDS ${js2c_files})
 
 set(node_sources
+  src/node_main.cc
   src/node.cc
   src/node_buffer.cc
+  src/node_javascript.cc
   src/node_extensions.cc
   src/node_http_parser.cc
   src/node_net.cc
