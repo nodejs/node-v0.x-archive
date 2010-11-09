@@ -13,15 +13,12 @@ endif()
 if(NOT "v${CMAKE_BUILD_TYPE}" MATCHES vDebug)
   set(CMAKE_BUILD_TYPE "Release")
 endif()
-message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
 set(node_extra_src "src/platform_${platform}.cc")
 
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/${node_extra_src})
   set(node_extra_src "src/platform_none.cc")
 endif()
-
-message("CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
 
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES i686*)
   set(arch x86)
@@ -120,7 +117,6 @@ set(V8_LIBRARY_NAMES v8)
 if(SHARED_V8)
   find_path(V8_INCLUDE_DIR NAMES ${V8_INCLUDE_NAMES})
   find_library(V8_LIBRARY_PATH NAMES ${V8_LIBRARY_NAMES} NO_CMAKE_PATH)
-  message("V8 library: ${V8_LIBRARY_PATH}")
 else()
   set(V8_INCLUDE_DIR "${PROJECT_BINARY_DIR}/deps/v8/include")
   if(${CMAKE_BUILD_TYPE} MATCHES Debug)
@@ -138,7 +134,6 @@ if(SHARED_LIBEV)
     ) # Find header
   include(FindPackageHandleStandardArgs)
   find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIBRARY LIBEV_INCLUDE_DIR)
-  message("libev library: ${LIBEV_LIBRARY}")
 else()
   add_subdirectory(deps/libev)
   set(LIBEV_INCLUDE_DIR deps/libev)
@@ -151,7 +146,6 @@ if(SHARED_CARES)
     ) # Find header
   include(FindPackageHandleStandardArgs)
   find_package_handle_standard_args(libcares DEFAULT_MSG LIBCARES_LIBRARY LIBCARES_INCLUDE_DIR)
-  message("libc-ares library: ${LIBCARES_LIBRARY}")
 else()
   add_subdirectory(deps/c-ares)
   set(LIBCARES_INCLUDE_DIR deps/c-ares deps/c-ares/${platform}-${arch})
@@ -162,11 +156,7 @@ if(${platform} MATCHES freebsd)
   set(extra_libs ${extra_libs} KVM)
 endif()
 
-message("RT library: ${RT}")
-message("DL library: ${DL}")
-
 if(${OPENSSL_FOUND} MATCHES TRUE)
-  message("openssl found!")
   add_definitions(-DHAVE_OPENSSL=1)
   set(HAVE_OPENSSL True)
   set(node_extra_src ${node_extra_src} src/node_crypto.cc)
@@ -187,10 +177,6 @@ get_directory_property(compile_defs COMPILE_DEFINITIONS)
 foreach(def ${compile_defs})
   set(CPPFLAGS "${CPPFLAGS} -D${def}")
 endforeach()
-
-message("PREFIX: ${PREFIX}")
-message("CCFLAGS: ${CCFLAGS}")
-message("CPPFLAGS: ${CPPFLAGS}")
 
 add_custom_command(
   OUTPUT ${PROJECT_BINARY_DIR}/src/node_natives.h
@@ -306,7 +292,6 @@ if(NOT SHARED_V8)
   else()
     set(parallel_jobs 1)
   endif()
-  message("V8 PARALLEL_JOBS: ${parallel_jobs}")
 
   add_custom_command(
     OUTPUT ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn}
@@ -474,7 +459,40 @@ file(READ ${PROJECT_SOURCE_DIR}/src/node_version.h node_version_h LIMIT 1024 OFF
 string(REGEX REPLACE ".*NODE_MAJOR_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VERSION_MAJOR "${node_version_h}")
 string(REGEX REPLACE ".*NODE_MINOR_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VERSION_MINOR "${node_version_h}")
 string(REGEX REPLACE ".*NODE_PATCH_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VERSION_PATCH "${node_version_h}")
-message("major: ${CPACK_PACKAGE_VERSION_MAJOR}")
-message("minor: ${CPACK_PACKAGE_VERSION_MINOR}")
-message("patch: ${CPACK_PACKAGE_VERSION_PATCH}")
+set(node_version_string "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
 include(CPack)
+
+
+#
+# Final build configuration output
+#
+
+message("** Build Summary **")
+message("  Version:            ${node_version_string}")
+message("  Prefix:             ${PREFIX}")
+message("  Build Type:         ${CMAKE_BUILD_TYPE}")
+message("  Architecture:       ${CMAKE_SYSTEM_PROCESSOR}")
+
+if(SHARED_V8)
+message("  V8:                 ${V8_LIBRARY_PATH}")
+#else()
+#message(" V8 jobs:            ${parallel_jobs}")
+endif()
+
+if(SHARED_libev)
+  message("  libev:              ${LIBEV_LIBRARY}")
+endif()
+
+if(SHARED_CARES)
+  message("  libc-ares:          ${LIBCARES_LIBRARY}")
+endif()
+
+message("  RT library:         ${RT}")
+message("  DL library:         ${DL}")
+
+if(${OPENSSL_FOUND} MATCHES TRUE)
+  message("  OpenSSL:            Found!")
+endif()
+
+# message("  CCFLAGS:            ${CCFLAGS}")
+# message("  CPPFLAGS:           ${CPPFLAGS}")
