@@ -59,6 +59,11 @@ if(${CMAKE_BUILD_TYPE} MATCHES Debug)
 else()
 endif()
 
+if(${CMAKE_BUILD_TYPE} MATCHES Debug)
+  set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/debug/)
+else()
+  set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/default/)
+endif()
 
 set(CMAKE_C_FLAGS_DEBUG "-O0 -Wall -g -Wextra -DDEBUG $ENV{CFLAGS}")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -Wall -g -Wextra -DDEBUG $ENV{CXXFLAGS}")
@@ -384,7 +389,6 @@ foreach(test ${node_tests})
   endif()
 
 endforeach()
-
 
 add_custom_command(
   TARGET node POST_BUILD
