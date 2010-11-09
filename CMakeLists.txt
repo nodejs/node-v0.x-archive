@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 project(node)
+cmake_policy(SET CMP0009 NEW)
 
 
 string(TOLOWER ${CMAKE_SYSTEM_NAME} platform)
