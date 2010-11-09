@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
-project(NODE)
+project(node)
+
 
 string(TOLOWER ${CMAKE_SYSTEM_NAME} platform)
 
@@ -453,3 +454,26 @@ add_custom_target(test-internet
   DEPENDS node
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   )
+
+#
+# package
+#
+
+set(CPACK_GENERATOR "TGZ;DEB;RPM")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Tom Hughes <tom.hughes@palm.com>")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Evented I/O for V8 JavaScript.")
+set(CPACK_PACKAGE_DESCRIPTION "Node's goal is to provide an easy way to
+  build scalable network programs.
+
+  Node is similar in design to and influenced by systems like Ruby's Event
+  Machine or Python's Twisted. Node takes the event model a bit further—it
+  presents the event loop as a language construct instead of as a library.")
+set(CPACK_DEBIAN_PACKAGE_SECTION "web")
+file(READ ${PROJECT_SOURCE_DIR}/src/node_version.h node_version_h LIMIT 1024 OFFSET 0)
+STRING(REGEX REPLACE ".*NODE_MAJOR_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VERSION_MAJOR "${node_version_h}")
+STRING(REGEX REPLACE ".*NODE_MINOR_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VERSION_MINOR "${node_version_h}")
+STRING(REGEX REPLACE ".*NODE_PATCH_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VERSION_PATCH "${node_version_h}")
+message("major: ${CPACK_PACKAGE_VERSION_MAJOR}")
+message("minor: ${CPACK_PACKAGE_VERSION_MINOR}")
+message("patch: ${CPACK_PACKAGE_VERSION_PATCH}")
+include(CPack)
