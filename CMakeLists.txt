@@ -383,7 +383,7 @@ file(GLOB_RECURSE node_tests ${CMAKE_SOURCE_DIR}/test/*)
 
 set(ARGS "-Q -N")
 
-foreach(test IN LISTS node_tests)
+foreach(test ${node_tests})
   if(test MATCHES ".*/test-[^./\ ]*.\\.js" AND NOT test MATCHES ".*disabled.*"
       AND NOT test MATCHES ".*pummel.*")
 
