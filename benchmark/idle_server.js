@@ -5,15 +5,13 @@ var errors = 0;
 
 server = net.Server(function (socket) {
 
-  socket.on('end', function () {
-    socket.end();
-  });
-
   socket.on('error', function () {
     errors++; 
   });
 
 });
+
+//server.maxConnections = 128;
 
 server.listen(9000);
 

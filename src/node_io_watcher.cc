@@ -51,9 +51,7 @@ void IOWatcher::Callback(EV_P_ ev_io *w, int revents) {
   argv[0] = Local<Value>::New(revents & EV_READ ? True() : False());
   argv[1] = Local<Value>::New(revents & EV_WRITE ? True() : False());
 
-  io->Ref();
   callback->Call(io->handle_, 2, argv);
-  io->Unref();
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
@@ -139,6 +137,7 @@ Handle<Value> IOWatcher::Set(const Arguments& args) {
 
   if (args[2]->IsTrue()) events |= EV_WRITE;
 
+  assert(!io->watcher_.active);
   ev_io_set(&io->watcher_, fd, events);
 
   return Undefined();

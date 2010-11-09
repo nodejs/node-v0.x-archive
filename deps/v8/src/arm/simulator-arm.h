@@ -38,11 +38,23 @@
 
 #include "allocation.h"
 
-#if defined(__arm__) && !defined(USE_SIMULATOR)
+#if !defined(USE_SIMULATOR)
+// Running without a simulator on a native arm platform.
+
+namespace v8 {
+namespace internal {
 
 // When running without a simulator we call the entry directly.
 #define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
   (entry(p0, p1, p2, p3, p4))
+
+// Call the generated regexp code directly. The entry function pointer should
+// expect seven int/pointer sized arguments and return an int.
+#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
+  (entry(p0, p1, p2, p3, p4, p5, p6))
+
+#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
+  (reinterpret_cast<TryCatch*>(try_catch_address))
 
 // The stack limit beyond which we will throw stack overflow errors in
 // generated code. Because generated code on arm uses the C stack, we
@@ -60,37 +72,13 @@ class SimulatorStack : public v8::internal::AllStatic {
   static inline void UnregisterCTryCatch() { }
 };
 
+} }  // namespace v8::internal
 
-// Call the generated regexp code directly. The entry function pointer should
-// expect eight int/pointer sized arguments and return an int.
-#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
-  entry(p0, p1, p2, p3, p4, p5, p6)
-
-#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
-  reinterpret_cast<TryCatch*>(try_catch_address)
-
-
-#else  // !defined(__arm__) || defined(USE_SIMULATOR)
-
-// When running with the simulator transition into simulated execution at this
-// point.
-#define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
-  reinterpret_cast<Object*>( \
-      assembler::arm::Simulator::current()->Call(FUNCTION_ADDR(entry), 5, \
-                                                 p0, p1, p2, p3, p4))
-
-#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
-  assembler::arm::Simulator::current()->Call( \
-    FUNCTION_ADDR(entry), 7, p0, p1, p2, p3, p4, p5, p6)
-
-#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
-  try_catch_address == NULL ? \
-      NULL : *(reinterpret_cast<TryCatch**>(try_catch_address))
-
+#else  // !defined(USE_SIMULATOR)
+// Running with a simulator.
 
 #include "constants-arm.h"
 #include "hashmap.h"
-
 
 namespace assembler {
 namespace arm {
@@ -238,6 +226,15 @@ class Simulator {
   void HandleRList(Instr* instr, bool load);
   void SoftwareInterrupt(Instr* instr);
 
+  // Stop helper functions.
+  inline bool isStopInstruction(Instr* instr);
+  inline bool isWatchedStop(uint32_t bkpt_code);
+  inline bool isEnabledStop(uint32_t bkpt_code);
+  inline void EnableStop(uint32_t bkpt_code);
+  inline void DisableStop(uint32_t bkpt_code);
+  inline void IncreaseStopCounter(uint32_t bkpt_code);
+  void PrintStopInfo(uint32_t code);
+
   // Read and write memory.
   inline uint8_t ReadBU(int32_t addr);
   inline int8_t ReadB(int32_t addr);
@@ -264,7 +261,6 @@ class Simulator {
   void DecodeType5(Instr* instr);
   void DecodeType6(Instr* instr);
   void DecodeType7(Instr* instr);
-  void DecodeUnconditional(Instr* instr);
 
   // Support for VFP.
   void DecodeTypeVFP(Instr* instr);
@@ -329,9 +325,44 @@ class Simulator {
   // Registered breakpoints.
   Instr* break_pc_;
   instr_t break_instr_;
+
+  // A stop is watched if its code is less than kNumOfWatchedStops.
+  // Only watched stops support enabling/disabling and the counter feature.
+  static const uint32_t kNumOfWatchedStops = 256;
+
+  // Breakpoint is disabled if bit 31 is set.
+  static const uint32_t kStopDisabledBit = 1 << 31;
+
+  // A stop is enabled, meaning the simulator will stop when meeting the
+  // instruction, if bit 31 of watched_stops[code].count is unset.
+  // The value watched_stops[code].count & ~(1 << 31) indicates how many times
+  // the breakpoint was hit or gone through.
+  struct StopCoundAndDesc {
+    uint32_t count;
+    char* desc;
+  };
+  StopCoundAndDesc watched_stops[kNumOfWatchedStops];
 };
 
 } }  // namespace assembler::arm
+
+
+namespace v8 {
+namespace internal {
+
+// When running with the simulator transition into simulated execution at this
+// point.
+#define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
+  reinterpret_cast<Object*>(assembler::arm::Simulator::current()->Call( \
+      FUNCTION_ADDR(entry), 5, p0, p1, p2, p3, p4))
+
+#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
+  assembler::arm::Simulator::current()->Call( \
+      FUNCTION_ADDR(entry), 7, p0, p1, p2, p3, p4, p5, p6)
+
+#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
+  try_catch_address == \
+      NULL ? NULL : *(reinterpret_cast<TryCatch**>(try_catch_address))
 
 
 // The simulator has its own stack. Thus it has a different stack limit from
@@ -355,7 +386,7 @@ class SimulatorStack : public v8::internal::AllStatic {
   }
 };
 
+} }  // namespace v8::internal
 
-#endif  // !defined(__arm__) || defined(USE_SIMULATOR)
-
+#endif  // !defined(USE_SIMULATOR)
 #endif  // V8_ARM_SIMULATOR_ARM_H_

@@ -425,45 +425,26 @@ var constants; // lazy loaded.
   };
 })();
 
-// Timers
-function addTimerListener (callback) {
-  var timer = this;
-  // Special case the no param case to avoid the extra object creation.
-  if (arguments.length > 2) {
-    var args = Array.prototype.slice.call(arguments, 2);
-    timer.callback = function () { callback.apply(timer, args); };
-  } else {
-    timer.callback = callback;
-  }
-}
 
-var Timer; // lazy load
-
-global.setTimeout = function (callback, after) {
-  if (!Timer) Timer = process.binding("timer").Timer;
-  var timer = new Timer();
-  addTimerListener.apply(timer, arguments);
-  timer.start(after, 0);
-  return timer;
+global.setTimeout = function () {
+  var t = module.requireNative('timers');
+  return t.setTimeout.apply(this, arguments);
 };
 
-global.setInterval = function (callback, repeat) {
-  if (!Timer) Timer = process.binding("timer").Timer;
-  var timer = new Timer();
-  addTimerListener.apply(timer, arguments);
-  timer.start(repeat, repeat ? repeat : 1);
-  return timer;
+global.setInterval = function () {
+  var t = module.requireNative('timers');
+  return t.setInterval.apply(this, arguments);
 };
 
-global.clearTimeout = function (timer) {
-  if (!Timer) Timer = process.binding("timer").Timer;
-  if (timer instanceof Timer) {
-    timer.callback = null;
-    timer.stop();
-  }
+global.clearTimeout = function () {
+  var t = module.requireNative('timers');
+  return t.clearTimeout.apply(this, arguments);
 };
 
-global.clearInterval = global.clearTimeout;
+global.clearInterval = function () {
+  var t = module.requireNative('timers');
+  return t.clearInterval.apply(this, arguments);
+};
 
 
 var stdout;
@@ -589,8 +570,8 @@ global.console.assert = function(expression){
 global.Buffer = module.requireNative('buffer').Buffer;
 
 process.exit = function (code) {
-  process.emit("exit");
-  process.reallyExit(code);
+  process.emit("exit", code || 0);
+  process.reallyExit(code || 0);
 };
 
 process.kill = function (pid, sig) {
@@ -620,7 +601,8 @@ if (process.argv[1]) {
 
 } else if (process._eval) {
     // -e, --eval
-    if (process._eval) console.log(eval(process._eval));
+    var indirectEval= eval; // so the eval happens in global scope.
+    if (process._eval) console.log(indirectEval(process._eval));
 } else {
     // REPL
   module.requireNative('repl').start();

@@ -536,7 +536,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : program.env["PREFIX"]
-        , 'VERSION'   : '0.3.0-pre' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.h
+        , 'VERSION'   : '0.3.1-pre' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.h
         }
     return x
 
@@ -574,7 +574,7 @@ def build(bld):
   if os.path.exists('doc/node.1'):
     bld.install_files('${PREFIX}/share/man/man1/', 'doc/node.1')
 
-  bld.install_files('${PREFIX}/bin/', 'bin/*', chmod=0755)
+  bld.install_files('${PREFIX}/bin/', 'tools/node-waf', chmod=0755)
   bld.install_files('${PREFIX}/lib/node/wafadmin', 'tools/wafadmin/*.py')
   bld.install_files('${PREFIX}/lib/node/wafadmin/Tools', 'tools/wafadmin/Tools/*.py')
 

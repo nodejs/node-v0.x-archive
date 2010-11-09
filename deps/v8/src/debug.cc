@@ -1038,7 +1038,7 @@ bool Debug::CheckBreakPoint(Handle<Object> break_point_object) {
       Factory::LookupAsciiSymbol("IsBreakPointTriggered");
   Handle<JSFunction> check_break_point =
     Handle<JSFunction>(JSFunction::cast(
-        debug_context()->global()->GetProperty(
+        debug_context()->global()->GetPropertyNoExceptionThrown(
             *is_break_point_triggered_symbol)));
 
   // Get the break id as an object.
@@ -1464,8 +1464,7 @@ bool Debug::IsSourceBreakStub(Code* code) {
 // location.
 bool Debug::IsBreakStub(Code* code) {
   CodeStub::Major major_key = CodeStub::GetMajorKey(code);
-  return major_key == CodeStub::CallFunction ||
-         major_key == CodeStub::StackCheck;
+  return major_key == CodeStub::CallFunction;
 }
 
 
@@ -1503,8 +1502,7 @@ Handle<Code> Debug::FindDebugBreak(Handle<Code> code, RelocInfo::Mode mode) {
     return result;
   }
   if (code->kind() == Code::STUB) {
-    ASSERT(code->major_key() == CodeStub::CallFunction ||
-           code->major_key() == CodeStub::StackCheck);
+    ASSERT(code->major_key() == CodeStub::CallFunction);
     Handle<Code> result =
         Handle<Code>(Builtins::builtin(Builtins::StubNoRegisters_DebugBreak));
     return result;
@@ -1847,7 +1845,8 @@ void Debug::ClearMirrorCache() {
   // Clear the mirror cache.
   Handle<String> function_name =
       Factory::LookupSymbol(CStrVector("ClearMirrorCache"));
-  Handle<Object> fun(Top::global()->GetProperty(*function_name));
+  Handle<Object> fun(Top::global()->GetPropertyNoExceptionThrown(
+      *function_name));
   ASSERT(fun->IsJSFunction());
   bool caught_exception;
   Handle<Object> js_object = Execution::TryCall(
@@ -1954,7 +1953,8 @@ Handle<Object> Debugger::MakeJSObject(Vector<const char> constructor_name,
 
   // Create the execution state object.
   Handle<String> constructor_str = Factory::LookupSymbol(constructor_name);
-  Handle<Object> constructor(Top::global()->GetProperty(*constructor_str));
+  Handle<Object> constructor(Top::global()->GetPropertyNoExceptionThrown(
+      *constructor_str));
   ASSERT(constructor->IsJSFunction());
   if (!constructor->IsJSFunction()) {
     *caught_exception = true;
@@ -2181,8 +2181,8 @@ void Debugger::OnAfterCompile(Handle<Script> script,
   Handle<String> update_script_break_points_symbol =
       Factory::LookupAsciiSymbol("UpdateScriptBreakPoints");
   Handle<Object> update_script_break_points =
-      Handle<Object>(Debug::debug_context()->global()->GetProperty(
-          *update_script_break_points_symbol));
+      Handle<Object>(Debug::debug_context()->global()->
+          GetPropertyNoExceptionThrown(*update_script_break_points_symbol));
   if (!update_script_break_points->IsJSFunction()) {
     return;
   }
