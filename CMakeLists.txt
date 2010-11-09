@@ -3,6 +3,11 @@ project (NODE)
 
 STRING(TOLOWER ${CMAKE_SYSTEM_NAME} platform)
 
+string(COMPARE EQUAL $(PROJECT_BINARY_DIR) ${PROJECT_SOURCE_DIR} in_source_build)
+if (NOT ${in_source_build})
+  execute_process(COMMAND cmake -E copy_directory ${PROJECT_SOURCE_DIR}/tools ${PROJECT_BINARY_DIR}/tools)
+endif ()
+
 if(NOT "v${CMAKE_BUILD_TYPE}" MATCHES vDebug)
   set (CMAKE_BUILD_TYPE "Release")
 endif()
@@ -66,9 +71,11 @@ CHECK_FUNCTION_EXISTS(fdatasync HAVE_FDATASYNC)
 
 if (HAVE_FDATASYNC)
   add_definitions(-DHAVE_FDATASYNC=1)
+else ()
+  add_definitions(-DHAVE_FDATASYNC=0)
 endif()
 
-add_definitions(-DPLATFORM="${platform}"
+add_definitions(-DPLATFORM=${platform}
   -DX_STACKSIZE=65536 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DEV_MULTIPLICITY=0
 )
 
@@ -91,7 +98,14 @@ find_package (OpenSSL QUIET)
 find_package (Threads)
 
 find_library (RT rt)
+if (RT)
+  set (extra_libs ${extra_libs} ${RT})
+endif ()
+
 find_library (DL dl)
+if (DL)
+  set (extra_libs ${extra_libs} ${DL})
+endif ()
 
 set(V8_INCLUDE_NAMES v8.h v8-debug.h v8-profiler.h)
 set(V8_LIBRARY_NAMES v8)
@@ -101,13 +115,13 @@ if (SHARED_V8)
   find_library(V8_LIBRARY_PATH NAMES ${V8_LIBRARY_NAMES} NO_CMAKE_PATH)
   message("V8 library: ${V8_LIBRARY_PATH}")
 else()
-  set(V8_INCLUDE_DIR "deps/v8/include")
+  set(V8_INCLUDE_DIR "${PROJECT_BINARY_DIR}/deps/v8/include")
   if (${CMAKE_BUILD_TYPE} MATCHES Debug)
     set(v8_fn "libv8_g.a")
   else()
     set(v8_fn "libv8.a")
   endif()
-  set(V8_LIBRARY_PATH "${PROJECT_SOURCE_DIR}/deps/v8/${v8_fn}")
+  set(V8_LIBRARY_PATH "${PROJECT_BINARY_DIR}/deps/v8/${v8_fn}")
 endif()
 
 if (SHARED_LIBEV)
@@ -138,7 +152,7 @@ endif()
 
 if (${platform} MATCHES freebsd)
   find_library (KVM NAMES kvm)
-  set (extra_libs KVM)
+  set (extra_libs ${extra_libs} KVM)
 endif()
 
 message("RT library: ${RT}")
@@ -152,12 +166,30 @@ if (${OPENSSL_FOUND} MATCHES TRUE)
   set (extra_libs ${extra_libs} ${OPENSSL_LIBRARIES})
 endif()
 
-FILE(GLOB js2c_files lib/*.js)
-set(js2c_files src/node.js ${js2c_files})
+FILE(GLOB js2c_files ${PROJECT_SOURCE_DIR}/lib/*.js)
+set(js2c_files ${PROJECT_SOURCE_DIR}/src/node.js ${js2c_files})
+file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/src)
 
-if (NOT EXISTS src/node_natives.h)
-  EXECUTE_PROCESS(COMMAND tools/js2c.py src/node_natives.h ${js2c_files})
-endif()
+set(PREFIX ${CMAKE_INSTALL_PREFIX})
+if (${CMAKE_BUILD_TYPE} MATCHES Debug)
+  set(CCFLAGS "${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_FLAGS}")
+else ()
+  set(CCFLAGS "${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_FLAGS}")
+endif ()
+get_directory_property(compile_defs COMPILE_DEFINITIONS)
+foreach (def ${compile_defs})
+  set(CPPFLAGS "${CPPFLAGS} -D${def}")
+endforeach ()
+
+message("PREFIX: ${PREFIX}")
+message("CCFLAGS: ${CCFLAGS}")
+message("CPPFLAGS: ${CPPFLAGS}")
+
+add_custom_command (
+  OUTPUT ${PROJECT_BINARY_DIR}/src/node_natives.h
+  COMMAND tools/js2c.py ${PROJECT_BINARY_DIR}/src/node_natives.h ${js2c_files}
+  DEPENDS ${js2c_files}
+  )
 
 set(node_sources
     src/node_main.cc
@@ -184,17 +216,17 @@ set(node_sources
 add_subdirectory (deps/libeio)
 add_subdirectory (deps/http_parser)
 
-
-configure_file (src/node_config.h.in src/node_config.h)
-configure_file (config.h.cmake config.h)
+configure_file (src/node_config.h.in ${PROJECT_BINARY_DIR}/src/node_config.h)
+configure_file (config.h.cmake ${PROJECT_BINARY_DIR}/config.h)
+include_directories(${PROJECT_BINARY_DIR} ${PROJECT_BINARY_DIR}/src)
 
 include_directories (src ${LIBEV_INCLUDE_DIR} deps/libeio ${V8_INCLUDE_DIR} ${LIBCARES_INCLUDE_DIR} deps/http_parser)
 add_executable (node ${node_sources})
-target_link_libraries (node ev eio cares http_parser v8 ${CMAKE_THREAD_LIBS_INIT} ${DL} ${RT} ${extra_libs})
+target_link_libraries (node ev eio cares http_parser ${V8_LIBRARY_PATH} ${CMAKE_THREAD_LIBS_INIT} ${extra_libs})
 set_target_properties(node PROPERTIES DEBUG_POSTFIX "_g")
 
 install (TARGETS node RUNTIME DESTINATION bin)
-install (FILES     
+install (FILES
   config.h
   src/node.h
   src/node_object_wrap.h
@@ -209,22 +241,58 @@ install (FILES
 #
 
 if (NOT SHARED_V8)
+
+  file(GLOB_RECURSE v8_sources RELATIVE ${PROJECT_SOURCE_DIR} deps/v8/*)
+
+  if (NOT ${in_source_build})
+    file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/deps/v8)
+
+    foreach(FILE ${v8_sources})
+      ADD_CUSTOM_COMMAND(OUTPUT ${PROJECT_BINARY_DIR}/${FILE}
+        COMMAND cmake -E copy_if_different ${PROJECT_SOURCE_DIR}/${FILE} ${PROJECT_BINARY_DIR}/${FILE}
+        DEPENDS   ${PROJECT_SOURCE_DIR}/${FILE}
+        )
+       list(APPEND v8_sources_dest ${PROJECT_BINARY_DIR}/${FILE})
+     endforeach()
+  else ()
+    set(v8_sources_dest ${v8_sources})
+  endif ()
+
   if (V8_SNAPSHOT)
     set(v8snapshot snapshot=on)
   endif()
 
-  add_custom_command (
-    OUTPUT ${PROJECT_SOURCE_DIR}/deps/v8/${v8_fn}
-    COMMAND ../../tools/scons/scons.py library=static visibility=default ${v8snapshot} mode=${v8mode} verbose=on arch=${v8arch}
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/deps/v8/
-    )
-  ADD_CUSTOM_TARGET(v8_stock ALL DEPENDS ${PROJECT_SOURCE_DIR}/deps/v8/${v8_fn})
+  if (${platform} MATCHES darwin)
+    execute_process(COMMAND hwprefs cpu_count OUTPUT_VARIABLE cpu_count)
+  elseif (${platform} MATCHES linux)
+    execute_process(COMMAND cat /proc/cpuinfo
+     COMMAND grep processor
+     COMMAND sort
+     COMMAND uniq
+     COMMAND wc -l
+     OUTPUT_VARIABLE cpu_count)
+  endif ()
 
+  if (${cpu_count} GREATER 1)
+    math(EXPR parallel_jobs ${cpu_count}*2)
+  else ()
+    set(parallel_jobs 1)
+  endif ()
+  message("V8 PARALLEL_JOBS: ${parallel_jobs}")
+
+  add_custom_command (
+    OUTPUT ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn}
+    COMMAND ${PROJECT_BINARY_DIR}/tools/scons/scons.py library=static visibility=default ${v8snapshot} mode=${v8mode} verbose=on arch=${v8arch} -j ${parallel_jobs}
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/deps/v8/
+    DEPENDS ${v8_sources_dest}
+    )
+
+  ADD_CUSTOM_TARGET(v8_stock ALL DEPENDS ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn})
 
   add_library(v8 STATIC IMPORTED)
 
   set_property(TARGET v8 PROPERTY
-               IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/deps/v8/${v8_fn})
+               IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn})
 endif()
 
 if (NOT SHARED_V8)
@@ -232,9 +300,46 @@ if (NOT SHARED_V8)
 endif()
 
 #
-# tests
+# docs
 #
 
+file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/doc)
+
+add_custom_target (
+  doc
+  DEPENDS doc/node.1 doc/api.html ${PROJECT_SOURCE_DIR}/doc/index.html doc/changelog.html
+  WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+  )
+
+add_custom_command (
+  OUTPUT ${PROJECT_BINARY_DIR}/doc/api.html
+  COMMAND ${PROJECT_BINARY_DIR}/default/node tools/ronnjs/bin/ronn.js --fragment doc/api.markdown
+    | sed "s/<h2>\\\(.*\\\)<\\/h2>/<h2 id=\"\\1\">\\1<\\/h2>/g"
+    | cat doc/api_header.html - doc/api_footer.html > ${PROJECT_BINARY_DIR}/doc/api.html
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  DEPENDS node doc/api.markdown doc/api_header.html doc/api_footer.html
+  VERBATIM
+  )
+
+add_custom_command (
+  OUTPUT ${PROJECT_BINARY_DIR}/doc/changelog.html
+  COMMAND cat doc/changelog_header.html ChangeLog doc/changelog_footer.html > ${PROJECT_BINARY_DIR}/doc/changelog.html
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  DEPENDS ChangeLog doc/changelog_header.html doc/changelog_footer.html
+  VERBATIM
+  )
+
+add_custom_command (
+  OUTPUT ${PROJECT_BINARY_DIR}/doc/node.1
+  COMMAND ${PROJECT_BINARY_DIR}/default/node tools/ronnjs/bin/ronn.js --roff doc/api.markdown > ${PROJECT_BINARY_DIR}/doc/node.1
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  DEPENDS node doc/api.markdown tools/ronnjs/bin/ronn.js
+  VERBATIM
+  )
+
+#
+# tests
+#
 
 if (${CMAKE_BUILD_TYPE} MATCHES Debug)
   set (test_bin_dir debug)
@@ -246,8 +351,8 @@ endif()
 
 add_custom_command (
   TARGET node POST_BUILD
-  COMMAND /bin/mkdir -p build/${test_bin_dir}
-  COMMAND /bin/cp -n ${node_bin} build/${test_bin_dir} || true
+  COMMAND cmake -E make_directory ${PROJECT_BINARY_DIR}/${test_bin_dir}
+  COMMAND cmake -E copy_if_different ${node_bin} ${PROJECT_BINARY_DIR}/${test_bin_dir}
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
 
@@ -287,13 +392,13 @@ add_custom_target (test-simple
   DEPENDS node
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   )
-     
+
 add_custom_target (test-pummel
   COMMAND python tools/test.py pummel
   DEPENDS node
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   )
-	
+
 add_custom_target (test-internet
   COMMAND python tools/test.py internet
   DEPENDS node
