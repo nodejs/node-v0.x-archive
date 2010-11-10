@@ -2,7 +2,8 @@ include(CheckIncludeFiles)
 include(CheckFunctionExists)
 include(CheckLibraryExists)
 
-include_directories(${platform})
+#include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${PROJECT_BINARY_DIR}/deps/libev)
 add_definitions(-DHAVE_CONFIG_H=1 -DEV_MULTIPLICITY=0)
 
 check_include_files(sys/inotify.h HAVE_SYS_INOTIFY_H)
@@ -33,6 +34,4 @@ check_library_exists(rt clock_gettime "" HAVE_CLOCK_GETTIME)
 check_library_exists(m ceil "" HAVE_LIBM)
 
 configure_file(config.h.cmake ${PROJECT_BINARY_DIR}/deps/libev/config.h)
-include_directories(${PROJECT_BINARY_DIR}/deps/libev)
-
 add_library (ev ev.c)
