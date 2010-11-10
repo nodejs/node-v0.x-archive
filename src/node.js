@@ -178,7 +178,7 @@ var module = (function () {
     var location, stats;
     while (location = nextLoc()) {
       try { stats = fs.statSync(location); } catch(e) { continue; }
-      if (stats && !stats.isDirectory()) return location;
+      if (stats && !stats.isDirectory()) return fs.realpathSync(location);
     }
     return false;
   }
