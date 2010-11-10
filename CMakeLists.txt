@@ -51,7 +51,7 @@ elseif(NOT ${platform} MATCHES cygwin*)
 endif()
 
 if(${platform} MATCHES darwin)
-  set(CMAKE_EXE_LINKER_FLAGS -framework Carbon)
+  set(CMAKE_EXE_LINKER_FLAGS "-framework Carbon")
 endif()
 
 ## What is this for??
