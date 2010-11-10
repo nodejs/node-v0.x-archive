@@ -245,13 +245,13 @@ target_link_libraries(node
 
 install(TARGETS node RUNTIME DESTINATION bin)
 install(FILES     
-  config.h
+  ${PROJECT_BINARY_DIR}/config.h
   src/node.h
   src/node_object_wrap.h
   src/node_buffer.h
   src/node_events.h
   src/node_version.h
-  src/node_config.h
+  ${PROJECT_BINARY_DIR}/src/node_config.h
 
   DESTINATION include/node
 )
