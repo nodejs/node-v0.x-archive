@@ -54,11 +54,6 @@ if(${platform} MATCHES darwin)
   set(CMAKE_EXE_LINKER_FLAGS "-framework Carbon")
 endif()
 
-## What is this for??
-if(${CMAKE_BUILD_TYPE} MATCHES Debug)
-else()
-endif()
-
 if(${CMAKE_BUILD_TYPE} MATCHES Debug)
   set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/debug/)
 else()
