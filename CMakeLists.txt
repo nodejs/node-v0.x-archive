@@ -444,7 +444,17 @@ add_custom_target(test-internet
 # package
 #
 
-set(CPACK_GENERATOR "TGZ;DEB;RPM")
+if(${platform} MATCHES darwin)
+  set(CPACK_GENERATOR "TGZ;PackageMaker")
+  # CPack requires the files to end in .txt
+  configure_file(LICENSE ${PROJECT_BINARY_DIR}/LICENSE.txt COPYONLY)
+  configure_file(ChangeLog ${PROJECT_BINARY_DIR}/ChangeLog.txt COPYONLY)
+  set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_BINARY_DIR}/LICENSE.txt")
+  set(CPACK_RESOURCE_FILE_README "${PROJECT_BINARY_DIR}/ChangeLog.txt")
+  #set(CPACK_RESOURCE_FILE_WELCOME "")
+else()
+  set(CPACK_GENERATOR "TGZ;DEB;RPM")
+endif()
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Tom Hughes <tom.hughes@palm.com>")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Evented I/O for V8 JavaScript.")
 set(CPACK_PACKAGE_DESCRIPTION "Node's goal is to provide an easy way to
