@@ -1,9 +1,6 @@
 assert = require('assert');
 fs = require('fs');
 
-//
-// dup
-//
 oldfd = fs.openSync(__filename, 'r');
 newfd = fs.dup(oldfd);
 assert.notEqual(oldfd, newfd, 'oldfd and newfd must not be identical');

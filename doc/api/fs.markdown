@@ -117,13 +117,25 @@ Synchronous lstat(2). Returns an instance of `fs.Stats`.
 
 Synchronous fstat(2). Returns an instance of `fs.Stats`.
 
-### fs.dup(fd)
+### fs.dup(fd, [newfd])
 
-Makes a copy of a file descriptor. See dup(2).
+Makes a copy of a file descriptor. This function takes one or two arguments. If
+one argument is given, dup() will use the lowest free file descriptor and return
+that as the new file descriptor. Given two, it will use `newfd` as the new file
+descriptor.
 
-### fs.dup2(oldfd, newfd)
+    var fs = require('fs');
 
-Makes newfd be a copy of oldfd. Will close newfd first if it refers to an open file. See dup2(2).
+    fs.open('test.txt', 'w', function(err, fd) {
+        // Close stdout = 1 to let dup use the file descriptor of stdout.
+        fs.close(1, function(err) {
+            fs.dup(fd);
+            console.log('hello, world');
+        });
+    });
+
+Since stdout was closed, dup() will assign the file `test.txt` to the file descriptor
+1 and thus everything written to stdout will be written to `test.txt`.
 
 ### fs.link(srcpath, dstpath, [callback])
 
