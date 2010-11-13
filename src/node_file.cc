@@ -764,6 +764,24 @@ static Handle<Value> Chown(const Arguments& args) {
   }
 }
 
+static Handle<Value> Dup(const Arguments& args) {
+    HandleScope scope;
+    
+    int fd = -1;
+    if (args.Length() == 2 && args[0]->IsInt32() && args[1]->IsInt32()) {
+      fd = dup2(args[0]->Int32Value(), args[1]->Int32Value());
+    } else if (args.Length() == 1 && args[0]->IsInt32()) {
+      fd = dup(args[0]->Int32Value());
+    }
+    
+    if (fd == -1) {
+      return ThrowException(ErrnoException(errno, "dup", "", NULL));
+    }
+    
+    return scope.Close(Integer::New(fd));
+}
+
+
 void File::Initialize(Handle<Object> target) {
   HandleScope scope;
 
@@ -789,6 +807,8 @@ void File::Initialize(Handle<Object> target) {
 
   NODE_SET_METHOD(target, "chmod", Chmod);
   NODE_SET_METHOD(target, "chown", Chown);
+
+  NODE_SET_METHOD(target, "dup", Dup);
 
   errno_symbol = NODE_PSYMBOL("errno");
   encoding_symbol = NODE_PSYMBOL("node:encoding");

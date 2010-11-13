@@ -117,6 +117,14 @@ Synchronous lstat(2). Returns an instance of `fs.Stats`.
 
 Synchronous fstat(2). Returns an instance of `fs.Stats`.
 
+### fs.dup(fd)
+
+Makes a copy of a file descriptor. See dup(2).
+
+### fs.dup2(oldfd, newfd)
+
+Makes newfd be a copy of oldfd. Will close newfd first if it refers to an open file. See dup2(2).
+
 ### fs.link(srcpath, dstpath, [callback])
 
 Asynchronous link(2). No arguments other than a possible exception are given to the completion callback.
