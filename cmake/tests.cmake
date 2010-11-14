@@ -25,8 +25,9 @@ foreach(test ${node_tests})
 
     add_test(${test_name} ${node_bin} ${test})
   endif()
-
 endforeach()
+
+configure_file(${CMAKE_SOURCE_DIR}/cmake/CTestCustom.cmake ${CMAKE_BINARY_DIR}/CTestCustom.cmake COPYONLY)
 
 add_custom_command(
   TARGET node POST_BUILD
