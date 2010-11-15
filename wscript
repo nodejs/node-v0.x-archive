@@ -13,7 +13,7 @@ import js2c
 
 srcdir = '.'
 blddir = 'build'
-supported_archs = ('arm', 'ia32', 'x64') # 'mips' supported by v8, but not node
+supported_archs = ('arm', 'ia32', 'x86', 'x64') # 'mips' supported by v8, but not node
 
 jobs=1
 if os.environ.has_key('JOBS'):
@@ -21,7 +21,7 @@ if os.environ.has_key('JOBS'):
 
 
 def canonical_cpu_type(arch):
-  m = {'i386':'ia32', 'x86_64':'x64', 'amd64':'x64'}
+  m = {'x86': 'ia32', 'i386':'ia32', 'x86_64':'x64', 'amd64':'x64'}
   if arch in m: arch = m[arch]
   if not arch in supported_archs:
     raise Exception("supported architectures are "+', '.join(supported_archs)+\
@@ -309,7 +309,7 @@ def configure(conf):
     if 'DEST_CPU' in conf.env:
       arch = conf.env['DEST_CPU']
       # map supported_archs to GCC names:
-      arch_mappings = {'ia32': 'i386', 'x64': 'x86_64'}
+      arch_mappings = {'x86': 'i386', 'ia32': 'i386', 'x64': 'x86_64'}
       if arch in arch_mappings:
         arch = arch_mappings[arch]
       flags = ['-arch', arch]
