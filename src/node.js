@@ -99,7 +99,6 @@ var module = (function () {
     var m = new Module(id);
     internalModuleCache[id] = m;
     var e = m._compile(natives[id], id+".js");
-    if (e) throw e; // error compiling native module
     return m;
   }
 
@@ -303,8 +302,7 @@ var module = (function () {
         sandbox.global      = sandbox;
         sandbox.root        = root;
 
-        Script.runInNewContext(content, sandbox, filename);
-
+        return Script.runInNewContext(content, sandbox, filename);
       } else {
         debug('load root module');
         // root module
@@ -313,7 +311,7 @@ var module = (function () {
         global.__filename = filename;
         global.__dirname  = dirname;
         global.module     = self;
-        Script.runInThisContext(content, filename);
+        return Script.runInThisContext(content, filename);
       }
 
     } else {
@@ -326,7 +324,7 @@ var module = (function () {
       if (filename === process.argv[1] && global.v8debug) {
         global.v8debug.Debug.setBreakPoint(compiledWrapper, 0, 0);
       }
-      compiledWrapper.apply(self.exports, [self.exports, require, self, filename, dirname]);
+      return compiledWrapper.apply(self.exports, [self.exports, require, self, filename, dirname]);
     }
   };
 
@@ -350,6 +348,9 @@ var module = (function () {
     process.mainModule = new Module(".");
     process.mainModule.load(process.argv[1]);
   };
+
+  // export for --eval
+  exports.Module = Module;
 
   return exports;
 })();
@@ -581,9 +582,9 @@ if (process.argv[1]) {
   process.nextTick(module.runMain);
 
 } else if (process._eval) {
-    // -e, --eval
-    var indirectEval= eval; // so the eval happens in global scope.
-    if (process._eval) console.log(indirectEval(process._eval));
+  // -e, --eval
+  var rv = new module.Module()._compile('return eval(process._eval)', 'eval');
+  console.log(rv);
 } else {
     // REPL
   module.requireNative('repl').start();
