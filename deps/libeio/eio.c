@@ -1648,13 +1648,15 @@ static void eio_execute (etp_worker *self, eio_req *req)
 #if defined (__APPLE__)
                           pthread_mutex_lock (&apple_bug_writelock);
 #endif
+
                           req->result = req->offs >= 0
-                                      ? pread     (req->int1, req->ptr2, req->size, req->offs)
-                                      : read      (req->int1, req->ptr2, req->size);
+                                      ? pwrite    (req->int1, req->ptr2, req->size, req->offs)
+                                      : write     (req->int1, req->ptr2, req->size);
+                                      
 #if defined (__APPLE__)
                           pthread_mutex_unlock (&apple_bug_writelock);
 #endif
-        break;
+                          break;
         
       case EIO_READAHEAD: req->result = readahead     (req->int1, req->offs, req->size); break;
       case EIO_SENDFILE:  req->result = eio__sendfile (req->int1, req->int2, req->offs, req->size, self); break;
