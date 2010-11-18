@@ -37,17 +37,17 @@ set(CMAKE_CXX_FLAGS_DEBUG "-O0 -Wall -g -Wextra -DDEBUG $ENV{CXXFLAGS}")
 set(CMAKE_C_FLAGS_RELEASE "-g -O3 -DNDEBUG $ENV{CFLAGS}")
 set(CMAKE_CXX_FLAGS_RELEASE "-g -O3 -DNDEBUG $ENV{CXXFLAGS}")
 
-if(${platform} MATCHES sunos)
+if(${node_platform} MATCHES sunos)
   # shouldn't this be added to CMAE_C_FLAGS or something?
   add_definitions(-threads)
-elseif(NOT ${platform} MATCHES cygwin*)
+elseif(NOT ${node_platform} MATCHES cygwin*)
   # shouldn't this be added to CMAE_C_FLAGS or something?
   add_definitions(-pthread)
   set(CMAKE_C_FLAGS -rdynamic)
   set(CMAKE_EXE_LINKER_FLAGS -pthread)
 endif()
 
-if(${platform} MATCHES darwin)
+if(${node_platform} MATCHES darwin)
   set(CMAKE_EXE_LINKER_FLAGS "-framework Carbon")
 endif()
 
