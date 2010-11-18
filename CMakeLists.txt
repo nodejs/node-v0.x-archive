@@ -64,7 +64,7 @@ message("  RT library:         ${RT}")
 message("  DL library:         ${DL}")
 
 if(${OPENSSL_FOUND} MATCHES TRUE)
-  message("  OpenSSL:            Found!")
+  message("  OpenSSL:            ${OPENSSL_LIBRARIES}")
 endif()
 
 # message("  CCFLAGS:            ${CCFLAGS}")
