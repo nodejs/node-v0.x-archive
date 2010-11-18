@@ -1,0 +1,20 @@
+assert = require('assert');
+child = require('child_process');
+
+nodejs = process.argv[0];
+self = process.argv[1];
+
+if (module.parent) {
+  // signal we've been loaded as a module
+  process.exit(42);
+}
+
+// assert that the result of the final expression is written to stdout
+child.exec(nodejs + ' --eval \'1337; 42\'', function(err, stdout, stderr) {
+  assert.equal(parseInt(stdout), 42);
+});
+
+// assert that module loading works
+child.exec(nodejs + ' --eval \'require("' + self + '")\'', function(status, stdout, stderr) {
+  assert.equal(status.code, 42);
+});
