@@ -1,7 +1,6 @@
 #
 # package
 #
-include(CPack)
 
 if(${node_platform} MATCHES darwin)
   set(CPACK_GENERATOR "TGZ;PackageMaker")
@@ -29,3 +28,6 @@ string(REGEX REPLACE ".*NODE_MINOR_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VE
 string(REGEX REPLACE ".*NODE_PATCH_VERSION[ ]*([0-9]+).*" "\\1" CPACK_PACKAGE_VERSION_PATCH "${node_version_h}")
 set(node_version_string "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
 
+# Note: this is intentionally at the bottom so that the above CPACK variables
+# are used by CPack.
+include(CPack)
