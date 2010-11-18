@@ -6,6 +6,7 @@ self = process.argv[1];
 
 if (module.parent) {
   // signal we've been loaded as a module
+  console.log('Loaded as a module, exiting with status code 42.');
   process.exit(42);
 }
 
@@ -16,5 +17,10 @@ child.exec(nodejs + ' --eval \'1337; 42\'', function(err, stdout, stderr) {
 
 // assert that module loading works
 child.exec(nodejs + ' --eval \'require("' + self + '")\'', function(status, stdout, stderr) {
+  assert.equal(status.code, 42);
+});
+
+// module path resolve bug, regression test
+child.exec(nodejs + ' --eval \'require("./test/simple/test-cli-eval.js")\'', function(status, stdout, stderr) {
   assert.equal(status.code, 42);
 });

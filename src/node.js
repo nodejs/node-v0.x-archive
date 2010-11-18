@@ -188,6 +188,13 @@ var module = (function () {
       return [request, modulePaths];
     }
 
+    // with --eval, parent.id is not set and parent.filename is null
+    if (!parent || !parent.id || !parent.filename) {
+      // make require('./path/to/foo') work - normally the path is taken
+      // from realpath(__filename) but with eval there is no filename
+      return [request, ['.'].concat(modulePaths)];
+    }
+
     // Is the parent an index module?
     // We can assume the parent has a valid extension,
     // as it already has been accepted as a module.
