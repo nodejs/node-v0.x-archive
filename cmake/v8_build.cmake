@@ -35,8 +35,7 @@ if(NOT SHARED_V8)
     PROPERTY IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/deps/v8/${v8_fn})
 
 
-  
-  if(CMAKE_VERSION VERSION_GREATER 2.8)
+  if(CMAKE_VERSION VERSION_GREATER 2.8 OR CMAKE_VERSION VERSION_EQUAL 2.8)
     # use ExternalProject for CMake >2.8
     include(ExternalProject)
     
