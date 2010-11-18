@@ -1,10 +1,20 @@
 WAF=python tools/waf-light
 
-all:
-	@$(WAF) build
+web_root = ryan@nodejs.org:~/web/nodejs.org/
+
+all: program
 
 all-progress:
 	@$(WAF) -p build
+
+program:
+	@$(WAF) --product-type=program build
+
+staticlib:
+	@$(WAF) --product-type=cstaticlib build
+
+dynamiclib:
+	@$(WAF) --product-type=cshlib build
 
 install:
 	@$(WAF) install
@@ -29,34 +39,63 @@ test-message: all
 
 test-simple: all
 	python tools/test.py simple
-     
+
 test-pummel: all
 	python tools/test.py pummel
-	
+
 test-internet: all
 	python tools/test.py internet
 
-# http://rtomayko.github.com/ronn
-# gem install ronn
-doc: doc/node.1 doc/api.html doc/index.html doc/changelog.html
+build/default/node: all
 
-## HACK to give the ronn-generated page a TOC
-doc/api.html: all doc/api.markdown doc/api_header.html doc/api_footer.html
-	build/default/node tools/ronnjs/bin/ronn.js --fragment doc/api.markdown \
-	| sed "s/<h2>\(.*\)<\/h2>/<h2 id=\"\1\">\1<\/h2>/g" \
-	| cat doc/api_header.html - doc/api_footer.html > doc/api.html
+apidoc_sources = $(wildcard doc/api/*.markdown)
+apidocs = $(addprefix build/,$(apidoc_sources:.markdown=.html))
 
-doc/changelog.html: ChangeLog doc/changelog_header.html doc/changelog_footer.html
-	cat doc/changelog_header.html ChangeLog doc/changelog_footer.html > doc/changelog.html
+apidoc_dirs = build/doc build/doc/api/ build/doc/api/assets
 
-doc/node.1: doc/api.markdown all
-	build/default/node tools/ronnjs/bin/ronn.js --roff doc/api.markdown > doc/node.1
+apiassets = $(subst api_assets,api/assets,$(addprefix build/,$(wildcard doc/api_assets/*)))
+
+website_files = \
+	build/doc/index.html    \
+	build/doc/cla.html      \
+	build/doc/sh_main.js    \
+	build/doc/sh_javascript.min.js \
+	build/doc/sh_vim-dark.css \
+	build/doc/logo.png      \
+	build/doc/sponsored.png \
+	build/doc/pipe.css
+
+doc: build/default/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) build/doc/changelog.html
+
+$(apidoc_dirs):
+	mkdir -p $@
+
+build/doc/api/assets/%: doc/api_assets/% build/doc/api/assets/
+	cp $< $@
+
+build/doc/%: doc/%
+	cp $< $@
+
+build/doc/api/%.html: doc/api/%.markdown build/default/node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
+	build/default/node tools/doctool/doctool.js doc/template.html $< > $@
+
+build/doc/changelog.html: ChangeLog build/default/node build/doc/ $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
+	build/default/node tools/doctool/doctool.js doc/template.html $< \
+	| sed 's|assets/|api/assets/|g' \
+	| sed 's|<body>|<body id="changelog">|g' > $@
+	@echo $(apiassets)
+
+
+build/doc/%:
 
 website-upload: doc
-	scp doc/* ryan@nodejs.org:~/web/nodejs.org/
+	scp -r build/doc/* $(web_root)
+
+docopen: build/doc/api/all.html
+	-google-chrome build/doc/api/all.html
 
 docclean:
-	@-rm -f doc/node.1 doc/api.html doc/changelog.html
+	-rm -rf build/doc
 
 clean:
 	@$(WAF) clean
@@ -72,11 +111,12 @@ check:
 VERSION=$(shell git describe)
 TARNAME=node-$(VERSION)
 
-dist: doc/node.1 doc/api.html
-	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
+#dist: doc/node.1 doc/api
+dist: doc
+	  git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
-	cp doc/api.html $(TARNAME)/doc/api.html
+	cp -r build/doc/api $(TARNAME)/doc/api
 	rm -rf $(TARNAME)/deps/v8/test # too big
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
@@ -91,4 +131,4 @@ bench-idle:
 	./node benchmark/idle_clients.js &
 
 
-.PHONY: bench clean docclean dist distclean check uninstall install all test test-all website-upload
+.PHONY: bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload

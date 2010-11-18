@@ -1,138 +1,133 @@
-var fs = require("fs")
-  , path = require("path")
-  , cp = require('child_process')
-  , markdown = require("./markdown");
-
-var cwd = process.cwd()
-  , doc_root = path.join(cwd, "doc/api/")
-  , build_root = path.join(cwd, "build/doc/api/")
-  , assets_path = path.join(cwd, "doc/api_assets/")
-  , bassets_path = path.join(build_root, "assets/");
-
 /*
-A simple step / flow-control pattern, so that I can make the code in this file
-just a little bit more easy to follow.
+  Process a single doc file
+
+    argv[2] = template file
+    argv[3] = input file
+    argv[4] = output file
+
 */
-var step = function(){
-  var self = this;
-  this.steps = Array.prototype.slice.call(arguments);
-  this.index = 0;
-  this.next = function(){
-    var index = self.index++;
-    return function(){
-      if(index < self.steps.length){
-        self.steps[index](self.next());
-      } else {
-        return function(){};
+var fs = require("fs"),
+    path = require("path"),
+    markdown = require("./markdown"),
+    argv = process.argv,
+    argc = argv.length;
+
+var template = fs.readFileSync(argv[2], "utf8");
+
+
+function formatIdString(str) {
+  str = str
+    .replace(/\([^)}]*\)/gmi, "")
+    .replace(/[^A-Za-z0-9_.]+/gmi, "_");
+
+  return str.substr(0,1).toLowerCase() + str.substr(1);
+}
+
+
+function generateToc(data) {
+  var last_level = 0
+    , first_level = 0
+    , toc = [
+      '<div id="toc">',
+      '<h2>Table Of Contents</h2>'
+    ];
+
+  data.replace(/(^#+)\W+([^$\n]+)/gmi, function(src, level, text) {
+    level = level.length;
+
+    if (first_level == 0) first_level = level;
+
+    if (level <= last_level) {
+      toc.push("</li>");
+    }
+
+    if (level > last_level) {
+      toc.push("<ul>");
+    } else if (level < last_level) {
+      for(var c=last_level-level; 0 < c ; c-- ) {
+        toc.push("</ul>");
+        toc.push("</li>");
       }
-    };
-  };
-  return this.next();
-};
+    }
+
+    toc.push("<li>");
+    toc.push('<a href="#'+formatIdString(text)+'">'+text+'</a>');
+
+    last_level = level;
+  });
+
+  for(var c=last_level-first_level; 0 <= c ; c-- ) {
+    toc.push("</li>");
+    toc.push("</ul>");
+  }
+
+  toc.push("<hr />")
+  toc.push("</div>");
+
+  return toc.join("");
+}
 
 
 var includeExpr = /^@include\s+([A-Za-z0-9-_]+)(?:\.)?([a-zA-Z]*)$/gmi;
-function convertData(data){
-  // Allow including other pages in the data.
-  data = data.replace(includeExpr, function(src, name, ext){
+// Allow including other pages in the data.
+function loadIncludes(data, current_file) {
+  return data.replace(includeExpr, function(src, name, ext) {
     try {
-      var inc_path = path.join(doc_root, name+"."+(ext || "markdown"));
-      return fs.readFileSync(inc_path, "utf8");
+      var include_path = path.join(current_file, "../", name+"."+(ext || "markdown"))
+      return loadIncludes(fs.readFileSync(include_path, "utf8"), current_file);
     } catch(e) {
       return "";
     }
   });
-  
+}
+
+
+function convertData(data) {
   // Convert it to HTML from Markdown
-  if(data.length == 0){
-    data = "Sorry, this section is currently undocumented, but we'll be working on it.";
-  }
-  
-  return markdown.toHTML(markdown.parse(data), {xhtml:true});
-};
-
-/*
-Ensures that the output directory exists, this can probably be done in the
-makefile.
-*/
-function checkdir(next){
-  fs.stat(build_root, function(err){
-    if(err) {
-      // easiest way to recursively create directories without doing loops.
-      cp.exec("mkdir -p "+build_root, function(err, stdout, stderr){
-        next();
-      });
-    } else {
-      next();
-    }
-  })
-};
-
-/*
-Loads the template for which the documentation should be outputed into.
-*/
-var template;
-
-function loadTemplates(next){
-  fs.readFile(path.join(doc_root, "../template.html"), "utf8", function(e, d){
-    if(e) throw e;
-    
-    template = d;
-    next();
-  });
-};
-
-
-/*
-This function reads the doc/api/* directory, and filters out any files 
-that are not markdown files. It then converts the markdown to HTML, and 
-outputs it into the previously loaded template file.
-*/
-function convertFiles(next){
-  fs.readdir(doc_root, function(err, files){
-    if(err) throw err;
-    
-    files.filter(function(file){
-      var basename = path.basename(file, ".markdown");
-      return path.extname(file) == ".markdown" &&
-        basename.substr(0,1) != "_";
-    }).forEach(function(file){
-      var filename = path.basename(file, '.markdown')
-        , build_path = path.join(build_root, filename+".html")
-        , doc_path = path.join(doc_root, file);
-
-      fs.readFile(doc_path, "utf8", function(err, data){
-        if(err) throw err;
-        
-        // do conversion stuff.
-        var html = convertData(data);
-        var output = template.replace("{{content}}", html);
-        
-        if(filename == "index"){
-          output = output.replace("{{section}}", "");
-        } else {
-          output = output.replace("{{section}}", filename+" - ")
-        }
-        
-        fs.writeFile(build_path, output, function(err){
-          if(err) throw err;
-        });
-      });
+  var html = markdown.toHTML(markdown.parse(data), {xhtml:true})
+    .replace(/<hr><\/hr>/g, "<hr />")
+    .replace(/(\<h[2-6])\>([^<]+)(\<\/h[1-6]\>)/gmi, function(o, ts, c, te) {
+      return ts+' id="'+formatIdString(c)+'">'+c+te;
     });
-  });
-  // we don't need the next call to wait at all, so stick it here.
-  next();
-};
 
-function copyAssets(next){
-  cp.exec("cp -R "+assets_path+" "+bassets_path, function(err, stdout, stderr){
-    next();
-  });
-};
+  return html;
+}
 
-step(
-  checkdir,
-  copyAssets,
-  loadTemplates,
-  convertFiles
-)();
+
+if (argc > 3) {
+  var filename = argv[3],
+      output = template,
+      html;
+
+  fs.readFile(filename, "utf8", function(err, data) {
+    if (err) throw err;
+
+    // go recursion.
+    data = loadIncludes(data, filename);
+    // go markdown.
+    html = convertData(data);
+    filename = path.basename(filename, '.markdown');
+
+    if (filename != "_toc" && filename != "index") {
+      if (data) {
+        html = generateToc(data) + "\n" + html;
+      }
+
+      output = output.replace("{{section}}", filename+" - ")
+    } else {
+      output = output.replace("{{section}}", "");
+      output = output.replace(/<body([^>]*)>/, '<body class="'+filename+'" $1>');
+    }
+    if (html.length == 0) {
+      html = "Sorry, this section is currently undocumented, \
+but we'll be working on it.";
+    }
+    output = output.replace("{{content}}", html);
+
+    if (argc > 4) {
+      fs.writeFile(argv[4], output);
+    } else {
+      process.stdout.write(output);
+    }
+  });
+}

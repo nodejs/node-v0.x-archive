@@ -126,21 +126,16 @@ var module = (function () {
   var pathModule = createInternalModule('path', pathFn);
   var path = pathModule.exports;
 
-  // The paths that the user has specifically asked for.  Highest priority.
-  // This is what's hung on require.paths.
-  var modulePaths = [];
-  if (process.env.NODE_PATH) {
-    modulePaths = process.env.NODE_PATH.split(":");
+  var modulePaths = [path.join(process.execPath, "..", "..", "lib", "node")];
+
+  if (process.env["HOME"]) {
+    modulePaths.unshift(path.join(process.env["HOME"], ".node_libraries"));
+    modulePaths.unshift(path.join(process.env["HOME"], ".node_modules"));
   }
 
-  // The default global paths that are always checked.
-  // Lowest priority.
-  var defaultPaths = [];
-  if (process.env.HOME) {
-    defaultPaths.push(path.join(process.env.HOME, ".node_modules"));
-    defaultPaths.push(path.join(process.env.HOME, ".node_libraries"));
+  if (process.env["NODE_PATH"]) {
+    modulePaths = process.env["NODE_PATH"].split(":").concat(modulePaths);
   }
-  defaultPaths.push(path.join(process.execPath, "..", "..", "lib", "node"));
 
   var extensions = {};
   var registerExtension = removed('require.registerExtension() removed. Use require.extensions instead');
@@ -171,7 +166,7 @@ var module = (function () {
   }
 
   function findModulePath (request, paths) {
-    var nextLoc = traverser(request, paths);
+    var nextLoc = traverser(request, request.charAt(0) === '/' ? [''] : paths);
 
     var fs = requireNative('fs');
 
@@ -183,29 +178,15 @@ var module = (function () {
     return false;
   }
 
-  function modulePathWalk (parent) {
-    if (parent._modulePaths) return parent._modulePaths;
-    var p = parent.filename.split("/");
-    var mp = [];
-    while (undefined !== p.pop()) {
-      mp.push(p.join("/")+"/node_modules");
-    }
-    return parent._modulePaths = mp;
-  }
 
   // sync - no i/o performed
   function resolveModuleLookupPaths (request, parent) {
 
     if (natives[request]) return [request, []];
 
-    if (request.charAt(0) === '/') {
-      return [request, ['']];
-    }
-
     var start = request.substring(0, 2);
     if (start !== "./" && start !== "..") {
-      var paths = modulePaths.concat(modulePathWalk(parent)).concat(defaultPaths);
-      return [request, paths];
+      return [request, modulePaths];
     }
 
     // Is the parent an index module?
@@ -607,14 +588,5 @@ if (process.argv[1]) {
     // REPL
   module.requireNative('repl').start();
 }
-
-// All our arguments are loaded. We've evaluated all of the scripts. We
-// might even have created TCP servers. Now we enter the main eventloop. If
-// there are no watchers on the loop (except for the ones that were
-// ev_unref'd) then this function exits. As long as there are active
-// watchers, it blocks.
-process.loop();
-
-process.emit("exit");
 
 });

@@ -1,7 +1,7 @@
 common = require("../common");
 assert = common.assert
 
-var Script = process.binding('evals').Script;
+var Script = require('vm').Script;
 
 common.debug('run a string');
 var result = Script.runInThisContext('"passed";');
