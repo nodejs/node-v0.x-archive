@@ -52,7 +52,11 @@ if(${platform} MATCHES darwin)
 endif()
 
 check_function_exists(fdatasync HAVE_FDATASYNC)
-add_definitions("-DHAVE_FDATASYNC=${HAVE_FDATASYNC}")
+if(HAVE_FDATASYNC)
+  add_definitions(-DHAVE_FDATASYNC=1)
+else()
+  add_definitions(-DHAVE_FDATASYNC=0)
+endif()
 
 add_definitions(
   -DPLATFORM=${node_platform}
