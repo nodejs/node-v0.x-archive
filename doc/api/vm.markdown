@@ -10,7 +10,8 @@ JavaScript code can be compiled and run immediately or compiled, saved, and run 
 ### vm.runInThisContext(code, [filename])
 
 `vm.runInThisContext()` compiles `code` as if it were loaded from `filename`,
-runs it and returns the result. Running code does not have access to local scope. `filename` is optional.
+runs it and returns the result. Running code does not have access to local scope.
+`filename` is optional and is only used to clarify debug stack traces.
 
 Example of using `vm.runInThisContext` and `eval` to run the same code:
 
@@ -41,7 +42,7 @@ and throws.an exception.
 `vm.runInNewContext` compiles `code` to run in `sandbox` as if it were loaded from `filename`,
 then runs it and returns the result. Running code does not have access to local scope and
 the object `sandbox` will be used as the global object for `code`.
-`sandbox` and `filename` are optional.
+`sandbox` and `filename` are optional. `filename` is only used to clarify debug stack traces.
 
 Example: compile and execute code that increments a global variable and sets a new one.
 These globals are contained in the sandbox.
@@ -72,7 +73,8 @@ and throws an exception.
 but does not run it. Instead, it returns a `vm.Script` object representing this compiled code.
 This script can be run later many times using methods below.
 The returned script is not bound to any global object.
-It is bound before each run, just for that run. `filename` is optional.
+It is bound before each run, just for that run. `filename` is optional and is only used to
+clarify debug stack traces.
 
 In case of syntax error in `code`, `createScript` prints the syntax error to stderr
 and throws an exception.
