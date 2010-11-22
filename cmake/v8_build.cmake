@@ -54,7 +54,7 @@ if(NOT SHARED_V8)
       )
     
     add_dependencies(node v8_extprj)
-  else(CAMKE_VERSION VERSION_GREATER 2.8)
+  else()
     # copy v8 sources inefficiently with CMake versions <2.8
     file(GLOB_RECURSE v8_sources RELATIVE ${PROJECT_SOURCE_DIR} deps/v8/*)
     
