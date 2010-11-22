@@ -89,6 +89,209 @@ function requireNative (id) {
   return m.exports;
 }
 
+// Load events module in order to access prototype elements on process like
+// process.addListener.
+var events = requireNative('events');
+
+// Signal Handlers
+(function() {
+  var signalWatchers = {};
+  var addListener = process.addListener;
+  var removeListener = process.removeListener;
+
+  function isSignal (event) {
+    return event.slice(0, 3) === 'SIG' && lazyConstants()[event];
+  }
+
+  // Wrap addListener for the special signal types
+  process.on = process.addListener = function (type, listener) {
+    var ret = addListener.apply(this, arguments);
+    if (isSignal(type)) {
+      if (!signalWatchers.hasOwnProperty(type)) {
+        var b = process.binding('signal_watcher');
+        var w = new b.SignalWatcher(lazyConstants()[type]);
+        w.callback = function () { process.emit(type); };
+        signalWatchers[type] = w;
+        w.start();
+
+      } else if (this.listeners(type).length === 1) {
+        signalWatchers[event].start();
+      }
+    }
+
+    return ret;
+  };
+
+  process.removeListener = function (type, listener) {
+    var ret = removeListener.apply(this, arguments);
+    if (isSignal(type)) {
+      process.assert(signalWatchers.hasOwnProperty(type));
+
+      if (this.listeners(type).length === 0) {
+        signalWatchers[type].stop();
+      }
+    }
+
+    return ret;
+  };
+})();
+
+
+global.setTimeout = function () {
+  var t = requireNative('timers');
+  return t.setTimeout.apply(this, arguments);
+};
+
+global.setInterval = function () {
+  var t = requireNative('timers');
+  return t.setInterval.apply(this, arguments);
+};
+
+global.clearTimeout = function () {
+  var t = requireNative('timers');
+  return t.clearTimeout.apply(this, arguments);
+};
+
+global.clearInterval = function () {
+  var t = requireNative('timers');
+  return t.clearInterval.apply(this, arguments);
+};
+
+
+var stdout;
+process.__defineGetter__('stdout', function () {
+  if (stdout) return stdout;
+
+  var binding = process.binding('stdio'),
+      net = requireNative('net'),
+      fs = requireNative('fs'),
+      fd = binding.stdoutFD;
+
+  if (binding.isStdoutBlocking()) {
+    stdout = new fs.WriteStream(null, {fd: fd});
+  } else {
+    stdout = new net.Stream(fd);
+    // FIXME Should probably have an option in net.Stream to create a stream from
+    // an existing fd which is writable only. But for now we'll just add
+    // this hack and set the `readable` member to false.
+    // Test: ./node test/fixtures/echo.js < /etc/passwd
+    stdout.readable = false;
+  }
+
+  return stdout;
+});
+
+var stdin;
+process.openStdin = function () {
+  if (stdin) return stdin;
+
+  var binding = process.binding('stdio'),
+      net = requireNative('net'),
+      fs = requireNative('fs'),
+      fd = binding.openStdin();
+
+  if (binding.isStdinBlocking()) {
+    stdin = new fs.ReadStream(null, {fd: fd});
+  } else {
+    stdin = new net.Stream(fd);
+    stdin.readable = true;
+  }
+
+  stdin.resume();
+
+  return stdin;
+};
+
+
+// console object
+var formatRegExp = /%[sdj]/g;
+function format (f) {
+  if (typeof f !== 'string') {
+    var objects = [], util = requireNative('util');
+    for (var i = 0; i < arguments.length; i++) {
+      objects.push(util.inspect(arguments[i]));
+    }
+    return objects.join(' ');
+  }
+
+
+  var i = 1;
+  var args = arguments;
+  var str = String(f).replace(formatRegExp, function (x) {
+    switch (x) {
+      case '%s': return args[i++];
+      case '%d': return +args[i++];
+      case '%j': return JSON.stringify(args[i++]);
+      default:
+        return x;
+    }
+  });
+  for (var len = args.length; i < len; ++i) {
+    str += ' ' + args[i];
+  }
+  return str;
+}
+
+global.console = {};
+
+global.console.log = function () {
+  process.stdout.write(format.apply(this, arguments) + '\n');
+};
+
+global.console.info = global.console.log;
+
+global.console.warn = function () {
+  writeError(format.apply(this, arguments) + '\n');
+};
+
+global.console.error = global.console.warn;
+
+global.console.dir = function(object){
+  var util = requireNative('util');
+  process.stdout.write(util.inspect(object) + '\n');
+};
+
+var times = {};
+global.console.time = function(label){
+  times[label] = Date.now();
+};
+
+global.console.timeEnd = function(label){
+  var duration = Date.now() - times[label];
+  global.console.log('%s: %dms', label, duration);
+};
+
+global.console.trace = function(label){
+  // TODO probably can to do this better with V8's debug object once that is
+  // exposed.
+  var err = new Error;
+  err.name = 'Trace';
+  err.message = label || '';
+  Error.captureStackTrace(err, arguments.callee);
+  console.error(err.stack);
+};
+
+global.console.assert = function(expression){
+  if(!expression){
+    var arr = Array.prototype.slice.call(arguments, 1);
+    process.assert(false, format.apply(this, arr));
+  }
+};
+
+global.Buffer = requireNative('buffer').Buffer;
+
+process.exit = function (code) {
+  process.emit("exit", code || 0);
+  process.reallyExit(code || 0);
+};
+
+process.kill = function (pid, sig) {
+  sig = sig || 'SIGTERM';
+  if (!lazyConstants()[sig]) throw new Error("Unknown signal: " + sig);
+  process._kill(pid, lazyConstants()[sig]);
+};
+
+
 // Module System
 var module = (function () {
   var exports = {};
@@ -364,209 +567,6 @@ var module = (function () {
 
   return exports;
 })();
-
-
-// Load events module in order to access prototype elements on process like
-// process.addListener.
-var events = requireNative('events');
-
-// Signal Handlers
-(function() {
-  var signalWatchers = {};
-  var addListener = process.addListener;
-  var removeListener = process.removeListener;
-
-  function isSignal (event) {
-    return event.slice(0, 3) === 'SIG' && lazyConstants()[event];
-  }
-
-  // Wrap addListener for the special signal types
-  process.on = process.addListener = function (type, listener) {
-    var ret = addListener.apply(this, arguments);
-    if (isSignal(type)) {
-      if (!signalWatchers.hasOwnProperty(type)) {
-        var b = process.binding('signal_watcher');
-        var w = new b.SignalWatcher(lazyConstants()[type]);
-        w.callback = function () { process.emit(type); };
-        signalWatchers[type] = w;
-        w.start();
-
-      } else if (this.listeners(type).length === 1) {
-        signalWatchers[event].start();
-      }
-    }
-
-    return ret;
-  };
-
-  process.removeListener = function (type, listener) {
-    var ret = removeListener.apply(this, arguments);
-    if (isSignal(type)) {
-      process.assert(signalWatchers.hasOwnProperty(type));
-
-      if (this.listeners(type).length === 0) {
-        signalWatchers[type].stop();
-      }
-    }
-
-    return ret;
-  };
-})();
-
-
-global.setTimeout = function () {
-  var t = requireNative('timers');
-  return t.setTimeout.apply(this, arguments);
-};
-
-global.setInterval = function () {
-  var t = requireNative('timers');
-  return t.setInterval.apply(this, arguments);
-};
-
-global.clearTimeout = function () {
-  var t = requireNative('timers');
-  return t.clearTimeout.apply(this, arguments);
-};
-
-global.clearInterval = function () {
-  var t = requireNative('timers');
-  return t.clearInterval.apply(this, arguments);
-};
-
-
-var stdout;
-process.__defineGetter__('stdout', function () {
-  if (stdout) return stdout;
-
-  var binding = process.binding('stdio'),
-      net = requireNative('net'),
-      fs = requireNative('fs'),
-      fd = binding.stdoutFD;
-
-  if (binding.isStdoutBlocking()) {
-    stdout = new fs.WriteStream(null, {fd: fd});
-  } else {
-    stdout = new net.Stream(fd);
-    // FIXME Should probably have an option in net.Stream to create a stream from
-    // an existing fd which is writable only. But for now we'll just add
-    // this hack and set the `readable` member to false.
-    // Test: ./node test/fixtures/echo.js < /etc/passwd
-    stdout.readable = false;
-  }
-
-  return stdout;
-});
-
-var stdin;
-process.openStdin = function () {
-  if (stdin) return stdin;
-
-  var binding = process.binding('stdio'),
-      net = requireNative('net'),
-      fs = requireNative('fs'),
-      fd = binding.openStdin();
-
-  if (binding.isStdinBlocking()) {
-    stdin = new fs.ReadStream(null, {fd: fd});
-  } else {
-    stdin = new net.Stream(fd);
-    stdin.readable = true;
-  }
-
-  stdin.resume();
-
-  return stdin;
-};
-
-
-// console object
-var formatRegExp = /%[sdj]/g;
-function format (f) {
-  if (typeof f !== 'string') {
-    var objects = [], util = requireNative('util');
-    for (var i = 0; i < arguments.length; i++) {
-      objects.push(util.inspect(arguments[i]));
-    }
-    return objects.join(' ');
-  }
-
-
-  var i = 1;
-  var args = arguments;
-  var str = String(f).replace(formatRegExp, function (x) {
-    switch (x) {
-      case '%s': return args[i++];
-      case '%d': return +args[i++];
-      case '%j': return JSON.stringify(args[i++]);
-      default:
-        return x;
-    }
-  });
-  for (var len = args.length; i < len; ++i) {
-    str += ' ' + args[i];
-  }
-  return str;
-}
-
-global.console = {};
-
-global.console.log = function () {
-  process.stdout.write(format.apply(this, arguments) + '\n');
-};
-
-global.console.info = global.console.log;
-
-global.console.warn = function () {
-  writeError(format.apply(this, arguments) + '\n');
-};
-
-global.console.error = global.console.warn;
-
-global.console.dir = function(object){
-  var util = requireNative('util');
-  process.stdout.write(util.inspect(object) + '\n');
-};
-
-var times = {};
-global.console.time = function(label){
-  times[label] = Date.now();
-};
-
-global.console.timeEnd = function(label){
-  var duration = Date.now() - times[label];
-  global.console.log('%s: %dms', label, duration);
-};
-
-global.console.trace = function(label){
-  // TODO probably can to do this better with V8's debug object once that is
-  // exposed.
-  var err = new Error;
-  err.name = 'Trace';
-  err.message = label || '';
-  Error.captureStackTrace(err, arguments.callee);
-  console.error(err.stack);
-};
-
-global.console.assert = function(expression){
-  if(!expression){
-    var arr = Array.prototype.slice.call(arguments, 1);
-    process.assert(false, format.apply(this, arr));
-  }
-};
-
-global.Buffer = requireNative('buffer').Buffer;
-
-process.exit = function (code) {
-  process.emit("exit", code || 0);
-  process.reallyExit(code || 0);
-};
-
-process.kill = function (pid, sig) {
-  sig = sig || 'SIGTERM';
-  if (!lazyConstants()[sig]) throw new Error("Unknown signal: " + sig);
-  process._kill(pid, lazyConstants()[sig]);
-};
 
 
 var cwd = process.cwd();
