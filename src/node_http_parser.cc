@@ -56,6 +56,10 @@ static Persistent<String> report_sym;
 static Persistent<String> mkactivity_sym;
 static Persistent<String> checkout_sym;
 static Persistent<String> merge_sym;
+static Persistent<String> msearch_sym;
+static Persistent<String> notify_sym;
+static Persistent<String> subscribe_sym;
+static Persistent<String> unsubscribe_sym;
 static Persistent<String> unknown_method_sym;
 
 static Persistent<String> method_sym;
@@ -138,6 +142,10 @@ method_to_str(unsigned short m) {
     case HTTP_MKACTIVITY: return mkactivity_sym;
     case HTTP_CHECKOUT:   return checkout_sym;
     case HTTP_MERGE:      return merge_sym;
+    case HTTP_MSEARCH:    return msearch_sym;
+    case HTTP_NOTIFY:     return notify_sym;
+    case HTTP_SUBSCRIBE:  return subscribe_sym;
+    case HTTP_UNSUBSCRIBE:return unsubscribe_sym;
     default:              return unknown_method_sym;
   }
 }
@@ -338,86 +346,6 @@ class Parser : public ObjectWrap {
 };
 
 
-static Handle<Value> UrlDecode (const Arguments& args) {
-  HandleScope scope;
-
-  if (!args[0]->IsString()) {
-    return ThrowException(Exception::TypeError(
-          String::New("First arg must be a string")));
-  }
-
-  bool decode_spaces = args[1]->IsTrue();
-
-  String::Utf8Value in_v(args[0]->ToString());
-  size_t l = in_v.length();
-  char* out = strdup(*in_v);
-
-  enum { CHAR, HEX0, HEX1 } state = CHAR;
-
-  int n, m, hexchar;
-  size_t in_index = 0, out_index = 0;
-  char c;
-  for (; in_index <= l; in_index++) {
-    c = out[in_index];
-    switch (state) {
-      case CHAR:
-        switch (c) {
-          case '%':
-            n = 0;
-            m = 0;
-            state = HEX0;
-            break;
-          case '+':
-            if (decode_spaces) c = ' ';
-            // pass thru
-          default:
-            out[out_index++] = c;
-            break;
-        }
-        break;
-
-      case HEX0:
-        state = HEX1;
-        hexchar = c;
-        if ('0' <= c && c <= '9') {
-          n = c - '0';
-        } else if ('a' <= c && c <= 'f') {
-          n = c - 'a' + 10;
-        } else if ('A' <= c && c <= 'F') {
-          n = c - 'A' + 10;
-        } else {
-          out[out_index++] = '%';
-          out[out_index++] = c;
-          state = CHAR;
-          break;
-        }
-        break;
-
-      case HEX1:
-        state = CHAR;
-        if ('0' <= c && c <= '9') {
-          m = c - '0';
-        } else if ('a' <= c && c <= 'f') {
-          m = c - 'a' + 10;
-        } else if ('A' <= c && c <= 'F') {
-          m = c - 'A' + 10;
-        } else {
-          out[out_index++] = '%';
-          out[out_index++] = hexchar;
-          out[out_index++] = c;
-          break;
-        }
-        out[out_index++] = 16*n + m;
-        break;
-    }
-  }
-
-  Local<String> out_v = String::New(out, out_index-1);
-  free(out);
-  return scope.Close(out_v);
-}
-
-
 void InitHttpParser(Handle<Object> target) {
   HandleScope scope;
 
@@ -430,7 +358,6 @@ void InitHttpParser(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "reinitialize", Parser::Reinitialize);
 
   target->Set(String::NewSymbol("HTTPParser"), t->GetFunction());
-  NODE_SET_METHOD(target, "urlDecode", UrlDecode);
 
   on_message_begin_sym    = NODE_PSYMBOL("onMessageBegin");
   on_path_sym             = NODE_PSYMBOL("onPath");
@@ -462,6 +389,10 @@ void InitHttpParser(Handle<Object> target) {
   mkactivity_sym = NODE_PSYMBOL("MKACTIVITY");
   checkout_sym = NODE_PSYMBOL("CHECKOUT");
   merge_sym = NODE_PSYMBOL("MERGE");
+  msearch_sym = NODE_PSYMBOL("M-SEARCH");
+  notify_sym = NODE_PSYMBOL("NOTIFY");
+  subscribe_sym = NODE_PSYMBOL("SUBSCRIBE");
+  unsubscribe_sym = NODE_PSYMBOL("UNSUBSCRIBE");;
   unknown_method_sym = NODE_PSYMBOL("UNKNOWN_METHOD");
 
   method_sym = NODE_PSYMBOL("method");

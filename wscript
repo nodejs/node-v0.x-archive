@@ -203,7 +203,7 @@ def configure(conf):
       Options.options.use_openssl = conf.env["USE_OPENSSL"] = True
       conf.env.append_value("CPPFLAGS", "-DHAVE_OPENSSL=1")
     else:
-      libssl = conf.check_cc(lib='ssl',
+      libssl = conf.check_cc(lib=['ssl', 'crypto'],
                              header_name='openssl/ssl.h',
                              function_name='SSL_library_init',
                              libpath=['/usr/lib', '/usr/local/lib', '/opt/local/lib', '/usr/sfw/lib'],
@@ -365,6 +365,9 @@ def configure(conf):
     conf.env.append_value('CPPFLAGS', '-pg')
     conf.env.append_value('LINKFLAGS', '-pg')
 
+  conf.env.append_value('CPPFLAGS', '-Wno-unused-parameter');
+  conf.env.append_value('CPPFLAGS', '-D_FORTIFY_SOURCE=2');
+
   # Split off debug variant before adding variant specific defines
   debug_env = conf.env.copy()
   conf.set_env_name('debug', debug_env)
@@ -413,7 +416,7 @@ def v8_cmd(bld, variant):
   else:
     snapshot = ""
 
-  cmd_R = 'python "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s library=static %s'
+  cmd_R = sys.executable + ' "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s library=static %s'
 
   cmd = cmd_R % ( scons
                 , Options.options.jobs

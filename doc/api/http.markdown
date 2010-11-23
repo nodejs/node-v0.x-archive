@@ -47,7 +47,7 @@ This is an `EventEmitter` with the following events:
 
 `function (errno) { }`
 
- Emitted when the server closes. 
+ Emitted when the server closes.
 
 ### Event: 'request'
 
@@ -121,12 +121,6 @@ This function is asynchronous. The last parameter `callback` will be called
 when the server has been bound.
 
 
-### server.setSecure(credentials)
-
-Enables HTTPS support for the server, with the crypto module credentials specifying the private key and certificate of the server, and optionally the CA certificates for use in client authentication.
-
-If the credentials hold one or more CA certificates, then the server will request for the client to submit a client certificate as part of the HTTPS connection handshake. The validity and content of this can be accessed via verifyPeer() and getPeerCertificate() from the server's request.connection.
-
 ### server.close()
 
 Stops the server from accepting new connections.
@@ -134,8 +128,8 @@ Stops the server from accepting new connections.
 
 ## http.ServerRequest
 
-This object is created internally by a HTTP server--not by
-the user--and passed as the first argument to a `'request'` listener.
+This object is created internally by a HTTP server -- not by
+the user -- and passed as the first argument to a `'request'` listener.
 
 This is an `EventEmitter` with the following events:
 
@@ -290,9 +284,9 @@ first chunk of body.
 ### response.addTrailers(headers)
 
 This method adds HTTP trailing headers (a header but at the end of the
-message) to the response. 
+message) to the response.
 
-Trailers will **only** be emitted if chunked encoding is used for the 
+Trailers will **only** be emitted if chunked encoding is used for the
 response; if it is not (e.g., if the request was HTTP/1.0), they will
 be silently discarded.
 
@@ -351,7 +345,7 @@ There are a few special headers that should be noted.
 
 * Sending a 'Content-length' header will disable the default chunked encoding.
 
-* Sending an 'Expect' header will immediately send the request headers. 
+* Sending an 'Expect' header will immediately send the request headers.
   Usually, when sending 'Expect: 100-continue', you should both set a timeout
   and listen for the `continue` event. See RFC2616 Section 8.2.3 for more
   information.
@@ -382,9 +376,13 @@ Constructs a new HTTP client. `port` and
 `host` refer to the server to be connected to. A
 stream is not established until a request is issued.
 
-`secure` is an optional boolean flag to enable https support and `credentials` is an optional credentials object from the crypto module, which may hold the client's private key, certificate, and a list of trusted CA certificates.
+`secure` is an optional boolean flag to enable https support and `credentials` is an optional
+credentials object from the crypto module, which may hold the client's private key,
+certificate, and a list of trusted CA certificates.
 
-If the connection is secure, but no explicit CA certificates are passed in the credentials, then node.js will default to the publicly trusted list of CA certificates, as given in http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt
+If the connection is secure, but no explicit CA certificates are passed
+in the credentials, then node.js will default to the publicly trusted list
+of CA certificates, as given in <http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>.
 
 ### client.request(method='GET', path, [request_headers])
 
@@ -407,11 +405,13 @@ the user to stream a body to the server with `request.write()`.)
 
 ### client.verifyPeer()
 
-Returns true or false depending on the validity of the server's certificate in the context of the defined or default list of trusted CA certificates.
+Returns true or false depending on the validity of the server's certificate
+in the context of the defined or default list of trusted CA certificates.
 
 ### client.getPeerCertificate()
 
-Returns a JSON structure detailing the server's certificate, containing a dictionary with keys for the certificate 'subject', 'issuer', 'valid\_from' and 'valid\_to'
+Returns a JSON structure detailing the server's certificate, containing a dictionary
+with keys for the certificate `'subject'`, `'issuer'`, `'valid_from'` and `'valid_to'`.
 
 
 ## http.ClientRequest

@@ -40,10 +40,10 @@ To get started we create a file `hello.cc`:
     using namespace v8;
 
     extern "C" void
-    init (Handle<Object> target) 
+    init (Handle<Object> target)
     {
       HandleScope scope;
-      target->Set(String::New("hello"), String::New("World"));
+      target->Set(String::New("hello"), String::New("world"));
     }
 
 This source code needs to be built into `hello.node`, the binary Addon. To
@@ -69,7 +69,7 @@ like this:
 Running `node-waf configure build` will create a file
 `build/default/hello.node` which is our Addon.
 
-`node-waf` is just http://code.google.com/p/waf/[WAF], the python-based build system. `node-waf` is
+`node-waf` is just [WAF](http://code.google.com/p/waf/), the python-based build system. `node-waf` is
 provided for the ease of users.
 
 All Node addons must export a function called `init` with this signature:
