@@ -46,6 +46,7 @@ void SecureContext::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setKey", SecureContext::SetKey);
   NODE_SET_PROTOTYPE_METHOD(t, "setCert", SecureContext::SetCert);
   NODE_SET_PROTOTYPE_METHOD(t, "addCACert", SecureContext::AddCACert);
+  NODE_SET_PROTOTYPE_METHOD(t, "addCRL", SecureContext::AddCRL);
   NODE_SET_PROTOTYPE_METHOD(t, "setCiphers", SecureContext::SetCiphers);
   NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
 
@@ -169,6 +170,41 @@ Handle<Value> SecureContext::SetCert(const Arguments& args) {
   return True();
 }
 
+
+Handle<Value> SecureContext::AddCRL(const Arguments& args) {
+  HandleScope scope;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  if (args.Length() != 1 || !args[0]->IsString()) {
+    return ThrowException(Exception::TypeError(String::New("Bad parameter")));
+  }
+  String::Utf8Value crl_pem(args[0]->ToString());
+
+  BIO *bp = BIO_new(BIO_s_mem());
+
+  if (!BIO_write(bp, *crl_pem, crl_pem.length())) {
+    BIO_free(bp);
+    return False();
+  }
+
+  X509_CRL *x509 = PEM_read_bio_X509_CRL(bp, NULL, NULL, NULL);
+
+  if (x509 == NULL) {
+    BIO_free(bp);
+    return False();
+  }
+
+  X509_STORE_add_crl(sc->caStore, x509);
+
+  X509_STORE_set_flags(sc->caStore, X509_V_FLAG_CRL_CHECK |
+                                    X509_V_FLAG_CRL_CHECK_ALL);
+
+  BIO_free(bp);
+  X509_CRL_free(x509);
+
+  return True();
+}
 
 Handle<Value> SecureContext::AddCACert(const Arguments& args) {
   HandleScope scope;
