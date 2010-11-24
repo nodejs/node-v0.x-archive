@@ -234,6 +234,7 @@ static xcond_t  reqwait = X_COND_INIT;
 
 #if defined (__APPLE__)
 static xmutex_t apple_bug_writelock = X_MUTEX_INIT;
+static xmutex_t apple_bug_readlock = X_MUTEX_INIT;
 #endif
 
 #if !HAVE_PREADWRITE
@@ -1641,9 +1642,16 @@ static void eio_execute (etp_worker *self, eio_req *req)
   switch (req->type)
     {
       case EIO_READ:      ALLOC (req->size);
+#if defined (__APPLE__)
+                          pthread_mutex_lock (&apple_bug_readlock);
+#endif
                           req->result = req->offs >= 0
                                       ? pread     (req->int1, req->ptr2, req->size, req->offs)
-                                      : read      (req->int1, req->ptr2, req->size); break;
+                                      : read      (req->int1, req->ptr2, req->size);
+#if defined (__APPLE__)
+                          pthread_mutex_unlock (&apple_bug_readlock);
+#endif
+                          break;
       case EIO_WRITE:
 #if defined (__APPLE__)
                           pthread_mutex_lock (&apple_bug_writelock);
