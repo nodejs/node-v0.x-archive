@@ -1582,6 +1582,21 @@ static Handle<Array> EnvEnumerator(const AccessorInfo& info) {
 }
 
 
+static Handle<Value> HostnameGetter(Local<String> property, const AccessorInfo& info) {
+  char buf[1024];
+
+  memset(buf, 0, sizeof(buf));
+  if (-1 == gethostname(buf, sizeof(buf) - 1)) {
+    // this can't really happen
+    return ThrowException(ErrnoException(errno, "gethostname", "", NULL));
+  }
+
+  HandleScope scope;
+  Local<String> hostname = String::New(buf);
+  return scope.Close(hostname);
+}
+
+
 static void Load(int argc, char *argv[]) {
   HandleScope scope;
 
@@ -1676,6 +1691,13 @@ static void Load(int argc, char *argv[]) {
   // Assign the EventEmitter. It was created in main().
   process->Set(String::NewSymbol("EventEmitter"),
                EventEmitter::constructor_template->GetFunction());
+
+  process->SetAccessor(String::NewSymbol("hostname"),
+                       HostnameGetter,
+                       NULL,
+                       Undefined(),
+                       DEFAULT,
+                       (PropertyAttribute) (ReadOnly | DontDelete));
 
   // Compile, execute the src/node.js file. (Which was included as static C
   // string in node_natives.h. 'natve_node' is the string containing that
