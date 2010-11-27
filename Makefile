@@ -22,6 +22,9 @@ install:
 uninstall:
 	@$(WAF) uninstall
 
+jslint:
+	node tools/node-jslint/bin/cli.js ./lib
+
 test: all
 	python tools/test.py --mode=release simple message
 
