@@ -45,6 +45,10 @@ function testServer(){
         socket.write(data, "utf8");
       }
     };
+    
+    // Stop propagation
+    // So 'http' module will know, that it should not destroy socket
+    return false;
   });
 };
 

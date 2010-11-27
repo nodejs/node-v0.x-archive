@@ -14,6 +14,12 @@ server.addListener('upgrade', function (req, socket, upgradeHead) {
   // test that throwing an error from upgrade gets
   // is uncaught
   throw new Error('upgrade error');
+  
+  // Stop propagation
+  // So 'http' module will know, that it should not destroy socket
+  // Actually, this line wouldn't be called
+  // But anyway return false
+  return false;
 });
 
 gotError = false;

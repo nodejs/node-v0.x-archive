@@ -48,6 +48,10 @@ srv.listen(common.PORT, '127.0.0.1', function () {
       srv.close();
 
       gotUpgrade = true;
+      
+      // Stop propagation
+      // So 'http' module will know, that it should not destroy socket
+      return false;
   });
   hc.request('GET', '/').end();
 });

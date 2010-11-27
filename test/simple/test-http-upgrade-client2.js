@@ -11,6 +11,9 @@ server.on('upgrade', function(req, socket, head) {
   socket.on('end', function () {
     socket.end();               
   });
+  // Stop propagation
+  // So 'http' module will know, that it should not destroy socket
+  return false;
 });
 
 
@@ -30,7 +33,11 @@ server.listen(common.PORT, function () {
       wasUpgrade = true;
       
       client.removeListener('upgrade', onUpgrade);
-      socket.end();    
+      socket.end(); 
+      
+      // Stop propagation
+      // So 'http' module will know, that it should not destroy socket
+      return false;   
     }
     client.on('upgrade', onUpgrade);
     
