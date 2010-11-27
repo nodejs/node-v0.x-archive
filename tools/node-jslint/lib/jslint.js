@@ -3,16 +3,16 @@
  * 
  * @author Oleg Slobodskoi aka Kof
  */
-
 var fs = require( "fs" ),
     util = require( "util" ),
     Script = process.binding( "evals" ).Script;
 
 var jslintPath = __dirname + "/../deps/fulljslint.js",
-    sandbox = {},
-    script = new Script.runInNewContext( fs.readFileSync( jslintPath ), sandbox, jslintPath ),
-    jslint = sandbox.JSLINT,
-    noop = function(){};
+    script = new Script.runInThisContext( fs.readFileSync( jslintPath ), jslintPath ),
+    jslint = global.JSLINT;
+
+// remove global JSLINT namespace
+delete global.JSLINT;
     
 exports.options = {
     "bitwise": true,
@@ -45,7 +45,6 @@ exports.options = {
     "white": false,
     "windows": false        
 };
-    
 
 function merge( target, src ) {
    for ( var key in src ) {
@@ -61,7 +60,10 @@ exports.check = function( path ) {
         
     if ( code && jslint( code, exports.options ) === false ) {
         err = "jslint error in file " + path + ":\n";
-        err += exports.options.format === "html" ? jslint.report(true) : util.inspect( jslint.data().errors );
+        err += exports.options.format === "html" ? 
+            jslint.report(true) 
+            : 
+            util.inspect( jslint.data().errors );
         return err;   
     }
     
@@ -73,4 +75,4 @@ exports.setup = function( options ) {
 };
 
 // expose all jslint functions
-merge( exports, jslint );  
+merge( exports, merge );  
