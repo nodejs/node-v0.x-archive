@@ -188,8 +188,15 @@ void Buffer::Replace(char *data, size_t length,
     data_ = data;
   } else if (length_) {
     data_ = new char[length_];
-    if (data)
+    if (data) {
       memcpy(data_, data, length_);
+    }
+    else {
+      size_t n = length_;
+      while (n--) {
+        data_[n]= 0;
+      }
+    }
     V8::AdjustAmountOfExternalAllocatedMemory(sizeof(Buffer) + length_);
   } else {
     data_ = NULL;
