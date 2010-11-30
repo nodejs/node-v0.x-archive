@@ -357,3 +357,19 @@ assert.equal(12, Buffer.byteLength("Il était tué", "binary"));
 
 // slice(0,0).length === 0
 assert.equal(0, Buffer('hello').slice(0, 0).length)
+
+b = new Buffer(50);
+b.set("h");
+for (var i = 0; i < b.length; i++) {
+  assert.equal("h".charCodeAt(0), b[i]);
+}
+
+b.set(0);
+for (var i = 0; i < b.length; i++) {
+  assert.equal(0, b[i]);
+}
+
+b.set(1, 16, 32);
+for (var i = 0; i < 16; i++) assert.equal(0, b[i]);
+for (; i < 32; i++) assert.equal(1, b[i]);
+for (; i < b.length; i++) assert.equal(0, b[i]);
