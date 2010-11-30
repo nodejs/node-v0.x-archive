@@ -7,12 +7,6 @@ if(SHARED_CARES)
 else()
   set(cares_arch ${node_arch})
 
-  if(${node_arch} MATCHES x86_64)
-    set(cares_arch x64)
-  elseif(${node_arch} MATCHES x86)
-    set(cares_arch ia32)
-  endif()
-
   add_subdirectory(deps/c-ares)
   set(LIBCARES_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/deps/c-ares ${CMAKE_SOURCE_DIR}/deps/c-ares/${node_platform}-${cares_arch})
 endif()
