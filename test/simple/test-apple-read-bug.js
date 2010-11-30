@@ -13,7 +13,7 @@ while (i < kMax) strs.push(pad(i++));
 
 /*
 Create a file with kMax records of padLength chars
-e.g. from 0000 to 9999
+e.g. from 00000 to 99999
 No 2 records should be equal for this test to work
 */
 
@@ -24,7 +24,7 @@ fs.writeSync(fd, strs.join(''));
 fs.close(fd);
 
 /*
-Now we push to libeio 1e4 read()s of 4 chars each.
+Now we push to libeio kMax read()s of padLength chars each.
 If the fd's filepointer is being updated properly,
 and the read()s are done at the right offsets,
 each read() should return a different number.
@@ -33,7 +33,7 @@ each read() should return a different number.
 fd= fs.openSync(fileName, "r");
 var assert = require("assert");
 
-var i= kMax;
+i= kMax;
 while (i--) tester();
 
 function tester () {
