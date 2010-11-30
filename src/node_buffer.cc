@@ -333,6 +333,27 @@ Handle<Value> Buffer::Base64Slice(const Arguments &args) {
 }
 
 
+// buffer.set(value, start, end);
+Handle<Value> Buffer::Set(const Arguments &args) {
+  HandleScope scope;
+
+  if (!args[0]->IsInt32()) {
+    return ThrowException(Exception::Error(String::New(
+            "value is not a number")));
+  }
+  int value = (char)args[0]->Int32Value();
+
+  Buffer *parent = ObjectWrap::Unwrap<Buffer>(args.This());
+  SLICE_ARGS(args[1], args[2])
+
+  memset( (void*)(parent->data_ + start),
+          value,
+          end - start);
+
+  return Undefined();
+}
+
+
 // var bytesCopied = buffer.copy(target, targetStart, sourceStart, sourceEnd);
 Handle<Value> Buffer::Copy(const Arguments &args) {
   HandleScope scope;
@@ -652,6 +673,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "asciiWrite", Buffer::AsciiWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "binaryWrite", Buffer::BinaryWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Write", Buffer::Base64Write);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "set", Buffer::Set);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "copy", Buffer::Copy);
 
   NODE_SET_METHOD(constructor_template->GetFunction(),
