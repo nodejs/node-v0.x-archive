@@ -5,6 +5,12 @@ var path = require('path'),
 
 common.debug("load test-module-loading.js");
 
+// require a file with a request that includes the extension
+var a_js = require("../fixtures/a.js");
+
+// require a file without any extensions
+var foo_no_ext = require("../fixtures/foo");
+
 var a = require("../fixtures/a");
 var c = require("../fixtures/b/c");
 var d = require("../fixtures/b/d");
