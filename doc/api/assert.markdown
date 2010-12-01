@@ -42,7 +42,7 @@ validation function.
 
 Validate instanceof using constructor:
 
-	assert.throws(
+    assert.throws(
 	  function() {
 	  	throw new Error("Wrong value");
 	  },
@@ -51,7 +51,7 @@ Validate instanceof using constructor:
 
 Validate error message using RegExp:
 
-	assert.throws(
+    assert.throws(
 	  function() {
 	  	throw new Error("Wrong value");
 	  },
@@ -60,7 +60,7 @@ Validate error message using RegExp:
     
 Custom error validation:
 
-	assert.throws(
+    assert.throws(
 	  function() {
 	  	throw new Error("Wrong value");
 	  },
