@@ -264,6 +264,7 @@ Handle<Value> SecureContext::Close(const Arguments& args) {
   if (sc->ctx_ != NULL) {
     SSL_CTX_free(sc->ctx_);
     sc->ctx_ = NULL;
+    sc->ca_store_ = NULL;
     return True();
   }
 
@@ -307,7 +308,7 @@ void SecureStream::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "encPending", SecureStream::EncPending);
   NODE_SET_PROTOTYPE_METHOD(t, "getPeerCertificate", SecureStream::GetPeerCertificate);
   NODE_SET_PROTOTYPE_METHOD(t, "isInitFinished", SecureStream::IsInitFinished);
-  NODE_SET_PROTOTYPE_METHOD(t, "verifyPeerError", SecureStream::VerifyPeerError);
+  NODE_SET_PROTOTYPE_METHOD(t, "verifyError", SecureStream::VerifyError);
   NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", SecureStream::GetCurrentCipher);
   NODE_SET_PROTOTYPE_METHOD(t, "start", SecureStream::Start);
   NODE_SET_PROTOTYPE_METHOD(t, "shutdown", SecureStream::Shutdown);
@@ -357,7 +358,7 @@ static int VerifyCallback(int preverify_ok, X509_STORE_CTX *ctx) {
   //
   // Since we cannot perform I/O quickly enough in this callback, we ignore
   // all preverify_ok errors and let the handshake continue. It is
-  // imparative that the user use SecureStream::VerifyPeerError after the
+  // imparative that the user use SecureStream::VerifyError after the
   // 'secure' callback has been made.
   return 1;
 }
@@ -377,7 +378,6 @@ Handle<Value> SecureStream::New(const Arguments& args) {
   SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args[0]->ToObject());
 
   bool is_server = args[1]->BooleanValue();
-  bool should_verify = args[2]->BooleanValue();
 
   p->ssl_ = SSL_new(sc->ctx_);
   p->bio_read_ = BIO_new(BIO_s_mem());
@@ -389,9 +389,8 @@ Handle<Value> SecureStream::New(const Arguments& args) {
   SSL_set_mode(p->ssl_, mode | SSL_MODE_RELEASE_BUFFERS);
 #endif
 
-  if ((p->should_verify_ = should_verify)) {
-    SSL_set_verify(p->ssl_, SSL_VERIFY_PEER, VerifyCallback);
-  }
+  // Always allow a connection. We'll reject in javascript.
+  SSL_set_verify(p->ssl_, SSL_VERIFY_PEER, VerifyCallback);
 
   if ((p->is_server_ = is_server)) {
     SSL_set_accept_state(p->ssl_);
@@ -716,13 +715,12 @@ Handle<Value> SecureStream::IsInitFinished(const Arguments& args) {
 }
 
 
-Handle<Value> SecureStream::VerifyPeerError(const Arguments& args) {
+Handle<Value> SecureStream::VerifyError(const Arguments& args) {
   HandleScope scope;
 
   SecureStream *ss = ObjectWrap::Unwrap<SecureStream>(args.Holder());
 
-  if (ss->ssl_ == NULL) return False();
-  if (!ss->should_verify_) return False();
+  if (ss->ssl_ == NULL) return Null();
 
 #if 0
   // Why?

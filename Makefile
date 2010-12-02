@@ -130,5 +130,18 @@ bench-idle:
 	sleep 1
 	./node benchmark/idle_clients.js &
 
+# TODO lint the test directories and src/node.js
+jslint:
+	@for i in lib/*.js; do \
+	  PYTHONPATH=tools/closure_linter/ python tools/closure_linter/closure_linter/gjslint.py \
+	    --unix_mode --strict --nojsdoc $$i || exit 1; \
+	done
 
-.PHONY: bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload
+cpplint:
+	@for i in src/*.cc src/*.h src/*.c; do \
+	  python tools/cpplint.py $$i || exit 1; \
+	done
+
+lint: jslint cpplint
+
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload

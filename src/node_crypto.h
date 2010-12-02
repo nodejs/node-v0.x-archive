@@ -43,11 +43,9 @@ class SecureContext : ObjectWrap {
     if (ctx_) {
       SSL_CTX_free(ctx_);
       ctx_ = NULL;
-    }
-
-    if (ca_store_) {
-      X509_STORE_free(ca_store_);
       ca_store_ = NULL;
+    } else {
+      assert(ca_store_ == NULL);
     }
   }
 
@@ -68,7 +66,7 @@ class SecureStream : ObjectWrap {
   static v8::Handle<v8::Value> ClearIn(const v8::Arguments& args);
   static v8::Handle<v8::Value> GetPeerCertificate(const v8::Arguments& args);
   static v8::Handle<v8::Value> IsInitFinished(const v8::Arguments& args);
-  static v8::Handle<v8::Value> VerifyPeerError(const v8::Arguments& args);
+  static v8::Handle<v8::Value> VerifyError(const v8::Arguments& args);
   static v8::Handle<v8::Value> GetCurrentCipher(const v8::Arguments& args);
   static v8::Handle<v8::Value> Shutdown(const v8::Arguments& args);
   static v8::Handle<v8::Value> Start(const v8::Arguments& args);
@@ -91,7 +89,6 @@ class SecureStream : ObjectWrap {
   BIO *bio_write_;
   SSL *ssl_;
   bool is_server_; /* coverity[member_decl] */
-  bool should_verify_; /* coverity[member_decl] */
 };
 
 void InitCrypto(v8::Handle<v8::Object> target);
