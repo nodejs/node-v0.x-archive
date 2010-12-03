@@ -138,6 +138,7 @@
 
     if (process.env['NODE_PATH']) {
       modulePaths = process.env['NODE_PATH'].split(':').concat(modulePaths);
+    }
 
     // given a module name, and a list of paths to test, returns the first
     // matching file in the following precedence.
