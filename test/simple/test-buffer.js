@@ -357,3 +357,13 @@ assert.equal(12, Buffer.byteLength("Il était tué", "binary"));
 
 // slice(0,0).length === 0
 assert.equal(0, Buffer('hello').slice(0, 0).length)
+
+// fill changes each index of the buffer to a function
+b = new Buffer(10); //random contents
+b.fill(function(index) {
+  return index;
+});
+
+for (var i = 0; i < b.length; i++) {
+  assert.equal(b[i] === i);
+}
