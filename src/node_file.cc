@@ -87,10 +87,8 @@ static int After(eio_req *req) {
 
       case EIO_OPEN:
       case EIO_SENDFILE:
-        argv[1] = Integer::New(req->result);
-        break;
-
       case EIO_WRITE:
+      case EIO_READ:
         argv[1] = Integer::New(req->result);
         break;
 
@@ -105,11 +103,6 @@ static int After(eio_req *req) {
 
       case EIO_READLINK:
         argv[1] = String::New(static_cast<char*>(req->ptr2), req->result);
-        break;
-
-      case EIO_READ:
-        // Buffer interface
-        argv[1] = Integer::New(req->result);
         break;
 
       case EIO_READDIR:
