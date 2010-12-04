@@ -333,8 +333,8 @@ Handle<Value> Buffer::Base64Slice(const Arguments &args) {
 }
 
 
-// buffer.set(value, start, end);
-Handle<Value> Buffer::Set(const Arguments &args) {
+// buffer.fill(value, start, end);
+Handle<Value> Buffer::Fill(const Arguments &args) {
   HandleScope scope;
 
   if (!args[0]->IsInt32()) {
@@ -673,7 +673,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "asciiWrite", Buffer::AsciiWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "binaryWrite", Buffer::BinaryWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Write", Buffer::Base64Write);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "set", Buffer::Set);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "fill", Buffer::Fill);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "copy", Buffer::Copy);
 
   NODE_SET_METHOD(constructor_template->GetFunction(),
