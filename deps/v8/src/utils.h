@@ -28,6 +28,7 @@
 #ifndef V8_UTILS_H_
 #define V8_UTILS_H_
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
