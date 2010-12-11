@@ -32,10 +32,10 @@
 // These macros define the version number for the current version.
 // NOTE these macros are used by the SCons build script so their names
 // cannot be changed without changing the SCons build script.
-#define MAJOR_VERSION     2
-#define MINOR_VERSION     5
-#define BUILD_NUMBER      8
-#define PATCH_LEVEL       0
+#define MAJOR_VERSION     3
+#define MINOR_VERSION     0
+#define BUILD_NUMBER      0
+#define PATCH_LEVEL       1
 #define CANDIDATE_VERSION false
 
 // Define SONAME to have the SCons build the put a specific SONAME into the
@@ -57,12 +57,19 @@ const char* Version::soname_ = SONAME;
 // Calculate the V8 version string.
 void Version::GetString(Vector<char> str) {
   const char* candidate = IsCandidate() ? " (candidate)" : "";
+#ifdef USE_SIMULATOR
+  const char* is_simulator = " SIMULATOR";
+#else
+  const char* is_simulator = "";
+#endif  // USE_SIMULATOR
   if (GetPatch() > 0) {
-    OS::SNPrintF(str, "%d.%d.%d.%d%s",
-                 GetMajor(), GetMinor(), GetBuild(), GetPatch(), candidate);
+    OS::SNPrintF(str, "%d.%d.%d.%d%s%s",
+                 GetMajor(), GetMinor(), GetBuild(), GetPatch(), candidate,
+                 is_simulator);
   } else {
-    OS::SNPrintF(str, "%d.%d.%d%s",
-                 GetMajor(), GetMinor(), GetBuild(), candidate);
+    OS::SNPrintF(str, "%d.%d.%d%s%s",
+                 GetMajor(), GetMinor(), GetBuild(), candidate,
+                 is_simulator);
   }
 }
 

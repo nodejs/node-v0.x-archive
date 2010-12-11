@@ -904,9 +904,11 @@ void LoadIC::GenerateMiss(MacroAssembler* masm) {
   __ TailCallExternalReference(ref, 2, 1);
 }
 
+// Returns the code marker, or the 0 if the code is not marked.
+static inline int InlinedICSiteMarker(Address address,
+                                      Address* inline_end_address) {
+  if (V8::UseCrankshaft()) return false;
 
-static inline bool IsInlinedICSite(Address address,
-                                   Address* inline_end_address) {
   // If the instruction after the call site is not the pseudo instruction nop1
   // then this is not related to an inlined in-object property load. The nop1
   // instruction is located just after the call to the IC in the deferred code
@@ -914,9 +916,11 @@ static inline bool IsInlinedICSite(Address address,
   // a branch instruction for jumping back from the deferred code.
   Address address_after_call = address + Assembler::kCallTargetAddressOffset;
   Instr instr_after_call = Assembler::instr_at(address_after_call);
-  if (!Assembler::IsNop(instr_after_call, PROPERTY_ACCESS_INLINED)) {
-    return false;
-  }
+  int code_marker = MacroAssembler::GetCodeMarker(instr_after_call);
+
+  // A negative result means the code is not marked.
+  if (code_marker <= 0) return 0;
+
   Address address_after_nop = address_after_call + Assembler::kInstrSize;
   Instr instr_after_nop = Assembler::instr_at(address_after_nop);
   // There may be some reg-reg move and frame merging code to skip over before
@@ -933,15 +937,20 @@ static inline bool IsInlinedICSite(Address address,
   ASSERT(b_offset < 0);  // Jumping back from deferred code.
   *inline_end_address = address_after_nop + b_offset;
 
-  return true;
+  return code_marker;
 }
 
 
 bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
+  if (V8::UseCrankshaft()) return false;
+
   // Find the end of the inlined code for handling the load if this is an
   // inlined IC call site.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the offset of the property load instruction (ldr r0, [r1, #+XXX]).
   // The immediate must be representable in 12 bits.
@@ -959,8 +968,12 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   CPU::FlushICache(ldr_property_instr_address, 1 * Assembler::kInstrSize);
 
   // Patch the map check.
+  // For PROPERTY_ACCESS_INLINED, the load map instruction is generated
+  // 4 instructions before the end of the inlined code.
+  // See codgen-arm.cc CodeGenerator::EmitNamedLoad.
+  int ldr_map_offset = -4;
   Address ldr_map_instr_address =
-      inline_end_address - 4 * Assembler::kInstrSize;
+      inline_end_address + ldr_map_offset * Assembler::kInstrSize;
   Assembler::set_target_address_at(ldr_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;
@@ -971,16 +984,54 @@ bool LoadIC::PatchInlinedContextualLoad(Address address,
                                         Object* map,
                                         Object* cell,
                                         bool is_dont_delete) {
-  // TODO(<bug#>): implement this.
-  return false;
+  // Find the end of the inlined code for handling the contextual load if
+  // this is inlined IC call site.
+  Address inline_end_address;
+  int marker = InlinedICSiteMarker(address, &inline_end_address);
+  if (!((marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT) ||
+        (marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE))) {
+    return false;
+  }
+  // On ARM we don't rely on the is_dont_delete argument as the hint is already
+  // embedded in the code marker.
+  bool marker_is_dont_delete =
+      marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE;
+
+  // These are the offsets from the end of the inlined code.
+  // See codgen-arm.cc CodeGenerator::EmitNamedLoad.
+  int ldr_map_offset = marker_is_dont_delete ? -5: -8;
+  int ldr_cell_offset = marker_is_dont_delete ? -2: -5;
+  if (FLAG_debug_code && marker_is_dont_delete) {
+    // Three extra instructions were generated to check for the_hole_value.
+    ldr_map_offset -= 3;
+    ldr_cell_offset -= 3;
+  }
+  Address ldr_map_instr_address =
+      inline_end_address + ldr_map_offset * Assembler::kInstrSize;
+  Address ldr_cell_instr_address =
+      inline_end_address + ldr_cell_offset * Assembler::kInstrSize;
+
+  // Patch the map check.
+  Assembler::set_target_address_at(ldr_map_instr_address,
+                                   reinterpret_cast<Address>(map));
+  // Patch the cell address.
+  Assembler::set_target_address_at(ldr_cell_instr_address,
+                                   reinterpret_cast<Address>(cell));
+
+  return true;
 }
 
 
 bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
+  if (V8::UseCrankshaft()) return false;
+
   // Find the end of the inlined code for the store if there is an
   // inlined version of the store.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Compute the address of the map load instruction.
   Address ldr_map_instr_address =
@@ -1024,8 +1075,13 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
 
 
 bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
+  if (V8::UseCrankshaft()) return false;
+
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the map check.
   Address ldr_map_instr_address =
@@ -1039,10 +1095,15 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
 
 
 bool KeyedStoreIC::PatchInlinedStore(Address address, Object* map) {
+  if (V8::UseCrankshaft()) return false;
+
   // Find the end of the inlined code for handling the store if this is an
   // inlined IC call site.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the map check.
   Address ldr_map_instr_address =
@@ -1264,7 +1325,7 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   char_at_generator.GenerateFast(masm);
   __ Ret();
 
-  ICRuntimeCallHelper call_helper;
+  StubRuntimeCallHelper call_helper;
   char_at_generator.GenerateSlow(masm, call_helper);
 
   __ bind(&miss);
@@ -2256,8 +2317,71 @@ void StoreIC::GenerateNormal(MacroAssembler* masm) {
 }
 
 
+void StoreIC::GenerateGlobalProxy(MacroAssembler* masm) {
+  // ----------- S t a t e -------------
+  //  -- r0    : value
+  //  -- r1    : receiver
+  //  -- r2    : name
+  //  -- lr    : return address
+  // -----------------------------------
+
+  __ Push(r1, r2, r0);
+
+  // Do tail-call to runtime routine.
+  __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
+}
+
+
 #undef __
 
+
+Condition CompareIC::ComputeCondition(Token::Value op) {
+  switch (op) {
+    case Token::EQ_STRICT:
+    case Token::EQ:
+      return eq;
+    case Token::LT:
+      return lt;
+    case Token::GT:
+      // Reverse left and right operands to obtain ECMA-262 conversion order.
+      return lt;
+    case Token::LTE:
+      // Reverse left and right operands to obtain ECMA-262 conversion order.
+      return ge;
+    case Token::GTE:
+      return ge;
+    default:
+      UNREACHABLE();
+      return no_condition;
+  }
+}
+
+
+void CompareIC::UpdateCaches(Handle<Object> x, Handle<Object> y) {
+  HandleScope scope;
+  Handle<Code> rewritten;
+#ifdef DEBUG
+  State previous_state = GetState();
+#endif
+  State state = TargetState(x, y);
+  if (state == GENERIC) {
+    CompareStub stub(GetCondition(), strict(), NO_COMPARE_FLAGS, r1, r0);
+    rewritten = stub.GetCode();
+  } else {
+    ICCompareStub stub(op_, state);
+    rewritten = stub.GetCode();
+  }
+  set_target(*rewritten);
+
+#ifdef DEBUG
+  if (FLAG_trace_ic) {
+    PrintF("[CompareIC (%s->%s)#%s]\n",
+           GetStateName(previous_state),
+           GetStateName(state),
+           Token::Name(op_));
+  }
+#endif
+}
 
 } }  // namespace v8::internal
 

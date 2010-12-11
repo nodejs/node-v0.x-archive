@@ -1,4 +1,4 @@
-// Copyright 2006-2009 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -224,6 +224,12 @@ class MacroAssembler: public Assembler {
     }
   }
 
+  // Push and pop the registers that can hold pointers, as defined by the
+  // RegList constant kSafepointSavedRegisters.
+  void PushSafepointRegisters();
+  void PopSafepointRegisters();
+  static int SafepointRegisterStackIndex(int reg_code);
+
   // Load two consecutive registers with two consecutive memory locations.
   void Ldrd(Register dst1,
             Register dst2,
@@ -235,11 +241,6 @@ class MacroAssembler: public Assembler {
             Register src2,
             const MemOperand& dst,
             Condition cond = al);
-
-  // ---------------------------------------------------------------------------
-  // Stack limit support
-
-  void StackLimitCheck(Label* on_stack_limit_hit);
 
   // ---------------------------------------------------------------------------
   // Activation frames
@@ -254,15 +255,23 @@ class MacroAssembler: public Assembler {
   // Expects the number of arguments in register r0 and
   // the builtin function to call in register r1. Exits with argc in
   // r4, argv in r6, and and the builtin function to call in r5.
-  void EnterExitFrame();
+  void EnterExitFrame(bool save_doubles);
 
   // Leave the current exit frame. Expects the return value in r0.
-  void LeaveExitFrame();
+  void LeaveExitFrame(bool save_doubles);
 
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();
 
   void LoadContext(Register dst, int context_chain_length);
+
+  void LoadGlobalFunction(int index, Register function);
+
+  // Load the initial map from the global function. The registers
+  // function and map can be the same, function is then overwritten.
+  void LoadGlobalFunctionInitialMap(Register function,
+                                    Register map,
+                                    Register scratch);
 
   // ---------------------------------------------------------------------------
   // JavaScript invokes
@@ -318,6 +327,40 @@ class MacroAssembler: public Assembler {
   void CheckAccessGlobalProxy(Register holder_reg,
                               Register scratch,
                               Label* miss);
+
+  inline void MarkCode(NopMarkerTypes type) {
+    nop(type);
+  }
+
+  // Check if the given instruction is a 'type' marker.
+  // ie. check if is is a mov r<type>, r<type> (referenced as nop(type))
+  // These instructions are generated to mark special location in the code,
+  // like some special IC code.
+  static inline bool IsMarkedCode(Instr instr, int type) {
+    ASSERT((FIRST_IC_MARKER <= type) && (type < LAST_CODE_MARKER));
+    return IsNop(instr, type);
+  }
+
+
+  static inline int GetCodeMarker(Instr instr) {
+    int dst_reg_offset = 12;
+    int dst_mask = 0xf << dst_reg_offset;
+    int src_mask = 0xf;
+    int dst_reg = (instr & dst_mask) >> dst_reg_offset;
+    int src_reg = instr & src_mask;
+    uint32_t non_register_mask = ~(dst_mask | src_mask);
+    uint32_t mov_mask = al | 13 << 21;
+
+    // Return <n> if we have a mov rn rn, else return -1.
+    int type = ((instr & non_register_mask) == mov_mask) &&
+               (dst_reg == src_reg) &&
+               (FIRST_IC_MARKER <= dst_reg) && (dst_reg < LAST_CODE_MARKER)
+                   ? src_reg
+                   : -1;
+    ASSERT((type == -1) ||
+           ((FIRST_IC_MARKER <= type) && (type < LAST_CODE_MARKER)));
+    return type;
+  }
 
 
   // ---------------------------------------------------------------------------
@@ -533,6 +576,7 @@ class MacroAssembler: public Assembler {
 
   // Call a runtime routine.
   void CallRuntime(Runtime::Function* f, int num_arguments);
+  void CallRuntimeSaveDoubles(Runtime::FunctionId id);
 
   // Convenience function: Same as above, but takes the fid instead.
   void CallRuntime(Runtime::FunctionId fid, int num_arguments);
@@ -622,6 +666,14 @@ class MacroAssembler: public Assembler {
 
   // ---------------------------------------------------------------------------
   // Smi utilities
+
+  void SmiTag(Register reg, SBit s = LeaveCC) {
+    add(reg, reg, Operand(reg), s);
+  }
+
+  void SmiUntag(Register reg) {
+    mov(reg, Operand(reg, ASR, kSmiTagSize));
+  }
 
   // Jump if either of the registers contain a non-smi.
   void JumpIfNotBothSmi(Register reg1, Register reg2, Label* on_not_both_smi);
@@ -722,6 +774,17 @@ class CodePatcher {
   MacroAssembler masm_;  // Macro assembler used to generate the code.
 };
 #endif  // ENABLE_DEBUGGER_SUPPORT
+
+
+// Helper class for generating code or data associated with the code
+// right after a call instruction. As an example this can be used to
+// generate safepoint data after calls for crankshaft.
+class PostCallGenerator {
+ public:
+  PostCallGenerator() { }
+  virtual ~PostCallGenerator() { }
+  virtual void Generate() = 0;
+};
 
 
 // -----------------------------------------------------------------------------

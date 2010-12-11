@@ -1531,6 +1531,17 @@ static Handle<Value> EnvGetter(Local<String> property,
 }
 
 
+static bool ENV_warning = false;
+static Handle<Value> EnvGetterWarn(Local<String> property,
+                                   const AccessorInfo& info) {
+  if (!ENV_warning) {
+    ENV_warning = true;
+    fprintf(stderr, "(node) Use process.env instead of process.ENV\r\n");
+  }
+  return EnvGetter(property, info);
+}
+
+
 static Handle<Value> EnvSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
@@ -1630,12 +1641,26 @@ static void Load(int argc, char *argv[]) {
 
   // create process.env
   Local<ObjectTemplate> envTemplate = ObjectTemplate::New();
-  envTemplate->SetNamedPropertyHandler(EnvGetter, EnvSetter, EnvQuery, EnvDeleter, EnvEnumerator, Undefined());
-
-  // assign process.ENV
+  envTemplate->SetNamedPropertyHandler(EnvGetter,
+                                       EnvSetter,
+                                       EnvQuery,
+                                       EnvDeleter,
+                                       EnvEnumerator,
+                                       Undefined());
   Local<Object> env = envTemplate->NewInstance();
-  process->Set(String::NewSymbol("ENV"), env);
   process->Set(String::NewSymbol("env"), env);
+
+  // create process.ENV
+  // TODO: remove me at some point.
+  Local<ObjectTemplate> ENVTemplate = ObjectTemplate::New();
+  ENVTemplate->SetNamedPropertyHandler(EnvGetterWarn,
+                                       EnvSetter,
+                                       EnvQuery,
+                                       EnvDeleter,
+                                       EnvEnumerator,
+                                       Undefined());
+  Local<Object> ENV = ENVTemplate->NewInstance();
+  process->Set(String::NewSymbol("ENV"), ENV);
 
   process->Set(String::NewSymbol("pid"), Integer::New(getpid()));
 
@@ -1818,7 +1843,8 @@ static void AtExit() {
 
 
 static void SignalExit(int signal) {
-  exit(1);
+  Stdio::DisableRawMode(STDIN_FILENO);
+  _exit(1);
 }
 
 
@@ -1878,7 +1904,7 @@ int Start(int argc, char *argv[]) {
   // Initialize the default ev loop.
 #if defined(__sun)
   // TODO(Ryan) I'm experiencing abnormally high load using Solaris's
-  // EVBACKEND_PORT. Temporarally forcing select() until I debug.
+  // EVBACKEND_PORT. Temporarally forcing poll().
   ev_default_loop(EVBACKEND_POLL);
 #elif defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
   ev_default_loop(EVBACKEND_KQUEUE);

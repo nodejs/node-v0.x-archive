@@ -35,27 +35,26 @@ Here is an example of a echo server which listens for connections
 on port 8124:
 
     var net = require('net');
-    var server = net.createServer(function (stream) {
-      stream.setEncoding('utf8');
-      stream.on('connect', function () {
-        stream.write('hello\r\n');
-      });
-      stream.on('data', function (data) {
-        stream.write(data);
-      });
-      stream.on('end', function () {
-        stream.write('goodbye\r\n');
-        stream.end();
-      });
+    var server = net.createServer(function (c) {
+      c.write('hello\r\n');
+      c.pipe(c);
     });
     server.listen(8124, 'localhost');
 
-To listen on the socket `'/tmp/echo.sock'`, the last line would just be
+Test this by using `telnet`:
+
+    telnet localhost 8124
+
+To listen on the socket `/tmp/echo.sock` the last line would just be
 changed to
 
     server.listen('/tmp/echo.sock');
 
-This is an `EventEmitter` with the following events:
+Use `nc` to connect to a UNIX domain socket server:
+
+    nc -U /tmp/echo.sock
+
+`net.Server` is an `EventEmitter` with the following events:
 
 #### server.listen(port, [host], [callback])
 
@@ -65,6 +64,23 @@ IPv4 address (`INADDR_ANY`).
 
 This function is asynchronous. The last parameter `callback` will be called
 when the server has been bound.
+
+One issue some users run into is getting `EADDRINUSE` errors. Meaning
+another server is already running on the requested port. One way of handling this
+would be to wait a second and the try again. This can be done with
+
+    server.on('error', function (e) {
+      if (e.errno == require('constants').EADDRINUSE) {
+        console.log('Address in use, retrying...');
+        setTimeout(function () {
+          server.close();
+          server.listen(PORT, HOST);
+        }, 1000);
+      }
+    });
+
+(Note: All sockets in Node are set SO_REUSEADDR already)
+
 
 #### server.listen(path, [callback])
 
@@ -193,8 +209,7 @@ buffer. Returns `false` if all or part of the data was queued in user memory.
 #### stream.end([data], [encoding])
 
 Half-closes the stream. I.E., it sends a FIN packet. It is possible the
-server will still send some data. After calling this `readyState` will be
-`'readOnly'`.
+server will still send some data.
 
 If `data` is specified, it is equivalent to calling `stream.write(data, encoding)`
 followed by `stream.end()`.
@@ -246,9 +261,6 @@ The string representation of the remote IP address. For example,
 
 This member is only present in server-side connections.
 
-#### stream.readyState
-
-Either `'closed'`, `'open'`, `'opening'`, `'readOnly'`, or `'writeOnly'`.
 
 #### Event: 'connect'
 
@@ -275,9 +287,7 @@ By default (`allowHalfOpen == false`) the stream will destroy its file
 descriptor  once it has written out its pending write queue.  However, by
 setting `allowHalfOpen == true` the stream will not automatically `end()`
 its side allowing the user to write arbitrary amounts of data, with the
-caveat that the user is required to `end()` their side now. In the
-`allowHalfOpen == true` case after `'end'` is emitted the `readyState` will
-be `'writeOnly'`.
+caveat that the user is required to `end()` their side now.
 
 
 #### Event: 'timeout'

@@ -1,35 +1,33 @@
-common = require("../common");
-assert = common.assert
-
-assert = require("assert");
-http = require("http");
-util = require("util");
+var common = require('../common');
+var assert = require('assert');
+var http = require('http');
+var util = require('util');
 
 
-body = "hello world\n";
+var body = 'hello world\n';
 
-server = http.createServer(function (req, res) {
+var server = http.createServer(function(req, res) {
   common.error('req: ' + req.method);
-  res.writeHead(200, {"Content-Length": body.length});
+  res.writeHead(200, {'Content-Length': body.length});
   res.end();
   server.close();
 });
 
 var gotEnd = false;
 
-server.listen(common.PORT, function () {
+server.listen(common.PORT, function() {
   var client = http.createClient(common.PORT);
-  var request = client.request("HEAD", "/");
+  var request = client.request('HEAD', '/');
   request.end();
-  request.addListener('response', function (response) {
+  request.addListener('response', function(response) {
     common.error('response start');
-    response.addListener("end", function () {
+    response.addListener('end', function() {
       common.error('response end');
       gotEnd = true;
     });
   });
 });
 
-process.addListener('exit', function () {
+process.addListener('exit', function() {
   assert.ok(gotEnd);
 });

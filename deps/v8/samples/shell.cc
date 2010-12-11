@@ -26,6 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <v8.h>
+#include <v8-testing.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
@@ -37,7 +38,6 @@ bool ExecuteString(v8::Handle<v8::String> source,
                    v8::Handle<v8::Value> name,
                    bool print_result,
                    bool report_exceptions);
-v8::Handle<v8::Value> PrintToInteger(const v8::Arguments& args);
 v8::Handle<v8::Value> Print(const v8::Arguments& args);
 v8::Handle<v8::Value> Read(const v8::Arguments& args);
 v8::Handle<v8::Value> Load(const v8::Arguments& args);
@@ -45,17 +45,16 @@ v8::Handle<v8::Value> Quit(const v8::Arguments& args);
 v8::Handle<v8::Value> Version(const v8::Arguments& args);
 v8::Handle<v8::String> ReadFile(const char* name);
 void ReportException(v8::TryCatch* handler);
+void SetFlagsFromString(const char* flags);
 
 
 int RunMain(int argc, char* argv[]) {
-  v8::V8::SetFlagsFromCommandLine(&argc, argv, true);
   v8::HandleScope handle_scope;
   // Create a template for the global object.
   v8::Handle<v8::ObjectTemplate> global = v8::ObjectTemplate::New();
   // Bind the global 'print' function to the C++ Print callback.
   global->Set(v8::String::New("print"), v8::FunctionTemplate::New(Print));
-global->Set(v8::String::New("print2int"), v8::FunctionTemplate::New(PrintToInteger));
-// Bind the global 'read' function to the C++ Read callback.
+  // Bind the global 'read' function to the C++ Read callback.
   global->Set(v8::String::New("read"), v8::FunctionTemplate::New(Read));
   // Bind the global 'load' function to the C++ Load callback.
   global->Set(v8::String::New("load"), v8::FunctionTemplate::New(Load));
@@ -65,11 +64,11 @@ global->Set(v8::String::New("print2int"), v8::FunctionTemplate::New(PrintToInteg
   global->Set(v8::String::New("version"), v8::FunctionTemplate::New(Version));
   // Create a new execution environment containing the built-in
   // functions
-  v8::Handle<v8::Context> context = v8::Context::New(NULL, global);
-  // Enter the newly created execution environment.
-  v8::Context::Scope context_scope(context);
+  v8::Persistent<v8::Context> context = v8::Context::New(NULL, global);
   bool run_shell = (argc == 1);
   for (int i = 1; i < argc; i++) {
+    // Enter the execution environment before evaluating any code.
+    v8::Context::Scope context_scope(context);
     const char* str = argv[i];
     if (strcmp(str, "--shell") == 0) {
       run_shell = true;
@@ -101,12 +100,48 @@ global->Set(v8::String::New("print2int"), v8::FunctionTemplate::New(PrintToInteg
     }
   }
   if (run_shell) RunShell(context);
+  context.Dispose();
   return 0;
 }
 
 
 int main(int argc, char* argv[]) {
-  int result = RunMain(argc, argv);
+  // Figure out if we're requested to stress the optimization
+  // infrastructure by running tests multiple times and forcing
+  // optimization in the last run.
+  bool FLAG_stress_opt = false;
+  bool FLAG_stress_deopt = false;
+  for (int i = 0; i < argc; i++) {
+    if (strcmp(argv[i], "--stress-opt") == 0) {
+      FLAG_stress_opt = true;
+      argv[i] = NULL;
+    } else if (strcmp(argv[i], "--stress-deopt") == 0) {
+      FLAG_stress_deopt = true;
+      argv[i] = NULL;
+    } else if (strcmp(argv[i], "--noalways-opt") == 0) {
+      // No support for stressing if we can't use --always-opt.
+      FLAG_stress_opt = false;
+      FLAG_stress_deopt = false;
+      break;
+    }
+  }
+
+  v8::V8::SetFlagsFromCommandLine(&argc, argv, true);
+  int result = 0;
+  if (FLAG_stress_opt || FLAG_stress_deopt) {
+    v8::Testing::SetStressRunType(FLAG_stress_opt
+                                  ? v8::Testing::kStressTypeOpt
+                                  : v8::Testing::kStressTypeDeopt);
+    int stress_runs = v8::Testing::GetStressRuns();
+    for (int i = 0; i < stress_runs && result == 0; i++) {
+      printf("============ Stress %d/%d ============\n",
+             i + 1, stress_runs);
+      v8::Testing::PrepareStressRun(i);
+      result = RunMain(argc, argv);
+    }
+  } else {
+    result = RunMain(argc, argv);
+  }
   v8::V8::Dispose();
   return result;
 }
@@ -135,16 +170,6 @@ v8::Handle<v8::Value> Print(const v8::Arguments& args) {
     printf("%s", cstr);
   }
   printf("\n");
-  fflush(stdout);
-  return v8::Undefined();
-}
-
-
-v8::Handle<v8::Value> PrintToInteger(const v8::Arguments& args) {
-  v8::HandleScope handle_scope;
-  v8::String::Utf8Value str(args[0]);
-  const char* cstr = ToCString(str);
-  printf("%s -> %d\n", cstr, args[0]->ToInt32()->Value());
   fflush(stdout);
   return v8::Undefined();
 }
@@ -233,6 +258,8 @@ v8::Handle<v8::String> ReadFile(const char* name) {
 void RunShell(v8::Handle<v8::Context> context) {
   printf("V8 version %s\n", v8::V8::GetVersion());
   static const int kBufferSize = 256;
+  // Enter the execution environment before evaluating any code.
+  v8::Context::Scope context_scope(context);
   while (true) {
     char buffer[kBufferSize];
     printf("> ");
@@ -317,4 +344,9 @@ void ReportException(v8::TryCatch* try_catch) {
       printf("%s\n", stack_trace_string);
     }
   }
+}
+
+
+void SetFlagsFromString(const char* flags) {
+  v8::V8::SetFlagsFromString(flags, strlen(flags));
 }

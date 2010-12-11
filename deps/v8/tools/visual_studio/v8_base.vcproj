@@ -577,6 +577,22 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\src\hydrogen.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\hydrogen.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\hydrogen-instructions.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\hydrogen-instructions.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\src\ia32\ic-ia32.cc"
 				>
 			</File>
@@ -762,6 +778,22 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\src\preparser.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\preparser.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\preparse-data.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\preparse-data.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\src\profile-generator.cc"
 				>
 			</File>
@@ -867,6 +899,22 @@
 			</File>
 			<File
 				RelativePath="..\..\src\runtime.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\runtime-profiler.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\runtime-profiler.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\safepoint-table.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\safepoint-table.h"
 				>
 			</File>
 			<File
@@ -1034,11 +1082,23 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\src\v8checks.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\v8globals.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\src\v8threads.cc"
 				>
 			</File>
 			<File
 				RelativePath="..\..\src\v8threads.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\src\v8utils.h"
 				>
 			</File>
 			<File
@@ -1154,7 +1214,15 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\include\v8-testing.h"
+				>
+			</File>
+			<File
 				RelativePath="..\..\include\v8.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\include\v8stdint.h"
 				>
 			</File>
 		</Filter>

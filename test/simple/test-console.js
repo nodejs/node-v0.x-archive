@@ -1,10 +1,10 @@
-common = require("../common");
-assert = common.assert;
+var common = require('../common');
+var assert = require('assert');
 
 var stdout_write = global.process.stdout.write;
 var strings = [];
 global.process.stdout.write = function(string) {
-    strings.push(string);
+  strings.push(string);
 };
 
 console.log('foo');

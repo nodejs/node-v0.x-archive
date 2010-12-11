@@ -2,8 +2,8 @@
 // of the same header as per RFC2616: joining the handful of fields by ', '
 // that support it, and dropping duplicates for other fields.
 
-common = require("../common");
-assert = common.assert
+var common = require('../common');
+var assert = require('assert');
 var http = require('http');
 
 var srv = http.createServer(function(req, res) {
@@ -18,20 +18,19 @@ var srv = http.createServer(function(req, res) {
   srv.close();
 });
 
-srv.listen(common.PORT, function () {
+srv.listen(common.PORT, function() {
   var hc = http.createClient(common.PORT, 'localhost');
   var hr = hc.request('/',
-    [
-      ['accept', 'abc'],
-      ['accept', 'def'],
-      ['Accept', 'ghijklmnopqrst'],
-      ['host', 'foo'],
-      ['Host', 'bar'],
-      ['hOst', 'baz'],
-      ['x-foo', 'bingo'],
-      ['x-bar', 'banjo'],
-      ['x-bar', 'bango']
-    ]
-  );
+      [
+        ['accept', 'abc'],
+        ['accept', 'def'],
+        ['Accept', 'ghijklmnopqrst'],
+        ['host', 'foo'],
+        ['Host', 'bar'],
+        ['hOst', 'baz'],
+        ['x-foo', 'bingo'],
+        ['x-bar', 'banjo'],
+        ['x-bar', 'bango']
+      ]);
   hr.end();
 });

@@ -30,6 +30,14 @@ To submit test results (see http://my.cdash.org/index.php?project=node):
 
   make -f Makefile.cmake cdash
 
+To submit coverage test results:
+
+  make -f Makefile.cmake cdash-cov
+
+To submit valgrind test results:
+
+  make -f Makefile.cmake cdash-mem
+
 Using cmake directly:
   cd ~/your-node-source-dir
   mkdir name-of-build-dir     (can be anything)
@@ -43,6 +51,7 @@ Using cmake directly:
 Other build targets:
   make Experimental
   make Nightly
+  make NightlyMemoryCheck
   make Continuous
 
 Additional options:

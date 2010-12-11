@@ -1,13 +1,13 @@
-common = require("../common");
-assert = common.assert
+var common = require('../common');
+var assert = require('assert');
 var path = require('path');
 var fs = require('fs');
 var got_error = false;
 var success_count = 0;
 
-var file = path.join(common.fixturesDir, "a.js");
+var file = path.join(common.fixturesDir, 'a.js');
 
-fs.chmod(file, 0777, function (err) {
+fs.chmod(file, 0777, function(err) {
   if (err) {
     got_error = true;
   } else {
@@ -20,7 +20,7 @@ fs.chmod(file, 0777, function (err) {
   }
 });
 
-process.addListener("exit", function () {
+process.addListener('exit', function() {
   assert.equal(1, success_count);
   assert.equal(false, got_error);
 });

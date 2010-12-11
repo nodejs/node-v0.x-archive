@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -137,12 +137,6 @@ class MacroAssembler: public Assembler {
 #endif
 
   // ---------------------------------------------------------------------------
-  // Stack limit support
-
-  // Do simple test for stack overflow. This doesn't handle an overflow.
-  void StackLimitCheck(Label* on_stack_limit_hit);
-
-  // ---------------------------------------------------------------------------
   // Activation frames
 
   void EnterInternalFrame() { EnterFrame(StackFrame::INTERNAL); }
@@ -172,6 +166,14 @@ class MacroAssembler: public Assembler {
   // Leave the current exit frame. Expects/provides the return value in
   // register rax (untouched).
   void LeaveApiExitFrame();
+
+  // Push and pop the registers that can hold pointers.
+  void PushSafepointRegisters() { UNIMPLEMENTED(); }
+  void PopSafepointRegisters() { UNIMPLEMENTED(); }
+  static int SafepointRegisterStackIndex(int reg_code) {
+    UNIMPLEMENTED();
+    return 0;
+  }
 
   // ---------------------------------------------------------------------------
   // JavaScript invokes
@@ -950,12 +952,9 @@ class MacroAssembler: public Assembler {
 
   // Allocation support helpers.
   // Loads the top of new-space into the result register.
-  // If flags contains RESULT_CONTAINS_TOP then result_end is valid and
-  // already contains the top of new-space, and scratch is invalid.
   // Otherwise the address of the new-space top is loaded into scratch (if
   // scratch is valid), and the new-space top is loaded into result.
   void LoadAllocationTopHelper(Register result,
-                               Register result_end,
                                Register scratch,
                                AllocationFlags flags);
   // Update allocation top with value in result_end register.

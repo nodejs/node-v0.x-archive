@@ -1,16 +1,18 @@
-common = require("../common");
-assert = common.assert
+var common = require('../common');
+var assert = require('assert');
 
-baseFoo = "foo";
-global.baseBar = "bar";
+common.globalCheck = false;
 
-assert.equal("foo", global.baseFoo, "x -> global.x in base level not working");
+baseFoo = 'foo';
+global.baseBar = 'bar';
 
-assert.equal("bar", baseBar, "global.x -> x in base level not working");
+assert.equal('foo', global.baseFoo, 'x -> global.x in base level not working');
 
-var module = require("../fixtures/global/plain"),
-  fooBar = module.fooBar;
+assert.equal('bar', baseBar, 'global.x -> x in base level not working');
 
-assert.equal("foo", fooBar.foo, "x -> global.x in sub level not working");
+var module = require('../fixtures/global/plain'),
+    fooBar = module.fooBar;
 
-assert.equal("bar", fooBar.bar, "global.x -> x in sub level not working");
+assert.equal('foo', fooBar.foo, 'x -> global.x in sub level not working');
+
+assert.equal('bar', fooBar.bar, 'global.x -> x in sub level not working');

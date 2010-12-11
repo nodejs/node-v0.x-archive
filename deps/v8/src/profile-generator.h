@@ -696,10 +696,12 @@ class HeapSnapshot {
   void ApproximateRetainedSizes();
   void ClearPaint();
   HeapSnapshotsDiff* CompareWith(HeapSnapshot* snapshot);
+  HeapEntry* GetEntryById(uint64_t id);
   List<HeapGraphPath*>* GetRetainingPaths(HeapEntry* entry);
   List<HeapEntry*>* GetSortedEntriesList();
   template<class Visitor>
   void IterateEntries(Visitor* visitor) { entries_.Iterate(visitor); }
+  void SetDominatorsToSelf();
 
   void Print(int max_depth);
   void PrintEntriesSize();
@@ -1071,6 +1073,9 @@ class HeapSnapshotJSONSerializer {
 
   DISALLOW_COPY_AND_ASSIGN(HeapSnapshotJSONSerializer);
 };
+
+
+String* GetConstructorNameForHeapProfile(JSObject* object);
 
 } }  // namespace v8::internal
 

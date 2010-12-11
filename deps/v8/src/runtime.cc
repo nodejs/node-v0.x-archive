@@ -1,4 +1,4 @@
-// Copyright 2006-2009 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -33,16 +33,19 @@
 #include "api.h"
 #include "arguments.h"
 #include "codegen.h"
+#include "compilation-cache.h"
 #include "compiler.h"
 #include "cpu.h"
 #include "dateparser-inl.h"
 #include "debug.h"
+#include "deoptimizer.h"
 #include "execution.h"
 #include "jsregexp.h"
 #include "liveedit.h"
 #include "parser.h"
 #include "platform.h"
 #include "runtime.h"
+#include "runtime-profiler.h"
 #include "scopeinfo.h"
 #include "smart-pointer.h"
 #include "stub-cache.h"
@@ -606,6 +609,22 @@ static MaybeObject* Runtime_SetHiddenPrototype(Arguments args) {
   // Set the object's prototype to proto.
   new_map->set_prototype(proto);
   jsobject->set_map(new_map);
+
+  return Heap::undefined_value();
+}
+
+
+// Sets the magic number that identifies a function as one of the special
+// math functions that can be inlined.
+static MaybeObject* Runtime_SetMathFunctionId(Arguments args) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 2);
+  CONVERT_CHECKED(JSFunction, function, args[0]);
+  CONVERT_CHECKED(Smi, id, args[1]);
+  RUNTIME_ASSERT(id->value() >= 0);
+  RUNTIME_ASSERT(id->value() < SharedFunctionInfo::max_math_id_number());
+
+  function->shared()->set_math_function_id(id->value());
 
   return Heap::undefined_value();
 }
@@ -1640,14 +1659,13 @@ static MaybeObject* Runtime_FunctionGetScriptSourcePosition(Arguments args) {
 static MaybeObject* Runtime_FunctionGetPositionForOffset(Arguments args) {
   ASSERT(args.length() == 2);
 
-  CONVERT_CHECKED(JSFunction, fun, args[0]);
+  CONVERT_CHECKED(Code, code, args[0]);
   CONVERT_NUMBER_CHECKED(int, offset, Int32, args[1]);
 
-  Code* code = fun->code();
   RUNTIME_ASSERT(0 <= offset && offset < code->Size());
 
   Address pc = code->address() + offset;
-  return Smi::FromInt(fun->code()->SourcePosition(pc));
+  return Smi::FromInt(code->SourcePosition(pc));
 }
 
 
@@ -1724,10 +1742,14 @@ static MaybeObject* Runtime_SetCode(Arguments args) {
     if (!EnsureCompiled(shared, KEEP_EXCEPTION)) {
       return Failure::Exception();
     }
+    // Since we don't store the source for this we should never
+    // optimize this.
+    shared->code()->set_optimizable(false);
+
     // Set the code, scope info, formal parameter count,
     // and the length of the target function.
     target->shared()->set_code(shared->code());
-    target->set_code(shared->code());
+    target->ReplaceCode(shared->code());
     target->shared()->set_scope_info(shared->scope_info());
     target->shared()->set_length(shared->length());
     target->shared()->set_formal_parameter_count(
@@ -1757,6 +1779,7 @@ static MaybeObject* Runtime_SetCode(Arguments args) {
     // It's okay to skip the write barrier here because the literals
     // are guaranteed to be in old space.
     target->set_literals(*literals, SKIP_WRITE_BARRIER);
+    target->set_next_function_link(Heap::undefined_value());
   }
 
   target->set_context(*context);
@@ -2019,10 +2042,7 @@ class ReplacementStringBuilder {
   }
 
   Handle<JSArray> GetParts() {
-    Handle<JSArray> result =
-        Factory::NewJSArrayWithElements(array_builder_.array());
-    result->set_length(Smi::FromInt(array_builder_.length()));
-    return result;
+    return array_builder_.ToJSArray();
   }
 
  private:
@@ -2597,7 +2617,7 @@ static MaybeObject* Runtime_StringReplaceRegExpWithString(Arguments args) {
 
 // Perform string match of pattern on subject, starting at start index.
 // Caller must ensure that 0 <= start_index <= sub->length(),
-// and should check that pat->length() + start_index <= sub->length()
+// and should check that pat->length() + start_index <= sub->length().
 int Runtime::StringMatch(Handle<String> sub,
                          Handle<String> pat,
                          int start_index) {
@@ -3196,7 +3216,7 @@ static MaybeObject* Runtime_RegExpExecMultiple(Arguments args) {
   if (regexp->TypeTag() == JSRegExp::ATOM) {
     Handle<String> pattern(
         String::cast(regexp->DataAt(JSRegExp::kAtomPatternIndex)));
-    if (!pattern->IsFlat()) FlattenString(pattern);
+    ASSERT(pattern->IsFlat());
     if (SearchStringMultiple(subject, pattern, last_match_info, &builder)) {
       return *builder.ToJSArray(result_array);
     }
@@ -4524,6 +4544,215 @@ static MaybeObject* Runtime_URIUnescape(Arguments args) {
 }
 
 
+static const unsigned int kQuoteTableLength = 128u;
+
+static const int kJsonQuotesCharactersPerEntry = 8;
+static const char* const JsonQuotes =
+    "\\u0000  \\u0001  \\u0002  \\u0003  "
+    "\\u0004  \\u0005  \\u0006  \\u0007  "
+    "\\b      \\t      \\n      \\u000b  "
+    "\\f      \\r      \\u000e  \\u000f  "
+    "\\u0010  \\u0011  \\u0012  \\u0013  "
+    "\\u0014  \\u0015  \\u0016  \\u0017  "
+    "\\u0018  \\u0019  \\u001a  \\u001b  "
+    "\\u001c  \\u001d  \\u001e  \\u001f  "
+    "        !       \\\"      #       "
+    "$       %       &       '       "
+    "(       )       *       +       "
+    ",       -       .       /       "
+    "0       1       2       3       "
+    "4       5       6       7       "
+    "8       9       :       ;       "
+    "<       =       >       ?       "
+    "@       A       B       C       "
+    "D       E       F       G       "
+    "H       I       J       K       "
+    "L       M       N       O       "
+    "P       Q       R       S       "
+    "T       U       V       W       "
+    "X       Y       Z       [       "
+    "\\\\      ]       ^       _       "
+    "`       a       b       c       "
+    "d       e       f       g       "
+    "h       i       j       k       "
+    "l       m       n       o       "
+    "p       q       r       s       "
+    "t       u       v       w       "
+    "x       y       z       {       "
+    "|       }       ~       \177       ";
+
+
+// For a string that is less than 32k characters it should always be
+// possible to allocate it in new space.
+static const int kMaxGuaranteedNewSpaceString = 32 * 1024;
+
+
+// Doing JSON quoting cannot make the string more than this many times larger.
+static const int kJsonQuoteWorstCaseBlowup = 6;
+
+
+// Covers the entire ASCII range (all other characters are unchanged by JSON
+// quoting).
+static const byte JsonQuoteLengths[kQuoteTableLength] = {
+    6, 6, 6, 6, 6, 6, 6, 6,
+    2, 2, 2, 6, 2, 2, 6, 6,
+    6, 6, 6, 6, 6, 6, 6, 6,
+    6, 6, 6, 6, 6, 6, 6, 6,
+    1, 1, 2, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 2, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+};
+
+
+template <typename StringType>
+MaybeObject* AllocateRawString(int length);
+
+
+template <>
+MaybeObject* AllocateRawString<SeqTwoByteString>(int length) {
+  return Heap::AllocateRawTwoByteString(length);
+}
+
+
+template <>
+MaybeObject* AllocateRawString<SeqAsciiString>(int length) {
+  return Heap::AllocateRawAsciiString(length);
+}
+
+
+template <typename Char, typename StringType>
+static MaybeObject* SlowQuoteJsonString(Vector<const Char> characters) {
+  int length = characters.length();
+  const Char* read_cursor = characters.start();
+  const Char* end = read_cursor + length;
+  const int kSpaceForQuotes = 2;
+  int quoted_length = kSpaceForQuotes;
+  while (read_cursor < end) {
+    Char c = *(read_cursor++);
+    if (sizeof(Char) > 1u && static_cast<unsigned>(c) >= kQuoteTableLength) {
+      quoted_length++;
+    } else {
+      quoted_length += JsonQuoteLengths[static_cast<unsigned>(c)];
+    }
+  }
+  MaybeObject* new_alloc = AllocateRawString<StringType>(quoted_length);
+  Object* new_object;
+  if (!new_alloc->ToObject(&new_object)) {
+    return new_alloc;
+  }
+  StringType* new_string = StringType::cast(new_object);
+
+  Char* write_cursor = reinterpret_cast<Char*>(
+      new_string->address() + SeqAsciiString::kHeaderSize);
+  *(write_cursor++) = '"';
+
+  read_cursor = characters.start();
+  while (read_cursor < end) {
+    Char c = *(read_cursor++);
+    if (sizeof(Char) > 1u && static_cast<unsigned>(c) >= kQuoteTableLength) {
+      *(write_cursor++) = c;
+    } else {
+      int len = JsonQuoteLengths[static_cast<unsigned>(c)];
+      const char* replacement = JsonQuotes +
+          static_cast<unsigned>(c) * kJsonQuotesCharactersPerEntry;
+      for (int i = 0; i < len; i++) {
+        *write_cursor++ = *replacement++;
+      }
+    }
+  }
+  *(write_cursor++) = '"';
+  return new_string;
+}
+
+
+template <typename Char, typename StringType>
+static MaybeObject* QuoteJsonString(Vector<const Char> characters) {
+  int length = characters.length();
+  Counters::quote_json_char_count.Increment(length);
+  const int kSpaceForQuotes = 2;
+  int worst_case_length = length * kJsonQuoteWorstCaseBlowup + kSpaceForQuotes;
+  if (worst_case_length > kMaxGuaranteedNewSpaceString) {
+    return SlowQuoteJsonString<Char, StringType>(characters);
+  }
+
+  MaybeObject* new_alloc = AllocateRawString<StringType>(worst_case_length);
+  Object* new_object;
+  if (!new_alloc->ToObject(&new_object)) {
+    return new_alloc;
+  }
+  StringType* new_string = StringType::cast(new_object);
+  ASSERT(Heap::new_space()->Contains(new_string));
+
+  STATIC_ASSERT(SeqTwoByteString::kHeaderSize == SeqAsciiString::kHeaderSize);
+  Char* write_cursor = reinterpret_cast<Char*>(
+      new_string->address() + SeqAsciiString::kHeaderSize);
+  *(write_cursor++) = '"';
+
+  const Char* read_cursor = characters.start();
+  const Char* end = read_cursor + length;
+  while (read_cursor < end) {
+    Char c = *(read_cursor++);
+    if (sizeof(Char) > 1u && static_cast<unsigned>(c) >= kQuoteTableLength) {
+      *(write_cursor++) = c;
+    } else {
+      int len = JsonQuoteLengths[static_cast<unsigned>(c)];
+      const char* replacement = JsonQuotes +
+          static_cast<unsigned>(c) * kJsonQuotesCharactersPerEntry;
+      write_cursor[0] = replacement[0];
+      if (len > 1) {
+        write_cursor[1] = replacement[1];
+        if (len > 2) {
+          ASSERT(len == 6);
+          write_cursor[2] = replacement[2];
+          write_cursor[3] = replacement[3];
+          write_cursor[4] = replacement[4];
+          write_cursor[5] = replacement[5];
+        }
+      }
+      write_cursor += len;
+    }
+  }
+  *(write_cursor++) = '"';
+
+  int final_length =
+      write_cursor - reinterpret_cast<Char*>(
+          new_string->address() + SeqAsciiString::kHeaderSize);
+  Heap::new_space()->ShrinkStringAtAllocationBoundary<StringType>(new_string,
+                                                                  final_length);
+  return new_string;
+}
+
+
+static MaybeObject* Runtime_QuoteJSONString(Arguments args) {
+  NoHandleAllocation ha;
+  CONVERT_CHECKED(String, str, args[0]);
+  if (!str->IsFlat()) {
+    MaybeObject* try_flatten = str->TryFlatten();
+    Object* flat;
+    if (!try_flatten->ToObject(&flat)) {
+      return try_flatten;
+    }
+    str = String::cast(flat);
+    ASSERT(str->IsFlat());
+  }
+  if (str->IsTwoByteRepresentation()) {
+    return QuoteJsonString<uc16, SeqTwoByteString>(str->ToUC16Vector());
+  } else {
+    return QuoteJsonString<char, SeqAsciiString>(str->ToAsciiVector());
+  }
+}
+
+
+
 static MaybeObject* Runtime_StringParseInt(Arguments args) {
   NoHandleAllocation ha;
 
@@ -5020,11 +5249,12 @@ static int CopyCachedAsciiCharsToArray(const char* chars,
 // For example, "foo" => ["f", "o", "o"].
 static MaybeObject* Runtime_StringToArray(Arguments args) {
   HandleScope scope;
-  ASSERT(args.length() == 1);
+  ASSERT(args.length() == 2);
   CONVERT_ARG_CHECKED(String, s, 0);
+  CONVERT_NUMBER_CHECKED(uint32_t, limit, Uint32, args[1]);
 
   s->TryFlatten();
-  const int length = s->length();
+  const int length = static_cast<int>(Min<uint32_t>(s->length(), limit));
 
   Handle<FixedArray> elements;
   if (s->IsFlat() && s->IsAsciiRepresentation()) {
@@ -5174,6 +5404,13 @@ static MaybeObject* Runtime_NumberToSmi(Arguments args) {
     }
   }
   return Heap::nan_value();
+}
+
+
+static MaybeObject* Runtime_AllocateHeapNumber(Arguments args) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 0);
+  return Heap::AllocateHeapNumber(0);
 }
 
 
@@ -6391,7 +6628,7 @@ static void TrySettingInlineConstructStub(Handle<JSFunction> function) {
   }
   if (function->shared()->CanGenerateInlineConstructor(*prototype)) {
     ConstructStubCompiler compiler;
-    MaybeObject* code = compiler.CompileConstructStub(function->shared());
+    MaybeObject* code = compiler.CompileConstructStub(*function);
     if (!code->IsFailure()) {
       function->shared()->set_construct_stub(
           Code::cast(code->ToObjectUnchecked()));
@@ -6449,9 +6686,12 @@ static MaybeObject* Runtime_NewObject(Arguments args) {
     }
   }
 
-  // The function should be compiled for the optimization hints to be available.
+  // The function should be compiled for the optimization hints to be
+  // available. We cannot use EnsureCompiled because that forces a
+  // compilation through the shared function info which makes it
+  // impossible for us to optimize.
   Handle<SharedFunctionInfo> shared(function->shared());
-  EnsureCompiled(shared, CLEAR_EXCEPTION);
+  if (!function->is_compiled()) CompileLazy(function, CLEAR_EXCEPTION);
 
   if (!function->has_initial_map() &&
       shared->IsInobjectSlackTrackingInProgress()) {
@@ -6459,7 +6699,6 @@ static MaybeObject* Runtime_NewObject(Arguments args) {
     // track one initial_map at a time, so we force the completion before the
     // function is called as a constructor for the first time.
     shared->CompleteInobjectSlackTracking();
-    TrySettingInlineConstructStub(function);
   }
 
   bool first_allocation = !shared->live_objects_may_exist();
@@ -6496,7 +6735,7 @@ static MaybeObject* Runtime_LazyCompile(Arguments args) {
 #ifdef DEBUG
   if (FLAG_trace_lazy && !function->shared()->is_compiled()) {
     PrintF("[lazy: ");
-    function->shared()->name()->Print();
+    function->PrintName();
     PrintF("]\n");
   }
 #endif
@@ -6513,7 +6752,233 @@ static MaybeObject* Runtime_LazyCompile(Arguments args) {
     return Failure::Exception();
   }
 
+  // All done. Return the compiled code.
+  ASSERT(function->is_compiled());
   return function->code();
+}
+
+
+static MaybeObject* Runtime_LazyRecompile(Arguments args) {
+  HandleScope scope;
+  ASSERT(args.length() == 1);
+  Handle<JSFunction> function = args.at<JSFunction>(0);
+  // If the function is not optimizable or debugger is active continue using the
+  // code from the full compiler.
+  if (!function->shared()->code()->optimizable() ||
+      Debug::has_break_points()) {
+    function->ReplaceCode(function->shared()->code());
+    return function->code();
+  }
+  if (CompileOptimized(function, AstNode::kNoNumber)) {
+    return function->code();
+  }
+  function->ReplaceCode(function->shared()->code());
+  return Failure::Exception();
+}
+
+
+static MaybeObject* Runtime_NotifyDeoptimized(Arguments args) {
+  HandleScope scope;
+  ASSERT(args.length() == 1);
+  RUNTIME_ASSERT(args[0]->IsSmi());
+  Deoptimizer::BailoutType type =
+      static_cast<Deoptimizer::BailoutType>(Smi::cast(args[0])->value());
+  Deoptimizer* deoptimizer = Deoptimizer::Grab();
+  ASSERT(Heap::IsAllocationAllowed());
+  int frames = deoptimizer->output_count();
+
+  JavaScriptFrameIterator it;
+  JavaScriptFrame* frame = NULL;
+  for (int i = 0; i < frames; i++) {
+    if (i != 0) it.Advance();
+    frame = it.frame();
+    deoptimizer->InsertHeapNumberValues(frames - i - 1, frame);
+  }
+  delete deoptimizer;
+
+  RUNTIME_ASSERT(frame->function()->IsJSFunction());
+  Handle<JSFunction> function(JSFunction::cast(frame->function()));
+  Handle<Object> arguments;
+  for (int i = frame->ComputeExpressionsCount() - 1; i >= 0; --i) {
+    if (frame->GetExpression(i) == Heap::the_hole_value()) {
+      if (arguments.is_null()) {
+        // FunctionGetArguments can't throw an exception, so cast away the
+        // doubt with an assert.
+        arguments = Handle<Object>(
+            Accessors::FunctionGetArguments(*function,
+                                            NULL)->ToObjectUnchecked());
+        ASSERT(*arguments != Heap::null_value());
+        ASSERT(*arguments != Heap::undefined_value());
+      }
+      frame->SetExpression(i, *arguments);
+    }
+  }
+
+  CompilationCache::MarkForLazyOptimizing(function);
+  if (type == Deoptimizer::EAGER) {
+    RUNTIME_ASSERT(function->IsOptimized());
+  } else {
+    RUNTIME_ASSERT(!function->IsOptimized());
+  }
+
+  // Avoid doing too much work when running with --always-opt and keep
+  // the optimized code around.
+  if (FLAG_always_opt || type == Deoptimizer::LAZY) {
+    return Heap::undefined_value();
+  }
+
+  // Count the number of optimized activations of the function.
+  int activations = 0;
+  while (!it.done()) {
+    JavaScriptFrame* frame = it.frame();
+    if (frame->is_optimized() && frame->function() == *function) {
+      activations++;
+    }
+    it.Advance();
+  }
+
+  // TODO(kasperl): For now, we cannot support removing the optimized
+  // code when we have recursive invocations of the same function.
+  if (activations == 0) {
+    if (FLAG_trace_deopt) {
+      PrintF("[removing optimized code for: ");
+      function->PrintName();
+      PrintF("]\n");
+    }
+    function->ReplaceCode(function->shared()->code());
+  }
+  return Heap::undefined_value();
+}
+
+
+static MaybeObject* Runtime_NotifyOSR(Arguments args) {
+  Deoptimizer* deoptimizer = Deoptimizer::Grab();
+  delete deoptimizer;
+  return Heap::undefined_value();
+}
+
+
+static MaybeObject* Runtime_DeoptimizeFunction(Arguments args) {
+  HandleScope scope;
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_CHECKED(JSFunction, function, 0);
+  if (!function->IsOptimized()) return Heap::undefined_value();
+
+  Deoptimizer::DeoptimizeFunction(*function);
+
+  return Heap::undefined_value();
+}
+
+
+static MaybeObject* Runtime_CompileForOnStackReplacement(Arguments args) {
+  HandleScope scope;
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_CHECKED(JSFunction, function, 0);
+
+  // We're not prepared to handle a function with arguments object.
+  ASSERT(!function->shared()->scope_info()->HasArgumentsShadow());
+
+  // We have hit a back edge in an unoptimized frame for a function that was
+  // selected for on-stack replacement.  Find the unoptimized code object.
+  Handle<Code> unoptimized(function->shared()->code());
+  // Keep track of whether we've succeeded in optimizing.
+  bool succeeded = unoptimized->optimizable();
+  if (succeeded) {
+    // If we are trying to do OSR when there are already optimized
+    // activations of the function, it means (a) the function is directly or
+    // indirectly recursive and (b) an optimized invocation has been
+    // deoptimized so that we are currently in an unoptimized activation.
+    // Check for optimized activations of this function.
+    JavaScriptFrameIterator it;
+    while (succeeded && !it.done()) {
+      JavaScriptFrame* frame = it.frame();
+      succeeded = !frame->is_optimized() || frame->function() != *function;
+      it.Advance();
+    }
+  }
+
+  int ast_id = AstNode::kNoNumber;
+  if (succeeded) {
+    // The top JS function is this one, the PC is somewhere in the
+    // unoptimized code.
+    JavaScriptFrameIterator it;
+    JavaScriptFrame* frame = it.frame();
+    ASSERT(frame->function() == *function);
+    ASSERT(frame->code() == *unoptimized);
+    ASSERT(unoptimized->contains(frame->pc()));
+
+    // Use linear search of the unoptimized code's stack check table to find
+    // the AST id matching the PC.
+    Address start = unoptimized->instruction_start();
+    unsigned target_pc_offset = static_cast<unsigned>(frame->pc() - start);
+    Address table_cursor = start + unoptimized->stack_check_table_start();
+    uint32_t table_length = Memory::uint32_at(table_cursor);
+    table_cursor += kIntSize;
+    for (unsigned i = 0; i < table_length; ++i) {
+      // Table entries are (AST id, pc offset) pairs.
+      uint32_t pc_offset = Memory::uint32_at(table_cursor + kIntSize);
+      if (pc_offset == target_pc_offset) {
+        ast_id = static_cast<int>(Memory::uint32_at(table_cursor));
+        break;
+      }
+      table_cursor += 2 * kIntSize;
+    }
+    ASSERT(ast_id != AstNode::kNoNumber);
+    if (FLAG_trace_osr) {
+      PrintF("[replacing on-stack at AST id %d in ", ast_id);
+      function->PrintName();
+      PrintF("]\n");
+    }
+
+    // Try to compile the optimized code.  A true return value from
+    // CompileOptimized means that compilation succeeded, not necessarily
+    // that optimization succeeded.
+    if (CompileOptimized(function, ast_id) && function->IsOptimized()) {
+      DeoptimizationInputData* data = DeoptimizationInputData::cast(
+          function->code()->deoptimization_data());
+      if (FLAG_trace_osr) {
+        PrintF("[on-stack replacement offset %d in optimized code]\n",
+               data->OsrPcOffset()->value());
+      }
+      ASSERT(data->OsrAstId()->value() == ast_id);
+      ASSERT(data->OsrPcOffset()->value() >= 0);
+    } else {
+      succeeded = false;
+    }
+  }
+
+  // Revert to the original stack checks in the original unoptimized code.
+  if (FLAG_trace_osr) {
+    PrintF("[restoring original stack checks in ");
+    function->PrintName();
+    PrintF("]\n");
+  }
+  StackCheckStub check_stub;
+  Handle<Code> check_code = check_stub.GetCode();
+  Handle<Code> replacement_code(
+      Builtins::builtin(Builtins::OnStackReplacement));
+  // Iterate the unoptimized code and revert all the patched stack checks.
+  for (RelocIterator it(*unoptimized, RelocInfo::kCodeTargetMask);
+       !it.done();
+       it.next()) {
+    RelocInfo* rinfo = it.rinfo();
+    if (rinfo->target_address() == replacement_code->entry()) {
+      Deoptimizer::RevertStackCheckCode(rinfo, *check_code);
+    }
+  }
+
+  // Allow OSR only at nesting level zero again.
+  unoptimized->set_allow_osr_at_loop_nesting_level(0);
+
+  // If the optimization attempt succeeded, return the AST id tagged as a
+  // smi. This tells the builtin that we need to translate the unoptimized
+  // frame to an optimized one.
+  if (succeeded) {
+    ASSERT(function->code()->kind() == Code::OPTIMIZED_FUNCTION);
+    return Smi::FromInt(ast_id);
+  } else {
+    return Smi::FromInt(-1);
+  }
 }
 
 
@@ -7794,7 +8259,7 @@ static MaybeObject* Runtime_GetArrayKeys(Arguments args) {
     int keys_length = keys->length();
     for (int i = 0; i < keys_length; i++) {
       Object* key = keys->get(i);
-      uint32_t index;
+      uint32_t index = 0;
       if (!key->ToArrayIndex(&index) || index >= length) {
         // Zap invalid keys.
         keys->set_undefined(i);
@@ -7921,6 +8386,7 @@ static MaybeObject* DebugLookupResultValue(Object* receiver, String* name,
         MaybeObject* maybe_value = receiver->GetPropertyWithCallback(
             receiver, structure, name, result->holder());
         if (!maybe_value->ToObject(&value)) {
+          if (maybe_value->IsRetryAfterGC()) return maybe_value;
           ASSERT(maybe_value->IsException());
           maybe_value = Top::pending_exception();
           Top::clear_pending_exception();
@@ -8221,6 +8687,9 @@ static MaybeObject* Runtime_GetFrameDetails(Arguments args) {
   }
   if (it.done()) return Heap::undefined_value();
 
+  bool is_optimized_frame =
+      it.frame()->code()->kind() == Code::OPTIMIZED_FUNCTION;
+
   // Traverse the saved contexts chain to find the active context for the
   // selected frame.
   SaveContext* save = Top::save_context();
@@ -8252,18 +8721,28 @@ static MaybeObject* Runtime_GetFrameDetails(Arguments args) {
   // (e.g. .result)?  For users of the debugger, they will probably be
   // confusing.
   Handle<FixedArray> locals = Factory::NewFixedArray(info.NumberOfLocals() * 2);
-  for (int i = 0; i < info.NumberOfLocals(); i++) {
-    // Name of the local.
-    locals->set(i * 2, *info.LocalName(i));
 
-    // Fetch the value of the local - either from the stack or from a
-    // heap-allocated context.
-    if (i < info.number_of_stack_slots()) {
+  // Fill in the names of the locals.
+  for (int i = 0; i < info.NumberOfLocals(); i++) {
+    locals->set(i * 2, *info.LocalName(i));
+  }
+
+  // Fill in the values of the locals.
+  for (int i = 0; i < info.NumberOfLocals(); i++) {
+    if (is_optimized_frame) {
+      // If we are inspecting an optimized frame use undefined as the
+      // value for all locals.
+      //
+      // TODO(3141533): We should be able to get the correct values
+      // for locals in optimized frames.
+      locals->set(i * 2 + 1, Heap::undefined_value());
+    } else if (i < info.number_of_stack_slots()) {
+      // Get the value from the stack.
       locals->set(i * 2 + 1, it.frame()->GetExpression(i));
     } else {
-      Handle<String> name = info.LocalName(i);
       // Traverse the context chain to the function context as all local
       // variables stored in the context will be on the function context.
+      Handle<String> name = info.LocalName(i);
       while (!context->is_function_context()) {
         context = Handle<Context>(context->previous());
       }
@@ -8273,8 +8752,12 @@ static MaybeObject* Runtime_GetFrameDetails(Arguments args) {
     }
   }
 
-  // Check whether this frame is positioned at return.
-  int at_return = (index == 0) ? Debug::IsBreakAtReturn(it.frame()) : false;
+  // Check whether this frame is positioned at return. If not top
+  // frame or if the frame is optimized it cannot be at a return.
+  bool at_return = false;
+  if (!is_optimized_frame && index == 0) {
+    at_return = Debug::IsBreakAtReturn(it.frame());
+  }
 
   // If positioned just before return find the value to be returned and add it
   // to the frame information.
@@ -8368,8 +8851,13 @@ static MaybeObject* Runtime_GetFrameDetails(Arguments args) {
       details->set(details_index++, Heap::undefined_value());
     }
 
-    // Parameter value.
-    if (i < it.frame()->GetProvidedParametersCount()) {
+    // Parameter value. If we are inspecting an optimized frame, use
+    // undefined as the value.
+    //
+    // TODO(3141533): We should be able to get the actual parameter
+    // value for optimized frames.
+    if (!is_optimized_frame &&
+        (i < it.frame()->GetProvidedParametersCount())) {
       details->set(details_index++, it.frame()->GetParameter(i));
     } else {
       details->set(details_index++, Heap::undefined_value());
@@ -8963,7 +9451,7 @@ Object* Runtime::FindSharedFunctionInfoInScript(Handle<Script> script,
   // Iterate the heap looking for SharedFunctionInfo generated from the
   // script. The inner most SharedFunctionInfo containing the source position
   // for the requested break point is found.
-  // NOTE: This might reqire several heap iterations. If the SharedFunctionInfo
+  // NOTE: This might require several heap iterations. If the SharedFunctionInfo
   // which is found is not compiled it is compiled and the heap is iterated
   // again as the compilation might create inner functions from the newly
   // compiled function and the actual requested break point might be in one of
@@ -9785,6 +10273,15 @@ static MaybeObject* Runtime_LiveEditReplaceScript(Arguments args) {
   }
 }
 
+
+static MaybeObject* Runtime_LiveEditFunctionSourceUpdated(Arguments args) {
+  ASSERT(args.length() == 1);
+  HandleScope scope;
+  CONVERT_ARG_CHECKED(JSArray, shared_info, 0);
+  return LiveEdit::FunctionSourceUpdated(shared_info);
+}
+
+
 // Replaces code of SharedFunctionInfo with a new one.
 static MaybeObject* Runtime_LiveEditReplaceFunctionCode(Arguments args) {
   ASSERT(args.length() == 2);
@@ -9887,7 +10384,12 @@ static MaybeObject* Runtime_GetFunctionCodePositionFromSource(Arguments args) {
 
   Handle<Code> code(function->code());
 
-  RelocIterator it(*code, 1 << RelocInfo::STATEMENT_POSITION);
+  if (code->kind() != Code::FUNCTION &&
+      code->kind() != Code::OPTIMIZED_FUNCTION) {
+    return Heap::undefined_value();
+  }
+
+  RelocIterator it(*code, RelocInfo::ModeMask(RelocInfo::STATEMENT_POSITION));
   int closest_pc = 0;
   int distance = kMaxInt;
   while (!it.done()) {
@@ -10041,9 +10543,9 @@ static bool ShowFrameInStackTrace(StackFrame* raw_frame, Object* caller,
 }
 
 
-// Collect the raw data for a stack trace.  Returns an array of three
-// element segments each containing a receiver, function and native
-// code offset.
+// Collect the raw data for a stack trace.  Returns an array of 4
+// element segments each containing a receiver, function, code and
+// native code offset.
 static MaybeObject* Runtime_CollectStackTrace(Arguments args) {
   ASSERT_EQ(args.length(), 2);
   Handle<Object> caller = args.at<Object>(0);
@@ -10053,7 +10555,7 @@ static MaybeObject* Runtime_CollectStackTrace(Arguments args) {
 
   limit = Max(limit, 0);  // Ensure that limit is not negative.
   int initial_size = Min(limit, 10);
-  Handle<JSArray> result = Factory::NewJSArray(initial_size * 3);
+  Handle<JSArray> result = Factory::NewJSArray(initial_size * 4);
 
   StackFrameIterator iter;
   // If the caller parameter is a function we skip frames until we're
@@ -10066,23 +10568,25 @@ static MaybeObject* Runtime_CollectStackTrace(Arguments args) {
     if (ShowFrameInStackTrace(raw_frame, *caller, &seen_caller)) {
       frames_seen++;
       JavaScriptFrame* frame = JavaScriptFrame::cast(raw_frame);
-      Object* recv = frame->receiver();
-      Object* fun = frame->function();
-      Address pc = frame->pc();
-      Address start = frame->code()->address();
-      Smi* offset = Smi::FromInt(static_cast<int>(pc - start));
-      FixedArray* elements = FixedArray::cast(result->elements());
-      if (cursor + 2 < elements->length()) {
-        elements->set(cursor++, recv);
-        elements->set(cursor++, fun);
-        elements->set(cursor++, offset);
-      } else {
-        HandleScope scope;
-        Handle<Object> recv_handle(recv);
-        Handle<Object> fun_handle(fun);
-        SetElement(result, cursor++, recv_handle);
-        SetElement(result, cursor++, fun_handle);
-        SetElement(result, cursor++, Handle<Smi>(offset));
+      List<FrameSummary> frames(3);  // Max 2 levels of inlining.
+      frame->Summarize(&frames);
+      for (int i = frames.length() - 1; i >= 0; i--) {
+        Handle<Object> recv = frames[i].receiver();
+        Handle<JSFunction> fun = frames[i].function();
+        Handle<Code> code = frames[i].code();
+        Handle<Smi> offset(Smi::FromInt(frames[i].offset()));
+        FixedArray* elements = FixedArray::cast(result->elements());
+        if (cursor + 3 < elements->length()) {
+          elements->set(cursor++, *recv);
+          elements->set(cursor++, *fun);
+          elements->set(cursor++, *code);
+          elements->set(cursor++, *offset);
+        } else {
+          SetElement(result, cursor++, recv);
+          SetElement(result, cursor++, fun);
+          SetElement(result, cursor++, code);
+          SetElement(result, cursor++, offset);
+        }
       }
     }
     iter.Advance();

@@ -28,3 +28,7 @@
 
 - Add callbacks to write() on other streams (fs.WriteStream, http outgoing)
   callbacks are already on net.Stream streams.
+- Add callback to net.Stream.connect
+- new TLS frontend api using securepair
+- "node --raw-js script.js" should bipass all Node code and load a raw V8
+  interpreter

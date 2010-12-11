@@ -113,7 +113,7 @@ TARNAME=node-$(VERSION)
 
 #dist: doc/node.1 doc/api
 dist: doc
-	  git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
+	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
 	cp -r build/doc/api $(TARNAME)/doc/api
@@ -130,5 +130,12 @@ bench-idle:
 	sleep 1
 	./node benchmark/idle_clients.js &
 
+jslint:
+	PYTHONPATH=tools/closure_linter/ python tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/
 
-.PHONY: bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload
+cpplint:
+	@python tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
+
+lint: jslint cpplint
+
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload

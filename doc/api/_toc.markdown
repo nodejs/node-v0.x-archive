@@ -11,7 +11,7 @@
 * [Buffers](buffers.html)
 * [Streams](streams.html)
 * [Crypto](crypto.html)
-  * [Secure Streams](securepair.html)
+* [TLS/SSL](tls.html)
 * [String Decoder](string_decoder.html)
 * [File System](fs.html)
 * [Path](path.html)
@@ -26,6 +26,8 @@
 * [VM](vm.html)
 * [Child Processes](child_processes.html)
 * [Assertion Testing](assert.html)
+* [TTY](tty.html)
+* [OS](os.html)
 * Appendixes
   * [Appendix 1: Recommended Third-party Modules](appendix_1.html)
   * [Appendix 2: Deprecated API's](appendix_2.html)
