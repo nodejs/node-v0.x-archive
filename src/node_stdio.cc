@@ -13,6 +13,10 @@
 # include <pty.h>
 #endif
 
+#define THROW_EXCEPTION_ON_ERROR(retval) if (retval == -1) { \
+      return ThrowException(Exception::Error(String::New("fcntl error!"))); \
+    }
+
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <stdlib.h>
@@ -152,24 +156,17 @@ WriteError (const Arguments& args)
   return Undefined();
 }
 
-
 static Handle<Value> OpenStdin(const Arguments& args) {
   HandleScope scope;
 
   if (isatty(STDIN_FILENO)) {
     // XXX selecting on tty fds wont work in windows.
     // Must ALWAYS make a coupling on shitty platforms.
-    stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    if (stdin_flags == -1) {
-      // TODO DRY
-      return ThrowException(Exception::Error(String::New("fcntl error!")));
-    }
+    int retval = 0;
 
-    int r = fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK);
-    if (r == -1) {
-      // TODO DRY
-      return ThrowException(Exception::Error(String::New("fcntl error!")));
-    }
+    THROW_EXCEPTION_ON_ERROR((retval = (stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0))));
+
+    THROW_EXCEPTION_ON_ERROR((retval = fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK)));
   }
 
   return scope.Close(Integer::New(STDIN_FILENO));
