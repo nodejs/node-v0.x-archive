@@ -11,6 +11,12 @@ var parseTests = {
     "href": "//some_path",
     "pathname": "//some_path"
   },
+  'HTTP://www.example.com' : {
+    'href': 'HTTP://www.example.com',
+    'protocol': 'HTTP:',
+    'host': 'www.example.com',
+    'hostname': 'www.example.com'
+  },
   "http://www.narwhaljs.org/blog/categories?id=news" : {
     "href": "http://www.narwhaljs.org/blog/categories?id=news",
     "protocol": "http:",
