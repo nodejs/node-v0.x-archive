@@ -178,10 +178,11 @@ to the completion callback.
 
 Synchronous rmdir(2).
 
-### fs.mkdir(path, mode, [callback])
+### fs.mkdir(path, mode, [recursive], [callback])
 
-Asynchronous mkdir(2). No arguments other than a possible exception are given
-to the completion callback.
+Asynchronous mkdir(2). The optional recursive boolean parameter turns on
+creation of intermediate directories as the command `mkdir -p` does.
+No arguments other than a possible exception are given to the completion callback.
 
 ### fs.mkdirSync(path, mode)
 
