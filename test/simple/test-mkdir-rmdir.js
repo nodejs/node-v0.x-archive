@@ -34,10 +34,6 @@ fs.mkdir(recursive_d, 0766, true, function(err) {
     mkdir_recursive_error = true;
   } else {
     console.log('mkdir recursive okay!');
-    var parts = recursive_d.split('/').slice(d.split('/').length);
-    for (var i = parts.length; i >= 0; i--) {
-      fs.rmdirSync(path.join(d, parts.slice(0, i).join('/')));
-    }
   }
 });
 
