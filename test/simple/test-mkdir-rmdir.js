@@ -5,8 +5,10 @@ var fs = require('fs');
 
 var dirname = path.dirname(__filename);
 var d = path.join(common.tmpDir, 'dir');
+var recursive_d = path.join(d, '/first/second/third/fourth/fifth');
 
 var mkdir_error = false;
+var mkdir_recursive_error = false;
 var rmdir_error = false;
 
 fs.mkdir(d, 0666, function(err) {
@@ -26,8 +28,22 @@ fs.mkdir(d, 0666, function(err) {
   }
 });
 
+fs.mkdir(recursive_d, 0766, true, function(err) {
+  if (err) {
+    console.log('mkdir recursive error: ' + err.message);
+    mkdir_recursive_error = true;
+  } else {
+    console.log('mkdir recursive okay!');
+    var parts = recursive_d.split('/').slice(d.split('/').length);
+    for (var i = parts.length; i >= 0; i--) {
+      fs.rmdirSync(path.join(d, parts.slice(0, i).join('/')));
+    }
+  }
+});
+
 process.addListener('exit', function() {
   assert.equal(false, mkdir_error);
+  assert.equal(false, mkdir_recursive_error);
   assert.equal(false, rmdir_error);
   console.log('exit');
 });
