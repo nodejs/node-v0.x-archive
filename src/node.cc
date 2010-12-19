@@ -43,8 +43,6 @@
 #endif
 #include <node_script.h>
 
-#include <v8-debug.h>
-
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 using namespace v8;
@@ -74,11 +72,8 @@ static Persistent<String> uncaught_exception_symbol;
 static Persistent<String> emit_symbol;
 
 
+static char *js_file = NULL;
 static char *eval_string = NULL;
-static int option_end_index = 0;
-static bool use_debug_agent = false;
-static bool debug_wait_connect = false;
-static int debug_port=5858;
 static int max_stack_size = 0;
 
 static ev_check check_tick_watcher;
@@ -1439,30 +1434,6 @@ void FatalException(TryCatch &try_catch) {
 }
 
 
-static ev_async debug_watcher;
-
-static void DebugMessageCallback(EV_P_ ev_async *watcher, int revents) {
-  HandleScope scope;
-  assert(watcher == &debug_watcher);
-  assert(revents == EV_ASYNC);
-  Debug::ProcessDebugMessages();
-}
-
-static void DebugMessageDispatch(void) {
-  // This function is called from V8's debug thread when a debug TCP client
-  // has sent a message.
-
-  // Send a signal to our main thread saying that it should enter V8 to
-  // handle the message.
-  ev_async_send(EV_DEFAULT_UC_ &debug_watcher);
-}
-
-static void DebugBreakMessageHandler(const Debug::Message& message) {
-  // do nothing with debug messages.
-  // The message handler will get changed by DebuggerAgent::CreateSession in
-  // debug-agent.cc of v8/src when a new session is created
-}
-
 Persistent<Object> binding_cache;
 
 static Handle<Value> Binding(const Arguments& args) {
@@ -1643,9 +1614,12 @@ static void Load(int argc, char *argv[]) {
 
   // process.argv
   int i, j;
-  Local<Array> arguments = Array::New(argc - option_end_index + 1);
+  Local<Array> arguments = Array::New(argc);
   arguments->Set(Integer::New(0), String::New(argv[0]));
-  for (j = 1, i = option_end_index; i < argc; j++, i++) {
+  if (js_file) {
+    arguments->Set(Integer::New(1), String::New(js_file));
+  }
+  for (j = 2, i = 1; i < argc; j++, i++) {
     Local<String> arg = String::New(argv[i]);
     arguments->Set(Integer::New(j), arg);
   }
@@ -1753,35 +1727,6 @@ static void Load(int argc, char *argv[]) {
   }
 }
 
-static void PrintHelp();
-
-static void ParseDebugOpt(const char* arg) {
-  const char *p = 0;
-
-  use_debug_agent = true;
-  if (!strcmp (arg, "--debug-brk")) {
-    debug_wait_connect = true;
-    return;
-  } else if (!strcmp(arg, "--debug")) {
-    return;
-  } else if (strstr(arg, "--debug-brk=") == arg) {
-    debug_wait_connect = true;
-    p = 1 + strchr(arg, '=');
-    debug_port = atoi(p);
-  } else if (strstr(arg, "--debug=") == arg) {
-    p = 1 + strchr(arg, '=');
-    debug_port = atoi(p);
-  }
-  if (p && debug_port > 1024 && debug_port <  65536)
-      return;
-
-  fprintf(stderr, "Bad debug option.\n");
-  if (p) fprintf(stderr, "Debug port must be in range 1025 to 65535.\n");
-
-  PrintHelp();
-  exit(1);
-}
-
 static void PrintHelp() {
   printf("Usage: node [options] script.js [arguments] \n"
          "Options:\n"
@@ -1808,16 +1753,13 @@ static void PrintHelp() {
 }
 
 // Parse node command line arguments.
-static void ParseArgs(int *argc, char **argv) {
+static char** ParseArgs(int *argc, char **argv) {
   int i;
-
+  char **v8argv = new char*[*argc];
   // TODO use parse opts
   for (i = 1; i < *argc; i++) {
     const char *arg = argv[i];
-    if (strstr(arg, "--debug") == arg) {
-      ParseDebugOpt(arg);
-      argv[i] = const_cast<char*>("");
-    } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
+    if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
       exit(0);
     } else if (strcmp(arg, "--vars") == 0) {
@@ -1828,7 +1770,6 @@ static void ParseArgs(int *argc, char **argv) {
       const char *p = 0;
       p = 1 + strchr(arg, '=');
       max_stack_size = atoi(p);
-      argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
       PrintHelp();
       exit(0);
@@ -1837,16 +1778,18 @@ static void ParseArgs(int *argc, char **argv) {
         fprintf(stderr, "Error: --eval requires an argument\n");
         exit(1);
       }
-      argv[i] = const_cast<char*>("");
       eval_string = argv[++i];
     } else if (strcmp(arg, "--v8-options") == 0) {
-      argv[i] = const_cast<char*>("--help");
+      v8argv[i] = const_cast<char*>("--help");
     } else if (argv[i][0] != '-') {
+      js_file = argv[i];
       break;
+    } else if (strstr(arg, "--debug") != arg) {
+      v8argv[i] = argv[i];
     }
   }
 
-  option_end_index = i;
+  return v8argv;
 }
 
 
@@ -1877,22 +1820,7 @@ int Start(int argc, char *argv[]) {
   argv = node::OS::SetupArgs(argc, argv);
 
   // Parse a few arguments which are specific to Node.
-  node::ParseArgs(&argc, argv);
-  // Parse the rest of the args (up to the 'option_end_index' (where '--' was
-  // in the command line))
-  int v8argc = node::option_end_index;
-  char **v8argv = argv;
-
-  if (node::debug_wait_connect) {
-    // v8argv is a copy of argv up to the script file argument +2 if --debug-brk
-    // to expose the v8 debugger js object so that node.js can set
-    // a breakpoint on the first line of the startup script
-    v8argc += 2;
-    v8argv = new char*[v8argc];
-    memcpy(v8argv, argv, sizeof(argv) * node::option_end_index);
-    v8argv[node::option_end_index] = const_cast<char*>("--expose_debug_as");
-    v8argv[node::option_end_index + 1] = const_cast<char*>("v8debug");
-  }
+  char **v8argv = node::ParseArgs(&argc, argv);
 
   // For the normal stack which moves from high to low addresses when frames
   // are pushed, we can compute the limit as stack_size bytes below the
@@ -1907,7 +1835,7 @@ int Start(int argc, char *argv[]) {
     constraints.set_stack_limit(stack_limit);
     SetResourceConstraints(&constraints); // Must be done before V8::Initialize
   }
-  V8::SetFlagsFromCommandLine(&v8argc, v8argv, false);
+  V8::SetFlagsFromCommandLine(&argc, v8argv, false);
 
   // Ignore SIGPIPE
   RegisterSignalHandler(SIGPIPE, SIG_IGN);
@@ -1966,39 +1894,6 @@ int Start(int argc, char *argv[]) {
   HandleScope handle_scope;
 
   V8::SetFatalErrorHandler(node::OnFatalError);
-
-  // If the --debug flag was specified then initialize the debug thread.
-  if (node::use_debug_agent) {
-    // Initialize the async watcher for receiving messages from the debug
-    // thread and marshal it into the main thread. DebugMessageCallback()
-    // is called from the main thread to execute a random bit of javascript
-    // - which will give V8 control so it can handle whatever new message
-    // had been received on the debug thread.
-    ev_async_init(&node::debug_watcher, node::DebugMessageCallback);
-    ev_set_priority(&node::debug_watcher, EV_MAXPRI);
-    // Set the callback DebugMessageDispatch which is called from the debug
-    // thread.
-    Debug::SetDebugMessageDispatchHandler(node::DebugMessageDispatch);
-    // Start the async watcher.
-    ev_async_start(EV_DEFAULT_UC_ &node::debug_watcher);
-    // unref it so that we exit the event loop despite it being active.
-    ev_unref(EV_DEFAULT_UC);
-
-    // Start the debug thread and it's associated TCP server on port 5858.
-    bool r = Debug::EnableAgent("node " NODE_VERSION, node::debug_port);
-    if (node::debug_wait_connect) {
-      // Set up an empty handler so v8 will not continue until a debugger
-      // attaches. This is the same behavior as Debug::EnableAgent(_,_,true)
-      // except we don't break at the beginning of the script.
-      // see Debugger::StartAgent in debug.cc of v8/src
-      Debug::SetMessageHandler2(node::DebugBreakMessageHandler);
-    }
-
-    // Crappy check that everything went well. FIXME
-    assert(r);
-    // Print out some information.
-    printf("debugger listening on port %d\n", node::debug_port);
-  }
 
   // Create the one and only Context.
   Persistent<v8::Context> context = v8::Context::New();

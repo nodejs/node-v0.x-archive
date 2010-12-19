@@ -353,8 +353,8 @@
             '\n});';
 
         var compiledWrapper = evals.Script.runInThisContext(wrapper, filename);
-        if (filename === process.argv[1] && global.v8debug) {
-          global.v8debug.Debug.setBreakPoint(compiledWrapper, 0, 0);
+        if (filename === process.argv[1] && waitForClient) {
+          process.debugger.pause();
         }
         var args = [self.exports, require, self, filename, dirname];
         return compiledWrapper.apply(self.exports, args);
@@ -528,6 +528,23 @@
 
   var cwd = process.cwd();
   var path = requireNative('path');
+
+  var debugFlag = process.argv.filter(function(a) {
+    return /--debug/.test(a);
+  })[0];
+
+  process.debugger = process.binding('debug');
+
+  // Start the debugger now or on a signal
+  if (debugFlag) {
+    var waitForClient = /--debug-brk/.test(debugFlag);
+    var debugPort = parseInt(debugFlag.split('=')[1] || '5858', 10);
+    process.debugger.start(debugPort, waitForClient);
+  } else {
+    process.on('SIGUSR1', function() {
+      process.debugger.start(5858, false);
+    });
+  }
 
   // Make process.argv[0] and process.argv[1] into full paths.
   if (process.argv[0].indexOf('/') > 0) {

@@ -588,6 +588,7 @@ def build(bld):
   node.source = """
     src/node.cc
     src/node_buffer.cc
+    src/node_debug.cc
     src/node_javascript.cc
     src/node_extensions.cc
     src/node_http_parser.cc
