@@ -1,5 +1,5 @@
-var common = require("../common");
-var assert = require('assert');
+common = require("../common");
+assert = common.assert
 var events = require('events');
 
 var e = new events.EventEmitter(),

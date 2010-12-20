@@ -192,23 +192,6 @@ var parseTestsWithQueryString = {
       'baz': 'quux'
     },
     'pathname': '/foo/bar'
-  },
-  'http://example.com' : {
-    'href': 'http://example.com',
-    'protocol': 'http:',
-    'slashes': true,
-    'host': 'example.com',
-    'hostname': 'example.com',
-    'query': {}
-  },
-  'http://example.com?' : {
-    'href': 'http://example.com?',
-    'protocol': 'http:',
-    'slashes': true,
-    'host': 'example.com',
-    'hostname': 'example.com',
-    'search': '?',
-    'query': {}
   }
 };
 for (var u in parseTestsWithQueryString) {
