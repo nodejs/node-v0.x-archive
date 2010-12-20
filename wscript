@@ -179,6 +179,8 @@ def configure(conf):
 
   conf.env["USE_DEBUG"] = o.debug
   conf.env["SNAPSHOT_V8"] = not o.without_snapshot
+  if sys.platform.startswith("sunos"):
+    conf.env["SNAPSHOT_V8"] = False
   conf.env["USE_PROFILING"] = o.profile
 
   conf.env["USE_SHARED_V8"] = o.shared_v8 or o.shared_v8_includes or o.shared_v8_libpath or o.shared_v8_libname
@@ -186,6 +188,9 @@ def configure(conf):
   conf.env["USE_SHARED_LIBEV"] = o.shared_libev or o.shared_libev_includes or o.shared_libev_libpath
 
   conf.env["USE_OPROFILE"] = o.use_oprofile
+
+  if o.use_oprofile:
+    conf.check(lib=['bfd', 'opagent'], uselib_store="OPROFILE")
 
   conf.check(lib='dl', uselib_store='DL')
   if not sys.platform.startswith("sunos") and not sys.platform.startswith("cygwin"):
@@ -573,7 +578,7 @@ def build(bld):
   node = bld.new_task_gen("cxx", product_type)
   node.name         = "node"
   node.target       = "node"
-  node.uselib = 'RT EV OPENSSL CARES EXECINFO DL KVM SOCKET NSL UTIL'
+  node.uselib = 'RT EV OPENSSL CARES EXECINFO DL KVM SOCKET NSL UTIL OPROFILE'
   node.add_objects = 'eio http_parser'
   if product_type_is_lib:
     node.install_path = '${PREFIX}/lib'
@@ -633,7 +638,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : program.env["PREFIX"]
-        , 'VERSION'   : '0.3.1-pre' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.h
+        , 'VERSION'   : '0.3.2' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 
