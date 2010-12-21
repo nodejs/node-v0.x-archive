@@ -40,7 +40,11 @@ class SecureContext : ObjectWrap {
   }
 
   ~SecureContext() {
-    // Free up
+    if (pCtx) {
+      SSL_CTX_free(pCtx);
+      pCtx = NULL;
+      caStore = NULL;
+    }
   }
 
  private:
