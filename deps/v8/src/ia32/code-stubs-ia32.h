@@ -40,13 +40,21 @@ namespace internal {
 // TranscendentalCache runtime function.
 class TranscendentalCacheStub: public CodeStub {
  public:
-  explicit TranscendentalCacheStub(TranscendentalCache::Type type)
-      : type_(type) {}
+  enum ArgumentType {
+    TAGGED = 0,
+    UNTAGGED = 1 << TranscendentalCache::kTranscendentalTypeBits
+  };
+
+  explicit TranscendentalCacheStub(TranscendentalCache::Type type,
+                                   ArgumentType argument_type)
+      : type_(type), argument_type_(argument_type) {}
   void Generate(MacroAssembler* masm);
  private:
   TranscendentalCache::Type type_;
+  ArgumentType argument_type_;
+
   Major MajorKey() { return TranscendentalCache; }
-  int MinorKey() { return type_; }
+  int MinorKey() { return type_ | argument_type_; }
   Runtime::FunctionId RuntimeFunction();
   void GenerateOperation(MacroAssembler* masm);
 };
@@ -231,7 +239,8 @@ class TypeRecordingBinaryOpStub: public CodeStub {
     ASSERT(OpBits::is_valid(Token::NUM_TOKENS));
   }
 
-  TypeRecordingBinaryOpStub(int key,
+  TypeRecordingBinaryOpStub(
+      int key,
       TRBinaryOpIC::TypeInfo operands_type,
       TRBinaryOpIC::TypeInfo result_type = TRBinaryOpIC::UNINITIALIZED)
       : op_(OpBits::decode(key)),
@@ -239,8 +248,7 @@ class TypeRecordingBinaryOpStub: public CodeStub {
         use_sse3_(SSE3Bits::decode(key)),
         operands_type_(operands_type),
         result_type_(result_type),
-        name_(NULL) {
-  }
+        name_(NULL) { }
 
   // Generate code to call the stub with the supplied arguments. This will add
   // code at the call site to prepare arguments either in registers or on the

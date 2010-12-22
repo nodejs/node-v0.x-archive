@@ -178,6 +178,12 @@ void MacroAssembler::Drop(int count, Condition cond) {
 }
 
 
+void MacroAssembler::Ret(int drop, Condition cond) {
+  Drop(drop, cond);
+  Ret(cond);
+}
+
+
 void MacroAssembler::Swap(Register reg1,
                           Register reg2,
                           Register scratch,
@@ -821,6 +827,38 @@ void MacroAssembler::InvokeFunction(JSFunction* function,
 }
 
 
+void MacroAssembler::IsObjectJSObjectType(Register heap_object,
+                                          Register map,
+                                          Register scratch,
+                                          Label* fail) {
+  ldr(map, FieldMemOperand(heap_object, HeapObject::kMapOffset));
+  IsInstanceJSObjectType(map, scratch, fail);
+}
+
+
+void MacroAssembler::IsInstanceJSObjectType(Register map,
+                                            Register scratch,
+                                            Label* fail) {
+  ldrb(scratch, FieldMemOperand(map, Map::kInstanceTypeOffset));
+  cmp(scratch, Operand(FIRST_JS_OBJECT_TYPE));
+  b(lt, fail);
+  cmp(scratch, Operand(LAST_JS_OBJECT_TYPE));
+  b(gt, fail);
+}
+
+
+void MacroAssembler::IsObjectJSStringType(Register object,
+                                           Register scratch,
+                                           Label* fail) {
+  ASSERT(kNotStringTag != 0);
+
+  ldr(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+  ldrb(scratch, FieldMemOperand(scratch, Map::kInstanceTypeOffset));
+  tst(scratch, Operand(kIsNotStringMask));
+  b(nz, fail);
+}
+
+
 #ifdef ENABLE_DEBUGGER_SUPPORT
 void MacroAssembler::DebugBreak() {
   ASSERT(allow_stub_calls());
@@ -1060,9 +1098,14 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
     return;
   }
 
+  // Assert that the register arguments are different and that none of
+  // them are ip. ip is used explicitly in the code generated below.
   ASSERT(!result.is(scratch1));
   ASSERT(!result.is(scratch2));
   ASSERT(!scratch1.is(scratch2));
+  ASSERT(!result.is(ip));
+  ASSERT(!scratch1.is(ip));
+  ASSERT(!scratch2.is(ip));
 
   // Check relative positions of allocation top and limit addresses.
   // The values must be adjacent in memory to allow the use of LDM.

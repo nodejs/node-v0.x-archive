@@ -66,6 +66,7 @@ namespace internal {
 
 const double DoubleConstant::min_int = kMinInt;
 const double DoubleConstant::one_half = 0.5;
+const double DoubleConstant::negative_infinity = -V8_INFINITY;
 
 
 // -----------------------------------------------------------------------------
@@ -466,34 +467,35 @@ const char* RelocInfo::RelocModeName(RelocInfo::Mode rmode) {
 }
 
 
-void RelocInfo::Print() {
-  PrintF("%p  %s", pc_, RelocModeName(rmode_));
+void RelocInfo::Print(FILE* out) {
+  PrintF(out, "%p  %s", pc_, RelocModeName(rmode_));
   if (IsComment(rmode_)) {
-    PrintF("  (%s)", reinterpret_cast<char*>(data_));
+    PrintF(out, "  (%s)", reinterpret_cast<char*>(data_));
   } else if (rmode_ == EMBEDDED_OBJECT) {
-    PrintF("  (");
-    target_object()->ShortPrint();
-    PrintF(")");
+    PrintF(out, "  (");
+    target_object()->ShortPrint(out);
+    PrintF(out, ")");
   } else if (rmode_ == EXTERNAL_REFERENCE) {
     ExternalReferenceEncoder ref_encoder;
-    PrintF(" (%s)  (%p)",
+    PrintF(out, " (%s)  (%p)",
            ref_encoder.NameOfAddress(*target_reference_address()),
            *target_reference_address());
   } else if (IsCodeTarget(rmode_)) {
     Code* code = Code::GetCodeFromTargetAddress(target_address());
-    PrintF(" (%s)  (%p)", Code::Kind2String(code->kind()), target_address());
+    PrintF(out, " (%s)  (%p)", Code::Kind2String(code->kind()),
+           target_address());
   } else if (IsPosition(rmode_)) {
-    PrintF("  (%" V8_PTR_PREFIX "d)", data());
+    PrintF(out, "  (%" V8_PTR_PREFIX "d)", data());
   } else if (rmode_ == RelocInfo::RUNTIME_ENTRY) {
     // Depotimization bailouts are stored as runtime entries.
     int id = Deoptimizer::GetDeoptimizationId(
         target_address(), Deoptimizer::EAGER);
     if (id != Deoptimizer::kNotDeoptimizationEntry) {
-      PrintF("  (deoptimization bailout %d)", id);
+      PrintF(out, "  (deoptimization bailout %d)", id);
     }
   }
 
-  PrintF("\n");
+  PrintF(out, "\n");
 }
 #endif  // ENABLE_DISASSEMBLER
 
@@ -722,6 +724,12 @@ ExternalReference ExternalReference::address_of_one_half() {
 }
 
 
+ExternalReference ExternalReference::address_of_negative_infinity() {
+  return ExternalReference(reinterpret_cast<void*>(
+      const_cast<double*>(&DoubleConstant::negative_infinity)));
+}
+
+
 #ifndef V8_INTERPRETED_REGEXP
 
 ExternalReference ExternalReference::re_check_stack_guard_state() {
@@ -790,6 +798,51 @@ static double div_two_doubles(double x, double y) {
 
 static double mod_two_doubles(double x, double y) {
   return modulo(x, y);
+}
+
+
+// Helper function to compute x^y, where y is known to be an
+// integer. Uses binary decomposition to limit the number of
+// multiplications; see the discussion in "Hacker's Delight" by Henry
+// S. Warren, Jr., figure 11-6, page 213.
+double power_double_int(double x, int y) {
+  double m = (y < 0) ? 1 / x : x;
+  unsigned n = (y < 0) ? -y : y;
+  double p = 1;
+  while (n != 0) {
+    if ((n & 1) != 0) p *= m;
+    m *= m;
+    if ((n & 2) != 0) p *= m;
+    m *= m;
+    n >>= 2;
+  }
+  return p;
+}
+
+
+double power_double_double(double x, double y) {
+  int y_int = static_cast<int>(y);
+  if (y == y_int) {
+    return power_double_int(x, y_int);  // Returns 1.0 for exponent 0.
+  }
+  if (!isinf(x)) {
+    if (y == 0.5) return sqrt(x);
+    if (y == -0.5) return 1.0 / sqrt(x);
+  }
+  if (isnan(y) || ((x == 1 || x == -1) && isinf(y))) {
+    return OS::nan_value();
+  }
+  return pow(x, y);
+}
+
+
+ExternalReference ExternalReference::power_double_double_function() {
+  return ExternalReference(Redirect(FUNCTION_ADDR(power_double_double)));
+}
+
+
+ExternalReference ExternalReference::power_double_int_function() {
+  return ExternalReference(Redirect(FUNCTION_ADDR(power_double_int)));
 }
 
 

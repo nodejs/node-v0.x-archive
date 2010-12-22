@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2009-2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -348,30 +348,37 @@ void HeapProfiler::TearDown() {
 
 #ifdef ENABLE_LOGGING_AND_PROFILING
 
-HeapSnapshot* HeapProfiler::TakeSnapshot(const char* name, int type) {
+HeapSnapshot* HeapProfiler::TakeSnapshot(const char* name,
+                                         int type,
+                                         v8::ActivityControl* control) {
   ASSERT(singleton_ != NULL);
-  return singleton_->TakeSnapshotImpl(name, type);
+  return singleton_->TakeSnapshotImpl(name, type, control);
 }
 
 
-HeapSnapshot* HeapProfiler::TakeSnapshot(String* name, int type) {
+HeapSnapshot* HeapProfiler::TakeSnapshot(String* name,
+                                         int type,
+                                         v8::ActivityControl* control) {
   ASSERT(singleton_ != NULL);
-  return singleton_->TakeSnapshotImpl(name, type);
+  return singleton_->TakeSnapshotImpl(name, type, control);
 }
 
 
-HeapSnapshot* HeapProfiler::TakeSnapshotImpl(const char* name, int type) {
-  Heap::CollectAllGarbage(true);
+HeapSnapshot* HeapProfiler::TakeSnapshotImpl(const char* name,
+                                             int type,
+                                             v8::ActivityControl* control) {
   HeapSnapshot::Type s_type = static_cast<HeapSnapshot::Type>(type);
   HeapSnapshot* result =
       snapshots_->NewSnapshot(s_type, name, next_snapshot_uid_++);
+  bool generation_completed = true;
   switch (s_type) {
     case HeapSnapshot::kFull: {
-      HeapSnapshotGenerator generator(result);
-      generator.GenerateSnapshot();
+      HeapSnapshotGenerator generator(result, control);
+      generation_completed = generator.GenerateSnapshot();
       break;
     }
     case HeapSnapshot::kAggregated: {
+      Heap::CollectAllGarbage(true);
       AggregatedHeapSnapshot agg_snapshot;
       AggregatedHeapSnapshotGenerator generator(&agg_snapshot);
       generator.GenerateSnapshot();
@@ -381,13 +388,19 @@ HeapSnapshot* HeapProfiler::TakeSnapshotImpl(const char* name, int type) {
     default:
       UNREACHABLE();
   }
-  snapshots_->SnapshotGenerationFinished();
+  if (!generation_completed) {
+    delete result;
+    result = NULL;
+  }
+  snapshots_->SnapshotGenerationFinished(result);
   return result;
 }
 
 
-HeapSnapshot* HeapProfiler::TakeSnapshotImpl(String* name, int type) {
-  return TakeSnapshotImpl(snapshots_->GetName(name), type);
+HeapSnapshot* HeapProfiler::TakeSnapshotImpl(String* name,
+                                             int type,
+                                             v8::ActivityControl* control) {
+  return TakeSnapshotImpl(snapshots_->GetName(name), type, control);
 }
 
 
@@ -795,7 +808,7 @@ void AggregatedHeapSnapshotGenerator::CollectStats(HeapObject* obj) {
 
 
 void AggregatedHeapSnapshotGenerator::GenerateSnapshot() {
-  HeapIterator iterator(HeapIterator::kPreciseFiltering);
+  HeapIterator iterator(HeapIterator::kFilterFreeListNodes);
   for (HeapObject* obj = iterator.next(); obj != NULL; obj = iterator.next()) {
     CollectStats(obj);
     agg_snapshot_->js_cons_profile()->CollectStats(obj);

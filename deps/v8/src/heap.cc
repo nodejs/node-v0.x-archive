@@ -3757,14 +3757,21 @@ bool Heap::IdleNotification() {
   static const int kIdlesBeforeScavenge = 4;
   static const int kIdlesBeforeMarkSweep = 7;
   static const int kIdlesBeforeMarkCompact = 8;
+  static const int kMaxIdleCount = kIdlesBeforeMarkCompact + 1;
+  static const int kGCsBetweenCleanup = 4;
   static int number_idle_notifications = 0;
   static int last_gc_count = gc_count_;
 
   bool uncommit = true;
   bool finished = false;
 
-  if (last_gc_count == gc_count_) {
-    number_idle_notifications++;
+  // Reset the number of idle notifications received when a number of
+  // GCs have taken place. This allows another round of cleanup based
+  // on idle notifications if enough work has been carried out to
+  // provoke a number of garbage collections.
+  if (gc_count_ < last_gc_count + kGCsBetweenCleanup) {
+    number_idle_notifications =
+        Min(number_idle_notifications + 1, kMaxIdleCount);
   } else {
     number_idle_notifications = 0;
     last_gc_count = gc_count_;
@@ -3779,7 +3786,6 @@ bool Heap::IdleNotification() {
     }
     new_space_.Shrink();
     last_gc_count = gc_count_;
-
   } else if (number_idle_notifications == kIdlesBeforeMarkSweep) {
     // Before doing the mark-sweep collections we clear the
     // compilation cache to avoid hanging on to source code and
@@ -3794,7 +3800,6 @@ bool Heap::IdleNotification() {
     CollectAllGarbage(true);
     new_space_.Shrink();
     last_gc_count = gc_count_;
-    number_idle_notifications = 0;
     finished = true;
 
   } else if (contexts_disposed_ > 0) {
@@ -3813,6 +3818,11 @@ bool Heap::IdleNotification() {
       number_idle_notifications = 0;
       uncommit = false;
     }
+  } else if (number_idle_notifications > kIdlesBeforeMarkCompact) {
+    // If we have received more than kIdlesBeforeMarkCompact idle
+    // notifications we do not perform any cleanup because we don't
+    // expect to gain much by doing so.
+    finished = true;
   }
 
   // Make sure that we have no pending context disposals and
@@ -4473,7 +4483,7 @@ void Heap::RecordStats(HeapStats* stats, bool take_snapshot) {
       MemoryAllocator::Size() + MemoryAllocator::Available();
   *stats->os_error = OS::GetLastError();
   if (take_snapshot) {
-    HeapIterator iterator(HeapIterator::kPreciseFiltering);
+    HeapIterator iterator(HeapIterator::kFilterFreeListNodes);
     for (HeapObject* obj = iterator.next();
          obj != NULL;
          obj = iterator.next()) {
@@ -4907,13 +4917,20 @@ ObjectIterator* SpaceIterator::CreateIterator() {
 }
 
 
-class FreeListNodesFilter {
+class HeapObjectsFilter {
+ public:
+  virtual ~HeapObjectsFilter() {}
+  virtual bool SkipObject(HeapObject* object) = 0;
+};
+
+
+class FreeListNodesFilter : public HeapObjectsFilter {
  public:
   FreeListNodesFilter() {
     MarkFreeListNodes();
   }
 
-  inline bool IsFreeListNode(HeapObject* object) {
+  bool SkipObject(HeapObject* object) {
     if (object->IsMarked()) {
       object->ClearMark();
       return true;
@@ -4945,6 +4962,65 @@ class FreeListNodesFilter {
 };
 
 
+class UnreachableObjectsFilter : public HeapObjectsFilter {
+ public:
+  UnreachableObjectsFilter() {
+    MarkUnreachableObjects();
+  }
+
+  bool SkipObject(HeapObject* object) {
+    if (object->IsMarked()) {
+      object->ClearMark();
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+ private:
+  class UnmarkingVisitor : public ObjectVisitor {
+   public:
+    UnmarkingVisitor() : list_(10) {}
+
+    void VisitPointers(Object** start, Object** end) {
+      for (Object** p = start; p < end; p++) {
+        if (!(*p)->IsHeapObject()) continue;
+        HeapObject* obj = HeapObject::cast(*p);
+        if (obj->IsMarked()) {
+          obj->ClearMark();
+          list_.Add(obj);
+        }
+      }
+    }
+
+    bool can_process() { return !list_.is_empty(); }
+
+    void ProcessNext() {
+      HeapObject* obj = list_.RemoveLast();
+      obj->Iterate(this);
+    }
+
+   private:
+    List<HeapObject*> list_;
+  };
+
+  void MarkUnreachableObjects() {
+    HeapIterator iterator;
+    for (HeapObject* obj = iterator.next();
+         obj != NULL;
+         obj = iterator.next()) {
+      obj->SetMark();
+    }
+    UnmarkingVisitor visitor;
+    Heap::IterateRoots(&visitor, VISIT_ONLY_STRONG);
+    while (visitor.can_process())
+      visitor.ProcessNext();
+  }
+
+  AssertNoAllocation no_alloc;
+};
+
+
 HeapIterator::HeapIterator()
     : filtering_(HeapIterator::kNoFiltering),
       filter_(NULL) {
@@ -4952,7 +5028,7 @@ HeapIterator::HeapIterator()
 }
 
 
-HeapIterator::HeapIterator(HeapIterator::FreeListNodesFiltering filtering)
+HeapIterator::HeapIterator(HeapIterator::HeapObjectsFiltering filtering)
     : filtering_(filtering),
       filter_(NULL) {
   Init();
@@ -4966,12 +5042,17 @@ HeapIterator::~HeapIterator() {
 
 void HeapIterator::Init() {
   // Start the iteration.
-  if (filtering_ == kPreciseFiltering) {
-    filter_ = new FreeListNodesFilter;
-    space_iterator_ =
-        new SpaceIterator(MarkCompactCollector::SizeOfMarkedObject);
-  } else {
-    space_iterator_ = new SpaceIterator;
+  space_iterator_ = filtering_ == kNoFiltering ? new SpaceIterator :
+      new SpaceIterator(MarkCompactCollector::SizeOfMarkedObject);
+  switch (filtering_) {
+    case kFilterFreeListNodes:
+      filter_ = new FreeListNodesFilter;
+      break;
+    case kFilterUnreachable:
+      filter_ = new UnreachableObjectsFilter;
+      break;
+    default:
+      break;
   }
   object_iterator_ = space_iterator_->next();
 }
@@ -4979,9 +5060,9 @@ void HeapIterator::Init() {
 
 void HeapIterator::Shutdown() {
 #ifdef DEBUG
-  // Assert that in precise mode we have iterated through all
+  // Assert that in filtering mode we have iterated through all
   // objects. Otherwise, heap will be left in an inconsistent state.
-  if (filtering_ == kPreciseFiltering) {
+  if (filtering_ != kNoFiltering) {
     ASSERT(object_iterator_ == NULL);
   }
 #endif
@@ -4998,7 +5079,7 @@ HeapObject* HeapIterator::next() {
   if (filter_ == NULL) return NextObject();
 
   HeapObject* obj = NextObject();
-  while (obj != NULL && filter_->IsFreeListNode(obj)) obj = NextObject();
+  while (obj != NULL && filter_->SkipObject(obj)) obj = NextObject();
   return obj;
 }
 

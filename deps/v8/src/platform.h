@@ -114,6 +114,8 @@ int signbit(double x);
 #endif  // __GNUC__
 
 #include "atomicops.h"
+#include "utils.h"
+#include "v8globals.h"
 
 namespace v8 {
 namespace internal {
@@ -123,6 +125,7 @@ namespace internal {
 typedef intptr_t AtomicWord;
 
 class Semaphore;
+class Mutex;
 
 double ceiling(double x);
 double modulo(double x, double y);
@@ -180,6 +183,10 @@ class OS {
   // should go to stdout.
   static void Print(const char* format, ...);
   static void VPrint(const char* format, va_list args);
+
+  // Print output to a file. This is mostly used for debugging output.
+  static void FPrint(FILE* out, const char* format, ...);
+  static void VFPrint(FILE* out, const char* format, va_list args);
 
   // Print error output to console. This is mostly used for error message
   // output. On platforms that has standard terminal output, the output

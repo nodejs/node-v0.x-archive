@@ -178,6 +178,7 @@ def configure(conf):
   o = Options.options
 
   conf.env["USE_DEBUG"] = o.debug
+  conf.env["SNAPSHOT_V8"] = not o.without_snapshot
   if sys.platform.startswith("sunos"):
     conf.env["SNAPSHOT_V8"] = False
   conf.env["USE_PROFILING"] = o.profile
@@ -196,7 +197,7 @@ def configure(conf):
     conf.env.append_value("CCFLAGS", "-rdynamic")
     conf.env.append_value("LINKFLAGS_DL", "-rdynamic")
 
-  if sys.platform.startswith("freebsd"):
+  if sys.platform.startswith("freebsd") or sys.platform.startswith("openbsd"):
     conf.check(lib='kvm', uselib_store='KVM')
 
   #if Options.options.debug:
@@ -455,7 +456,10 @@ def v8_cmd(bld, variant):
                 , snapshot
 		, profile
                 )
-  
+
+  if sys.platform.startswith("sunos"): cmd += ' toolchain=gcc'
+
+
   return ("echo '%s' && " % cmd) + cmd
 
 
@@ -637,7 +641,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : program.env["PREFIX"]
-        , 'VERSION'   : '0.3.1-pre' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.h
+        , 'VERSION'   : '0.3.2' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 

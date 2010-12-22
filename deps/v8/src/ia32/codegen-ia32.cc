@@ -7676,6 +7676,13 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   __ test(tmp2.reg(), Immediate(kSmiTagMask));
   deferred->Branch(not_zero);
 
+  // Check that both indices are valid.
+  __ mov(tmp2.reg(), FieldOperand(object.reg(), JSArray::kLengthOffset));
+  __ cmp(tmp2.reg(), Operand(index1.reg()));
+  deferred->Branch(below_equal);
+  __ cmp(tmp2.reg(), Operand(index2.reg()));
+  deferred->Branch(below_equal);
+
   // Bring addresses into index1 and index2.
   __ lea(index1.reg(), FixedArrayElementOperand(tmp1.reg(), index1.reg()));
   __ lea(index2.reg(), FixedArrayElementOperand(tmp1.reg(), index2.reg()));
@@ -7905,7 +7912,8 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
-  TranscendentalCacheStub stub(TranscendentalCache::SIN);
+  TranscendentalCacheStub stub(TranscendentalCache::SIN,
+                               TranscendentalCacheStub::TAGGED);
   Result result = frame_->CallStub(&stub, 1);
   frame_->Push(&result);
 }
@@ -7914,7 +7922,8 @@ void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
-  TranscendentalCacheStub stub(TranscendentalCache::COS);
+  TranscendentalCacheStub stub(TranscendentalCache::COS,
+                               TranscendentalCacheStub::TAGGED);
   Result result = frame_->CallStub(&stub, 1);
   frame_->Push(&result);
 }
@@ -7923,7 +7932,8 @@ void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateMathLog(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
-  TranscendentalCacheStub stub(TranscendentalCache::LOG);
+  TranscendentalCacheStub stub(TranscendentalCache::LOG,
+                               TranscendentalCacheStub::TAGGED);
   Result result = frame_->CallStub(&stub, 1);
   frame_->Push(&result);
 }
@@ -9133,7 +9143,7 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
     case Token::INSTANCEOF: {
       if (!left_already_loaded) Load(left);
       Load(right);
-      InstanceofStub stub;
+      InstanceofStub stub(InstanceofStub::kNoFlags);
       Result answer = frame_->CallStub(&stub, 2);
       answer.ToRegister();
       __ test(answer.reg(), Operand(answer.reg()));

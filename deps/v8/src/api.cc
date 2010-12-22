@@ -1165,14 +1165,22 @@ void ObjectTemplate::SetInternalFieldCount(int value) {
 
 
 ScriptData* ScriptData::PreCompile(const char* input, int length) {
-  unibrow::Utf8InputBuffer<> buf(input, length);
-  return i::ParserApi::PreParse(i::Handle<i::String>(), &buf, NULL);
+  i::Utf8ToUC16CharacterStream stream(
+      reinterpret_cast<const unsigned char*>(input), length);
+  return i::ParserApi::PreParse(&stream, NULL);
 }
 
 
 ScriptData* ScriptData::PreCompile(v8::Handle<String> source) {
   i::Handle<i::String> str = Utils::OpenHandle(*source);
-  return i::ParserApi::PreParse(str, NULL, NULL);
+  if (str->IsExternalTwoByteString()) {
+    i::ExternalTwoByteStringUC16CharacterStream stream(
+      i::Handle<i::ExternalTwoByteString>::cast(str), 0, str->length());
+    return i::ParserApi::PreParse(&stream, NULL);
+  } else {
+    i::GenericStringUC16CharacterStream stream(str, 0, str->length());
+    return i::ParserApi::PreParse(&stream, NULL);
+  }
 }
 
 
@@ -3119,14 +3127,15 @@ int String::Write(uint16_t* buffer,
     // using StringInputBuffer or Get(i) to access the characters.
     str->TryFlatten();
   }
-  int end = length;
-  if ( (length == -1) || (length > str->length() - start) )
-    end = str->length() - start;
+  int end = start + length;
+  if ((length == -1) || (length > str->length() - start) )
+    end = str->length();
   if (end < 0) return 0;
   i::String::WriteToFlat(*str, buffer, start, end);
-  if (length == -1 || end < length)
-    buffer[end] = '\0';
-  return end;
+  if (length == -1 || end - start < length) {
+    buffer[end - start] = '\0';
+  }
+  return end - start;
 }
 
 
@@ -3790,6 +3799,35 @@ double v8::Date::NumberValue() const {
   i::Handle<i::Object> obj = Utils::OpenHandle(this);
   i::Handle<i::JSValue> jsvalue = i::Handle<i::JSValue>::cast(obj);
   return jsvalue->value()->Number();
+}
+
+
+void v8::Date::DateTimeConfigurationChangeNotification() {
+  ON_BAILOUT("v8::Date::DateTimeConfigurationChangeNotification()", return);
+  LOG_API("Date::DateTimeConfigurationChangeNotification");
+  ENTER_V8;
+
+  HandleScope scope;
+
+  // Get the function ResetDateCache (defined in date-delay.js).
+  i::Handle<i::String> func_name_str =
+      i::Factory::LookupAsciiSymbol("ResetDateCache");
+  i::MaybeObject* result = i::Top::builtins()->GetProperty(*func_name_str);
+  i::Object* object_func;
+  if (!result->ToObject(&object_func)) {
+    return;
+  }
+
+  if (object_func->IsJSFunction()) {
+    i::Handle<i::JSFunction> func =
+        i::Handle<i::JSFunction>(i::JSFunction::cast(object_func));
+
+    // Call ResetDateCache(0 but expect no exceptions:
+    bool caught_exception = false;
+    i::Handle<i::Object> result =
+        i::Execution::TryCall(func, i::Top::builtins(), 0, NULL,
+        &caught_exception);
+  }
 }
 
 
@@ -4939,7 +4977,8 @@ const HeapSnapshot* HeapProfiler::FindSnapshot(unsigned uid) {
 
 
 const HeapSnapshot* HeapProfiler::TakeSnapshot(Handle<String> title,
-                                               HeapSnapshot::Type type) {
+                                               HeapSnapshot::Type type,
+                                               ActivityControl* control) {
   IsDeadCheck("v8::HeapProfiler::TakeSnapshot");
   i::HeapSnapshot::Type internal_type = i::HeapSnapshot::kFull;
   switch (type) {
@@ -4953,7 +4992,8 @@ const HeapSnapshot* HeapProfiler::TakeSnapshot(Handle<String> title,
       UNREACHABLE();
   }
   return reinterpret_cast<const HeapSnapshot*>(
-      i::HeapProfiler::TakeSnapshot(*Utils::OpenHandle(*title), internal_type));
+      i::HeapProfiler::TakeSnapshot(
+          *Utils::OpenHandle(*title), internal_type, control));
 }
 
 #endif  // ENABLE_LOGGING_AND_PROFILING
@@ -4968,6 +5008,7 @@ void Testing::SetStressRunType(Testing::StressType type) {
 }
 
 int Testing::GetStressRuns() {
+  if (internal::FLAG_stress_runs != 0) return internal::FLAG_stress_runs;
 #ifdef DEBUG
   // In debug mode the code runs much slower so stressing will only make two
   // runs.

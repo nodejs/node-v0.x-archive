@@ -1,3 +1,26 @@
+2010-12-21: Version 3.0.4
+
+        Added Date::ResetCache() to the API so that the cached values in the
+        Date object can be reset to allow live DST / timezone changes.
+
+        Extended existing support for printing (while debugging) the contents
+        of objects.  Added support for printing objects from release builds.
+
+        Fixed V8 issues 989, 1006, and 1007.
+
+
+2010-12-17: Version 3.0.3
+
+        Reapplied all changes for version 3.0.1.
+
+        Improved debugger protocol for remote debugging.
+
+        Added experimental support for using gyp to generate build files
+        for V8.
+
+        Fixed implementation of String::Write in the API (issue 975).
+
+
 2010-12-15: Version 3.0.2
 
         Revert version 3.0.1 and patch 3.0.1.1.

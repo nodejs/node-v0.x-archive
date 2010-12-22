@@ -136,7 +136,7 @@ bool LCodeGen::GeneratePrologue() {
       Label loop;
       __ bind(&loop);
       __ push(r2);
-      __ sub(r0, r0, Operand(1));
+      __ sub(r0, r0, Operand(1), SetCC);
       __ b(ne, &loop);
     } else {
       __ sub(sp,  sp, Operand(slots * kPointerSize));
@@ -1213,6 +1213,26 @@ void LCodeGen::DoIsNullAndBranch(LIsNullAndBranch* instr) {
 }
 
 
+Condition LCodeGen::EmitIsObject(Register input,
+                                 Register temp1,
+                                 Register temp2,
+                                 Label* is_not_object,
+                                 Label* is_object) {
+  Abort("EmitIsObject unimplemented.");
+  return ne;
+}
+
+
+void LCodeGen::DoIsObject(LIsObject* instr) {
+  Abort("DoIsObject unimplemented.");
+}
+
+
+void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
+  Abort("DoIsObjectAndBranch unimplemented.");
+}
+
+
 void LCodeGen::DoIsSmi(LIsSmi* instr) {
   ASSERT(instr->hydrogen()->value()->representation().IsTagged());
   Register result = ToRegister(instr->result());
@@ -1317,7 +1337,14 @@ void LCodeGen::DoCmpMapAndBranch(LCmpMapAndBranch* instr) {
 
 
 void LCodeGen::DoInstanceOf(LInstanceOf* instr) {
-  Abort("DoInstanceOf unimplemented.");
+  // We expect object and function in registers r1 and r0.
+  InstanceofStub stub(InstanceofStub::kArgsInRegisters);
+  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+
+  Label true_value, done;
+  __ tst(r0, r0);
+  __ mov(r0, Operand(Factory::false_value()), LeaveCC, eq);
+  __ mov(r0, Operand(Factory::true_value()), LeaveCC, ne);
 }
 
 
@@ -1527,7 +1554,7 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
-  Abort("LUnaryMathOperation unimplemented.");
+  Abort("DoMathAbs unimplemented.");
 }
 
 
@@ -1542,9 +1569,6 @@ void LCodeGen::DoMathSqrt(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoUnaryMathOperation(LUnaryMathOperation* instr) {
-  ASSERT(instr->op() == kMathFloor ||
-         instr->op() == kMathAbs);
-
   switch (instr->op()) {
     case kMathAbs:
       DoMathAbs(instr);
@@ -1556,6 +1580,7 @@ void LCodeGen::DoUnaryMathOperation(LUnaryMathOperation* instr) {
       DoMathSqrt(instr);
       break;
     default:
+      Abort("Unimplemented type of LUnaryMathOperation.");
       UNREACHABLE();
   }
 }
@@ -1733,13 +1758,14 @@ void LCodeGen::DoNumberTagD(LNumberTagD* instr) {
 
   DoubleRegister input_reg = ToDoubleRegister(instr->input());
   Register reg = ToRegister(instr->result());
-  Register tmp = ToRegister(instr->temp());
+  Register temp1 = ToRegister(instr->temp1());
+  Register temp2 = ToRegister(instr->temp2());
   Register scratch = r9;
 
   DeferredNumberTagD* deferred = new DeferredNumberTagD(this, instr);
   if (FLAG_inline_new) {
     __ LoadRoot(scratch, Heap::kHeapNumberMapRootIndex);
-    __ AllocateHeapNumber(reg, tmp, ip, scratch, deferred->entry());
+    __ AllocateHeapNumber(reg, temp1, temp2, scratch, deferred->entry());
   } else {
     __ jmp(deferred->entry());
   }

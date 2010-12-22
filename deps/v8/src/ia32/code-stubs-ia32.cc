@@ -1366,8 +1366,8 @@ void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
   if (op_ == Token::DIV || op_ == Token::MOD) {
     left = eax;
     right = ebx;
-      __ mov(ebx, eax);
-      __ mov(eax, edx);
+    __ mov(ebx, eax);
+    __ mov(eax, edx);
   }
 
 
@@ -2472,41 +2472,65 @@ void TypeRecordingBinaryOpStub::GenerateRegisterArgsPush(MacroAssembler* masm) {
 
 
 void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
-  // Input on stack:
-  // esp[4]: argument (should be number).
-  // esp[0]: return address.
-  // Test that eax is a number.
+  // TAGGED case:
+  //   Input:
+  //     esp[4]: tagged number input argument (should be number).
+  //     esp[0]: return address.
+  //   Output:
+  //     eax: tagged double result.
+  // UNTAGGED case:
+  //   Input::
+  //     esp[0]: return address.
+  //     xmm1: untagged double input argument
+  //   Output:
+  //     xmm1: untagged double result.
+
   Label runtime_call;
   Label runtime_call_clear_stack;
-  NearLabel input_not_smi;
-  NearLabel loaded;
-  __ mov(eax, Operand(esp, kPointerSize));
-  __ test(eax, Immediate(kSmiTagMask));
-  __ j(not_zero, &input_not_smi);
-  // Input is a smi. Untag and load it onto the FPU stack.
-  // Then load the low and high words of the double into ebx, edx.
-  STATIC_ASSERT(kSmiTagSize == 1);
-  __ sar(eax, 1);
-  __ sub(Operand(esp), Immediate(2 * kPointerSize));
-  __ mov(Operand(esp, 0), eax);
-  __ fild_s(Operand(esp, 0));
-  __ fst_d(Operand(esp, 0));
-  __ pop(edx);
-  __ pop(ebx);
-  __ jmp(&loaded);
-  __ bind(&input_not_smi);
-  // Check if input is a HeapNumber.
-  __ mov(ebx, FieldOperand(eax, HeapObject::kMapOffset));
-  __ cmp(Operand(ebx), Immediate(Factory::heap_number_map()));
-  __ j(not_equal, &runtime_call);
-  // Input is a HeapNumber. Push it on the FPU stack and load its
-  // low and high words into ebx, edx.
-  __ fld_d(FieldOperand(eax, HeapNumber::kValueOffset));
-  __ mov(edx, FieldOperand(eax, HeapNumber::kExponentOffset));
-  __ mov(ebx, FieldOperand(eax, HeapNumber::kMantissaOffset));
+  Label skip_cache;
+  const bool tagged = (argument_type_ == TAGGED);
+  if (tagged) {
+    // Test that eax is a number.
+    NearLabel input_not_smi;
+    NearLabel loaded;
+    __ mov(eax, Operand(esp, kPointerSize));
+    __ test(eax, Immediate(kSmiTagMask));
+    __ j(not_zero, &input_not_smi);
+    // Input is a smi. Untag and load it onto the FPU stack.
+    // Then load the low and high words of the double into ebx, edx.
+    STATIC_ASSERT(kSmiTagSize == 1);
+    __ sar(eax, 1);
+    __ sub(Operand(esp), Immediate(2 * kPointerSize));
+    __ mov(Operand(esp, 0), eax);
+    __ fild_s(Operand(esp, 0));
+    __ fst_d(Operand(esp, 0));
+    __ pop(edx);
+    __ pop(ebx);
+    __ jmp(&loaded);
+    __ bind(&input_not_smi);
+    // Check if input is a HeapNumber.
+    __ mov(ebx, FieldOperand(eax, HeapObject::kMapOffset));
+    __ cmp(Operand(ebx), Immediate(Factory::heap_number_map()));
+    __ j(not_equal, &runtime_call);
+    // Input is a HeapNumber. Push it on the FPU stack and load its
+    // low and high words into ebx, edx.
+    __ fld_d(FieldOperand(eax, HeapNumber::kValueOffset));
+    __ mov(edx, FieldOperand(eax, HeapNumber::kExponentOffset));
+    __ mov(ebx, FieldOperand(eax, HeapNumber::kMantissaOffset));
 
-  __ bind(&loaded);
-  // ST[0] == double value
+    __ bind(&loaded);
+  } else {  // UNTAGGED.
+    if (CpuFeatures::IsSupported(SSE4_1)) {
+      CpuFeatures::Scope sse4_scope(SSE4_1);
+      __ pextrd(Operand(edx), xmm1, 0x1);  // copy xmm1[63..32] to edx.
+    } else {
+      __ pshufd(xmm0, xmm1, 0x1);
+      __ movd(Operand(edx), xmm0);
+    }
+    __ movd(Operand(ebx), xmm1);
+  }
+
+  // ST[0] or xmm1  == double value
   // ebx = low 32 bits of double value
   // edx = high 32 bits of double value
   // Compute hash (the shifts are arithmetic):
@@ -2522,7 +2546,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   ASSERT(IsPowerOf2(TranscendentalCache::kCacheSize));
   __ and_(Operand(ecx), Immediate(TranscendentalCache::kCacheSize - 1));
 
-  // ST[0] == double value.
+  // ST[0] or xmm1 == double value.
   // ebx = low 32 bits of double value.
   // edx = high 32 bits of double value.
   // ecx = TranscendentalCache::hash(double value).
@@ -2559,31 +2583,80 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   __ j(not_equal, &cache_miss);
   // Cache hit!
   __ mov(eax, Operand(ecx, 2 * kIntSize));
-  __ fstp(0);
-  __ ret(kPointerSize);
+  if (tagged) {
+    __ fstp(0);
+    __ ret(kPointerSize);
+  } else {  // UNTAGGED.
+    __ movdbl(xmm1, FieldOperand(eax, HeapNumber::kValueOffset));
+    __ Ret();
+  }
 
   __ bind(&cache_miss);
   // Update cache with new value.
   // We are short on registers, so use no_reg as scratch.
   // This gives slightly larger code.
-  __ AllocateHeapNumber(eax, edi, no_reg, &runtime_call_clear_stack);
+  if (tagged) {
+    __ AllocateHeapNumber(eax, edi, no_reg, &runtime_call_clear_stack);
+  } else {  // UNTAGGED.
+    __ AllocateHeapNumber(eax, edi, no_reg, &skip_cache);
+    __ sub(Operand(esp), Immediate(kDoubleSize));
+    __ movdbl(Operand(esp, 0), xmm1);
+    __ fld_d(Operand(esp, 0));
+    __ add(Operand(esp), Immediate(kDoubleSize));
+  }
   GenerateOperation(masm);
   __ mov(Operand(ecx, 0), ebx);
   __ mov(Operand(ecx, kIntSize), edx);
   __ mov(Operand(ecx, 2 * kIntSize), eax);
   __ fstp_d(FieldOperand(eax, HeapNumber::kValueOffset));
-  __ ret(kPointerSize);
+  if (tagged) {
+    __ ret(kPointerSize);
+  } else {  // UNTAGGED.
+    __ movdbl(xmm1, FieldOperand(eax, HeapNumber::kValueOffset));
+    __ Ret();
 
-  __ bind(&runtime_call_clear_stack);
-  __ fstp(0);
-  __ bind(&runtime_call);
-  __ TailCallExternalReference(ExternalReference(RuntimeFunction()), 1, 1);
+    // Skip cache and return answer directly, only in untagged case.
+    __ bind(&skip_cache);
+    __ sub(Operand(esp), Immediate(kDoubleSize));
+    __ movdbl(Operand(esp, 0), xmm1);
+    __ fld_d(Operand(esp, 0));
+    GenerateOperation(masm);
+    __ fstp_d(Operand(esp, 0));
+    __ movdbl(xmm1, Operand(esp, 0));
+    __ add(Operand(esp), Immediate(kDoubleSize));
+    // We return the value in xmm1 without adding it to the cache, but
+    // we cause a scavenging GC so that future allocations will succeed.
+    __ EnterInternalFrame();
+    // Allocate an unused object bigger than a HeapNumber.
+    __ push(Immediate(Smi::FromInt(2 * kDoubleSize)));
+    __ CallRuntimeSaveDoubles(Runtime::kAllocateInNewSpace);
+    __ LeaveInternalFrame();
+    __ Ret();
+  }
+
+  // Call runtime, doing whatever allocation and cleanup is necessary.
+  if (tagged) {
+    __ bind(&runtime_call_clear_stack);
+    __ fstp(0);
+    __ bind(&runtime_call);
+    __ TailCallExternalReference(ExternalReference(RuntimeFunction()), 1, 1);
+  } else {  // UNTAGGED.
+    __ bind(&runtime_call_clear_stack);
+    __ bind(&runtime_call);
+    __ AllocateHeapNumber(eax, edi, no_reg, &skip_cache);
+    __ movdbl(FieldOperand(eax, HeapNumber::kValueOffset), xmm1);
+    __ EnterInternalFrame();
+    __ push(eax);
+    __ CallRuntime(RuntimeFunction(), 1);
+    __ LeaveInternalFrame();
+    __ movdbl(xmm1, FieldOperand(eax, HeapNumber::kValueOffset));
+    __ Ret();
+  }
 }
 
 
 Runtime::FunctionId TranscendentalCacheStub::RuntimeFunction() {
   switch (type_) {
-    // Add more cases when necessary.
     case TranscendentalCache::SIN: return Runtime::kMath_sin;
     case TranscendentalCache::COS: return Runtime::kMath_cos;
     case TranscendentalCache::LOG: return Runtime::kMath_log;
@@ -2596,14 +2669,14 @@ Runtime::FunctionId TranscendentalCacheStub::RuntimeFunction() {
 
 void TranscendentalCacheStub::GenerateOperation(MacroAssembler* masm) {
   // Only free register is edi.
-  // Input value is on FP stack, and also in ebx/edx.  Address of result
-  // (a newly allocated HeapNumber) is in eax.
-  NearLabel done;
+  // Input value is on FP stack, and also in ebx/edx.
+  // Input value is possibly in xmm1.
+  // Address of result (a newly allocated HeapNumber) may be in eax.
   if (type_ == TranscendentalCache::SIN || type_ == TranscendentalCache::COS) {
     // Both fsin and fcos require arguments in the range +/-2^63 and
     // return NaN for infinities and NaN. They can share all code except
     // the actual fsin/fcos operation.
-    NearLabel in_range;
+    NearLabel in_range, done;
     // If argument is outside the range -2^63..2^63, fsin/cos doesn't
     // work. We must reduce it to the appropriate range.
     __ mov(edi, edx);
@@ -4901,76 +4974,125 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
 
 void InstanceofStub::Generate(MacroAssembler* masm) {
-  // Get the object - go slow case if it's a smi.
-  Label slow;
-  __ mov(eax, Operand(esp, 2 * kPointerSize));  // 2 ~ return address, function
-  __ test(eax, Immediate(kSmiTagMask));
-  __ j(zero, &slow, not_taken);
+  // Fixed register usage throughout the stub.
+  Register object = eax;  // Object (lhs).
+  Register map = ebx;  // Map of the object.
+  Register function = edx;  // Function (rhs).
+  Register prototype = edi;  // Prototype of the function.
+  Register scratch = ecx;
+
+  // Get the object and function - they are always both needed.
+  Label slow, not_js_object;
+  if (!args_in_registers()) {
+    __ mov(object, Operand(esp, 2 * kPointerSize));
+    __ mov(function, Operand(esp, 1 * kPointerSize));
+  }
 
   // Check that the left hand is a JS object.
-  __ IsObjectJSObjectType(eax, eax, edx, &slow);
-
-  // Get the prototype of the function.
-  __ mov(edx, Operand(esp, 1 * kPointerSize));  // 1 ~ return address
-  // edx is function, eax is map.
+  __ test(object, Immediate(kSmiTagMask));
+  __ j(zero, &not_js_object, not_taken);
+  __ IsObjectJSObjectType(object, map, scratch, &not_js_object);
 
   // Look up the function and the map in the instanceof cache.
   NearLabel miss;
   ExternalReference roots_address = ExternalReference::roots_address();
-  __ mov(ecx, Immediate(Heap::kInstanceofCacheFunctionRootIndex));
-  __ cmp(edx, Operand::StaticArray(ecx, times_pointer_size, roots_address));
+  __ mov(scratch, Immediate(Heap::kInstanceofCacheFunctionRootIndex));
+  __ cmp(function,
+         Operand::StaticArray(scratch, times_pointer_size, roots_address));
   __ j(not_equal, &miss);
-  __ mov(ecx, Immediate(Heap::kInstanceofCacheMapRootIndex));
-  __ cmp(eax, Operand::StaticArray(ecx, times_pointer_size, roots_address));
+  __ mov(scratch, Immediate(Heap::kInstanceofCacheMapRootIndex));
+  __ cmp(map, Operand::StaticArray(scratch, times_pointer_size, roots_address));
   __ j(not_equal, &miss);
-  __ mov(ecx, Immediate(Heap::kInstanceofCacheAnswerRootIndex));
-  __ mov(eax, Operand::StaticArray(ecx, times_pointer_size, roots_address));
-  __ ret(2 * kPointerSize);
+  __ mov(scratch, Immediate(Heap::kInstanceofCacheAnswerRootIndex));
+  __ mov(eax, Operand::StaticArray(scratch, times_pointer_size, roots_address));
+  __ IncrementCounter(&Counters::instance_of_cache, 1);
+  __ ret((args_in_registers() ? 0 : 2) * kPointerSize);
 
   __ bind(&miss);
-  __ TryGetFunctionPrototype(edx, ebx, ecx, &slow);
+  // Get the prototype of the function.
+  __ TryGetFunctionPrototype(function, prototype, scratch, &slow);
 
   // Check that the function prototype is a JS object.
-  __ test(ebx, Immediate(kSmiTagMask));
+  __ test(prototype, Immediate(kSmiTagMask));
   __ j(zero, &slow, not_taken);
-  __ IsObjectJSObjectType(ebx, ecx, ecx, &slow);
+  __ IsObjectJSObjectType(prototype, scratch, scratch, &slow);
 
-  // Register mapping:
-  //   eax is object map.
-  //   edx is function.
-  //   ebx is function prototype.
-  __ mov(ecx, Immediate(Heap::kInstanceofCacheMapRootIndex));
-  __ mov(Operand::StaticArray(ecx, times_pointer_size, roots_address), eax);
-  __ mov(ecx, Immediate(Heap::kInstanceofCacheFunctionRootIndex));
-  __ mov(Operand::StaticArray(ecx, times_pointer_size, roots_address), edx);
+  // Update the golbal instanceof cache with the current map and function. The
+  // cached answer will be set when it is known.
+  __ mov(scratch, Immediate(Heap::kInstanceofCacheMapRootIndex));
+  __ mov(Operand::StaticArray(scratch, times_pointer_size, roots_address), map);
+  __ mov(scratch, Immediate(Heap::kInstanceofCacheFunctionRootIndex));
+  __ mov(Operand::StaticArray(scratch, times_pointer_size, roots_address),
+         function);
 
-  __ mov(ecx, FieldOperand(eax, Map::kPrototypeOffset));
-
-  // Loop through the prototype chain looking for the function prototype.
+  // Loop through the prototype chain of the object looking for the function
+  // prototype.
+  __ mov(scratch, FieldOperand(map, Map::kPrototypeOffset));
   NearLabel loop, is_instance, is_not_instance;
   __ bind(&loop);
-  __ cmp(ecx, Operand(ebx));
+  __ cmp(scratch, Operand(prototype));
   __ j(equal, &is_instance);
-  __ cmp(Operand(ecx), Immediate(Factory::null_value()));
+  __ cmp(Operand(scratch), Immediate(Factory::null_value()));
   __ j(equal, &is_not_instance);
-  __ mov(ecx, FieldOperand(ecx, HeapObject::kMapOffset));
-  __ mov(ecx, FieldOperand(ecx, Map::kPrototypeOffset));
+  __ mov(scratch, FieldOperand(scratch, HeapObject::kMapOffset));
+  __ mov(scratch, FieldOperand(scratch, Map::kPrototypeOffset));
   __ jmp(&loop);
 
   __ bind(&is_instance);
+  __ IncrementCounter(&Counters::instance_of_stub_true, 1);
   __ Set(eax, Immediate(0));
-  __ mov(ecx, Immediate(Heap::kInstanceofCacheAnswerRootIndex));
-  __ mov(Operand::StaticArray(ecx, times_pointer_size, roots_address), eax);
-  __ ret(2 * kPointerSize);
+  __ mov(scratch, Immediate(Heap::kInstanceofCacheAnswerRootIndex));
+  __ mov(Operand::StaticArray(scratch, times_pointer_size, roots_address), eax);
+  __ ret((args_in_registers() ? 0 : 2) * kPointerSize);
 
   __ bind(&is_not_instance);
+  __ IncrementCounter(&Counters::instance_of_stub_false, 1);
   __ Set(eax, Immediate(Smi::FromInt(1)));
-  __ mov(ecx, Immediate(Heap::kInstanceofCacheAnswerRootIndex));
-  __ mov(Operand::StaticArray(ecx, times_pointer_size, roots_address), eax);
-  __ ret(2 * kPointerSize);
+  __ mov(scratch, Immediate(Heap::kInstanceofCacheAnswerRootIndex));
+  __ mov(Operand::StaticArray(scratch, times_pointer_size, roots_address), eax);
+  __ ret((args_in_registers() ? 0 : 2) * kPointerSize);
+
+  Label object_not_null, object_not_null_or_smi;
+  __ bind(&not_js_object);
+  // Before null, smi and string value checks, check that the rhs is a function
+  // as for a non-function rhs an exception needs to be thrown.
+  __ test(function, Immediate(kSmiTagMask));
+  __ j(zero, &slow, not_taken);
+  __ CmpObjectType(function, JS_FUNCTION_TYPE, scratch);
+  __ j(not_equal, &slow, not_taken);
+
+  // Null is not instance of anything.
+  __ cmp(object, Factory::null_value());
+  __ j(not_equal, &object_not_null);
+  __ IncrementCounter(&Counters::instance_of_stub_false_null, 1);
+  __ Set(eax, Immediate(Smi::FromInt(1)));
+  __ ret((args_in_registers() ? 0 : 2) * kPointerSize);
+
+  __ bind(&object_not_null);
+  // Smi values is not instance of anything.
+  __ test(object, Immediate(kSmiTagMask));
+  __ j(not_zero, &object_not_null_or_smi, not_taken);
+  __ Set(eax, Immediate(Smi::FromInt(1)));
+  __ ret((args_in_registers() ? 0 : 2) * kPointerSize);
+
+  __ bind(&object_not_null_or_smi);
+  // String values is not instance of anything.
+  Condition is_string = masm->IsObjectStringType(object, scratch, scratch);
+  __ j(NegateCondition(is_string), &slow);
+  __ IncrementCounter(&Counters::instance_of_stub_false_string, 1);
+  __ Set(eax, Immediate(Smi::FromInt(1)));
+  __ ret((args_in_registers() ? 0 : 2) * kPointerSize);
 
   // Slow-case: Go through the JavaScript implementation.
   __ bind(&slow);
+  if (args_in_registers()) {
+    // Push arguments below return address.
+    __ pop(scratch);
+    __ push(object);
+    __ push(function);
+    __ push(scratch);
+  }
+  __ IncrementCounter(&Counters::instance_of_slow, 1);
   __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_FUNCTION);
 }
 

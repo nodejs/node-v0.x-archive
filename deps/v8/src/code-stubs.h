@@ -47,6 +47,7 @@ namespace internal {
   V(Compare)                             \
   V(CompareIC)                           \
   V(MathPow)                             \
+  V(TranscendentalCache)                 \
   V(RecordWrite)                         \
   V(ConvertToDouble)                     \
   V(WriteInt32ToHeapNumber)              \
@@ -55,7 +56,6 @@ namespace internal {
   V(FastNewClosure)                      \
   V(FastNewContext)                      \
   V(FastCloneShallowArray)               \
-  V(TranscendentalCache)                 \
   V(GenericUnaryOp)                      \
   V(RevertToNumber)                      \
   V(ToBoolean)                           \
@@ -325,13 +325,24 @@ class FastCloneShallowArrayStub : public CodeStub {
 
 class InstanceofStub: public CodeStub {
  public:
-  InstanceofStub() { }
+  enum Flags {
+    kNoFlags = 0,
+    kArgsInRegisters = 1 << 0
+  };
+
+  explicit InstanceofStub(Flags flags) : flags_(flags) { }
 
   void Generate(MacroAssembler* masm);
 
  private:
   Major MajorKey() { return Instanceof; }
-  int MinorKey() { return 0; }
+  int MinorKey() { return args_in_registers() ? 1 : 0; }
+
+  bool args_in_registers() {
+    return (flags_ & kArgsInRegisters) != 0;
+  }
+
+  Flags flags_;
 };
 
 
