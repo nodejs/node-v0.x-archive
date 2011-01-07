@@ -631,7 +631,7 @@ def build(bld):
     src/node_script.cc
     src/node_os.cc
   """
-  node.source += bld.env["PLATFORM_FILE"]
+  node.source += str(bld.env["PLATFORM_FILE"])
   if not product_type_is_lib:
     node.source = 'src/node_main.cc '+node.source
 

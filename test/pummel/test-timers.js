@@ -98,10 +98,19 @@ clearTimeout(y);
 var z = setTimeout(t, 200);
 clearTimeout(y);
 
+// for string as first argument
+string_value1 = 0;
+setTimeout("string_count1 = 5;", 150); 
 
-process.addListener('exit', function() {
+string_count2 = 0;
+string_interval = setInterval("string_count2++", 100);
+setTimeout("clearInterval(string_interval);", 550);
+
+process.addListener("exit", function () {
   assert.equal(true, setTimeout_called);
   assert.equal(3, interval_count);
   assert.equal(11, count4);
   assert.equal(0, expectedTimeouts, 'clearTimeout cleared too many timeouts');
+  assert.equal(5, string_value1);
+  assert.equal(5, string_count2);
 });
