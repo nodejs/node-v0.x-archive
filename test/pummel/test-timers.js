@@ -1,6 +1,8 @@
 var common = require('../common');
 var assert = require('assert');
 
+common.globalCheck = false; // for setTimeout/setInterval with strings
+
 var WINDOW = 200; // why is does this need to be so big?
 
 var interval_count = 0;
@@ -100,7 +102,7 @@ clearTimeout(y);
 
 // for string as first argument
 string_value1 = 0;
-setTimeout("string_count1 = 5;", 150); 
+setTimeout("string_value1 = 5;", 150); 
 
 string_count2 = 0;
 string_interval = setInterval("string_count2++", 100);
