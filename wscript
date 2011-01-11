@@ -18,10 +18,6 @@ srcdir = '.'
 blddir = 'build'
 supported_archs = ('arm', 'ia32', 'x64') # 'mips' supported by v8, but not node
 
-jobs=1
-if os.environ.has_key('JOBS'):
-  jobs = int(os.environ['JOBS'])
-
 def safe_path(path):
   return path.replace("\\", "/")
 
@@ -523,7 +519,8 @@ def build(bld):
     return old(self, cmd, **kw)
   Build.BuildContext.exec_command = exec_command
 
-  Options.options.jobs=jobs
+  if os.environ.has_key('JOBS'):
+    Options.options.jobs=int(os.environ['JOBS'])
   product_type = Options.options.product_type
   product_type_is_lib = product_type != 'program'
 
