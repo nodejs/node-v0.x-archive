@@ -128,3 +128,23 @@ the PEM encoded public key, and `signature`, which is the previously calculates
 signature for the data, in the `signature_format` which can be `'binary'`, `'hex'` or `'base64'`.
 
 Returns true or false depending on the validity of the signature for the data and public key.
+
+### crypto.createDiffieHellman()
+
+Creates a Diffie-Hellman key exchange object using the default Diffie-Hellman primes from the OpenID specification.
+
+### crypto.createDiffieHellman(prime_length)
+
+Creates a Diffie-Hellman key exchange object and generates a prime of the given bit length. The generator used is `2`.
+
+### crypto.createDiffieHellman(p, g)
+
+Creates a Diffie-Hellman key exchange object using the supplied prime and generator, which should be Base64-encoded strings.
+
+### diffieHellman.generateKey()
+
+Generates private and public Diffie-Hellman key values, and returns the public key in Base64-encoding. This key should be transferred to the other party.
+
+### diffieHellman.computeSecret(other_public_key)
+
+Computes the shared secret using `other_public_key` as the other party's public key. The other party's public key should be a Base64-encoded string.

@@ -16,6 +16,9 @@
 # define OPENSSL_CONST
 #endif
 
+#define DIFFIE_HELLMAN_DEFAULT_P "ANz5OguIOXLsDhmYmsWizjEOHTdxfo2Vcbt2I3MYZuYe91ouJ4mLBX+YkcLiemOcPym2CBRYHNOyyjmG0mg3BVd9RcLn5S3IHHoXGHblzqdLFEi/368Ygo79JRnxTkXjgmY0rxlJ5bU1zIKaSDuKdiI+XUkKJX8Fvf8W8vsixYOr"
+#define DIFFIE_HELLMAN_DEFAULT_G "Ag=="
+
 namespace node {
 namespace crypto {
 
@@ -2654,7 +2657,184 @@ class Verify : public ObjectWrap {
 
 };
 
+class DiffieHellman : public ObjectWrap {
+ public:
+  static void Initialize (v8::Handle<v8::Object> target) {
+    HandleScope scope;
 
+    Local<FunctionTemplate> t = FunctionTemplate::New(New);
+
+    t->InstanceTemplate()->SetInternalFieldCount(1);
+
+    NODE_SET_PROTOTYPE_METHOD(t, "generateKey", GenerateKey);
+    NODE_SET_PROTOTYPE_METHOD(t, "computeSecret", ComputeSecret);
+
+    target->Set(String::NewSymbol("DiffieHellman"), t->GetFunction());
+  }
+
+  bool Init(int primeLength) {
+    dh = DH_generate_parameters(primeLength, 2, NULL, NULL);
+    int codes;
+    if (!DH_check(dh, &codes)) return false;
+    initialised_ = true;
+    return true;
+  }
+
+  bool Init(unsigned char* p, int p_len, unsigned char* g, int g_len) {
+    dh = DH_new();
+    dh->p = DiffieHellman::StringToBigNum(p, p_len);
+    dh->g = DiffieHellman::StringToBigNum(g, g_len);
+    int codes;
+    if (!DH_check(dh, &codes)) return false;
+    initialised_ = true;
+    return true;
+  }
+
+ protected:
+  static BIGNUM* StringToBigNum(unsigned char* value, int length)
+  {
+    char* binaryKey; int binaryKeyLength;
+    unbase64(value, length, &binaryKey, &binaryKeyLength);
+
+    BIGNUM* bignum = BN_bin2bn(reinterpret_cast<unsigned char*>(binaryKey), 
+                               binaryKeyLength, NULL);
+
+    return bignum;
+  }
+
+  static Handle<Value> New (const Arguments& args) {
+    HandleScope scope;
+
+    DiffieHellman* diffieHellman = new DiffieHellman();
+    bool initialized = false;
+
+    if (args.Length() > 0) {
+      if (args[0]->IsInt32()) {
+        int primeLength = args[0]->Int32Value();
+        initialized = diffieHellman->Init(primeLength);
+      }
+      else if (args.Length() > 1 && args[0]->IsString() && args[1]->IsString()) {
+        String::Utf8Value p(args[0]->ToString());
+        String::Utf8Value g(args[0]->ToString());
+
+        initialized = diffieHellman->Init(reinterpret_cast<unsigned char*>(*p), 
+                                          strlen(*p), 
+                                          reinterpret_cast<unsigned char*>(*g), 
+                                          strlen(*g));
+      }
+      else {
+        if (args.Length() == 1) {
+          ThrowException(Exception::Error(String::New("Invalid argument")));
+        }
+        else {
+          ThrowException(Exception::Error(String::New("Invalid arguments")));
+        }
+      }
+    }
+    else
+    {
+      String::Utf8Value p(String::New(DIFFIE_HELLMAN_DEFAULT_P));
+      String::Utf8Value g(String::New(DIFFIE_HELLMAN_DEFAULT_G));
+      initialized = diffieHellman->Init(reinterpret_cast<unsigned char*>(*p), 
+                                        strlen(*p), 
+                                        reinterpret_cast<unsigned char*>(*g), 
+                                        strlen(*g));
+    }
+    if (!initialized) {
+      ThrowException(Exception::Error(String::New("Initialization failed")));
+    }
+    diffieHellman->Wrap(args.This());
+
+    return args.This();
+  }
+
+  static Handle<Value> GenerateKey (const Arguments& args) {
+    DiffieHellman* diffieHellman = ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
+    HandleScope scope;
+
+    if (!diffieHellman->initialised_) {
+      ThrowException(Exception::Error(String::New("Not initialized")));
+    }
+
+    if (!DH_generate_key(diffieHellman->dh)) {
+      ThrowException(Exception::Error(String::New("Key generation failed")));
+    }
+
+    Local<Value> outString;
+
+    int binaryKeySize = BN_num_bytes(diffieHellman->dh->pub_key);
+    char* binaryKey = new char[binaryKeySize];
+
+    char* base64data; int base64length;
+    base64(reinterpret_cast<unsigned char*>(binaryKey), binaryKeySize, 
+           &base64data, &base64length);
+
+    outString = Encode(base64data, base64length, BINARY);
+
+    return scope.Close(outString);
+  }
+
+  static Handle<Value> ComputeSecret (const Arguments& args) {
+    HandleScope scope;
+
+    DiffieHellman* diffieHellman = ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
+    if (!diffieHellman->initialised_) {
+      ThrowException(Exception::Error(String::New("Not initialized")));
+    }
+
+    if (args.Length() == 0) {
+      ThrowException(Exception::Error(String::New("First argument must be other party's public key")));
+    }
+    ssize_t argLength = DecodeBytes(args[0], BINARY);
+    char* argBuffer = new char[argLength];
+    ssize_t written = DecodeWrite(argBuffer, argLength, args[0], BINARY);
+    assert(written == argLength);
+
+    BIGNUM* key = DiffieHellman::StringToBigNum(
+                    reinterpret_cast<unsigned char*>(argBuffer),
+                    argLength);
+
+    int dataSize = DH_size(diffieHellman->dh);
+    unsigned char* data = new unsigned char[dataSize];
+
+    int size = DH_compute_key(data, key, diffieHellman->dh);
+
+    BN_free(key);
+
+    if (size == -1) {
+      delete[] data;
+      ThrowException(Exception::Error(String::New("Could not compute shared key")));
+    }
+
+    Local<Value> outString;
+
+    char* base64data; int base64length;
+    base64(data, dataSize, &base64data, &base64length);
+
+    outString = Encode(base64data, base64length, BINARY);
+
+    delete[] data;
+
+    return scope.Close(outString);
+  }
+
+  DiffieHellman () : ObjectWrap () {
+    initialised_ = false;
+    dh = NULL;
+  }
+
+  ~DiffieHellman () { 
+    if (dh != NULL) {
+      DH_free(dh);
+    }
+  }
+
+ private:
+  bool initialised_;
+  DH* dh;
+};
 
 
 
@@ -2671,6 +2851,7 @@ void InitCrypto(Handle<Object> target) {
   Connection::Initialize(target);
   Cipher::Initialize(target);
   Decipher::Initialize(target);
+  DiffieHellman::Initialize(target);
   Hmac::Initialize(target);
   Hash::Initialize(target);
   Sign::Initialize(target);
