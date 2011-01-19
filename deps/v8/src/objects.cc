@@ -2601,7 +2601,8 @@ bool JSObject::ReferencesObject(Object* obj) {
 Object* JSObject::PreventExtensions() {
   // If there are fast elements we normalize.
   if (HasFastElements()) {
-    NormalizeElements();
+    Object* ok = NormalizeElements();
+    if (ok->IsFailure()) return ok;
   }
   // Make sure that we never go back to fast case.
   element_dictionary()->set_requires_slow_elements();
