@@ -416,7 +416,7 @@ Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
 
 
 Thread::Thread(const char* name) : ThreadHandle(ThreadHandle::INVALID) {
-  set_names(name);
+  set_name(name);
 }
 
 
@@ -510,6 +510,16 @@ class FreeBSDMutex : public Mutex {
   virtual int Unlock() {
     int result = pthread_mutex_unlock(&mutex_);
     return result;
+  }
+
+  virtual bool TryLock() {
+    int result = pthread_mutex_trylock(&mutex_);
+    // Return false if the lock is busy and locking failed.
+    if (result == EBUSY) {
+      return false;
+    }
+    ASSERT(result == 0);  // Verify no other errors.
+    return true;
   }
 
  private:
