@@ -134,6 +134,7 @@ void PendingListNode::WeakCallback(v8::Persistent<v8::Value>, void* data) {
 
 
 static bool IsOptimizable(JSFunction* function) {
+  if (Heap::InNewSpace(function)) return false;
   Code* code = function->code();
   return code->kind() == Code::FUNCTION && code->optimizable();
 }
@@ -165,8 +166,10 @@ static void AttemptOnStackReplacement(JSFunction* function) {
   }
 
   SharedFunctionInfo* shared = function->shared();
-  // If the code is not optimizable, don't try OSR.
-  if (!shared->code()->optimizable()) return;
+  // If the code is not optimizable or references context slots, don't try OSR.
+  if (!shared->code()->optimizable() || !shared->allows_lazy_compilation()) {
+    return;
+  }
 
   // We are not prepared to do OSR for a function that already has an
   // allocated arguments object.  The optimized code would bypass it for

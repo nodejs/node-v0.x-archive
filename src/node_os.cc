@@ -1,14 +1,22 @@
-#include <node_os.h>
 
 #include <node.h>
+#include <node_os.h>
+#include <platform.h>
+
 #include <v8.h>
 
-#include "platform.h"
-
 #include <errno.h>
-#include <unistd.h>  // gethostname, sysconf
-#include <sys/param.h>  // sysctl
-#include <sys/sysctl.h>  // sysctl
+#include <string.h>
+
+#ifdef __MINGW32__
+# include <platform_win32.h>
+# include <platform_win32_winsock.h>
+#endif
+
+#ifdef __POSIX__
+# include <unistd.h>  // gethostname, sysconf
+# include <sys/utsname.h>
+#endif
 
 namespace node {
 
@@ -17,9 +25,14 @@ using namespace v8;
 static Handle<Value> GetHostname(const Arguments& args) {
   HandleScope scope;
   char s[255];
+  int r = gethostname(s, 255);
 
-  if (gethostname(s, 255) < 0) {
-    return Undefined();
+  if (r < 0) {
+#ifdef __POSIX__
+    return ThrowException(ErrnoException(errno, "gethostname"));
+#else // __MINGW32__
+    return ThrowException(ErrnoException(WSAGetLastError(), "gethostname"));
+#endif // __MINGW32__
   }
 
   return scope.Close(String::New(s));
@@ -27,26 +40,43 @@ static Handle<Value> GetHostname(const Arguments& args) {
 
 static Handle<Value> GetOSType(const Arguments& args) {
   HandleScope scope;
-  char type[256];
-  static int which[] = {CTL_KERN, KERN_OSTYPE};
-  size_t size = sizeof(type);
 
-  if (sysctl(which, 2, &type, &size, NULL, 0) < 0) {
-    return Undefined();
-  }
+#ifdef __POSIX__
+  char type[256];
+  struct utsname info;
+
+  uname(&info);
+  strncpy(type, info.sysname, strlen(info.sysname));
+  type[strlen(info.sysname)] = 0;
 
   return scope.Close(String::New(type));
+#else // __MINGW32__
+  return scope.Close(String::New("Windows_NT"));
+#endif
 }
 
 static Handle<Value> GetOSRelease(const Arguments& args) {
   HandleScope scope;
   char release[256];
-  static int which[] = {CTL_KERN, KERN_OSRELEASE};
-  size_t size = sizeof(release);
 
-  if (sysctl(which, 2, &release, &size, NULL, 0) < 0) {
+#ifdef __POSIX__
+  struct utsname info;
+
+  uname(&info);
+  strncpy(release, info.release, strlen(info.release));
+  release[strlen(info.release)] = 0;
+
+#else // __MINGW32__
+  OSVERSIONINFO info;
+  info.dwOSVersionInfoSize = sizeof(info);
+
+  if (GetVersionEx(&info) == 0) {
     return Undefined();
   }
+
+  sprintf(release, "%d.%d.%d", static_cast<int>(info.dwMajorVersion),
+      static_cast<int>(info.dwMinorVersion), static_cast<int>(info.dwBuildNumber));
+#endif
 
   return scope.Close(String::New(release));
 }

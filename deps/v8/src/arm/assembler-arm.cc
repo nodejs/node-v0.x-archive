@@ -1656,8 +1656,14 @@ void Assembler::stop(const char* msg, Condition cond, int32_t code) {
   emit(reinterpret_cast<Instr>(msg));
 #else  // def __arm__
 #ifdef CAN_USE_ARMV5_INSTRUCTIONS
-  ASSERT(cond == al);
-  bkpt(0);
+  if (cond != al) {
+    Label skip;
+    b(&skip, NegateCondition(cond));
+    bkpt(0);
+    bind(&skip);
+  } else {
+    bkpt(0);
+  }
 #else  // ndef CAN_USE_ARMV5_INSTRUCTIONS
   svc(0x9f0001, cond);
 #endif  // ndef CAN_USE_ARMV5_INSTRUCTIONS
@@ -2337,12 +2343,11 @@ void Assembler::vdiv(const DwVfpRegister dst,
 
 void Assembler::vcmp(const DwVfpRegister src1,
                      const DwVfpRegister src2,
-                     const SBit s,
                      const Condition cond) {
   // vcmp(Dd, Dm) double precision floating point comparison.
   // Instruction details available in ARM DDI 0406A, A8-570.
   // cond(31-28) | 11101 (27-23)| D=?(22) | 11 (21-20) | 0100 (19-16) |
-  // Vd(15-12) | 101(11-9) | sz(8)=1 | E(7)=? | 1(6) | M(5)=? | 0(4) | Vm(3-0)
+  // Vd(15-12) | 101(11-9) | sz(8)=1 | E(7)=0 | 1(6) | M(5)=? | 0(4) | Vm(3-0)
   ASSERT(CpuFeatures::IsEnabled(VFP3));
   emit(cond | 0xE*B24 |B23 | 0x3*B20 | B18 |
        src1.code()*B12 | 0x5*B9 | B8 | B6 | src2.code());
@@ -2351,12 +2356,11 @@ void Assembler::vcmp(const DwVfpRegister src1,
 
 void Assembler::vcmp(const DwVfpRegister src1,
                      const double src2,
-                     const SBit s,
                      const Condition cond) {
   // vcmp(Dd, Dm) double precision floating point comparison.
   // Instruction details available in ARM DDI 0406A, A8-570.
   // cond(31-28) | 11101 (27-23)| D=?(22) | 11 (21-20) | 0101 (19-16) |
-  // Vd(15-12) | 101(11-9) | sz(8)=1 | E(7)=? | 1(6) | M(5)=? | 0(4) | 0000(3-0)
+  // Vd(15-12) | 101(11-9) | sz(8)=1 | E(7)=0 | 1(6) | M(5)=? | 0(4) | 0000(3-0)
   ASSERT(CpuFeatures::IsEnabled(VFP3));
   ASSERT(src2 == 0.0);
   emit(cond | 0xE*B24 |B23 | 0x3*B20 | B18 | B16 |
@@ -2497,6 +2501,10 @@ void Assembler::GrowBuffer() {
 
 
 void Assembler::db(uint8_t data) {
+  // No relocation info should be pending while using db. db is used
+  // to write pure data with no pointers and the constant pool should
+  // be emitted before using db.
+  ASSERT(num_prinfo_ == 0);
   CheckBuffer();
   *reinterpret_cast<uint8_t*>(pc_) = data;
   pc_ += sizeof(uint8_t);
@@ -2504,6 +2512,10 @@ void Assembler::db(uint8_t data) {
 
 
 void Assembler::dd(uint32_t data) {
+  // No relocation info should be pending while using dd. dd is used
+  // to write pure data with no pointers and the constant pool should
+  // be emitted before using dd.
+  ASSERT(num_prinfo_ == 0);
   CheckBuffer();
   *reinterpret_cast<uint32_t*>(pc_) = data;
   pc_ += sizeof(uint32_t);

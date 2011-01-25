@@ -31,6 +31,7 @@
 #include "arguments.h"
 #include "bootstrapper.h"
 #include "builtins.h"
+#include "gdb-jit.h"
 #include "ic-inl.h"
 #include "vm-state-inl.h"
 
@@ -380,7 +381,7 @@ static inline MaybeObject* EnsureJSArrayWithWritableFastElements(
     Object* receiver) {
   if (!receiver->IsJSArray()) return NULL;
   JSArray* array = JSArray::cast(receiver);
-  HeapObject* elms = HeapObject::cast(array->elements());
+  HeapObject* elms = array->elements();
   if (elms->map() == Heap::fixed_array_map()) return elms;
   if (elms->map() == Heap::fixed_cow_array_map()) {
     return array->EnsureWritableFastElements();
@@ -613,41 +614,42 @@ BUILTIN(ArraySlice) {
   Object* receiver = *args.receiver();
   FixedArray* elms;
   int len = -1;
-  { MaybeObject* maybe_elms_obj =
-        EnsureJSArrayWithWritableFastElements(receiver);
-    Object* elms_obj;
-    if (maybe_elms_obj != NULL && maybe_elms_obj->ToObject(&elms_obj)) {
-      if (!IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
+  if (receiver->IsJSArray()) {
+    JSArray* array = JSArray::cast(receiver);
+    if (!array->HasFastElements() ||
+        !IsJSArrayFastElementMovingAllowed(array)) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
+
+    elms = FixedArray::cast(array->elements());
+    len = Smi::cast(array->length())->value();
+  } else {
+    // Array.slice(arguments, ...) is quite a common idiom (notably more
+    // than 50% of invocations in Web apps).  Treat it in C++ as well.
+    Map* arguments_map =
+        Top::context()->global_context()->arguments_boilerplate()->map();
+
+    bool is_arguments_object_with_fast_elements =
+        receiver->IsJSObject()
+        && JSObject::cast(receiver)->map() == arguments_map
+        && JSObject::cast(receiver)->HasFastElements();
+    if (!is_arguments_object_with_fast_elements) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
+    elms = FixedArray::cast(JSObject::cast(receiver)->elements());
+    Object* len_obj = JSObject::cast(receiver)
+        ->InObjectPropertyAt(Heap::arguments_length_index);
+    if (!len_obj->IsSmi()) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
+    len = Smi::cast(len_obj)->value();
+    if (len > elms->length()) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
+    for (int i = 0; i < len; i++) {
+      if (elms->get(i) == Heap::the_hole_value()) {
         return CallJsBuiltin("ArraySlice", args);
       }
-      elms = FixedArray::cast(elms_obj);
-      JSArray* array = JSArray::cast(receiver);
-      ASSERT(array->HasFastElements());
-
-      len = Smi::cast(array->length())->value();
-    } else {
-      // Array.slice(arguments, ...) is quite a common idiom (notably more
-      // than 50% of invocations in Web apps).  Treat it in C++ as well.
-      Map* arguments_map =
-          Top::context()->global_context()->arguments_boilerplate()->map();
-
-      bool is_arguments_object_with_fast_elements =
-          receiver->IsJSObject()
-          && JSObject::cast(receiver)->map() == arguments_map
-          && JSObject::cast(receiver)->HasFastElements();
-      if (!is_arguments_object_with_fast_elements) {
-        return CallJsBuiltin("ArraySlice", args);
-      }
-      elms = FixedArray::cast(JSObject::cast(receiver)->elements());
-      len = elms->length();
-#ifdef DEBUG
-      // Arguments object by construction should have no holes, check it.
-      if (FLAG_enable_slow_asserts) {
-        for (int i = 0; i < len; i++) {
-          ASSERT(elms->get(i) != Heap::the_hole_value());
-        }
-      }
-#endif
     }
   }
   ASSERT(len >= 0);
@@ -1280,44 +1282,6 @@ static void Generate_KeyedLoadIC_String(MacroAssembler* masm) {
 }
 
 
-static void Generate_KeyedLoadIC_ExternalByteArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalByteArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalUnsignedByteArray(
-    MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalUnsignedByteArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalShortArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalShortArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalUnsignedShortArray(
-    MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalUnsignedShortArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalIntArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalIntArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalUnsignedIntArray(
-    MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalUnsignedIntArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalFloatArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalFloatArray);
-}
-
-
 static void Generate_KeyedLoadIC_PreMonomorphic(MacroAssembler* masm) {
   KeyedLoadIC::GeneratePreMonomorphic(masm);
 }
@@ -1359,44 +1323,6 @@ static void Generate_StoreIC_GlobalProxy(MacroAssembler* masm) {
 
 static void Generate_KeyedStoreIC_Generic(MacroAssembler* masm) {
   KeyedStoreIC::GenerateGeneric(masm);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalByteArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalByteArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalUnsignedByteArray(
-    MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalUnsignedByteArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalShortArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalShortArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalUnsignedShortArray(
-    MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalUnsignedShortArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalIntArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalIntArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalUnsignedIntArray(
-    MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalUnsignedIntArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalFloatArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalFloatArray);
 }
 
 
@@ -1549,7 +1475,7 @@ void Builtins::Setup(bool create_heap_objects) {
       CodeDesc desc;
       masm.GetCode(&desc);
       Code::Flags flags =  functions[i].flags;
-      Object* code = 0;
+      Object* code = NULL;
       {
         // During startup it's OK to always allocate and defer GC to later.
         // This simplifies things because we don't need to retry.
@@ -1563,7 +1489,11 @@ void Builtins::Setup(bool create_heap_objects) {
       }
       // Log the event and add the code to the builtins array.
       PROFILE(CodeCreateEvent(Logger::BUILTIN_TAG,
-                              Code::cast(code), functions[i].s_name));
+                              Code::cast(code),
+                              functions[i].s_name));
+      GDBJIT(AddCode(GDBJITInterface::BUILTIN,
+                     functions[i].s_name,
+                     Code::cast(code)));
       builtins_[i] = code;
 #ifdef ENABLE_DISASSEMBLER
       if (FLAG_print_builtin_code) {

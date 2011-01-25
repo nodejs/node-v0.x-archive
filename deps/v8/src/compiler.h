@@ -114,7 +114,7 @@ class CompilationInfo BASE_EMBEDDED {
     SetMode(OPTIMIZE);
     osr_ast_id_ = osr_ast_id;
   }
-  void DisableOptimization() { SetMode(NONOPT); }
+  void DisableOptimization();
 
   // Deoptimization support.
   bool HasDeoptimizationSupport() const { return supports_deoptimization_; }
@@ -125,9 +125,7 @@ class CompilationInfo BASE_EMBEDDED {
 
   // Determine whether or not we can adaptively optimize.
   bool AllowOptimize() {
-    return V8::UseCrankshaft() &&
-           !closure_.is_null() &&
-           function_->AllowOptimize();
+    return V8::UseCrankshaft() && !closure_.is_null();
   }
 
  private:
@@ -211,9 +209,13 @@ class CompilationInfo BASE_EMBEDDED {
 
 class Compiler : public AllStatic {
  public:
-  // All routines return a JSFunction.
-  // If an error occurs an exception is raised and
-  // the return handle contains NULL.
+  // Default maximum number of function optimization attempts before we
+  // give up.
+  static const int kDefaultMaxOptCount = 10;
+
+  // All routines return a SharedFunctionInfo.
+  // If an error occurs an exception is raised and the return handle
+  // contains NULL.
 
   // Compile a String source within a context.
   static Handle<SharedFunctionInfo> Compile(Handle<String> source,

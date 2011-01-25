@@ -242,6 +242,12 @@ void OS::DebugBreak() {
 }
 
 
+OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
+  UNIMPLEMENTED();
+  return NULL;
+}
+
+
 OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
     void* initial) {
   UNIMPLEMENTED();
@@ -335,12 +341,25 @@ bool ThreadHandle::IsValid() const {
 
 
 Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
+  set_name("v8:<unknown>");
+  UNIMPLEMENTED();
+}
+
+
+Thread::Thread(const char* name) : ThreadHandle(ThreadHandle::INVALID) {
+  set_name(name);
   UNIMPLEMENTED();
 }
 
 
 Thread::~Thread() {
   UNIMPLEMENTED();
+}
+
+
+void Thread::set_name(const char* name) {
+  strncpy(name_, name, sizeof(name_));
+  name_[sizeof(name_) - 1] = '\0';
 }
 
 

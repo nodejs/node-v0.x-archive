@@ -1208,6 +1208,7 @@ class Property: public Expression {
         is_monomorphic_(false),
         receiver_types_(NULL),
         is_array_length_(false),
+        is_function_prototype_(false),
         is_arguments_access_(false) { }
 
   DECLARE_NODE_TYPE(Property)
@@ -1219,6 +1220,8 @@ class Property: public Expression {
   Expression* key() const { return key_; }
   int position() const { return pos_; }
   bool is_synthetic() const { return type_ == SYNTHETIC; }
+
+  bool IsFunctionPrototype() const { return is_function_prototype_; }
 
   // Marks that this is actually an argument rewritten to a keyed property
   // accessing the argument through the arguments shadow object.
@@ -1249,6 +1252,7 @@ class Property: public Expression {
   bool is_monomorphic_;
   ZoneMapList* receiver_types_;
   bool is_array_length_;
+  bool is_function_prototype_;
   bool is_arguments_access_;
   Handle<Map> monomorphic_receiver_type_;
 
@@ -1264,6 +1268,7 @@ class Call: public Expression {
         arguments_(arguments),
         pos_(pos),
         is_monomorphic_(false),
+        check_type_(RECEIVER_MAP_CHECK),
         receiver_types_(NULL),
         return_id_(GetNextId()) {
   }
@@ -1279,6 +1284,7 @@ class Call: public Expression {
   void RecordTypeFeedback(TypeFeedbackOracle* oracle);
   virtual ZoneMapList* GetReceiverTypes() { return receiver_types_; }
   virtual bool IsMonomorphic() { return is_monomorphic_; }
+  CheckType check_type() const { return check_type_; }
   Handle<JSFunction> target() { return target_; }
   Handle<JSObject> holder() { return holder_; }
   Handle<JSGlobalPropertyCell> cell() { return cell_; }
@@ -1302,6 +1308,7 @@ class Call: public Expression {
   int pos_;
 
   bool is_monomorphic_;
+  CheckType check_type_;
   ZoneMapList* receiver_types_;
   Handle<JSFunction> target_;
   Handle<JSObject> holder_;
@@ -1391,7 +1398,7 @@ class BinaryOperation: public Expression {
       : op_(op), left_(left), right_(right), pos_(pos), is_smi_only_(false) {
     ASSERT(Token::IsBinaryOp(op));
     right_id_ = (op == Token::AND || op == Token::OR)
-        ? GetNextId()
+        ? static_cast<int>(GetNextId())
         : AstNode::kNoNumber;
   }
 
@@ -1668,7 +1675,8 @@ class FunctionLiteral: public Expression {
                   int start_position,
                   int end_position,
                   bool is_expression,
-                  bool contains_loops)
+                  bool contains_loops,
+                  bool strict_mode)
       : name_(name),
         scope_(scope),
         body_(body),
@@ -1682,6 +1690,7 @@ class FunctionLiteral: public Expression {
         end_position_(end_position),
         is_expression_(is_expression),
         contains_loops_(contains_loops),
+        strict_mode_(strict_mode),
         function_token_position_(RelocInfo::kNoPosition),
         inferred_name_(Heap::empty_string()),
         try_full_codegen_(false),
@@ -1698,6 +1707,7 @@ class FunctionLiteral: public Expression {
   int end_position() const { return end_position_; }
   bool is_expression() const { return is_expression_; }
   bool contains_loops() const { return contains_loops_; }
+  bool strict_mode() const { return strict_mode_; }
 
   int materialized_literal_count() { return materialized_literal_count_; }
   int expected_property_count() { return expected_property_count_; }
@@ -1710,7 +1720,6 @@ class FunctionLiteral: public Expression {
   int num_parameters() { return num_parameters_; }
 
   bool AllowsLazyCompilation();
-  bool AllowOptimize();
 
   Handle<String> debug_name() const {
     if (name_->length() > 0) return name_;
@@ -1741,6 +1750,7 @@ class FunctionLiteral: public Expression {
   int end_position_;
   bool is_expression_;
   bool contains_loops_;
+  bool strict_mode_;
   int function_token_position_;
   Handle<String> inferred_name_;
   bool try_full_codegen_;

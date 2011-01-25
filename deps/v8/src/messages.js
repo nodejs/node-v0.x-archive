@@ -90,15 +90,28 @@ function FormatString(format, args) {
 }
 
 
+// When formatting internally created error messages, do not
+// invoke overwritten error toString methods but explicitly use
+// the error to string method. This is to avoid leaking error
+// objects between script tags in a browser setting.
+function ToStringCheckErrorObject(obj) {
+  if (obj instanceof $Error) {
+    return %_CallFunction(obj, errorToString);
+  } else {
+    return ToString(obj);
+  }
+}
+
+
 function ToDetailString(obj) {
   if (obj != null && IS_OBJECT(obj) && obj.toString === $Object.prototype.toString) {
     var constructor = obj.constructor;
-    if (!constructor) return ToString(obj);
+    if (!constructor) return ToStringCheckErrorObject(obj);
     var constructorName = constructor.name;
-    if (!constructorName) return ToString(obj);
+    if (!constructorName) return ToStringCheckErrorObject(obj);
     return "#<" + GetInstanceName(constructorName) + ">";
   } else {
-    return ToString(obj);
+    return ToStringCheckErrorObject(obj);
   }
 }
 
@@ -196,7 +209,13 @@ function FormatMessage(message) {
       array_indexof_not_defined:    "Array.getIndexOf: Argument undefined",
       object_not_extensible:        "Can't add property %0, object is not extensible",
       illegal_access:               "Illegal access",
-      invalid_preparser_data:       "Invalid preparser data for function %0"
+      invalid_preparser_data:       "Invalid preparser data for function %0",
+      strict_mode_with:             "Strict mode code may not include a with statement",
+      strict_catch_variable:        "Catch variable may not be eval or arguments in strict mode",
+      strict_param_name:            "Parameter name eval or arguments is not allowed in strict mode",
+      strict_param_dupe:            "Strict mode function may not have duplicate parameter names",
+      strict_var_name:              "Variable name may not be eval or arguments in strict mode",
+      strict_function_name:         "Function name may not be eval or arguments in strict mode",
     };
   }
   var format = kMessages[message.type];
@@ -943,15 +962,28 @@ function DefineError(f) {
   }
   %FunctionSetInstanceClassName(f, 'Error');
   %SetProperty(f.prototype, 'constructor', f, DONT_ENUM);
-  f.prototype.name = name;
+  // The name property on the prototype of error objects is not
+  // specified as being read-one and dont-delete. However, allowing
+  // overwriting allows leaks of error objects between script blocks
+  // in the same context in a browser setting. Therefore we fix the
+  // name.
+  %SetProperty(f.prototype, "name", name, READ_ONLY | DONT_DELETE);
   %SetCode(f, function(m) {
     if (%_IsConstructCall()) {
+      // Define all the expected properties directly on the error
+      // object. This avoids going through getters and setters defined
+      // on prototype objects.
+      %IgnoreAttributesAndSetProperty(this, 'stack', void 0);
+      %IgnoreAttributesAndSetProperty(this, 'arguments', void 0);
+      %IgnoreAttributesAndSetProperty(this, 'type', void 0);
       if (m === kAddMessageAccessorsMarker) {
+        // DefineOneShotAccessor always inserts a message property and
+        // ignores setters.
         DefineOneShotAccessor(this, 'message', function (obj) {
           return FormatMessage({type: obj.type, args: obj.arguments});
         });
       } else if (!IS_UNDEFINED(m)) {
-        this.message = ToString(m);
+        %IgnoreAttributesAndSetProperty(this, 'message', ToString(m));
       }
       captureStackTrace(this, f);
     } else {
@@ -987,15 +1019,43 @@ $Error.captureStackTrace = captureStackTrace;
 // Setup extra properties of the Error.prototype object.
 $Error.prototype.message = '';
 
-%SetProperty($Error.prototype, 'toString', function toString() {
-  var type = this.type;
-  if (type && !this.hasOwnProperty("message")) {
-    return this.name + ": " + FormatMessage({ type: type, args: this.arguments });
-  }
-  var message = this.message;
-  return this.name + (message ? (": " + message) : "");
-}, DONT_ENUM);
+// Global list of error objects visited during errorToString. This is
+// used to detect cycles in error toString formatting.
+var visited_errors = new $Array();
+var cyclic_error_marker = new $Object();
 
+function errorToStringDetectCycle() {
+  if (!%PushIfAbsent(visited_errors, this)) throw cyclic_error_marker;
+  try {
+    var type = this.type;
+    if (type && !this.hasOwnProperty("message")) {
+      var formatted = FormatMessage({ type: type, args: this.arguments });
+      return this.name + ": " + formatted;
+    }
+    var message = this.hasOwnProperty("message") ? (": " + this.message) : "";
+    return this.name + message;
+  } finally {
+    visited_errors.pop();
+  }
+}
+
+function errorToString() {
+  // This helper function is needed because access to properties on
+  // the builtins object do not work inside of a catch clause.
+  function isCyclicErrorMarker(o) { return o === cyclic_error_marker; }
+
+  try {
+    return %_CallFunction(this, errorToStringDetectCycle);
+  } catch(e) {
+    // If this error message was encountered already return the empty
+    // string for it instead of recursively formatting it.
+    if (isCyclicErrorMarker(e)) return '';
+    else throw e;
+  }
+}
+
+%FunctionSetName(errorToString, 'toString');
+%SetProperty($Error.prototype, 'toString', errorToString, DONT_ENUM);
 
 // Boilerplate for exceptions for stack overflows. Used from
 // Top::StackOverflow().

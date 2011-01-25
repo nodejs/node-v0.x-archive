@@ -167,6 +167,10 @@ class StubCache : public AllStatic {
   MUST_USE_RESULT static MaybeObject* ComputeKeyedStoreSpecialized(
       JSObject* receiver);
 
+  MUST_USE_RESULT static MaybeObject* ComputeKeyedLoadOrStoreExternalArray(
+      JSObject* receiver,
+      bool is_store);
+
   // ---
 
   MUST_USE_RESULT static MaybeObject* ComputeCallField(int argc,
@@ -177,13 +181,15 @@ class StubCache : public AllStatic {
                                                        JSObject* holder,
                                                        int index);
 
-  MUST_USE_RESULT static MaybeObject* ComputeCallConstant(int argc,
-                                                          InLoopFlag in_loop,
-                                                          Code::Kind,
-                                                          String* name,
-                                                          Object* object,
-                                                          JSObject* holder,
-                                                          JSFunction* function);
+  MUST_USE_RESULT static MaybeObject* ComputeCallConstant(
+      int argc,
+      InLoopFlag in_loop,
+      Code::Kind,
+      Code::ExtraICState extra_ic_state,
+      String* name,
+      Object* object,
+      JSObject* holder,
+      JSFunction* function);
 
   MUST_USE_RESULT static MaybeObject* ComputeCallNormal(int argc,
                                                         InLoopFlag in_loop,
@@ -660,6 +666,7 @@ class CallStubCompiler: public StubCompiler {
   CallStubCompiler(int argc,
                    InLoopFlag in_loop,
                    Code::Kind kind,
+                   Code::ExtraICState extra_ic_state,
                    InlineCacheHolderFlag cache_holder);
 
   MUST_USE_RESULT MaybeObject* CompileCallField(JSObject* object,
@@ -705,6 +712,7 @@ class CallStubCompiler: public StubCompiler {
   const ParameterCount arguments_;
   const InLoopFlag in_loop_;
   const Code::Kind kind_;
+  const Code::ExtraICState extra_ic_state_;
   const InlineCacheHolderFlag cache_holder_;
 
   const ParameterCount& arguments() { return arguments_; }
@@ -791,6 +799,20 @@ class CallOptimization BASE_EMBEDDED {
   bool is_simple_api_call_;
   FunctionTemplateInfo* expected_receiver_type_;
   CallHandlerInfo* api_call_info_;
+};
+
+class ExternalArrayStubCompiler: public StubCompiler {
+ public:
+  explicit ExternalArrayStubCompiler() {}
+
+  MUST_USE_RESULT MaybeObject* CompileKeyedLoadStub(
+      ExternalArrayType array_type, Code::Flags flags);
+
+  MUST_USE_RESULT MaybeObject* CompileKeyedStoreStub(
+      ExternalArrayType array_type, Code::Flags flags);
+
+ private:
+  MaybeObject* GetCode(Code::Flags flags);
 };
 
 } }  // namespace v8::internal

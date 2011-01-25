@@ -30,6 +30,7 @@
 
 #include "v8.h"
 
+#include "data-flow.h"
 #include "zone.h"
 
 namespace v8 {
@@ -47,9 +48,10 @@ class StringStream;
 
 class LArgument;
 class LChunk;
+class LOperand;
+class LUnallocated;
 class LConstantOperand;
 class LGap;
-class LInstruction;
 class LParallelMove;
 class LPointerMap;
 class LStackSlot;
@@ -149,340 +151,16 @@ enum RegisterKind {
 };
 
 
-class LOperand: public ZoneObject {
- public:
-  enum Kind {
-    INVALID,
-    UNALLOCATED,
-    CONSTANT_OPERAND,
-    STACK_SLOT,
-    DOUBLE_STACK_SLOT,
-    REGISTER,
-    DOUBLE_REGISTER,
-    ARGUMENT
-  };
-
-  LOperand() : value_(KindField::encode(INVALID)) { }
-
-  Kind kind() const { return KindField::decode(value_); }
-  int index() const { return static_cast<int>(value_) >> kKindFieldWidth; }
-  bool IsConstantOperand() const { return kind() == CONSTANT_OPERAND; }
-  bool IsStackSlot() const { return kind() == STACK_SLOT; }
-  bool IsDoubleStackSlot() const { return kind() == DOUBLE_STACK_SLOT; }
-  bool IsRegister() const { return kind() == REGISTER; }
-  bool IsDoubleRegister() const { return kind() == DOUBLE_REGISTER; }
-  bool IsArgument() const { return kind() == ARGUMENT; }
-  bool IsUnallocated() const { return kind() == UNALLOCATED; }
-  bool Equals(LOperand* other) const { return value_ == other->value_; }
-  int VirtualRegister();
-
-  void PrintTo(StringStream* stream);
-  void ConvertTo(Kind kind, int index) {
-    value_ = KindField::encode(kind);
-    value_ |= index << kKindFieldWidth;
-    ASSERT(this->index() == index);
-  }
-
- protected:
-  static const int kKindFieldWidth = 3;
-  class KindField : public BitField<Kind, 0, kKindFieldWidth> { };
-
-  LOperand(Kind kind, int index) { ConvertTo(kind, index); }
-
-  unsigned value_;
-};
-
-
-class LUnallocated: public LOperand {
- public:
-  enum Policy {
-    NONE,
-    ANY,
-    FIXED_REGISTER,
-    FIXED_DOUBLE_REGISTER,
-    FIXED_SLOT,
-    MUST_HAVE_REGISTER,
-    WRITABLE_REGISTER,
-    SAME_AS_FIRST_INPUT,
-    SAME_AS_ANY_INPUT,
-    IGNORE
-  };
-
-  // Lifetime of operand inside the instruction.
-  enum Lifetime {
-    // USED_AT_START operand is guaranteed to be live only at
-    // instruction start. Register allocator is free to assign the same register
-    // to some other operand used inside instruction (i.e. temporary or
-    // output).
-    USED_AT_START,
-
-    // USED_AT_END operand is treated as live until the end of
-    // instruction. This means that register allocator will not reuse it's
-    // register for any other operand inside instruction.
-    USED_AT_END
-  };
-
-  explicit LUnallocated(Policy policy) : LOperand(UNALLOCATED, 0) {
-    Initialize(policy, 0, USED_AT_END);
-  }
-
-  LUnallocated(Policy policy, int fixed_index) : LOperand(UNALLOCATED, 0) {
-    Initialize(policy, fixed_index, USED_AT_END);
-  }
-
-  LUnallocated(Policy policy, Lifetime lifetime) : LOperand(UNALLOCATED, 0) {
-    Initialize(policy, 0, lifetime);
-  }
-
-  // The superclass has a KindField.  Some policies have a signed fixed
-  // index in the upper bits.
-  static const int kPolicyWidth = 4;
-  static const int kLifetimeWidth = 1;
-  static const int kVirtualRegisterWidth = 17;
-
-  static const int kPolicyShift = kKindFieldWidth;
-  static const int kLifetimeShift = kPolicyShift + kPolicyWidth;
-  static const int kVirtualRegisterShift = kLifetimeShift + kLifetimeWidth;
-  static const int kFixedIndexShift =
-      kVirtualRegisterShift + kVirtualRegisterWidth;
-
-  class PolicyField : public BitField<Policy, kPolicyShift, kPolicyWidth> { };
-
-  class LifetimeField
-      : public BitField<Lifetime, kLifetimeShift, kLifetimeWidth> {
-  };
-
-  class VirtualRegisterField
-      : public BitField<unsigned,
-                        kVirtualRegisterShift,
-                        kVirtualRegisterWidth> {
-  };
-
-  static const int kMaxVirtualRegisters = 1 << (kVirtualRegisterWidth + 1);
-  static const int kMaxFixedIndices = 128;
-
-  bool HasIgnorePolicy() const { return policy() == IGNORE; }
-  bool HasNoPolicy() const { return policy() == NONE; }
-  bool HasAnyPolicy() const {
-    return policy() == ANY;
-  }
-  bool HasFixedPolicy() const {
-    return policy() == FIXED_REGISTER ||
-        policy() == FIXED_DOUBLE_REGISTER ||
-        policy() == FIXED_SLOT;
-  }
-  bool HasRegisterPolicy() const {
-    return policy() == WRITABLE_REGISTER || policy() == MUST_HAVE_REGISTER;
-  }
-  bool HasSameAsInputPolicy() const {
-    return policy() == SAME_AS_FIRST_INPUT || policy() == SAME_AS_ANY_INPUT;
-  }
-  Policy policy() const { return PolicyField::decode(value_); }
-  void set_policy(Policy policy) {
-    value_ &= ~PolicyField::mask();
-    value_ |= PolicyField::encode(policy);
-  }
-  int fixed_index() const {
-    return static_cast<int>(value_) >> kFixedIndexShift;
-  }
-
-  unsigned virtual_register() const {
-    return VirtualRegisterField::decode(value_);
-  }
-
-  void set_virtual_register(unsigned id) {
-    value_ &= ~VirtualRegisterField::mask();
-    value_ |= VirtualRegisterField::encode(id);
-  }
-
-  LUnallocated* CopyUnconstrained() {
-    LUnallocated* result = new LUnallocated(ANY);
-    result->set_virtual_register(virtual_register());
-    return result;
-  }
-
-  static LUnallocated* cast(LOperand* op) {
-    ASSERT(op->IsUnallocated());
-    return reinterpret_cast<LUnallocated*>(op);
-  }
-
-  bool IsUsedAtStart() {
-    return LifetimeField::decode(value_) == USED_AT_START;
-  }
-
- private:
-  void Initialize(Policy policy, int fixed_index, Lifetime lifetime) {
-    value_ |= PolicyField::encode(policy);
-    value_ |= LifetimeField::encode(lifetime);
-    value_ |= fixed_index << kFixedIndexShift;
-    ASSERT(this->fixed_index() == fixed_index);
-  }
-};
-
-
-class LMoveOperands BASE_EMBEDDED {
- public:
-  LMoveOperands(LOperand* from, LOperand* to) : from_(from), to_(to) { }
-
-  LOperand* from() const { return from_; }
-  LOperand* to() const { return to_; }
-  bool IsRedundant() const {
-    return IsEliminated() || from_->Equals(to_) || IsIgnored();
-  }
-  bool IsEliminated() const { return from_ == NULL; }
-  bool IsIgnored() const {
-    if (to_ != NULL && to_->IsUnallocated() &&
-      LUnallocated::cast(to_)->HasIgnorePolicy()) {
-      return true;
-    }
-    return false;
-  }
-
-  void Eliminate() { from_ = to_ = NULL; }
-
- private:
-  LOperand* from_;
-  LOperand* to_;
-};
-
-
-class LConstantOperand: public LOperand {
- public:
-  static LConstantOperand* Create(int index) {
-    ASSERT(index >= 0);
-    if (index < kNumCachedOperands) return &cache[index];
-    return new LConstantOperand(index);
-  }
-
-  static LConstantOperand* cast(LOperand* op) {
-    ASSERT(op->IsConstantOperand());
-    return reinterpret_cast<LConstantOperand*>(op);
-  }
-
-  static void SetupCache();
-
- private:
-  static const int kNumCachedOperands = 128;
-  static LConstantOperand cache[];
-
-  LConstantOperand() : LOperand() { }
-  explicit LConstantOperand(int index) : LOperand(CONSTANT_OPERAND, index) { }
-};
-
-
-class LArgument: public LOperand {
- public:
-  explicit LArgument(int index) : LOperand(ARGUMENT, index) { }
-
-  static LArgument* cast(LOperand* op) {
-    ASSERT(op->IsArgument());
-    return reinterpret_cast<LArgument*>(op);
-  }
-};
-
-
-class LStackSlot: public LOperand {
- public:
-  static LStackSlot* Create(int index) {
-    ASSERT(index >= 0);
-    if (index < kNumCachedOperands) return &cache[index];
-    return new LStackSlot(index);
-  }
-
-  static LStackSlot* cast(LOperand* op) {
-    ASSERT(op->IsStackSlot());
-    return reinterpret_cast<LStackSlot*>(op);
-  }
-
-  static void SetupCache();
-
- private:
-  static const int kNumCachedOperands = 128;
-  static LStackSlot cache[];
-
-  LStackSlot() : LOperand() { }
-  explicit LStackSlot(int index) : LOperand(STACK_SLOT, index) { }
-};
-
-
-class LDoubleStackSlot: public LOperand {
- public:
-  static LDoubleStackSlot* Create(int index) {
-    ASSERT(index >= 0);
-    if (index < kNumCachedOperands) return &cache[index];
-    return new LDoubleStackSlot(index);
-  }
-
-  static LDoubleStackSlot* cast(LOperand* op) {
-    ASSERT(op->IsStackSlot());
-    return reinterpret_cast<LDoubleStackSlot*>(op);
-  }
-
-  static void SetupCache();
-
- private:
-  static const int kNumCachedOperands = 128;
-  static LDoubleStackSlot cache[];
-
-  LDoubleStackSlot() : LOperand() { }
-  explicit LDoubleStackSlot(int index) : LOperand(DOUBLE_STACK_SLOT, index) { }
-};
-
-
-class LRegister: public LOperand {
- public:
-  static LRegister* Create(int index) {
-    ASSERT(index >= 0);
-    if (index < kNumCachedOperands) return &cache[index];
-    return new LRegister(index);
-  }
-
-  static LRegister* cast(LOperand* op) {
-    ASSERT(op->IsRegister());
-    return reinterpret_cast<LRegister*>(op);
-  }
-
-  static void SetupCache();
-
- private:
-  static const int kNumCachedOperands = 16;
-  static LRegister cache[];
-
-  LRegister() : LOperand() { }
-  explicit LRegister(int index) : LOperand(REGISTER, index) { }
-};
-
-
-class LDoubleRegister: public LOperand {
- public:
-  static LDoubleRegister* Create(int index) {
-    ASSERT(index >= 0);
-    if (index < kNumCachedOperands) return &cache[index];
-    return new LDoubleRegister(index);
-  }
-
-  static LDoubleRegister* cast(LOperand* op) {
-    ASSERT(op->IsDoubleRegister());
-    return reinterpret_cast<LDoubleRegister*>(op);
-  }
-
-  static void SetupCache();
-
- private:
-  static const int kNumCachedOperands = 16;
-  static LDoubleRegister cache[];
-
-  LDoubleRegister() : LOperand() { }
-  explicit LDoubleRegister(int index) : LOperand(DOUBLE_REGISTER, index) { }
-};
-
-
 // A register-allocator view of a Lithium instruction. It contains the id of
 // the output operand and a list of input operand uses.
 class InstructionSummary: public ZoneObject {
  public:
   InstructionSummary()
-      : output_operand_(NULL), input_count_(0), operands_(4), is_call_(false) {}
+      : output_operand_(NULL),
+        input_count_(0),
+        operands_(4),
+        is_call_(false),
+        is_save_doubles_(false) {}
 
   // Output operands.
   LOperand* Output() const { return output_operand_; }
@@ -510,11 +188,15 @@ class InstructionSummary: public ZoneObject {
   void MarkAsCall() { is_call_ = true; }
   bool IsCall() const { return is_call_; }
 
+  void MarkAsSaveDoubles() { is_save_doubles_ = true; }
+  bool IsSaveDoubles() const { return is_save_doubles_; }
+
  private:
   LOperand* output_operand_;
   int input_count_;
   ZoneList<LOperand*> operands_;
   bool is_call_;
+  bool is_save_doubles_;
 };
 
 // Representation of the non-empty interval [start,end[.
@@ -559,27 +241,14 @@ class UseInterval: public ZoneObject {
 // Representation of a use position.
 class UsePosition: public ZoneObject {
  public:
-  UsePosition(LifetimePosition pos, LOperand* operand)
-      : operand_(operand),
-        hint_(NULL),
-        pos_(pos),
-        next_(NULL),
-        requires_reg_(false),
-        register_beneficial_(true) {
-    if (operand_ != NULL && operand_->IsUnallocated()) {
-      LUnallocated* unalloc = LUnallocated::cast(operand_);
-      requires_reg_ = unalloc->HasRegisterPolicy();
-      register_beneficial_ = !unalloc->HasAnyPolicy();
-    }
-    ASSERT(pos_.IsValid());
-  }
+  UsePosition(LifetimePosition pos, LOperand* operand);
 
   LOperand* operand() const { return operand_; }
   bool HasOperand() const { return operand_ != NULL; }
 
   LOperand* hint() const { return hint_; }
   void set_hint(LOperand* hint) { hint_ = hint; }
-  bool HasHint() const { return hint_ != NULL && !hint_->IsUnallocated(); }
+  bool HasHint() const;
   bool RequiresRegister() const;
   bool RegisterIsBeneficial() const;
 
@@ -605,21 +274,7 @@ class LiveRange: public ZoneObject {
  public:
   static const int kInvalidAssignment = 0x7fffffff;
 
-  explicit LiveRange(int id)
-      : id_(id),
-        spilled_(false),
-        assigned_register_(kInvalidAssignment),
-        assigned_register_kind_(NONE),
-        last_interval_(NULL),
-        first_interval_(NULL),
-        first_pos_(NULL),
-        parent_(NULL),
-        next_(NULL),
-        current_interval_(NULL),
-        last_processed_use_(NULL),
-        spill_start_index_(kMaxInt) {
-    spill_operand_ = new LUnallocated(LUnallocated::IGNORE);
-  }
+  explicit LiveRange(int id);
 
   UseInterval* first_interval() const { return first_interval_; }
   UsePosition* first_pos() const { return first_pos_; }
@@ -634,19 +289,8 @@ class LiveRange: public ZoneObject {
   LOperand* CreateAssignedOperand();
   int assigned_register() const { return assigned_register_; }
   int spill_start_index() const { return spill_start_index_; }
-  void set_assigned_register(int reg, RegisterKind register_kind) {
-    ASSERT(!HasRegisterAssigned() && !IsSpilled());
-    assigned_register_ = reg;
-    assigned_register_kind_ = register_kind;
-    ConvertOperands();
-  }
-  void MakeSpilled() {
-    ASSERT(!IsSpilled());
-    ASSERT(TopLevel()->HasAllocatedSpillOperand());
-    spilled_ = true;
-    assigned_register_ = kInvalidAssignment;
-    ConvertOperands();
-  }
+  void set_assigned_register(int reg, RegisterKind register_kind);
+  void MakeSpilled();
 
   // Returns use position in this live range that follows both start
   // and last processed use position.
@@ -695,16 +339,9 @@ class LiveRange: public ZoneObject {
     return last_interval_->end();
   }
 
-  bool HasAllocatedSpillOperand() const {
-    return spill_operand_ != NULL && !spill_operand_->IsUnallocated();
-  }
+  bool HasAllocatedSpillOperand() const;
   LOperand* GetSpillOperand() const { return spill_operand_; }
-  void SetSpillOperand(LOperand* operand) {
-    ASSERT(!operand->IsUnallocated());
-    ASSERT(spill_operand_ != NULL);
-    ASSERT(spill_operand_->IsUnallocated());
-    spill_operand_->ConvertTo(operand->kind(), operand->index());
-  }
+  void SetSpillOperand(LOperand* operand);
 
   void SetSpillStartIndex(int start) {
     spill_start_index_ = Min(start, spill_start_index_);
@@ -714,7 +351,6 @@ class LiveRange: public ZoneObject {
   bool CanCover(LifetimePosition position) const;
   bool Covers(LifetimePosition position);
   LifetimePosition FirstIntersection(LiveRange* other);
-
 
   // Add a new interval or a new use position to this live range.
   void EnsureInterval(LifetimePosition start, LifetimePosition end);
@@ -754,6 +390,40 @@ class LiveRange: public ZoneObject {
 };
 
 
+class GrowableBitVector BASE_EMBEDDED {
+ public:
+  GrowableBitVector() : bits_(NULL) { }
+
+  bool Contains(int value) const {
+    if (!InBitsRange(value)) return false;
+    return bits_->Contains(value);
+  }
+
+  void Add(int value) {
+    EnsureCapacity(value);
+    bits_->Add(value);
+  }
+
+ private:
+  static const int kInitialLength = 1024;
+
+  bool InBitsRange(int value) const {
+    return bits_ != NULL && bits_->length() > value;
+  }
+
+  void EnsureCapacity(int value) {
+    if (InBitsRange(value)) return;
+    int new_length = bits_ == NULL ? kInitialLength : bits_->length();
+    while (new_length <= value) new_length *= 2;
+    BitVector* new_bits = new BitVector(new_length);
+    if (bits_ != NULL) new_bits->CopyFrom(*bits_);
+    bits_ = new_bits;
+  }
+
+  BitVector* bits_;
+};
+
+
 class LAllocator BASE_EMBEDDED {
  public:
   explicit LAllocator(int first_virtual_register, HGraph* graph)
@@ -770,6 +440,7 @@ class LAllocator BASE_EMBEDDED {
         inactive_live_ranges_(8),
         reusable_slots_(8),
         next_virtual_register_(first_virtual_register),
+        first_artificial_register_(first_virtual_register),
         mode_(NONE),
         num_registers_(-1),
         graph_(graph),
@@ -788,6 +459,9 @@ class LAllocator BASE_EMBEDDED {
 
   // Marks the current instruction as a call.
   void MarkAsCall();
+
+  // Marks the current instruction as requiring saving double registers.
+  void MarkAsSaveDoubles();
 
   // Checks whether the value of a given virtual register is tagged.
   bool HasTaggedValue(int virtual_register) const;
@@ -917,7 +591,6 @@ class LAllocator BASE_EMBEDDED {
 
   void Spill(LiveRange* range);
   bool IsBlockBoundary(LifetimePosition pos);
-  void AddGapMove(int pos, LiveRange* prev, LiveRange* next);
 
   // Helper methods for resolving control flow.
   void ResolveControlFlow(LiveRange* range,
@@ -972,6 +645,8 @@ class LAllocator BASE_EMBEDDED {
 
   // Next virtual register number to be assigned to temporaries.
   int next_virtual_register_;
+  int first_artificial_register_;
+  GrowableBitVector double_artificial_registers_;
 
   RegisterKind mode_;
   int num_registers_;

@@ -27,6 +27,8 @@
 
 #include "v8.h"
 
+#if defined(V8_TARGET_ARCH_X64)
+
 #include "codegen.h"
 #include "deoptimizer.h"
 #include "full-codegen.h"
@@ -39,7 +41,8 @@ namespace internal {
 int Deoptimizer::table_entry_size_ = 10;
 
 void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
-  UNIMPLEMENTED();
+  // UNIMPLEMENTED, for now just return.
+  return;
 }
 
 
@@ -66,7 +69,8 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
 
 
 void Deoptimizer::EntryGenerator::Generate() {
-  UNIMPLEMENTED();
+  // UNIMPLEMENTED, for now just return.
+  return;
 }
 
 
@@ -75,3 +79,5 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
 }
 
 } }  // namespace v8::internal
+
+#endif  // V8_TARGET_ARCH_X64

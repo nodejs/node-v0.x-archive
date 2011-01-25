@@ -42,9 +42,11 @@
 #ifdef EIO_STACKSIZE
 # define XTHREAD_STACKSIZE EIO_STACKSIZE
 #endif
-#ifdef _WIN32
-# define PTW32_STATIC_LIB 1
-#endif
+
+// For statically-linked pthreads-w32, use:
+// #ifdef _WIN32
+// # define PTW32_STATIC_LIB 1
+// #endif
 #include "xthread.h"
 
 #include <errno.h>
@@ -102,7 +104,7 @@
 # include <signal.h>
 # include <dirent.h>
 
-#if _POSIX_MEMLOCK || _POSIX_MAPPED_FILES
+#if _POSIX_MEMLOCK || _POSIX_MEMLOCK_RANGE || _POSIX_MAPPED_FILES
 # include <sys/mman.h>
 #endif
 
@@ -843,12 +845,10 @@ eio__pwrite (int fd, void *buf, size_t count, off_t offset)
 }
 #endif
 
-#ifndef HAVE_FUTIMES
+#ifndef HAVE_UTIMES
 
 # undef utimes
-# undef futimes
-# define utimes(path,times)  eio__utimes  (path, times)
-# define futimes(fd,times)   eio__futimes (fd, times)
+# define utimes(path,times)  eio__utimes (path, times)
 
 static int
 eio__utimes (const char *filename, const struct timeval times[2])
@@ -866,6 +866,13 @@ eio__utimes (const char *filename, const struct timeval times[2])
     return utime (filename, 0);
 }
 
+#endif
+
+#ifndef HAVE_FUTIMES
+
+# undef futimes
+# define futimes(fd,times) eio__futimes (fd, times)
+
 static int eio__futimes (int fd, const struct timeval tv[2])
 {
   errno = ENOSYS;
@@ -881,6 +888,14 @@ static int eio__futimes (int fd, const struct timeval tv[2])
 #if !HAVE_FDATASYNC
 # undef fdatasync
 # define fdatasync(fd) fsync (fd)
+#endif
+
+// Use unicode and big file aware stat on windows
+#ifdef _WIN32
+# undef stat
+# undef fstat
+# define stat  _stati64
+# define fstat _fstati64
 #endif
 
 /* sync_file_range always needs emulation */
@@ -1425,6 +1440,7 @@ eio__scandir (eio_req *req, etp_worker *self)
           }
       }
 }
+
 #ifdef PAGESIZE
 # define eio_pagesize() PAGESIZE
 
@@ -1434,10 +1450,10 @@ eio__scandir (eio_req *req, etp_worker *self)
   eio_pagesize (void)
   { 
     SYSTEM_INFO si;
-	GetSystemInfo(&si);
-	return si.dwPageSize;
+    GetSystemInfo(&si);
+    return si.dwPageSize;
   }
-  
+
 #else
   /* POSIX */
   static intptr_t
@@ -1447,7 +1463,7 @@ eio__scandir (eio_req *req, etp_worker *self)
 
     if (!page)
       page = sysconf (_SC_PAGESIZE);
-	
+
     return page;
   }
 #endif
@@ -1468,17 +1484,8 @@ eio_page_align (void **addr, size_t *length)
 }
 
 #if !_POSIX_MEMLOCK
-# define eio__mlock(a,b) ((errno = ENOSYS), -1)
 # define eio__mlockall(a) ((errno = ENOSYS), -1)
 #else
-
-static int
-eio__mlock (void *addr, size_t length)
-{
-  eio_page_align (&addr, &length);
-
-  return mlock (addr, length);
-}
 
 static int
 eio__mlockall (int flags)
@@ -1498,6 +1505,20 @@ eio__mlockall (int flags)
 
   return mlockall (flags);
 }
+#endif
+
+#if !_POSIX_MEMLOCK_RANGE
+# define eio__mlock(a,b) ((errno = ENOSYS), -1)
+#else
+
+static int
+eio__mlock (void *addr, size_t length)
+{
+  eio_page_align (&addr, &length);
+
+  return mlock (addr, length);
+}
+
 #endif
 
 #if !(_POSIX_MAPPED_FILES && _POSIX_SYNCHRONIZED_IO)
@@ -1672,8 +1693,6 @@ static void eio_api_destroy (eio_req *req)
 
 static void eio_execute (etp_worker *self, eio_req *req)
 {
-  errno = 0;
-
   switch (req->type)
     {
       case EIO_READ:      ALLOC (req->size);
@@ -1702,19 +1721,21 @@ static void eio_execute (etp_worker *self, eio_req *req)
 #ifndef _WIN32
       case EIO_LSTAT:     ALLOC (sizeof (EIO_STRUCT_STAT));
                           req->result = lstat     (req->ptr1, (EIO_STRUCT_STAT *)req->ptr2); break;
-#endif	  
+#endif
       case EIO_FSTAT:     ALLOC (sizeof (EIO_STRUCT_STAT));
                           req->result = fstat     (req->int1, (EIO_STRUCT_STAT *)req->ptr2); break;
+
 #ifndef _WIN32
       case EIO_STATVFS:   ALLOC (sizeof (EIO_STRUCT_STATVFS));
                           req->result = statvfs   (req->ptr1, (EIO_STRUCT_STATVFS *)req->ptr2); break;
       case EIO_FSTATVFS:  ALLOC (sizeof (EIO_STRUCT_STATVFS));
                           req->result = fstatvfs  (req->int1, (EIO_STRUCT_STATVFS *)req->ptr2); break;
+
       case EIO_CHOWN:     req->result = chown     (req->ptr1, req->int2, req->int3); break;
       case EIO_FCHOWN:    req->result = fchown    (req->int1, req->int2, req->int3); break;
-#endif	  
+#endif
       case EIO_CHMOD:     req->result = chmod     (req->ptr1, (mode_t)req->int2); break;
-#ifndef _WIN32	  
+#ifndef _WIN32
       case EIO_FCHMOD:    req->result = fchmod    (req->int1, (mode_t)req->int2); break;
       case EIO_TRUNCATE:  req->result = truncate  (req->ptr1, req->offs); break;
 #endif
@@ -1727,11 +1748,11 @@ static void eio_execute (etp_worker *self, eio_req *req)
       case EIO_RMDIR:     req->result = rmdir     (req->ptr1); break;
 #ifdef _WIN32
       case EIO_MKDIR:     req->result = mkdir     (req->ptr1); break;
-#else 
+#else
       case EIO_MKDIR:     req->result = mkdir     (req->ptr1, (mode_t)req->int2); break;
 #endif
       case EIO_RENAME:    req->result = rename    (req->ptr1, req->ptr2); break;
-#ifndef _WIN32	  
+#ifndef _WIN32
       case EIO_LINK:      req->result = link      (req->ptr1, req->ptr2); break;
       case EIO_SYMLINK:   req->result = symlink   (req->ptr1, req->ptr2); break;
       case EIO_MKNOD:     req->result = mknod     (req->ptr1, (mode_t)req->int2, (dev_t)req->int3); break;
@@ -1788,7 +1809,6 @@ static void eio_execute (etp_worker *self, eio_req *req)
           else
             times = 0;
 
-
           req->result = req->type == EIO_FUTIME
                         ? futimes (req->int1, times)
                         : utimes  (req->ptr1, times);
@@ -1807,6 +1827,7 @@ static void eio_execute (etp_worker *self, eio_req *req)
         break;
 
       default:
+        errno = ENOSYS;
         req->result = -1;
         break;
     }

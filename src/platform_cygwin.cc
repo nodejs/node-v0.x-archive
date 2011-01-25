@@ -4,7 +4,6 @@
 #include <v8.h>
 
 #include <sys/param.h> // for MAXPATHLEN
-#include <sys/sysctl.h>
 #include <sys/sysinfo.h>
 #include <unistd.h> // getpagesize, sysconf
 #include <stdio.h> // sscanf, snprintf
@@ -23,11 +22,11 @@ static char *process_title = NULL;
 
 // Does the about the same as perror(), but for windows api functions
 static void _winapi_perror(const char* prefix = NULL) {
-  DWORD errno = GetLastError();
+  DWORD errorno = GetLastError();
   char *errmsg;
 
   FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL, errno, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
+                NULL, errorno, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
 
   // FormatMessage messages include a newline character
 
@@ -93,7 +92,7 @@ static inline char* _getProcessTitle() {
   char *title;
   int length, length_w;
 
-  length_w = GetConsoleTitleW(L"\0", sizeof(WCHAR));
+  length_w = GetConsoleTitleW((WCHAR*)L"\0", sizeof(WCHAR));
 
   // If length is zero, there may be an error or the title may be empty
   if (!length_w) {
@@ -290,8 +289,8 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
         continue;
       else if (strncmp(line, "intr ", 5) == 0)
         break;
-      sscanf(line, "%*s %llu %llu %llu %llu %*llu %llu",
-             &ticks_user, &ticks_nice, &ticks_sys, &ticks_idle, &ticks_intr);
+      sscanf(line, "%*s %llu %llu %llu %llu",
+             &ticks_user, &ticks_nice, &ticks_sys, &ticks_idle);
       snprintf(speedPath, sizeof(speedPath),
                "/sys/devices/system/cpu/cpu%u/cpufreq/cpuinfo_max_freq", i);
       fpSpeed = fopen(speedPath, "r");
@@ -308,7 +307,7 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
       cputimes->Set(String::New("nice"), Number::New(ticks_nice * multiplier));
       cputimes->Set(String::New("sys"), Number::New(ticks_sys * multiplier));
       cputimes->Set(String::New("idle"), Number::New(ticks_idle * multiplier));
-      cputimes->Set(String::New("irq"), Number::New(ticks_intr * multiplier));
+      cputimes->Set(String::New("irq"), Number::New(0));
 
       cpuinfo->Set(String::New("model"), String::New(model));
       cpuinfo->Set(String::New("speed"), Number::New(cpuspeed));
@@ -337,26 +336,23 @@ double Platform::GetTotalMemory() {
 }
 
 double Platform::GetUptime() {
-  struct sysinfo info;
+  double amount;
+  char line[512];
+  FILE *fpUptime = fopen("/proc/uptime", "r");
 
-  if (sysinfo(&info) < 0) {
-    return -1;
+  if (fpUptime) {
+    if (fgets(line, 511, fpUptime) != NULL) {
+      sscanf(line, "%lf %*lf", &amount);
+    }
+    fclose(fpUptime);
   }
 
-  return static_cast<double>(info.uptime);
+  return amount;
 }
 
 int Platform::GetLoadAvg(Local<Array> *loads) {
-  struct sysinfo info;
-
-  if (sysinfo(&info) < 0) {
-    return -1;
-  }
-  (*loads)->Set(0, Number::New(static_cast<double>(info.loads[0]) / 65536.0));
-  (*loads)->Set(1, Number::New(static_cast<double>(info.loads[1]) / 65536.0));
-  (*loads)->Set(2, Number::New(static_cast<double>(info.loads[2]) / 65536.0));
-
-  return 0;
+  // Unsupported as of cygwin 1.7.7
+  return -1;
 }
 
 }  // namespace node

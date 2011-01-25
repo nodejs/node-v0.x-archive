@@ -28,6 +28,7 @@
 // Platform specific code for MacOS goes here. For the POSIX comaptible parts
 // the implementation is in platform-posix.cc.
 
+#include <dlfcn.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <mach/mach_init.h>
@@ -49,7 +50,6 @@
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdlib.h>
-
 #include <errno.h>
 
 #undef MAP_TYPE
@@ -196,11 +196,25 @@ class PosixMemoryMappedFile : public OS::MemoryMappedFile {
     : file_(file), memory_(memory), size_(size) { }
   virtual ~PosixMemoryMappedFile();
   virtual void* memory() { return memory_; }
+  virtual int size() { return size_; }
  private:
   FILE* file_;
   void* memory_;
   int size_;
 };
+
+
+OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
+  FILE* file = fopen(name, "w+");
+  if (file == NULL) return NULL;
+
+  fseek(file, 0, SEEK_END);
+  int size = ftell(file);
+
+  void* memory =
+      mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+  return new PosixMemoryMappedFile(file, memory, size);
+}
 
 
 OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
@@ -411,10 +425,34 @@ bool ThreadHandle::IsValid() const {
 
 
 Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
+  set_name("v8:<unknown>");
+}
+
+
+Thread::Thread(const char* name) : ThreadHandle(ThreadHandle::INVALID) {
+  set_name(name);
 }
 
 
 Thread::~Thread() {
+}
+
+
+
+static void SetThreadName(const char* name) {
+  // pthread_setname_np is only available in 10.6 or later, so test
+  // for it at runtime.
+  int (*dynamic_pthread_setname_np)(const char*);
+  *reinterpret_cast<void**>(&dynamic_pthread_setname_np) =
+    dlsym(RTLD_DEFAULT, "pthread_setname_np");
+  if (!dynamic_pthread_setname_np)
+    return;
+
+  // Mac OS X does not expose the length limit of the name, so hardcode it.
+  static const int kMaxNameLength = 63;
+  USE(kMaxNameLength);
+  ASSERT(Thread::kMaxThreadNameLength <= kMaxNameLength);
+  dynamic_pthread_setname_np(name);
 }
 
 
@@ -424,9 +462,16 @@ static void* ThreadEntry(void* arg) {
   // don't know which thread will run first (the original thread or the new
   // one) so we initialize it here too.
   thread->thread_handle_data()->thread_ = pthread_self();
+  SetThreadName(thread->name());
   ASSERT(thread->IsValid());
   thread->Run();
   return NULL;
+}
+
+
+void Thread::set_name(const char* name) {
+  strncpy(name_, name, sizeof(name_));
+  name_[sizeof(name_) - 1] = '\0';
 }
 
 

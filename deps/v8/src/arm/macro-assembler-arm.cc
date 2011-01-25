@@ -466,11 +466,40 @@ void MacroAssembler::PopSafepointRegisters() {
 }
 
 
+void MacroAssembler::PushSafepointRegistersAndDoubles() {
+  PushSafepointRegisters();
+  sub(sp, sp, Operand(DwVfpRegister::kNumAllocatableRegisters *
+                      kDoubleSize));
+  for (int i = 0; i < DwVfpRegister::kNumAllocatableRegisters; i++) {
+    vstr(DwVfpRegister::FromAllocationIndex(i), sp, i * kDoubleSize);
+  }
+}
+
+
+void MacroAssembler::PopSafepointRegistersAndDoubles() {
+  for (int i = 0; i < DwVfpRegister::kNumAllocatableRegisters; i++) {
+    vldr(DwVfpRegister::FromAllocationIndex(i), sp, i * kDoubleSize);
+  }
+  add(sp, sp, Operand(DwVfpRegister::kNumAllocatableRegisters *
+                      kDoubleSize));
+  PopSafepointRegisters();
+}
+
+void MacroAssembler::StoreToSafepointRegisterSlot(Register reg) {
+  str(reg, SafepointRegisterSlot(reg));
+}
+
+
 int MacroAssembler::SafepointRegisterStackIndex(int reg_code) {
   // The registers are pushed starting with the highest encoding,
   // which means that lowest encodings are closest to the stack pointer.
   ASSERT(reg_code >= 0 && reg_code < kNumSafepointRegisters);
   return reg_code;
+}
+
+
+MemOperand MacroAssembler::SafepointRegisterSlot(Register reg) {
+  return MemOperand(sp, SafepointRegisterStackIndex(reg.code()) * kPointerSize);
 }
 
 
@@ -516,6 +545,49 @@ void MacroAssembler::Strd(Register src1, Register src2,
     str(src1, dst, cond);
     str(src2, dst2, cond);
   }
+}
+
+
+void MacroAssembler::ClearFPSCRBits(const uint32_t bits_to_clear,
+                                    const Register scratch,
+                                    const Condition cond) {
+  vmrs(scratch, cond);
+  bic(scratch, scratch, Operand(bits_to_clear), LeaveCC, cond);
+  vmsr(scratch, cond);
+}
+
+
+void MacroAssembler::VFPCompareAndSetFlags(const DwVfpRegister src1,
+                                           const DwVfpRegister src2,
+                                           const Condition cond) {
+  // Compare and move FPSCR flags to the normal condition flags.
+  VFPCompareAndLoadFlags(src1, src2, pc, cond);
+}
+
+void MacroAssembler::VFPCompareAndSetFlags(const DwVfpRegister src1,
+                                           const double src2,
+                                           const Condition cond) {
+  // Compare and move FPSCR flags to the normal condition flags.
+  VFPCompareAndLoadFlags(src1, src2, pc, cond);
+}
+
+
+void MacroAssembler::VFPCompareAndLoadFlags(const DwVfpRegister src1,
+                                            const DwVfpRegister src2,
+                                            const Register fpscr_flags,
+                                            const Condition cond) {
+  // Compare and load FPSCR.
+  vcmp(src1, src2, cond);
+  vmrs(fpscr_flags, cond);
+}
+
+void MacroAssembler::VFPCompareAndLoadFlags(const DwVfpRegister src1,
+                                            const double src2,
+                                            const Register fpscr_flags,
+                                            const Condition cond) {
+  // Compare and load FPSCR.
+  vcmp(src1, src2, cond);
+  vmrs(fpscr_flags, cond);
 }
 
 
@@ -675,7 +747,8 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     Handle<Code> code_constant,
                                     Register code_reg,
                                     Label* done,
-                                    InvokeFlag flag) {
+                                    InvokeFlag flag,
+                                    PostCallGenerator* post_call_generator) {
   bool definitely_matches = false;
   Label regular_invoke;
 
@@ -731,6 +804,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
         Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline));
     if (flag == CALL_FUNCTION) {
       Call(adaptor, RelocInfo::CODE_TARGET);
+      if (post_call_generator != NULL) post_call_generator->Generate();
       b(done);
     } else {
       Jump(adaptor, RelocInfo::CODE_TARGET);
@@ -743,12 +817,15 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
 void MacroAssembler::InvokeCode(Register code,
                                 const ParameterCount& expected,
                                 const ParameterCount& actual,
-                                InvokeFlag flag) {
+                                InvokeFlag flag,
+                                PostCallGenerator* post_call_generator) {
   Label done;
 
-  InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag);
+  InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag,
+                 post_call_generator);
   if (flag == CALL_FUNCTION) {
     Call(code);
+    if (post_call_generator != NULL) post_call_generator->Generate();
   } else {
     ASSERT(flag == JUMP_FUNCTION);
     Jump(code);
@@ -782,7 +859,8 @@ void MacroAssembler::InvokeCode(Handle<Code> code,
 
 void MacroAssembler::InvokeFunction(Register fun,
                                     const ParameterCount& actual,
-                                    InvokeFlag flag) {
+                                    InvokeFlag flag,
+                                    PostCallGenerator* post_call_generator) {
   // Contract with called JS functions requires that function is passed in r1.
   ASSERT(fun.is(r1));
 
@@ -799,7 +877,7 @@ void MacroAssembler::InvokeFunction(Register fun,
       FieldMemOperand(r1, JSFunction::kCodeEntryOffset));
 
   ParameterCount expected(expected_reg);
-  InvokeCode(code_reg, expected, actual, flag);
+  InvokeCode(code_reg, expected, actual, flag, post_call_generator);
 }
 
 
@@ -1669,10 +1747,12 @@ void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
 
 
 void MacroAssembler::InvokeBuiltin(Builtins::JavaScript id,
-                                   InvokeJSFlags flags) {
+                                   InvokeJSFlags flags,
+                                   PostCallGenerator* post_call_generator) {
   GetBuiltinEntry(r2, id);
   if (flags == CALL_JS) {
     Call(r2);
+    if (post_call_generator != NULL) post_call_generator->Generate();
   } else {
     ASSERT(flags == JUMP_JS);
     Jump(r2);
@@ -1795,7 +1875,7 @@ void MacroAssembler::Abort(const char* msg) {
   }
 #endif
   // Disable stub call restrictions to always allow calls to abort.
-  set_allow_stub_calls(true);
+  AllowStubCallsScope allow_scope(this, true);
 
   mov(r0, Operand(p0));
   push(r0);
@@ -1887,6 +1967,13 @@ void MacroAssembler::AbortIfSmi(Register object) {
   ASSERT_EQ(0, kSmiTag);
   tst(object, Operand(kSmiTagMask));
   Assert(ne, "Operand is a smi");
+}
+
+
+void MacroAssembler::AbortIfNotSmi(Register object) {
+  ASSERT_EQ(0, kSmiTag);
+  tst(object, Operand(kSmiTagMask));
+  Assert(eq, "Operand is not smi");
 }
 
 
@@ -2112,6 +2199,26 @@ void MacroAssembler::CallCFunction(Register function, int num_arguments) {
   } else {
     add(sp, sp, Operand(stack_passed_arguments * sizeof(kPointerSize)));
   }
+}
+
+
+void MacroAssembler::GetRelocatedValueLocation(Register ldr_location,
+                               Register result) {
+  const uint32_t kLdrOffsetMask = (1 << 12) - 1;
+  const int32_t kPCRegOffset = 2 * kPointerSize;
+  ldr(result, MemOperand(ldr_location));
+  if (FLAG_debug_code) {
+    // Check that the instruction is a ldr reg, [pc + offset] .
+    and_(result, result, Operand(kLdrPCPattern));
+    cmp(result, Operand(kLdrPCPattern));
+    Check(eq, "The instruction to patch should be a load from pc.");
+    // Result was clobbered. Restore it.
+    ldr(result, MemOperand(ldr_location));
+  }
+  // Get the address of the constant.
+  and_(result, result, Operand(kLdrOffsetMask));
+  add(result, ldr_location, Operand(result));
+  add(result, result, Operand(kPCRegOffset));
 }
 
 

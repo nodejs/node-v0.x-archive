@@ -29,7 +29,7 @@
 #define V8_V8UTILS_H_
 
 #include "utils.h"
-#include <stdarg.h>
+#include "platform.h"  // For va_list on Solaris.
 
 namespace v8 {
 namespace internal {
@@ -315,6 +315,39 @@ static inline void CopyChars(sinkchar* dest, const sourcechar* src, int chars) {
     *dest++ = static_cast<sinkchar>(*src++);
   }
 }
+
+
+// A resource for using mmapped files to back external strings that are read
+// from files.
+class MemoryMappedExternalResource: public
+    v8::String::ExternalAsciiStringResource {
+ public:
+  explicit MemoryMappedExternalResource(const char* filename);
+  MemoryMappedExternalResource(const char* filename,
+                               bool remove_file_on_cleanup);
+  virtual ~MemoryMappedExternalResource();
+
+  virtual const char* data() const { return data_; }
+  virtual size_t length() const { return length_; }
+
+  bool exists() const { return file_ != NULL; }
+  bool is_empty() const { return length_ == 0; }
+
+  bool EnsureIsAscii(bool abort_if_failed) const;
+  bool EnsureIsAscii() const { return EnsureIsAscii(true); }
+  bool IsAscii() const { return EnsureIsAscii(false); }
+
+ private:
+  void Init(const char* filename);
+
+  char* filename_;
+  OS::MemoryMappedFile* file_;
+
+  const char* data_;
+  size_t length_;
+  bool remove_file_on_cleanup_;
+};
+
 
 } }  // namespace v8::internal
 

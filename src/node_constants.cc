@@ -1,6 +1,8 @@
 // Copyright 2009 Ryan Dahl <ry@tinyclouds.org>
 #include <node_constants.h>
 
+#include <ev.h>
+
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -8,7 +10,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <ev.h>
+#ifdef __MINGW32__
+# include <platform_win32.h>
+# include <platform_win32_winsock.h>
+#endif
 
 namespace node {
 
@@ -29,8 +34,14 @@ void DefineConstants(Handle<Object> target) {
   NODE_DEFINE_CONSTANT(target, S_IFCHR);
   NODE_DEFINE_CONSTANT(target, S_IFBLK);
   NODE_DEFINE_CONSTANT(target, S_IFIFO);
+
+#ifdef S_IFLNK
   NODE_DEFINE_CONSTANT(target, S_IFLNK);
+#endif
+
+#ifdef S_IFSOCK
   NODE_DEFINE_CONSTANT(target, S_IFSOCK);
+#endif
 
 #ifdef O_CREAT
   NODE_DEFINE_CONSTANT(target, O_CREAT);
@@ -437,6 +448,238 @@ void DefineConstants(Handle<Object> target) {
   NODE_DEFINE_CONSTANT(target, EXDEV);
 #endif
 
+#ifdef WSAEINTR
+  NODE_DEFINE_CONSTANT(target, WSAEINTR);
+#endif
+
+#ifdef WSAEBADF
+  NODE_DEFINE_CONSTANT(target, WSAEBADF);
+#endif
+
+#ifdef WSAEACCES
+  NODE_DEFINE_CONSTANT(target, WSAEACCES);
+#endif
+
+#ifdef WSAEFAULT
+  NODE_DEFINE_CONSTANT(target, WSAEFAULT);
+#endif
+
+#ifdef WSAEINVAL
+  NODE_DEFINE_CONSTANT(target, WSAEINVAL);
+#endif
+
+#ifdef WSAEMFILE
+  NODE_DEFINE_CONSTANT(target, WSAEMFILE);
+#endif
+
+#ifdef WSAEWOULDBLOCK
+  NODE_DEFINE_CONSTANT(target, WSAEWOULDBLOCK);
+#endif
+
+#ifdef WSAEINPROGRESS
+  NODE_DEFINE_CONSTANT(target, WSAEINPROGRESS);
+#endif
+
+#ifdef WSAEALREADY
+  NODE_DEFINE_CONSTANT(target, WSAEALREADY);
+#endif
+
+#ifdef WSAENOTSOCK
+  NODE_DEFINE_CONSTANT(target, WSAENOTSOCK);
+#endif
+
+#ifdef WSAEDESTADDRREQ
+  NODE_DEFINE_CONSTANT(target, WSAEDESTADDRREQ);
+#endif
+
+#ifdef WSAEMSGSIZE
+  NODE_DEFINE_CONSTANT(target, WSAEMSGSIZE);
+#endif
+
+#ifdef WSAEPROTOTYPE
+  NODE_DEFINE_CONSTANT(target, WSAEPROTOTYPE);
+#endif
+
+#ifdef WSAENOPROTOOPT
+  NODE_DEFINE_CONSTANT(target, WSAENOPROTOOPT);
+#endif
+
+#ifdef WSAEPROTONOSUPPORT
+  NODE_DEFINE_CONSTANT(target, WSAEPROTONOSUPPORT);
+#endif
+
+#ifdef WSAESOCKTNOSUPPORT
+  NODE_DEFINE_CONSTANT(target, WSAESOCKTNOSUPPORT);
+#endif
+
+#ifdef WSAEOPNOTSUPP
+  NODE_DEFINE_CONSTANT(target, WSAEOPNOTSUPP);
+#endif
+
+#ifdef WSAEPFNOSUPPORT
+  NODE_DEFINE_CONSTANT(target, WSAEPFNOSUPPORT);
+#endif
+
+#ifdef WSAEAFNOSUPPORT
+  NODE_DEFINE_CONSTANT(target, WSAEAFNOSUPPORT);
+#endif
+
+#ifdef WSAEADDRINUSE
+  NODE_DEFINE_CONSTANT(target, WSAEADDRINUSE);
+#endif
+
+#ifdef WSAEADDRNOTAVAIL
+  NODE_DEFINE_CONSTANT(target, WSAEADDRNOTAVAIL);
+#endif
+
+#ifdef WSAENETDOWN
+  NODE_DEFINE_CONSTANT(target, WSAENETDOWN);
+#endif
+
+#ifdef WSAENETUNREACH
+  NODE_DEFINE_CONSTANT(target, WSAENETUNREACH);
+#endif
+
+#ifdef WSAENETRESET
+  NODE_DEFINE_CONSTANT(target, WSAENETRESET);
+#endif
+
+#ifdef WSAECONNABORTED
+  NODE_DEFINE_CONSTANT(target, WSAECONNABORTED);
+#endif
+
+#ifdef WSAECONNRESET
+  NODE_DEFINE_CONSTANT(target, WSAECONNRESET);
+#endif
+
+#ifdef WSAENOBUFS
+  NODE_DEFINE_CONSTANT(target, WSAENOBUFS);
+#endif
+
+#ifdef WSAEISCONN
+  NODE_DEFINE_CONSTANT(target, WSAEISCONN);
+#endif
+
+#ifdef WSAENOTCONN
+  NODE_DEFINE_CONSTANT(target, WSAENOTCONN);
+#endif
+
+#ifdef WSAESHUTDOWN
+  NODE_DEFINE_CONSTANT(target, WSAESHUTDOWN);
+#endif
+
+#ifdef WSAETOOMANYREFS
+  NODE_DEFINE_CONSTANT(target, WSAETOOMANYREFS);
+#endif
+
+#ifdef WSAETIMEDOUT
+  NODE_DEFINE_CONSTANT(target, WSAETIMEDOUT);
+#endif
+
+#ifdef WSAECONNREFUSED
+  NODE_DEFINE_CONSTANT(target, WSAECONNREFUSED);
+#endif
+
+#ifdef WSAELOOP
+  NODE_DEFINE_CONSTANT(target, WSAELOOP);
+#endif
+
+#ifdef WSAENAMETOOLONG
+  NODE_DEFINE_CONSTANT(target, WSAENAMETOOLONG);
+#endif
+
+#ifdef WSAEHOSTDOWN
+  NODE_DEFINE_CONSTANT(target, WSAEHOSTDOWN);
+#endif
+
+#ifdef WSAEHOSTUNREACH
+  NODE_DEFINE_CONSTANT(target, WSAEHOSTUNREACH);
+#endif
+
+#ifdef WSAENOTEMPTY
+  NODE_DEFINE_CONSTANT(target, WSAENOTEMPTY);
+#endif
+
+#ifdef WSAEPROCLIM
+  NODE_DEFINE_CONSTANT(target, WSAEPROCLIM);
+#endif
+
+#ifdef WSAEUSERS
+  NODE_DEFINE_CONSTANT(target, WSAEUSERS);
+#endif
+
+#ifdef WSAEDQUOT
+  NODE_DEFINE_CONSTANT(target, WSAEDQUOT);
+#endif
+
+#ifdef WSAESTALE
+  NODE_DEFINE_CONSTANT(target, WSAESTALE);
+#endif
+
+#ifdef WSAEREMOTE
+  NODE_DEFINE_CONSTANT(target, WSAEREMOTE);
+#endif
+
+#ifdef WSASYSNOTREADY
+  NODE_DEFINE_CONSTANT(target, WSASYSNOTREADY);
+#endif
+
+#ifdef WSAVERNOTSUPPORTED
+  NODE_DEFINE_CONSTANT(target, WSAVERNOTSUPPORTED);
+#endif
+
+#ifdef WSANOTINITIALISED
+  NODE_DEFINE_CONSTANT(target, WSANOTINITIALISED);
+#endif
+
+#ifdef WSAEDISCON
+  NODE_DEFINE_CONSTANT(target, WSAEDISCON);
+#endif
+
+#ifdef WSAENOMORE
+  NODE_DEFINE_CONSTANT(target, WSAENOMORE);
+#endif
+
+#ifdef WSAECANCELLED
+  NODE_DEFINE_CONSTANT(target, WSAECANCELLED);
+#endif
+
+#ifdef WSAEINVALIDPROCTABLE
+  NODE_DEFINE_CONSTANT(target, WSAEINVALIDPROCTABLE);
+#endif
+
+#ifdef WSAEINVALIDPROVIDER
+  NODE_DEFINE_CONSTANT(target, WSAEINVALIDPROVIDER);
+#endif
+
+#ifdef WSAEPROVIDERFAILEDINIT
+  NODE_DEFINE_CONSTANT(target, WSAEPROVIDERFAILEDINIT);
+#endif
+
+#ifdef WSASYSCALLFAILURE
+  NODE_DEFINE_CONSTANT(target, WSASYSCALLFAILURE);
+#endif
+
+#ifdef WSASERVICE_NOT_FOUND
+  NODE_DEFINE_CONSTANT(target, WSASERVICE_NOT_FOUND);
+#endif
+
+#ifdef WSATYPE_NOT_FOUND
+  NODE_DEFINE_CONSTANT(target, WSATYPE_NOT_FOUND);
+#endif
+
+#ifdef WSA_E_NO_MORE
+  NODE_DEFINE_CONSTANT(target, WSA_E_NO_MORE);
+#endif
+
+#ifdef WSA_E_CANCELLED
+  NODE_DEFINE_CONSTANT(target, WSA_E_CANCELLED);
+#endif
+
+#ifdef WSAEREFUSED
+  NODE_DEFINE_CONSTANT(target, WSAEREFUSED);
+#endif
+
 #ifdef SIGHUP
   NODE_DEFINE_CONSTANT(target, SIGHUP);
 #endif
@@ -498,7 +741,10 @@ void DefineConstants(Handle<Object> target) {
 #endif
 
   NODE_DEFINE_CONSTANT(target, SIGTERM);
+
+#ifdef SIGCHLD
   NODE_DEFINE_CONSTANT(target, SIGCHLD);
+#endif
 
 #ifdef SIGSTKFLT
   NODE_DEFINE_CONSTANT(target, SIGSTKFLT);

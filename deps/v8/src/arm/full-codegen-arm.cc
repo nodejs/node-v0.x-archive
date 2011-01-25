@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -37,6 +37,8 @@
 #include "parser.h"
 #include "scopes.h"
 #include "stub-cache.h"
+
+#include "arm/code-stubs-arm.h"
 
 namespace v8 {
 namespace internal {
@@ -90,7 +92,7 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
   bool function_in_register = true;
 
   // Possibly allocate a local context.
-  int heap_slots = scope()->num_heap_slots() - Context::MIN_CONTEXT_SLOTS;
+  int heap_slots = scope()->num_heap_slots();
   if (heap_slots > 0) {
     Comment cmnt(masm_, "[ Allocate local context");
     // Argument to NewContext is the function, which is in r1.
@@ -219,10 +221,17 @@ void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt) {
   __ b(hs, &ok);
   StackCheckStub stub;
   __ CallStub(&stub);
+  // Record a mapping of this PC offset to the OSR id.  This is used to find
+  // the AST id from the unoptimized code in order to use it as a key into
+  // the deoptimization input data found in the optimized code.
+  RecordStackCheck(stmt->OsrEntryId());
+
   __ bind(&ok);
   PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
+  // Record a mapping of the OSR id to this PC.  This is used if the OSR
+  // entry becomes the target of a bailout.  We don't expect it to be, but
+  // we want it to work if it is.
   PrepareForBailoutForId(stmt->OsrEntryId(), NO_REGISTERS);
-  RecordStackCheck(stmt->OsrEntryId());
 }
 
 
@@ -1979,16 +1988,21 @@ void FullCodeGenerator::VisitCall(Call* expr) {
       // Call to a keyed property.
       // For a synthetic property use keyed load IC followed by function call,
       // for a regular property use keyed CallIC.
-      { PreservePositionScope scope(masm()->positions_recorder());
-        VisitForStackValue(prop->obj());
-      }
       if (prop->is_synthetic()) {
-        { PreservePositionScope scope(masm()->positions_recorder());
-          VisitForAccumulatorValue(prop->key());
-        }
+        // Do not visit the object and key subexpressions (they are shared
+        // by all occurrences of the same rewritten parameter).
+        ASSERT(prop->obj()->AsVariableProxy() != NULL);
+        ASSERT(prop->obj()->AsVariableProxy()->var()->AsSlot() != NULL);
+        Slot* slot = prop->obj()->AsVariableProxy()->var()->AsSlot();
+        MemOperand operand = EmitSlotSearch(slot, r1);
+        __ ldr(r1, operand);
+
+        ASSERT(prop->key()->AsLiteral() != NULL);
+        ASSERT(prop->key()->AsLiteral()->handle()->IsSmi());
+        __ mov(r0, Operand(prop->key()->AsLiteral()->handle()));
+
         // Record source code position for IC call.
         SetSourcePosition(prop->position());
-        __ pop(r1);  // We do not need to keep the receiver.
 
         Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
         EmitCallIC(ic, RelocInfo::CODE_TARGET);
@@ -1997,6 +2011,9 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         __ Push(r0, r1);  // Function, receiver.
         EmitCallWithStub(expr);
       } else {
+        { PreservePositionScope scope(masm()->positions_recorder());
+          VisitForStackValue(prop->obj());
+        }
         EmitKeyedCallWithIC(expr, prop->key(), RelocInfo::CODE_TARGET);
       }
     }

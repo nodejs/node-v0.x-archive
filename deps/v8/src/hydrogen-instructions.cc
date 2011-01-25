@@ -570,34 +570,29 @@ void HCallConstantFunction::PrintDataTo(StringStream* stream) const {
 }
 
 
-void HBranch::PrintDataTo(StringStream* stream) const {
-  int first_id = FirstSuccessor()->block_id();
-  int second_id = SecondSuccessor()->block_id();
-  stream->Add("on ");
-  value()->PrintNameTo(stream);
-  stream->Add(" (B%d, B%d)", first_id, second_id);
+void HControlInstruction::PrintDataTo(StringStream* stream) const {
+  if (FirstSuccessor() != NULL) {
+    int first_id = FirstSuccessor()->block_id();
+    if (SecondSuccessor() == NULL) {
+      stream->Add(" B%d", first_id);
+    } else {
+      int second_id = SecondSuccessor()->block_id();
+      stream->Add(" goto (B%d, B%d)", first_id, second_id);
+    }
+  }
 }
 
 
-void HCompareMapAndBranch::PrintDataTo(StringStream* stream) const {
-  stream->Add("on ");
+void HUnaryControlInstruction::PrintDataTo(StringStream* stream) const {
+  value()->PrintNameTo(stream);
+  HControlInstruction::PrintDataTo(stream);
+}
+
+
+void HCompareMap::PrintDataTo(StringStream* stream) const {
   value()->PrintNameTo(stream);
   stream->Add(" (%p)", *map());
-}
-
-
-void HGoto::PrintDataTo(StringStream* stream) const {
-  stream->Add("B%d", FirstSuccessor()->block_id());
-}
-
-
-void HReturn::PrintDataTo(StringStream* stream) const {
-  value()->PrintNameTo(stream);
-}
-
-
-void HThrow::PrintDataTo(StringStream* stream) const {
-  value()->PrintNameTo(stream);
+  HControlInstruction::PrintDataTo(stream);
 }
 
 
@@ -996,7 +991,8 @@ HConstant::HConstant(Handle<Object> handle, Representation r)
   SetFlag(kUseGVN);
   if (handle_->IsNumber()) {
     double n = handle_->Number();
-    has_int32_value_ = static_cast<double>(static_cast<int32_t>(n)) == n;
+    double roundtrip_value = static_cast<double>(static_cast<int32_t>(n));
+    has_int32_value_ = BitCast<int64_t>(roundtrip_value) == BitCast<int64_t>(n);
     if (has_int32_value_) int32_value_ = static_cast<int32_t>(n);
     double_value_ = n;
     has_double_value_ = true;
@@ -1190,6 +1186,11 @@ void HStoreGlobal::PrintDataTo(StringStream* stream) const {
 }
 
 
+void HLoadContextSlot::PrintDataTo(StringStream* stream) const {
+  stream->Add("(%d, %d)", context_chain_length(), slot_index());
+}
+
+
 // Implementation of type inference and type conversions. Calculates
 // the inferred type of this instruction based on the input operands.
 
@@ -1246,6 +1247,11 @@ HType HCompareJSObjectEq::CalculateInferredType() const {
 
 HType HUnaryPredicate::CalculateInferredType() const {
   return HType::Boolean();
+}
+
+
+HType HBitwiseBinaryOperation::CalculateInferredType() const {
+  return HType::TaggedNumber();
 }
 
 

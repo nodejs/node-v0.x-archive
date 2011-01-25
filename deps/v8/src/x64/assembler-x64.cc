@@ -74,7 +74,7 @@ void CpuFeatures::Probe(bool portable)  {
   __ xor_(rax, rdx);  // Different if CPUID is supported.
   __ j(not_zero, &cpuid);
 
-  // CPUID not supported. Clear the supported features in edx:eax.
+  // CPUID not supported. Clear the supported features in rax.
   __ xor_(rax, rax);
   __ jmp(&done);
 
@@ -185,6 +185,20 @@ void RelocInfo::PatchCode(byte* instructions, int instruction_count) {
   // Indicate that code has changed.
   CPU::FlushICache(pc_, instruction_count);
 }
+
+
+// -----------------------------------------------------------------------------
+// Register constants.
+
+const int Register::registerCodeByAllocationIndex[kNumAllocatableRegisters] = {
+    // rax, rbx, rdx, rcx, rdi, r8, r9, r11, r14, r12
+    0, 3, 2, 1, 7, 8, 9, 11, 14, 12
+};
+
+const int Register::allocationIndexByRegisterCode[kNumRegisters] = {
+    0, 3, 2, 1, -1, -1, -1, 4, 5, 6, -1, 7, 9, -1, 8, -1
+};
+
 
 // -----------------------------------------------------------------------------
 // Implementation of Operand
@@ -2707,6 +2721,17 @@ void Assembler::cvttss2si(Register dst, const Operand& src) {
 }
 
 
+void Assembler::cvttss2si(Register dst, XMMRegister src) {
+  EnsureSpace ensure_space(this);
+  last_pc_ = pc_;
+  emit(0xF3);
+  emit_optional_rex_32(dst, src);
+  emit(0x0F);
+  emit(0x2C);
+  emit_sse_operand(dst, src);
+}
+
+
 void Assembler::cvttsd2si(Register dst, const Operand& src) {
   EnsureSpace ensure_space(this);
   last_pc_ = pc_;
@@ -2715,6 +2740,17 @@ void Assembler::cvttsd2si(Register dst, const Operand& src) {
   emit(0x0F);
   emit(0x2C);
   emit_operand(dst, src);
+}
+
+
+void Assembler::cvttsd2si(Register dst, XMMRegister src) {
+  EnsureSpace ensure_space(this);
+  last_pc_ = pc_;
+  emit(0xF2);
+  emit_optional_rex_32(dst, src);
+  emit(0x0F);
+  emit(0x2C);
+  emit_sse_operand(dst, src);
 }
 
 
@@ -2933,6 +2969,12 @@ void Assembler::emit_sse_operand(XMMRegister dst, Register src) {
 
 void Assembler::emit_sse_operand(Register dst, XMMRegister src) {
   emit(0xC0 | (dst.low_bits() << 3) | src.low_bits());
+}
+
+
+void Assembler::db(uint8_t data) {
+  EnsureSpace ensure_space(this);
+  emit(data);
 }
 
 

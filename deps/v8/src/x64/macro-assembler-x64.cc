@@ -288,7 +288,7 @@ void MacroAssembler::Abort(const char* msg) {
   }
 #endif
   // Disable stub call restrictions to always allow calls to abort.
-  set_allow_stub_calls(true);
+  AllowStubCallsScope allow_scope(this, true);
 
   push(rax);
   movq(kScratchRegister, p0, RelocInfo::NONE);
@@ -885,6 +885,13 @@ Condition MacroAssembler::CheckSmi(Register src) {
 }
 
 
+Condition MacroAssembler::CheckSmi(const Operand& src) {
+  ASSERT_EQ(0, kSmiTag);
+  testb(src, Immediate(kSmiTagMask));
+  return zero;
+}
+
+
 Condition MacroAssembler::CheckNonNegativeSmi(Register src) {
   ASSERT_EQ(0, kSmiTag);
   // Make mask 0x8000000000000001 and test that both bits are zero.
@@ -1110,7 +1117,7 @@ void MacroAssembler::SmiAnd(Register dst, Register src1, Register src2) {
 
 void MacroAssembler::SmiAndConstant(Register dst, Register src, Smi* constant) {
   if (constant->value() == 0) {
-    xor_(dst, dst);
+    Set(dst, 0);
   } else if (dst.is(src)) {
     ASSERT(!dst.is(kScratchRegister));
     Register constant_reg = GetSmiConstant(constant);
@@ -1274,8 +1281,6 @@ void MacroAssembler::Move(Register dst, Register src) {
 }
 
 
-
-
 void MacroAssembler::Move(Register dst, Handle<Object> source) {
   ASSERT(!source->IsFailure());
   if (source->IsSmi()) {
@@ -1385,6 +1390,40 @@ void MacroAssembler::Call(Address destination, RelocInfo::Mode rmode) {
 void MacroAssembler::Call(Handle<Code> code_object, RelocInfo::Mode rmode) {
   ASSERT(RelocInfo::IsCodeTarget(rmode));
   call(code_object, rmode);
+}
+
+
+void MacroAssembler::Pushad() {
+  push(rax);
+  push(rcx);
+  push(rdx);
+  push(rbx);
+  // Not pushing rsp or rbp.
+  push(rsi);
+  push(rdi);
+  push(r8);
+  push(r9);
+  // r10 is kScratchRegister.
+  push(r11);
+  push(r12);
+  // r13 is kRootRegister.
+  push(r14);
+  // r15 is kSmiConstantRegister
+}
+
+
+void MacroAssembler::Popad() {
+  pop(r14);
+  pop(r12);
+  pop(r11);
+  pop(r9);
+  pop(r8);
+  pop(rdi);
+  pop(rsi);
+  pop(rbx);
+  pop(rdx);
+  pop(rcx);
+  pop(rax);
 }
 
 
@@ -1605,7 +1644,7 @@ void MacroAssembler::DecrementCounter(StatsCounter* counter, int value) {
 #ifdef ENABLE_DEBUGGER_SUPPORT
 void MacroAssembler::DebugBreak() {
   ASSERT(allow_stub_calls());
-  xor_(rax, rax);  // no arguments
+  Set(rax, 0);  // No arguments.
   movq(rbx, ExternalReference(Runtime::kDebugBreak));
   CEntryStub ces(1);
   Call(ces.GetCode(), RelocInfo::DEBUG_BREAK);

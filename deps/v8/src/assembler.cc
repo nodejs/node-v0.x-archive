@@ -66,6 +66,7 @@ namespace internal {
 
 const double DoubleConstant::min_int = kMinInt;
 const double DoubleConstant::one_half = 0.5;
+const double DoubleConstant::minus_zero = -0.0;
 const double DoubleConstant::negative_infinity = -V8_INFINITY;
 
 
@@ -647,6 +648,11 @@ ExternalReference ExternalReference::the_hole_value_location() {
 }
 
 
+ExternalReference ExternalReference::arguments_marker_location() {
+  return ExternalReference(Factory::arguments_marker().location());
+}
+
+
 ExternalReference ExternalReference::roots_address() {
   return ExternalReference(Heap::roots_address());
 }
@@ -721,6 +727,12 @@ ExternalReference ExternalReference::address_of_min_int() {
 ExternalReference ExternalReference::address_of_one_half() {
   return ExternalReference(reinterpret_cast<void*>(
       const_cast<double*>(&DoubleConstant::one_half)));
+}
+
+
+ExternalReference ExternalReference::address_of_minus_zero() {
+  return ExternalReference(reinterpret_cast<void*>(
+      const_cast<double*>(&DoubleConstant::minus_zero)));
 }
 
 
@@ -905,6 +917,11 @@ void PositionsRecorder::RecordPosition(int pos) {
   ASSERT(pos != RelocInfo::kNoPosition);
   ASSERT(pos >= 0);
   state_.current_position = pos;
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  if (gdbjit_lineinfo_ != NULL) {
+    gdbjit_lineinfo_->SetPosition(assembler_->pc_offset(), pos, false);
+  }
+#endif
 }
 
 
@@ -912,6 +929,11 @@ void PositionsRecorder::RecordStatementPosition(int pos) {
   ASSERT(pos != RelocInfo::kNoPosition);
   ASSERT(pos >= 0);
   state_.current_statement_position = pos;
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  if (gdbjit_lineinfo_ != NULL) {
+    gdbjit_lineinfo_->SetPosition(assembler_->pc_offset(), pos, true);
+  }
+#endif
 }
 
 

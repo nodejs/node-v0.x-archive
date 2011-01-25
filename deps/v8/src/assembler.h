@@ -35,6 +35,7 @@
 #ifndef V8_ASSEMBLER_H_
 #define V8_ASSEMBLER_H_
 
+#include "gdb-jit.h"
 #include "runtime.h"
 #include "top.h"
 #include "token.h"
@@ -50,6 +51,7 @@ class DoubleConstant: public AllStatic {
  public:
   static const double min_int;
   static const double one_half;
+  static const double minus_zero;
   static const double negative_infinity;
 };
 
@@ -512,6 +514,9 @@ class ExternalReference BASE_EMBEDDED {
   // Static variable Factory::the_hole_value.location()
   static ExternalReference the_hole_value_location();
 
+  // Static variable Factory::arguments_marker.location()
+  static ExternalReference arguments_marker_location();
+
   // Static variable Heap::roots_address()
   static ExternalReference roots_address();
 
@@ -552,6 +557,7 @@ class ExternalReference BASE_EMBEDDED {
   // Static variables containing common double constants.
   static ExternalReference address_of_min_int();
   static ExternalReference address_of_one_half();
+  static ExternalReference address_of_minus_zero();
   static ExternalReference address_of_negative_infinity();
 
   Address address() const {return reinterpret_cast<Address>(address_);}
@@ -632,7 +638,29 @@ struct PositionState {
 class PositionsRecorder BASE_EMBEDDED {
  public:
   explicit PositionsRecorder(Assembler* assembler)
-      : assembler_(assembler) {}
+      : assembler_(assembler) {
+#ifdef ENABLE_GDB_JIT_INTERFACE
+    gdbjit_lineinfo_ = NULL;
+#endif
+  }
+
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  ~PositionsRecorder() {
+    delete gdbjit_lineinfo_;
+  }
+
+  void StartGDBJITLineInfoRecording() {
+    if (FLAG_gdbjit) {
+      gdbjit_lineinfo_ = new GDBJITLineInfo();
+    }
+  }
+
+  GDBJITLineInfo* DetachGDBJITLineInfo() {
+    GDBJITLineInfo* lineinfo = gdbjit_lineinfo_;
+    gdbjit_lineinfo_ = NULL;  // To prevent deallocation in destructor.
+    return lineinfo;
+  }
+#endif
 
   // Set current position to pos.
   void RecordPosition(int pos);
@@ -652,6 +680,9 @@ class PositionsRecorder BASE_EMBEDDED {
  private:
   Assembler* assembler_;
   PositionState state_;
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  GDBJITLineInfo* gdbjit_lineinfo_;
+#endif
 
   friend class PreservePositionScope;
 

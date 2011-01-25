@@ -19,6 +19,7 @@
 * [DNS](dns.html)
 * [Datagram](dgram.html)
 * [HTTP](http.html)
+* [HTTPS](https.html)
 * [URL](url.html)
 * [Query Strings](querystring.html)
 * [Readline](readline.html)
@@ -28,6 +29,7 @@
 * [Assertion Testing](assert.html)
 * [TTY](tty.html)
 * [OS](os.html)
+* [Debugger](debugger.html)
 * Appendixes
   * [Appendix 1: Recommended Third-party Modules](appendix_1.html)
   * [Appendix 2: Deprecated API's](appendix_2.html)
