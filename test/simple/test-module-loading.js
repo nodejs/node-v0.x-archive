@@ -112,6 +112,13 @@ try {
   assert.equal(err.message, 'Cannot find module \'../fixtures/empty\'');
 }
 
+// Should not attempt to load a file
+try {
+  require('../fixtures/a/');
+} catch (err) {
+  assert.equal(err.message, 'Cannot find module \'../fixtures/a/\'');
+}
+
 // Check load order is as expected
 common.debug('load order');
 
@@ -123,6 +130,7 @@ require.extensions['.reg2'] = require.extensions['.js'];
 
 assert.equal(require(loadOrder + 'file1').file1, 'file1', msg);
 assert.equal(require(loadOrder + 'file2').file2, 'file2.js', msg);
+assert.equal(require(loadOrder + 'file2/').file2, 'file2/index.js', msg);
 try {
   require(loadOrder + 'file3');
 } catch (e) {
