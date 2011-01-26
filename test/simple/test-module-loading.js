@@ -112,13 +112,6 @@ try {
   assert.equal(err.message, 'Cannot find module \'../fixtures/empty\'');
 }
 
-// Should not attempt to load a file
-try {
-  require('../fixtures/a/');
-} catch (err) {
-  assert.equal(err.message, 'Cannot find module \'../fixtures/a/\'');
-}
-
 // Check load order is as expected
 common.debug('load order');
 
