@@ -20,6 +20,7 @@
 @include dns
 @include dgram
 @include http
+@include https
 @include url
 @include querystring
 @include readline
@@ -29,6 +30,7 @@
 @include assert
 @include tty
 @include os
+@include debugger
 
 # Appendixes
 @include appendix_1

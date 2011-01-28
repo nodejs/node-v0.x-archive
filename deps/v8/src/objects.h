@@ -455,6 +455,7 @@ const uint32_t kShortcutTypeTag = kConsStringTag;
 
 enum InstanceType {
   // String types.
+  // FIRST_STRING_TYPE
   SYMBOL_TYPE = kTwoByteStringTag | kSymbolTag | kSeqStringTag,
   ASCII_SYMBOL_TYPE = kAsciiStringTag | kSymbolTag | kSeqStringTag,
   CONS_SYMBOL_TYPE = kTwoByteStringTag | kSymbolTag | kConsStringTag,
@@ -471,6 +472,7 @@ enum InstanceType {
   EXTERNAL_STRING_TYPE = kTwoByteStringTag | kExternalStringTag,
   EXTERNAL_STRING_WITH_ASCII_DATA_TYPE =
       kTwoByteStringTag | kExternalStringTag | kAsciiDataHintTag,
+  // LAST_STRING_TYPE
   EXTERNAL_ASCII_STRING_TYPE = kAsciiStringTag | kExternalStringTag,
   PRIVATE_EXTERNAL_ASCII_STRING_TYPE = EXTERNAL_ASCII_STRING_TYPE,
 
@@ -523,7 +525,8 @@ enum InstanceType {
   JS_BUILTINS_OBJECT_TYPE,
   JS_GLOBAL_PROXY_TYPE,
   JS_ARRAY_TYPE,
-  JS_REGEXP_TYPE,  // LAST_JS_OBJECT_TYPE
+
+  JS_REGEXP_TYPE,  // LAST_JS_OBJECT_TYPE, FIRST_FUNCTION_CLASS_TYPE
 
   JS_FUNCTION_TYPE,
 
@@ -532,6 +535,8 @@ enum InstanceType {
   LAST_TYPE = JS_FUNCTION_TYPE,
   INVALID_TYPE = FIRST_TYPE - 1,
   FIRST_NONSTRING_TYPE = MAP_TYPE,
+  FIRST_STRING_TYPE = FIRST_TYPE,
+  LAST_STRING_TYPE = FIRST_NONSTRING_TYPE - 1,
   // Boundaries for testing for an external array.
   FIRST_EXTERNAL_ARRAY_TYPE = EXTERNAL_BYTE_ARRAY_TYPE,
   LAST_EXTERNAL_ARRAY_TYPE = EXTERNAL_FLOAT_ARRAY_TYPE,
@@ -541,7 +546,10 @@ enum InstanceType {
   // function objects are not counted as objects, even though they are
   // implemented as such; only values whose typeof is "object" are included.
   FIRST_JS_OBJECT_TYPE = JS_VALUE_TYPE,
-  LAST_JS_OBJECT_TYPE = JS_REGEXP_TYPE
+  LAST_JS_OBJECT_TYPE = JS_REGEXP_TYPE,
+  // RegExp objects have [[Class]] "function" because they are callable.
+  // All types from this type and above are objects with [[Class]] "function".
+  FIRST_FUNCTION_CLASS_TYPE = JS_REGEXP_TYPE
 };
 
 
@@ -607,14 +615,87 @@ class MaybeObject BASE_EMBEDDED {
     return reinterpret_cast<Object*>(this);
   }
 
-#ifdef DEBUG
+#ifdef OBJECT_PRINT
   // Prints this object with details.
-  void Print();
-  void PrintLn();
+  inline void Print() {
+    Print(stdout);
+  };
+  inline void PrintLn() {
+    PrintLn(stdout);
+  }
+  void Print(FILE* out);
+  void PrintLn(FILE* out);
+#endif
+#ifdef DEBUG
   // Verifies the object.
   void Verify();
 #endif
 };
+
+
+#define OBJECT_TYPE_LIST(V)                    \
+  V(Smi)                                       \
+  V(HeapObject)                                \
+  V(Number)                                    \
+
+#define HEAP_OBJECT_TYPE_LIST(V)               \
+  V(HeapNumber)                                \
+  V(String)                                    \
+  V(Symbol)                                    \
+  V(SeqString)                                 \
+  V(ExternalString)                            \
+  V(ConsString)                                \
+  V(ExternalTwoByteString)                     \
+  V(ExternalAsciiString)                       \
+  V(SeqTwoByteString)                          \
+  V(SeqAsciiString)                            \
+                                               \
+  V(PixelArray)                                \
+  V(ExternalArray)                             \
+  V(ExternalByteArray)                         \
+  V(ExternalUnsignedByteArray)                 \
+  V(ExternalShortArray)                        \
+  V(ExternalUnsignedShortArray)                \
+  V(ExternalIntArray)                          \
+  V(ExternalUnsignedIntArray)                  \
+  V(ExternalFloatArray)                        \
+  V(ByteArray)                                 \
+  V(JSObject)                                  \
+  V(JSContextExtensionObject)                  \
+  V(Map)                                       \
+  V(DescriptorArray)                           \
+  V(DeoptimizationInputData)                   \
+  V(DeoptimizationOutputData)                  \
+  V(FixedArray)                                \
+  V(Context)                                   \
+  V(CatchContext)                              \
+  V(GlobalContext)                             \
+  V(JSFunction)                                \
+  V(Code)                                      \
+  V(Oddball)                                   \
+  V(SharedFunctionInfo)                        \
+  V(JSValue)                                   \
+  V(StringWrapper)                             \
+  V(Proxy)                                     \
+  V(Boolean)                                   \
+  V(JSArray)                                   \
+  V(JSRegExp)                                  \
+  V(HashTable)                                 \
+  V(Dictionary)                                \
+  V(SymbolTable)                               \
+  V(JSFunctionResultCache)                     \
+  V(NormalizedMapCache)                        \
+  V(CompilationCacheTable)                     \
+  V(CodeCacheHashTable)                        \
+  V(MapCache)                                  \
+  V(Primitive)                                 \
+  V(GlobalObject)                              \
+  V(JSGlobalObject)                            \
+  V(JSBuiltinsObject)                          \
+  V(JSGlobalProxy)                             \
+  V(UndetectableObject)                        \
+  V(AccessCheckNeeded)                         \
+  V(JSGlobalPropertyCell)                      \
 
 // Object is the abstract superclass for all classes in the
 // object hierarchy.
@@ -625,67 +706,10 @@ class MaybeObject BASE_EMBEDDED {
 class Object : public MaybeObject {
  public:
   // Type testing.
-  inline bool IsSmi();
-  inline bool IsHeapObject();
-  inline bool IsHeapNumber();
-  inline bool IsString();
-  inline bool IsSymbol();
-  // See objects-inl.h for more details
-  inline bool IsSeqString();
-  inline bool IsExternalString();
-  inline bool IsExternalTwoByteString();
-  inline bool IsExternalAsciiString();
-  inline bool IsSeqTwoByteString();
-  inline bool IsSeqAsciiString();
-  inline bool IsConsString();
-
-  inline bool IsNumber();
-  inline bool IsByteArray();
-  inline bool IsPixelArray();
-  inline bool IsExternalArray();
-  inline bool IsExternalByteArray();
-  inline bool IsExternalUnsignedByteArray();
-  inline bool IsExternalShortArray();
-  inline bool IsExternalUnsignedShortArray();
-  inline bool IsExternalIntArray();
-  inline bool IsExternalUnsignedIntArray();
-  inline bool IsExternalFloatArray();
-  inline bool IsJSObject();
-  inline bool IsJSContextExtensionObject();
-  inline bool IsMap();
-  inline bool IsFixedArray();
-  inline bool IsDescriptorArray();
-  inline bool IsDeoptimizationInputData();
-  inline bool IsDeoptimizationOutputData();
-  inline bool IsContext();
-  inline bool IsCatchContext();
-  inline bool IsGlobalContext();
-  inline bool IsJSFunction();
-  inline bool IsCode();
-  inline bool IsOddball();
-  inline bool IsSharedFunctionInfo();
-  inline bool IsJSValue();
-  inline bool IsStringWrapper();
-  inline bool IsProxy();
-  inline bool IsBoolean();
-  inline bool IsJSArray();
-  inline bool IsJSRegExp();
-  inline bool IsHashTable();
-  inline bool IsDictionary();
-  inline bool IsSymbolTable();
-  inline bool IsJSFunctionResultCache();
-  inline bool IsNormalizedMapCache();
-  inline bool IsCompilationCacheTable();
-  inline bool IsCodeCacheHashTable();
-  inline bool IsMapCache();
-  inline bool IsPrimitive();
-  inline bool IsGlobalObject();
-  inline bool IsJSGlobalObject();
-  inline bool IsJSBuiltinsObject();
-  inline bool IsJSGlobalProxy();
-  inline bool IsUndetectableObject();
-  inline bool IsAccessCheckNeeded();
-  inline bool IsJSGlobalPropertyCell();
+#define IS_TYPE_FUNCTION_DECL(type_)  inline bool Is##type_();
+  OBJECT_TYPE_LIST(IS_TYPE_FUNCTION_DECL)
+  HEAP_OBJECT_TYPE_LIST(IS_TYPE_FUNCTION_DECL)
+#undef IS_TYPE_FUNCTION_DECL
 
   // Returns true if this object is an instance of the specified
   // function template.
@@ -701,6 +725,7 @@ class Object : public MaybeObject {
   INLINE(bool IsNull());
   INLINE(bool IsTrue());
   INLINE(bool IsFalse());
+  inline bool IsArgumentsMarker();
 
   // Extract the number.
   inline double Number();
@@ -762,7 +787,10 @@ class Object : public MaybeObject {
 #endif
 
   // Prints this object without details.
-  void ShortPrint();
+  inline void ShortPrint() {
+    ShortPrint(stdout);
+  }
+  void ShortPrint(FILE* out);
 
   // Prints this object without details to a message accumulator.
   void ShortPrint(StringStream* accumulator);
@@ -801,7 +829,10 @@ class Smi: public Object {
   static inline Smi* cast(Object* object);
 
   // Dispatched behavior.
-  void SmiPrint();
+  inline void SmiPrint() {
+    SmiPrint(stdout);
+  }
+  void SmiPrint(FILE* out);
   void SmiPrint(StringStream* accumulator);
 #ifdef DEBUG
   void SmiVerify();
@@ -870,7 +901,10 @@ class Failure: public MaybeObject {
   static inline Failure* cast(MaybeObject* object);
 
   // Dispatched behavior.
-  void FailurePrint();
+  inline void FailurePrint() {
+    FailurePrint(stdout);
+  }
+  void FailurePrint(FILE* out);
   void FailurePrint(StringStream* accumulator);
 #ifdef DEBUG
   void FailureVerify();
@@ -1099,14 +1133,23 @@ class HeapObject: public Object {
 
   // Dispatched behavior.
   void HeapObjectShortPrint(StringStream* accumulator);
+#ifdef OBJECT_PRINT
+  inline void HeapObjectPrint() {
+    HeapObjectPrint(stdout);
+  }
+  void HeapObjectPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void HeapObjectPrint();
   void HeapObjectVerify();
   inline void VerifyObjectField(int offset);
   inline void VerifySmiField(int offset);
+#endif
 
-  void PrintHeader(const char* id);
+#ifdef OBJECT_PRINT
+  void PrintHeader(FILE* out, const char* id);
+#endif
 
+#ifdef DEBUG
   // Verify a pointer is a valid HeapObject pointer that points to object
   // areas in the heap.
   static void VerifyHeapPointer(Object* p);
@@ -1189,7 +1232,10 @@ class HeapNumber: public HeapObject {
 
   // Dispatched behavior.
   Object* HeapNumberToBoolean();
-  void HeapNumberPrint();
+  inline void HeapNumberPrint() {
+    HeapNumberPrint(stdout);
+  }
+  void HeapNumberPrint(FILE* out);
   void HeapNumberPrint(StringStream* accumulator);
 #ifdef DEBUG
   void HeapNumberVerify();
@@ -1312,7 +1358,8 @@ class JSObject: public HeapObject {
   MUST_USE_RESULT MaybeObject* SetPropertyWithFailedAccessCheck(
       LookupResult* result,
       String* name,
-      Object* value);
+      Object* value,
+      bool check_prototype);
   MUST_USE_RESULT MaybeObject* SetPropertyWithCallback(Object* structure,
                                                        String* name,
                                                        Object* value,
@@ -1327,7 +1374,7 @@ class JSObject: public HeapObject {
       String* name,
       Object* value,
       PropertyAttributes attributes);
-  MUST_USE_RESULT MaybeObject* IgnoreAttributesAndSetLocalProperty(
+  MUST_USE_RESULT MaybeObject* SetLocalPropertyIgnoreAttributes(
       String* key,
       Object* value,
       PropertyAttributes attributes);
@@ -1476,11 +1523,15 @@ class JSObject: public HeapObject {
   bool HasElementWithInterceptor(JSObject* receiver, uint32_t index);
   bool HasElementPostInterceptor(JSObject* receiver, uint32_t index);
 
-  MUST_USE_RESULT MaybeObject* SetFastElement(uint32_t index, Object* value);
+  MUST_USE_RESULT MaybeObject* SetFastElement(uint32_t index,
+                                              Object* value,
+                                              bool check_prototype = true);
 
   // Set the index'th array element.
   // A Failure object is returned if GC is needed.
-  MUST_USE_RESULT MaybeObject* SetElement(uint32_t index, Object* value);
+  MUST_USE_RESULT MaybeObject* SetElement(uint32_t index,
+                                          Object* value,
+                                          bool check_prototype = true);
 
   // Returns the index'th element.
   // The undefined object if index is out of bounds.
@@ -1649,12 +1700,28 @@ class JSObject: public HeapObject {
 
   // Dispatched behavior.
   void JSObjectShortPrint(StringStream* accumulator);
+#ifdef OBJECT_PRINT
+  inline void JSObjectPrint() {
+    JSObjectPrint(stdout);
+  }
+  void JSObjectPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void JSObjectPrint();
   void JSObjectVerify();
-  void PrintProperties();
-  void PrintElements();
+#endif
+#ifdef OBJECT_PRINT
+  inline void PrintProperties() {
+    PrintProperties(stdout);
+  }
+  void PrintProperties(FILE* out);
 
+  inline void PrintElements() {
+    PrintElements(stdout);
+  }
+  void PrintElements(FILE* out);
+#endif
+
+#ifdef DEBUG
   // Structure for collecting spill information about JSObjects.
   class SpillInformation {
    public:
@@ -1689,7 +1756,7 @@ class JSObject: public HeapObject {
   static const uint32_t kMaxGap = 1024;
   static const int kMaxFastElementsLength = 5000;
   static const int kInitialMaxFastElementArray = 100000;
-  static const int kMaxFastProperties = 8;
+  static const int kMaxFastProperties = 12;
   static const int kMaxInstanceSize = 255 * kPointerSize;
   // When extending the backing storage for property values, we increase
   // its size by more than the 1 entry necessary, so sequentially adding fields
@@ -1718,9 +1785,12 @@ class JSObject: public HeapObject {
                                       Object* value,
                                       JSObject* holder);
   MUST_USE_RESULT MaybeObject* SetElementWithInterceptor(uint32_t index,
-                                                         Object* value);
-  MUST_USE_RESULT MaybeObject* SetElementWithoutInterceptor(uint32_t index,
-                                                            Object* value);
+                                                         Object* value,
+                                                         bool check_prototype);
+  MUST_USE_RESULT MaybeObject* SetElementWithoutInterceptor(
+      uint32_t index,
+      Object* value,
+      bool check_prototype);
 
   MaybeObject* GetElementPostInterceptor(JSObject* receiver, uint32_t index);
 
@@ -1835,8 +1905,13 @@ class FixedArray: public HeapObject {
   static const int kMaxLength = (kMaxSize - kHeaderSize) / kPointerSize;
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void FixedArrayPrint() {
+    FixedArrayPrint(stdout);
+  }
+  void FixedArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void FixedArrayPrint();
   void FixedArrayVerify();
   // Checks if two FixedArrays have identical contents.
   bool IsEqualTo(FixedArray* other);
@@ -2012,10 +2087,15 @@ class DescriptorArray: public FixedArray {
   static const int kEnumCacheBridgeCacheOffset =
     kEnumCacheBridgeEnumOffset + kPointerSize;
 
-#ifdef DEBUG
+#ifdef OBJECT_PRINT
   // Print all the descriptors.
-  void PrintDescriptors();
+  inline void PrintDescriptors() {
+    PrintDescriptors(stdout);
+  }
+  void PrintDescriptors(FILE* out);
+#endif
 
+#ifdef DEBUG
   // Is the descriptor array sorted and without duplicates?
   bool IsSortedNoDuplicates();
 
@@ -2272,6 +2352,10 @@ class SymbolTable: public HashTable<SymbolTableShape, HashTableKey*> {
   // been enlarged.  If the return value is not a failure, the symbol
   // pointer *s is set to the symbol found.
   MUST_USE_RESULT MaybeObject* LookupSymbol(Vector<const char> str, Object** s);
+  MUST_USE_RESULT MaybeObject* LookupAsciiSymbol(Vector<const char> str,
+                                                 Object** s);
+  MUST_USE_RESULT MaybeObject* LookupTwoByteSymbol(Vector<const uc16> str,
+                                                   Object** s);
   MUST_USE_RESULT MaybeObject* LookupString(String* key, Object** s);
 
   // Looks up a symbol that is equal to the given string and returns
@@ -2396,8 +2480,11 @@ class Dictionary: public HashTable<Shape, Key> {
   // Ensure enough space for n additional elements.
   MUST_USE_RESULT MaybeObject* EnsureCapacity(int n, Key key);
 
-#ifdef DEBUG
-  void Print();
+#ifdef OBJECT_PRINT
+  inline void Print() {
+    Print(stdout);
+  }
+  void Print(FILE* out);
 #endif
   // Returns the key (slow).
   Object* SlowReverseLookup(Object* value);
@@ -2542,6 +2629,11 @@ class JSFunctionResultCache: public FixedArray {
   inline void MakeZeroSize();
   inline void Clear();
 
+  inline int size();
+  inline void set_size(int size);
+  inline int finger_index();
+  inline void set_finger_index(int finger_index);
+
   // Casting
   static inline JSFunctionResultCache* cast(Object* obj);
 
@@ -2619,8 +2711,13 @@ class ByteArray: public HeapObject {
   inline int ByteArraySize() {
     return SizeFor(this->length());
   }
+#ifdef OBJECT_PRINT
+  inline void ByteArrayPrint() {
+    ByteArrayPrint(stdout);
+  }
+  void ByteArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ByteArrayPrint();
   void ByteArrayVerify();
 #endif
 
@@ -2669,8 +2766,13 @@ class PixelArray: public HeapObject {
   // Casting.
   static inline PixelArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void PixelArrayPrint() {
+    PixelArrayPrint(stdout);
+  }
+  void PixelArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void PixelArrayPrint();
   void PixelArrayVerify();
 #endif  // DEBUG
 
@@ -2741,8 +2843,13 @@ class ExternalByteArray: public ExternalArray {
   // Casting.
   static inline ExternalByteArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ExternalByteArrayPrint() {
+    ExternalByteArrayPrint(stdout);
+  }
+  void ExternalByteArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ExternalByteArrayPrint();
   void ExternalByteArrayVerify();
 #endif  // DEBUG
 
@@ -2764,8 +2871,13 @@ class ExternalUnsignedByteArray: public ExternalArray {
   // Casting.
   static inline ExternalUnsignedByteArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ExternalUnsignedByteArrayPrint() {
+    ExternalUnsignedByteArrayPrint(stdout);
+  }
+  void ExternalUnsignedByteArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ExternalUnsignedByteArrayPrint();
   void ExternalUnsignedByteArrayVerify();
 #endif  // DEBUG
 
@@ -2787,8 +2899,13 @@ class ExternalShortArray: public ExternalArray {
   // Casting.
   static inline ExternalShortArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ExternalShortArrayPrint() {
+    ExternalShortArrayPrint(stdout);
+  }
+  void ExternalShortArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ExternalShortArrayPrint();
   void ExternalShortArrayVerify();
 #endif  // DEBUG
 
@@ -2810,8 +2927,13 @@ class ExternalUnsignedShortArray: public ExternalArray {
   // Casting.
   static inline ExternalUnsignedShortArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ExternalUnsignedShortArrayPrint() {
+    ExternalUnsignedShortArrayPrint(stdout);
+  }
+  void ExternalUnsignedShortArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ExternalUnsignedShortArrayPrint();
   void ExternalUnsignedShortArrayVerify();
 #endif  // DEBUG
 
@@ -2833,8 +2955,13 @@ class ExternalIntArray: public ExternalArray {
   // Casting.
   static inline ExternalIntArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ExternalIntArrayPrint() {
+    ExternalIntArrayPrint(stdout);
+  }
+  void ExternalIntArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ExternalIntArrayPrint();
   void ExternalIntArrayVerify();
 #endif  // DEBUG
 
@@ -2856,8 +2983,13 @@ class ExternalUnsignedIntArray: public ExternalArray {
   // Casting.
   static inline ExternalUnsignedIntArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ExternalUnsignedIntArrayPrint() {
+    ExternalUnsignedIntArrayPrint(stdout);
+  }
+  void ExternalUnsignedIntArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ExternalUnsignedIntArrayPrint();
   void ExternalUnsignedIntArrayVerify();
 #endif  // DEBUG
 
@@ -2879,8 +3011,13 @@ class ExternalFloatArray: public ExternalArray {
   // Casting.
   static inline ExternalFloatArray* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ExternalFloatArrayPrint() {
+    ExternalFloatArrayPrint(stdout);
+  }
+  void ExternalFloatArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ExternalFloatArrayPrint();
   void ExternalFloatArrayVerify();
 #endif  // DEBUG
 
@@ -2960,8 +3097,8 @@ class DeoptimizationInputData: public FixedArray {
   // Casting.
   static inline DeoptimizationInputData* cast(Object* obj);
 
-#ifdef DEBUG
-  void DeoptimizationInputDataPrint();
+#ifdef OBJECT_PRINT
+  void DeoptimizationInputDataPrint(FILE* out);
 #endif
 
  private:
@@ -2999,10 +3136,13 @@ class DeoptimizationOutputData: public FixedArray {
   // Casting.
   static inline DeoptimizationOutputData* cast(Object* obj);
 
-#ifdef DEBUG
-  void DeoptimizationOutputDataPrint();
+#ifdef OBJECT_PRINT
+  void DeoptimizationOutputDataPrint(FILE* out);
 #endif
 };
+
+
+class SafepointEntry;
 
 
 // Code describes objects with on-the-fly generated machine code.
@@ -3044,12 +3184,19 @@ class Code: public HeapObject {
     NUMBER_OF_KINDS = LAST_IC_KIND + 1
   };
 
+  typedef int ExtraICState;
+
+  static const ExtraICState kNoExtraICState = 0;
+
 #ifdef ENABLE_DISASSEMBLER
   // Printing
   static const char* Kind2String(Kind kind);
   static const char* ICState2String(InlineCacheState state);
   static const char* PropertyType2String(PropertyType type);
-  void Disassemble(const char* name);
+  inline void Disassemble(const char* name) {
+    Disassemble(name, stdout);
+  }
+  void Disassemble(const char* name, FILE* out);
 #endif  // ENABLE_DISASSEMBLER
 
   // [instruction_size]: Size of the native instructions
@@ -3076,6 +3223,7 @@ class Code: public HeapObject {
   // [flags]: Access to specific code flags.
   inline Kind kind();
   inline InlineCacheState ic_state();  // Only valid for IC stubs.
+  inline ExtraICState extra_ic_state();  // Only valid for IC stubs.
   inline InLoopFlag ic_in_loop();  // Only valid for IC stubs.
   inline PropertyType type();  // Only valid for monomorphic IC stubs.
   inline int arguments_count();  // Only valid for call IC stubs.
@@ -3149,9 +3297,8 @@ class Code: public HeapObject {
   inline byte compare_state();
   inline void set_compare_state(byte value);
 
-  // Get the safepoint entry for the given pc. Returns NULL for
-  // non-safepoint pcs.
-  uint8_t* GetSafepointEntry(Address pc);
+  // Get the safepoint entry for the given pc.
+  SafepointEntry GetSafepointEntry(Address pc);
 
   // Mark this code object as not having a stack check table.  Assumes kind
   // is FUNCTION.
@@ -3161,22 +3308,26 @@ class Code: public HeapObject {
   Map* FindFirstMap();
 
   // Flags operations.
-  static inline Flags ComputeFlags(Kind kind,
-                                   InLoopFlag in_loop = NOT_IN_LOOP,
-                                   InlineCacheState ic_state = UNINITIALIZED,
-                                   PropertyType type = NORMAL,
-                                   int argc = -1,
-                                   InlineCacheHolderFlag holder = OWN_MAP);
+  static inline Flags ComputeFlags(
+      Kind kind,
+      InLoopFlag in_loop = NOT_IN_LOOP,
+      InlineCacheState ic_state = UNINITIALIZED,
+      ExtraICState extra_ic_state = kNoExtraICState,
+      PropertyType type = NORMAL,
+      int argc = -1,
+      InlineCacheHolderFlag holder = OWN_MAP);
 
   static inline Flags ComputeMonomorphicFlags(
       Kind kind,
       PropertyType type,
+      ExtraICState extra_ic_state = kNoExtraICState,
       InlineCacheHolderFlag holder = OWN_MAP,
       InLoopFlag in_loop = NOT_IN_LOOP,
       int argc = -1);
 
   static inline Kind ExtractKindFromFlags(Flags flags);
   static inline InlineCacheState ExtractICStateFromFlags(Flags flags);
+  static inline ExtraICState ExtractExtraICStateFromFlags(Flags flags);
   static inline InLoopFlag ExtractICInLoopFromFlags(Flags flags);
   static inline PropertyType ExtractTypeFromFlags(Flags flags);
   static inline int ExtractArgumentsCountFromFlags(Flags flags);
@@ -3242,8 +3393,13 @@ class Code: public HeapObject {
 
   template<typename StaticVisitor>
   inline void CodeIterateBody();
+#ifdef OBJECT_PRINT
+  inline void CodePrint() {
+    CodePrint(stdout);
+  }
+  void CodePrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void CodePrint();
   void CodeVerify();
 #endif
 
@@ -3292,14 +3448,16 @@ class Code: public HeapObject {
   static const int kFlagsTypeShift           = 4;
   static const int kFlagsKindShift           = 7;
   static const int kFlagsICHolderShift       = 11;
-  static const int kFlagsArgumentsCountShift = 12;
+  static const int kFlagsExtraICStateShift   = 12;
+  static const int kFlagsArgumentsCountShift = 14;
 
   static const int kFlagsICStateMask        = 0x00000007;  // 00000000111
   static const int kFlagsICInLoopMask       = 0x00000008;  // 00000001000
   static const int kFlagsTypeMask           = 0x00000070;  // 00001110000
   static const int kFlagsKindMask           = 0x00000780;  // 11110000000
   static const int kFlagsCacheInPrototypeMapMask = 0x00000800;
-  static const int kFlagsArgumentsCountMask = 0xFFFFF000;
+  static const int kFlagsExtraICStateMask   = 0x00003000;
+  static const int kFlagsArgumentsCountMask = 0xFFFFC000;
 
   static const int kFlagsNotUsedInLookup =
       (kFlagsICInLoopMask | kFlagsTypeMask | kFlagsCacheInPrototypeMapMask);
@@ -3531,8 +3689,13 @@ class Map: public HeapObject {
   void ClearNonLiveTransitions(Object* real_prototype);
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void MapPrint() {
+    MapPrint(stdout);
+  }
+  void MapPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void MapPrint();
   void MapVerify();
   void SharedMapVerify();
 #endif
@@ -3688,8 +3851,13 @@ class Script: public Struct {
   // resource is accessible. Otherwise, always return true.
   inline bool HasValidSource();
 
+#ifdef OBJECT_PRINT
+  inline void ScriptPrint() {
+    ScriptPrint(stdout);
+  }
+  void ScriptPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ScriptPrint();
   void ScriptVerify();
 #endif
 
@@ -3906,7 +4074,6 @@ class SharedFunctionInfo: public HeapObject {
   inline bool IsApiFunction();
   inline FunctionTemplateInfo* get_api_func_data();
   inline bool HasBuiltinFunctionId();
-  inline bool IsBuiltinMathFunction();
   inline BuiltinFunctionId builtin_function_id();
 
   // [script info]: Script from which the function originates.
@@ -4052,8 +4219,13 @@ class SharedFunctionInfo: public HeapObject {
   // Dispatched behavior.
   // Set max_length to -1 for unlimited length.
   void SourceCodePrint(StringStream* accumulator, int max_length);
+#ifdef OBJECT_PRINT
+  inline void SharedFunctionInfoPrint() {
+    SharedFunctionInfoPrint(stdout);
+  }
+  void SharedFunctionInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void SharedFunctionInfoPrint();
   void SharedFunctionInfoVerify();
 #endif
 
@@ -4285,7 +4457,10 @@ class JSFunction: public JSObject {
   DECL_ACCESSORS(next_function_link, Object)
 
   // Prints the name of the function using PrintF.
-  void PrintName();
+  inline void PrintName() {
+    PrintName(stdout);
+  }
+  void PrintName(FILE* out);
 
   // Casting.
   static inline JSFunction* cast(Object* obj);
@@ -4295,8 +4470,13 @@ class JSFunction: public JSObject {
   void JSFunctionIterateBody(int object_size, ObjectVisitor* v);
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSFunctionPrint() {
+    JSFunctionPrint(stdout);
+  }
+  void JSFunctionPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void JSFunctionPrint();
   void JSFunctionVerify();
 #endif
 
@@ -4345,8 +4525,13 @@ class JSGlobalProxy : public JSObject {
   static inline JSGlobalProxy* cast(Object* obj);
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSGlobalProxyPrint() {
+    JSGlobalProxyPrint(stdout);
+  }
+  void JSGlobalProxyPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void JSGlobalProxyPrint();
   void JSGlobalProxyVerify();
 #endif
 
@@ -4416,8 +4601,13 @@ class JSGlobalObject: public GlobalObject {
   static inline JSGlobalObject* cast(Object* obj);
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSGlobalObjectPrint() {
+    JSGlobalObjectPrint(stdout);
+  }
+  void JSGlobalObjectPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void JSGlobalObjectPrint();
   void JSGlobalObjectVerify();
 #endif
 
@@ -4445,8 +4635,13 @@ class JSBuiltinsObject: public GlobalObject {
   static inline JSBuiltinsObject* cast(Object* obj);
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSBuiltinsObjectPrint() {
+    JSBuiltinsObjectPrint(stdout);
+  }
+  void JSBuiltinsObjectPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void JSBuiltinsObjectPrint();
   void JSBuiltinsObjectVerify();
 #endif
 
@@ -4483,8 +4678,13 @@ class JSValue: public JSObject {
   static inline JSValue* cast(Object* obj);
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSValuePrint() {
+    JSValuePrint(stdout);
+  }
+  void JSValuePrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void JSValuePrint();
   void JSValueVerify();
 #endif
 
@@ -4673,8 +4873,13 @@ class CodeCache: public Struct {
 
   static inline CodeCache* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void CodeCachePrint() {
+    CodeCachePrint(stdout);
+  }
+  void CodeCachePrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void CodeCachePrint();
   void CodeCacheVerify();
 #endif
 
@@ -4915,6 +5120,8 @@ class String: public HeapObject {
   // String equality operations.
   inline bool Equals(String* other);
   bool IsEqualTo(Vector<const char> str);
+  bool IsAsciiEqualTo(Vector<const char> str);
+  bool IsTwoByteEqualTo(Vector<const uc16> str);
 
   // Return a UTF8 representation of the string.  The string is null
   // terminated but may optionally contain nulls.  Length is returned
@@ -4975,8 +5182,13 @@ class String: public HeapObject {
 
   // Dispatched behavior.
   void StringShortPrint(StringStream* accumulator);
+#ifdef OBJECT_PRINT
+  inline void StringPrint() {
+    StringPrint(stdout);
+  }
+  void StringPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void StringPrint();
   void StringVerify();
 #endif
   inline bool IsFlat();
@@ -5080,6 +5292,34 @@ class String: public HeapObject {
                           sinkchar* sink,
                           int from,
                           int to);
+
+  static inline bool IsAscii(const char* chars, int length) {
+    const char* limit = chars + length;
+#ifdef V8_HOST_CAN_READ_UNALIGNED
+    ASSERT(kMaxAsciiCharCode == 0x7F);
+    const uintptr_t non_ascii_mask = kUintptrAllBitsSet / 0xFF * 0x80;
+    while (chars <= limit - sizeof(uintptr_t)) {
+      if (*reinterpret_cast<const uintptr_t*>(chars) & non_ascii_mask) {
+        return false;
+      }
+      chars += sizeof(uintptr_t);
+    }
+#endif
+    while (chars < limit) {
+      if (static_cast<uint8_t>(*chars) > kMaxAsciiCharCodeU) return false;
+      ++chars;
+    }
+    return true;
+  }
+
+  static inline bool IsAscii(const uc16* chars, int length) {
+    const uc16* limit = chars + length;
+    while (chars < limit) {
+      if (*chars > kMaxAsciiCharCodeU) return false;
+      ++chars;
+    }
+    return true;
+  }
 
  protected:
   class ReadBlockBuffer {
@@ -5531,7 +5771,12 @@ class JSGlobalPropertyCell: public HeapObject {
 
 #ifdef DEBUG
   void JSGlobalPropertyCellVerify();
-  void JSGlobalPropertyCellPrint();
+#endif
+#ifdef OBJECT_PRINT
+  inline void JSGlobalPropertyCellPrint() {
+    JSGlobalPropertyCellPrint(stdout);
+  }
+  void JSGlobalPropertyCellPrint(FILE* out);
 #endif
 
   // Layout description.
@@ -5566,8 +5811,13 @@ class Proxy: public HeapObject {
   template<typename StaticVisitor>
   inline void ProxyIterateBody();
 
+#ifdef OBJECT_PRINT
+  inline void ProxyPrint() {
+    ProxyPrint(stdout);
+  }
+  void ProxyPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ProxyPrint();
   void ProxyVerify();
 #endif
 
@@ -5616,8 +5866,13 @@ class JSArray: public JSObject {
   inline void EnsureSize(int minimum_size_of_backing_fixed_array);
 
   // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSArrayPrint() {
+    JSArrayPrint(stdout);
+  }
+  void JSArrayPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void JSArrayPrint();
   void JSArrayVerify();
 #endif
 
@@ -5688,8 +5943,13 @@ class AccessorInfo: public Struct {
 
   static inline AccessorInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void AccessorInfoPrint() {
+    AccessorInfoPrint(stdout);
+  }
+  void AccessorInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void AccessorInfoPrint();
   void AccessorInfoVerify();
 #endif
 
@@ -5719,8 +5979,13 @@ class AccessCheckInfo: public Struct {
 
   static inline AccessCheckInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void AccessCheckInfoPrint() {
+    AccessCheckInfoPrint(stdout);
+  }
+  void AccessCheckInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void AccessCheckInfoPrint();
   void AccessCheckInfoVerify();
 #endif
 
@@ -5745,8 +6010,13 @@ class InterceptorInfo: public Struct {
 
   static inline InterceptorInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void InterceptorInfoPrint() {
+    InterceptorInfoPrint(stdout);
+  }
+  void InterceptorInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void InterceptorInfoPrint();
   void InterceptorInfoVerify();
 #endif
 
@@ -5770,8 +6040,13 @@ class CallHandlerInfo: public Struct {
 
   static inline CallHandlerInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void CallHandlerInfoPrint() {
+    CallHandlerInfoPrint(stdout);
+  }
+  void CallHandlerInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void CallHandlerInfoPrint();
   void CallHandlerInfoVerify();
 #endif
 
@@ -5827,8 +6102,13 @@ class FunctionTemplateInfo: public TemplateInfo {
 
   static inline FunctionTemplateInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void FunctionTemplateInfoPrint() {
+    FunctionTemplateInfoPrint(stdout);
+  }
+  void FunctionTemplateInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void FunctionTemplateInfoPrint();
   void FunctionTemplateInfoVerify();
 #endif
 
@@ -5870,8 +6150,13 @@ class ObjectTemplateInfo: public TemplateInfo {
 
   static inline ObjectTemplateInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void ObjectTemplateInfoPrint() {
+    ObjectTemplateInfoPrint(stdout);
+  }
+  void ObjectTemplateInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void ObjectTemplateInfoPrint();
   void ObjectTemplateInfoVerify();
 #endif
 
@@ -5889,8 +6174,13 @@ class SignatureInfo: public Struct {
 
   static inline SignatureInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void SignatureInfoPrint() {
+    SignatureInfoPrint(stdout);
+  }
+  void SignatureInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void SignatureInfoPrint();
   void SignatureInfoVerify();
 #endif
 
@@ -5909,8 +6199,13 @@ class TypeSwitchInfo: public Struct {
 
   static inline TypeSwitchInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void TypeSwitchInfoPrint() {
+    TypeSwitchInfoPrint(stdout);
+  }
+  void TypeSwitchInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void TypeSwitchInfoPrint();
   void TypeSwitchInfoVerify();
 #endif
 
@@ -5956,8 +6251,13 @@ class DebugInfo: public Struct {
 
   static inline DebugInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void DebugInfoPrint() {
+    DebugInfoPrint(stdout);
+  }
+  void DebugInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void DebugInfoPrint();
   void DebugInfoVerify();
 #endif
 
@@ -6009,8 +6309,13 @@ class BreakPointInfo: public Struct {
 
   static inline BreakPointInfo* cast(Object* obj);
 
+#ifdef OBJECT_PRINT
+  inline void BreakPointInfoPrint() {
+    BreakPointInfoPrint(stdout);
+  }
+  void BreakPointInfoPrint(FILE* out);
+#endif
 #ifdef DEBUG
-  void BreakPointInfoPrint();
   void BreakPointInfoVerify();
 #endif
 

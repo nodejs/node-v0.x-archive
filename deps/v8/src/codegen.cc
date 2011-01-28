@@ -215,8 +215,17 @@ void CodeGenerator::PrintCode(Handle<Code> code, CompilationInfo* info) {
       }
       PrintF("\n\n");
     }
-    PrintF("--- Code ---\n");
-    code->Disassemble(*function->name()->ToCString());
+    if (info->IsOptimizing()) {
+      if (FLAG_print_unopt_code) {
+        PrintF("--- Unoptimized code ---\n");
+        info->closure()->shared()->code()->Disassemble(
+            *function->debug_name()->ToCString());
+      }
+      PrintF("--- Optimized code ---\n");
+    } else {
+      PrintF("--- Code ---\n");
+    }
+    code->Disassemble(*function->debug_name()->ToCString());
   }
 #endif  // ENABLE_DISASSEMBLER
 }
@@ -239,6 +248,9 @@ bool CodeGenerator::MakeCode(CompilationInfo* info) {
   // Generate code.
   const int kInitialBufferSize = 4 * KB;
   MacroAssembler masm(NULL, kInitialBufferSize);
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  masm.positions_recorder()->StartGDBJITLineInfoRecording();
+#endif
   CodeGenerator cgen(&masm);
   CodeGeneratorScope scope(&cgen);
   cgen.Generate(info);
@@ -254,6 +266,14 @@ bool CodeGenerator::MakeCode(CompilationInfo* info) {
   code->SetNoStackCheckTable();
   CodeGenerator::PrintCode(code, info);
   info->SetCode(code);  // May be an empty handle.
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  if (FLAG_gdbjit && !code.is_null()) {
+    GDBJITLineInfo* lineinfo =
+        masm.positions_recorder()->DetachGDBJITLineInfo();
+
+    GDBJIT(RegisterDetailedLineInfo(*code, lineinfo));
+  }
+#endif
   return !code.is_null();
 }
 

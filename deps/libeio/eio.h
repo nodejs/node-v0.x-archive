@@ -66,7 +66,11 @@ typedef int (*eio_cb)(eio_req *req);
 #endif
 
 #ifndef EIO_STRUCT_STAT
-# define EIO_STRUCT_STAT struct stat
+# ifdef _WIN32
+#   define EIO_STRUCT_STAT struct _stati64
+# else
+#   define EIO_STRUCT_STAT struct stat
+# endif
 #endif
 
 #ifndef EIO_STRUCT_STATVFS
@@ -180,7 +184,7 @@ enum
 enum {
   EIO_PRI_MIN     = -4,
   EIO_PRI_MAX     =  4,
-  EIO_PRI_DEFAULT =  0
+  EIO_PRI_DEFAULT =  0,
 };
 
 /* eio request structure */

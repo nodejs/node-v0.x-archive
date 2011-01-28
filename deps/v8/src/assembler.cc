@@ -66,6 +66,7 @@ namespace internal {
 
 const double DoubleConstant::min_int = kMinInt;
 const double DoubleConstant::one_half = 0.5;
+const double DoubleConstant::minus_zero = -0.0;
 const double DoubleConstant::negative_infinity = -V8_INFINITY;
 
 
@@ -467,34 +468,35 @@ const char* RelocInfo::RelocModeName(RelocInfo::Mode rmode) {
 }
 
 
-void RelocInfo::Print() {
-  PrintF("%p  %s", pc_, RelocModeName(rmode_));
+void RelocInfo::Print(FILE* out) {
+  PrintF(out, "%p  %s", pc_, RelocModeName(rmode_));
   if (IsComment(rmode_)) {
-    PrintF("  (%s)", reinterpret_cast<char*>(data_));
+    PrintF(out, "  (%s)", reinterpret_cast<char*>(data_));
   } else if (rmode_ == EMBEDDED_OBJECT) {
-    PrintF("  (");
-    target_object()->ShortPrint();
-    PrintF(")");
+    PrintF(out, "  (");
+    target_object()->ShortPrint(out);
+    PrintF(out, ")");
   } else if (rmode_ == EXTERNAL_REFERENCE) {
     ExternalReferenceEncoder ref_encoder;
-    PrintF(" (%s)  (%p)",
+    PrintF(out, " (%s)  (%p)",
            ref_encoder.NameOfAddress(*target_reference_address()),
            *target_reference_address());
   } else if (IsCodeTarget(rmode_)) {
     Code* code = Code::GetCodeFromTargetAddress(target_address());
-    PrintF(" (%s)  (%p)", Code::Kind2String(code->kind()), target_address());
+    PrintF(out, " (%s)  (%p)", Code::Kind2String(code->kind()),
+           target_address());
   } else if (IsPosition(rmode_)) {
-    PrintF("  (%" V8_PTR_PREFIX "d)", data());
+    PrintF(out, "  (%" V8_PTR_PREFIX "d)", data());
   } else if (rmode_ == RelocInfo::RUNTIME_ENTRY) {
     // Depotimization bailouts are stored as runtime entries.
     int id = Deoptimizer::GetDeoptimizationId(
         target_address(), Deoptimizer::EAGER);
     if (id != Deoptimizer::kNotDeoptimizationEntry) {
-      PrintF("  (deoptimization bailout %d)", id);
+      PrintF(out, "  (deoptimization bailout %d)", id);
     }
   }
 
-  PrintF("\n");
+  PrintF(out, "\n");
 }
 #endif  // ENABLE_DISASSEMBLER
 
@@ -646,6 +648,11 @@ ExternalReference ExternalReference::the_hole_value_location() {
 }
 
 
+ExternalReference ExternalReference::arguments_marker_location() {
+  return ExternalReference(Factory::arguments_marker().location());
+}
+
+
 ExternalReference ExternalReference::roots_address() {
   return ExternalReference(Heap::roots_address());
 }
@@ -720,6 +727,12 @@ ExternalReference ExternalReference::address_of_min_int() {
 ExternalReference ExternalReference::address_of_one_half() {
   return ExternalReference(reinterpret_cast<void*>(
       const_cast<double*>(&DoubleConstant::one_half)));
+}
+
+
+ExternalReference ExternalReference::address_of_minus_zero() {
+  return ExternalReference(reinterpret_cast<void*>(
+      const_cast<double*>(&DoubleConstant::minus_zero)));
 }
 
 
@@ -904,6 +917,11 @@ void PositionsRecorder::RecordPosition(int pos) {
   ASSERT(pos != RelocInfo::kNoPosition);
   ASSERT(pos >= 0);
   state_.current_position = pos;
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  if (gdbjit_lineinfo_ != NULL) {
+    gdbjit_lineinfo_->SetPosition(assembler_->pc_offset(), pos, false);
+  }
+#endif
 }
 
 
@@ -911,6 +929,11 @@ void PositionsRecorder::RecordStatementPosition(int pos) {
   ASSERT(pos != RelocInfo::kNoPosition);
   ASSERT(pos >= 0);
   state_.current_statement_position = pos;
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  if (gdbjit_lineinfo_ != NULL) {
+    gdbjit_lineinfo_->SetPosition(assembler_->pc_offset(), pos, true);
+  }
+#endif
 }
 
 

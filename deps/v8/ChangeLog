@@ -1,3 +1,113 @@
+2011-01-28: Version 3.0.12
+
+        Added support for strict mode parameter and object property
+        validation.
+
+        Fixed a couple of crash bugs.
+
+
+2011-01-25: Version 3.0.11
+
+        Fixed a bug in deletion of lookup slots that could cause global
+        variables to be accidentally deleted (http://crbug.com/70066).
+
+        Added support for strict mode octal literal verification.
+
+        Fixed a couple of crash bugs (issues 1070 and 1071).
+
+
+2011-01-24: Version 3.0.10
+
+        Fixed External::Wrap for 64-bit addresses (issue 1037).
+
+        Fixed incorrect .arguments variable proxy handling in the full
+        code generator (issue 1060).
+
+        Introduced partial strict mode support.
+
+        Changed formatting of recursive error messages to match Firefox and Safari
+        (issue http://crbug.com/70334).
+
+        Fixed incorrect rounding for float-to-integer conversions for external
+        array types, which implement the Typed Array spec
+        (issue http://crbug.com/50972).
+
+        Performance improvements on the IA32 platform.
+
+
+2011-01-19: Version 3.0.9
+
+        Added basic GDB JIT Interface integration.
+
+        Make invalid break/continue statements a syntax error instead of a
+        runtime error.
+
+
+2011-01-17: Version 3.0.8
+
+        Exposed heap size limit to the heap statistics gathered by
+        the GetHeapStatistics API.
+
+        Wrapped external pointers more carefully (issue 1037).
+
+        Hardened the implementation of error objects to avoid setters
+        intercepting the properties set then throwing an error.
+
+        Avoided trashing the FPSCR when calculating Math.floor on ARM.
+
+        Performance improvements on the IA32 platform.
+
+
+2011-01-10: Version 3.0.7
+
+        Stopped calling inherited setters when creating object literals
+        (issue 1015).
+
+        Changed interpretation of malformed \c? escapes in RegExp to match
+        JSC.
+
+        Enhanced the command-line debugger interface and fixed some minor
+        bugs in the debugger.
+
+        Performance improvements on the IA32 platform.
+
+
+2011-01-05: Version 3.0.6
+
+        Allowed getters and setters on JSArray elements (issue 900).
+
+        Stopped JSON objects from hitting inherited setters (part of
+        issue 1015).
+
+        Allowed numbers and strings as names of getters/setters in object
+        initializer (issue 820).
+
+        Added use_system_v8 option to gyp (off by default), to make it easier
+        for Linux distributions to ship with system-provided V8 library.
+
+        Exported external array data accessors (issue 1016).
+
+        Added labelled thread names to help with debugging (on Linux).
+
+
+2011-01-03: Version 3.0.5
+
+        Fixed a couple of cast errors for gcc-3.4.3.
+
+        Performance improvements in GC and IA32 code generator.
+
+
+2010-12-21: Version 3.0.4
+
+        Added Date::ResetCache() to the API so that the cached values in the
+        Date object can be reset to allow live DST / timezone changes.
+
+        Extended existing support for printing (while debugging) the contents
+        of objects.  Added support for printing objects from release builds.
+
+        Fixed V8 issues 989, 1006, and 1007.
+
+
 2010-12-17: Version 3.0.3
 
         Reapplied all changes for version 3.0.1.
@@ -141,7 +251,7 @@
         Allowed forcing the use of a simulator from the build script
         independently of the host architecture.
 
-        Fixed FreeBSD port (Issue 912).
+        Fixed FreeBSD port (issue 912).
 
         Made windows-tick-processor respect D8_PATH.
 

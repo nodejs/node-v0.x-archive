@@ -553,11 +553,11 @@ Object* Object::GetPrototype() {
 }
 
 
-void Object::ShortPrint() {
+void Object::ShortPrint(FILE* out) {
   HeapStringAllocator allocator;
   StringStream accumulator(&allocator);
   ShortPrint(&accumulator);
-  accumulator.OutputToStdOut();
+  accumulator.OutputToFile(out);
 }
 
 
@@ -572,8 +572,8 @@ void Object::ShortPrint(StringStream* accumulator) {
 }
 
 
-void Smi::SmiPrint() {
-  PrintF("%d", value());
+void Smi::SmiPrint(FILE* out) {
+  PrintF(out, "%d", value());
 }
 
 
@@ -587,8 +587,8 @@ void Failure::FailurePrint(StringStream* accumulator) {
 }
 
 
-void Failure::FailurePrint() {
-  PrintF("Failure(%p)", reinterpret_cast<void*>(value()));
+void Failure::FailurePrint(FILE* out) {
+  PrintF(out, "Failure(%p)", reinterpret_cast<void*>(value()));
 }
 
 
@@ -1141,8 +1141,8 @@ Object* HeapNumber::HeapNumberToBoolean() {
 }
 
 
-void HeapNumber::HeapNumberPrint() {
-  PrintF("%.16g", Number());
+void HeapNumber::HeapNumberPrint(FILE* out) {
+  PrintF(out, "%.16g", Number());
 }
 
 
@@ -1823,8 +1823,9 @@ void JSObject::LookupRealNamedPropertyInPrototypes(String* name,
 // We only need to deal with CALLBACKS and INTERCEPTORS
 MaybeObject* JSObject::SetPropertyWithFailedAccessCheck(LookupResult* result,
                                                         String* name,
-                                                        Object* value) {
-  if (!result->IsProperty()) {
+                                                        Object* value,
+                                                        bool check_prototype) {
+  if (check_prototype && !result->IsProperty()) {
     LookupCallbackSetterInPrototypes(name, result);
   }
 
@@ -1850,7 +1851,8 @@ MaybeObject* JSObject::SetPropertyWithFailedAccessCheck(LookupResult* result,
           LookupResult r;
           LookupRealNamedProperty(name, &r);
           if (r.IsProperty()) {
-            return SetPropertyWithFailedAccessCheck(&r, name, value);
+            return SetPropertyWithFailedAccessCheck(&r, name, value,
+                                                    check_prototype);
           }
           break;
         }
@@ -1891,7 +1893,7 @@ MaybeObject* JSObject::SetProperty(LookupResult* result,
   // Check access rights if needed.
   if (IsAccessCheckNeeded()
       && !Top::MayNamedAccess(this, name, v8::ACCESS_SET)) {
-    return SetPropertyWithFailedAccessCheck(result, name, value);
+    return SetPropertyWithFailedAccessCheck(result, name, value, true);
   }
 
   if (IsJSGlobalProxy()) {
@@ -1981,7 +1983,7 @@ MaybeObject* JSObject::SetProperty(LookupResult* result,
 // callback setter removed.  The two lines looking up the LookupResult
 // result are also added.  If one of the functions is changed, the other
 // should be.
-MaybeObject* JSObject::IgnoreAttributesAndSetLocalProperty(
+MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
     String* name,
     Object* value,
     PropertyAttributes attributes) {
@@ -1993,14 +1995,14 @@ MaybeObject* JSObject::IgnoreAttributesAndSetLocalProperty(
   // Check access rights if needed.
   if (IsAccessCheckNeeded()
       && !Top::MayNamedAccess(this, name, v8::ACCESS_SET)) {
-    return SetPropertyWithFailedAccessCheck(&result, name, value);
+    return SetPropertyWithFailedAccessCheck(&result, name, value, false);
   }
 
   if (IsJSGlobalProxy()) {
     Object* proto = GetPrototype();
     if (proto->IsNull()) return value;
     ASSERT(proto->IsJSGlobalObject());
-    return JSObject::cast(proto)->IgnoreAttributesAndSetLocalProperty(
+    return JSObject::cast(proto)->SetLocalPropertyIgnoreAttributes(
         name,
         value,
         attributes);
@@ -2932,7 +2934,6 @@ MaybeObject* JSObject::DefineGetterSetter(String* name,
 
   uint32_t index = 0;
   bool is_element = name->AsArrayIndex(&index);
-  if (is_element && IsJSArray()) return Heap::undefined_value();
 
   if (is_element) {
     switch (GetElementsKind()) {
@@ -5143,6 +5144,26 @@ bool String::IsEqualTo(Vector<const char> str) {
 }
 
 
+bool String::IsAsciiEqualTo(Vector<const char> str) {
+  int slen = length();
+  if (str.length() != slen) return false;
+  for (int i = 0; i < slen; i++) {
+    if (Get(i) != static_cast<uint16_t>(str[i])) return false;
+  }
+  return true;
+}
+
+
+bool String::IsTwoByteEqualTo(Vector<const uc16> str) {
+  int slen = length();
+  if (str.length() != slen) return false;
+  for (int i = 0; i < slen; i++) {
+    if (Get(i) != str[i]) return false;
+  }
+  return true;
+}
+
+
 template <typename schar>
 static inline uint32_t HashSequentialString(const schar* chars, int length) {
   StringHasher hasher(length);
@@ -5378,7 +5399,8 @@ void JSFunction::JSFunctionIterateBody(int object_size, ObjectVisitor* v) {
 
 void JSFunction::MarkForLazyRecompilation() {
   ASSERT(is_compiled() && !IsOptimized());
-  ASSERT(shared()->allows_lazy_compilation());
+  ASSERT(shared()->allows_lazy_compilation() ||
+         code()->optimizable());
   ReplaceCode(Builtins::builtin(Builtins::LazyRecompile));
 }
 
@@ -5467,9 +5489,9 @@ Object* JSFunction::SetInstanceClassName(String* name) {
 }
 
 
-void JSFunction::PrintName() {
+void JSFunction::PrintName(FILE* out) {
   SmartPointer<char> name = shared()->DebugName()->ToCString();
-  PrintF("%s", *name);
+  PrintF(out, "%s", *name);
 }
 
 
@@ -5966,14 +5988,9 @@ int Code::SourceStatementPosition(Address pc) {
 }
 
 
-uint8_t* Code::GetSafepointEntry(Address pc) {
+SafepointEntry Code::GetSafepointEntry(Address pc) {
   SafepointTable table(this);
-  unsigned pc_offset = static_cast<unsigned>(pc - instruction_start());
-  for (unsigned i = 0; i < table.length(); i++) {
-    // TODO(kasperl): Replace the linear search with binary search.
-    if (table.GetPcOffset(i) == pc_offset) return table.GetEntry(i);
-  }
-  return NULL;
+  return table.FindEntry(pc);
 }
 
 
@@ -5999,18 +6016,18 @@ Map* Code::FindFirstMap() {
 
 #ifdef ENABLE_DISASSEMBLER
 
-#ifdef DEBUG
+#ifdef OBJECT_PRINT
 
-void DeoptimizationInputData::DeoptimizationInputDataPrint() {
+void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
   disasm::NameConverter converter;
   int deopt_count = DeoptCount();
-  PrintF("Deoptimization Input Data (deopt points = %d)\n", deopt_count);
+  PrintF(out, "Deoptimization Input Data (deopt points = %d)\n", deopt_count);
   if (0 == deopt_count) return;
 
-  PrintF("%6s  %6s  %6s  %12s\n", "index", "ast id", "argc", "commands");
+  PrintF(out, "%6s  %6s  %6s  %12s\n", "index", "ast id", "argc", "commands");
   for (int i = 0; i < deopt_count; i++) {
     int command_count = 0;
-    PrintF("%6d  %6d  %6d",
+    PrintF(out, "%6d  %6d  %6d",
            i, AstId(i)->value(), ArgumentsStackHeight(i)->value());
     int translation_index = TranslationIndex(i)->value();
     TranslationIterator iterator(TranslationByteArray(), translation_index);
@@ -6019,7 +6036,8 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
     ASSERT(Translation::BEGIN == opcode);
     int frame_count = iterator.Next();
     if (FLAG_print_code_verbose) {
-      PrintF("  %s {count=%d}\n", Translation::StringFor(opcode), frame_count);
+      PrintF(out, "  %s {count=%d}\n", Translation::StringFor(opcode),
+             frame_count);
     }
 
     for (int i = 0; i < frame_count; ++i) {
@@ -6031,10 +6049,10 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           JSFunction::cast(LiteralArray()->get(function_id));
       unsigned height = iterator.Next();
       if (FLAG_print_code_verbose) {
-        PrintF("%24s  %s {ast_id=%d, function=",
+        PrintF(out, "%24s  %s {ast_id=%d, function=",
                "", Translation::StringFor(opcode), ast_id);
-        function->PrintName();
-        PrintF(", height=%u}\n", height);
+        function->PrintName(out);
+        PrintF(out, ", height=%u}\n", height);
       }
 
       // Size of translation is height plus all incoming arguments including
@@ -6044,13 +6062,13 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
       for (int j = 0; j < size; ++j) {
         opcode = static_cast<Translation::Opcode>(iterator.Next());
         if (FLAG_print_code_verbose) {
-          PrintF("%24s    %s ", "", Translation::StringFor(opcode));
+          PrintF(out, "%24s    %s ", "", Translation::StringFor(opcode));
         }
 
         if (opcode == Translation::DUPLICATE) {
           opcode = static_cast<Translation::Opcode>(iterator.Next());
           if (FLAG_print_code_verbose) {
-            PrintF("%s ", Translation::StringFor(opcode));
+            PrintF(out, "%s ", Translation::StringFor(opcode));
           }
           --j;  // Two commands share the same frame index.
         }
@@ -6065,7 +6083,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::REGISTER: {
             int reg_code = iterator.Next();
             if (FLAG_print_code_verbose)  {
-              PrintF("{input=%s}", converter.NameOfCPURegister(reg_code));
+              PrintF(out, "{input=%s}", converter.NameOfCPURegister(reg_code));
             }
             break;
           }
@@ -6073,7 +6091,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::INT32_REGISTER: {
             int reg_code = iterator.Next();
             if (FLAG_print_code_verbose)  {
-              PrintF("{input=%s}", converter.NameOfCPURegister(reg_code));
+              PrintF(out, "{input=%s}", converter.NameOfCPURegister(reg_code));
             }
             break;
           }
@@ -6081,7 +6099,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::DOUBLE_REGISTER: {
             int reg_code = iterator.Next();
             if (FLAG_print_code_verbose)  {
-              PrintF("{input=%s}",
+              PrintF(out, "{input=%s}",
                      DoubleRegister::AllocationIndexToString(reg_code));
             }
             break;
@@ -6090,7 +6108,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::STACK_SLOT: {
             int input_slot_index = iterator.Next();
             if (FLAG_print_code_verbose)  {
-              PrintF("{input=%d}", input_slot_index);
+              PrintF(out, "{input=%d}", input_slot_index);
             }
             break;
           }
@@ -6098,7 +6116,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::INT32_STACK_SLOT: {
             int input_slot_index = iterator.Next();
             if (FLAG_print_code_verbose)  {
-              PrintF("{input=%d}", input_slot_index);
+              PrintF(out, "{input=%d}", input_slot_index);
             }
             break;
           }
@@ -6106,7 +6124,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::DOUBLE_STACK_SLOT: {
             int input_slot_index = iterator.Next();
             if (FLAG_print_code_verbose)  {
-              PrintF("{input=%d}", input_slot_index);
+              PrintF(out, "{input=%d}", input_slot_index);
             }
             break;
           }
@@ -6114,7 +6132,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::LITERAL: {
             unsigned literal_index = iterator.Next();
             if (FLAG_print_code_verbose)  {
-              PrintF("{literal_id=%u}", literal_index);
+              PrintF(out, "{literal_id=%u}", literal_index);
             }
             break;
           }
@@ -6122,16 +6140,16 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint() {
           case Translation::ARGUMENTS_OBJECT:
             break;
         }
-        if (FLAG_print_code_verbose) PrintF("\n");
+        if (FLAG_print_code_verbose) PrintF(out, "\n");
       }
     }
-    if (!FLAG_print_code_verbose) PrintF("  %12d\n", command_count);
+    if (!FLAG_print_code_verbose) PrintF(out, "  %12d\n", command_count);
   }
 }
 
 
-void DeoptimizationOutputData::DeoptimizationOutputDataPrint() {
-  PrintF("Deoptimization Output Data (deopt points = %d)\n",
+void DeoptimizationOutputData::DeoptimizationOutputDataPrint(FILE* out) {
+  PrintF(out, "Deoptimization Output Data (deopt points = %d)\n",
          this->DeoptPoints());
   if (this->DeoptPoints() == 0) return;
 
@@ -6202,56 +6220,59 @@ const char* Code::PropertyType2String(PropertyType type) {
 }
 
 
-void Code::Disassemble(const char* name) {
-  PrintF("kind = %s\n", Kind2String(kind()));
+void Code::Disassemble(const char* name, FILE* out) {
+  PrintF(out, "kind = %s\n", Kind2String(kind()));
   if (is_inline_cache_stub()) {
-    PrintF("ic_state = %s\n", ICState2String(ic_state()));
-    PrintF("ic_in_loop = %d\n", ic_in_loop() == IN_LOOP);
+    PrintF(out, "ic_state = %s\n", ICState2String(ic_state()));
+    PrintF(out, "ic_in_loop = %d\n", ic_in_loop() == IN_LOOP);
     if (ic_state() == MONOMORPHIC) {
-      PrintF("type = %s\n", PropertyType2String(type()));
+      PrintF(out, "type = %s\n", PropertyType2String(type()));
     }
   }
   if ((name != NULL) && (name[0] != '\0')) {
-    PrintF("name = %s\n", name);
+    PrintF(out, "name = %s\n", name);
   }
   if (kind() == OPTIMIZED_FUNCTION) {
-    PrintF("stack_slots = %d\n", stack_slots());
+    PrintF(out, "stack_slots = %d\n", stack_slots());
   }
 
-  PrintF("Instructions (size = %d)\n", instruction_size());
-  Disassembler::Decode(NULL, this);
-  PrintF("\n");
+  PrintF(out, "Instructions (size = %d)\n", instruction_size());
+  Disassembler::Decode(out, this);
+  PrintF(out, "\n");
 
 #ifdef DEBUG
   if (kind() == FUNCTION) {
     DeoptimizationOutputData* data =
         DeoptimizationOutputData::cast(this->deoptimization_data());
-    data->DeoptimizationOutputDataPrint();
+    data->DeoptimizationOutputDataPrint(out);
   } else if (kind() == OPTIMIZED_FUNCTION) {
     DeoptimizationInputData* data =
         DeoptimizationInputData::cast(this->deoptimization_data());
-    data->DeoptimizationInputDataPrint();
+    data->DeoptimizationInputDataPrint(out);
   }
   PrintF("\n");
 #endif
 
   if (kind() == OPTIMIZED_FUNCTION) {
     SafepointTable table(this);
-    PrintF("Safepoints (size = %u)\n", table.size());
+    PrintF(out, "Safepoints (size = %u)\n", table.size());
     for (unsigned i = 0; i < table.length(); i++) {
       unsigned pc_offset = table.GetPcOffset(i);
-      PrintF("%p  %4d  ", (instruction_start() + pc_offset), pc_offset);
+      PrintF(out, "%p  %4d  ", (instruction_start() + pc_offset), pc_offset);
       table.PrintEntry(i);
-      PrintF(" (sp -> fp)");
-      int deoptimization_index = table.GetDeoptimizationIndex(i);
-      if (deoptimization_index != Safepoint::kNoDeoptimizationIndex) {
-        PrintF("  %6d", deoptimization_index);
+      PrintF(out, " (sp -> fp)");
+      SafepointEntry entry = table.GetEntry(i);
+      if (entry.deoptimization_index() != Safepoint::kNoDeoptimizationIndex) {
+        PrintF(out, "  %6d", entry.deoptimization_index());
       } else {
-        PrintF("  <none>");
+        PrintF(out, "  <none>");
       }
-      PrintF("\n");
+      if (entry.argument_count() > 0) {
+        PrintF(out, " argc: %d", entry.argument_count());
+      }
+      PrintF(out, "\n");
     }
-    PrintF("\n");
+    PrintF(out, "\n");
   } else if (kind() == FUNCTION) {
     unsigned offset = stack_check_table_start();
     // If there is no stack check table, the "table start" will at or after
@@ -6260,19 +6281,19 @@ void Code::Disassemble(const char* name) {
       unsigned* address =
           reinterpret_cast<unsigned*>(instruction_start() + offset);
       unsigned length = address[0];
-      PrintF("Stack checks (size = %u)\n", length);
-      PrintF("ast_id  pc_offset\n");
+      PrintF(out, "Stack checks (size = %u)\n", length);
+      PrintF(out, "ast_id  pc_offset\n");
       for (unsigned i = 0; i < length; ++i) {
         unsigned index = (2 * i) + 1;
-        PrintF("%6u  %9u\n", address[index], address[index + 1]);
+        PrintF(out, "%6u  %9u\n", address[index], address[index + 1]);
       }
-      PrintF("\n");
+      PrintF(out, "\n");
     }
   }
 
   PrintF("RelocInfo (size = %d)\n", relocation_size());
-  for (RelocIterator it(this); !it.done(); it.next()) it.rinfo()->Print();
-  PrintF("\n");
+  for (RelocIterator it(this); !it.done(); it.next()) it.rinfo()->Print(out);
+  PrintF(out, "\n");
 }
 #endif  // ENABLE_DISASSEMBLER
 
@@ -6774,7 +6795,8 @@ bool JSObject::HasElementWithReceiver(JSObject* receiver, uint32_t index) {
 
 
 MaybeObject* JSObject::SetElementWithInterceptor(uint32_t index,
-                                                 Object* value) {
+                                                 Object* value,
+                                                 bool check_prototype) {
   // Make sure that the top context does not change when doing
   // callbacks or interceptor calls.
   AssertNoContextChange ncc;
@@ -6798,7 +6820,9 @@ MaybeObject* JSObject::SetElementWithInterceptor(uint32_t index,
     if (!result.IsEmpty()) return *value_handle;
   }
   MaybeObject* raw_result =
-      this_handle->SetElementWithoutInterceptor(index, *value_handle);
+      this_handle->SetElementWithoutInterceptor(index,
+                                                *value_handle,
+                                                check_prototype);
   RETURN_IF_SCHEDULED_EXCEPTION();
   return raw_result;
 }
@@ -6909,7 +6933,9 @@ MaybeObject* JSObject::SetElementWithCallback(Object* structure,
 // Adding n elements in fast case is O(n*n).
 // Note: revisit design to have dual undefined values to capture absent
 // elements.
-MaybeObject* JSObject::SetFastElement(uint32_t index, Object* value) {
+MaybeObject* JSObject::SetFastElement(uint32_t index,
+                                      Object* value,
+                                      bool check_prototype) {
   ASSERT(HasFastElements());
 
   Object* elms_obj;
@@ -6919,11 +6945,12 @@ MaybeObject* JSObject::SetFastElement(uint32_t index, Object* value) {
   FixedArray* elms = FixedArray::cast(elms_obj);
   uint32_t elms_length = static_cast<uint32_t>(elms->length());
 
-  if (!IsJSArray() && (index >= elms_length || elms->get(index)->IsTheHole())) {
-    if (SetElementWithCallbackSetterInPrototypes(index, value)) {
-      return value;
-    }
+  if (check_prototype &&
+      (index >= elms_length || elms->get(index)->IsTheHole()) &&
+      SetElementWithCallbackSetterInPrototypes(index, value)) {
+    return value;
   }
+
 
   // Check whether there is extra space in fixed array..
   if (index < elms_length) {
@@ -6962,11 +6989,13 @@ MaybeObject* JSObject::SetFastElement(uint32_t index, Object* value) {
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
   }
   ASSERT(HasDictionaryElements());
-  return SetElement(index, value);
+  return SetElement(index, value, check_prototype);
 }
 
 
-MaybeObject* JSObject::SetElement(uint32_t index, Object* value) {
+MaybeObject* JSObject::SetElement(uint32_t index,
+                                  Object* value,
+                                  bool check_prototype) {
   // Check access rights if needed.
   if (IsAccessCheckNeeded() &&
       !Top::MayIndexedAccess(this, index, v8::ACCESS_SET)) {
@@ -6980,24 +7009,25 @@ MaybeObject* JSObject::SetElement(uint32_t index, Object* value) {
     Object* proto = GetPrototype();
     if (proto->IsNull()) return value;
     ASSERT(proto->IsJSGlobalObject());
-    return JSObject::cast(proto)->SetElement(index, value);
+    return JSObject::cast(proto)->SetElement(index, value, check_prototype);
   }
 
   // Check for lookup interceptor
   if (HasIndexedInterceptor()) {
-    return SetElementWithInterceptor(index, value);
+    return SetElementWithInterceptor(index, value, check_prototype);
   }
 
-  return SetElementWithoutInterceptor(index, value);
+  return SetElementWithoutInterceptor(index, value, check_prototype);
 }
 
 
 MaybeObject* JSObject::SetElementWithoutInterceptor(uint32_t index,
-                                                    Object* value) {
+                                                    Object* value,
+                                                    bool check_prototype) {
   switch (GetElementsKind()) {
     case FAST_ELEMENTS:
       // Fast case.
-      return SetFastElement(index, value);
+      return SetFastElement(index, value, check_prototype);
     case PIXEL_ELEMENTS: {
       PixelArray* pixels = PixelArray::cast(elements());
       return pixels->SetValue(index, value);
@@ -7050,10 +7080,9 @@ MaybeObject* JSObject::SetElementWithoutInterceptor(uint32_t index,
         }
       } else {
         // Index not already used. Look for an accessor in the prototype chain.
-        if (!IsJSArray()) {
-          if (SetElementWithCallbackSetterInPrototypes(index, value)) {
-            return value;
-          }
+        if (check_prototype &&
+            SetElementWithCallbackSetterInPrototypes(index, value)) {
+          return value;
         }
         // When we set the is_extensible flag to false we always force
         // the element into dictionary mode (and force them to stay there).
@@ -7421,22 +7450,22 @@ bool JSObject::ShouldConvertToFastElements() {
 // class. This requires us to have the template functions put
 // together, so even though this function belongs in objects-debug.cc,
 // we keep it here instead to satisfy certain compilers.
-#ifdef DEBUG
+#ifdef OBJECT_PRINT
 template<typename Shape, typename Key>
-void Dictionary<Shape, Key>::Print() {
+void Dictionary<Shape, Key>::Print(FILE* out) {
   int capacity = HashTable<Shape, Key>::Capacity();
   for (int i = 0; i < capacity; i++) {
     Object* k = HashTable<Shape, Key>::KeyAt(i);
     if (HashTable<Shape, Key>::IsKey(k)) {
-      PrintF(" ");
+      PrintF(out, " ");
       if (k->IsString()) {
-        String::cast(k)->StringPrint();
+        String::cast(k)->StringPrint(out);
       } else {
-        k->ShortPrint();
+        k->ShortPrint(out);
       }
-      PrintF(": ");
-      ValueAt(i)->ShortPrint();
-      PrintF("\n");
+      PrintF(out, ": ");
+      ValueAt(i)->ShortPrint(out);
+      PrintF(out, "\n");
     }
   }
 }
@@ -8082,6 +8111,85 @@ class Utf8SymbolKey : public HashTableKey {
   Vector<const char> string_;
   uint32_t hash_field_;
   int chars_;  // Caches the number of characters when computing the hash code.
+};
+
+
+template <typename Char>
+class SequentialSymbolKey : public HashTableKey {
+ public:
+  explicit SequentialSymbolKey(Vector<const Char> string)
+      : string_(string), hash_field_(0) { }
+
+  uint32_t Hash() {
+    StringHasher hasher(string_.length());
+
+    // Very long strings have a trivial hash that doesn't inspect the
+    // string contents.
+    if (hasher.has_trivial_hash()) {
+      hash_field_ = hasher.GetHashField();
+    } else {
+      int i = 0;
+      // Do the iterative array index computation as long as there is a
+      // chance this is an array index.
+      while (i < string_.length() && hasher.is_array_index()) {
+        hasher.AddCharacter(static_cast<uc32>(string_[i]));
+        i++;
+      }
+
+      // Process the remaining characters without updating the array
+      // index.
+      while (i < string_.length()) {
+        hasher.AddCharacterNoIndex(static_cast<uc32>(string_[i]));
+        i++;
+      }
+      hash_field_ = hasher.GetHashField();
+    }
+
+    uint32_t result = hash_field_ >> String::kHashShift;
+    ASSERT(result != 0);  // Ensure that the hash value of 0 is never computed.
+    return result;
+  }
+
+
+  uint32_t HashForObject(Object* other) {
+    return String::cast(other)->Hash();
+  }
+
+  Vector<const Char> string_;
+  uint32_t hash_field_;
+};
+
+
+
+class AsciiSymbolKey : public SequentialSymbolKey<char> {
+ public:
+  explicit AsciiSymbolKey(Vector<const char> str)
+      : SequentialSymbolKey<char>(str) { }
+
+  bool IsMatch(Object* string) {
+    return String::cast(string)->IsAsciiEqualTo(string_);
+  }
+
+  MaybeObject* AsObject() {
+    if (hash_field_ == 0) Hash();
+    return Heap::AllocateAsciiSymbol(string_, hash_field_);
+  }
+};
+
+
+class TwoByteSymbolKey : public SequentialSymbolKey<uc16> {
+ public:
+  explicit TwoByteSymbolKey(Vector<const uc16> str)
+      : SequentialSymbolKey<uc16>(str) { }
+
+  bool IsMatch(Object* string) {
+    return String::cast(string)->IsTwoByteEqualTo(string_);
+  }
+
+  MaybeObject* AsObject() {
+    if (hash_field_ == 0) Hash();
+    return Heap::AllocateTwoByteSymbol(string_, hash_field_);
+  }
 };
 
 
@@ -8828,6 +8936,19 @@ MaybeObject* SymbolTable::LookupSymbol(Vector<const char> str, Object** s) {
   return LookupKey(&key, s);
 }
 
+
+MaybeObject* SymbolTable::LookupAsciiSymbol(Vector<const char> str,
+                                            Object** s) {
+  AsciiSymbolKey key(str);
+  return LookupKey(&key, s);
+}
+
+
+MaybeObject* SymbolTable::LookupTwoByteSymbol(Vector<const uc16> str,
+                                              Object** s) {
+  TwoByteSymbolKey key(str);
+  return LookupKey(&key, s);
+}
 
 MaybeObject* SymbolTable::LookupKey(HashTableKey* key, Object** s) {
   int entry = FindEntry(key);

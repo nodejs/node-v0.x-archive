@@ -30,6 +30,7 @@ static Persistent<String> valid_to_symbol;
 static Persistent<String> fingerprint_symbol;
 static Persistent<String> name_symbol;
 static Persistent<String> version_symbol;
+static Persistent<String> ext_key_usage_symbol;
 
 
 void SecureContext::Initialize(Handle<Object> target) {
@@ -177,8 +178,8 @@ Handle<Value> SecureContext::SetKey(const Arguments& args) {
   }
 
   SSL_CTX_use_PrivateKey(sc->ctx_, key);
+  EVP_PKEY_free(key);
   BIO_free(bio);
-  // XXX Free key?
 
   return True();
 }
@@ -694,6 +695,21 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
       }
 
       info->Set(fingerprint_symbol, String::New(fingerprint));
+    }
+
+    STACK_OF(ASN1_OBJECT) *eku = (STACK_OF(ASN1_OBJECT) *)X509_get_ext_d2i(
+        peer_cert, NID_ext_key_usage, NULL, NULL);
+    if (eku != NULL) {
+      Local<Array> ext_key_usage = Array::New();
+
+      for (int i = 0; i < sk_ASN1_OBJECT_num(eku); i++) {
+        memset(buf, 0, sizeof(buf));
+        OBJ_obj2txt(buf, sizeof(buf) - 1, sk_ASN1_OBJECT_value(eku, i), 1);
+        ext_key_usage->Set(Integer::New(i), String::New(buf));
+      }
+
+      sk_ASN1_OBJECT_pop_free(eku, ASN1_OBJECT_free);
+      info->Set(ext_key_usage_symbol, ext_key_usage);
     }
 
     X509_free(peer_cert);
@@ -1719,19 +1735,19 @@ class Decipher : public ObjectWrap {
 
         if (alloc_buf) {
           delete [] buf;
-          alloc_buf = false;
         }
         buf = ciphertext;
         len = ciphertext_len;
+        alloc_buf = true;
 
       } else if (strcasecmp(*encoding, "base64") == 0) {
         unbase64((unsigned char*)buf, len, (char **)&ciphertext, &ciphertext_len);
         if (alloc_buf) {
           delete [] buf;
-          alloc_buf = false;
         }
         buf = ciphertext;
         len = ciphertext_len;
+        alloc_buf = true;
 
       } else if (strcasecmp(*encoding, "binary") == 0) {
         // Binary - do nothing
@@ -2683,6 +2699,7 @@ void InitCrypto(Handle<Object> target) {
   fingerprint_symbol   = NODE_PSYMBOL("fingerprint");
   name_symbol       = NODE_PSYMBOL("name");
   version_symbol    = NODE_PSYMBOL("version");
+  ext_key_usage_symbol = NODE_PSYMBOL("ext_key_usage");
 }
 
 }  // namespace crypto

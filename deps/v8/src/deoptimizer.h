@@ -128,14 +128,17 @@ class Deoptimizer : public Malloced {
 
   static void VisitAllOptimizedFunctions(OptimizedFunctionVisitor* visitor);
 
-  // Given the relocation info of a call to the stack check stub, patch the
-  // code so as to go unconditionally to the on-stack replacement builtin
-  // instead.
-  static void PatchStackCheckCode(RelocInfo* rinfo, Code* replacement_code);
+  // Patch all stack guard checks in the unoptimized code to
+  // unconditionally call replacement_code.
+  static void PatchStackCheckCode(Code* unoptimized_code,
+                                  Code* check_code,
+                                  Code* replacement_code);
 
-  // Given the relocation info of a call to the on-stack replacement
-  // builtin, patch the code back to the original stack check code.
-  static void RevertStackCheckCode(RelocInfo* rinfo, Code* check_code);
+  // Change all patched stack guard checks in the unoptimized code
+  // back to a normal stack guard check.
+  static void RevertStackCheckCode(Code* unoptimized_code,
+                                   Code* check_code,
+                                   Code* replacement_code);
 
   ~Deoptimizer();
 
@@ -145,9 +148,9 @@ class Deoptimizer : public Malloced {
 
   static Address GetDeoptimizationEntry(int id, BailoutType type);
   static int GetDeoptimizationId(Address addr, BailoutType type);
-  static unsigned GetOutputInfo(DeoptimizationOutputData* data,
-                                unsigned node_id,
-                                SharedFunctionInfo* shared);
+  static int GetOutputInfo(DeoptimizationOutputData* data,
+                           unsigned node_id,
+                           SharedFunctionInfo* shared);
 
   static void Setup();
   static void TearDown();
@@ -476,7 +479,7 @@ class Translation BASE_EMBEDDED {
 
   static int NumberOfOperandsFor(Opcode opcode);
 
-#ifdef DEBUG
+#ifdef OBJECT_PRINT
   static const char* StringFor(Opcode opcode);
 #endif
 

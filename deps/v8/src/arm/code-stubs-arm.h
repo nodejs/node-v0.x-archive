@@ -77,7 +77,7 @@ class GenericBinaryOpStub : public CodeStub {
         rhs_(rhs),
         constant_rhs_(constant_rhs),
         specialized_on_rhs_(RhsIsOneWeWantToOptimizeFor(op, constant_rhs)),
-        runtime_operands_type_(BinaryOpIC::DEFAULT),
+        runtime_operands_type_(BinaryOpIC::UNINIT_OR_SMI),
         name_(NULL) { }
 
   GenericBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info)
@@ -178,6 +178,10 @@ class GenericBinaryOpStub : public CodeStub {
     return lhs_is_r0 ? r1 : r0;
   }
 
+  bool HasSmiSmiFastPath() {
+    return op_ != Token::DIV;
+  }
+
   bool ShouldGenerateSmiCode() {
     return ((op_ != Token::DIV && op_ != Token::MOD) || specialized_on_rhs_) &&
         runtime_operands_type_ != BinaryOpIC::HEAP_NUMBERS &&
@@ -211,6 +215,117 @@ class GenericBinaryOpStub : public CodeStub {
     }
   }
 #endif
+};
+
+
+class TypeRecordingBinaryOpStub: public CodeStub {
+ public:
+  TypeRecordingBinaryOpStub(Token::Value op, OverwriteMode mode)
+      : op_(op),
+        mode_(mode),
+        operands_type_(TRBinaryOpIC::UNINITIALIZED),
+        result_type_(TRBinaryOpIC::UNINITIALIZED),
+        name_(NULL) {
+    use_vfp3_ = CpuFeatures::IsSupported(VFP3);
+    ASSERT(OpBits::is_valid(Token::NUM_TOKENS));
+  }
+
+  TypeRecordingBinaryOpStub(
+      int key,
+      TRBinaryOpIC::TypeInfo operands_type,
+      TRBinaryOpIC::TypeInfo result_type = TRBinaryOpIC::UNINITIALIZED)
+      : op_(OpBits::decode(key)),
+        mode_(ModeBits::decode(key)),
+        use_vfp3_(VFP3Bits::decode(key)),
+        operands_type_(operands_type),
+        result_type_(result_type),
+        name_(NULL) { }
+
+ private:
+  enum SmiCodeGenerateHeapNumberResults {
+    ALLOW_HEAPNUMBER_RESULTS,
+    NO_HEAPNUMBER_RESULTS
+  };
+
+  Token::Value op_;
+  OverwriteMode mode_;
+  bool use_vfp3_;
+
+  // Operand type information determined at runtime.
+  TRBinaryOpIC::TypeInfo operands_type_;
+  TRBinaryOpIC::TypeInfo result_type_;
+
+  char* name_;
+
+  const char* GetName();
+
+#ifdef DEBUG
+  void Print() {
+    PrintF("TypeRecordingBinaryOpStub %d (op %s), "
+           "(mode %d, runtime_type_info %s)\n",
+           MinorKey(),
+           Token::String(op_),
+           static_cast<int>(mode_),
+           TRBinaryOpIC::GetName(operands_type_));
+  }
+#endif
+
+  // Minor key encoding in 16 bits RRRTTTVOOOOOOOMM.
+  class ModeBits: public BitField<OverwriteMode, 0, 2> {};
+  class OpBits: public BitField<Token::Value, 2, 7> {};
+  class VFP3Bits: public BitField<bool, 9, 1> {};
+  class OperandTypeInfoBits: public BitField<TRBinaryOpIC::TypeInfo, 10, 3> {};
+  class ResultTypeInfoBits: public BitField<TRBinaryOpIC::TypeInfo, 13, 3> {};
+
+  Major MajorKey() { return TypeRecordingBinaryOp; }
+  int MinorKey() {
+    return OpBits::encode(op_)
+           | ModeBits::encode(mode_)
+           | VFP3Bits::encode(use_vfp3_)
+           | OperandTypeInfoBits::encode(operands_type_)
+           | ResultTypeInfoBits::encode(result_type_);
+  }
+
+  void Generate(MacroAssembler* masm);
+  void GenerateGeneric(MacroAssembler* masm);
+  void GenerateSmiSmiOperation(MacroAssembler* masm);
+  void GenerateVFPOperation(MacroAssembler* masm);
+  void GenerateSmiCode(MacroAssembler* masm,
+                       Label* gc_required,
+                       SmiCodeGenerateHeapNumberResults heapnumber_results);
+  void GenerateLoadArguments(MacroAssembler* masm);
+  void GenerateReturn(MacroAssembler* masm);
+  void GenerateUninitializedStub(MacroAssembler* masm);
+  void GenerateSmiStub(MacroAssembler* masm);
+  void GenerateInt32Stub(MacroAssembler* masm);
+  void GenerateHeapNumberStub(MacroAssembler* masm);
+  void GenerateStringStub(MacroAssembler* masm);
+  void GenerateGenericStub(MacroAssembler* masm);
+  void GenerateAddStrings(MacroAssembler* masm);
+  void GenerateCallRuntime(MacroAssembler* masm);
+
+  void GenerateHeapResultAllocation(MacroAssembler* masm,
+                                    Register result,
+                                    Register heap_number_map,
+                                    Register scratch1,
+                                    Register scratch2,
+                                    Label* gc_required);
+  void GenerateRegisterArgsPush(MacroAssembler* masm);
+  void GenerateTypeTransition(MacroAssembler* masm);
+  void GenerateTypeTransitionWithSavedArgs(MacroAssembler* masm);
+
+  virtual int GetCodeKind() { return Code::TYPE_RECORDING_BINARY_OP_IC; }
+
+  virtual InlineCacheState GetICState() {
+    return TRBinaryOpIC::ToState(operands_type_);
+  }
+
+  virtual void FinishCode(Code* code) {
+    code->set_type_recording_binary_op_type(operands_type_);
+    code->set_type_recording_binary_op_result_type(result_type_);
+  }
+
+  friend class CodeGenerator;
 };
 
 
@@ -434,43 +549,6 @@ class NumberToStringStub: public CodeStub {
   void Generate(MacroAssembler* masm);
 
   const char* GetName() { return "NumberToStringStub"; }
-};
-
-
-class RecordWriteStub : public CodeStub {
- public:
-  RecordWriteStub(Register object, Register offset, Register scratch)
-      : object_(object), offset_(offset), scratch_(scratch) { }
-
-  void Generate(MacroAssembler* masm);
-
- private:
-  Register object_;
-  Register offset_;
-  Register scratch_;
-
-  // Minor key encoding in 12 bits. 4 bits for each of the three
-  // registers (object, offset and scratch) OOOOAAAASSSS.
-  class ScratchBits: public BitField<uint32_t, 0, 4> {};
-  class OffsetBits: public BitField<uint32_t, 4, 4> {};
-  class ObjectBits: public BitField<uint32_t, 8, 4> {};
-
-  Major MajorKey() { return RecordWrite; }
-
-  int MinorKey() {
-    // Encode the registers.
-    return ObjectBits::encode(object_.code()) |
-           OffsetBits::encode(offset_.code()) |
-           ScratchBits::encode(scratch_.code());
-  }
-
-#ifdef DEBUG
-  void Print() {
-    PrintF("RecordWriteStub (object reg %d), (offset reg %d),"
-           " (scratch reg %d)\n",
-           object_.code(), offset_.code(), scratch_.code());
-  }
-#endif
 };
 
 

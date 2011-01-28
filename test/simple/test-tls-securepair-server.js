@@ -1,3 +1,9 @@
+if (!process.versions.openssl) {
+  console.error("Skipping because node compiled without OpenSSL.");
+  process.exit(0);
+}
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -88,9 +94,9 @@ var sentWorld = false;
 var gotWorld = false;
 var opensslExitCode = -1;
 
-server.listen(8000, function() {
+server.listen(common.PORT, function() {
   // To test use: openssl s_client -connect localhost:8000
-  var client = spawn('openssl', ['s_client', '-connect', '127.0.0.1:8000']);
+  var client = spawn('openssl', ['s_client', '-connect', '127.0.0.1:' + common.PORT]);
 
 
   var out = '';

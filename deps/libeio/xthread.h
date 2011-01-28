@@ -30,9 +30,8 @@ typedef int ssize_t
 #include <winsock2.h>
 #include <process.h>
 #include <windows.h>
-#include "pthread.h"
+#include <pthread.h>
 #define sigset_t int
-#define sigfillset(a)
 #define pthread_sigmask(a,b,c)
 #define sigaddset(a,b)
 #define sigemptyset(s)

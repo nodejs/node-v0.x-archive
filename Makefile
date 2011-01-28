@@ -25,8 +25,14 @@ uninstall:
 test: all
 	python tools/test.py --mode=release simple message
 
+test-valgrind: all
+	python tools/test.py --mode=release --valgrind simple message
+
 test-all: all
 	python tools/test.py --mode=debug,release
+
+test-all-valgrind: all
+	python tools/test.py --mode=debug,release --valgrind
 
 test-release: all
 	python tools/test.py --mode=release
@@ -65,7 +71,7 @@ website_files = \
 	build/doc/sponsored.png \
 	build/doc/pipe.css
 
-doc: build/default/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) build/doc/changelog.html
+doc: build/default/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -78,13 +84,6 @@ build/doc/%: doc/%
 
 build/doc/api/%.html: doc/api/%.markdown build/default/node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
 	build/default/node tools/doctool/doctool.js doc/template.html $< > $@
-
-build/doc/changelog.html: ChangeLog build/default/node build/doc/ $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
-	build/default/node tools/doctool/doctool.js doc/template.html $< \
-	| sed 's|assets/|api/assets/|g' \
-	| sed 's|<body>|<body id="changelog">|g' > $@
-	@echo $(apiassets)
-
 
 build/doc/%:
 

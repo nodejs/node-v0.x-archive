@@ -31,6 +31,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
@@ -317,11 +318,25 @@ class PosixMemoryMappedFile : public OS::MemoryMappedFile {
     : file_(file), memory_(memory), size_(size) { }
   virtual ~PosixMemoryMappedFile();
   virtual void* memory() { return memory_; }
+  virtual int size() { return size_; }
  private:
   FILE* file_;
   void* memory_;
   int size_;
 };
+
+
+OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
+  FILE* file = fopen(name, "w+");
+  if (file == NULL) return NULL;
+
+  fseek(file, 0, SEEK_END);
+  int size = ftell(file);
+
+  void* memory =
+      mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+  return new PosixMemoryMappedFile(file, memory, size);
+}
 
 
 OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
@@ -551,6 +566,12 @@ bool ThreadHandle::IsValid() const {
 
 
 Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
+  set_name("v8:<unknown>");
+}
+
+
+Thread::Thread(const char* name) : ThreadHandle(ThreadHandle::INVALID) {
+  set_name(name);
 }
 
 
@@ -563,10 +584,17 @@ static void* ThreadEntry(void* arg) {
   // This is also initialized by the first argument to pthread_create() but we
   // don't know which thread will run first (the original thread or the new
   // one) so we initialize it here too.
+  prctl(PR_SET_NAME, thread->name(), 0, 0, 0);
   thread->thread_handle_data()->thread_ = pthread_self();
   ASSERT(thread->IsValid());
   thread->Run();
   return NULL;
+}
+
+
+void Thread::set_name(const char* name) {
+  strncpy(name_, name, sizeof(name_));
+  name_[sizeof(name_) - 1] = '\0';
 }
 
 

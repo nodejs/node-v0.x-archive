@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -26,6 +26,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "v8.h"
+
+#if defined(V8_TARGET_ARCH_IA32)
 
 #include "codegen.h"
 #include "deoptimizer.h"
@@ -56,8 +58,9 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   SafepointTable table(function->code());
   for (unsigned i = 0; i < table.length(); i++) {
     unsigned pc_offset = table.GetPcOffset(i);
-    int deoptimization_index = table.GetDeoptimizationIndex(i);
-    int gap_code_size = table.GetGapCodeSize(i);
+    SafepointEntry safepoint_entry = table.GetEntry(i);
+    int deoptimization_index = safepoint_entry.deoptimization_index();
+    int gap_code_size = safepoint_entry.gap_code_size();
 #ifdef DEBUG
     // Destroy the code which is not supposed to run again.
     unsigned instructions = pc_offset - last_pc_offset;
@@ -103,40 +106,71 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 }
 
 
-void Deoptimizer::PatchStackCheckCode(RelocInfo* rinfo,
+void Deoptimizer::PatchStackCheckCode(Code* unoptimized_code,
+                                      Code* check_code,
                                       Code* replacement_code) {
-  // The stack check code matches the pattern (on ia32, for example):
-  //
-  //     cmp esp, <limit>
-  //     jae ok
-  //     call <stack guard>
-  // ok: ...
-  //
-  // We will patch the code to:
-  //
-  //     cmp esp, <limit>  ;; Not changed
-  //     nop
-  //     nop
-  //     call <on-stack replacment>
-  // ok:
-  Address call_target_address = rinfo->pc();
-  ASSERT(*(call_target_address - 3) == 0x73 &&  // jae
-         *(call_target_address - 2) == 0x05 &&  // offset
-         *(call_target_address - 1) == 0xe8);   // call
-  *(call_target_address - 3) = 0x90;  // nop
-  *(call_target_address - 2) = 0x90;  // nop
-  rinfo->set_target_address(replacement_code->entry());
+  // Iterate the unoptimized code and patch every stack check except at
+  // the function entry.  This code assumes the function entry stack
+  // check appears first i.e., is not deferred or otherwise reordered.
+  ASSERT(unoptimized_code->kind() == Code::FUNCTION);
+  bool first = true;
+  for (RelocIterator it(unoptimized_code, RelocInfo::kCodeTargetMask);
+       !it.done();
+       it.next()) {
+    RelocInfo* rinfo = it.rinfo();
+    if (rinfo->target_address() == Code::cast(check_code)->entry()) {
+      if (first) {
+        first = false;
+      } else {
+        // The stack check code matches the pattern:
+        //
+        //     cmp esp, <limit>
+        //     jae ok
+        //     call <stack guard>
+        //     test eax, <loop nesting depth>
+        // ok: ...
+        //
+        // We will patch away the branch so the code is:
+        //
+        //     cmp esp, <limit>  ;; Not changed
+        //     nop
+        //     nop
+        //     call <on-stack replacment>
+        //     test eax, <loop nesting depth>
+        // ok:
+        Address call_target_address = rinfo->pc();
+        ASSERT(*(call_target_address - 3) == 0x73 &&  // jae
+               *(call_target_address - 2) == 0x07 &&  // offset
+               *(call_target_address - 1) == 0xe8);   // call
+        *(call_target_address - 3) = 0x90;  // nop
+        *(call_target_address - 2) = 0x90;  // nop
+        rinfo->set_target_address(replacement_code->entry());
+      }
+    }
+  }
 }
 
 
-void Deoptimizer::RevertStackCheckCode(RelocInfo* rinfo, Code* check_code) {
-  Address call_target_address = rinfo->pc();
-  ASSERT(*(call_target_address - 3) == 0x90 &&  // nop
-         *(call_target_address - 2) == 0x90 &&  // nop
-         *(call_target_address - 1) == 0xe8);   // call
-  *(call_target_address - 3) = 0x73;  // jae
-  *(call_target_address - 2) = 0x05;  // offset
-  rinfo->set_target_address(check_code->entry());
+void Deoptimizer::RevertStackCheckCode(Code* unoptimized_code,
+                                       Code* check_code,
+                                       Code* replacement_code) {
+  // Iterate the unoptimized code and revert all the patched stack checks.
+  for (RelocIterator it(unoptimized_code, RelocInfo::kCodeTargetMask);
+       !it.done();
+       it.next()) {
+    RelocInfo* rinfo = it.rinfo();
+    if (rinfo->target_address() == replacement_code->entry()) {
+      // Replace the nops from patching (Deoptimizer::PatchStackCheckCode) to
+      // restore the conditional branch.
+      Address call_target_address = rinfo->pc();
+      ASSERT(*(call_target_address - 3) == 0x90 &&  // nop
+             *(call_target_address - 2) == 0x90 &&  // nop
+             *(call_target_address - 1) == 0xe8);   // call
+      *(call_target_address - 3) = 0x73;  // jae
+      *(call_target_address - 2) = 0x07;  // offset
+      rinfo->set_target_address(check_code->entry());
+    }
+  }
 }
 
 
@@ -500,26 +534,25 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ mov(ebx, Operand(eax, Deoptimizer::input_offset()));
 
   // Fill in the input registers.
-  for (int i = 0; i < kNumberOfRegisters; i++) {
-    int offset = (i * kIntSize) + FrameDescription::registers_offset();
-    __ mov(ecx, Operand(esp, (kNumberOfRegisters - 1 - i) * kPointerSize));
-    __ mov(Operand(ebx, offset), ecx);
+  for (int i = kNumberOfRegisters - 1; i >= 0; i--) {
+    int offset = (i * kPointerSize) + FrameDescription::registers_offset();
+    __ pop(Operand(ebx, offset));
   }
 
   // Fill in the double input registers.
   int double_regs_offset = FrameDescription::double_registers_offset();
   for (int i = 0; i < XMMRegister::kNumAllocatableRegisters; ++i) {
     int dst_offset = i * kDoubleSize + double_regs_offset;
-    int src_offset = i * kDoubleSize + kNumberOfRegisters * kPointerSize;
+    int src_offset = i * kDoubleSize;
     __ movdbl(xmm0, Operand(esp, src_offset));
     __ movdbl(Operand(ebx, dst_offset), xmm0);
   }
 
-  // Remove the bailout id and the general purpose registers from the stack.
+  // Remove the bailout id and the double registers from the stack.
   if (type() == EAGER) {
-    __ add(Operand(esp), Immediate(kSavedRegistersAreaSize + kPointerSize));
+    __ add(Operand(esp), Immediate(kDoubleRegsSize + kPointerSize));
   } else {
-    __ add(Operand(esp), Immediate(kSavedRegistersAreaSize + 2 * kPointerSize));
+    __ add(Operand(esp), Immediate(kDoubleRegsSize + 2 * kPointerSize));
   }
 
   // Compute a pointer to the unwinding limit in register ecx; that is
@@ -584,7 +617,7 @@ void Deoptimizer::EntryGenerator::Generate() {
 
   // Push the registers from the last output frame.
   for (int i = 0; i < kNumberOfRegisters; i++) {
-    int offset = (i * kIntSize) + FrameDescription::registers_offset();
+    int offset = (i * kPointerSize) + FrameDescription::registers_offset();
     __ push(Operand(ebx, offset));
   }
 
@@ -613,3 +646,5 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
 
 
 } }  // namespace v8::internal
+
+#endif  // V8_TARGET_ARCH_IA32

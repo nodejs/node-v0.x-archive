@@ -98,6 +98,12 @@ bool Variable::IsStackLocal() const {
 }
 
 
+bool Variable::IsContextSlot() const {
+  Slot* s = AsSlot();
+  return s != NULL && s->type() == Slot::CONTEXT;
+}
+
+
 Variable::Variable(Scope* scope,
                    Handle<String> name,
                    Mode mode,
@@ -106,12 +112,12 @@ Variable::Variable(Scope* scope,
   : scope_(scope),
     name_(name),
     mode_(mode),
-    is_valid_LHS_(is_valid_LHS),
     kind_(kind),
     local_if_not_shadowed_(NULL),
+    rewrite_(NULL),
+    is_valid_LHS_(is_valid_LHS),
     is_accessed_from_inner_scope_(false),
-    is_used_(false),
-    rewrite_(NULL) {
+    is_used_(false) {
   // names must be canonicalized for fast equality checks
   ASSERT(name->IsSymbol());
 }

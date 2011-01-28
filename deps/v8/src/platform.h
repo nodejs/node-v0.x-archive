@@ -174,6 +174,7 @@ class OS {
   static int GetLastError();
 
   static FILE* FOpen(const char* path, const char* mode);
+  static bool Remove(const char* path);
 
   // Log file open mode is platform-dependent due to line ends issues.
   static const char* LogFileOpenMode;
@@ -183,6 +184,10 @@ class OS {
   // should go to stdout.
   static void Print(const char* format, ...);
   static void VPrint(const char* format, va_list args);
+
+  // Print output to a file. This is mostly used for debugging output.
+  static void FPrint(FILE* out, const char* format, ...);
+  static void VFPrint(FILE* out, const char* format, va_list args);
 
   // Print error output to console. This is mostly used for error message
   // output. On platforms that has standard terminal output, the output
@@ -247,9 +252,11 @@ class OS {
 
   class MemoryMappedFile {
    public:
+    static MemoryMappedFile* open(const char* name);
     static MemoryMappedFile* create(const char* name, int size, void* initial);
     virtual ~MemoryMappedFile() { }
     virtual void* memory() = 0;
+    virtual int size() = 0;
   };
 
   // Safe formatting print. Ensures that str is always null-terminated.
@@ -372,7 +379,6 @@ class ThreadHandle {
 
 class Thread: public ThreadHandle {
  public:
-#ifndef __CYGWIN__
   // Opaque data type for thread-local storage keys.
   // LOCAL_STORAGE_KEY_MIN_VALUE and LOCAL_STORAGE_KEY_MAX_VALUE are specified
   // to ensure that enumeration type has correct value range (see Issue 830 for
@@ -381,13 +387,10 @@ class Thread: public ThreadHandle {
     LOCAL_STORAGE_KEY_MIN_VALUE = kMinInt,
     LOCAL_STORAGE_KEY_MAX_VALUE = kMaxInt
   };
-#else
-  typedef void *LocalStorageKey;
-#endif
-
 
   // Create new thread.
   Thread();
+  explicit Thread(const char* name);
   virtual ~Thread();
 
   // Start new thread by calling the Run() method in the new thread.
@@ -395,6 +398,10 @@ class Thread: public ThreadHandle {
 
   // Wait until thread terminates.
   void Join();
+
+  inline const char* name() const {
+    return name_;
+  }
 
   // Abstract method for run handler.
   virtual void Run() = 0;
@@ -417,9 +424,17 @@ class Thread: public ThreadHandle {
   // A hint to the scheduler to let another thread run.
   static void YieldCPU();
 
+  // The thread name length is limited to 16 based on Linux's implementation of
+  // prctl().
+  static const int kMaxThreadNameLength = 16;
  private:
+  void set_name(const char *name);
+
   class PlatformData;
   PlatformData* data_;
+
+  char name_[kMaxThreadNameLength];
+
   DISALLOW_COPY_AND_ASSIGN(Thread);
 };
 

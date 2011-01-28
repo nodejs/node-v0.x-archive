@@ -35,6 +35,7 @@
 #include "debug.h"
 #include "heap-profiler.h"
 #include "global-handles.h"
+#include "liveobjectlist-inl.h"
 #include "mark-compact.h"
 #include "natives.h"
 #include "objects-visiting.h"
@@ -400,6 +401,8 @@ void Heap::GarbageCollectionPrologue() {
 #if defined(DEBUG) || defined(ENABLE_LOGGING_AND_PROFILING)
   ReportStatisticsBeforeGC();
 #endif
+
+  LiveObjectList::GCPrologue();
 }
 
 intptr_t Heap::SizeOfObjects() {
@@ -412,6 +415,7 @@ intptr_t Heap::SizeOfObjects() {
 }
 
 void Heap::GarbageCollectionEpilogue() {
+  LiveObjectList::GCEpilogue();
 #ifdef DEBUG
   allow_allocation(true);
   ZapFromSpace();
@@ -1065,6 +1069,8 @@ void Heap::Scavenge() {
 
   UpdateNewSpaceReferencesInExternalStringTable(
       &UpdateNewSpaceReferenceInExternalStringTableEntry);
+
+  LiveObjectList::UpdateReferencesForScavengeGC();
 
   ASSERT(new_space_front == new_space_.top());
 
@@ -2011,6 +2017,12 @@ bool Heap::CreateInitialObjects() {
   }
   set_the_hole_value(obj);
 
+  { MaybeObject* maybe_obj = CreateOddball("arguments_marker",
+                                           Smi::FromInt(-4));
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  set_arguments_marker(obj);
+
   { MaybeObject* maybe_obj =
         CreateOddball("no_interceptor_result_sentinel", Smi::FromInt(-2));
     if (!maybe_obj->ToObject(&obj)) return false;
@@ -2549,20 +2561,10 @@ MaybeObject* Heap::AllocateExternalStringFromTwoByte(
   }
 
   // For small strings we check whether the resource contains only
-  // ascii characters.  If yes, we use a different string map.
-  bool is_ascii = true;
-  if (length >= static_cast<size_t>(String::kMinNonFlatLength)) {
-    is_ascii = false;
-  } else {
-    const uc16* data = resource->data();
-    for (size_t i = 0; i < length; i++) {
-      if (data[i] > String::kMaxAsciiCharCode) {
-        is_ascii = false;
-        break;
-      }
-    }
-  }
-
+  // ASCII characters.  If yes, we use a different string map.
+  static const size_t kAsciiCheckLengthLimit = 32;
+  bool is_ascii = length <= kAsciiCheckLengthLimit &&
+      String::IsAscii(resource->data(), static_cast<int>(length));
   Map* map = is_ascii ?
       Heap::external_string_with_ascii_data_map() : Heap::external_string_map();
   Object* result;
@@ -2728,6 +2730,9 @@ MaybeObject* Heap::CreateCode(const CodeDesc& desc,
   code->set_instruction_size(desc.instr_size);
   code->set_relocation_info(ByteArray::cast(reloc_info));
   code->set_flags(flags);
+  if (code->is_call_stub() || code->is_keyed_call_stub()) {
+    code->set_check_type(RECEIVER_MAP_CHECK);
+  }
   code->set_deoptimization_data(empty_fixed_array());
   // Allow self references to created code object by patching the handle to
   // point to the newly allocated Code object.
@@ -3307,8 +3312,8 @@ MaybeObject* Heap::AllocateStringFromAscii(Vector<const char> string,
 }
 
 
-MaybeObject* Heap::AllocateStringFromUtf8(Vector<const char> string,
-                                          PretenureFlag pretenure) {
+MaybeObject* Heap::AllocateStringFromUtf8Slow(Vector<const char> string,
+                                              PretenureFlag pretenure) {
   // V8 only supports characters in the Basic Multilingual Plane.
   const uc32 kMaxSupportedChar = 0xFFFF;
   // Count the number of characters in the UTF-8 string and check if
@@ -3317,16 +3322,10 @@ MaybeObject* Heap::AllocateStringFromUtf8(Vector<const char> string,
       decoder(ScannerConstants::utf8_decoder());
   decoder->Reset(string.start(), string.length());
   int chars = 0;
-  bool is_ascii = true;
   while (decoder->has_more()) {
-    uc32 r = decoder->GetNext();
-    if (r > String::kMaxAsciiCharCode) is_ascii = false;
+    decoder->GetNext();
     chars++;
   }
-
-  // If the string is ascii, we do not need to convert the characters
-  // since UTF8 is backwards compatible with ascii.
-  if (is_ascii) return AllocateStringFromAscii(string, pretenure);
 
   Object* result;
   { MaybeObject* maybe_result = AllocateRawTwoByteString(chars, pretenure);
@@ -3348,11 +3347,8 @@ MaybeObject* Heap::AllocateStringFromUtf8(Vector<const char> string,
 MaybeObject* Heap::AllocateStringFromTwoByte(Vector<const uc16> string,
                                              PretenureFlag pretenure) {
   // Check if the string is an ASCII string.
-  int i = 0;
-  while (i < string.length() && string[i] <= String::kMaxAsciiCharCode) i++;
-
   MaybeObject* maybe_result;
-  if (i == string.length()) {  // It's an ASCII string.
+  if (String::IsAscii(string.start(), string.length())) {
     maybe_result = AllocateRawAsciiString(string.length(), pretenure);
   } else {  // It's not an ASCII string.
     maybe_result = AllocateRawTwoByteString(string.length(), pretenure);
@@ -4032,6 +4028,36 @@ MaybeObject* Heap::LookupSymbol(Vector<const char> string) {
 }
 
 
+MaybeObject* Heap::LookupAsciiSymbol(Vector<const char> string) {
+  Object* symbol = NULL;
+  Object* new_table;
+  { MaybeObject* maybe_new_table =
+        symbol_table()->LookupAsciiSymbol(string, &symbol);
+    if (!maybe_new_table->ToObject(&new_table)) return maybe_new_table;
+  }
+  // Can't use set_symbol_table because SymbolTable::cast knows that
+  // SymbolTable is a singleton and checks for identity.
+  roots_[kSymbolTableRootIndex] = new_table;
+  ASSERT(symbol != NULL);
+  return symbol;
+}
+
+
+MaybeObject* Heap::LookupTwoByteSymbol(Vector<const uc16> string) {
+  Object* symbol = NULL;
+  Object* new_table;
+  { MaybeObject* maybe_new_table =
+        symbol_table()->LookupTwoByteSymbol(string, &symbol);
+    if (!maybe_new_table->ToObject(&new_table)) return maybe_new_table;
+  }
+  // Can't use set_symbol_table because SymbolTable::cast knows that
+  // SymbolTable is a singleton and checks for identity.
+  roots_[kSymbolTableRootIndex] = new_table;
+  ASSERT(symbol != NULL);
+  return symbol;
+}
+
+
 MaybeObject* Heap::LookupSymbol(String* string) {
   if (string->IsSymbol()) return string;
   Object* symbol = NULL;
@@ -4483,7 +4509,7 @@ void Heap::RecordStats(HeapStats* stats, bool take_snapshot) {
       MemoryAllocator::Size() + MemoryAllocator::Available();
   *stats->os_error = OS::GetLastError();
   if (take_snapshot) {
-    HeapIterator iterator(HeapIterator::kPreciseFiltering);
+    HeapIterator iterator(HeapIterator::kFilterFreeListNodes);
     for (HeapObject* obj = iterator.next();
          obj != NULL;
          obj = iterator.next()) {
@@ -4917,13 +4943,20 @@ ObjectIterator* SpaceIterator::CreateIterator() {
 }
 
 
-class FreeListNodesFilter {
+class HeapObjectsFilter {
+ public:
+  virtual ~HeapObjectsFilter() {}
+  virtual bool SkipObject(HeapObject* object) = 0;
+};
+
+
+class FreeListNodesFilter : public HeapObjectsFilter {
  public:
   FreeListNodesFilter() {
     MarkFreeListNodes();
   }
 
-  inline bool IsFreeListNode(HeapObject* object) {
+  bool SkipObject(HeapObject* object) {
     if (object->IsMarked()) {
       object->ClearMark();
       return true;
@@ -4955,6 +4988,65 @@ class FreeListNodesFilter {
 };
 
 
+class UnreachableObjectsFilter : public HeapObjectsFilter {
+ public:
+  UnreachableObjectsFilter() {
+    MarkUnreachableObjects();
+  }
+
+  bool SkipObject(HeapObject* object) {
+    if (object->IsMarked()) {
+      object->ClearMark();
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+ private:
+  class UnmarkingVisitor : public ObjectVisitor {
+   public:
+    UnmarkingVisitor() : list_(10) {}
+
+    void VisitPointers(Object** start, Object** end) {
+      for (Object** p = start; p < end; p++) {
+        if (!(*p)->IsHeapObject()) continue;
+        HeapObject* obj = HeapObject::cast(*p);
+        if (obj->IsMarked()) {
+          obj->ClearMark();
+          list_.Add(obj);
+        }
+      }
+    }
+
+    bool can_process() { return !list_.is_empty(); }
+
+    void ProcessNext() {
+      HeapObject* obj = list_.RemoveLast();
+      obj->Iterate(this);
+    }
+
+   private:
+    List<HeapObject*> list_;
+  };
+
+  void MarkUnreachableObjects() {
+    HeapIterator iterator;
+    for (HeapObject* obj = iterator.next();
+         obj != NULL;
+         obj = iterator.next()) {
+      obj->SetMark();
+    }
+    UnmarkingVisitor visitor;
+    Heap::IterateRoots(&visitor, VISIT_ALL);
+    while (visitor.can_process())
+      visitor.ProcessNext();
+  }
+
+  AssertNoAllocation no_alloc;
+};
+
+
 HeapIterator::HeapIterator()
     : filtering_(HeapIterator::kNoFiltering),
       filter_(NULL) {
@@ -4962,7 +5054,7 @@ HeapIterator::HeapIterator()
 }
 
 
-HeapIterator::HeapIterator(HeapIterator::FreeListNodesFiltering filtering)
+HeapIterator::HeapIterator(HeapIterator::HeapObjectsFiltering filtering)
     : filtering_(filtering),
       filter_(NULL) {
   Init();
@@ -4976,12 +5068,17 @@ HeapIterator::~HeapIterator() {
 
 void HeapIterator::Init() {
   // Start the iteration.
-  if (filtering_ == kPreciseFiltering) {
-    filter_ = new FreeListNodesFilter;
-    space_iterator_ =
-        new SpaceIterator(MarkCompactCollector::SizeOfMarkedObject);
-  } else {
-    space_iterator_ = new SpaceIterator;
+  space_iterator_ = filtering_ == kNoFiltering ? new SpaceIterator :
+      new SpaceIterator(MarkCompactCollector::SizeOfMarkedObject);
+  switch (filtering_) {
+    case kFilterFreeListNodes:
+      filter_ = new FreeListNodesFilter;
+      break;
+    case kFilterUnreachable:
+      filter_ = new UnreachableObjectsFilter;
+      break;
+    default:
+      break;
   }
   object_iterator_ = space_iterator_->next();
 }
@@ -4989,9 +5086,9 @@ void HeapIterator::Init() {
 
 void HeapIterator::Shutdown() {
 #ifdef DEBUG
-  // Assert that in precise mode we have iterated through all
+  // Assert that in filtering mode we have iterated through all
   // objects. Otherwise, heap will be left in an inconsistent state.
-  if (filtering_ == kPreciseFiltering) {
+  if (filtering_ != kNoFiltering) {
     ASSERT(object_iterator_ == NULL);
   }
 #endif
@@ -5008,7 +5105,7 @@ HeapObject* HeapIterator::next() {
   if (filter_ == NULL) return NextObject();
 
   HeapObject* obj = NextObject();
-  while (obj != NULL && filter_->IsFreeListNode(obj)) obj = NextObject();
+  while (obj != NULL && filter_->SkipObject(obj)) obj = NextObject();
   return obj;
 }
 

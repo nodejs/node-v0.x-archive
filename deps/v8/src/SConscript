@@ -1,4 +1,4 @@
-# Copyright 2008 the V8 project authors. All rights reserved.
+# Copyright 2011 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -71,6 +71,7 @@ SOURCES = {
     frames.cc
     full-codegen.cc
     func-name-inferrer.cc
+    gdb-jit.cc
     global-handles.cc
     fast-dtoa.cc
     fixed-dtoa.cc
@@ -81,16 +82,20 @@ SOURCES = {
     hydrogen.cc
     hydrogen-instructions.cc
     ic.cc
+    inspector.cc
     interpreter-irregexp.cc
     jsregexp.cc
     jump-target.cc
     lithium-allocator.cc
+    lithium.cc
     liveedit.cc
+    liveobjectlist.cc
     log-utils.cc
     log.cc
     mark-compact.cc
     messages.cc
     objects.cc
+    objects-printer.cc
     objects-visiting.cc
     oprofile-agent.cc
     parser.cc
@@ -189,6 +194,7 @@ SOURCES = {
     ia32/ic-ia32.cc
     ia32/jump-target-ia32.cc
     ia32/lithium-codegen-ia32.cc
+    ia32/lithium-gap-resolver-ia32.cc
     ia32/lithium-ia32.cc
     ia32/macro-assembler-ia32.cc
     ia32/regexp-macro-assembler-ia32.cc
@@ -211,6 +217,9 @@ SOURCES = {
     x64/full-codegen-x64.cc
     x64/ic-x64.cc
     x64/jump-target-x64.cc
+    x64/lithium-codegen-x64.cc
+    x64/lithium-gap-resolver-x64.cc
+    x64/lithium-x64.cc
     x64/macro-assembler-x64.cc
     x64/regexp-macro-assembler-x64.cc
     x64/register-allocator-x64.cc
@@ -225,7 +234,6 @@ SOURCES = {
   'os:android': ['platform-linux.cc', 'platform-posix.cc'],
   'os:macos':   ['platform-macos.cc', 'platform-posix.cc'],
   'os:solaris': ['platform-solaris.cc', 'platform-posix.cc'],
-  'os:cygwin':  ['platform-cygwin.cc', 'platform-posix.cc'],
   'os:nullos':  ['platform-nullos.cc'],
   'os:win32':   ['platform-win32.cc'],
   'mode:release': [],

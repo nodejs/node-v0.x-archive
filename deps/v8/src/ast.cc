@@ -32,7 +32,6 @@
 #include "parser.h"
 #include "scopes.h"
 #include "string-stream.h"
-#include "stub-cache.h"
 
 namespace v8 {
 namespace internal {
@@ -166,12 +165,6 @@ bool FunctionLiteral::AllowsLazyCompilation() {
 }
 
 
-bool FunctionLiteral::AllowOptimize() {
-  // We can't deal with heap-allocated locals.
-  return scope()->num_heap_slots() == 0;
-}
-
-
 ObjectLiteral::Property::Property(Literal* key, Expression* value) {
   emit_store_ = true;
   key_ = key;
@@ -215,12 +208,16 @@ bool ObjectLiteral::Property::emit_store() {
 
 
 bool IsEqualString(void* first, void* second) {
+  ASSERT((*reinterpret_cast<String**>(first))->IsString());
+  ASSERT((*reinterpret_cast<String**>(second))->IsString());
   Handle<String> h1(reinterpret_cast<String**>(first));
   Handle<String> h2(reinterpret_cast<String**>(second));
   return (*h1)->Equals(*h2);
 }
 
 bool IsEqualSmi(void* first, void* second) {
+  ASSERT((*reinterpret_cast<Smi**>(first))->IsSmi());
+  ASSERT((*reinterpret_cast<Smi**>(second))->IsSmi());
   Handle<Smi> h1(reinterpret_cast<Smi**>(first));
   Handle<Smi> h2(reinterpret_cast<Smi**>(second));
   return (*h1)->value() == (*h2)->value();
@@ -242,12 +239,19 @@ void ObjectLiteral::CalculateEmitStore() {
     HashMap* table;
     void* key;
     uint32_t index;
+    Smi* smi_key_location;
     if (handle->IsSymbol()) {
       Handle<String> name(String::cast(*handle));
-      ASSERT(!name->AsArrayIndex(&index));
-      key = name.location();
-      hash = name->Hash();
-      table = &properties;
+      if (name->AsArrayIndex(&index)) {
+        smi_key_location = Smi::FromInt(index);
+        key = &smi_key_location;
+        hash = index;
+        table = &elements;
+      } else {
+        key = name.location();
+        hash = name->Hash();
+        table = &properties;
+      }
     } else if (handle->ToArrayIndex(&index)) {
       key = handle.location();
       hash = index;
@@ -266,12 +270,12 @@ void ObjectLiteral::CalculateEmitStore() {
     // If the key of a computed property is in the table, do not emit
     // a store for the property later.
     if (property->kind() == ObjectLiteral::Property::COMPUTED) {
-      if (table->Lookup(literal, hash, false) != NULL) {
+      if (table->Lookup(key, hash, false) != NULL) {
         property->set_emit_store(false);
       }
     }
     // Add key to the table.
-    table->Lookup(literal, hash, true);
+    table->Lookup(key, hash, true);
   }
 }
 
@@ -517,6 +521,11 @@ void Property::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
   if (key()->IsPropertyName()) {
     if (oracle->LoadIsBuiltin(this, Builtins::LoadIC_ArrayLength)) {
       is_array_length_ = true;
+    } else if (oracle->LoadIsBuiltin(this, Builtins::LoadIC_StringLength)) {
+      is_string_length_ = true;
+    } else if (oracle->LoadIsBuiltin(this,
+                                     Builtins::LoadIC_FunctionPrototype)) {
+      is_function_prototype_ = true;
     } else {
       Literal* lit_key = key()->AsLiteral();
       ASSERT(lit_key != NULL && lit_key->handle()->IsString());
@@ -559,25 +568,25 @@ void CaseClause::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
 }
 
 
-static bool CallWithoutIC(Handle<JSFunction> target, int arity) {
+static bool CanCallWithoutIC(Handle<JSFunction> target, int arity) {
   SharedFunctionInfo* info = target->shared();
-  if (target->NeedsArgumentsAdaption()) {
-    // If the number of formal parameters of the target function
-    // does not match the number of arguments we're passing, we
-    // don't want to deal with it.
-    return info->formal_parameter_count() == arity;
-  } else {
-    // If the target doesn't need arguments adaption, we can call
-    // it directly, but we avoid to do so if it has a custom call
-    // generator, because that is likely to generate better code.
-    return !info->HasBuiltinFunctionId() ||
-        !CallStubCompiler::HasCustomCallGenerator(info->builtin_function_id());
-  }
+  // If the number of formal parameters of the target function does
+  // not match the number of arguments we're passing, we don't want to
+  // deal with it. Otherwise, we can call it directly.
+  return !target->NeedsArgumentsAdaption() ||
+      info->formal_parameter_count() == arity;
 }
 
 
 bool Call::ComputeTarget(Handle<Map> type, Handle<String> name) {
-  holder_ = Handle<JSObject>::null();
+  if (check_type_ == RECEIVER_MAP_CHECK) {
+    // For primitive checks the holder is set up to point to the
+    // corresponding prototype object, i.e. one step of the algorithm
+    // below has been already performed.
+    // For non-primitive checks we clear it to allow computing targets
+    // for polymorphic calls.
+    holder_ = Handle<JSObject>::null();
+  }
   while (true) {
     LookupResult lookup;
     type->LookupInDescriptors(NULL, *name, &lookup);
@@ -588,7 +597,7 @@ bool Call::ComputeTarget(Handle<Map> type, Handle<String> name) {
       type = Handle<Map>(holder()->map());
     } else if (lookup.IsProperty() && lookup.type() == CONSTANT_FUNCTION) {
       target_ = Handle<JSFunction>(lookup.GetConstantFunctionFromMap(*type));
-      return CallWithoutIC(target_, arguments()->length());
+      return CanCallWithoutIC(target_, arguments()->length());
     } else {
       return false;
     }
@@ -608,8 +617,8 @@ bool Call::ComputeGlobalTarget(Handle<GlobalObject> global,
       Handle<JSFunction> candidate(JSFunction::cast(cell_->value()));
       // If the function is in new space we assume it's more likely to
       // change and thus prefer the general IC code.
-      if (!Heap::InNewSpace(*candidate)
-          && CallWithoutIC(candidate, arguments()->length())) {
+      if (!Heap::InNewSpace(*candidate) &&
+          CanCallWithoutIC(candidate, arguments()->length())) {
         target_ = candidate;
         return true;
       }
@@ -638,27 +647,29 @@ void Call::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
     }
   }
 #endif
-  if (receiver_types_ != NULL && receiver_types_->length() > 0) {
-    Handle<Map> type = receiver_types_->at(0);
-    is_monomorphic_ = oracle->CallIsMonomorphic(this);
-    if (is_monomorphic_) is_monomorphic_ = ComputeTarget(type, name);
+  is_monomorphic_ = oracle->CallIsMonomorphic(this);
+  check_type_ = oracle->GetCallCheckType(this);
+  if (is_monomorphic_) {
+    Handle<Map> map;
+    if (receiver_types_ != NULL && receiver_types_->length() > 0) {
+      ASSERT(check_type_ == RECEIVER_MAP_CHECK);
+      map = receiver_types_->at(0);
+    } else {
+      ASSERT(check_type_ != RECEIVER_MAP_CHECK);
+      holder_ = Handle<JSObject>(
+          oracle->GetPrototypeForPrimitiveCheck(check_type_));
+      map = Handle<Map>(holder_->map());
+    }
+    is_monomorphic_ = ComputeTarget(map, name);
   }
 }
 
 
-void BinaryOperation::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
-  TypeInfo left = oracle->BinaryType(this, TypeFeedbackOracle::LEFT);
-  TypeInfo right = oracle->BinaryType(this, TypeFeedbackOracle::RIGHT);
-  is_smi_only_ = left.IsSmi() && right.IsSmi();
-}
-
-
 void CompareOperation::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
-  TypeInfo left = oracle->CompareType(this, TypeFeedbackOracle::LEFT);
-  TypeInfo right = oracle->CompareType(this, TypeFeedbackOracle::RIGHT);
-  if (left.IsSmi() && right.IsSmi()) {
+  TypeInfo info = oracle->CompareType(this);
+  if (info.IsSmi()) {
     compare_type_ = SMI_ONLY;
-  } else if (left.IsNonPrimitive() && right.IsNonPrimitive()) {
+  } else if (info.IsNonPrimitive()) {
     compare_type_ = OBJECT_ONLY;
   } else {
     ASSERT(compare_type_ == NONE);

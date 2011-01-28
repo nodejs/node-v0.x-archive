@@ -422,7 +422,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // [rsp+0x20] : argv
 
   // Clear the context before we push it when entering the JS frame.
-  __ xor_(rsi, rsi);
+  __ Set(rsi, 0);
   __ EnterInternalFrame();
 
   // Load the function context into rsi.
@@ -451,7 +451,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // rdi : function
 
   // Clear the context before we push it when entering the JS frame.
-  __ xor_(rsi, rsi);
+  __ Set(rsi, 0);
   // Enter an internal frame.
   __ EnterInternalFrame();
 
@@ -479,7 +479,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // Register rbx points to array of pointers to handle locations.
   // Push the values of these handles.
   Label loop, entry;
-  __ xor_(rcx, rcx);  // Set loop variable to 0.
+  __ Set(rcx, 0);  // Set loop variable to 0.
   __ jmp(&entry);
   __ bind(&loop);
   __ movq(kScratchRegister, Operand(rbx, rcx, times_pointer_size, 0));
@@ -561,7 +561,33 @@ void Builtins::Generate_LazyRecompile(MacroAssembler* masm) {
 
 static void Generate_NotifyDeoptimizedHelper(MacroAssembler* masm,
                                              Deoptimizer::BailoutType type) {
-  __ int3();
+  // Enter an internal frame.
+  __ EnterInternalFrame();
+
+  // Pass the deoptimization type to the runtime system.
+  __ Push(Smi::FromInt(static_cast<int>(type)));
+
+  __ CallRuntime(Runtime::kNotifyDeoptimized, 1);
+  // Tear down temporary frame.
+  __ LeaveInternalFrame();
+
+  // Get the full codegen state from the stack and untag it.
+  __ SmiToInteger32(rcx, Operand(rsp, 1 * kPointerSize));
+
+  // Switch on the state.
+  NearLabel not_no_registers, not_tos_rax;
+  __ cmpq(rcx, Immediate(FullCodeGenerator::NO_REGISTERS));
+  __ j(not_equal, &not_no_registers);
+  __ ret(1 * kPointerSize);  // Remove state.
+
+  __ bind(&not_no_registers);
+  __ movq(rax, Operand(rsp, 2 * kPointerSize));
+  __ cmpq(rcx, Immediate(FullCodeGenerator::TOS_REG));
+  __ j(not_equal, &not_tos_rax);
+  __ ret(2 * kPointerSize);  // Remove state, rax.
+
+  __ bind(&not_tos_rax);
+  __ Abort("no cases left");
 }
 
 void Builtins::Generate_NotifyDeoptimized(MacroAssembler* masm) {
@@ -668,7 +694,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   //     become the receiver.
   __ bind(&non_function);
   __ movq(Operand(rsp, rax, times_pointer_size, 0), rdi);
-  __ xor_(rdi, rdi);
+  __ Set(rdi, 0);
 
   // 4. Shift arguments and return address one slot down on the stack
   //    (overwriting the original receiver).  Adjust argument count to make
@@ -689,7 +715,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   { Label function;
     __ testq(rdi, rdi);
     __ j(not_zero, &function);
-    __ xor_(rbx, rbx);
+    __ Set(rbx, 0);
     __ GetBuiltinEntry(rdx, Builtins::CALL_NON_FUNCTION);
     __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
             RelocInfo::CODE_TARGET);

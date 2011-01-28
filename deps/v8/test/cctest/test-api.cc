@@ -814,6 +814,79 @@ THREADED_TEST(FunctionTemplate) {
 }
 
 
+static void* expected_ptr;
+static v8::Handle<v8::Value> callback(const v8::Arguments& args) {
+  void* ptr = v8::External::Unwrap(args.Data());
+  CHECK_EQ(expected_ptr, ptr);
+  return v8::Boolean::New(true);
+}
+
+
+static void TestExternalPointerWrapping() {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  v8::Handle<v8::Value> data = v8::External::Wrap(expected_ptr);
+
+  v8::Handle<v8::Object> obj = v8::Object::New();
+  obj->Set(v8_str("func"),
+           v8::FunctionTemplate::New(callback, data)->GetFunction());
+  env->Global()->Set(v8_str("obj"), obj);
+
+  CHECK(CompileRun(
+        "function foo() {\n"
+        "  for (var i = 0; i < 13; i++) obj.func();\n"
+        "}\n"
+        "foo(), true")->BooleanValue());
+}
+
+
+THREADED_TEST(ExternalWrap) {
+  // Check heap allocated object.
+  int* ptr = new int;
+  expected_ptr = ptr;
+  TestExternalPointerWrapping();
+  delete ptr;
+
+  // Check stack allocated object.
+  int foo;
+  expected_ptr = &foo;
+  TestExternalPointerWrapping();
+
+  // Check not aligned addresses.
+  const int n = 100;
+  char* s = new char[n];
+  for (int i = 0; i < n; i++) {
+    expected_ptr = s + i;
+    TestExternalPointerWrapping();
+  }
+
+  delete[] s;
+
+  // Check several invalid addresses.
+  expected_ptr = reinterpret_cast<void*>(1);
+  TestExternalPointerWrapping();
+
+  expected_ptr = reinterpret_cast<void*>(0xdeadbeef);
+  TestExternalPointerWrapping();
+
+  expected_ptr = reinterpret_cast<void*>(0xdeadbeef + 1);
+  TestExternalPointerWrapping();
+
+#if defined(V8_HOST_ARCH_X64)
+  // Check a value with a leading 1 bit in x64 Smi encoding.
+  expected_ptr = reinterpret_cast<void*>(0x400000000);
+  TestExternalPointerWrapping();
+
+  expected_ptr = reinterpret_cast<void*>(0xdeadbeefdeadbeef);
+  TestExternalPointerWrapping();
+
+  expected_ptr = reinterpret_cast<void*>(0xdeadbeefdeadbeef + 1);
+  TestExternalPointerWrapping();
+#endif
+}
+
+
 THREADED_TEST(FindInstanceInPrototypeChain) {
   v8::HandleScope scope;
   LocalContext env;
@@ -2285,6 +2358,43 @@ TEST(TryCatchInTryFinally) {
                                    "} catch (e) {"
                                    "}");
   CHECK(result->IsTrue());
+}
+
+
+static void check_reference_error_message(
+    v8::Handle<v8::Message> message,
+    v8::Handle<v8::Value> data) {
+  const char* reference_error = "Uncaught ReferenceError: asdf is not defined";
+  CHECK(message->Get()->Equals(v8_str(reference_error)));
+}
+
+
+// Test that overwritten toString methods are not invoked on uncaught
+// exception formatting. However, they are invoked when performing
+// normal error string conversions.
+TEST(APIThrowMessageOverwrittenToString) {
+  v8::HandleScope scope;
+  v8::V8::AddMessageListener(check_reference_error_message);
+  LocalContext context;
+  CompileRun("ReferenceError.prototype.toString ="
+             "  function() { return 'Whoops' }");
+  CompileRun("asdf;");
+  CompileRun("ReferenceError.prototype.constructor.name = void 0;");
+  CompileRun("asdf;");
+  CompileRun("ReferenceError.prototype.constructor = void 0;");
+  CompileRun("asdf;");
+  CompileRun("ReferenceError.prototype.__proto__ = new Object();");
+  CompileRun("asdf;");
+  CompileRun("ReferenceError.prototype = new Object();");
+  CompileRun("asdf;");
+  v8::Handle<Value> string = CompileRun("try { asdf; } catch(e) { e + ''; }");
+  CHECK(string->Equals(v8_str("Whoops")));
+  CompileRun("ReferenceError.prototype.constructor = new Object();"
+             "ReferenceError.prototype.constructor.name = 1;"
+             "Number.prototype.toString = function() { return 'Whoops'; };"
+             "ReferenceError.prototype.toString = Object.prototype.toString;");
+  CompileRun("asdf;");
+  v8::V8::RemoveMessageListeners(check_message);
 }
 
 
@@ -10490,6 +10600,33 @@ static void ExternalArrayTestHelper(v8::ExternalArrayType array_type,
     CHECK_EQ(0, result->Int32Value());
     CHECK_EQ(0,
              i::Smi::cast(jsobj->GetElement(5)->ToObjectChecked())->value());
+
+    // Check truncation behavior of integral arrays.
+    const char* unsigned_data =
+        "var source_data = [0.6, 10.6];"
+        "var expected_results = [0, 10];";
+    const char* signed_data =
+        "var source_data = [0.6, 10.6, -0.6, -10.6];"
+        "var expected_results = [0, 10, 0, -10];";
+    bool is_unsigned =
+        (array_type == v8::kExternalUnsignedByteArray ||
+         array_type == v8::kExternalUnsignedShortArray ||
+         array_type == v8::kExternalUnsignedIntArray);
+
+    i::OS::SNPrintF(test_buf,
+                    "%s"
+                    "var all_passed = true;"
+                    "for (var i = 0; i < source_data.length; i++) {"
+                    "  for (var j = 0; j < 8; j++) {"
+                    "    ext_array[j] = source_data[i];"
+                    "  }"
+                    "  all_passed = all_passed &&"
+                    "               (ext_array[5] == expected_results[i]);"
+                    "}"
+                    "all_passed;",
+                    (is_unsigned ? unsigned_data : signed_data));
+    result = CompileRun(test_buf.start());
+    CHECK_EQ(true, result->BooleanValue());
   }
 
   result = CompileRun("ext_array[3] = 33;"

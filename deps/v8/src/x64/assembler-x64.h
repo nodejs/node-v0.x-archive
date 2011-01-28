@@ -98,19 +98,29 @@ struct Register {
   static const int kNumRegisters = 16;
   static const int kNumAllocatableRegisters = 10;
 
+  static int ToAllocationIndex(Register reg) {
+    return allocationIndexByRegisterCode[reg.code()];
+  }
+
+  static Register FromAllocationIndex(int index) {
+    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    Register result = { registerCodeByAllocationIndex[index] };
+    return result;
+  }
+
   static const char* AllocationIndexToString(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
     const char* const names[] = {
       "rax",
-      "rcx",
-      "rdx",
       "rbx",
+      "rdx",
+      "rcx",
       "rdi",
       "r8",
       "r9",
       "r11",
-      "r12",
-      "r14"
+      "r14",
+      "r12"
     };
     return names[index];
   }
@@ -143,6 +153,10 @@ struct Register {
   // Unfortunately we can't make this private in a struct when initializing
   // by assignment.
   int code_;
+
+ private:
+  static const int registerCodeByAllocationIndex[kNumAllocatableRegisters];
+  static const int allocationIndexByRegisterCode[kNumRegisters];
 };
 
 const Register rax = { 0 };
@@ -173,6 +187,12 @@ struct XMMRegister {
     return reg.code() - 1;
   }
 
+  static XMMRegister FromAllocationIndex(int index) {
+    ASSERT(0 <= index && index < kNumAllocatableRegisters);
+    XMMRegister result = { index + 1 };
+    return result;
+  }
+
   static const char* AllocationIndexToString(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
     const char* const names[] = {
@@ -196,6 +216,7 @@ struct XMMRegister {
   }
 
   bool is_valid() const { return 0 <= code_ && code_ < kNumRegisters; }
+  bool is(XMMRegister reg) const { return code_ == reg.code_; }
   int code() const {
     ASSERT(is_valid());
     return code_;
@@ -370,11 +391,15 @@ class Operand BASE_EMBEDDED {
   // this must not overflow.
   Operand(const Operand& base, int32_t offset);
 
+  // Checks whether either base or index register is the given register.
+  // Does not check the "reg" part of the Operand.
+  bool AddressUsesRegister(Register reg) const;
+
  private:
   byte rex_;
   byte buf_[6];
-  // The number of bytes in buf_.
-  unsigned int len_;
+  // The number of bytes of buf_ in use.
+  byte len_;
 
   // Set the ModR/M byte without an encoded 'reg' register. The
   // register is encoded later as part of the emit_operand operation.
@@ -536,6 +561,8 @@ class Assembler : public Malloced {
   // The debug break slot must be able to contain a call instruction.
   static const int kDebugBreakSlotLength = kCallInstructionLength;
 
+  // One byte opcode for test eax,0xXXXXXXXX.
+  static const byte kTestEaxByte = 0xA9;
 
   // ---------------------------------------------------------------------------
   // Code generation
@@ -568,6 +595,9 @@ class Assembler : public Malloced {
   void popfq();
 
   void push(Immediate value);
+  // Push a 32 bit integer, and guarantee that it is actually pushed as a
+  // 32 bit value, the normal push will optimize the 8 bit case.
+  void push_imm32(int32_t imm32);
   void push(Register src);
   void push(const Operand& src);
 
@@ -685,6 +715,10 @@ class Assembler : public Malloced {
     arithmetic_op_32(0x1b, dst, src);
   }
 
+  void sbbq(Register dst, Register src) {
+    arithmetic_op(0x1b, dst, src);
+  }
+
   void cmpb(Register dst, Immediate src) {
     immediate_arithmetic_op_8(0x7, dst, src);
   }
@@ -792,6 +826,10 @@ class Assembler : public Malloced {
   }
 
   void andl(Register dst, Register src) {
+    arithmetic_op_32(0x23, dst, src);
+  }
+
+  void andl(Register dst, const Operand& src) {
     arithmetic_op_32(0x23, dst, src);
   }
 
@@ -1179,11 +1217,16 @@ class Assembler : public Malloced {
   void movsd(XMMRegister dst, XMMRegister src);
   void movsd(XMMRegister dst, const Operand& src);
 
+  void movdqa(const Operand& dst, XMMRegister src);
+  void movdqa(XMMRegister dst, const Operand& src);
+
   void movss(XMMRegister dst, const Operand& src);
   void movss(const Operand& dst, XMMRegister src);
 
   void cvttss2si(Register dst, const Operand& src);
+  void cvttss2si(Register dst, XMMRegister src);
   void cvttsd2si(Register dst, const Operand& src);
+  void cvttsd2si(Register dst, XMMRegister src);
   void cvttsd2siq(Register dst, XMMRegister src);
 
   void cvtlsi2sd(XMMRegister dst, const Operand& src);
@@ -1217,10 +1260,6 @@ class Assembler : public Malloced {
   void emit_sse_operand(XMMRegister dst, Register src);
   void emit_sse_operand(Register dst, XMMRegister src);
 
-  // Use either movsd or movlpd.
-  // void movdbl(XMMRegister dst, const Operand& src);
-  // void movdbl(const Operand& dst, XMMRegister src);
-
   // Debugging
   void Print();
 
@@ -1239,7 +1278,7 @@ class Assembler : public Malloced {
 
   // Writes a single word of data in the code stream.
   // Used for inline tables, e.g., jump-tables.
-  void db(uint8_t data) { UNIMPLEMENTED(); }
+  void db(uint8_t data);
   void dd(uint32_t data);
 
   int pc_offset() const { return static_cast<int>(pc_ - buffer_); }

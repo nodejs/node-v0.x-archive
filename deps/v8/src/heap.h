@@ -53,6 +53,7 @@ namespace internal {
   V(Object, null_value, NullValue)                                             \
   V(Object, true_value, TrueValue)                                             \
   V(Object, false_value, FalseValue)                                           \
+  V(Object, arguments_marker, ArgumentsMarker)                                 \
   V(Map, heap_number_map, HeapNumberMap)                                       \
   V(Map, global_context_map, GlobalContextMap)                                 \
   V(Map, fixed_array_map, FixedArrayMap)                                       \
@@ -202,7 +203,10 @@ namespace internal {
   V(zero_symbol, "0")                                                    \
   V(global_eval_symbol, "GlobalEval")                                    \
   V(identity_hash_symbol, "v8::IdentityHash")                            \
-  V(closure_symbol, "(closure)")
+  V(closure_symbol, "(closure)")                                         \
+  V(use_strict, "use strict")                                            \
+  V(KeyedLoadExternalArray_symbol, "KeyedLoadExternalArray")             \
+  V(KeyedStoreExternalArray_symbol, "KeyedStoreExternalArray")
 
 
 // Forward declarations.
@@ -412,7 +416,10 @@ class Heap : public AllStatic {
   MUST_USE_RESULT static MaybeObject* AllocateStringFromAscii(
       Vector<const char> str,
       PretenureFlag pretenure = NOT_TENURED);
-  MUST_USE_RESULT static MaybeObject* AllocateStringFromUtf8(
+  MUST_USE_RESULT static inline MaybeObject* AllocateStringFromUtf8(
+      Vector<const char> str,
+      PretenureFlag pretenure = NOT_TENURED);
+  MUST_USE_RESULT static MaybeObject* AllocateStringFromUtf8Slow(
       Vector<const char> str,
       PretenureFlag pretenure = NOT_TENURED);
   MUST_USE_RESULT static MaybeObject* AllocateStringFromTwoByte(
@@ -427,6 +434,14 @@ class Heap : public AllStatic {
       Vector<const char> str,
       int chars,
       uint32_t hash_field);
+
+  MUST_USE_RESULT static inline MaybeObject* AllocateAsciiSymbol(
+        Vector<const char> str,
+        uint32_t hash_field);
+
+  MUST_USE_RESULT static inline MaybeObject* AllocateTwoByteSymbol(
+        Vector<const uc16> str,
+        uint32_t hash_field);
 
   MUST_USE_RESULT static MaybeObject* AllocateInternalSymbol(
       unibrow::CharacterStream* buffer, int chars, uint32_t hash_field);
@@ -683,6 +698,9 @@ class Heap : public AllStatic {
   // failed.
   // Please note this function does not perform a garbage collection.
   MUST_USE_RESULT static MaybeObject* LookupSymbol(Vector<const char> str);
+  MUST_USE_RESULT static MaybeObject* LookupAsciiSymbol(Vector<const char> str);
+  MUST_USE_RESULT static MaybeObject* LookupTwoByteSymbol(
+      Vector<const uc16> str);
   MUST_USE_RESULT static MaybeObject* LookupAsciiSymbol(const char* str) {
     return LookupSymbol(CStrVector(str));
   }
@@ -1585,17 +1603,18 @@ class SpaceIterator : public Malloced {
 // nodes filtering uses GC marks, it can't be used during MS/MC GC
 // phases. Also, it is forbidden to interrupt iteration in this mode,
 // as this will leave heap objects marked (and thus, unusable).
-class FreeListNodesFilter;
+class HeapObjectsFilter;
 
 class HeapIterator BASE_EMBEDDED {
  public:
-  enum FreeListNodesFiltering {
+  enum HeapObjectsFiltering {
     kNoFiltering,
-    kPreciseFiltering
+    kFilterFreeListNodes,
+    kFilterUnreachable
   };
 
   HeapIterator();
-  explicit HeapIterator(FreeListNodesFiltering filtering);
+  explicit HeapIterator(HeapObjectsFiltering filtering);
   ~HeapIterator();
 
   HeapObject* next();
@@ -1608,8 +1627,8 @@ class HeapIterator BASE_EMBEDDED {
   void Shutdown();
   HeapObject* NextObject();
 
-  FreeListNodesFiltering filtering_;
-  FreeListNodesFilter* filter_;
+  HeapObjectsFiltering filtering_;
+  HeapObjectsFilter* filter_;
   // Space iterator for iterating all the spaces.
   SpaceIterator* space_iterator_;
   // Object iterator for the space currently being iterated.
@@ -1849,7 +1868,7 @@ class GCTracer BASE_EMBEDDED {
     }
 
     ~Scope() {
-      ASSERT((0 <= scope_) && (scope_ < kNumberOfScopes));
+      ASSERT(scope_ < kNumberOfScopes);  // scope_ is unsigned.
       tracer_->scopes_[scope_] += OS::TimeCurrentMillis() - start_time_;
     }
 
@@ -1968,6 +1987,8 @@ class GCTracer BASE_EMBEDDED {
 class TranscendentalCache {
  public:
   enum Type {ACOS, ASIN, ATAN, COS, EXP, LOG, SIN, TAN, kNumberOfCaches};
+  static const int kTranscendentalTypeBits = 3;
+  STATIC_ASSERT((1 << kTranscendentalTypeBits) >= kNumberOfCaches);
 
   explicit TranscendentalCache(Type t);
 
@@ -2056,7 +2077,6 @@ class TranscendentalCache {
   friend class ExternalReference;
   // Inline implementation of the cache.
   friend class TranscendentalCacheStub;
-  friend class TranscendentalCacheSSE2Stub;
 
   static TranscendentalCache* caches_[kNumberOfCaches];
   Element elements_[kCacheSize];

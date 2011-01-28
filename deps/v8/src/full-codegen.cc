@@ -286,6 +286,9 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   CodeGenerator::MakeCodePrologue(info);
   const int kInitialBufferSize = 4 * KB;
   MacroAssembler masm(NULL, kInitialBufferSize);
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  masm.positions_recorder()->StartGDBJITLineInfoRecording();
+#endif
 
   FullCodeGenerator cgen(&masm);
   cgen.Generate(info);
@@ -304,6 +307,14 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   code->set_stack_check_table_start(table_offset);
   CodeGenerator::PrintCode(code, info);
   info->SetCode(code);  // may be an empty handle.
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  if (FLAG_gdbjit && !code.is_null()) {
+    GDBJITLineInfo* lineinfo =
+        masm.positions_recorder()->DetachGDBJITLineInfo();
+
+    GDBJIT(RegisterDetailedLineInfo(*code, lineinfo));
+  }
+#endif
   return !code.is_null();
 }
 
@@ -671,8 +682,12 @@ const FullCodeGenerator::InlineFunctionGenerator
 
 FullCodeGenerator::InlineFunctionGenerator
   FullCodeGenerator::FindInlineFunctionGenerator(Runtime::FunctionId id) {
-    return kInlineFunctionGenerators[
-      static_cast<int>(id) - static_cast<int>(Runtime::kFirstInlineFunction)];
+    int lookup_index =
+        static_cast<int>(id) - static_cast<int>(Runtime::kFirstInlineFunction);
+    ASSERT(lookup_index >= 0);
+    ASSERT(static_cast<size_t>(lookup_index) <
+           ARRAY_SIZE(kInlineFunctionGenerators));
+    return kInlineFunctionGenerators[lookup_index];
 }
 
 
@@ -684,7 +699,6 @@ void FullCodeGenerator::EmitInlineRuntimeCall(CallRuntime* node) {
   ASSERT(function->intrinsic_type == Runtime::INLINE);
   InlineFunctionGenerator generator =
       FindInlineFunctionGenerator(function->function_id);
-  ASSERT(generator != NULL);
   ((*this).*(generator))(args);
 }
 

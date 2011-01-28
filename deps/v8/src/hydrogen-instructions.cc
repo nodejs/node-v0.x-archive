@@ -490,7 +490,7 @@ void HInstruction::InsertAfter(HInstruction* previous) {
 
 
 #ifdef DEBUG
-void HInstruction::Verify() const {
+void HInstruction::Verify() {
   // Verify that input operands are defined before use.
   HBasicBlock* cur_block = block();
   for (int i = 0; i < OperandCount(); ++i) {
@@ -517,6 +517,11 @@ void HInstruction::Verify() const {
   if (HasSideEffects() && !IsOsrEntry()) {
     ASSERT(next()->IsSimulate());
   }
+
+  // Verify that instructions that can be eliminated by GVN have overridden
+  // HValue::DataEquals.  The default implementation is UNREACHABLE.  We
+  // don't actually care whether DataEquals returns true or false here.
+  if (CheckFlag(kUseGVN)) DataEquals(this);
 }
 #endif
 
@@ -524,7 +529,7 @@ void HInstruction::Verify() const {
 HCall::HCall(int count) : arguments_(Zone::NewArray<HValue*>(count), count) {
   for (int i = 0; i < count; ++i) arguments_[i] = NULL;
   set_representation(Representation::Tagged());
-  SetFlagMask(AllSideEffects());
+  SetAllSideEffects();
 }
 
 
@@ -570,27 +575,29 @@ void HCallConstantFunction::PrintDataTo(StringStream* stream) const {
 }
 
 
-void HBranch::PrintDataTo(StringStream* stream) const {
-  int first_id = FirstSuccessor()->block_id();
-  int second_id = SecondSuccessor()->block_id();
-  stream->Add("on ");
-  value()->PrintNameTo(stream);
-  stream->Add(" (B%d, B%d)", first_id, second_id);
+void HControlInstruction::PrintDataTo(StringStream* stream) const {
+  if (FirstSuccessor() != NULL) {
+    int first_id = FirstSuccessor()->block_id();
+    if (SecondSuccessor() == NULL) {
+      stream->Add(" B%d", first_id);
+    } else {
+      int second_id = SecondSuccessor()->block_id();
+      stream->Add(" goto (B%d, B%d)", first_id, second_id);
+    }
+  }
 }
 
 
-void HGoto::PrintDataTo(StringStream* stream) const {
-  stream->Add("B%d", FirstSuccessor()->block_id());
+void HUnaryControlInstruction::PrintDataTo(StringStream* stream) const {
+  value()->PrintNameTo(stream);
+  HControlInstruction::PrintDataTo(stream);
 }
 
 
-void HReturn::PrintDataTo(StringStream* stream) const {
+void HCompareMap::PrintDataTo(StringStream* stream) const {
   value()->PrintNameTo(stream);
-}
-
-
-void HThrow::PrintDataTo(StringStream* stream) const {
-  value()->PrintNameTo(stream);
+  stream->Add(" (%p)", *map());
+  HControlInstruction::PrintDataTo(stream);
 }
 
 
@@ -989,7 +996,8 @@ HConstant::HConstant(Handle<Object> handle, Representation r)
   SetFlag(kUseGVN);
   if (handle_->IsNumber()) {
     double n = handle_->Number();
-    has_int32_value_ = static_cast<double>(static_cast<int32_t>(n)) == n;
+    double roundtrip_value = static_cast<double>(static_cast<int32_t>(n));
+    has_int32_value_ = BitCast<int64_t>(roundtrip_value) == BitCast<int64_t>(n);
     if (has_int32_value_) int32_value_ = static_cast<int32_t>(n);
     double_value_ = n;
     has_double_value_ = true;
@@ -1116,10 +1124,10 @@ void HCompare::PrintDataTo(StringStream* stream) const {
 void HCompare::SetInputRepresentation(Representation r) {
   input_representation_ = r;
   if (r.IsTagged()) {
-    SetFlagMask(AllSideEffects());
+    SetAllSideEffects();
     ClearFlag(kUseGVN);
   } else {
-    ClearFlagMask(AllSideEffects());
+    ClearAllSideEffects();
     SetFlag(kUseGVN);
   }
 }
@@ -1183,6 +1191,11 @@ void HStoreGlobal::PrintDataTo(StringStream* stream) const {
 }
 
 
+void HLoadContextSlot::PrintDataTo(StringStream* stream) const {
+  stream->Add("(%d, %d)", context_chain_length(), slot_index());
+}
+
+
 // Implementation of type inference and type conversions. Calculates
 // the inferred type of this instruction based on the input operands.
 
@@ -1239,6 +1252,11 @@ HType HCompareJSObjectEq::CalculateInferredType() const {
 
 HType HUnaryPredicate::CalculateInferredType() const {
   return HType::Boolean();
+}
+
+
+HType HBitwiseBinaryOperation::CalculateInferredType() const {
+  return HType::TaggedNumber();
 }
 
 
@@ -1375,7 +1393,7 @@ HValue* HAdd::EnsureAndPropagateNotMinusZero(BitVector* visited) {
 // Node-specific verification code is only included in debug mode.
 #ifdef DEBUG
 
-void HPhi::Verify() const {
+void HPhi::Verify() {
   ASSERT(OperandCount() == block()->predecessors()->length());
   for (int i = 0; i < OperandCount(); ++i) {
     HValue* value = OperandAt(i);
@@ -1387,49 +1405,49 @@ void HPhi::Verify() const {
 }
 
 
-void HSimulate::Verify() const {
+void HSimulate::Verify() {
   HInstruction::Verify();
   ASSERT(HasAstId());
 }
 
 
-void HBoundsCheck::Verify() const {
+void HBoundsCheck::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }
 
 
-void HCheckSmi::Verify() const {
+void HCheckSmi::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }
 
 
-void HCheckNonSmi::Verify() const {
+void HCheckNonSmi::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }
 
 
-void HCheckInstanceType::Verify() const {
+void HCheckInstanceType::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }
 
 
-void HCheckMap::Verify() const {
+void HCheckMap::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }
 
 
-void HCheckFunction::Verify() const {
+void HCheckFunction::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }
 
 
-void HCheckPrototypeMaps::Verify() const {
+void HCheckPrototypeMaps::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }
