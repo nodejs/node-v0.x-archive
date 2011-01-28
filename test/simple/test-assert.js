@@ -46,7 +46,11 @@ assert.throws(makeBlock(a.strictEqual, null, undefined),
 assert.doesNotThrow(makeBlock(a.notStrictEqual, 2, '2'), 'notStrictEqual');
 
 // deepEquals joy!
+
 // 7.2
+assert.doesNotThrow(makeBlock(a.deepEqual, /.*/, /.*/), 'deepEqual RegExp');
+
+// 7.3
 assert.doesNotThrow(makeBlock(a.deepEqual, new Date(2000, 3, 14),
                     new Date(2000, 3, 14)), 'deepEqual date');
 
@@ -54,14 +58,14 @@ assert.throws(makeBlock(a.deepEqual, new Date(), new Date(2000, 3, 14)),
               a.AssertionError,
               'deepEqual date');
 
-// 7.3
+// 7.4
 assert.doesNotThrow(makeBlock(a.deepEqual, 4, '4'), 'deepEqual == check');
 assert.doesNotThrow(makeBlock(a.deepEqual, true, 1), 'deepEqual == check');
 assert.throws(makeBlock(a.deepEqual, 4, '5'),
               a.AssertionError,
               'deepEqual == check');
 
-// 7.4
+// 7.5
 // having the same number of owned properties && the same set of keys
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4}, {a: 4}));
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
