@@ -191,7 +191,17 @@ hr {
 }
 
 #toc {
-  
+  position:fixed;
+  top: 0;
+  right: 0;
+  width: 20em;
+  height: 95%;
+  margin: 1em;
+  border: 1px solid #d8d8d8;
+  padding-left: 0.5em;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  white-space: nowrap;
 }
 
   #toc h2 {
