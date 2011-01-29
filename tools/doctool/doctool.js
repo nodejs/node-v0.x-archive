@@ -51,7 +51,7 @@ function generateToc(data) {
     }
 
     toc.push("<li>");
-    toc.push('<a href="#'+formatIdString(text)+'">'+text+'</a>');
+    toc.push('<a href="#'+formatIdString(text)+'" title="'+text.replace(/"/g, "''")+'">'+text+'</a>');
 
     last_level = level;
   });
@@ -61,7 +61,6 @@ function generateToc(data) {
     toc.push("</ul>");
   }
 
-  toc.push("<hr />")
   toc.push("</div>");
 
   return toc.join("");
