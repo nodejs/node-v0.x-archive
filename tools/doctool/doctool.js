@@ -51,7 +51,7 @@ function generateToc(data) {
     }
 
     toc.push("<li>");
-    toc.push('<a href="#'+formatIdString(text)+'" title="'+text.replace(/"/g, "''")+'">'+text+'</a>');
+    toc.push('<a href="#'+formatIdString(text)+'" title="'+text.replace(/"/g, '&quot;')+'">'+text+'</a>');
 
     last_level = level;
   });
