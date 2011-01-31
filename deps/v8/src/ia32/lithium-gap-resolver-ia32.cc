@@ -32,12 +32,11 @@ namespace v8 {
 namespace internal {
 
 LGapResolver::LGapResolver(LCodeGen* owner)
-    : cgen_(owner), moves_(32), spilled_register_(-1) {
-  for (int i = 0; i < Register::kNumAllocatableRegisters; ++i) {
-    source_uses_[i] = 0;
-    destination_uses_[i] = 0;
-  }
-}
+    : cgen_(owner),
+      moves_(32),
+      source_uses_(),
+      destination_uses_(),
+      spilled_register_(-1) {}
 
 
 void LGapResolver::Resolve(LParallelMove* parallel_move) {

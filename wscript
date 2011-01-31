@@ -601,6 +601,7 @@ def build(bld):
   make_macros(macros_loc_debug, "")  # leave debug(x) as is in debug build
   # replace debug(x) with nothing in release build
   make_macros(macros_loc_default, "macro debug(x) = ;\n")
+  make_macros(macros_loc_default, "macro assert(x) = ;\n")
 
   if not bld.env["USE_DTRACE"]:
     make_macros(macros_loc_default, "macro DTRACE_HTTP_SERVER_RESPONSE(x) = ;\n");
@@ -774,7 +775,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.3.2' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.3.7' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 

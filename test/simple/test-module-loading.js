@@ -52,6 +52,13 @@ var one = require('../fixtures/nested-index/one'),
     two = require('../fixtures/nested-index/two');
 assert.notEqual(one.hello, two.hello);
 
+common.debug('test index.js in a folder with a trailing slash');
+var three = require('../fixtures/nested-index/three'),
+    threeFolder = require('../fixtures/nested-index/three/'),
+    threeIndex = require('../fixtures/nested-index/three/index.js');
+assert.equal(threeFolder, threeIndex);
+assert.notEqual(threeFolder, three);
+
 common.debug('test cycles containing a .. path');
 var root = require('../fixtures/cycles/root'),
     foo = require('../fixtures/cycles/folder/foo');
@@ -100,7 +107,7 @@ common.debug('load modules by absolute id, then change require.paths, ' +
              'and load another module with the same absolute id.');
 // this will throw if it fails.
 var foo = require('../fixtures/require-path/p1/foo');
-process.assert(foo.bar.expect === foo.bar.actual);
+assert.ok(foo.bar.expect === foo.bar.actual);
 
 assert.equal(require('../fixtures/foo').foo, 'ok',
              'require module with no extension');
