@@ -47,6 +47,9 @@ else()
 endif()
 get_directory_property(compile_defs COMPILE_DEFINITIONS)
 foreach(def ${compile_defs})
+  # escape " in CPPFLAGS (-DPLATFORM="${node_platform}" would fuck stuff up
+  # otherwise)
+  string(REPLACE "\"" "\\\"" def ${def})
   set(CPPFLAGS "${CPPFLAGS} -D${def}")
 endforeach()
 
