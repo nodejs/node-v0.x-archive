@@ -119,3 +119,12 @@ txt += decipher.final('utf8');
 
 assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
 
+var dh1 = crypto.createDiffieHellman(256);
+var p1 = dh1.getPrime('base64');
+var dh2 = crypto.createDiffieHellman(p1, 'base64');
+var key1 = dh1.generateKey();
+var key2 = dh2.generateKey('hex');
+var secret1 = dh1.computeSecret(key2, 'hex', 'base64');
+var secret2 = dh2.computeSecret(key1, 'binary', 'base64');
+
+assert.equal(secret1, secret2);

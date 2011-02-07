@@ -2668,40 +2668,34 @@ class DiffieHellman : public ObjectWrap {
 
     NODE_SET_PROTOTYPE_METHOD(t, "generateKey", GenerateKey);
     NODE_SET_PROTOTYPE_METHOD(t, "computeSecret", ComputeSecret);
+    NODE_SET_PROTOTYPE_METHOD(t, "getPrime", GetPrime);
+    NODE_SET_PROTOTYPE_METHOD(t, "getGenerator", GetGenerator);
+    NODE_SET_PROTOTYPE_METHOD(t, "getKey", GetKey);
 
     target->Set(String::NewSymbol("DiffieHellman"), t->GetFunction());
   }
 
   bool Init(int primeLength) {
-    dh = DH_generate_parameters(primeLength, 2, NULL, NULL);
-    int codes;
-    if (!DH_check(dh, &codes)) return false;
+    dh = DH_new();
+    DH_generate_parameters_ex(dh, primeLength, DH_GENERATOR_2, 0);
+    bool result = VerifyContext();
+    if (!result) return false;
     initialised_ = true;
     return true;
   }
 
-  bool Init(unsigned char* p, int p_len, unsigned char* g, int g_len) {
+  bool Init(unsigned char* p, int p_len) {
     dh = DH_new();
-    dh->p = DiffieHellman::StringToBigNum(p, p_len);
-    dh->g = DiffieHellman::StringToBigNum(g, g_len);
-    int codes;
-    if (!DH_check(dh, &codes)) return false;
+    dh->p = BN_bin2bn(p, p_len, 0);
+    dh->g = BN_new();
+    if (!BN_set_word(dh->g, 2)) return false;
+    bool result = VerifyContext();
+    if (!result) return false;
     initialised_ = true;
     return true;
   }
 
  protected:
-  static BIGNUM* StringToBigNum(unsigned char* value, int length)
-  {
-    char* binaryKey; int binaryKeyLength;
-    unbase64(value, length, &binaryKey, &binaryKeyLength);
-
-    BIGNUM* bignum = BN_bin2bn(reinterpret_cast<unsigned char*>(binaryKey), 
-                               binaryKeyLength, NULL);
-
-    return bignum;
-  }
-
   static Handle<Value> New (const Arguments& args) {
     HandleScope scope;
 
@@ -2710,39 +2704,40 @@ class DiffieHellman : public ObjectWrap {
 
     if (args.Length() > 0) {
       if (args[0]->IsInt32()) {
-        int primeLength = args[0]->Int32Value();
-        initialized = diffieHellman->Init(primeLength);
-      }
-      else if (args.Length() > 1 && args[0]->IsString() && args[1]->IsString()) {
-        String::Utf8Value p(args[0]->ToString());
-        String::Utf8Value g(args[0]->ToString());
+        diffieHellman->Init(args[0]->Int32Value());
+        initialized = true;
+      } else {
+        if (args[0]->IsString()) {
+          char* buf;
+          int len;
+          if (args.Length() > 1 && args[1]->IsString()) {
+            len = DecodeWithEncoding(args[0], args[1], &buf);
+          } else {
+            len = DecodeBinary(args[0], &buf);
+          }
 
-        initialized = diffieHellman->Init(reinterpret_cast<unsigned char*>(*p), 
-                                          strlen(*p), 
-                                          reinterpret_cast<unsigned char*>(*g), 
-                                          strlen(*g));
-      }
-      else {
-        if (args.Length() == 1) {
-          ThrowException(Exception::Error(String::New("Invalid argument")));
-        }
-        else {
-          ThrowException(Exception::Error(String::New("Invalid arguments")));
+          if (len == -1) {
+            delete[] buf;
+            return ThrowException(Exception::Error(String::New("Invalid argument")));
+          } else {
+            diffieHellman->Init(reinterpret_cast<unsigned char*>(buf), len);
+            delete[] buf;
+            initialized = true;
+          }
+        } else if (Buffer::HasInstance(args[0])) {
+          Local<Object> buffer = args[0]->ToObject();
+          diffieHellman->Init(
+                  reinterpret_cast<unsigned char*>(Buffer::Data(buffer)), 
+                  Buffer::Length(buffer));
+          initialized = true;
         }
       }
     }
-    else
-    {
-      String::Utf8Value p(String::New(DIFFIE_HELLMAN_DEFAULT_P));
-      String::Utf8Value g(String::New(DIFFIE_HELLMAN_DEFAULT_G));
-      initialized = diffieHellman->Init(reinterpret_cast<unsigned char*>(*p), 
-                                        strlen(*p), 
-                                        reinterpret_cast<unsigned char*>(*g), 
-                                        strlen(*g));
-    }
+
     if (!initialized) {
-      ThrowException(Exception::Error(String::New("Initialization failed")));
+      return ThrowException(Exception::Error(String::New("Initialization failed")));
     }
+
     diffieHellman->Wrap(args.This());
 
     return args.This();
@@ -2754,23 +2749,107 @@ class DiffieHellman : public ObjectWrap {
     HandleScope scope;
 
     if (!diffieHellman->initialised_) {
-      ThrowException(Exception::Error(String::New("Not initialized")));
+      return ThrowException(Exception::Error(String::New("Not initialized")));
     }
 
     if (!DH_generate_key(diffieHellman->dh)) {
-      ThrowException(Exception::Error(String::New("Key generation failed")));
+      return ThrowException(Exception::Error(String::New("Key generation failed")));
     }
 
     Local<Value> outString;
 
-    int binaryKeySize = BN_num_bytes(diffieHellman->dh->pub_key);
-    char* binaryKey = new char[binaryKeySize];
+    int dataSize = BN_num_bytes(diffieHellman->dh->pub_key);
+    char* data = new char[dataSize];
+    BN_bn2bin(diffieHellman->dh->pub_key, reinterpret_cast<unsigned char*>(data));
 
-    char* base64data; int base64length;
-    base64(reinterpret_cast<unsigned char*>(binaryKey), binaryKeySize, 
-           &base64data, &base64length);
+    if (args.Length() > 0 && args[0]->IsString()) {
+      outString = EncodeWithEncoding(args[0], data, dataSize);
+    } else {
+      outString = Encode(data, dataSize, BINARY);
+    }
+    delete[] data;
 
-    outString = Encode(base64data, base64length, BINARY);
+    return scope.Close(outString);
+  }
+
+  static Handle<Value> GetPrime (const Arguments& args) {
+    DiffieHellman* diffieHellman = ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
+    HandleScope scope;
+
+    if (!diffieHellman->initialised_) {
+      return ThrowException(Exception::Error(String::New("Not initialized")));
+    }
+
+    int dataSize = BN_num_bytes(diffieHellman->dh->p);
+    char* data = new char[dataSize];
+    BN_bn2bin(diffieHellman->dh->p, reinterpret_cast<unsigned char*>(data));
+
+    Local<Value> outString;
+
+    if (args.Length() > 0 && args[0]->IsString()) {
+      outString = EncodeWithEncoding(args[0], data, dataSize);
+    } else {
+      outString = Encode(data, dataSize, BINARY);
+    }
+
+    delete[] data;
+
+    return scope.Close(outString);
+  }
+
+  static Handle<Value> GetGenerator (const Arguments& args) {
+    DiffieHellman* diffieHellman = ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
+    HandleScope scope;
+
+    if (!diffieHellman->initialised_) {
+      return ThrowException(Exception::Error(String::New("Not initialized")));
+    }
+
+    int dataSize = BN_num_bytes(diffieHellman->dh->g);
+    char* data = new char[dataSize];
+    BN_bn2bin(diffieHellman->dh->g, reinterpret_cast<unsigned char*>(data));
+
+    Local<Value> outString;
+
+    if (args.Length() > 0 && args[0]->IsString()) {
+      outString = EncodeWithEncoding(args[0], data, dataSize);
+    } else {
+      outString = Encode(data, dataSize, BINARY);
+    }
+
+    delete[] data;
+
+    return scope.Close(outString);
+  }
+
+  static Handle<Value> GetKey (const Arguments& args) {
+    DiffieHellman* diffieHellman = ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
+    HandleScope scope;
+
+    if (!diffieHellman->initialised_) {
+      return ThrowException(Exception::Error(String::New("Not initialized")));
+    }
+
+    if (diffieHellman->dh->pub_key == NULL) {
+      return ThrowException(Exception::Error(String::New("No public key - did you forget to generate one?")));
+    }
+
+    int dataSize = BN_num_bytes(diffieHellman->dh->pub_key);
+    char* data = new char[dataSize];
+    BN_bn2bin(diffieHellman->dh->pub_key, reinterpret_cast<unsigned char*>(data));
+
+    Local<Value> outString;
+
+    if (args.Length() > 0 && args[0]->IsString()) {
+      outString = EncodeWithEncoding(args[0], data, dataSize);
+    } else {
+      outString = Encode(data, dataSize, BINARY);
+    }
+
+    delete[] data;
 
     return scope.Close(outString);
   }
@@ -2781,42 +2860,73 @@ class DiffieHellman : public ObjectWrap {
     DiffieHellman* diffieHellman = ObjectWrap::Unwrap<DiffieHellman>(args.This());
 
     if (!diffieHellman->initialised_) {
-      ThrowException(Exception::Error(String::New("Not initialized")));
+      return ThrowException(Exception::Error(String::New("Not initialized")));
     }
+
+    BIGNUM* key = 0;
 
     if (args.Length() == 0) {
-      ThrowException(Exception::Error(String::New("First argument must be other party's public key")));
+      return ThrowException(Exception::Error(String::New("First argument must be other party's public key")));
+    } else {
+      if (args[0]->IsString()) {
+        char* buf;
+        int len;
+        if (args.Length() > 1) {
+          len = DecodeWithEncoding(args[0], args[1], &buf);
+        } else {
+          len = DecodeBinary(args[0], &buf);
+        }
+        if (len == -1) {
+          delete[] buf;
+          return ThrowException(Exception::Error(String::New("Invalid argument")));
+        }
+        key = BN_bin2bn(reinterpret_cast<unsigned char*>(buf), len, 0);
+        delete[] buf;
+      } else if (Buffer::HasInstance(args[0])) {
+        Local<Object> buffer = args[0]->ToObject();
+        key = BN_bin2bn(
+          reinterpret_cast<unsigned char*>(Buffer::Data(buffer)), 
+          Buffer::Length(buffer), 0);
+      } else {
+        return ThrowException(Exception::Error(String::New("First argument must be other party's public key")));
+      }
     }
-    ssize_t argLength = DecodeBytes(args[0], BINARY);
-    char* argBuffer = new char[argLength];
-    ssize_t written = DecodeWrite(argBuffer, argLength, args[0], BINARY);
-    assert(written == argLength);
-
-    BIGNUM* key = DiffieHellman::StringToBigNum(
-                    reinterpret_cast<unsigned char*>(argBuffer),
-                    argLength);
 
     int dataSize = DH_size(diffieHellman->dh);
-    unsigned char* data = new unsigned char[dataSize];
+    char* data = new char[dataSize];
 
-    int size = DH_compute_key(data, key, diffieHellman->dh);
-
+    int size = DH_compute_key(reinterpret_cast<unsigned char*>(data), 
+      key, diffieHellman->dh);
     BN_free(key);
-
-    if (size == -1) {
-      delete[] data;
-      ThrowException(Exception::Error(String::New("Could not compute shared key")));
-    }
 
     Local<Value> outString;
 
-    char* base64data; int base64length;
-    base64(data, dataSize, &base64data, &base64length);
-
-    outString = Encode(base64data, base64length, BINARY);
+    if (size == -1) {
+      int checkResult;
+      if (!DH_check_pub_key(diffieHellman->dh, key, &checkResult)) {
+        return ThrowException(Exception::Error(String::New("Invalid key")));
+      } else if (checkResult) {
+        if (checkResult & DH_CHECK_PUBKEY_TOO_SMALL) {
+          return ThrowException(Exception::Error(String::New("Supplied key is too small")));
+        } else if (checkResult & DH_CHECK_PUBKEY_TOO_LARGE) {
+          return ThrowException(Exception::Error(String::New("Supplied key is too large")));
+        } else {
+          return ThrowException(Exception::Error(String::New("Invalid key")));
+        }
+      } else {
+        return ThrowException(Exception::Error(String::New("Invalid key")));
+      }
+    } else {
+      if (args.Length() > 2 && args[2]->IsString()) {
+        outString = EncodeWithEncoding(args[2], data, dataSize);
+      } else if (args.Length() > 1 && args[1]->IsString()) {
+        outString = EncodeWithEncoding(args[2], data, dataSize);
+      } else {
+        outString = Encode(data, dataSize, BINARY);
+      }
+    }
 
     delete[] data;
-
     return scope.Close(outString);
   }
 
@@ -2832,6 +2942,83 @@ class DiffieHellman : public ObjectWrap {
   }
 
  private:
+  bool VerifyContext() {
+    int codes;
+    if (!DH_check(dh, &codes)) return false;
+    if (codes & DH_CHECK_P_NOT_SAFE_PRIME) return false;
+    if (codes & DH_CHECK_P_NOT_PRIME) return false;
+    if (codes & DH_UNABLE_TO_CHECK_GENERATOR) return false;
+    if (codes & DH_NOT_SUITABLE_GENERATOR) return false;
+    return true;
+  }
+
+  static int DecodeBinary(Handle<Value> str, char** buf) {
+    int len = DecodeBytes(str);
+    *buf = new char[len];
+    int written = DecodeWrite(*buf, len, str, BINARY);
+    if(written != len) {
+      return -1;
+    }
+    return len;
+  }
+
+  static int DecodeWithEncoding(Handle<Value> str, Handle<Value> enc, char** buf) {
+    int len = DecodeBinary(str, buf);
+    if (len == -1) {
+      return len;
+    }
+    String::Utf8Value encoding(enc->ToString());
+    char* retbuf = 0;
+    int retlen;
+
+    if (strcasecmp(*encoding, "hex") == 0) {
+      HexDecode((unsigned char*)*buf, len, &retbuf, &retlen);
+
+    } else if (strcasecmp(*encoding, "base64") == 0) {
+      unbase64((unsigned char*)*buf, len, &retbuf, &retlen);
+
+    } else if (strcasecmp(*encoding, "binary") == 0) {
+      // Binary - do nothing
+    } else {
+      fprintf(stderr, "node-crypto : Diffie-Hellman parameter encoding "
+                      "can be binary, hex or base64\n");
+    }
+
+    if (retbuf != 0) {
+      delete [] *buf;
+      *buf = retbuf;
+      len = retlen;
+    }
+
+    return len;
+  }
+
+  static Local<Value> EncodeWithEncoding(Handle<Value> enc, char* buf, int len) {
+    HandleScope scope;
+
+    Local<Value> outString;
+    String::Utf8Value encoding(enc->ToString());
+    char* retbuf;
+    int retlen;
+    if (strcasecmp(*encoding, "hex") == 0) {
+      // Hex encoding
+      HexEncode(reinterpret_cast<unsigned char*>(buf), len, &retbuf, &retlen);
+      outString = Encode(retbuf, retlen, BINARY);
+      delete [] retbuf;
+    } else if (strcasecmp(*encoding, "base64") == 0) {
+      base64(reinterpret_cast<unsigned char*>(buf), len, &retbuf, &retlen);
+      outString = Encode(retbuf, retlen, BINARY);
+      delete [] retbuf;
+    } else if (strcasecmp(*encoding, "binary") == 0) {
+      outString = Encode(buf, len, BINARY);
+    } else {
+      fprintf(stderr, "node-crypto : Diffie-Hellman parameter encoding "
+                      "can be binary, hex or base64\n");
+    }
+
+    return scope.Close(outString);
+  }
+
   bool initialised_;
   DH* dh;
 };
