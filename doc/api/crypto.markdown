@@ -129,22 +129,43 @@ signature for the data, in the `signature_format` which can be `'binary'`, `'hex
 
 Returns true or false depending on the validity of the signature for the data and public key.
 
-### crypto.createDiffieHellman()
-
-Creates a Diffie-Hellman key exchange object using the default Diffie-Hellman primes from the OpenID specification.
-
 ### crypto.createDiffieHellman(prime_length)
 
 Creates a Diffie-Hellman key exchange object and generates a prime of the given bit length. The generator used is `2`.
 
-### crypto.createDiffieHellman(p, g)
+### crypto.createDiffieHellman(prime, encoding='binary')
 
-Creates a Diffie-Hellman key exchange object using the supplied prime and generator, which should be Base64-encoded strings.
+Creates a Diffie-Hellman key exchange object using the supplied prime. The generator used is `2`. Encoding can be `'binary'`, `'hex'`, or `'base64'`.
 
-### diffieHellman.generateKey()
+### diffieHellman.generateKeys(encoding='binary')
 
-Generates private and public Diffie-Hellman key values, and returns the public key in Base64-encoding. This key should be transferred to the other party.
+Generates private and public Diffie-Hellman key values, and returns the public key in the specified encoding. This key should be transferred to the other party. Encoding can be `'binary'`, `'hex'`, or `'base64'`.
 
-### diffieHellman.computeSecret(other_public_key)
+### diffieHellman.computeSecret(other_public_key, input_encoding='binary', output_encoding=input_encoding)
 
-Computes the shared secret using `other_public_key` as the other party's public key. The other party's public key should be a Base64-encoded string.
+Computes the shared secret using `other_public_key` as the other party's public key and returns the computed shared secret. Supplied key is interpreted using specified `input_encoding`, and secret is encoded using specified `output_encoding`. Encodings can be `'binary'`, `'hex'`, or `'base64'`. If no output encoding is given, the input encoding is used as output encoding.
+
+### diffieHellman.getPrime(encoding='binary')
+
+Returns the Diffie-Hellman prime in the specified encoding, which can be `'binary'`, `'hex'`, or `'base64'`.
+
+### diffieHellman.getGenerator(encoding='binary')
+
+Returns the Diffie-Hellman prime in the specified encoding, which can be `'binary'`, `'hex'`, or `'base64'`.
+
+### diffieHellman.getPublicKey(encoding='binary')
+
+Returns the Diffie-Hellman public key in the specified encoding, which can be `'binary'`, `'hex'`, or `'base64'`.
+
+### diffieHellman.getPrivateKey(encoding='binary')
+
+Returns the Diffie-Hellman private key in the specified encoding, which can be `'binary'`, `'hex'`, or `'base64'`.
+
+### diffieHellman.setPublicKey(public_key, encoding='binary')
+
+Sets the Diffie-Hellman public key. Key encoding can be `'binary'`, `'hex'`, or `'base64'`.
+
+### diffieHellman.setPrivateKey(public_key, encoding='binary')
+
+Sets the Diffie-Hellman private key. Key encoding can be `'binary'`, `'hex'`, or `'base64'`.
+
