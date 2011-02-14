@@ -254,7 +254,8 @@ Handle<Value> Buffer::AsciiSlice(const Arguments &args) {
   SLICE_ARGS(args[0], args[1])
 
   char* data = parent->data_ + start;
-  Local<String> string = String::New(data, end - start);
+  size_t len = strnlen(data, end - start);
+  Local<String> string = String::New(data, len);
 
   return scope.Close(string);
 }
@@ -264,10 +265,12 @@ Handle<Value> Buffer::Utf8Slice(const Arguments &args) {
   HandleScope scope;
   Buffer *parent = ObjectWrap::Unwrap<Buffer>(args.This());
   SLICE_ARGS(args[0], args[1])
-  char *data = parent->data_ + start;
-  Local<String> string = String::New(data, end - start);
+  char* data = parent->data_ + start;
+  size_t len = strnlen(data, end - start);
+  Local<String> string = String::New(data, len);
   return scope.Close(string);
 }
+
 
 Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
   HandleScope scope;
@@ -277,6 +280,7 @@ Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
   Local<String> string = String::New(data, (end - start) / 2);
   return scope.Close(string);
 }
+
 
 static const char *base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                   "abcdefghijklmnopqrstuvwxyz"
