@@ -45,6 +45,24 @@ assert.throws(makeBlock(a.strictEqual, null, undefined),
 
 assert.doesNotThrow(makeBlock(a.notStrictEqual, 2, '2'), 'notStrictEqual');
 
+
+//failure message (AssertionError#toString)
+function failAndReturnToString(actual, expected) {
+  var explode = false
+  try{
+    assert.equal(actual, expected)
+    explode = true
+  } catch(assertionError) {
+    return assertionError.toString()
+  }  
+  if (explode) assert.fail("shouldn't have passed, something's wrong")
+}
+
+assert.equal('AssertionError: 999 == 1', failAndReturnToString(1, 999))
+assert.equal('AssertionError: 999 == "\x"', failAndReturnToString('x', 999))
+assert.deepEqual('AssertionError: {\"x\":1} == {\"x\":2}', failAndReturnToString({x:2}, {x:1}))
+
+
 // deepEquals joy!
 // 7.2
 assert.doesNotThrow(makeBlock(a.deepEqual, new Date(2000, 3, 14),
