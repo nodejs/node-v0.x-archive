@@ -1,21 +1,20 @@
 
-var common = require('../common');
 var assert = require('assert');
 var spawn = require('child_process').spawn;
 
 var cat = spawn('cat');
+var called;
 
-try {
-  process.kill(cat.pid, 0);
-} catch (err) {
-  assert.fail('null signal failed');
-}
+process.kill(cat.pid, 0);
 
-process.kill(cat.pid, 'SIGTERM');
+cat.stdout.on('data', function(){
+  called = true;
+  process.kill(cat.pid, 'SIGKILL');
+});
 
-try {
-  process.kill(cat.pid, 0);
-  assert.fail('null signal failed');
-} catch (err) {
-  assert.ok(err);
-}
+// EPIPE when null sig fails
+cat.stdin.write('test');
+
+process.on('exit', function(){
+  assert.ok(called);
+});
