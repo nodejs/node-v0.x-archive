@@ -757,6 +757,10 @@ static const ProfileNode* PickChild(const ProfileNode* parent,
 
 
 TEST(RecordStackTraceAtStartProfiling) {
+  // This test does not pass with inlining enabled since inlined functions
+  // don't appear in the stack trace.
+  i::FLAG_use_inlining = false;
+
   if (env.IsEmpty()) {
     v8::HandleScope scope;
     const char* extensions[] = { "v8/profiler" };
@@ -778,12 +782,16 @@ TEST(RecordStackTraceAtStartProfiling) {
       CpuProfiler::GetProfile(NULL, 0);
   const ProfileTree* topDown = profile->top_down();
   const ProfileNode* current = topDown->root();
+  const_cast<ProfileNode*>(current)->Print(0);
   // The tree should look like this:
   //  (root)
   //   (anonymous function)
   //     a
   //       b
   //         c
+  // There can also be:
+  //           startProfiling
+  // if the sampler managed to get a tick.
   current = PickChild(current, "(anonymous function)");
   CHECK_NE(NULL, const_cast<ProfileNode*>(current));
   current = PickChild(current, "a");
@@ -792,7 +800,12 @@ TEST(RecordStackTraceAtStartProfiling) {
   CHECK_NE(NULL, const_cast<ProfileNode*>(current));
   current = PickChild(current, "c");
   CHECK_NE(NULL, const_cast<ProfileNode*>(current));
-  CHECK_EQ(0, current->children()->length());
+  CHECK(current->children()->length() == 0 ||
+        current->children()->length() == 1);
+  if (current->children()->length() == 1) {
+    current = PickChild(current, "startProfiling");
+    CHECK_EQ(0, current->children()->length());
+  }
 }
 
 

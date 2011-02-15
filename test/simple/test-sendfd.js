@@ -25,8 +25,8 @@
 //     seen in a response yet. This is intended to ensure that all blobs
 //     sent out have been relayed back to us.
 
-common = require("../common");
-assert = common.assert
+var common = require('../common');
+var assert = require('assert');
 
 var buffer = require('buffer');
 var child_process = require('child_process');
@@ -40,11 +40,9 @@ var DATA = {
   'ord' : 0
 };
 
-var SOCK_PATH = path.join(
-  __dirname,
-  '..',
-  path.basename(__filename, '.js') + '.sock'
-);
+var SOCK_PATH = path.join(__dirname,
+                          '..',
+                          path.basename(__filename, '.js') + '.sock');
 
 var logChild = function(d) {
   if (typeof d == 'object') {
@@ -96,7 +94,7 @@ var srv = net.createServer(function(s) {
   buf.write(JSON.stringify(DATA) + '\n', 'utf8');
 
   s.write(str, 'utf8', pipeFDs[1]);
-  if (s.write(buf, undefined, pipeFDs[1])) {
+  if (s.write(buf, pipeFDs[1])) {
     netBinding.close(pipeFDs[1]);
   } else {
     s.addListener('drain', function() {
@@ -108,7 +106,8 @@ srv.listen(SOCK_PATH);
 
 // Spawn a child running test/fixtures/recvfd.js
 var cp = child_process.spawn(process.argv[0],
-                             [path.join(common.fixturesDir, 'recvfd.js'), SOCK_PATH]);
+                             [path.join(common.fixturesDir, 'recvfd.js'),
+                              SOCK_PATH]);
 
 cp.stdout.addListener('data', logChild);
 cp.stderr.addListener('data', logChild);

@@ -31,7 +31,9 @@
 #include "liveedit.h"
 
 #include "compiler.h"
+#include "compilation-cache.h"
 #include "debug.h"
+#include "deoptimizer.h"
 #include "global-handles.h"
 #include "memory.h"
 #include "oprofile-agent.h"
@@ -273,6 +275,82 @@ static bool CompareSubstrings(Handle<String> s1, int pos1,
 }
 
 
+// A helper class that writes chunk numbers into JSArray.
+// Each chunk is stored as 3 array elements: (pos1_begin, pos1_end, pos2_end).
+class CompareOutputArrayWriter {
+ public:
+  CompareOutputArrayWriter()
+      : array_(Factory::NewJSArray(10)), current_size_(0) {}
+
+  Handle<JSArray> GetResult() {
+    return array_;
+  }
+
+  void WriteChunk(int char_pos1, int char_pos2, int char_len1, int char_len2) {
+    SetElement(array_, current_size_, Handle<Object>(Smi::FromInt(char_pos1)));
+    SetElement(array_, current_size_ + 1,
+               Handle<Object>(Smi::FromInt(char_pos1 + char_len1)));
+    SetElement(array_, current_size_ + 2,
+               Handle<Object>(Smi::FromInt(char_pos2 + char_len2)));
+    current_size_ += 3;
+  }
+
+ private:
+  Handle<JSArray> array_;
+  int current_size_;
+};
+
+
+// Represents 2 strings as 2 arrays of tokens.
+// TODO(LiveEdit): Currently it's actually an array of charactres.
+//     Make array of tokens instead.
+class TokensCompareInput : public Comparator::Input {
+ public:
+  TokensCompareInput(Handle<String> s1, int offset1, int len1,
+                       Handle<String> s2, int offset2, int len2)
+      : s1_(s1), offset1_(offset1), len1_(len1),
+        s2_(s2), offset2_(offset2), len2_(len2) {
+  }
+  virtual int getLength1() {
+    return len1_;
+  }
+  virtual int getLength2() {
+    return len2_;
+  }
+  bool equals(int index1, int index2) {
+    return s1_->Get(offset1_ + index1) == s2_->Get(offset2_ + index2);
+  }
+
+ private:
+  Handle<String> s1_;
+  int offset1_;
+  int len1_;
+  Handle<String> s2_;
+  int offset2_;
+  int len2_;
+};
+
+
+// Stores compare result in JSArray. Converts substring positions
+// to absolute positions.
+class TokensCompareOutput : public Comparator::Output {
+ public:
+  TokensCompareOutput(CompareOutputArrayWriter* array_writer,
+                      int offset1, int offset2)
+        : array_writer_(array_writer), offset1_(offset1), offset2_(offset2) {
+  }
+
+  void AddChunk(int pos1, int pos2, int len1, int len2) {
+    array_writer_->WriteChunk(pos1 + offset1_, pos2 + offset2_, len1, len2);
+  }
+
+ private:
+  CompareOutputArrayWriter* array_writer_;
+  int offset1_;
+  int offset2_;
+};
+
+
 // Wraps raw n-elements line_ends array as a list of n+1 lines. The last line
 // never has terminating new line character.
 class LineEndsWrapper {
@@ -348,13 +426,14 @@ class LineArrayCompareInput : public Comparator::Input {
 };
 
 
-// Stores compare result in JSArray. Each chunk is stored as 3 array elements:
-// (pos1_begin, pos1_end, pos2_end).
-class LineArrayCompareOutput : public Comparator::Output {
+// Stores compare result in JSArray. For each chunk tries to conduct
+// a fine-grained nested diff token-wise.
+class TokenizingLineArrayCompareOutput : public Comparator::Output {
  public:
-  LineArrayCompareOutput(LineEndsWrapper line_ends1, LineEndsWrapper line_ends2)
-      : array_(Factory::NewJSArray(10)), current_size_(0),
-        line_ends1_(line_ends1), line_ends2_(line_ends2) {
+  TokenizingLineArrayCompareOutput(LineEndsWrapper line_ends1,
+                                   LineEndsWrapper line_ends2,
+                                   Handle<String> s1, Handle<String> s2)
+      : line_ends1_(line_ends1), line_ends2_(line_ends2), s1_(s1), s2_(s2) {
   }
 
   void AddChunk(int line_pos1, int line_pos2, int line_len1, int line_len2) {
@@ -363,33 +442,43 @@ class LineArrayCompareOutput : public Comparator::Output {
     int char_len1 = line_ends1_.GetLineStart(line_pos1 + line_len1) - char_pos1;
     int char_len2 = line_ends2_.GetLineStart(line_pos2 + line_len2) - char_pos2;
 
-    SetElement(array_, current_size_, Handle<Object>(Smi::FromInt(char_pos1)));
-    SetElement(array_, current_size_ + 1,
-               Handle<Object>(Smi::FromInt(char_pos1 + char_len1)));
-    SetElement(array_, current_size_ + 2,
-               Handle<Object>(Smi::FromInt(char_pos2 + char_len2)));
-    current_size_ += 3;
+    if (char_len1 < CHUNK_LEN_LIMIT && char_len2 < CHUNK_LEN_LIMIT) {
+      // Chunk is small enough to conduct a nested token-level diff.
+      HandleScope subTaskScope;
+
+      TokensCompareInput tokens_input(s1_, char_pos1, char_len1,
+                                      s2_, char_pos2, char_len2);
+      TokensCompareOutput tokens_output(&array_writer_, char_pos1,
+                                          char_pos2);
+
+      Comparator::CalculateDifference(&tokens_input, &tokens_output);
+    } else {
+      array_writer_.WriteChunk(char_pos1, char_pos2, char_len1, char_len2);
+    }
   }
 
   Handle<JSArray> GetResult() {
-    return array_;
+    return array_writer_.GetResult();
   }
 
  private:
-  Handle<JSArray> array_;
-  int current_size_;
+  static const int CHUNK_LEN_LIMIT = 800;
+
+  CompareOutputArrayWriter array_writer_;
   LineEndsWrapper line_ends1_;
   LineEndsWrapper line_ends2_;
+  Handle<String> s1_;
+  Handle<String> s2_;
 };
 
 
-Handle<JSArray> LiveEdit::CompareStringsLinewise(Handle<String> s1,
-                                                 Handle<String> s2) {
+Handle<JSArray> LiveEdit::CompareStrings(Handle<String> s1,
+                                         Handle<String> s2) {
   LineEndsWrapper line_ends1(s1);
   LineEndsWrapper line_ends2(s2);
 
   LineArrayCompareInput input(s1, s2, line_ends1, line_ends2);
-  LineArrayCompareOutput output(line_ends1, line_ends2);
+  TokenizingLineArrayCompareOutput output(line_ends1, line_ends2, s1, s2);
 
   Comparator::CalculateDifference(&input, &output);
 
@@ -605,18 +694,18 @@ class FunctionInfoListener {
 
   void FunctionDone() {
     HandleScope scope;
-    Object* element =
-        result_->GetElementNoExceptionThrown(current_parent_index_);
-    FunctionInfoWrapper info = FunctionInfoWrapper::cast(element);
+    FunctionInfoWrapper info =
+        FunctionInfoWrapper::cast(
+            result_->GetElementNoExceptionThrown(current_parent_index_));
     current_parent_index_ = info.GetParentIndex();
   }
 
   // Saves only function code, because for a script function we
   // may never create a SharedFunctionInfo object.
   void FunctionCode(Handle<Code> function_code) {
-    Object* element =
-        result_->GetElementNoExceptionThrown(current_parent_index_);
-    FunctionInfoWrapper info = FunctionInfoWrapper::cast(element);
+    FunctionInfoWrapper info =
+        FunctionInfoWrapper::cast(
+            result_->GetElementNoExceptionThrown(current_parent_index_));
     info.SetFunctionCode(function_code, Handle<Object>(Heap::null_value()));
   }
 
@@ -626,9 +715,9 @@ class FunctionInfoListener {
     if (!shared->IsSharedFunctionInfo()) {
       return;
     }
-    Object* element =
-        result_->GetElementNoExceptionThrown(current_parent_index_);
-    FunctionInfoWrapper info = FunctionInfoWrapper::cast(element);
+    FunctionInfoWrapper info =
+        FunctionInfoWrapper::cast(
+            result_->GetElementNoExceptionThrown(current_parent_index_));
     info.SetFunctionCode(Handle<Code>(shared->code()),
         Handle<Object>(shared->scope_info()));
     info.SetSharedFunctionInfo(shared);
@@ -828,6 +917,61 @@ static bool IsJSFunctionCode(Code* code) {
 }
 
 
+// Returns true if an instance of candidate were inlined into function's code.
+static bool IsInlined(JSFunction* function, SharedFunctionInfo* candidate) {
+  AssertNoAllocation no_gc;
+
+  if (function->code()->kind() != Code::OPTIMIZED_FUNCTION) return false;
+
+  DeoptimizationInputData* data =
+      DeoptimizationInputData::cast(function->code()->deoptimization_data());
+
+  if (data == Heap::empty_fixed_array()) return false;
+
+  FixedArray* literals = data->LiteralArray();
+
+  int inlined_count = data->InlinedFunctionCount()->value();
+  for (int i = 0; i < inlined_count; ++i) {
+    JSFunction* inlined = JSFunction::cast(literals->get(i));
+    if (inlined->shared() == candidate) return true;
+  }
+
+  return false;
+}
+
+
+class DependentFunctionsDeoptimizingVisitor : public OptimizedFunctionVisitor {
+ public:
+  explicit DependentFunctionsDeoptimizingVisitor(
+      SharedFunctionInfo* function_info)
+      : function_info_(function_info) {}
+
+  virtual void EnterContext(Context* context) {
+  }
+
+  virtual void VisitFunction(JSFunction* function) {
+    if (function->shared() == function_info_ ||
+        IsInlined(function, function_info_)) {
+      Deoptimizer::DeoptimizeFunction(function);
+    }
+  }
+
+  virtual void LeaveContext(Context* context) {
+  }
+
+ private:
+  SharedFunctionInfo* function_info_;
+};
+
+
+static void DeoptimizeDependentFunctions(SharedFunctionInfo* function_info) {
+  AssertNoAllocation no_allocation;
+
+  DependentFunctionsDeoptimizingVisitor visitor(function_info);
+  Deoptimizer::VisitAllOptimizedFunctions(&visitor);
+}
+
+
 MaybeObject* LiveEdit::ReplaceFunctionCode(
     Handle<JSArray> new_compile_info_array,
     Handle<JSArray> shared_info_array) {
@@ -864,17 +1008,38 @@ MaybeObject* LiveEdit::ReplaceFunctionCode(
   shared_info->set_construct_stub(
       Builtins::builtin(Builtins::JSConstructStubGeneric));
 
+  DeoptimizeDependentFunctions(*shared_info);
+  CompilationCache::Remove(shared_info);
+
   return Heap::undefined_value();
 }
 
 
-// TODO(635): Eval caches its scripts (same text -- same compiled info).
-// Make sure we clear such caches.
+MaybeObject* LiveEdit::FunctionSourceUpdated(
+    Handle<JSArray> shared_info_array) {
+  HandleScope scope;
+
+  if (!SharedInfoWrapper::IsInstance(shared_info_array)) {
+    return Top::ThrowIllegalOperation();
+  }
+
+  SharedInfoWrapper shared_info_wrapper(shared_info_array);
+  Handle<SharedFunctionInfo> shared_info = shared_info_wrapper.GetInfo();
+
+  DeoptimizeDependentFunctions(*shared_info);
+  CompilationCache::Remove(shared_info);
+
+  return Heap::undefined_value();
+}
+
+
 void LiveEdit::SetFunctionScript(Handle<JSValue> function_wrapper,
                                  Handle<Object> script_handle) {
   Handle<SharedFunctionInfo> shared_info =
       Handle<SharedFunctionInfo>::cast(UnwrapJSValue(function_wrapper));
   shared_info->set_script(*script_handle);
+
+  CompilationCache::Remove(shared_info);
 }
 
 
@@ -1135,11 +1300,14 @@ void LiveEdit::ReplaceRefToNestedFunction(
 // Check an activation against list of functions. If there is a function
 // that matches, its status in result array is changed to status argument value.
 static bool CheckActivation(Handle<JSArray> shared_info_array,
-                            Handle<JSArray> result, StackFrame* frame,
+                            Handle<JSArray> result,
+                            StackFrame* frame,
                             LiveEdit::FunctionPatchabilityStatus status) {
-  if (!frame->is_java_script()) {
-    return false;
-  }
+  if (!frame->is_java_script()) return false;
+
+  Handle<JSFunction> function(
+      JSFunction::cast(JavaScriptFrame::cast(frame)->function()));
+
   int len = Smi::cast(shared_info_array->length())->value();
   for (int i = 0; i < len; i++) {
     JSValue* wrapper =
@@ -1147,7 +1315,7 @@ static bool CheckActivation(Handle<JSArray> shared_info_array,
     Handle<SharedFunctionInfo> shared(
         SharedFunctionInfo::cast(wrapper->value()));
 
-    if (frame->code() == shared->code()) {
+    if (function->shared() == *shared || IsInlined(*function, *shared)) {
       SetElement(result, i, Handle<Smi>(Smi::FromInt(status)));
       return true;
     }

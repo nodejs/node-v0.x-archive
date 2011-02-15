@@ -1,14 +1,22 @@
+
+#include <node.h>
 #include <node_buffer.h>
+
+#include <v8.h>
 
 #include <assert.h>
 #include <stdlib.h> // malloc, free
-#include <v8.h>
-
 #include <string.h> // memcpy
 
-#include <arpa/inet.h>  // htons, htonl
+#ifdef __MINGW32__
+# include <platform.h>
+# include <platform_win32_winsock.h> // htons, htonl
+#endif
 
-#include <node.h>
+#ifdef __POSIX__
+# include <arpa/inet.h> // htons, htonl
+#endif
+
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
@@ -76,6 +84,8 @@ static size_t ByteLength (Handle<String> string, enum encoding enc) {
   } else if (enc == BASE64) {
     String::Utf8Value v(string);
     return base64_decoded_size(*v, v.length());
+  } else if (enc == UCS2) {
+    return string->Length() * 2;
   } else {
     return string->Length();
   }
@@ -135,20 +145,6 @@ Buffer* Buffer::New(char *data, size_t length,
 }
 
 
-char* Buffer::Data(Handle<Object> obj) {
-  if (Buffer::HasInstance(obj))
-    return (char*)obj->GetIndexedPropertiesExternalArrayData();
-  return NULL;
-}
-
-
-size_t Buffer::Length(Handle<Object> obj) {
-  if (Buffer::HasInstance(obj))
-    return (size_t)obj->GetIndexedPropertiesExternalArrayDataLength();
-  return 0;
-}
-
-
 Handle<Value> Buffer::New(const Arguments &args) {
   if (!args.IsConstructCall()) {
     return FromConstructorTemplate(constructor_template, args);
@@ -190,7 +186,7 @@ void Buffer::Replace(char *data, size_t length,
   if (callback_) {
     callback_(data_, callback_hint_);
   } else if (length_) {
-    delete data_;
+    delete [] data_;
     V8::AdjustAmountOfExternalAllocatedMemory(-(sizeof(Buffer) + length_));
   }
 
@@ -236,7 +232,8 @@ Handle<Value> Buffer::AsciiSlice(const Arguments &args) {
   SLICE_ARGS(args[0], args[1])
 
   char* data = parent->data_ + start;
-  Local<String> string = String::New(data, end - start);
+  size_t len = strnlen(data, end - start);
+  Local<String> string = String::New(data, len);
 
   return scope.Close(string);
 }
@@ -246,10 +243,22 @@ Handle<Value> Buffer::Utf8Slice(const Arguments &args) {
   HandleScope scope;
   Buffer *parent = ObjectWrap::Unwrap<Buffer>(args.This());
   SLICE_ARGS(args[0], args[1])
-  char *data = parent->data_ + start;
-  Local<String> string = String::New(data, end - start);
+  char* data = parent->data_ + start;
+  size_t len = strnlen(data, end - start);
+  Local<String> string = String::New(data, len);
   return scope.Close(string);
 }
+
+
+Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
+  HandleScope scope;
+  Buffer *parent = ObjectWrap::Unwrap<Buffer>(args.This());
+  SLICE_ARGS(args[0], args[1])
+  uint16_t *data = (uint16_t*)(parent->data_ + start);
+  Local<String> string = String::New(data, (end - start) / 2);
+  return scope.Close(string);
+}
+
 
 static const char *base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                   "abcdefghijklmnopqrstuvwxyz"
@@ -395,7 +404,7 @@ Handle<Value> Buffer::Copy(const Arguments &args) {
   ssize_t to_copy = MIN(MIN(source_end - source_start,
                             target_length - target_start),
                             source->length_ - source_start);
-  
+
 
   // need to use slightly slower memmove is the ranges might overlap
   memmove((void *)(target_data + target_start),
@@ -420,7 +429,7 @@ Handle<Value> Buffer::Utf8Write(const Arguments &args) {
 
   size_t offset = args[1]->Uint32Value();
 
-  if (s->Utf8Length() > 0 && offset >= buffer->length_) {
+  if (s->Length() > 0 && offset >= buffer->length_) {
     return ThrowException(Exception::TypeError(String::New(
             "Offset is out of bounds")));
   }
@@ -444,6 +453,39 @@ Handle<Value> Buffer::Utf8Write(const Arguments &args) {
   if (written > 0 && p[written-1] == '\0') written--;
 
   return scope.Close(Integer::New(written));
+}
+
+
+// var charsWritten = buffer.ucs2Write(string, offset, [maxLength]);
+Handle<Value> Buffer::Ucs2Write(const Arguments &args) {
+  HandleScope scope;
+  Buffer *buffer = ObjectWrap::Unwrap<Buffer>(args.This());
+
+  if (!args[0]->IsString()) {
+    return ThrowException(Exception::TypeError(String::New(
+            "Argument must be a string")));
+  }
+
+  Local<String> s = args[0]->ToString();
+
+  size_t offset = args[1]->Uint32Value();
+
+  if (s->Length() > 0 && offset >= buffer->length_) {
+    return ThrowException(Exception::TypeError(String::New(
+            "Offset is out of bounds")));
+  }
+
+  size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
+                                             : args[2]->Uint32Value();
+  max_length = MIN(buffer->length_ - offset, max_length);
+
+  uint16_t* p = (uint16_t*)(buffer->data_ + offset);
+
+  int written = s->Write(p,
+                         0,
+                         max_length,
+                         String::HINT_MANY_WRITES_EXPECTED);
+  return scope.Close(Integer::New(written * 2));
 }
 
 
@@ -658,6 +700,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "binarySlice", Buffer::BinarySlice);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "asciiSlice", Buffer::AsciiSlice);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Slice", Buffer::Base64Slice);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "ucs2Slice", Buffer::Ucs2Slice);
   // TODO NODE_SET_PROTOTYPE_METHOD(t, "utf16Slice", Utf16Slice);
   // copy
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "utf8Slice", Buffer::Utf8Slice);
@@ -666,6 +709,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "asciiWrite", Buffer::AsciiWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "binaryWrite", Buffer::BinaryWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Write", Buffer::Base64Write);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "ucs2Write", Buffer::Ucs2Write);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "copy", Buffer::Copy);
 
   NODE_SET_METHOD(constructor_template->GetFunction(),

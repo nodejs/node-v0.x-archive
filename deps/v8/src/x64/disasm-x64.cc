@@ -906,7 +906,9 @@ int DisassemblerX64::RegisterFPUInstruction(int escape_opcode,
             case 0xE4: mnem = "ftst"; break;
             case 0xE8: mnem = "fld1"; break;
             case 0xEB: mnem = "fldpi"; break;
+            case 0xED: mnem = "fldln2"; break;
             case 0xEE: mnem = "fldz"; break;
+            case 0xF1: mnem = "fyl2x"; break;
             case 0xF5: mnem = "fprem1"; break;
             case 0xF7: mnem = "fincstp"; break;
             case 0xF8: mnem = "fprem"; break;
@@ -1023,9 +1025,17 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
                        rex_w() ? 'q' : 'd',
                        NameOfXMMRegister(regop));
         current += PrintRightOperand(current);
+      } else if (opcode == 0x6F) {
+        AppendToBuffer("movdqa %s,",
+                       NameOfXMMRegister(regop));
+        current += PrintRightOperand(current);
       } else if (opcode == 0x7E) {
         AppendToBuffer("mov%c ",
                        rex_w() ? 'q' : 'd');
+        current += PrintRightOperand(current);
+        AppendToBuffer(", %s", NameOfXMMRegister(regop));
+      } else if (opcode == 0x7F) {
+        AppendToBuffer("movdqa ");
         current += PrintRightOperand(current);
         AppendToBuffer(", %s", NameOfXMMRegister(regop));
       } else {
@@ -1036,6 +1046,8 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
           mnemonic = "ucomisd";
         } else if (opcode == 0x2F) {
           mnemonic = "comisd";
+        } else if (opcode == 0x50) {
+          mnemonic = "movmskpd";
         } else {
           UnimplementedInstruction();
         }
@@ -1111,9 +1123,11 @@ int DisassemblerX64::TwoByteOpcodeInstruction(byte* data) {
     } else if (opcode == 0x2C) {
       // CVTTSS2SI:
       // Convert with truncation scalar single-precision FP to dword integer.
-      // Assert that mod is not 3, so source is memory, not an XMM register.
-      ASSERT_NE(0xC0, *current & 0xC0);
-      current += PrintOperands("cvttss2si", REG_OPER_OP_ORDER, current);
+      int mod, regop, rm;
+      get_modrm(*current, &mod, &regop, &rm);
+      AppendToBuffer("cvttss2si%c %s,",
+          operand_size_code(), NameOfCPURegister(regop));
+      current += PrintRightXMMOperand(current);
     } else if (opcode == 0x5A) {
       // CVTSS2SD:
       // Convert scalar single-precision FP to scalar double-precision FP.

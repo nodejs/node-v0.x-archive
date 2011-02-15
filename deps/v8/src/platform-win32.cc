@@ -26,70 +26,14 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Platform specific code for Win32.
-#ifndef WIN32_LEAN_AND_MEAN
-// WIN32_LEAN_AND_MEAN implies NOCRYPT and NOGDI.
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef NOKERNEL
-#define NOKERNEL
-#endif
-#ifndef NOUSER
-#define NOUSER
-#endif
-#ifndef NOSERVICE
-#define NOSERVICE
-#endif
-#ifndef NOSOUND
-#define NOSOUND
-#endif
-#ifndef NOMCX
-#define NOMCX
-#endif
-// Require Windows XP or higher (this is required for the RtlCaptureContext
-// function to be present).
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x501
-#endif
 
-#include <windows.h>
-
-#include <time.h>  // For LocalOffset() implementation.
-#include <mmsystem.h>  // For timeGetTime().
-#ifdef __MINGW32__
-// Require Windows XP or higher when compiling with MinGW. This is for MinGW
-// header files to expose getaddrinfo.
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x501
-#endif  // __MINGW32__
-#ifndef __MINGW32__
-#include <dbghelp.h>  // For SymLoadModule64 and al.
-#endif  // __MINGW32__
-#include <limits.h>  // For INT_MAX and al.
-#include <tlhelp32.h>  // For Module32First and al.
-
-// These additional WIN32 includes have to be right here as the #undef's below
-// makes it impossible to have them elsewhere.
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <process.h>  // for _beginthreadex()
-#include <stdlib.h>
-
-#undef VOID
-#undef DELETE
-#undef IN
-#undef THIS
-#undef CONST
-#undef NAN
-#undef GetObject
-#undef CreateMutex
-#undef CreateSemaphore
+#define V8_WIN32_HEADERS_FULL
+#include "win32-headers.h"
 
 #include "v8.h"
 
 #include "platform.h"
+#include "vm-state-inl.h"
 
 // Extra POSIX/ANSI routines for Win32 when when using Visual Studio C++. Please
 // refer to The Open Group Base Specification for specification of the correct
@@ -205,6 +149,12 @@ int strncpy_s(char* strDest, size_t numberOfElements,
               const char* strSource, size_t count) {
   strncpy(strDest, strSource, count);
   return 0;
+}
+
+
+inline void MemoryBarrier() {
+  int barrier = 0;
+  __asm__ __volatile__("xchgl %%eax,%0 ":"=r" (barrier));
 }
 
 #endif  // __MINGW32__
@@ -720,6 +670,11 @@ FILE* OS::FOpen(const char* path, const char* mode) {
 }
 
 
+bool OS::Remove(const char* path) {
+  return (DeleteFileA(path) != 0);
+}
+
+
 // Open log file in binary mode to avoid /n -> /r/n conversion.
 const char* OS::LogFileOpenMode = "wb";
 
@@ -735,6 +690,19 @@ void OS::Print(const char* format, ...) {
 
 void OS::VPrint(const char* format, va_list args) {
   VPrintHelper(stdout, format, args);
+}
+
+
+void OS::FPrint(FILE* out, const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  VFPrint(out, format, args);
+  va_end(args);
+}
+
+
+void OS::VFPrint(FILE* out, const char* format, va_list args) {
+  VPrintHelper(out, format, args);
 }
 
 
@@ -766,7 +734,8 @@ int OS::VSNPrintF(Vector<char> str, const char* format, va_list args) {
   // Make sure to zero-terminate the string if the output was
   // truncated or if there was an error.
   if (n < 0 || n >= str.length()) {
-    str[str.length() - 1] = '\0';
+    if (str.length() > 0)
+      str[str.length() - 1] = '\0';
     return -1;
   } else {
     return n;
@@ -858,22 +827,24 @@ void* OS::Allocate(const size_t requested,
 
   // VirtualAlloc rounds allocated size to page size automatically.
   size_t msize = RoundUp(requested, static_cast<int>(GetPageSize()));
-  intptr_t address = NULL;
+  intptr_t address = 0;
 
   // Windows XP SP2 allows Data Excution Prevention (DEP).
   int prot = is_executable ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
 
   // For exectutable pages try and randomize the allocation address
-  if (prot == PAGE_EXECUTE_READWRITE && msize >= Page::kPageSize) {
-      address = (V8::Random() << kPageSizeBits) | kAllocationRandomAddressMin;
-      address &= kAllocationRandomAddressMax;
+  if (prot == PAGE_EXECUTE_READWRITE &&
+      msize >= static_cast<size_t>(Page::kPageSize)) {
+    address = (V8::RandomPrivate() << kPageSizeBits)
+      | kAllocationRandomAddressMin;
+    address &= kAllocationRandomAddressMax;
   }
 
   LPVOID mbase = VirtualAlloc(reinterpret_cast<void *>(address),
                               msize,
                               MEM_COMMIT | MEM_RESERVE,
                               prot);
-  if (mbase == NULL && address != NULL)
+  if (mbase == NULL && address != 0)
     mbase = VirtualAlloc(NULL, msize, MEM_COMMIT | MEM_RESERVE, prot);
 
   if (mbase == NULL) {
@@ -945,15 +916,42 @@ void OS::DebugBreak() {
 
 class Win32MemoryMappedFile : public OS::MemoryMappedFile {
  public:
-  Win32MemoryMappedFile(HANDLE file, HANDLE file_mapping, void* memory)
-    : file_(file), file_mapping_(file_mapping), memory_(memory) { }
+  Win32MemoryMappedFile(HANDLE file,
+                        HANDLE file_mapping,
+                        void* memory,
+                        int size)
+      : file_(file),
+        file_mapping_(file_mapping),
+        memory_(memory),
+        size_(size) { }
   virtual ~Win32MemoryMappedFile();
   virtual void* memory() { return memory_; }
+  virtual int size() { return size_; }
  private:
   HANDLE file_;
   HANDLE file_mapping_;
   void* memory_;
+  int size_;
 };
+
+
+OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
+  // Open a physical file
+  HANDLE file = CreateFileA(name, GENERIC_READ | GENERIC_WRITE,
+      FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+  if (file == NULL) return NULL;
+
+  int size = static_cast<int>(GetFileSize(file, NULL));
+
+  // Create a file mapping for the physical file
+  HANDLE file_mapping = CreateFileMapping(file, NULL,
+      PAGE_READWRITE, 0, static_cast<DWORD>(size), NULL);
+  if (file_mapping == NULL) return NULL;
+
+  // Map a view of the file into memory
+  void* memory = MapViewOfFile(file_mapping, FILE_MAP_ALL_ACCESS, 0, 0, size);
+  return new Win32MemoryMappedFile(file, file_mapping, memory, size);
+}
 
 
 OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
@@ -969,7 +967,7 @@ OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
   // Map a view of the file into memory
   void* memory = MapViewOfFile(file_mapping, FILE_MAP_ALL_ACCESS, 0, 0, size);
   if (memory) memmove(memory, initial, size);
-  return new Win32MemoryMappedFile(file, file_mapping, memory);
+  return new Win32MemoryMappedFile(file, file_mapping, memory, size);
 }
 
 
@@ -1154,7 +1152,7 @@ static bool LoadSymbols(HANDLE process_handle) {
   // Initialize the symbol engine.
   ok = _SymInitialize(process_handle,  // hProcess
                       NULL,            // UserSearchPath
-                      FALSE);          // fInvadeProcess
+                      false);          // fInvadeProcess
   if (!ok) return false;
 
   DWORD options = _SymGetOptions();
@@ -1346,6 +1344,7 @@ int OS::StackWalk(Vector<OS::StackFrame> frames) {
 
 #else  // __MINGW32__
 void OS::LogSharedLibraryAddresses() { }
+void OS::SignalCodeMovingGC() { }
 int OS::StackWalk(Vector<OS::StackFrame> frames) { return 0; }
 #endif  // __MINGW32__
 
@@ -1413,7 +1412,7 @@ bool VirtualMemory::Commit(void* address, size_t size, bool is_executable) {
 
 bool VirtualMemory::Uncommit(void* address, size_t size) {
   ASSERT(IsReserved());
-  return VirtualFree(address, size, MEM_DECOMMIT) != FALSE;
+  return VirtualFree(address, size, MEM_DECOMMIT) != false;
 }
 
 
@@ -1496,6 +1495,19 @@ class Thread::PlatformData : public Malloced {
 
 Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
   data_ = new PlatformData(kNoThread);
+  set_name("v8:<unknown>");
+}
+
+
+Thread::Thread(const char* name) : ThreadHandle(ThreadHandle::INVALID) {
+  data_ = new PlatformData(kNoThread);
+  set_name(name);
+}
+
+
+void Thread::set_name(const char* name) {
+  OS::StrNCpy(Vector<char>(name_, sizeof(name_)), name, strlen(name));
+  name_[sizeof(name_) - 1] = '\0';
 }
 
 
@@ -1573,16 +1585,22 @@ class Win32Mutex : public Mutex {
 
   Win32Mutex() { InitializeCriticalSection(&cs_); }
 
-  ~Win32Mutex() { DeleteCriticalSection(&cs_); }
+  virtual ~Win32Mutex() { DeleteCriticalSection(&cs_); }
 
-  int Lock() {
+  virtual int Lock() {
     EnterCriticalSection(&cs_);
     return 0;
   }
 
-  int Unlock() {
+  virtual int Unlock() {
     LeaveCriticalSection(&cs_);
     return 0;
+  }
+
+
+  virtual bool TryLock() {
+    // Returns non-zero if critical section is entered successfully entered.
+    return TryEnterCriticalSection(&cs_);
   }
 
  private:
@@ -1767,7 +1785,7 @@ int Win32Socket::Receive(char* data, int len) const {
 
 
 bool Win32Socket::SetReuseAddress(bool reuse_address) {
-  BOOL on = reuse_address ? TRUE : FALSE;
+  BOOL on = reuse_address ? true : false;
   int status = setsockopt(socket_, SOL_SOCKET, SO_REUSEADDR,
                           reinterpret_cast<char*>(&on), sizeof(on));
   return status == SOCKET_ERROR;
@@ -1837,53 +1855,48 @@ class Sampler::PlatformData : public Malloced {
   Sampler* sampler_;
   HANDLE sampler_thread_;
   HANDLE profiled_thread_;
+  RuntimeProfilerRateLimiter rate_limiter_;
 
   // Sampler thread handler.
   void Runner() {
-    // Context used for sampling the register state of the profiled thread.
-    CONTEXT context;
-    memset(&context, 0, sizeof(context));
-    // Loop until the sampler is disengaged, keeping the specified
-    // sampling frequency.
-    for ( ; sampler_->IsActive(); Sleep(sampler_->interval_)) {
+    while (sampler_->IsActive()) {
+      if (rate_limiter_.SuspendIfNecessary()) continue;
+      Sample();
+      Sleep(sampler_->interval_);
+    }
+  }
+
+  void Sample() {
+    if (sampler_->IsProfiling()) {
+      // Context used for sampling the register state of the profiled thread.
+      CONTEXT context;
+      memset(&context, 0, sizeof(context));
+
       TickSample sample_obj;
       TickSample* sample = CpuProfiler::TickSampleEvent();
       if (sample == NULL) sample = &sample_obj;
 
-      // If the sampler runs in sync with the JS thread, we try to
-      // suspend it. If we fail, we skip the current sample.
-      if (sampler_->IsSynchronous()) {
-        static const DWORD kSuspendFailed = static_cast<DWORD>(-1);
-        if (SuspendThread(profiled_thread_) == kSuspendFailed) continue;
-      }
+      static const DWORD kSuspendFailed = static_cast<DWORD>(-1);
+      if (SuspendThread(profiled_thread_) == kSuspendFailed) return;
+      sample->state = Top::current_vm_state();
 
-      // We always sample the VM state.
-      sample->state = VMState::current_state();
-
-      // If profiling, we record the pc and sp of the profiled thread.
-      if (sampler_->IsProfiling()) {
-        context.ContextFlags = CONTEXT_FULL;
-        if (GetThreadContext(profiled_thread_, &context) != 0) {
+      context.ContextFlags = CONTEXT_FULL;
+      if (GetThreadContext(profiled_thread_, &context) != 0) {
 #if V8_HOST_ARCH_X64
-          sample->pc = reinterpret_cast<Address>(context.Rip);
-          sample->sp = reinterpret_cast<Address>(context.Rsp);
-          sample->fp = reinterpret_cast<Address>(context.Rbp);
+        sample->pc = reinterpret_cast<Address>(context.Rip);
+        sample->sp = reinterpret_cast<Address>(context.Rsp);
+        sample->fp = reinterpret_cast<Address>(context.Rbp);
 #else
-          sample->pc = reinterpret_cast<Address>(context.Eip);
-          sample->sp = reinterpret_cast<Address>(context.Esp);
-          sample->fp = reinterpret_cast<Address>(context.Ebp);
+        sample->pc = reinterpret_cast<Address>(context.Eip);
+        sample->sp = reinterpret_cast<Address>(context.Esp);
+        sample->fp = reinterpret_cast<Address>(context.Ebp);
 #endif
-          sampler_->SampleStack(sample);
-        }
+        sampler_->SampleStack(sample);
+        sampler_->Tick(sample);
       }
-
-      // Invoke tick handler with program counter and stack pointer.
-      sampler_->Tick(sample);
-
-      // If the sampler runs in sync with the JS thread, we have to
-      // remember to resume it.
-      if (sampler_->IsSynchronous()) ResumeThread(profiled_thread_);
+      ResumeThread(profiled_thread_);
     }
+    if (RuntimeProfiler::IsEnabled()) RuntimeProfiler::NotifyTick();
   }
 };
 
@@ -1898,11 +1911,11 @@ static unsigned int __stdcall SamplerEntry(void* arg) {
 
 
 // Initialize a profile sampler.
-Sampler::Sampler(int interval, bool profiling)
+Sampler::Sampler(int interval)
     : interval_(interval),
-      profiling_(profiling),
-      synchronous_(profiling),
-      active_(false) {
+      profiling_(false),
+      active_(false),
+      samples_taken_(0) {
   data_ = new PlatformData(this);
 }
 
@@ -1914,26 +1927,25 @@ Sampler::~Sampler() {
 
 // Start profiling.
 void Sampler::Start() {
-  // If we are starting a synchronous sampler, we need to be able to
-  // access the calling thread.
-  if (IsSynchronous()) {
-    // Get a handle to the calling thread. This is the thread that we are
-    // going to profile. We need to make a copy of the handle because we are
-    // going to use it in the sampler thread. Using GetThreadHandle() will
-    // not work in this case. We're using OpenThread because DuplicateHandle
-    // for some reason doesn't work in Chrome's sandbox.
-    data_->profiled_thread_ = OpenThread(THREAD_GET_CONTEXT |
-                                         THREAD_SUSPEND_RESUME |
-                                         THREAD_QUERY_INFORMATION,
-                                         FALSE,
-                                         GetCurrentThreadId());
-    BOOL ok = data_->profiled_thread_ != NULL;
-    if (!ok) return;
-  }
+  // Do not start multiple threads for the same sampler.
+  ASSERT(!IsActive());
+
+  // Get a handle to the calling thread. This is the thread that we are
+  // going to profile. We need to make a copy of the handle because we are
+  // going to use it in the sampler thread. Using GetThreadHandle() will
+  // not work in this case. We're using OpenThread because DuplicateHandle
+  // for some reason doesn't work in Chrome's sandbox.
+  data_->profiled_thread_ = OpenThread(THREAD_GET_CONTEXT |
+                                       THREAD_SUSPEND_RESUME |
+                                       THREAD_QUERY_INFORMATION,
+                                       false,
+                                       GetCurrentThreadId());
+  BOOL ok = data_->profiled_thread_ != NULL;
+  if (!ok) return;
 
   // Start sampler thread.
   unsigned int tid;
-  active_ = true;
+  SetActive(true);
   data_->sampler_thread_ = reinterpret_cast<HANDLE>(
       _beginthreadex(NULL, 0, SamplerEntry, data_, 0, &tid));
   // Set thread to high priority to increase sampling accuracy.
@@ -1945,9 +1957,10 @@ void Sampler::Start() {
 void Sampler::Stop() {
   // Seting active to false triggers termination of the sampler
   // thread.
-  active_ = false;
+  SetActive(false);
 
   // Wait for sampler thread to terminate.
+  Top::WakeUpRuntimeProfilerThreadBeforeShutdown();
   WaitForSingleObject(data_->sampler_thread_, INFINITE);
 
   // Release the thread handles

@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -74,7 +74,7 @@ class MacroAssembler: public Assembler {
 
   void LoadRoot(Register destination, Heap::RootListIndex index);
   void CompareRoot(Register with, Heap::RootListIndex index);
-  void CompareRoot(Operand with, Heap::RootListIndex index);
+  void CompareRoot(const Operand& with, Heap::RootListIndex index);
   void PushRoot(Heap::RootListIndex index);
   void StoreRoot(Register source, Heap::RootListIndex index);
 
@@ -137,12 +137,6 @@ class MacroAssembler: public Assembler {
 #endif
 
   // ---------------------------------------------------------------------------
-  // Stack limit support
-
-  // Do simple test for stack overflow. This doesn't handle an overflow.
-  void StackLimitCheck(Label* on_stack_limit_hit);
-
-  // ---------------------------------------------------------------------------
   // Activation frames
 
   void EnterInternalFrame() { EnterFrame(StackFrame::INTERNAL); }
@@ -155,16 +149,30 @@ class MacroAssembler: public Assembler {
   // debug mode. Expects the number of arguments in register rax and
   // sets up the number of arguments in register rdi and the pointer
   // to the first argument in register rsi.
-  void EnterExitFrame(int result_size = 1);
+  //
+  // Allocates arg_stack_space * kPointerSize memory (not GCed) on the stack
+  // accessible via StackSpaceOperand.
+  void EnterExitFrame(int arg_stack_space = 0, bool save_doubles = false);
 
-  void EnterApiExitFrame(int stack_space,
-                         int argc,
-                         int result_size = 1);
+  // Enter specific kind of exit frame. Allocates arg_stack_space * kPointerSize
+  // memory (not GCed) on the stack accessible via StackSpaceOperand.
+  void EnterApiExitFrame(int arg_stack_space);
 
   // Leave the current exit frame. Expects/provides the return value in
   // register rax:rdx (untouched) and the pointer to the first
   // argument in register rsi.
-  void LeaveExitFrame(int result_size = 1);
+  void LeaveExitFrame(bool save_doubles = false);
+
+  // Leave the current exit frame. Expects/provides the return value in
+  // register rax (untouched).
+  void LeaveApiExitFrame();
+
+  // Push and pop the registers that can hold pointers.
+  void PushSafepointRegisters() { Pushad(); }
+  void PopSafepointRegisters() { Popad(); }
+  static int SafepointRegisterStackIndex(int reg_code) {
+    return kSafepointPushRegisterIndices[reg_code];
+  }
 
 
   // ---------------------------------------------------------------------------
@@ -264,6 +272,7 @@ class MacroAssembler: public Assembler {
 
   // Is the value a tagged smi.
   Condition CheckSmi(Register src);
+  Condition CheckSmi(const Operand& src);
 
   // Is the value a non-negative tagged smi.
   Condition CheckNonNegativeSmi(Register src);
@@ -291,6 +300,11 @@ class MacroAssembler: public Assembler {
   // Checks whether an 32-bit unsigned integer value is a valid for
   // conversion to a smi.
   Condition CheckUInteger32ValidSmiValue(Register src);
+
+  // Check whether src is a Smi, and set dst to zero if it is a smi,
+  // and to one if it isn't.
+  void CheckSmiToIndicator(Register dst, Register src);
+  void CheckSmiToIndicator(Register dst, const Operand& src);
 
   // Test-and-jump functions. Typically combines a check function
   // above with a conditional jump.
@@ -526,6 +540,14 @@ class MacroAssembler: public Assembler {
 
   // ---------------------------------------------------------------------------
   // String macros.
+
+  // If object is a string, its map is loaded into object_map.
+  template <typename LabelType>
+  void JumpIfNotString(Register object,
+                       Register object_map,
+                       LabelType* not_string);
+
+
   template <typename LabelType>
   void JumpIfNotBothSequentialAsciiStrings(Register first_object,
                                            Register second_object,
@@ -581,6 +603,22 @@ class MacroAssembler: public Assembler {
   void Call(Address destination, RelocInfo::Mode rmode);
   void Call(ExternalReference ext);
   void Call(Handle<Code> code_object, RelocInfo::Mode rmode);
+
+  // Emit call to the code we are currently generating.
+  void CallSelf() {
+    Handle<Code> self(reinterpret_cast<Code**>(CodeObject().location()));
+    Call(self, RelocInfo::CODE_TARGET);
+  }
+
+  // Non-x64 instructions.
+  // Push/pop all general purpose registers.
+  // Does not push rsp/rbp nor any of the assembler's special purpose registers
+  // (kScratchRegister, kSmiConstantRegister, kRootRegister).
+  void Pushad();
+  void Popad();
+  // Sets the stack as after performing Popad, without actually loading the
+  // registers.
+  void Dropad();
 
   // Compare object type for heap object.
   // Always use unsigned comparisons: above and below, not less and greater.
@@ -764,6 +802,13 @@ class MacroAssembler: public Assembler {
   // Find the function context up the context chain.
   void LoadContext(Register dst, int context_chain_length);
 
+  // Load the global function with the given index.
+  void LoadGlobalFunction(int index, Register function);
+
+  // Load the initial map from the global function. The registers
+  // function and map can be the same.
+  void LoadGlobalFunctionInitialMap(Register function, Register map);
+
   // ---------------------------------------------------------------------------
   // Runtime calls
 
@@ -789,6 +834,9 @@ class MacroAssembler: public Assembler {
   // Call a runtime routine.
   void CallRuntime(Runtime::Function* f, int num_arguments);
 
+  // Call a runtime function and save the value of XMM registers.
+  void CallRuntimeSaveDoubles(Runtime::FunctionId id);
+
   // Call a runtime function, returning the CodeStub object called.
   // Try to generate the stub code if necessary.  Do not perform a GC
   // but instead return a retry after GC failure.
@@ -813,22 +861,38 @@ class MacroAssembler: public Assembler {
                                  int num_arguments,
                                  int result_size);
 
+  MUST_USE_RESULT MaybeObject* TryTailCallExternalReference(
+      const ExternalReference& ext, int num_arguments, int result_size);
+
   // Convenience function: tail call a runtime routine (jump).
   void TailCallRuntime(Runtime::FunctionId fid,
                        int num_arguments,
                        int result_size);
 
+  MUST_USE_RESULT  MaybeObject* TryTailCallRuntime(Runtime::FunctionId fid,
+                                                   int num_arguments,
+                                                   int result_size);
+
   // Jump to a runtime routine.
   void JumpToExternalReference(const ExternalReference& ext, int result_size);
 
-  // Prepares stack to put arguments (aligns and so on).
-  // Uses calle-saved esi to restore stack state after call.
-  void PrepareCallApiFunction(int stack_space);
+  // Jump to a runtime routine.
+  MaybeObject* TryJumpToExternalReference(const ExternalReference& ext,
+                                          int result_size);
 
-  // Tail call an API function (jump). Allocates HandleScope, extracts
-  // returned value from handle and propogates exceptions.
-  // Clobbers ebx, edi and caller-save registers.
-  void CallApiFunctionAndReturn(ApiFunction* function);
+  // Prepares stack to put arguments (aligns and so on).
+  // WIN64 calling convention requires to put the pointer to the return value
+  // slot into rcx (rcx must be preserverd until TryCallApiFunctionAndReturn).
+  // Saves context (rsi). Clobbers rax. Allocates arg_stack_space * kPointerSize
+  // inside the exit frame (not GCed) accessible via StackSpaceOperand.
+  void PrepareCallApiFunction(int arg_stack_space);
+
+  // Calls an API function. Allocates HandleScope, extracts
+  // returned value from handle and propagates exceptions.
+  // Clobbers r12, r14, rbx and caller-save registers. Restores context.
+  // On return removes stack_space * kPointerSize (GCed).
+  MUST_USE_RESULT MaybeObject* TryCallApiFunctionAndReturn(
+      ApiFunction* function, int stack_space);
 
   // Before calling a C-function from generated code, align arguments on stack.
   // After aligning the frame, arguments must be stored in esp[0], esp[4],
@@ -892,6 +956,9 @@ class MacroAssembler: public Assembler {
   bool allow_stub_calls() { return allow_stub_calls_; }
 
  private:
+  // Order general registers are pushed by Pushad.
+  // rax, rcx, rdx, rbx, rsi, rdi, r8, r9, r11, r12, r14.
+  static int kSafepointPushRegisterIndices[Register::kNumRegisters];
   bool generating_stub_;
   bool allow_stub_calls_;
 
@@ -919,16 +986,18 @@ class MacroAssembler: public Assembler {
   void LeaveFrame(StackFrame::Type type);
 
   void EnterExitFramePrologue(bool save_rax);
-  void EnterExitFrameEpilogue(int result_size, int argc);
+
+  // Allocates arg_stack_space * kPointerSize memory (not GCed) on the stack
+  // accessible via StackSpaceOperand.
+  void EnterExitFrameEpilogue(int arg_stack_space, bool save_doubles);
+
+  void LeaveExitFrameEpilogue();
 
   // Allocation support helpers.
   // Loads the top of new-space into the result register.
-  // If flags contains RESULT_CONTAINS_TOP then result_end is valid and
-  // already contains the top of new-space, and scratch is invalid.
   // Otherwise the address of the new-space top is loaded into scratch (if
   // scratch is valid), and the new-space top is loaded into result.
   void LoadAllocationTopHelper(Register result,
-                               Register result_end,
                                Register scratch,
                                AllocationFlags flags);
   // Update allocation top with value in result_end register.
@@ -980,6 +1049,28 @@ static inline Operand FieldOperand(Register object,
                                    int offset) {
   return Operand(object, index, scale, offset - kHeapObjectTag);
 }
+
+
+static inline Operand ContextOperand(Register context, int index) {
+  return Operand(context, Context::SlotOffset(index));
+}
+
+
+static inline Operand GlobalObjectOperand() {
+  return ContextOperand(rsi, Context::GLOBAL_INDEX);
+}
+
+
+// Provides access to exit frame stack space (not GCed).
+static inline Operand StackSpaceOperand(int index) {
+#ifdef _WIN64
+  const int kShaddowSpace = 4;
+  return Operand(rsp, (index + kShaddowSpace) * kPointerSize);
+#else
+  return Operand(rsp, index * kPointerSize);
+#endif
+}
+
 
 
 #ifdef GENERATED_CODE_COVERAGE
@@ -1121,7 +1212,7 @@ void MacroAssembler::SmiMul(Register dst,
     jmp(on_not_smi_result);
 
     bind(&zero_correct_result);
-    xor_(dst, dst);
+    Set(dst, 0);
 
     bind(&correct_result);
   } else {
@@ -1381,6 +1472,8 @@ void MacroAssembler::SmiShiftLogicalRight(Register dst,
   ASSERT(!src1.is(kScratchRegister));
   ASSERT(!src2.is(kScratchRegister));
   ASSERT(!dst.is(rcx));
+  // dst and src1 can be the same, because the one case that bails out
+  // is a shift by 0, which leaves dst, and therefore src1, unchanged.
   NearLabel result_ok;
   if (src1.is(rcx) || src2.is(rcx)) {
     movq(kScratchRegister, rcx);
@@ -1511,6 +1604,17 @@ void MacroAssembler::JumpUnlessBothNonNegativeSmi(Register src1,
                                                   LabelType* on_not_both_smi) {
   Condition both_smi = CheckBothNonNegativeSmi(src1, src2);
   j(NegateCondition(both_smi), on_not_both_smi);
+}
+
+
+template <typename LabelType>
+void MacroAssembler::JumpIfNotString(Register object,
+                                     Register object_map,
+                                     LabelType* not_string) {
+  Condition is_smi = CheckSmi(object);
+  j(is_smi, not_string);
+  CmpObjectType(object, FIRST_NONSTRING_TYPE, object_map);
+  j(above_equal, not_string);
 }
 
 

@@ -5,9 +5,19 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#if defined(__APPLE__) || defined(__OpenBSD__)
+# include <util.h>
+#elif __FreeBSD__
+# include <libutil.h>
+#elif defined(__sun)
+# include <stropts.h> // for openpty ioctls
+#else
+# include <pty.h>
+#endif
 
 #include <termios.h>
 #include <sys/ioctl.h>
+#include <stdlib.h>
 
 using namespace v8;
 namespace node {
@@ -33,8 +43,8 @@ static int EnableRawMode(int fd) {
   /* input modes: no break, no CR to NL, no parity check, no strip char,
    * no start/stop output control. */
   raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-  /* output modes - disable post processing */
-  raw.c_oflag &= ~(OPOST);
+  /* output modes */
+  raw.c_oflag |= (ONLCR);
   /* control modes - set 8 bit chars */
   raw.c_cflag |= (CS8);
   /* local modes - choing off, canonical off, no extended functions,
@@ -78,30 +88,47 @@ static Handle<Value> SetRawMode (const Arguments& args) {
 }
 
 
-// process.binding('stdio').getColumns();
-static Handle<Value> GetColumns (const Arguments& args) {
+// process.binding('stdio').getWindowSize(fd);
+// returns [row, col]
+static Handle<Value> GetWindowSize (const Arguments& args) {
   HandleScope scope;
+
+  int fd = args[0]->IntegerValue();
 
   struct winsize ws;
 
-  if (ioctl(1, TIOCGWINSZ, &ws) == -1) {
-    return scope.Close(Integer::New(80));
+  if (ioctl(fd, TIOCGWINSZ, &ws) < 0) {
+    return ThrowException(ErrnoException(errno, "ioctl"));
   }
 
-  return scope.Close(Integer::NewFromUnsigned(ws.ws_col));
+  Local<Array> ret = Array::New(2);
+  ret->Set(0, Integer::NewFromUnsigned(ws.ws_row));
+  ret->Set(1, Integer::NewFromUnsigned(ws.ws_col));
+
+  return scope.Close(ret);
 }
 
-// process.binding('stdio').getRows();
-static Handle<Value> GetRows (const Arguments& args) {
+
+// process.binding('stdio').setWindowSize(fd, row, col);
+static Handle<Value> SetWindowSize (const Arguments& args) {
   HandleScope scope;
+
+  int fd = args[0]->IntegerValue();
+  int row = args[1]->IntegerValue();
+  int col = args[2]->IntegerValue();
 
   struct winsize ws;
 
-  if (ioctl(1, TIOCGWINSZ, &ws) == -1) {
-    return scope.Close(Integer::New(132));
+  ws.ws_row = row;
+  ws.ws_col = col;
+  ws.ws_xpixel = 0;
+  ws.ws_ypixel = 0;
+
+  if (ioctl(fd, TIOCSWINSZ, &ws) < 0) {
+    return ThrowException(ErrnoException(errno, "ioctl"));
   }
 
-  return scope.Close(Integer::NewFromUnsigned(ws.ws_row));
+  return True();
 }
 
 
@@ -129,7 +156,7 @@ WriteError (const Arguments& args)
 
   ssize_t r;
   size_t written = 0;
-  while (written < msg.length()) {
+  while (written < (size_t) msg.length()) {
     r = write(STDERR_FILENO, (*msg) + written, msg.length() - written);
     if (r < 0) {
       if (errno == EAGAIN || errno == EIO) {
@@ -189,6 +216,44 @@ static Handle<Value> IsStdoutBlocking(const Arguments& args) {
 }
 
 
+static Handle<Value> OpenPTY(const Arguments& args) {
+  HandleScope scope;
+
+  int master_fd, slave_fd;
+
+#ifdef __sun
+
+typedef void (*sighandler)(int);
+  // TODO move to platform files.
+  master_fd = open("/dev/ptmx", O_RDWR | O_NOCTTY);
+  sighandler sig_saved = signal(SIGCHLD, SIG_DFL);
+  grantpt(master_fd);
+  unlockpt(master_fd);
+  signal(SIGCHLD, sig_saved);
+  char *slave_name = ptsname(master_fd);
+  slave_fd = open(slave_name, O_RDWR);
+  ioctl(slave_fd, I_PUSH, "ptem");
+  ioctl(slave_fd, I_PUSH, "ldterm");
+  ioctl(slave_fd, I_PUSH, "ttcompat");
+
+#else
+
+  int r = openpty(&master_fd, &slave_fd, NULL, NULL, NULL);
+
+  if (r == -1) {
+    return ThrowException(ErrnoException(errno, "openpty"));
+  }
+#endif
+
+  Local<Array> a = Array::New(2);
+
+  a->Set(0, Integer::New(master_fd));
+  a->Set(1, Integer::New(slave_fd));
+
+  return scope.Close(a);
+}
+
+
 void Stdio::Flush() {
   if (stdin_flags != -1) {
     fcntl(STDIN_FILENO, F_SETFL, stdin_flags & ~O_NONBLOCK);
@@ -217,7 +282,7 @@ void Stdio::Initialize(v8::Handle<v8::Object> target) {
     // XXX selecting on tty fds wont work in windows.
     // Must ALWAYS make a coupling on shitty platforms.
     stdout_flags = fcntl(STDOUT_FILENO, F_GETFL, 0);
-    int r = fcntl(STDOUT_FILENO, F_SETFL, stdout_flags | O_NONBLOCK);
+    fcntl(STDOUT_FILENO, F_SETFL, stdout_flags | O_NONBLOCK);
   }
 
   target->Set(String::NewSymbol("stdoutFD"), Integer::New(STDOUT_FILENO));
@@ -229,11 +294,13 @@ void Stdio::Initialize(v8::Handle<v8::Object> target) {
   NODE_SET_METHOD(target, "isStdoutBlocking", IsStdoutBlocking);
   NODE_SET_METHOD(target, "isStdinBlocking", IsStdinBlocking);
   NODE_SET_METHOD(target, "setRawMode", SetRawMode);
-  NODE_SET_METHOD(target, "getColumns", GetColumns);
-  NODE_SET_METHOD(target, "getRows", GetRows);
+  NODE_SET_METHOD(target, "getWindowSize", GetWindowSize);
+  NODE_SET_METHOD(target, "setWindowSize", GetWindowSize);
   NODE_SET_METHOD(target, "isatty", IsATTY);
+  NODE_SET_METHOD(target, "openpty", OpenPTY);
 
-  struct sigaction sa = {0};
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
   sa.sa_handler = HandleSIGCONT;
   sigaction(SIGCONT, &sa, NULL);
 }

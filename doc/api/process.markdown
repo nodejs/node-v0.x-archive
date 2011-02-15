@@ -59,7 +59,8 @@ standard POSIX signal names such as SIGINT, SIGUSR1, etc.
 
 Example of listening for `SIGINT`:
 
-    var stdin = process.openStdin();
+    // Start reading from stdin so we don't exit.
+    process.stdin.resume();
 
     process.on('SIGINT', function () {
       console.log('Got SIGINT.  Press Control-D to exit.');
@@ -80,21 +81,26 @@ Example: the definition of `console.log`
     };
 
 
-### process.openStdin()
+### process.stderr
 
-Opens the standard input stream, returns a `Readable Stream`.
+A writable stream to stderr. Writes on this stream are blocking.
+
+
+### process.stdin
+
+A `Readable Stream` for stdin. The stdin stream is paused by default, so one
+must call `process.stdin.resume()` to read from it.
 
 Example of opening standard input and listening for both events:
 
-    var stdin = process.openStdin();
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
 
-    stdin.setEncoding('utf8');
-
-    stdin.on('data', function (chunk) {
+    process.stdin.on('data', function (chunk) {
       process.stdout.write('data: ' + chunk);
     });
 
-    stdin.on('end', function () {
+    process.stdin.on('end', function () {
       process.stdout.write('end');
     });
 
@@ -158,7 +164,7 @@ An object containing the user environment. See environ(7).
 
 ### process.exit(code=0)
 
-Ends the process with the specified `code`.  If omitted, exit uses the 
+Ends the process with the specified `code`.  If omitted, exit uses the
 'success' code `0`.
 
 To exit with a 'failure' code:
@@ -170,14 +176,17 @@ The shell that executed node should see the exit code as 1.
 
 ### process.getgid()
 
-Gets the group identity of the process. (See getgid(2).)  This is the numerical group id, not the group name.
+Gets the group identity of the process. (See getgid(2).)
+This is the numerical group id, not the group name.
 
     console.log('Current gid: ' + process.getgid());
 
 
 ### process.setgid(id)
 
-Sets the group identity of the process. (See setgid(2).)  This accepts either a numerical ID or a groupname string.  If a groupname is specified, this method blocks while resolving it to a numerical ID.
+Sets the group identity of the process. (See setgid(2).)  This accepts either
+a numerical ID or a groupname string. If a groupname is specified, this method
+blocks while resolving it to a numerical ID.
 
     console.log('Current gid: ' + process.getgid());
     try {
@@ -191,14 +200,17 @@ Sets the group identity of the process. (See setgid(2).)  This accepts either a 
 
 ### process.getuid()
 
-Gets the user identity of the process. (See getuid(2).)  This is the numerical userid, not the username.
+Gets the user identity of the process. (See getuid(2).)
+This is the numerical userid, not the username.
 
     console.log('Current uid: ' + process.getuid());
 
 
 ### process.setuid(id)
 
-Sets the user identity of the process. (See setuid(2).)  This accepts either a numerical ID or a username string.  If a username is specified, this method blocks while resolving it to a numerical ID.
+Sets the user identity of the process. (See setuid(2).)  This accepts either
+a numerical ID or a username string.  If a username is specified, this method
+blocks while resolving it to a numerical ID.
 
     console.log('Current uid: ' + process.getuid());
     try {
@@ -223,11 +235,11 @@ A compiled-in property that exposes `NODE_PREFIX`.
     console.log('Prefix: ' + process.installPrefix);
 
 
-### process.kill(pid, signal='SIGINT')
+### process.kill(pid, signal='SIGTERM')
 
 Send a signal to a process. `pid` is the process id and `signal` is the
 string describing the signal to send.  Signal names are strings like
-'SIGINT' or 'SIGUSR1'.  If omitted, the signal will be 'SIGINT'.
+'SIGINT' or 'SIGUSR1'.  If omitted, the signal will be 'SIGTERM'.
 See kill(2) for more information.
 
 Note that just because the name of this function is `process.kill`, it is
@@ -276,11 +288,10 @@ Returns an object describing the memory usage of the Node process.
 
 This will generate:
 
-    { rss: 4935680
-    , vsize: 41893888
-    , heapTotal: 1826816
-    , heapUsed: 650472
-    }
+    { rss: 4935680,
+      vsize: 41893888,
+      heapTotal: 1826816,
+      heapUsed: 650472 }
 
 `heapTotal` and `heapUsed` refer to V8's memory usage.
 

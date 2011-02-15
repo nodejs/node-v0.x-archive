@@ -25,29 +25,21 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifndef V8_AST_INL_H_
+#define V8_AST_INL_H_
+
 #include "v8.h"
 
 #include "ast.h"
+#include "jump-target-inl.h"
 
 namespace v8 {
 namespace internal {
-
-BreakableStatement::BreakableStatement(ZoneStringList* labels, Type type)
-    : labels_(labels), type_(type) {
-  ASSERT(labels == NULL || labels->length() > 0);
-}
 
 
 SwitchStatement::SwitchStatement(ZoneStringList* labels)
     : BreakableStatement(labels, TARGET_FOR_ANONYMOUS),
       tag_(NULL), cases_(NULL) {
-}
-
-
-IterationStatement::IterationStatement(ZoneStringList* labels)
-    : BreakableStatement(labels, TARGET_FOR_ANONYMOUS),
-      body_(NULL),
-      continue_target_(JumpTarget::BIDIRECTIONAL) {
 }
 
 
@@ -58,23 +50,58 @@ Block::Block(ZoneStringList* labels, int capacity, bool is_initializer_block)
 }
 
 
+BreakableStatement::BreakableStatement(ZoneStringList* labels, Type type)
+    : labels_(labels),
+      type_(type),
+      entry_id_(GetNextId()),
+      exit_id_(GetNextId()) {
+  ASSERT(labels == NULL || labels->length() > 0);
+}
+
+
+IterationStatement::IterationStatement(ZoneStringList* labels)
+    : BreakableStatement(labels, TARGET_FOR_ANONYMOUS),
+      body_(NULL),
+      continue_target_(JumpTarget::BIDIRECTIONAL),
+      osr_entry_id_(GetNextId()) {
+}
+
+
+DoWhileStatement::DoWhileStatement(ZoneStringList* labels)
+    : IterationStatement(labels),
+      cond_(NULL),
+      condition_position_(-1),
+      continue_id_(GetNextId()),
+      back_edge_id_(GetNextId()) {
+}
+
+
+WhileStatement::WhileStatement(ZoneStringList* labels)
+    : IterationStatement(labels),
+      cond_(NULL),
+      may_have_function_literal_(true),
+      body_id_(GetNextId()) {
+}
+
+
 ForStatement::ForStatement(ZoneStringList* labels)
     : IterationStatement(labels),
       init_(NULL),
       cond_(NULL),
       next_(NULL),
       may_have_function_literal_(true),
-      loop_variable_(NULL) {
+      loop_variable_(NULL),
+      continue_id_(GetNextId()),
+      body_id_(GetNextId()) {
 }
 
 
 ForInStatement::ForInStatement(ZoneStringList* labels)
-    : IterationStatement(labels), each_(NULL), enumerable_(NULL) {
+    : IterationStatement(labels), each_(NULL), enumerable_(NULL),
+      assignment_id_(GetNextId()) {
 }
 
-
-DoWhileStatement::DoWhileStatement(ZoneStringList* labels)
-    : IterationStatement(labels), cond_(NULL), condition_position_(-1) {
-}
 
 } }  // namespace v8::internal
+
+#endif  // V8_AST_INL_H_

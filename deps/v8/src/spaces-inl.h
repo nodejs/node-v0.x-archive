@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2006-2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -412,6 +412,14 @@ bool PagedSpace::Contains(Address addr) {
 }
 
 
+bool PagedSpace::SafeContains(Address addr) {
+  if (!MemoryAllocator::SafeIsInAPageChunk(addr)) return false;
+  Page* p = Page::FromAddress(addr);
+  if (!p->is_valid()) return false;
+  return MemoryAllocator::IsPageInSpace(p, this);
+}
+
+
 // Try linear allocation in the page of alloc_info's allocation top.  Does
 // not contain slow case logic (eg, move to the next page or try free list
 // allocation) so it can be used by all the allocation functions and for all
@@ -460,16 +468,20 @@ MaybeObject* PagedSpace::MCAllocateRaw(int size_in_bytes) {
 // -----------------------------------------------------------------------------
 // LargeObjectChunk
 
-HeapObject* LargeObjectChunk::GetObject() {
+Address LargeObjectChunk::GetStartAddress() {
   // Round the chunk address up to the nearest page-aligned address
   // and return the heap object in that page.
   Page* page = Page::FromAddress(RoundUp(address(), Page::kPageSize));
-  return HeapObject::FromAddress(page->ObjectAreaStart());
+  return page->ObjectAreaStart();
 }
 
 
+void LargeObjectChunk::Free(Executability executable) {
+  MemoryAllocator::FreeRawMemory(address(), size(), executable);
+}
+
 // -----------------------------------------------------------------------------
-// LargeObjectSpace
+// NewSpace
 
 MaybeObject* NewSpace::AllocateRawInternal(int size_in_bytes,
                                            AllocationInfo* alloc_info) {
@@ -486,6 +498,18 @@ MaybeObject* NewSpace::AllocateRawInternal(int size_in_bytes,
          && alloc_info->limit == space->high());
 #endif
   return obj;
+}
+
+
+template <typename StringType>
+void NewSpace::ShrinkStringAtAllocationBoundary(String* string, int length) {
+  ASSERT(length <= string->length());
+  ASSERT(string->IsSeqString());
+  ASSERT(string->address() + StringType::SizeFor(string->length()) ==
+         allocation_info_.top);
+  allocation_info_.top =
+      string->address() + StringType::SizeFor(length);
+  string->set_length(length);
 }
 
 

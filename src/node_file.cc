@@ -15,27 +15,52 @@
 #include <errno.h>
 #include <limits.h>
 
+#ifdef __MINGW32__
+# include <platform_win32.h>
+#endif
+
 /* used for readlink, AIX doesn't provide it */
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+/* HACK to use pread/pwrite from eio because MINGW32 doesn't have it */
+/* TODO fixme */
+#ifdef __MINGW32__
+# define pread  eio__pread
+# define pwrite eio__pwrite
+#endif
 
 namespace node {
 
 using namespace v8;
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define THROW_BAD_ARGS \
   ThrowException(Exception::TypeError(String::New("Bad argument")))
+
 static Persistent<String> encoding_symbol;
 static Persistent<String> errno_symbol;
 static Persistent<String> buf_symbol;
 
 // Buffer for readlink()  and other misc callers; keep this scoped at
 // file-level rather than method-level to avoid excess stack usage.
-static char getbuf[PATH_MAX + 1];
+// Not used on windows atm
+#ifdef __POSIX__
+  static char getbuf[PATH_MAX + 1];
+#endif
+
+
+static inline bool SetCloseOnExec(int fd) {
+#ifdef __POSIX__
+  return (fcntl(fd, F_SETFD, FD_CLOEXEC) != -1);
+#else // __MINGW32__
+  return SetHandleInformation(reinterpret_cast<HANDLE>(_get_osfhandle(fd)),
+                              HANDLE_FLAG_INHERIT, 0) != 0;
+#endif
+}
+
 
 static int After(eio_req *req) {
   HandleScope scope;
@@ -86,6 +111,8 @@ static int After(eio_req *req) {
         break;
 
       case EIO_OPEN:
+        SetCloseOnExec(req->result);
+        /* pass thru */
       case EIO_SENDFILE:
         argv[1] = Integer::New(req->result);
         break;
@@ -98,7 +125,7 @@ static int After(eio_req *req) {
       case EIO_LSTAT:
       case EIO_FSTAT:
         {
-          struct stat *s = reinterpret_cast<struct stat*>(req->ptr2);
+          NODE_STAT_STRUCT *s = reinterpret_cast<NODE_STAT_STRUCT*>(req->ptr2);
           argv[1] = BuildStatsObject(s);
         }
         break;
@@ -196,7 +223,7 @@ static Persistent<String> atime_symbol;
 static Persistent<String> mtime_symbol;
 static Persistent<String> ctime_symbol;
 
-Local<Object> BuildStatsObject(struct stat * s) {
+Local<Object> BuildStatsObject(NODE_STAT_STRUCT *s) {
   HandleScope scope;
 
   if (dev_symbol.IsEmpty()) {
@@ -242,11 +269,13 @@ Local<Object> BuildStatsObject(struct stat * s) {
   /* total size, in bytes */
   stats->Set(size_symbol, Number::New(s->st_size));
 
+#ifdef __POSIX__
   /* blocksize for filesystem I/O */
   stats->Set(blksize_symbol, Integer::New(s->st_blksize));
 
   /* number of blocks allocated */
   stats->Set(blocks_symbol, Integer::New(s->st_blocks));
+#endif
 
   /* time of last access */
   stats->Set(atime_symbol, NODE_UNIXTIME_V8(s->st_atime));
@@ -272,13 +301,14 @@ static Handle<Value> Stat(const Arguments& args) {
   if (args[1]->IsFunction()) {
     ASYNC_CALL(stat, args[1], *path)
   } else {
-    struct stat s;
-    int ret = stat(*path, &s);
+    NODE_STAT_STRUCT s;
+    int ret = NODE_STAT(*path, &s);
     if (ret != 0) return ThrowException(ErrnoException(errno, NULL, "", *path));
     return scope.Close(BuildStatsObject(&s));
   }
 }
 
+#ifdef __POSIX__
 static Handle<Value> LStat(const Arguments& args) {
   HandleScope scope;
 
@@ -291,12 +321,13 @@ static Handle<Value> LStat(const Arguments& args) {
   if (args[1]->IsFunction()) {
     ASYNC_CALL(lstat, args[1], *path)
   } else {
-    struct stat s;
+    NODE_STAT_STRUCT s;
     int ret = lstat(*path, &s);
     if (ret != 0) return ThrowException(ErrnoException(errno, NULL, "", *path));
     return scope.Close(BuildStatsObject(&s));
   }
 }
+#endif // __POSIX__
 
 static Handle<Value> FStat(const Arguments& args) {
   HandleScope scope;
@@ -310,13 +341,14 @@ static Handle<Value> FStat(const Arguments& args) {
   if (args[1]->IsFunction()) {
     ASYNC_CALL(fstat, args[1], fd)
   } else {
-    struct stat s;
-    int ret = fstat(fd, &s);
+    NODE_STAT_STRUCT s;
+    int ret = NODE_FSTAT(fd, &s);
     if (ret != 0) return ThrowException(ErrnoException(errno));
     return scope.Close(BuildStatsObject(&s));
   }
 }
 
+#ifdef __POSIX__
 static Handle<Value> Symlink(const Arguments& args) {
   HandleScope scope;
 
@@ -335,7 +367,9 @@ static Handle<Value> Symlink(const Arguments& args) {
     return Undefined();
   }
 }
+#endif // __POSIX__
 
+#ifdef __POSIX__
 static Handle<Value> Link(const Arguments& args) {
   HandleScope scope;
 
@@ -354,7 +388,9 @@ static Handle<Value> Link(const Arguments& args) {
     return Undefined();
   }
 }
+#endif // __POSIX__
 
+#ifdef __POSIX__
 static Handle<Value> ReadLink(const Arguments& args) {
   HandleScope scope;
 
@@ -373,6 +409,7 @@ static Handle<Value> ReadLink(const Arguments& args) {
     return scope.Close(String::New(getbuf, bz));
   }
 }
+#endif // __POSIX__
 
 static Handle<Value> Rename(const Arguments& args) {
   HandleScope scope;
@@ -426,6 +463,8 @@ static Handle<Value> Fdatasync(const Arguments& args) {
   } else {
 #if HAVE_FDATASYNC
     int ret = fdatasync(fd);
+#elif defined(__MINGW32__)
+    int ret = FlushFileBuffers((HANDLE)_get_osfhandle(fd)) ? 0 : -1;
 #else
     int ret = fsync(fd);
 #endif
@@ -446,7 +485,11 @@ static Handle<Value> Fsync(const Arguments& args) {
   if (args[1]->IsFunction()) {
     ASYNC_CALL(fsync, args[1], fd)
   } else {
+#ifdef __MINGW32__
+    int ret = FlushFileBuffers((HANDLE)_get_osfhandle(fd)) ? 0 : -1;
+#else
     int ret = fsync(fd);
+#endif
     if (ret != 0) return ThrowException(ErrnoException(errno));
     return Undefined();
   }
@@ -501,7 +544,11 @@ static Handle<Value> MKDir(const Arguments& args) {
   if (args[2]->IsFunction()) {
     ASYNC_CALL(mkdir, args[2], *path, mode)
   } else {
+#ifdef __MINGW32__
+    int ret = mkdir(*path);
+#else
     int ret = mkdir(*path, mode);
+#endif
     if (ret != 0) return ThrowException(ErrnoException(errno, NULL, "", *path));
     return Undefined();
   }
@@ -587,6 +634,7 @@ static Handle<Value> Open(const Arguments& args) {
     ASYNC_CALL(open, args[3], *path, flags, mode)
   } else {
     int fd = open(*path, flags, mode);
+    SetCloseOnExec(fd);
     if (fd < 0) return ThrowException(ErrnoException(errno, NULL, "", *path));
     return scope.Close(Integer::New(fd));
   }
@@ -750,6 +798,7 @@ static Handle<Value> Chmod(const Arguments& args) {
 /* fs.chown(fd, uid, gid);
  * Wrapper for chown(1) / EIO_CHOWN
  */
+#ifdef __POSIX__
 static Handle<Value> Chown(const Arguments& args) {
   HandleScope scope;
 
@@ -773,6 +822,7 @@ static Handle<Value> Chown(const Arguments& args) {
     return Undefined();
   }
 }
+#endif // __POSIX__
 
 void File::Initialize(Handle<Object> target) {
   HandleScope scope;
@@ -789,16 +839,22 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "sendfile", SendFile);
   NODE_SET_METHOD(target, "readdir", ReadDir);
   NODE_SET_METHOD(target, "stat", Stat);
+#ifdef __POSIX__
   NODE_SET_METHOD(target, "lstat", LStat);
+#endif // __POSIX__
   NODE_SET_METHOD(target, "fstat", FStat);
+#ifdef __POSIX__
   NODE_SET_METHOD(target, "link", Link);
   NODE_SET_METHOD(target, "symlink", Symlink);
   NODE_SET_METHOD(target, "readlink", ReadLink);
+#endif // __POSIX__
   NODE_SET_METHOD(target, "unlink", Unlink);
   NODE_SET_METHOD(target, "write", Write);
 
   NODE_SET_METHOD(target, "chmod", Chmod);
+#ifdef __POSIX__
   NODE_SET_METHOD(target, "chown", Chown);
+#endif // __POSIX__
 
   errno_symbol = NODE_PSYMBOL("errno");
   encoding_symbol = NODE_PSYMBOL("node:encoding");
@@ -814,6 +870,11 @@ void InitFs(Handle<Object> target) {
                stats_constructor_template->GetFunction());
   StatWatcher::Initialize(target);
   File::Initialize(target);
+
+#ifdef __MINGW32__
+  // Open files in binary mode by default
+  _fmode = _O_BINARY;
+#endif
 }
 
 }  // end namespace node

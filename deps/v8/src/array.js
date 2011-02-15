@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -117,48 +117,72 @@ function Join(array, length, separator, convert) {
     // Fast case for one-element arrays.
     if (length == 1) {
       var e = array[0];
-      if (!IS_UNDEFINED(e) || (0 in array)) {
-        if (IS_STRING(e)) return e;
-        return convert(e);
-      }
+      if (IS_STRING(e)) return e;
+      return convert(e);
     }
 
     // Construct an array for the elements.
-    var elements;
-    var elements_length = 0;
+    var elements = new $Array(length);
 
     // We pull the empty separator check outside the loop for speed!
     if (separator.length == 0) {
-      elements = new $Array(length);
+      var elements_length = 0;
       for (var i = 0; i < length; i++) {
         var e = array[i];
-        if (!IS_UNDEFINED(e) || (i in array)) {
+        if (!IS_UNDEFINED(e)) {
           if (!IS_STRING(e)) e = convert(e);
           elements[elements_length++] = e;
         }
       }
-    } else {
-      elements = new $Array(length << 1);
-      for (var i = 0; i < length; i++) {
-        var e = array[i];
-        if (i != 0) elements[elements_length++] = separator;
-        if (!IS_UNDEFINED(e) || (i in array)) {
-          if (!IS_STRING(e)) e = convert(e);
-          elements[elements_length++] = e;
-        }
-      }
+      elements.length = elements_length;
+      var result = %_FastAsciiArrayJoin(elements, '');
+      if (!IS_UNDEFINED(result)) return result;
+      return %StringBuilderConcat(elements, elements_length, '');
     }
-    return %StringBuilderConcat(elements, elements_length, '');
+    // Non-empty separator case.
+    // If the first element is a number then use the heuristic that the 
+    // remaining elements are also likely to be numbers.
+    if (!IS_NUMBER(array[0])) {
+      for (var i = 0; i < length; i++) {
+        var e = array[i];
+        if (!IS_STRING(e)) e = convert(e);
+        elements[i] = e;
+      }
+    } else { 
+      for (var i = 0; i < length; i++) {
+        var e = array[i];
+        if (IS_NUMBER(e)) elements[i] = %_NumberToString(e);
+        else {
+          if (!IS_STRING(e)) e = convert(e);
+          elements[i] = e;
+        }
+      }
+    }   
+    var result = %_FastAsciiArrayJoin(elements, separator);
+    if (!IS_UNDEFINED(result)) return result;   
+
+    var length2 = (length << 1) - 1;
+    var j = length2;
+    var i = length;
+    elements[--j] = elements[--i];
+    while (i > 0) {
+      elements[--j] = separator;
+      elements[--j] = elements[--i];
+    }
+    return %StringBuilderConcat(elements, length2, '');    
   } finally {
-    // Make sure to pop the visited array no matter what happens.
-    if (is_array) visited_arrays.pop();
+    // Make sure to remove the last element of the visited array no
+    // matter what happens.
+    if (is_array) visited_arrays.length = visited_arrays.length - 1;
   }
 }
 
 
-function ConvertToString(e) {
-  if (e == null) return '';
-  else return ToString(e);
+function ConvertToString(x) {
+  // Assumes x is a non-string. 
+  if (IS_NUMBER(x)) return %_NumberToString(x);
+  if (IS_BOOLEAN(x)) return x ? 'true' : 'false';
+  return (IS_NULL_OR_UNDEFINED(x)) ? '' : %ToString(%DefaultString(x));
 }
 
 
@@ -362,10 +386,13 @@ function ArrayJoin(separator) {
   if (IS_UNDEFINED(separator)) {
     separator = ',';
   } else if (!IS_STRING(separator)) {
-    separator = ToString(separator);
+    separator = NonStringToString(separator);
   }
-  var length = TO_UINT32(this.length);
-  return Join(this, length, separator, ConvertToString);
+
+  var result = %_FastAsciiArrayJoin(this, separator);
+  if (!IS_UNDEFINED(result)) return result;
+
+  return Join(this, TO_UINT32(this.length), separator, ConvertToString);
 }
 
 
@@ -577,16 +604,17 @@ function ArraySplice(start, delete_count) {
   }
 
   // SpiderMonkey, TraceMonkey and JSC treat the case where no delete count is
-  // given differently from when an undefined delete count is given.
+  // given as a request to delete all the elements from the start.
+  // And it differs from the case of undefined delete count.
   // This does not follow ECMA-262, but we do the same for
   // compatibility.
   var del_count = 0;
-  if (num_arguments > 1) {
+  if (num_arguments == 1) {
+    del_count = len - start_i;
+  } else {
     del_count = TO_INTEGER(delete_count);
     if (del_count < 0) del_count = 0;
     if (del_count > len - start_i) del_count = len - start_i;
-  } else {
-    del_count = len - start_i;
   }
 
   var deleted_elements = [];
@@ -669,39 +697,76 @@ function ArraySort(comparefn) {
 
   function QuickSort(a, from, to) {
     // Insertion sort is faster for short arrays.
-    if (to - from <= 22) {
+    if (to - from <= 10) {
       InsertionSort(a, from, to);
       return;
     }
-    var pivot_index = $floor($random() * (to - from)) + from;
-    var pivot = a[pivot_index];
-    // Issue 95: Keep the pivot element out of the comparisons to avoid
-    // infinite recursion if comparefn(pivot, pivot) != 0.
-    %_SwapElements(a, from, pivot_index);
-    var low_end = from;   // Upper bound of the elements lower than pivot.
-    var high_start = to;  // Lower bound of the elements greater than pivot.
+    // Find a pivot as the median of first, last and middle element.
+    var v0 = a[from];
+    var v1 = a[to - 1];
+    var middle_index = from + ((to - from) >> 1);
+    var v2 = a[middle_index];
+    var c01 = %_CallFunction(global_receiver, v0, v1, comparefn);
+    if (c01 > 0) {
+      // v1 < v0, so swap them.
+      var tmp = v0;
+      v0 = v1;
+      v1 = tmp;
+    } // v0 <= v1.
+    var c02 = %_CallFunction(global_receiver, v0, v2, comparefn);
+    if (c02 >= 0) {
+      // v2 <= v0 <= v1.
+      var tmp = v0;
+      v0 = v2;
+      v2 = v1;
+      v1 = tmp;
+    } else {
+      // v0 <= v1 && v0 < v2
+      var c12 = %_CallFunction(global_receiver, v1, v2, comparefn);
+      if (c12 > 0) {
+        // v0 <= v2 < v1
+        var tmp = v1;
+        v1 = v2;
+        v2 = tmp;
+      }
+    }
+    // v0 <= v1 <= v2
+    a[from] = v0;
+    a[to - 1] = v2;
+    var pivot = v1;
+    var low_end = from + 1;   // Upper bound of elements lower than pivot.
+    var high_start = to - 1;  // Lower bound of elements greater than pivot.
+    a[middle_index] = a[low_end];
+    a[low_end] = pivot;
+
     // From low_end to i are elements equal to pivot.
     // From i to high_start are elements that haven't been compared yet.
-    for (var i = from + 1; i < high_start; ) {
+    partition: for (var i = low_end + 1; i < high_start; i++) {
       var element = a[i];
       var order = %_CallFunction(global_receiver, element, pivot, comparefn);
       if (order < 0) {
         %_SwapElements(a, i, low_end);
-        i++;
         low_end++;
       } else if (order > 0) {
-        high_start--;
+        do {
+          high_start--;
+          if (high_start == i) break partition;
+          var top_elem = a[high_start];
+          order = %_CallFunction(global_receiver, top_elem, pivot, comparefn);
+        } while (order > 0);
         %_SwapElements(a, i, high_start);
-      } else {  // order == 0
-        i++;
+        if (order < 0) {
+          %_SwapElements(a, i, low_end);
+          low_end++;
+        }
       }
     }
     QuickSort(a, from, low_end);
     QuickSort(a, high_start, to);
   }
 
-  // Copies elements in the range 0..length from obj's prototype chain
-  // to obj itself, if obj has holes. Returns one more than the maximal index
+  // Copy elements in the range 0..length from obj's prototype chain
+  // to obj itself, if obj has holes. Return one more than the maximal index
   // of a prototype property.
   function CopyFromPrototype(obj, length) {
     var max = 0;
@@ -953,9 +1018,11 @@ function ArrayIndexOf(element, index) {
   } else {
     index = TO_INTEGER(index);
     // If index is negative, index from the end of the array.
-    if (index < 0) index = length + index;
-    // If index is still negative, search the entire array.
-    if (index < 0) index = 0;
+    if (index < 0) {
+      index = length + index;
+      // If index is still negative, search the entire array.
+      if (index < 0) index = 0;
+    }
   }
   var min = index;
   var max = length;

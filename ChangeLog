@@ -1,4 +1,192 @@
-2010.11.16, Version 0.3.1 (unstable)
+2011.02.10, Version 0.4.0 (stable)
+
+* require() improvements (isaacs) 
+  - understand package.json (isaacs)
+  - look for 'node_modules' dir
+
+* cmake fixes (Daniel Gröber)
+
+* http: fix buffer writes to outgoing messages (Russell Haering)
+
+* Expose UCS-2 Encoding (Konstantin Käfer)
+
+* Support strings for octal modes (isaacs)
+
+* Support array-ish args to Buffer ctor (isaacs)
+
+* cygwin and mingw improvements (Bert Belder)
+
+* TLS improvements
+
+* Fewer syscalls during require (Bert Belder, isaacs)
+
+* More DTrace probes (Bryan Cantrill,  Robert Mustacchi)
+
+* 'pipe' event on pipe() (Mikeal Rogers)
+
+* CRL support in TLS (Theo Schlossnagle)
+
+* HTTP header manipulation methods (Tim Caswell, Charlie Robbins)
+
+* Upgrade V8 to 3.1.2
+
+
+2011.02.04, Version 0.3.8 (unstable)
+
+* Add req.abort() for client side requests.
+
+* Add exception.code for easy testing:
+  Example: if (err.code == 'EADDRINUSE');
+
+* Add process.stderr.
+
+* require.main is the main module. (Isaac Schlueter)
+
+* dgram: setMulticastTTL, setMulticastLoopback and addMembership.
+  (Joe Walnes)
+
+* Fix throttling in TLS connections
+
+* Add socket.bufferSize
+
+* MinGW improvements (Bert Belder)
+
+* Upgrade V8 to 3.1.1
+
+2011.01.27, Version 0.3.7 (unstable)
+
+* Expose agent in http and https client. (Mikeal Rogers)
+
+* Fix bug in http request's end method. (Ali Farhadi)
+
+* MinGW: better net support (Bert Belder)
+
+* fs.open should set FD_CLOEXEC
+
+* DTrace probes (Bryan Cantrill)
+
+* REPL fixes and improvements (isaacs, Bert Belder)
+
+* Fix many bugs with legacy http.Client interface
+
+* Deprecate process.assert. Use require('assert').ok
+
+* Add callback parameter to socket.setTimeout(). (Ali Farhadi)
+
+* Fixing bug in http request default encoding (Ali Farhadi)
+
+* require: A module ID with a trailing slash must be a dir.
+  (isaacs)
+
+* Add ext_key_usage to getPeerCertificate (Greg Hughes)
+
+* Error when child_process.exec hits maxBuffer.
+
+* Fix option parsing in tls.connect()
+
+* Upgrade to V8 3.0.10
+
+
+2011.01.21, Version 0.3.6 (unstable), bb3e71466e5240626d9d21cf791fe43e87d90011
+
+* REPL and other improvements on MinGW (Bert Belder)
+
+* listen/bind errors should close net.Server
+
+* New HTTP and HTTPS client APIs
+
+* Upgrade V8 to 3.0.9
+
+
+2011.01.16, Version 0.3.5 (unstable), b622bc6305e3c675e0edfcdbaa387d849ad0bba0
+
+* Built-in debugger improvements.
+
+* Add setsid, setuid, setgid options to child_process.spawn
+  (Isaac Schlueter)
+
+* tty module improvements.
+
+* Upgrade libev to 4.3, libeio to latest, c-ares to 1.7.4
+
+* Allow third party hooks before main module load.
+  (See 496be457b6a2bc5b01ec13644b9c9783976159b2)
+
+* Don't stat() on cached modules. (Felix Geisendörfer)
+
+
+2011.01.08, Version 0.3.4 (unstable)
+
+* Primordal mingw build (Bert Belder)
+
+* HTTPS server
+
+* Built in debugger 'node debug script.js' 
+
+* realpath files during module load (Mihai Călin Bazon)
+
+* Rename net.Stream to net.Socket (existing name will continue to be
+  supported)
+
+* Fix process.platform
+
+
+2011.01.02, Version 0.3.3 (unstable), 57544ba1c54c7d0da890317deeb73076350c5647
+
+* TLS improvements.
+
+* url.parse(url, true) defaults query field to {} (Jeremy Martin)
+
+* Upgrade V8 to 3.0.4
+
+* Handle ECONNABORT properly (Theo Schlossnagle)
+
+* Fix memory leaks (Tom Hughes)
+
+* Add os.cpus(), os.freemem(), os.totalmem(), os.loadavg() and other
+  functions for OSX, Linux, and Cygwin. (Brian White)
+
+* Fix REPL syntax error bug (GH-543), improve how REPL commands are
+  evaulated.
+
+* Use process.stdin instead of process.openStdin().
+
+* Disable TLS tests when node doesn't have OpenSSL.
+
+
+2010.12.16, Version 0.3.2 (unstable), 4bb914bde9f3c2d6de00853353b6b8fc9c66143a
+
+* Rip out the old (broken) TLS implementation introduce new tested
+  implementation and API. See docs. HTTPS not supported in this release.
+
+* Introduce 'os' and 'tty' modules.
+
+* Callback parameters for socket.write() and socket.connect().
+
+* Support CNAME lookups in DNS module. (Ben Noordhuis)
+
+* cmake support (Tom Hughes)
+
+* 'make lint'
+
+* oprofile support (./configure --oprofile)
+
+* Lots of bug fixes, including:
+  - Memory leak in ChildProcess:Spawn(). (Tom Hughes)
+  - buffer.slice(0, 0)
+  - Global variable leaks
+  - clearTimeouts calling multiple times (Michael W)
+  - utils.inspect's detection of circular structures (Tim Cooijmans)
+  - Apple's threaded write()s bug (Jorge Chamorro Bieling)
+  - Make sure raw mode is disabled when exiting a terminal-based REPL.
+    (Brian White)
+
+* Deprecate process.compile, process.ENV
+
+* Upgrade V8 to 3.0.3, upgrade http-parser.
+
+
+2010.11.16, Version 0.3.1 (unstable), ce9a54aa1fbf709dd30316af8a2f14d83150e947
 
 * TLS improvments (Paul Querna)
   - Centralize error handling in SecureStream

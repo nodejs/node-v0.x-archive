@@ -104,8 +104,10 @@ TEST(IntegerStrLiteral) {
   CHECK_EQ(0.0, StringToDouble("000", NO_FLAGS));
   CHECK_EQ(1.0, StringToDouble("1", NO_FLAGS));
   CHECK_EQ(-1.0, StringToDouble("-1", NO_FLAGS));
-  CHECK_EQ(-1.0, StringToDouble("  -  1  ", NO_FLAGS));
-  CHECK_EQ(1.0, StringToDouble("  +  1  ", NO_FLAGS));
+  CHECK_EQ(-1.0, StringToDouble("  -1  ", NO_FLAGS));
+  CHECK_EQ(1.0, StringToDouble("  +1  ", NO_FLAGS));
+  CHECK(isnan(StringToDouble("  -  1  ", NO_FLAGS)));
+  CHECK(isnan(StringToDouble("  +  1  ", NO_FLAGS)));
 
   CHECK_EQ(0.0, StringToDouble("0e0", ALLOW_HEX | ALLOW_OCTALS));
   CHECK_EQ(0.0, StringToDouble("0e1", ALLOW_HEX | ALLOW_OCTALS));
@@ -141,9 +143,6 @@ TEST(LongNumberStr) {
 }
 
 
-extern "C" double gay_strtod(const char* s00, const char** se);
-
-
 TEST(MaximumSignificantDigits) {
   char num[] =
       "4.4501477170144020250819966727949918635852426585926051135169509"
@@ -160,12 +159,12 @@ TEST(MaximumSignificantDigits) {
       "847003580761626016356864581135848683152156368691976240370422601"
       "6998291015625000000000000000000000000000000000e-308";
 
-  CHECK_EQ(gay_strtod(num, NULL), StringToDouble(num, NO_FLAGS));
+  CHECK_EQ(4.4501477170144017780491e-308, StringToDouble(num, NO_FLAGS));
 
   // Changes the result of strtod (at least in glibc implementation).
   num[sizeof(num) - 8] = '1';
 
-  CHECK_EQ(gay_strtod(num, NULL), StringToDouble(num, NO_FLAGS));
+  CHECK_EQ(4.4501477170144022721148e-308, StringToDouble(num, NO_FLAGS));
 }
 
 TEST(MinimumExponent) {
@@ -185,19 +184,19 @@ TEST(MinimumExponent) {
   "470035807616260163568645811358486831521563686919762403704226016"
   "998291015625000000000000000000000000000000000e-1108";
 
-  CHECK_EQ(gay_strtod(num, NULL), StringToDouble(num, NO_FLAGS));
+  CHECK_EQ(4.4501477170144017780491e-308, StringToDouble(num, NO_FLAGS));
 
   // Changes the result of strtod (at least in glibc implementation).
   num[sizeof(num) - 8] = '1';
 
-  CHECK_EQ(gay_strtod(num, NULL), StringToDouble(num, NO_FLAGS));
+  CHECK_EQ(4.4501477170144022721148e-308, StringToDouble(num, NO_FLAGS));
 }
 
 
 TEST(MaximumExponent) {
   char num[] = "0.16e309";
 
-  CHECK_EQ(gay_strtod(num, NULL), StringToDouble(num, NO_FLAGS));
+  CHECK_EQ(1.59999999999999997765e+308, StringToDouble(num, NO_FLAGS));
 }
 
 

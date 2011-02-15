@@ -45,6 +45,7 @@
 #include <errno.h>
 #include <ieeefp.h>  // finite()
 #include <signal.h>  // sigemptyset(), etc
+#include <sys/kdi_regs.h>
 
 
 #undef MAP_TYPE
@@ -52,6 +53,7 @@
 #include "v8.h"
 
 #include "platform.h"
+#include "vm-state-inl.h"
 
 
 // It seems there is a bug in some Solaris distributions (experienced in
@@ -224,11 +226,25 @@ class PosixMemoryMappedFile : public OS::MemoryMappedFile {
     : file_(file), memory_(memory), size_(size) { }
   virtual ~PosixMemoryMappedFile();
   virtual void* memory() { return memory_; }
+  virtual int size() { return size_; }
  private:
   FILE* file_;
   void* memory_;
   int size_;
 };
+
+
+OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
+  FILE* file = fopen(name, "w+");
+  if (file == NULL) return NULL;
+
+  fseek(file, 0, SEEK_END);
+  int size = ftell(file);
+
+  void* memory =
+      mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+  return new PosixMemoryMappedFile(file, memory, size);
+}
 
 
 OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
@@ -400,6 +416,12 @@ bool ThreadHandle::IsValid() const {
 
 
 Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
+  set_name("v8:<unknown>");
+}
+
+
+Thread::Thread(const char* name) : ThreadHandle(ThreadHandle::INVALID) {
+  set_name(name);
 }
 
 
@@ -416,6 +438,12 @@ static void* ThreadEntry(void* arg) {
   ASSERT(thread->IsValid());
   thread->Run();
   return NULL;
+}
+
+
+void Thread::set_name(const char* name) {
+  strncpy(name_, name, sizeof(name_));
+  name_[sizeof(name_) - 1] = '\0';
 }
 
 
@@ -479,6 +507,16 @@ class SolarisMutex : public Mutex {
   int Lock() { return pthread_mutex_lock(&mutex_); }
 
   int Unlock() { return pthread_mutex_unlock(&mutex_); }
+
+  virtual bool TryLock() {
+    int result = pthread_mutex_trylock(&mutex_);
+    // Return false if the lock is busy and locking failed.
+    if (result == EBUSY) {
+      return false;
+    }
+    ASSERT(result == 0);  // Verify no other errors.
+    return true;
+  }
 
  private:
   pthread_mutex_t mutex_;
@@ -571,21 +609,37 @@ Semaphore* OS::CreateSemaphore(int count) {
 #ifdef ENABLE_LOGGING_AND_PROFILING
 
 static Sampler* active_sampler_ = NULL;
+static pthread_t vm_tid_ = 0;
+
 
 static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
   USE(info);
   if (signal != SIGPROF) return;
-  if (active_sampler_ == NULL) return;
+  if (active_sampler_ == NULL || !active_sampler_->IsActive()) return;
+  if (vm_tid_ != pthread_self()) return;
 
-  TickSample sample;
-  sample.pc = 0;
-  sample.sp = 0;
-  sample.fp = 0;
+  TickSample sample_obj;
+  TickSample* sample = CpuProfiler::TickSampleEvent();
+  if (sample == NULL) sample = &sample_obj;
 
-  // We always sample the VM state.
-  sample.state = VMState::current_state();
+  // Extracting the sample from the context is extremely machine dependent.
+  ucontext_t* ucontext = reinterpret_cast<ucontext_t*>(context);
+  mcontext_t& mcontext = ucontext->uc_mcontext;
+  sample->state = Top::current_vm_state();
 
-  active_sampler_->Tick(&sample);
+#if V8_HOST_ARCH_IA32
+  sample->pc = reinterpret_cast<Address>(mcontext.gregs[KDIREG_EIP]);
+  sample->sp = reinterpret_cast<Address>(mcontext.gregs[KDIREG_ESP]);
+  sample->fp = reinterpret_cast<Address>(mcontext.gregs[KDIREG_EBP]);
+#elif V8_HOST_ARCH_X64
+  sample->pc = reinterpret_cast<Address>(mcontext.gregs[KDIREG_RIP]);
+  sample->sp = reinterpret_cast<Address>(mcontext.gregs[KDIREG_RSP]);
+  sample->fp = reinterpret_cast<Address>(mcontext.gregs[KDIREG_RBP]);
+#else
+  UNIMPLEMENTED();
+#endif
+  active_sampler_->SampleStack(sample);
+  active_sampler_->Tick(sample);
 }
 
 
@@ -601,11 +655,11 @@ class Sampler::PlatformData : public Malloced {
 };
 
 
-Sampler::Sampler(int interval, bool profiling)
+Sampler::Sampler(int interval)
     : interval_(interval),
-      profiling_(profiling),
-      synchronous_(profiling),
-      active_(false) {
+      profiling_(false),
+      active_(false),
+      samples_taken_(0) {
   data_ = new PlatformData();
 }
 

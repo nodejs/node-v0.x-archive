@@ -42,6 +42,11 @@
 #ifdef EIO_STACKSIZE
 # define XTHREAD_STACKSIZE EIO_STACKSIZE
 #endif
+
+// For statically-linked pthreads-w32, use:
+// #ifdef _WIN32
+// # define PTW32_STATIC_LIB 1
+// #endif
 #include "xthread.h"
 
 #include <errno.h>
@@ -51,10 +56,13 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/statvfs.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <assert.h>
+
+#ifndef _WIN32
+#include <sys/statvfs.h>
+#endif
 
 #ifndef EIO_FINISH
 # define EIO_FINISH(req)  ((req)->finish) && !EIO_CANCELLED (req) ? (req)->finish (req) : 0
@@ -70,7 +78,22 @@
 
 #ifdef _WIN32
 
-  /*doh*/
+# include <errno.h>
+# include <sys/time.h>
+# include <unistd.h>
+# include <utime.h>
+# include <signal.h>
+# include <dirent.h>
+# include <windows.h>
+
+# define ENOTSOCK WSAENOTSOCK
+# define EOPNOTSUPP WSAEOPNOTSUPP
+# define ECANCELED 140
+
+# ifndef EIO_STRUCT_DIRENT
+#  define EIO_STRUCT_DIRENT struct dirent
+# endif
+
 #else
 
 # include "config.h"
@@ -81,7 +104,7 @@
 # include <signal.h>
 # include <dirent.h>
 
-#if _POSIX_MEMLOCK || _POSIX_MAPPED_FILES
+#if _POSIX_MEMLOCK || _POSIX_MEMLOCK_RANGE || _POSIX_MAPPED_FILES
 # include <sys/mman.h>
 #endif
 
@@ -231,6 +254,10 @@ static xmutex_t wrklock = X_MUTEX_INIT;
 static xmutex_t reslock = X_MUTEX_INIT;
 static xmutex_t reqlock = X_MUTEX_INIT;
 static xcond_t  reqwait = X_COND_INIT;
+
+#if defined (__APPLE__)
+static xmutex_t apple_bug_writelock = X_MUTEX_INIT;
+#endif
 
 #if !HAVE_PREADWRITE
 /*
@@ -785,7 +812,7 @@ int eio_poll (void)
 # define pread  eio__pread
 # define pwrite eio__pwrite
 
-static ssize_t
+ssize_t
 eio__pread (int fd, void *buf, size_t count, off_t offset)
 {
   ssize_t res;
@@ -801,7 +828,7 @@ eio__pread (int fd, void *buf, size_t count, off_t offset)
   return res;
 }
 
-static ssize_t
+ssize_t
 eio__pwrite (int fd, void *buf, size_t count, off_t offset)
 {
   ssize_t res;
@@ -818,12 +845,10 @@ eio__pwrite (int fd, void *buf, size_t count, off_t offset)
 }
 #endif
 
-#ifndef HAVE_FUTIMES
+#ifndef HAVE_UTIMES
 
 # undef utimes
-# undef futimes
-# define utimes(path,times)  eio__utimes  (path, times)
-# define futimes(fd,times)   eio__futimes (fd, times)
+# define utimes(path,times)  eio__utimes (path, times)
 
 static int
 eio__utimes (const char *filename, const struct timeval times[2])
@@ -841,6 +866,13 @@ eio__utimes (const char *filename, const struct timeval times[2])
     return utime (filename, 0);
 }
 
+#endif
+
+#ifndef HAVE_FUTIMES
+
+# undef futimes
+# define futimes(fd,times) eio__futimes (fd, times)
+
 static int eio__futimes (int fd, const struct timeval tv[2])
 {
   errno = ENOSYS;
@@ -849,9 +881,21 @@ static int eio__futimes (int fd, const struct timeval tv[2])
 
 #endif
 
+#ifdef _WIN32
+# define fsync(fd) (FlushFileBuffers((HANDLE)_get_osfhandle(fd)) ? 0 : -1)
+#endif
+
 #if !HAVE_FDATASYNC
 # undef fdatasync
 # define fdatasync(fd) fsync (fd)
+#endif
+
+// Use unicode and big file aware stat on windows
+#ifdef _WIN32
+# undef stat
+# undef fstat
+# define stat  _stati64
+# define fstat _fstati64
 #endif
 
 /* sync_file_range always needs emulation */
@@ -974,14 +1018,14 @@ eio__sendfile (int ofd, int ifd, off_t offset, size_t count, etp_worker *self)
 
 # endif
 
-#elif defined (_WIN32)
-
-  /* does not work, just for documentation of what would need to be done */
-  {
-    HANDLE h = TO_SOCKET (ifd);
-    SetFilePointer (h, offset, 0, FILE_BEGIN);
-    res = TransmitFile (TO_SOCKET (ofd), h, count, 0, 0, 0, 0);
-  }
+//#elif defined (_WIN32)
+//
+//  /* does not work, just for documentation of what would need to be done */
+//  {
+//    HANDLE h = TO_SOCKET (ifd);
+//    SetFilePointer (h, offset, 0, FILE_BEGIN);
+//    res = TransmitFile (TO_SOCKET (ofd), h, count, 0, 0, 0, 0);
+//  }
 
 #else
   res = -1;
@@ -1399,17 +1443,29 @@ eio__scandir (eio_req *req, etp_worker *self)
 
 #ifdef PAGESIZE
 # define eio_pagesize() PAGESIZE
+
+#elif defined(_WIN32)
+  /* Windows */
+  static intptr_t
+  eio_pagesize (void)
+  { 
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return si.dwPageSize;
+  }
+
 #else
-static intptr_t
-eio_pagesize (void)
-{
-  static intptr_t page;
+  /* POSIX */
+  static intptr_t
+  eio_pagesize (void)
+  {
+    static intptr_t page;
 
-  if (!page)
-    page = sysconf (_SC_PAGESIZE);
+    if (!page)
+      page = sysconf (_SC_PAGESIZE);
 
-  return page;
-}
+    return page;
+  }
 #endif
 
 static void
@@ -1428,17 +1484,8 @@ eio_page_align (void **addr, size_t *length)
 }
 
 #if !_POSIX_MEMLOCK
-# define eio__mlock(a,b) ((errno = ENOSYS), -1)
 # define eio__mlockall(a) ((errno = ENOSYS), -1)
 #else
-
-static int
-eio__mlock (void *addr, size_t length)
-{
-  eio_page_align (&addr, &length);
-
-  return mlock (addr, length);
-}
 
 static int
 eio__mlockall (int flags)
@@ -1458,6 +1505,20 @@ eio__mlockall (int flags)
 
   return mlockall (flags);
 }
+#endif
+
+#if !_POSIX_MEMLOCK_RANGE
+# define eio__mlock(a,b) ((errno = ENOSYS), -1)
+#else
+
+static int
+eio__mlock (void *addr, size_t length)
+{
+  eio_page_align (&addr, &length);
+
+  return mlock (addr, length);
+}
+
 #endif
 
 #if !(_POSIX_MAPPED_FILES && _POSIX_SYNCHRONIZED_IO)
@@ -1632,28 +1693,39 @@ static void eio_api_destroy (eio_req *req)
 
 static void eio_execute (etp_worker *self, eio_req *req)
 {
-  errno = 0;
-
   switch (req->type)
     {
       case EIO_READ:      ALLOC (req->size);
                           req->result = req->offs >= 0
                                       ? pread     (req->int1, req->ptr2, req->size, req->offs)
                                       : read      (req->int1, req->ptr2, req->size); break;
-      case EIO_WRITE:     req->result = req->offs >= 0
+      case EIO_WRITE:
+#if defined (__APPLE__)
+                          pthread_mutex_lock (&apple_bug_writelock);
+#endif
+
+                          req->result = req->offs >= 0
                                       ? pwrite    (req->int1, req->ptr2, req->size, req->offs)
-                                      : write     (req->int1, req->ptr2, req->size); break;
+                                      : write     (req->int1, req->ptr2, req->size);
+
+#if defined (__APPLE__)
+                          pthread_mutex_unlock (&apple_bug_writelock);
+#endif
+                          break;
 
       case EIO_READAHEAD: req->result = readahead     (req->int1, req->offs, req->size); break;
       case EIO_SENDFILE:  req->result = eio__sendfile (req->int1, req->int2, req->offs, req->size, self); break;
 
       case EIO_STAT:      ALLOC (sizeof (EIO_STRUCT_STAT));
                           req->result = stat      (req->ptr1, (EIO_STRUCT_STAT *)req->ptr2); break;
+#ifndef _WIN32
       case EIO_LSTAT:     ALLOC (sizeof (EIO_STRUCT_STAT));
                           req->result = lstat     (req->ptr1, (EIO_STRUCT_STAT *)req->ptr2); break;
+#endif
       case EIO_FSTAT:     ALLOC (sizeof (EIO_STRUCT_STAT));
                           req->result = fstat     (req->int1, (EIO_STRUCT_STAT *)req->ptr2); break;
 
+#ifndef _WIN32
       case EIO_STATVFS:   ALLOC (sizeof (EIO_STRUCT_STATVFS));
                           req->result = statvfs   (req->ptr1, (EIO_STRUCT_STATVFS *)req->ptr2); break;
       case EIO_FSTATVFS:  ALLOC (sizeof (EIO_STRUCT_STATVFS));
@@ -1661,9 +1733,12 @@ static void eio_execute (etp_worker *self, eio_req *req)
 
       case EIO_CHOWN:     req->result = chown     (req->ptr1, req->int2, req->int3); break;
       case EIO_FCHOWN:    req->result = fchown    (req->int1, req->int2, req->int3); break;
+#endif
       case EIO_CHMOD:     req->result = chmod     (req->ptr1, (mode_t)req->int2); break;
+#ifndef _WIN32
       case EIO_FCHMOD:    req->result = fchmod    (req->int1, (mode_t)req->int2); break;
       case EIO_TRUNCATE:  req->result = truncate  (req->ptr1, req->offs); break;
+#endif
       case EIO_FTRUNCATE: req->result = ftruncate (req->int1, req->offs); break;
 
       case EIO_OPEN:      req->result = open      (req->ptr1, req->int1, (mode_t)req->int2); break;
@@ -1671,16 +1746,26 @@ static void eio_execute (etp_worker *self, eio_req *req)
       case EIO_DUP2:      req->result = dup2      (req->int1, req->int2); break;
       case EIO_UNLINK:    req->result = unlink    (req->ptr1); break;
       case EIO_RMDIR:     req->result = rmdir     (req->ptr1); break;
+#ifdef _WIN32
+      case EIO_MKDIR:     req->result = mkdir     (req->ptr1); break;
+#else
       case EIO_MKDIR:     req->result = mkdir     (req->ptr1, (mode_t)req->int2); break;
+#endif
       case EIO_RENAME:    req->result = rename    (req->ptr1, req->ptr2); break;
+#ifndef _WIN32
       case EIO_LINK:      req->result = link      (req->ptr1, req->ptr2); break;
       case EIO_SYMLINK:   req->result = symlink   (req->ptr1, req->ptr2); break;
       case EIO_MKNOD:     req->result = mknod     (req->ptr1, (mode_t)req->int2, (dev_t)req->int3); break;
+#endif
 
+#ifndef _WIN32
       case EIO_READLINK:  ALLOC (PATH_MAX);
                           req->result = readlink  (req->ptr1, req->ptr2, PATH_MAX); break;
+#endif
 
+#ifndef _WIN32
       case EIO_SYNC:      req->result = 0; sync (); break;
+#endif
       case EIO_FSYNC:     req->result = fsync     (req->int1); break;
       case EIO_FDATASYNC: req->result = fdatasync (req->int1); break;
       case EIO_MSYNC:     req->result = eio__msync (req->ptr2, req->size, req->int1); break;
@@ -1724,7 +1809,6 @@ static void eio_execute (etp_worker *self, eio_req *req)
           else
             times = 0;
 
-
           req->result = req->type == EIO_FUTIME
                         ? futimes (req->int1, times)
                         : utimes  (req->ptr1, times);
@@ -1743,6 +1827,7 @@ static void eio_execute (etp_worker *self, eio_req *req)
         break;
 
       default:
+        errno = ENOSYS;
         req->result = -1;
         break;
     }

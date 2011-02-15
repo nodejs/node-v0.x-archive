@@ -557,6 +557,31 @@ const struct message requests[] =
   ,.body= ""
   }
 
+#define MSEARCH_REQ 19
+, {.name= "m-search request"
+  ,.type= HTTP_REQUEST
+  ,.raw= "M-SEARCH * HTTP/1.1\r\n"
+         "HOST: 239.255.255.250:1900\r\n"
+         "MAN: \"ssdp:discover\"\r\n"
+         "ST: \"ssdp:all\"\r\n"
+         "\r\n"
+  ,.should_keep_alive= TRUE
+  ,.message_complete_on_eof= FALSE
+  ,.http_major= 1
+  ,.http_minor= 1
+  ,.method= HTTP_MSEARCH
+  ,.query_string= ""
+  ,.fragment= ""
+  ,.request_path= "*"
+  ,.request_url= "*"
+  ,.num_headers= 3
+  ,.headers= { { "HOST", "239.255.255.250:1900" }
+             , { "MAN", "\"ssdp:discover\"" }
+             , { "ST", "\"ssdp:all\"" }
+             }
+  ,.body= ""
+  }
+
 , {.name= NULL } /* sentinel */
 };
 
@@ -1710,13 +1735,21 @@ main (void)
 
   /// REQUESTS
 
-
   test_simple("hello world", 0);
   test_simple("GET / HTP/1.1\r\n\r\n", 0);
+
 
   test_simple("ASDF / HTTP/1.1\r\n\r\n", 0);
   test_simple("PROPPATCHA / HTTP/1.1\r\n\r\n", 0);
   test_simple("GETA / HTTP/1.1\r\n\r\n", 0);
+
+  // Well-formed but incomplete
+  test_simple("GET / HTTP/1.1\r\n"
+              "Content-Type: text/plain\r\n"
+              "Content-Length: 6\r\n"
+              "\r\n"
+              "fooba",
+              0);
 
   static const char *all_methods[] = {
     "DELETE",

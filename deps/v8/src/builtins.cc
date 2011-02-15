@@ -31,7 +31,9 @@
 #include "arguments.h"
 #include "bootstrapper.h"
 #include "builtins.h"
+#include "gdb-jit.h"
 #include "ic-inl.h"
+#include "vm-state-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -379,7 +381,7 @@ static inline MaybeObject* EnsureJSArrayWithWritableFastElements(
     Object* receiver) {
   if (!receiver->IsJSArray()) return NULL;
   JSArray* array = JSArray::cast(receiver);
-  HeapObject* elms = HeapObject::cast(array->elements());
+  HeapObject* elms = array->elements();
   if (elms->map() == Heap::fixed_array_map()) return elms;
   if (elms->map() == Heap::fixed_cow_array_map()) {
     return array->EnsureWritableFastElements();
@@ -514,10 +516,10 @@ BUILTIN(ArrayShift) {
   Object* elms_obj;
   { MaybeObject* maybe_elms_obj =
         EnsureJSArrayWithWritableFastElements(receiver);
+    if (maybe_elms_obj == NULL) return CallJsBuiltin("ArrayShift", args);
     if (!maybe_elms_obj->ToObject(&elms_obj)) return maybe_elms_obj;
   }
-  if (elms_obj == NULL ||
-      !IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
+  if (!IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
     return CallJsBuiltin("ArrayShift", args);
   }
   FixedArray* elms = FixedArray::cast(elms_obj);
@@ -556,10 +558,10 @@ BUILTIN(ArrayUnshift) {
   Object* elms_obj;
   { MaybeObject* maybe_elms_obj =
         EnsureJSArrayWithWritableFastElements(receiver);
+    if (maybe_elms_obj == NULL) return CallJsBuiltin("ArrayUnshift", args);
     if (!maybe_elms_obj->ToObject(&elms_obj)) return maybe_elms_obj;
   }
-  if (elms_obj == NULL ||
-      !IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
+  if (!IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
     return CallJsBuiltin("ArrayUnshift", args);
   }
   FixedArray* elms = FixedArray::cast(elms_obj);
@@ -610,21 +612,47 @@ BUILTIN(ArrayUnshift) {
 
 BUILTIN(ArraySlice) {
   Object* receiver = *args.receiver();
-  Object* elms_obj;
-  { MaybeObject* maybe_elms_obj =
-        EnsureJSArrayWithWritableFastElements(receiver);
-    if (!maybe_elms_obj->ToObject(&elms_obj)) return maybe_elms_obj;
-  }
-  if (elms_obj == NULL ||
-      !IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
-    return CallJsBuiltin("ArraySlice", args);
-  }
-  FixedArray* elms = FixedArray::cast(elms_obj);
-  JSArray* array = JSArray::cast(receiver);
-  ASSERT(array->HasFastElements());
+  FixedArray* elms;
+  int len = -1;
+  if (receiver->IsJSArray()) {
+    JSArray* array = JSArray::cast(receiver);
+    if (!array->HasFastElements() ||
+        !IsJSArrayFastElementMovingAllowed(array)) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
 
-  int len = Smi::cast(array->length())->value();
+    elms = FixedArray::cast(array->elements());
+    len = Smi::cast(array->length())->value();
+  } else {
+    // Array.slice(arguments, ...) is quite a common idiom (notably more
+    // than 50% of invocations in Web apps).  Treat it in C++ as well.
+    Map* arguments_map =
+        Top::context()->global_context()->arguments_boilerplate()->map();
 
+    bool is_arguments_object_with_fast_elements =
+        receiver->IsJSObject()
+        && JSObject::cast(receiver)->map() == arguments_map
+        && JSObject::cast(receiver)->HasFastElements();
+    if (!is_arguments_object_with_fast_elements) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
+    elms = FixedArray::cast(JSObject::cast(receiver)->elements());
+    Object* len_obj = JSObject::cast(receiver)
+        ->InObjectPropertyAt(Heap::arguments_length_index);
+    if (!len_obj->IsSmi()) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
+    len = Smi::cast(len_obj)->value();
+    if (len > elms->length()) {
+      return CallJsBuiltin("ArraySlice", args);
+    }
+    for (int i = 0; i < len; i++) {
+      if (elms->get(i) == Heap::the_hole_value()) {
+        return CallJsBuiltin("ArraySlice", args);
+      }
+    }
+  }
+  ASSERT(len >= 0);
   int n_arguments = args.length() - 1;
 
   // Note carefully choosen defaults---if argument is missing,
@@ -692,10 +720,10 @@ BUILTIN(ArraySplice) {
   Object* elms_obj;
   { MaybeObject* maybe_elms_obj =
         EnsureJSArrayWithWritableFastElements(receiver);
+    if (maybe_elms_obj == NULL) return CallJsBuiltin("ArraySplice", args);
     if (!maybe_elms_obj->ToObject(&elms_obj)) return maybe_elms_obj;
   }
-  if (elms_obj == NULL ||
-      !IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
+  if (!IsJSArrayFastElementMovingAllowed(JSArray::cast(receiver))) {
     return CallJsBuiltin("ArraySplice", args);
   }
   FixedArray* elms = FixedArray::cast(elms_obj);
@@ -706,35 +734,39 @@ BUILTIN(ArraySplice) {
 
   int n_arguments = args.length() - 1;
 
-  // Return empty array when no arguments are supplied.
-  if (n_arguments == 0) {
-    return AllocateEmptyJSArray();
-  }
-
   int relative_start = 0;
-  Object* arg1 = args[1];
-  if (arg1->IsSmi()) {
-    relative_start = Smi::cast(arg1)->value();
-  } else if (!arg1->IsUndefined()) {
-    return CallJsBuiltin("ArraySplice", args);
+  if (n_arguments > 0) {
+    Object* arg1 = args[1];
+    if (arg1->IsSmi()) {
+      relative_start = Smi::cast(arg1)->value();
+    } else if (!arg1->IsUndefined()) {
+      return CallJsBuiltin("ArraySplice", args);
+    }
   }
   int actual_start = (relative_start < 0) ? Max(len + relative_start, 0)
                                           : Min(relative_start, len);
 
   // SpiderMonkey, TraceMonkey and JSC treat the case where no delete count is
-  // given differently from when an undefined delete count is given.
+  // given as a request to delete all the elements from the start.
+  // And it differs from the case of undefined delete count.
   // This does not follow ECMA-262, but we do the same for
   // compatibility.
-  int delete_count = len;
-  if (n_arguments > 1) {
-    Object* arg2 = args[2];
-    if (arg2->IsSmi()) {
-      delete_count = Smi::cast(arg2)->value();
-    } else {
-      return CallJsBuiltin("ArraySplice", args);
+  int actual_delete_count;
+  if (n_arguments == 1) {
+    ASSERT(len - actual_start >= 0);
+    actual_delete_count = len - actual_start;
+  } else {
+    int value = 0;  // ToInteger(undefined) == 0
+    if (n_arguments > 1) {
+      Object* arg2 = args[2];
+      if (arg2->IsSmi()) {
+        value = Smi::cast(arg2)->value();
+      } else {
+        return CallJsBuiltin("ArraySplice", args);
+      }
     }
+    actual_delete_count = Min(Max(value, 0), len - actual_start);
   }
-  int actual_delete_count = Min(Max(delete_count, 0), len - actual_start);
 
   JSArray* result_array = NULL;
   if (actual_delete_count == 0) {
@@ -1031,9 +1063,7 @@ MUST_USE_RESULT static MaybeObject* HandleApiCallHelper(
     {
       // Leaving JavaScript.
       VMState state(EXTERNAL);
-#ifdef ENABLE_LOGGING_AND_PROFILING
-      state.set_external_callback(v8::ToCData<Address>(callback_obj));
-#endif
+      ExternalCallbackScope call_scope(v8::ToCData<Address>(callback_obj));
       value = callback(new_args);
     }
     if (value.IsEmpty()) {
@@ -1081,38 +1111,29 @@ BUILTIN(FastHandleApiCall) {
   ASSERT(!CalledAsConstructor());
   const bool is_construct = false;
 
-  // We expect four more arguments: function, callback, call data, and holder.
+  // We expect four more arguments: callback, function, call data, and holder.
   const int args_length = args.length() - 4;
   ASSERT(args_length >= 0);
 
-  Handle<JSFunction> function = args.at<JSFunction>(args_length);
-  Object* callback_obj = args[args_length + 1];
-  Handle<Object> data = args.at<Object>(args_length + 2);
-  Handle<JSObject> checked_holder = args.at<JSObject>(args_length + 3);
-
-#ifdef DEBUG
-  VerifyTypeCheck(checked_holder, function);
-#endif
-
-  CustomArguments custom;
-  v8::ImplementationUtilities::PrepareArgumentsData(custom.end(),
-      *data, *function, *checked_holder);
+  Object* callback_obj = args[args_length];
 
   v8::Arguments new_args = v8::ImplementationUtilities::NewArguments(
-      custom.end(),
+      &args[args_length + 1],
       &args[0] - 1,
       args_length - 1,
       is_construct);
 
+#ifdef DEBUG
+  VerifyTypeCheck(Utils::OpenHandle(*new_args.Holder()),
+                  Utils::OpenHandle(*new_args.Callee()));
+#endif
   HandleScope scope;
   Object* result;
   v8::Handle<v8::Value> value;
   {
     // Leaving JavaScript.
     VMState state(EXTERNAL);
-#ifdef ENABLE_LOGGING_AND_PROFILING
-    state.set_external_callback(v8::ToCData<Address>(callback_obj));
-#endif
+    ExternalCallbackScope call_scope(v8::ToCData<Address>(callback_obj));
     v8::InvocationCallback callback =
         v8::ToCData<v8::InvocationCallback>(callback_obj);
 
@@ -1176,9 +1197,7 @@ MUST_USE_RESULT static MaybeObject* HandleApiCallAsFunctionOrConstructor(
     {
       // Leaving JavaScript.
       VMState state(EXTERNAL);
-#ifdef ENABLE_LOGGING_AND_PROFILING
-      state.set_external_callback(v8::ToCData<Address>(callback_obj));
-#endif
+      ExternalCallbackScope call_scope(v8::ToCData<Address>(callback_obj));
       value = callback(new_args);
     }
     if (value.IsEmpty()) {
@@ -1213,7 +1232,12 @@ static void Generate_LoadIC_ArrayLength(MacroAssembler* masm) {
 
 
 static void Generate_LoadIC_StringLength(MacroAssembler* masm) {
-  LoadIC::GenerateStringLength(masm);
+  LoadIC::GenerateStringLength(masm, false);
+}
+
+
+static void Generate_LoadIC_StringWrapperLength(MacroAssembler* masm) {
+  LoadIC::GenerateStringLength(masm, true);
 }
 
 
@@ -1267,44 +1291,6 @@ static void Generate_KeyedLoadIC_String(MacroAssembler* masm) {
 }
 
 
-static void Generate_KeyedLoadIC_ExternalByteArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalByteArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalUnsignedByteArray(
-    MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalUnsignedByteArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalShortArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalShortArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalUnsignedShortArray(
-    MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalUnsignedShortArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalIntArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalIntArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalUnsignedIntArray(
-    MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalUnsignedIntArray);
-}
-
-
-static void Generate_KeyedLoadIC_ExternalFloatArray(MacroAssembler* masm) {
-  KeyedLoadIC::GenerateExternalArray(masm, kExternalFloatArray);
-}
-
-
 static void Generate_KeyedLoadIC_PreMonomorphic(MacroAssembler* masm) {
   KeyedLoadIC::GeneratePreMonomorphic(masm);
 }
@@ -1339,46 +1325,13 @@ static void Generate_StoreIC_ArrayLength(MacroAssembler* masm) {
 }
 
 
+static void Generate_StoreIC_GlobalProxy(MacroAssembler* masm) {
+  StoreIC::GenerateGlobalProxy(masm);
+}
+
+
 static void Generate_KeyedStoreIC_Generic(MacroAssembler* masm) {
   KeyedStoreIC::GenerateGeneric(masm);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalByteArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalByteArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalUnsignedByteArray(
-    MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalUnsignedByteArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalShortArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalShortArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalUnsignedShortArray(
-    MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalUnsignedShortArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalIntArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalIntArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalUnsignedIntArray(
-    MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalUnsignedIntArray);
-}
-
-
-static void Generate_KeyedStoreIC_ExternalFloatArray(MacroAssembler* masm) {
-  KeyedStoreIC::GenerateExternalArray(masm, kExternalFloatArray);
 }
 
 
@@ -1531,7 +1484,7 @@ void Builtins::Setup(bool create_heap_objects) {
       CodeDesc desc;
       masm.GetCode(&desc);
       Code::Flags flags =  functions[i].flags;
-      Object* code = 0;
+      Object* code = NULL;
       {
         // During startup it's OK to always allocate and defer GC to later.
         // This simplifies things because we don't need to retry.
@@ -1545,7 +1498,11 @@ void Builtins::Setup(bool create_heap_objects) {
       }
       // Log the event and add the code to the builtins array.
       PROFILE(CodeCreateEvent(Logger::BUILTIN_TAG,
-                              Code::cast(code), functions[i].s_name));
+                              Code::cast(code),
+                              functions[i].s_name));
+      GDBJIT(AddCode(GDBJITInterface::BUILTIN,
+                     functions[i].s_name,
+                     Code::cast(code)));
       builtins_[i] = code;
 #ifdef ENABLE_DISASSEMBLER
       if (FLAG_print_builtin_code) {
@@ -1587,5 +1544,6 @@ const char* Builtins::Lookup(byte* pc) {
   }
   return NULL;
 }
+
 
 } }  // namespace v8::internal

@@ -1,5 +1,5 @@
-common = require("../common");
-assert = common.assert
+var common = require('../common');
+var assert = require('assert');
 
 var http = require('http');
 
@@ -15,11 +15,11 @@ server.listen(common.PORT);
 
 var responseComplete = false;
 
-server.addListener("listening", function() {
-  var req = http.createClient(common.PORT).request('HEAD', '/')
+server.addListener('listening', function() {
+  var req = http.createClient(common.PORT).request('HEAD', '/');
   common.error('req');
   req.end();
-  req.addListener('response', function (res) {
+  req.addListener('response', function(res) {
     common.error('response');
     res.addListener('end', function() {
       common.error('response end');
@@ -29,6 +29,6 @@ server.addListener("listening", function() {
   });
 });
 
-process.addListener('exit', function () {
+process.addListener('exit', function() {
   assert.ok(responseComplete);
 });

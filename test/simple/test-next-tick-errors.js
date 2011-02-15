@@ -1,5 +1,5 @@
-common = require("../common");
-assert = common.assert
+var common = require('../common');
+var assert = require('assert');
 
 var order = [],
     exceptionHandled = false;
@@ -31,6 +31,6 @@ process.addListener('uncaughtException', function() {
 });
 
 process.addListener('exit', function() {
-  assert.deepEqual(['A','B','C'], order);
+  assert.deepEqual(['A', 'B', 'C'], order);
 });
 

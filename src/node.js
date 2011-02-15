@@ -1,592 +1,433 @@
-(function (process) {
+// Hello, and welcome to hacking node.js!
+//
+// This file is invoked by node::Load in src/node.cc, and responsible for
+// bootstrapping the node.js core. Special caution is given to the performance
+// of the startup process, so many dependencies are invoked lazily.
+(function(process) {
+  global = this;
 
-global = this;
-global.process = process;
-global.global = global;
-global.GLOBAL = global;
-global.root = global;
+  function startup() {
+    startup.globalVariables();
+    startup.globalTimeouts();
+    startup.globalConsole();
 
-/** deprecation errors ************************************************/
+    startup.processAssert();
+    startup.processNextTick();
+    startup.processStdio();
+    startup.processKillAndExit();
+    startup.processSignalHandlers();
 
-function removed (reason) {
-  return function () {
-    throw new Error(reason);
+    startup.removedMethods();
+
+    startup.resolveArgv0();
+
+    if (startup.runThirdPartyMain()) {
+      return;
+    }
+
+    if (startup.runDebugger()) {
+      return;
+    }
+
+    if (startup.runScript()) {
+      return;
+    }
+
+    if (startup.runEval()) {
+      return;
+    }
+
+    startup.runRepl();
+  }
+
+  startup.globalVariables = function() {
+    global.process = process;
+    global.global = global;
+    global.GLOBAL = global;
+    global.root = global;
+    global.Buffer = NativeModule.require('buffer').Buffer;
   };
-}
 
-process.debug = removed("process.debug() has moved. Use require('sys') to bring it back.");
-process.error = removed("process.error() has moved. Use require('sys') to bring it back.");
-process.watchFile = removed("process.watchFile() has moved to fs.watchFile()");
-process.unwatchFile = removed("process.unwatchFile() has moved to fs.unwatchFile()");
-process.mixin = removed('process.mixin() has been removed.');
-process.createChildProcess = removed("childProcess API has changed. See doc/api.txt.");
-process.inherits = removed("process.inherits() has moved to sys.inherits.");
-process._byteLength = removed("process._byteLength() has moved to Buffer.byteLength");
+  startup.globalTimeouts = function() {
+    global.setTimeout = function() {
+      var t = NativeModule.require('timers');
+      return t.setTimeout.apply(this, arguments);
+    };
 
-process.assert = function (x, msg) {
-  if (!x) throw new Error(msg || "assertion error");
-};
+    global.setInterval = function() {
+      var t = NativeModule.require('timers');
+      return t.setInterval.apply(this, arguments);
+    };
 
-var writeError = process.binding('stdio').writeError;
+    global.clearTimeout = function() {
+      var t = NativeModule.require('timers');
+      return t.clearTimeout.apply(this, arguments);
+    };
 
-// nextTick()
+    global.clearInterval = function() {
+      var t = NativeModule.require('timers');
+      return t.clearInterval.apply(this, arguments);
+    };
+  };
 
-var nextTickQueue = [];
+  startup.globalConsole = function() {
+    global.__defineGetter__('console', function() {
+      return NativeModule.require('console');
+    });
+  };
 
-process._tickCallback = function () {
-  var l = nextTickQueue.length;
-  if (l === 0) return;
 
-  try {
-    for (var i = 0; i < l; i++) {
-      nextTickQueue[i]();
+  startup._lazyConstants = null;
+
+  startup.lazyConstants = function() {
+    if (!startup._lazyConstants) {
+      startup._lazyConstants = process.binding('constants');
     }
-  }
-  catch(e) {
-    nextTickQueue.splice(0, i+1);
-    if (i+1 < l) {
+    return startup._lazyConstants;
+  };
+
+  var assert;
+  startup.processAssert = function() {
+    // Note that calls to assert() are pre-processed out by JS2C for the
+    // normal build of node. They persist only in the node_g build.
+    // Similarly for debug().
+    assert = process.assert = function(x, msg) {
+      if (!x) throw new Error(msg || 'assertion error');
+    };
+  };
+
+  startup.processNextTick = function() {
+    var nextTickQueue = [];
+
+    process._tickCallback = function() {
+      var l = nextTickQueue.length;
+      if (l === 0) return;
+
+      try {
+        for (var i = 0; i < l; i++) {
+          nextTickQueue[i]();
+        }
+      }
+      catch (e) {
+        nextTickQueue.splice(0, i + 1);
+        if (i + 1 < l) {
+          process._needTickCallback();
+        }
+        throw e; // process.nextTick error, or 'error' event on first tick
+      }
+
+      nextTickQueue.splice(0, l);
+    };
+
+    process.nextTick = function(callback) {
+      nextTickQueue.push(callback);
       process._needTickCallback();
+    };
+  };
+
+  startup.processStdio = function() {
+    var stdout, stdin;
+
+    process.__defineGetter__('stdout', function() {
+      if (stdout) return stdout;
+
+      var binding = process.binding('stdio'),
+          net = NativeModule.require('net'),
+          fs = NativeModule.require('fs'),
+          tty = NativeModule.require('tty'),
+          fd = binding.stdoutFD;
+
+      if (binding.isatty(fd)) {
+        stdout = new tty.WriteStream(fd);
+      } else if (binding.isStdoutBlocking()) {
+        stdout = new fs.WriteStream(null, {fd: fd});
+      } else {
+        stdout = new net.Stream(fd);
+        // FIXME Should probably have an option in net.Stream to create a
+        // stream from an existing fd which is writable only. But for now
+        // we'll just add this hack and set the `readable` member to false.
+        // Test: ./node test/fixtures/echo.js < /etc/passwd
+        stdout.readable = false;
+      }
+
+      return stdout;
+    });
+
+    var events = NativeModule.require('events');
+    var stderr = process.stderr = new events.EventEmitter();
+    stderr.writable = true;
+    stderr.readable = false;
+    stderr.write = process.binding('stdio').writeError;
+    stderr.end = stderr.destroy = stderr.destroySoon = function() { };
+
+    process.__defineGetter__('stdin', function() {
+      if (stdin) return stdin;
+
+      var binding = process.binding('stdio'),
+          net = NativeModule.require('net'),
+          fs = NativeModule.require('fs'),
+          tty = NativeModule.require('tty'),
+          fd = binding.openStdin();
+
+      if (binding.isatty(fd)) {
+        stdin = new tty.ReadStream(fd);
+      } else if (binding.isStdinBlocking()) {
+        stdin = new fs.ReadStream(null, {fd: fd});
+      } else {
+        stdin = new net.Stream(fd);
+        stdin.readable = true;
+      }
+
+      return stdin;
+    });
+
+    process.openStdin = function() {
+      process.stdin.resume();
+      return process.stdin;
+    };
+  };
+
+  startup.processKillAndExit = function() {
+    process.exit = function(code) {
+      process.emit('exit', code || 0);
+      process.reallyExit(code || 0);
+    };
+
+    process.kill = function(pid, sig) {
+      sig = sig || 'SIGTERM';
+
+      if (!startup.lazyConstants()[sig]) {
+        throw new Error('Unknown signal: ' + sig);
+      }
+
+      process._kill(pid, startup.lazyConstants()[sig]);
+    };
+  };
+
+  startup.processSignalHandlers = function() {
+    // Load events module in order to access prototype elements on process like
+    // process.addListener.
+    var events = NativeModule.require('events');
+    var signalWatchers = {};
+    var addListener = process.addListener;
+    var removeListener = process.removeListener;
+
+    function isSignal(event) {
+      return event.slice(0, 3) === 'SIG' && startup.lazyConstants()[event];
     }
-    throw e; // process.nextTick error, or 'error' event on first tick
-  }
 
-  nextTickQueue.splice(0, l);
-};
+    // Wrap addListener for the special signal types
+    process.on = process.addListener = function(type, listener) {
+      var ret = addListener.apply(this, arguments);
+      if (isSignal(type)) {
+        if (!signalWatchers.hasOwnProperty(type)) {
+          var b = process.binding('signal_watcher');
+          var w = new b.SignalWatcher(startup.lazyConstants()[type]);
+          w.callback = function() { process.emit(type); };
+          signalWatchers[type] = w;
+          w.start();
 
-process.nextTick = function (callback) {
-  nextTickQueue.push(callback);
-  process._needTickCallback();
-};
+        } else if (this.listeners(type).length === 1) {
+          signalWatchers[event].start();
+        }
+      }
+
+      return ret;
+    };
+
+    process.removeListener = function(type, listener) {
+      var ret = removeListener.apply(this, arguments);
+      if (isSignal(type)) {
+        assert(signalWatchers.hasOwnProperty(type));
+
+        if (this.listeners(type).length === 0) {
+          signalWatchers[type].stop();
+        }
+      }
+
+      return ret;
+    };
+  };
+
+  startup._removedProcessMethods = {
+    'assert': 'process.assert() use require("assert").ok() instead',
+    'debug': 'process.debug() use console.error() instead',
+    'error': 'process.error() use console.error() instead',
+    'watchFile': 'process.watchFile() has moved to fs.watchFile()',
+    'unwatchFile': 'process.unwatchFile() has moved to fs.unwatchFile()',
+    'mixin': 'process.mixin() has been removed.',
+    'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
+    'inherits': 'process.inherits() has moved to sys.inherits.',
+    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength',
+  };
+
+  startup.removedMethods = function() {
+    for (var method in startup._removedProcessMethods) {
+      var reason = startup._removedProcessMethods[method];
+      process[method] = startup._removedMethod(reason);
+    }
+  };
+
+  startup._removedMethod = function(reason) {
+    return function() {
+      throw new Error(reason);
+    };
+  };
+
+  startup.resolveArgv0 = function() {
+    var cwd = process.cwd();
+    var isWindows = process.platform === 'win32';
+
+    // Make process.argv[0] into a full path, but only touch argv[0] if it's
+    // not a system $PATH lookup.
+    // TODO: Make this work on Windows as well.  Note that "node" might
+    // execute cwd\node.exe, or some %PATH%\node.exe on Windows,
+    // and that every directory has its own cwd, so d:node.exe is valid.
+    var argv0 = process.argv[0];
+    if (!isWindows && argv0.indexOf('/') !== -1 && argv0.charAt(0) !== '/') {
+      var path = NativeModule.require('path');
+      process.argv[0] = path.join(cwd, process.argv[0]);
+    }
+  };
+
+  startup.runThirdPartyMain = function() {
+    // To allow people to extend Node in different ways, this hook allows
+    // one to drop a file lib/_third_party_main.js into the build directory
+    // which will be executed instead of Node's normal loading.
+    if (!NativeModule.exists('_third_party_main')) {
+      return;
+    }
+
+    process.nextTick(function() {
+      NativeModule.require('_third_party_main');
+    });
+    return true;
+  };
+
+  startup.runDebugger = function() {
+    if (!(process.argv[1] == 'debug')) {
+      return;
+    }
+
+    // Start the debugger agent
+    var d = NativeModule.require('_debugger');
+    d.start();
+    return true;
+  };
+
+  startup.runScript = function() {
+    if (!process.argv[1]) {
+      return;
+    }
+
+    // make process.argv[1] into a full path
+    if (!(/^http:\/\//).exec(process.argv[1])) {
+      var path = NativeModule.require('path');
+      process.argv[1] = path.resolve(process.argv[1]);
+    }
+
+    var Module = NativeModule.require('module');
+
+    // REMOVEME: nextTick should not be necessary. This hack to get
+    // test/simple/test-exception-handler2.js working.
+    process.nextTick(Module.runMain);
+
+    return true;
+  };
+
+  startup.runEval = function() {
+    // -e, --eval
+    if (!process._eval) {
+      return;
+    }
+
+    var Module = NativeModule.require('module');
+
+    var rv = new Module()._compile('return eval(process._eval)', 'eval');
+    console.log(rv);
+    return true;
+  };
+
+  startup.runRepl = function() {
+    var Module = NativeModule.require('module');
+    // REPL
+    Module.requireRepl().start();
+  };
 
 
-// Module System
-var module = (function () {
-  var exports = {};
-  // Set the environ variable NODE_MODULE_CONTEXTS=1 to make node load all
-  // modules in thier own context.
-  var contextLoad = false;
-  if (+process.env["NODE_MODULE_CONTEXTS"] > 0) contextLoad = true;
-  var Script;
+  // Below you find a minimal module system, which is used to load the node
+  // core modules found in lib/*.js. All core modules are compiled into the
+  // node binary, so they can be loaded faster.
 
-  var internalModuleCache = {};
-  var moduleCache = {};
+  var Script = process.binding('evals').Script;
+  var runInThisContext = Script.runInThisContext;
 
-  function Module (id, parent) {
+  function NativeModule(id) {
+    this.filename = id + '.js';
     this.id = id;
     this.exports = {};
-    this.parent = parent;
-
-    this.filename = null;
     this.loaded = false;
-    this.exited = false;
-    this.children = [];
+  }
+
+  NativeModule._source = process.binding('natives');
+  NativeModule._cache = {};
+
+  NativeModule.require = function(id) {
+    if (id == 'native_module') {
+      return NativeModule;
+    }
+
+    var cached = NativeModule.getCached(id);
+    if (cached) {
+      return cached.exports;
+    }
+
+    if (!NativeModule.exists(id)) {
+      throw new Error('No such native module ' + id);
+    }
+
+    var nativeModule = new NativeModule(id);
+
+    nativeModule.compile();
+    nativeModule.cache();
+
+    return nativeModule.exports;
   };
 
-  function createInternalModule (id, constructor) {
-    var m = new Module(id);
-    constructor(m.exports);
-    m.loaded = true;
-    internalModuleCache[id] = m;
-    return m;
+  NativeModule.getCached = function(id) {
+    return NativeModule._cache[id];
+  }
+
+  NativeModule.exists = function(id) {
+    return (id in NativeModule._source);
+  }
+
+  NativeModule.getSource = function(id) {
+    return NativeModule._source[id];
+  }
+
+  NativeModule.wrap = function(script) {
+    return NativeModule.wrapper[0] + script + NativeModule.wrapper[1];
   };
 
+  NativeModule.wrapper = [
+    '(function (exports, require, module, __filename, __dirname) { ',
+    '\n});'
+  ];
 
-  // This contains the source code for the files in lib/
-  // Like, natives.fs is the contents of lib/fs.js
-  var natives = process.binding('natives');
+  NativeModule.prototype.compile = function() {
+    var source = NativeModule.getSource(this.id);
+    source = NativeModule.wrap(source);
 
-  function loadNative (id) {
-    var m = new Module(id);
-    internalModuleCache[id] = m;
-    var e = m._compile(natives[id], id+".js");
-    if (e) throw e; // error compiling native module
-    return m;
-  }
+    var fn = runInThisContext(source, this.filename, true);
+    fn(this.exports, NativeModule.require, this, this.filename);
 
-  exports.requireNative = requireNative;
-
-  function requireNative (id) {
-    if (internalModuleCache[id]) return internalModuleCache[id].exports;
-    if (!natives[id]) throw new Error('No such native module ' + id);
-    return loadNative(id).exports;
-  }
-
-
-  // Modules
-
-  var debugLevel = parseInt(process.env["NODE_DEBUG"], 16);
-  function debug (x) {
-    if (debugLevel & 1) {
-      process.binding('stdio').writeError(x + "\n");
-    }
-  }
-
-  var pathFn = process.compile("(function (exports) {" + natives.path + "\n})",
-                               "path");
-  var pathModule = createInternalModule('path', pathFn);
-  var path = pathModule.exports;
-
-  var modulePaths = [path.join(process.execPath, "..", "..", "lib", "node")];
-
-  if (process.env["HOME"]) {
-    modulePaths.unshift(path.join(process.env["HOME"], ".node_libraries"));
-    modulePaths.unshift(path.join(process.env["HOME"], ".node_modules"));
-  }
-
-  if (process.env["NODE_PATH"]) {
-    modulePaths = process.env["NODE_PATH"].split(":").concat(modulePaths);
-  }
-
-  var extensions = {};
-  var registerExtension = removed('require.registerExtension() removed. Use require.extensions instead');
-
-  // Which files to traverse while finding id? Returns generator function.
-  function traverser (id, dirs) {
-    var head = [], inDir = [], dirs = dirs.slice(),
-        exts = Object.keys(extensions);
-    return function next () {
-      var result = head.shift();
-      if (result) { return result; }
-
-      var gen = inDir.shift();
-      if (gen) { head = gen(); return next(); }
-
-      var dir = dirs.shift();
-      if (dir !== undefined) {
-        function direct (ext) { return path.join(dir, id + ext); }
-        function index (ext) { return path.join(dir, id, 'index' + ext); }
-        inDir = [
-          function () { return exts.map(direct); },
-          function () { return exts.map(index); }
-        ];
-        head = [path.join(dir, id)];
-        return next();
-      }
-    };
-  }
-
-  function findModulePath (request, paths) {
-    var nextLoc = traverser(request, request.charAt(0) === '/' ? [''] : paths);
-
-    var fs = requireNative('fs');
-
-    var location, stats;
-    while (location = nextLoc()) {
-      try { stats = fs.statSync(location); } catch(e) { continue; }
-      if (stats && !stats.isDirectory()) return location;
-    }
-    return false;
-  }
-
-
-  // sync - no i/o performed
-  function resolveModuleLookupPaths (request, parent) {
-
-    if (natives[request]) return [request, []];
-
-    var start = request.substring(0, 2);
-    if (start !== "./" && start !== "..") {
-      return [request, modulePaths];
-    }
-
-    // Is the parent an index module?
-    // We can assume the parent has a valid extension,
-    // as it already has been accepted as a module.
-    var isIndex        = /^index\.\w+?$/.test(path.basename(parent.filename)),
-        parentIdPath   = isIndex ? parent.id : path.dirname(parent.id),
-        id             = path.join(parentIdPath, request);
-
-    // make sure require('./path') and require('path') get distinct ids, even
-    // when called from the toplevel js file
-    if (parentIdPath === '.' && id.indexOf('/') === -1) {
-      id = './' + id;
-    }
-    debug("RELATIVE: requested:" + request + " set ID to: "+id+" from "+parent.id);
-    return [id, [path.dirname(parent.filename)]];
-  }
-
-
-  function loadModule (request, parent) {
-    debug("loadModule REQUEST  " + (request) + " parent: " + parent.id);
-
-    var resolved = resolveModuleFilename(request, parent);
-    var id = resolved[0];
-    var filename = resolved[1];
-
-    // With natives id === request
-    // We deal with these first
-    var cachedNative = internalModuleCache[id];
-    if (cachedNative) {
-      return cachedNative.exports;
-    }
-    if (natives[id]) {
-      debug('load native module ' + request);
-      return loadNative(id).exports;
-    }
-
-    var cachedModule = moduleCache[filename];
-    if (cachedModule) return cachedModule.exports;
-
-    var module = new Module(id, parent);
-    moduleCache[filename] = module;
-    module.load(filename);
-    return module.exports;
-  };
-  
-  function resolveModuleFilename (request, parent) {
-    if (natives[request]) return [request, request];
-    var resolvedModule = resolveModuleLookupPaths(request, parent),
-        id             = resolvedModule[0],
-        paths          = resolvedModule[1];
-
-    // look up the filename first, since that's the cache key.
-    debug("looking for " + JSON.stringify(id) + " in " + JSON.stringify(paths));
-    var filename = findModulePath(request, paths);
-    if (!filename) {
-      throw new Error("Cannot find module '" + request + "'");
-    }
-    return [id, filename];
-  }
-
-
-  Module.prototype.load = function (filename) {
-    debug("load " + JSON.stringify(filename) + " for module " + JSON.stringify(this.id));
-
-    process.assert(!this.loaded);
-    this.filename = filename;
-
-    var extension = path.extname(filename) || '.js';
-    if (!extensions[extension]) extension = '.js';
-    extensions[extension](this, filename);
     this.loaded = true;
   };
 
-
-  // Returns exception if any
-  Module.prototype._compile = function (content, filename) {
-    var self = this;
-    // remove shebang
-    content = content.replace(/^\#\!.*/, '');
-
-    function require (path) {
-      return loadModule(path, self);
-    }
-
-    require.resolve = function (request) {
-      return resolveModuleFilename(request, self)[1];
-    }
-    require.paths = modulePaths;
-    require.main = process.mainModule;
-    // Enable support to add extra extension types
-    require.extensions = extensions;
-    // TODO: Insert depreciation warning
-    require.registerExtension = registerExtension;
-    require.cache = moduleCache;
-
-    var dirname = path.dirname(filename);
-
-    if (contextLoad) {
-      if (!Script) Script = process.binding('evals').Script;
-
-      if (self.id !== ".") {
-        debug('load submodule');
-        // not root module
-        var sandbox = {};
-        for (var k in global) {
-          sandbox[k] = global[k];
-        }
-        sandbox.require     = require;
-        sandbox.exports     = self.exports;
-        sandbox.__filename  = filename;
-        sandbox.__dirname   = dirname;
-        sandbox.module      = self;
-        sandbox.global      = sandbox;
-        sandbox.root        = root;
-
-        Script.runInNewContext(content, sandbox, filename);
-
-      } else {
-        debug('load root module');
-        // root module
-        global.require    = require;
-        global.exports    = self.exports;
-        global.__filename = filename;
-        global.__dirname  = dirname;
-        global.module     = self;
-        Script.runInThisContext(content, filename);
-      }
-
-    } else {
-      // create wrapper function
-      var wrapper = "(function (exports, require, module, __filename, __dirname) { "
-                  + content
-                  + "\n});";
-
-      var compiledWrapper = process.compile(wrapper, filename);
-      if (filename === process.argv[1] && global.v8debug) {
-        global.v8debug.Debug.setBreakPoint(compiledWrapper, 0, 0);
-      }
-      compiledWrapper.apply(self.exports, [self.exports, require, self, filename, dirname]);
-    }
+  NativeModule.prototype.cache = function() {
+    NativeModule._cache[this.id] = this;
   };
 
-
-  // Native extension for .js
-  extensions['.js'] = function (module, filename) {
-    var content = requireNative('fs').readFileSync(filename, 'utf8');
-    module._compile(content, filename);
-  };
-
-
-  // Native extension for .node
-  extensions['.node'] = function (module, filename) {
-    process.dlopen(filename, module.exports);
-  };
-
-
-  // bootstrap main module.
-  exports.runMain = function () {
-    // Load the main module--the command line argument.
-    process.mainModule = new Module(".");
-    process.mainModule.load(process.argv[1]);
-  };
-
-  return exports;
-})();
-
-
-// Load events module in order to access prototype elements on process like
-// process.addListener.
-var events = module.requireNative('events');
-
-var constants; // lazy loaded.
-
-// Signal Handlers
-(function() {
-  var signalWatchers = {};
-  var addListener = process.addListener;
-  var removeListener = process.removeListener;
-
-  function isSignal (event) {
-    if (!constants) constants = process.binding("constants");
-    return event.slice(0, 3) === 'SIG' && constants[event];
-  }
-
-  // Wrap addListener for the special signal types
-  process.on = process.addListener = function (type, listener) {
-    var ret = addListener.apply(this, arguments);
-    if (isSignal(type)) {
-      if (!signalWatchers.hasOwnProperty(type)) {
-        if (!constants) constants = process.binding("constants");
-        var b = process.binding('signal_watcher');
-        var w = new b.SignalWatcher(constants[type]);
-        w.callback = function () { process.emit(type); };
-        signalWatchers[type] = w;
-        w.start();
-
-      } else if (this.listeners(type).length === 1) {
-        signalWatchers[event].start();
-      }
-    }
-
-    return ret;
-  };
-
-  process.removeListener = function (type, listener) {
-    var ret = removeListener.apply(this, arguments);
-    if (isSignal(type)) {
-      process.assert(signalWatchers.hasOwnProperty(type));
-
-      if (this.listeners(type).length === 0) {
-        signalWatchers[type].stop();
-      }
-    }
-
-    return ret;
-  };
-})();
-
-
-global.setTimeout = function () {
-  var t = module.requireNative('timers');
-  return t.setTimeout.apply(this, arguments);
-};
-
-global.setInterval = function () {
-  var t = module.requireNative('timers');
-  return t.setInterval.apply(this, arguments);
-};
-
-global.clearTimeout = function () {
-  var t = module.requireNative('timers');
-  return t.clearTimeout.apply(this, arguments);
-};
-
-global.clearInterval = function () {
-  var t = module.requireNative('timers');
-  return t.clearInterval.apply(this, arguments);
-};
-
-
-var stdout;
-process.__defineGetter__('stdout', function () {
-  if (stdout) return stdout;
-
-  var binding = process.binding('stdio'),
-      net = module.requireNative('net'),
-      fs = module.requireNative('fs'),
-      fd = binding.stdoutFD;
-
-  if (binding.isStdoutBlocking()) {
-    stdout = new fs.WriteStream(null, {fd: fd});
-  } else {
-    stdout = new net.Stream(fd);
-    // FIXME Should probably have an option in net.Stream to create a stream from
-    // an existing fd which is writable only. But for now we'll just add
-    // this hack and set the `readable` member to false.
-    // Test: ./node test/fixtures/echo.js < /etc/passwd
-    stdout.readable = false;
-  }
-
-  return stdout;
-});
-
-var stdin;
-process.openStdin = function () {
-  if (stdin) return stdin;
-
-  var binding = process.binding('stdio'),
-      net = module.requireNative('net'),
-      fs = module.requireNative('fs'),
-      fd = binding.openStdin();
-
-  if (binding.isStdinBlocking()) {
-    stdin = new fs.ReadStream(null, {fd: fd});
-  } else {
-    stdin = new net.Stream(fd);
-    stdin.readable = true;
-  }
-
-  stdin.resume();
-
-  return stdin;
-};
-
-
-// console object
-var formatRegExp = /%[sdj]/g;
-function format (f) {
-  if (typeof f !== 'string') {
-    var objects = [], util = module.requireNative('util');
-    for (var i = 0; i < arguments.length; i++) {
-      objects.push(util.inspect(arguments[i]));
-    }
-    return objects.join(' ');
-  }
-
-
-  var i = 1;
-  var args = arguments;
-  var str = String(f).replace(formatRegExp, function (x) {
-    switch (x) {
-      case '%s': return args[i++];
-      case '%d': return +args[i++];
-      case '%j': return JSON.stringify(args[i++]);
-      default:
-        return x;
-    }
-  });
-  for (var len = args.length; i < len; ++i) {
-    str += ' ' + args[i];
-  }
-  return str;
-}
-
-global.console = {};
-
-global.console.log = function () {
-  process.stdout.write(format.apply(this, arguments) + '\n');
-};
-
-global.console.info = global.console.log;
-
-global.console.warn = function () {
-  writeError(format.apply(this, arguments) + '\n');
-};
-
-global.console.error = global.console.warn;
-
-global.console.dir = function(object){
-  var util = module.requireNative('util');
-  process.stdout.write(util.inspect(object) + '\n');
-};
-
-var times = {};
-global.console.time = function(label){
-  times[label] = Date.now();
-};
-
-global.console.timeEnd = function(label){
-  var duration = Date.now() - times[label];
-  global.console.log('%s: %dms', label, duration);
-};
-
-global.console.trace = function(label){
-  // TODO probably can to do this better with V8's debug object once that is
-  // exposed.
-  var err = new Error;
-  err.name = 'Trace';
-  err.message = label || '';
-  Error.captureStackTrace(err, arguments.callee);
-  console.error(err.stack);
-};
-
-global.console.assert = function(expression){
-  if(!expression){
-    var arr = Array.prototype.slice.call(arguments, 1);
-    process.assert(false, format.apply(this, arr));
-  }
-};
-
-global.Buffer = module.requireNative('buffer').Buffer;
-
-process.exit = function (code) {
-  process.emit("exit", code || 0);
-  process.reallyExit(code || 0);
-};
-
-process.kill = function (pid, sig) {
-  if (!constants) constants = process.binding("constants");
-  sig = sig || 'SIGTERM';
-  if (!constants[sig]) throw new Error("Unknown signal: " + sig);
-  process._kill(pid, constants[sig]);
-};
-
-
-var cwd = process.cwd();
-var path = module.requireNative('path');
-
-// Make process.argv[0] and process.argv[1] into full paths.
-if (process.argv[0].indexOf('/') > 0) {
-  process.argv[0] = path.join(cwd, process.argv[0]);
-}
-
-if (process.argv[1]) {
-  // Load module
-  if (process.argv[1].charAt(0) != "/" && !(/^http:\/\//).exec(process.argv[1])) {
-    process.argv[1] = path.join(cwd, process.argv[1]);
-  }
-  // REMOVEME: nextTick should not be necessary. This hack to get
-  // test/simple/test-exception-handler2.js working.
-  process.nextTick(module.runMain);
-
-} else if (process._eval) {
-    // -e, --eval
-    var indirectEval= eval; // so the eval happens in global scope.
-    if (process._eval) console.log(indirectEval(process._eval));
-} else {
-    // REPL
-  module.requireNative('repl').start();
-}
-
+  startup();
 });

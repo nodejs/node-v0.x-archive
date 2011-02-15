@@ -31,7 +31,13 @@
 # char arrays. It is used for embedded JavaScript code in the V8
 # library.
 
-import os, re, sys, string
+import os
+from os.path import dirname
+import re
+import sys
+import string
+
+sys.path.append(dirname(__file__) + "/../deps/v8/tools");
 import jsmin
 
 
@@ -351,3 +357,11 @@ def JS2C(source, target):
       'get_script_name_cases': "".join(get_script_name_cases)
     })
     output.close()
+
+def main():
+  natives = sys.argv[1]
+  source_files = sys.argv[2:]
+  JS2C(source_files, [natives])
+
+if __name__ == "__main__":
+  main()

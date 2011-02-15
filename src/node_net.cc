@@ -1,38 +1,66 @@
-#include <node_net.h>
-#include <v8.h>
 
 #include <node.h>
 #include <node_buffer.h>
+#include <node_net.h>
 
+#include <v8.h>
+
+#include <errno.h>
 #include <string.h>
 #include <stdlib.h>
 
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <arpa/inet.h> /* inet_pton */
 
-#include <netdb.h>
+#ifdef __MINGW32__
+# include <platform_win32.h>
+# include <platform_win32_winsock.h>
+#endif
 
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-
-#include <sys/ioctl.h>
+#ifdef __POSIX__
+# include <sys/ioctl.h>
+# include <sys/socket.h>
+# include <sys/un.h>
+# include <arpa/inet.h> /* inet_pton */
+# include <netdb.h>
+# include <netinet/in.h>
+# include <netinet/tcp.h>
+#endif
 
 #ifdef __linux__
 # include <linux/sockios.h> /* For the SIOCINQ / FIONREAD ioctl */
 #endif
+
 /* Non-linux platforms like OS X define this ioctl elsewhere */
 #ifndef FIONREAD
-#include <sys/filio.h>
+# include <sys/filio.h>
 #endif
 
-#include <errno.h>
-
 #ifdef __OpenBSD__
-#include <sys/uio.h>
+# include <sys/uio.h>
+#endif
+
+/*
+ * HACK to use inet_pton/inet_ntop from c-ares because mingw32 doesn't have it
+ * This trick is used in node_ares.cc as well
+ * TODO fixme
+ */
+#ifdef __MINGW32__
+  extern "C" {
+#   include <inet_net_pton.h>
+#   include <inet_ntop.h>
+  }
+
+# define inet_pton ares_inet_pton
+# define inet_ntop ares_inet_ntop
+#endif
+
+// SHUT_* constants aren't available on windows but there are 1:1 equivalents
+#ifdef __MINGW32__
+# define SHUT_RD   SD_RECEIVE
+# define SHUT_WR   SD_SEND
+# define SHUT_RDWR SD_BOTH
 #endif
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
@@ -63,22 +91,40 @@ static Persistent<FunctionTemplate> recv_msg_template;
           String::New("Bad file descriptor argument"))); \
   }
 
+
 static inline bool SetCloseOnExec(int fd) {
+#ifdef __POSIX__
   return (fcntl(fd, F_SETFD, FD_CLOEXEC) != -1);
+#else // __MINGW32__
+  return SetHandleInformation(reinterpret_cast<HANDLE>(_get_osfhandle(fd)),
+                              HANDLE_FLAG_INHERIT, 0) != 0;
+#endif
 }
 
 
 static inline bool SetNonBlock(int fd) {
+#ifdef __MINGW32__
+  unsigned long value = 1;
+  return (ioctlsocket(_get_osfhandle(fd), FIONBIO, &value) == 0);
+#else // __POSIX__
   return (fcntl(fd, F_SETFL, O_NONBLOCK) != -1);
+#endif
 }
 
 
 static inline bool SetSockFlags(int fd) {
+#ifdef __MINGW32__
+  BOOL flags = TRUE;
+  setsockopt(_get_osfhandle(fd), SOL_SOCKET, SO_REUSEADDR, (const char *)&flags, sizeof(flags));
+#else // __POSIX__
   int flags = 1;
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&flags, sizeof(flags));
+#endif
   return SetNonBlock(fd) && SetCloseOnExec(fd);
 }
 
+
+#ifdef __POSIX__
 
 // Creates nonblocking pipe
 static Handle<Value> Pipe(const Arguments& args) {
@@ -124,6 +170,8 @@ static Handle<Value> SocketPair(const Arguments& args) {
   a->Set(Integer::New(1), Integer::New(fds[1]));
   return scope.Close(a);
 }
+
+#endif
 
 
 // Creates a new non-blocking socket fd
@@ -182,7 +230,11 @@ static Handle<Value> Socket(const Arguments& args) {
     }
   }
 
+#ifdef __POSIX__
   int fd = socket(domain, type, 0);
+#else // __MINGW32__
+  int fd = _open_osfhandle(socket(domain, type, 0), 0);
+#endif
 
   if (fd < 0) return ThrowException(ErrnoException(errno, "socket"));
 
@@ -213,9 +265,11 @@ static socklen_t addrlen;
 static inline Handle<Value> ParseAddressArgs(Handle<Value> first,
                                              Handle<Value> second,
                                              bool is_bind) {
-  static struct sockaddr_un un;
   static struct sockaddr_in in;
   static struct sockaddr_in6 in6;
+
+#ifdef __POSIX__ // No unix sockets on windows
+  static struct sockaddr_un un;
 
   if (first->IsString() && !second->IsString()) {
     // UNIX
@@ -233,6 +287,11 @@ static inline Handle<Value> ParseAddressArgs(Handle<Value> first,
     addrlen = sizeof(un) - sizeof(un.sun_path) + path.length() + 1;
 
   } else {
+#else // __MINGW32__
+  if (first->IsString() && !second->IsString()) {
+    return ErrnoException(errno, "ParseAddressArgs", "Unix sockets are not supported on windows");
+  } else {
+#endif
     // TCP or UDP
     memset(&in, 0, sizeof in);
     memset(&in6, 0, sizeof in6);
@@ -284,13 +343,22 @@ static Handle<Value> Bind(const Arguments& args) {
   if (!error.IsEmpty()) return ThrowException(error);
 
   int flags = 1;
+
+#ifdef __POSIX__
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&flags, sizeof(flags));
 
-  int r = bind(fd, addr, addrlen);
-
-  if (r < 0) {
+  if (0 > bind(fd, addr, addrlen)) {
     return ThrowException(ErrnoException(errno, "bind"));
   }
+
+#else // __MINGW32__
+  SOCKET handle =  _get_osfhandle(fd);
+  setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, (char *)&flags, sizeof(flags));
+
+  if (SOCKET_ERROR == bind(handle, addr, addrlen)) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "bind"));
+  }
+#endif // __MINGW32__
 
   return Undefined();
 }
@@ -301,6 +369,7 @@ static Handle<Value> Close(const Arguments& args) {
 
   FD_ARG(args[0])
 
+  // Windows: this is not a winsock operation, don't use _get_osfhandle here!
   if (0 > close(fd)) {
     return ThrowException(ErrnoException(errno, "close"));
   }
@@ -334,9 +403,15 @@ static Handle<Value> Shutdown(const Arguments& args) {
     }
   }
 
+#ifdef __POSIX__
   if (0 > shutdown(fd, how)) {
     return ThrowException(ErrnoException(errno, "shutdown"));
   }
+#else // __MINGW32__
+  if (SOCKET_ERROR == shutdown(_get_osfhandle(fd), how)) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "shutdown"));
+  }
+#endif // __MINGW32__
 
   return Undefined();
 }
@@ -363,45 +438,111 @@ static Handle<Value> Connect(const Arguments& args) {
   Handle<Value> error = ParseAddressArgs(args[1], args[2], false);
   if (!error.IsEmpty()) return ThrowException(error);
 
+#ifdef __POSIX__
   int r = connect(fd, addr, addrlen);
 
   if (r < 0 && errno != EINPROGRESS) {
     return ThrowException(ErrnoException(errno, "connect"));
   }
+#else // __MINGW32__
+  int r = connect(_get_osfhandle(fd), addr, addrlen);
+
+  if (r == SOCKET_ERROR) {
+    int wsaErrno = WSAGetLastError();
+    if (wsaErrno != WSAEWOULDBLOCK && wsaErrno != WSAEINPROGRESS) {
+      return ThrowException(ErrnoException(wsaErrno, "connect"));
+    }
+  }
+#endif // __MINGW32__
 
   return Undefined();
 }
 
-#define ADDRESS_TO_JS(info, address_storage) \
+
+#ifdef __POSIX__
+
+#define ADDRESS_TO_JS(info, address_storage, addrlen) \
 do { \
   char ip[INET6_ADDRSTRLEN]; \
   int port; \
   struct sockaddr_in *a4; \
   struct sockaddr_in6 *a6; \
   struct sockaddr_un *au; \
-  switch ((address_storage).ss_family) { \
-    case AF_INET6: \
-      a6 = (struct sockaddr_in6*)&(address_storage); \
-      inet_ntop(AF_INET6, &(a6->sin6_addr), ip, INET6_ADDRSTRLEN); \
-      port = ntohs(a6->sin6_port); \
-      (info)->Set(address_symbol, String::New(ip)); \
-      (info)->Set(port_symbol, Integer::New(port)); \
-      break; \
-    case AF_INET: \
-      a4 = (struct sockaddr_in*)&(address_storage); \
-      inet_ntop(AF_INET, &(a4->sin_addr), ip, INET6_ADDRSTRLEN); \
-      port = ntohs(a4->sin_port); \
-      (info)->Set(address_symbol, String::New(ip)); \
-      (info)->Set(port_symbol, Integer::New(port)); \
-      break; \
-    case AF_UNIX: \
-      au = (struct sockaddr_un*)&(address_storage); \
-      (info)->Set(address_symbol, String::New(au->sun_path)); \
-      break; \
-    default: \
-      (info)->Set(address_symbol, String::Empty()); \
+  if (addrlen == 0) { \
+    (info)->Set(address_symbol, String::Empty()); \
+  } else { \
+    switch ((address_storage).ss_family) { \
+      case AF_INET6: \
+        a6 = (struct sockaddr_in6*)&(address_storage); \
+        inet_ntop(AF_INET6, &(a6->sin6_addr), ip, INET6_ADDRSTRLEN); \
+        port = ntohs(a6->sin6_port); \
+        (info)->Set(address_symbol, String::New(ip)); \
+        (info)->Set(port_symbol, Integer::New(port)); \
+        break; \
+      case AF_INET: \
+        a4 = (struct sockaddr_in*)&(address_storage); \
+        inet_ntop(AF_INET, &(a4->sin_addr), ip, INET6_ADDRSTRLEN); \
+        port = ntohs(a4->sin_port); \
+        (info)->Set(address_symbol, String::New(ip)); \
+        (info)->Set(port_symbol, Integer::New(port)); \
+        break; \
+      case AF_UNIX: \
+        /*
+         * Three types of addresses (see man 7 unix):
+         *   * unnamed:  sizeof(sa_family_t) (sun_path should not be used)
+         *   * abstract (Linux extension): sizeof(struct sockaddr_un)
+         *   * pathname: sizeof(sa_family_t) + strlen(sun_path) + 1
+         */ \
+        au = (struct sockaddr_un*)&(address_storage); \
+        if (addrlen == sizeof(sa_family_t)) { \
+          (info)->Set(address_symbol, String::Empty()); \
+        } else if (addrlen == sizeof(struct sockaddr_un)) { \
+          /* first byte is '\0' and all remaining bytes are name;
+           * it is not NUL-terminated and may contain embedded NULs */ \
+          (info)->Set(address_symbol, String::New(au->sun_path + 1, sizeof(au->sun_path - 1))); \
+        } else { \
+          (info)->Set(address_symbol, String::New(au->sun_path)); \
+        } \
+        break; \
+      default: \
+        (info)->Set(address_symbol, String::Empty()); \
+    } \
   } \
 } while (0)
+
+#else // __MINGW32__
+
+#define ADDRESS_TO_JS(info, address_storage, addrlen) \
+do { \
+  char ip[INET6_ADDRSTRLEN]; \
+  int port; \
+  struct sockaddr_in *a4; \
+  struct sockaddr_in6 *a6; \
+  if (addrlen == 0) { \
+    (info)->Set(address_symbol, String::Empty()); \
+  } else { \
+    switch ((address_storage).ss_family) { \
+      case AF_INET6: \
+        a6 = (struct sockaddr_in6*)&(address_storage); \
+        inet_ntop(AF_INET6, &(a6->sin6_addr), ip, INET6_ADDRSTRLEN); \
+        port = ntohs(a6->sin6_port); \
+        (info)->Set(address_symbol, String::New(ip)); \
+        (info)->Set(port_symbol, Integer::New(port)); \
+        break; \
+      case AF_INET: \
+        a4 = (struct sockaddr_in*)&(address_storage); \
+        inet_ntop(AF_INET, &(a4->sin_addr), ip, INET6_ADDRSTRLEN); \
+        port = ntohs(a4->sin_port); \
+        (info)->Set(address_symbol, String::New(ip)); \
+        (info)->Set(port_symbol, Integer::New(port)); \
+        break; \
+      default: \
+        (info)->Set(address_symbol, String::Empty()); \
+    } \
+  } \
+} while (0)
+
+#endif // __MINGW32__
 
 
 static Handle<Value> GetSockName(const Arguments& args) {
@@ -412,16 +553,20 @@ static Handle<Value> GetSockName(const Arguments& args) {
   struct sockaddr_storage address_storage;
   socklen_t len = sizeof(struct sockaddr_storage);
 
-  int r = getsockname(fd, (struct sockaddr *) &address_storage, &len);
-
-  if (r < 0) {
+#ifdef __POSIX__
+  if (0 > getsockname(fd, (struct sockaddr *) &address_storage, &len)) {
     return ThrowException(ErrnoException(errno, "getsockname"));
   }
 
+#else // __MINGW32__
+  if (SOCKET_ERROR == getsockname(_get_osfhandle(fd),
+      (struct sockaddr *) &address_storage, &len)) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "getsockname"));
+  }
+#endif // __MINGW32__
+
   Local<Object> info = Object::New();
-
-  ADDRESS_TO_JS(info, address_storage);
-
+  ADDRESS_TO_JS(info, address_storage, len);
   return scope.Close(info);
 }
 
@@ -434,16 +579,20 @@ static Handle<Value> GetPeerName(const Arguments& args) {
   struct sockaddr_storage address_storage;
   socklen_t len = sizeof(struct sockaddr_storage);
 
-  int r = getpeername(fd, (struct sockaddr *) &address_storage, &len);
-
-  if (r < 0) {
-    return ThrowException(ErrnoException(errno, "getsockname"));
+#ifdef __POSIX__
+  if (0 > getpeername(fd, (struct sockaddr *) &address_storage, &len)) {
+    return ThrowException(ErrnoException(errno, "getpeername"));
   }
 
+#else // __MINGW32__
+  if (SOCKET_ERROR == getpeername(_get_osfhandle(fd),
+      (struct sockaddr *) &address_storage, &len)) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "getpeername"));
+  }
+#endif // __MINGW32__
+
   Local<Object> info = Object::New();
-
-  ADDRESS_TO_JS(info, address_storage);
-
+  ADDRESS_TO_JS(info, address_storage, len);
   return scope.Close(info);
 }
 
@@ -454,10 +603,15 @@ static Handle<Value> Listen(const Arguments& args) {
   FD_ARG(args[0])
   int backlog = args[1]->IsInt32() ? args[1]->Int32Value() : 128;
 
+#ifdef __POSIX__
   if (0 > listen(fd, backlog)) {
     return ThrowException(ErrnoException(errno, "listen"));
   }
-
+#else // __MINGW32__
+  if (SOCKET_ERROR == listen(_get_osfhandle(fd), backlog)) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "listen"));
+  }
+#endif
 
   return Undefined();
 }
@@ -480,15 +634,32 @@ static Handle<Value> Accept(const Arguments& args) {
   struct sockaddr_storage address_storage;
   socklen_t len = sizeof(struct sockaddr_storage);
 
+#ifdef __POSIX__
   int peer_fd = accept(fd, (struct sockaddr*) &address_storage, &len);
 
   if (peer_fd < 0) {
     if (errno == EAGAIN) return scope.Close(Null());
+    if (errno == ECONNABORTED) return scope.Close(Null());
     return ThrowException(ErrnoException(errno, "accept"));
   }
+#else // __MINGW32__
+  SOCKET peer_handle = accept(_get_osfhandle(fd), (struct sockaddr*) &address_storage, &len);
+
+  if (peer_handle == INVALID_SOCKET) {
+    int wsaErrno = WSAGetLastError();
+    if (wsaErrno == WSAEWOULDBLOCK) return scope.Close(Null());
+    return ThrowException(ErrnoException(wsaErrno, "accept"));
+  }
+
+  int peer_fd = _open_osfhandle(peer_handle, 0);
+#endif // __MINGW32__
 
   if (!SetSockFlags(peer_fd)) {
+#ifdef __POSIX__
     int fcntl_errno = errno;
+#else // __MINGW32__
+    int fcntl_errno = WSAGetLastError();
+#endif // __MINGW32__
     close(peer_fd);
     return ThrowException(ErrnoException(fcntl_errno, "fcntl"));
   }
@@ -497,7 +668,7 @@ static Handle<Value> Accept(const Arguments& args) {
 
   peer_info->Set(fd_symbol, Integer::New(peer_fd));
 
-  ADDRESS_TO_JS(peer_info, address_storage);
+  ADDRESS_TO_JS(peer_info, address_storage, len);
 
   return scope.Close(peer_info);
 }
@@ -510,11 +681,20 @@ static Handle<Value> SocketError(const Arguments& args) {
 
   int error;
   socklen_t len = sizeof(int);
+
+#ifdef __POSIX__
   int r = getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len);
 
   if (r < 0) {
     return ThrowException(ErrnoException(errno, "getsockopt"));
   }
+#else // __MINGW32__
+  int r = getsockopt(_get_osfhandle(fd), SOL_SOCKET, SO_ERROR, (char*)&error, &len);
+
+  if (r < 0) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "getsockopt"));
+  }
+#endif
 
   return scope.Close(Integer::New(error));
 }
@@ -554,15 +734,28 @@ static Handle<Value> Read(const Arguments& args) {
           String::New("Length is extends beyond buffer")));
   }
 
+#ifdef __POSIX__
   ssize_t bytes_read = read(fd, (char*)buffer_data + off, len);
 
   if (bytes_read < 0) {
     if (errno == EAGAIN || errno == EINTR) return Null();
     return ThrowException(ErrnoException(errno, "read"));
   }
+#else // __MINGW32__
+   // read() doesn't work for overlapped sockets (the only usable
+   // type of sockets) so recv() is used here.
+  ssize_t bytes_read = recv(_get_osfhandle(fd), (char*)buffer_data + off, len, 0);
+
+  if (bytes_read < 0) {
+    int wsaErrno = WSAGetLastError();
+    if (wsaErrno == WSAEWOULDBLOCK || wsaErrno == WSAEINTR) return Null();
+    return ThrowException(ErrnoException(wsaErrno, "read"));
+  }
+#endif
 
   return scope.Close(Integer::New(bytes_read));
 }
+
 
 //  var info = t.recvfrom(fd, buffer, offset, length, flags);
 //    info.size // bytes read
@@ -606,6 +799,7 @@ static Handle<Value> RecvFrom(const Arguments& args) {
   struct sockaddr_storage address_storage;
   socklen_t addrlen = sizeof(struct sockaddr_storage);
 
+#ifdef __POSIX__
   ssize_t bytes_read = recvfrom(fd, (char*)buffer_data + off, len, flags,
                                 (struct sockaddr*) &address_storage, &addrlen);
 
@@ -614,15 +808,28 @@ static Handle<Value> RecvFrom(const Arguments& args) {
     return ThrowException(ErrnoException(errno, "read"));
   }
 
+#else // __MINGW32__
+  ssize_t bytes_read = recvfrom(_get_osfhandle(fd), (char*)buffer_data + off,
+      len, flags, (struct sockaddr*) &address_storage, &addrlen);
+
+  if (bytes_read == SOCKET_ERROR) {
+    int wsaErrno = WSAGetLastError();
+    if (wsaErrno == WSAEWOULDBLOCK || wsaErrno == WSAEINTR) return Null();
+    return ThrowException(ErrnoException(wsaErrno, "read"));
+  }
+#endif
+
   Local<Object> info = Object::New();
 
   info->Set(size_symbol, Integer::New(bytes_read));
 
-  ADDRESS_TO_JS(info, address_storage);
+  ADDRESS_TO_JS(info, address_storage, addrlen);
 
   return scope.Close(info);
 }
 
+
+#ifdef __POSIX__
 
 // bytesRead = t.recvMsg(fd, buffer, offset, length)
 // if (recvMsg.fd) {
@@ -720,6 +927,8 @@ static Handle<Value> RecvMsg(const Arguments& args) {
   return scope.Close(Integer::New(bytes_read));
 }
 
+#endif // __POSIX__
+
 
 //  var bytesWritten = t.write(fd, buffer, offset, length);
 //  returns null on EAGAIN or EINTR, raises an exception on all other errors
@@ -754,6 +963,7 @@ static Handle<Value> Write(const Arguments& args) {
           String::New("Length is extends beyond buffer")));
   }
 
+#ifdef __POSIX__
   ssize_t written = write(fd, buffer_data + off, len);
 
   if (written < 0) {
@@ -762,10 +972,25 @@ static Handle<Value> Write(const Arguments& args) {
     }
     return ThrowException(ErrnoException(errno, "write"));
   }
+#else // __MINGW32__
+  // write() doesn't work for overlapped sockets (the only usable
+  // type of sockets) so send() is used.
+  ssize_t written = send(_get_osfhandle(fd), buffer_data + off, len, 0);
+
+  if (written < 0) {
+    int wsaErrno = WSAGetLastError();
+    if (wsaErrno == WSAEWOULDBLOCK || wsaErrno == WSAEINTR) {
+      return scope.Close(Integer::New(0));
+    }
+    return ThrowException(ErrnoException(wsaErrno, "write"));
+  }
+#endif // __MINGW32__
 
   return scope.Close(Integer::New(written));
 }
 
+
+#ifdef __POSIX__
 
 // var bytes = sendmsg(fd, buf, off, len, fd, flags);
 //
@@ -890,6 +1115,9 @@ static Handle<Value> SendMsg(const Arguments& args) {
   return scope.Close(Integer::New(written));
 }
 
+#endif // __POSIX__
+
+
 // var bytes = sendto(fd, buf, off, len, flags, destination port, desitnation address);
 //
 // Write a buffer with optional offset and length to the given file
@@ -966,12 +1194,25 @@ static Handle<Value> SendTo(const Arguments& args) {
   Handle<Value> error = ParseAddressArgs(args[5], args[6], false);
   if (!error.IsEmpty()) return ThrowException(error);
 
-  ssize_t written = sendto(fd, buffer_data + offset, length, flags, addr, addrlen);
+#ifdef __POSIX__
+  ssize_t written = sendto(fd, buffer_data + offset, length, flags, addr,
+      addrlen);
 
   if (written < 0) {
     if (errno == EAGAIN || errno == EINTR) return Null();
-    return ThrowException(ErrnoException(errno, "sendmsg"));
+    return ThrowException(ErrnoException(errno, "sendto"));
   }
+
+#else // __MINGW32__
+  ssize_t written = sendto(_get_osfhandle(fd), buffer_data + offset, length,
+      flags, addr, addrlen);
+
+  if (written == SOCKET_ERROR) {
+    int wsaErrno = WSAGetLastError();
+    if (wsaErrno == WSAEWOULDBLOCK || wsaErrno == WSAEINTR) return Null();
+    return ThrowException(ErrnoException(wsaErrno, "sendto"));
+  }
+#endif // __MINGW32__
 
   /* Note that the FD isn't explicitly closed here, this
    * happens in the JS */
@@ -987,31 +1228,50 @@ static Handle<Value> ToRead(const Arguments& args) {
 
   FD_ARG(args[0])
 
+#ifdef __POSIX__
   int value;
-  int r = ioctl(fd, FIONREAD, &value);
 
-  if (r < 0) {
+  if (0 > ioctl(fd, FIONREAD, &value)) {
     return ThrowException(ErrnoException(errno, "ioctl"));
   }
+
+#else // __MINGW32__
+  unsigned long value;
+
+  if (SOCKET_ERROR == ioctlsocket(_get_osfhandle(fd), FIONREAD, &value)) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "ioctlsocket"));
+  }
+#endif // __MINGW32__
 
   return scope.Close(Integer::New(value));
 }
 
 
 static Handle<Value> SetNoDelay(const Arguments& args) {
-  int flags, r;
   HandleScope scope;
 
   FD_ARG(args[0])
 
-  flags = args[1]->IsFalse() ? 0 : 1;
-  r = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void *)&flags, sizeof(flags));
+#ifdef __POSIX__
+  int flags = args[1]->IsFalse() ? 0 : 1;
 
-  if (r < 0) {
+  if (0 > setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void *)&flags,
+      sizeof(flags))) {
     return ThrowException(ErrnoException(errno, "setsockopt"));
   }
+
+#else // __MINGW32__
+  BOOL flags = args[1]->IsFalse() ? FALSE : TRUE;
+
+  if (SOCKET_ERROR == setsockopt(_get_osfhandle(fd), IPPROTO_TCP, TCP_NODELAY,
+      (const char *)&flags, sizeof(flags))) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "setsockopt"));
+  }
+#endif // __MINGW32__
+
   return Undefined();
 }
+
 
 static Handle<Value> SetKeepAlive(const Arguments& args) {
   int r;
@@ -1027,7 +1287,9 @@ static Handle<Value> SetKeepAlive(const Arguments& args) {
     time = args[2]->Int32Value();
   }
 
+#ifdef __POSIX__
   int flags = enable ? 1 : 0;
+
   r = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&flags, sizeof(flags));
   if ((time > 0)&&(r >= 0)) {
 #if defined(__APPLE__)
@@ -1041,27 +1303,57 @@ static Handle<Value> SetKeepAlive(const Arguments& args) {
   if (r < 0) {
     return ThrowException(ErrnoException(errno, "setsockopt"));
   }
+
+#else // __MINGW32__
+  SOCKET handle = (SOCKET)_get_osfhandle(fd);
+  BOOL flags = enable ? TRUE : FALSE;
+
+  r = setsockopt(handle, SOL_SOCKET, SO_KEEPALIVE, (const char *)&flags,
+      sizeof(flags));
+  // Could set the timeout here, using WSAIoctl(SIO_KEEPALIVE_VALS),
+  // but ryah thinks it is not necessary, and mingw is missing mstcpip.h anyway.
+  if (r == SOCKET_ERROR) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "setsockopt"));
+  }
+#endif
+
   return Undefined();
 }
 
+
 static Handle<Value> SetBroadcast(const Arguments& args) {
-  int flags, r;
   HandleScope scope;
 
   FD_ARG(args[0])
 
-  flags = args[1]->IsFalse() ? 0 : 1;
-  r = setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void *)&flags, sizeof(flags));
+#ifdef __POSIX__
+  int flags = args[1]->IsFalse() ? 0 : 1;
 
-  if (r < 0) {
+  if (0 > setsockopt(fd, SOL_SOCKET, SO_BROADCAST, (void *)&flags,
+      sizeof(flags))) {
     return ThrowException(ErrnoException(errno, "setsockopt"));
-  } else {
-    return scope.Close(Integer::New(flags));
   }
+
+#else // __MINGW32__
+  BOOL flags = args[1]->IsFalse() ? FALSE : TRUE;
+
+  if (SOCKET_ERROR == setsockopt(_get_osfhandle(fd), SOL_SOCKET, SO_BROADCAST,
+      (const char *)&flags, sizeof(flags))) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "setsockopt"));
+  }
+#endif
+
+  return Undefined();
 }
 
 static Handle<Value> SetTTL(const Arguments& args) {
   HandleScope scope;
+
+#ifdef __POSIX__
+  int newttl;
+#else // __MINGW32__
+  DWORD newttl;
+#endif
 
   if (args.Length() != 2) {
     return ThrowException(Exception::TypeError(
@@ -1070,18 +1362,65 @@ static Handle<Value> SetTTL(const Arguments& args) {
 
   FD_ARG(args[0]);
 
-  if (! args[1]->IsInt32()) {
+  if (!args[1]->IsInt32()) {
     return ThrowException(Exception::TypeError(
       String::New("Argument must be a number")));
   }
-  
-  int newttl = args[1]->Int32Value();
+
+  newttl = args[1]->Int32Value();
+
   if (newttl < 1 || newttl > 255) {
     return ThrowException(Exception::TypeError(
       String::New("new TTL must be between 1 and 255")));
   }
 
-  int r = setsockopt(fd, IPPROTO_IP, IP_TTL, (void *)&newttl, sizeof(newttl));
+#ifdef __POSIX__
+  int r = setsockopt(fd,
+                     IPPROTO_IP,
+                     IP_TTL,
+                     reinterpret_cast<void*>(&newttl),
+                     sizeof(newttl));
+  if (r < 0) {
+    return ThrowException(ErrnoException(errno, "setsockopt"));
+  }
+
+#else // __MINGW32__
+  if (SOCKET_ERROR > setsockopt(_get_osfhandle(fd), IPPROTO_IP, IP_TTL,
+      (const char *)&newttl, sizeof(newttl))) {
+    return ThrowException(ErrnoException(WSAGetLastError(), "setsockopt"));
+  }
+
+#endif // __MINGW32__
+
+  return scope.Close(Integer::New(newttl));
+}
+
+
+#ifdef  __POSIX__
+
+static Handle<Value> SetMulticastTTL(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() != 2) {
+    return ThrowException(Exception::TypeError(
+      String::New("Takes exactly two arguments: fd, new MulticastTTL")));
+  }
+
+  FD_ARG(args[0]);
+
+  if (!args[1]->IsInt32()) {
+    return ThrowException(Exception::TypeError(
+      String::New("Argument must be a number")));
+  }
+
+  int newttl = args[1]->Int32Value();
+  if (newttl < 0 || newttl > 255) {
+    return ThrowException(Exception::TypeError(
+      String::New("new MulticastTTL must be between 0 and 255")));
+  }
+
+  int r = setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL,
+    reinterpret_cast<void*>(&newttl), sizeof(newttl));
 
   if (r < 0) {
     return ThrowException(ErrnoException(errno, "setsockopt"));
@@ -1089,6 +1428,74 @@ static Handle<Value> SetTTL(const Arguments& args) {
     return scope.Close(Integer::New(newttl));
   }
 }
+
+static Handle<Value> SetMulticastLoopback(const Arguments& args) {
+  int flags, r;
+  HandleScope scope;
+
+  FD_ARG(args[0])
+
+  flags = args[1]->IsFalse() ? 0 : 1;
+  r = setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP,
+    reinterpret_cast<void*>(&flags), sizeof(flags));
+
+  if (r < 0) {
+    return ThrowException(ErrnoException(errno, "setsockopt"));
+  } else {
+    return scope.Close(Integer::New(flags));
+  }
+}
+
+static Handle<Value> SetMembership(const Arguments& args, int socketOption) {
+  HandleScope scope;
+
+  if (args.Length() < 2 || args.Length() > 3) {
+    return ThrowException(Exception::TypeError(
+      String::New("Takes arguments: fd, multicast group, multicast address")));
+  }
+
+  FD_ARG(args[0]);
+
+  struct ip_mreq mreq;
+  memset(&mreq, 0, sizeof(mreq));
+
+  // Multicast address (arg[1])
+  String::Utf8Value multicast_address(args[1]->ToString());
+  if (inet_pton(
+      AF_INET, *multicast_address, &(mreq.imr_multiaddr.s_addr)) <= 0) {
+    return ErrnoException(errno, "inet_pton", "Invalid multicast address");
+  }
+
+  // Interface address (arg[2] - optional, default:INADDR_ANY)
+  if (args.Length() < 3 || !args[2]->IsString()) {
+    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+  } else {
+    String::Utf8Value multicast_interface(args[2]->ToString());
+    if (inet_pton(
+        AF_INET, *multicast_interface, &(mreq.imr_interface.s_addr)) <= 0) {
+      return ErrnoException(errno, "inet_pton", "Invalid multicast interface");
+    }
+  }
+
+  int r = setsockopt(fd, IPPROTO_IP, socketOption,
+    reinterpret_cast<void*>(&mreq), sizeof(mreq));
+
+  if (r < 0) {
+    return ThrowException(ErrnoException(errno, "setsockopt"));
+  } else {
+    return Undefined();
+  }
+}
+
+static Handle<Value> AddMembership(const Arguments& args) {
+  return SetMembership(args, IP_ADD_MEMBERSHIP);
+}
+
+static Handle<Value> DropMembership(const Arguments& args) {
+  return SetMembership(args, IP_DROP_MEMBERSHIP);
+}
+
+#endif // __POSIX__
 
 
 //
@@ -1291,20 +1698,25 @@ void InitNet(Handle<Object> target) {
 
   NODE_SET_METHOD(target, "write", Write);
   NODE_SET_METHOD(target, "read", Read);
-
-  NODE_SET_METHOD(target, "sendMsg", SendMsg);
-  NODE_SET_METHOD(target, "recvfrom", RecvFrom);
   NODE_SET_METHOD(target, "sendto", SendTo);
+  NODE_SET_METHOD(target, "recvfrom", RecvFrom);
+
+#ifdef __POSIX__
+  NODE_SET_METHOD(target, "sendMsg", SendMsg);
 
   recv_msg_template =
       Persistent<FunctionTemplate>::New(FunctionTemplate::New(RecvMsg));
   target->Set(String::NewSymbol("recvMsg"), recv_msg_template->GetFunction());
+#endif //__POSIX__
 
   NODE_SET_METHOD(target, "socket", Socket);
   NODE_SET_METHOD(target, "close", Close);
   NODE_SET_METHOD(target, "shutdown", Shutdown);
+
+#ifdef __POSIX__
   NODE_SET_METHOD(target, "pipe", Pipe);
   NODE_SET_METHOD(target, "socketpair", SocketPair);
+#endif // __POSIX__
 
   NODE_SET_METHOD(target, "connect", Connect);
   NODE_SET_METHOD(target, "bind", Bind);
@@ -1316,6 +1728,12 @@ void InitNet(Handle<Object> target) {
   NODE_SET_METHOD(target, "setBroadcast", SetBroadcast);
   NODE_SET_METHOD(target, "setTTL", SetTTL);
   NODE_SET_METHOD(target, "setKeepAlive", SetKeepAlive);
+#ifdef __POSIX__
+  NODE_SET_METHOD(target, "setMulticastTTL", SetMulticastTTL);
+  NODE_SET_METHOD(target, "setMulticastLoopback", SetMulticastLoopback);
+  NODE_SET_METHOD(target, "addMembership", AddMembership);
+  NODE_SET_METHOD(target, "dropMembership", DropMembership);
+#endif // __POSIX__
   NODE_SET_METHOD(target, "getsockname", GetSockName);
   NODE_SET_METHOD(target, "getpeername", GetPeerName);
   NODE_SET_METHOD(target, "getaddrinfo", GetAddrInfo);

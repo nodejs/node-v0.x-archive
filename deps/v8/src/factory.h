@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -53,8 +53,16 @@ class Factory : public AllStatic {
   static Handle<StringDictionary> NewStringDictionary(int at_least_space_for);
 
   static Handle<DescriptorArray> NewDescriptorArray(int number_of_descriptors);
+  static Handle<DeoptimizationInputData> NewDeoptimizationInputData(
+      int deopt_entry_count,
+      PretenureFlag pretenure);
+  static Handle<DeoptimizationOutputData> NewDeoptimizationOutputData(
+      int deopt_entry_count,
+      PretenureFlag pretenure);
 
   static Handle<String> LookupSymbol(Vector<const char> str);
+  static Handle<String> LookupAsciiSymbol(Vector<const char> str);
+  static Handle<String> LookupTwoByteSymbol(Vector<const uc16> str);
   static Handle<String> LookupAsciiSymbol(const char* str) {
     return LookupSymbol(CStrVector(str));
   }
@@ -168,6 +176,9 @@ class Factory : public AllStatic {
       ExternalArrayType array_type,
       void* external_pointer,
       PretenureFlag pretenure = NOT_TENURED);
+
+  static Handle<JSGlobalPropertyCell> NewJSGlobalPropertyCell(
+      Handle<Object> value);
 
   static Handle<Map> NewMap(InstanceType type, int instance_size);
 
@@ -353,6 +364,15 @@ class Factory : public AllStatic {
       Handle<Code> code,
       Handle<SerializedScopeInfo> scope_info);
   static Handle<SharedFunctionInfo> NewSharedFunctionInfo(Handle<String> name);
+
+  static Handle<JSMessageObject> NewJSMessageObject(
+      Handle<String> type,
+      Handle<JSArray> arguments,
+      int start_position,
+      int end_position,
+      Handle<Object> script,
+      Handle<Object> stack_trace,
+      Handle<Object> stack_frames);
 
   static Handle<NumberDictionary> DictionaryAtNumberPut(
       Handle<NumberDictionary>,

@@ -38,7 +38,8 @@
 #include "natives.h"
 #include "objects-visiting.h"
 #include "snapshot.h"
-#include "stub-cache.h"
+#include "extensions/externalize-string-extension.h"
+#include "extensions/gc-extension.h"
 
 namespace v8 {
 namespace internal {
@@ -137,6 +138,8 @@ Handle<String> Bootstrapper::NativesSourceLookup(int index) {
 
 void Bootstrapper::Initialize(bool create_heap_objects) {
   extensions_cache.Initialize(create_heap_objects);
+  GCExtension::Register();
+  ExternalizeStringExtension::Register();
 }
 
 
@@ -230,7 +233,7 @@ class Genesis BASE_EMBEDDED {
   // Used for creating a context from scratch.
   void InstallNativeFunctions();
   bool InstallNatives();
-  void InstallCustomCallGenerators();
+  void InstallBuiltinFunctionIds();
   void InstallJSFunctionResultCaches();
   void InitializeNormalizedMapCaches();
   // Used both for deserialized and from-scratch contexts to add the extensions
@@ -496,6 +499,24 @@ Handle<JSFunction> Genesis::CreateEmptyFunction() {
 }
 
 
+static void AddToWeakGlobalContextList(Context* context) {
+  ASSERT(context->IsGlobalContext());
+#ifdef DEBUG
+  { // NOLINT
+    ASSERT(context->get(Context::NEXT_CONTEXT_LINK)->IsUndefined());
+    // Check that context is not in the list yet.
+    for (Object* current = Heap::global_contexts_list();
+         !current->IsUndefined();
+         current = Context::cast(current)->get(Context::NEXT_CONTEXT_LINK)) {
+      ASSERT(current != context);
+    }
+  }
+#endif
+  context->set(Context::NEXT_CONTEXT_LINK, Heap::global_contexts_list());
+  Heap::set_global_contexts_list(context);
+}
+
+
 void Genesis::CreateRoots() {
   // Allocate the global context FixedArray first and then patch the
   // closure and extension object later (we need the empty function
@@ -504,6 +525,7 @@ void Genesis::CreateRoots() {
   global_context_ =
       Handle<Context>::cast(
           GlobalHandles::Create(*Factory::NewGlobalContext()));
+  AddToWeakGlobalContextList(*global_context_);
   Top::set_context(*global_context());
 
   // Allocate the message listeners object.
@@ -1028,7 +1050,6 @@ void Genesis::InstallNativeFunctions() {
   INSTALL_NATIVE(JSFunction, "Instantiate", instantiate_fun);
   INSTALL_NATIVE(JSFunction, "ConfigureTemplateInstance",
                  configure_instance_fun);
-  INSTALL_NATIVE(JSFunction, "MakeMessage", make_message_fun);
   INSTALL_NATIVE(JSFunction, "GetStackTraceLine", get_stack_trace_line_fun);
   INSTALL_NATIVE(JSObject, "functionCache", function_cache);
 }
@@ -1247,7 +1268,7 @@ bool Genesis::InstallNatives() {
   global_context()->set_string_function_prototype_map(
       HeapObject::cast(string_function->initial_map()->prototype())->map());
 
-  InstallCustomCallGenerators();
+  InstallBuiltinFunctionIds();
 
   // Install Function.prototype.call and apply.
   { Handle<String> key = Factory::function_class_symbol();
@@ -1346,7 +1367,7 @@ bool Genesis::InstallNatives() {
 }
 
 
-static Handle<JSObject> ResolveCustomCallGeneratorHolder(
+static Handle<JSObject> ResolveBuiltinIdHolder(
     Handle<Context> global_context,
     const char* holder_expr) {
   Handle<GlobalObject> global(global_context->global());
@@ -1364,9 +1385,9 @@ static Handle<JSObject> ResolveCustomCallGeneratorHolder(
 }
 
 
-static void InstallCustomCallGenerator(Handle<JSObject> holder,
-                                       const char* function_name,
-                                       int id) {
+static void InstallBuiltinFunctionId(Handle<JSObject> holder,
+                                     const char* function_name,
+                                     BuiltinFunctionId id) {
   Handle<String> name = Factory::LookupAsciiSymbol(function_name);
   Object* function_object = holder->GetProperty(*name)->ToObjectUnchecked();
   Handle<JSFunction> function(JSFunction::cast(function_object));
@@ -1374,17 +1395,17 @@ static void InstallCustomCallGenerator(Handle<JSObject> holder,
 }
 
 
-void Genesis::InstallCustomCallGenerators() {
+void Genesis::InstallBuiltinFunctionIds() {
   HandleScope scope;
-#define INSTALL_CALL_GENERATOR(holder_expr, fun_name, name)     \
-  {                                                             \
-    Handle<JSObject> holder = ResolveCustomCallGeneratorHolder( \
-        global_context(), #holder_expr);                        \
-    const int id = CallStubCompiler::k##name##CallGenerator;    \
-    InstallCustomCallGenerator(holder, #fun_name, id);          \
+#define INSTALL_BUILTIN_ID(holder_expr, fun_name, name) \
+  {                                                     \
+    Handle<JSObject> holder = ResolveBuiltinIdHolder(   \
+        global_context(), #holder_expr);                \
+    BuiltinFunctionId id = k##name;                     \
+    InstallBuiltinFunctionId(holder, #fun_name, id);    \
   }
-  CUSTOM_CALL_IC_GENERATORS(INSTALL_CALL_GENERATOR)
-#undef INSTALL_CALL_GENERATOR
+  FUNCTIONS_WITH_ID_LIST(INSTALL_BUILTIN_ID)
+#undef INSTALL_BUILTIN_ID
 }
 
 
@@ -1592,7 +1613,7 @@ bool Genesis::InstallJSBuiltins(Handle<JSBuiltinsObject> builtins) {
         = Handle<SharedFunctionInfo>(function->shared());
     if (!EnsureCompiled(shared, CLEAR_EXCEPTION)) return false;
     // Set the code object on the function object.
-    function->set_code(function->shared()->code());
+    function->ReplaceCode(function->shared()->code());
     builtins->set_javascript_builtin_code(id, shared->code());
   }
   return true;
@@ -1780,11 +1801,11 @@ Genesis::Genesis(Handle<Object> global_object,
   if (!new_context.is_null()) {
     global_context_ =
       Handle<Context>::cast(GlobalHandles::Create(*new_context));
+    AddToWeakGlobalContextList(*global_context_);
     Top::set_context(*global_context_);
     i::Counters::contexts_created_by_snapshot.Increment();
-    result_ = global_context_;
     JSFunction* empty_function =
-        JSFunction::cast(result_->function_map()->prototype());
+        JSFunction::cast(global_context_->function_map()->prototype());
     empty_function_ = Handle<JSFunction>(empty_function);
     Handle<GlobalObject> inner_global;
     Handle<JSGlobalProxy> global_proxy =
@@ -1814,11 +1835,6 @@ Genesis::Genesis(Handle<Object> global_object,
     if (!ConfigureGlobalObjects(global_template)) return;
     i::Counters::contexts_created_from_scratch.Increment();
   }
-
-  // Add this context to the weak list of global contexts.
-  (*global_context_)->set(Context::NEXT_CONTEXT_LINK,
-                          Heap::global_contexts_list());
-  Heap::set_global_contexts_list(*global_context_);
 
   result_ = global_context_;
 }

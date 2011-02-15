@@ -33,7 +33,7 @@ Emitted if there was an error receiving data.
 
 `function () { }`
 
-Emitted when the underlying file descriptor has be closed. Not all streams
+Emitted when the underlying file descriptor has been closed. Not all streams
 will emit this.  (For example, an incoming HTTP request will not emit
 `'close'`.)
 
@@ -66,6 +66,41 @@ Resumes the incoming `'data'` events after a `pause()`.
 Closes the underlying file descriptor. Stream will not emit any more events.
 
 
+### stream.destroySoon()
+
+After the write queue is drained, close the file descriptor.
+
+### stream.pipe(destination, [options])
+
+This is a `Stream.prototype` method available on all `Stream`s.
+
+Connects this read stream to `destination` WriteStream. Incoming
+data on this stream gets written to `destination`. The destination and source
+streams are kept in sync by pausing and resuming as necessary.
+
+Emulating the Unix `cat` command:
+
+    process.stdin.resume();
+    process.stdin.pipe(process.stdout);
+
+
+By default `end()` is called on the destination when the source stream emits
+`end`, so that `destination` is no longer writable. Pass `{ end: false }` as
+`options` to keep the destination stream open.
+
+This keeps `process.stdout` open so that "Goodbye" can be written at the end.
+
+    process.stdin.resume();
+
+    process.stdin.pipe(process.stdout, { end: false });
+
+    process.stdin.on("end", function() {
+      process.stdout.write("Goodbye\n");
+    });
+
+NOTE: If the source stream does not support `pause()` and `resume()`, this function
+adds simple definitions which simply emit `'pause'` and `'resume'` events on
+the source stream.
 
 ## Writable Stream
 
@@ -90,7 +125,13 @@ Emitted on error with the exception `exception`.
 
 Emitted when the underlying file descriptor has been closed.
 
-### stream.writeable
+### Event: 'pipe'
+
+`function (src) { }`
+
+Emitted when the stream is passed to a readable stream's pipe method.
+
+### stream.writable
 
 A boolean that is `true` by default, but turns `false` after an `'error'`
 occurred or `end()` / `destroy()` was called.

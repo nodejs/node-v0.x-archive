@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -32,6 +32,7 @@
 #include "execution.h"
 #include "factory.h"
 #include "macro-assembler.h"
+#include "objects.h"
 #include "objects-visiting.h"
 
 namespace v8 {
@@ -73,9 +74,37 @@ Handle<DescriptorArray> Factory::NewDescriptorArray(int number_of_descriptors) {
 }
 
 
+Handle<DeoptimizationInputData> Factory::NewDeoptimizationInputData(
+    int deopt_entry_count,
+    PretenureFlag pretenure) {
+  ASSERT(deopt_entry_count > 0);
+  CALL_HEAP_FUNCTION(DeoptimizationInputData::Allocate(deopt_entry_count,
+                                                       pretenure),
+                     DeoptimizationInputData);
+}
+
+
+Handle<DeoptimizationOutputData> Factory::NewDeoptimizationOutputData(
+    int deopt_entry_count,
+    PretenureFlag pretenure) {
+  ASSERT(deopt_entry_count > 0);
+  CALL_HEAP_FUNCTION(DeoptimizationOutputData::Allocate(deopt_entry_count,
+                                                        pretenure),
+                     DeoptimizationOutputData);
+}
+
+
 // Symbols are created in the old generation (data space).
 Handle<String> Factory::LookupSymbol(Vector<const char> string) {
   CALL_HEAP_FUNCTION(Heap::LookupSymbol(string), String);
+}
+
+Handle<String> Factory::LookupAsciiSymbol(Vector<const char> string) {
+  CALL_HEAP_FUNCTION(Heap::LookupAsciiSymbol(string), String);
+}
+
+Handle<String> Factory::LookupTwoByteSymbol(Vector<const uc16> string) {
+  CALL_HEAP_FUNCTION(Heap::LookupTwoByteSymbol(string), String);
 }
 
 
@@ -243,6 +272,13 @@ Handle<ExternalArray> Factory::NewExternalArray(int length,
 }
 
 
+Handle<JSGlobalPropertyCell> Factory::NewJSGlobalPropertyCell(
+    Handle<Object> value) {
+  CALL_HEAP_FUNCTION(Heap::AllocateJSGlobalPropertyCell(*value),
+                     JSGlobalPropertyCell);
+}
+
+
 Handle<Map> Factory::NewMap(InstanceType type, int instance_size) {
   CALL_HEAP_FUNCTION(Heap::AllocateMap(type, instance_size), Map);
 }
@@ -333,6 +369,15 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
                   context->global_context());
   }
   result->set_literals(*literals);
+  result->set_next_function_link(Heap::undefined_value());
+
+  if (V8::UseCrankshaft() &&
+      FLAG_always_opt &&
+      result->is_compiled() &&
+      !function_info->is_toplevel() &&
+      function_info->allows_lazy_compilation()) {
+    result->MarkForLazyRecompilation();
+  }
   return result;
 }
 
@@ -709,6 +754,24 @@ Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(
   return shared;
 }
 
+
+Handle<JSMessageObject> Factory::NewJSMessageObject(
+    Handle<String> type,
+    Handle<JSArray> arguments,
+    int start_position,
+    int end_position,
+    Handle<Object> script,
+    Handle<Object> stack_trace,
+    Handle<Object> stack_frames) {
+  CALL_HEAP_FUNCTION(Heap::AllocateJSMessageObject(*type,
+                                                   *arguments,
+                                                   start_position,
+                                                   end_position,
+                                                   *script,
+                                                   *stack_trace,
+                                                   *stack_frames),
+                     JSMessageObject);
+}
 
 Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(Handle<String> name) {
   CALL_HEAP_FUNCTION(Heap::AllocateSharedFunctionInfo(*name),

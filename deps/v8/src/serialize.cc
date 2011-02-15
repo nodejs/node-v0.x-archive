@@ -290,10 +290,6 @@ void ExternalReferenceTable::PopulateTable() {
     Add(Top::get_address_from_id((Top::AddressId)i), TOP_ADDRESS, i, chars);
   }
 
-  // Extensions
-  Add(FUNCTION_ADDR(GCExtension::GC), EXTENSION, 1,
-      "GCExtension::GC");
-
   // Accessors
 #define ACCESSOR_DESCRIPTOR_DECLARATION(name) \
   Add((Address)&Accessors::name, \
@@ -339,7 +335,7 @@ void ExternalReferenceTable::PopulateTable() {
 
   Add(ExternalReference::delete_handle_scope_extensions().address(),
       RUNTIME_ENTRY,
-      3,
+      4,
       "HandleScope::DeleteExtensions");
 
   // Miscellaneous
@@ -474,6 +470,42 @@ void ExternalReferenceTable::PopulateTable() {
       UNCLASSIFIED,
       32,
       "HandleScope::level");
+  Add(ExternalReference::new_deoptimizer_function().address(),
+      UNCLASSIFIED,
+      33,
+      "Deoptimizer::New()");
+  Add(ExternalReference::compute_output_frames_function().address(),
+      UNCLASSIFIED,
+      34,
+      "Deoptimizer::ComputeOutputFrames()");
+  Add(ExternalReference::address_of_min_int().address(),
+      UNCLASSIFIED,
+      35,
+      "LDoubleConstant::min_int");
+  Add(ExternalReference::address_of_one_half().address(),
+      UNCLASSIFIED,
+      36,
+      "LDoubleConstant::one_half");
+  Add(ExternalReference::address_of_minus_zero().address(),
+      UNCLASSIFIED,
+      37,
+      "LDoubleConstant::minus_zero");
+  Add(ExternalReference::address_of_negative_infinity().address(),
+      UNCLASSIFIED,
+      38,
+      "LDoubleConstant::negative_infinity");
+  Add(ExternalReference::power_double_double_function().address(),
+      UNCLASSIFIED,
+      39,
+      "power_double_double_function");
+  Add(ExternalReference::power_double_int_function().address(),
+      UNCLASSIFIED,
+      40,
+      "power_double_int_function");
+  Add(ExternalReference::arguments_marker_location().address(),
+      UNCLASSIFIED,
+      41,
+      "Factory::arguments_marker().location()");
 }
 
 
@@ -1371,6 +1403,13 @@ void Serializer::ObjectSerializer::VisitCodeEntry(Address entry_address) {
   OutputRawData(entry_address);
   serializer_->SerializeObject(target, kPlain, kFirstInstruction);
   bytes_processed_so_far_ += kPointerSize;
+}
+
+
+void Serializer::ObjectSerializer::VisitGlobalPropertyCell(RelocInfo* rinfo) {
+  // We shouldn't have any global property cell references in code
+  // objects in the snapshot.
+  UNREACHABLE();
 }
 
 

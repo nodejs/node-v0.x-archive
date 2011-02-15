@@ -1,58 +1,59 @@
-var common = require("../common");
-var assert = common.assert
-var http = require('http'),
-    CRLF = '\r\n';
+var common = require('../common');
+var assert = require('assert');
+var http = require('http');
+
+var CRLF = '\r\n';
 
 var server = http.createServer();
-server.on('upgrade', function(req, socket, head) {  
+server.on('upgrade', function(req, socket, head) {
   socket.write('HTTP/1.1 101 Ok' + CRLF +
                'Connection: Upgrade' + CRLF +
                'Upgrade: Test' + CRLF + CRLF + 'head');
-  socket.on('end', function () {
-    socket.end();               
+  socket.on('end', function() {
+    socket.end();
   });
 });
 
+var successCount = 0;
 
-server.listen(common.PORT, function () {
+server.listen(common.PORT, function() {
 
   var client = http.createClient(common.PORT);
 
   function upgradeRequest(fn) {
-    var request = client.request('GET', '/', {
-      'Connection': 'Upgrade',
-      'Upgrade': 'Test'
-    });
-    
+    console.log("req");
+    var header = { 'Connection': 'Upgrade', 'Upgrade': 'Test' };
+    var request = client.request('GET', '/', header);
     var wasUpgrade = false;
-    
+
     function onUpgrade(res, socket, head) {
+      console.log("client upgraded");
       wasUpgrade = true;
-      
+
       client.removeListener('upgrade', onUpgrade);
-      socket.end();    
+      socket.end();
     }
     client.on('upgrade', onUpgrade);
-    
+
     function onEnd() {
+      console.log("client end");
       client.removeListener('end', onEnd);
       if (!wasUpgrade) {
         throw new Error('hasn\'t received upgrade event');
-      } else {      
+      } else {
         fn && process.nextTick(fn);
       }
     }
     client.on('end', onEnd);
-    
+
     request.write('head');
 
   }
 
-  successCount = 0;
   upgradeRequest(function() {
-    successCount++;  
+    successCount++;
     upgradeRequest(function() {
-      successCount++;  
+      successCount++;
       // Test pass
       console.log('Pass!');
       client.end();
@@ -63,6 +64,6 @@ server.listen(common.PORT, function () {
 
 });
 
-process.on('exit', function () {
+process.on('exit', function() {
   assert.equal(2, successCount);
 });

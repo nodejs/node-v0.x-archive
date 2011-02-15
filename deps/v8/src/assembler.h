@@ -35,13 +35,25 @@
 #ifndef V8_ASSEMBLER_H_
 #define V8_ASSEMBLER_H_
 
+#include "gdb-jit.h"
 #include "runtime.h"
 #include "top.h"
 #include "token.h"
-#include "objects.h"
 
 namespace v8 {
 namespace internal {
+
+
+// -----------------------------------------------------------------------------
+// Common double constants.
+
+class DoubleConstant: public AllStatic {
+ public:
+  static const double min_int;
+  static const double one_half;
+  static const double minus_zero;
+  static const double negative_infinity;
+};
 
 
 // -----------------------------------------------------------------------------
@@ -173,6 +185,7 @@ class RelocInfo BASE_EMBEDDED {
     DEBUG_BREAK,  // Code target for the debugger statement.
     CODE_TARGET,  // Code target which is not any of the above.
     EMBEDDED_OBJECT,
+    GLOBAL_PROPERTY_CELL,
 
     // Everything after runtime_entry (inclusive) is not GC'ed.
     RUNTIME_ENTRY,
@@ -189,7 +202,7 @@ class RelocInfo BASE_EMBEDDED {
     NUMBER_OF_MODES,  // must be no greater than 14 - see RelocInfoWriter
     NONE,  // never recorded
     LAST_CODE_ENUM = CODE_TARGET,
-    LAST_GCED_ENUM = EMBEDDED_OBJECT
+    LAST_GCED_ENUM = GLOBAL_PROPERTY_CELL
   };
 
 
@@ -254,6 +267,10 @@ class RelocInfo BASE_EMBEDDED {
   INLINE(Handle<Object> target_object_handle(Assembler* origin));
   INLINE(Object** target_object_address());
   INLINE(void set_target_object(Object* target));
+  INLINE(JSGlobalPropertyCell* target_cell());
+  INLINE(Handle<JSGlobalPropertyCell> target_cell_handle());
+  INLINE(void set_target_cell(JSGlobalPropertyCell* cell));
+
 
   // Read the address of the word containing the target_address in an
   // instruction stream.  What this means exactly is architecture-independent.
@@ -306,7 +323,7 @@ class RelocInfo BASE_EMBEDDED {
 #ifdef ENABLE_DISASSEMBLER
   // Printing
   static const char* RelocModeName(Mode rmode);
-  void Print();
+  void Print(FILE* out);
 #endif  // ENABLE_DISASSEMBLER
 #ifdef DEBUG
   // Debugging
@@ -419,7 +436,7 @@ class RelocIterator: public Malloced {
   // If the given mode is wanted, set it in rinfo_ and return true.
   // Else return false. Used for efficiently skipping unwanted modes.
   bool SetMode(RelocInfo::Mode mode) {
-    return (mode_mask_ & 1 << mode) ? (rinfo_.rmode_ = mode, true) : false;
+    return (mode_mask_ & (1 << mode)) ? (rinfo_.rmode_ = mode, true) : false;
   }
 
   byte* pos_;
@@ -442,9 +459,6 @@ class Debug_Address;
 #endif
 
 
-typedef void* ExternalReferenceRedirector(void* original, bool fp_return);
-
-
 // An ExternalReference represents a C++ address used in the generated
 // code. All references to C++ functions and variables must be encapsulated in
 // an ExternalReference instance. This is done in order to track the origin of
@@ -452,9 +466,29 @@ typedef void* ExternalReferenceRedirector(void* original, bool fp_return);
 // addresses when deserializing a heap.
 class ExternalReference BASE_EMBEDDED {
  public:
+  // Used in the simulator to support different native api calls.
+  //
+  // BUILTIN_CALL - builtin call.
+  // MaybeObject* f(v8::internal::Arguments).
+  //
+  // FP_RETURN_CALL - builtin call that returns floating point.
+  // double f(double, double).
+  //
+  // DIRECT_CALL - direct call to API function native callback
+  // from generated code.
+  // Handle<Value> f(v8::Arguments&)
+  //
+  enum Type {
+    BUILTIN_CALL,  // default
+    FP_RETURN_CALL,
+    DIRECT_CALL
+  };
+
+  typedef void* ExternalReferenceRedirector(void* original, Type type);
+
   explicit ExternalReference(Builtins::CFunctionId id);
 
-  explicit ExternalReference(ApiFunction* ptr);
+  explicit ExternalReference(ApiFunction* ptr, Type type);
 
   explicit ExternalReference(Builtins::Name name);
 
@@ -484,12 +518,20 @@ class ExternalReference BASE_EMBEDDED {
   static ExternalReference transcendental_cache_array_address();
   static ExternalReference delete_handle_scope_extensions();
 
+  // Deoptimization support.
+  static ExternalReference new_deoptimizer_function();
+  static ExternalReference compute_output_frames_function();
+  static ExternalReference global_contexts_list();
+
   // Static data in the keyed lookup cache.
   static ExternalReference keyed_lookup_cache_keys();
   static ExternalReference keyed_lookup_cache_field_offsets();
 
   // Static variable Factory::the_hole_value.location()
   static ExternalReference the_hole_value_location();
+
+  // Static variable Factory::arguments_marker.location()
+  static ExternalReference arguments_marker_location();
 
   // Static variable Heap::roots_address()
   static ExternalReference roots_address();
@@ -519,12 +561,20 @@ class ExternalReference BASE_EMBEDDED {
 
   static ExternalReference double_fp_operation(Token::Value operation);
   static ExternalReference compare_doubles();
+  static ExternalReference power_double_double_function();
+  static ExternalReference power_double_int_function();
 
   static ExternalReference handle_scope_next_address();
   static ExternalReference handle_scope_limit_address();
   static ExternalReference handle_scope_level_address();
 
   static ExternalReference scheduled_exception_address();
+
+  // Static variables containing common double constants.
+  static ExternalReference address_of_min_int();
+  static ExternalReference address_of_one_half();
+  static ExternalReference address_of_minus_zero();
+  static ExternalReference address_of_negative_infinity();
 
   Address address() const {return reinterpret_cast<Address>(address_);}
 
@@ -566,21 +616,113 @@ class ExternalReference BASE_EMBEDDED {
 
   static ExternalReferenceRedirector* redirector_;
 
-  static void* Redirect(void* address, bool fp_return = false) {
+  static void* Redirect(void* address,
+                        Type type = ExternalReference::BUILTIN_CALL) {
     if (redirector_ == NULL) return address;
-    void* answer = (*redirector_)(address, fp_return);
+    void* answer = (*redirector_)(address, type);
     return answer;
   }
 
-  static void* Redirect(Address address_arg, bool fp_return = false) {
+  static void* Redirect(Address address_arg,
+                        Type type = ExternalReference::BUILTIN_CALL) {
     void* address = reinterpret_cast<void*>(address_arg);
     void* answer = (redirector_ == NULL) ?
                    address :
-                   (*redirector_)(address, fp_return);
+                   (*redirector_)(address, type);
     return answer;
   }
 
   void* address_;
+};
+
+
+// -----------------------------------------------------------------------------
+// Position recording support
+
+struct PositionState {
+  PositionState() : current_position(RelocInfo::kNoPosition),
+                    written_position(RelocInfo::kNoPosition),
+                    current_statement_position(RelocInfo::kNoPosition),
+                    written_statement_position(RelocInfo::kNoPosition) {}
+
+  int current_position;
+  int written_position;
+
+  int current_statement_position;
+  int written_statement_position;
+};
+
+
+class PositionsRecorder BASE_EMBEDDED {
+ public:
+  explicit PositionsRecorder(Assembler* assembler)
+      : assembler_(assembler) {
+#ifdef ENABLE_GDB_JIT_INTERFACE
+    gdbjit_lineinfo_ = NULL;
+#endif
+  }
+
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  ~PositionsRecorder() {
+    delete gdbjit_lineinfo_;
+  }
+
+  void StartGDBJITLineInfoRecording() {
+    if (FLAG_gdbjit) {
+      gdbjit_lineinfo_ = new GDBJITLineInfo();
+    }
+  }
+
+  GDBJITLineInfo* DetachGDBJITLineInfo() {
+    GDBJITLineInfo* lineinfo = gdbjit_lineinfo_;
+    gdbjit_lineinfo_ = NULL;  // To prevent deallocation in destructor.
+    return lineinfo;
+  }
+#endif
+
+  // Set current position to pos.
+  void RecordPosition(int pos);
+
+  // Set current statement position to pos.
+  void RecordStatementPosition(int pos);
+
+  // Write recorded positions to relocation information.
+  bool WriteRecordedPositions();
+
+  int current_position() const { return state_.current_position; }
+
+  int current_statement_position() const {
+    return state_.current_statement_position;
+  }
+
+ private:
+  Assembler* assembler_;
+  PositionState state_;
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  GDBJITLineInfo* gdbjit_lineinfo_;
+#endif
+
+  friend class PreservePositionScope;
+
+  DISALLOW_COPY_AND_ASSIGN(PositionsRecorder);
+};
+
+
+class PreservePositionScope BASE_EMBEDDED {
+ public:
+  explicit PreservePositionScope(PositionsRecorder* positions_recorder)
+      : positions_recorder_(positions_recorder),
+        saved_state_(positions_recorder->state_) {}
+
+  ~PreservePositionScope() {
+    positions_recorder_->state_ = saved_state_;
+  }
+
+ private:
+  PositionsRecorder* positions_recorder_;
+  const PositionState saved_state_;
+
+  DISALLOW_COPY_AND_ASSIGN(PreservePositionScope);
 };
 
 
@@ -620,6 +762,10 @@ static inline int NumberOfBitsSet(uint32_t x) {
   }
   return num_bits_set;
 }
+
+// Computes pow(x, y) with the special cases in the spec for Math.pow.
+double power_double_int(double x, int y);
+double power_double_double(double x, double y);
 
 } }  // namespace v8::internal
 

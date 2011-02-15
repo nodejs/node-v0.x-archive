@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2006-2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -371,7 +371,12 @@ class Space : public Malloced {
   // Identity used in error reporting.
   AllocationSpace identity() { return id_; }
 
+  // Returns allocated size.
   virtual intptr_t Size() = 0;
+
+  // Returns size of objects. Can differ from the allocated size
+  // (e.g. see LargeObjectSpace).
+  virtual intptr_t SizeOfObjects() { return Size(); }
 
 #ifdef ENABLE_HEAP_PROTECTION
   // Protect/unprotect the space by marking it read-only/writable.
@@ -491,8 +496,8 @@ class CodeRange : public AllStatic {
 class MemoryAllocator : public AllStatic {
  public:
   // Initializes its internal bookkeeping structures.
-  // Max capacity of the total space.
-  static bool Setup(intptr_t max_capacity);
+  // Max capacity of the total space and executable memory limit.
+  static bool Setup(intptr_t max_capacity, intptr_t capacity_executable);
 
   // Deletes valid chunks.
   static void TearDown();
@@ -590,6 +595,12 @@ class MemoryAllocator : public AllStatic {
   // Returns allocated spaces in bytes.
   static intptr_t Size() { return size_; }
 
+  // Returns the maximum available executable bytes of heaps.
+  static intptr_t AvailableExecutable() {
+    if (capacity_executable_ < size_executable_) return 0;
+    return capacity_executable_ - size_executable_;
+  }
+
   // Returns allocated executable spaces in bytes.
   static intptr_t SizeExecutable() { return size_executable_; }
 
@@ -597,6 +608,9 @@ class MemoryAllocator : public AllStatic {
   static intptr_t MaxAvailable() {
     return (Available() / Page::kPageSize) * Page::kObjectAreaSize;
   }
+
+  // Sanity check on a pointer.
+  static bool SafeIsInAPageChunk(Address addr);
 
   // Links two pages.
   static inline void SetNextPage(Page* prev, Page* next);
@@ -639,20 +653,49 @@ class MemoryAllocator : public AllStatic {
   static void ReportStatistics();
 #endif
 
+  static void AddToAllocatedChunks(Address addr, intptr_t size);
+  static void RemoveFromAllocatedChunks(Address addr, intptr_t size);
+  // Note: This only checks the regular chunks, not the odd-sized initial
+  // chunk.
+  static bool InAllocatedChunks(Address addr);
+
   // Due to encoding limitation, we can only have 8K chunks.
   static const int kMaxNofChunks = 1 << kPageSizeBits;
   // If a chunk has at least 16 pages, the maximum heap size is about
   // 8K * 8K * 16 = 1G bytes.
 #ifdef V8_TARGET_ARCH_X64
   static const int kPagesPerChunk = 32;
+  // On 64 bit the chunk table consists of 4 levels of 4096-entry tables.
+  static const int kPagesPerChunkLog2 = 5;
+  static const int kChunkTableLevels = 4;
+  static const int kChunkTableBitsPerLevel = 12;
 #else
   static const int kPagesPerChunk = 16;
+  // On 32 bit the chunk table consists of 2 levels of 256-entry tables.
+  static const int kPagesPerChunkLog2 = 4;
+  static const int kChunkTableLevels = 2;
+  static const int kChunkTableBitsPerLevel = 8;
 #endif
-  static const int kChunkSize = kPagesPerChunk * Page::kPageSize;
 
  private:
+  static const int kChunkSize = kPagesPerChunk * Page::kPageSize;
+  static const int kChunkSizeLog2 = kPagesPerChunkLog2 + kPageSizeBits;
+  static const int kChunkTableTopLevelEntries =
+      1 << (sizeof(intptr_t) * kBitsPerByte - kChunkSizeLog2 -
+          (kChunkTableLevels - 1) * kChunkTableBitsPerLevel);
+
+  // The chunks are not chunk-size aligned so for a given chunk-sized area of
+  // memory there can be two chunks that cover it.
+  static const int kChunkTableFineGrainedWordsPerEntry = 2;
+  static const uintptr_t kUnusedChunkTableEntry = 0;
+
   // Maximum space size in bytes.
   static intptr_t capacity_;
+  // Maximum subset of capacity_ that can be executable
+  static intptr_t capacity_executable_;
+
+  // Top level table to track whether memory is part of a chunk or not.
+  static uintptr_t chunk_table_[kChunkTableTopLevelEntries];
 
   // Allocated space size in bytes.
   static intptr_t size_;
@@ -711,6 +754,28 @@ class MemoryAllocator : public AllStatic {
 
   // Frees a chunk.
   static void DeleteChunk(int chunk_id);
+
+  // Helpers to maintain and query the chunk tables.
+  static void AddChunkUsingAddress(
+      uintptr_t chunk_start,        // Where the chunk starts.
+      uintptr_t chunk_index_base);  // Used to place the chunk in the tables.
+  static void RemoveChunkFoundUsingAddress(
+      uintptr_t chunk_start,        // Where the chunk starts.
+      uintptr_t chunk_index_base);  // Used to locate the entry in the tables.
+  // Controls whether the lookup creates intermediate levels of tables as
+  // needed.
+  enum CreateTables { kDontCreateTables, kCreateTablesAsNeeded };
+  static uintptr_t* AllocatedChunksFinder(uintptr_t* table,
+                                          uintptr_t address,
+                                          int bit_position,
+                                          CreateTables create_as_needed);
+  static void FreeChunkTables(uintptr_t* array, int length, int level);
+  static int FineGrainedIndexForAddress(uintptr_t address) {
+    int index = ((address >> kChunkSizeLog2) &
+        ((1 << kChunkTableBitsPerLevel) - 1));
+    return index * kChunkTableFineGrainedWordsPerEntry;
+  }
+
 
   // Basic check whether a chunk id is in the valid range.
   static inline bool IsValidChunkId(int chunk_id);
@@ -1006,6 +1071,8 @@ class PagedSpace : public Space {
   // Checks whether an object/address is in this space.
   inline bool Contains(Address a);
   bool Contains(HeapObject* o) { return Contains(o->address()); }
+  // Never crashes even if a is not a valid pointer.
+  inline bool SafeContains(Address a);
 
   // Given an address occupied by a live object, return that object if it is
   // in this space, or Failure::Exception() if it is not. The implementation
@@ -1575,6 +1642,11 @@ class NewSpace : public Space {
 
   virtual bool ReserveSpace(int bytes);
 
+  // Resizes a sequential string which must be the most recent thing that was
+  // allocated in new space.
+  template <typename StringType>
+  inline void ShrinkStringAtAllocationBoundary(String* string, int len);
+
 #ifdef ENABLE_HEAP_PROTECTION
   // Protect/unprotect the space by marking it read-only/writable.
   virtual void Protect();
@@ -1707,6 +1779,8 @@ class OldSpaceFreeList BASE_EMBEDDED {
   // 'wasted_bytes'.  The size should be a non-zero multiple of the word size.
   MUST_USE_RESULT MaybeObject* Allocate(int size_in_bytes, int* wasted_bytes);
 
+  void MarkNodes();
+
  private:
   // The size range of blocks, in bytes. (Smaller allocations are allowed, but
   // will always result in waste.)
@@ -1805,6 +1879,8 @@ class FixedSizeFreeList BASE_EMBEDDED {
   // A failure is returned if no block is available.
   MUST_USE_RESULT MaybeObject* Allocate();
 
+  void MarkNodes();
+
  private:
   // Available bytes on the free list.
   intptr_t available_;
@@ -1876,6 +1952,8 @@ class OldSpace : public PagedSpace {
 
   virtual void PutRestOfCurrentPageOnFreeList(Page* current_page);
 
+  void MarkFreeListNodes() { free_list_.MarkNodes(); }
+
 #ifdef DEBUG
   // Reports statistics for the space
   void ReportStatistics();
@@ -1943,6 +2021,9 @@ class FixedSpace : public PagedSpace {
   virtual void DeallocateBlock(Address start,
                                int size_in_bytes,
                                bool add_to_freelist);
+
+  void MarkFreeListNodes() { free_list_.MarkNodes(); }
+
 #ifdef DEBUG
   // Reports statistic info of the space
   void ReportStatistics();
@@ -2110,10 +2191,10 @@ class LargeObjectChunk {
   // Allocates a new LargeObjectChunk that contains a large object page
   // (Page::kPageSize aligned) that has at least size_in_bytes (for a large
   // object) bytes after the object area start of that page.
-  // The allocated chunk size is set in the output parameter chunk_size.
-  static LargeObjectChunk* New(int size_in_bytes,
-                               size_t* chunk_size,
-                               Executability executable);
+  static LargeObjectChunk* New(int size_in_bytes, Executability executable);
+
+  // Free the memory associated with the chunk.
+  inline void Free(Executability executable);
 
   // Interpret a raw address as a large object chunk.
   static LargeObjectChunk* FromAddress(Address address) {
@@ -2126,12 +2207,13 @@ class LargeObjectChunk {
   // Accessors for the fields of the chunk.
   LargeObjectChunk* next() { return next_; }
   void set_next(LargeObjectChunk* chunk) { next_ = chunk; }
-
   size_t size() { return size_ & ~Page::kPageFlagMask; }
-  void set_size(size_t size_in_bytes) { size_ = size_in_bytes; }
+
+  // Compute the start address in the chunk.
+  inline Address GetStartAddress();
 
   // Returns the object in this chunk.
-  inline HeapObject* GetObject();
+  HeapObject* GetObject() { return HeapObject::FromAddress(GetStartAddress()); }
 
   // Given a requested size returns the physical size of a chunk to be
   // allocated.
@@ -2148,7 +2230,7 @@ class LargeObjectChunk {
   // A pointer to the next large object chunk in the space or NULL.
   LargeObjectChunk* next_;
 
-  // The size of this chunk.
+  // The total size of this chunk.
   size_t size_;
 
  public:
@@ -2181,6 +2263,10 @@ class LargeObjectSpace : public Space {
 
   virtual intptr_t Size() {
     return size_;
+  }
+
+  virtual intptr_t SizeOfObjects() {
+    return objects_size_;
   }
 
   int PageCount() {
@@ -2234,7 +2320,7 @@ class LargeObjectSpace : public Space {
   LargeObjectChunk* first_chunk_;
   intptr_t size_;  // allocated bytes
   int page_count_;  // number of chunks
-
+  intptr_t objects_size_;  // size of objects
 
   // Shared implementation of AllocateRaw, AllocateRawCode and
   // AllocateRawFixedArray.

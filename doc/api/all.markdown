@@ -12,7 +12,7 @@
 @include buffers
 @include streams
 @include crypto
-@include securepair
+@include tls
 @include string_decoder
 @include fs
 @include path
@@ -20,6 +20,7 @@
 @include dns
 @include dgram
 @include http
+@include https
 @include url
 @include querystring
 @include readline
@@ -27,6 +28,9 @@
 @include script
 @include child_processes
 @include assert
+@include tty
+@include os
+@include debugger
 
 # Appendixes
 @include appendix_1

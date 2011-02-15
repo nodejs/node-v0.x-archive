@@ -68,6 +68,8 @@ void VirtualFrame::PopToR0() {
 
 void VirtualFrame::MergeTo(const VirtualFrame* expected, Condition cond) {
   if (Equals(expected)) return;
+  ASSERT((expected->tos_known_smi_map_ & tos_known_smi_map_) ==
+         expected->tos_known_smi_map_);
   ASSERT(expected->IsCompatibleWith(this));
   MergeTOSTo(expected->top_of_stack_state_, cond);
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
@@ -76,7 +78,7 @@ void VirtualFrame::MergeTo(const VirtualFrame* expected, Condition cond) {
 
 void VirtualFrame::MergeTo(VirtualFrame* expected, Condition cond) {
   if (Equals(expected)) return;
-  expected->tos_known_smi_map_ &= tos_known_smi_map_;
+  tos_known_smi_map_ &= expected->tos_known_smi_map_;
   MergeTOSTo(expected->top_of_stack_state_, cond);
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
 }
@@ -245,18 +247,15 @@ void VirtualFrame::AllocateStackSlots() {
     __ LoadRoot(r2, Heap::kStackLimitRootIndex);
   }
   // Check the stack for overflow or a break request.
-  // Put the lr setup instruction in the delay slot.  The kInstrSize is added
-  // to the implicit 8 byte offset that always applies to operations with pc
-  // and gives a return address 12 bytes down.
-  masm()->add(lr, pc, Operand(Assembler::kInstrSize));
   masm()->cmp(sp, Operand(r2));
   StackCheckStub stub;
   // Call the stub if lower.
-  masm()->mov(pc,
+  masm()->mov(ip,
               Operand(reinterpret_cast<intptr_t>(stub.GetCode().location()),
                       RelocInfo::CODE_TARGET),
               LeaveCC,
               lo);
+  masm()->Call(ip, lo);
 }
 
 

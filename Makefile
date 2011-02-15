@@ -25,8 +25,14 @@ uninstall:
 test: all
 	python tools/test.py --mode=release simple message
 
+test-valgrind: all
+	python tools/test.py --mode=release --valgrind simple message
+
 test-all: all
 	python tools/test.py --mode=debug,release
+
+test-all-valgrind: all
+	python tools/test.py --mode=debug,release --valgrind
 
 test-release: all
 	python tools/test.py --mode=release
@@ -57,8 +63,8 @@ apiassets = $(subst api_assets,api/assets,$(addprefix build/,$(wildcard doc/api_
 
 website_files = \
 	build/doc/index.html    \
+	build/doc/v0.4_announcement.html   \
 	build/doc/cla.html      \
-	build/doc/jquery.js     \
 	build/doc/sh_main.js    \
 	build/doc/sh_javascript.min.js \
 	build/doc/sh_vim-dark.css \
@@ -66,7 +72,7 @@ website_files = \
 	build/doc/sponsored.png \
 	build/doc/pipe.css
 
-doc: build/default/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) build/doc/changelog.html
+doc: build/default/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -77,15 +83,8 @@ build/doc/api/assets/%: doc/api_assets/% build/doc/api/assets/
 build/doc/%: doc/%
 	cp $< $@
 
-build/doc/api/%.html: doc/api/%.markdown build/default/node $(apidoc_dirs) $(apiassets)
+build/doc/api/%.html: doc/api/%.markdown build/default/node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
 	build/default/node tools/doctool/doctool.js doc/template.html $< > $@
-
-build/doc/changelog.html: ChangeLog build/default/node build/doc/ $(apidoc_dirs) $(apiassets)
-	build/default/node tools/doctool/doctool.js doc/template.html $< \
-	| sed 's|assets/|api/assets/|g' \
-	| sed 's|<body>|<body id="changelog">|g' > $@
-	@echo $(apiassets)
-
 
 build/doc/%:
 
@@ -99,12 +98,12 @@ docclean:
 	-rm -rf build/doc
 
 clean:
-	@$(WAF) clean
-	@-find tools -name "*.pyc" | xargs rm -f
+	$(WAF) clean
+	-find tools -name "*.pyc" | xargs rm -f
 
 distclean: docclean
-	@-find tools -name "*.pyc" | xargs rm -f
-	@-rm -rf build/ node node_g
+	-find tools -name "*.pyc" | xargs rm -f
+	-rm -rf build/ node node_g
 
 check:
 	@tools/waf-light check
@@ -114,7 +113,7 @@ TARNAME=node-$(VERSION)
 
 #dist: doc/node.1 doc/api
 dist: doc
-	  git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
+	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
 	cp -r build/doc/api $(TARNAME)/doc/api
@@ -131,5 +130,12 @@ bench-idle:
 	sleep 1
 	./node benchmark/idle_clients.js &
 
+jslint:
+	PYTHONPATH=tools/closure_linter/ python tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/
 
-.PHONY: bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload
+cpplint:
+	@python tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
+
+lint: jslint cpplint
+
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload

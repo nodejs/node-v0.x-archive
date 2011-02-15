@@ -1,3 +1,271 @@
+2011-02-07: Version 3.1.2
+
+        Added better security checks when accessing properties via
+        Object.getOwnPropertyDescriptor.
+
+        Fixed bug in Object.defineProperty and related access bugs (issues
+        992, 1083 and 1092).
+
+        Added LICENSE.v8, LICENSE.strongtalk and LICENSE.valgrind to ease
+        copyright notice generation for embedders.
+
+
+2011-02-02: Version 3.1.1
+
+        Perform security checks before fetching the value in
+        Object.getOwnPropertyDescriptor.
+
+        Fixed a bug in Array.prototype.splice triggered by passing no
+        arguments.
+
+        Fixed bugs in -0 in arithmetic and in Math.pow.
+
+        Fixed bugs in the register allocator and in switching from optimized
+        to unoptimized code.
+
+
+2011-01-31: Version 3.1.0
+
+        Performance improvements on all platforms.
+
+
+2011-01-28: Version 3.0.12
+
+        Added support for strict mode parameter and object property
+        validation.
+
+        Fixed a couple of crash bugs.
+
+
+2011-01-25: Version 3.0.11
+
+        Fixed a bug in deletion of lookup slots that could cause global
+        variables to be accidentally deleted (http://crbug.com/70066).
+
+        Added support for strict mode octal literal verification.
+
+        Fixed a couple of crash bugs (issues 1070 and 1071).
+
+
+2011-01-24: Version 3.0.10
+
+        Fixed External::Wrap for 64-bit addresses (issue 1037).
+
+        Fixed incorrect .arguments variable proxy handling in the full
+        code generator (issue 1060).
+
+        Introduced partial strict mode support.
+
+        Changed formatting of recursive error messages to match Firefox and Safari
+        (issue http://crbug.com/70334).
+
+        Fixed incorrect rounding for float-to-integer conversions for external
+        array types, which implement the Typed Array spec
+        (issue http://crbug.com/50972).
+
+        Performance improvements on the IA32 platform.
+
+
+2011-01-19: Version 3.0.9
+
+        Added basic GDB JIT Interface integration.
+
+        Make invalid break/continue statements a syntax error instead of a
+        runtime error.
+
+
+2011-01-17: Version 3.0.8
+
+        Exposed heap size limit to the heap statistics gathered by
+        the GetHeapStatistics API.
+
+        Wrapped external pointers more carefully (issue 1037).
+
+        Hardened the implementation of error objects to avoid setters
+        intercepting the properties set then throwing an error.
+
+        Avoided trashing the FPSCR when calculating Math.floor on ARM.
+
+        Performance improvements on the IA32 platform.
+
+
+2011-01-10: Version 3.0.7
+
+        Stopped calling inherited setters when creating object literals
+        (issue 1015).
+
+        Changed interpretation of malformed \c? escapes in RegExp to match
+        JSC.
+
+        Enhanced the command-line debugger interface and fixed some minor
+        bugs in the debugger.
+
+        Performance improvements on the IA32 platform.
+
+
+2011-01-05: Version 3.0.6
+
+        Allowed getters and setters on JSArray elements (issue 900).
+
+        Stopped JSON objects from hitting inherited setters (part of
+        issue 1015).
+
+        Allowed numbers and strings as names of getters/setters in object
+        initializer (issue 820).
+
+        Added use_system_v8 option to gyp (off by default), to make it easier
+        for Linux distributions to ship with system-provided V8 library.
+
+        Exported external array data accessors (issue 1016).
+
+        Added labelled thread names to help with debugging (on Linux).
+
+
+2011-01-03: Version 3.0.5
+
+        Fixed a couple of cast errors for gcc-3.4.3.
+
+        Performance improvements in GC and IA32 code generator.
+
+
+2010-12-21: Version 3.0.4
+
+        Added Date::ResetCache() to the API so that the cached values in the
+        Date object can be reset to allow live DST / timezone changes.
+
+        Extended existing support for printing (while debugging) the contents
+        of objects.  Added support for printing objects from release builds.
+
+        Fixed V8 issues 989, 1006, and 1007.
+
+
+2010-12-17: Version 3.0.3
+
+        Reapplied all changes for version 3.0.1.
+
+        Improved debugger protocol for remote debugging.
+
+        Added experimental support for using gyp to generate build files
+        for V8.
+
+        Fixed implementation of String::Write in the API (issue 975).
+
+
+2010-12-15: Version 3.0.2
+
+        Revert version 3.0.1 and patch 3.0.1.1.
+
+
+2010-12-13: Version 3.0.1
+
+        Added support for an experimental internationalization API as an
+        extension.  This extension is disabled by default but can be enabled
+        when building V8.  The ECMAScript internationalization strawman is
+        at http://wiki.ecmascript.org/doku.php?id=strawman:i18n_api.
+
+        Made RegExp character class parsing stricter.  This mirrors a change
+        to RegExp parsing in WebKit.
+
+        Fixed a bug in Object.defineProperty when used to change attributes
+        of an existing property.  It incorrectly set the property value to
+        undefined (issue 965).
+
+        Fixed several different compilation failures on various platforms
+        caused by the 3.0.0 release.
+
+        Optimized Math.pow so it can work on unboxed doubles.
+
+        Sped up quoting of JSON strings by removing one traversal of the
+        string.
+
+
+2010-12-07: Version 3.0.0
+
+        Improved performance by (partially) addressing issue 957 on
+        IA-32. Still needs more work for the other architectures.
+
+
+2010-11-29: Version 2.5.9
+
+        Fixed crashes during GC caused by partially initialize heap
+        objects.
+
+        Fixed bug in process sample that caused memory leaks.
+
+        Improved performance on ARM by implementing missing stubs and
+        inlining.
+
+        Improved heap profiler support.
+
+        Added separate seeding on Windows of the random number generator
+        used internally by the compiler (issue 936).
+
+        Exposed API for getting the name of the function used to construct
+        an object.
+
+        Fixed date parser to handle one and two digit millisecond
+        values (issue 944).
+
+        Fixed number parsing to disallow space between sign and
+        digits (issue 946).
+
+
+2010-11-23: Version 2.5.8
+
+        Removed dependency on Gay's dtoa.
+
+        Improved heap profiler precision and speed.
+
+        Reduced overhead of callback invocations on ARM.
+
+
+2010-11-18: Version 2.5.7
+
+        Fixed obscure evaluation order bug (issue 931).
+
+        Split the random number state between JavaScript and the private API.
+
+        Fixed performance bug causing GCs when generating stack traces on
+        code from very large scripts.
+
+        Fixed bug in parser that allowed (foo):42 as a labelled statement
+        (issue 918).
+
+        Provide more accurate results about used heap size via
+        GetHeapStatistics.
+
+        Allow build-time customization of the max semispace size.
+
+        Made String.prototype.split honor limit when separator is empty
+        (issue 929).
+
+        Added missing failure check after expecting an identifier in
+        preparser (Chromium issue 62639).
+
+
+2010-11-10: Version 2.5.6
+
+        Added support for VFP rounding modes to the ARM simulator.
+
+        Fixed multiplication overflow bug (issue 927).
+
+        Added a limit for the amount of executable memory (issue 925).
+
+
+2010-11-08: Version 2.5.5
+
+        Added more aggressive GC of external objects in near out-of-memory
+        situations.
+
+        Fixed a bug that gave the incorrect result for String.split called
+        on the empty string (issue 924).
+
+
+2010-11-03: Version 2.5.4
+
+        Improved V8 VFPv3 runtime detection to address issue 914.
+
+
 2010-11-01: Version 2.5.3
 
         Fixed a bug that prevents constants from overwriting function values
@@ -14,7 +282,7 @@
         Allowed forcing the use of a simulator from the build script
         independently of the host architecture.
 
-        Fixed FreeBSD port (Issue 912).
+        Fixed FreeBSD port (issue 912).
 
         Made windows-tick-processor respect D8_PATH.
 
@@ -45,7 +313,7 @@
 
         Added USE_SIMULATOR macro that explicitly indicates that we wish to use
         the simulator as the execution engine (by Mark Lam <mark.lam@palm.com>
-	from Hewlett-Packard Development Company, LP).
+        from Hewlett-Packard Development Company, LP).
 
         Fixed compilation error on ARM with gcc 4.4 (issue 894).
 

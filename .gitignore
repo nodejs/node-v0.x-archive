@@ -3,7 +3,6 @@ build
 tags
 .lock-wscript
 *.pyc
-*.patch
 doc/api.xml
 tools/nodejs.pc
 test/fixtures/hello.txt
@@ -12,3 +11,5 @@ node
 node_g
 *.swp
 .benchmark_reports
+/.project
+/.cproject
