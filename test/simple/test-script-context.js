@@ -1,7 +1,8 @@
 var common = require('../common');
 var assert = require('assert');
 
-var Script = require('vm').Script;
+var vm = require('vm');
+var Script = vm.Script;
 var script = new Script('"passed";');
 
 common.debug('run in a new empty context');
@@ -20,6 +21,11 @@ result = script.runInContext(context);
 assert.equal(3, context.foo);
 assert.equal('lala', context.thing);
 
-
 // Issue GH-227:
 Script.runInNewContext('', null, 'some.js');
+
+// Issue GH-693:
+common.debug('test RegExp as argument to assert.throws');
+script = vm.createScript('var assert = require(\'assert\'); assert.throws(function() { throw "hello world"; }, /hello/);', 'some.js');
+script.runInNewContext({ require : require });
+
