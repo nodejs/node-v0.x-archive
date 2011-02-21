@@ -761,6 +761,7 @@ def build(bld):
   node.add_objects = 'eio http_parser'
   if product_type_is_lib:
     node.install_path = '${PREFIX}/lib'
+    node.vnum = "4.0.0" # FIXME: Should probably be based on VERSION
   else:
     node.install_path = '${PREFIX}/bin'
   node.chmod = 0755
