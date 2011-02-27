@@ -56,8 +56,8 @@ static inline bool SetCloseOnExec(int fd) {
 #ifdef __POSIX__
   return (fcntl(fd, F_SETFD, FD_CLOEXEC) != -1);
 #else // __MINGW32__
-  /* no-op on windows */
-  return false;
+  return SetHandleInformation(reinterpret_cast<HANDLE>(_get_osfhandle(fd)),
+                              HANDLE_FLAG_INHERIT, 0) != 0;
 #endif
 }
 
@@ -870,6 +870,11 @@ void InitFs(Handle<Object> target) {
                stats_constructor_template->GetFunction());
   StatWatcher::Initialize(target);
   File::Initialize(target);
+
+#ifdef __MINGW32__
+  // Open files in binary mode by default
+  _fmode = _O_BINARY;
+#endif
 }
 
 }  // end namespace node

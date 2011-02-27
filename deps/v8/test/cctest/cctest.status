@@ -29,11 +29,6 @@ prefix cctest
 
 test-api/Bug*: FAIL
 
-# The problem is that a code object can get a different optimizable flag
-# in crankshaft after creation.
-test-log/EquivalenceOfLoggingAndTraversal: SKIP
-
-
 ##############################################################################
 # BUG(281): This test fails on some Linuxes.
 test-debug/DebuggerAgent: PASS, (PASS || FAIL) if $system == linux
@@ -51,44 +46,8 @@ test-heap-profiler/HeapSnapshotsDiff: PASS || FAIL
 test-serialize/TestThatAlwaysFails: FAIL
 test-serialize/DependentTestThatAlwaysFails: FAIL
 
-# BUG(1079)
-test-api/CaptureStackTraceForUncaughtException: PASS || FAIL
-
-##############################################################################
-[ $arch == x64 ]
-
-# Optimization is currently not working on crankshaft x64 and ARM.
-test-heap/TestInternalWeakLists: PASS || FAIL
-test-heap/TestInternalWeakListsTraverseWithGC: PASS || FAIL
-
-
-##############################################################################
-[ $arch == x64 && $crankshaft ]
-
-# Tests that fail with crankshaft.
-test-deoptimization/DeoptimizeBinaryOperationADDString: FAIL
-test-deoptimization/DeoptimizeBinaryOperationADD: FAIL
-test-deoptimization/DeoptimizeBinaryOperationSUB: FAIL
-test-deoptimization/DeoptimizeBinaryOperationMUL: FAIL
-test-deoptimization/DeoptimizeBinaryOperationMOD: FAIL
-test-deoptimization/DeoptimizeBinaryOperationDIV: FAIL
-test-deoptimization/DeoptimizeLoadICStoreIC: FAIL
-test-deoptimization/DeoptimizeLoadICStoreICNested: FAIL
-test-deoptimization/DeoptimizeCompare: FAIL
-
-# Tests that time out with crankshaft.
-test-api/Threading: SKIP
-
-# BUG(1069): Context serialization fails on optimized functions.
-test-serialize/ContextSerialization: SKIP
-test-serialize/ContextDeserialization: SKIP
-
 ##############################################################################
 [ $arch == arm ]
-
-# Optimization is currently not working on crankshaft x64 and ARM.
-test-heap/TestInternalWeakLists: PASS || FAIL
-test-heap/TestInternalWeakListsTraverseWithGC: PASS || FAIL
 
 # We cannot assume that we can throw OutOfMemory exceptions in all situations.
 # Apparently our ARM box is in such a state. Skip the test as it also runs for

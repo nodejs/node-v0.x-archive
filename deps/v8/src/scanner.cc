@@ -76,7 +76,8 @@ void BufferedUC16CharacterStream::SlowPushBack(uc16 character) {
     buffer_end_ = buffer_ + kBufferSize;
     buffer_cursor_ = buffer_end_;
   }
-  ASSERT(pushback_limit_ > buffer_);
+  // Ensure that there is room for at least one pushback.
+  ASSERT(buffer_cursor_ > buffer_);
   ASSERT(pos_ > 0);
   buffer_[--buffer_cursor_ - buffer_] = character;
   if (buffer_cursor_ == buffer_) {
@@ -89,15 +90,17 @@ void BufferedUC16CharacterStream::SlowPushBack(uc16 character) {
 
 
 bool BufferedUC16CharacterStream::ReadBlock() {
+  buffer_cursor_ = buffer_;
   if (pushback_limit_ != NULL) {
-    buffer_cursor_ = buffer_;
+    // Leave pushback mode.
     buffer_end_ = pushback_limit_;
     pushback_limit_ = NULL;
-    ASSERT(buffer_cursor_ != buffer_end_);
-    return true;
+    // If there were any valid characters left at the
+    // start of the buffer, use those.
+    if (buffer_cursor_ < buffer_end_) return true;
+    // Otherwise read a new block.
   }
   unsigned length = FillBuffer(pos_, kBufferSize);
-  buffer_cursor_ = buffer_;
   buffer_end_ = buffer_ + length;
   return length > 0;
 }
@@ -516,17 +519,30 @@ Token::Value JsonScanner::ScanJsonString() {
 
 Token::Value JsonScanner::ScanJsonNumber() {
   LiteralScope literal(this);
-  if (c0_ == '-') AddLiteralCharAdvance();
+  bool negative = false;
+
+  if (c0_ == '-') {
+    AddLiteralCharAdvance();
+    negative = true;
+  }
   if (c0_ == '0') {
     AddLiteralCharAdvance();
     // Prefix zero is only allowed if it's the only digit before
     // a decimal point or exponent.
     if ('0' <= c0_ && c0_ <= '9') return Token::ILLEGAL;
   } else {
+    int i = 0;
+    int digits = 0;
     if (c0_ < '1' || c0_ > '9') return Token::ILLEGAL;
     do {
+      i = i * 10 + c0_ - '0';
+      digits++;
       AddLiteralCharAdvance();
     } while (c0_ >= '0' && c0_ <= '9');
+    if (c0_ != '.' && c0_ != 'e' && c0_ != 'E' && digits < 10) {
+      number_ = (negative ? -i : i);
+      return Token::NUMBER;
+    }
   }
   if (c0_ == '.') {
     AddLiteralCharAdvance();
@@ -544,6 +560,10 @@ Token::Value JsonScanner::ScanJsonNumber() {
     } while (c0_ >= '0' && c0_ <= '9');
   }
   literal.Complete();
+  ASSERT_NOT_NULL(next_.literal_chars);
+  number_ = StringToDouble(next_.literal_chars->ascii_literal(),
+                           NO_FLAGS,  // Hex, octal or trailing junk.
+                           OS::nan_value());
   return Token::NUMBER;
 }
 

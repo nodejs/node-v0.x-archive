@@ -697,6 +697,10 @@
         >
       </File>
       <File
+        RelativePath="..\..\src\lithium-allocator-inl.h"
+        >
+      </File>
+      <File
         RelativePath="..\..\src\arm\lithium-arm.cc"
         >
       </File>
@@ -809,14 +813,6 @@
       </File>
       <File
         RelativePath="..\..\src\objects.h"
-        >
-      </File>
-      <File
-        RelativePath="..\..\src\oprofile-agent.cc"
-        >
-      </File>
-      <File
-        RelativePath="..\..\src\oprofile-agent.h"
         >
       </File>
       <File

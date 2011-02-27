@@ -368,7 +368,9 @@ static bool ArrayPrototypeHasNoElements(Context* global_context,
   array_proto = JSObject::cast(array_proto->GetPrototype());
   ASSERT(array_proto->elements() == Heap::empty_fixed_array());
   // Object.prototype
-  array_proto = JSObject::cast(array_proto->GetPrototype());
+  Object* proto = array_proto->GetPrototype();
+  if (proto == Heap::null_value()) return false;
+  array_proto = JSObject::cast(proto);
   if (array_proto != global_context->initial_object_prototype()) return false;
   if (array_proto->elements() != Heap::empty_fixed_array()) return false;
   ASSERT(array_proto->GetPrototype()->IsNull());
@@ -734,35 +736,39 @@ BUILTIN(ArraySplice) {
 
   int n_arguments = args.length() - 1;
 
-  // Return empty array when no arguments are supplied.
-  if (n_arguments == 0) {
-    return AllocateEmptyJSArray();
-  }
-
   int relative_start = 0;
-  Object* arg1 = args[1];
-  if (arg1->IsSmi()) {
-    relative_start = Smi::cast(arg1)->value();
-  } else if (!arg1->IsUndefined()) {
-    return CallJsBuiltin("ArraySplice", args);
+  if (n_arguments > 0) {
+    Object* arg1 = args[1];
+    if (arg1->IsSmi()) {
+      relative_start = Smi::cast(arg1)->value();
+    } else if (!arg1->IsUndefined()) {
+      return CallJsBuiltin("ArraySplice", args);
+    }
   }
   int actual_start = (relative_start < 0) ? Max(len + relative_start, 0)
                                           : Min(relative_start, len);
 
   // SpiderMonkey, TraceMonkey and JSC treat the case where no delete count is
-  // given differently from when an undefined delete count is given.
+  // given as a request to delete all the elements from the start.
+  // And it differs from the case of undefined delete count.
   // This does not follow ECMA-262, but we do the same for
   // compatibility.
-  int delete_count = len;
-  if (n_arguments > 1) {
-    Object* arg2 = args[2];
-    if (arg2->IsSmi()) {
-      delete_count = Smi::cast(arg2)->value();
-    } else {
-      return CallJsBuiltin("ArraySplice", args);
+  int actual_delete_count;
+  if (n_arguments == 1) {
+    ASSERT(len - actual_start >= 0);
+    actual_delete_count = len - actual_start;
+  } else {
+    int value = 0;  // ToInteger(undefined) == 0
+    if (n_arguments > 1) {
+      Object* arg2 = args[2];
+      if (arg2->IsSmi()) {
+        value = Smi::cast(arg2)->value();
+      } else {
+        return CallJsBuiltin("ArraySplice", args);
+      }
     }
+    actual_delete_count = Min(Max(value, 0), len - actual_start);
   }
-  int actual_delete_count = Min(Max(delete_count, 0), len - actual_start);
 
   JSArray* result_array = NULL;
   if (actual_delete_count == 0) {
@@ -1301,6 +1307,11 @@ static void Generate_StoreIC_Initialize(MacroAssembler* masm) {
 }
 
 
+static void Generate_StoreIC_Initialize_Strict(MacroAssembler* masm) {
+  StoreIC::GenerateInitialize(masm);
+}
+
+
 static void Generate_StoreIC_Miss(MacroAssembler* masm) {
   StoreIC::GenerateMiss(masm);
 }
@@ -1311,8 +1322,18 @@ static void Generate_StoreIC_Normal(MacroAssembler* masm) {
 }
 
 
+static void Generate_StoreIC_Normal_Strict(MacroAssembler* masm) {
+  StoreIC::GenerateNormal(masm);
+}
+
+
 static void Generate_StoreIC_Megamorphic(MacroAssembler* masm) {
-  StoreIC::GenerateMegamorphic(masm);
+  StoreIC::GenerateMegamorphic(masm, StoreIC::kStoreICNonStrict);
+}
+
+
+static void Generate_StoreIC_Megamorphic_Strict(MacroAssembler* masm) {
+  StoreIC::GenerateMegamorphic(masm, StoreIC::kStoreICStrict);
 }
 
 
@@ -1321,7 +1342,17 @@ static void Generate_StoreIC_ArrayLength(MacroAssembler* masm) {
 }
 
 
+static void Generate_StoreIC_ArrayLength_Strict(MacroAssembler* masm) {
+  StoreIC::GenerateArrayLength(masm);
+}
+
+
 static void Generate_StoreIC_GlobalProxy(MacroAssembler* masm) {
+  StoreIC::GenerateGlobalProxy(masm);
+}
+
+
+static void Generate_StoreIC_GlobalProxy_Strict(MacroAssembler* masm) {
   StoreIC::GenerateGlobalProxy(masm);
 }
 
@@ -1438,13 +1469,13 @@ void Builtins::Setup(bool create_heap_objects) {
       extra_args                                  \
     },
 
-#define DEF_FUNCTION_PTR_A(name, kind, state)              \
-    { FUNCTION_ADDR(Generate_##name),                      \
-      NULL,                                                \
-      #name,                                               \
-      name,                                                \
-      Code::ComputeFlags(Code::kind, NOT_IN_LOOP, state),  \
-      NO_EXTRA_ARGUMENTS                                   \
+#define DEF_FUNCTION_PTR_A(name, kind, state, extra)              \
+    { FUNCTION_ADDR(Generate_##name),                             \
+      NULL,                                                       \
+      #name,                                                      \
+      name,                                                       \
+      Code::ComputeFlags(Code::kind, NOT_IN_LOOP, state, extra),  \
+      NO_EXTRA_ARGUMENTS                                          \
     },
 
   // Define array of pointers to generators and C builtin functions.

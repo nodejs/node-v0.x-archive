@@ -92,7 +92,7 @@ function GlobalIsFinite(number) {
 
 // ECMA-262 - 15.1.2.2
 function GlobalParseInt(string, radix) {
-  if (IS_UNDEFINED(radix)) {
+  if (IS_UNDEFINED(radix) || radix === 10 || radix === 0) {
     // Some people use parseInt instead of Math.floor.  This
     // optimization makes parseInt on a Smi 12 times faster (60ns
     // vs 800ns).  The following optimization makes parseInt on a
@@ -105,7 +105,7 @@ function GlobalParseInt(string, radix) {
       // Truncate number.
       return string | 0;
     }
-    radix = 0;
+    if (IS_UNDEFINED(radix)) radix = 0;
   } else {
     radix = TO_INT32(radix);
     if (!(radix == 0 || (2 <= radix && radix <= 36)))
@@ -491,28 +491,29 @@ PropertyDescriptor.prototype.hasSetter = function() {
 }
 
 
-
-// ES5 section 8.12.1.
-function GetOwnProperty(obj, p) {
-  var desc = new PropertyDescriptor();
-
-  // GetOwnProperty returns an array indexed by the constants
-  // defined in macros.py.
-  // If p is not a property on obj undefined is returned.
-  var props = %GetOwnProperty(ToObject(obj), ToString(p));
-
-  if (IS_UNDEFINED(props)) return void 0;
-
-  // This is an accessor
-  if (props[IS_ACCESSOR_INDEX]) {
-    desc.setGet(props[GETTER_INDEX]);
-    desc.setSet(props[SETTER_INDEX]);
-  } else {
-    desc.setValue(props[VALUE_INDEX]);
-    desc.setWritable(props[WRITABLE_INDEX]);
+// Converts an array returned from Runtime_GetOwnProperty to an actual
+// property descriptor. For a description of the array layout please
+// see the runtime.cc file.
+function ConvertDescriptorArrayToDescriptor(desc_array) {
+  if (desc_array == false) {
+    throw 'Internal error: invalid desc_array';
   }
-  desc.setEnumerable(props[ENUMERABLE_INDEX]);
-  desc.setConfigurable(props[CONFIGURABLE_INDEX]);
+
+  if (IS_UNDEFINED(desc_array)) {
+    return void 0;
+  }
+
+  var desc = new PropertyDescriptor();
+  // This is an accessor.
+  if (desc_array[IS_ACCESSOR_INDEX]) {
+    desc.setGet(desc_array[GETTER_INDEX]);
+    desc.setSet(desc_array[SETTER_INDEX]);
+  } else {
+    desc.setValue(desc_array[VALUE_INDEX]);
+    desc.setWritable(desc_array[WRITABLE_INDEX]);
+  }
+  desc.setEnumerable(desc_array[ENUMERABLE_INDEX]);
+  desc.setConfigurable(desc_array[CONFIGURABLE_INDEX]);
 
   return desc;
 }
@@ -535,9 +536,27 @@ function HasProperty(obj, p) {
 }
 
 
+// ES5 section 8.12.1.
+function GetOwnProperty(obj, p) {
+  // GetOwnProperty returns an array indexed by the constants
+  // defined in macros.py.
+  // If p is not a property on obj undefined is returned.
+  var props = %GetOwnProperty(ToObject(obj), ToString(p));
+
+  // A false value here means that access checks failed.
+  if (props == false) return void 0;
+
+  return ConvertDescriptorArrayToDescriptor(props);
+}
+
+
 // ES5 8.12.9.
 function DefineOwnProperty(obj, p, desc, should_throw) {
-  var current = GetOwnProperty(obj, p);
+  var current_or_access = %GetOwnProperty(ToObject(obj), ToString(p));
+  // A false value here means that access checks failed.
+  if (current_or_access == false) return void 0;
+
+  var current = ConvertDescriptorArrayToDescriptor(current_or_access);
   var extensible = %IsExtensible(ToObject(obj));
 
   // Error handling according to spec.
@@ -545,10 +564,12 @@ function DefineOwnProperty(obj, p, desc, should_throw) {
   if (IS_UNDEFINED(current) && !extensible)
     throw MakeTypeError("define_disallowed", ["defineProperty"]);
 
-  if (!IS_UNDEFINED(current) && !current.isConfigurable()) {
+  if (!IS_UNDEFINED(current)) {
     // Step 5 and 6
-    if ((!desc.hasEnumerable() ||
-         SameValue(desc.isEnumerable() && current.isEnumerable())) &&
+    if ((IsGenericDescriptor(desc) ||
+         IsDataDescriptor(desc) == IsDataDescriptor(current)) &&
+        (!desc.hasEnumerable() ||
+         SameValue(desc.isEnumerable(), current.isEnumerable())) &&
         (!desc.hasConfigurable() ||
          SameValue(desc.isConfigurable(), current.isConfigurable())) &&
         (!desc.hasWritable() ||
@@ -561,29 +582,39 @@ function DefineOwnProperty(obj, p, desc, should_throw) {
          SameValue(desc.getSet(), current.getSet()))) {
       return true;
     }
-
-    // Step 7
-    if (desc.isConfigurable() || desc.isEnumerable() != current.isEnumerable())
-      throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
-    // Step 9
-    if (IsDataDescriptor(current) != IsDataDescriptor(desc))
-      throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
-    // Step 10
-    if (IsDataDescriptor(current) && IsDataDescriptor(desc)) {
-      if (!current.isWritable() && desc.isWritable())
-        throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
-      if (!current.isWritable() && desc.hasValue() &&
-          !SameValue(desc.getValue(), current.getValue())) {
+    if (!current.isConfigurable()) {
+      // Step 7
+      if (desc.isConfigurable() ||
+          (desc.hasEnumerable() &&
+           desc.isEnumerable() != current.isEnumerable())) {
         throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
       }
-    }
-    // Step 11
-    if (IsAccessorDescriptor(desc) && IsAccessorDescriptor(current)) {
-      if (desc.hasSetter() && !SameValue(desc.getSet(), current.getSet())){
-        throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
+      // Step 8
+      if (!IsGenericDescriptor(desc)) {
+        // Step 9a
+        if (IsDataDescriptor(current) != IsDataDescriptor(desc)) {
+          throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
+        }
+        // Step 10a
+        if (IsDataDescriptor(current) && IsDataDescriptor(desc)) {
+          if (!current.isWritable() && desc.isWritable()) {
+            throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
+          }
+          if (!current.isWritable() && desc.hasValue() &&
+              !SameValue(desc.getValue(), current.getValue())) {
+            throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
+          }
+        }
+        // Step 11
+        if (IsAccessorDescriptor(desc) && IsAccessorDescriptor(current)) {
+          if (desc.hasSetter() && !SameValue(desc.getSet(), current.getSet())) {
+            throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
+          }
+          if (desc.hasGetter() && !SameValue(desc.getGet(),current.getGet())) {
+            throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
+          }
+        }
       }
-      if (desc.hasGetter() && !SameValue(desc.getGet(),current.getGet()))
-        throw MakeTypeError("redefine_disallowed", ["defineProperty"]);
     }
   }
 
@@ -607,7 +638,16 @@ function DefineOwnProperty(obj, p, desc, should_throw) {
   } else
     flag |= DONT_DELETE;
 
-  if (IsDataDescriptor(desc) || IsGenericDescriptor(desc)) {
+  if (IsDataDescriptor(desc) ||
+      (IsGenericDescriptor(desc) &&
+       (IS_UNDEFINED(current) || IsDataDescriptor(current)))) {
+    // There are 3 cases that lead here:
+    // Step 4a - defining a new data property.
+    // Steps 9b & 12 - replacing an existing accessor property with a data
+    //                 property.
+    // Step 12 - updating an existing data property with a data or generic
+    //           descriptor.
+
     if (desc.hasWritable()) {
       flag |= desc.isWritable() ? 0 : READ_ONLY;
     } else if (!IS_UNDEFINED(current)) {
@@ -615,20 +655,30 @@ function DefineOwnProperty(obj, p, desc, should_throw) {
     } else {
       flag |= READ_ONLY;
     }
+
     var value = void 0;  // Default value is undefined.
     if (desc.hasValue()) {
       value = desc.getValue();
-    } else if (!IS_UNDEFINED(current)) {
+    } else if (!IS_UNDEFINED(current) && IsDataDescriptor(current)) {
       value = current.getValue();
     }
+
     %DefineOrRedefineDataProperty(obj, p, value, flag);
+  } else if (IsGenericDescriptor(desc)) {
+    // Step 12 - updating an existing accessor property with generic
+    //           descriptor. Changing flags only.
+    %DefineOrRedefineAccessorProperty(obj, p, GETTER, current.getGet(), flag);
   } else {
-    if (desc.hasGetter() &&
-        (IS_FUNCTION(desc.getGet()) || IS_UNDEFINED(desc.getGet()))) {
-       %DefineOrRedefineAccessorProperty(obj, p, GETTER, desc.getGet(), flag);
+    // There are 3 cases that lead here:
+    // Step 4b - defining a new accessor property.
+    // Steps 9c & 12 - replacing an existing data property with an accessor
+    //                 property.
+    // Step 12 - updating an existing accessor property with an accessor
+    //           descriptor.
+    if (desc.hasGetter()) {
+      %DefineOrRedefineAccessorProperty(obj, p, GETTER, desc.getGet(), flag);
     }
-    if (desc.hasSetter() &&
-        (IS_FUNCTION(desc.getSet()) || IS_UNDEFINED(desc.getSet()))) {
+    if (desc.hasSetter()) {
       %DefineOrRedefineAccessorProperty(obj, p, SETTER, desc.getSet(), flag);
     }
   }
@@ -1107,33 +1157,49 @@ function FunctionBind(this_arg) { // Length is 1.
   }
   // this_arg is not an argument that should be bound.
   var argc_bound = (%_ArgumentsLength() || 1) - 1;
-  if (argc_bound > 0) {
+  var fn = this;
+  if (argc_bound == 0) {
+    var result = function() {
+      if (%_IsConstructCall()) {
+        // %NewObjectFromBound implicitly uses arguments passed to this
+        // function. We do not pass the arguments object explicitly to avoid
+        // materializing it and guarantee that this function will be optimized.
+        return %NewObjectFromBound(fn, null);
+      }
+
+      return fn.apply(this_arg, arguments);
+    };
+  } else {
     var bound_args = new $Array(argc_bound);
     for(var i = 0; i < argc_bound; i++) {
       bound_args[i] = %_Arguments(i+1);
     }
+
+    var result = function() {
+      // If this is a construct call we use a special runtime method
+      // to generate the actual object using the bound function.
+      if (%_IsConstructCall()) {
+        // %NewObjectFromBound implicitly uses arguments passed to this
+        // function. We do not pass the arguments object explicitly to avoid
+        // materializing it and guarantee that this function will be optimized.
+        return %NewObjectFromBound(fn, bound_args);
+      }
+
+      // Combine the args we got from the bind call with the args
+      // given as argument to the invocation.
+      var argc = %_ArgumentsLength();
+      var args = new $Array(argc + argc_bound);
+      // Add bound arguments.
+      for (var i = 0; i < argc_bound; i++) {
+        args[i] = bound_args[i];
+      }
+      // Add arguments from call.
+      for (var i = 0; i < argc; i++) {
+        args[argc_bound + i] = %_Arguments(i);
+      }
+      return fn.apply(this_arg, args);
+    };
   }
-  var fn = this;
-  var result = function() {
-    // Combine the args we got from the bind call with the args
-    // given as argument to the invocation.
-    var argc = %_ArgumentsLength();
-    var args = new $Array(argc + argc_bound);
-    // Add bound arguments.
-    for (var i = 0; i < argc_bound; i++) {
-      args[i] = bound_args[i];
-    }
-    // Add arguments from call.
-    for (var i = 0; i < argc; i++) {
-      args[argc_bound + i] = %_Arguments(i);
-    }
-    // If this is a construct call we use a special runtime method
-    // to generate the actual object using the bound function.
-    if (%_IsConstructCall()) {
-      return %NewObjectFromBound(fn, args);
-    }
-    return fn.apply(this_arg, args);
-  };
 
   // We already have caller and arguments properties on functions,
   // which are non-configurable. It therefore makes no sence to

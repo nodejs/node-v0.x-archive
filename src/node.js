@@ -153,6 +153,13 @@
       return stdout;
     });
 
+    var events = NativeModule.require('events');
+    var stderr = process.stderr = new events.EventEmitter();
+    stderr.writable = true;
+    stderr.readable = false;
+    stderr.write = process.binding('stdio').writeError;
+    stderr.end = stderr.destroy = stderr.destroySoon = function() { };
+
     process.__defineGetter__('stdin', function() {
       if (stdin) return stdin;
 
@@ -187,13 +194,17 @@
     };
 
     process.kill = function(pid, sig) {
-      sig = sig || 'SIGTERM';
-
-      if (!startup.lazyConstants()[sig]) {
-        throw new Error('Unknown signal: ' + sig);
+      // preserve null signal
+      if (0 === sig) {
+        process._kill(pid, 0);
+      } else {
+        sig = sig || 'SIGTERM';
+        if (startup.lazyConstants()[sig]) {
+          process._kill(pid, startup.lazyConstants()[sig]);
+        } else {
+          throw new Error('Unknown signal: ' + sig);
+        }
       }
-
-      process._kill(pid, startup.lazyConstants()[sig]);
     };
   };
 
@@ -221,7 +232,7 @@
           w.start();
 
         } else if (this.listeners(type).length === 1) {
-          signalWatchers[event].start();
+          signalWatchers[type].start();
         }
       }
 

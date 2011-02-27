@@ -158,6 +158,9 @@ void HeapObject::HeapObjectVerify() {
     case SHARED_FUNCTION_INFO_TYPE:
       SharedFunctionInfo::cast(this)->SharedFunctionInfoVerify();
       break;
+    case JS_MESSAGE_OBJECT_TYPE:
+      JSMessageObject::cast(this)->JSMessageObjectVerify();
+      break;
 
 #define MAKE_STRUCT_CASE(NAME, Name, name) \
   case NAME##_TYPE:                        \
@@ -296,6 +299,19 @@ void JSValue::JSValueVerify() {
 }
 
 
+void JSMessageObject::JSMessageObjectVerify() {
+  CHECK(IsJSMessageObject());
+  CHECK(type()->IsString());
+  CHECK(arguments()->IsJSArray());
+  VerifyObjectField(kStartPositionOffset);
+  VerifyObjectField(kEndPositionOffset);
+  VerifyObjectField(kArgumentsOffset);
+  VerifyObjectField(kScriptOffset);
+  VerifyObjectField(kStackTraceOffset);
+  VerifyObjectField(kStackFramesOffset);
+}
+
+
 void String::StringVerify() {
   CHECK(IsString());
   CHECK(length() >= 0 && length() <= Smi::kMaxValue);
@@ -424,7 +440,7 @@ void JSRegExp::JSRegExpVerify() {
       ASSERT(ascii_data->IsTheHole() || ascii_data->IsJSObject() ||
           (is_native ? ascii_data->IsCode() : ascii_data->IsByteArray()));
       Object* uc16_data = arr->get(JSRegExp::kIrregexpUC16CodeIndex);
-      ASSERT(uc16_data->IsTheHole() || ascii_data->IsJSObject() ||
+      ASSERT(uc16_data->IsTheHole() || uc16_data->IsJSObject() ||
           (is_native ? uc16_data->IsCode() : uc16_data->IsByteArray()));
       ASSERT(arr->get(JSRegExp::kIrregexpCaptureCountIndex)->IsSmi());
       ASSERT(arr->get(JSRegExp::kIrregexpMaxRegisterCountIndex)->IsSmi());

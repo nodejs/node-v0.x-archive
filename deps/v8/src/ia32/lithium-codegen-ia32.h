@@ -60,6 +60,7 @@ class LCodeGen BASE_EMBEDDED {
         status_(UNUSED),
         deferred_(8),
         osr_pc_offset_(-1),
+        deoptimization_reloc_size(),
         resolver_(this) {
     PopulateDeoptimizationLiteralsWithInlinedFunctions();
   }
@@ -102,6 +103,8 @@ class LCodeGen BASE_EMBEDDED {
   // Emit frame translation commands for an environment.
   void WriteTranslation(LEnvironment* environment, Translation* translation);
 
+  void EnsureRelocSpaceForDeoptimization();
+
   // Declare methods that deal with the individual node types.
 #define DECLARE_DO(type) void Do##type(L##type* node);
   LITHIUM_CONCRETE_INSTRUCTION_LIST(DECLARE_DO)
@@ -119,6 +122,10 @@ class LCodeGen BASE_EMBEDDED {
   bool is_generating() const { return status_ == GENERATING; }
   bool is_done() const { return status_ == DONE; }
   bool is_aborted() const { return status_ == ABORTED; }
+
+  int strict_mode_flag() const {
+    return info_->is_strict() ? kStrictMode : kNonStrictMode;
+  }
 
   LChunk* chunk() const { return chunk_; }
   Scope* scope() const { return scope_; }
@@ -147,19 +154,19 @@ class LCodeGen BASE_EMBEDDED {
   bool GeneratePrologue();
   bool GenerateBody();
   bool GenerateDeferredCode();
+  // Pad the reloc info to ensure that we have enough space to patch during
+  // deoptimization.
+  bool GenerateRelocPadding();
   bool GenerateSafepointTable();
 
-  void CallCode(Handle<Code> code,
-                RelocInfo::Mode mode,
-                LInstruction* instr);
-  void CallRuntime(Runtime::Function* function,
-                   int num_arguments,
-                   LInstruction* instr);
-  void CallRuntime(Runtime::FunctionId id,
-                   int num_arguments,
-                   LInstruction* instr) {
+  void CallCode(Handle<Code> code, RelocInfo::Mode mode, LInstruction* instr,
+                bool adjusted = true);
+  void CallRuntime(Runtime::Function* fun, int argc, LInstruction* instr,
+                   bool adjusted = true);
+  void CallRuntime(Runtime::FunctionId id, int argc, LInstruction* instr,
+                   bool adjusted = true) {
     Runtime::Function* function = Runtime::FunctionForId(id);
-    CallRuntime(function, num_arguments, instr);
+    CallRuntime(function, argc, instr, adjusted);
   }
 
   // Generate a direct call to a known function.  Expects the function
@@ -203,6 +210,7 @@ class LCodeGen BASE_EMBEDDED {
                        int arguments,
                        int deoptimization_index);
   void RecordSafepoint(LPointerMap* pointers, int deoptimization_index);
+  void RecordSafepoint(int deoptimization_index);
   void RecordSafepointWithRegisters(LPointerMap* pointers,
                                     int arguments,
                                     int deoptimization_index);
@@ -229,6 +237,11 @@ class LCodeGen BASE_EMBEDDED {
                          Label* is_not_object,
                          Label* is_object);
 
+  // Emits optimized code for %_IsConstructCall().
+  // Caller should branch on equal condition.
+  void EmitIsConstructCall(Register temp);
+
+
   LChunk* const chunk_;
   MacroAssembler* const masm_;
   CompilationInfo* const info_;
@@ -244,6 +257,13 @@ class LCodeGen BASE_EMBEDDED {
   TranslationBuffer translations_;
   ZoneList<LDeferredCode*> deferred_;
   int osr_pc_offset_;
+
+  struct DeoptimizationRelocSize {
+    int min_size;
+    int last_pc_offset;
+  };
+
+  DeoptimizationRelocSize deoptimization_reloc_size;
 
   // Builder that keeps track of safepoints in the code. The table
   // itself is emitted at the end of the generated code.

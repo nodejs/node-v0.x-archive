@@ -178,10 +178,24 @@ class RelocInfo BASE_EMBEDDED {
   // invalid/uninitialized position value.
   static const int kNoPosition = -1;
 
+  // This string is used to add padding comments to the reloc info in cases
+  // where we are not sure to have enough space for patching in during
+  // lazy deoptimization. This is the case if we have indirect calls for which
+  // we do not normally record relocation info.
+  static const char* kFillerCommentString;
+
+  // The size of a comment is equal to tree bytes for the extra tagged pc +
+  // the tag for the data, and kPointerSize for the actual pointer to the
+  // comment.
+  static const int kRelocCommentSize = 3 + kPointerSize;
+
+  // The maximum size for a call instruction including pc-jump.
+  static const int kMaxCallSize = 6;
+
   enum Mode {
     // Please note the order is important (see IsCodeTarget, IsGCRelocMode).
     CONSTRUCT_CALL,  // code target that is a call to a JavaScript constructor.
-    CODE_TARGET_CONTEXT,  // Code target used for contextual loads.
+    CODE_TARGET_CONTEXT,  // Code target used for contextual loads and stores.
     DEBUG_BREAK,  // Code target for the debugger statement.
     CODE_TARGET,  // Code target which is not any of the above.
     EMBEDDED_OBJECT,
@@ -459,9 +473,6 @@ class Debug_Address;
 #endif
 
 
-typedef void* ExternalReferenceRedirector(void* original, bool fp_return);
-
-
 // An ExternalReference represents a C++ address used in the generated
 // code. All references to C++ functions and variables must be encapsulated in
 // an ExternalReference instance. This is done in order to track the origin of
@@ -469,9 +480,29 @@ typedef void* ExternalReferenceRedirector(void* original, bool fp_return);
 // addresses when deserializing a heap.
 class ExternalReference BASE_EMBEDDED {
  public:
+  // Used in the simulator to support different native api calls.
+  //
+  // BUILTIN_CALL - builtin call.
+  // MaybeObject* f(v8::internal::Arguments).
+  //
+  // FP_RETURN_CALL - builtin call that returns floating point.
+  // double f(double, double).
+  //
+  // DIRECT_CALL - direct call to API function native callback
+  // from generated code.
+  // Handle<Value> f(v8::Arguments&)
+  //
+  enum Type {
+    BUILTIN_CALL,  // default
+    FP_RETURN_CALL,
+    DIRECT_CALL
+  };
+
+  typedef void* ExternalReferenceRedirector(void* original, Type type);
+
   explicit ExternalReference(Builtins::CFunctionId id);
 
-  explicit ExternalReference(ApiFunction* ptr);
+  explicit ExternalReference(ApiFunction* ptr, Type type);
 
   explicit ExternalReference(Builtins::Name name);
 
@@ -599,17 +630,19 @@ class ExternalReference BASE_EMBEDDED {
 
   static ExternalReferenceRedirector* redirector_;
 
-  static void* Redirect(void* address, bool fp_return = false) {
+  static void* Redirect(void* address,
+                        Type type = ExternalReference::BUILTIN_CALL) {
     if (redirector_ == NULL) return address;
-    void* answer = (*redirector_)(address, fp_return);
+    void* answer = (*redirector_)(address, type);
     return answer;
   }
 
-  static void* Redirect(Address address_arg, bool fp_return = false) {
+  static void* Redirect(Address address_arg,
+                        Type type = ExternalReference::BUILTIN_CALL) {
     void* address = reinterpret_cast<void*>(address_arg);
     void* answer = (redirector_ == NULL) ?
                    address :
-                   (*redirector_)(address, fp_return);
+                   (*redirector_)(address, type);
     return answer;
   }
 

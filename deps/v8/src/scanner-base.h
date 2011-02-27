@@ -409,6 +409,8 @@ class Scanner {
   }
 
   uc32 ScanHexEscape(uc32 c, int length);
+
+  // Scans octal escape sequence. Also accepts "\0" decimal escape sequence.
   uc32 ScanOctalEscape(uc32 c, int length);
 
   // Return the current source position.
@@ -562,10 +564,17 @@ class KeywordMatcher {
     CON,
     D,
     DE,
+    E,
+    EX,
     F,
     I,
+    IM,
+    IMP,
     IN,
     N,
+    P,
+    PR,
+    S,
     T,
     TH,
     TR,
@@ -581,7 +590,7 @@ class KeywordMatcher {
 
   // Range of possible first characters of a keyword.
   static const unsigned int kFirstCharRangeMin = 'b';
-  static const unsigned int kFirstCharRangeMax = 'w';
+  static const unsigned int kFirstCharRangeMax = 'y';
   static const unsigned int kFirstCharRangeLength =
       kFirstCharRangeMax - kFirstCharRangeMin + 1;
   // State map for first keyword character range.

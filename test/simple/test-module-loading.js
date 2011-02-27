@@ -5,6 +5,14 @@ var fs = require('fs');
 
 common.debug('load test-module-loading.js');
 
+// assert that this is the main module.
+assert.equal(require.main.id, '.', 'main module should have id of \'.\'');
+assert.equal(require.main, module, 'require.main should === module');
+assert.equal(process.mainModule, module,
+             'process.mainModule should === module');
+// assert that it's *not* the main module in the required module.
+require('../fixtures/not-main-module.js');
+
 // require a file with a request that includes the extension
 var a_js = require('../fixtures/a.js');
 assert.equal(42, a_js.number);
@@ -59,11 +67,22 @@ var three = require('../fixtures/nested-index/three'),
 assert.equal(threeFolder, threeIndex);
 assert.notEqual(threeFolder, three);
 
+common.debug('test package.json require() loading');
+assert.equal(require('../fixtures/packages/main').ok, 'ok',
+             'Failed loading package');
+assert.equal(require('../fixtures/packages/main-index').ok, 'ok',
+             'Failed loading package with index.js in main subdir');
+
 common.debug('test cycles containing a .. path');
 var root = require('../fixtures/cycles/root'),
     foo = require('../fixtures/cycles/folder/foo');
 assert.equal(root.foo, foo);
 assert.equal(root.sayHello(), root.hello);
+
+common.debug('test node_modules folders');
+// asserts are in the fixtures files themselves,
+// since they depend on the folder structure.
+require('../fixtures/node_modules/foo');
 
 common.debug('test name clashes');
 // this one exists and should import the local module

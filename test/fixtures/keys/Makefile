@@ -1,4 +1,4 @@
-all: agent1-cert.pem agent2-cert.pem agent3-cert.pem agent4-cert.pem
+all: agent1-cert.pem agent2-cert.pem agent3-cert.pem agent4-cert.pem ca2-crl.pem
 
 
 #
@@ -14,6 +14,8 @@ ca1-cert.pem: ca1.cnf
 #
 ca2-cert.pem: ca2.cnf
 	openssl req -new -x509 -config ca2.cnf -keyout ca2-key.pem -out ca2-cert.pem
+	echo '01' > ca2-serial
+	touch ca2-database.txt
 
 
 #
@@ -28,6 +30,7 @@ agent1-csr.pem: agent1.cnf agent1-key.pem
 
 agent1-cert.pem: agent1-csr.pem ca1-cert.pem ca1-key.pem
 	openssl x509 -req \
+		-days 999 \
 		-passin "pass:password" \
 		-in agent1-csr.pem \
 		-CA ca1-cert.pem \
@@ -53,6 +56,7 @@ agent2-csr.pem: agent2-key.pem agent2.cnf
 # Create a Certificate for the agent.
 agent2-cert.pem: agent2-csr.pem agent2-key.pem
 	openssl x509 -req \
+		-days 999 \
 		-in agent2-csr.pem \
 		-signkey agent2-key.pem \
 		-out agent2-cert.pem
@@ -72,6 +76,7 @@ agent3-csr.pem: agent3.cnf agent3-key.pem
 
 agent3-cert.pem: agent3-csr.pem ca2-cert.pem ca2-key.pem
 	openssl x509 -req \
+		-days 999 \
 		-passin "pass:password" \
 		-in agent3-csr.pem \
 		-CA ca2-cert.pem \
@@ -95,6 +100,7 @@ agent4-csr.pem: agent4.cnf agent4-key.pem
 
 agent4-cert.pem: agent4-csr.pem ca2-cert.pem ca2-key.pem
 	openssl x509 -req \
+		-days 999 \
 		-passin "pass:password" \
 		-in agent4-csr.pem \
 		-CA ca2-cert.pem \
@@ -107,12 +113,23 @@ agent4-cert.pem: agent4-csr.pem ca2-cert.pem ca2-key.pem
 agent4-verify: agent4-cert.pem ca2-cert.pem
 	openssl verify -CAfile ca2-cert.pem agent4-cert.pem
 
-
-# TODO: agent on CRL
-
+#
+# Make CRL with agent4 being rejected
+#
+ca2-crl.pem: ca2-key.pem ca2-cert.pem ca2.cnf
+	openssl ca -revoke agent4-cert.pem \
+		-keyfile ca2-key.pem \
+		-cert ca2-cert.pem \
+		-config ca2.cnf
+	openssl ca \
+		-keyfile ca2-key.pem \
+		-cert ca2-cert.pem \
+		-config ca2.cnf \
+		-gencrl \
+		-out ca2-crl.pem
 
 clean:
-	rm -f *.pem *.srl
+	rm -f *.pem *.srl ca2-database.txt ca2-serial
 
 test: agent1-verify agent2-verify agent3-verify agent4-verify
 

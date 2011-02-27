@@ -423,7 +423,8 @@ class Parser {
 
   // Returns NULL if parsing failed.
   FunctionLiteral* ParseProgram(Handle<String> source,
-                                bool in_global_context);
+                                bool in_global_context,
+                                StrictModeFlag strict_mode);
 
   FunctionLiteral* ParseLazy(Handle<SharedFunctionInfo> info);
 
@@ -435,6 +436,11 @@ class Parser {
                        Vector<Handle<String> > args);
 
  protected:
+  // Limit on number of function parameters is chosen arbitrarily.
+  // Code::Flags uses only the low 17 bits of num-parameters to
+  // construct a hashable id, so if more than 2^17 are allowed, this
+  // should be checked.
+  static const int kMaxNumFunctionParameters = 32766;
   FunctionLiteral* ParseLazy(Handle<SharedFunctionInfo> info,
                              UC16CharacterStream* source,
                              ZoneScope* zone_scope);
@@ -446,6 +452,7 @@ class Parser {
   // Called by ParseProgram after setting up the scanner.
   FunctionLiteral* DoParseProgram(Handle<String> source,
                                   bool in_global_context,
+                                  StrictModeFlag strict_mode,
                                   ZoneScope* zone_scope);
 
   // Report syntax error
@@ -546,6 +553,7 @@ class Parser {
 
   ZoneList<Expression*>* ParseArguments(bool* ok);
   FunctionLiteral* ParseFunctionLiteral(Handle<String> var_name,
+                                        bool name_is_reserved,
                                         int function_token_position,
                                         FunctionLiteralType type,
                                         bool* ok);
@@ -574,6 +582,8 @@ class Parser {
     }
     return scanner().Next();
   }
+
+  bool peek_any_identifier();
 
   INLINE(void Consume(Token::Value token));
   void Expect(Token::Value token, bool* ok);
@@ -608,6 +618,7 @@ class Parser {
   Literal* GetLiteralNumber(double value);
 
   Handle<String> ParseIdentifier(bool* ok);
+  Handle<String> ParseIdentifierOrReservedWord(bool* is_reserved, bool* ok);
   Handle<String> ParseIdentifierName(bool* ok);
   Handle<String> ParseIdentifierOrGetOrSet(bool* is_get,
                                            bool* is_set,

@@ -31,6 +31,7 @@ class SecureContext : ObjectWrap {
   static v8::Handle<v8::Value> SetKey(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetCert(const v8::Arguments& args);
   static v8::Handle<v8::Value> AddCACert(const v8::Arguments& args);
+  static v8::Handle<v8::Value> AddCRL(const v8::Arguments& args);
   static v8::Handle<v8::Value> AddRootCerts(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetCiphers(const v8::Arguments& args);
   static v8::Handle<v8::Value> Close(const v8::Arguments& args);
@@ -73,6 +74,18 @@ class Connection : ObjectWrap {
   static v8::Handle<v8::Value> ReceivedShutdown(const v8::Arguments& args);
   static v8::Handle<v8::Value> Start(const v8::Arguments& args);
   static v8::Handle<v8::Value> Close(const v8::Arguments& args);
+
+  int HandleBIOError(BIO *bio, const char* func, int rv);
+  int HandleSSLError(const char* func, int rv);
+
+  void ClearError();
+  void SetShutdownFlags();
+
+  static Connection* Unwrap(const v8::Arguments& args) {
+    Connection* ss = ObjectWrap::Unwrap<Connection>(args.Holder());
+    ss->ClearError();
+    return ss;
+  }
 
   Connection() : ObjectWrap() {
     bio_read_ = bio_write_ = NULL;

@@ -39,11 +39,15 @@ process.on('exit', function() {
                       process,
                       global];
 
-  if (DTRACE_HTTP_SERVER_RESPONSE) {
+  if (global.DTRACE_HTTP_SERVER_RESPONSE) {
     knownGlobals.push(DTRACE_HTTP_SERVER_RESPONSE);
     knownGlobals.push(DTRACE_HTTP_SERVER_REQUEST);
+    knownGlobals.push(DTRACE_HTTP_CLIENT_RESPONSE);
+    knownGlobals.push(DTRACE_HTTP_CLIENT_REQUEST);
     knownGlobals.push(DTRACE_NET_STREAM_END);
     knownGlobals.push(DTRACE_NET_SERVER_CONNECTION);
+    knownGlobals.push(DTRACE_NET_SOCKET_READ);
+    knownGlobals.push(DTRACE_NET_SOCKET_WRITE);
   }
 
   for (var x in global) {
@@ -62,3 +66,10 @@ process.on('exit', function() {
     }
   }
 });
+
+
+// This function allows one two run an HTTP test agaist both HTTPS and
+// normal HTTP modules. This ensures they fit the same API.
+exports.httpTest = function httpTest(cb) {
+};
+

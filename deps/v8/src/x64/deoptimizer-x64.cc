@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -40,6 +40,67 @@ namespace internal {
 
 int Deoptimizer::table_entry_size_ = 10;
 
+
+int Deoptimizer::patch_size() {
+  return MacroAssembler::kCallInstructionLength;
+}
+
+
+#ifdef DEBUG
+// Overwrites code with int3 instructions.
+static void ZapCodeRange(Address from, Address to) {
+  CHECK(from <= to);
+  int length = static_cast<int>(to - from);
+  CodePatcher destroyer(from, length);
+  while (length-- > 0) {
+    destroyer.masm()->int3();
+  }
+}
+#endif
+
+
+// Iterate through the entries of a SafepointTable that corresponds to
+// deoptimization points.
+class SafepointTableDeoptimiztionEntryIterator {
+ public:
+  explicit SafepointTableDeoptimiztionEntryIterator(Code* code)
+      : code_(code), table_(code), index_(-1), limit_(table_.length()) {
+    FindNextIndex();
+  }
+
+  SafepointEntry Next(Address* pc) {
+    if (index_ >= limit_) {
+      *pc = NULL;
+      return SafepointEntry();  // Invalid entry.
+    }
+    *pc = code_->instruction_start() + table_.GetPcOffset(index_);
+    SafepointEntry entry = table_.GetEntry(index_);
+    FindNextIndex();
+    return entry;
+  }
+
+ private:
+  void FindNextIndex() {
+    ASSERT(index_ < limit_);
+    while (++index_ < limit_) {
+      if (table_.GetEntry(index_).deoptimization_index() !=
+          Safepoint::kNoDeoptimizationIndex) {
+        return;
+      }
+    }
+  }
+
+  Code* code_;
+  SafepointTable table_;
+  // Index of next deoptimization entry. If negative after calling
+  // FindNextIndex, there are no more, and Next will return an invalid
+  // SafepointEntry.
+  int index_;
+  // Table length.
+  int limit_;
+};
+
+
 void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   AssertNoAllocation no_allocation;
 
@@ -53,42 +114,74 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   code->InvalidateRelocation();
 
   // For each return after a safepoint insert a absolute call to the
-  // corresponding deoptimization entry.
-  unsigned last_pc_offset = 0;
-  SafepointTable table(function->code());
-  for (unsigned i = 0; i < table.length(); i++) {
-    unsigned pc_offset = table.GetPcOffset(i);
-    SafepointEntry safepoint_entry = table.GetEntry(i);
-    int deoptimization_index = safepoint_entry.deoptimization_index();
-    int gap_code_size = safepoint_entry.gap_code_size();
+  // corresponding deoptimization entry, or a short call to an absolute
+  // jump if space is short. The absolute jumps are put in a table just
+  // before the safepoint table (space was allocated there when the Code
+  // object was created, if necessary).
+
+  Address instruction_start = function->code()->instruction_start();
+  Address jump_table_address =
+      instruction_start + function->code()->safepoint_table_offset();
+  Address previous_pc = instruction_start;
+
+  SafepointTableDeoptimiztionEntryIterator deoptimizations(function->code());
+  Address entry_pc = NULL;
+
+  SafepointEntry current_entry = deoptimizations.Next(&entry_pc);
+  while (current_entry.is_valid()) {
+    int gap_code_size = current_entry.gap_code_size();
+    unsigned deoptimization_index = current_entry.deoptimization_index();
+
 #ifdef DEBUG
     // Destroy the code which is not supposed to run again.
-    unsigned instructions = pc_offset - last_pc_offset;
-    CodePatcher destroyer(code->instruction_start() + last_pc_offset,
-                          instructions);
-    for (unsigned i = 0; i < instructions; i++) {
-      destroyer.masm()->int3();
-    }
+    ZapCodeRange(previous_pc, entry_pc);
 #endif
-    last_pc_offset = pc_offset;
-    if (deoptimization_index != Safepoint::kNoDeoptimizationIndex) {
-      CodePatcher patcher(
-          code->instruction_start() + pc_offset + gap_code_size,
-          Assembler::kCallInstructionLength);
+    // Position where Call will be patched in.
+    Address call_address = entry_pc + gap_code_size;
+    // End of call instruction, if using a direct call to a 64-bit address.
+    Address call_end_address =
+        call_address + MacroAssembler::kCallInstructionLength;
+
+    // Find next deoptimization entry, if any.
+    Address next_pc = NULL;
+    SafepointEntry next_entry = deoptimizations.Next(&next_pc);
+
+    if (!next_entry.is_valid() || next_pc >= call_end_address) {
+      // Room enough to write a long call instruction.
+      CodePatcher patcher(call_address, Assembler::kCallInstructionLength);
       patcher.masm()->Call(GetDeoptimizationEntry(deoptimization_index, LAZY),
                            RelocInfo::NONE);
-      last_pc_offset += gap_code_size + Assembler::kCallInstructionLength;
+      previous_pc = call_end_address;
+    } else {
+      // Not room enough for a long Call instruction. Write a short call
+      // instruction to a long jump placed elsewhere in the code.
+      Address short_call_end_address =
+          call_address + MacroAssembler::kShortCallInstructionLength;
+      ASSERT(next_pc >= short_call_end_address);
+
+      // Write jump in jump-table.
+      jump_table_address -= MacroAssembler::kJumpInstructionLength;
+      CodePatcher jump_patcher(jump_table_address,
+                               MacroAssembler::kJumpInstructionLength);
+      jump_patcher.masm()->Jump(
+          GetDeoptimizationEntry(deoptimization_index, LAZY),
+          RelocInfo::NONE);
+
+      // Write call to jump at call_offset.
+      CodePatcher call_patcher(call_address,
+                               MacroAssembler::kShortCallInstructionLength);
+      call_patcher.masm()->call(jump_table_address);
+      previous_pc = short_call_end_address;
     }
+
+    // Continue with next deoptimization entry.
+    current_entry = next_entry;
+    entry_pc = next_pc;
   }
+
 #ifdef DEBUG
   // Destroy the code which is not supposed to run again.
-  CHECK(code->safepoint_table_start() >= last_pc_offset);
-  unsigned instructions = code->safepoint_table_start() - last_pc_offset;
-  CodePatcher destroyer(code->instruction_start() + last_pc_offset,
-                        instructions);
-  for (unsigned i = 0; i < instructions; i++) {
-    destroyer.masm()->int3();
-  }
+  ZapCodeRange(previous_pc, jump_table_address);
 #endif
 
   // Add the deoptimizing code to the list.
@@ -107,17 +200,54 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 }
 
 
-void Deoptimizer::PatchStackCheckCode(Code* unoptimized_code,
-                                      Code* check_code,
-                                      Code* replacement_code) {
-  UNIMPLEMENTED();
+void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
+                                        Code* check_code,
+                                        Code* replacement_code) {
+  Address call_target_address = pc_after - kIntSize;
+  ASSERT(check_code->entry() ==
+         Assembler::target_address_at(call_target_address));
+  // The stack check code matches the pattern:
+  //
+  //     cmp rsp, <limit>
+  //     jae ok
+  //     call <stack guard>
+  //     test rax, <loop nesting depth>
+  // ok: ...
+  //
+  // We will patch away the branch so the code is:
+  //
+  //     cmp rsp, <limit>  ;; Not changed
+  //     nop
+  //     nop
+  //     call <on-stack replacment>
+  //     test rax, <loop nesting depth>
+  // ok:
+  //
+  ASSERT(*(call_target_address - 3) == 0x73 &&  // jae
+         *(call_target_address - 2) == 0x05 &&  // offset
+         *(call_target_address - 1) == 0xe8);   // call
+  *(call_target_address - 3) = 0x90;  // nop
+  *(call_target_address - 2) = 0x90;  // nop
+  Assembler::set_target_address_at(call_target_address,
+                                   replacement_code->entry());
 }
 
 
-void Deoptimizer::RevertStackCheckCode(Code* unoptimized_code,
-                                       Code* check_code,
-                                       Code* replacement_code) {
-  UNIMPLEMENTED();
+void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
+                                         Code* check_code,
+                                         Code* replacement_code) {
+  Address call_target_address = pc_after - kIntSize;
+  ASSERT(replacement_code->entry() ==
+         Assembler::target_address_at(call_target_address));
+  // Replace the nops from patching (Deoptimizer::PatchStackCheckCode) to
+  // restore the conditional branch.
+  ASSERT(*(call_target_address - 3) == 0x90 &&  // nop
+         *(call_target_address - 2) == 0x90 &&  // nop
+         *(call_target_address - 1) == 0xe8);   // call
+  *(call_target_address - 3) = 0x73;  // jae
+  *(call_target_address - 2) = 0x05;  // offset
+  Assembler::set_target_address_at(call_target_address,
+                                   check_code->entry());
 }
 
 
@@ -228,14 +358,16 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
            fp_value, output_offset, value);
   }
 
-  // The context can be gotten from the function so long as we don't
-  // optimize functions that need local contexts.
+  // For the bottommost output frame the context can be gotten from the input
+  // frame. For all subsequent output frames it can be gotten from the function
+  // so long as we don't inline functions that need local contexts.
   output_offset -= kPointerSize;
   input_offset -= kPointerSize;
-  value = reinterpret_cast<intptr_t>(function->context());
-  // The context for the bottommost output frame should also agree with the
-  // input frame.
-  ASSERT(!is_bottommost || input_->GetFrameSlot(input_offset) == value);
+  if (is_bottommost) {
+    value = input_->GetFrameSlot(input_offset);
+  } else {
+    value = reinterpret_cast<intptr_t>(function->context());
+  }
   output_frame->SetFrameSlot(output_offset, value);
   if (is_topmost) output_frame->SetRegister(rsi.code(), value);
   if (FLAG_trace_deopt) {
@@ -384,7 +516,7 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ pop(Operand(rbx, offset));
   }
 
-    // Fill in the double input registers.
+  // Fill in the double input registers.
   int double_regs_offset = FrameDescription::double_registers_offset();
   for (int i = 0; i < XMMRegister::kNumAllocatableRegisters; i++) {
     int dst_offset = i * kDoubleSize + double_regs_offset;
@@ -398,7 +530,7 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ addq(rsp, Immediate(2 * kPointerSize));
   }
 
-  // Compute a pointer to the unwinding limit in register ecx; that is
+  // Compute a pointer to the unwinding limit in register rcx; that is
   // the first stack slot not part of the input frame.
   __ movq(rcx, Operand(rbx, FrameDescription::frame_size_offset()));
   __ addq(rcx, rsp);

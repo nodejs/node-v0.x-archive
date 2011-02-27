@@ -261,10 +261,59 @@ Example:
 This method must only be called once on a message and it must
 be called before `response.end()` is called.
 
+If you call `response.write()` or `response.end()` before calling this, the
+implicit/mutable headers will be calculated and call this function for you.
+
+### response.statusCode
+
+When using implicit headers (not calling `response.writeHead()` explicitly), this property
+controls the status code that will be send to the client when the headers get
+flushed.
+
+Example:
+
+    response.statusCode = 404;
+
+### response.setHeader(name, value)
+
+Sets a single header value for implicit headers.  If this header already exists
+in the to-be-sent headers, it's value will be replaced.  Use an array of strings
+here if you need to send multiple headers with the same name.
+
+Example:
+
+    response.setHeader("Content-Type", "text/html");
+
+or
+
+    response.setHeader("Set-Cookie", ["type=ninja", "language=javascript"]);
+
+
+### response.getHeader(name)
+
+Reads out a header that's already been queued but not sent to the client.  Note
+that the name is case insensitive.  This can only be called before headers get
+implicitly flushed.
+
+Example:
+
+    var contentType = response.getHeader('content-type');
+
+### response.removeHeader(name)
+
+Removes a header that's queued for implicit sending.
+
+Example:
+
+    response.removeHeader("Content-Encoding");
+
+
 ### response.write(chunk, encoding='utf8')
 
-This method must be called after `writeHead` was
-called. It sends a chunk of the response body. This method may
+If this method is called and `response.writeHead()` has not been called, it will
+switch to implicit header mode and flush the implicit headers.
+
+This sends a chunk of the response body. This method may
 be called multiple times to provide successive parts of the body.
 
 `chunk` can be a string or a buffer. If `chunk` is a string,
@@ -319,7 +368,7 @@ Options:
 
 - `host`: A domain name or IP address of the server to issue the request to.
 - `port`: Port of remote server.
-- `method`: A string specifing the HTTP request method. Possible values:
+- `method`: A string specifying the HTTP request method. Possible values:
   `'GET'` (default), `'POST'`, `'PUT'`, and `'DELETE'`.
 - `path`: Request path. Should include query string and fragments if any.
    E.G. `'/index.html?page=12'`
@@ -375,7 +424,7 @@ There are a few special headers that should be noted.
 ## http.get(options, callback)
 
 Since most requests are GET requests without bodies, Node provides this
-convience method. The only difference between this method and `http.request()` is
+convenience method. The only difference between this method and `http.request()` is
 that it sets the method to GET and calls `req.end()` automatically.
 
 Example:
@@ -425,7 +474,7 @@ By default set to 5. Determines how many concurrent sockets the agent can have o
 
 ### agent.sockets
 
-An array of sockets currently inuse by the Agent. Do not modify.
+An array of sockets currently in use by the Agent. Do not modify.
 
 ### agent.queue
 
@@ -436,7 +485,10 @@ A queue of requests waiting to be sent to sockets.
 ## http.ClientRequest
 
 This object is created internally and returned from `http.request()`.  It
-represents an _in-progress_ request whose header has already been sent.
+represents an _in-progress_ request whose header has already been queued.  The 
+header is still mutable using the `setHeader(name, value)`, `getHeader(name)`,
+`removeHeader(name)` API.  The actual header will be sent along with the first
+data chunk or when closing the connection.
 
 To get the response, add a listener for `'response'` to the request object.
 `'response'` will be emitted from the request object when the response
@@ -502,6 +554,10 @@ chunked, this will send the terminating `'0\r\n\r\n'`.
 
 If `data` is specified, it is equivalent to calling `request.write(data, encoding)`
 followed by `request.end()`.
+
+### request.abort()
+
+Aborts a request.  (New since v0.3.8.)
 
 
 ## http.ClientResponse

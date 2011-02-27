@@ -45,7 +45,7 @@ namespace internal {
   /* Property access */ \
   F(GetProperty, 2, 1) \
   F(KeyedGetProperty, 2, 1) \
-  F(DeleteProperty, 2, 1) \
+  F(DeleteProperty, 3, 1) \
   F(HasLocalProperty, 2, 1) \
   F(HasProperty, 2, 1) \
   F(HasElement, 2, 1) \
@@ -128,6 +128,7 @@ namespace internal {
   \
   F(StringAdd, 2, 1) \
   F(StringBuilderConcat, 3, 1) \
+  F(StringBuilderJoin, 3, 1) \
   \
   /* Bit operations */ \
   F(NumberOr, 2, 1) \
@@ -237,8 +238,8 @@ namespace internal {
   \
   /* Eval */ \
   F(GlobalReceiver, 1, 1) \
-  F(ResolvePossiblyDirectEval, 3, 2) \
-  F(ResolvePossiblyDirectEvalNoLookup, 3, 2) \
+  F(ResolvePossiblyDirectEval, 4, 2) \
+  F(ResolvePossiblyDirectEvalNoLookup, 4, 2) \
   \
   F(SetProperty, -1 /* 3 or 4 */, 1) \
   F(DefineOrRedefineDataProperty, 4, 1) \
@@ -309,6 +310,13 @@ namespace internal {
   F(LocalKeys, 1, 1) \
   /* Cache suport */ \
   F(GetFromCache, 2, 1) \
+  \
+  /* Message objects */ \
+  F(NewMessageObject, 2, 1) \
+  F(MessageGetType, 1, 1) \
+  F(MessageGetArguments, 1, 1) \
+  F(MessageGetStartPosition, 1, 1) \
+  F(MessageGetScript, 1, 1) \
   \
   /* Pseudo functions - handled as macros by parser */ \
   F(IS_VAR, 1, 1)

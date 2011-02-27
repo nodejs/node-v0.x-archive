@@ -196,6 +196,8 @@ class Factory : public AllStatic {
 
   static Handle<Map> GetSlowElementsMap(Handle<Map> map);
 
+  static Handle<Map> GetPixelArrayElementsMap(Handle<Map> map);
+
   static Handle<FixedArray> CopyFixedArray(Handle<FixedArray> array);
 
   // Numbers (eg, literals) are pretenured by the parser.
@@ -364,6 +366,15 @@ class Factory : public AllStatic {
       Handle<Code> code,
       Handle<SerializedScopeInfo> scope_info);
   static Handle<SharedFunctionInfo> NewSharedFunctionInfo(Handle<String> name);
+
+  static Handle<JSMessageObject> NewJSMessageObject(
+      Handle<String> type,
+      Handle<JSArray> arguments,
+      int start_position,
+      int end_position,
+      Handle<Object> script,
+      Handle<Object> stack_trace,
+      Handle<Object> stack_frames);
 
   static Handle<NumberDictionary> DictionaryAtNumberPut(
       Handle<NumberDictionary>,

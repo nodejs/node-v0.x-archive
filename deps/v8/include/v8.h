@@ -462,7 +462,6 @@ class V8EXPORT HandleScope {
 
   void Leave();
 
-
   internal::Object** prev_next_;
   internal::Object** prev_limit_;
 
@@ -3053,7 +3052,22 @@ class V8EXPORT ExtensionConfiguration {
  */
 class V8EXPORT Context {
  public:
-  /** Returns the global object of the context. */
+  /**
+   * Returns the global proxy object or global object itself for
+   * detached contexts.
+   *
+   * Global proxy object is a thin wrapper whose prototype points to
+   * actual context's global object with the properties like Object, etc.
+   * This is done that way for security reasons (for more details see
+   * https://wiki.mozilla.org/Gecko:SplitWindow).
+   *
+   * Please note that changes to global proxy object prototype most probably
+   * would break VM---v8 expects only global object as a prototype of
+   * global proxy object.
+   *
+   * If DetachGlobal() has been invoked, Global() would return actual global
+   * object until global is reattached with ReattachGlobal().
+   */
   Local<Object> Global();
 
   /**
@@ -3433,7 +3447,7 @@ class Internals {
   static const int kFullStringRepresentationMask = 0x07;
   static const int kExternalTwoByteRepresentationTag = 0x02;
 
-  static const int kJSObjectType = 0x9f;
+  static const int kJSObjectType = 0xa0;
   static const int kFirstNonstringType = 0x80;
   static const int kProxyType = 0x85;
 

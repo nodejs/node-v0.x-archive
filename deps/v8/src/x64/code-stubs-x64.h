@@ -270,6 +270,11 @@ class TypeRecordingBinaryOpStub: public CodeStub {
   void GenerateSmiCode(MacroAssembler* masm,
                        Label* slow,
                        SmiCodeGenerateHeapNumberResults heapnumber_results);
+  void GenerateFloatingPointCode(MacroAssembler* masm,
+                                 Label* allocation_failure,
+                                 Label* non_numeric_failure);
+  void GenerateStringAddCode(MacroAssembler* masm);
+  void GenerateCallRuntimeCode(MacroAssembler* masm);
   void GenerateLoadArguments(MacroAssembler* masm);
   void GenerateReturn(MacroAssembler* masm);
   void GenerateUninitializedStub(MacroAssembler* masm);
@@ -355,24 +360,35 @@ class StringHelper : public AllStatic {
 // Flag that indicates how to generate code for the stub StringAddStub.
 enum StringAddFlags {
   NO_STRING_ADD_FLAGS = 0,
-  NO_STRING_CHECK_IN_STUB = 1 << 0  // Omit string check in stub.
+  // Omit left string check in stub (left is definitely a string).
+  NO_STRING_CHECK_LEFT_IN_STUB = 1 << 0,
+  // Omit right string check in stub (right is definitely a string).
+  NO_STRING_CHECK_RIGHT_IN_STUB = 1 << 1,
+  // Omit both string checks in stub.
+  NO_STRING_CHECK_IN_STUB =
+      NO_STRING_CHECK_LEFT_IN_STUB | NO_STRING_CHECK_RIGHT_IN_STUB
 };
 
 
 class StringAddStub: public CodeStub {
  public:
-  explicit StringAddStub(StringAddFlags flags) {
-    string_check_ = ((flags & NO_STRING_CHECK_IN_STUB) == 0);
-  }
+  explicit StringAddStub(StringAddFlags flags) : flags_(flags) {}
 
  private:
   Major MajorKey() { return StringAdd; }
-  int MinorKey() { return string_check_ ? 0 : 1; }
+  int MinorKey() { return flags_; }
 
   void Generate(MacroAssembler* masm);
 
-  // Should the stub check whether arguments are strings?
-  bool string_check_;
+  void GenerateConvertArgument(MacroAssembler* masm,
+                               int stack_offset,
+                               Register arg,
+                               Register scratch1,
+                               Register scratch2,
+                               Register scratch3,
+                               Label* slow);
+
+  const StringAddFlags flags_;
 };
 
 
@@ -446,6 +462,49 @@ class NumberToStringStub: public CodeStub {
 #endif
 };
 
+
+// Generate code to load an element from a pixel array. The receiver is assumed
+// to not be a smi and to have elements, the caller must guarantee this
+// precondition. If key is not a smi, then the generated code branches to
+// key_not_smi. Callers can specify NULL for key_not_smi to signal that a smi
+// check has already been performed on key so that the smi check is not
+// generated. If key is not a valid index within the bounds of the pixel array,
+// the generated code jumps to out_of_range. receiver, key and elements are
+// unchanged throughout the generated code sequence.
+void GenerateFastPixelArrayLoad(MacroAssembler* masm,
+                                Register receiver,
+                                Register key,
+                                Register elements,
+                                Register untagged_key,
+                                Register result,
+                                Label* not_pixel_array,
+                                Label* key_not_smi,
+                                Label* out_of_range);
+
+// Generate code to store an element into a pixel array, clamping values between
+// [0..255]. The receiver is assumed to not be a smi and to have elements, the
+// caller must guarantee this precondition. If key is not a smi, then the
+// generated code branches to key_not_smi. Callers can specify NULL for
+// key_not_smi to signal that a smi check has already been performed on key so
+// that the smi check is not generated. If the value is not a smi, the
+// generated code will branch to value_not_smi.  If the receiver
+// doesn't have pixel array elements, the generated code will branch to
+// not_pixel_array, unless not_pixel_array is NULL, in which case the caller
+// must ensure that the receiver has pixel array elements.  If key is not a
+// valid index within the bounds of the pixel array, the generated code jumps to
+// out_of_range.
+void GenerateFastPixelArrayStore(MacroAssembler* masm,
+                                 Register receiver,
+                                 Register key,
+                                 Register value,
+                                 Register elements,
+                                 Register scratch1,
+                                 bool load_elements_from_receiver,
+                                 bool key_is_untagged,
+                                 Label* key_not_smi,
+                                 Label* value_not_smi,
+                                 Label* not_pixel_array,
+                                 Label* out_of_range);
 
 } }  // namespace v8::internal
 

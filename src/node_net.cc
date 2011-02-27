@@ -92,13 +92,14 @@ static Persistent<FunctionTemplate> recv_msg_template;
   }
 
 
-#ifdef __POSIX__
-
 static inline bool SetCloseOnExec(int fd) {
+#ifdef __POSIX__
   return (fcntl(fd, F_SETFD, FD_CLOEXEC) != -1);
+#else // __MINGW32__
+  return SetHandleInformation(reinterpret_cast<HANDLE>(_get_osfhandle(fd)),
+                              HANDLE_FLAG_INHERIT, 0) != 0;
+#endif
 }
-
-#endif // __POSIX__
 
 
 static inline bool SetNonBlock(int fd) {
@@ -115,12 +116,11 @@ static inline bool SetSockFlags(int fd) {
 #ifdef __MINGW32__
   BOOL flags = TRUE;
   setsockopt(_get_osfhandle(fd), SOL_SOCKET, SO_REUSEADDR, (const char *)&flags, sizeof(flags));
-  return SetNonBlock(fd);
 #else // __POSIX__
   int flags = 1;
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&flags, sizeof(flags));
-  return SetNonBlock(fd) && SetCloseOnExec(fd);
 #endif
+  return SetNonBlock(fd) && SetCloseOnExec(fd);
 }
 
 
@@ -373,10 +373,6 @@ static Handle<Value> Close(const Arguments& args) {
   if (0 > close(fd)) {
     return ThrowException(ErrnoException(errno, "close"));
   }
-
-#ifdef __MINGW32__
-  ev_fd_closed(EV_DEFAULT_UC_ fd);
-#endif
 
   return Undefined();
 }
@@ -1366,20 +1362,25 @@ static Handle<Value> SetTTL(const Arguments& args) {
 
   FD_ARG(args[0]);
 
-  if (! args[1]->IsInt32()) {
+  if (!args[1]->IsInt32()) {
     return ThrowException(Exception::TypeError(
       String::New("Argument must be a number")));
   }
 
   newttl = args[1]->Int32Value();
+
   if (newttl < 1 || newttl > 255) {
     return ThrowException(Exception::TypeError(
       String::New("new TTL must be between 1 and 255")));
   }
 
 #ifdef __POSIX__
-  if (0 > setsockopt(fd, IPPROTO_IP, IP_TTL, (void *)&newttl,
-      sizeof(newttl))) {
+  int r = setsockopt(fd,
+                     IPPROTO_IP,
+                     IP_TTL,
+                     reinterpret_cast<void*>(&newttl),
+                     sizeof(newttl));
+  if (r < 0) {
     return ThrowException(ErrnoException(errno, "setsockopt"));
   }
 
@@ -1393,6 +1394,108 @@ static Handle<Value> SetTTL(const Arguments& args) {
 
   return scope.Close(Integer::New(newttl));
 }
+
+
+#ifdef  __POSIX__
+
+static Handle<Value> SetMulticastTTL(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() != 2) {
+    return ThrowException(Exception::TypeError(
+      String::New("Takes exactly two arguments: fd, new MulticastTTL")));
+  }
+
+  FD_ARG(args[0]);
+
+  if (!args[1]->IsInt32()) {
+    return ThrowException(Exception::TypeError(
+      String::New("Argument must be a number")));
+  }
+
+  int newttl = args[1]->Int32Value();
+  if (newttl < 0 || newttl > 255) {
+    return ThrowException(Exception::TypeError(
+      String::New("new MulticastTTL must be between 0 and 255")));
+  }
+
+  int r = setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL,
+    reinterpret_cast<void*>(&newttl), sizeof(newttl));
+
+  if (r < 0) {
+    return ThrowException(ErrnoException(errno, "setsockopt"));
+  } else {
+    return scope.Close(Integer::New(newttl));
+  }
+}
+
+static Handle<Value> SetMulticastLoopback(const Arguments& args) {
+  int flags, r;
+  HandleScope scope;
+
+  FD_ARG(args[0])
+
+  flags = args[1]->IsFalse() ? 0 : 1;
+  r = setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP,
+    reinterpret_cast<void*>(&flags), sizeof(flags));
+
+  if (r < 0) {
+    return ThrowException(ErrnoException(errno, "setsockopt"));
+  } else {
+    return scope.Close(Integer::New(flags));
+  }
+}
+
+static Handle<Value> SetMembership(const Arguments& args, int socketOption) {
+  HandleScope scope;
+
+  if (args.Length() < 2 || args.Length() > 3) {
+    return ThrowException(Exception::TypeError(
+      String::New("Takes arguments: fd, multicast group, multicast address")));
+  }
+
+  FD_ARG(args[0]);
+
+  struct ip_mreq mreq;
+  memset(&mreq, 0, sizeof(mreq));
+
+  // Multicast address (arg[1])
+  String::Utf8Value multicast_address(args[1]->ToString());
+  if (inet_pton(
+      AF_INET, *multicast_address, &(mreq.imr_multiaddr.s_addr)) <= 0) {
+    return ErrnoException(errno, "inet_pton", "Invalid multicast address");
+  }
+
+  // Interface address (arg[2] - optional, default:INADDR_ANY)
+  if (args.Length() < 3 || !args[2]->IsString()) {
+    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+  } else {
+    String::Utf8Value multicast_interface(args[2]->ToString());
+    if (inet_pton(
+        AF_INET, *multicast_interface, &(mreq.imr_interface.s_addr)) <= 0) {
+      return ErrnoException(errno, "inet_pton", "Invalid multicast interface");
+    }
+  }
+
+  int r = setsockopt(fd, IPPROTO_IP, socketOption,
+    reinterpret_cast<void*>(&mreq), sizeof(mreq));
+
+  if (r < 0) {
+    return ThrowException(ErrnoException(errno, "setsockopt"));
+  } else {
+    return Undefined();
+  }
+}
+
+static Handle<Value> AddMembership(const Arguments& args) {
+  return SetMembership(args, IP_ADD_MEMBERSHIP);
+}
+
+static Handle<Value> DropMembership(const Arguments& args) {
+  return SetMembership(args, IP_DROP_MEMBERSHIP);
+}
+
+#endif // __POSIX__
 
 
 //
@@ -1625,6 +1728,12 @@ void InitNet(Handle<Object> target) {
   NODE_SET_METHOD(target, "setBroadcast", SetBroadcast);
   NODE_SET_METHOD(target, "setTTL", SetTTL);
   NODE_SET_METHOD(target, "setKeepAlive", SetKeepAlive);
+#ifdef __POSIX__
+  NODE_SET_METHOD(target, "setMulticastTTL", SetMulticastTTL);
+  NODE_SET_METHOD(target, "setMulticastLoopback", SetMulticastLoopback);
+  NODE_SET_METHOD(target, "addMembership", AddMembership);
+  NODE_SET_METHOD(target, "dropMembership", DropMembership);
+#endif // __POSIX__
   NODE_SET_METHOD(target, "getsockname", GetSockName);
   NODE_SET_METHOD(target, "getpeername", GetPeerName);
   NODE_SET_METHOD(target, "getaddrinfo", GetAddrInfo);

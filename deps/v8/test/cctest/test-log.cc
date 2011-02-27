@@ -1053,10 +1053,10 @@ static bool AreFuncNamesEqual(CodeEntityInfo ref_s, CodeEntityInfo new_s) {
   // Skip size.
   ref_s = strchr(ref_s, ',') + 1;
   new_s = strchr(new_s, ',') + 1;
-  int ref_len = StrChrLen(ref_s, '\n');
-  int new_len = StrChrLen(new_s, '\n');
-  // If reference is anonymous (""), it's OK to have anything in new.
-  if (ref_len == 2) return true;
+  CHECK_EQ('"', ref_s[0]);
+  CHECK_EQ('"', new_s[0]);
+  int ref_len = StrChrLen(ref_s + 1, '\"');
+  int new_len = StrChrLen(new_s + 1, '\"');
   // A special case for ErrorPrototype. Haven't yet figured out why they
   // are different.
   const char* error_prototype = "\"ErrorPrototype";

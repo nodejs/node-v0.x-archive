@@ -81,12 +81,7 @@ function TimeFromYear(year) {
 
 
 function InLeapYear(time) {
-  return DaysInYear(YearFromTime(time)) == 366 ? 1 : 0;
-}
-
-
-function DayWithinYear(time) {
-  return DAY(time) - DayFromYear(YearFromTime(time));
+  return DaysInYear(YearFromTime(time)) - 365;  // Returns 1 or 0.
 }
 
 
@@ -605,7 +600,7 @@ function DateToTimeString() {
 
 // ECMA 262 - 15.9.5.5
 function DateToLocaleString() {
-  return DateToString.call(this);
+  return %_CallFunction(this, DateToString);
 }
 
 
@@ -973,7 +968,7 @@ function DateSetYear(year) {
 // do that either.  Instead, we create a new function whose name
 // property will return toGMTString.
 function DateToGMTString() {
-  return DateToUTCString.call(this);
+  return %_CallFunction(this, DateToUTCString);
 }
 
 

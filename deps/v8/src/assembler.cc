@@ -68,7 +68,7 @@ const double DoubleConstant::min_int = kMinInt;
 const double DoubleConstant::one_half = 0.5;
 const double DoubleConstant::minus_zero = -0.0;
 const double DoubleConstant::negative_infinity = -V8_INFINITY;
-
+const char* RelocInfo::kFillerCommentString = "DEOPTIMIZATION PADDING";
 
 // -----------------------------------------------------------------------------
 // Implementation of Label
@@ -228,6 +228,7 @@ void RelocInfoWriter::Write(const RelocInfo* rinfo) {
     WriteTaggedPC(pc_delta, kEmbeddedObjectTag);
   } else if (rmode == RelocInfo::CODE_TARGET) {
     WriteTaggedPC(pc_delta, kCodeTargetTag);
+    ASSERT(begin_pos - pos_ <= RelocInfo::kMaxCallSize);
   } else if (RelocInfo::IsPosition(rmode)) {
     // Use signed delta-encoding for data.
     intptr_t data_delta = rinfo->data() - last_data_;
@@ -251,6 +252,7 @@ void RelocInfoWriter::Write(const RelocInfo* rinfo) {
     WriteExtraTaggedPC(pc_delta, kPCJumpTag);
     WriteExtraTaggedData(rinfo->data() - last_data_, kCommentTag);
     last_data_ = rinfo->data();
+    ASSERT(begin_pos - pos_ == RelocInfo::kRelocCommentSize);
   } else {
     // For all other modes we simply use the mode as the extra tag.
     // None of these modes need a data component.
@@ -553,8 +555,9 @@ ExternalReference::ExternalReference(Builtins::CFunctionId id)
   : address_(Redirect(Builtins::c_function_address(id))) {}
 
 
-ExternalReference::ExternalReference(ApiFunction* fun)
-  : address_(Redirect(fun->address())) {}
+ExternalReference::ExternalReference(
+    ApiFunction* fun, Type type = ExternalReference::BUILTIN_CALL)
+  : address_(Redirect(fun->address(), type)) {}
 
 
 ExternalReference::ExternalReference(Builtins::Name name)
@@ -838,8 +841,8 @@ double power_double_double(double x, double y) {
     return power_double_int(x, y_int);  // Returns 1.0 for exponent 0.
   }
   if (!isinf(x)) {
-    if (y == 0.5) return sqrt(x);
-    if (y == -0.5) return 1.0 / sqrt(x);
+    if (y == 0.5) return sqrt(x + 0.0);  // -0 must be converted to +0.
+    if (y == -0.5) return 1.0 / sqrt(x + 0.0);
   }
   if (isnan(y) || ((x == 1 || x == -1) && isinf(y))) {
     return OS::nan_value();
@@ -849,12 +852,14 @@ double power_double_double(double x, double y) {
 
 
 ExternalReference ExternalReference::power_double_double_function() {
-  return ExternalReference(Redirect(FUNCTION_ADDR(power_double_double)));
+  return ExternalReference(Redirect(FUNCTION_ADDR(power_double_double),
+                                    FP_RETURN_CALL));
 }
 
 
 ExternalReference ExternalReference::power_double_int_function() {
-  return ExternalReference(Redirect(FUNCTION_ADDR(power_double_int)));
+  return ExternalReference(Redirect(FUNCTION_ADDR(power_double_int),
+                                    FP_RETURN_CALL));
 }
 
 
@@ -888,17 +893,18 @@ ExternalReference ExternalReference::double_fp_operation(
       UNREACHABLE();
   }
   // Passing true as 2nd parameter indicates that they return an fp value.
-  return ExternalReference(Redirect(FUNCTION_ADDR(function), true));
+  return ExternalReference(Redirect(FUNCTION_ADDR(function), FP_RETURN_CALL));
 }
 
 
 ExternalReference ExternalReference::compare_doubles() {
   return ExternalReference(Redirect(FUNCTION_ADDR(native_compare_doubles),
-                                    false));
+                                    BUILTIN_CALL));
 }
 
 
-ExternalReferenceRedirector* ExternalReference::redirector_ = NULL;
+ExternalReference::ExternalReferenceRedirector*
+    ExternalReference::redirector_ = NULL;
 
 
 #ifdef ENABLE_DEBUGGER_SUPPORT

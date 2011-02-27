@@ -54,7 +54,8 @@
 //           - JSGlobalObject
 //           - JSBuiltinsObject
 //         - JSGlobalProxy
-//        - JSValue
+//         - JSValue
+//         - JSMessageObject
 //       - ByteArray
 //       - PixelArray
 //       - ExternalArray
@@ -288,6 +289,8 @@ static const int kVariableSizeSentinel = 0;
   V(FIXED_ARRAY_TYPE)                                                          \
   V(SHARED_FUNCTION_INFO_TYPE)                                                 \
                                                                                \
+  V(JS_MESSAGE_OBJECT_TYPE)                                                    \
+                                                                               \
   V(JS_VALUE_TYPE)                                                             \
   V(JS_OBJECT_TYPE)                                                            \
   V(JS_CONTEXT_EXTENSION_OBJECT_TYPE)                                          \
@@ -518,6 +521,8 @@ enum InstanceType {
   FIXED_ARRAY_TYPE,
   SHARED_FUNCTION_INFO_TYPE,
 
+  JS_MESSAGE_OBJECT_TYPE,
+
   JS_VALUE_TYPE,  // FIRST_JS_OBJECT_TYPE
   JS_OBJECT_TYPE,
   JS_CONTEXT_EXTENSION_OBJECT_TYPE,
@@ -675,6 +680,7 @@ class MaybeObject BASE_EMBEDDED {
   V(Oddball)                                   \
   V(SharedFunctionInfo)                        \
   V(JSValue)                                   \
+  V(JSMessageObject)                           \
   V(StringWrapper)                             \
   V(Proxy)                                     \
   V(Boolean)                                   \
@@ -1280,7 +1286,12 @@ class HeapNumber: public HeapObject {
 // caching.
 class JSObject: public HeapObject {
  public:
-  enum DeleteMode { NORMAL_DELETION, FORCE_DELETION };
+  enum DeleteMode {
+    NORMAL_DELETION,
+    STRICT_DELETION,
+    FORCE_DELETION
+  };
+
   enum ElementsKind {
     // The only "fast" kind.
     FAST_ELEMENTS,
@@ -1535,8 +1546,13 @@ class JSObject: public HeapObject {
 
   // Returns the index'th element.
   // The undefined object if index is out of bounds.
-  MaybeObject* GetElementWithReceiver(JSObject* receiver, uint32_t index);
-  MaybeObject* GetElementWithInterceptor(JSObject* receiver, uint32_t index);
+  MaybeObject* GetElementWithReceiver(Object* receiver, uint32_t index);
+  MaybeObject* GetElementWithInterceptor(Object* receiver, uint32_t index);
+
+  // Get external element value at index if there is one and undefined
+  // otherwise. Can return a failure if allocation of a heap number
+  // failed.
+  MaybeObject* GetExternalElement(uint32_t index);
 
   MUST_USE_RESULT MaybeObject* SetFastElementsCapacityAndLength(int capacity,
                                                                 int length);
@@ -1573,7 +1589,8 @@ class JSObject: public HeapObject {
   void LookupRealNamedProperty(String* name, LookupResult* result);
   void LookupRealNamedPropertyInPrototypes(String* name, LookupResult* result);
   void LookupCallbackSetterInPrototypes(String* name, LookupResult* result);
-  bool SetElementWithCallbackSetterInPrototypes(uint32_t index, Object* value);
+  MUST_USE_RESULT MaybeObject* SetElementWithCallbackSetterInPrototypes(
+      uint32_t index, Object* value, bool* found);
   void LookupCallback(String* name, LookupResult* result);
 
   // Returns the number of properties on this object filtering out properties
@@ -1792,7 +1809,7 @@ class JSObject: public HeapObject {
       Object* value,
       bool check_prototype);
 
-  MaybeObject* GetElementPostInterceptor(JSObject* receiver, uint32_t index);
+  MaybeObject* GetElementPostInterceptor(Object* receiver, uint32_t index);
 
   MUST_USE_RESULT MaybeObject* DeletePropertyPostInterceptor(String* name,
                                                              DeleteMode mode);
@@ -3193,6 +3210,7 @@ class Code: public HeapObject {
   static const char* Kind2String(Kind kind);
   static const char* ICState2String(InlineCacheState state);
   static const char* PropertyType2String(PropertyType type);
+  static void PrintExtraICState(FILE* out, Kind kind, ExtraICState extra);
   inline void Disassemble(const char* name) {
     Disassemble(name, stdout);
   }
@@ -3269,13 +3287,13 @@ class Code: public HeapObject {
 
   // [safepoint_table_start]: For kind OPTIMIZED_CODE, the offset in
   // the instruction stream where the safepoint table starts.
-  inline unsigned safepoint_table_start();
-  inline void set_safepoint_table_start(unsigned offset);
+  inline unsigned safepoint_table_offset();
+  inline void set_safepoint_table_offset(unsigned offset);
 
   // [stack_check_table_start]: For kind FUNCTION, the offset in the
   // instruction stream where the stack check table starts.
-  inline unsigned stack_check_table_start();
-  inline void set_stack_check_table_start(unsigned offset);
+  inline unsigned stack_check_table_offset();
+  inline void set_stack_check_table_offset(unsigned offset);
 
   // [check type]: For kind CALL_IC, tells how to check if the
   // receiver is valid for the given call.
@@ -3439,8 +3457,8 @@ class Code: public HeapObject {
   static const int kAllowOSRAtLoopNestingLevelOffset =
       kHasDeoptimizationSupportOffset + 1;
 
-  static const int kSafepointTableStartOffset = kStackSlotsOffset + kIntSize;
-  static const int kStackCheckTableStartOffset = kStackSlotsOffset + kIntSize;
+  static const int kSafepointTableOffsetOffset = kStackSlotsOffset + kIntSize;
+  static const int kStackCheckTableOffsetOffset = kStackSlotsOffset + kIntSize;
 
   // Flags layout.
   static const int kFlagsICStateShift        = 0;
@@ -3586,6 +3604,19 @@ class Map: public HeapObject {
     return ((1 << kHasFastElements) & bit_field2()) != 0;
   }
 
+  // Tells whether an instance has pixel array elements.
+  inline void set_has_pixel_array_elements(bool value) {
+    if (value) {
+      set_bit_field2(bit_field2() | (1 << kHasPixelArrayElements));
+    } else {
+      set_bit_field2(bit_field2() & ~(1 << kHasPixelArrayElements));
+    }
+  }
+
+  inline bool has_pixel_array_elements() {
+    return ((1 << kHasPixelArrayElements) & bit_field2()) != 0;
+  }
+
   // Tells whether the map is attached to SharedFunctionInfo
   // (for inobject slack tracking).
   inline void set_attached_to_shared_function_info(bool value);
@@ -3643,6 +3674,11 @@ class Map: public HeapObject {
   // otherwise returns a copy of the map, with all transitions dropped
   // from the descriptors and the fast elements bit cleared.
   MUST_USE_RESULT inline MaybeObject* GetSlowElementsMap();
+
+  // Returns this map if it has the pixel array elements bit is set, otherwise
+  // returns a copy of the map, with all transitions dropped from the
+  // descriptors and the pixel array elements bit set.
+  MUST_USE_RESULT inline MaybeObject* GetPixelArrayElementsMap();
 
   // Returns the property index for name (only valid for FAST MODE).
   int PropertyIndexFor(String* name);
@@ -3762,6 +3798,7 @@ class Map: public HeapObject {
   static const int kStringWrapperSafeForDefaultValueOf = 3;
   static const int kAttachedToSharedFunctionInfo = 4;
   static const int kIsShared = 5;
+  static const int kHasPixelArrayElements = 6;
 
   // Layout of the default cache. It holds alternating name and code objects.
   static const int kCodeCacheEntrySize = 2;
@@ -4170,6 +4207,10 @@ class SharedFunctionInfo: public HeapObject {
   inline bool optimization_disabled();
   inline void set_optimization_disabled(bool value);
 
+  // Indicates whether the function is a strict mode function.
+  inline bool strict_mode();
+  inline void set_strict_mode(bool value);
+
   // Indicates whether or not the code in the shared function support
   // deoptimization.
   inline bool has_deoptimization_support();
@@ -4334,7 +4375,6 @@ class SharedFunctionInfo: public HeapObject {
                               kThisPropertyAssignmentsOffset + kPointerSize,
                               kSize> BodyDescriptor;
 
- private:
   // Bit positions in start_position_and_type.
   // The source code start position is in the 30 most significant bits of
   // the start_position_and_type field.
@@ -4351,7 +4391,37 @@ class SharedFunctionInfo: public HeapObject {
   static const int kCodeAgeShift = 4;
   static const int kCodeAgeMask = 0x7;
   static const int kOptimizationDisabled = 7;
+  static const int kStrictModeFunction = 8;
 
+ private:
+#if V8_HOST_ARCH_32_BIT
+  // On 32 bit platforms, compiler hints is a smi.
+  static const int kCompilerHintsSmiTagSize = kSmiTagSize;
+  static const int kCompilerHintsSize = kPointerSize;
+#else
+  // On 64 bit platforms, compiler hints is not a smi, see comment above.
+  static const int kCompilerHintsSmiTagSize = 0;
+  static const int kCompilerHintsSize = kIntSize;
+#endif
+
+ public:
+  // Constants for optimizing codegen for strict mode function tests.
+  // Allows to use byte-widgh instructions.
+  static const int kStrictModeBitWithinByte =
+      (kStrictModeFunction + kCompilerHintsSmiTagSize) % kBitsPerByte;
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+  static const int kStrictModeByteOffset = kCompilerHintsOffset +
+    (kStrictModeFunction + kCompilerHintsSmiTagSize) / kBitsPerByte;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+  static const int kStrictModeByteOffset = kCompilerHintsOffset +
+    (kCompilerHintsSize - 1) -
+    ((kStrictModeFunction + kCompilerHintsSmiTagSize) / kBitsPerByte);
+#else
+#error Unknown byte ordering
+#endif
+
+ private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(SharedFunctionInfo);
 };
 
@@ -4696,6 +4766,68 @@ class JSValue: public JSObject {
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSValue);
 };
 
+
+// Representation of message objects used for error reporting through
+// the API. The messages are formatted in JavaScript so this object is
+// a real JavaScript object. The information used for formatting the
+// error messages are not directly accessible from JavaScript to
+// prevent leaking information to user code called during error
+// formatting.
+class JSMessageObject: public JSObject {
+ public:
+  // [type]: the type of error message.
+  DECL_ACCESSORS(type, String)
+
+  // [arguments]: the arguments for formatting the error message.
+  DECL_ACCESSORS(arguments, JSArray)
+
+  // [script]: the script from which the error message originated.
+  DECL_ACCESSORS(script, Object)
+
+  // [stack_trace]: the stack trace for this error message.
+  DECL_ACCESSORS(stack_trace, Object)
+
+  // [stack_frames]: an array of stack frames for this error object.
+  DECL_ACCESSORS(stack_frames, Object)
+
+  // [start_position]: the start position in the script for the error message.
+  inline int start_position();
+  inline void set_start_position(int value);
+
+  // [end_position]: the end position in the script for the error message.
+  inline int end_position();
+  inline void set_end_position(int value);
+
+  // Casting.
+  static inline JSMessageObject* cast(Object* obj);
+
+  // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSMessageObjectPrint() {
+    JSMessageObjectPrint(stdout);
+  }
+  void JSMessageObjectPrint(FILE* out);
+#endif
+#ifdef DEBUG
+  void JSMessageObjectVerify();
+#endif
+
+  // Layout description.
+  static const int kTypeOffset = JSObject::kHeaderSize;
+  static const int kArgumentsOffset = kTypeOffset + kPointerSize;
+  static const int kScriptOffset = kArgumentsOffset + kPointerSize;
+  static const int kStackTraceOffset = kScriptOffset + kPointerSize;
+  static const int kStackFramesOffset = kStackTraceOffset + kPointerSize;
+  static const int kStartPositionOffset = kStackFramesOffset + kPointerSize;
+  static const int kEndPositionOffset = kStartPositionOffset + kPointerSize;
+  static const int kSize = kEndPositionOffset + kPointerSize;
+
+  typedef FixedBodyDescriptor<HeapObject::kMapOffset,
+                              kStackFramesOffset + kPointerSize,
+                              kSize> BodyDescriptor;
+};
+
+
 // Regular expressions
 // The regular expression holds a single reference to a FixedArray in
 // the kDataOffset field.
@@ -4834,10 +4966,12 @@ class CompilationCacheTable: public HashTable<CompilationCacheShape,
  public:
   // Find cached value for a string key, otherwise return null.
   Object* Lookup(String* src);
-  Object* LookupEval(String* src, Context* context);
+  Object* LookupEval(String* src, Context* context, StrictModeFlag strict_mode);
   Object* LookupRegExp(String* source, JSRegExp::Flags flags);
   MaybeObject* Put(String* src, Object* value);
-  MaybeObject* PutEval(String* src, Context* context, Object* value);
+  MaybeObject* PutEval(String* src,
+                       Context* context,
+                       SharedFunctionInfo* value);
   MaybeObject* PutRegExp(String* src, JSRegExp::Flags flags, FixedArray* value);
 
   // Remove given value from cache.

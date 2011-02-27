@@ -106,6 +106,11 @@ static Handle<Object> Invoke(bool construct,
   ASSERT(*has_pending_exception == Top::has_pending_exception());
   if (*has_pending_exception) {
     Top::ReportPendingMessages();
+    if (Top::pending_exception() == Failure::OutOfMemoryException()) {
+      if (!HandleScopeImplementer::instance()->ignore_out_of_memory()) {
+        V8::FatalProcessOutOfMemory("JS", true);
+      }
+    }
     return Handle<Object>();
   } else {
     Top::clear_pending_message();
@@ -403,6 +408,7 @@ void StackGuard::ThreadLocal::Initialize() {
   if (real_climit_ == kIllegalLimit) {
     // Takes the address of the limit variable in order to find out where
     // the top of stack is right now.
+    const uintptr_t kLimitSize = FLAG_stack_size * KB;
     uintptr_t limit = reinterpret_cast<uintptr_t>(&limit) - kLimitSize;
     ASSERT(reinterpret_cast<uintptr_t>(&limit) > kLimitSize);
     real_jslimit_ = SimulatorStack::JsLimitFromCLimit(limit);

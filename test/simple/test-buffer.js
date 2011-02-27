@@ -216,6 +216,7 @@ assert.equal(d.length, 3);
 assert.equal(d[0], 23);
 assert.equal(d[1], 42);
 assert.equal(d[2], 255);
+assert.deepEqual(d, new Buffer(d));
 
 var e = new Buffer('über');
 console.error('uber: \'%s\'', e.toString());
@@ -224,6 +225,23 @@ assert.deepEqual(e, new Buffer([195, 188, 98, 101, 114]));
 var f = new Buffer('über', 'ascii');
 console.error('f.length: %d     (should be 4)', f.length);
 assert.deepEqual(f, new Buffer([252, 98, 101, 114]));
+
+var f = new Buffer('über', 'ucs2');
+console.error('f.length: %d     (should be 8)', f.length);
+assert.deepEqual(f, new Buffer([252, 0, 98, 0, 101, 0, 114, 0]));
+
+var f = new Buffer('привет', 'ucs2');
+console.error('f.length: %d     (should be 12)', f.length);
+assert.deepEqual(f, new Buffer([63, 4, 64, 4, 56, 4, 50, 4, 53, 4, 66, 4]));
+assert.equal(f.toString('ucs2'), 'привет');
+
+
+var arrayIsh = {0: 0, 1: 1, 2: 2, 3: 3, length: 4};
+var g = new Buffer(arrayIsh);
+assert.deepEqual(g, new Buffer([0, 1, 2, 3]));
+var strArrayIsh = {0: '0', 1: '1', 2: '2', 3: '3', length: 4};
+g = new Buffer(strArrayIsh);
+assert.deepEqual(g, new Buffer([0, 1, 2, 3]));
 
 
 //
@@ -386,9 +404,40 @@ assert.equal('bcde', b.slice(1).toString());
 // byte length
 assert.equal(14, Buffer.byteLength('Il était tué'));
 assert.equal(14, Buffer.byteLength('Il était tué', 'utf8'));
+assert.equal(24, Buffer.byteLength('Il était tué', 'ucs2'));
 assert.equal(12, Buffer.byteLength('Il était tué', 'ascii'));
 assert.equal(12, Buffer.byteLength('Il était tué', 'binary'));
 
-
 // slice(0,0).length === 0
 assert.equal(0, Buffer('hello').slice(0, 0).length);
+
+// test hex toString
+console.log('Create hex string from buffer');
+var hexb = new Buffer(256);
+for (var i = 0; i < 256; i ++) {
+  hexb[i] = i;
+}
+var hexStr = hexb.toString('hex');
+assert.equal(hexStr,
+             '000102030405060708090a0b0c0d0e0f'+
+             '101112131415161718191a1b1c1d1e1f'+
+             '202122232425262728292a2b2c2d2e2f'+
+             '303132333435363738393a3b3c3d3e3f'+
+             '404142434445464748494a4b4c4d4e4f'+
+             '505152535455565758595a5b5c5d5e5f'+
+             '606162636465666768696a6b6c6d6e6f'+
+             '707172737475767778797a7b7c7d7e7f'+
+             '808182838485868788898a8b8c8d8e8f'+
+             '909192939495969798999a9b9c9d9e9f'+
+             'a0a1a2a3a4a5a6a7a8a9aaabacadaeaf'+
+             'b0b1b2b3b4b5b6b7b8b9babbbcbdbebf'+
+             'c0c1c2c3c4c5c6c7c8c9cacbcccdcecf'+
+             'd0d1d2d3d4d5d6d7d8d9dadbdcdddedf'+
+             'e0e1e2e3e4e5e6e7e8e9eaebecedeeef'+
+             'f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff');
+
+console.log('Create buffer from hex string');
+var hexb2 = new Buffer(hexStr, 'hex');
+for (var i = 0; i < 256; i ++) {
+  assert.equal(hexb2[i], hexb[i]);
+}

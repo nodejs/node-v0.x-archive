@@ -48,10 +48,16 @@ namespace internal {
 #define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
   (entry(p0, p1, p2, p3, p4))
 
-// Call the generated regexp code directly. The entry function pointer should
-// expect seven int/pointer sized arguments and return an int.
+typedef int (*arm_regexp_matcher)(String*, int, const byte*, const byte*,
+                                  void*, int*, Address, int);
+
+
+// Call the generated regexp code directly. The code at the entry address
+// should act as a function matching the type arm_regexp_matcher.
+// The fifth argument is a dummy that reserves the space used for
+// the return address added by the ExitFrame in native calls.
 #define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
-  (entry(p0, p1, p2, p3, p4, p5, p6))
+  (FUNCTION_CAST<arm_regexp_matcher>(entry)(p0, p1, p2, p3, NULL, p4, p5, p6))
 
 #define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
   (reinterpret_cast<TryCatch*>(try_catch_address))
@@ -79,6 +85,7 @@ class SimulatorStack : public v8::internal::AllStatic {
 
 #include "constants-arm.h"
 #include "hashmap.h"
+#include "assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -285,8 +292,9 @@ class Simulator {
   static CachePage* GetCachePage(void* page);
 
   // Runtime call support.
-  static void* RedirectExternalReference(void* external_function,
-                                         bool fp_return);
+  static void* RedirectExternalReference(
+      void* external_function,
+      v8::internal::ExternalReference::Type type);
 
   // For use in calls that take two double values, constructed from r0, r1, r2
   // and r3.
@@ -312,7 +320,7 @@ class Simulator {
   bool v_flag_FPSCR_;
 
   // VFP rounding mode. See ARM DDI 0406B Page A2-29.
-  FPSCRRoundingModes FPSCR_rounding_mode_;
+  VFPRoundingMode FPSCR_rounding_mode_;
 
   // VFP FP exception flags architecture state.
   bool inv_op_vfp_flag_;
@@ -360,8 +368,7 @@ class Simulator {
       FUNCTION_ADDR(entry), 5, p0, p1, p2, p3, p4))
 
 #define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
-  Simulator::current()->Call( \
-      FUNCTION_ADDR(entry), 7, p0, p1, p2, p3, p4, p5, p6)
+  Simulator::current()->Call(entry, 8, p0, p1, p2, p3, NULL, p4, p5, p6)
 
 #define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
   try_catch_address == \

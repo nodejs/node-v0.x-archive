@@ -190,13 +190,13 @@ void RelocInfo::PatchCode(byte* instructions, int instruction_count) {
 // -----------------------------------------------------------------------------
 // Register constants.
 
-const int Register::registerCodeByAllocationIndex[kNumAllocatableRegisters] = {
-    // rax, rbx, rdx, rcx, rdi, r8, r9, r11, r14, r12
-    0, 3, 2, 1, 7, 8, 9, 11, 14, 12
+const int Register::kRegisterCodeByAllocationIndex[kNumAllocatableRegisters] = {
+  // rax, rbx, rdx, rcx, rdi, r8, r9, r11, r14, r12
+  0, 3, 2, 1, 7, 8, 9, 11, 14, 12
 };
 
-const int Register::allocationIndexByRegisterCode[kNumRegisters] = {
-    0, 3, 2, 1, -1, -1, -1, 4, 5, 6, -1, 7, 9, -1, 8, -1
+const int Register::kAllocationIndexByRegisterCode[kNumRegisters] = {
+  0, 3, 2, 1, -1, -1, -1, 4, 5, 6, -1, 7, 9, -1, 8, -1
 };
 
 
@@ -916,6 +916,23 @@ void Assembler::call(const Operand& op) {
 }
 
 
+// Calls directly to the given address using a relative offset.
+// Should only ever be used in Code objects for calls within the
+// same Code object. Should not be used when generating new code (use labels),
+// but only when patching existing code.
+void Assembler::call(Address target) {
+  positions_recorder()->WriteRecordedPositions();
+  EnsureSpace ensure_space(this);
+  last_pc_ = pc_;
+  // 1110 1000 #32-bit disp.
+  emit(0xE8);
+  Address source = pc_ + 4;
+  intptr_t displacement = target - source;
+  ASSERT(is_int32(displacement));
+  emitl(static_cast<int32_t>(displacement));
+}
+
+
 void Assembler::clc() {
   EnsureSpace ensure_space(this);
   last_pc_ = pc_;
@@ -1168,6 +1185,16 @@ void Assembler::imull(Register dst, Register src) {
   emit(0x0F);
   emit(0xAF);
   emit_modrm(dst, src);
+}
+
+
+void Assembler::imull(Register dst, const Operand& src) {
+  EnsureSpace ensure_space(this);
+  last_pc_ = pc_;
+  emit_optional_rex_32(dst, src);
+  emit(0x0F);
+  emit(0xAF);
+  emit_operand(dst, src);
 }
 
 
@@ -3012,6 +3039,16 @@ void Assembler::ucomisd(XMMRegister dst, const Operand& src) {
 }
 
 
+void Assembler::movmskpd(Register dst, XMMRegister src) {
+  EnsureSpace ensure_space(this);
+  last_pc_ = pc_;
+  emit(0x66);
+  emit_optional_rex_32(dst, src);
+  emit(0x0f);
+  emit(0x50);
+  emit_sse_operand(dst, src);
+}
+
 
 void Assembler::emit_sse_operand(XMMRegister reg, const Operand& adr) {
   Register ireg = { reg.code() };
@@ -3049,10 +3086,15 @@ void Assembler::dd(uint32_t data) {
 void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
   ASSERT(rmode != RelocInfo::NONE);
   // Don't record external references unless the heap will be serialized.
-  if (rmode == RelocInfo::EXTERNAL_REFERENCE &&
-      !Serializer::enabled() &&
-      !FLAG_debug_code) {
-    return;
+  if (rmode == RelocInfo::EXTERNAL_REFERENCE) {
+#ifdef DEBUG
+    if (!Serializer::enabled()) {
+      Serializer::TooLateToEnableNow();
+    }
+#endif
+    if (!Serializer::enabled() && !FLAG_debug_code) {
+      return;
+    }
   }
   RelocInfo rinfo(pc_, rmode, data);
   reloc_info_writer.Write(&rinfo);
@@ -3072,8 +3114,8 @@ void Assembler::RecordDebugBreakSlot() {
 }
 
 
-void Assembler::RecordComment(const char* msg) {
-  if (FLAG_code_comments) {
+void Assembler::RecordComment(const char* msg, bool force) {
+  if (FLAG_code_comments || force) {
     EnsureSpace ensure_space(this);
     RecordRelocInfo(RelocInfo::COMMENT, reinterpret_cast<intptr_t>(msg));
   }

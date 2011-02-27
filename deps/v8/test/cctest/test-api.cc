@@ -1649,6 +1649,23 @@ THREADED_TEST(IdentityHash) {
   CHECK_NE(hash, hash3);
   int hash4 = obj->GetIdentityHash();
   CHECK_EQ(hash, hash4);
+
+  // Check identity hashes behaviour in the presence of JS accessors.
+  // Put a getter for 'v8::IdentityHash' on the Object's prototype:
+  {
+    CompileRun("Object.prototype['v8::IdentityHash'] = 42;\n");
+    Local<v8::Object> o1 = v8::Object::New();
+    Local<v8::Object> o2 = v8::Object::New();
+    CHECK_NE(o1->GetIdentityHash(), o2->GetIdentityHash());
+  }
+  {
+    CompileRun(
+        "function cnst() { return 42; };\n"
+        "Object.prototype.__defineGetter__('v8::IdentityHash', cnst);\n");
+    Local<v8::Object> o1 = v8::Object::New();
+    Local<v8::Object> o2 = v8::Object::New();
+    CHECK_NE(o1->GetIdentityHash(), o2->GetIdentityHash());
+  }
 }
 
 
@@ -2369,13 +2386,32 @@ static void check_reference_error_message(
 }
 
 
-// Test that overwritten toString methods are not invoked on uncaught
-// exception formatting. However, they are invoked when performing
-// normal error string conversions.
+static v8::Handle<Value> Fail(const v8::Arguments& args) {
+  ApiTestFuzzer::Fuzz();
+  CHECK(false);
+  return v8::Undefined();
+}
+
+
+// Test that overwritten methods are not invoked on uncaught exception
+// formatting. However, they are invoked when performing normal error
+// string conversions.
 TEST(APIThrowMessageOverwrittenToString) {
   v8::HandleScope scope;
   v8::V8::AddMessageListener(check_reference_error_message);
-  LocalContext context;
+  Local<ObjectTemplate> templ = ObjectTemplate::New();
+  templ->Set(v8_str("fail"), v8::FunctionTemplate::New(Fail));
+  LocalContext context(NULL, templ);
+  CompileRun("asdf;");
+  CompileRun("var limit = {};"
+             "limit.valueOf = fail;"
+             "Error.stackTraceLimit = limit;");
+  CompileRun("asdf");
+  CompileRun("Array.prototype.pop = fail;");
+  CompileRun("Object.prototype.hasOwnProperty = fail;");
+  CompileRun("Object.prototype.toString = function f() { return 'Yikes'; }");
+  CompileRun("Number.prototype.toString = function f() { return 'Yikes'; }");
+  CompileRun("String.prototype.toString = function f() { return 'Yikes'; }");
   CompileRun("ReferenceError.prototype.toString ="
              "  function() { return 'Whoops' }");
   CompileRun("asdf;");
@@ -2651,6 +2687,41 @@ THREADED_TEST(CatchExceptionFromWith) {
   v8::TryCatch try_catch;
   CHECK(!try_catch.HasCaught());
   Script::Compile(v8_str("var o = {}; with (o) { throw 42; }"))->Run();
+  CHECK(try_catch.HasCaught());
+}
+
+
+THREADED_TEST(TryCatchAndFinallyHidingException) {
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::TryCatch try_catch;
+  CHECK(!try_catch.HasCaught());
+  CompileRun("function f(k) { try { this[k]; } finally { return 0; } };");
+  CompileRun("f({toString: function() { throw 42; }});");
+  CHECK(!try_catch.HasCaught());
+}
+
+
+v8::Handle<v8::Value> WithTryCatch(const v8::Arguments& args) {
+  v8::TryCatch try_catch;
+  return v8::Undefined();
+}
+
+
+THREADED_TEST(TryCatchAndFinally) {
+  v8::HandleScope scope;
+  LocalContext context;
+  context->Global()->Set(
+      v8_str("native_with_try_catch"),
+      v8::FunctionTemplate::New(WithTryCatch)->GetFunction());
+  v8::TryCatch try_catch;
+  CHECK(!try_catch.HasCaught());
+  CompileRun(
+      "try {\n"
+      "  throw new Error('a');\n"
+      "} finally {\n"
+      "  native_with_try_catch();\n"
+      "}\n");
   CHECK(try_catch.HasCaught());
 }
 
@@ -5290,11 +5361,13 @@ TEST(DetachAndReattachGlobal) {
 }
 
 
+static bool allowed_access_type[v8::ACCESS_KEYS + 1] = { false };
 static bool NamedAccessBlocker(Local<v8::Object> global,
                                Local<Value> name,
                                v8::AccessType type,
                                Local<Value> data) {
-  return Context::GetCurrent()->Global()->Equals(global);
+  return Context::GetCurrent()->Global()->Equals(global) ||
+      allowed_access_type[type];
 }
 
 
@@ -5302,7 +5375,8 @@ static bool IndexedAccessBlocker(Local<v8::Object> global,
                                  uint32_t key,
                                  v8::AccessType type,
                                  Local<Value> data) {
-  return Context::GetCurrent()->Global()->Equals(global);
+  return Context::GetCurrent()->Global()->Equals(global) ||
+      allowed_access_type[type];
 }
 
 
@@ -5334,7 +5408,7 @@ static void UnreachableSetter(Local<String>, Local<Value>,
 }
 
 
-THREADED_TEST(AccessControl) {
+TEST(AccessControl) {
   v8::HandleScope handle_scope;
   v8::Handle<v8::ObjectTemplate> global_template = v8::ObjectTemplate::New();
 
@@ -5360,6 +5434,27 @@ THREADED_TEST(AccessControl) {
 
   v8::Handle<v8::Object> global0 = context0->Global();
 
+  // Define a property with JS getter and setter.
+  CompileRun(
+      "function getter() { return 'getter'; };\n"
+      "function setter() { return 'setter'; }\n"
+      "Object.defineProperty(this, 'js_accessor_p', {get:getter, set:setter})");
+
+  Local<Value> getter = global0->Get(v8_str("getter"));
+  Local<Value> setter = global0->Get(v8_str("setter"));
+
+  // And define normal element.
+  global0->Set(239, v8_str("239"));
+
+  // Define an element with JS getter and setter.
+  CompileRun(
+      "function el_getter() { return 'el_getter'; };\n"
+      "function el_setter() { return 'el_setter'; };\n"
+      "Object.defineProperty(this, '42', {get: el_getter, set: el_setter});");
+
+  Local<Value> el_getter = global0->Get(v8_str("el_getter"));
+  Local<Value> el_setter = global0->Get(v8_str("el_setter"));
+
   v8::HandleScope scope1;
 
   v8::Persistent<Context> context1 = Context::New();
@@ -5368,45 +5463,242 @@ THREADED_TEST(AccessControl) {
   v8::Handle<v8::Object> global1 = context1->Global();
   global1->Set(v8_str("other"), global0);
 
+  // Access blocked property.
+  CompileRun("other.blocked_prop = 1");
+
+  ExpectUndefined("other.blocked_prop");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'blocked_prop')");
+  ExpectFalse("propertyIsEnumerable.call(other, 'blocked_prop')");
+
+  // Enable ACCESS_HAS
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  ExpectUndefined("other.blocked_prop");
+  // ... and now we can get the descriptor...
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'blocked_prop').value");
+  // ... and enumerate the property.
+  ExpectTrue("propertyIsEnumerable.call(other, 'blocked_prop')");
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Access blocked element.
+  CompileRun("other[239] = 1");
+
+  ExpectUndefined("other[239]");
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '239')");
+  ExpectFalse("propertyIsEnumerable.call(other, '239')");
+
+  // Enable ACCESS_HAS
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  ExpectUndefined("other[239]");
+  // ... and now we can get the descriptor...
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '239').value");
+  // ... and enumerate the property.
+  ExpectTrue("propertyIsEnumerable.call(other, '239')");
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Access a property with JS accessor.
+  CompileRun("other.js_accessor_p = 2");
+
+  ExpectUndefined("other.js_accessor_p");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p')");
+
+  // Enable ACCESS_HAS.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  ExpectUndefined("other.js_accessor_p");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').get");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').set");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').value");
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Enable both ACCESS_HAS and ACCESS_GET.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  allowed_access_type[v8::ACCESS_GET] = true;
+
+  ExpectString("other.js_accessor_p", "getter");
+  ExpectObject(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').get", getter);
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').set");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').value");
+
+  allowed_access_type[v8::ACCESS_GET] = false;
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Enable both ACCESS_HAS and ACCESS_SET.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  allowed_access_type[v8::ACCESS_SET] = true;
+
+  ExpectUndefined("other.js_accessor_p");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').get");
+  ExpectObject(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').set", setter);
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').value");
+
+  allowed_access_type[v8::ACCESS_SET] = false;
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Enable both ACCESS_HAS, ACCESS_GET and ACCESS_SET.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  allowed_access_type[v8::ACCESS_GET] = true;
+  allowed_access_type[v8::ACCESS_SET] = true;
+
+  ExpectString("other.js_accessor_p", "getter");
+  ExpectObject(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').get", getter);
+  ExpectObject(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').set", setter);
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'js_accessor_p').value");
+
+  allowed_access_type[v8::ACCESS_SET] = false;
+  allowed_access_type[v8::ACCESS_GET] = false;
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Access an element with JS accessor.
+  CompileRun("other[42] = 2");
+
+  ExpectUndefined("other[42]");
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42')");
+
+  // Enable ACCESS_HAS.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  ExpectUndefined("other[42]");
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').get");
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').set");
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').value");
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Enable both ACCESS_HAS and ACCESS_GET.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  allowed_access_type[v8::ACCESS_GET] = true;
+
+  ExpectString("other[42]", "el_getter");
+  ExpectObject("Object.getOwnPropertyDescriptor(other, '42').get", el_getter);
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').set");
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').value");
+
+  allowed_access_type[v8::ACCESS_GET] = false;
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Enable both ACCESS_HAS and ACCESS_SET.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  allowed_access_type[v8::ACCESS_SET] = true;
+
+  ExpectUndefined("other[42]");
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').get");
+  ExpectObject("Object.getOwnPropertyDescriptor(other, '42').set", el_setter);
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').value");
+
+  allowed_access_type[v8::ACCESS_SET] = false;
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
+  // Enable both ACCESS_HAS, ACCESS_GET and ACCESS_SET.
+  allowed_access_type[v8::ACCESS_HAS] = true;
+  allowed_access_type[v8::ACCESS_GET] = true;
+  allowed_access_type[v8::ACCESS_SET] = true;
+
+  ExpectString("other[42]", "el_getter");
+  ExpectObject("Object.getOwnPropertyDescriptor(other, '42').get", el_getter);
+  ExpectObject("Object.getOwnPropertyDescriptor(other, '42').set", el_setter);
+  ExpectUndefined("Object.getOwnPropertyDescriptor(other, '42').value");
+
+  allowed_access_type[v8::ACCESS_SET] = false;
+  allowed_access_type[v8::ACCESS_GET] = false;
+  allowed_access_type[v8::ACCESS_HAS] = false;
+
   v8::Handle<Value> value;
 
-  // Access blocked property
-  value = v8_compile("other.blocked_prop = 1")->Run();
-  value = v8_compile("other.blocked_prop")->Run();
-  CHECK(value->IsUndefined());
-
-  value = v8_compile("propertyIsEnumerable.call(other, 'blocked_prop')")->Run();
-  CHECK(value->IsFalse());
-
   // Access accessible property
-  value = v8_compile("other.accessible_prop = 3")->Run();
+  value = CompileRun("other.accessible_prop = 3");
   CHECK(value->IsNumber());
   CHECK_EQ(3, value->Int32Value());
   CHECK_EQ(3, g_echo_value);
 
-  value = v8_compile("other.accessible_prop")->Run();
+  value = CompileRun("other.accessible_prop");
   CHECK(value->IsNumber());
   CHECK_EQ(3, value->Int32Value());
 
-  value =
-    v8_compile("propertyIsEnumerable.call(other, 'accessible_prop')")->Run();
+  value = CompileRun(
+      "Object.getOwnPropertyDescriptor(other, 'accessible_prop').value");
+  CHECK(value->IsNumber());
+  CHECK_EQ(3, value->Int32Value());
+
+  value = CompileRun("propertyIsEnumerable.call(other, 'accessible_prop')");
   CHECK(value->IsTrue());
 
   // Enumeration doesn't enumerate accessors from inaccessible objects in
   // the prototype chain even if the accessors are in themselves accessible.
-  Local<Value> result =
+  value =
       CompileRun("(function(){var obj = {'__proto__':other};"
                  "for (var p in obj)"
                  "   if (p == 'accessible_prop' || p == 'blocked_prop') {"
                  "     return false;"
                  "   }"
                  "return true;})()");
-  CHECK(result->IsTrue());
+  CHECK(value->IsTrue());
 
   context1->Exit();
   context0->Exit();
   context1.Dispose();
   context0.Dispose();
+}
+
+
+TEST(AccessControlES5) {
+  v8::HandleScope handle_scope;
+  v8::Handle<v8::ObjectTemplate> global_template = v8::ObjectTemplate::New();
+
+  global_template->SetAccessCheckCallbacks(NamedAccessBlocker,
+                                           IndexedAccessBlocker);
+
+  // Add an accessor that is not accessible by cross-domain JS code.
+  global_template->SetAccessor(v8_str("blocked_prop"),
+                               UnreachableGetter, UnreachableSetter,
+                               v8::Handle<Value>(),
+                               v8::DEFAULT);
+
+  // Create an environment
+  v8::Persistent<Context> context0 = Context::New(NULL, global_template);
+  context0->Enter();
+
+  v8::Handle<v8::Object> global0 = context0->Global();
+
+  v8::Persistent<Context> context1 = Context::New();
+  context1->Enter();
+  v8::Handle<v8::Object> global1 = context1->Global();
+  global1->Set(v8_str("other"), global0);
+
+  // Regression test for issue 1154.
+  ExpectTrue("Object.keys(other).indexOf('blocked_prop') == -1");
+
+  ExpectUndefined("other.blocked_prop");
+
+  // Regression test for issue 1027.
+  CompileRun("Object.defineProperty(\n"
+             "  other, 'blocked_prop', {configurable: false})");
+  ExpectUndefined("other.blocked_prop");
+  ExpectUndefined(
+      "Object.getOwnPropertyDescriptor(other, 'blocked_prop')");
+
+  // Regression test for issue 1171.
+  ExpectTrue("Object.isExtensible(other)");
+  CompileRun("Object.preventExtensions(other)");
+  ExpectTrue("Object.isExtensible(other)");
+
+  // Object.seal and Object.freeze.
+  CompileRun("Object.freeze(other)");
+  ExpectTrue("Object.isExtensible(other)");
+
+  CompileRun("Object.seal(other)");
+  ExpectTrue("Object.isExtensible(other)");
 }
 
 
@@ -6246,7 +6538,7 @@ THREADED_TEST(FunctionDescriptorException) {
     "    var str = String(e);"
     "    if (str.indexOf('TypeError') == -1) return 1;"
     "    if (str.indexOf('[object Fun]') != -1) return 2;"
-    "    if (str.indexOf('#<a Fun>') == -1) return 3;"
+    "    if (str.indexOf('#<Fun>') == -1) return 3;"
     "    return 0;"
     "  }"
     "  return 4;"
@@ -7334,6 +7626,61 @@ static void GenerateSomeGarbage() {
       "}"
       "garbage = undefined;");
 }
+
+v8::Handle<v8::Value> DirectApiCallback(const v8::Arguments& args) {
+  static int count = 0;
+  if (count++ % 3 == 0) {
+    v8::V8::LowMemoryNotification();  // This should move the stub
+    GenerateSomeGarbage();  // This should ensure the old stub memory is flushed
+  }
+  return v8::Handle<v8::Value>();
+}
+
+
+THREADED_TEST(CallICFastApi_DirectCall_GCMoveStub) {
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::Handle<v8::ObjectTemplate> nativeobject_templ = v8::ObjectTemplate::New();
+  nativeobject_templ->Set("callback",
+                          v8::FunctionTemplate::New(DirectApiCallback));
+  v8::Local<v8::Object> nativeobject_obj = nativeobject_templ->NewInstance();
+  context->Global()->Set(v8_str("nativeobject"), nativeobject_obj);
+  // call the api function multiple times to ensure direct call stub creation.
+  CompileRun(
+        "function f() {"
+        "  for (var i = 1; i <= 30; i++) {"
+        "    nativeobject.callback();"
+        "  }"
+        "}"
+        "f();");
+}
+
+
+v8::Handle<v8::Value> ThrowingDirectApiCallback(const v8::Arguments& args) {
+  return v8::ThrowException(v8_str("g"));
+}
+
+
+THREADED_TEST(CallICFastApi_DirectCall_Throw) {
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::Handle<v8::ObjectTemplate> nativeobject_templ = v8::ObjectTemplate::New();
+  nativeobject_templ->Set("callback",
+                          v8::FunctionTemplate::New(ThrowingDirectApiCallback));
+  v8::Local<v8::Object> nativeobject_obj = nativeobject_templ->NewInstance();
+  context->Global()->Set(v8_str("nativeobject"), nativeobject_obj);
+  // call the api function multiple times to ensure direct call stub creation.
+  v8::Handle<Value> result = CompileRun(
+      "var result = '';"
+      "function f() {"
+      "  for (var i = 1; i <= 5; i++) {"
+      "    try { nativeobject.callback(); } catch (e) { result += e; }"
+      "  }"
+      "}"
+      "f(); result;");
+  CHECK_EQ(v8_str("ggggg"), result);
+}
+
 
 THREADED_TEST(InterceptorCallICFastApi_TrivialSignature) {
   int interceptor_call_count = 0;
@@ -10342,6 +10689,181 @@ THREADED_TEST(PixelArray) {
                       "i");
   CHECK_EQ(255, result->Int32Value());
 
+  // Make sure that pixel array ICs recognize when a non-pixel array
+  // is passed to it.
+  result = CompileRun("function pa_load(p) {"
+                      "  var sum = 0;"
+                      "  for (var j = 0; j < 256; j++) { sum += p[j]; }"
+                      "  return sum;"
+                      "}"
+                      "for (var i = 0; i < 256; ++i) { pixels[i] = i; }"
+                      "for (var i = 0; i < 10; ++i) { pa_load(pixels); }"
+                      "just_ints = new Object();"
+                      "for (var i = 0; i < 256; ++i) { just_ints[i] = i; }"
+                      "for (var i = 0; i < 10; ++i) {"
+                      "  result = pa_load(just_ints);"
+                      "}"
+                      "result");
+  CHECK_EQ(32640, result->Int32Value());
+
+  // Make sure that pixel array ICs recognize out-of-bound accesses.
+  result = CompileRun("function pa_load(p, start) {"
+                      "  var sum = 0;"
+                      "  for (var j = start; j < 256; j++) { sum += p[j]; }"
+                      "  return sum;"
+                      "}"
+                      "for (var i = 0; i < 256; ++i) { pixels[i] = i; }"
+                      "for (var i = 0; i < 10; ++i) { pa_load(pixels,0); }"
+                      "for (var i = 0; i < 10; ++i) {"
+                      "  result = pa_load(pixels,-10);"
+                      "}"
+                      "result");
+  CHECK_EQ(0, result->Int32Value());
+
+  // Make sure that generic ICs properly handles a pixel array.
+  result = CompileRun("function pa_load(p) {"
+                      "  var sum = 0;"
+                      "  for (var j = 0; j < 256; j++) { sum += p[j]; }"
+                      "  return sum;"
+                      "}"
+                      "for (var i = 0; i < 256; ++i) { pixels[i] = i; }"
+                      "just_ints = new Object();"
+                      "for (var i = 0; i < 256; ++i) { just_ints[i] = i; }"
+                      "for (var i = 0; i < 10; ++i) { pa_load(just_ints); }"
+                      "for (var i = 0; i < 10; ++i) {"
+                      "  result = pa_load(pixels);"
+                      "}"
+                      "result");
+  CHECK_EQ(32640, result->Int32Value());
+
+  // Make sure that generic load ICs recognize out-of-bound accesses in
+  // pixel arrays.
+  result = CompileRun("function pa_load(p, start) {"
+                      "  var sum = 0;"
+                      "  for (var j = start; j < 256; j++) { sum += p[j]; }"
+                      "  return sum;"
+                      "}"
+                      "for (var i = 0; i < 256; ++i) { pixels[i] = i; }"
+                      "just_ints = new Object();"
+                      "for (var i = 0; i < 256; ++i) { just_ints[i] = i; }"
+                      "for (var i = 0; i < 10; ++i) { pa_load(just_ints,0); }"
+                      "for (var i = 0; i < 10; ++i) { pa_load(pixels,0); }"
+                      "for (var i = 0; i < 10; ++i) {"
+                      "  result = pa_load(pixels,-10);"
+                      "}"
+                      "result");
+  CHECK_EQ(0, result->Int32Value());
+
+  // Make sure that generic ICs properly handles other types than pixel
+  // arrays (that the inlined fast pixel array test leaves the right information
+  // in the right registers).
+  result = CompileRun("function pa_load(p) {"
+                      "  var sum = 0;"
+                      "  for (var j = 0; j < 256; j++) { sum += p[j]; }"
+                      "  return sum;"
+                      "}"
+                      "for (var i = 0; i < 256; ++i) { pixels[i] = i; }"
+                      "just_ints = new Object();"
+                      "for (var i = 0; i < 256; ++i) { just_ints[i] = i; }"
+                      "for (var i = 0; i < 10; ++i) { pa_load(just_ints); }"
+                      "for (var i = 0; i < 10; ++i) { pa_load(pixels); }"
+                      "sparse_array = new Object();"
+                      "for (var i = 0; i < 256; ++i) { sparse_array[i] = i; }"
+                      "sparse_array[1000000] = 3;"
+                      "for (var i = 0; i < 10; ++i) {"
+                      "  result = pa_load(sparse_array);"
+                      "}"
+                      "result");
+  CHECK_EQ(32640, result->Int32Value());
+
+  // Make sure that pixel array store ICs clamp values correctly.
+  result = CompileRun("function pa_store(p) {"
+                      "  for (var j = 0; j < 256; j++) { p[j] = j * 2; }"
+                      "}"
+                      "pa_store(pixels);"
+                      "var sum = 0;"
+                      "for (var j = 0; j < 256; j++) { sum += pixels[j]; }"
+                      "sum");
+  CHECK_EQ(48896, result->Int32Value());
+
+  // Make sure that pixel array stores correctly handle accesses outside
+  // of the pixel array..
+  result = CompileRun("function pa_store(p,start) {"
+                      "  for (var j = 0; j < 256; j++) {"
+                      "    p[j+start] = j * 2;"
+                      "  }"
+                      "}"
+                      "pa_store(pixels,0);"
+                      "pa_store(pixels,-128);"
+                      "var sum = 0;"
+                      "for (var j = 0; j < 256; j++) { sum += pixels[j]; }"
+                      "sum");
+  CHECK_EQ(65280, result->Int32Value());
+
+  // Make sure that the generic store stub correctly handle accesses outside
+  // of the pixel array..
+  result = CompileRun("function pa_store(p,start) {"
+                      "  for (var j = 0; j < 256; j++) {"
+                      "    p[j+start] = j * 2;"
+                      "  }"
+                      "}"
+                      "pa_store(pixels,0);"
+                      "just_ints = new Object();"
+                      "for (var i = 0; i < 256; ++i) { just_ints[i] = i; }"
+                      "pa_store(just_ints, 0);"
+                      "pa_store(pixels,-128);"
+                      "var sum = 0;"
+                      "for (var j = 0; j < 256; j++) { sum += pixels[j]; }"
+                      "sum");
+  CHECK_EQ(65280, result->Int32Value());
+
+  // Make sure that the generic keyed store stub clamps pixel array values
+  // correctly.
+  result = CompileRun("function pa_store(p) {"
+                      "  for (var j = 0; j < 256; j++) { p[j] = j * 2; }"
+                      "}"
+                      "pa_store(pixels);"
+                      "just_ints = new Object();"
+                      "pa_store(just_ints);"
+                      "pa_store(pixels);"
+                      "var sum = 0;"
+                      "for (var j = 0; j < 256; j++) { sum += pixels[j]; }"
+                      "sum");
+  CHECK_EQ(48896, result->Int32Value());
+
+  // Make sure that pixel array loads are optimized by crankshaft.
+  result = CompileRun("function pa_load(p) {"
+                      "  var sum = 0;"
+                      "  for (var i=0; i<256; ++i) {"
+                      "    sum += p[i];"
+                      "  }"
+                      "  return sum; "
+                      "}"
+                      "for (var i = 0; i < 256; ++i) { pixels[i] = i; }"
+                      "for (var i = 0; i < 10000; ++i) {"
+                      "  result = pa_load(pixels);"
+                      "}"
+                      "result");
+  CHECK_EQ(32640, result->Int32Value());
+
+  // Make sure that pixel array stores are optimized by crankshaft.
+  result = CompileRun("function pa_init(p) {"
+                      "for (var i = 0; i < 256; ++i) { p[i] = i; }"
+                      "}"
+                      "function pa_load(p) {"
+                      "  var sum = 0;"
+                      "  for (var i=0; i<256; ++i) {"
+                      "    sum += p[i];"
+                      "  }"
+                      "  return sum; "
+                      "}"
+                      "for (var i = 0; i < 100000; ++i) {"
+                      "  pa_init(pixels);"
+                      "}"
+                      "result = pa_load(pixels);"
+                      "result");
+  CHECK_EQ(32640, result->Int32Value());
+
   free(pixel_data);
 }
 
@@ -10358,6 +10880,53 @@ THREADED_TEST(PixelArrayInfo) {
     CHECK_EQ(size, obj->GetIndexedPropertiesPixelDataLength());
     free(pixel_data);
   }
+}
+
+
+static v8::Handle<Value> NotHandledIndexedPropertyGetter(
+    uint32_t index,
+    const AccessorInfo& info) {
+  ApiTestFuzzer::Fuzz();
+  return v8::Handle<Value>();
+}
+
+
+static v8::Handle<Value> NotHandledIndexedPropertySetter(
+    uint32_t index,
+    Local<Value> value,
+    const AccessorInfo& info) {
+  ApiTestFuzzer::Fuzz();
+  return v8::Handle<Value>();
+}
+
+
+THREADED_TEST(PixelArrayWithInterceptor) {
+  v8::HandleScope scope;
+  LocalContext context;
+  const int kElementCount = 260;
+  uint8_t* pixel_data = reinterpret_cast<uint8_t*>(malloc(kElementCount));
+  i::Handle<i::PixelArray> pixels =
+      i::Factory::NewPixelArray(kElementCount, pixel_data);
+  for (int i = 0; i < kElementCount; i++) {
+    pixels->set(i, i % 256);
+  }
+  v8::Handle<v8::ObjectTemplate> templ = v8::ObjectTemplate::New();
+  templ->SetIndexedPropertyHandler(NotHandledIndexedPropertyGetter,
+                                   NotHandledIndexedPropertySetter);
+  v8::Handle<v8::Object> obj = templ->NewInstance();
+  obj->SetIndexedPropertiesToPixelData(pixel_data, kElementCount);
+  context->Global()->Set(v8_str("pixels"), obj);
+  v8::Handle<v8::Value> result = CompileRun("pixels[1]");
+  CHECK_EQ(1, result->Int32Value());
+  result = CompileRun("var sum = 0;"
+                      "for (var i = 0; i < 8; i++) {"
+                      "  sum += pixels[i] = pixels[i] = -i;"
+                      "}"
+                      "sum;");
+  CHECK_EQ(-28, result->Int32Value());
+  result = CompileRun("pixels.hasOwnProperty('1')");
+  CHECK(result->BooleanValue());
+  free(pixel_data);
 }
 
 
@@ -11018,6 +11587,26 @@ TEST(CaptureStackTraceForUncaughtException) {
   Function::Cast(*trouble)->Call(global, 0, NULL);
   v8::V8::SetCaptureStackTraceForUncaughtExceptions(false);
   v8::V8::RemoveMessageListeners(StackTraceForUncaughtExceptionListener);
+}
+
+
+TEST(CaptureStackTraceForUncaughtExceptionAndSetters) {
+  v8::HandleScope scope;
+  LocalContext env;
+  v8::V8::SetCaptureStackTraceForUncaughtExceptions(true,
+                                                    1024,
+                                                    v8::StackTrace::kDetailed);
+
+  CompileRun(
+      "var setters = ['column', 'lineNumber', 'scriptName',\n"
+      "    'scriptNameOrSourceURL', 'functionName', 'isEval',\n"
+      "    'isConstructor'];\n"
+      "for (var i = 0; i < setters.length; i++) {\n"
+      "  var prop = setters[i];\n"
+      "  Object.prototype.__defineSetter__(prop, function() { throw prop; });\n"
+      "}\n");
+  CompileRun("throw 'exception';");
+  v8::V8::SetCaptureStackTraceForUncaughtExceptions(false);
 }
 
 
@@ -12191,6 +12780,25 @@ TEST(RegExp) {
 }
 
 
+THREADED_TEST(Equals) {
+  v8::HandleScope handleScope;
+  LocalContext localContext;
+
+  v8::Handle<v8::Object> globalProxy = localContext->Global();
+  v8::Handle<Value> global = globalProxy->GetPrototype();
+
+  CHECK(global->StrictEquals(global));
+  CHECK(!global->StrictEquals(globalProxy));
+  CHECK(!globalProxy->StrictEquals(global));
+  CHECK(globalProxy->StrictEquals(globalProxy));
+
+  CHECK(global->Equals(global));
+  CHECK(!global->Equals(globalProxy));
+  CHECK(!globalProxy->Equals(global));
+  CHECK(globalProxy->Equals(globalProxy));
+}
+
+
 static v8::Handle<v8::Value> Getter(v8::Local<v8::String> property,
                                     const v8::AccessorInfo& info ) {
   return v8_str("42!");
@@ -12216,4 +12824,20 @@ TEST(NamedEnumeratorAndForIn) {
         "var result = []; for (var k in o) result.push(k); result"));
   CHECK_EQ(1, result->Length());
   CHECK_EQ(v8_str("universalAnswer"), result->Get(0));
+}
+
+
+TEST(DefinePropertyPostDetach) {
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::Handle<v8::Object> proxy = context->Global();
+  v8::Handle<v8::Function> define_property =
+      CompileRun("(function() {"
+                 "  Object.defineProperty("
+                 "    this,"
+                 "    1,"
+                 "    { configurable: true, enumerable: true, value: 3 });"
+                 "})").As<Function>();
+  context->DetachGlobal();
+  define_property->Call(proxy, 0, NULL);
 }
