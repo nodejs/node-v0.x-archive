@@ -17,7 +17,7 @@
 
 namespace node {
 
-int Start (int argc, char *argv[]);
+int Start (int argc, char *argv[], void(startup_callback)(v8::Local<v8::Object>));
 
 #define NODE_PSYMBOL(s) Persistent<String>::New(String::NewSymbol(s))
 

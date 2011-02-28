@@ -1901,7 +1901,7 @@ static Handle<Array> EnvEnumerator(const AccessorInfo& info) {
 }
 
 
-static void Load(int argc, char *argv[]) {
+static void Load(int argc, char *argv[], void (startup_callback)(Local<Object>)) {
   HandleScope scope;
 
   int i, j;
@@ -2064,6 +2064,8 @@ static void Load(int argc, char *argv[]) {
   InitDTrace(global);
 #endif
 
+  if(startup_callback) startup_callback(global);
+
   f->Call(global, 1, args);
 
   if (try_catch.HasCaught())  {
@@ -2224,7 +2226,7 @@ static int RegisterSignalHandler(int signal, void (*handler)(int)) {
 #endif // __POSIX__
 
 
-int Start(int argc, char *argv[]) {
+int Start(int argc, char *argv[], void (startup_callback)(Local<Object>)) {
   // Hack aroung with the argv pointer. Used for process.title = "blah".
   argv = node::Platform::SetupArgs(argc, argv);
 
@@ -2358,7 +2360,7 @@ int Start(int argc, char *argv[]) {
 
   // Create all the objects, load modules, do everything.
   // so your next reading stop should be node::Load()!
-  node::Load(argc, argv);
+  node::Load(argc, argv, startup_callback);
 
   // TODO Probably don't need to start this each time.
   // Avoids failing on test/simple/test-eio-race3.js though
