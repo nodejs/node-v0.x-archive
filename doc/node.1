@@ -1,384 +1,4774 @@
 .TH NODE.JS "1" "2010" "" ""
-
-
-.SH "NAME"
+.SH "NAME" 
 node \- Server-side JavaScript
+.SS Synopsis
+.PP
+An example of a web server (http.html) written with Node which responds
+with `Hello World':
+.IP
+.nf
+\f[C]
+var\ http\ =\ require(\[aq]http\[aq]);
 
-.SH SYNOPSIS
+http.createServer(function\ (request,\ response)\ {
+\ \ response.writeHead(200,\ {\[aq]Content-Type\[aq]:\ \[aq]text/plain\[aq]});
+\ \ response.end(\[aq]Hello\ World\\n\[aq]);
+}).listen(8124);
 
+console.log(\[aq]Server\ running\ at\ http://127.0.0.1:8124/\[aq]);
+\f[]
+.fi
+.PP
+To run the server, put the code into a file called \f[C]example.js\f[]
+and execute it with the node program
+.IP
+.nf
+\f[C]
+>\ node\ example.js
+Server\ running\ at\ http://127.0.0.1:8124/
+\f[]
+.fi
+.PP
+All of the examples in the documentation can be run similarly.
+.SS Global Objects
+.PP
+These object are available in the global scope and can be accessed from
+anywhere.
+.SS global
+.PP
+The global namespace object.
+.PP
+In browsers, the top-level scope is the global scope.
+That means that in browsers if you're in the global scope
+\f[C]var\ something\f[] will define a global variable.
+In Node this is different.
+The top-level scope is not the global scope; \f[C]var\ something\f[]
+inside a Node module will be local to that module.
+.SS process
+.PP
+The process object.
+See the `process object' section.
+.SS require()
+.PP
+To require modules.
+See the `Modules' section.
+.SS require.resolve()
+.PP
+Use the internal \f[C]require()\f[] machinery to look up the location of
+a module, but rather than loading the module, just return the resolved
+filename.
+.SS require.paths
+.PP
+An array of search paths for \f[C]require()\f[].
+This array can be modified to add custom paths.
+.PP
+Example: add a new path to the beginning of the search list
+.IP
+.nf
+\f[C]
+require.paths.unshift(\[aq]/usr/local/node\[aq]);
+\f[]
+.fi
+.SS __filename
+.PP
+The filename of the script being executed.
+This is the absolute path, and not necessarily the same filename passed
+in as a command line argument.
+.PP
+Example: running \f[C]node\ example.js\f[] from \f[C]/Users/mjr\f[]
+.IP
+.nf
+\f[C]
+console.log(__filename);
+//\ /Users/mjr/example.js
+\f[]
+.fi
+.SS __dirname
+.PP
+The dirname of the script being executed.
+.PP
+Example: running \f[C]node\ example.js\f[] from \f[C]/Users/mjr\f[]
+.IP
+.nf
+\f[C]
+console.log(__dirname);
+//\ /Users/mjr
+\f[]
+.fi
+.SS module
+.PP
+A reference to the current module.
+In particular \f[C]module.exports\f[] is the same as the
+\f[C]exports\f[] object.
+See \f[C]src/node.js\f[] for more information.
+.SS Timers
+.SS setTimeout(callback, delay, [arg], [\&...])
+.PP
+To schedule execution of \f[C]callback\f[] after \f[C]delay\f[]
+milliseconds.
+Returns a \f[C]timeoutId\f[] for possible use with
+\f[C]clearTimeout()\f[].
+Optionally, you can also pass arguments to the callback.
+.SS clearTimeout(timeoutId)
+.PP
+Prevents a timeout from triggering.
+.SS setInterval(callback, delay, [arg], [\&...])
+.PP
+To schedule the repeated execution of \f[C]callback\f[] every
+\f[C]delay\f[] milliseconds.
+Returns a \f[C]intervalId\f[] for possible use with
+\f[C]clearInterval()\f[].
+Optionally, you can also pass arguments to the callback.
+.SS clearInterval(intervalId)
+.PP
+Stops a interval from triggering.
+.SS Modules
+.PP
+Node uses the CommonJS module system.
+.PP
+Node has a simple module loading system.
+In Node, files and modules are in one-to-one correspondence.
+As an example, \f[C]foo.js\f[] loads the module \f[C]circle.js\f[] in
+the same directory.
+.PP
+The contents of \f[C]foo.js\f[]:
+.IP
+.nf
+\f[C]
+var\ circle\ =\ require(\[aq]./circle.js\[aq]);
+console.log(\ \[aq]The\ area\ of\ a\ circle\ of\ radius\ 4\ is\ \[aq]
+\ \ \ \ \ \ \ \ \ \ \ +\ circle.area(4));
+\f[]
+.fi
+.PP
+The contents of \f[C]circle.js\f[]:
+.IP
+.nf
+\f[C]
+var\ PI\ =\ Math.PI;
 
-.B node
-[
-.B \-v
-]
-[
-.B \-\-debug
-|
-.B \-\-debug-brk
-]
-[
-.B \-\-v8-options
-]
-.br
-     [
-.B \-e
-.I command
-|
-.I script.js
-]
-[
-.I arguments
-]
+exports.area\ =\ function\ (r)\ {
+\ \ return\ PI\ *\ r\ *\ r;
+};
 
-Execute without arguments to start the REPL.
+exports.circumference\ =\ function\ (r)\ {
+\ \ return\ 2\ *\ PI\ *\ r;
+};
+\f[]
+.fi
+.PP
+The module \f[C]circle.js\f[] has exported the functions \f[C]area()\f[]
+and \f[C]circumference()\f[].
+To export an object, add to the special \f[C]exports\f[] object.
+.PP
+Variables local to the module will be private.
+In this example the variable \f[C]PI\f[] is private to
+\f[C]circle.js\f[].
+.SS Core Modules
+.PP
+Node has several modules compiled into the binary.
+These modules are described in greater detail elsewhere in this
+documentation.
+.PP
+The core modules are defined in node's source in the \f[C]lib/\f[]
+folder.
+.PP
+Core modules are always preferentially loaded if their identifier is
+passed to \f[C]require()\f[].
+For instance, \f[C]require(\[aq]http\[aq])\f[] will always return the
+built in HTTP module, even if there is a file by that name.
+.SS File Modules
+.PP
+If the exact filename is not found, then node will attempt to load the
+required filename with the added extension of \f[C].js\f[], and then
+\f[C].node\f[].
+.PP
+\f[C].js\f[] files are interpreted as JavaScript text files, and
+\f[C].node\f[] files are interpreted as compiled addon modules loaded
+with \f[C]dlopen\f[].
+.PP
+A module prefixed with \f[C]\[aq]/\[aq]\f[] is an absolute path to the
+file.
+For example, \f[C]require(\[aq]/home/marco/foo.js\[aq])\f[] will load
+the file at \f[C]/home/marco/foo.js\f[].
+.PP
+A module prefixed with \f[C]\[aq]./\[aq]\f[] is relative to the file
+calling \f[C]require()\f[].
+That is, \f[C]circle.js\f[] must be in the same directory as
+\f[C]foo.js\f[] for \f[C]require(\[aq]./circle\[aq])\f[] to find it.
+.PP
+Without a leading `/' or './' to indicate a file, the module is either a
+\[lq]core module\[rq] or is loaded from a \f[C]node_modules\f[] folder.
+.SS Loading from \f[C]node_modules\f[] Folders
+.PP
+If the module identifier passed to \f[C]require()\f[] is not a native
+module, and does not begin with \f[C]\[aq]/\[aq]\f[],
+\f[C]\[aq]../\[aq]\f[], or \f[C]\[aq]./\[aq]\f[], then node starts at
+the parent directory of the current module, and adds
+\f[C]/node_modules\f[], and attempts to load the module from that
+location.
+.PP
+If it is not found there, then it moves to the parent directory, and so
+on, until either the module is found, or the root of the tree is
+reached.
+.PP
+For example, if the file at \f[C]\[aq]/home/ry/projects/foo.js\[aq]\f[]
+called \f[C]require(\[aq]bar.js\[aq])\f[], then node would look in the
+following locations, in this order:
+.IP \[bu] 2
+\f[C]/home/ry/projects/node_modules/bar.js\f[]
+.IP \[bu] 2
+\f[C]/home/ry/node_modules/bar.js\f[]
+.IP \[bu] 2
+\f[C]/home/node_modules/bar.js\f[]
+.IP \[bu] 2
+\f[C]/node_modules/bar.js\f[]
+.PP
+This allows programs to localize their dependencies, so that they do not
+clash.
+.SS Optimizations to the \f[C]node_modules\f[] Lookup Process
+.PP
+When there are many levels of nested dependencies, it is possible for
+these file trees to get fairly long.
+The following optimizations are thus made to the process.
+.PP
+First, \f[C]/node_modules\f[] is never appended to a folder already
+ending in \f[C]/node_modules\f[].
+.PP
+Second, if the file calling \f[C]require()\f[] is already inside a
+\f[C]node_modules\f[] hierarchy, then the top-most \f[C]node_modules\f[]
+folder is treated as the root of the search tree.
+.PP
+For example, if the file at
+\f[C]\[aq]/home/ry/projects/foo/node_modules/bar/node_modules/baz/quux.js\[aq]\f[]
+called \f[C]require(\[aq]asdf.js\[aq])\f[], then node would search the
+following locations:
+.IP \[bu] 2
+\f[C]/home/ry/projects/foo/node_modules/bar/node_modules/baz/node_modules/asdf.js\f[]
+.IP \[bu] 2
+\f[C]/home/ry/projects/foo/node_modules/bar/node_modules/asdf.js\f[]
+.IP \[bu] 2
+\f[C]/home/ry/projects/foo/node_modules/asdf.js\f[]
+.SS Folders as Modules
+.PP
+It is convenient to organize programs and libraries into self-contained
+directories, and then provide a single entry point to that library.
+There are three ways in which a folder may be passed to
+\f[C]require()\f[] as an argument.
+.PP
+The first is to create a \f[C]package.json\f[] file in the root of the
+folder, which specifies a \f[C]main\f[] module.
+An example package.json file might look like this:
+.IP
+.nf
+\f[C]
+{\ "name"\ :\ "some-library",
+\ \ "main"\ :\ "./lib/some-library.js"\ }
+\f[]
+.fi
+.PP
+If this was in a folder at \f[C]./some-library\f[], then
+\f[C]require(\[aq]./some-library\[aq])\f[] would attempt to load
+\f[C]./some-library/lib/some-library.js\f[].
+.PP
+This is the extent of Node's awareness of package.json files.
+.PP
+If there is no package.json file present in the directory, then node
+will attempt to load an \f[C]index.js\f[] or \f[C]index.node\f[] file
+out of that directory.
+For example, if there was no package.json file in the above example,
+then \f[C]require(\[aq]./some-library\[aq])\f[] would attempt to load:
+.IP \[bu] 2
+\f[C]./some-library/index.js\f[]
+.IP \[bu] 2
+\f[C]./some-library/index.node\f[]
+.SS Caching
+.PP
+Modules are cached after the first time they are loaded.
+This means (among other things) that every call to
+\f[C]require(\[aq]foo\[aq])\f[] will get exactly the same object
+returned, if it would resolve to the same file.
+.SS All Together\&...
+.PP
+To get the exact filename that will be loaded when \f[C]require()\f[] is
+called, use the \f[C]require.resolve()\f[] function.
+.PP
+Putting together all of the above, here is the high-level algorithm in
+pseudocode of what require.resolve does:
+.IP
+.nf
+\f[C]
+require(X)
+1.\ If\ X\ is\ a\ core\ module,
+\ \ \ a.\ return\ the\ core\ module
+\ \ \ b.\ STOP
+2.\ If\ X\ begins\ with\ `./`\ or\ `/`,
+\ \ \ a.\ LOAD_AS_FILE(Y\ +\ X)
+\ \ \ b.\ LOAD_AS_DIRECTORY(Y\ +\ X)
+3.\ LOAD_NODE_MODULES(X,\ dirname(Y))
+4.\ THROW\ "not\ found"
 
+LOAD_AS_FILE(X)
+1.\ If\ X\ is\ a\ file,\ load\ X\ as\ JavaScript\ text.\ \ STOP
+2.\ If\ X.js\ is\ a\ file,\ load\ X.js\ as\ JavaScript\ text.\ \ STOP
+3.\ If\ X.node\ is\ a\ file,\ load\ X.node\ as\ binary\ addon.\ \ STOP
 
-.SH DESCRIPTION
+LOAD_AS_DIRECTORY(X)
+1.\ If\ X/package.json\ is\ a\ file,
+\ \ \ a.\ Parse\ X/package.json,\ and\ look\ for\ "main"\ field.
+\ \ \ b.\ let\ M\ =\ X\ +\ (json\ main\ field)
+\ \ \ c.\ LOAD_AS_FILE(M)
+2.\ LOAD_AS_FILE(X/index)
 
-Node is a set of libraries for javascript which allows
-it to be used outside of the browser. It is primarily
-focused on creating simple, easy to build network clients
-and servers.
+LOAD_NODE_MODULES(X,\ START)
+1.\ let\ DIRS=NODE_MODULES_PATHS(START)
+2.\ for\ each\ DIR\ in\ DIRS:
+\ \ \ a.\ LOAD_AS_FILE(DIR/X)
+\ \ \ b.\ LOAD_AS_DIRECTORY(DIR/X)
 
+NODE_MODULES_PATHS(START)
+1.\ let\ PARTS\ =\ path\ split(START)
+2.\ let\ ROOT\ =\ index\ of\ first\ instance\ of\ "node_modules"\ in\ PARTS,\ or\ 0
+3.\ let\ I\ =\ count\ of\ PARTS\ -\ 1
+4.\ let\ DIRS\ =\ []
+5.\ while\ I\ >\ ROOT,
+\ \ \ a.\ if\ PARTS[I]\ =\ "node_modules"\ CONTINUE
+\ \ \ c.\ DIR\ =\ path\ join(PARTS[0\ ..\ I]\ +\ "node_modules")
+\ \ \ b.\ DIRS\ =\ DIRS\ +\ DIR
+6.\ return\ DIRS
+\f[]
+.fi
+.SS Loading from the \f[C]require.paths\f[] Folders
+.PP
+In node, \f[C]require.paths\f[] is an array of strings that represent
+paths to be searched for modules when they are not prefixed with
+\f[C]\[aq]/\[aq]\f[], \f[C]\[aq]./\[aq]\f[], or \f[C]\[aq]../\[aq]\f[].
+For example, if require.paths were set to:
+.IP
+.nf
+\f[C]
+[\ \[aq]/home/micheil/.node_modules\[aq],
+\ \ \[aq]/usr/local/lib/node_modules\[aq]\ ]
+\f[]
+.fi
+.PP
+Then calling \f[C]require(\[aq]bar/baz.js\[aq])\f[] would search the
+following locations:
+.IP \[bu] 2
+1: \f[C]\[aq]/home/micheil/.node_modules/bar/baz.js\[aq]\f[]
+.IP \[bu] 2
+2: \f[C]\[aq]/usr/local/lib/node_modules/bar/baz.js\[aq]\f[]
+.PP
+The \f[C]require.paths\f[] array can be mutated at run time to alter
+this behavior.
+.PP
+It is set initially from the \f[C]NODE_PATH\f[] environment variable,
+which is a colon-delimited list of absolute paths.
+In the previous example, the \f[C]NODE_PATH\f[] environment variable
+might have been set to:
+.IP
+.nf
+\f[C]
+/home/micheil/.node_modules:/usr/local/lib/node_modules
+\f[]
+.fi
+.SS \f[B]Note:\f[] Please Avoid Modifying \f[C]require.paths\f[]
+.PP
+For compatibility reasons, \f[C]require.paths\f[] is still given first
+priority in the module lookup process.
+However, it may disappear in a future release.
+.PP
+While it seemed like a good idea at the time, and enabled a lot of
+useful experimentation, in practice a mutable \f[C]require.paths\f[]
+list is often a troublesome source of confusion and headaches.
+.SS Setting \f[C]require.paths\f[] to some other value does nothing.
+.PP
+This does not do what one might expect:
+.IP
+.nf
+\f[C]
+require.paths\ =\ [\ \[aq]/usr/lib/node\[aq]\ ];
+\f[]
+.fi
+.PP
+All that does is lose the reference to the \f[I]actual\f[] node module
+lookup paths, and create a new reference to some other thing that isn't
+used for anything.
+.SS Putting relative paths in \f[C]require.paths\f[] is\&... weird.
+.PP
+If you do this:
+.IP
+.nf
+\f[C]
+require.paths.push(\[aq]./lib\[aq]);
+\f[]
+.fi
+.PP
+then it does \f[I]not\f[] add the full resolved path to where
+\f[C]./lib\f[] is on the filesystem.
+Instead, it literally adds \f[C]\[aq]./lib\[aq]\f[], meaning that if you
+do \f[C]require(\[aq]y.js\[aq])\f[] in \f[C]/a/b/x.js\f[], then it'll
+look in \f[C]/a/b/lib/y.js\f[].
+If you then did \f[C]require(\[aq]y.js\[aq])\f[] in
+\f[C]/l/m/n/o/p.js\f[], then it'd look in \f[C]/l/m/n/o/lib/y.js\f[].
+.PP
+In practice, people have used this as an ad hoc way to bundle
+dependencies, but this technique is brittle.
+.SS Zero Isolation
+.PP
+There is (by regrettable design), only one \f[C]require.paths\f[] array
+used by all modules.
+.PP
+As a result, if one node program comes to rely on this behavior, it may
+permanently and subtly alter the behavior of all other node programs in
+the same process.
+As the application stack grows, we tend to assemble functionality, and
+it is a problem with those parts interact in ways that are difficult to
+predict.
+.SS Addenda: Package Manager Tips
+.PP
+The semantics of Node's \f[C]require()\f[] function were designed to be
+general enough to support a number of sane directory structures.
+Package manager programs such as \f[C]dpkg\f[], \f[C]rpm\f[], and
+\f[C]npm\f[] will hopefully find it possible to build native packages
+from Node modules without modification.
+.PP
+Below we give a suggested directory structure that could work:
+.PP
+Let's say that we wanted to have the folder at
+\f[C]/usr/lib/node/<some-package>/<some-version>\f[] hold the contents
+of a specific version of a package.
+.PP
+Packages can depend on one another.
+In order to install package \f[C]foo\f[], you may have to install a
+specific version of package \f[C]bar\f[].
+The \f[C]bar\f[] package may itself have dependencies, and in some
+cases, these dependencies may even collide or form cycles.
+.PP
+Since Node looks up the \f[C]realpath\f[] of any modules it loads (that
+is, resolves symlinks), and then looks for their dependencies in the
+\f[C]node_modules\f[] folders as described above, this situation is very
+simple to resolve with the following architecture:
+.IP \[bu] 2
+\f[C]/usr/lib/node/foo/1.2.3/\f[] - Contents of the \f[C]foo\f[]
+package, version 1.2.3.
+.IP \[bu] 2
+\f[C]/usr/lib/node/bar/4.3.2/\f[] - Contents of the \f[C]bar\f[] package
+that \f[C]foo\f[] depends on.
+.IP \[bu] 2
+\f[C]/usr/lib/node/foo/1.2.3/node_modules/bar\f[] - Symbolic link to
+\f[C]/usr/lib/node/bar/4.3.2/\f[].
+.IP \[bu] 2
+\f[C]/usr/lib/node/bar/4.3.2/node_modules/*\f[] - Symbolic links to the
+packages that \f[C]bar\f[] depends on.
+.PP
+Thus, even if a cycle is encountered, or if there are dependency
+conflicts, every module will be able to get a version of its dependency
+that it can use.
+.PP
+When the code in the \f[C]foo\f[] package does
+\f[C]require(\[aq]bar\[aq])\f[], it will get the version that is
+symlinked into \f[C]/usr/lib/node/foo/1.2.3/node_modules/bar\f[].
+Then, when the code in the \f[C]bar\f[] package calls
+\f[C]require(\[aq]quux\[aq])\f[], it'll get the version that is
+symlinked into \f[C]/usr/lib/node/bar/4.3.2/node_modules/quux\f[].
+.PP
+Furthermore, to make the module lookup process even more optimal, rather
+than putting packages directly in \f[C]/usr/lib/node\f[], we could put
+them in \f[C]/usr/lib/node_modules/<name>/<version>\f[].
+Then node will not bother looking for missing dependencies in
+\f[C]/usr/node_modules\f[] or \f[C]/node_modules\f[].
+.PP
+In order to make modules available to the node REPL, it might be useful
+to also add the \f[C]/usr/lib/node_modules\f[] folder to the
+\f[C]$NODE_PATH\f[] environment variable.
+Since the module lookups using \f[C]node_modules\f[] folders are all
+relative, and based on the real path of the files making the calls to
+\f[C]require()\f[], the packages themselves can be anywhere.
+.SS Addons
+.PP
+Addons are dynamically linked shared objects.
+They can provide glue to C and C++ libraries.
+The API (at the moment) is rather complex, involving knowledge of
+several libraries:
+.IP \[bu] 2
+V8 JavaScript, a C++ library.
+Used for interfacing with JavaScript: creating objects, calling
+functions, etc.
+Documented mostly in the \f[C]v8.h\f[] header file
+(\f[C]deps/v8/include/v8.h\f[] in the Node source tree).
+.IP \[bu] 2
+libev, C event loop library.
+Anytime one needs to wait for a file descriptor to become readable, wait
+for a timer, or wait for a signal to received one will need to interface
+with libev.
+That is, if you perform any I/O, libev will need to be used.
+Node uses the \f[C]EV_DEFAULT\f[] event loop.
+Documentation can be found here (http://cvs.schmorp.de/libev/ev.html).
+.IP \[bu] 2
+libeio, C thread pool library.
+Used to execute blocking POSIX system calls asynchronously.
+Mostly wrappers already exist for such calls, in \f[C]src/file.cc\f[] so
+you will probably not need to use it.
+If you do need it, look at the header file \f[C]deps/libeio/eio.h\f[].
+.IP \[bu] 2
+Internal Node libraries.
+Most importantly is the \f[C]node::ObjectWrap\f[] class which you will
+likely want to derive from.
+.IP \[bu] 2
+Others.
+Look in \f[C]deps/\f[] for what else is available.
+.PP
+Node statically compiles all its dependencies into the executable.
+When compiling your module, you don't need to worry about linking to any
+of these libraries.
+.PP
+To get started let's make a small Addon which does the following except
+in C++:
+.IP
+.nf
+\f[C]
+exports.hello\ =\ \[aq]world\[aq];
+\f[]
+.fi
+.PP
+To get started we create a file \f[C]hello.cc\f[]:
+.IP
+.nf
+\f[C]
+#include\ <v8.h>
 
-.SH ENVIRONMENT VARIABLES
+using\ namespace\ v8;
 
-.IP NODE_PATH
-\':\'\-separated list of directories prefixed to the module search path,
-require.paths.
+extern\ "C"\ void
+init\ (Handle<Object>\ target)
+{
+\ \ HandleScope\ scope;
+\ \ target->Set(String::New("hello"),\ String::New("world"));
+}
+\f[]
+.fi
+.PP
+This source code needs to be built into \f[C]hello.node\f[], the binary
+Addon.
+To do this we create a file called \f[C]wscript\f[] which is python code
+and looks like this:
+.IP
+.nf
+\f[C]
+srcdir\ =\ \[aq].\[aq]
+blddir\ =\ \[aq]build\[aq]
+VERSION\ =\ \[aq]0.0.1\[aq]
 
-.IP NODE_MODULE_CONTEXTS
-If set to 1 then modules will load in their own global contexts.
+def\ set_options(opt):
+\ \ opt.tool_options(\[aq]compiler_cxx\[aq])
 
-.IP NODE_DISABLE_COLORS
-If set to 1 then colors will not be used in the REPL.
+def\ configure(conf):
+\ \ conf.check_tool(\[aq]compiler_cxx\[aq])
+\ \ conf.check_tool(\[aq]node_addon\[aq])
 
-.SH V8 OPTIONS
+def\ build(bld):
+\ \ obj\ =\ bld.new_task_gen(\[aq]cxx\[aq],\ \[aq]shlib\[aq],\ \[aq]node_addon\[aq])
+\ \ obj.target\ =\ \[aq]hello\[aq]
+\ \ obj.source\ =\ \[aq]hello.cc\[aq]
+\f[]
+.fi
+.PP
+Running \f[C]node-waf\ configure\ build\f[] will create a file
+\f[C]build/default/hello.node\f[] which is our Addon.
+.PP
+\f[C]node-waf\f[] is just WAF (http://code.google.com/p/waf), the
+python-based build system.
+\f[C]node-waf\f[] is provided for the ease of users.
+.PP
+All Node addons must export a function called \f[C]init\f[] with this
+signature:
+.IP
+.nf
+\f[C]
+extern\ \[aq]C\[aq]\ void\ init\ (Handle<Object>\ target)
+\f[]
+.fi
+.PP
+For the moment, that is all the documentation on addons.
+Please see <http://github.com/joyent/node_postgres> for a real example.
+.SS process
+.PP
+The \f[C]process\f[] object is a global object and can be accessed from
+anywhere.
+It is an instance of \f[C]EventEmitter\f[].
+.SS Event: `exit'
+.PP
+\f[C]function\ ()\ {}\f[]
+.PP
+Emitted when the process is about to exit.
+This is a good hook to perform constant time checks of the module's
+state (like for unit tests).
+The main event loop will no longer be run after the `exit' callback
+finishes, so timers may not be scheduled.
+.PP
+Example of listening for \f[C]exit\f[]:
+.IP
+.nf
+\f[C]
+process.on(\[aq]exit\[aq],\ function\ ()\ {
+\ \ process.nextTick(function\ ()\ {
+\ \ \ console.log(\[aq]This\ will\ not\ run\[aq]);
+\ \ });
+\ \ console.log(\[aq]About\ to\ exit.\[aq]);
+});
+\f[]
+.fi
+.SS Event: `uncaughtException'
+.PP
+\f[C]function\ (err)\ {\ }\f[]
+.PP
+Emitted when an exception bubbles all the way back to the event loop.
+If a listener is added for this exception, the default action (which is
+to print a stack trace and exit) will not occur.
+.PP
+Example of listening for \f[C]uncaughtException\f[]:
+.IP
+.nf
+\f[C]
+process.on(\[aq]uncaughtException\[aq],\ function\ (err)\ {
+\ \ console.log(\[aq]Caught\ exception:\ \[aq]\ +\ err);
+});
 
-  --crankshaft (use crankshaft)
-        type: bool  default: false
-  --hydrogen_filter (hydrogen use/trace filter)
-        type: string  default: 
-  --use_hydrogen (use generated hydrogen for compilation)
-        type: bool  default: true
-  --build_lithium (use lithium chunk builder)
-        type: bool  default: true
-  --alloc_lithium (use lithium register allocator)
-        type: bool  default: true
-  --use_lithium (use lithium code generator)
-        type: bool  default: true
-  --use_range (use hydrogen range analysis)
-        type: bool  default: true
-  --eliminate_dead_phis (eliminate dead phis)
-        type: bool  default: true
-  --use_gvn (use hydrogen global value numbering)
-        type: bool  default: true
-  --use_peeling (use loop peeling)
-        type: bool  default: false
-  --use_canonicalizing (use hydrogen instruction canonicalizing)
-        type: bool  default: true
-  --use_inlining (use function inlining)
-        type: bool  default: true
-  --limit_inlining (limit code size growth from inlining)
-        type: bool  default: true
-  --eliminate_empty_blocks (eliminate empty blocks)
-        type: bool  default: true
-  --loop_invariant_code_motion (loop invariant code motion)
-        type: bool  default: true
-  --time_hydrogen (timing for hydrogen)
-        type: bool  default: false
-  --trace_hydrogen (trace generated hydrogen to file)
-        type: bool  default: false
-  --trace_inlining (trace inlining decisions)
-        type: bool  default: false
-  --trace_alloc (trace register allocator)
-        type: bool  default: false
-  --trace_range (trace range analysis)
-        type: bool  default: false
-  --trace_gvn (trace global value numbering)
-        type: bool  default: false
-  --trace_representation (trace representation types)
-        type: bool  default: false
-  --stress_pointer_maps (pointer map for every instruction)
-        type: bool  default: false
-  --stress_environments (environment for every instruction)
-        type: bool  default: false
-  --deopt_every_n_times (deoptimize every n times a deopt point is passed)
-        type: int  default: 0
-  --process_arguments_object (try to deal with arguments object)
-        type: bool  default: true
-  --trap_on_deopt (put a break point before deoptimizing)
-        type: bool  default: false
-  --deoptimize_uncommon_cases (deoptimize uncommon cases)
-        type: bool  default: true
-  --polymorphic_inlining (polymorphic inlining)
-        type: bool  default: true
-  --aggressive_loop_invariant_motion (aggressive motion of instructions out of loops)
-        type: bool  default: true
-  --use_osr (use on-stack replacement)
-        type: bool  default: true
-  --trace_osr (trace on-stack replacement)
-        type: bool  default: false
-  --stress_runs (number of stress runs)
-        type: int  default: 0
-  --optimize_closures (optimize closures)
-        type: bool  default: true
-  --debug_code (generate extra code (assertions) for debugging)
-        type: bool  default: false
-  --code_comments (emit comments in code disassembly)
-        type: bool  default: false
-  --emit_branch_hints (emit branch hints)
-        type: bool  default: false
-  --peephole_optimization (perform peephole optimizations in assembly code)
-        type: bool  default: true
-  --print_peephole_optimization (print peephole optimizations in assembly code)
-        type: bool  default: false
-  --enable_sse2 (enable use of SSE2 instructions if available)
-        type: bool  default: true
-  --enable_sse3 (enable use of SSE3 instructions if available)
-        type: bool  default: true
-  --enable_sse4_1 (enable use of SSE4.1 instructions if available)
-        type: bool  default: true
-  --enable_cmov (enable use of CMOV instruction if available)
-        type: bool  default: true
-  --enable_rdtsc (enable use of RDTSC instruction if available)
-        type: bool  default: true
-  --enable_sahf (enable use of SAHF instruction if available (X64 only))
-        type: bool  default: true
-  --enable_vfp3 (enable use of VFP3 instructions if available (ARM only))
-        type: bool  default: true
-  --enable_armv7 (enable use of ARMv7 instructions if available (ARM only))
-        type: bool  default: true
-  --expose_natives_as (expose natives in global object)
-        type: string  default: NULL
-  --expose_debug_as (expose debug in global object)
-        type: string  default: NULL
-  --expose_gc (expose gc extension)
-        type: bool  default: false
-  --expose_externalize_string (expose externalize string extension)
-        type: bool  default: false
-  --stack_trace_limit (number of stack frames to capture)
-        type: int  default: 10
-  --disable_native_files (disable builtin natives files)
-        type: bool  default: false
-  --inline_new (use fast inline allocation)
-        type: bool  default: true
-  --stack_trace_on_abort (print a stack trace if an assertion failure occurs)
-        type: bool  default: true
-  --trace (trace function calls)
-        type: bool  default: false
-  --defer_negation (defer negation operation)
-        type: bool  default: true
-  --mask_constants_with_cookie (use random jit cookie to mask large constants)
-        type: bool  default: true
-  --lazy (use lazy compilation)
-        type: bool  default: true
-  --trace_opt (trace lazy optimization)
-        type: bool  default: false
-  --trace_opt_stats (trace lazy optimization statistics)
-        type: bool  default: false
-  --opt (use adaptive optimizations)
-        type: bool  default: true
-  --opt_eagerly (be more eager when adaptively optimizing)
-        type: bool  default: false
-  --always_opt (always try to optimize functions)
-        type: bool  default: false
-  --prepare_always_opt (prepare for turning on always opt)
-        type: bool  default: false
-  --debug_info (add debug information to compiled functions)
-        type: bool  default: true
-  --deopt (support deoptimization)
-        type: bool  default: true
-  --trace_deopt (trace deoptimization)
-        type: bool  default: false
-  --strict (strict error checking)
-        type: bool  default: false
-  --min_preparse_length (minimum length for automatic enable preparsing)
-        type: int  default: 1024
-  --full_compiler (enable dedicated backend for run-once code)
-        type: bool  default: true
-  --always_full_compiler (try to use the dedicated run-once backend for all code)
-        type: bool  default: false
-  --trace_bailout (print reasons for falling back to using the classic V8 backend)
-        type: bool  default: false
-  --safe_int32_compiler (enable optimized side-effect-free int32 expressions.)
-        type: bool  default: true
-  --use_flow_graph (perform flow-graph based optimizations)
-        type: bool  default: false
-  --compilation_cache (enable compilation cache)
-        type: bool  default: true
-  --loop_peeling (Peel off the first iteration of loops.)
-        type: bool  default: false
-  --remote_debugging (enable remote debugging)
-        type: bool  default: false
-  --trace_debug_json (trace debugging JSON request/response)
-        type: bool  default: false
-  --debugger_auto_break (automatically set the debug break flag when debugger commands are in the queue)
-        type: bool  default: true
-  --enable_liveedit (enable liveedit experimental feature)
-        type: bool  default: true
-  --stack_size (default size of stack region v8 is allowed to use (in KkBytes))
-        type: int  default: 1024
-  --max_stack_trace_source_length (maximum length of function source code printed in a stack trace.)
-        type: int  default: 300
-  --always_inline_smi_code (always inline smi code in non-opt code)
-        type: bool  default: false
-  --max_new_space_size (max size of the new generation (in kBytes))
-        type: int  default: 0
-  --max_old_space_size (max size of the old generation (in Mbytes))
-        type: int  default: 0
-  --max_executable_size (max size of executable memory (in Mbytes))
-        type: int  default: 0
-  --gc_global (always perform global GCs)
-        type: bool  default: false
-  --gc_interval (garbage collect after <n> allocations)
-        type: int  default: -1
-  --trace_gc (print one trace line following each garbage collection)
-        type: bool  default: false
-  --trace_gc_nvp (print one detailed trace line in name=value format after each garbage collection)
-        type: bool  default: false
-  --print_cumulative_gc_stat (print cumulative GC statistics in name=value format on exit)
-        type: bool  default: false
-  --trace_gc_verbose (print more details following each garbage collection)
-        type: bool  default: false
-  --collect_maps (garbage collect maps from which no objects can be reached)
-        type: bool  default: true
-  --flush_code (flush code that we expect not to use again before full gc)
-        type: bool  default: true
-  --use_idle_notification (Use idle notification to reduce memory footprint.)
-        type: bool  default: true
-  --use_ic (use inline caching)
-        type: bool  default: true
-  --native_code_counters (generate extra code for manipulating stats counters)
-        type: bool  default: false
-  --always_compact (Perform compaction on every full GC)
-        type: bool  default: false
-  --never_compact (Never perform compaction on full GC - testing only)
-        type: bool  default: false
-  --cleanup_ics_at_gc (Flush inline caches prior to mark compact collection.)
-        type: bool  default: true
-  --cleanup_caches_in_maps_at_gc (Flush code caches in maps during mark compact cycle.)
-        type: bool  default: true
-  --random_seed (Default seed for initializing random generator (0, the default, means to use system random).)
-        type: int  default: 0
-  --canonicalize_object_literal_maps (Canonicalize maps for object literals.)
-        type: bool  default: true
-  --use_big_map_space (Use big map space, but don't compact if it grew too big.)
-        type: bool  default: true
-  --max_map_space_pages (Maximum number of pages in map space which still allows to encode forwarding pointers.  That's actually a constant, but it's useful to control it with a flag for better testing.)
-        type: int  default: 65535
-  --h (print this message)
-        type: bool  default: false
-  --new_snapshot (use new snapshot implementation)
-        type: bool  default: true
-  --use_verbose_printer (allows verbose printing)
-        type: bool  default: true
-  --allow_natives_syntax (allow natives syntax)
-        type: bool  default: false
-  --strict_mode (allow strict mode directives)
-        type: bool  default: true
-  --optimize_ast (optimize the ast)
-        type: bool  default: true
-  --trace_sim (Trace simulator execution)
-        type: bool  default: false
-  --check_icache (Check icache flushes in ARM simulator)
-        type: bool  default: false
-  --stop_sim_at (Simulator stop after x number of instructions)
-        type: int  default: 0
-  --sim_stack_alignment (Stack alingment in bytes in simulator (4 or 8, 8 is default))
-        type: int  default: 8
-  --trace_exception (print stack trace when throwing exceptions)
-        type: bool  default: false
-  --preallocate_message_memory (preallocate some memory to build stack traces.)
-        type: bool  default: false
-  --preemption (activate a 100ms timer that switches between V8 threads)
-        type: bool  default: false
-  --trace_regexps (trace regexp execution)
-        type: bool  default: false
-  --regexp_optimization (generate optimized regexp code)
-        type: bool  default: true
-  --regexp_entry_native (use native code to enter regexp)
-        type: bool  default: true
-  --testing_bool_flag (testing_bool_flag)
-        type: bool  default: true
-  --testing_int_flag (testing_int_flag)
-        type: int  default: 13
-  --testing_float_flag (float-flag)
-        type: float  default: 2.500000
-  --testing_string_flag (string-flag)
-        type: string  default: Hello, world!
-  --testing_prng_seed (Seed used for threading test randomness)
-        type: int  default: 42
-  --testing_serialization_file (file in which to serialize heap)
-        type: string  default: /tmp/serdes
-  --help (Print usage message, including flags, on console)
-        type: bool  default: true
-  --dump_counters (Dump counters on exit)
-        type: bool  default: false
-  --debugger (Enable JavaScript debugger)
-        type: bool  default: false
-  --remote_debugger (Connect JavaScript debugger to the debugger agent in another process)
-        type: bool  default: false
-  --debugger_agent (Enable debugger agent)
-        type: bool  default: false
-  --debugger_port (Port to use for remote debugging)
-        type: int  default: 5858
-  --map_counters (Map counters to a file)
-        type: string  default: NULL
-  --js_arguments (Pass all remaining arguments to the script. Alias for "--".)
-        type: arguments  default: 
-  --debug_compile_events (Enable debugger compile events)
-        type: bool  default: true
-  --debug_script_collected_events (Enable debugger script collected events)
-        type: bool  default: true
-  --gdbjit (enable GDBJIT interface (disables compacting GC))
-        type: bool  default: false
-  --gdbjit_full (enable GDBJIT interface for all code objects)
-        type: bool  default: false
-  --gdbjit_dump (dump elf objects with debug info to disk)
-        type: bool  default: false
-  --log (Minimal logging (no API, code, GC, suspect, or handles samples).)
-        type: bool  default: false
-  --log_all (Log all events to the log file.)
-        type: bool  default: false
-  --log_runtime (Activate runtime system %Log call.)
-        type: bool  default: false
-  --log_api (Log API events to the log file.)
-        type: bool  default: false
-  --log_code (Log code events to the log file without profiling.)
-        type: bool  default: false
-  --log_gc (Log heap samples on garbage collection for the hp2ps tool.)
-        type: bool  default: false
-  --log_handles (Log global handle events.)
-        type: bool  default: false
-  --log_snapshot_positions (log positions of (de)serialized objects in the snapshot.)
-        type: bool  default: false
-  --log_suspect (Log suspect operations.)
-        type: bool  default: false
-  --log_producers (Log stack traces of JS objects allocations.)
-        type: bool  default: false
-  --prof (Log statistical profiling information (implies --log-code).)
-        type: bool  default: false
-  --prof_auto (Used with --prof, starts profiling automatically)
-        type: bool  default: true
-  --prof_lazy (Used with --prof, only does sampling and logging when profiler is active (implies --noprof_auto).)
-        type: bool  default: false
-  --prof_browser_mode (Used with --prof, turns on browser-compatible mode for profiling.)
-        type: bool  default: true
-  --log_regexp (Log regular expression execution.)
-        type: bool  default: false
-  --sliding_state_window (Update sliding state window counters.)
-        type: bool  default: false
-  --logfile (Specify the name of the log file.)
-        type: string  default: v8.log
-  --ll_prof (Enable low-level linux profiler.)
-        type: bool  default: false
+setTimeout(function\ ()\ {
+\ \ console.log(\[aq]This\ will\ still\ run.\[aq]);
+},\ 500);
 
+//\ Intentionally\ cause\ an\ exception,\ but\ don\[aq]t\ catch\ it.
+nonexistentFunc();
+console.log(\[aq]This\ will\ not\ run.\[aq]);
+\f[]
+.fi
+.PP
+Note that \f[C]uncaughtException\f[] is a very crude mechanism for
+exception handling.
+Using try / catch in your program will give you more control over your
+program's flow.
+Especially for server programs that are designed to stay running
+forever, \f[C]uncaughtException\f[] can be a useful safety mechanism.
+.SS Signal Events
+.PP
+\f[C]function\ ()\ {}\f[]
+.PP
+Emitted when the processes receives a signal.
+See sigaction(2) for a list of standard POSIX signal names such as
+SIGINT, SIGUSR1, etc.
+.PP
+Example of listening for \f[C]SIGINT\f[]:
+.IP
+.nf
+\f[C]
+//\ Start\ reading\ from\ stdin\ so\ we\ don\[aq]t\ exit.
+process.stdin.resume();
 
-.SH RESOURCES AND DOCUMENTATION
+process.on(\[aq]SIGINT\[aq],\ function\ ()\ {
+\ \ console.log(\[aq]Got\ SIGINT.\ \ Press\ Control-D\ to\ exit.\[aq]);
+});
+\f[]
+.fi
+.PP
+An easy way to send the \f[C]SIGINT\f[] signal is with
+\f[C]Control-C\f[] in most terminal programs.
+.SS process.stdout
+.PP
+A \f[C]Writable\ Stream\f[] to \f[C]stdout\f[].
+.PP
+Example: the definition of \f[C]console.log\f[]
+.IP
+.nf
+\f[C]
+console.log\ =\ function\ (d)\ {
+\ \ process.stdout.write(d\ +\ \[aq]\\n\[aq]);
+};
+\f[]
+.fi
+.SS process.stderr
+.PP
+A writable stream to stderr.
+Writes on this stream are blocking.
+.SS process.stdin
+.PP
+A \f[C]Readable\ Stream\f[] for stdin.
+The stdin stream is paused by default, so one must call
+\f[C]process.stdin.resume()\f[] to read from it.
+.PP
+Example of opening standard input and listening for both events:
+.IP
+.nf
+\f[C]
+process.stdin.resume();
+process.stdin.setEncoding(\[aq]utf8\[aq]);
 
-See the website for documentation http://nodejs.org/
+process.stdin.on(\[aq]data\[aq],\ function\ (chunk)\ {
+\ \ process.stdout.write(\[aq]data:\ \[aq]\ +\ chunk);
+});
 
-Mailing list: http://groups.google.com/group/nodejs
+process.stdin.on(\[aq]end\[aq],\ function\ ()\ {
+\ \ process.stdout.write(\[aq]end\[aq]);
+});
+\f[]
+.fi
+.SS process.argv
+.PP
+An array containing the command line arguments.
+The first element will be `node', the second element will be the name of
+the JavaScript file.
+The next elements will be any additional command line arguments.
+.IP
+.nf
+\f[C]
+//\ print\ process.argv
+process.argv.forEach(function\ (val,\ index,\ array)\ {
+\ \ console.log(index\ +\ \[aq]:\ \[aq]\ +\ val);
+});
+\f[]
+.fi
+.PP
+This will generate:
+.IP
+.nf
+\f[C]
+$\ node\ process-2.js\ one\ two=three\ four
+0:\ node
+1:\ /Users/mjr/work/node/process-2.js
+2:\ one
+3:\ two=three
+4:\ four
+\f[]
+.fi
+.SS process.execPath
+.PP
+This is the absolute pathname of the executable that started the
+process.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+/usr/local/bin/node
+\f[]
+.fi
+.SS process.chdir(directory)
+.PP
+Changes the current working directory of the process or throws an
+exception if that fails.
+.IP
+.nf
+\f[C]
+console.log(\[aq]Starting\ directory:\ \[aq]\ +\ process.cwd());
+try\ {
+\ \ process.chdir(\[aq]/tmp\[aq]);
+\ \ console.log(\[aq]New\ directory:\ \[aq]\ +\ process.cwd());
+}
+catch\ (err)\ {
+\ \ console.log(\[aq]chdir:\ \[aq]\ +\ err);
+}
+\f[]
+.fi
+.SS process.cwd()
+.PP
+Returns the current working directory of the process.
+.IP
+.nf
+\f[C]
+console.log(\[aq]Current\ directory:\ \[aq]\ +\ process.cwd());
+\f[]
+.fi
+.SS process.env
+.PP
+An object containing the user environment.
+See environ(7).
+.SS process.exit(code=0)
+.PP
+Ends the process with the specified \f[C]code\f[].
+If omitted, exit uses the `success' code \f[C]0\f[].
+.PP
+To exit with a `failure' code:
+.IP
+.nf
+\f[C]
+process.exit(1);
+\f[]
+.fi
+.PP
+The shell that executed node should see the exit code as 1.
+.SS process.getgid()
+.PP
+Gets the group identity of the process.
+(See getgid(2).)
+ This is the numerical group id, not the group name.
+.IP
+.nf
+\f[C]
+console.log(\[aq]Current\ gid:\ \[aq]\ +\ process.getgid());
+\f[]
+.fi
+.SS process.setgid(id)
+.PP
+Sets the group identity of the process.
+(See setgid(2).)
+ This accepts either a numerical ID or a groupname string.
+If a groupname is specified, this method blocks while resolving it to a
+numerical ID.
+.IP
+.nf
+\f[C]
+console.log(\[aq]Current\ gid:\ \[aq]\ +\ process.getgid());
+try\ {
+\ \ process.setgid(501);
+\ \ console.log(\[aq]New\ gid:\ \[aq]\ +\ process.getgid());
+}
+catch\ (err)\ {
+\ \ console.log(\[aq]Failed\ to\ set\ gid:\ \[aq]\ +\ err);
+}
+\f[]
+.fi
+.SS process.getuid()
+.PP
+Gets the user identity of the process.
+(See getuid(2).)
+ This is the numerical userid, not the username.
+.IP
+.nf
+\f[C]
+console.log(\[aq]Current\ uid:\ \[aq]\ +\ process.getuid());
+\f[]
+.fi
+.SS process.setuid(id)
+.PP
+Sets the user identity of the process.
+(See setuid(2).)
+ This accepts either a numerical ID or a username string.
+If a username is specified, this method blocks while resolving it to a
+numerical ID.
+.IP
+.nf
+\f[C]
+console.log(\[aq]Current\ uid:\ \[aq]\ +\ process.getuid());
+try\ {
+\ \ process.setuid(501);
+\ \ console.log(\[aq]New\ uid:\ \[aq]\ +\ process.getuid());
+}
+catch\ (err)\ {
+\ \ console.log(\[aq]Failed\ to\ set\ uid:\ \[aq]\ +\ err);
+}
+\f[]
+.fi
+.SS process.version
+.PP
+A compiled-in property that exposes \f[C]NODE_VERSION\f[].
+.IP
+.nf
+\f[C]
+console.log(\[aq]Version:\ \[aq]\ +\ process.version);
+\f[]
+.fi
+.SS process.installPrefix
+.PP
+A compiled-in property that exposes \f[C]NODE_PREFIX\f[].
+.IP
+.nf
+\f[C]
+console.log(\[aq]Prefix:\ \[aq]\ +\ process.installPrefix);
+\f[]
+.fi
+.SS process.kill(pid, signal=`SIGTERM')
+.PP
+Send a signal to a process.
+\f[C]pid\f[] is the process id and \f[C]signal\f[] is the string
+describing the signal to send.
+Signal names are strings like `SIGINT' or `SIGUSR1'.
+If omitted, the signal will be `SIGTERM'.
+See kill(2) for more information.
+.PP
+Note that just because the name of this function is
+\f[C]process.kill\f[], it is really just a signal sender, like the
+\f[C]kill\f[] system call.
+The signal sent may do something other than kill the target process.
+.PP
+Example of sending a signal to yourself:
+.IP
+.nf
+\f[C]
+process.on(\[aq]SIGHUP\[aq],\ function\ ()\ {
+\ \ console.log(\[aq]Got\ SIGHUP\ signal.\[aq]);
+});
 
-IRC: irc.freenode.net #node.js
+setTimeout(function\ ()\ {
+\ \ console.log(\[aq]Exiting.\[aq]);
+\ \ process.exit(0);
+},\ 100);
+
+process.kill(process.pid,\ \[aq]SIGHUP\[aq]);
+\f[]
+.fi
+.SS process.pid
+.PP
+The PID of the process.
+.IP
+.nf
+\f[C]
+console.log(\[aq]This\ process\ is\ pid\ \[aq]\ +\ process.pid);
+\f[]
+.fi
+.SS process.title
+.PP
+Getter/setter to set what is displayed in `ps'.
+.SS process.platform
+.PP
+What platform you're running on.
+\f[C]\[aq]linux2\[aq]\f[], \f[C]\[aq]darwin\[aq]\f[], etc.
+.IP
+.nf
+\f[C]
+console.log(\[aq]This\ platform\ is\ \[aq]\ +\ process.platform);
+\f[]
+.fi
+.SS process.memoryUsage()
+.PP
+Returns an object describing the memory usage of the Node process.
+.IP
+.nf
+\f[C]
+var\ util\ =\ require(\[aq]util\[aq]);
+
+console.log(util.inspect(process.memoryUsage()));
+\f[]
+.fi
+.PP
+This will generate:
+.IP
+.nf
+\f[C]
+{\ rss:\ 4935680,
+\ \ vsize:\ 41893888,
+\ \ heapTotal:\ 1826816,
+\ \ heapUsed:\ 650472\ }
+\f[]
+.fi
+.PP
+\f[C]heapTotal\f[] and \f[C]heapUsed\f[] refer to V8's memory usage.
+.SS process.nextTick(callback)
+.PP
+On the next loop around the event loop call this callback.
+This is \f[I]not\f[] a simple alias to \f[C]setTimeout(fn,\ 0)\f[], it's
+much more efficient.
+.IP
+.nf
+\f[C]
+process.nextTick(function\ ()\ {
+\ \ console.log(\[aq]nextTick\ callback\[aq]);
+});
+\f[]
+.fi
+.SS process.umask([mask])
+.PP
+Sets or reads the process's file mode creation mask.
+Child processes inherit the mask from the parent process.
+Returns the old mask if \f[C]mask\f[] argument is given, otherwise
+returns the current mask.
+.IP
+.nf
+\f[C]
+var\ oldmask,\ newmask\ =\ 0644;
+
+oldmask\ =\ process.umask(newmask);
+console.log(\[aq]Changed\ umask\ from:\ \[aq]\ +\ oldmask.toString(8)\ +
+\ \ \ \ \ \ \ \ \ \ \ \ \[aq]\ to\ \[aq]\ +\ newmask.toString(8));
+\f[]
+.fi
+.SS util
+.PP
+These functions are in the module \f[C]\[aq]util\[aq]\f[].
+Use \f[C]require(\[aq]util\[aq])\f[] to access them.
+.SS util.debug(string)
+.PP
+A synchronous output function.
+Will block the process and output \f[C]string\f[] immediately to
+\f[C]stderr\f[].
+.IP
+.nf
+\f[C]
+require(\[aq]util\[aq]).debug(\[aq]message\ on\ stderr\[aq]);
+\f[]
+.fi
+.SS util.log(string)
+.PP
+Output with timestamp on \f[C]stdout\f[].
+.IP
+.nf
+\f[C]
+require(\[aq]util\[aq]).log(\[aq]Timestmaped\ message.\[aq]);
+\f[]
+.fi
+.SS util.inspect(object, showHidden=false, depth=2)
+.PP
+Return a string representation of \f[C]object\f[], which is useful for
+debugging.
+.PP
+If \f[C]showHidden\f[] is \f[C]true\f[], then the object's
+non-enumerable properties will be shown too.
+.PP
+If \f[C]depth\f[] is provided, it tells \f[C]inspect\f[] how many times
+to recurse while formatting the object.
+This is useful for inspecting large complicated objects.
+.PP
+The default is to only recurse twice.
+To make it recurse indefinitely, pass in \f[C]null\f[] for
+\f[C]depth\f[].
+.PP
+Example of inspecting all properties of the \f[C]util\f[] object:
+.IP
+.nf
+\f[C]
+var\ util\ =\ require(\[aq]util\[aq]);
+
+console.log(util.inspect(util,\ true,\ null));
+\f[]
+.fi
+.SS util.pump(readableStream, writableStream, [callback])
+.PP
+Experimental
+.PP
+Read the data from \f[C]readableStream\f[] and send it to the
+\f[C]writableStream\f[].
+When \f[C]writableStream.write(data)\f[] returns \f[C]false\f[]
+\f[C]readableStream\f[] will be paused until the \f[C]drain\f[] event
+occurs on the \f[C]writableStream\f[].
+\f[C]callback\f[] gets an error as its only argument and is called when
+\f[C]writableStream\f[] is closed or when an error occurs.
+.SS util.inherits(constructor, superConstructor)
+.PP
+Inherit the prototype methods from one
+constructor (https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object/constructor)
+into another.
+The prototype of \f[C]constructor\f[] will be set to a new object
+created from \f[C]superConstructor\f[].
+.PP
+As an additional convenience, \f[C]superConstructor\f[] will be
+accessible through the \f[C]constructor.super_\f[] property.
+.IP
+.nf
+\f[C]
+var\ util\ =\ require("util");
+var\ events\ =\ require("events");
+
+function\ MyStream()\ {
+\ \ \ \ events.EventEmitter.call(this);
+}
+
+util.inherits(MyStream,\ events.EventEmitter);
+
+MyStream.prototype.write\ =\ function(data)\ {
+\ \ \ \ this.emit("data",\ data);
+}
+
+var\ stream\ =\ new\ MyStream();
+
+console.log(stream\ instanceof\ events.EventEmitter);\ //\ true
+console.log(MyStream.super_\ ===\ events.EventEmitter);\ //\ true
+
+stream.on("data",\ function(data)\ {
+\ \ \ \ console.log(\[aq]Received\ data:\ "\[aq]\ +\ data\ +\ \[aq]"\[aq]);
+})
+stream.write("It\ works!");\ //\ Received\ data:\ "It\ works!"
+\f[]
+.fi
+.SS Events
+.PP
+Many objects in Node emit events: a \f[C]net.Server\f[] emits an event
+each time a peer connects to it, a \f[C]fs.readStream\f[] emits an event
+when the file is opened.
+All objects which emit events are instances of
+\f[C]events.EventEmitter\f[].
+You can access this module by doing: \f[C]require("events");\f[]
+.PP
+Typically, event names are represented by a camel-cased string, however,
+there aren't any strict restrictions on that, as any string will be
+accepted.
+.PP
+Functions can then be attached to objects, to be executed when an event
+is emitted.
+These functions are called \f[I]listeners\f[].
+.SS events.EventEmitter
+.PP
+To access the EventEmitter class,
+\f[C]require(\[aq]events\[aq]).EventEmitter\f[].
+.PP
+When an \f[C]EventEmitter\f[] instance experiences an error, the typical
+action is to emit an \f[C]\[aq]error\[aq]\f[] event.
+Error events are treated as a special case in node.
+If there is no listener for it, then the default action is to print a
+stack trace and exit the program.
+.PP
+All EventEmitters emit the event \f[C]\[aq]newListener\[aq]\f[] when new
+listeners are added.
+.SS emitter.addListener(event, listener)
+.SS emitter.on(event, listener)
+.PP
+Adds a listener to the end of the listeners array for the specified
+event.
+.IP
+.nf
+\f[C]
+server.on(\[aq]connection\[aq],\ function\ (stream)\ {
+\ \ console.log(\[aq]someone\ connected!\[aq]);
+});
+\f[]
+.fi
+.SS emitter.once(event, listener)
+.PP
+Adds a \f[B]one time\f[] listener for the event.
+The listener is invoked only the first time the event is fired, after
+which it is removed.
+.IP
+.nf
+\f[C]
+server.once(\[aq]connection\[aq],\ function\ (stream)\ {
+\ \ console.log(\[aq]Ah,\ we\ have\ our\ first\ user!\[aq]);
+});
+\f[]
+.fi
+.SS emitter.removeListener(event, listener)
+.PP
+Remove a listener from the listener array for the specified event.
+\f[B]Caution\f[]: changes array indices in the listener array behind the
+listener.
+.IP
+.nf
+\f[C]
+var\ callback\ =\ function(stream)\ {
+\ \ console.log(\[aq]someone\ connected!\[aq]);
+};
+server.on(\[aq]connection\[aq],\ callback);
+//\ ...
+server.removeListener(\[aq]connection\[aq],\ callback);
+\f[]
+.fi
+.SS emitter.removeAllListeners(event)
+.PP
+Removes all listeners from the listener array for the specified event.
+.SS emitter.setMaxListeners(n)
+.PP
+By default EventEmitters will print a warning if more than 10 listeners
+are added to it.
+This is a useful default which helps finding memory leaks.
+Obviously not all Emitters should be limited to 10.
+This function allows that to be increased.
+Set to zero for unlimited.
+.SS emitter.listeners(event)
+.PP
+Returns an array of listeners for the specified event.
+This array can be manipulated, e.g.\ to remove listeners.
+.IP
+.nf
+\f[C]
+server.on(\[aq]connection\[aq],\ function\ (stream)\ {
+\ \ console.log(\[aq]someone\ connected!\[aq]);
+});
+console.log(util.inspect(server.listeners(\[aq]connection\[aq]));\ //\ [\ [Function]\ ]
+\f[]
+.fi
+.SS emitter.emit(event, [arg1], [arg2], [\&...])
+.PP
+Execute each of the listeners in order with the supplied arguments.
+.SS Event: `newListener'
+.PP
+\f[C]function\ (event,\ listener)\ {\ }\f[]
+.PP
+This event is emitted any time someone adds a new listener.
+.SS Buffers
+.PP
+Pure Javascript is Unicode friendly but not nice to binary data.
+When dealing with TCP streams or the file system, it's necessary to
+handle octet streams.
+Node has several strategies for manipulating, creating, and consuming
+octet streams.
+.PP
+Raw data is stored in instances of the \f[C]Buffer\f[] class.
+A \f[C]Buffer\f[] is similar to an array of integers but corresponds to
+a raw memory allocation outside the V8 heap.
+A \f[C]Buffer\f[] cannot be resized.
+.PP
+The \f[C]Buffer\f[] object is global.
+.PP
+Converting between Buffers and JavaScript string objects requires an
+explicit encoding method.
+Here are the different string encodings;
+.IP \[bu] 2
+\f[C]\[aq]ascii\[aq]\f[] - for 7 bit ASCII data only.
+This encoding method is very fast, and will strip the high bit if set.
+.IP \[bu] 2
+\f[C]\[aq]utf8\[aq]\f[] - Unicode characters.
+Many web pages and other document formats use UTF\[en]8.
+.IP \[bu] 2
+\f[C]\[aq]base64\[aq]\f[] - Base64 string encoding.
+.IP \[bu] 2
+\f[C]\[aq]binary\[aq]\f[] - A way of encoding raw binary data into
+strings by using only the first 8 bits of each character.
+This encoding method is depreciated and should be avoided in favor of
+\f[C]Buffer\f[] objects where possible.
+This encoding will be removed in future versions of Node.
+.IP \[bu] 2
+\f[C]\[aq]hex\[aq]\f[] - Encode each byte as two hexidecimal characters.
+.SS new Buffer(size)
+.PP
+Allocates a new buffer of \f[C]size\f[] octets.
+.SS new Buffer(array)
+.PP
+Allocates a new buffer using an \f[C]array\f[] of octets.
+.SS new Buffer(str, encoding=`utf8')
+.PP
+Allocates a new buffer containing the given \f[C]str\f[].
+.SS buffer.write(string, offset=0, encoding=`utf8')
+.PP
+Writes \f[C]string\f[] to the buffer at \f[C]offset\f[] using the given
+encoding.
+Returns number of octets written.
+If \f[C]buffer\f[] did not contain enough space to fit the entire
+string, it will write a partial amount of the string.
+In the case of \f[C]\[aq]utf8\[aq]\f[] encoding, the method will not
+write partial characters.
+.PP
+Example: write a utf8 string into a buffer, then print it
+.IP
+.nf
+\f[C]
+buf\ =\ new\ Buffer(256);
+len\ =\ buf.write(\[aq]\\u00bd\ +\ \\u00bc\ =\ \\u00be\[aq],\ 0);
+console.log(len\ +\ "\ bytes:\ "\ +\ buf.toString(\[aq]utf8\[aq],\ 0,\ len));
+
+//\ 12\ bytes:\ ½\ +\ ¼\ =\ ¾
+\f[]
+.fi
+.SS buffer.toString(encoding, start=0, end=buffer.length)
+.PP
+Decodes and returns a string from buffer data encoded with
+\f[C]encoding\f[] beginning at \f[C]start\f[] and ending at
+\f[C]end\f[].
+.PP
+See \f[C]buffer.write()\f[] example, above.
+.SS buffer[index]
+.PP
+Get and set the octet at \f[C]index\f[].
+The values refer to individual bytes, so the legal range is between
+\f[C]0x00\f[] and \f[C]0xFF\f[] hex or \f[C]0\f[] and \f[C]255\f[].
+.PP
+Example: copy an ASCII string into a buffer, one byte at a time:
+.IP
+.nf
+\f[C]
+str\ =\ "node.js";
+buf\ =\ new\ Buffer(str.length);
+
+for\ (var\ i\ =\ 0;\ i\ <\ str.length\ ;\ i++)\ {
+\ \ buf[i]\ =\ str.charCodeAt(i);
+}
+
+console.log(buf);
+
+//\ node.js
+\f[]
+.fi
+.SS Buffer.isBuffer(obj)
+.PP
+Tests if \f[C]obj\f[] is a \f[C]Buffer\f[].
+.SS Buffer.byteLength(string, encoding=`utf8')
+.PP
+Gives the actual byte length of a string.
+This is not the same as \f[C]String.prototype.length\f[] since that
+returns the number of \f[I]characters\f[] in a string.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+str\ =\ \[aq]\\u00bd\ +\ \\u00bc\ =\ \\u00be\[aq];
+
+console.log(str\ +\ ":\ "\ +\ str.length\ +\ "\ characters,\ "\ +
+\ \ Buffer.byteLength(str,\ \[aq]utf8\[aq])\ +\ "\ bytes");
+
+//\ ½\ +\ ¼\ =\ ¾:\ 9\ characters,\ 12\ bytes
+\f[]
+.fi
+.SS buffer.length
+.PP
+The size of the buffer in bytes.
+Note that this is not necessarily the size of the contents.
+\f[C]length\f[] refers to the amount of memory allocated for the buffer
+object.
+It does not change when the contents of the buffer are changed.
+.IP
+.nf
+\f[C]
+buf\ =\ new\ Buffer(1234);
+
+console.log(buf.length);
+buf.write("some\ string",\ "ascii",\ 0);
+console.log(buf.length);
+
+//\ 1234
+//\ 1234
+\f[]
+.fi
+.SS buffer.copy(targetBuffer, targetStart=0, sourceStart=0,
+sourceEnd=buffer.length)
+.PP
+Does a memcpy() between buffers.
+.PP
+Example: build two Buffers, then copy \f[C]buf1\f[] from byte 16 through
+byte 19 into \f[C]buf2\f[], starting at the 8th byte in \f[C]buf2\f[].
+.IP
+.nf
+\f[C]
+buf1\ =\ new\ Buffer(26);
+buf2\ =\ new\ Buffer(26);
+
+for\ (var\ i\ =\ 0\ ;\ i\ <\ 26\ ;\ i++)\ {
+\ \ buf1[i]\ =\ i\ +\ 97;\ //\ 97\ is\ ASCII\ a
+\ \ buf2[i]\ =\ 33;\ //\ ASCII\ !
+}
+
+buf1.copy(buf2,\ 8,\ 16,\ 20);
+console.log(buf2.toString(\[aq]ascii\[aq],\ 0,\ 25));
+
+//\ !!!!!!!!qrst!!!!!!!!!!!!!
+\f[]
+.fi
+.SS buffer.slice(start, end=buffer.length)
+.PP
+Returns a new buffer which references the same memory as the old, but
+offset and cropped by the \f[C]start\f[] and \f[C]end\f[] indexes.
+.PP
+\f[B]Modifying the new buffer slice will modify memory in the original
+buffer!\f[]
+.PP
+Example: build a Buffer with the ASCII alphabet, take a slice, then
+modify one byte from the original Buffer.
+.IP
+.nf
+\f[C]
+var\ buf1\ =\ new\ Buffer(26);
+
+for\ (var\ i\ =\ 0\ ;\ i\ <\ 26\ ;\ i++)\ {
+\ \ buf1[i]\ =\ i\ +\ 97;\ //\ 97\ is\ ASCII\ a
+}
+
+var\ buf2\ =\ buf1.slice(0,\ 3);
+console.log(buf2.toString(\[aq]ascii\[aq],\ 0,\ buf2.length));
+buf1[0]\ =\ 33;
+console.log(buf2.toString(\[aq]ascii\[aq],\ 0,\ buf2.length));
+
+//\ abc
+//\ !bc
+\f[]
+.fi
+.SS Streams
+.PP
+A stream is an abstract interface implemented by various objects in
+Node.
+For example a request to an HTTP server is a stream, as is stdout.
+Streams are readable, writable, or both.
+All streams are instances of \f[C]EventEmitter\f[].
+.SS Readable Stream
+.PP
+A \f[C]Readable\ Stream\f[] has the following methods, members, and
+events.
+.SS Event: `data'
+.PP
+\f[C]function\ (data)\ {\ }\f[]
+.PP
+The \f[C]\[aq]data\[aq]\f[] event emits either a \f[C]Buffer\f[] (by
+default) or a string if \f[C]setEncoding()\f[] was used.
+.SS Event: `end'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when the stream has received an EOF (FIN in TCP terminology).
+Indicates that no more \f[C]\[aq]data\[aq]\f[] events will happen.
+If the stream is also writable, it may be possible to continue writing.
+.SS Event: `error'
+.PP
+\f[C]function\ (exception)\ {\ }\f[]
+.PP
+Emitted if there was an error receiving data.
+.SS Event: `close'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when the underlying file descriptor has been closed.
+Not all streams will emit this.
+(For example, an incoming HTTP request will not emit
+\f[C]\[aq]close\[aq]\f[].)
+.SS Event: `fd'
+.PP
+\f[C]function\ (fd)\ {\ }\f[]
+.PP
+Emitted when a file descriptor is received on the stream.
+Only UNIX streams support this functionality; all others will simply
+never emit this event.
+.SS stream.readable
+.PP
+A boolean that is \f[C]true\f[] by default, but turns \f[C]false\f[]
+after an \f[C]\[aq]error\[aq]\f[] occurred, the stream came to an
+\f[C]\[aq]end\[aq]\f[], or \f[C]destroy()\f[] was called.
+.SS stream.setEncoding(encoding)
+.PP
+Makes the data event emit a string instead of a \f[C]Buffer\f[].
+\f[C]encoding\f[] can be \f[C]\[aq]utf8\[aq]\f[],
+\f[C]\[aq]ascii\[aq]\f[], or \f[C]\[aq]base64\[aq]\f[].
+.SS stream.pause()
+.PP
+Pauses the incoming \f[C]\[aq]data\[aq]\f[] events.
+.SS stream.resume()
+.PP
+Resumes the incoming \f[C]\[aq]data\[aq]\f[] events after a
+\f[C]pause()\f[].
+.SS stream.destroy()
+.PP
+Closes the underlying file descriptor.
+Stream will not emit any more events.
+.SS stream.destroySoon()
+.PP
+After the write queue is drained, close the file descriptor.
+.SS stream.pipe(destination, [options])
+.PP
+This is a \f[C]Stream.prototype\f[] method available on all
+\f[C]Stream\f[]s.
+.PP
+Connects this read stream to \f[C]destination\f[] WriteStream.
+Incoming data on this stream gets written to \f[C]destination\f[].
+The destination and source streams are kept in sync by pausing and
+resuming as necessary.
+.PP
+Emulating the Unix \f[C]cat\f[] command:
+.IP
+.nf
+\f[C]
+process.stdin.resume();
+process.stdin.pipe(process.stdout);
+\f[]
+.fi
+.PP
+By default \f[C]end()\f[] is called on the destination when the source
+stream emits \f[C]end\f[], so that \f[C]destination\f[] is no longer
+writable.
+Pass \f[C]{\ end:\ false\ }\f[] as \f[C]options\f[] to keep the
+destination stream open.
+.PP
+This keeps \f[C]process.stdout\f[] open so that \[lq]Goodbye\[rq] can be
+written at the end.
+.IP
+.nf
+\f[C]
+process.stdin.resume();
+
+process.stdin.pipe(process.stdout,\ {\ end:\ false\ });
+
+process.stdin.on("end",\ function()\ {
+\ \ process.stdout.write("Goodbye\\n");
+});
+\f[]
+.fi
+.PP
+NOTE: If the source stream does not support \f[C]pause()\f[] and
+\f[C]resume()\f[], this function adds simple definitions which simply
+emit \f[C]\[aq]pause\[aq]\f[] and \f[C]\[aq]resume\[aq]\f[] events on
+the source stream.
+.SS Writable Stream
+.PP
+A \f[C]Writable\ Stream\f[] has the following methods, members, and
+events.
+.SS Event: `drain'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted after a \f[C]write()\f[] method was called that returned
+\f[C]false\f[] to indicate that it is safe to write again.
+.SS Event: `error'
+.PP
+\f[C]function\ (exception)\ {\ }\f[]
+.PP
+Emitted on error with the exception \f[C]exception\f[].
+.SS Event: `close'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when the underlying file descriptor has been closed.
+.SS Event: `pipe'
+.PP
+\f[C]function\ (src)\ {\ }\f[]
+.PP
+Emitted when the stream is passed to a readable stream's pipe method.
+.SS stream.writable
+.PP
+A boolean that is \f[C]true\f[] by default, but turns \f[C]false\f[]
+after an \f[C]\[aq]error\[aq]\f[] occurred or \f[C]end()\f[] /
+\f[C]destroy()\f[] was called.
+.SS stream.write(string, encoding=`utf8', [fd])
+.PP
+Writes \f[C]string\f[] with the given \f[C]encoding\f[] to the stream.
+Returns \f[C]true\f[] if the string has been flushed to the kernel
+buffer.
+Returns \f[C]false\f[] to indicate that the kernel buffer is full, and
+the data will be sent out in the future.
+The \f[C]\[aq]drain\[aq]\f[] event will indicate when the kernel buffer
+is empty again.
+The \f[C]encoding\f[] defaults to \f[C]\[aq]utf8\[aq]\f[].
+.PP
+If the optional \f[C]fd\f[] parameter is specified, it is interpreted as
+an integral file descriptor to be sent over the stream.
+This is only supported for UNIX streams, and is silently ignored
+otherwise.
+When writing a file descriptor in this manner, closing the descriptor
+before the stream drains risks sending an invalid (closed) FD.
+.SS stream.write(buffer)
+.PP
+Same as the above except with a raw buffer.
+.SS stream.end()
+.PP
+Terminates the stream with EOF or FIN.
+.SS stream.end(string, encoding)
+.PP
+Sends \f[C]string\f[] with the given \f[C]encoding\f[] and terminates
+the stream with EOF or FIN.
+This is useful to reduce the number of packets sent.
+.SS stream.end(buffer)
+.PP
+Same as above but with a \f[C]buffer\f[].
+.SS stream.destroy()
+.PP
+Closes the underlying file descriptor.
+Stream will not emit any more events.
+.SS Crypto
+.PP
+Use \f[C]require(\[aq]crypto\[aq])\f[] to access this module.
+.PP
+The crypto module requires OpenSSL to be available on the underlying
+platform.
+It offers a way of encapsulating secure credentials to be used as part
+of a secure HTTPS net or http connection.
+.PP
+It also offers a set of wrappers for OpenSSL's hash, hmac, cipher,
+decipher, sign and verify methods.
+.SS crypto.createCredentials(details)
+.PP
+Creates a credentials object, with the optional details being a
+dictionary with keys:
+.IP \[bu] 2
+\f[C]key\f[] : a string holding the PEM encoded private key
+.IP \[bu] 2
+\f[C]cert\f[] : a string holding the PEM encoded certificate
+.IP \[bu] 2
+\f[C]ca\f[] : either a string or list of strings of PEM encoded CA
+certificates to trust.
+.PP
+If no `ca' details are given, then node.js will use the default publicly
+trusted list of CAs as given in
+<http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>.
+.SS crypto.createHash(algorithm)
+.PP
+Creates and returns a hash object, a cryptographic hash with the given
+algorithm which can be used to generate hash digests.
+.PP
+\f[C]algorithm\f[] is dependent on the available algorithms supported by
+the version of OpenSSL on the platform.
+Examples are \f[C]\[aq]sha1\[aq]\f[], \f[C]\[aq]md5\[aq]\f[],
+\f[C]\[aq]sha256\[aq]\f[], \f[C]\[aq]sha512\[aq]\f[], etc.
+On recent releases, \f[C]openssl\ list-message-digest-algorithms\f[]
+will display the available digest algorithms.
+.SS hash.update(data)
+.PP
+Updates the hash content with the given \f[C]data\f[].
+This can be called many times with new data as it is streamed.
+.SS hash.digest(encoding=`binary')
+.PP
+Calculates the digest of all of the passed data to be hashed.
+The \f[C]encoding\f[] can be \f[C]\[aq]hex\[aq]\f[],
+\f[C]\[aq]binary\[aq]\f[] or \f[C]\[aq]base64\[aq]\f[].
+.SS crypto.createHmac(algorithm, key)
+.PP
+Creates and returns a hmac object, a cryptographic hmac with the given
+algorithm and key.
+.PP
+\f[C]algorithm\f[] is dependent on the available algorithms supported by
+OpenSSL - see createHash above.
+\f[C]key\f[] is the hmac key to be used.
+.SS hmac.update(data)
+.PP
+Update the hmac content with the given \f[C]data\f[].
+This can be called many times with new data as it is streamed.
+.SS hmac.digest(encoding=`binary')
+.PP
+Calculates the digest of all of the passed data to the hmac.
+The \f[C]encoding\f[] can be \f[C]\[aq]hex\[aq]\f[],
+\f[C]\[aq]binary\[aq]\f[] or \f[C]\[aq]base64\[aq]\f[].
+.SS crypto.createCipher(algorithm, key)
+.PP
+Creates and returns a cipher object, with the given algorithm and key.
+.PP
+\f[C]algorithm\f[] is dependent on OpenSSL, examples are
+\f[C]\[aq]aes192\[aq]\f[], etc.
+On recent releases, \f[C]openssl\ list-cipher-algorithms\f[] will
+display the available cipher algorithms.
+.SS cipher.update(data, input_encoding=`binary',
+output_encoding=`binary')
+.PP
+Updates the cipher with \f[C]data\f[], the encoding of which is given in
+\f[C]input_encoding\f[] and can be \f[C]\[aq]utf8\[aq]\f[],
+\f[C]\[aq]ascii\[aq]\f[] or \f[C]\[aq]binary\[aq]\f[].
+The \f[C]output_encoding\f[] specifies the output format of the
+enciphered data, and can be \f[C]\[aq]binary\[aq]\f[],
+\f[C]\[aq]base64\[aq]\f[] or \f[C]\[aq]hex\[aq]\f[].
+.PP
+Returns the enciphered contents, and can be called many times with new
+data as it is streamed.
+.SS cipher.final(output_encoding=`binary')
+.PP
+Returns any remaining enciphered contents, with \f[C]output_encoding\f[]
+being one of: \f[C]\[aq]binary\[aq]\f[], \f[C]\[aq]ascii\[aq]\f[] or
+\f[C]\[aq]utf8\[aq]\f[].
+.SS crypto.createDecipher(algorithm, key)
+.PP
+Creates and returns a decipher object, with the given algorithm and key.
+This is the mirror of the cipher object above.
+.SS decipher.update(data, input_encoding=`binary',
+output_encoding=`binary')
+.PP
+Updates the decipher with \f[C]data\f[], which is encoded in
+\f[C]\[aq]binary\[aq]\f[], \f[C]\[aq]base64\[aq]\f[] or
+\f[C]\[aq]hex\[aq]\f[].
+The \f[C]output_decoding\f[] specifies in what format to return the
+deciphered plaintext: \f[C]\[aq]binary\[aq]\f[],
+\f[C]\[aq]ascii\[aq]\f[] or \f[C]\[aq]utf8\[aq]\f[].
+.SS decipher.final(output_encoding=`binary')
+.PP
+Returns any remaining plaintext which is deciphered, with
+\f[C]output_encoding\[aq]\ being\ one\ of:\f[]`binary'\f[C],\f[]`ascii'\f[C]or\f[]`utf8'`.
+.SS crypto.createSign(algorithm)
+.PP
+Creates and returns a signing object, with the given algorithm.
+On recent OpenSSL releases, \f[C]openssl\ list-public-key-algorithms\f[]
+will display the available signing algorithms.
+Examples are \f[C]\[aq]RSA-SHA256\[aq]\f[].
+.SS signer.update(data)
+.PP
+Updates the signer object with data.
+This can be called many times with new data as it is streamed.
+.SS signer.sign(private_key, output_format=`binary')
+.PP
+Calculates the signature on all the updated data passed through the
+signer.
+\f[C]private_key\f[] is a string containing the PEM encoded private key
+for signing.
+.PP
+Returns the signature in \f[C]output_format\f[] which can be
+\f[C]\[aq]binary\[aq]\f[], \f[C]\[aq]hex\[aq]\f[] or
+\f[C]\[aq]base64\[aq]\f[].
+.SS crypto.createVerify(algorithm)
+.PP
+Creates and returns a verification object, with the given algorithm.
+This is the mirror of the signing object above.
+.SS verifier.update(data)
+.PP
+Updates the verifier object with data.
+This can be called many times with new data as it is streamed.
+.SS verifier.verify(cert, signature, signature_format=`binary')
+.PP
+Verifies the signed data by using the \f[C]cert\f[] which is a string
+containing the PEM encoded public key, and \f[C]signature\f[], which is
+the previously calculates signature for the data, in the
+\f[C]signature_format\f[] which can be \f[C]\[aq]binary\[aq]\f[],
+\f[C]\[aq]hex\[aq]\f[] or \f[C]\[aq]base64\[aq]\f[].
+.PP
+Returns true or false depending on the validity of the signature for the
+data and public key.
+.SS TLS (SSL)
+.PP
+Use \f[C]require(\[aq]tls\[aq])\f[] to access this module.
+.PP
+The \f[C]tls\f[] module uses OpenSSL to provide Transport Layer Security
+and/or Secure Socket Layer: encrypted stream communication.
+.PP
+TLS/SSL is a public/private key infrastructure.
+Each client and each server must have a private key.
+A private key is created like this
+.IP
+.nf
+\f[C]
+openssl\ genrsa\ -out\ ryans-key.pem\ 1024
+\f[]
+.fi
+.PP
+All severs and some clients need to have a certificate.
+Certificates are public keys signed by a Certificate Authority or
+self-signed.
+The first step to getting a certificate is to create a \[lq]Certificate
+Signing Request\[rq] (CSR) file.
+This is done with:
+.IP
+.nf
+\f[C]
+openssl\ req\ -new\ -key\ ryans-key.pem\ -out\ ryans-csr.pem
+\f[]
+.fi
+.PP
+To create a self-signed certificate with the CSR, do this:
+.IP
+.nf
+\f[C]
+openssl\ x509\ -req\ -in\ ryans-csr.pem\ -signkey\ ryans-key.pem\ -out\ ryans-cert.pem
+\f[]
+.fi
+.PP
+Alternatively you can send the CSR to a Certificate Authority for
+signing.
+.PP
+(TODO: docs on creating a CA, for now interested users should just look
+at \f[C]test/fixtures/keys/Makefile\f[] in the Node source code)
+.SS s = tls.connect(port, [host], [options], callback)
+.PP
+Creates a new client connection to the given \f[C]port\f[] and
+\f[C]host\f[].
+(If \f[C]host\f[] defaults to \f[C]localhost\f[].)
+ \f[C]options\f[] should be an object which specifies
+.IP \[bu] 2
+\f[C]key\f[]: A string or \f[C]Buffer\f[] containing the private key of
+the server in PEM format.
+(Required)
+.IP \[bu] 2
+\f[C]cert\f[]: A string or \f[C]Buffer\f[] containing the certificate
+key of the server in PEM format.
+.IP \[bu] 2
+\f[C]ca\f[]: An array of strings or \f[C]Buffer\f[]s of trusted
+certificates.
+If this is omitted several well known \[lq]root\[rq] CAs will be used,
+like VeriSign.
+These are used to authorize connections.
+.PP
+\f[C]tls.connect()\f[] returns a cleartext \f[C]CryptoStream\f[] object.
+.PP
+After the TLS/SSL handshake the \f[C]callback\f[] is called.
+The \f[C]callback\f[] will be called no matter if the server's
+certificate was authorized or not.
+It is up to the user to test \f[C]s.authorized\f[] to see if the server
+certificate was signed by one of the specified CAs.
+If \f[C]s.authorized\ ===\ false\f[] then the error can be found in
+\f[C]s.authorizationError\f[].
+.SS tls.Server
+.PP
+This class is a subclass of \f[C]net.Server\f[] and has the same methods
+on it.
+Instead of accepting just raw TCP connections, this accepts encrypted
+connections using TLS or SSL.
+.PP
+Here is a simple example echo server:
+.IP
+.nf
+\f[C]
+var\ tls\ =\ require(\[aq]tls\[aq]);
+var\ fs\ =\ require(\[aq]fs\[aq]);
+
+var\ options\ =\ {
+\ \ key:\ fs.readFileSync(\[aq]server-key.pem\[aq]),
+\ \ cert:\ fs.readFileSync(\[aq]server-cert.pem\[aq])
+};
+
+tls.createServer(options,\ function\ (s)\ {
+\ \ s.write("welcome!\\n");
+\ \ s.pipe(s);
+}).listen(8000);
+\f[]
+.fi
+.PP
+You can test this server by connecting to it with
+\f[C]openssl\ s_client\f[]:
+.IP
+.nf
+\f[C]
+openssl\ s_client\ -connect\ 127.0.0.1:8000
+\f[]
+.fi
+.SS tls.createServer(options, secureConnectionListener)
+.PP
+This is a constructor for the \f[C]tls.Server\f[] class.
+The options object has these possibilities:
+.IP \[bu] 2
+\f[C]key\f[]: A string or \f[C]Buffer\f[] containing the private key of
+the server in PEM format.
+(Required)
+.IP \[bu] 2
+\f[C]cert\f[]: A string or \f[C]Buffer\f[] containing the certificate
+key of the server in PEM format.
+(Required)
+.IP \[bu] 2
+\f[C]ca\f[]: An array of strings or \f[C]Buffer\f[]s of trusted
+certificates.
+If this is omitted several well known \[lq]root\[rq] CAs will be used,
+like VeriSign.
+These are used to authorize connections.
+.IP \[bu] 2
+\f[C]requestCert\f[]: If \f[C]true\f[] the server will request a
+certificate from clients that connect and attempt to verify that
+certificate.
+Default: \f[C]false\f[].
+.IP \[bu] 2
+\f[C]rejectUnauthorized\f[]: If \f[C]true\f[] the server will reject any
+connection which is not authorized with the list of supplied CAs.
+This option only has an effect if \f[C]requestCert\f[] is \f[C]true\f[].
+Default: \f[C]false\f[].
+.SS Event: `secureConnection'
+.PP
+\f[C]function\ (cleartextStream)\ {}\f[]
+.PP
+This event is emitted after a new connection has been successfully
+handshaked.
+The argument is a duplex instance of \f[C]stream.Stream\f[].
+It has all the common stream methods and events.
+.PP
+\f[C]cleartextStream.authorized\f[] is a boolean value which indicates
+if the client has verified by one of the supplied certificate
+authorities for the server.
+If \f[C]cleartextStream.authorized\f[] is false, then
+\f[C]cleartextStream.authorizationError\f[] is set to describe how
+authorization failed.
+Implied but worth mentioning: depending on the settings of the TLS
+server, you unauthorized connections may be accepted.
+.SS server.listen(port, [host], [callback])
+.PP
+Begin accepting connections on the specified \f[C]port\f[] and
+\f[C]host\f[].
+If the \f[C]host\f[] is omitted, the server will accept connections
+directed to any IPv4 address (\f[C]INADDR_ANY\f[]).
+.PP
+This function is asynchronous.
+The last parameter \f[C]callback\f[] will be called when the server has
+been bound.
+.PP
+See \f[C]net.Server\f[] for more information.
+.SS server.close()
+.PP
+Stops the server from accepting new connections.
+This function is asynchronous, the server is finally closed when the
+server emits a \f[C]\[aq]close\[aq]\f[] event.
+.SS server.maxConnections
+.PP
+Set this property to reject connections when the server's connection
+count gets high.
+.SS server.connections
+.PP
+The number of concurrent connections on the server.
+.SS File System
+.PP
+File I/O is provided by simple wrappers around standard POSIX functions.
+To use this module do \f[C]require(\[aq]fs\[aq])\f[].
+All the methods have asynchronous and synchronous forms.
+.PP
+The asynchronous form always take a completion callback as its last
+argument.
+The arguments passed to the completion callback depend on the method,
+but the first argument is always reserved for an exception.
+If the operation was completed successfully, then the first argument
+will be \f[C]null\f[] or \f[C]undefined\f[].
+.PP
+Here is an example of the asynchronous version:
+.IP
+.nf
+\f[C]
+var\ fs\ =\ require(\[aq]fs\[aq]);
+
+fs.unlink(\[aq]/tmp/hello\[aq],\ function\ (err)\ {
+\ \ if\ (err)\ throw\ err;
+\ \ console.log(\[aq]successfully\ deleted\ /tmp/hello\[aq]);
+});
+\f[]
+.fi
+.PP
+Here is the synchronous version:
+.IP
+.nf
+\f[C]
+var\ fs\ =\ require(\[aq]fs\[aq]);
+
+fs.unlinkSync(\[aq]/tmp/hello\[aq])
+console.log(\[aq]successfully\ deleted\ /tmp/hello\[aq]);
+\f[]
+.fi
+.PP
+With the asynchronous methods there is no guaranteed ordering.
+So the following is prone to error:
+.IP
+.nf
+\f[C]
+fs.rename(\[aq]/tmp/hello\[aq],\ \[aq]/tmp/world\[aq],\ function\ (err)\ {
+\ \ if\ (err)\ throw\ err;
+\ \ console.log(\[aq]renamed\ complete\[aq]);
+});
+fs.stat(\[aq]/tmp/world\[aq],\ function\ (err,\ stats)\ {
+\ \ if\ (err)\ throw\ err;
+\ \ console.log(\[aq]stats:\ \[aq]\ +\ JSON.stringify(stats));
+});
+\f[]
+.fi
+.PP
+It could be that \f[C]fs.stat\f[] is executed before \f[C]fs.rename\f[].
+The correct way to do this is to chain the callbacks.
+.IP
+.nf
+\f[C]
+fs.rename(\[aq]/tmp/hello\[aq],\ \[aq]/tmp/world\[aq],\ function\ (err)\ {
+\ \ if\ (err)\ throw\ err;
+\ \ fs.stat(\[aq]/tmp/world\[aq],\ function\ (err,\ stats)\ {
+\ \ \ \ if\ (err)\ throw\ err;
+\ \ \ \ console.log(\[aq]stats:\ \[aq]\ +\ JSON.stringify(stats));
+\ \ });
+});
+\f[]
+.fi
+.PP
+In busy processes, the programmer is \f[I]strongly encouraged\f[] to use
+the asynchronous versions of these calls.
+The synchronous versions will block the entire process until they
+complete\[em]halting all connections.
+.SS fs.rename(path1, path2, [callback])
+.PP
+Asynchronous rename(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.renameSync(path1, path2)
+.PP
+Synchronous rename(2).
+.SS fs.truncate(fd, len, [callback])
+.PP
+Asynchronous ftruncate(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.truncateSync(fd, len)
+.PP
+Synchronous ftruncate(2).
+.SS fs.chmod(path, mode, [callback])
+.PP
+Asynchronous chmod(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.chmodSync(path, mode)
+.PP
+Synchronous chmod(2).
+.SS fs.stat(path, [callback])
+.PP
+Asynchronous stat(2).
+The callback gets two arguments \f[C](err,\ stats)\f[] where
+\f[C]stats\f[] is a \f[C]fs.Stats\f[] object.
+It looks like this:
+.IP
+.nf
+\f[C]
+{\ dev:\ 2049,
+\ \ ino:\ 305352,
+\ \ mode:\ 16877,
+\ \ nlink:\ 12,
+\ \ uid:\ 1000,
+\ \ gid:\ 1000,
+\ \ rdev:\ 0,
+\ \ size:\ 4096,
+\ \ blksize:\ 4096,
+\ \ blocks:\ 8,
+\ \ atime:\ \[aq]2009-06-29T11:11:55Z\[aq],
+\ \ mtime:\ \[aq]2009-06-29T11:11:40Z\[aq],
+\ \ ctime:\ \[aq]2009-06-29T11:11:40Z\[aq]\ }
+\f[]
+.fi
+.PP
+See the \f[C]fs.Stats\f[] section below for more information.
+.SS fs.lstat(path, [callback])
+.PP
+Asynchronous lstat(2).
+The callback gets two arguments \f[C](err,\ stats)\f[] where
+\f[C]stats\f[] is a \f[C]fs.Stats\f[] object.
+lstat() is identical to stat(), except that if path is a symbolic link,
+then the link itself is stat-ed, not the file that it refers to.
+.SS fs.fstat(fd, [callback])
+.PP
+Asynchronous fstat(2).
+The callback gets two arguments \f[C](err,\ stats)\f[] where
+\f[C]stats\f[] is a \f[C]fs.Stats\f[] object.
+.SS fs.statSync(path)
+.PP
+Synchronous stat(2).
+Returns an instance of \f[C]fs.Stats\f[].
+.SS fs.lstatSync(path)
+.PP
+Synchronous lstat(2).
+Returns an instance of \f[C]fs.Stats\f[].
+.SS fs.fstatSync(fd)
+.PP
+Synchronous fstat(2).
+Returns an instance of \f[C]fs.Stats\f[].
+.SS fs.link(srcpath, dstpath, [callback])
+.PP
+Asynchronous link(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.linkSync(srcpath, dstpath)
+.PP
+Synchronous link(2).
+.SS fs.symlink(linkdata, path, [callback])
+.PP
+Asynchronous symlink(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.symlinkSync(linkdata, path)
+.PP
+Synchronous symlink(2).
+.SS fs.readlink(path, [callback])
+.PP
+Asynchronous readlink(2).
+The callback gets two arguments \f[C](err,\ resolvedPath)\f[].
+.SS fs.readlinkSync(path)
+.PP
+Synchronous readlink(2).
+Returns the resolved path.
+.SS fs.realpath(path, [callback])
+.PP
+Asynchronous realpath(2).
+The callback gets two arguments \f[C](err,\ resolvedPath)\f[].
+.SS fs.realpathSync(path)
+.PP
+Synchronous realpath(2).
+Returns the resolved path.
+.SS fs.unlink(path, [callback])
+.PP
+Asynchronous unlink(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.unlinkSync(path)
+.PP
+Synchronous unlink(2).
+.SS fs.rmdir(path, [callback])
+.PP
+Asynchronous rmdir(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.rmdirSync(path)
+.PP
+Synchronous rmdir(2).
+.SS fs.mkdir(path, mode, [callback])
+.PP
+Asynchronous mkdir(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.mkdirSync(path, mode)
+.PP
+Synchronous mkdir(2).
+.SS fs.readdir(path, [callback])
+.PP
+Asynchronous readdir(3).
+Reads the contents of a directory.
+The callback gets two arguments \f[C](err,\ files)\f[] where
+\f[C]files\f[] is an array of the names of the files in the directory
+excluding \f[C]\[aq].\[aq]\f[] and \f[C]\[aq]..\[aq]\f[].
+.SS fs.readdirSync(path)
+.PP
+Synchronous readdir(3).
+Returns an array of filenames excluding \f[C]\[aq].\[aq]\f[] and
+\f[C]\[aq]..\[aq]\f[].
+.SS fs.close(fd, [callback])
+.PP
+Asynchronous close(2).
+No arguments other than a possible exception are given to the completion
+callback.
+.SS fs.closeSync(fd)
+.PP
+Synchronous close(2).
+.SS fs.open(path, flags, [mode], [callback])
+.PP
+Asynchronous file open.
+See open(2).
+Flags can be `r', `r+', `w', `w+', `a', or `a+'.
+\f[C]mode\f[] defaults to 0666.
+The callback gets two arguments \f[C](err,\ fd)\f[].
+.SS fs.openSync(path, flags, [mode])
+.PP
+Synchronous open(2).
+.SS fs.utimes(path, atime, mtime, callback)
+.SS fs.utimesSync(path, atime, mtime)
+.PP
+Change file timestamps.
+.SS fs.futimes(path, atime, mtime, callback)
+.SS fs.futimesSync(path, atime, mtime)
+.PP
+Change file timestamps with the difference that if filename refers to a
+symbolic link, then the link is not dereferenced.
+.SS fs.write(fd, buffer, offset, length, position, [callback])
+.PP
+Write \f[C]buffer\f[] to the file specified by \f[C]fd\f[].
+.PP
+\f[C]offset\f[] and \f[C]length\f[] determine the part of the buffer to
+be written.
+.PP
+\f[C]position\f[] refers to the offset from the beginning of the file
+where this data should be written.
+If \f[C]position\f[] is \f[C]null\f[], the data will be written at the
+current position.
+See pwrite(2).
+.PP
+The callback will be given two arguments \f[C](err,\ written)\f[] where
+\f[C]written\f[] specifies how many \f[I]bytes\f[] were written.
+.SS fs.writeSync(fd, buffer, offset, length, position)
+.PP
+Synchronous version of buffer-based \f[C]fs.write()\f[].
+Returns the number of bytes written.
+.SS fs.writeSync(fd, str, position, encoding=`utf8')
+.PP
+Synchronous version of string-based \f[C]fs.write()\f[].
+Returns the number of bytes written.
+.SS fs.read(fd, buffer, offset, length, position, [callback])
+.PP
+Read data from the file specified by \f[C]fd\f[].
+.PP
+\f[C]buffer\f[] is the buffer that the data will be written to.
+.PP
+\f[C]offset\f[] is offset within the buffer where writing will start.
+.PP
+\f[C]length\f[] is an integer specifying the number of bytes to read.
+.PP
+\f[C]position\f[] is an integer specifying where to begin reading from
+in the file.
+If \f[C]position\f[] is \f[C]null\f[], data will be read from the
+current file position.
+.PP
+The callback is given the two arguments, \f[C](err,\ bytesRead)\f[].
+.SS fs.readSync(fd, buffer, offset, length, position)
+.PP
+Synchronous version of buffer-based \f[C]fs.read\f[].
+Returns the number of \f[C]bytesRead\f[].
+.SS fs.readSync(fd, length, position, encoding)
+.PP
+Synchronous version of string-based \f[C]fs.read\f[].
+Returns the number of \f[C]bytesRead\f[].
+.SS fs.readFile(filename, [encoding], [callback])
+.PP
+Asynchronously reads the entire contents of a file.
+Example:
+.IP
+.nf
+\f[C]
+fs.readFile(\[aq]/etc/passwd\[aq],\ function\ (err,\ data)\ {
+\ \ if\ (err)\ throw\ err;
+\ \ console.log(data);
+});
+\f[]
+.fi
+.PP
+The callback is passed two arguments \f[C](err,\ data)\f[], where
+\f[C]data\f[] is the contents of the file.
+.PP
+If no encoding is specified, then the raw buffer is returned.
+.SS fs.readFileSync(filename, [encoding])
+.PP
+Synchronous version of \f[C]fs.readFile\f[].
+Returns the contents of the \f[C]filename\f[].
+.PP
+If \f[C]encoding\f[] is specified then this function returns a string.
+Otherwise it returns a buffer.
+.SS fs.writeFile(filename, data, encoding=`utf8', [callback])
+.PP
+Asynchronously writes data to a file.
+\f[C]data\f[] can be a string or a buffer.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+fs.writeFile(\[aq]message.txt\[aq],\ \[aq]Hello\ Node\[aq],\ function\ (err)\ {
+\ \ if\ (err)\ throw\ err;
+\ \ console.log(\[aq]It\\\[aq]s\ saved!\[aq]);
+});
+\f[]
+.fi
+.SS fs.writeFileSync(filename, data, encoding=`utf8')
+.PP
+The synchronous version of \f[C]fs.writeFile\f[].
+.SS fs.watchFile(filename, [options], listener)
+.PP
+Watch for changes on \f[C]filename\f[].
+The callback \f[C]listener\f[] will be called each time the file is
+accessed.
+.PP
+The second argument is optional.
+The \f[C]options\f[] if provided should be an object containing two
+members a boolean, \f[C]persistent\f[], and \f[C]interval\f[], a polling
+value in milliseconds.
+The default is \f[C]{\ persistent:\ true,\ interval:\ 0\ }\f[].
+.PP
+The \f[C]listener\f[] gets two arguments the current stat object and the
+previous stat object:
+.IP
+.nf
+\f[C]
+fs.watchFile(f,\ function\ (curr,\ prev)\ {
+\ \ console.log(\[aq]the\ current\ mtime\ is:\ \[aq]\ +\ curr.mtime);
+\ \ console.log(\[aq]the\ previous\ mtime\ was:\ \[aq]\ +\ prev.mtime);
+});
+\f[]
+.fi
+.PP
+These stat objects are instances of \f[C]fs.Stat\f[].
+.PP
+If you want to be notified when the file was modified, not just accessed
+you need to compare \f[C]curr.mtime\f[] and `prev.mtime.
+.SS fs.unwatchFile(filename)
+.PP
+Stop watching for changes on \f[C]filename\f[].
+.SS fs.Stats
+.PP
+Objects returned from \f[C]fs.stat()\f[] and \f[C]fs.lstat()\f[] are of
+this type.
+.IP \[bu] 2
+\f[C]stats.isFile()\f[]
+.IP \[bu] 2
+\f[C]stats.isDirectory()\f[]
+.IP \[bu] 2
+\f[C]stats.isBlockDevice()\f[]
+.IP \[bu] 2
+\f[C]stats.isCharacterDevice()\f[]
+.IP \[bu] 2
+\f[C]stats.isSymbolicLink()\f[] (only valid with \f[C]fs.lstat()\f[])
+.IP \[bu] 2
+\f[C]stats.isFIFO()\f[]
+.IP \[bu] 2
+\f[C]stats.isSocket()\f[]
+.SS fs.ReadStream
+.PP
+\f[C]ReadStream\f[] is a \f[C]Readable\ Stream\f[].
+.SS fs.createReadStream(path, [options])
+.PP
+Returns a new ReadStream object (See \f[C]Readable\ Stream\f[]).
+.PP
+\f[C]options\f[] is an object with the following defaults:
+.IP
+.nf
+\f[C]
+{\ flags:\ \[aq]r\[aq],
+\ \ encoding:\ null,
+\ \ fd:\ null,
+\ \ mode:\ 0666,
+\ \ bufferSize:\ 64\ *\ 1024
+}
+\f[]
+.fi
+.PP
+\f[C]options\f[] can include \f[C]start\f[] and \f[C]end\f[] values to
+read a range of bytes from the file instead of the entire file.
+Both \f[C]start\f[] and \f[C]end\f[] are inclusive and start at 0.
+When used, both the limits must be specified always.
+.PP
+An example to read the last 10 bytes of a file which is 100 bytes long:
+.IP
+.nf
+\f[C]
+fs.createReadStream(\[aq]sample.txt\[aq],\ {start:\ 90,\ end:\ 99});
+\f[]
+.fi
+.SS fs.WriteStream
+.PP
+\f[C]WriteStream\f[] is a \f[C]Writable\ Stream\f[].
+.SS Event: `open'
+.PP
+\f[C]function\ (fd)\ {\ }\f[]
+.PP
+\f[C]fd\f[] is the file descriptor used by the WriteStream.
+.SS fs.createWriteStream(path, [options])
+.PP
+Returns a new WriteStream object (See \f[C]Writable\ Stream\f[]).
+.PP
+\f[C]options\f[] is an object with the following defaults:
+.IP
+.nf
+\f[C]
+{\ flags:\ \[aq]w\[aq],
+\ \ encoding:\ null,
+\ \ mode:\ 0666\ }
+\f[]
+.fi
+.SS Path
+.PP
+This module contains utilities for dealing with file paths.
+Use \f[C]require(\[aq]path\[aq])\f[] to use it.
+It provides the following methods:
+.SS path.normalize(p)
+.PP
+Normalize a string path, taking care of \f[C]\[aq]..\[aq]\f[] and
+\f[C]\[aq].\[aq]\f[] parts.
+.PP
+When multiple slashes are found, they're replaces by a single one; when
+the path contains a trailing slash, it is preserved.
+On windows backslashes are used.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+path.normalize(\[aq]/foo/bar//baz/asdf/quux/..\[aq])
+//\ returns
+\[aq]/foo/bar/baz/asdf\[aq]
+\f[]
+.fi
+.SS path.join([path1], [path2], [\&...])
+.PP
+Join all arguments together and normalize the resulting path.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+node>\ require(\[aq]path\[aq]).join(
+...\ \ \ \[aq]/foo\[aq],\ \[aq]bar\[aq],\ \[aq]baz/asdf\[aq],\ \[aq]quux\[aq],\ \[aq]..\[aq])
+\[aq]/foo/bar/baz/asdf\[aq]
+\f[]
+.fi
+.SS path.resolve([from \&...], to)
+.PP
+Resolves \f[C]to\f[] to an absolute path.
+.PP
+If \f[C]to\f[] isn't already absolute \f[C]from\f[] arguments are
+prepended in right to left order, until an absolute path is found.
+If after using all \f[C]from\f[] paths still no absolute path is found,
+the current working directory is used as well.
+The resulting path is normalized, and trailing slashes are removed
+unless the path gets resolved to the root directory.
+.PP
+Another way to think of it is as a sequence of \f[C]cd\f[] commands in a
+shell.
+.IP
+.nf
+\f[C]
+path.resolve(\[aq]foo/bar\[aq],\ \[aq]/tmp/file/\[aq],\ \[aq]..\[aq],\ \[aq]a/../subfile\[aq])
+\f[]
+.fi
+.PP
+Is similar to:
+.IP
+.nf
+\f[C]
+cd\ foo/bar
+cd\ /tmp/file/
+cd\ ..
+cd\ a/../subfile
+pwd
+\f[]
+.fi
+.PP
+The difference is that the different paths don't need to exist and may
+also be files.
+.PP
+Examples:
+.IP
+.nf
+\f[C]
+path.resolve(\[aq]/foo/bar\[aq],\ \[aq]./baz\[aq])
+//\ returns
+\[aq]/foo/bar/baz\[aq]
+
+path.resolve(\[aq]/foo/bar\[aq],\ \[aq]/tmp/file/\[aq])
+//\ returns
+\[aq]/tmp/file\[aq]
+
+path.resolve(\[aq]wwwroot\[aq],\ \[aq]static_files/png/\[aq],\ \[aq]../gif/image.gif\[aq])
+//\ if\ currently\ in\ /home/myself/node,\ it\ returns
+\[aq]/home/myself/node/wwwroot/static_files/gif/image.gif\[aq]
+\f[]
+.fi
+.SS path.dirname(p)
+.PP
+Return the directory name of a path.
+Similar to the Unix \f[C]dirname\f[] command.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+path.dirname(\[aq]/foo/bar/baz/asdf/quux\[aq])
+//\ returns
+\[aq]/foo/bar/baz/asdf\[aq]
+\f[]
+.fi
+.SS path.basename(p, [ext])
+.PP
+Return the last portion of a path.
+Similar to the Unix \f[C]basename\f[] command.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+path.basename(\[aq]/foo/bar/baz/asdf/quux.html\[aq])
+//\ returns
+\[aq]quux.html\[aq]
+
+path.basename(\[aq]/foo/bar/baz/asdf/quux.html\[aq],\ \[aq].html\[aq])
+//\ returns
+\[aq]quux\[aq]
+\f[]
+.fi
+.SS path.extname(p)
+.PP
+Return the extension of the path.
+Everything after the last '.' in the last portion of the path.
+If there is no '.' in the last portion of the path or the only '.' is
+the first character, then it returns an empty string.
+Examples:
+.IP
+.nf
+\f[C]
+path.extname(\[aq]index.html\[aq])
+//\ returns
+\[aq].html\[aq]
+
+path.extname(\[aq]index\[aq])
+//\ returns
+\[aq]\[aq]
+\f[]
+.fi
+.SS path.exists(p, [callback])
+.PP
+Test whether or not the given path exists.
+Then, call the \f[C]callback\f[] argument with either true or false.
+Example:
+.IP
+.nf
+\f[C]
+path.exists(\[aq]/etc/passwd\[aq],\ function\ (exists)\ {
+\ \ util.debug(exists\ ?\ "it\[aq]s\ there"\ :\ "no\ passwd!");
+});
+\f[]
+.fi
+.SS path.existsSync(p)
+.PP
+Synchronous version of \f[C]path.exists\f[].
+.SS net
+.PP
+The \f[C]net\f[] module provides you with an asynchronous network
+wrapper.
+It contains methods for creating both servers and clients (called
+streams).
+You can include this module with \f[C]require("net");\f[]
+.SS net.createServer(connectionListener)
+.PP
+Creates a new TCP server.
+The \f[C]connectionListener\f[] argument is automatically set as a
+listener for the \f[C]\[aq]connection\[aq]\f[] event.
+.SS net.createConnection(arguments\&...)
+.PP
+Construct a new socket object and opens a socket to the given location.
+When the socket is established the \f[C]\[aq]connect\[aq]\f[] event will
+be emitted.
+.PP
+The arguments for this method change the type of connection:
+.IP \[bu] 2
+\f[C]net.createConnection(port,\ [host])\f[]
+.PP
+Creates a TCP connection to \f[C]port\f[] on \f[C]host\f[].
+If \f[C]host\f[] is omitted, \f[C]localhost\f[] will be assumed.
+.IP \[bu] 2
+\f[C]net.createConnection(path)\f[]
+.PP
+Creates unix socket connection to \f[C]path\f[]
+.PP
+   *   *   *   *   *
+.SS net.Server
+.PP
+This class is used to create a TCP or UNIX server.
+.PP
+Here is an example of a echo server which listens for connections on
+port 8124:
+.IP
+.nf
+\f[C]
+var\ net\ =\ require(\[aq]net\[aq]);
+var\ server\ =\ net.createServer(function\ (c)\ {
+\ \ c.write(\[aq]hello\\r\\n\[aq]);
+\ \ c.pipe(c);
+});
+server.listen(8124,\ \[aq]localhost\[aq]);
+\f[]
+.fi
+.PP
+Test this by using \f[C]telnet\f[]:
+.IP
+.nf
+\f[C]
+telnet\ localhost\ 8124
+\f[]
+.fi
+.PP
+To listen on the socket \f[C]/tmp/echo.sock\f[] the last line would just
+be changed to
+.IP
+.nf
+\f[C]
+server.listen(\[aq]/tmp/echo.sock\[aq]);
+\f[]
+.fi
+.PP
+Use \f[C]nc\f[] to connect to a UNIX domain socket server:
+.IP
+.nf
+\f[C]
+nc\ -U\ /tmp/echo.sock
+\f[]
+.fi
+.PP
+\f[C]net.Server\f[] is an \f[C]EventEmitter\f[] with the following
+events:
+.SS server.listen(port, [host], [callback])
+.PP
+Begin accepting connections on the specified \f[C]port\f[] and
+\f[C]host\f[].
+If the \f[C]host\f[] is omitted, the server will accept connections
+directed to any IPv4 address (\f[C]INADDR_ANY\f[]).
+.PP
+This function is asynchronous.
+The last parameter \f[C]callback\f[] will be called when the server has
+been bound.
+.PP
+One issue some users run into is getting \f[C]EADDRINUSE\f[] errors.
+Meaning another server is already running on the requested port.
+One way of handling this would be to wait a second and the try again.
+This can be done with
+.IP
+.nf
+\f[C]
+server.on(\[aq]error\[aq],\ function\ (e)\ {
+\ \ if\ (e.code\ ==\ \[aq]EADDRINUSE\[aq])\ {
+\ \ \ \ console.log(\[aq]Address\ in\ use,\ retrying...\[aq]);
+\ \ \ \ setTimeout(function\ ()\ {
+\ \ \ \ \ \ server.close();
+\ \ \ \ \ \ server.listen(PORT,\ HOST);
+\ \ \ \ },\ 1000);
+\ \ }
+});
+\f[]
+.fi
+.PP
+(Note: All sockets in Node are set SO_REUSEADDR already)
+.SS server.listen(path, [callback])
+.PP
+Start a UNIX socket server listening for connections on the given
+\f[C]path\f[].
+.PP
+This function is asynchronous.
+The last parameter \f[C]callback\f[] will be called when the server has
+been bound.
+.SS server.listenFD(fd)
+.PP
+Start a server listening for connections on the given file descriptor.
+.PP
+This file descriptor must have already had the \f[C]bind(2)\f[] and
+\f[C]listen(2)\f[] system calls invoked on it.
+.SS server.close()
+.PP
+Stops the server from accepting new connections.
+This function is asynchronous, the server is finally closed when the
+server emits a \f[C]\[aq]close\[aq]\f[] event.
+.SS server.address()
+.PP
+Returns the bound address of the server as seen by the operating system.
+Useful to find which port was assigned when giving getting an
+OS-assigned address
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ server\ =\ net.createServer(function\ (socket)\ {
+\ \ socket.end("goodbye\\n");
+});
+
+//\ grab\ a\ random\ port.
+server.listen(function()\ {
+\ \ address\ =\ server.address();
+\ \ console.log("opened\ server\ on\ %j",\ address);
+});
+\f[]
+.fi
+.SS server.maxConnections
+.PP
+Set this property to reject connections when the server's connection
+count gets high.
+.SS server.connections
+.PP
+The number of concurrent connections on the server.
+.SS Event: `connection'
+.PP
+\f[C]function\ (socket)\ {}\f[]
+.PP
+Emitted when a new connection is made.
+\f[C]socket\f[] is an instance of \f[C]net.Socket\f[].
+.SS Event: `close'
+.PP
+\f[C]function\ ()\ {}\f[]
+.PP
+Emitted when the server closes.
+.PP
+   *   *   *   *   *
+.SS net.Socket
+.PP
+This object is an abstraction of of a TCP or UNIX socket.
+\f[C]net.Socket\f[] instances implement a duplex Stream interface.
+They can be created by the user and used as a client (with
+\f[C]connect()\f[]) or they can be created by Node and passed to the
+user through the \f[C]\[aq]connection\[aq]\f[] event of a server.
+.PP
+\f[C]net.Socket\f[] instances are EventEmitters with the following
+events:
+.SS socket.connect(port, [host], [callback])
+.SS socket.connect(path, [callback])
+.PP
+Opens the connection for a given socket.
+If \f[C]port\f[] and \f[C]host\f[] are given, then the socket will be
+opened as a TCP socket, if \f[C]host\f[] is omitted, \f[C]localhost\f[]
+will be assumed.
+If a \f[C]path\f[] is given, the socket will be opened as a unix socket
+to that path.
+.PP
+Normally this method is not needed, as \f[C]net.createConnection\f[]
+opens the socket.
+Use this only if you are implementing a custom Socket or if a Socket is
+closed and you want to reuse it to connect to another server.
+.PP
+This function is asynchronous.
+When the \f[C]\[aq]connect\[aq]\f[] event is emitted the socket is
+established.
+If there is a problem connecting, the \f[C]\[aq]connect\[aq]\f[] event
+will not be emitted, the \f[C]\[aq]error\[aq]\f[] event will be emitted
+with the exception.
+.PP
+The \f[C]callback\f[] parameter will be added as an listener for the
+`connect' event.
+.SS socket.bufferSize
+.PP
+\f[C]net.Socket\f[] has the property that \f[C]socket.write()\f[] always
+works.
+This is to help users get up an running quickly.
+The computer cannot necessarily keep up with the amount of data that is
+written to a socket - the network connection simply might be too slow.
+Node will internally queue up the data written to a socket and send it
+out over the wire when it is possible.
+(Internally it is polling on the socket's file descriptor for being
+writable).
+.PP
+The consequence of this internal buffering is that memory may grow.
+This property shows the number of characters currently buffered to be
+written.
+(Number of characters is approximately equal to the number of bytes to
+be written, but the buffer may contain strings, and the strings are
+lazily encoded, so the exact number of bytes is not known.)
+.PP
+Users who experience large or growing \f[C]bufferSize\f[] should attempt
+to \[lq]throttle\[rq] the data flows in their program with
+\f[C]pause()\f[] and resume()`.
+.SS socket.setEncoding(encoding=null)
+.PP
+Sets the encoding (either \f[C]\[aq]ascii\[aq]\f[],
+\f[C]\[aq]utf8\[aq]\f[], or \f[C]\[aq]base64\[aq]\f[]) for data that is
+received.
+.SS socket.setSecure()
+.PP
+This function has been removed in v0.3.
+It used to upgrade the connection to SSL/TLS.
+See the TLS for the new API.
+.SS socket.write(data, [encoding], [callback])
+.PP
+Sends data on the socket.
+The second parameter specifies the encoding in the case of a
+string\[em]it defaults to UTF8 encoding.
+.PP
+Returns \f[C]true\f[] if the entire data was flushed successfully to the
+kernel buffer.
+Returns \f[C]false\f[] if all or part of the data was queued in user
+memory.
+\f[C]\[aq]drain\[aq]\f[] will be emitted when the buffer is again free.
+.PP
+The optional \f[C]callback\f[] parameter will be executed when the data
+is finally written out - this may not be immediately.
+.SS socket.write(data, [encoding], [fileDescriptor], [callback])
+.PP
+For UNIX sockets, it is possible to send a file descriptor through the
+socket.
+Simply add the \f[C]fileDescriptor\f[] argument and listen for the
+\f[C]\[aq]fd\[aq]\f[] event on the other end.
+.SS socket.end([data], [encoding])
+.PP
+Half-closes the socket.
+I.E., it sends a FIN packet.
+It is possible the server will still send some data.
+.PP
+If \f[C]data\f[] is specified, it is equivalent to calling
+\f[C]socket.write(data,\ encoding)\f[] followed by
+\f[C]socket.end()\f[].
+.SS socket.destroy()
+.PP
+Ensures that no more I/O activity happens on this socket.
+Only necessary in case of errors (parse error or so).
+.SS socket.pause()
+.PP
+Pauses the reading of data.
+That is, \f[C]\[aq]data\[aq]\f[] events will not be emitted.
+Useful to throttle back an upload.
+.SS socket.resume()
+.PP
+Resumes reading after a call to \f[C]pause()\f[].
+.SS socket.setTimeout(timeout, [callback])
+.PP
+Sets the socket to timeout after \f[C]timeout\f[] milliseconds of
+inactivity on the socket.
+By default \f[C]net.Socket\f[] do not have a timeout.
+.PP
+When an idle timeout is triggered the socket will receive a
+\f[C]\[aq]timeout\[aq]\f[] event but the connection will not be severed.
+The user must manually \f[C]end()\f[] or \f[C]destroy()\f[] the socket.
+.PP
+If \f[C]timeout\f[] is 0, then the existing idle timeout is disabled.
+.PP
+The optional \f[C]callback\f[] parameter will be added as a one time
+listener for the \f[C]\[aq]timeout\[aq]\f[] event.
+.SS socket.setNoDelay(noDelay=true)
+.PP
+Disables the Nagle algorithm.
+By default TCP connections use the Nagle algorithm, they buffer data
+before sending it off.
+Setting \f[C]noDelay\f[] will immediately fire off data each time
+\f[C]socket.write()\f[] is called.
+.SS socket.setKeepAlive(enable=false, [initialDelay])
+.PP
+Enable/disable keep-alive functionality, and optionally set the initial
+delay before the first keepalive probe is sent on an idle socket.
+Set \f[C]initialDelay\f[] (in milliseconds) to set the delay between the
+last data packet received and the first keepalive probe.
+Setting 0 for initialDelay will leave the value unchanged from the
+default (or previous) setting.
+.SS socket.remoteAddress
+.PP
+The string representation of the remote IP address.
+For example, \f[C]\[aq]74.125.127.100\[aq]\f[] or
+\f[C]\[aq]2001:4860:a005::68\[aq]\f[].
+.PP
+This member is only present in server-side connections.
+.SS Event: `connect'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when a socket connection successfully is established.
+See \f[C]connect()\f[].
+.SS Event: `data'
+.PP
+\f[C]function\ (data)\ {\ }\f[]
+.PP
+Emitted when data is received.
+The argument \f[C]data\f[] will be a \f[C]Buffer\f[] or \f[C]String\f[].
+Encoding of data is set by \f[C]socket.setEncoding()\f[].
+(See the section on \f[C]Readable\ Socket\f[] for more information.)
+.SS Event: `end'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when the other end of the socket sends a FIN packet.
+.PP
+By default (\f[C]allowHalfOpen\ ==\ false\f[]) the socket will destroy
+its file descriptor once it has written out its pending write queue.
+However, by setting \f[C]allowHalfOpen\ ==\ true\f[] the socket will not
+automatically \f[C]end()\f[] its side allowing the user to write
+arbitrary amounts of data, with the caveat that the user is required to
+\f[C]end()\f[] their side now.
+.SS Event: `timeout'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted if the socket times out from inactivity.
+This is only to notify that the socket has been idle.
+The user must manually close the connection.
+.PP
+See also: \f[C]socket.setTimeout()\f[]
+.SS Event: `drain'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when the write buffer becomes empty.
+Can be used to throttle uploads.
+.SS Event: `error'
+.PP
+\f[C]function\ (exception)\ {\ }\f[]
+.PP
+Emitted when an error occurs.
+The \f[C]\[aq]close\[aq]\f[] event will be called directly following
+this event.
+.SS Event: `close'
+.PP
+\f[C]function\ (had_error)\ {\ }\f[]
+.PP
+Emitted once the socket is fully closed.
+The argument \f[C]had_error\f[] is a boolean which says if the socket
+was closed due to a transmission error.
+.PP
+   *   *   *   *   *
+.SS net.isIP
+.SS net.isIP(input)
+.PP
+Tests if input is an IP address.
+Returns 0 for invalid strings, returns 4 for IP version 4 addresses, and
+returns 6 for IP version 6 addresses.
+.SS net.isIPv4(input)
+.PP
+Returns true if input is a version 4 IP address, otherwise returns
+false.
+.SS net.isIPv6(input)
+.PP
+Returns true if input is a version 6 IP address, otherwise returns
+false.
+.SS DNS
+.PP
+Use \f[C]require(\[aq]dns\[aq])\f[] to access this module.
+.PP
+Here is an example which resolves \f[C]\[aq]www.google.com\[aq]\f[] then
+reverse resolves the IP addresses which are returned.
+.IP
+.nf
+\f[C]
+var\ dns\ =\ require(\[aq]dns\[aq]);
+
+dns.resolve4(\[aq]www.google.com\[aq],\ function\ (err,\ addresses)\ {
+\ \ if\ (err)\ throw\ err;
+
+\ \ console.log(\[aq]addresses:\ \[aq]\ +\ JSON.stringify(addresses));
+
+\ \ addresses.forEach(function\ (a)\ {
+\ \ \ \ dns.reverse(a,\ function\ (err,\ domains)\ {
+\ \ \ \ \ \ if\ (err)\ {
+\ \ \ \ \ \ \ \ console.log(\[aq]reverse\ for\ \[aq]\ +\ a\ +\ \[aq]\ failed:\ \[aq]\ +
+\ \ \ \ \ \ \ \ \ \ err.message);
+\ \ \ \ \ \ }\ else\ {
+\ \ \ \ \ \ \ \ console.log(\[aq]reverse\ for\ \[aq]\ +\ a\ +\ \[aq]:\ \[aq]\ +
+\ \ \ \ \ \ \ \ \ \ JSON.stringify(domains));
+\ \ \ \ \ \ }
+\ \ \ \ });
+\ \ });
+});
+\f[]
+.fi
+.SS dns.lookup(domain, family=null, callback)
+.PP
+Resolves a domain (e.g.
+\f[C]\[aq]google.com\[aq]\f[]) into the first found A (IPv4) or AAAA
+(IPv6) record.
+.PP
+The callback has arguments \f[C](err,\ address,\ family)\f[].
+The \f[C]address\f[] argument is a string representation of a IP v4 or
+v6 address.
+The \f[C]family\f[] argument is either the integer 4 or 6 and denotes
+the family of \f[C]address\f[] (not necessarily the value initially
+passed to \f[C]lookup\f[]).
+.SS dns.resolve(domain, rrtype=`A', callback)
+.PP
+Resolves a domain (e.g.
+\f[C]\[aq]google.com\[aq]\f[]) into an array of the record types
+specified by rrtype.
+Valid rrtypes are \f[C]A\f[] (IPV4 addresses), \f[C]AAAA\f[] (IPV6
+addresses), \f[C]MX\f[] (mail exchange records), \f[C]TXT\f[] (text
+records), \f[C]SRV\f[] (SRV records), and \f[C]PTR\f[] (used for reverse
+IP lookups).
+.PP
+The callback has arguments \f[C](err,\ addresses)\f[].
+The type of each item in \f[C]addresses\f[] is determined by the record
+type, and described in the documentation for the corresponding lookup
+methods below.
+.PP
+On error, \f[C]err\f[] would be an instanceof \f[C]Error\f[] object,
+where \f[C]err.errno\f[] is one of the error codes listed below and
+\f[C]err.message\f[] is a string describing the error in English.
+.SS dns.resolve4(domain, callback)
+.PP
+The same as \f[C]dns.resolve()\f[], but only for IPv4 queries
+(\f[C]A\f[] records).
+\f[C]addresses\f[] is an array of IPv4 addresses (e.g.
+\f[C][\[aq]74.125.79.104\[aq],\ \[aq]74.125.79.105\[aq],\ \[aq]74.125.79.106\[aq]]\f[]).
+.SS dns.resolve6(domain, callback)
+.PP
+The same as \f[C]dns.resolve4()\f[] except for IPv6 queries (an
+\f[C]AAAA\f[] query).
+.SS dns.resolveMx(domain, callback)
+.PP
+The same as \f[C]dns.resolve()\f[], but only for mail exchange queries
+(\f[C]MX\f[] records).
+.PP
+\f[C]addresses\f[] is an array of MX records, each with a priority and
+an exchange attribute (e.g.
+\f[C][{\[aq]priority\[aq]:\ 10,\ \[aq]exchange\[aq]:\ \[aq]mx.example.com\[aq]},...]\f[]).
+.SS dns.resolveTxt(domain, callback)
+.PP
+The same as \f[C]dns.resolve()\f[], but only for text queries
+(\f[C]TXT\f[] records).
+\f[C]addresses\f[] is an array of the text records available for
+\f[C]domain\f[] (e.g., \f[C][\[aq]v=spf1\ ip4:0.0.0.0\ ~all\[aq]]\f[]).
+.SS dns.resolveSrv(domain, callback)
+.PP
+The same as \f[C]dns.resolve()\f[], but only for service records
+(\f[C]SRV\f[] records).
+\f[C]addresses\f[] is an array of the SRV records available for
+\f[C]domain\f[].
+Properties of SRV records are priority, weight, port, and name (e.g.,
+\f[C][{\[aq]priority\[aq]:\ 10,\ {\[aq]weight\[aq]:\ 5,\ \[aq]port\[aq]:\ 21223,\ \[aq]name\[aq]:\ \[aq]service.example.com\[aq]},\ ...]\f[]).
+.SS dns.reverse(ip, callback)
+.PP
+Reverse resolves an ip address to an array of domain names.
+.PP
+The callback has arguments \f[C](err,\ domains)\f[].
+.PP
+If there an an error, \f[C]err\f[] will be non-null and an instanceof
+the Error object.
+.PP
+Each DNS query can return an error code.
+.IP \[bu] 2
+\f[C]dns.TEMPFAIL\f[]: timeout, SERVFAIL or similar.
+.IP \[bu] 2
+\f[C]dns.PROTOCOL\f[]: got garbled reply.
+.IP \[bu] 2
+\f[C]dns.NXDOMAIN\f[]: domain does not exists.
+.IP \[bu] 2
+\f[C]dns.NODATA\f[]: domain exists but no data of reqd type.
+.IP \[bu] 2
+\f[C]dns.NOMEM\f[]: out of memory while processing.
+.IP \[bu] 2
+\f[C]dns.BADQUERY\f[]: the query is malformed.
+.SS UDP / Datagram Sockets
+.PP
+Datagram sockets are available through
+\f[C]require(\[aq]dgram\[aq])\f[].
+Datagrams are most commonly handled as IP/UDP messages but they can also
+be used over Unix domain sockets.
+.SS Event: `message'
+.PP
+\f[C]function\ (msg,\ rinfo)\ {\ }\f[]
+.PP
+Emitted when a new datagram is available on a socket.
+\f[C]msg\f[] is a \f[C]Buffer\f[] and \f[C]rinfo\f[] is an object with
+the sender's address information and the number of bytes in the
+datagram.
+.SS Event: `listening'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when a socket starts listening for datagrams.
+This happens as soon as UDP sockets are created.
+Unix domain sockets do not start listening until calling \f[C]bind()\f[]
+on them.
+.SS Event: `close'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted when a socket is closed with \f[C]close()\f[].
+No new \f[C]message\f[] events will be emitted on this socket.
+.SS dgram.createSocket(type, [callback])
+.PP
+Creates a datagram socket of the specified types.
+Valid types are: \f[C]udp4\f[], \f[C]udp6\f[], and \f[C]unix_dgram\f[].
+.PP
+Takes an optional callback which is added as a listener for
+\f[C]message\f[] events.
+.SS dgram.send(buf, offset, length, path, [callback])
+.PP
+For Unix domain datagram sockets, the destination address is a pathname
+in the filesystem.
+An optional callback may be supplied that is invoked after the
+\f[C]sendto\f[] call is completed by the OS.
+It is not safe to re-use \f[C]buf\f[] until the callback is invoked.
+Note that unless the socket is bound to a pathname with \f[C]bind()\f[]
+there is no way to receive messages on this socket.
+.PP
+Example of sending a message to syslogd on OSX via Unix domain socket
+\f[C]/var/run/syslog\f[]:
+.IP
+.nf
+\f[C]
+var\ dgram\ =\ require(\[aq]dgram\[aq]);
+var\ message\ =\ new\ Buffer("A\ message\ to\ log.");
+var\ client\ =\ dgram.createSocket("unix_dgram");
+client.send(message,\ 0,\ message.length,\ "/var/run/syslog",
+\ \ function\ (err,\ bytes)\ {
+\ \ \ \ if\ (err)\ {
+\ \ \ \ \ \ throw\ err;
+\ \ \ \ }
+\ \ \ \ console.log("Wrote\ "\ +\ bytes\ +\ "\ bytes\ to\ socket.");
+});
+\f[]
+.fi
+.SS dgram.send(buf, offset, length, port, address, [callback])
+.PP
+For UDP sockets, the destination port and IP address must be specified.
+A string may be supplied for the \f[C]address\f[] parameter, and it will
+be resolved with DNS.
+An optional callback may be specified to detect any DNS errors and when
+\f[C]buf\f[] may be re-used.
+Note that DNS lookups will delay the time that a send takes place, at
+least until the next tick.
+The only way to know for sure that a send has taken place is to use the
+callback.
+.PP
+Example of sending a UDP packet to a random port on \f[C]localhost\f[];
+.IP
+.nf
+\f[C]
+var\ dgram\ =\ require(\[aq]dgram\[aq]);
+var\ message\ =\ new\ Buffer("Some\ bytes");
+var\ client\ =\ dgram.createSocket("udp4");
+client.send(message,\ 0,\ message.length,\ 41234,\ "localhost");
+client.close();
+\f[]
+.fi
+.SS dgram.bind(path)
+.PP
+For Unix domain datagram sockets, start listening for incoming datagrams
+on a socket specified by \f[C]path\f[].
+Note that clients may \f[C]send()\f[] without \f[C]bind()\f[], but no
+datagrams will be received without a \f[C]bind()\f[].
+.PP
+Example of a Unix domain datagram server that echoes back all messages
+it receives:
+.IP
+.nf
+\f[C]
+var\ dgram\ =\ require("dgram");
+var\ serverPath\ =\ "/tmp/dgram_server_sock";
+var\ server\ =\ dgram.createSocket("unix_dgram");
+
+server.on("message",\ function\ (msg,\ rinfo)\ {
+\ \ console.log("got:\ "\ +\ msg\ +\ "\ from\ "\ +\ rinfo.address);
+\ \ server.send(msg,\ 0,\ msg.length,\ rinfo.address);
+});
+
+server.on("listening",\ function\ ()\ {
+\ \ console.log("server\ listening\ "\ +\ server.address().address);
+})
+
+server.bind(serverPath);
+\f[]
+.fi
+.PP
+Example of a Unix domain datagram client that talks to this server:
+.IP
+.nf
+\f[C]
+var\ dgram\ =\ require("dgram");
+var\ serverPath\ =\ "/tmp/dgram_server_sock";
+var\ clientPath\ =\ "/tmp/dgram_client_sock";
+
+var\ message\ =\ new\ Buffer("A\ message\ at\ "\ +\ (new\ Date()));
+
+var\ client\ =\ dgram.createSocket("unix_dgram");
+
+client.on("message",\ function\ (msg,\ rinfo)\ {
+\ \ console.log("got:\ "\ +\ msg\ +\ "\ from\ "\ +\ rinfo.address);
+});
+
+client.on("listening",\ function\ ()\ {
+\ \ console.log("client\ listening\ "\ +\ client.address().address);
+\ \ client.send(message,\ 0,\ message.length,\ serverPath);
+});
+
+client.bind(clientPath);
+\f[]
+.fi
+.SS dgram.bind(port, [address])
+.PP
+For UDP sockets, listen for datagrams on a named \f[C]port\f[] and
+optional \f[C]address\f[].
+If \f[C]address\f[] is not specified, the OS will try to listen on all
+addresses.
+.PP
+Example of a UDP server listening on port 41234:
+.IP
+.nf
+\f[C]
+var\ dgram\ =\ require("dgram");
+
+var\ server\ =\ dgram.createSocket("udp4");
+var\ messageToSend\ =\ new\ Buffer("A\ message\ to\ send");
+
+server.on("message",\ function\ (msg,\ rinfo)\ {
+\ \ console.log("server\ got:\ "\ +\ msg\ +\ "\ from\ "\ +
+\ \ \ \ rinfo.address\ +\ ":"\ +\ rinfo.port);
+});
+
+server.on("listening",\ function\ ()\ {
+\ \ var\ address\ =\ server.address();
+\ \ console.log("server\ listening\ "\ +
+\ \ \ \ \ \ address.address\ +\ ":"\ +\ address.port);
+});
+
+server.bind(41234);
+//\ server\ listening\ 0.0.0.0:41234
+\f[]
+.fi
+.SS dgram.close()
+.PP
+Close the underlying socket and stop listening for data on it.
+UDP sockets automatically listen for messages, even if they did not call
+\f[C]bind()\f[].
+.SS dgram.address()
+.PP
+Returns an object containing the address information for a socket.
+For UDP sockets, this object will contain \f[C]address\f[] and
+\f[C]port\f[].
+For Unix domain sockets, it will contain only \f[C]address\f[].
+.SS dgram.setBroadcast(flag)
+.PP
+Sets or clears the \f[C]SO_BROADCAST\f[] socket option.
+When this option is set, UDP packets may be sent to a local interface's
+broadcast address.
+.SS dgram.setTTL(ttl)
+.PP
+Sets the \f[C]IP_TTL\f[] socket option.
+TTL stands for \[lq]Time to Live,\[rq] but in this context it specifies
+the number of IP hops that a packet is allowed to go through.
+Each router or gateway that forwards a packet decrements the TTL.
+If the TTL is decremented to 0 by a router, it will not be forwarded.
+Changing TTL values is typically done for network probes or when
+multicasting.
+.PP
+The argument to \f[C]setTTL()\f[] is a number of hops between 1 and 255.
+The default on most systems is 64.
+.SS dgram.setMulticastTTL(ttl)
+.PP
+Sets the \f[C]IP_MULTICAST_TTL\f[] socket option.
+TTL stands for \[lq]Time to Live,\[rq] but in this context it specifies
+the number of IP hops that a packet is allowed to go through,
+specifically for multicast traffic.
+Each router or gateway that forwards a packet decrements the TTL.
+If the TTL is decremented to 0 by a router, it will not be forwarded.
+.PP
+The argument to \f[C]setMulticastTTL()\f[] is a number of hops between 0
+and 255.
+The default on most systems is 64.
+.SS dgram.setMulticastLoopback(flag)
+.PP
+Sets or clears the \f[C]IP_MULTICAST_LOOP\f[] socket option.
+When this option is set, multicast packets will also be received on the
+local interface.
+.SS dgram.addMembership(multicastAddress, [multicastInterface])
+.PP
+Tells the kernel to join a multicast group with
+\f[C]IP_ADD_MEMBERSHIP\f[] socket option.
+.PP
+If \f[C]multicastAddress\f[] is not specified, the OS will try to add
+membership to all valid interfaces.
+.SS dgram.dropMembership(multicastAddress, [multicastInterface])
+.PP
+Opposite of \f[C]addMembership\f[] - tells the kernel to leave a
+multicast group with \f[C]IP_DROP_MEMBERSHIP\f[] socket option.
+This is automatically called by the kernel when the socket is closed or
+process terminates, so most apps will never need to call this.
+.PP
+If \f[C]multicastAddress\f[] is not specified, the OS will try to drop
+membership to all valid interfaces.
+.SS HTTP
+.PP
+To use the HTTP server and client one must
+\f[C]require(\[aq]http\[aq])\f[].
+.PP
+The HTTP interfaces in Node are designed to support many features of the
+protocol which have been traditionally difficult to use.
+In particular, large, possibly chunk-encoded, messages.
+The interface is careful to never buffer entire requests or
+responses\[em]the user is able to stream data.
+.PP
+HTTP message headers are represented by an object like this:
+.IP
+.nf
+\f[C]
+{\ \[aq]content-length\[aq]:\ \[aq]123\[aq],
+\ \ \[aq]content-type\[aq]:\ \[aq]text/plain\[aq],
+\ \ \[aq]connection\[aq]:\ \[aq]keep-alive\[aq],
+\ \ \[aq]accept\[aq]:\ \[aq]*/*\[aq]\ }
+\f[]
+.fi
+.PP
+Keys are lowercased.
+Values are not modified.
+.PP
+In order to support the full spectrum of possible HTTP applications,
+Node's HTTP API is very low-level.
+It deals with stream handling and message parsing only.
+It parses a message into headers and body but it does not parse the
+actual headers or the body.
+.SS http.Server
+.PP
+This is an \f[C]EventEmitter\f[] with the following events:
+.SS Event: `request'
+.PP
+\f[C]function\ (request,\ response)\ {\ }\f[]
+.PP
+\f[C]request\f[] is an instance of \f[C]http.ServerRequest\f[] and
+\f[C]response\f[] is an instance of \f[C]http.ServerResponse\f[]
+.SS Event: `connection'
+.PP
+\f[C]function\ (stream)\ {\ }\f[]
+.PP
+When a new TCP stream is established.
+\f[C]stream\f[] is an object of type \f[C]net.Stream\f[].
+Usually users will not want to access this event.
+The \f[C]stream\f[] can also be accessed at \f[C]request.connection\f[].
+.SS Event: `close'
+.PP
+\f[C]function\ (errno)\ {\ }\f[]
+.PP
+Emitted when the server closes.
+.SS Event: `request'
+.PP
+\f[C]function\ (request,\ response)\ {}\f[]
+.PP
+Emitted each time there is request.
+Note that there may be multiple requests per connection (in the case of
+keep-alive connections).
+.SS Event: `checkContinue'
+.PP
+\f[C]function\ (request,\ response)\ {}\f[]
+.PP
+Emitted each time a request with an http Expect: 100-continue is
+received.
+If this event isn't listened for, the server will automatically respond
+with a 100 Continue as appropriate.
+.PP
+Handling this event involves calling \f[C]response.writeContinue\f[] if
+the client should continue to send the request body, or generating an
+appropriate HTTP response (e.g., 400 Bad Request) if the client should
+not continue to send the request body.
+.PP
+Note that when this event is emitted and handled, the \f[C]request\f[]
+event will not be emitted.
+.SS Event: `upgrade'
+.PP
+\f[C]function\ (request,\ socket,\ head)\f[]
+.PP
+Emitted each time a client requests a http upgrade.
+If this event isn't listened for, then clients requesting an upgrade
+will have their connections closed.
+.IP \[bu] 2
+\f[C]request\f[] is the arguments for the http request, as it is in the
+request event.
+.IP \[bu] 2
+\f[C]socket\f[] is the network socket between the server and client.
+.IP \[bu] 2
+\f[C]head\f[] is an instance of Buffer, the first packet of the upgraded
+stream, this may be empty.
+.PP
+After this event is emitted, the request's socket will not have a
+\f[C]data\f[] event listener, meaning you will need to bind to it in
+order to handle data sent to the server on that socket.
+.SS Event: `clientError'
+.PP
+\f[C]function\ (exception)\ {}\f[]
+.PP
+If a client connection emits an `error' event - it will forwarded here.
+.SS http.createServer(requestListener)
+.PP
+Returns a new web server object.
+.PP
+The \f[C]requestListener\f[] is a function which is automatically added
+to the \f[C]\[aq]request\[aq]\f[] event.
+.SS server.listen(port, [hostname], [callback])
+.PP
+Begin accepting connections on the specified port and hostname.
+If the hostname is omitted, the server will accept connections directed
+to any IPv4 address (\f[C]INADDR_ANY\f[]).
+.PP
+To listen to a unix socket, supply a filename instead of port and
+hostname.
+.PP
+This function is asynchronous.
+The last parameter \f[C]callback\f[] will be called when the server has
+been bound to the port.
+.SS server.listen(path, [callback])
+.PP
+Start a UNIX socket server listening for connections on the given
+\f[C]path\f[].
+.PP
+This function is asynchronous.
+The last parameter \f[C]callback\f[] will be called when the server has
+been bound.
+.SS server.close()
+.PP
+Stops the server from accepting new connections.
+.SS http.ServerRequest
+.PP
+This object is created internally by a HTTP server \[em] not by the user
+\[em] and passed as the first argument to a \f[C]\[aq]request\[aq]\f[]
+listener.
+.PP
+This is an \f[C]EventEmitter\f[] with the following events:
+.SS Event: `data'
+.PP
+\f[C]function\ (chunk)\ {\ }\f[]
+.PP
+Emitted when a piece of the message body is received.
+.PP
+Example: A chunk of the body is given as the single argument.
+The transfer-encoding has been decoded.
+The body chunk is a string.
+The body encoding is set with \f[C]request.setBodyEncoding()\f[].
+.SS Event: `end'
+.PP
+\f[C]function\ ()\ {\ }\f[]
+.PP
+Emitted exactly once for each message.
+No arguments.
+After emitted no other events will be emitted on the request.
+.SS request.method
+.PP
+The request method as a string.
+Read only.
+Example: \f[C]\[aq]GET\[aq]\f[], \f[C]\[aq]DELETE\[aq]\f[].
+.SS request.url
+.PP
+Request URL string.
+This contains only the URL that is present in the actual HTTP request.
+If the request is:
+.IP
+.nf
+\f[C]
+GET\ /status?name=ryan\ HTTP/1.1\\r\\n
+Accept:\ text/plain\\r\\n
+\\r\\n
+\f[]
+.fi
+.PP
+Then \f[C]request.url\f[] will be:
+.IP
+.nf
+\f[C]
+\[aq]/status?name=ryan\[aq]
+\f[]
+.fi
+.PP
+If you would like to parse the URL into its parts, you can use
+\f[C]require(\[aq]url\[aq]).parse(request.url)\f[].
+Example:
+.IP
+.nf
+\f[C]
+node>\ require(\[aq]url\[aq]).parse(\[aq]/status?name=ryan\[aq])
+{\ href:\ \[aq]/status?name=ryan\[aq],
+\ \ search:\ \[aq]?name=ryan\[aq],
+\ \ query:\ \[aq]name=ryan\[aq],
+\ \ pathname:\ \[aq]/status\[aq]\ }
+\f[]
+.fi
+.PP
+If you would like to extract the params from the query string, you can
+use the \f[C]require(\[aq]querystring\[aq]).parse\f[] function, or pass
+\f[C]true\f[] as the second argument to
+\f[C]require(\[aq]url\[aq]).parse\f[].
+Example:
+.IP
+.nf
+\f[C]
+node>\ require(\[aq]url\[aq]).parse(\[aq]/status?name=ryan\[aq],\ true)
+{\ href:\ \[aq]/status?name=ryan\[aq],
+\ \ search:\ \[aq]?name=ryan\[aq],
+\ \ query:\ {\ name:\ \[aq]ryan\[aq]\ },
+\ \ pathname:\ \[aq]/status\[aq]\ }
+\f[]
+.fi
+.SS request.headers
+.PP
+Read only.
+.SS request.trailers
+.PP
+Read only; HTTP trailers (if present).
+Only populated after the `end' event.
+.SS request.httpVersion
+.PP
+The HTTP protocol version as a string.
+Read only.
+Examples: \f[C]\[aq]1.1\[aq]\f[], \f[C]\[aq]1.0\[aq]\f[].
+Also \f[C]request.httpVersionMajor\f[] is the first integer and
+\f[C]request.httpVersionMinor\f[] is the second.
+.SS request.setEncoding(encoding=null)
+.PP
+Set the encoding for the request body.
+Either \f[C]\[aq]utf8\[aq]\f[] or \f[C]\[aq]binary\[aq]\f[].
+Defaults to \f[C]null\f[], which means that the \f[C]\[aq]data\[aq]\f[]
+event will emit a \f[C]Buffer\f[] object..
+.SS request.pause()
+.PP
+Pauses request from emitting events.
+Useful to throttle back an upload.
+.SS request.resume()
+.PP
+Resumes a paused request.
+.SS request.connection
+.PP
+The \f[C]net.Stream\f[] object associated with the connection.
+.PP
+With HTTPS support, use request.connection.verifyPeer() and
+request.connection.getPeerCertificate() to obtain the client's
+authentication details.
+.SS http.ServerResponse
+.PP
+This object is created internally by a HTTP server\[em]not by the user.
+It is passed as the second parameter to the \f[C]\[aq]request\[aq]\f[]
+event.
+It is a \f[C]Writable\ Stream\f[].
+.SS response.writeContinue()
+.PP
+Sends a HTTP/1.1 100 Continue message to the client, indicating that the
+request body should be sent.
+See the the \f[C]checkContinue\f[] event on \f[C]Server\f[].
+.SS response.writeHead(statusCode, [reasonPhrase], [headers])
+.PP
+Sends a response header to the request.
+The status code is a 3-digit HTTP status code, like \f[C]404\f[].
+The last argument, \f[C]headers\f[], are the response headers.
+Optionally one can give a human-readable \f[C]reasonPhrase\f[] as the
+second argument.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ body\ =\ \[aq]hello\ world\[aq];
+response.writeHead(200,\ {
+\ \ \[aq]Content-Length\[aq]:\ body.length,
+\ \ \[aq]Content-Type\[aq]:\ \[aq]text/plain\[aq]\ });
+\f[]
+.fi
+.PP
+This method must only be called once on a message and it must be called
+before \f[C]response.end()\f[] is called.
+.PP
+If you call \f[C]response.write()\f[] or \f[C]response.end()\f[] before
+calling this, the implicit/mutable headers will be calculated and call
+this function for you.
+.SS response.statusCode
+.PP
+When using implicit headers (not calling \f[C]response.writeHead()\f[]
+explicitly), this property controls the status code that will be send to
+the client when the headers get flushed.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+response.statusCode\ =\ 404;
+\f[]
+.fi
+.SS response.setHeader(name, value)
+.PP
+Sets a single header value for implicit headers.
+If this header already exists in the to-be-sent headers, it's value will
+be replaced.
+Use an array of strings here if you need to send multiple headers with
+the same name.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+response.setHeader("Content-Type",\ "text/html");
+\f[]
+.fi
+.PP
+or
+.IP
+.nf
+\f[C]
+response.setHeader("Set-Cookie",\ ["type=ninja",\ "language=javascript"]);
+\f[]
+.fi
+.SS response.getHeader(name)
+.PP
+Reads out a header that's already been queued but not sent to the
+client.
+Note that the name is case insensitive.
+This can only be called before headers get implicitly flushed.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ contentType\ =\ response.getHeader(\[aq]content-type\[aq]);
+\f[]
+.fi
+.SS response.removeHeader(name)
+.PP
+Removes a header that's queued for implicit sending.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+response.removeHeader("Content-Encoding");
+\f[]
+.fi
+.SS response.write(chunk, encoding=`utf8')
+.PP
+If this method is called and \f[C]response.writeHead()\f[] has not been
+called, it will switch to implicit header mode and flush the implicit
+headers.
+.PP
+This sends a chunk of the response body.
+This method may be called multiple times to provide successive parts of
+the body.
+.PP
+\f[C]chunk\f[] can be a string or a buffer.
+If \f[C]chunk\f[] is a string, the second parameter specifies how to
+encode it into a byte stream.
+By default the \f[C]encoding\f[] is \f[C]\[aq]utf8\[aq]\f[].
+.PP
+\f[B]Note\f[]: This is the raw HTTP body and has nothing to do with
+higher-level multi-part body encodings that may be used.
+.PP
+The first time \f[C]response.write()\f[] is called, it will send the
+buffered header information and the first body to the client.
+The second time \f[C]response.write()\f[] is called, Node assumes you're
+going to be streaming data, and sends that separately.
+That is, the response is buffered up to the first chunk of body.
+.SS response.addTrailers(headers)
+.PP
+This method adds HTTP trailing headers (a header but at the end of the
+message) to the response.
+.PP
+Trailers will \f[B]only\f[] be emitted if chunked encoding is used for
+the response; if it is not (e.g., if the request was HTTP/1.0), they
+will be silently discarded.
+.PP
+Note that HTTP requires the \f[C]Trailer\f[] header to be sent if you
+intend to emit trailers, with a list of the header fields in its value.
+E.g.,
+.IP
+.nf
+\f[C]
+response.writeHead(200,\ {\ \[aq]Content-Type\[aq]:\ \[aq]text/plain\[aq],
+\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \[aq]Trailer\[aq]:\ \[aq]TraceInfo\[aq]\ });
+response.write(fileData);
+response.addTrailers({\[aq]Content-MD5\[aq]:\ "7895bf4b8828b55ceaf47747b4bca667"});
+response.end();
+\f[]
+.fi
+.SS response.end([data], [encoding])
+.PP
+This method signals to the server that all of the response headers and
+body has been sent; that server should consider this message complete.
+The method, \f[C]response.end()\f[], MUST be called on each response.
+.PP
+If \f[C]data\f[] is specified, it is equivalent to calling
+\f[C]response.write(data,\ encoding)\f[] followed by
+\f[C]response.end()\f[].
+.SS http.request(options, callback)
+.PP
+Node maintains several connections per server to make HTTP requests.
+This function allows one to transparently issue requests.
+.PP
+Options:
+.IP \[bu] 2
+\f[C]host\f[]: A domain name or IP address of the server to issue the
+request to.
+.IP \[bu] 2
+\f[C]port\f[]: Port of remote server.
+.IP \[bu] 2
+\f[C]method\f[]: A string specifying the HTTP request method.
+Possible values: \f[C]\[aq]GET\[aq]\f[] (default),
+\f[C]\[aq]POST\[aq]\f[], \f[C]\[aq]PUT\[aq]\f[], and
+\f[C]\[aq]DELETE\[aq]\f[].
+.IP \[bu] 2
+\f[C]path\f[]: Request path.
+Should include query string and fragments if any.
+E.G.
+\f[C]\[aq]/index.html?page=12\[aq]\f[]
+.IP \[bu] 2
+\f[C]headers\f[]: An object containing request headers.
+.PP
+\f[C]http.request()\f[] returns an instance of the
+\f[C]http.ClientRequest\f[] class.
+The \f[C]ClientRequest\f[] instance is a writable stream.
+If one needs to upload a file with a POST request, then write to the
+\f[C]ClientRequest\f[] object.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ options\ =\ {
+\ \ host:\ \[aq]www.google.com\[aq],
+\ \ port:\ 80,
+\ \ path:\ \[aq]/upload\[aq],
+\ \ method:\ \[aq]POST\[aq]
+};
+
+var\ req\ =\ http.request(options,\ function(res)\ {
+\ \ console.log(\[aq]STATUS:\ \[aq]\ +\ res.statusCode);
+\ \ console.log(\[aq]HEADERS:\ \[aq]\ +\ JSON.stringify(res.headers));
+\ \ res.setEncoding(\[aq]utf8\[aq]);
+\ \ res.on(\[aq]data\[aq],\ function\ (chunk)\ {
+\ \ \ \ console.log(\[aq]BODY:\ \[aq]\ +\ chunk);
+\ \ });
+});
+
+//\ write\ data\ to\ request\ body
+req.write(\[aq]data\\n\[aq]);
+req.write(\[aq]data\\n\[aq]);
+req.end();
+\f[]
+.fi
+.PP
+Note that in the example \f[C]req.end()\f[] was called.
+With \f[C]http.request()\f[] one must always call \f[C]req.end()\f[] to
+signify that you're done with the request - even if there is no data
+being written to the request body.
+.PP
+If any error is encountered during the request (be that with DNS
+resolution, TCP level errors, or actual HTTP parse errors) an
+\f[C]\[aq]error\[aq]\f[] event is emitted on the returned request
+object.
+.PP
+There are a few special headers that should be noted.
+.IP \[bu] 2
+Sending a `Connection: keep-alive' will notify Node that the connection
+to the server should be persisted until the next request.
+.IP \[bu] 2
+Sending a `Content-length' header will disable the default chunked
+encoding.
+.IP \[bu] 2
+Sending an `Expect' header will immediately send the request headers.
+Usually, when sending `Expect: 100-continue', you should both set a
+timeout and listen for the \f[C]continue\f[] event.
+See RFC2616 Section 8.2.3 for more information.
+.SS http.get(options, callback)
+.PP
+Since most requests are GET requests without bodies, Node provides this
+convenience method.
+The only difference between this method and \f[C]http.request()\f[] is
+that it sets the method to GET and calls \f[C]req.end()\f[]
+automatically.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ options\ =\ {
+\ \ host:\ \[aq]www.google.com\[aq],
+\ \ port:\ 80,
+\ \ path:\ \[aq]/index.html\[aq]
+};
+
+http.get(options,\ function(res)\ {
+\ \ console.log("Got\ response:\ "\ +\ res.statusCode);
+}).on(\[aq]error\[aq],\ function(e)\ {
+\ \ console.log("Got\ error:\ "\ +\ e.message);
+});
+\f[]
+.fi
+.SS http.Agent
+.SS http.getAgent(host, port)
+.PP
+\f[C]http.request()\f[] uses a special \f[C]Agent\f[] for managing
+multiple connections to an HTTP server.
+Normally \f[C]Agent\f[] instances should not be exposed to user code,
+however in certain situations it's useful to check the status of the
+agent.
+The \f[C]http.getAgent()\f[] function allows you to access the agents.
+.SS Event: `upgrade'
+.PP
+\f[C]function\ (request,\ socket,\ head)\f[]
+.PP
+Emitted each time a server responds to a request with an upgrade.
+If this event isn't being listened for, clients receiving an upgrade
+header will have their connections closed.
+.PP
+See the description of the \f[C]upgrade\f[] event for
+\f[C]http.Server\f[] for further details.
+.SS Event: `continue'
+.PP
+\f[C]function\ ()\f[]
+.PP
+Emitted when the server sends a `100 Continue' HTTP response, usually
+because the request contained `Expect: 100-continue'.
+This is an instruction that the client should send the request body.
+.SS agent.maxSockets
+.PP
+By default set to 5.
+Determines how many concurrent sockets the agent can have open.
+.SS agent.sockets
+.PP
+An array of sockets currently in use by the Agent.
+Do not modify.
+.SS agent.queue
+.PP
+A queue of requests waiting to be sent to sockets.
+.SS http.ClientRequest
+.PP
+This object is created internally and returned from
+\f[C]http.request()\f[].
+It represents an \f[I]in-progress\f[] request whose header has already
+been queued.
+The header is still mutable using the \f[C]setHeader(name,\ value)\f[],
+\f[C]getHeader(name)\f[], \f[C]removeHeader(name)\f[] API.
+The actual header will be sent along with the first data chunk or when
+closing the connection.
+.PP
+To get the response, add a listener for \f[C]\[aq]response\[aq]\f[] to
+the request object.
+\f[C]\[aq]response\[aq]\f[] will be emitted from the request object when
+the response headers have been received.
+The \f[C]\[aq]response\[aq]\f[] event is executed with one argument
+which is an instance of \f[C]http.ClientResponse\f[].
+.PP
+During the \f[C]\[aq]response\[aq]\f[] event, one can add listeners to
+the response object; particularly to listen for the
+\f[C]\[aq]data\[aq]\f[] event.
+Note that the \f[C]\[aq]response\[aq]\f[] event is called before any
+part of the response body is received, so there is no need to worry
+about racing to catch the first part of the body.
+As long as a listener for \f[C]\[aq]data\[aq]\f[] is added during the
+\f[C]\[aq]response\[aq]\f[] event, the entire body will be caught.
+.IP
+.nf
+\f[C]
+//\ Good
+request.on(\[aq]response\[aq],\ function\ (response)\ {
+\ \ response.on(\[aq]data\[aq],\ function\ (chunk)\ {
+\ \ \ \ console.log(\[aq]BODY:\ \[aq]\ +\ chunk);
+\ \ });
+});
+
+//\ Bad\ -\ misses\ all\ or\ part\ of\ the\ body
+request.on(\[aq]response\[aq],\ function\ (response)\ {
+\ \ setTimeout(function\ ()\ {
+\ \ \ \ response.on(\[aq]data\[aq],\ function\ (chunk)\ {
+\ \ \ \ \ \ console.log(\[aq]BODY:\ \[aq]\ +\ chunk);
+\ \ \ \ });
+\ \ },\ 10);
+});
+\f[]
+.fi
+.PP
+This is a \f[C]Writable\ Stream\f[].
+.PP
+This is an \f[C]EventEmitter\f[] with the following events:
+.SS Event `response'
+.PP
+\f[C]function\ (response)\ {\ }\f[]
+.PP
+Emitted when a response is received to this request.
+This event is emitted only once.
+The \f[C]response\f[] argument will be an instance of
+\f[C]http.ClientResponse\f[].
+.SS request.write(chunk, encoding=`utf8')
+.PP
+Sends a chunk of the body.
+By calling this method many times, the user can stream a request body to
+a server\[em]in that case it is suggested to use the
+\f[C][\[aq]Transfer-Encoding\[aq],\ \[aq]chunked\[aq]]\f[] header line
+when creating the request.
+.PP
+The \f[C]chunk\f[] argument should be an array of integers or a string.
+.PP
+The \f[C]encoding\f[] argument is optional and only applies when
+\f[C]chunk\f[] is a string.
+.SS request.end([data], [encoding])
+.PP
+Finishes sending the request.
+If any parts of the body are unsent, it will flush them to the stream.
+If the request is chunked, this will send the terminating
+\f[C]\[aq]0\\r\\n\\r\\n\[aq]\f[].
+.PP
+If \f[C]data\f[] is specified, it is equivalent to calling
+\f[C]request.write(data,\ encoding)\f[] followed by
+\f[C]request.end()\f[].
+.SS request.abort()
+.PP
+Aborts a request.
+(New since v0.3.8.)
+.SS http.ClientResponse
+.PP
+This object is created when making a request with
+\f[C]http.request()\f[].
+It is passed to the \f[C]\[aq]response\[aq]\f[] event of the request
+object.
+.PP
+The response implements the \f[C]Readable\ Stream\f[] interface.
+.SS Event: `data'
+.PP
+\f[C]function\ (chunk)\ {}\f[]
+.PP
+Emitted when a piece of the message body is received.
+.SS Event: `end'
+.PP
+\f[C]function\ ()\ {}\f[]
+.PP
+Emitted exactly once for each message.
+No arguments.
+After emitted no other events will be emitted on the response.
+.SS response.statusCode
+.PP
+The 3-digit HTTP response status code.
+E.G.
+\f[C]404\f[].
+.SS response.httpVersion
+.PP
+The HTTP version of the connected-to server.
+Probably either \f[C]\[aq]1.1\[aq]\f[] or \f[C]\[aq]1.0\[aq]\f[].
+Also \f[C]response.httpVersionMajor\f[] is the first integer and
+\f[C]response.httpVersionMinor\f[] is the second.
+.SS response.headers
+.PP
+The response headers object.
+.SS response.trailers
+.PP
+The response trailers object.
+Only populated after the `end' event.
+.SS response.setEncoding(encoding=null)
+.PP
+Set the encoding for the response body.
+Either \f[C]\[aq]utf8\[aq]\f[], \f[C]\[aq]ascii\[aq]\f[], or
+\f[C]\[aq]base64\[aq]\f[].
+Defaults to \f[C]null\f[], which means that the \f[C]\[aq]data\[aq]\f[]
+event will emit a \f[C]Buffer\f[] object..
+.SS response.pause()
+.PP
+Pauses response from emitting events.
+Useful to throttle back a download.
+.SS response.resume()
+.PP
+Resumes a paused response.
+.SS HTTPS
+.PP
+HTTPS is the HTTP protocol over TLS/SSL.
+In Node this is implemented as a separate module.
+.SS https.Server
+.SS https.createServer
+.PP
+Example:
+.IP
+.nf
+\f[C]
+//\ curl\ -k\ https://localhost:8000/
+var\ https\ =\ require(\[aq]https\[aq]);
+var\ fs\ =\ require(\[aq]fs\[aq]);
+
+var\ options\ =\ {
+\ \ key:\ fs.readFileSync(\[aq]test/fixtures/keys/agent2-key.pem\[aq]),
+\ \ cert:\ fs.readFileSync(\[aq]test/fixtures/keys/agent2-cert.pem\[aq])
+};
+
+https.createServer(options,\ function\ (req,\ res)\ {
+\ \ res.writeHead(200);
+\ \ res.end("hello\ world\\n");
+}).listen(8000);
+\f[]
+.fi
+.SS https.request(options, callback)
+.PP
+Makes a request to a secure web server.
+Similar options to \f[C]http.request()\f[].
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ https\ =\ require(\[aq]https\[aq]);
+
+var\ options\ =\ {
+\ \ host:\ \[aq]encrypted.google.com\[aq],
+\ \ port:\ 443,
+\ \ path:\ \[aq]/\[aq],
+\ \ method:\ \[aq]GET\[aq]
+};
+
+var\ req\ =\ https.request(options,\ function(res)\ {
+\ \ console.log("statusCode:\ ",\ res.statusCode);
+\ \ console.log("headers:\ ",\ res.headers);
+
+\ \ res.on(\[aq]data\[aq],\ function(d)\ {
+\ \ \ \ process.stdout.write(d);
+\ \ });
+});
+req.end();
+
+req.on(\[aq]error\[aq],\ function(e)\ {
+\ \ console.error(e);
+});
+\f[]
+.fi
+.SS https.get(options, callback)
+.PP
+Like \f[C]http.get()\f[] but for HTTPS.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ https\ =\ require(\[aq]https\[aq]);
+
+https.get({\ host:\ \[aq]encrypted.google.com\[aq],\ path:\ \[aq]/\[aq]\ },\ function(res)\ {
+\ \ console.log("statusCode:\ ",\ res.statusCode);
+\ \ console.log("headers:\ ",\ res.headers);
+
+\ \ res.on(\[aq]data\[aq],\ function(d)\ {
+\ \ \ \ process.stdout.write(d);
+\ \ });
+
+}).on(\[aq]error\[aq],\ function(e)\ {
+\ \ console.error(e);
+});
+\f[]
+.fi
+.SS URL
+.PP
+This module has utilities for URL resolution and parsing.
+Call \f[C]require(\[aq]url\[aq])\f[] to use it.
+.PP
+Parsed URL objects have some or all of the following fields, depending
+on whether or not they exist in the URL string.
+Any parts that are not in the URL string will not be in the parsed
+object.
+Examples are shown for the URL
+.PP
+\f[C]\[aq]http://user:pass\@host.com:8080/p/a/t/h?query=string#hash\[aq]\f[]
+.IP \[bu] 2
+\f[C]href\f[]: The full URL that was originally parsed.
+.PP
+Example:
+\f[C]\[aq]http://user:pass\@host.com:8080/p/a/t/h?query=string#hash\[aq]\f[]
+* \f[C]protocol\f[]: The request protocol.
+.PP
+Example: \f[C]\[aq]http:\[aq]\f[] * \f[C]host\f[]: The full host portion
+of the URL, including port and authentication information.
+.PP
+Example: \f[C]\[aq]user:pass\@host.com:8080\[aq]\f[] * \f[C]auth\f[]:
+The authentication information portion of a URL.
+.PP
+Example: \f[C]\[aq]user:pass\[aq]\f[] * \f[C]hostname\f[]: Just the
+hostname portion of the host.
+.PP
+Example: \f[C]\[aq]host.com\[aq]\f[] * \f[C]port\f[]: The port number
+portion of the host.
+.PP
+Example: \f[C]\[aq]8080\[aq]\f[] * \f[C]pathname\f[]: The path section
+of the URL, that comes after the host and before the query, including
+the initial slash if present.
+.PP
+Example: \f[C]\[aq]/p/a/t/h\[aq]\f[] * \f[C]search\f[]: The `query
+string' portion of the URL, including the leading question mark.
+.PP
+Example: \f[C]\[aq]?query=string\[aq]\f[] * \f[C]query\f[]: Either the
+`params' portion of the query string, or a querystring-parsed object.
+.PP
+Example: \f[C]\[aq]query=string\[aq]\f[] or
+\f[C]{\[aq]query\[aq]:\[aq]string\[aq]}\f[] * \f[C]hash\f[]: The
+`fragment' portion of the URL including the pound-sign.
+.PP
+Example: \f[C]\[aq]#hash\[aq]\f[]
+.PP
+The following methods are provided by the URL module:
+.SS url.parse(urlStr, parseQueryString=false)
+.PP
+Take a URL string, and return an object.
+Pass \f[C]true\f[] as the second argument to also parse the query string
+using the \f[C]querystring\f[] module.
+.SS url.format(urlObj)
+.PP
+Take a parsed URL object, and return a formatted URL string.
+.SS url.resolve(from, to)
+.PP
+Take a base URL, and a href URL, and resolve them as a browser would for
+an anchor tag.
+.SS Query String
+.PP
+This module provides utilities for dealing with query strings.
+It provides the following methods:
+.SS querystring.stringify(obj, sep=`&', eq=`=')
+.PP
+Serialize an object to a query string.
+Optionally override the default separator and assignment characters.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+querystring.stringify({foo:\ \[aq]bar\[aq]})
+//\ returns
+\[aq]foo=bar\[aq]
+
+querystring.stringify({foo:\ \[aq]bar\[aq],\ baz:\ \[aq]bob\[aq]},\ \[aq];\[aq],\ \[aq]:\[aq])
+//\ returns
+\[aq]foo:bar;baz:bob\[aq]
+\f[]
+.fi
+.SS querystring.parse(str, sep=`&', eq=`=')
+.PP
+Deserialize a query string to an object.
+Optionally override the default separator and assignment characters.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+querystring.parse(\[aq]a=b&b=c\[aq])
+//\ returns
+{\ a:\ \[aq]b\[aq],\ b:\ \[aq]c\[aq]\ }
+\f[]
+.fi
+.SS querystring.escape
+.PP
+The escape function used by \f[C]querystring.stringify\f[], provided so
+that it could be overridden if necessary.
+.SS querystring.unescape
+.PP
+The unescape function used by \f[C]querystring.parse\f[], provided so
+that it could be overridden if necessary.
+.SS REPL
+.PP
+A Read-Eval-Print-Loop (REPL) is available both as a standalone program
+and easily includable in other programs.
+REPL provides a way to interactively run JavaScript and see the results.
+It can be used for debugging, testing, or just trying things out.
+.PP
+By executing \f[C]node\f[] without any arguments from the command-line
+you will be dropped into the REPL.
+It has simplistic emacs line-editing.
+.IP
+.nf
+\f[C]
+mjr:~$\ node
+Type\ \[aq].help\[aq]\ for\ options.
+>\ a\ =\ [\ 1,\ 2,\ 3];
+[\ 1,\ 2,\ 3\ ]
+>\ a.forEach(function\ (v)\ {
+...\ \ \ console.log(v);
+...\ \ \ });
+1
+2
+3
+\f[]
+.fi
+.PP
+For advanced line-editors, start node with the environmental variable
+\f[C]NODE_NO_READLINE=1\f[].
+This will start the REPL in canonical terminal settings which will allow
+you to use with \f[C]rlwrap\f[].
+.PP
+For example, you could add this to your bashrc file:
+.IP
+.nf
+\f[C]
+alias\ node="env\ NODE_NO_READLINE=1\ rlwrap\ node"
+\f[]
+.fi
+.SS repl.start(prompt=`>', stream=process.stdin)
+.PP
+Starts a REPL with \f[C]prompt\f[] as the prompt and \f[C]stream\f[] for
+all I/O.
+\f[C]prompt\f[] is optional and defaults to \f[C]>\f[].
+\f[C]stream\f[] is optional and defaults to \f[C]process.stdin\f[].
+.PP
+Multiple REPLs may be started against the same running instance of node.
+Each will share the same global object but will have unique I/O.
+.PP
+Here is an example that starts a REPL on stdin, a Unix socket, and a TCP
+socket:
+.IP
+.nf
+\f[C]
+var\ net\ =\ require("net"),
+\ \ \ \ repl\ =\ require("repl");
+
+connections\ =\ 0;
+
+repl.start("node\ via\ stdin>\ ");
+
+net.createServer(function\ (socket)\ {
+\ \ connections\ +=\ 1;
+\ \ repl.start("node\ via\ Unix\ socket>\ ",\ socket);
+}).listen("/tmp/node-repl-sock");
+
+net.createServer(function\ (socket)\ {
+\ \ connections\ +=\ 1;
+\ \ repl.start("node\ via\ TCP\ socket>\ ",\ socket);
+}).listen(5001);
+\f[]
+.fi
+.PP
+Running this program from the command line will start a REPL on stdin.
+Other REPL clients may connect through the Unix socket or TCP socket.
+\f[C]telnet\f[] is useful for connecting to TCP sockets, and
+\f[C]socat\f[] can be used to connect to both Unix and TCP sockets.
+.PP
+By starting a REPL from a Unix socket-based server instead of stdin, you
+can connect to a long-running node process without restarting it.
+.SS REPL Features
+.PP
+Inside the REPL, Control+D will exit.
+Multi-line expressions can be input.
+.PP
+The special variable \f[C]_\f[] (underscore) contains the result of the
+last expression.
+.IP
+.nf
+\f[C]
+>\ [\ "a",\ "b",\ "c"\ ]
+[\ \[aq]a\[aq],\ \[aq]b\[aq],\ \[aq]c\[aq]\ ]
+>\ _.length
+3
+>\ _\ +=\ 1
+4
+\f[]
+.fi
+.PP
+The REPL provides access to any variables in the global scope.
+You can expose a variable to the REPL explicitly by assigning it to the
+\f[C]context\f[] object associated with each \f[C]REPLServer\f[].
+For example:
+.IP
+.nf
+\f[C]
+//\ repl_test.js
+var\ repl\ =\ require("repl"),
+\ \ \ \ msg\ =\ "message";
+
+repl.start().context.m\ =\ msg;
+\f[]
+.fi
+.PP
+Things in the \f[C]context\f[] object appear as local within the REPL:
+.IP
+.nf
+\f[C]
+mjr:~$\ node\ repl_test.js
+>\ m
+\[aq]message\[aq]
+\f[]
+.fi
+.PP
+There are a few special REPL commands:
+.IP \[bu] 2
+\f[C].break\f[] - While inputting a multi-line expression, sometimes you
+get lost or just don't care about completing it.
+\f[C].break\f[] will start over.
+.IP \[bu] 2
+\f[C].clear\f[] - Resets the \f[C]context\f[] object to an empty object
+and clears any multi-line expression.
+.IP \[bu] 2
+\f[C].exit\f[] - Close the I/O stream, which will cause the REPL to
+exit.
+.IP \[bu] 2
+\f[C].help\f[] - Show this list of special commands.
+.SS Child Processes
+.PP
+Node provides a tri-directional \f[C]popen(3)\f[] facility through the
+\f[C]ChildProcess\f[] class.
+.PP
+It is possible to stream data through the child's \f[C]stdin\f[],
+\f[C]stdout\f[], and \f[C]stderr\f[] in a fully non-blocking way.
+.PP
+To create a child process use
+\f[C]require(\[aq]child_process\[aq]).spawn()\f[].
+.PP
+Child processes always have three streams associated with them.
+\f[C]child.stdin\f[], \f[C]child.stdout\f[], and \f[C]child.stderr\f[].
+.PP
+\f[C]ChildProcess\f[] is an \f[C]EventEmitter\f[].
+.SS Event: `exit'
+.PP
+\f[C]function\ (code,\ signal)\ {}\f[]
+.PP
+This event is emitted after the child process ends.
+If the process terminated normally, \f[C]code\f[] is the final exit code
+of the process, otherwise \f[C]null\f[].
+If the process terminated due to receipt of a signal, \f[C]signal\f[] is
+the string name of the signal, otherwise \f[C]null\f[].
+.PP
+See \f[C]waitpid(2)\f[].
+.SS child.stdin
+.PP
+A \f[C]Writable\ Stream\f[] that represents the child process's
+\f[C]stdin\f[].
+Closing this stream via \f[C]end()\f[] often causes the child process to
+terminate.
+.SS child.stdout
+.PP
+A \f[C]Readable\ Stream\f[] that represents the child process's
+\f[C]stdout\f[].
+.SS child.stderr
+.PP
+A \f[C]Readable\ Stream\f[] that represents the child process's
+\f[C]stderr\f[].
+.SS child.pid
+.PP
+The PID of the child process.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ spawn\ =\ require(\[aq]child_process\[aq]).spawn,
+\ \ \ \ grep\ \ =\ spawn(\[aq]grep\[aq],\ [\[aq]ssh\[aq]]);
+
+console.log(\[aq]Spawned\ child\ pid:\ \[aq]\ +\ grep.pid);
+grep.stdin.end();
+\f[]
+.fi
+.SS child_process.spawn(command, args=[], [options])
+.PP
+Launches a new process with the given \f[C]command\f[], with command
+line arguments in \f[C]args\f[].
+If omitted, \f[C]args\f[] defaults to an empty Array.
+.PP
+The third argument is used to specify additional options, which defaults
+to:
+.IP
+.nf
+\f[C]
+{\ cwd:\ undefined,
+\ \ env:\ process.env,
+\ \ customFds:\ [-1,\ -1,\ -1],
+\ \ setsid:\ false
+}
+\f[]
+.fi
+.PP
+\f[C]cwd\f[] allows you to specify the working directory from which the
+process is spawned.
+Use \f[C]env\f[] to specify environment variables that will be visible
+to the new process.
+With \f[C]customFds\f[] it is possible to hook up the new process'
+[stdin, stout, stderr] to existing streams; \f[C]-1\f[] means that a new
+stream should be created.
+\f[C]setsid\f[], if set true, will cause the subprocess to be run in a
+new session.
+.PP
+Example of running \f[C]ls\ -lh\ /usr\f[], capturing \f[C]stdout\f[],
+\f[C]stderr\f[], and the exit code:
+.IP
+.nf
+\f[C]
+var\ util\ \ \ =\ require(\[aq]util\[aq]),
+\ \ \ \ spawn\ =\ require(\[aq]child_process\[aq]).spawn,
+\ \ \ \ ls\ \ \ \ =\ spawn(\[aq]ls\[aq],\ [\[aq]-lh\[aq],\ \[aq]/usr\[aq]]);
+
+ls.stdout.on(\[aq]data\[aq],\ function\ (data)\ {
+\ \ console.log(\[aq]stdout:\ \[aq]\ +\ data);
+});
+
+ls.stderr.on(\[aq]data\[aq],\ function\ (data)\ {
+\ \ console.log(\[aq]stderr:\ \[aq]\ +\ data);
+});
+
+ls.on(\[aq]exit\[aq],\ function\ (code)\ {
+\ \ console.log(\[aq]child\ process\ exited\ with\ code\ \[aq]\ +\ code);
+});
+\f[]
+.fi
+.PP
+Example: A very elaborate way to run `ps ax | grep ssh'
+.IP
+.nf
+\f[C]
+var\ util\ \ \ =\ require(\[aq]util\[aq]),
+\ \ \ \ spawn\ =\ require(\[aq]child_process\[aq]).spawn,
+\ \ \ \ ps\ \ \ \ =\ spawn(\[aq]ps\[aq],\ [\[aq]ax\[aq]]),
+\ \ \ \ grep\ \ =\ spawn(\[aq]grep\[aq],\ [\[aq]ssh\[aq]]);
+
+ps.stdout.on(\[aq]data\[aq],\ function\ (data)\ {
+\ \ grep.stdin.write(data);
+});
+
+ps.stderr.on(\[aq]data\[aq],\ function\ (data)\ {
+\ \ console.log(\[aq]ps\ stderr:\ \[aq]\ +\ data);
+});
+
+ps.on(\[aq]exit\[aq],\ function\ (code)\ {
+\ \ if\ (code\ !==\ 0)\ {
+\ \ \ \ console.log(\[aq]ps\ process\ exited\ with\ code\ \[aq]\ +\ code);
+\ \ }
+\ \ grep.stdin.end();
+});
+
+grep.stdout.on(\[aq]data\[aq],\ function\ (data)\ {
+\ \ console.log(data);
+});
+
+grep.stderr.on(\[aq]data\[aq],\ function\ (data)\ {
+\ \ console.log(\[aq]grep\ stderr:\ \[aq]\ +\ data);
+});
+
+grep.on(\[aq]exit\[aq],\ function\ (code)\ {
+\ \ if\ (code\ !==\ 0)\ {
+\ \ \ \ console.log(\[aq]grep\ process\ exited\ with\ code\ \[aq]\ +\ code);
+\ \ }
+});
+\f[]
+.fi
+.PP
+Example of checking for failed exec:
+.IP
+.nf
+\f[C]
+var\ spawn\ =\ require(\[aq]child_process\[aq]).spawn,
+\ \ \ \ child\ =\ spawn(\[aq]bad_command\[aq]);
+
+child.stderr.on(\[aq]data\[aq],\ function\ (data)\ {
+\ \ if\ (/^execvp\\(\\)/.test(data.asciiSlice(0,data.length)))\ {
+\ \ \ \ console.log(\[aq]Failed\ to\ start\ child\ process.\[aq]);
+\ \ }
+});
+\f[]
+.fi
+.PP
+See also: \f[C]child_process.exec()\f[]
+.SS child_process.exec(command, [options], callback)
+.PP
+High-level way to execute a command as a child process, buffer the
+output, and return it all in a callback.
+.IP
+.nf
+\f[C]
+var\ util\ \ \ =\ require(\[aq]util\[aq]),
+\ \ \ \ exec\ \ =\ require(\[aq]child_process\[aq]).exec,
+\ \ \ \ child;
+
+child\ =\ exec(\[aq]cat\ *.js\ bad_file\ |\ wc\ -l\[aq],
+\ \ function\ (error,\ stdout,\ stderr)\ {
+\ \ \ \ console.log(\[aq]stdout:\ \[aq]\ +\ stdout);
+\ \ \ \ console.log(\[aq]stderr:\ \[aq]\ +\ stderr);
+\ \ \ \ if\ (error\ !==\ null)\ {
+\ \ \ \ \ \ console.log(\[aq]exec\ error:\ \[aq]\ +\ error);
+\ \ \ \ }
+});
+\f[]
+.fi
+.PP
+The callback gets the arguments \f[C](error,\ stdout,\ stderr)\f[].
+On success, \f[C]error\f[] will be \f[C]null\f[].
+On error, \f[C]error\f[] will be an instance of \f[C]Error\f[] and
+\f[C]err.code\f[] will be the exit code of the child process, and
+\f[C]err.signal\f[] will be set to the signal that terminated the
+process.
+.PP
+There is a second optional argument to specify several options.
+The default options are
+.IP
+.nf
+\f[C]
+{\ encoding:\ \[aq]utf8\[aq],
+\ \ timeout:\ 0,
+\ \ maxBuffer:\ 200*1024,
+\ \ killSignal:\ \[aq]SIGTERM\[aq],
+\ \ cwd:\ null,
+\ \ env:\ null\ }
+\f[]
+.fi
+.PP
+If \f[C]timeout\f[] is greater than 0, then it will kill the child
+process if it runs longer than \f[C]timeout\f[] milliseconds.
+The child process is killed with \f[C]killSignal\f[] (default:
+\f[C]\[aq]SIGTERM\[aq]\f[]).
+\f[C]maxBuffer\f[] specifies the largest amount of data allowed on
+stdout or stderr - if this value is exceeded then the child process is
+killed.
+.SS child.kill(signal=`SIGTERM')
+.PP
+Send a signal to the child process.
+If no argument is given, the process will be sent
+\f[C]\[aq]SIGTERM\[aq]\f[].
+See \f[C]signal(7)\f[] for a list of available signals.
+.IP
+.nf
+\f[C]
+var\ spawn\ =\ require(\[aq]child_process\[aq]).spawn,
+\ \ \ \ grep\ \ =\ spawn(\[aq]grep\[aq],\ [\[aq]ssh\[aq]]);
+
+grep.on(\[aq]exit\[aq],\ function\ (code,\ signal)\ {
+\ \ console.log(\[aq]child\ process\ terminated\ due\ to\ receipt\ of\ signal\ \[aq]+signal);
+});
+
+//\ send\ SIGHUP\ to\ process
+grep.kill(\[aq]SIGHUP\[aq]);
+\f[]
+.fi
+.PP
+Note that while the function is called \f[C]kill\f[], the signal
+delivered to the child process may not actually kill it.
+\f[C]kill\f[] really just sends a signal to a process.
+.PP
+See \f[C]kill(2)\f[]
+.SS Assert
+.PP
+This module is used for writing unit tests for your applications, you
+can access it with \f[C]require(\[aq]assert\[aq])\f[].
+.SS assert.fail(actual, expected, message, operator)
+.PP
+Tests if \f[C]actual\f[] is equal to \f[C]expected\f[] using the
+operator provided.
+.SS assert.ok(value, [message])
+.PP
+Tests if value is a \f[C]true\f[] value, it is equivalent to
+\f[C]assert.equal(true,\ value,\ message);\f[]
+.SS assert.equal(actual, expected, [message])
+.PP
+Tests shallow, coercive equality with the equal comparison operator (
+\f[C]==\f[] ).
+.SS assert.notEqual(actual, expected, [message])
+.PP
+Tests shallow, coercive non-equality with the not equal comparison
+operator ( \f[C]!=\f[] ).
+.SS assert.deepEqual(actual, expected, [message])
+.PP
+Tests for deep equality.
+.SS assert.notDeepEqual(actual, expected, [message])
+.PP
+Tests for any deep inequality.
+.SS assert.strictEqual(actual, expected, [message])
+.PP
+Tests strict equality, as determined by the strict equality operator (
+\f[C]===\f[] )
+.SS assert.notStrictEqual(actual, expected, [message])
+.PP
+Tests strict non-equality, as determined by the strict not equal
+operator ( \f[C]!==\f[] )
+.SS assert.throws(block, [error], [message])
+.PP
+Expects \f[C]block\f[] to throw an error.
+\f[C]error\f[] can be constructor, regexp or validation function.
+.PP
+Validate instanceof using constructor:
+.IP
+.nf
+\f[C]
+assert.throws(
+\ \ function()\ {
+\ \ \ \ throw\ new\ Error("Wrong\ value");
+\ \ },
+\ \ Error
+);
+\f[]
+.fi
+.PP
+Validate error message using RegExp:
+.IP
+.nf
+\f[C]
+assert.throws(
+\ \ function()\ {
+\ \ \ \ throw\ new\ Error("Wrong\ value");
+\ \ },
+\ \ /value/
+);
+\f[]
+.fi
+.PP
+Custom error validation:
+.IP
+.nf
+\f[C]
+assert.throws(
+\ \ function()\ {
+\ \ \ \ throw\ new\ Error("Wrong\ value");
+\ \ },
+\ \ function(err)\ {
+\ \ \ \ if\ (\ (err\ instanceof\ Error)\ &&\ /value/.test(err)\ )\ {
+\ \ \ \ \ \ return\ true;
+\ \ \ \ }
+\ \ },
+\ \ "unexpected\ error"
+);
+\f[]
+.fi
+.SS assert.doesNotThrow(block, [error], [message])
+.PP
+Expects \f[C]block\f[] not to throw an error, see assert.throws for
+details.
+.SS assert.ifError(value)
+.PP
+Tests if value is not a false value, throws if it is a true value.
+Useful when testing the first argument, \f[C]error\f[] in callbacks.
+.SS TTY
+.PP
+Use \f[C]require(\[aq]tty\[aq])\f[] to access this module.
+.PP
+Example:
+.IP
+.nf
+\f[C]
+var\ tty\ =\ require(\[aq]tty\[aq]);
+tty.setRawMode(true);
+process.stdin.resume();
+process.stdin.on(\[aq]keypress\[aq],\ function(char,\ key)\ {
+\ \ if\ (key\ &&\ key.ctrl\ &&\ key.name\ ==\ \[aq]c\[aq])\ {
+\ \ \ \ console.log(\[aq]graceful\ exit\[aq]);
+\ \ \ \ process.exit()
+\ \ }
+});
+\f[]
+.fi
+.SS tty.open(path, args=[])
+.PP
+Spawns a new process with the executable pointed to by \f[C]path\f[] as
+the session leader to a new pseudo terminal.
+.PP
+Returns an array \f[C][slaveFD,\ childProcess]\f[].
+\f[C]slaveFD\f[] is the file descriptor of the slave end of the pseudo
+terminal.
+\f[C]childProcess\f[] is a child process object.
+.SS tty.isatty(fd)
+.PP
+Returns \f[C]true\f[] or \f[C]false\f[] depending on if the \f[C]fd\f[]
+is associated with a terminal.
+.SS tty.setRawMode(mode)
+.PP
+\f[C]mode\f[] should be \f[C]true\f[] or \f[C]false\f[].
+This sets the properties of the current process's stdin fd to act either
+as a raw device or default.
+.SS tty.setWindowSize(fd, row, col)
+.PP
+\f[C]ioctl\f[]s the window size settings to the file descriptor.
+.SS tty.getWindowSize(fd)
+.PP
+Returns \f[C][row,\ col]\f[] for the TTY associated with the file
+descriptor.
+.SS os Module
+.PP
+Use \f[C]require(\[aq]os\[aq])\f[] to access this module.
+.SS os.hostname()
+.PP
+Returns the hostname of the operating system.
+.SS os.type()
+.PP
+Returns the operating system name.
+.SS os.release()
+.PP
+Returns the operating system release.
+.SS os.uptime()
+.PP
+Returns the system uptime in seconds.
+.SS os.loadavg()
+.PP
+Returns an array containing the 1, 5, and 15 minute load averages.
+.SS os.totalmem()
+.PP
+Returns the total amount of system memory in bytes.
+.SS os.freemem()
+.PP
+Returns the amount of free system memory in bytes.
+.SS os.cpus()
+.PP
+Returns an array of objects containing information about each CPU/core
+installed: model, speed (in MHz), and times (an object containing the
+number of CPU ticks spent in: user, nice, sys, idle, and irq).
+.PP
+Example inspection of os.cpus:
+.IP
+.nf
+\f[C]
+[\ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 252020,
+\ \ \ \ \ \ \ nice:\ 0,
+\ \ \ \ \ \ \ sys:\ 30340,
+\ \ \ \ \ \ \ idle:\ 1070356870,
+\ \ \ \ \ \ \ irq:\ 0\ }\ },
+\ \ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 306960,
+\ \ \ \ \ \ \ nice:\ 0,
+\ \ \ \ \ \ \ sys:\ 26980,
+\ \ \ \ \ \ \ idle:\ 1071569080,
+\ \ \ \ \ \ \ irq:\ 0\ }\ },
+\ \ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 248450,
+\ \ \ \ \ \ \ nice:\ 0,
+\ \ \ \ \ \ \ sys:\ 21750,
+\ \ \ \ \ \ \ idle:\ 1070919370,
+\ \ \ \ \ \ \ irq:\ 0\ }\ },
+\ \ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 256880,
+\ \ \ \ \ \ \ nice:\ 0,
+\ \ \ \ \ \ \ sys:\ 19430,
+\ \ \ \ \ \ \ idle:\ 1070905480,
+\ \ \ \ \ \ \ irq:\ 20\ }\ },
+\ \ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 511580,
+\ \ \ \ \ \ \ nice:\ 20,
+\ \ \ \ \ \ \ sys:\ 40900,
+\ \ \ \ \ \ \ idle:\ 1070842510,
+\ \ \ \ \ \ \ irq:\ 0\ }\ },
+\ \ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 291660,
+\ \ \ \ \ \ \ nice:\ 0,
+\ \ \ \ \ \ \ sys:\ 34360,
+\ \ \ \ \ \ \ idle:\ 1070888000,
+\ \ \ \ \ \ \ irq:\ 10\ }\ },
+\ \ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 308260,
+\ \ \ \ \ \ \ nice:\ 0,
+\ \ \ \ \ \ \ sys:\ 55410,
+\ \ \ \ \ \ \ idle:\ 1071129970,
+\ \ \ \ \ \ \ irq:\ 880\ }\ },
+\ \ {\ model:\ \[aq]Intel(R)\ Core(TM)\ i7\ CPU\ \ \ \ \ \ \ \ \ 860\ \ \@\ 2.80GHz\[aq],
+\ \ \ \ speed:\ 2926,
+\ \ \ \ times:
+\ \ \ \ \ {\ user:\ 266450,
+\ \ \ \ \ \ \ nice:\ 1480,
+\ \ \ \ \ \ \ sys:\ 34920,
+\ \ \ \ \ \ \ idle:\ 1072572010,
+\ \ \ \ \ \ \ irq:\ 30\ }\ }\ ]
+\f[]
+.fi
+.SS Debugger
+.PP
+V8 comes with an extensive debugger which is accessible out-of-process
+via a simple TCP
+protocol (http://code.google.com/p/v8/wiki/DebuggerProtocol).
+Node has a built-in client for this debugger.
+To use this, start Node with the \f[C]debug\f[] argument; a prompt will
+appear:
+.IP
+.nf
+\f[C]
+%\ node\ debug\ myscript.js
+debug>
+\f[]
+.fi
+.PP
+At this point \f[C]myscript.js\f[] is not yet running.
+To start the script, enter the command \f[C]run\f[].
+If everything works okay, the output should look like this:
+.IP
+.nf
+\f[C]
+%\ node\ debug\ myscript.js
+debug>\ run
+debugger\ listening\ on\ port\ 5858
+connecting...ok
+\f[]
+.fi
+.PP
+Node's debugger client doesn't support the full range of commands, but
+simple step and inspection is possible.
+By putting the statement \f[C]debugger;\f[] into the source code of your
+script, you will enable a breakpoint.
+.PP
+For example, suppose \f[C]myscript.js\f[] looked like this:
+.IP
+.nf
+\f[C]
+//\ myscript.js
+x\ =\ 5;
+setTimeout(function\ ()\ {
+\ \ debugger;
+\ \ console.log("world");
+},\ 1000);
+console.log("hello");
+\f[]
+.fi
+.PP
+Then once the debugger is run, it will break on line 4.
+.IP
+.nf
+\f[C]
+%\ ./node\ debug\ myscript.js
+debug>\ run
+debugger\ listening\ on\ port\ 5858
+connecting...ok
+hello
+break\ in\ #<an\ Object>._onTimeout(),\ myscript.js:4
+\ \ debugger;
+\ \ ^
+debug>\ next
+break\ in\ #<an\ Object>._onTimeout(),\ myscript.js:5
+\ \ console.log("world");
+\ \ ^
+debug>\ print\ x
+5
+debug>\ print\ 2+2
+4
+debug>\ next
+world
+break\ in\ #<an\ Object>._onTimeout()\ returning\ undefined,\ myscript.js:6
+},\ 1000);
+^
+debug>\ quit
+A\ debugging\ session\ is\ active.\ Quit\ anyway?\ (y\ or\ n)\ y
+%
+\f[]
+.fi
+.PP
+The \f[C]print\f[] command allows you to evaluate variables.
+The \f[C]next\f[] command steps over to the next line.
+There are a few other commands available and more to come type
+\f[C]help\f[] to see others.
+.SS Advanced Usage
+.PP
+The V8 debugger can be enabled and accessed either by starting Node with
+the \f[C]--debug\f[] command-line flag or by signaling an existing Node
+process with \f[C]SIGUSR1\f[].
+.SS Appendix 1 - Third Party Modules
+.PP
+There are many third party modules for Node.
+At the time of writing, August 2010, the master repository of modules is
+the wiki page (http://github.com/joyent/node/wiki/modules).
+.PP
+This appendix is intended as a SMALL guide to new-comers to help them
+quickly find what are considered to be quality modules.
+It is not intended to be a complete list.
+There may be better more complete modules found elsewhere.
+.IP \[bu] 2
+Module Installer: npm (http://github.com/isaacs/npm)
+.IP \[bu] 2
+HTTP Middleware: Connect (http://github.com/senchalabs/connect)
+.IP \[bu] 2
+Web Framework: Express (http://github.com/visionmedia/express)
+.IP \[bu] 2
+Web Sockets: Socket.IO (http://github.com/LearnBoost/Socket.IO-node)
+.IP \[bu] 2
+HTML Parsing: HTML5 (http://github.com/aredridel/html5)
+.IP \[bu] 2
+mDNS/Zeroconf/Bonjour (http://github.com/agnat/node_mdns)
+.IP \[bu] 2
+RabbitMQ, AMQP (http://github.com/joyent/node-amqp)
+.IP \[bu] 2
+mysql (http://github.com/felixge/node-mysql)
+.IP \[bu] 2
+Serialization: msgpack (http://github.com/pgriess/node-msgpack)
+.IP \[bu] 2
+Scraping: Apricot (http://github.com/silentrob/Apricot)
+.IP \[bu] 2
+Debugger: ndb (http://github.com/smtlaissezfaire/ndb) is a CLI debugger
+inspector (http://github.com/dannycoates/node-inspector) is a web based
+tool.
+.IP \[bu] 2
+pcap binding (http://github.com/mranney/node_pcap)
+.IP \[bu] 2
+ncurses (http://github.com/mscdex/node-ncurses)
+.IP \[bu] 2
+Testing/TDD/BDD: vows (http://vowsjs.org/),
+expresso (http://github.com/visionmedia/expresso),
+mjsunit.runner (http://github.com/tmpvar/mjsunit.runner)
+.PP
+Patches to this list are welcome.
