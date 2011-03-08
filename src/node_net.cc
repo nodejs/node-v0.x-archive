@@ -190,7 +190,7 @@ static Handle<Value> Socket(const Arguments& args) {
 
   if (args[0]->IsString()) {
     String::Utf8Value t(args[0]->ToString());
-    // FIXME optimize this cascade.
+    // TCP?
     if (0 == strncasecmp(*t, "TCP", 3)) {
       if (0 == strcasecmp(*t, "TCP")) {
         domain = PF_INET;
@@ -203,8 +203,9 @@ static Handle<Value> Socket(const Arguments& args) {
         type = SOCK_STREAM;
       } else {
         return ThrowException(Exception::Error(
-                  String::New("Unknown socket type.")));
+              String::New("Unknown socket type.")));
       }
+    // UNIX socket?
     } else if (0 == strncasecmp(*t, "UNIX", 4)) {
       if (0 == strcasecmp(*t, "UNIX")) {
         domain = PF_UNIX;
@@ -214,8 +215,9 @@ static Handle<Value> Socket(const Arguments& args) {
         type = SOCK_DGRAM;
       } else {
         return ThrowException(Exception::Error(
-                  String::New("Unknown socket type.")));
+              String::New("Unknown socket type.")));
       }
+    // UDP?
     } else if (0 == strncasecmp(*t, "UDP", 3)) {
       if (0 == strcasecmp(*t, "UDP")) {
         domain = PF_INET;
@@ -228,7 +230,7 @@ static Handle<Value> Socket(const Arguments& args) {
         type = SOCK_DGRAM;
       } else {
         return ThrowException(Exception::Error(
-                  String::New("Unknown socket type.")));
+              String::New("Unknown socket type.")));
       }
 #ifdef SO_REUSEPORT
       set_reuseport = true;
