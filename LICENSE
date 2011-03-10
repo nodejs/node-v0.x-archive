@@ -28,40 +28,41 @@ maintained libraries.
 
 The externally maintained libraries used by Node are:
 
-  - v8, located under deps/v8, which is copyrighted by Google, Inc.
-    v8 has a BSD license.
+  - v8, located at deps/v8. v8 is copyright Google, Inc, and released
+    under a BSD license.
 
-  - libev, located under deps/libev, and libeio, located at deps/libeio. 
-    This code is copyrighted by Marc Alexander Lehmann. Both are dual-
-    licensed under MIT and GPL2.
+  - libev, located at deps/libev, and libeio, located at deps/libeio. libev
+    and libeio are copyright Marc Alexander Lehmann, and dual-licensed
+    under the MIT license and GPL2.
 
-  - WAF build system, located at tools/waf. Copyrighted Thomas Nagy.
-    Released under an MIT license.
+  - WAF build system, located at tools/waf. WAF is copyright Thomas Nagy,
+    and released under the MIT license.
 
-  - The SCONS build system, located at tools/scons. Copyrighted by the SCONS
-    Foundation.  Released under an MIT license.
+  - The SCONS build system, located at tools/scons. SCONS is copyright
+    the SCONS Foundation and released under the MIT license.
 
-  - C-Ares, an asynchronous DNS client, located at deps/c-ares. Copyright by
-    the Massachusetts Institute of Technology; authored by Greg Hudson,
-    Daniel Stenberg and others. Released under an MIT license.
+  - C-Ares, an asynchronous DNS client, located at deps/c-ares. C-Ares is
+    copyright the Massachusetts Institute of Technology, authored by
+    Greg Hudson, Daniel Stenberg and others, and released under the MIT
+    license.
 
   - Node, optionally, dynamically links to OpenSSL, cryptographic software
     written by Eric Young (eay@cryptsoft.com) to provide SSL/TLS encryption.
-    OpenSSL is copyrighted by The OpenSSL Project.  OpenSSL is released under
-    the OpenSSL license. OpenSSL is not included in the Node distribution.
+    OpenSSL is copyright The OpenSSL Project and released under the OpenSSL
+    license. OpenSSL is not included in the Node distribution.
     See http://openssl.org/ for more information.
 
-  - tools/doctool/markdown.js is Released under MIT license and
-    Copyright 2009-2010 Dominic Baggott and Ash Berli
+  - tools/doctool/markdown.js is copyright 2009-2010 Dominic Baggott and Ash
+    Berli and released under the MIT license.
 
   - HTTP Parser, located at deps/http_parser, is a small C library
-    copyrighted by Ryan Lienhart Dahl and has a MIT license.
+    copyright Ryan Lienhart Dahl and released under the MIT license.
 
   - src/platform_darwin_proctitle.cc, has code taken from the Chromium
-    project copyright Google Inc. and released with the BSD license.
+    project copyright Google Inc. and released under a BSD license.
 
-  - tools/closure_linter is copyrighted by The Closure Linter Authors and
-    Google Inc and is released under the Apache License, version 2.0.
+  - tools/closure_linter is copyright The Closure Linter Authors and
+    Google Inc. and released under the Apache License, version 2.0.
 
-  - tools/cpplint.py is copyrighted by Google Inc and is released under the
+  - tools/cpplint.py is copyright Google Inc. and released under a
     BSD license.
