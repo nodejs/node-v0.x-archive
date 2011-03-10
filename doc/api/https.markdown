@@ -36,7 +36,9 @@ Example:
       host: 'encrypted.google.com',
       port: 443,
       path: '/',
-      method: 'GET'
+      method: 'GET',
+      key: fs.readFileSync('path/to/client.key'),
+      cert: fs.readFileSync('path/to/client.crt')
     };
 
     var req = https.request(options, function(res) {
