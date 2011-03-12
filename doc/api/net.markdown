@@ -358,3 +358,6 @@ Returns true if input is a version 4 IP address, otherwise returns false.
 
 Returns true if input is a version 6 IP address, otherwise returns false.
 
+### net.socketpair()
+Returns an array of 2 File Descriptors to matching Unix Domain Sockets.
+(***Only available on linux***)

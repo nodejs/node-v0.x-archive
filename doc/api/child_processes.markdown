@@ -62,12 +62,32 @@ The third argument is used to specify additional options, which defaults to:
       customFds: [-1, -1, -1],
       setsid: false
     }
+#### options
+  - `cwd`: allows you to specify the working directory from which the process is spawned.
+  - `env`: Specify environment variables that will be visible to the new process.
+  - `setsid`: if set true, will cause the subprocess to be run in a new session.
+  - `customFds`: Format: `[stdin, stout, stderr]`. Where each
+  of stdin/stdout/stderr is either an `array`, the string `unix`, `-1`, or
+  a single integer file descriptor.
+  #### values for each of stdin, stdout, and stderr:
+    - If the value is an array like `[4,5]` for stdin,
+  The child process will read from the `5` FD and the `4` fd will be used for
+  child.stdin.
+    - If the value is `-1`, a standard pipe pair will be automatically
+  assigned.
+    - If value is `unix`, a unix domain socket is used as the pair
+  (useful for sending file descriptors to child processes).
+    - If you pass a single integer file descriptor, that FD will be used
+    on the child process, however, the matching end of
+    child.stdin/stdout/stderr will be set to null and must be
+    manually created (for example `child.stdin = new net.Stream(fd)`)
 
-`cwd` allows you to specify the working directory from which the process is spawned.
-Use `env` to specify environment variables that will be visible to the new process.
-With `customFds` it is possible to hook up the new process' [stdin, stout, stderr] to
-existing streams; `-1` means that a new stream should be created. `setsid`,
-if set true, will cause the subprocess to be run in a new session.
+  - Example customFds setup: `['unix', [3, 4], -1]`
+  This would assign a unix domain socket to process.stdin
+  and the childs stdin, then would assign FD 3 to parents child.stdout and
+  the childs stdout would write to FD 4, then finally stderr would get a
+  standard read/write pipe (not capable of sending file descriptors).
+
 
 Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit code:
 
