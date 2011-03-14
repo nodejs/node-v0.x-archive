@@ -1130,10 +1130,6 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
-  if (!val->IsString() && !Buffer::HasInstance(val)) {
-    return -1;
-  }
-
   Local<String> str = val->ToString();
 
   if (encoding == UTF8) return str->Utf8Length();
