@@ -119,3 +119,9 @@ txt += decipher.final('utf8');
 
 assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
 
+
+// update() should only take buffers / strings
+assert.throws(function() {
+  crypto.createHash('sha1').update({foo: 'bar'});
+});
+
