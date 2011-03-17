@@ -1468,8 +1468,7 @@ static Handle<Value> Chroot(const Arguments& args) {
     return ThrowException(ErrnoException(errno, "chroot"));
   }
 
-  const char root = '/';
-  chdir(&root);
+  chdir("/");
   return Undefined();
 }
 
