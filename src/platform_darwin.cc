@@ -210,7 +210,7 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 }
 
 
-Handle<Value> Platform::GetInterfaceAddresses() {
+v8::Handle<v8::Value> Platform::GetInterfaceAddresses() {
   HandleScope scope;
   return scope.Close(Object::New());
 }
