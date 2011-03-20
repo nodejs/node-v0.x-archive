@@ -38,6 +38,7 @@
 namespace node {
 
 using namespace v8;
+using v8::Handle; // Handle is also defined in MacTypes.h
 
 static char *process_title;
 double Platform::prog_start_time = Platform::GetUptime();
