@@ -1593,12 +1593,15 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
 
   String::Utf8Value filename(args[0]->ToString()); // Cast
   Local<Object> target = args[1]->ToObject(); // Cast
+  int flags = RTLD_LAZY;
+  if (args.Length() >= 3)
+    flags = args[2]->IntegerValue();
 
   // Actually call dlopen().
   // FIXME: This is a blocking function and should be called asynchronously!
   // This function should be moved to file.cc and use libeio to make this
   // system call.
-  void *handle = dlopen(*filename, RTLD_LAZY);
+  void *handle = dlopen(*filename, flags);
 
   // Handle errors.
   if (handle == NULL) {
@@ -1660,7 +1663,6 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   // coverity[leaked_storage]
   return Undefined();
 }
-
 #endif // __POSIX__
 
 
@@ -2062,6 +2064,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "umask", Umask);
   NODE_SET_METHOD(process, "dlopen", DLOpen);
   NODE_SET_METHOD(process, "_kill", Kill);
+
+  process->Set(String::NewSymbol("dlOpenFlags"), Integer::New(RTLD_LAZY));
 #endif // __POSIX__
 
   NODE_SET_METHOD(process, "uptime", Uptime);

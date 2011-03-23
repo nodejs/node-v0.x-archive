@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <dlfcn.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -838,6 +839,33 @@ void DefineConstants(Handle<Object> target) {
 #ifdef SIGUNUSED
   NODE_DEFINE_CONSTANT(target, SIGUNUSED);
 #endif
-}
 
+#ifdef RTLD_LAZY
+  NODE_DEFINE_CONSTANT(target, RTLD_LAZY);
+#endif
+
+#ifdef RTLD_NOW
+  NODE_DEFINE_CONSTANT(target, RTLD_NOW);
+#endif
+
+#ifdef RTLD_GLOBAL
+  NODE_DEFINE_CONSTANT(target, RTLD_GLOBAL);
+#endif
+
+#ifdef RTLD_LOCAL
+  NODE_DEFINE_CONSTANT(target, RTLD_LOCAL);
+#endif
+
+#ifdef RTLD_NODELETE
+  NODE_DEFINE_CONSTANT(target, RTLD_NODELETE);
+#endif
+
+#ifdef RTLD_NOLOAD
+  NODE_DEFINE_CONSTANT(target, RTLD_NOLOAD);
+#endif
+
+#ifdef RTLD_DEEPBIND
+  NODE_DEFINE_CONSTANT(target, RTLD_DEEPBIND);
+#endif
+}
 }  // namespace node
