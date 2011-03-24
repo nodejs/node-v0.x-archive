@@ -1420,7 +1420,11 @@ static Handle<Value> SetGid(const Arguments& args) {
 
     if ((err = getgrnam_r(*grpnam, &grp, getbuf, ARRAY_SIZE(getbuf), &grpp)) ||
         grpp == NULL) {
-      return ThrowException(ErrnoException(errno, "getgrnam_r"));
+      if (errno == 0)
+        return ThrowException(Exception::Error(
+          String::New("setgid group id does not exist")));
+      else
+        return ThrowException(ErrnoException(errno, "getgrnam_r"));
     }
 
     gid = grpp->gr_gid;
@@ -1455,7 +1459,11 @@ static Handle<Value> SetUid(const Arguments& args) {
 
     if ((err = getpwnam_r(*pwnam, &pwd, getbuf, ARRAY_SIZE(getbuf), &pwdp)) ||
         pwdp == NULL) {
-      return ThrowException(ErrnoException(errno, "getpwnam_r"));
+      if (errno == 0)
+        return ThrowException(Exception::Error(
+          String::New("setuid user id does not exist")));
+      else
+        return ThrowException(ErrnoException(errno, "getpwnam_r"));
     }
 
     uid = pwdp->pw_uid;
@@ -1486,9 +1494,10 @@ static void CheckStatus(EV_P_ ev_timer *watcher, int revents) {
   assert(revents == EV_TIMEOUT);
 
   // check memory
-  size_t rss, vsize;
-  if (!ev_is_active(&gc_idle) && Platform::GetMemory(&rss, &vsize) == 0) {
-    if (rss > 1024*1024*128) {
+  if (!ev_is_active(&gc_idle)) {
+    HeapStatistics stats;
+    V8::GetHeapStatistics(&stats);
+    if (stats.total_heap_size() > 1024 * 1024 * 128) {
       // larger than 128 megs, just start the idle watcher
       ev_idle_start(EV_A_ &gc_idle);
       return;
