@@ -15,10 +15,10 @@ SlowStream.prototype.write = function(buffer) {
   this.output += buffer.toString();
   console.log('wrote data.');
   var self = this;
-  this.emit('pause');
   setTimeout(function() {
     self.emit('drain');
   }, 100);
+  return false;
 };
 
 SlowStream.prototype.end = function() {
