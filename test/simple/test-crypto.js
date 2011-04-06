@@ -91,55 +91,6 @@ fileStream.addListener('close', function() {
                'Test SHA1 of sample.png');
 });
 
-// Test signing and verifying
-var s1 = crypto.createSign('RSA-SHA1')
-               .update('Test123')
-               .sign(keyPem, 'base64');
-var verified = crypto.createVerify('RSA-SHA1')
-                     .update('Test')
-                     .update('123')
-                     .verify(certPem, s1, 'base64');
-assert.ok(verified, 'sign and verify (base 64)');
-
-var s2 = crypto.createSign('RSA-SHA256')
-               .update('Test123')
-               .sign(keyPem); // binary
-var verified = crypto.createVerify('RSA-SHA256')
-                     .update('Test')
-                     .update('123')
-                     .verify(certPem, s2); // binary
-assert.ok(verified, 'sign and verify (binary)');
-
-// Test encryption and decryption
-var plaintext = 'Keep this a secret? No! Tell everyone about node.js!';
-var cipher = crypto.createCipher('aes192', 'MySecretKey123');
-
-// encrypt plaintext which is in utf8 format
-// to a ciphertext which will be in hex
-var ciph = cipher.update(plaintext, 'utf8', 'hex');
-// Only use binary or hex, not base64.
-ciph += cipher.final('hex');
-
-var decipher = crypto.createDecipher('aes192', 'MySecretKey123');
-var txt = decipher.update(ciph, 'hex', 'utf8');
-txt += decipher.final('utf8');
-
-assert.equal(txt, plaintext, 'encryption and decryption');
-
-// Test encyrption and decryption with explicit key and iv
-var encryption_key = '0123456789abcd0123456789';
-var iv = '12345678';
-
-var cipher = crypto.createCipheriv('des-ede3-cbc', encryption_key, iv);
-var ciph = cipher.update(plaintext, 'utf8', 'hex');
-ciph += cipher.final('hex');
-
-var decipher = crypto.createDecipheriv('des-ede3-cbc', encryption_key, iv);
-var txt = decipher.update(ciph, 'hex', 'utf8');
-txt += decipher.final('utf8');
-
-assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
-
 // update() should only take buffers / strings
 assert.throws(function() {
   crypto.createHash('sha1').update({foo: 'bar'});
