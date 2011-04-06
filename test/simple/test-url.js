@@ -96,6 +96,14 @@ var parseTests = {
     'query': 'baz=quux',
     'pathname': '/foo/bar'
   },
+  // Case insensitive protocols
+  'HTTP://domain.com/bar': {
+    'href': 'http://domain.com/bar',
+    'protocol': 'http:',
+    'host': 'domain.com',
+    'hostname': 'domain.com',
+    'pathname': '/bar'
+  },
   // Mixed case hostnames
   'http://SuB.doMAIN.cOM/foo/bar': {
     'href': 'http://SuB.doMAIN.cOM/foo/bar',
@@ -162,7 +170,7 @@ for (var u in parseTests) {
                  'parse(' + u + ').' + i + ' == ' + e + '\nactual: ' + a);
   }
 
-  var expected = u,
+  var expected = parseTests[u].href,
       actual = url.format(parseTests[u]);
 
   assert.equal(expected, actual,
