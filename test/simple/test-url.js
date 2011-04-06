@@ -96,6 +96,14 @@ var parseTests = {
     'query': 'baz=quux',
     'pathname': '/foo/bar'
   },
+  // Mixed case hostnames
+  'http://SuB.doMAIN.cOM/foo/bar': {
+    'href': 'http://SuB.doMAIN.cOM/foo/bar',
+    'protocol': 'http:',
+    'host': 'SuB.doMAIN.cOM',
+    'hostname': 'SuB.doMAIN.cOM',
+    'pathname': '/foo/bar'
+  },
   '//user:pass@example.com:8000/foo/bar?baz=quux#frag' : {
     'href': '//user:pass@example.com:8000/foo/bar?baz=quux#frag',
     'host': 'user:pass@example.com:8000',
