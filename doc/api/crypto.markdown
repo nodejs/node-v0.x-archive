@@ -6,7 +6,7 @@ The crypto module requires OpenSSL to be available on the underlying platform.
 It offers a way of encapsulating secure credentials to be used as part
 of a secure HTTPS net or http connection.
 
-It also offers a set of wrappers for OpenSSL's hash, hmac, cipher, decipher, sign and verify methods.
+It also offers a set of wrappers for OpenSSL's hash and hmac methods.
 
 ### crypto.createCredentials(details)
 
@@ -75,74 +75,3 @@ This can be called many times with new data as it is streamed.
 Calculates the digest of all of the passed data to the hmac.
 The `encoding` can be `'hex'`, `'binary'` or `'base64'`.
 
-
-### crypto.createCipher(algorithm, key)
-
-Creates and returns a cipher object, with the given algorithm and key.
-
-`algorithm` is dependent on OpenSSL, examples are `'aes192'`, etc.
-On recent releases, `openssl list-cipher-algorithms` will display the available cipher algorithms.
-
-### cipher.update(data, input_encoding='binary', output_encoding='binary')
-
-Updates the cipher with `data`, the encoding of which is given in `input_encoding`
-and can be `'utf8'`, `'ascii'` or `'binary'`. The `output_encoding` specifies
-the output format of the enciphered data, and can be `'binary'`, `'base64'` or `'hex'`.
-
-Returns the enciphered contents, and can be called many times with new data as it is streamed.
-
-### cipher.final(output_encoding='binary')
-
-Returns any remaining enciphered contents, with `output_encoding` being one of: `'binary'`, `'ascii'` or `'utf8'`.
-
-### crypto.createDecipher(algorithm, key)
-
-Creates and returns a decipher object, with the given algorithm and key.
-This is the mirror of the cipher object above.
-
-### decipher.update(data, input_encoding='binary', output_encoding='binary')
-
-Updates the decipher with `data`, which is encoded in `'binary'`, `'base64'` or `'hex'`.
-The `output_decoding` specifies in what format to return the deciphered plaintext: `'binary'`, `'ascii'` or `'utf8'`.
-
-### decipher.final(output_encoding='binary')
-
-Returns any remaining plaintext which is deciphered,
-with `output_encoding' being one of: `'binary'`, `'ascii'` or `'utf8'`.
-
-
-### crypto.createSign(algorithm)
-
-Creates and returns a signing object, with the given algorithm.
-On recent OpenSSL releases, `openssl list-public-key-algorithms` will display
-the available signing algorithms. Examples are `'RSA-SHA256'`.
-
-### signer.update(data)
-
-Updates the signer object with data.
-This can be called many times with new data as it is streamed.
-
-### signer.sign(private_key, output_format='binary')
-
-Calculates the signature on all the updated data passed through the signer.
-`private_key` is a string containing the PEM encoded private key for signing.
-
-Returns the signature in `output_format` which can be `'binary'`, `'hex'` or `'base64'`.
-
-### crypto.createVerify(algorithm)
-
-Creates and returns a verification object, with the given algorithm.
-This is the mirror of the signing object above.
-
-### verifier.update(data)
-
-Updates the verifier object with data.
-This can be called many times with new data as it is streamed.
-
-### verifier.verify(cert, signature, signature_format='binary')
-
-Verifies the signed data by using the `cert` which is a string containing
-the PEM encoded certificate, and `signature`, which is the previously calculates
-signature for the data, in the `signature_format` which can be `'binary'`, `'hex'` or `'base64'`.
-
-Returns true or false depending on the validity of the signature for the data and public key.
