@@ -7,6 +7,7 @@ var server = net.createServer();
 //test unix sockets
 var fds = process.binding('net').socketpair();
 var unixsocket = new net.Socket(fds[0]);
+
 assert.ok(unixsocket.type == 'unix', 'Should be UNIX');
 
 //test that stdin is default file
