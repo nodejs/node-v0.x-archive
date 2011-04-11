@@ -19,24 +19,64 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+// This test asserts that Stream.prototype.pipe does not leave listeners
+// hanging on the source or dest.
+
+var stream = require('stream');
 var assert = require('assert');
+var util = require('util');
 
-var stdout_write = global.process.stdout.write;
-var strings = [];
-global.process.stdout.write = function(string) {
-  strings.push(string);
-};
+function Writable () {
+  this.writable = true;
+  stream.Stream.call(this);
+}
+util.inherits(Writable, stream.Stream);
+Writable.prototype.end = function () {}
 
-console.log('foo');
-console.log('foo', 'bar');
-console.log('%s %s', 'foo', 'bar', 'hop');
-console.log({slashes: '\\\\'})
+function Readable () {
+  this.readable = true;
+  stream.Stream.call(this);
+}
+util.inherits(Readable, stream.Stream);
 
-global.process.stdout.write = stdout_write;
-assert.equal('foo\n', strings.shift());
-assert.equal('foo bar\n', strings.shift());
-assert.equal('foo bar hop\n', strings.shift());
-assert.equal("{ slashes: '\\\\\\\\' }\n", strings.shift());
+var i = 0;
+var limit = 100;
 
-assert.equal(true, process.stderr.write("hello world"));
+var w = new Writable();
+
+console.error = function (text) {
+  throw new Error(text);
+}
+
+var r;
+
+for (i = 0; i < limit; i++) {
+  r = new Readable()
+  r.pipe(w)
+  r.emit('end')
+}
+assert.equal(0, r.listeners('end').length);
+
+for (i = 0; i < limit; i++) {
+  r = new Readable()
+  r.pipe(w)
+  r.emit('close')
+}
+assert.equal(0, r.listeners('close').length);
+
+r = new Readable();
+
+for (i = 0; i < limit; i++) {
+  w = new Writable();
+  r.pipe(w);
+  w.emit('end');
+}
+assert.equal(0, w.listeners('end').length);
+
+for (i = 0; i < limit; i++) {
+  w = new Writable();
+  r.pipe(w);
+  w.emit('close');
+}
+assert.equal(0, w.listeners('close').length);
+
