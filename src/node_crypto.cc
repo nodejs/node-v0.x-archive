@@ -550,8 +550,11 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "close", Connection::Close);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
+  t->Set(String::NewSymbol("hasNPN"), True());
   NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", Connection::GetNegotiatedProto);
   NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", Connection::SetNPNProtocols);
+#else
+  t->Set(String::NewSymbol("hasNPN"), False());
 #endif
 
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
