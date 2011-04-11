@@ -549,6 +549,11 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "receivedShutdown", Connection::ReceivedShutdown);
   NODE_SET_PROTOTYPE_METHOD(t, "close", Connection::Close);
 
+#ifdef OPENSSL_NPN_NEGOTIATED
+  NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", Connection::GetNegotiatedProto);
+  NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", Connection::SetNPNProtocols);
+#endif
+
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
 }
 
@@ -598,6 +603,27 @@ static int VerifyCallback(int preverify_ok, X509_STORE_CTX *ctx) {
   return 1;
 }
 
+#ifdef OPENSSL_NPN_NEGOTIATED
+#define NPN_DEFAULT_PROTOS "\x08http/1.1\x08http/1.0"
+int Connection::AdvertiseNextProtoCallback_(SSL *s,
+                                            const unsigned char **data,
+                                            unsigned int *len,
+                                            void *arg) {
+
+  Connection *p = (Connection*) SSL_get_app_data(s);
+
+  if (p->npnProtos_.IsEmpty()) {
+    *data = (const unsigned char*) NPN_DEFAULT_PROTOS;
+    *len = strlen(NPN_DEFAULT_PROTOS);
+  } else {
+    *data = (const unsigned char*) Buffer::Data(p->npnProtos_);
+    *len = Buffer::Length(p->npnProtos_);
+  }
+
+  return SSL_TLSEXT_ERR_OK;
+}
+#endif
+
 
 Handle<Value> Connection::New(const Arguments& args) {
   HandleScope scope;
@@ -617,6 +643,14 @@ Handle<Value> Connection::New(const Arguments& args) {
   p->ssl_ = SSL_new(sc->ctx_);
   p->bio_read_ = BIO_new(BIO_s_mem());
   p->bio_write_ = BIO_new(BIO_s_mem());
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+  SSL_set_app_data(p->ssl_, p);
+  SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
+                                        AdvertiseNextProtoCallback_,
+                                        NULL);
+#endif
+
   SSL_set_bio(p->ssl_, p->bio_read_, p->bio_write_);
 
 #ifdef SSL_MODE_RELEASE_BUFFERS
@@ -1167,6 +1201,44 @@ Handle<Value> Connection::Close(const Arguments& args) {
   }
   return True();
 }
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+Handle<Value> Connection::GetNegotiatedProto(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  const unsigned char *npn_proto;
+  unsigned int npn_proto_len;
+
+  SSL_get0_next_proto_negotiated(ss->ssl_, &npn_proto, &npn_proto_len);
+
+  if (npn_proto_len == 0) {
+    return False();
+  }
+
+  return String::New((const char*) npn_proto, npn_proto_len);
+}
+
+Handle<Value> Connection::SetNPNProtocols(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (args.Length() < 1 || !Buffer::HasInstance(args[0])) {
+    return ThrowException(Exception::Error(String::New(
+           "Must give a Buffer as first argument")));
+  }
+
+  // Release old handle
+  if (!ss->npnProtos_.IsEmpty()) {
+    ss->npnProtos_.Dispose();
+  }
+  ss->npnProtos_ = Persistent<Object>::New(args[0]->ToObject());
+
+  return True();
+};
+#endif
 
 
 static void HexEncode(unsigned char *md_value,
