@@ -912,6 +912,11 @@ void DefineConstants(Handle<Object> target) {
 #ifdef SSL_OP_CRYPTOPRO_TLSEXT_BUG
   NODE_DEFINE_CONSTANT(target, SSL_OP_CRYPTOPRO_TLSEXT_BUG);
 #endif
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+#define NODE_NPN_ENABLED 1
+  NODE_DEFINE_CONSTANT(target, NODE_NPN_ENABLED);
+#endif
 }
 
 }  // namespace node
