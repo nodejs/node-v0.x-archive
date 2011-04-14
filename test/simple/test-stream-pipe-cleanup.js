@@ -28,10 +28,13 @@ var util = require('util');
 
 function Writable () {
   this.writable = true;
+  this.endCalls = 0;
   stream.Stream.call(this);
 }
 util.inherits(Writable, stream.Stream);
-Writable.prototype.end = function () {}
+Writable.prototype.end = function () {
+  this.endCalls++;
+}
 
 function Readable () {
   this.readable = true;
@@ -56,6 +59,9 @@ for (i = 0; i < limit; i++) {
   r.emit('end')
 }
 assert.equal(0, r.listeners('end').length);
+assert.equal(limit, w.endCalls);
+
+w.endCalls = 0;
 
 for (i = 0; i < limit; i++) {
   r = new Readable()
@@ -63,6 +69,7 @@ for (i = 0; i < limit; i++) {
   r.emit('close')
 }
 assert.equal(0, r.listeners('close').length);
+assert.equal(limit, w.endCalls);
 
 r = new Readable();
 
