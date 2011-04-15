@@ -58,11 +58,8 @@
 //   Generate
 //   ComputeLazyCompile
 //   BuildFunctionInfo
-//   ComputeCallInitialize
-//   ComputeCallInitializeInLoop
 //   ProcessDeclarations
 //   DeclareGlobals
-//   FindInlineRuntimeLUT
 //   CheckForInlineRuntimeCall
 //   AnalyzeCondition
 //   CodeForFunctionPosition
@@ -70,6 +67,9 @@
 //   CodeForStatementPosition
 //   CodeForDoWhileConditionPosition
 //   CodeForSourcePosition
+
+enum InitState { CONST_INIT, NOT_CONST_INIT };
+enum TypeofState { INSIDE_TYPEOF, NOT_INSIDE_TYPEOF };
 
 #if V8_TARGET_ARCH_IA32
 #include "ia32/codegen-ia32.h"

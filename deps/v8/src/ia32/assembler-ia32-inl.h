@@ -49,20 +49,24 @@ void RelocInfo::apply(intptr_t delta) {
   if (rmode_ == RUNTIME_ENTRY || IsCodeTarget(rmode_)) {
     int32_t* p = reinterpret_cast<int32_t*>(pc_);
     *p -= delta;  // Relocate entry.
+    CPU::FlushICache(p, sizeof(uint32_t));
   } else if (rmode_ == JS_RETURN && IsPatchedReturnSequence()) {
     // Special handling of js_return when a break point is set (call
     // instruction has been inserted).
     int32_t* p = reinterpret_cast<int32_t*>(pc_ + 1);
     *p -= delta;  // Relocate entry.
+    CPU::FlushICache(p, sizeof(uint32_t));
   } else if (rmode_ == DEBUG_BREAK_SLOT && IsPatchedDebugBreakSlotSequence()) {
     // Special handling of a debug break slot when a break point is set (call
     // instruction has been inserted).
     int32_t* p = reinterpret_cast<int32_t*>(pc_ + 1);
     *p -= delta;  // Relocate entry.
+    CPU::FlushICache(p, sizeof(uint32_t));
   } else if (IsInternalReference(rmode_)) {
     // absolute code pointer inside code object moves with the code object.
     int32_t* p = reinterpret_cast<int32_t*>(pc_);
     *p += delta;  // Relocate entry.
+    CPU::FlushICache(p, sizeof(uint32_t));
   }
 }
 
@@ -111,12 +115,38 @@ Object** RelocInfo::target_object_address() {
 void RelocInfo::set_target_object(Object* target) {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
   Memory::Object_at(pc_) = target;
+  CPU::FlushICache(pc_, sizeof(Address));
 }
 
 
 Address* RelocInfo::target_reference_address() {
   ASSERT(rmode_ == RelocInfo::EXTERNAL_REFERENCE);
   return reinterpret_cast<Address*>(pc_);
+}
+
+
+Handle<JSGlobalPropertyCell> RelocInfo::target_cell_handle() {
+  ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
+  Address address = Memory::Address_at(pc_);
+  return Handle<JSGlobalPropertyCell>(
+      reinterpret_cast<JSGlobalPropertyCell**>(address));
+}
+
+
+JSGlobalPropertyCell* RelocInfo::target_cell() {
+  ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
+  Address address = Memory::Address_at(pc_);
+  Object* object = HeapObject::FromAddress(
+      address - JSGlobalPropertyCell::kValueOffset);
+  return reinterpret_cast<JSGlobalPropertyCell*>(object);
+}
+
+
+void RelocInfo::set_target_cell(JSGlobalPropertyCell* cell) {
+  ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
+  Address address = cell->address() + JSGlobalPropertyCell::kValueOffset;
+  Memory::Address_at(pc_) = address;
+  CPU::FlushICache(pc_, sizeof(Address));
 }
 
 
@@ -165,10 +195,14 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     visitor->VisitPointer(target_object_address());
+    CPU::FlushICache(pc_, sizeof(Address));
   } else if (RelocInfo::IsCodeTarget(mode)) {
     visitor->VisitCodeTarget(this);
+  } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {
+    visitor->VisitGlobalPropertyCell(this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
     visitor->VisitExternalReference(target_reference_address());
+    CPU::FlushICache(pc_, sizeof(Address));
 #ifdef ENABLE_DEBUGGER_SUPPORT
   } else if (Debug::has_break_points() &&
              ((RelocInfo::IsJSReturn(mode) &&
@@ -188,10 +222,14 @@ void RelocInfo::Visit() {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     StaticVisitor::VisitPointer(target_object_address());
+    CPU::FlushICache(pc_, sizeof(Address));
   } else if (RelocInfo::IsCodeTarget(mode)) {
     StaticVisitor::VisitCodeTarget(this);
+  } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {
+    StaticVisitor::VisitGlobalPropertyCell(this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
     StaticVisitor::VisitExternalReference(target_reference_address());
+    CPU::FlushICache(pc_, sizeof(Address));
 #ifdef ENABLE_DEBUGGER_SUPPORT
   } else if (Debug::has_break_points() &&
              ((RelocInfo::IsJSReturn(mode) &&
@@ -242,6 +280,12 @@ Immediate::Immediate(Handle<Object> handle) {
 
 Immediate::Immediate(Smi* value) {
   x_ = reinterpret_cast<intptr_t>(value);
+  rmode_ = RelocInfo::NONE;
+}
+
+
+Immediate::Immediate(Address addr) {
+  x_ = reinterpret_cast<int32_t>(addr);
   rmode_ = RelocInfo::NONE;
 }
 

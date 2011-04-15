@@ -87,9 +87,9 @@ bool DisassembleAndCompare(byte* pc, const char* compare_string) {
 #define COMPARE(asm_, compare_string) \
   { \
     int pc_offset = assm.pc_offset(); \
-    byte *pc = &buffer[pc_offset]; \
+    byte *progcounter = &buffer[pc_offset]; \
     assm.asm_; \
-    if (!DisassembleAndCompare(pc, compare_string)) failure = true; \
+    if (!DisassembleAndCompare(progcounter, compare_string)) failure = true; \
   }
 
 
@@ -435,6 +435,11 @@ TEST(Vfp) {
     COMPARE(vmov(s31, r10),
             "ee0faa90       vmov s31, r10");
 
+    COMPARE(vabs(d0, d1),
+            "eeb00bc1       vabs d0, d1");
+    COMPARE(vabs(d3, d4, mi),
+            "4eb03bc4       vabsmi d3, d4");
+
     COMPARE(vadd(d0, d1, d2),
             "ee310b02       vadd.f64 d0, d1, d2");
     COMPARE(vadd(d3, d4, d5, mi),
@@ -499,6 +504,19 @@ TEST(Vfp) {
             "ed811b01       vstr d1, [r1 + 4*1]");
     COMPARE(vstr(d15, r10, 1020),
             "ed8afbff       vstr d15, [r10 + 4*255]");
+
+    COMPARE(vmsr(r5),
+            "eee15a10       vmsr FPSCR, r5");
+    COMPARE(vmsr(r10, pl),
+            "5ee1aa10       vmsrpl FPSCR, r10");
+    COMPARE(vmsr(pc),
+            "eee1fa10       vmsr FPSCR, APSR");
+    COMPARE(vmrs(r5),
+            "eef15a10       vmrs r5, FPSCR");
+    COMPARE(vmrs(r10, ge),
+            "aef1aa10       vmrsge r10, FPSCR");
+    COMPARE(vmrs(pc),
+            "eef1fa10       vmrs APSR, FPSCR");
   }
 
   VERIFY_RUN();

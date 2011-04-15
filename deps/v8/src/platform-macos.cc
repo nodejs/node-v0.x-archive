@@ -28,6 +28,7 @@
 // Platform specific code for MacOS goes here. For the POSIX comaptible parts
 // the implementation is in platform-posix.cc.
 
+#include <dlfcn.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <mach/mach_init.h>
@@ -49,7 +50,6 @@
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdlib.h>
-
 #include <errno.h>
 
 #undef MAP_TYPE
@@ -57,6 +57,7 @@
 #include "v8.h"
 
 #include "platform.h"
+#include "vm-state-inl.h"
 
 // Manually define these here as weak imports, rather than including execinfo.h.
 // This lets us launch on 10.4 which does not have these calls.
@@ -195,6 +196,7 @@ class PosixMemoryMappedFile : public OS::MemoryMappedFile {
     : file_(file), memory_(memory), size_(size) { }
   virtual ~PosixMemoryMappedFile();
   virtual void* memory() { return memory_; }
+  virtual int size() { return size_; }
  private:
   FILE* file_;
   void* memory_;
@@ -202,11 +204,28 @@ class PosixMemoryMappedFile : public OS::MemoryMappedFile {
 };
 
 
+OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
+  FILE* file = fopen(name, "r+");
+  if (file == NULL) return NULL;
+
+  fseek(file, 0, SEEK_END);
+  int size = ftell(file);
+
+  void* memory =
+      mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+  return new PosixMemoryMappedFile(file, memory, size);
+}
+
+
 OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
     void* initial) {
   FILE* file = fopen(name, "w+");
   if (file == NULL) return NULL;
-  fwrite(initial, size, 1, file);
+  int result = fwrite(initial, size, 1, file);
+  if (result < 1) {
+    fclose(file);
+    return NULL;
+  }
   void* memory =
       mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
   return new PosixMemoryMappedFile(file, memory, size);
@@ -242,6 +261,10 @@ void OS::LogSharedLibraryAddresses() {
     LOG(SharedLibraryEvent(_dyld_get_image_name(i), start, start + size));
   }
 #endif  // ENABLE_LOGGING_AND_PROFILING
+}
+
+
+void OS::SignalCodeMovingGC() {
 }
 
 
@@ -402,10 +425,34 @@ bool ThreadHandle::IsValid() const {
 
 
 Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
+  set_name("v8:<unknown>");
+}
+
+
+Thread::Thread(const char* name) : ThreadHandle(ThreadHandle::INVALID) {
+  set_name(name);
 }
 
 
 Thread::~Thread() {
+}
+
+
+
+static void SetThreadName(const char* name) {
+  // pthread_setname_np is only available in 10.6 or later, so test
+  // for it at runtime.
+  int (*dynamic_pthread_setname_np)(const char*);
+  *reinterpret_cast<void**>(&dynamic_pthread_setname_np) =
+    dlsym(RTLD_DEFAULT, "pthread_setname_np");
+  if (!dynamic_pthread_setname_np)
+    return;
+
+  // Mac OS X does not expose the length limit of the name, so hardcode it.
+  static const int kMaxNameLength = 63;
+  USE(kMaxNameLength);
+  ASSERT(Thread::kMaxThreadNameLength <= kMaxNameLength);
+  dynamic_pthread_setname_np(name);
 }
 
 
@@ -415,9 +462,16 @@ static void* ThreadEntry(void* arg) {
   // don't know which thread will run first (the original thread or the new
   // one) so we initialize it here too.
   thread->thread_handle_data()->thread_ = pthread_self();
+  SetThreadName(thread->name());
   ASSERT(thread->IsValid());
   thread->Run();
   return NULL;
+}
+
+
+void Thread::set_name(const char* name) {
+  strncpy(name_, name, sizeof(name_));
+  name_[sizeof(name_) - 1] = '\0';
 }
 
 
@@ -475,11 +529,20 @@ class MacOSMutex : public Mutex {
     pthread_mutex_init(&mutex_, &attr);
   }
 
-  ~MacOSMutex() { pthread_mutex_destroy(&mutex_); }
+  virtual ~MacOSMutex() { pthread_mutex_destroy(&mutex_); }
 
-  int Lock() { return pthread_mutex_lock(&mutex_); }
+  virtual int Lock() { return pthread_mutex_lock(&mutex_); }
+  virtual int Unlock() { return pthread_mutex_unlock(&mutex_); }
 
-  int Unlock() { return pthread_mutex_unlock(&mutex_); }
+  virtual bool TryLock() {
+    int result = pthread_mutex_trylock(&mutex_);
+    // Return false if the lock is busy and locking failed.
+    if (result == EBUSY) {
+      return false;
+    }
+    ASSERT(result == 0);  // Verify no other errors.
+    return true;
+  }
 
  private:
   pthread_mutex_t mutex_;
@@ -546,33 +609,38 @@ class Sampler::PlatformData : public Malloced {
   mach_port_t task_self_;
   thread_act_t profiled_thread_;
   pthread_t sampler_thread_;
+  RuntimeProfilerRateLimiter rate_limiter_;
 
   // Sampler thread handler.
   void Runner() {
-    // Loop until the sampler is disengaged, keeping the specified samling freq.
-    for ( ; sampler_->IsActive(); OS::Sleep(sampler_->interval_)) {
+    while (sampler_->IsActive()) {
+      if (rate_limiter_.SuspendIfNecessary()) continue;
+      Sample();
+      OS::Sleep(sampler_->interval_);
+    }
+  }
+
+  void Sample() {
+    if (sampler_->IsProfiling()) {
       TickSample sample_obj;
       TickSample* sample = CpuProfiler::TickSampleEvent();
       if (sample == NULL) sample = &sample_obj;
 
-      // We always sample the VM state.
-      sample->state = VMState::current_state();
-      // If profiling, we record the pc and sp of the profiled thread.
-      if (sampler_->IsProfiling()
-          && KERN_SUCCESS == thread_suspend(profiled_thread_)) {
+      if (KERN_SUCCESS != thread_suspend(profiled_thread_)) return;
+
 #if V8_HOST_ARCH_X64
-        thread_state_flavor_t flavor = x86_THREAD_STATE64;
-        x86_thread_state64_t state;
-        mach_msg_type_number_t count = x86_THREAD_STATE64_COUNT;
+      thread_state_flavor_t flavor = x86_THREAD_STATE64;
+      x86_thread_state64_t state;
+      mach_msg_type_number_t count = x86_THREAD_STATE64_COUNT;
 #if __DARWIN_UNIX03
 #define REGISTER_FIELD(name) __r ## name
 #else
 #define REGISTER_FIELD(name) r ## name
 #endif  // __DARWIN_UNIX03
 #elif V8_HOST_ARCH_IA32
-        thread_state_flavor_t flavor = i386_THREAD_STATE;
-        i386_thread_state_t state;
-        mach_msg_type_number_t count = i386_THREAD_STATE_COUNT;
+      thread_state_flavor_t flavor = i386_THREAD_STATE;
+      i386_thread_state_t state;
+      mach_msg_type_number_t count = i386_THREAD_STATE_COUNT;
 #if __DARWIN_UNIX03
 #define REGISTER_FIELD(name) __e ## name
 #else
@@ -582,21 +650,20 @@ class Sampler::PlatformData : public Malloced {
 #error Unsupported Mac OS X host architecture.
 #endif  // V8_HOST_ARCH
 
-        if (thread_get_state(profiled_thread_,
-                             flavor,
-                             reinterpret_cast<natural_t*>(&state),
-                             &count) == KERN_SUCCESS) {
-          sample->pc = reinterpret_cast<Address>(state.REGISTER_FIELD(ip));
-          sample->sp = reinterpret_cast<Address>(state.REGISTER_FIELD(sp));
-          sample->fp = reinterpret_cast<Address>(state.REGISTER_FIELD(bp));
-          sampler_->SampleStack(sample);
-        }
-        thread_resume(profiled_thread_);
+      if (thread_get_state(profiled_thread_,
+                           flavor,
+                           reinterpret_cast<natural_t*>(&state),
+                           &count) == KERN_SUCCESS) {
+        sample->state = Top::current_vm_state();
+        sample->pc = reinterpret_cast<Address>(state.REGISTER_FIELD(ip));
+        sample->sp = reinterpret_cast<Address>(state.REGISTER_FIELD(sp));
+        sample->fp = reinterpret_cast<Address>(state.REGISTER_FIELD(bp));
+        sampler_->SampleStack(sample);
+        sampler_->Tick(sample);
       }
-
-      // Invoke tick handler with program counter and stack pointer.
-      sampler_->Tick(sample);
+      thread_resume(profiled_thread_);
     }
+    if (RuntimeProfiler::IsEnabled()) RuntimeProfiler::NotifyTick();
   }
 };
 
@@ -612,8 +679,11 @@ static void* SamplerEntry(void* arg) {
 }
 
 
-Sampler::Sampler(int interval, bool profiling)
-    : interval_(interval), profiling_(profiling), active_(false) {
+Sampler::Sampler(int interval)
+    : interval_(interval),
+      profiling_(false),
+      active_(false),
+      samples_taken_(0) {
   data_ = new PlatformData(this);
 }
 
@@ -624,11 +694,9 @@ Sampler::~Sampler() {
 
 
 void Sampler::Start() {
-  // If we are profiling, we need to be able to access the calling
-  // thread.
-  if (IsProfiling()) {
-    data_->profiled_thread_ = mach_thread_self();
-  }
+  // Do not start multiple threads for the same sampler.
+  ASSERT(!IsActive());
+  data_->profiled_thread_ = mach_thread_self();
 
   // Create sampler thread with high priority.
   // According to POSIX spec, when SCHED_FIFO policy is used, a thread
@@ -641,7 +709,7 @@ void Sampler::Start() {
   fifo_param.sched_priority = sched_get_priority_max(SCHED_FIFO);
   pthread_attr_setschedparam(&sched_attr, &fifo_param);
 
-  active_ = true;
+  SetActive(true);
   pthread_create(&data_->sampler_thread_, &sched_attr, SamplerEntry, data_);
 }
 
@@ -649,15 +717,14 @@ void Sampler::Start() {
 void Sampler::Stop() {
   // Seting active to false triggers termination of the sampler
   // thread.
-  active_ = false;
+  SetActive(false);
 
   // Wait for sampler thread to terminate.
+  Top::WakeUpRuntimeProfilerThreadBeforeShutdown();
   pthread_join(data_->sampler_thread_, NULL);
 
   // Deallocate Mach port for thread.
-  if (IsProfiling()) {
-    mach_port_deallocate(data_->task_self_, data_->profiled_thread_);
-  }
+  mach_port_deallocate(data_->task_self_, data_->profiled_thread_);
 }
 
 #endif  // ENABLE_LOGGING_AND_PROFILING

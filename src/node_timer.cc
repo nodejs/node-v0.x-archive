@@ -1,19 +1,41 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node.h>
 #include <node_timer.h>
 #include <assert.h>
 
+namespace node {
+
 using namespace v8;
-using namespace node;
 
 Persistent<FunctionTemplate> Timer::constructor_template;
+
 
 static Persistent<String> timeout_symbol;
 static Persistent<String> repeat_symbol;
 static Persistent<String> callback_symbol;
 
-void
-Timer::Initialize (Handle<Object> target)
-{
+
+void Timer::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(Timer::New);
@@ -35,23 +57,23 @@ Timer::Initialize (Handle<Object> target)
   target->Set(String::NewSymbol("Timer"), constructor_template->GetFunction());
 }
 
-Handle<Value>
-Timer::RepeatGetter (Local<String> property, const AccessorInfo& info)
-{
+
+Handle<Value> Timer::RepeatGetter(Local<String> property,
+                                  const AccessorInfo& info) {
   HandleScope scope;
   Timer *timer = ObjectWrap::Unwrap<Timer>(info.This());
 
   assert(timer);
-  assert (property == repeat_symbol);
+  assert(property == repeat_symbol);
 
   Local<Integer> v = Integer::New(timer->watcher_.repeat);
 
   return scope.Close(v);
 }
 
-void
-Timer::RepeatSetter (Local<String> property, Local<Value> value, const AccessorInfo& info)
-{
+void Timer::RepeatSetter(Local<String> property,
+                         Local<Value> value,
+                         const AccessorInfo& info) {
   HandleScope scope;
   Timer *timer = ObjectWrap::Unwrap<Timer>(info.This());
 
@@ -61,9 +83,7 @@ Timer::RepeatSetter (Local<String> property, Local<Value> value, const AccessorI
   timer->watcher_.repeat = NODE_V8_UNIXTIME(value);
 }
 
-void
-Timer::OnTimeout (EV_P_ ev_timer *watcher, int revents)
-{
+void Timer::OnTimeout(EV_P_ ev_timer *watcher, int revents) {
   Timer *timer = static_cast<Timer*>(watcher->data);
 
   assert(revents == EV_TIMEOUT);
@@ -89,14 +109,13 @@ Timer::OnTimeout (EV_P_ ev_timer *watcher, int revents)
   if (timer->watcher_.repeat == 0) timer->Unref();
 }
 
-Timer::~Timer ()
-{
+
+Timer::~Timer() {
   ev_timer_stop(EV_DEFAULT_UC_ &watcher_);
 }
 
-Handle<Value>
-Timer::New (const Arguments& args)
-{
+
+Handle<Value> Timer::New(const Arguments& args) {
   if (!args.IsConstructCall()) {
     return FromConstructorTemplate(constructor_template, args);
   }
@@ -109,9 +128,7 @@ Timer::New (const Arguments& args)
   return args.This();
 }
 
-Handle<Value>
-Timer::Start (const Arguments& args)
-{
+Handle<Value> Timer::Start(const Arguments& args) {
   HandleScope scope;
   Timer *timer = ObjectWrap::Unwrap<Timer>(args.Holder());
 
@@ -145,7 +162,7 @@ Handle<Value> Timer::Stop(const Arguments& args) {
 }
 
 
-void Timer::Stop () {
+void Timer::Stop() {
   if (watcher_.active) {
     ev_timer_stop(EV_DEFAULT_UC_ &watcher_);
     Unref();
@@ -178,3 +195,6 @@ Handle<Value> Timer::Again(const Arguments& args) {
 
   return Undefined();
 }
+
+
+}  // namespace node

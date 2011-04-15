@@ -113,6 +113,10 @@ int signbit(double x);
 
 #endif  // __GNUC__
 
+#include "atomicops.h"
+#include "utils.h"
+#include "v8globals.h"
+
 namespace v8 {
 namespace internal {
 
@@ -121,6 +125,7 @@ namespace internal {
 typedef intptr_t AtomicWord;
 
 class Semaphore;
+class Mutex;
 
 double ceiling(double x);
 double modulo(double x, double y);
@@ -169,6 +174,7 @@ class OS {
   static int GetLastError();
 
   static FILE* FOpen(const char* path, const char* mode);
+  static bool Remove(const char* path);
 
   // Log file open mode is platform-dependent due to line ends issues.
   static const char* LogFileOpenMode;
@@ -178,6 +184,10 @@ class OS {
   // should go to stdout.
   static void Print(const char* format, ...);
   static void VPrint(const char* format, va_list args);
+
+  // Print output to a file. This is mostly used for debugging output.
+  static void FPrint(FILE* out, const char* format, ...);
+  static void VFPrint(FILE* out, const char* format, va_list args);
 
   // Print error output to console. This is mostly used for error message
   // output. On platforms that has standard terminal output, the output
@@ -242,9 +252,11 @@ class OS {
 
   class MemoryMappedFile {
    public:
+    static MemoryMappedFile* open(const char* name);
     static MemoryMappedFile* create(const char* name, int size, void* initial);
     virtual ~MemoryMappedFile() { }
     virtual void* memory() = 0;
+    virtual int size() = 0;
   };
 
   // Safe formatting print. Ensures that str is always null-terminated.
@@ -257,10 +269,15 @@ class OS {
   static char* StrChr(char* str, int c);
   static void StrNCpy(Vector<char> dest, const char* src, size_t n);
 
-  // Support for profiler.  Can do nothing, in which case ticks
-  // occuring in shared libraries will not be properly accounted
-  // for.
+  // Support for the profiler.  Can do nothing, in which case ticks
+  // occuring in shared libraries will not be properly accounted for.
   static void LogSharedLibraryAddresses();
+
+  // Support for the profiler.  Notifies the external profiling
+  // process that a code moving garbage collection starts.  Can do
+  // nothing, in which case the code objects must not move (e.g., by
+  // using --never-compact) if accurate profiling is desired.
+  static void SignalCodeMovingGC();
 
   // The return value indicates the CPU features we are sure of because of the
   // OS.  For example MacOSX doesn't run on any x86 CPUs that don't have SSE2
@@ -362,7 +379,6 @@ class ThreadHandle {
 
 class Thread: public ThreadHandle {
  public:
-#ifndef __CYGWIN__
   // Opaque data type for thread-local storage keys.
   // LOCAL_STORAGE_KEY_MIN_VALUE and LOCAL_STORAGE_KEY_MAX_VALUE are specified
   // to ensure that enumeration type has correct value range (see Issue 830 for
@@ -371,13 +387,10 @@ class Thread: public ThreadHandle {
     LOCAL_STORAGE_KEY_MIN_VALUE = kMinInt,
     LOCAL_STORAGE_KEY_MAX_VALUE = kMaxInt
   };
-#else
-  typedef void *LocalStorageKey;
-#endif
-
 
   // Create new thread.
   Thread();
+  explicit Thread(const char* name);
   virtual ~Thread();
 
   // Start new thread by calling the Run() method in the new thread.
@@ -385,6 +398,10 @@ class Thread: public ThreadHandle {
 
   // Wait until thread terminates.
   void Join();
+
+  inline const char* name() const {
+    return name_;
+  }
 
   // Abstract method for run handler.
   virtual void Run() = 0;
@@ -407,9 +424,17 @@ class Thread: public ThreadHandle {
   // A hint to the scheduler to let another thread run.
   static void YieldCPU();
 
+  // The thread name length is limited to 16 based on Linux's implementation of
+  // prctl().
+  static const int kMaxThreadNameLength = 16;
  private:
+  void set_name(const char *name);
+
   class PlatformData;
   PlatformData* data_;
+
+  char name_[kMaxThreadNameLength];
+
   DISALLOW_COPY_AND_ASSIGN(Thread);
 };
 
@@ -433,6 +458,10 @@ class Mutex {
   // Unlocks the given mutex. The mutex is assumed to be locked and owned by
   // the calling thread on entrance.
   virtual int Unlock() = 0;
+
+  // Tries to lock the given mutex. Returns whether the mutex was
+  // successfully locked.
+  virtual bool TryLock() = 0;
 };
 
 
@@ -538,13 +567,13 @@ class TickSample {
         pc(NULL),
         sp(NULL),
         fp(NULL),
-        function(NULL),
+        tos(NULL),
         frames_count(0) {}
   StateTag state;  // The state of the VM.
-  Address pc;  // Instruction pointer.
-  Address sp;  // Stack pointer.
-  Address fp;  // Frame pointer.
-  Address function;  // The last called JS function.
+  Address pc;   // Instruction pointer.
+  Address sp;   // Stack pointer.
+  Address fp;   // Frame pointer.
+  Address tos;  // Top stack value (*sp).
   static const int kMaxFramesCount = 64;
   Address stack[kMaxFramesCount];  // Call stack.
   int frames_count;  // Number of captured frames.
@@ -554,11 +583,14 @@ class TickSample {
 class Sampler {
  public:
   // Initialize sampler.
-  explicit Sampler(int interval, bool profiling);
+  explicit Sampler(int interval);
   virtual ~Sampler();
 
   // Performs stack sampling.
-  virtual void SampleStack(TickSample* sample) = 0;
+  void SampleStack(TickSample* sample) {
+    DoSampleStack(sample);
+    IncSamplesTaken();
+  }
 
   // This method is called for each sampling period with the current
   // program counter.
@@ -568,19 +600,32 @@ class Sampler {
   void Start();
   void Stop();
 
-  // Is the sampler used for profiling.
-  inline bool IsProfiling() { return profiling_; }
+  // Is the sampler used for profiling?
+  bool IsProfiling() const { return NoBarrier_Load(&profiling_) > 0; }
+  void IncreaseProfilingDepth() { NoBarrier_AtomicIncrement(&profiling_, 1); }
+  void DecreaseProfilingDepth() { NoBarrier_AtomicIncrement(&profiling_, -1); }
 
   // Whether the sampler is running (that is, consumes resources).
-  inline bool IsActive() { return active_; }
+  bool IsActive() const { return NoBarrier_Load(&active_); }
+
+  // Used in tests to make sure that stack sampling is performed.
+  int samples_taken() const { return samples_taken_; }
+  void ResetSamplesTaken() { samples_taken_ = 0; }
 
   class PlatformData;
 
+ protected:
+  virtual void DoSampleStack(TickSample* sample) = 0;
+
  private:
+  void SetActive(bool value) { NoBarrier_Store(&active_, value); }
+  void IncSamplesTaken() { if (++samples_taken_ < 0) samples_taken_ = 0; }
+
   const int interval_;
-  const bool profiling_;
-  bool active_;
+  Atomic32 profiling_;
+  Atomic32 active_;
   PlatformData* data_;  // Platform specific data.
+  int samples_taken_;  // Counts stack samples taken.
   DISALLOW_IMPLICIT_CONSTRUCTORS(Sampler);
 };
 

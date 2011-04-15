@@ -110,17 +110,36 @@ Debug.ScopeType = { Global: 0,
 const kNoFrame = -1;
 Debug.State = {
   currentFrame: kNoFrame,
+  displaySourceStartLine: -1,
+  displaySourceEndLine: -1,
   currentSourceLine: -1
 }
 var trace_compile = false;  // Tracing all compile events?
+var trace_debug_json = false; // Tracing all debug json packets?
+var last_cmd_line = '';
+//var lol_is_enabled;  // Set to true in d8.cc if LIVE_OBJECT_LIST is defined.
+var lol_next_dump_index = 0;
+const kDefaultLolLinesToPrintAtATime = 10;
+const kMaxLolLinesToPrintAtATime = 1000;
+var repeat_cmd_line = '';
+var is_running = true;
+
+// Copied from debug-delay.js.  This is needed below:
+function ScriptTypeFlag(type) {
+  return (1 << type);
+}
 
 
 // Process a debugger JSON message into a display text and a running status.
 // This function returns an object with properties "text" and "running" holding
 // this information.
 function DebugMessageDetails(message) {
+  if (trace_debug_json) {
+    print("received: '" + message + "'");
+  }
   // Convert the JSON string to an object.
   var response = new ProtocolPackage(message);
+  is_running = response.running();
 
   if (response.type() == 'event') {
     return DebugEventDetails(response);
@@ -161,6 +180,8 @@ function DebugEventDetails(response) {
       result += '\n';
       result += SourceUnderline(body.sourceLineText, body.sourceColumn);
       Debug.State.currentSourceLine = body.sourceLine;
+      Debug.State.displaySourceStartLine = -1;
+      Debug.State.displaySourceEndLine = -1;
       Debug.State.currentFrame = 0;
       details.text = result;
       break;
@@ -180,10 +201,14 @@ function DebugEventDetails(response) {
         result += '\n';
         result += SourceUnderline(body.sourceLineText, body.sourceColumn);
         Debug.State.currentSourceLine = body.sourceLine;
+        Debug.State.displaySourceStartLine = -1;
+        Debug.State.displaySourceEndLine = -1;
         Debug.State.currentFrame = 0;
       } else {
         result += ' (empty stack)';
         Debug.State.currentSourceLine = -1;
+        Debug.State.displaySourceStartLine = -1;
+        Debug.State.displaySourceEndLine = -1;
         Debug.State.currentFrame = kNoFrame;
       }
       details.text = result;
@@ -199,6 +224,10 @@ function DebugEventDetails(response) {
           result += source.substring(0, source.length - 1);
         }
       }
+      details.text = result;
+      break;
+
+    case 'scriptCollected':
       details.text = result;
       break;
 
@@ -254,7 +283,11 @@ function SourceUnderline(source_text, position) {
 
 // Converts a text command to a JSON request.
 function DebugCommandToJSONRequest(cmd_line) {
-  return new DebugRequest(cmd_line).JSONRequest();
+  var result = new DebugRequest(cmd_line).JSONRequest();
+  if (trace_debug_json && result) {
+    print("sending: '" + result + "'");
+  }
+  return result;
 };
 
 
@@ -264,6 +297,20 @@ function DebugRequest(cmd_line) {
   if (cmd_line && cmd_line.length > 0 && cmd_line.charAt(0) == '{') {
     this.request_ = cmd_line;
     return;
+  }
+
+  // Check for a simple carriage return to repeat the last command:
+  var is_repeating = false;
+  if (cmd_line == '\n') {
+    if (is_running) {
+      cmd_line = 'break'; // Not in debugger mode, break with a frame request.
+    } else {
+      cmd_line = repeat_cmd_line; // use command to repeat.
+      is_repeating = true;
+    }
+  }
+  if (!is_running) { // Only save the command if in debugger mode.
+    repeat_cmd_line = cmd_line;   // save last command.
   }
 
   // Trim string for leading and trailing whitespace.
@@ -281,6 +328,13 @@ function DebugRequest(cmd_line) {
     args = cmd_line.slice(pos).replace(/^\s+|\s+$/g, '');
   }
 
+  if ((cmd === undefined) || !cmd) {
+    this.request_ = void 0;
+    return;
+  }
+
+  last_cmd = cmd;
+
   // Switch on command.
   switch (cmd) {
     case 'continue':
@@ -290,7 +344,22 @@ function DebugRequest(cmd_line) {
 
     case 'step':
     case 's':
-      this.request_ = this.stepCommandToJSONRequest_(args);
+      this.request_ = this.stepCommandToJSONRequest_(args, 'in');
+      break;
+
+    case 'stepi':
+    case 'si':
+      this.request_ = this.stepCommandToJSONRequest_(args, 'min');
+      break;
+
+    case 'next':
+    case 'n':
+      this.request_ = this.stepCommandToJSONRequest_(args, 'next');
+      break;
+
+    case 'finish':
+    case 'fin':
+      this.request_ = this.stepCommandToJSONRequest_(args, 'out');
       break;
 
     case 'backtrace':
@@ -311,6 +380,26 @@ function DebugRequest(cmd_line) {
       this.request_ = this.scopeCommandToJSONRequest_(args);
       break;
 
+    case 'disconnect':
+    case 'exit':
+    case 'quit':
+      this.request_ = this.disconnectCommandToJSONRequest_(args);
+      break;
+
+    case 'up':
+      this.request_ =
+          this.frameCommandToJSONRequest_('' +
+                                          (Debug.State.currentFrame + 1));
+      break;
+      
+    case 'down':
+    case 'do':
+      this.request_ =
+          this.frameCommandToJSONRequest_('' +
+                                          (Debug.State.currentFrame - 1));
+      break;
+      
+    case 'set':
     case 'print':
     case 'p':
       this.request_ = this.printCommandToJSONRequest_(args);
@@ -328,11 +417,17 @@ function DebugRequest(cmd_line) {
       this.request_ = this.instancesCommandToJSONRequest_(args);
       break;
 
+    case 'list':
+    case 'l':
+      this.request_ = this.listCommandToJSONRequest_(args);
+      break;
     case 'source':
       this.request_ = this.sourceCommandToJSONRequest_(args);
       break;
 
     case 'scripts':
+    case 'script':
+    case 'scr':
       this.request_ = this.scriptsCommandToJSONRequest_(args);
       break;
 
@@ -347,6 +442,8 @@ function DebugRequest(cmd_line) {
       break;
 
     case 'clear':
+    case 'delete':
+    case 'd':
       this.request_ = this.clearCommandToJSONRequest_(args);
       break;
 
@@ -354,7 +451,42 @@ function DebugRequest(cmd_line) {
       this.request_ = this.threadsCommandToJSONRequest_(args);
       break;
 
+    case 'cond':
+      this.request_ = this.changeBreakpointCommandToJSONRequest_(args, 'cond');
+      break;
+
+    case 'enable':
+    case 'en':
+      this.request_ =
+          this.changeBreakpointCommandToJSONRequest_(args, 'enable');
+      break;
+
+    case 'disable':
+    case 'dis':
+      this.request_ =
+          this.changeBreakpointCommandToJSONRequest_(args, 'disable');
+      break;
+
+    case 'ignore':
+      this.request_ =
+          this.changeBreakpointCommandToJSONRequest_(args, 'ignore');
+      break;
+
+    case 'info':
+    case 'inf':
+      this.request_ = this.infoCommandToJSONRequest_(args);
+      break;
+
+    case 'flags':
+      this.request_ = this.v8FlagsToJSONRequest_(args);
+      break;
+
+    case 'gc':
+      this.request_ = this.gcToJSONRequest_(args);
+      break;
+
     case 'trace':
+    case 'tr':
       // Return undefined to indicate command handled internally (no JSON).
       this.request_ = void 0;
       this.traceCommand_(args);
@@ -367,11 +499,16 @@ function DebugRequest(cmd_line) {
       this.request_ = void 0;
       break;
 
+    case 'liveobjectlist':
+    case 'lol':
+      if (lol_is_enabled) {
+        this.request_ = this.lolToJSONRequest_(args, is_repeating);
+        break;
+      }
+
     default:
       throw new Error('Unknown command "' + cmd + '"');
   }
-
-  last_cmd = cmd;
 }
 
 DebugRequest.prototype.JSONRequest = function() {
@@ -413,10 +550,54 @@ DebugRequest.prototype.createRequest = function(command) {
 };
 
 
+// Note: we use detected command repetition as a signal for continuation here.
+DebugRequest.prototype.createLOLRequest = function(command,
+                                                   start_index,
+                                                   lines_to_dump,
+                                                   is_continuation) {
+  if (is_continuation) {
+    start_index = lol_next_dump_index;
+  }
+
+  if (lines_to_dump) {
+    lines_to_dump = parseInt(lines_to_dump);
+  } else {
+    lines_to_dump = kDefaultLolLinesToPrintAtATime;
+  }
+  if (lines_to_dump > kMaxLolLinesToPrintAtATime) {
+    lines_to_dump = kMaxLolLinesToPrintAtATime;
+  }
+
+  // Save the next start_index to dump from:
+  lol_next_dump_index = start_index + lines_to_dump;
+
+  var request = this.createRequest(command);
+  request.arguments = {};
+  request.arguments.start = start_index;
+  request.arguments.count = lines_to_dump;
+
+  return request;
+};
+
+
 // Create a JSON request for the evaluation command.
 DebugRequest.prototype.makeEvaluateJSONRequest_ = function(expression) {
   // Global varaible used to store whether a handle was requested.
   lookup_handle = null;
+
+  if (lol_is_enabled) {
+    // Check if the expression is a obj id in the form @<obj id>.
+    var obj_id_match = expression.match(/^@([0-9]+)$/);
+    if (obj_id_match) {
+      var obj_id = parseInt(obj_id_match[1]);
+      // Build a dump request.
+      var request = this.createRequest('getobj');
+      request.arguments = {};
+      request.arguments.obj_id = obj_id;
+      return request.toJSONProtocol();
+    }
+  }
+
   // Check if the expression is a handle id in the form #<handle>#.
   var handle_match = expression.match(/^#([0-9]*)#$/);
   if (handle_match) {
@@ -465,59 +646,73 @@ DebugRequest.prototype.continueCommandToJSONRequest_ = function(args) {
 
 
 // Create a JSON request for the step command.
-DebugRequest.prototype.stepCommandToJSONRequest_ = function(args) {
+DebugRequest.prototype.stepCommandToJSONRequest_ = function(args, type) {
   // Requesting a step is through the continue command with additional
   // arguments.
   var request = this.createRequest('continue');
   request.arguments = {};
 
   // Process arguments if any.
+
+  // Only process args if the command is 'step' which is indicated by type being
+  // set to 'in'.  For all other commands, ignore the args.
   if (args && args.length > 0) {
-    args = args.split(/\s*[ ]+\s*/g);
+    args = args.split(/\s+/g);
 
     if (args.length > 2) {
       throw new Error('Invalid step arguments.');
     }
 
     if (args.length > 0) {
-      // Get step count argument if any.
-      if (args.length == 2) {
-        var stepcount = parseInt(args[1]);
-        if (isNaN(stepcount) || stepcount <= 0) {
-          throw new Error('Invalid step count argument "' + args[0] + '".');
+      // Check if we have a gdb stype step command.  If so, the 1st arg would
+      // be the step count.  If it's not a number, then assume that we're
+      // parsing for the legacy v8 step command.
+      var stepcount = Number(args[0]);
+      if (stepcount == Number.NaN) {
+        // No step count at arg 1.  Process as legacy d8 step command:
+        if (args.length == 2) {
+          var stepcount = parseInt(args[1]);
+          if (isNaN(stepcount) || stepcount <= 0) {
+            throw new Error('Invalid step count argument "' + args[0] + '".');
+          }
+          request.arguments.stepcount = stepcount;
         }
+
+        // Get the step action.
+        switch (args[0]) {
+          case 'in':
+          case 'i':
+            request.arguments.stepaction = 'in';
+            break;
+
+          case 'min':
+          case 'm':
+            request.arguments.stepaction = 'min';
+            break;
+
+          case 'next':
+          case 'n':
+            request.arguments.stepaction = 'next';
+            break;
+
+          case 'out':
+          case 'o':
+            request.arguments.stepaction = 'out';
+            break;
+
+          default:
+            throw new Error('Invalid step argument "' + args[0] + '".');
+        }
+
+      } else {
+        // gdb style step commands:
+        request.arguments.stepaction = type;
         request.arguments.stepcount = stepcount;
-      }
-
-      // Get the step action.
-      switch (args[0]) {
-        case 'in':
-        case 'i':
-          request.arguments.stepaction = 'in';
-          break;
-
-        case 'min':
-        case 'm':
-          request.arguments.stepaction = 'min';
-          break;
-
-        case 'next':
-        case 'n':
-          request.arguments.stepaction = 'next';
-          break;
-
-        case 'out':
-        case 'o':
-          request.arguments.stepaction = 'out';
-          break;
-
-        default:
-          throw new Error('Invalid step argument "' + args[0] + '".');
       }
     }
   } else {
-    // Default is step next.
-    request.arguments.stepaction = 'next';
+    // Default is step of the specified type.
+    request.arguments.stepaction = type;
   }
 
   return request.toJSONProtocol();
@@ -648,6 +843,41 @@ DebugRequest.prototype.instancesCommandToJSONRequest_ = function(args) {
 };
 
 
+// Create a JSON request for the list command.
+DebugRequest.prototype.listCommandToJSONRequest_ = function(args) {
+
+  // Default is ten lines starting five lines before the current location.
+  if (Debug.State.displaySourceEndLine == -1) {
+    // If we list forwards, we will start listing after the last source end
+    // line.  Set it to start from 5 lines before the current location.
+    Debug.State.displaySourceEndLine = Debug.State.currentSourceLine - 5;
+    // If we list backwards, we will start listing backwards from the last
+    // source start line.  Set it to start from 1 lines before the current
+    // location.
+    Debug.State.displaySourceStartLine = Debug.State.currentSourceLine + 1;
+  }
+
+  var from = Debug.State.displaySourceEndLine + 1;
+  var lines = 10;
+
+  // Parse the arguments.
+  args = args.split(/\s*,\s*/g);
+  if (args == '') {
+  } else if ((args.length == 1) && (args[0] == '-')) {
+    from = Debug.State.displaySourceStartLine - lines;
+  } else if (args.length == 2) {
+    from = parseInt(args[0]);
+    lines = parseInt(args[1]) - from + 1; // inclusive of the ending line.
+  } else {
+    throw new Error('Invalid list arguments.');
+  }
+  Debug.State.displaySourceStartLine = from;
+  Debug.State.displaySourceEndLine = from + lines - 1;
+  var sourceArgs = '' + from + ' ' + lines;
+  return this.sourceCommandToJSONRequest_(sourceArgs);
+};
+
+
 // Create a JSON request for the source command.
 DebugRequest.prototype.sourceCommandToJSONRequest_ = function(args) {
   // Build a evaluate request from the text command.
@@ -709,7 +939,10 @@ DebugRequest.prototype.scriptsCommandToJSONRequest_ = function(args) {
         break;
 
       default:
-        throw new Error('Invalid argument "' + args[0] + '".');
+        // If the arg is not one of the know one aboves, then it must be a
+        // filter used for filtering the results:
+        request.arguments.filter = args[0];
+        break;
     }
   }
 
@@ -730,6 +963,8 @@ DebugRequest.prototype.breakCommandToJSONRequest_ = function(args) {
     var pos;
 
     var request = this.createRequest('setbreakpoint');
+
+    // Break the args into target spec and condition if appropriate.
 
     // Check for breakpoint condition.
     pos = args.indexOf(' ');
@@ -801,6 +1036,438 @@ DebugRequest.prototype.clearCommandToJSONRequest_ = function(args) {
 };
 
 
+// Create a JSON request for the change breakpoint command.
+DebugRequest.prototype.changeBreakpointCommandToJSONRequest_ =
+    function(args, command) {
+
+  var request;
+
+  // Check for exception breaks first:
+  //   en[able] exc[eptions] [all|unc[aught]]
+  //   en[able] [all|unc[aught]] exc[eptions]
+  //   dis[able] exc[eptions] [all|unc[aught]]
+  //   dis[able] [all|unc[aught]] exc[eptions]
+  if ((command == 'enable' || command == 'disable') &&
+      args && args.length > 1) {
+    var nextPos = args.indexOf(' ');
+    var arg1 = (nextPos > 0) ? args.substring(0, nextPos) : args;
+    var excType = null;
+
+    // Check for:
+    //   en[able] exc[eptions] [all|unc[aught]]
+    //   dis[able] exc[eptions] [all|unc[aught]]
+    if (arg1 == 'exc' || arg1 == 'exception' || arg1 == 'exceptions') {
+
+      var arg2 = (nextPos > 0) ?
+          args.substring(nextPos + 1, args.length) : 'all';
+      if (!arg2) {
+        arg2 = 'all'; // if unspecified, set for all.
+      } if (arg2 == 'unc') { // check for short cut.
+        arg2 = 'uncaught';
+      }
+      excType = arg2;
+      
+    // Check for:
+    //   en[able] [all|unc[aught]] exc[eptions]
+    //   dis[able] [all|unc[aught]] exc[eptions]
+    } else if (arg1 == 'all' || arg1 == 'unc' || arg1 == 'uncaught') {
+
+      var arg2 = (nextPos > 0) ?
+          args.substring(nextPos + 1, args.length) : null;
+      if (arg2 == 'exc' || arg1 == 'exception' || arg1 == 'exceptions') {
+        excType = arg1;
+        if (excType == 'unc') {
+          excType = 'uncaught';
+        }
+      }
+    }
+
+    // If we matched one of the command formats, then excType will be non-null:
+    if (excType) {
+      // Build a evaluate request from the text command.
+      request = this.createRequest('setexceptionbreak');
+
+      request.arguments = {};
+      request.arguments.type = excType;
+      request.arguments.enabled = (command == 'enable');
+
+      return request.toJSONProtocol();
+    }
+  }
+
+  // Build a evaluate request from the text command.
+  request = this.createRequest('changebreakpoint');
+
+  // Process arguments if any.
+  if (args && args.length > 0) {
+    request.arguments = {};
+    var pos = args.indexOf(' ');
+    var breakpointArg = args;
+    var otherArgs;
+    if (pos > 0) {
+      breakpointArg = args.substring(0, pos);
+      otherArgs = args.substring(pos + 1, args.length);
+    }
+
+    request.arguments.breakpoint = parseInt(breakpointArg);
+
+    switch(command) {
+      case 'cond':
+        request.arguments.condition = otherArgs ? otherArgs : null;
+        break;
+      case 'enable':
+        request.arguments.enabled = true;
+        break;
+      case 'disable':
+        request.arguments.enabled = false;
+        break;
+      case 'ignore':
+        request.arguments.ignoreCount = parseInt(otherArgs);
+        break;
+      default:
+        throw new Error('Invalid arguments.');  
+    }
+  } else {
+    throw new Error('Invalid arguments.');
+  }
+
+  return request.toJSONProtocol();
+};
+
+
+// Create a JSON request for the disconnect command.
+DebugRequest.prototype.disconnectCommandToJSONRequest_ = function(args) {
+  var request;
+  request = this.createRequest('disconnect');
+  return request.toJSONProtocol();
+};
+
+
+// Create a JSON request for the info command.
+DebugRequest.prototype.infoCommandToJSONRequest_ = function(args) {
+  var request;
+  if (args && (args == 'break' || args == 'br')) {
+    // Build a evaluate request from the text command.
+    request = this.createRequest('listbreakpoints');
+    last_cmd = 'info break';
+  } else if (args && (args == 'locals' || args == 'lo')) {
+    // Build a evaluate request from the text command.
+    request = this.createRequest('frame');
+    last_cmd = 'info locals';
+  } else if (args && (args == 'args' || args == 'ar')) {
+    // Build a evaluate request from the text command.
+    request = this.createRequest('frame');
+    last_cmd = 'info args';
+  } else if (lol_is_enabled &&
+             args && (args == 'liveobjectlist' || args == 'lol')) {
+    // Build a evaluate request from the text command.
+    return this.liveObjectListToJSONRequest_(null);
+  } else {
+    throw new Error('Invalid info arguments.');
+  }
+
+  return request.toJSONProtocol();
+};
+
+
+DebugRequest.prototype.v8FlagsToJSONRequest_ = function(args) {
+  var request;
+  request = this.createRequest('v8flags');
+  request.arguments = {};
+  request.arguments.flags = args;
+  return request.toJSONProtocol();
+};
+
+
+DebugRequest.prototype.gcToJSONRequest_ = function(args) {
+  var request;
+  if (!args) {
+    args = 'all';
+  }
+  var args = args.split(/\s+/g);
+  var cmd = args[0];
+
+  switch(cmd) {
+    case 'all':
+    case 'quick':
+    case 'full':
+    case 'young':
+    case 'old':
+    case 'compact':
+    case 'sweep':
+    case 'scavenge': {
+      if (cmd == 'young') { cmd = 'quick'; }
+      else if (cmd == 'old') { cmd = 'full'; }
+
+      request = this.createRequest('gc');
+      request.arguments = {};
+      request.arguments.type = cmd;
+      break;
+    }
+      // Else fall thru to the default case below to report the error.
+    default:
+      throw new Error('Missing arguments after ' + cmd + '.');
+  }
+  return request.toJSONProtocol();
+};
+
+
+// Args: [v[erbose]] [<N>] [i[ndex] <i>] [t[ype] <type>] [sp[ace] <space>]
+DebugRequest.prototype.lolMakeListRequest =
+    function(cmd, args, first_arg_index, is_repeating) {
+
+  var request;
+  var start_index = 0;
+  var dump_limit = void 0;
+  var type_filter = void 0;
+  var space_filter = void 0;
+  var prop_filter = void 0;
+  var is_verbose = false;
+  var i;
+
+  for (i = first_arg_index; i < args.length; i++) {
+    var arg = args[i];
+    // Check for [v[erbose]]:
+    if (arg === 'verbose' || arg === 'v') {
+      // Nothing to do.  This is already implied by args.length > 3.
+      is_verbose = true;
+
+    // Check for [<N>]:
+    } else if (arg.match(/^[0-9]+$/)) {
+      dump_limit = arg;
+      is_verbose = true;
+
+    // Check for i[ndex] <i>:
+    } else if (arg === 'index' || arg === 'i') {
+      i++;
+      if (args.length < i) {
+        throw new Error('Missing index after ' + arg + '.');
+      }
+      start_index = parseInt(args[i]);
+      // The user input start index starts at 1:
+      if (start_index <= 0) {
+        throw new Error('Invalid index ' + args[i] + '.');                
+      }
+      start_index -= 1;
+      is_verbose = true;
+
+    // Check for t[ype] <type>:
+    } else if (arg === 'type' || arg === 't') {
+      i++;
+      if (args.length < i) {
+        throw new Error('Missing type after ' + arg + '.');
+      }
+      type_filter = args[i];
+
+    // Check for space <heap space name>:
+    } else if (arg === 'space' || arg === 'sp') {
+      i++;
+      if (args.length < i) {
+        throw new Error('Missing space name after ' + arg + '.');
+      }
+      space_filter = args[i];
+
+    // Check for property <prop name>:
+    } else if (arg === 'property' || arg === 'prop') {
+      i++;
+      if (args.length < i) {
+        throw new Error('Missing property name after ' + arg + '.');
+      }
+      prop_filter = args[i];
+
+    } else {
+      throw new Error('Unknown args at ' + arg + '.');
+    }
+  }
+
+  // Build the verbose request:
+  if (is_verbose) {
+    request = this.createLOLRequest('lol-'+cmd,
+                                    start_index,
+                                    dump_limit,
+                                    is_repeating);
+    request.arguments.verbose = true;
+  } else {
+    request = this.createRequest('lol-'+cmd);
+    request.arguments = {};
+  }
+
+  request.arguments.filter = {};
+  if (type_filter) {
+    request.arguments.filter.type = type_filter;
+  }
+  if (space_filter) {
+    request.arguments.filter.space = space_filter;
+  }
+  if (prop_filter) {
+    request.arguments.filter.prop = prop_filter;
+  }
+
+  return request;
+}
+
+
+function extractObjId(args) {
+  var id = args;
+  id = id.match(/^@([0-9]+)$/);
+  if (id) {
+    id = id[1];
+  } else {
+    throw new Error('Invalid obj id ' + args + '.');
+  }
+  return parseInt(id);
+}
+
+
+DebugRequest.prototype.lolToJSONRequest_ = function(args, is_repeating) {
+  var request;
+  // Use default command if one is not specified:
+  if (!args) {
+    args = 'info';
+  }
+
+  var orig_args = args;
+  var first_arg_index;
+
+  var arg, i;
+  var args = args.split(/\s+/g);
+  var cmd = args[0];
+  var id;
+
+  // Command: <id> [v[erbose]] ...
+  if (cmd.match(/^[0-9]+$/)) {
+    // Convert to the padded list command:
+    // Command: l[ist] <dummy> <id> [v[erbose]] ...
+
+    // Insert the implicit 'list' in front and process as normal:
+    cmd = 'list';
+    args.unshift(cmd);
+  }
+
+  switch(cmd) {
+    // Command: c[apture]
+    case 'capture':
+    case 'c':
+      request = this.createRequest('lol-capture');
+      break;
+
+    // Command: clear|d[elete] <id>|all
+    case 'clear':
+    case 'delete':
+    case 'del': {
+      if (args.length < 2) {
+        throw new Error('Missing argument after ' + cmd + '.');
+      } else if (args.length > 2) {
+        throw new Error('Too many arguments after ' + cmd + '.');
+      }
+      id = args[1];
+      if (id.match(/^[0-9]+$/)) {
+        // Delete a specific lol record:
+        request = this.createRequest('lol-delete');
+        request.arguments = {};
+        request.arguments.id = parseInt(id);
+      } else if (id === 'all') {
+        // Delete all:
+        request = this.createRequest('lol-reset');
+      } else {
+        throw new Error('Invalid argument after ' + cmd + '.');
+      }
+      break;
+    }
+
+    // Command: diff <id1> <id2> [<dump options>]
+    case 'diff':
+      first_arg_index = 3;
+
+    // Command: list <dummy> <id> [<dump options>]
+    case 'list':
+
+    // Command: ret[ainers] <obj id> [<dump options>]
+    case 'retainers':
+    case 'ret':
+    case 'retaining-paths':
+    case 'rp': {
+      if (cmd === 'ret') cmd = 'retainers';
+      else if (cmd === 'rp') cmd = 'retaining-paths';
+
+      if (!first_arg_index) first_arg_index = 2;
+
+      if (args.length < first_arg_index) {
+        throw new Error('Too few arguments after ' + cmd + '.');
+      }
+
+      var request_cmd = (cmd === 'list') ? 'diff':cmd;
+      request = this.lolMakeListRequest(request_cmd,
+                                        args,
+                                        first_arg_index,
+                                        is_repeating);
+
+      if (cmd === 'diff') {
+        request.arguments.id1 = parseInt(args[1]);
+        request.arguments.id2 = parseInt(args[2]);
+      } else if (cmd == 'list') {
+        request.arguments.id1 = 0;
+        request.arguments.id2 = parseInt(args[1]);
+      } else {
+        request.arguments.id = extractObjId(args[1]);
+      }
+      break;
+    }
+
+    // Command: getid
+    case 'getid': {
+      request = this.createRequest('lol-getid');
+      request.arguments = {};
+      request.arguments.address = args[1];
+      break;
+    }
+
+    // Command: inf[o] [<N>]
+    case 'info':
+    case 'inf': {
+      if (args.length > 2) {
+        throw new Error('Too many arguments after ' + cmd + '.');
+      }
+      // Built the info request:
+      request = this.createLOLRequest('lol-info', 0, args[1], is_repeating);
+      break;
+    }
+
+    // Command: path <obj id 1> <obj id 2>
+    case 'path': {
+      request = this.createRequest('lol-path');
+      request.arguments = {};
+      if (args.length > 2) {
+        request.arguments.id1 = extractObjId(args[1]);
+        request.arguments.id2 = extractObjId(args[2]);
+      } else {
+        request.arguments.id1 = 0;
+        request.arguments.id2 = extractObjId(args[1]);
+      }
+      break;
+    }
+
+    // Command: print
+    case 'print': {
+      request = this.createRequest('lol-print');
+      request.arguments = {};
+      request.arguments.id = extractObjId(args[1]);
+      break;
+    }
+
+    // Command: reset
+    case 'reset': {
+      request = this.createRequest('lol-reset');
+      break;
+    }
+
+    default:
+      throw new Error('Invalid arguments.');
+  }
+  return request.toJSONProtocol();
+};
+
+
 // Create a JSON request for the threads command.
 DebugRequest.prototype.threadsCommandToJSONRequest_ = function(args) {
   // Build a threads request from the text command.
@@ -816,6 +1483,10 @@ DebugRequest.prototype.traceCommand_ = function(args) {
     if (args == 'compile') {
       trace_compile = !trace_compile;
       print('Tracing of compiled scripts ' + (trace_compile ? 'on' : 'off'));
+    } else if (args === 'debug json' || args === 'json' || args === 'packets') {
+      trace_debug_json = !trace_debug_json;
+      print('Tracing of debug json packets ' +
+            (trace_debug_json ? 'on' : 'off'));
     } else {
       throw new Error('Invalid trace arguments.');
     }
@@ -831,24 +1502,106 @@ DebugRequest.prototype.helpCommand_ = function(args) {
     print('warning: arguments to \'help\' are ignored');
   }
 
-  print('break');
-  print('break location [condition]');
-  print('  break on named function: location is a function name');
-  print('  break on function: location is #<id>#');
-  print('  break on script position: location is name:line[:column]');
-  print('clear <breakpoint #>');
-  print('backtrace [n] | [-n] | [from to]');
-  print('frame <frame #>');
+  print('Note: <> denotes symbollic values to be replaced with real values.');
+  print('Note: [] denotes optional parts of commands, or optional options / arguments.');
+  print('      e.g. d[elete] - you get the same command if you type d or delete.');
+  print('');
+  print('[break] - break as soon as possible');
+  print('b[reak] location [condition]');
+  print('        - break on named function: location is a function name');
+  print('        - break on function: location is #<id>#');
+  print('        - break on script position: location is name:line[:column]');
+  print('');
+  print('clear <breakpoint #>       - deletes the specified user defined breakpoint');
+  print('d[elete]  <breakpoint #>   - deletes the specified user defined breakpoint');
+  print('dis[able] <breakpoint #>   - disables the specified user defined breakpoint');
+  print('dis[able] exc[eptions] [[all] | unc[aught]]');
+  print('                           - disables breaking on exceptions');
+  print('en[able]  <breakpoint #>   - enables the specified user defined breakpoint');
+  print('en[able]  exc[eptions] [[all] | unc[aught]]');
+  print('                           - enables breaking on exceptions');
+  print('');
+  print('b[ack]t[race] [n] | [-n] | [from to]');
+  print('                           - prints the stack back trace');
+  print('f[rame]                    - prints info about the current frame context');
+  print('f[rame] <frame #>          - set context to specified frame #');
   print('scopes');
   print('scope <scope #>');
+  print('');
+  print('up                         - set context to caller of current frame');
+  print('do[wn]                     - set context to callee of current frame');
+  print('inf[o] br[eak]             - prints info about breakpoints in use');
+  print('inf[o] ar[gs]              - prints info about arguments of the current function');
+  print('inf[o] lo[cals]            - prints info about locals in the current function');
+  print('inf[o] liveobjectlist|lol  - same as \'lol info\'');
+  print('');
   print('step [in | next | out| min [step count]]');
-  print('print <expression>');
-  print('dir <expression>');
+  print('c[ontinue]                 - continue executing after a breakpoint');
+  print('s[tep]   [<N>]             - step into the next N callees (default N is 1)');
+  print('s[tep]i  [<N>]             - step into the next N callees (default N is 1)');
+  print('n[ext]   [<N>]             - step over the next N callees (default N is 1)');
+  print('fin[ish] [<N>]             - step out of N frames (default N is 1)');
+  print('');
+  print('p[rint] <expression>       - prints the result of the specified expression');
+  print('dir <expression>           - prints the object structure of the result');
+  print('set <var> = <expression>   - executes the specified statement');
+  print('');
+  print('l[ist]                     - list the source code around for the current pc');
+  print('l[ist] [- | <start>,<end>] - list the specified range of source code');
   print('source [from line [num lines]]');
-  print('scripts');
-  print('continue');
+  print('scr[ipts] [native|extensions|all]');
+  print('scr[ipts] [<filter text>]  - list scripts with the specified text in its description');
+  print('');
+  print('gc                         - runs the garbage collector');
+  print('');
+
+  if (lol_is_enabled) {
+    print('liveobjectlist|lol <command> - live object list tracking.');
+    print('  where <command> can be:');
+    print('  c[apture]               - captures a LOL list.');
+    print('  clear|del[ete] <id>|all - clears LOL of id <id>.');
+    print('                            If \'all\' is unspecified instead, will clear all.');
+    print('  diff <id1> <id2> [<dump options>]');
+    print('                          - prints the diff between LOLs id1 and id2.');
+    print('                          - also see <dump options> below.');
+    print('  getid <address>         - gets the obj id for the specified address if available.');
+    print('                            The address must be in hex form prefixed with 0x.');
+    print('  inf[o] [<N>]            - lists summary info of all LOL lists.');
+    print('                            If N is specified, will print N items at a time.');
+    print('  [l[ist]] <id> [<dump options>]');
+    print('                          - prints the listing of objects in LOL id.');
+    print('                          - also see <dump options> below.');
+    print('  reset                   - clears all LOL lists.');
+    print('  ret[ainers] <id> [<dump options>]');
+    print('                          - prints the list of retainers of obj id.');
+    print('                          - also see <dump options> below.');
+    print('  path <id1> <id2>        - prints the retaining path from obj id1 to id2.');
+    print('                            If only one id is specified, will print the path from');
+    print('                            roots to the specified object if available.');
+    print('  print <id>              - prints the obj for the specified obj id if available.');
+    print('');
+    print('  <dump options> includes:');
+    print('     [v[erbose]]            - do verbose dump.');
+    print('     [<N>]                  - dump N items at a time.  Implies verbose dump.');
+    print('                             If unspecified, N will default to '+
+          kDefaultLolLinesToPrintAtATime+'.  Max N is '+
+          kMaxLolLinesToPrintAtATime+'.');
+    print('     [i[ndex] <i>]          - start dump from index i.  Implies verbose dump.');
+    print('     [t[ype] <type>]        - filter by type.');
+    print('     [sp[ace] <space name>] - filter by heap space where <space name> is one of');
+    print('                              { cell, code, lo, map, new, old-data, old-pointer }.');
+    print('');
+    print('     If the verbose option, or an option that implies a verbose dump');
+    print('     is specified, then a verbose dump will requested.  Else, a summary dump');
+    print('     will be requested.');
+    print('');
+  }
+
   print('trace compile');
-  print('help');
+  // hidden command: trace debug json - toggles tracing of debug json packets
+  print('');
+  print('disconnect|exit|quit       - disconnects and quits the debugger');
+  print('help                       - prints this help information');
 }
 
 
@@ -930,6 +1683,258 @@ function formatScope_(scope) {
 }
 
 
+function refObjectToString_(protocolPackage, handle) {
+  var value = protocolPackage.lookup(handle);
+  var result = '';
+  if (value.isString()) {
+    result = '"' + value.value() + '"';
+  } else if (value.isPrimitive()) {
+    result = value.valueString();
+  } else if (value.isObject()) {
+    result += formatObject_(value, true);
+  }
+  return result;
+}
+
+
+function decodeLolCaptureResponse(body) {
+  var result;
+  result = 'Captured live object list '+ body.id +
+           ': count '+ body.count + ' size ' + body.size;
+  return result;
+}
+
+
+function decodeLolDeleteResponse(body) {
+  var result;
+  result = 'Deleted live object list '+ body.id;
+  return result;
+}
+
+
+function digitsIn(value) {
+  var digits = 0;
+  if (value === 0) value = 1;
+  while (value >= 1) {
+    digits++;
+    value /= 10;
+  }
+  return digits;
+}
+
+
+function padding(value, max_digits) {
+  var padding_digits = max_digits - digitsIn(value);
+  var padding = '';
+  while (padding_digits > 0) {
+    padding += ' ';
+    padding_digits--;
+  }
+  return padding;
+}
+
+
+function decodeLolInfoResponse(body) {
+  var result;
+  var lists = body.lists;
+  var length = lists.length;
+  var first_index = body.first_index + 1;
+  var has_more = ((first_index + length) <= body.count);
+  result = 'captured live object lists';
+  if (has_more || (first_index != 1)) {
+    result += ' ['+ length +' of '+ body.count +
+              ': starting from '+ first_index +']';
+  }
+  result += ':\n';
+  var max_digits = digitsIn(body.count);
+  var last_count = 0;
+  var last_size = 0;
+  for (var i = 0; i < length; i++) {
+    var entry = lists[i];
+    var count = entry.count;
+    var size = entry.size;
+    var index = first_index + i;
+    result += '  [' + padding(index, max_digits) + index + '] id '+ entry.id +
+              ': count '+ count;
+    if (last_count > 0) {
+      result += '(+' + (count - last_count) + ')';
+    }
+    result += ' size '+ size;
+    if (last_size > 0) {
+      result += '(+' + (size - last_size) + ')';
+    }
+    result += '\n';
+    last_count = count;
+    last_size = size;
+  }
+  result += '  total: '+length+' lists\n';
+  if (has_more) {
+    result += '  -- press <enter> for more --\n';
+  } else {
+    repeat_cmd_line = '';
+  }
+  if (length === 0) result += '  none\n';
+
+  return result;
+}
+
+
+function decodeLolListResponse(body, title) {
+  
+  var result;
+  var total_count = body.count;
+  var total_size = body.size;
+  var length;
+  var max_digits;
+  var i;
+  var entry;
+  var index;
+
+  var max_count_digits = digitsIn(total_count);
+  var max_size_digits;
+
+  var summary = body.summary;
+  if (summary) {
+
+    var roots_count = 0;
+    var found_root = body.found_root || 0;
+    var found_weak_root = body.found_weak_root || 0;
+
+    // Print the summary result:
+    result = 'summary of objects:\n';
+    length = summary.length;
+    if (found_root !== 0) {
+      roots_count++;
+    }
+    if (found_weak_root !== 0) {
+      roots_count++;
+    }
+    max_digits = digitsIn(length + roots_count);
+    max_size_digits = digitsIn(total_size);
+
+    index = 1;
+    if (found_root !== 0) {
+      result += '  [' + padding(index, max_digits) + index + '] ' +
+                ' count '+ 1 + padding(0, max_count_digits) +
+                '      '+ padding(0, max_size_digits+1) +
+                ' : <root>\n';
+      index++;
+    }
+    if (found_weak_root !== 0) {
+      result += '  [' + padding(index, max_digits) + index + '] ' +
+                ' count '+ 1 + padding(0, max_count_digits) +
+                '      '+ padding(0, max_size_digits+1) +
+                ' : <weak root>\n';
+      index++;
+    }
+
+    for (i = 0; i < length; i++) {
+      entry = summary[i];
+      var count = entry.count;
+      var size = entry.size;
+      result += '  [' + padding(index, max_digits) + index + '] ' +
+                ' count '+ count + padding(count, max_count_digits) +
+                ' size '+ size + padding(size, max_size_digits) +
+                ' : <' + entry.desc + '>\n';
+      index++;
+    }
+    result += '\n  total count: '+(total_count+roots_count)+'\n';
+    if (body.size) {
+      result += '  total size:  '+body.size+'\n';
+    }
+
+  } else {
+    // Print the full dump result:
+    var first_index = body.first_index + 1;
+    var elements = body.elements;
+    length = elements.length;
+    var has_more = ((first_index + length) <= total_count);
+    result = title;
+    if (has_more || (first_index != 1)) {
+      result += ' ['+ length +' of '+ total_count +
+                ': starting from '+ first_index +']';
+    }
+    result += ':\n';
+    if (length === 0) result += '  none\n';
+    max_digits = digitsIn(length);
+
+    var max_id = 0;
+    var max_size = 0;
+    for (i = 0; i < length; i++) {
+      entry = elements[i];
+      if (entry.id > max_id) max_id = entry.id;
+      if (entry.size > max_size) max_size = entry.size;
+    }
+    var max_id_digits = digitsIn(max_id);
+    max_size_digits = digitsIn(max_size);
+
+    for (i = 0; i < length; i++) {
+      entry = elements[i];
+      index = first_index + i;
+      result += '  ['+ padding(index, max_digits) + index +']';
+      if (entry.id !== 0) {
+        result += ' @' + entry.id + padding(entry.id, max_id_digits) +
+                  ': size ' + entry.size + ', ' +
+                  padding(entry.size, max_size_digits) +  entry.desc + '\n';
+      } else {
+        // Must be a root or weak root:
+        result += ' ' + entry.desc + '\n';
+      }
+    }
+    if (has_more) {
+      result += '  -- press <enter> for more --\n';
+    } else {
+      repeat_cmd_line = '';
+    }
+    if (length === 0) result += '  none\n';
+  }
+
+  return result;
+}
+
+
+function decodeLolDiffResponse(body) {
+  var title = 'objects';
+  return decodeLolListResponse(body, title);
+}
+
+
+function decodeLolRetainersResponse(body) {
+  var title = 'retainers for @' + body.id;
+  return decodeLolListResponse(body, title);
+}
+
+
+function decodeLolPathResponse(body) {
+  return body.path;
+}
+
+
+function decodeLolResetResponse(body) {
+  return 'Reset all live object lists.';
+}
+
+
+function decodeLolGetIdResponse(body) {
+  if (body.id == 0) {
+    return 'Address is invalid, or object has been moved or collected';
+  }
+  return 'obj id is @' + body.id;
+}
+
+
+function decodeLolPrintResponse(body) {
+  return body.dump;
+}
+
+
+// Rounds number 'num' to 'length' decimal places.
+function roundNumber(num, length) {
+  var factor = Math.pow(10, length);
+  return Math.round(num * factor) / factor;
+}
+
+
 // Convert a JSON response to text for display in a text based debugger.
 function DebugResponseDetails(response) {
   details = {text:'', running:false}
@@ -949,7 +1954,7 @@ function DebugResponseDetails(response) {
       case 'suspend':
         details.text = 'stopped';
         break;
-        
+
       case 'setbreakpoint':
         result = 'set breakpoint #';
         result += body.breakpoint;
@@ -961,7 +1966,12 @@ function DebugResponseDetails(response) {
         result += body.breakpoint;
         details.text = result;
         break;
-        
+
+      case 'changebreakpoint':
+        result = 'successfully changed breakpoint';
+        details.text = result;
+        break;
+
       case 'listbreakpoints':
         result = 'breakpoints: (' + body.breakpoints.length + ')';
         for (var i = 0; i < body.breakpoints.length; i++) {
@@ -974,9 +1984,9 @@ function DebugResponseDetails(response) {
           if (breakpoint.script_name) {
               result += ' script_name=' + breakpoint.script_name;
           }
-          result += ' line=' + breakpoint.line;
+          result += ' line=' + (breakpoint.line + 1);
           if (breakpoint.column != null) {
-            result += ' column=' + breakpoint.column;
+            result += ' column=' + (breakpoint.column + 1);
           }
           if (breakpoint.groupId) {
             result += ' groupId=' + breakpoint.groupId;
@@ -992,6 +2002,24 @@ function DebugResponseDetails(response) {
           }
           result += ' hit_count=' + breakpoint.hit_count;
         }
+        if (body.breakpoints.length === 0) {
+          result = "No user defined breakpoints\n";
+        } else {
+          result += '\n';
+        }
+        if (body.breakOnExceptions) {
+          result += '* breaking on ALL exceptions is enabled\n';
+        } else if (body.breakOnUncaughtExceptions) {
+          result += '* breaking on UNCAUGHT exceptions is enabled\n';
+        } else {
+          result += '* all exception breakpoints are disabled\n';            
+        }
+        details.text = result;
+        break;
+
+      case 'setexceptionbreak':
+        result = 'Break on ' + body.type + ' exceptions: ';
+        result += body.enabled ? 'enabled' : 'disabled';
         details.text = result;
         break;
 
@@ -1010,10 +2038,39 @@ function DebugResponseDetails(response) {
         break;
 
       case 'frame':
-        details.text = SourceUnderline(body.sourceLineText,
-                                       body.column);
-        Debug.State.currentSourceLine = body.line;
-        Debug.State.currentFrame = body.index;
+        if (last_cmd === 'info locals') {
+          var locals = body.locals;
+          if (locals.length === 0) {
+            result = 'No locals';
+          } else {
+            for (var i = 0; i < locals.length; i++) {
+              var local = locals[i];
+              result += local.name + ' = ';
+              result += refObjectToString_(response, local.value.ref);
+              result += '\n';
+            }
+          }
+        } else if (last_cmd === 'info args') {
+          var args = body.arguments;
+          if (args.length === 0) {
+            result = 'No arguments';
+          } else {
+            for (var i = 0; i < args.length; i++) {
+              var arg = args[i];
+              result += arg.name + ' = ';
+              result += refObjectToString_(response, arg.value.ref);
+              result += '\n';
+            }
+          }
+        } else {
+          result = SourceUnderline(body.sourceLineText,
+                                   body.column);
+          Debug.State.currentSourceLine = body.line;
+          Debug.State.currentFrame = body.index;
+          Debug.State.displaySourceStartLine = -1;
+          Debug.State.displaySourceEndLine = -1;
+        }
+        details.text = result;
         break;
 
       case 'scopes':
@@ -1042,6 +2099,7 @@ function DebugResponseDetails(response) {
 
       case 'evaluate':
       case 'lookup':
+      case 'getobj':
         if (last_cmd == 'p' || last_cmd == 'print') {
           result = body.text;
         } else {
@@ -1132,7 +2190,9 @@ function DebugResponseDetails(response) {
           if (body[i].name) {
             result += body[i].name;
           } else {
-            if (body[i].compilationType == Debug.ScriptCompilationType.Eval) {
+            if (body[i].compilationType == Debug.ScriptCompilationType.Eval
+                && body[i].evalFromScript
+                ) {
               result += 'eval from ';
               var script_value = response.lookup(body[i].evalFromScript.ref);
               result += ' ' + script_value.field('name');
@@ -1162,6 +2222,9 @@ function DebugResponseDetails(response) {
           result += sourceStart;
           result += ']';
         }
+        if (body.length == 0) {
+          result = "no matching scripts found";
+        }
         details.text = result;
         break;
 
@@ -1179,6 +2242,51 @@ function DebugResponseDetails(response) {
 
       case 'continue':
         details.text = "(running)";
+        break;
+
+      case 'v8flags':
+        details.text = "flags set";
+        break;
+
+      case 'gc':
+        details.text = "GC " + body.before + " => " + body.after;
+        if (body.after > (1024*1024)) {
+          details.text +=
+              " (" + roundNumber(body.before/(1024*1024), 1) + "M => " +
+                     roundNumber(body.after/(1024*1024), 1) + "M)";
+        } else if (body.after > 1024) {
+          details.text +=
+              " (" + roundNumber(body.before/1024, 1) + "K => " +
+                     roundNumber(body.after/1024, 1) + "K)";
+        }
+        break;
+
+      case 'lol-capture':
+        details.text = decodeLolCaptureResponse(body);
+        break;
+      case 'lol-delete':
+        details.text = decodeLolDeleteResponse(body);
+        break;
+      case 'lol-diff':
+        details.text = decodeLolDiffResponse(body);
+        break;
+      case 'lol-getid':
+        details.text = decodeLolGetIdResponse(body);
+        break;
+      case 'lol-info':
+        details.text = decodeLolInfoResponse(body);
+        break;
+      case 'lol-print':
+        details.text = decodeLolPrintResponse(body);
+        break;
+      case 'lol-reset':
+        details.text = decodeLolResetResponse(body);
+        break;
+      case 'lol-retainers':
+        details.text = decodeLolRetainersResponse(body);
+        break;
+      case 'lol-path':
+        details.text = decodeLolPathResponse(body);
         break;
 
       default:
@@ -1467,6 +2575,11 @@ ProtocolValue.prototype.value = function() {
 }
 
 
+ProtocolValue.prototype.valueString = function() {
+  return this.value_.text;
+}
+
+
 function ProtocolReference(handle) {
   this.handle_ = handle;
 }
@@ -1613,7 +2726,9 @@ function SimpleObjectToJSON_(object) {
       var property_value_json;
       switch (typeof property_value) {
         case 'object':
-          if (typeof property_value.toJSONProtocol == 'function') {
+          if (property_value === null) {
+            property_value_json = 'null';
+          } else if (typeof property_value.toJSONProtocol == 'function') {
             property_value_json = property_value.toJSONProtocol(true)
           } else if (property_value.constructor.name == 'Array'){
             property_value_json = SimpleArrayToJSON_(property_value);

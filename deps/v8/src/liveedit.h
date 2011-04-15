@@ -83,14 +83,17 @@ class LiveEdit : AllStatic {
 
   static void WrapSharedFunctionInfos(Handle<JSArray> array);
 
-  static Object* ReplaceFunctionCode(Handle<JSArray> new_compile_info_array,
-                                     Handle<JSArray> shared_info_array);
+  MUST_USE_RESULT static MaybeObject* ReplaceFunctionCode(
+      Handle<JSArray> new_compile_info_array,
+      Handle<JSArray> shared_info_array);
+
+  static MaybeObject* FunctionSourceUpdated(Handle<JSArray> shared_info_array);
 
   // Updates script field in FunctionSharedInfo.
   static void SetFunctionScript(Handle<JSValue> function_wrapper,
                                 Handle<Object> script_handle);
 
-  static Object* PatchFunctionPositions(
+  MUST_USE_RESULT static MaybeObject* PatchFunctionPositions(
       Handle<JSArray> shared_info_array, Handle<JSArray> position_change_array);
 
   // For a script updates its source field. If old_script_name is provided
@@ -123,10 +126,11 @@ class LiveEdit : AllStatic {
     FUNCTION_REPLACED_ON_ACTIVE_STACK = 5
   };
 
-  // Compares 2 strings line-by-line and returns diff in form of array of
-  // triplets (pos1, pos1_end, pos2_end) describing list of diff chunks.
-  static Handle<JSArray> CompareStringsLinewise(Handle<String> s1,
-                                                Handle<String> s2);
+  // Compares 2 strings line-by-line, then token-wise and returns diff in form
+  // of array of triplets (pos1, pos1_end, pos2_end) describing list
+  // of diff chunks.
+  static Handle<JSArray> CompareStrings(Handle<String> s1,
+                                        Handle<String> s2);
 };
 
 

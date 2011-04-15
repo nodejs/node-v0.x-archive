@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2006-2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,6 +27,7 @@
 
 #include "v8.h"
 
+#include "liveobjectlist-inl.h"
 #include "macro-assembler.h"
 #include "mark-compact.h"
 #include "platform.h"
@@ -270,8 +271,9 @@ void CodeRange::TearDown() {
 // -----------------------------------------------------------------------------
 // MemoryAllocator
 //
-intptr_t MemoryAllocator::capacity_   = 0;
-intptr_t MemoryAllocator::size_       = 0;
+intptr_t MemoryAllocator::capacity_ = 0;
+intptr_t MemoryAllocator::capacity_executable_ = 0;
+intptr_t MemoryAllocator::size_ = 0;
 intptr_t MemoryAllocator::size_executable_ = 0;
 
 List<MemoryAllocator::MemoryAllocationCallbackRegistration>
@@ -302,8 +304,10 @@ int MemoryAllocator::Pop() {
 }
 
 
-bool MemoryAllocator::Setup(intptr_t capacity) {
+bool MemoryAllocator::Setup(intptr_t capacity, intptr_t capacity_executable) {
   capacity_ = RoundUp(capacity, Page::kPageSize);
+  capacity_executable_ = RoundUp(capacity_executable, Page::kPageSize);
+  ASSERT_GE(capacity_, capacity_executable_);
 
   // Over-estimate the size of chunks_ array.  It assumes the expansion of old
   // space is always in the unit of a chunk (kChunkSize) except the last
@@ -330,6 +334,11 @@ bool MemoryAllocator::Setup(intptr_t capacity) {
 }
 
 
+bool MemoryAllocator::SafeIsInAPageChunk(Address addr) {
+  return InInitialChunk(addr) || InAllocatedChunks(addr);
+}
+
+
 void MemoryAllocator::TearDown() {
   for (int i = 0; i < max_nof_chunks_; i++) {
     if (chunks_[i].address() != NULL) DeleteChunk(i);
@@ -343,11 +352,32 @@ void MemoryAllocator::TearDown() {
     initial_chunk_ = NULL;
   }
 
+  FreeChunkTables(&chunk_table_[0],
+                  kChunkTableTopLevelEntries,
+                  kChunkTableLevels);
+
   ASSERT(top_ == max_nof_chunks_);  // all chunks are free
   top_ = 0;
   capacity_ = 0;
+  capacity_executable_ = 0;
   size_ = 0;
   max_nof_chunks_ = 0;
+}
+
+
+void MemoryAllocator::FreeChunkTables(uintptr_t* array, int len, int level) {
+  for (int i = 0; i < len; i++) {
+    if (array[i] != kUnusedChunkTableEntry) {
+      uintptr_t* subarray = reinterpret_cast<uintptr_t*>(array[i]);
+      if (level > 1) {
+        array[i] = kUnusedChunkTableEntry;
+        FreeChunkTables(subarray, 1 << kChunkTableBitsPerLevel, level - 1);
+      } else {
+        array[i] = kUnusedChunkTableEntry;
+      }
+      delete[] subarray;
+    }
+  }
 }
 
 
@@ -357,16 +387,31 @@ void* MemoryAllocator::AllocateRawMemory(const size_t requested,
   if (size_ + static_cast<size_t>(requested) > static_cast<size_t>(capacity_)) {
     return NULL;
   }
+
   void* mem;
-  if (executable == EXECUTABLE  && CodeRange::exists()) {
-    mem = CodeRange::AllocateRawMemory(requested, allocated);
+  if (executable == EXECUTABLE) {
+    // Check executable memory limit.
+    if (size_executable_ + requested >
+        static_cast<size_t>(capacity_executable_)) {
+      LOG(StringEvent("MemoryAllocator::AllocateRawMemory",
+                      "V8 Executable Allocation capacity exceeded"));
+      return NULL;
+    }
+    // Allocate executable memory either from code range or from the
+    // OS.
+    if (CodeRange::exists()) {
+      mem = CodeRange::AllocateRawMemory(requested, allocated);
+    } else {
+      mem = OS::Allocate(requested, allocated, true);
+    }
+    // Update executable memory size.
+    size_executable_ += static_cast<int>(*allocated);
   } else {
-    mem = OS::Allocate(requested, allocated, (executable == EXECUTABLE));
+    mem = OS::Allocate(requested, allocated, false);
   }
   int alloced = static_cast<int>(*allocated);
   size_ += alloced;
 
-  if (executable == EXECUTABLE) size_executable_ += alloced;
 #ifdef DEBUG
   ZapBlock(reinterpret_cast<Address>(mem), alloced);
 #endif
@@ -391,6 +436,7 @@ void MemoryAllocator::FreeRawMemory(void* mem,
   if (executable == EXECUTABLE) size_executable_ -= static_cast<int>(length);
 
   ASSERT(size_ >= 0);
+  ASSERT(size_executable_ >= 0);
 }
 
 
@@ -468,25 +514,19 @@ static int PagesInChunk(Address start, size_t size) {
 }
 
 
-Page* MemoryAllocator::AllocatePages(int requested_pages, int* allocated_pages,
+Page* MemoryAllocator::AllocatePages(int requested_pages,
+                                     int* allocated_pages,
                                      PagedSpace* owner) {
   if (requested_pages <= 0) return Page::FromAddress(NULL);
   size_t chunk_size = requested_pages * Page::kPageSize;
 
-  // There is not enough space to guarantee the desired number pages can be
-  // allocated.
-  if (size_ + static_cast<int>(chunk_size) > capacity_) {
-    // Request as many pages as we can.
-    chunk_size = capacity_ - size_;
-    requested_pages = static_cast<int>(chunk_size >> kPageSizeBits);
-
-    if (requested_pages <= 0) return Page::FromAddress(NULL);
-  }
   void* chunk = AllocateRawMemory(chunk_size, &chunk_size, owner->executable());
   if (chunk == NULL) return Page::FromAddress(NULL);
   LOG(NewEvent("PagedChunk", chunk, chunk_size));
 
   *allocated_pages = PagesInChunk(static_cast<Address>(chunk), chunk_size);
+  // We may 'lose' a page due to alignment.
+  ASSERT(*allocated_pages >= kPagesPerChunk - 1);
   if (*allocated_pages == 0) {
     FreeRawMemory(chunk, chunk_size, owner->executable());
     LOG(DeleteEvent("PagedChunk", chunk));
@@ -498,7 +538,11 @@ Page* MemoryAllocator::AllocatePages(int requested_pages, int* allocated_pages,
 
   ObjectSpace space = static_cast<ObjectSpace>(1 << owner->identity());
   PerformAllocationCallback(space, kAllocationActionAllocate, chunk_size);
-  return InitializePagesInChunk(chunk_id, *allocated_pages, owner);
+  Page* new_pages = InitializePagesInChunk(chunk_id, *allocated_pages, owner);
+
+  AddToAllocatedChunks(static_cast<Address>(chunk), chunk_size);
+
+  return new_pages;
 }
 
 
@@ -655,6 +699,7 @@ void MemoryAllocator::DeleteChunk(int chunk_id) {
     initial_chunk_->Uncommit(c.address(), c.size());
     Counters::memory_allocated.Decrement(static_cast<int>(c.size()));
   } else {
+    RemoveFromAllocatedChunks(c.address(), c.size());
     LOG(DeleteEvent("PagedChunk", c.address()));
     ObjectSpace space = static_cast<ObjectSpace>(1 << c.owner()->identity());
     size_t size = c.size();
@@ -768,6 +813,123 @@ Page* MemoryAllocator::RelinkPagesInChunk(int chunk_id,
 }
 
 
+void MemoryAllocator::AddToAllocatedChunks(Address addr, intptr_t size) {
+  ASSERT(size == kChunkSize);
+  uintptr_t int_address = reinterpret_cast<uintptr_t>(addr);
+  AddChunkUsingAddress(int_address, int_address);
+  AddChunkUsingAddress(int_address, int_address + size - 1);
+}
+
+
+void MemoryAllocator::AddChunkUsingAddress(uintptr_t chunk_start,
+                                           uintptr_t chunk_index_base) {
+  uintptr_t* fine_grained = AllocatedChunksFinder(
+      chunk_table_,
+      chunk_index_base,
+      kChunkSizeLog2 + (kChunkTableLevels - 1) * kChunkTableBitsPerLevel,
+      kCreateTablesAsNeeded);
+  int index = FineGrainedIndexForAddress(chunk_index_base);
+  if (fine_grained[index] != kUnusedChunkTableEntry) index++;
+  ASSERT(fine_grained[index] == kUnusedChunkTableEntry);
+  fine_grained[index] = chunk_start;
+}
+
+
+void MemoryAllocator::RemoveFromAllocatedChunks(Address addr, intptr_t size) {
+  ASSERT(size == kChunkSize);
+  uintptr_t int_address = reinterpret_cast<uintptr_t>(addr);
+  RemoveChunkFoundUsingAddress(int_address, int_address);
+  RemoveChunkFoundUsingAddress(int_address, int_address + size - 1);
+}
+
+
+void MemoryAllocator::RemoveChunkFoundUsingAddress(
+    uintptr_t chunk_start,
+    uintptr_t chunk_index_base) {
+  uintptr_t* fine_grained = AllocatedChunksFinder(
+      chunk_table_,
+      chunk_index_base,
+      kChunkSizeLog2 + (kChunkTableLevels - 1) * kChunkTableBitsPerLevel,
+      kDontCreateTables);
+  // Can't remove an entry that's not there.
+  ASSERT(fine_grained != kUnusedChunkTableEntry);
+  int index = FineGrainedIndexForAddress(chunk_index_base);
+  ASSERT(fine_grained[index] != kUnusedChunkTableEntry);
+  if (fine_grained[index] != chunk_start) {
+    index++;
+    ASSERT(fine_grained[index] == chunk_start);
+    fine_grained[index] = kUnusedChunkTableEntry;
+  } else {
+    // If only one of the entries is used it must be the first, since
+    // InAllocatedChunks relies on that.  Move things around so that this is
+    // the case.
+    fine_grained[index] = fine_grained[index + 1];
+    fine_grained[index + 1] = kUnusedChunkTableEntry;
+  }
+}
+
+
+bool MemoryAllocator::InAllocatedChunks(Address addr) {
+  uintptr_t int_address = reinterpret_cast<uintptr_t>(addr);
+  uintptr_t* fine_grained = AllocatedChunksFinder(
+      chunk_table_,
+      int_address,
+      kChunkSizeLog2 + (kChunkTableLevels - 1) * kChunkTableBitsPerLevel,
+      kDontCreateTables);
+  if (fine_grained == NULL) return false;
+  int index = FineGrainedIndexForAddress(int_address);
+  if (fine_grained[index] == kUnusedChunkTableEntry) return false;
+  uintptr_t entry = fine_grained[index];
+  if (entry <= int_address && entry + kChunkSize > int_address) return true;
+  index++;
+  if (fine_grained[index] == kUnusedChunkTableEntry) return false;
+  entry = fine_grained[index];
+  if (entry <= int_address && entry + kChunkSize > int_address) return true;
+  return false;
+}
+
+
+uintptr_t* MemoryAllocator::AllocatedChunksFinder(
+    uintptr_t* table,
+    uintptr_t address,
+    int bit_position,
+    CreateTables create_as_needed) {
+  if (bit_position == kChunkSizeLog2) {
+    return table;
+  }
+  ASSERT(bit_position >= kChunkSizeLog2 + kChunkTableBitsPerLevel);
+  int index =
+      ((address >> bit_position) &
+       ((V8_INTPTR_C(1) << kChunkTableBitsPerLevel) - 1));
+  uintptr_t more_fine_grained_address =
+      address & ((V8_INTPTR_C(1) << bit_position) - 1);
+  ASSERT((table == chunk_table_ && index < kChunkTableTopLevelEntries) ||
+         (table != chunk_table_ && index < 1 << kChunkTableBitsPerLevel));
+  uintptr_t* more_fine_grained_table =
+      reinterpret_cast<uintptr_t*>(table[index]);
+  if (more_fine_grained_table == kUnusedChunkTableEntry) {
+    if (create_as_needed == kDontCreateTables) return NULL;
+    int words_needed = 1 << kChunkTableBitsPerLevel;
+    if (bit_position == kChunkTableBitsPerLevel + kChunkSizeLog2) {
+      words_needed =
+          (1 << kChunkTableBitsPerLevel) * kChunkTableFineGrainedWordsPerEntry;
+    }
+    more_fine_grained_table = new uintptr_t[words_needed];
+    for (int i = 0; i < words_needed; i++) {
+      more_fine_grained_table[i] = kUnusedChunkTableEntry;
+    }
+    table[index] = reinterpret_cast<uintptr_t>(more_fine_grained_table);
+  }
+  return AllocatedChunksFinder(
+      more_fine_grained_table,
+      more_fine_grained_address,
+      bit_position - kChunkTableBitsPerLevel,
+      create_as_needed);
+}
+
+
+uintptr_t MemoryAllocator::chunk_table_[kChunkTableTopLevelEntries];
+
 
 // -----------------------------------------------------------------------------
 // PagedSpace implementation
@@ -873,7 +1035,7 @@ void PagedSpace::MarkAllPagesClean() {
 }
 
 
-Object* PagedSpace::FindObject(Address addr) {
+MaybeObject* PagedSpace::FindObject(Address addr) {
   // Note: this function can only be called before or after mark-compact GC
   // because it accesses map pointers.
   ASSERT(!MarkCompactCollector::in_use());
@@ -990,7 +1152,10 @@ bool PagedSpace::Expand(Page* last_page) {
 
   int available_pages =
       static_cast<int>((max_capacity_ - Capacity()) / Page::kObjectAreaSize);
-  if (available_pages <= 0) return false;
+  // We don't want to have to handle small chunks near the end so if there are
+  // not kPagesPerChunk pages available without exceeding the max capacity then
+  // act as if memory has run out.
+  if (available_pages < MemoryAllocator::kPagesPerChunk) return false;
 
   int desired_pages = Min(available_pages, MemoryAllocator::kPagesPerChunk);
   Page* p = MemoryAllocator::AllocatePages(desired_pages, &desired_pages, this);
@@ -1524,6 +1689,7 @@ static void ReportCodeKindStatistics() {
   for (int i = 0; i < Code::NUMBER_OF_KINDS; i++) {
     switch (static_cast<Code::Kind>(i)) {
       CASE(FUNCTION);
+      CASE(OPTIMIZED_FUNCTION);
       CASE(STUB);
       CASE(BUILTIN);
       CASE(LOAD_IC);
@@ -1533,6 +1699,8 @@ static void ReportCodeKindStatistics() {
       CASE(CALL_IC);
       CASE(KEYED_CALL_IC);
       CASE(BINARY_OP_IC);
+      CASE(TYPE_RECORDING_BINARY_OP_IC);
+      CASE(COMPARE_IC);
     }
   }
 
@@ -1804,7 +1972,7 @@ int OldSpaceFreeList::Free(Address start, int size_in_bytes) {
 }
 
 
-Object* OldSpaceFreeList::Allocate(int size_in_bytes, int* wasted_bytes) {
+MaybeObject* OldSpaceFreeList::Allocate(int size_in_bytes, int* wasted_bytes) {
   ASSERT(0 < size_in_bytes);
   ASSERT(size_in_bytes <= kMaxBlockSize);
   ASSERT(IsAligned(size_in_bytes, kPointerSize));
@@ -1828,7 +1996,7 @@ Object* OldSpaceFreeList::Allocate(int size_in_bytes, int* wasted_bytes) {
   if (cur == kEnd) {
     // No large enough size in list.
     *wasted_bytes = 0;
-    return Failure::RetryAfterGC(size_in_bytes, owner_);
+    return Failure::RetryAfterGC(owner_);
   }
   ASSERT(!FLAG_always_compact);  // We only use the freelists with mark-sweep.
   int rem = cur - index;
@@ -1878,6 +2046,18 @@ Object* OldSpaceFreeList::Allocate(int size_in_bytes, int* wasted_bytes) {
 }
 
 
+void OldSpaceFreeList::MarkNodes() {
+  for (int i = 0; i < kFreeListsLength; i++) {
+    Address cur_addr = free_[i].head_node_;
+    while (cur_addr != NULL) {
+      FreeListNode* cur_node = FreeListNode::FromAddress(cur_addr);
+      cur_addr = cur_node->next();
+      cur_node->SetMark();
+    }
+  }
+}
+
+
 #ifdef DEBUG
 bool OldSpaceFreeList::Contains(FreeListNode* node) {
   for (int i = 0; i < kFreeListsLength; i++) {
@@ -1924,9 +2104,9 @@ void FixedSizeFreeList::Free(Address start) {
 }
 
 
-Object* FixedSizeFreeList::Allocate() {
+MaybeObject* FixedSizeFreeList::Allocate() {
   if (head_ == NULL) {
-    return Failure::RetryAfterGC(object_size_, owner_);
+    return Failure::RetryAfterGC(owner_);
   }
 
   ASSERT(!FLAG_always_compact);  // We only use the freelists with mark-sweep.
@@ -1934,6 +2114,16 @@ Object* FixedSizeFreeList::Allocate() {
   head_ = node->next();
   available_ -= object_size_;
   return node;
+}
+
+
+void FixedSizeFreeList::MarkNodes() {
+  Address cur_addr = head_;
+  while (cur_addr != NULL && cur_addr != tail_) {
+    FreeListNode* cur_node = FreeListNode::FromAddress(cur_addr);
+    cur_addr = cur_node->next();
+    cur_node->SetMark();
+  }
 }
 
 
@@ -2187,9 +2377,10 @@ HeapObject* OldSpace::SlowAllocateRaw(int size_in_bytes) {
   // is currently forbidden.
   if (!Heap::linear_allocation()) {
     int wasted_bytes;
-    Object* result = free_list_.Allocate(size_in_bytes, &wasted_bytes);
+    Object* result;
+    MaybeObject* maybe = free_list_.Allocate(size_in_bytes, &wasted_bytes);
     accounting_stats_.WasteBytes(wasted_bytes);
-    if (!result->IsFailure()) {
+    if (maybe->ToObject(&result)) {
       accounting_stats_.AllocateBytes(size_in_bytes);
 
       HeapObject* obj = HeapObject::cast(result);
@@ -2495,8 +2686,9 @@ HeapObject* FixedSpace::SlowAllocateRaw(int size_in_bytes) {
   // that is currently forbidden.  The fixed space free list implicitly assumes
   // that all free blocks are of the fixed size.
   if (!Heap::linear_allocation()) {
-    Object* result = free_list_.Allocate();
-    if (!result->IsFailure()) {
+    Object* result;
+    MaybeObject* maybe = free_list_.Allocate();
+    if (maybe->ToObject(&result)) {
       accounting_stats_.AllocateBytes(size_in_bytes);
       HeapObject* obj = HeapObject::cast(result);
       Page* p = Page::FromAddress(obj->address());
@@ -2653,32 +2845,40 @@ HeapObject* LargeObjectIterator::next() {
 // LargeObjectChunk
 
 LargeObjectChunk* LargeObjectChunk::New(int size_in_bytes,
-                                        size_t* chunk_size,
                                         Executability executable) {
   size_t requested = ChunkSizeFor(size_in_bytes);
-  void* mem = MemoryAllocator::AllocateRawMemory(requested,
-                                                 chunk_size,
-                                                 executable);
+  size_t size;
+  void* mem = MemoryAllocator::AllocateRawMemory(requested, &size, executable);
   if (mem == NULL) return NULL;
-  LOG(NewEvent("LargeObjectChunk", mem, *chunk_size));
-  if (*chunk_size < requested) {
-    MemoryAllocator::FreeRawMemory(mem, *chunk_size, executable);
+
+  // The start of the chunk may be overlayed with a page so we have to
+  // make sure that the page flags fit in the size field.
+  ASSERT((size & Page::kPageFlagMask) == 0);
+
+  LOG(NewEvent("LargeObjectChunk", mem, size));
+  if (size < requested) {
+    MemoryAllocator::FreeRawMemory(mem, size, executable);
     LOG(DeleteEvent("LargeObjectChunk", mem));
     return NULL;
   }
-  ObjectSpace space =
-      (executable == EXECUTABLE) ? kObjectSpaceCodeSpace : kObjectSpaceLoSpace;
-  MemoryAllocator::PerformAllocationCallback(space,
-                                             kAllocationActionAllocate,
-                                             *chunk_size);
-  return reinterpret_cast<LargeObjectChunk*>(mem);
+
+  ObjectSpace space = (executable == EXECUTABLE)
+      ? kObjectSpaceCodeSpace
+      : kObjectSpaceLoSpace;
+  MemoryAllocator::PerformAllocationCallback(
+      space, kAllocationActionAllocate, size);
+
+  LargeObjectChunk* chunk = reinterpret_cast<LargeObjectChunk*>(mem);
+  chunk->size_ = size;
+  return chunk;
 }
 
 
 int LargeObjectChunk::ChunkSizeFor(int size_in_bytes) {
   int os_alignment = static_cast<int>(OS::AllocateAlignment());
-  if (os_alignment < Page::kPageSize)
+  if (os_alignment < Page::kPageSize) {
     size_in_bytes += (Page::kPageSize - os_alignment);
+  }
   return size_in_bytes + Page::kObjectStartOffset;
 }
 
@@ -2689,13 +2889,15 @@ LargeObjectSpace::LargeObjectSpace(AllocationSpace id)
     : Space(id, NOT_EXECUTABLE),  // Managed on a per-allocation basis
       first_chunk_(NULL),
       size_(0),
-      page_count_(0) {}
+      page_count_(0),
+      objects_size_(0) {}
 
 
 bool LargeObjectSpace::Setup() {
   first_chunk_ = NULL;
   size_ = 0;
   page_count_ = 0;
+  objects_size_ = 0;
   return true;
 }
 
@@ -2718,6 +2920,7 @@ void LargeObjectSpace::TearDown() {
 
   size_ = 0;
   page_count_ = 0;
+  objects_size_ = 0;
 }
 
 
@@ -2745,37 +2948,35 @@ void LargeObjectSpace::Unprotect() {
 #endif
 
 
-Object* LargeObjectSpace::AllocateRawInternal(int requested_size,
-                                              int object_size,
-                                              Executability executable) {
+MaybeObject* LargeObjectSpace::AllocateRawInternal(int requested_size,
+                                                   int object_size,
+                                                   Executability executable) {
   ASSERT(0 < object_size && object_size <= requested_size);
 
   // Check if we want to force a GC before growing the old space further.
   // If so, fail the allocation.
   if (!Heap::always_allocate() && Heap::OldGenerationAllocationLimitReached()) {
-    return Failure::RetryAfterGC(requested_size, identity());
+    return Failure::RetryAfterGC(identity());
   }
 
-  size_t chunk_size;
-  LargeObjectChunk* chunk =
-      LargeObjectChunk::New(requested_size, &chunk_size, executable);
+  LargeObjectChunk* chunk = LargeObjectChunk::New(requested_size, executable);
   if (chunk == NULL) {
-    return Failure::RetryAfterGC(requested_size, identity());
+    return Failure::RetryAfterGC(identity());
   }
 
-  size_ += static_cast<int>(chunk_size);
+  size_ += static_cast<int>(chunk->size());
+  objects_size_ += requested_size;
   page_count_++;
   chunk->set_next(first_chunk_);
-  chunk->set_size(chunk_size);
   first_chunk_ = chunk;
 
   // Initialize page header.
   Page* page = Page::FromAddress(RoundUp(chunk->address(), Page::kPageSize));
   Address object_address = page->ObjectAreaStart();
+
   // Clear the low order bit of the second word in the page to flag it as a
   // large object page.  If the chunk_size happened to be written there, its
   // low order bit should already be clear.
-  ASSERT((chunk_size & 0x1) == 0);
   page->SetIsLargeObjectPage(true);
   page->SetIsPageExecutable(executable);
   page->SetRegionMarks(Page::kAllRegionsCleanMarks);
@@ -2783,7 +2984,7 @@ Object* LargeObjectSpace::AllocateRawInternal(int requested_size,
 }
 
 
-Object* LargeObjectSpace::AllocateRawCode(int size_in_bytes) {
+MaybeObject* LargeObjectSpace::AllocateRawCode(int size_in_bytes) {
   ASSERT(0 < size_in_bytes);
   return AllocateRawInternal(size_in_bytes,
                              size_in_bytes,
@@ -2791,7 +2992,7 @@ Object* LargeObjectSpace::AllocateRawCode(int size_in_bytes) {
 }
 
 
-Object* LargeObjectSpace::AllocateRawFixedArray(int size_in_bytes) {
+MaybeObject* LargeObjectSpace::AllocateRawFixedArray(int size_in_bytes) {
   ASSERT(0 < size_in_bytes);
   return AllocateRawInternal(size_in_bytes,
                              size_in_bytes,
@@ -2799,7 +3000,7 @@ Object* LargeObjectSpace::AllocateRawFixedArray(int size_in_bytes) {
 }
 
 
-Object* LargeObjectSpace::AllocateRaw(int size_in_bytes) {
+MaybeObject* LargeObjectSpace::AllocateRaw(int size_in_bytes) {
   ASSERT(0 < size_in_bytes);
   return AllocateRawInternal(size_in_bytes,
                              size_in_bytes,
@@ -2808,7 +3009,7 @@ Object* LargeObjectSpace::AllocateRaw(int size_in_bytes) {
 
 
 // GC support
-Object* LargeObjectSpace::FindObject(Address a) {
+MaybeObject* LargeObjectSpace::FindObject(Address a) {
   for (LargeObjectChunk* chunk = first_chunk_;
        chunk != NULL;
        chunk = chunk->next()) {
@@ -2925,7 +3126,10 @@ void LargeObjectSpace::FreeUnmarkedObjects() {
 
       // Free the chunk.
       MarkCompactCollector::ReportDeleteIfNeeded(object);
+      LiveObjectList::ProcessNonLive(object);
+
       size_ -= static_cast<int>(chunk_size);
+      objects_size_ -= object->Size();
       page_count_--;
       ObjectSpace space = kObjectSpaceLoSpace;
       if (executable == EXECUTABLE) space = kObjectSpaceCodeSpace;
@@ -3030,7 +3234,8 @@ void LargeObjectSpace::ReportStatistics() {
     CollectHistogramInfo(obj);
   }
 
-  PrintF("  number of objects %d\n", num_objects);
+  PrintF("  number of objects %d, "
+         "size of objects %" V8_PTR_PREFIX "d\n", num_objects, objects_size_);
   if (num_objects > 0) ReportHistogram(false);
 }
 

@@ -28,9 +28,16 @@
 #ifndef V8_ALLOCATION_H_
 #define V8_ALLOCATION_H_
 
+#include "checks.h"
+#include "globals.h"
+
 namespace v8 {
 namespace internal {
 
+// Called when allocation routines fail to allocate.
+// This function should not return, but should terminate the current
+// processing.
+void FatalProcessOutOfMemory(const char* message);
 
 // A class that controls whether allocation is allowed.  This is for
 // the C++ heap only!

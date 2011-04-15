@@ -40,13 +40,21 @@ namespace internal {
 // TranscendentalCache runtime function.
 class TranscendentalCacheStub: public CodeStub {
  public:
-  explicit TranscendentalCacheStub(TranscendentalCache::Type type)
-      : type_(type) {}
+  enum ArgumentType {
+    TAGGED = 0,
+    UNTAGGED = 1 << TranscendentalCache::kTranscendentalTypeBits
+  };
+
+  explicit TranscendentalCacheStub(TranscendentalCache::Type type,
+                                   ArgumentType argument_type)
+      : type_(type), argument_type_(argument_type) {}
   void Generate(MacroAssembler* masm);
  private:
   TranscendentalCache::Type type_;
+  ArgumentType argument_type_;
+
   Major MajorKey() { return TranscendentalCache; }
-  int MinorKey() { return type_; }
+  int MinorKey() { return type_ | argument_type_; }
   Runtime::FunctionId RuntimeFunction();
   void GenerateOperation(MacroAssembler* masm);
 };
@@ -83,7 +91,7 @@ class GenericBinaryOpStub: public CodeStub {
         args_in_registers_(false),
         args_reversed_(false),
         static_operands_type_(operands_type),
-        runtime_operands_type_(BinaryOpIC::DEFAULT),
+        runtime_operands_type_(BinaryOpIC::UNINIT_OR_SMI),
         name_(NULL) {
     if (static_operands_type_.IsSmi()) {
       mode_ = NO_OVERWRITE;
@@ -115,6 +123,11 @@ class GenericBinaryOpStub: public CodeStub {
   bool ArgsInRegistersSupported() {
     return op_ == Token::ADD || op_ == Token::SUB
         || op_ == Token::MUL || op_ == Token::DIV;
+  }
+
+  void SetArgsInRegisters() {
+    ASSERT(ArgsInRegistersSupported());
+    args_in_registers_ = true;
   }
 
  private:
@@ -157,7 +170,7 @@ class GenericBinaryOpStub: public CodeStub {
   class ArgsReversedBits: public BitField<bool, 11, 1> {};
   class FlagBits: public BitField<GenericBinaryFlags, 12, 1> {};
   class StaticTypeInfoBits: public BitField<int, 13, 3> {};
-  class RuntimeTypeInfoBits: public BitField<BinaryOpIC::TypeInfo, 16, 2> {};
+  class RuntimeTypeInfoBits: public BitField<BinaryOpIC::TypeInfo, 16, 3> {};
 
   Major MajorKey() { return GenericBinaryOp; }
   int MinorKey() {
@@ -185,7 +198,6 @@ class GenericBinaryOpStub: public CodeStub {
     return (op_ == Token::ADD) || (op_ == Token::MUL);
   }
 
-  void SetArgsInRegisters() { args_in_registers_ = true; }
   void SetArgsReversed() { args_reversed_ = true; }
   bool HasSmiCodeInStub() { return (flags_ & NO_SMI_CODE_IN_STUB) == 0; }
   bool HasArgsInRegisters() { return args_in_registers_; }
@@ -205,6 +217,114 @@ class GenericBinaryOpStub: public CodeStub {
 
   virtual InlineCacheState GetICState() {
     return BinaryOpIC::ToState(runtime_operands_type_);
+  }
+
+  virtual void FinishCode(Code* code) {
+    code->set_binary_op_type(runtime_operands_type_);
+  }
+
+  friend class CodeGenerator;
+};
+
+
+class TypeRecordingBinaryOpStub: public CodeStub {
+ public:
+  TypeRecordingBinaryOpStub(Token::Value op, OverwriteMode mode)
+      : op_(op),
+        mode_(mode),
+        operands_type_(TRBinaryOpIC::UNINITIALIZED),
+        result_type_(TRBinaryOpIC::UNINITIALIZED),
+        name_(NULL) {
+    use_sse3_ = CpuFeatures::IsSupported(SSE3);
+    ASSERT(OpBits::is_valid(Token::NUM_TOKENS));
+  }
+
+  TypeRecordingBinaryOpStub(
+      int key,
+      TRBinaryOpIC::TypeInfo operands_type,
+      TRBinaryOpIC::TypeInfo result_type = TRBinaryOpIC::UNINITIALIZED)
+      : op_(OpBits::decode(key)),
+        mode_(ModeBits::decode(key)),
+        use_sse3_(SSE3Bits::decode(key)),
+        operands_type_(operands_type),
+        result_type_(result_type),
+        name_(NULL) { }
+
+ private:
+  enum SmiCodeGenerateHeapNumberResults {
+    ALLOW_HEAPNUMBER_RESULTS,
+    NO_HEAPNUMBER_RESULTS
+  };
+
+  Token::Value op_;
+  OverwriteMode mode_;
+  bool use_sse3_;
+
+  // Operand type information determined at runtime.
+  TRBinaryOpIC::TypeInfo operands_type_;
+  TRBinaryOpIC::TypeInfo result_type_;
+
+  char* name_;
+
+  const char* GetName();
+
+#ifdef DEBUG
+  void Print() {
+    PrintF("TypeRecordingBinaryOpStub %d (op %s), "
+           "(mode %d, runtime_type_info %s)\n",
+           MinorKey(),
+           Token::String(op_),
+           static_cast<int>(mode_),
+           TRBinaryOpIC::GetName(operands_type_));
+  }
+#endif
+
+  // Minor key encoding in 16 bits RRRTTTSOOOOOOOMM.
+  class ModeBits: public BitField<OverwriteMode, 0, 2> {};
+  class OpBits: public BitField<Token::Value, 2, 7> {};
+  class SSE3Bits: public BitField<bool, 9, 1> {};
+  class OperandTypeInfoBits: public BitField<TRBinaryOpIC::TypeInfo, 10, 3> {};
+  class ResultTypeInfoBits: public BitField<TRBinaryOpIC::TypeInfo, 13, 3> {};
+
+  Major MajorKey() { return TypeRecordingBinaryOp; }
+  int MinorKey() {
+    return OpBits::encode(op_)
+           | ModeBits::encode(mode_)
+           | SSE3Bits::encode(use_sse3_)
+           | OperandTypeInfoBits::encode(operands_type_)
+           | ResultTypeInfoBits::encode(result_type_);
+  }
+
+  void Generate(MacroAssembler* masm);
+  void GenerateGeneric(MacroAssembler* masm);
+  void GenerateSmiCode(MacroAssembler* masm,
+                       Label* slow,
+                       SmiCodeGenerateHeapNumberResults heapnumber_results);
+  void GenerateLoadArguments(MacroAssembler* masm);
+  void GenerateReturn(MacroAssembler* masm);
+  void GenerateUninitializedStub(MacroAssembler* masm);
+  void GenerateSmiStub(MacroAssembler* masm);
+  void GenerateInt32Stub(MacroAssembler* masm);
+  void GenerateHeapNumberStub(MacroAssembler* masm);
+  void GenerateOddballStub(MacroAssembler* masm);
+  void GenerateStringStub(MacroAssembler* masm);
+  void GenerateGenericStub(MacroAssembler* masm);
+  void GenerateAddStrings(MacroAssembler* masm);
+
+  void GenerateHeapResultAllocation(MacroAssembler* masm, Label* alloc_failure);
+  void GenerateRegisterArgsPush(MacroAssembler* masm);
+  void GenerateTypeTransition(MacroAssembler* masm);
+  void GenerateTypeTransitionWithSavedArgs(MacroAssembler* masm);
+
+  virtual int GetCodeKind() { return Code::TYPE_RECORDING_BINARY_OP_IC; }
+
+  virtual InlineCacheState GetICState() {
+    return TRBinaryOpIC::ToState(operands_type_);
+  }
+
+  virtual void FinishCode(Code* code) {
+    code->set_type_recording_binary_op_type(operands_type_);
+    code->set_type_recording_binary_op_result_type(result_type_);
   }
 
   friend class CodeGenerator;
@@ -370,6 +490,47 @@ class NumberToStringStub: public CodeStub {
 #endif
 };
 
+
+// Generate code to load an element from a pixel array. The receiver is assumed
+// to not be a smi and to have elements, the caller must guarantee this
+// precondition. If key is not a smi, then the generated code branches to
+// key_not_smi. Callers can specify NULL for key_not_smi to signal that a smi
+// check has already been performed on key so that the smi check is not
+// generated. If key is not a valid index within the bounds of the pixel array,
+// the generated code jumps to out_of_range. receiver, key and elements are
+// unchanged throughout the generated code sequence.
+void GenerateFastPixelArrayLoad(MacroAssembler* masm,
+                                Register receiver,
+                                Register key,
+                                Register elements,
+                                Register untagged_key,
+                                Register result,
+                                Label* not_pixel_array,
+                                Label* key_not_smi,
+                                Label* out_of_range);
+
+// Generate code to store an element into a pixel array, clamping values between
+// [0..255]. The receiver is assumed to not be a smi and to have elements, the
+// caller must guarantee this precondition. If key is not a smi, then the
+// generated code branches to key_not_smi. Callers can specify NULL for
+// key_not_smi to signal that a smi check has already been performed on key so
+// that the smi check is not generated. If the value is not a smi, the generated
+// code will branch to value_not_smi.  If the receiver doesn't have pixel array
+// elements, the generated code will branch to not_pixel_array, unless
+// not_pixel_array is NULL, in which case the caller must ensure that the
+// receiver has pixel array elements.  If key is not a valid index within the
+// bounds of the pixel array, the generated code jumps to out_of_range.
+void GenerateFastPixelArrayStore(MacroAssembler* masm,
+                                 Register receiver,
+                                 Register key,
+                                 Register value,
+                                 Register elements,
+                                 Register scratch1,
+                                 bool load_elements_from_receiver,
+                                 Label* key_not_smi,
+                                 Label* value_not_smi,
+                                 Label* not_pixel_array,
+                                 Label* out_of_range);
 
 } }  // namespace v8::internal
 

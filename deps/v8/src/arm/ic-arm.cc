@@ -95,13 +95,13 @@ static void GenerateStringDictionaryReceiverCheck(MacroAssembler* masm,
   __ ldrb(t1, FieldMemOperand(t0, Map::kBitFieldOffset));
   __ tst(t1, Operand((1 << Map::kIsAccessCheckNeeded) |
                      (1 << Map::kHasNamedInterceptor)));
-  __ b(nz, miss);
+  __ b(ne, miss);
 
   __ ldr(elements, FieldMemOperand(receiver, JSObject::kPropertiesOffset));
   __ ldr(t1, FieldMemOperand(elements, HeapObject::kMapOffset));
   __ LoadRoot(ip, Heap::kHashTableMapRootIndex);
   __ cmp(t1, ip);
-  __ b(nz, miss);
+  __ b(ne, miss);
 }
 
 
@@ -115,6 +115,9 @@ static void GenerateStringDictionaryProbes(MacroAssembler* masm,
                                            Register name,
                                            Register scratch1,
                                            Register scratch2) {
+  // Assert that name contains a string.
+  if (FLAG_debug_code) __ AbortIfNotString(name);
+
   // Compute the capacity mask.
   const int kCapacityOffset = StringDictionary::kHeaderSize +
       StringDictionary::kCapacityIndex * kPointerSize;
@@ -379,7 +382,7 @@ void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
 }
 
 
-void LoadIC::GenerateStringLength(MacroAssembler* masm) {
+void LoadIC::GenerateStringLength(MacroAssembler* masm, bool support_wrappers) {
   // ----------- S t a t e -------------
   //  -- r2    : name
   //  -- lr    : return address
@@ -388,7 +391,8 @@ void LoadIC::GenerateStringLength(MacroAssembler* masm) {
   // -----------------------------------
   Label miss;
 
-  StubCompiler::GenerateLoadStringLength(masm, r0, r1, r3, &miss);
+  StubCompiler::GenerateLoadStringLength(masm, r0, r1, r3, &miss,
+                                         support_wrappers);
   // Cache miss: Jump to runtime.
   __ bind(&miss);
   StubCompiler::GenerateLoadMiss(masm, Code::LOAD_IC);
@@ -419,14 +423,14 @@ static void GenerateKeyedLoadReceiverCheck(MacroAssembler* masm,
                                            int interceptor_bit,
                                            Label* slow) {
   // Check that the object isn't a smi.
-  __ BranchOnSmi(receiver, slow);
+  __ JumpIfSmi(receiver, slow);
   // Get the map of the receiver.
   __ ldr(map, FieldMemOperand(receiver, HeapObject::kMapOffset));
   // Check bit field.
   __ ldrb(scratch, FieldMemOperand(map, Map::kBitFieldOffset));
   __ tst(scratch,
          Operand((1 << Map::kIsAccessCheckNeeded) | (1 << interceptor_bit)));
-  __ b(nz, slow);
+  __ b(ne, slow);
   // Check that the object is some kind of JS object EXCEPT JS Value type.
   // In the case that the object is a value-wrapper object,
   // we enter the runtime system to make sure that indexing into string
@@ -542,9 +546,13 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
   Label number, non_number, non_string, boolean, probe, miss;
 
   // Probe the stub cache.
-  Code::Flags flags =
-      Code::ComputeFlags(kind, NOT_IN_LOOP, MONOMORPHIC, NORMAL, argc);
-  StubCache::GenerateProbe(masm, flags, r1, r2, r3, no_reg);
+  Code::Flags flags = Code::ComputeFlags(kind,
+                                         NOT_IN_LOOP,
+                                         MONOMORPHIC,
+                                         Code::kNoExtraICState,
+                                         NORMAL,
+                                         argc);
+  StubCache::GenerateProbe(masm, flags, r1, r2, r3, r4, r5);
 
   // If the stub cache probing failed, the receiver might be a value.
   // For value objects, we use the map of the prototype objects for
@@ -583,7 +591,7 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
 
   // Probe the stub cache for the value object.
   __ bind(&probe);
-  StubCache::GenerateProbe(masm, flags, r1, r2, r3, no_reg);
+  StubCache::GenerateProbe(masm, flags, r1, r2, r3, r4, r5);
 
   __ bind(&miss);
 }
@@ -745,7 +753,7 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   Label index_smi, index_string;
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(r2, &check_string);
+  __ JumpIfNotSmi(r2, &check_string);
   __ bind(&index_smi);
   // Now the key is known to be a smi. This place is also jumped to from below
   // where a numeric string is converted to a smi.
@@ -838,7 +846,14 @@ void KeyedCallIC::GenerateNormal(MacroAssembler* masm, int argc) {
   //  -- lr    : return address
   // -----------------------------------
 
+  // Check if the name is a string.
+  Label miss;
+  __ tst(r2, Operand(kSmiTagMask));
+  __ b(eq, &miss);
+  __ IsObjectJSStringType(r2, r0, &miss);
+
   GenerateCallNormal(masm, argc);
+  __ bind(&miss);
   GenerateMiss(masm, argc);
 }
 
@@ -858,7 +873,7 @@ void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
                                          NOT_IN_LOOP,
                                          MONOMORPHIC);
-  StubCache::GenerateProbe(masm, flags, r0, r2, r3, no_reg);
+  StubCache::GenerateProbe(masm, flags, r0, r2, r3, r4, r5);
 
   // Cache miss: Jump to runtime.
   GenerateMiss(masm);
@@ -904,9 +919,11 @@ void LoadIC::GenerateMiss(MacroAssembler* masm) {
   __ TailCallExternalReference(ref, 2, 1);
 }
 
+// Returns the code marker, or the 0 if the code is not marked.
+static inline int InlinedICSiteMarker(Address address,
+                                      Address* inline_end_address) {
+  if (V8::UseCrankshaft()) return false;
 
-static inline bool IsInlinedICSite(Address address,
-                                   Address* inline_end_address) {
   // If the instruction after the call site is not the pseudo instruction nop1
   // then this is not related to an inlined in-object property load. The nop1
   // instruction is located just after the call to the IC in the deferred code
@@ -914,9 +931,11 @@ static inline bool IsInlinedICSite(Address address,
   // a branch instruction for jumping back from the deferred code.
   Address address_after_call = address + Assembler::kCallTargetAddressOffset;
   Instr instr_after_call = Assembler::instr_at(address_after_call);
-  if (!Assembler::IsNop(instr_after_call, PROPERTY_ACCESS_INLINED)) {
-    return false;
-  }
+  int code_marker = MacroAssembler::GetCodeMarker(instr_after_call);
+
+  // A negative result means the code is not marked.
+  if (code_marker <= 0) return 0;
+
   Address address_after_nop = address_after_call + Assembler::kInstrSize;
   Instr instr_after_nop = Assembler::instr_at(address_after_nop);
   // There may be some reg-reg move and frame merging code to skip over before
@@ -933,15 +952,20 @@ static inline bool IsInlinedICSite(Address address,
   ASSERT(b_offset < 0);  // Jumping back from deferred code.
   *inline_end_address = address_after_nop + b_offset;
 
-  return true;
+  return code_marker;
 }
 
 
 bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
+  if (V8::UseCrankshaft()) return false;
+
   // Find the end of the inlined code for handling the load if this is an
   // inlined IC call site.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the offset of the property load instruction (ldr r0, [r1, #+XXX]).
   // The immediate must be representable in 12 bits.
@@ -959,8 +983,12 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   CPU::FlushICache(ldr_property_instr_address, 1 * Assembler::kInstrSize);
 
   // Patch the map check.
+  // For PROPERTY_ACCESS_INLINED, the load map instruction is generated
+  // 4 instructions before the end of the inlined code.
+  // See codgen-arm.cc CodeGenerator::EmitNamedLoad.
+  int ldr_map_offset = -4;
   Address ldr_map_instr_address =
-      inline_end_address - 4 * Assembler::kInstrSize;
+      inline_end_address + ldr_map_offset * Assembler::kInstrSize;
   Assembler::set_target_address_at(ldr_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;
@@ -971,16 +999,54 @@ bool LoadIC::PatchInlinedContextualLoad(Address address,
                                         Object* map,
                                         Object* cell,
                                         bool is_dont_delete) {
-  // TODO(<bug#>): implement this.
-  return false;
+  // Find the end of the inlined code for handling the contextual load if
+  // this is inlined IC call site.
+  Address inline_end_address;
+  int marker = InlinedICSiteMarker(address, &inline_end_address);
+  if (!((marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT) ||
+        (marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE))) {
+    return false;
+  }
+  // On ARM we don't rely on the is_dont_delete argument as the hint is already
+  // embedded in the code marker.
+  bool marker_is_dont_delete =
+      marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE;
+
+  // These are the offsets from the end of the inlined code.
+  // See codgen-arm.cc CodeGenerator::EmitNamedLoad.
+  int ldr_map_offset = marker_is_dont_delete ? -5: -8;
+  int ldr_cell_offset = marker_is_dont_delete ? -2: -5;
+  if (FLAG_debug_code && marker_is_dont_delete) {
+    // Three extra instructions were generated to check for the_hole_value.
+    ldr_map_offset -= 3;
+    ldr_cell_offset -= 3;
+  }
+  Address ldr_map_instr_address =
+      inline_end_address + ldr_map_offset * Assembler::kInstrSize;
+  Address ldr_cell_instr_address =
+      inline_end_address + ldr_cell_offset * Assembler::kInstrSize;
+
+  // Patch the map check.
+  Assembler::set_target_address_at(ldr_map_instr_address,
+                                   reinterpret_cast<Address>(map));
+  // Patch the cell address.
+  Assembler::set_target_address_at(ldr_cell_instr_address,
+                                   reinterpret_cast<Address>(cell));
+
+  return true;
 }
 
 
 bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
+  if (V8::UseCrankshaft()) return false;
+
   // Find the end of the inlined code for the store if there is an
   // inlined version of the store.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Compute the address of the map load instruction.
   Address ldr_map_instr_address =
@@ -1024,8 +1090,13 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
 
 
 bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
+  if (V8::UseCrankshaft()) return false;
+
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the map check.
   Address ldr_map_instr_address =
@@ -1039,10 +1110,15 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
 
 
 bool KeyedStoreIC::PatchInlinedStore(Address address, Object* map) {
+  if (V8::UseCrankshaft()) return false;
+
   // Find the end of the inlined code for handling the store if this is an
   // inlined IC call site.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the map check.
   Address ldr_map_instr_address =
@@ -1100,7 +1176,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   Register receiver = r1;
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(key, &check_string);
+  __ JumpIfNotSmi(key, &check_string);
   __ bind(&index_smi);
   // Now the key is known to be a smi. This place is also jumped to from below
   // where a numeric string is converted to a smi.
@@ -1123,19 +1199,18 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // r0: key
   // r1: receiver
   __ bind(&check_pixel_array);
-  __ ldr(r4, FieldMemOperand(r1, JSObject::kElementsOffset));
-  __ ldr(r3, FieldMemOperand(r4, HeapObject::kMapOffset));
-  __ LoadRoot(ip, Heap::kPixelArrayMapRootIndex);
-  __ cmp(r3, ip);
-  __ b(ne, &check_number_dictionary);
-  __ ldr(ip, FieldMemOperand(r4, PixelArray::kLengthOffset));
-  __ mov(r2, Operand(key, ASR, kSmiTagSize));
-  __ cmp(r2, ip);
-  __ b(hs, &slow);
-  __ ldr(ip, FieldMemOperand(r4, PixelArray::kExternalPointerOffset));
-  __ ldrb(r2, MemOperand(ip, r2));
-  __ mov(r0, Operand(r2, LSL, kSmiTagSize));  // Tag result as smi.
-  __ Ret();
+
+  GenerateFastPixelArrayLoad(masm,
+                             r1,
+                             r0,
+                             r3,
+                             r4,
+                             r2,
+                             r5,
+                             r0,
+                             &check_number_dictionary,
+                             NULL,
+                             &slow);
 
   __ bind(&check_number_dictionary);
   // Check whether the elements is a number dictionary.
@@ -1264,313 +1339,11 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   char_at_generator.GenerateFast(masm);
   __ Ret();
 
-  ICRuntimeCallHelper call_helper;
+  StubRuntimeCallHelper call_helper;
   char_at_generator.GenerateSlow(masm, call_helper);
 
   __ bind(&miss);
   GenerateMiss(masm);
-}
-
-
-// Convert unsigned integer with specified number of leading zeroes in binary
-// representation to IEEE 754 double.
-// Integer to convert is passed in register hiword.
-// Resulting double is returned in registers hiword:loword.
-// This functions does not work correctly for 0.
-static void GenerateUInt2Double(MacroAssembler* masm,
-                                Register hiword,
-                                Register loword,
-                                Register scratch,
-                                int leading_zeroes) {
-  const int meaningful_bits = kBitsPerInt - leading_zeroes - 1;
-  const int biased_exponent = HeapNumber::kExponentBias + meaningful_bits;
-
-  const int mantissa_shift_for_hi_word =
-      meaningful_bits - HeapNumber::kMantissaBitsInTopWord;
-
-  const int mantissa_shift_for_lo_word =
-      kBitsPerInt - mantissa_shift_for_hi_word;
-
-  __ mov(scratch, Operand(biased_exponent << HeapNumber::kExponentShift));
-  if (mantissa_shift_for_hi_word > 0) {
-    __ mov(loword, Operand(hiword, LSL, mantissa_shift_for_lo_word));
-    __ orr(hiword, scratch, Operand(hiword, LSR, mantissa_shift_for_hi_word));
-  } else {
-    __ mov(loword, Operand(0, RelocInfo::NONE));
-    __ orr(hiword, scratch, Operand(hiword, LSL, mantissa_shift_for_hi_word));
-  }
-
-  // If least significant bit of biased exponent was not 1 it was corrupted
-  // by most significant bit of mantissa so we should fix that.
-  if (!(biased_exponent & 1)) {
-    __ bic(hiword, hiword, Operand(1 << HeapNumber::kExponentShift));
-  }
-}
-
-
-void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
-                                        ExternalArrayType array_type) {
-  // ---------- S t a t e --------------
-  //  -- lr     : return address
-  //  -- r0     : key
-  //  -- r1     : receiver
-  // -----------------------------------
-  Label slow, failed_allocation;
-
-  Register key = r0;
-  Register receiver = r1;
-
-  // Check that the object isn't a smi
-  __ BranchOnSmi(receiver, &slow);
-
-  // Check that the key is a smi.
-  __ BranchOnNotSmi(key, &slow);
-
-  // Check that the object is a JS object. Load map into r2.
-  __ CompareObjectType(receiver, r2, r3, FIRST_JS_OBJECT_TYPE);
-  __ b(lt, &slow);
-
-  // Check that the receiver does not require access checks.  We need
-  // to check this explicitly since this generic stub does not perform
-  // map checks.
-  __ ldrb(r3, FieldMemOperand(r2, Map::kBitFieldOffset));
-  __ tst(r3, Operand(1 << Map::kIsAccessCheckNeeded));
-  __ b(ne, &slow);
-
-  // Check that the elements array is the appropriate type of
-  // ExternalArray.
-  __ ldr(r3, FieldMemOperand(receiver, JSObject::kElementsOffset));
-  __ ldr(r2, FieldMemOperand(r3, HeapObject::kMapOffset));
-  __ LoadRoot(ip, Heap::RootIndexForExternalArrayType(array_type));
-  __ cmp(r2, ip);
-  __ b(ne, &slow);
-
-  // Check that the index is in range.
-  __ ldr(ip, FieldMemOperand(r3, ExternalArray::kLengthOffset));
-  __ cmp(ip, Operand(key, ASR, kSmiTagSize));
-  // Unsigned comparison catches both negative and too-large values.
-  __ b(lo, &slow);
-
-  // r3: elements array
-  __ ldr(r3, FieldMemOperand(r3, ExternalArray::kExternalPointerOffset));
-  // r3: base pointer of external storage
-
-  // We are not untagging smi key and instead work with it
-  // as if it was premultiplied by 2.
-  ASSERT((kSmiTag == 0) && (kSmiTagSize == 1));
-
-  Register value = r2;
-  switch (array_type) {
-    case kExternalByteArray:
-      __ ldrsb(value, MemOperand(r3, key, LSR, 1));
-      break;
-    case kExternalUnsignedByteArray:
-      __ ldrb(value, MemOperand(r3, key, LSR, 1));
-      break;
-    case kExternalShortArray:
-      __ ldrsh(value, MemOperand(r3, key, LSL, 0));
-      break;
-    case kExternalUnsignedShortArray:
-      __ ldrh(value, MemOperand(r3, key, LSL, 0));
-      break;
-    case kExternalIntArray:
-    case kExternalUnsignedIntArray:
-      __ ldr(value, MemOperand(r3, key, LSL, 1));
-      break;
-    case kExternalFloatArray:
-      if (CpuFeatures::IsSupported(VFP3)) {
-        CpuFeatures::Scope scope(VFP3);
-        __ add(r2, r3, Operand(key, LSL, 1));
-        __ vldr(s0, r2, 0);
-      } else {
-        __ ldr(value, MemOperand(r3, key, LSL, 1));
-      }
-      break;
-    default:
-      UNREACHABLE();
-      break;
-  }
-
-  // For integer array types:
-  // r2: value
-  // For floating-point array type
-  // s0: value (if VFP3 is supported)
-  // r2: value (if VFP3 is not supported)
-
-  if (array_type == kExternalIntArray) {
-    // For the Int and UnsignedInt array types, we need to see whether
-    // the value can be represented in a Smi. If not, we need to convert
-    // it to a HeapNumber.
-    Label box_int;
-    __ cmp(value, Operand(0xC0000000));
-    __ b(mi, &box_int);
-    // Tag integer as smi and return it.
-    __ mov(r0, Operand(value, LSL, kSmiTagSize));
-    __ Ret();
-
-    __ bind(&box_int);
-    // Allocate a HeapNumber for the result and perform int-to-double
-    // conversion. Use r0 for result as key is not needed any more.
-    __ LoadRoot(r6, Heap::kHeapNumberMapRootIndex);
-    __ AllocateHeapNumber(r0, r3, r4, r6, &slow);
-
-    if (CpuFeatures::IsSupported(VFP3)) {
-      CpuFeatures::Scope scope(VFP3);
-      __ vmov(s0, value);
-      __ vcvt_f64_s32(d0, s0);
-      __ sub(r3, r0, Operand(kHeapObjectTag));
-      __ vstr(d0, r3, HeapNumber::kValueOffset);
-      __ Ret();
-    } else {
-      WriteInt32ToHeapNumberStub stub(value, r0, r3);
-      __ TailCallStub(&stub);
-    }
-  } else if (array_type == kExternalUnsignedIntArray) {
-    // The test is different for unsigned int values. Since we need
-    // the value to be in the range of a positive smi, we can't
-    // handle either of the top two bits being set in the value.
-    if (CpuFeatures::IsSupported(VFP3)) {
-      CpuFeatures::Scope scope(VFP3);
-      Label box_int, done;
-      __ tst(value, Operand(0xC0000000));
-      __ b(ne, &box_int);
-      // Tag integer as smi and return it.
-      __ mov(r0, Operand(value, LSL, kSmiTagSize));
-      __ Ret();
-
-      __ bind(&box_int);
-      __ vmov(s0, value);
-      // Allocate a HeapNumber for the result and perform int-to-double
-      // conversion. Don't use r0 and r1 as AllocateHeapNumber clobbers all
-      // registers - also when jumping due to exhausted young space.
-      __ LoadRoot(r6, Heap::kHeapNumberMapRootIndex);
-      __ AllocateHeapNumber(r2, r3, r4, r6, &slow);
-
-      __ vcvt_f64_u32(d0, s0);
-      __ sub(r1, r2, Operand(kHeapObjectTag));
-      __ vstr(d0, r1, HeapNumber::kValueOffset);
-
-      __ mov(r0, r2);
-      __ Ret();
-    } else {
-      // Check whether unsigned integer fits into smi.
-      Label box_int_0, box_int_1, done;
-      __ tst(value, Operand(0x80000000));
-      __ b(ne, &box_int_0);
-      __ tst(value, Operand(0x40000000));
-      __ b(ne, &box_int_1);
-      // Tag integer as smi and return it.
-      __ mov(r0, Operand(value, LSL, kSmiTagSize));
-      __ Ret();
-
-      Register hiword = value;  // r2.
-      Register loword = r3;
-
-      __ bind(&box_int_0);
-      // Integer does not have leading zeros.
-      GenerateUInt2Double(masm, hiword, loword, r4, 0);
-      __ b(&done);
-
-      __ bind(&box_int_1);
-      // Integer has one leading zero.
-      GenerateUInt2Double(masm, hiword, loword, r4, 1);
-
-
-      __ bind(&done);
-      // Integer was converted to double in registers hiword:loword.
-      // Wrap it into a HeapNumber. Don't use r0 and r1 as AllocateHeapNumber
-      // clobbers all registers - also when jumping due to exhausted young
-      // space.
-      __ LoadRoot(r6, Heap::kHeapNumberMapRootIndex);
-      __ AllocateHeapNumber(r4, r5, r7, r6, &slow);
-
-      __ str(hiword, FieldMemOperand(r4, HeapNumber::kExponentOffset));
-      __ str(loword, FieldMemOperand(r4, HeapNumber::kMantissaOffset));
-
-      __ mov(r0, r4);
-      __ Ret();
-    }
-  } else if (array_type == kExternalFloatArray) {
-    // For the floating-point array type, we need to always allocate a
-    // HeapNumber.
-    if (CpuFeatures::IsSupported(VFP3)) {
-      CpuFeatures::Scope scope(VFP3);
-      // Allocate a HeapNumber for the result. Don't use r0 and r1 as
-      // AllocateHeapNumber clobbers all registers - also when jumping due to
-      // exhausted young space.
-      __ LoadRoot(r6, Heap::kHeapNumberMapRootIndex);
-      __ AllocateHeapNumber(r2, r3, r4, r6, &slow);
-      __ vcvt_f64_f32(d0, s0);
-      __ sub(r1, r2, Operand(kHeapObjectTag));
-      __ vstr(d0, r1, HeapNumber::kValueOffset);
-
-      __ mov(r0, r2);
-      __ Ret();
-    } else {
-      // Allocate a HeapNumber for the result. Don't use r0 and r1 as
-      // AllocateHeapNumber clobbers all registers - also when jumping due to
-      // exhausted young space.
-      __ LoadRoot(r6, Heap::kHeapNumberMapRootIndex);
-      __ AllocateHeapNumber(r3, r4, r5, r6, &slow);
-      // VFP is not available, do manual single to double conversion.
-
-      // r2: floating point value (binary32)
-      // r3: heap number for result
-
-      // Extract mantissa to r0. OK to clobber r0 now as there are no jumps to
-      // the slow case from here.
-      __ and_(r0, value, Operand(kBinary32MantissaMask));
-
-      // Extract exponent to r1. OK to clobber r1 now as there are no jumps to
-      // the slow case from here.
-      __ mov(r1, Operand(value, LSR, kBinary32MantissaBits));
-      __ and_(r1, r1, Operand(kBinary32ExponentMask >> kBinary32MantissaBits));
-
-      Label exponent_rebiased;
-      __ teq(r1, Operand(0x00));
-      __ b(eq, &exponent_rebiased);
-
-      __ teq(r1, Operand(0xff));
-      __ mov(r1, Operand(0x7ff), LeaveCC, eq);
-      __ b(eq, &exponent_rebiased);
-
-      // Rebias exponent.
-      __ add(r1,
-             r1,
-             Operand(-kBinary32ExponentBias + HeapNumber::kExponentBias));
-
-      __ bind(&exponent_rebiased);
-      __ and_(r2, value, Operand(kBinary32SignMask));
-      value = no_reg;
-      __ orr(r2, r2, Operand(r1, LSL, HeapNumber::kMantissaBitsInTopWord));
-
-      // Shift mantissa.
-      static const int kMantissaShiftForHiWord =
-          kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
-
-      static const int kMantissaShiftForLoWord =
-          kBitsPerInt - kMantissaShiftForHiWord;
-
-      __ orr(r2, r2, Operand(r0, LSR, kMantissaShiftForHiWord));
-      __ mov(r0, Operand(r0, LSL, kMantissaShiftForLoWord));
-
-      __ str(r2, FieldMemOperand(r3, HeapNumber::kExponentOffset));
-      __ str(r0, FieldMemOperand(r3, HeapNumber::kMantissaOffset));
-
-      __ mov(r0, r3);
-      __ Ret();
-    }
-
-  } else {
-    // Tag integer as smi and return it.
-    __ mov(r0, Operand(value, LSL, kSmiTagSize));
-    __ Ret();
-  }
-
-  // Slow case, key and receiver still in r0 and r1.
-  __ bind(&slow);
-  __ IncrementCounter(&Counters::keyed_load_external_array_slow, 1, r2, r3);
-  GenerateRuntimeGetProperty(masm);
 }
 
 
@@ -1583,7 +1356,7 @@ void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   Label slow;
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(r1, &slow);
+  __ JumpIfSmi(r1, &slow);
 
   // Check that the key is an array index, that is Uint32.
   __ tst(r0, Operand(kSmiTagMask | kSmiSignMask));
@@ -1627,7 +1400,8 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 }
 
 
-void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
+void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm,
+                                              StrictModeFlag strict_mode) {
   // ---------- S t a t e --------------
   //  -- r0     : value
   //  -- r1     : key
@@ -1638,11 +1412,16 @@ void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
   // Push receiver, key and value for runtime call.
   __ Push(r2, r1, r0);
 
-  __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
+  __ mov(r1, Operand(Smi::FromInt(NONE)));          // PropertyAttributes
+  __ mov(r0, Operand(Smi::FromInt(strict_mode)));   // Strict mode.
+  __ Push(r1, r0);
+
+  __ TailCallRuntime(Runtime::kSetProperty, 5, 1);
 }
 
 
-void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
+void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
+                                   StrictModeFlag strict_mode) {
   // ---------- S t a t e --------------
   //  -- r0     : value
   //  -- r1     : key
@@ -1697,29 +1476,25 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // r0: value.
   // r1: key.
   // r2: receiver.
-  GenerateRuntimeSetProperty(masm);
+  GenerateRuntimeSetProperty(masm, strict_mode);
 
   // Check whether the elements is a pixel array.
   // r4: elements map.
   __ bind(&check_pixel_array);
-  __ LoadRoot(ip, Heap::kPixelArrayMapRootIndex);
-  __ cmp(r4, ip);
-  __ b(ne, &slow);
-  // Check that the value is a smi. If a conversion is needed call into the
-  // runtime to convert and clamp.
-  __ BranchOnNotSmi(value, &slow);
-  __ mov(r4, Operand(key, ASR, kSmiTagSize));  // Untag the key.
-  __ ldr(ip, FieldMemOperand(elements, PixelArray::kLengthOffset));
-  __ cmp(r4, Operand(ip));
-  __ b(hs, &slow);
-  __ mov(r5, Operand(value, ASR, kSmiTagSize));  // Untag the value.
-  __ Usat(r5, 8, Operand(r5));  // Clamp the value to [0..255].
-
-  // Get the pointer to the external array. This clobbers elements.
-  __ ldr(elements,
-         FieldMemOperand(elements, PixelArray::kExternalPointerOffset));
-  __ strb(r5, MemOperand(elements, r4));  // Elements is now external array.
-  __ Ret();
+  GenerateFastPixelArrayStore(masm,
+                              r2,
+                              r1,
+                              r0,
+                              elements,
+                              r4,
+                              r5,
+                              r6,
+                              false,
+                              false,
+                              NULL,
+                              &slow,
+                              &slow,
+                              &slow);
 
   // Extra capacity case: Check if there is extra capacity to
   // perform the store and update the length. Used for adding one
@@ -1770,385 +1545,8 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 }
 
 
-// Convert and store int passed in register ival to IEEE 754 single precision
-// floating point value at memory location (dst + 4 * wordoffset)
-// If VFP3 is available use it for conversion.
-static void StoreIntAsFloat(MacroAssembler* masm,
-                            Register dst,
-                            Register wordoffset,
-                            Register ival,
-                            Register fval,
-                            Register scratch1,
-                            Register scratch2) {
-  if (CpuFeatures::IsSupported(VFP3)) {
-    CpuFeatures::Scope scope(VFP3);
-    __ vmov(s0, ival);
-    __ add(scratch1, dst, Operand(wordoffset, LSL, 2));
-    __ vcvt_f32_s32(s0, s0);
-    __ vstr(s0, scratch1, 0);
-  } else {
-    Label not_special, done;
-    // Move sign bit from source to destination.  This works because the sign
-    // bit in the exponent word of the double has the same position and polarity
-    // as the 2's complement sign bit in a Smi.
-    ASSERT(kBinary32SignMask == 0x80000000u);
-
-    __ and_(fval, ival, Operand(kBinary32SignMask), SetCC);
-    // Negate value if it is negative.
-    __ rsb(ival, ival, Operand(0, RelocInfo::NONE), LeaveCC, ne);
-
-    // We have -1, 0 or 1, which we treat specially. Register ival contains
-    // absolute value: it is either equal to 1 (special case of -1 and 1),
-    // greater than 1 (not a special case) or less than 1 (special case of 0).
-    __ cmp(ival, Operand(1));
-    __ b(gt, &not_special);
-
-    // For 1 or -1 we need to or in the 0 exponent (biased).
-    static const uint32_t exponent_word_for_1 =
-        kBinary32ExponentBias << kBinary32ExponentShift;
-
-    __ orr(fval, fval, Operand(exponent_word_for_1), LeaveCC, eq);
-    __ b(&done);
-
-    __ bind(&not_special);
-    // Count leading zeros.
-    // Gets the wrong answer for 0, but we already checked for that case above.
-    Register zeros = scratch2;
-    __ CountLeadingZeros(zeros, ival, scratch1);
-
-    // Compute exponent and or it into the exponent register.
-    __ rsb(scratch1,
-           zeros,
-           Operand((kBitsPerInt - 1) + kBinary32ExponentBias));
-
-    __ orr(fval,
-           fval,
-           Operand(scratch1, LSL, kBinary32ExponentShift));
-
-    // Shift up the source chopping the top bit off.
-    __ add(zeros, zeros, Operand(1));
-    // This wouldn't work for 1 and -1 as the shift would be 32 which means 0.
-    __ mov(ival, Operand(ival, LSL, zeros));
-    // And the top (top 20 bits).
-    __ orr(fval,
-           fval,
-           Operand(ival, LSR, kBitsPerInt - kBinary32MantissaBits));
-
-    __ bind(&done);
-    __ str(fval, MemOperand(dst, wordoffset, LSL, 2));
-  }
-}
-
-
-static bool IsElementTypeSigned(ExternalArrayType array_type) {
-  switch (array_type) {
-    case kExternalByteArray:
-    case kExternalShortArray:
-    case kExternalIntArray:
-      return true;
-
-    case kExternalUnsignedByteArray:
-    case kExternalUnsignedShortArray:
-    case kExternalUnsignedIntArray:
-      return false;
-
-    default:
-      UNREACHABLE();
-      return false;
-  }
-}
-
-
-void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
-                                         ExternalArrayType array_type) {
-  // ---------- S t a t e --------------
-  //  -- r0     : value
-  //  -- r1     : key
-  //  -- r2     : receiver
-  //  -- lr     : return address
-  // -----------------------------------
-  Label slow, check_heap_number;
-
-  // Register usage.
-  Register value = r0;
-  Register key = r1;
-  Register receiver = r2;
-  // r3 mostly holds the elements array or the destination external array.
-
-  // Check that the object isn't a smi.
-  __ BranchOnSmi(receiver, &slow);
-
-  // Check that the object is a JS object. Load map into r3.
-  __ CompareObjectType(receiver, r3, r4, FIRST_JS_OBJECT_TYPE);
-  __ b(le, &slow);
-
-  // Check that the receiver does not require access checks.  We need
-  // to do this because this generic stub does not perform map checks.
-  __ ldrb(ip, FieldMemOperand(r3, Map::kBitFieldOffset));
-  __ tst(ip, Operand(1 << Map::kIsAccessCheckNeeded));
-  __ b(ne, &slow);
-
-  // Check that the key is a smi.
-  __ BranchOnNotSmi(key, &slow);
-
-  // Check that the elements array is the appropriate type of ExternalArray.
-  __ ldr(r3, FieldMemOperand(receiver, JSObject::kElementsOffset));
-  __ ldr(r4, FieldMemOperand(r3, HeapObject::kMapOffset));
-  __ LoadRoot(ip, Heap::RootIndexForExternalArrayType(array_type));
-  __ cmp(r4, ip);
-  __ b(ne, &slow);
-
-  // Check that the index is in range.
-  __ mov(r4, Operand(key, ASR, kSmiTagSize));  // Untag the index.
-  __ ldr(ip, FieldMemOperand(r3, ExternalArray::kLengthOffset));
-  __ cmp(r4, ip);
-  // Unsigned comparison catches both negative and too-large values.
-  __ b(hs, &slow);
-
-  // Handle both smis and HeapNumbers in the fast path. Go to the
-  // runtime for all other kinds of values.
-  // r3: external array.
-  // r4: key (integer).
-  __ BranchOnNotSmi(value, &check_heap_number);
-  __ mov(r5, Operand(value, ASR, kSmiTagSize));  // Untag the value.
-  __ ldr(r3, FieldMemOperand(r3, ExternalArray::kExternalPointerOffset));
-
-  // r3: base pointer of external storage.
-  // r4: key (integer).
-  // r5: value (integer).
-  switch (array_type) {
-    case kExternalByteArray:
-    case kExternalUnsignedByteArray:
-      __ strb(r5, MemOperand(r3, r4, LSL, 0));
-      break;
-    case kExternalShortArray:
-    case kExternalUnsignedShortArray:
-      __ strh(r5, MemOperand(r3, r4, LSL, 1));
-      break;
-    case kExternalIntArray:
-    case kExternalUnsignedIntArray:
-      __ str(r5, MemOperand(r3, r4, LSL, 2));
-      break;
-    case kExternalFloatArray:
-      // Perform int-to-float conversion and store to memory.
-      StoreIntAsFloat(masm, r3, r4, r5, r6, r7, r9);
-      break;
-    default:
-      UNREACHABLE();
-      break;
-  }
-
-  // Entry registers are intact, r0 holds the value which is the return value.
-  __ Ret();
-
-
-  // r3: external array.
-  // r4: index (integer).
-  __ bind(&check_heap_number);
-  __ CompareObjectType(value, r5, r6, HEAP_NUMBER_TYPE);
-  __ b(ne, &slow);
-
-  __ ldr(r3, FieldMemOperand(r3, ExternalArray::kExternalPointerOffset));
-
-  // r3: base pointer of external storage.
-  // r4: key (integer).
-
-  // The WebGL specification leaves the behavior of storing NaN and
-  // +/-Infinity into integer arrays basically undefined. For more
-  // reproducible behavior, convert these to zero.
-  if (CpuFeatures::IsSupported(VFP3)) {
-    CpuFeatures::Scope scope(VFP3);
-
-
-    if (array_type == kExternalFloatArray) {
-      // vldr requires offset to be a multiple of 4 so we can not
-      // include -kHeapObjectTag into it.
-      __ sub(r5, r0, Operand(kHeapObjectTag));
-      __ vldr(d0, r5, HeapNumber::kValueOffset);
-      __ add(r5, r3, Operand(r4, LSL, 2));
-      __ vcvt_f32_f64(s0, d0);
-      __ vstr(s0, r5, 0);
-    } else {
-      // Need to perform float-to-int conversion.
-      // Test for NaN or infinity (both give zero).
-      __ ldr(r6, FieldMemOperand(r5, HeapNumber::kExponentOffset));
-
-      // Hoisted load.  vldr requires offset to be a multiple of 4 so we can not
-      // include -kHeapObjectTag into it.
-      __ sub(r5, r0, Operand(kHeapObjectTag));
-      __ vldr(d0, r5, HeapNumber::kValueOffset);
-
-      __ Sbfx(r6, r6, HeapNumber::kExponentShift, HeapNumber::kExponentBits);
-      // NaNs and Infinities have all-one exponents so they sign extend to -1.
-      __ cmp(r6, Operand(-1));
-      __ mov(r5, Operand(Smi::FromInt(0)), LeaveCC, eq);
-
-      // Not infinity or NaN simply convert to int.
-      if (IsElementTypeSigned(array_type)) {
-        __ vcvt_s32_f64(s0, d0, ne);
-      } else {
-        __ vcvt_u32_f64(s0, d0, ne);
-      }
-      __ vmov(r5, s0, ne);
-
-      switch (array_type) {
-        case kExternalByteArray:
-        case kExternalUnsignedByteArray:
-          __ strb(r5, MemOperand(r3, r4, LSL, 0));
-          break;
-        case kExternalShortArray:
-        case kExternalUnsignedShortArray:
-          __ strh(r5, MemOperand(r3, r4, LSL, 1));
-          break;
-        case kExternalIntArray:
-        case kExternalUnsignedIntArray:
-          __ str(r5, MemOperand(r3, r4, LSL, 2));
-          break;
-        default:
-          UNREACHABLE();
-          break;
-      }
-    }
-
-    // Entry registers are intact, r0 holds the value which is the return value.
-    __ Ret();
-  } else {
-    // VFP3 is not available do manual conversions.
-    __ ldr(r5, FieldMemOperand(value, HeapNumber::kExponentOffset));
-    __ ldr(r6, FieldMemOperand(value, HeapNumber::kMantissaOffset));
-
-    if (array_type == kExternalFloatArray) {
-      Label done, nan_or_infinity_or_zero;
-      static const int kMantissaInHiWordShift =
-          kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
-
-      static const int kMantissaInLoWordShift =
-          kBitsPerInt - kMantissaInHiWordShift;
-
-      // Test for all special exponent values: zeros, subnormal numbers, NaNs
-      // and infinities. All these should be converted to 0.
-      __ mov(r7, Operand(HeapNumber::kExponentMask));
-      __ and_(r9, r5, Operand(r7), SetCC);
-      __ b(eq, &nan_or_infinity_or_zero);
-
-      __ teq(r9, Operand(r7));
-      __ mov(r9, Operand(kBinary32ExponentMask), LeaveCC, eq);
-      __ b(eq, &nan_or_infinity_or_zero);
-
-      // Rebias exponent.
-      __ mov(r9, Operand(r9, LSR, HeapNumber::kExponentShift));
-      __ add(r9,
-             r9,
-             Operand(kBinary32ExponentBias - HeapNumber::kExponentBias));
-
-      __ cmp(r9, Operand(kBinary32MaxExponent));
-      __ and_(r5, r5, Operand(HeapNumber::kSignMask), LeaveCC, gt);
-      __ orr(r5, r5, Operand(kBinary32ExponentMask), LeaveCC, gt);
-      __ b(gt, &done);
-
-      __ cmp(r9, Operand(kBinary32MinExponent));
-      __ and_(r5, r5, Operand(HeapNumber::kSignMask), LeaveCC, lt);
-      __ b(lt, &done);
-
-      __ and_(r7, r5, Operand(HeapNumber::kSignMask));
-      __ and_(r5, r5, Operand(HeapNumber::kMantissaMask));
-      __ orr(r7, r7, Operand(r5, LSL, kMantissaInHiWordShift));
-      __ orr(r7, r7, Operand(r6, LSR, kMantissaInLoWordShift));
-      __ orr(r5, r7, Operand(r9, LSL, kBinary32ExponentShift));
-
-      __ bind(&done);
-      __ str(r5, MemOperand(r3, r4, LSL, 2));
-      // Entry registers are intact, r0 holds the value which is the return
-      // value.
-      __ Ret();
-
-      __ bind(&nan_or_infinity_or_zero);
-      __ and_(r7, r5, Operand(HeapNumber::kSignMask));
-      __ and_(r5, r5, Operand(HeapNumber::kMantissaMask));
-      __ orr(r9, r9, r7);
-      __ orr(r9, r9, Operand(r5, LSL, kMantissaInHiWordShift));
-      __ orr(r5, r9, Operand(r6, LSR, kMantissaInLoWordShift));
-      __ b(&done);
-    } else {
-      bool is_signed_type = IsElementTypeSigned(array_type);
-      int meaningfull_bits = is_signed_type ? (kBitsPerInt - 1) : kBitsPerInt;
-      int32_t min_value = is_signed_type ? 0x80000000 : 0x00000000;
-
-      Label done, sign;
-
-      // Test for all special exponent values: zeros, subnormal numbers, NaNs
-      // and infinities. All these should be converted to 0.
-      __ mov(r7, Operand(HeapNumber::kExponentMask));
-      __ and_(r9, r5, Operand(r7), SetCC);
-      __ mov(r5, Operand(0, RelocInfo::NONE), LeaveCC, eq);
-      __ b(eq, &done);
-
-      __ teq(r9, Operand(r7));
-      __ mov(r5, Operand(0, RelocInfo::NONE), LeaveCC, eq);
-      __ b(eq, &done);
-
-      // Unbias exponent.
-      __ mov(r9, Operand(r9, LSR, HeapNumber::kExponentShift));
-      __ sub(r9, r9, Operand(HeapNumber::kExponentBias), SetCC);
-      // If exponent is negative than result is 0.
-      __ mov(r5, Operand(0, RelocInfo::NONE), LeaveCC, mi);
-      __ b(mi, &done);
-
-      // If exponent is too big than result is minimal value.
-      __ cmp(r9, Operand(meaningfull_bits - 1));
-      __ mov(r5, Operand(min_value), LeaveCC, ge);
-      __ b(ge, &done);
-
-      __ and_(r7, r5, Operand(HeapNumber::kSignMask), SetCC);
-      __ and_(r5, r5, Operand(HeapNumber::kMantissaMask));
-      __ orr(r5, r5, Operand(1u << HeapNumber::kMantissaBitsInTopWord));
-
-      __ rsb(r9, r9, Operand(HeapNumber::kMantissaBitsInTopWord), SetCC);
-      __ mov(r5, Operand(r5, LSR, r9), LeaveCC, pl);
-      __ b(pl, &sign);
-
-      __ rsb(r9, r9, Operand(0, RelocInfo::NONE));
-      __ mov(r5, Operand(r5, LSL, r9));
-      __ rsb(r9, r9, Operand(meaningfull_bits));
-      __ orr(r5, r5, Operand(r6, LSR, r9));
-
-      __ bind(&sign);
-      __ teq(r7, Operand(0, RelocInfo::NONE));
-      __ rsb(r5, r5, Operand(0, RelocInfo::NONE), LeaveCC, ne);
-
-      __ bind(&done);
-      switch (array_type) {
-        case kExternalByteArray:
-        case kExternalUnsignedByteArray:
-          __ strb(r5, MemOperand(r3, r4, LSL, 0));
-          break;
-        case kExternalShortArray:
-        case kExternalUnsignedShortArray:
-          __ strh(r5, MemOperand(r3, r4, LSL, 1));
-          break;
-        case kExternalIntArray:
-        case kExternalUnsignedIntArray:
-          __ str(r5, MemOperand(r3, r4, LSL, 2));
-          break;
-        default:
-          UNREACHABLE();
-          break;
-      }
-    }
-  }
-
-  // Slow case: call runtime.
-  __ bind(&slow);
-
-  // Entry registers are intact.
-  // r0: value
-  // r1: key
-  // r2: receiver
-  GenerateRuntimeSetProperty(masm);
-}
-
-
-void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
+void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
+                                  StrictModeFlag strict_mode) {
   // ----------- S t a t e -------------
   //  -- r0    : value
   //  -- r1    : receiver
@@ -2159,8 +1557,9 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
   // Get the receiver from the stack and probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(Code::STORE_IC,
                                          NOT_IN_LOOP,
-                                         MONOMORPHIC);
-  StubCache::GenerateProbe(masm, flags, r1, r2, r3, no_reg);
+                                         MONOMORPHIC,
+                                         strict_mode);
+  StubCache::GenerateProbe(masm, flags, r1, r2, r3, r4, r5);
 
   // Cache miss: Jump to runtime.
   GenerateMiss(masm);
@@ -2204,7 +1603,7 @@ void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   Register scratch = r3;
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, &miss);
+  __ JumpIfSmi(receiver, &miss);
 
   // Check that the object is a JS array.
   __ CompareObjectType(receiver, scratch, scratch, JS_ARRAY_TYPE);
@@ -2218,7 +1617,7 @@ void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   __ b(ne, &miss);
 
   // Check that value is a smi.
-  __ BranchOnNotSmi(value, &miss);
+  __ JumpIfNotSmi(value, &miss);
 
   // Prepare tail call to StoreIC_ArrayLength.
   __ Push(receiver, value);
@@ -2253,7 +1652,146 @@ void StoreIC::GenerateNormal(MacroAssembler* masm) {
 }
 
 
+void StoreIC::GenerateGlobalProxy(MacroAssembler* masm,
+                                  StrictModeFlag strict_mode) {
+  // ----------- S t a t e -------------
+  //  -- r0    : value
+  //  -- r1    : receiver
+  //  -- r2    : name
+  //  -- lr    : return address
+  // -----------------------------------
+
+  __ Push(r1, r2, r0);
+
+  __ mov(r1, Operand(Smi::FromInt(NONE)));  // PropertyAttributes
+  __ mov(r0, Operand(Smi::FromInt(strict_mode)));
+  __ Push(r1, r0);
+
+  // Do tail-call to runtime routine.
+  __ TailCallRuntime(Runtime::kSetProperty, 5, 1);
+}
+
+
 #undef __
+
+
+Condition CompareIC::ComputeCondition(Token::Value op) {
+  switch (op) {
+    case Token::EQ_STRICT:
+    case Token::EQ:
+      return eq;
+    case Token::LT:
+      return lt;
+    case Token::GT:
+      // Reverse left and right operands to obtain ECMA-262 conversion order.
+      return lt;
+    case Token::LTE:
+      // Reverse left and right operands to obtain ECMA-262 conversion order.
+      return ge;
+    case Token::GTE:
+      return ge;
+    default:
+      UNREACHABLE();
+      return kNoCondition;
+  }
+}
+
+
+void CompareIC::UpdateCaches(Handle<Object> x, Handle<Object> y) {
+  HandleScope scope;
+  Handle<Code> rewritten;
+  State previous_state = GetState();
+  State state = TargetState(previous_state, false, x, y);
+  if (state == GENERIC) {
+    CompareStub stub(GetCondition(), strict(), NO_COMPARE_FLAGS, r1, r0);
+    rewritten = stub.GetCode();
+  } else {
+    ICCompareStub stub(op_, state);
+    rewritten = stub.GetCode();
+  }
+  set_target(*rewritten);
+
+#ifdef DEBUG
+  if (FLAG_trace_ic) {
+    PrintF("[CompareIC (%s->%s)#%s]\n",
+           GetStateName(previous_state),
+           GetStateName(state),
+           Token::Name(op_));
+  }
+#endif
+
+  // Activate inlined smi code.
+  if (previous_state == UNINITIALIZED) {
+    PatchInlinedSmiCode(address());
+  }
+}
+
+
+void PatchInlinedSmiCode(Address address) {
+  Address cmp_instruction_address =
+      address + Assembler::kCallTargetAddressOffset;
+
+  // If the instruction following the call is not a cmp rx, #yyy, nothing
+  // was inlined.
+  Instr instr = Assembler::instr_at(cmp_instruction_address);
+  if (!Assembler::IsCmpImmediate(instr)) {
+    return;
+  }
+
+  // The delta to the start of the map check instruction and the
+  // condition code uses at the patched jump.
+  int delta = Assembler::GetCmpImmediateRawImmediate(instr);
+  delta +=
+      Assembler::GetCmpImmediateRegister(instr).code() * kOff12Mask;
+  // If the delta is 0 the instruction is cmp r0, #0 which also signals that
+  // nothing was inlined.
+  if (delta == 0) {
+    return;
+  }
+
+#ifdef DEBUG
+  if (FLAG_trace_ic) {
+    PrintF("[  patching ic at %p, cmp=%p, delta=%d\n",
+           address, cmp_instruction_address, delta);
+  }
+#endif
+
+  Address patch_address =
+      cmp_instruction_address - delta * Instruction::kInstrSize;
+  Instr instr_at_patch = Assembler::instr_at(patch_address);
+  Instr branch_instr =
+      Assembler::instr_at(patch_address + Instruction::kInstrSize);
+  ASSERT(Assembler::IsCmpRegister(instr_at_patch));
+  ASSERT_EQ(Assembler::GetRn(instr_at_patch).code(),
+            Assembler::GetRm(instr_at_patch).code());
+  ASSERT(Assembler::IsBranch(branch_instr));
+  if (Assembler::GetCondition(branch_instr) == eq) {
+    // This is patching a "jump if not smi" site to be active.
+    // Changing
+    //   cmp rx, rx
+    //   b eq, <target>
+    // to
+    //   tst rx, #kSmiTagMask
+    //   b ne, <target>
+    CodePatcher patcher(patch_address, 2);
+    Register reg = Assembler::GetRn(instr_at_patch);
+    patcher.masm()->tst(reg, Operand(kSmiTagMask));
+    patcher.EmitCondition(ne);
+  } else {
+    ASSERT(Assembler::GetCondition(branch_instr) == ne);
+    // This is patching a "jump if smi" site to be active.
+    // Changing
+    //   cmp rx, rx
+    //   b ne, <target>
+    // to
+    //   tst rx, #kSmiTagMask
+    //   b eq, <target>
+    CodePatcher patcher(patch_address, 2);
+    Register reg = Assembler::GetRn(instr_at_patch);
+    patcher.masm()->tst(reg, Operand(kSmiTagMask));
+    patcher.EmitCondition(eq);
+  }
+}
 
 
 } }  // namespace v8::internal

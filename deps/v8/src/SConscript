@@ -1,4 +1,4 @@
-# Copyright 2008 the V8 project authors. All rights reserved.
+# Copyright 2011 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -31,6 +31,7 @@ root_dir = dirname(File('SConstruct').rfile().abspath)
 sys.path.append(join(root_dir, 'tools'))
 import js2c
 Import('context')
+Import('tools')
 
 
 SOURCES = {
@@ -40,8 +41,12 @@ SOURCES = {
     api.cc
     assembler.cc
     ast.cc
+    atomicops_internals_x86_gcc.cc
+    bignum.cc
+    bignum-dtoa.cc
     bootstrapper.cc
     builtins.cc
+    cached-powers.cc
     checks.cc
     circular-queue.cc
     code-stubs.cc
@@ -56,6 +61,7 @@ SOURCES = {
     dateparser.cc
     debug-agent.cc
     debug.cc
+    deoptimizer.cc
     disassembler.cc
     diy-fp.cc
     dtoa.cc
@@ -66,6 +72,7 @@ SOURCES = {
     frames.cc
     full-codegen.cc
     func-name-inferrer.cc
+    gdb-jit.cc
     global-handles.cc
     fast-dtoa.cc
     fixed-dtoa.cc
@@ -73,19 +80,27 @@ SOURCES = {
     hashmap.cc
     heap-profiler.cc
     heap.cc
+    hydrogen.cc
+    hydrogen-instructions.cc
     ic.cc
+    inspector.cc
     interpreter-irregexp.cc
     jsregexp.cc
     jump-target.cc
+    lithium-allocator.cc
+    lithium.cc
     liveedit.cc
+    liveobjectlist.cc
     log-utils.cc
     log.cc
     mark-compact.cc
     messages.cc
     objects.cc
+    objects-printer.cc
     objects-visiting.cc
-    oprofile-agent.cc
     parser.cc
+    preparser.cc
+    preparse-data.cc
     profile-generator.cc
     property.cc
     regexp-macro-assembler-irregexp.cc
@@ -94,6 +109,9 @@ SOURCES = {
     register-allocator.cc
     rewriter.cc
     runtime.cc
+    runtime-profiler.cc
+    safepoint-table.cc
+    scanner-base.cc
     scanner.cc
     scopeinfo.cc
     scopes.cc
@@ -102,6 +120,7 @@ SOURCES = {
     spaces.cc
     string-search.cc
     string-stream.cc
+    strtod.cc
     stub-cache.cc
     token.cc
     top.cc
@@ -114,8 +133,9 @@ SOURCES = {
     variables.cc
     version.cc
     virtual-frame.cc
-    vm-state.cc
     zone.cc
+    extensions/gc-extension.cc
+    extensions/externalize-string-extension.cc
     """),
   'arch:arm': Split("""
     jump-target-light.cc
@@ -126,11 +146,15 @@ SOURCES = {
     arm/constants-arm.cc
     arm/cpu-arm.cc
     arm/debug-arm.cc
+    arm/deoptimizer-arm.cc
     arm/disasm-arm.cc
     arm/frames-arm.cc
     arm/full-codegen-arm.cc
     arm/ic-arm.cc
     arm/jump-target-arm.cc
+    arm/lithium-arm.cc
+    arm/lithium-codegen-arm.cc
+    arm/lithium-gap-resolver-arm.cc
     arm/macro-assembler-arm.cc
     arm/regexp-macro-assembler-arm.cc
     arm/register-allocator-arm.cc
@@ -164,11 +188,15 @@ SOURCES = {
     ia32/codegen-ia32.cc
     ia32/cpu-ia32.cc
     ia32/debug-ia32.cc
+    ia32/deoptimizer-ia32.cc
     ia32/disasm-ia32.cc
     ia32/frames-ia32.cc
     ia32/full-codegen-ia32.cc
     ia32/ic-ia32.cc
     ia32/jump-target-ia32.cc
+    ia32/lithium-codegen-ia32.cc
+    ia32/lithium-gap-resolver-ia32.cc
+    ia32/lithium-ia32.cc
     ia32/macro-assembler-ia32.cc
     ia32/regexp-macro-assembler-ia32.cc
     ia32/register-allocator-ia32.cc
@@ -184,11 +212,15 @@ SOURCES = {
     x64/codegen-x64.cc
     x64/cpu-x64.cc
     x64/debug-x64.cc
+    x64/deoptimizer-x64.cc
     x64/disasm-x64.cc
     x64/frames-x64.cc
     x64/full-codegen-x64.cc
     x64/ic-x64.cc
     x64/jump-target-x64.cc
+    x64/lithium-codegen-x64.cc
+    x64/lithium-gap-resolver-x64.cc
+    x64/lithium-x64.cc
     x64/macro-assembler-x64.cc
     x64/regexp-macro-assembler-x64.cc
     x64/register-allocator-x64.cc
@@ -235,6 +267,9 @@ D8_FILES = {
   'os:solaris': [
     'd8-posix.cc'
   ],
+  'os:cygwin': [
+    'd8-posix.cc'
+  ],
   'os:win32': [
     'd8-windows.cc'
   ],
@@ -271,7 +306,7 @@ def Abort(message):
 
 
 def ConfigureObjectFiles():
-  env = Environment()
+  env = Environment(tools=tools)
   env.Replace(**context.flags['v8'])
   context.ApplyEnvOverrides(env)
   env['BUILDERS']['JS2C'] = Builder(action=js2c.JS2C)
@@ -292,14 +327,8 @@ def ConfigureObjectFiles():
   libraries_src, libraries_empty_src = env.JS2C(['libraries.cc', 'libraries-empty.cc'], library_files, TYPE='CORE')
   libraries_obj = context.ConfigureObject(env, libraries_src, CPPPATH=['.'])
 
-  # Build dtoa.
-  dtoa_env = env.Copy()
-  dtoa_env.Replace(**context.flags['dtoa'])
-  dtoa_files = ['dtoa-config.c']
-  dtoa_obj = context.ConfigureObject(dtoa_env, dtoa_files)
-
   source_objs = context.ConfigureObject(env, source_files)
-  non_snapshot_files = [dtoa_obj, source_objs]
+  non_snapshot_files = [source_objs]
 
   # Create snapshot if necessary.  For cross compilation you should either
   # do without snapshots and take the performance hit or you should build a

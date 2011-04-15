@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -32,6 +32,7 @@
 #include "execution.h"
 #include "factory.h"
 #include "macro-assembler.h"
+#include "objects.h"
 #include "objects-visiting.h"
 
 namespace v8 {
@@ -73,9 +74,37 @@ Handle<DescriptorArray> Factory::NewDescriptorArray(int number_of_descriptors) {
 }
 
 
+Handle<DeoptimizationInputData> Factory::NewDeoptimizationInputData(
+    int deopt_entry_count,
+    PretenureFlag pretenure) {
+  ASSERT(deopt_entry_count > 0);
+  CALL_HEAP_FUNCTION(DeoptimizationInputData::Allocate(deopt_entry_count,
+                                                       pretenure),
+                     DeoptimizationInputData);
+}
+
+
+Handle<DeoptimizationOutputData> Factory::NewDeoptimizationOutputData(
+    int deopt_entry_count,
+    PretenureFlag pretenure) {
+  ASSERT(deopt_entry_count > 0);
+  CALL_HEAP_FUNCTION(DeoptimizationOutputData::Allocate(deopt_entry_count,
+                                                        pretenure),
+                     DeoptimizationOutputData);
+}
+
+
 // Symbols are created in the old generation (data space).
 Handle<String> Factory::LookupSymbol(Vector<const char> string) {
   CALL_HEAP_FUNCTION(Heap::LookupSymbol(string), String);
+}
+
+Handle<String> Factory::LookupAsciiSymbol(Vector<const char> string) {
+  CALL_HEAP_FUNCTION(Heap::LookupAsciiSymbol(string), String);
+}
+
+Handle<String> Factory::LookupTwoByteSymbol(Vector<const uc16> string) {
+  CALL_HEAP_FUNCTION(Heap::LookupTwoByteSymbol(string), String);
 }
 
 
@@ -243,6 +272,13 @@ Handle<ExternalArray> Factory::NewExternalArray(int length,
 }
 
 
+Handle<JSGlobalPropertyCell> Factory::NewJSGlobalPropertyCell(
+    Handle<Object> value) {
+  CALL_HEAP_FUNCTION(Heap::AllocateJSGlobalPropertyCell(*value),
+                     JSGlobalPropertyCell);
+}
+
+
 Handle<Map> Factory::NewMap(InstanceType type, int instance_size) {
   CALL_HEAP_FUNCTION(Heap::AllocateMap(type, instance_size), Map);
 }
@@ -298,6 +334,11 @@ Handle<Map> Factory::GetSlowElementsMap(Handle<Map> src) {
 }
 
 
+Handle<Map> Factory::GetPixelArrayElementsMap(Handle<Map> src) {
+  CALL_HEAP_FUNCTION(src->GetPixelArrayElementsMap(), Map);
+}
+
+
 Handle<FixedArray> Factory::CopyFixedArray(Handle<FixedArray> array) {
   CALL_HEAP_FUNCTION(array->Copy(), FixedArray);
 }
@@ -333,6 +374,15 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
                   context->global_context());
   }
   result->set_literals(*literals);
+  result->set_next_function_link(Heap::undefined_value());
+
+  if (V8::UseCrankshaft() &&
+      FLAG_always_opt &&
+      result->is_compiled() &&
+      !function_info->is_toplevel() &&
+      function_info->allows_lazy_compilation()) {
+    result->MarkForLazyRecompilation();
+  }
   return result;
 }
 
@@ -431,7 +481,8 @@ Handle<Object> Factory::NewError(const char* maker,
                                  const char* type,
                                  Handle<JSArray> args) {
   Handle<String> make_str = Factory::LookupAsciiSymbol(maker);
-  Handle<Object> fun_obj(Top::builtins()->GetProperty(*make_str));
+  Handle<Object> fun_obj(Top::builtins()->GetPropertyNoExceptionThrown(
+      *make_str));
   // If the builtins haven't been properly configured yet this error
   // constructor may not have been defined.  Bail out.
   if (!fun_obj->IsJSFunction())
@@ -464,7 +515,7 @@ Handle<Object> Factory::NewError(const char* constructor,
   Handle<JSFunction> fun =
       Handle<JSFunction>(
           JSFunction::cast(
-              Top::builtins()->GetProperty(*constr)));
+              Top::builtins()->GetPropertyNoExceptionThrown(*constr)));
   Object** argv[1] = { Handle<Object>::cast(message).location() };
 
   // Invoke the JavaScript factory method. If an exception is thrown while
@@ -534,7 +585,9 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
   // Set function.prototype and give the prototype a constructor
   // property that refers to the function.
   SetPrototypeProperty(function, prototype);
-  SetProperty(prototype, Factory::constructor_symbol(), function, DONT_ENUM);
+  // Currently safe because it is only invoked from Genesis.
+  SetLocalPropertyNoThrow(
+      prototype, Factory::constructor_symbol(), function, DONT_ENUM);
   return function;
 }
 
@@ -567,12 +620,13 @@ Handle<Code> Factory::CopyCode(Handle<Code> code, Vector<byte> reloc_info) {
 }
 
 
-static inline Object* DoCopyInsert(DescriptorArray* array,
-                                   String* key,
-                                   Object* value,
-                                   PropertyAttributes attributes) {
+MUST_USE_RESULT static inline MaybeObject* DoCopyInsert(
+    DescriptorArray* array,
+    String* key,
+    Object* value,
+    PropertyAttributes attributes) {
   CallbacksDescriptor desc(key, value, attributes);
-  Object* obj = array->CopyInsert(&desc, REMOVE_TRANSITIONS);
+  MaybeObject* obj = array->CopyInsert(&desc, REMOVE_TRANSITIONS);
   return obj;
 }
 
@@ -707,6 +761,24 @@ Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(
   return shared;
 }
 
+
+Handle<JSMessageObject> Factory::NewJSMessageObject(
+    Handle<String> type,
+    Handle<JSArray> arguments,
+    int start_position,
+    int end_position,
+    Handle<Object> script,
+    Handle<Object> stack_trace,
+    Handle<Object> stack_frames) {
+  CALL_HEAP_FUNCTION(Heap::AllocateJSMessageObject(*type,
+                                                   *arguments,
+                                                   start_position,
+                                                   end_position,
+                                                   *script,
+                                                   *stack_trace,
+                                                   *stack_frames),
+                     JSMessageObject);
+}
 
 Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(Handle<String> name) {
   CALL_HEAP_FUNCTION(Heap::AllocateSharedFunctionInfo(*name),
@@ -921,11 +993,15 @@ Handle<MapCache> Factory::NewMapCache(int at_least_space_for) {
 }
 
 
-static Object* UpdateMapCacheWith(Context* context,
-                                  FixedArray* keys,
-                                  Map* map) {
-  Object* result = MapCache::cast(context->map_cache())->Put(keys, map);
-  if (!result->IsFailure()) context->set_map_cache(MapCache::cast(result));
+MUST_USE_RESULT static MaybeObject* UpdateMapCacheWith(Context* context,
+                                                       FixedArray* keys,
+                                                       Map* map) {
+  Object* result;
+  { MaybeObject* maybe_result =
+        MapCache::cast(context->map_cache())->Put(keys, map);
+    if (!maybe_result->ToObject(&result)) return maybe_result;
+  }
+  context->set_map_cache(MapCache::cast(result));
   return result;
 }
 

@@ -35,9 +35,9 @@
 using namespace v8::internal;
 
 
-static Object* AllocateAfterFailures() {
+static MaybeObject* AllocateAfterFailures() {
   static int attempts = 0;
-  if (++attempts < 3) return Failure::RetryAfterGC(0);
+  if (++attempts < 3) return Failure::RetryAfterGC();
 
   // New space.
   NewSpace* new_space = Heap::new_space();
@@ -60,7 +60,8 @@ static Object* AllocateAfterFailures() {
   CHECK(!Heap::AllocateFixedArray(100)->IsFailure());
   CHECK(!Heap::AllocateHeapNumber(0.42)->IsFailure());
   CHECK(!Heap::AllocateArgumentsObject(Smi::FromInt(87), 10)->IsFailure());
-  Object* object = Heap::AllocateJSObject(*Top::object_function());
+  Object* object =
+      Heap::AllocateJSObject(*Top::object_function())->ToObjectChecked();
   CHECK(!Heap::CopyJSObject(JSObject::cast(object))->IsFailure());
 
   // Old data space.
@@ -111,7 +112,7 @@ TEST(StressHandles) {
 }
 
 
-static Object* TestAccessorGet(Object* object, void*) {
+static MaybeObject* TestAccessorGet(Object* object, void*) {
   return AllocateAfterFailures();
 }
 
@@ -132,7 +133,7 @@ TEST(StressJS) {
   // Force the creation of an initial map and set the code to
   // something empty.
   Factory::NewJSObject(function);
-  function->set_code(Builtins::builtin(Builtins::EmptyFunction));
+  function->ReplaceCode(Builtins::builtin(Builtins::EmptyFunction));
   // Patch the map to have an accessor for "get".
   Handle<Map> map(function->initial_map());
   Handle<DescriptorArray> instance_descriptors(map->instance_descriptors());

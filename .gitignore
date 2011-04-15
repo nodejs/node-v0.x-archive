@@ -3,14 +3,12 @@ build
 tags
 .lock-wscript
 *.pyc
-*.patch
 doc/api.xml
-doc/api.html
-doc/changelog.html
-doc/node.1
 tools/nodejs.pc
-test/fixtures/hello.txt
 tmp/
 node
 node_g
 *.swp
+.benchmark_reports
+/.project
+/.cproject

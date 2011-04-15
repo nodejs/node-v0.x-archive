@@ -1,19 +1,19 @@
 /*
  * libevent compatibility header, only core events supported
  *
- * Copyright (c) 2007,2008 Marc Alexander Lehmann <libev@schmorp.de>
+ * Copyright (c) 2007,2008,2010 Marc Alexander Lehmann <libev@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
  * tion, are permitted provided that the following conditions are met:
- * 
+ *
  *   1.  Redistributions of source code must retain the above copyright notice,
  *       this list of conditions and the following disclaimer.
- * 
+ *
  *   2.  Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MER-
  * CHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
@@ -44,6 +44,16 @@
 # include EV_H
 #else
 # include "ev.h"
+#endif
+
+#ifndef EVLOOP_NONBLOCK
+# define EVLOOP_NONBLOCK EVRUN_NOWAIT
+#endif
+#ifndef EVLOOP_ONESHOT
+# define EVLOOP_ONESHOT EVRUN_ONCE
+#endif
+#ifndef EV_TIMEOUT
+# define EV_TIMEOUT EV_TIMER
 #endif
 
 #ifdef __cplusplus
@@ -85,6 +95,8 @@ struct event
   short ev_events;
 };
 
+#define EV_READ                    EV_READ
+#define EV_WRITE                   EV_WRITE
 #define EV_PERSIST                 0x10
 
 #define EVENT_SIGNAL(ev)           ((int) (ev)->ev_fd)

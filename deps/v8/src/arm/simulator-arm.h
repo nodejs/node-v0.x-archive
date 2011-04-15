@@ -38,11 +38,29 @@
 
 #include "allocation.h"
 
-#if defined(__arm__)
+#if !defined(USE_SIMULATOR)
+// Running without a simulator on a native arm platform.
+
+namespace v8 {
+namespace internal {
 
 // When running without a simulator we call the entry directly.
 #define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
   (entry(p0, p1, p2, p3, p4))
+
+typedef int (*arm_regexp_matcher)(String*, int, const byte*, const byte*,
+                                  void*, int*, Address, int);
+
+
+// Call the generated regexp code directly. The code at the entry address
+// should act as a function matching the type arm_regexp_matcher.
+// The fifth argument is a dummy that reserves the space used for
+// the return address added by the ExitFrame in native calls.
+#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
+  (FUNCTION_CAST<arm_regexp_matcher>(entry)(p0, p1, p2, p3, NULL, p4, p5, p6))
+
+#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
+  (reinterpret_cast<TryCatch*>(try_catch_address))
 
 // The stack limit beyond which we will throw stack overflow errors in
 // generated code. Because generated code on arm uses the C stack, we
@@ -60,40 +78,17 @@ class SimulatorStack : public v8::internal::AllStatic {
   static inline void UnregisterCTryCatch() { }
 };
 
+} }  // namespace v8::internal
 
-// Call the generated regexp code directly. The entry function pointer should
-// expect eight int/pointer sized arguments and return an int.
-#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
-  entry(p0, p1, p2, p3, p4, p5, p6)
-
-#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
-  reinterpret_cast<TryCatch*>(try_catch_address)
-
-
-#else  // defined(__arm__)
-
-// When running with the simulator transition into simulated execution at this
-// point.
-#define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
-  reinterpret_cast<Object*>( \
-      assembler::arm::Simulator::current()->Call(FUNCTION_ADDR(entry), 5, \
-                                                 p0, p1, p2, p3, p4))
-
-#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
-  assembler::arm::Simulator::current()->Call( \
-    FUNCTION_ADDR(entry), 7, p0, p1, p2, p3, p4, p5, p6)
-
-#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
-  try_catch_address == NULL ? \
-      NULL : *(reinterpret_cast<TryCatch**>(try_catch_address))
-
+#else  // !defined(USE_SIMULATOR)
+// Running with a simulator.
 
 #include "constants-arm.h"
 #include "hashmap.h"
+#include "assembler.h"
 
-
-namespace assembler {
-namespace arm {
+namespace v8 {
+namespace internal {
 
 class CachePage {
  public:
@@ -198,6 +193,10 @@ class Simulator {
   // ICache checking.
   static void FlushICache(void* start, size_t size);
 
+  // Returns true if pc register contains one of the 'special_values' defined
+  // below (bad_lr, end_sim_pc).
+  bool has_bad_pc() const;
+
  private:
   enum special_values {
     // Known bad pc value to ensure that the simulator does not execute
@@ -211,11 +210,11 @@ class Simulator {
   };
 
   // Unsupported instructions use Format to print an error and stop execution.
-  void Format(Instr* instr, const char* format);
+  void Format(Instruction* instr, const char* format);
 
   // Checks if the current instruction should be executed based on its
   // condition bits.
-  bool ConditionallyExecute(Instr* instr);
+  bool ConditionallyExecute(Instruction* instr);
 
   // Helper functions to set the conditional flags in the architecture state.
   void SetNZFlags(int32_t val);
@@ -233,10 +232,19 @@ class Simulator {
   void Copy_FPSCR_to_APSR();
 
   // Helper functions to decode common "addressing" modes
-  int32_t GetShiftRm(Instr* instr, bool* carry_out);
-  int32_t GetImm(Instr* instr, bool* carry_out);
-  void HandleRList(Instr* instr, bool load);
-  void SoftwareInterrupt(Instr* instr);
+  int32_t GetShiftRm(Instruction* instr, bool* carry_out);
+  int32_t GetImm(Instruction* instr, bool* carry_out);
+  void HandleRList(Instruction* instr, bool load);
+  void SoftwareInterrupt(Instruction* instr);
+
+  // Stop helper functions.
+  inline bool isStopInstruction(Instruction* instr);
+  inline bool isWatchedStop(uint32_t bkpt_code);
+  inline bool isEnabledStop(uint32_t bkpt_code);
+  inline void EnableStop(uint32_t bkpt_code);
+  inline void DisableStop(uint32_t bkpt_code);
+  inline void IncreaseStopCounter(uint32_t bkpt_code);
+  void PrintStopInfo(uint32_t code);
 
   // Read and write memory.
   inline uint8_t ReadBU(int32_t addr);
@@ -244,48 +252,49 @@ class Simulator {
   inline void WriteB(int32_t addr, uint8_t value);
   inline void WriteB(int32_t addr, int8_t value);
 
-  inline uint16_t ReadHU(int32_t addr, Instr* instr);
-  inline int16_t ReadH(int32_t addr, Instr* instr);
+  inline uint16_t ReadHU(int32_t addr, Instruction* instr);
+  inline int16_t ReadH(int32_t addr, Instruction* instr);
   // Note: Overloaded on the sign of the value.
-  inline void WriteH(int32_t addr, uint16_t value, Instr* instr);
-  inline void WriteH(int32_t addr, int16_t value, Instr* instr);
+  inline void WriteH(int32_t addr, uint16_t value, Instruction* instr);
+  inline void WriteH(int32_t addr, int16_t value, Instruction* instr);
 
-  inline int ReadW(int32_t addr, Instr* instr);
-  inline void WriteW(int32_t addr, int value, Instr* instr);
+  inline int ReadW(int32_t addr, Instruction* instr);
+  inline void WriteW(int32_t addr, int value, Instruction* instr);
 
   int32_t* ReadDW(int32_t addr);
   void WriteDW(int32_t addr, int32_t value1, int32_t value2);
 
   // Executing is handled based on the instruction type.
-  void DecodeType01(Instr* instr);  // both type 0 and type 1 rolled into one
-  void DecodeType2(Instr* instr);
-  void DecodeType3(Instr* instr);
-  void DecodeType4(Instr* instr);
-  void DecodeType5(Instr* instr);
-  void DecodeType6(Instr* instr);
-  void DecodeType7(Instr* instr);
-  void DecodeUnconditional(Instr* instr);
+  // Both type 0 and type 1 rolled into one.
+  void DecodeType01(Instruction* instr);
+  void DecodeType2(Instruction* instr);
+  void DecodeType3(Instruction* instr);
+  void DecodeType4(Instruction* instr);
+  void DecodeType5(Instruction* instr);
+  void DecodeType6(Instruction* instr);
+  void DecodeType7(Instruction* instr);
 
   // Support for VFP.
-  void DecodeTypeVFP(Instr* instr);
-  void DecodeType6CoprocessorIns(Instr* instr);
+  void DecodeTypeVFP(Instruction* instr);
+  void DecodeType6CoprocessorIns(Instruction* instr);
 
-  void DecodeVMOVBetweenCoreAndSinglePrecisionRegisters(Instr* instr);
-  void DecodeVCMP(Instr* instr);
-  void DecodeVCVTBetweenDoubleAndSingle(Instr* instr);
-  void DecodeVCVTBetweenFloatingPointAndInteger(Instr* instr);
+  void DecodeVMOVBetweenCoreAndSinglePrecisionRegisters(Instruction* instr);
+  void DecodeVCMP(Instruction* instr);
+  void DecodeVCVTBetweenDoubleAndSingle(Instruction* instr);
+  void DecodeVCVTBetweenFloatingPointAndInteger(Instruction* instr);
 
   // Executes one instruction.
-  void InstructionDecode(Instr* instr);
+  void InstructionDecode(Instruction* instr);
 
   // ICache.
-  static void CheckICache(Instr* instr);
+  static void CheckICache(Instruction* instr);
   static void FlushOnePage(intptr_t start, int size);
   static CachePage* GetCachePage(void* page);
 
   // Runtime call support.
-  static void* RedirectExternalReference(void* external_function,
-                                         bool fp_return);
+  static void* RedirectExternalReference(
+      void* external_function,
+      v8::internal::ExternalReference::Type type);
 
   // For use in calls that take two double values, constructed from r0, r1, r2
   // and r3.
@@ -310,6 +319,9 @@ class Simulator {
   bool c_flag_FPSCR_;
   bool v_flag_FPSCR_;
 
+  // VFP rounding mode. See ARM DDI 0406B Page A2-29.
+  VFPRoundingMode FPSCR_rounding_mode_;
+
   // VFP FP exception flags architecture state.
   bool inv_op_vfp_flag_;
   bool div_zero_vfp_flag_;
@@ -327,11 +339,40 @@ class Simulator {
   static v8::internal::HashMap* i_cache_;
 
   // Registered breakpoints.
-  Instr* break_pc_;
-  instr_t break_instr_;
+  Instruction* break_pc_;
+  Instr break_instr_;
+
+  // A stop is watched if its code is less than kNumOfWatchedStops.
+  // Only watched stops support enabling/disabling and the counter feature.
+  static const uint32_t kNumOfWatchedStops = 256;
+
+  // Breakpoint is disabled if bit 31 is set.
+  static const uint32_t kStopDisabledBit = 1 << 31;
+
+  // A stop is enabled, meaning the simulator will stop when meeting the
+  // instruction, if bit 31 of watched_stops[code].count is unset.
+  // The value watched_stops[code].count & ~(1 << 31) indicates how many times
+  // the breakpoint was hit or gone through.
+  struct StopCountAndDesc {
+    uint32_t count;
+    char* desc;
+  };
+  StopCountAndDesc watched_stops[kNumOfWatchedStops];
 };
 
-} }  // namespace assembler::arm
+
+// When running with the simulator transition into simulated execution at this
+// point.
+#define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
+  reinterpret_cast<Object*>(Simulator::current()->Call( \
+      FUNCTION_ADDR(entry), 5, p0, p1, p2, p3, p4))
+
+#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
+  Simulator::current()->Call(entry, 8, p0, p1, p2, p3, NULL, p4, p5, p6)
+
+#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
+  try_catch_address == \
+      NULL ? NULL : *(reinterpret_cast<TryCatch**>(try_catch_address))
 
 
 // The simulator has its own stack. Thus it has a different stack limit from
@@ -342,20 +383,20 @@ class Simulator {
 class SimulatorStack : public v8::internal::AllStatic {
  public:
   static inline uintptr_t JsLimitFromCLimit(uintptr_t c_limit) {
-    return assembler::arm::Simulator::current()->StackLimit();
+    return Simulator::current()->StackLimit();
   }
 
   static inline uintptr_t RegisterCTryCatch(uintptr_t try_catch_address) {
-    assembler::arm::Simulator* sim = assembler::arm::Simulator::current();
+    Simulator* sim = Simulator::current();
     return sim->PushAddress(try_catch_address);
   }
 
   static inline void UnregisterCTryCatch() {
-    assembler::arm::Simulator::current()->PopAddress();
+    Simulator::current()->PopAddress();
   }
 };
 
+} }  // namespace v8::internal
 
-#endif  // defined(__arm__)
-
+#endif  // !defined(USE_SIMULATOR)
 #endif  // V8_ARM_SIMULATOR_ARM_H_

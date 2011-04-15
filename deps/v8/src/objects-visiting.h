@@ -50,6 +50,7 @@ class StaticVisitorBase : public AllStatic {
     kVisitShortcutCandidate,
     kVisitByteArray,
     kVisitFixedArray,
+    kVisitGlobalContext,
 
     // For data objects, JS objects and structs along with generic visitor which
     // can visit object of any size we provide visitors specialized by
@@ -145,7 +146,7 @@ class VisitorDispatchTable {
   }
 
   void Register(StaticVisitorBase::VisitorId id, Callback callback) {
-    ASSERT((0 <= id) && (id < StaticVisitorBase::kVisitorIdCount));
+    ASSERT(id < StaticVisitorBase::kVisitorIdCount);  // id is unsigned.
     callbacks_[id] = callback;
   }
 
@@ -185,9 +186,9 @@ class VisitorDispatchTable {
 template<typename StaticVisitor>
 class BodyVisitorBase : public AllStatic {
  public:
-  static inline void IteratePointers(HeapObject* object,
+  INLINE(static void IteratePointers(HeapObject* object,
                                      int start_offset,
-                                     int end_offset) {
+                                     int end_offset)) {
     Object** start_slot = reinterpret_cast<Object**>(object->address() +
                                                      start_offset);
     Object** end_slot = reinterpret_cast<Object**>(object->address() +
@@ -262,6 +263,11 @@ class StaticNewSpaceVisitor : public StaticVisitorBase {
                     &FlexibleBodyVisitor<StaticVisitor,
                                          FixedArray::BodyDescriptor,
                                          int>::Visit);
+
+    table_.Register(kVisitGlobalContext,
+                    &FixedBodyVisitor<StaticVisitor,
+                                      Context::ScavengeBodyDescriptor,
+                                      int>::Visit);
 
     table_.Register(kVisitByteArray, &VisitByteArray);
 
@@ -346,6 +352,7 @@ VisitorDispatchTable<typename StaticNewSpaceVisitor<StaticVisitor>::Callback>
 void Code::CodeIterateBody(ObjectVisitor* v) {
   int mode_mask = RelocInfo::kCodeTargetMask |
                   RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT) |
+                  RelocInfo::ModeMask(RelocInfo::GLOBAL_PROPERTY_CELL) |
                   RelocInfo::ModeMask(RelocInfo::EXTERNAL_REFERENCE) |
                   RelocInfo::ModeMask(RelocInfo::JS_RETURN) |
                   RelocInfo::ModeMask(RelocInfo::DEBUG_BREAK_SLOT) |
@@ -355,9 +362,8 @@ void Code::CodeIterateBody(ObjectVisitor* v) {
   // the heap compaction in the next statement.
   RelocIterator it(this, mode_mask);
 
-  IteratePointers(v,
-                  kRelocationInfoOffset,
-                  kRelocationInfoOffset + kPointerSize);
+  IteratePointer(v, kRelocationInfoOffset);
+  IteratePointer(v, kDeoptimizationDataOffset);
 
   for (; !it.done(); it.next()) {
     it.rinfo()->Visit(v);
@@ -369,6 +375,7 @@ template<typename StaticVisitor>
 void Code::CodeIterateBody() {
   int mode_mask = RelocInfo::kCodeTargetMask |
                   RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT) |
+                  RelocInfo::ModeMask(RelocInfo::GLOBAL_PROPERTY_CELL) |
                   RelocInfo::ModeMask(RelocInfo::EXTERNAL_REFERENCE) |
                   RelocInfo::ModeMask(RelocInfo::JS_RETURN) |
                   RelocInfo::ModeMask(RelocInfo::DEBUG_BREAK_SLOT) |
@@ -380,6 +387,8 @@ void Code::CodeIterateBody() {
 
   StaticVisitor::VisitPointer(
       reinterpret_cast<Object**>(this->address() + kRelocationInfoOffset));
+  StaticVisitor::VisitPointer(
+      reinterpret_cast<Object**>(this->address() + kDeoptimizationDataOffset));
 
   for (; !it.done(); it.next()) {
     it.rinfo()->template Visit<StaticVisitor>();

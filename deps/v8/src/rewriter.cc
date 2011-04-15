@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,9 +27,11 @@
 
 #include "v8.h"
 
-#include "ast.h"
-#include "scopes.h"
 #include "rewriter.h"
+
+#include "ast.h"
+#include "compiler.h"
+#include "scopes.h"
 
 namespace v8 {
 namespace internal {
@@ -217,11 +219,6 @@ void AstOptimizer::VisitConditional(Conditional* node) {
   Visit(node->condition());
   Visit(node->then_expression());
   Visit(node->else_expression());
-}
-
-
-void AstOptimizer::VisitSlot(Slot* node) {
-  USE(node);
 }
 
 
@@ -684,7 +681,7 @@ void AstOptimizer::VisitThisFunction(ThisFunction* node) {
 
 class Processor: public AstVisitor {
  public:
-  explicit Processor(VariableProxy* result)
+  explicit Processor(Variable* result)
       : result_(result),
         result_assigned_(false),
         is_set_(false),
@@ -695,7 +692,7 @@ class Processor: public AstVisitor {
   bool result_assigned() const { return result_assigned_; }
 
  private:
-  VariableProxy* result_;
+  Variable* result_;
 
   // We are not tracking result usage via the result_'s use
   // counts (we leave the accurate computation to the
@@ -712,7 +709,8 @@ class Processor: public AstVisitor {
 
   Expression* SetResult(Expression* value) {
     result_assigned_ = true;
-    return new Assignment(Token::ASSIGN, result_, value,
+    VariableProxy* result_proxy = new VariableProxy(result_);
+    return new Assignment(Token::ASSIGN, result_proxy, value,
                           RelocInfo::kNoPosition);
   }
 
@@ -867,12 +865,6 @@ void Processor::VisitConditional(Conditional* node) {
 }
 
 
-void Processor::VisitSlot(Slot* node) {
-  USE(node);
-  UNREACHABLE();
-}
-
-
 void Processor::VisitVariableProxy(VariableProxy* node) {
   USE(node);
   UNREACHABLE();
@@ -986,34 +978,43 @@ void Processor::VisitThisFunction(ThisFunction* node) {
 }
 
 
-bool Rewriter::Process(FunctionLiteral* function) {
-  HistogramTimerScope timer(&Counters::rewriting);
+// Assumes code has been parsed and scopes have been analyzed.  Mutates the
+// AST, so the AST should not continue to be used in the case of failure.
+bool Rewriter::Rewrite(CompilationInfo* info) {
+  FunctionLiteral* function = info->function();
+  ASSERT(function != NULL);
   Scope* scope = function->scope();
+  ASSERT(scope != NULL);
   if (scope->is_function_scope()) return true;
 
   ZoneList<Statement*>* body = function->body();
-  if (body->is_empty()) return true;
+  if (!body->is_empty()) {
+    Variable* result = scope->NewTemporary(Factory::result_symbol());
+    Processor processor(result);
+    processor.Process(body);
+    if (processor.HasStackOverflow()) return false;
 
-  VariableProxy* result = scope->NewTemporary(Factory::result_symbol());
-  Processor processor(result);
-  processor.Process(body);
-  if (processor.HasStackOverflow()) return false;
+    if (processor.result_assigned()) {
+      VariableProxy* result_proxy = new VariableProxy(result);
+      body->Add(new ReturnStatement(result_proxy));
+    }
+  }
 
-  if (processor.result_assigned()) body->Add(new ReturnStatement(result));
   return true;
 }
 
 
-bool Rewriter::Optimize(FunctionLiteral* function) {
-  ZoneList<Statement*>* body = function->body();
+// Assumes code has been parsed and scopes have been analyzed.  Mutates the
+// AST, so the AST should not continue to be used in the case of failure.
+bool Rewriter::Analyze(CompilationInfo* info) {
+  FunctionLiteral* function = info->function();
+  ASSERT(function != NULL && function->scope() != NULL);
 
+  ZoneList<Statement*>* body = function->body();
   if (FLAG_optimize_ast && !body->is_empty()) {
-    HistogramTimerScope timer(&Counters::ast_optimization);
     AstOptimizer optimizer;
     optimizer.Optimize(body);
-    if (optimizer.HasStackOverflow()) {
-      return false;
-    }
+    if (optimizer.HasStackOverflow()) return false;
   }
   return true;
 }

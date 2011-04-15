@@ -138,6 +138,9 @@ class Variable: public ZoneObject {
   bool is_accessed_from_inner_scope() const {
     return is_accessed_from_inner_scope_;
   }
+  void MarkAsAccessedFromInnerScope() {
+    is_accessed_from_inner_scope_ = true;
+  }
   bool is_used() { return is_used_; }
   void set_is_used(bool flag) { is_used_ = flag; }
 
@@ -146,6 +149,9 @@ class Variable: public ZoneObject {
   }
 
   bool IsStackAllocated() const;
+  bool IsParameter() const;  // Includes 'this'.
+  bool IsStackLocal() const;
+  bool IsContextSlot() const;
 
   bool is_dynamic() const {
     return (mode_ == DYNAMIC ||
@@ -173,6 +179,7 @@ class Variable: public ZoneObject {
   }
 
   Expression* rewrite() const { return rewrite_; }
+  void set_rewrite(Expression* expr) { rewrite_ = expr; }
 
   StaticType* type() { return &type_; }
 
@@ -180,14 +187,9 @@ class Variable: public ZoneObject {
   Scope* scope_;
   Handle<String> name_;
   Mode mode_;
-  bool is_valid_LHS_;
   Kind kind_;
 
   Variable* local_if_not_shadowed_;
-
-  // Usage info.
-  bool is_accessed_from_inner_scope_;  // set by variable resolver
-  bool is_used_;
 
   // Static type information
   StaticType type_;
@@ -196,7 +198,12 @@ class Variable: public ZoneObject {
   // rewrite_ is usually a Slot or a Property, but may be any expression.
   Expression* rewrite_;
 
-  friend class Scope;  // Has explicit access to rewrite_.
+  // Valid as a LHS? (const and this are not valid LHS, for example)
+  bool is_valid_LHS_;
+
+  // Usage info.
+  bool is_accessed_from_inner_scope_;  // set by variable resolver
+  bool is_used_;
 };
 
 

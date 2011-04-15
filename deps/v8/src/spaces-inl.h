@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2006-2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -407,8 +407,15 @@ void MemoryAllocator::UnprotectChunkFromPage(Page* page) {
 
 bool PagedSpace::Contains(Address addr) {
   Page* p = Page::FromAddress(addr);
-  ASSERT(p->is_valid());
+  if (!p->is_valid()) return false;
+  return MemoryAllocator::IsPageInSpace(p, this);
+}
 
+
+bool PagedSpace::SafeContains(Address addr) {
+  if (!MemoryAllocator::SafeIsInAPageChunk(addr)) return false;
+  Page* p = Page::FromAddress(addr);
+  if (!p->is_valid()) return false;
   return MemoryAllocator::IsPageInSpace(p, this);
 }
 
@@ -431,7 +438,7 @@ HeapObject* PagedSpace::AllocateLinearly(AllocationInfo* alloc_info,
 
 
 // Raw allocation.
-Object* PagedSpace::AllocateRaw(int size_in_bytes) {
+MaybeObject* PagedSpace::AllocateRaw(int size_in_bytes) {
   ASSERT(HasBeenSetup());
   ASSERT_OBJECT_SIZE(size_in_bytes);
   HeapObject* object = AllocateLinearly(&allocation_info_, size_in_bytes);
@@ -440,12 +447,12 @@ Object* PagedSpace::AllocateRaw(int size_in_bytes) {
   object = SlowAllocateRaw(size_in_bytes);
   if (object != NULL) return object;
 
-  return Failure::RetryAfterGC(size_in_bytes, identity());
+  return Failure::RetryAfterGC(identity());
 }
 
 
 // Reallocating (and promoting) objects during a compacting collection.
-Object* PagedSpace::MCAllocateRaw(int size_in_bytes) {
+MaybeObject* PagedSpace::MCAllocateRaw(int size_in_bytes) {
   ASSERT(HasBeenSetup());
   ASSERT_OBJECT_SIZE(size_in_bytes);
   HeapObject* object = AllocateLinearly(&mc_forwarding_info_, size_in_bytes);
@@ -454,28 +461,32 @@ Object* PagedSpace::MCAllocateRaw(int size_in_bytes) {
   object = SlowMCAllocateRaw(size_in_bytes);
   if (object != NULL) return object;
 
-  return Failure::RetryAfterGC(size_in_bytes, identity());
+  return Failure::RetryAfterGC(identity());
 }
 
 
 // -----------------------------------------------------------------------------
 // LargeObjectChunk
 
-HeapObject* LargeObjectChunk::GetObject() {
+Address LargeObjectChunk::GetStartAddress() {
   // Round the chunk address up to the nearest page-aligned address
   // and return the heap object in that page.
   Page* page = Page::FromAddress(RoundUp(address(), Page::kPageSize));
-  return HeapObject::FromAddress(page->ObjectAreaStart());
+  return page->ObjectAreaStart();
 }
 
 
-// -----------------------------------------------------------------------------
-// LargeObjectSpace
+void LargeObjectChunk::Free(Executability executable) {
+  MemoryAllocator::FreeRawMemory(address(), size(), executable);
+}
 
-Object* NewSpace::AllocateRawInternal(int size_in_bytes,
-                                      AllocationInfo* alloc_info) {
+// -----------------------------------------------------------------------------
+// NewSpace
+
+MaybeObject* NewSpace::AllocateRawInternal(int size_in_bytes,
+                                           AllocationInfo* alloc_info) {
   Address new_top = alloc_info->top + size_in_bytes;
-  if (new_top > alloc_info->limit) return Failure::RetryAfterGC(size_in_bytes);
+  if (new_top > alloc_info->limit) return Failure::RetryAfterGC();
 
   Object* obj = HeapObject::FromAddress(alloc_info->top);
   alloc_info->top = new_top;
@@ -487,6 +498,18 @@ Object* NewSpace::AllocateRawInternal(int size_in_bytes,
          && alloc_info->limit == space->high());
 #endif
   return obj;
+}
+
+
+template <typename StringType>
+void NewSpace::ShrinkStringAtAllocationBoundary(String* string, int length) {
+  ASSERT(length <= string->length());
+  ASSERT(string->IsSeqString());
+  ASSERT(string->address() + StringType::SizeFor(string->length()) ==
+         allocation_info_.top);
+  allocation_info_.top =
+      string->address() + StringType::SizeFor(length);
+  string->set_length(length);
 }
 
 

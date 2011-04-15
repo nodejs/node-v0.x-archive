@@ -31,7 +31,7 @@
 #undef FALSE
 #define FALSE 0
 
-#define MAX_HEADERS 10
+#define MAX_HEADERS 13
 #define MAX_ELEMENT_SIZE 500
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -498,7 +498,7 @@ const struct message requests[] =
 #define CONNECT_REQUEST 17
 , {.name = "connect request"
   ,.type= HTTP_REQUEST
-  ,.raw= "CONNECT home.netscape.com:443 HTTP/1.0\r\n"
+  ,.raw= "CONNECT home0.netscape.com:443 HTTP/1.0\r\n"
          "User-agent: Mozilla/1.1N\r\n"
          "Proxy-authorization: basic aGVsbG86d29ybGQ=\r\n"
          "\r\n"
@@ -510,7 +510,7 @@ const struct message requests[] =
   ,.query_string= ""
   ,.fragment= ""
   ,.request_path= ""
-  ,.request_url= "home.netscape.com:443"
+  ,.request_url= "home0.netscape.com:443"
   ,.num_headers= 2
   ,.upgrade=1
   ,.headers= { { "User-agent", "Mozilla/1.1N" }
@@ -538,6 +538,50 @@ const struct message requests[] =
   ,.body= ""
   }
 
+#define NO_HTTP_VERSION 19
+, {.name= "request with no http version"
+  ,.type= HTTP_REQUEST
+  ,.raw= "GET /\r\n"
+         "\r\n"
+  ,.should_keep_alive= FALSE
+  ,.message_complete_on_eof= FALSE
+  ,.http_major= 0
+  ,.http_minor= 9
+  ,.method= HTTP_GET
+  ,.query_string= ""
+  ,.fragment= ""
+  ,.request_path= "/"
+  ,.request_url= "/"
+  ,.num_headers= 0
+  ,.headers= {}
+  ,.body= ""
+  }
+
+#define MSEARCH_REQ 19
+, {.name= "m-search request"
+  ,.type= HTTP_REQUEST
+  ,.raw= "M-SEARCH * HTTP/1.1\r\n"
+         "HOST: 239.255.255.250:1900\r\n"
+         "MAN: \"ssdp:discover\"\r\n"
+         "ST: \"ssdp:all\"\r\n"
+         "\r\n"
+  ,.should_keep_alive= TRUE
+  ,.message_complete_on_eof= FALSE
+  ,.http_major= 1
+  ,.http_minor= 1
+  ,.method= HTTP_MSEARCH
+  ,.query_string= ""
+  ,.fragment= ""
+  ,.request_path= "*"
+  ,.request_url= "*"
+  ,.num_headers= 3
+  ,.headers= { { "HOST", "239.255.255.250:1900" }
+             , { "MAN", "\"ssdp:discover\"" }
+             , { "ST", "\"ssdp:all\"" }
+             }
+  ,.body= ""
+  }
+
 , {.name= NULL } /* sentinel */
 };
 
@@ -551,9 +595,10 @@ const struct message responses[] =
          "Content-Type: text/html; charset=UTF-8\r\n"
          "Date: Sun, 26 Apr 2009 11:11:49 GMT\r\n"
          "Expires: Tue, 26 May 2009 11:11:49 GMT\r\n"
+         "X-$PrototypeBI-Version: 1.6.0.3\r\n" /* $ char in header field */
          "Cache-Control: public, max-age=2592000\r\n"
          "Server: gws\r\n"
-         "Content-Length: 219\r\n"
+         "Content-Length:  219  \r\n"
          "\r\n"
          "<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n"
          "<TITLE>301 Moved</TITLE></HEAD><BODY>\n"
@@ -566,15 +611,16 @@ const struct message responses[] =
   ,.http_major= 1
   ,.http_minor= 1
   ,.status_code= 301
-  ,.num_headers= 7
+  ,.num_headers= 8
   ,.headers=
     { { "Location", "http://www.google.com/" }
     , { "Content-Type", "text/html; charset=UTF-8" }
     , { "Date", "Sun, 26 Apr 2009 11:11:49 GMT" }
     , { "Expires", "Tue, 26 May 2009 11:11:49 GMT" }
+    , { "X-$PrototypeBI-Version", "1.6.0.3" }
     , { "Cache-Control", "public, max-age=2592000" }
     , { "Server", "gws" }
-    , { "Content-Length", "219" }
+    , { "Content-Length", "219  " }
     }
   ,.body= "<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n"
           "<TITLE>301 Moved</TITLE></HEAD><BODY>\n"
@@ -832,6 +878,71 @@ const struct message responses[] =
     }
   ,.body= "<xml>hello</xml>"
   }
+
+
+#define RES_FIELD_UNDERSCORE 10
+/* Should handle spaces in header fields */
+, {.name= "field underscore"
+  ,.type= HTTP_RESPONSE
+  ,.raw= "HTTP/1.1 200 OK\r\n"
+         "Date: Tue, 28 Sep 2010 01:14:13 GMT\r\n"
+         "Server: Apache\r\n"
+         "Cache-Control: no-cache, must-revalidate\r\n"
+         "Expires: Mon, 26 Jul 1997 05:00:00 GMT\r\n"
+         ".et-Cookie: PlaxoCS=1274804622353690521; path=/; domain=.plaxo.com\r\n"
+         "Vary: Accept-Encoding\r\n"
+         "_eep-Alive: timeout=45\r\n" /* semantic value ignored */
+         "_onnection: Keep-Alive\r\n" /* semantic value ignored */
+         "Transfer-Encoding: chunked\r\n"
+         "Content-Type: text/html\r\n"
+         "Connection: close\r\n"
+         "\r\n"
+         "0\r\n\r\n"
+  ,.should_keep_alive= FALSE
+  ,.message_complete_on_eof= FALSE
+  ,.http_major= 1
+  ,.http_minor= 1
+  ,.status_code= 200
+  ,.num_headers= 11
+  ,.headers=
+    { { "Date", "Tue, 28 Sep 2010 01:14:13 GMT" }
+    , { "Server", "Apache" }
+    , { "Cache-Control", "no-cache, must-revalidate" }
+    , { "Expires", "Mon, 26 Jul 1997 05:00:00 GMT" }
+    , { ".et-Cookie", "PlaxoCS=1274804622353690521; path=/; domain=.plaxo.com" }
+    , { "Vary", "Accept-Encoding" }
+    , { "_eep-Alive", "timeout=45" }
+    , { "_onnection", "Keep-Alive" }
+    , { "Transfer-Encoding", "chunked" }
+    , { "Content-Type", "text/html" }
+    , { "Connection", "close" }
+    }
+  ,.body= ""
+  }
+
+#define NON_ASCII_IN_STATUS_LINE 11
+/* Should handle non-ASCII in status line */
+, {.name= "non-ASCII in status line"
+  ,.type= HTTP_RESPONSE
+  ,.raw= "HTTP/1.1 500 Oriëntatieprobleem\r\n"
+         "Date: Fri, 5 Nov 2010 23:07:12 GMT+2\r\n"
+         "Content-Length: 0\r\n"
+         "Connection: close\r\n"
+         "\r\n"
+  ,.should_keep_alive= FALSE
+  ,.message_complete_on_eof= FALSE
+  ,.http_major= 1
+  ,.http_minor= 1
+  ,.status_code= 500
+  ,.num_headers= 3
+  ,.headers=
+    { { "Date", "Fri, 5 Nov 2010 23:07:12 GMT+2" }
+    , { "Content-Length", "0" }
+    , { "Connection", "close" }
+    }
+  ,.body= ""
+  }
+
 
 , {.name= NULL } /* sentinel */
 };
@@ -1624,13 +1735,21 @@ main (void)
 
   /// REQUESTS
 
-
   test_simple("hello world", 0);
   test_simple("GET / HTP/1.1\r\n\r\n", 0);
+
 
   test_simple("ASDF / HTTP/1.1\r\n\r\n", 0);
   test_simple("PROPPATCHA / HTTP/1.1\r\n\r\n", 0);
   test_simple("GETA / HTTP/1.1\r\n\r\n", 0);
+
+  // Well-formed but incomplete
+  test_simple("GET / HTTP/1.1\r\n"
+              "Content-Type: text/plain\r\n"
+              "Content-Length: 6\r\n"
+              "\r\n"
+              "fooba",
+              0);
 
   static const char *all_methods[] = {
     "DELETE",

@@ -31,7 +31,13 @@
 # char arrays. It is used for embedded JavaScript code in the V8
 # library.
 
-import os, re, sys, string
+import os
+from os.path import dirname
+import re
+import sys
+import string
+
+sys.path.append(dirname(__file__) + "/../deps/v8/tools");
 import jsmin
 
 
@@ -47,7 +53,7 @@ def ToCArray(filename, lines):
 
     value = ord(chr)
 
-    if value > 128:
+    if value >= 128:
       print 'non-ascii value ' + filename + ':' + str(row) + ':' + str(col)
       sys.exit(1);
 
@@ -214,6 +220,7 @@ namespace node {
 struct _native {
   const char* name;
   const char* source;
+  size_t source_len;
 };
 
 static const struct _native natives[] = {
@@ -230,7 +237,7 @@ static const struct _native natives[] = {
 
 
 NATIVE_DECLARATION = """\
-  { "%(id)s", %(id)s_native },
+  { "%(id)s", %(id)s_native, sizeof(%(id)s_native)-1 },
 """
 
 SOURCE_DECLARATION = """\
@@ -351,3 +358,11 @@ def JS2C(source, target):
       'get_script_name_cases': "".join(get_script_name_cases)
     })
     output.close()
+
+def main():
+  natives = sys.argv[1]
+  source_files = sys.argv[2:]
+  JS2C(source_files, [natives])
+
+if __name__ == "__main__":
+  main()

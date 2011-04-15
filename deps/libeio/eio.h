@@ -47,6 +47,15 @@ extern "C" {
 #include <stddef.h>
 #include <sys/types.h>
 
+#ifdef __OpenBSD__
+# include <inttypes.h>
+#endif
+
+#ifdef _WIN32
+# define uid_t int
+# define gid_t int
+#endif
+
 typedef struct eio_req    eio_req;
 typedef struct eio_dirent eio_dirent;
 
@@ -57,7 +66,11 @@ typedef int (*eio_cb)(eio_req *req);
 #endif
 
 #ifndef EIO_STRUCT_STAT
-# define EIO_STRUCT_STAT struct stat
+# ifdef _WIN32
+#   define EIO_STRUCT_STAT struct _stati64
+# else
+#   define EIO_STRUCT_STAT struct stat
+# endif
 #endif
 
 #ifndef EIO_STRUCT_STATVFS
@@ -171,7 +184,7 @@ enum
 enum {
   EIO_PRI_MIN     = -4,
   EIO_PRI_MAX     =  4,
-  EIO_PRI_DEFAULT =  0
+  EIO_PRI_DEFAULT =  0,
 };
 
 /* eio request structure */
@@ -326,6 +339,14 @@ void eio_destroy (eio_req *req);
 /* convinience functions */
 
 ssize_t eio_sendfile_sync (int ofd, int ifd, off_t offset, size_t count);
+
+/*****************************************************************************/
+/* export these so node_file can use these function instead of pread/write */
+
+#if !HAVE_PREADWRITE
+ssize_t eio__pread (int fd, void *buf, size_t count, off_t offset);
+ssize_t eio__pwrite (int fd, void *buf, size_t count, off_t offset);
+#endif
 
 #ifdef __cplusplus
 }

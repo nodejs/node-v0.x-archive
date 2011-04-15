@@ -1,4 +1,453 @@
-2010.08.20, Version 0.2.0
+2011.04.01, Version 0.4.5 (stable)
+
+* Fix listener leak in stream.pipe() (Mikeal Rogers)
+
+* Retain buffers in fs.read/write() GH-814 (Jorge Chamorro Bieling)
+
+* TLS performance improvements
+
+* SlowBuffer.prototype.slice bug GH-843
+
+* process.stderr.write should return true
+
+* Immediate pause/resume race condition GH-535 (isaacs)
+
+* Set default host header properly GH-721 (isaacs)
+
+* Upgrade V8 to 3.1.8.8
+
+
+2011.03.26, Version 0.4.4 (stable), 25122b986a90ba0982697b7abcb0158c302a1019
+
+* CryptoStream.end shouldn't throw if not writable GH-820
+
+* Drop out if connection destroyed before connect() GH-819
+
+* expose https.Agent
+
+* Correctly setsid in tty.open GH-815
+
+* Bug fix for failed buffer construction
+
+* Added support for removing .once listeners (GH-806)
+
+* Upgrade V8 to 3.1.8.5
+
+
+2011.03.18, Version 0.4.3 (stable), c095ce1a1b41ca015758a713283bf1f0bd41e4c4
+
+* Don't decrease server connection counter again if destroy() is called more
+	than once GH-431 (Andreas Reich, Anders Conbere)
+
+* Documentation improvements (koichik)
+
+* Fix bug with setMaxListeners GH-682
+
+* Start up memory footprint improvement. (Tom Hughes)
+
+* Solaris improvements.
+
+* Buffer::Length(Buffer*) should not invoke itself recursively GH-759 (Ben
+  Noordhuis)
+
+* TLS: Advertise support for client certs GH-774 (Theo Schlossnagle)
+
+* HTTP Agent bugs: GH-787, GH-784, GH-803.
+
+* Don't call GetMemoryUsage every 5 seconds.
+
+* Upgrade V8 to 3.1.8.3
+
+
+2011.03.02, Version 0.4.2 (stable), 39280e1b5731f3fcd8cc42ad41b86cdfdcb6d58b
+
+* Improve docs.
+
+* Fix process.on edge case with signal event (Alexis Sellier)
+
+* Pragma HTTP header comma separation
+
+* In addition to 'aborted' emit 'close' from incoming requests
+  (Felix Geisendörfer)
+
+* Fix memleak in vm.runInNewContext
+
+* Do not cache modules that throw exceptions (Felix Geisendörfer)
+
+* Build system changes for libnode (Aria Stewart)
+
+* Read up the prototype of the 'env' object. (Nathan Rajlich)
+
+* Add 'close' and 'aborted' events to Agent responses
+
+* http: fix missing 'drain' events (Russell Haering)
+
+* Fix process.stdout.end() throws ENOTSOCK error. (Koichi Kobayashi)
+
+* REPL bug fixes (isaacs)
+
+* node_modules folders should be highest priority (isaacs)
+
+* URL parse more safely (isaacs)
+
+* Expose errno with a string for dns/cares (Felix Geisendörfer)
+
+* Fix tty.setWindowSize
+
+* spawn: setuid after chdir (isaacs)
+
+* SIGUSR1 should break the VM without delay
+
+* Upgrade V8 to 3.1.8.
+
+
+2011.02.19, Version 0.4.1 (stable), e8aef84191bc2c1ba2bcaa54f30aabde7f03769b
+
+* Fixed field merging with progressive fields on writeHead()
+  (TJ Holowaychuk)
+
+* Make the repl respect node_modules folders (isaacs)
+
+* Fix for DNS fail in HTTP request (Richard Rodger)
+
+* Default to port 80 for http.request and http.get.
+
+* Improve V8 support for Cygwin (Bert Belder)
+
+* Fix fs.open param parsing. (Felix Geisendörfer)
+
+* Fixed null signal.
+
+* Fix various HTTP and HTTPS bugs
+
+* cmake improvements (Tom Hughes)
+
+* Fix: TLS sockets should not be writable after 'end'
+
+* Fix os.cpus() on cygwin (Brian White)
+
+* MinGW: OpenSSL support (Bert Belder)
+
+* Upgrade V8 to 3.1.5, libev to 4.4.
+
+
+2011.02.10, Version 0.4.0 (stable)
+
+* require() improvements (isaacs)
+  - understand package.json (isaacs)
+  - look for 'node_modules' dir
+
+* cmake fixes (Daniel Gröber)
+
+* http: fix buffer writes to outgoing messages (Russell Haering)
+
+* Expose UCS-2 Encoding (Konstantin Käfer)
+
+* Support strings for octal modes (isaacs)
+
+* Support array-ish args to Buffer ctor (isaacs)
+
+* cygwin and mingw improvements (Bert Belder)
+
+* TLS improvements
+
+* Fewer syscalls during require (Bert Belder, isaacs)
+
+* More DTrace probes (Bryan Cantrill,  Robert Mustacchi)
+
+* 'pipe' event on pipe() (Mikeal Rogers)
+
+* CRL support in TLS (Theo Schlossnagle)
+
+* HTTP header manipulation methods (Tim Caswell, Charlie Robbins)
+
+* Upgrade V8 to 3.1.2
+
+
+2011.02.04, Version 0.3.8 (unstable)
+
+* Add req.abort() for client side requests.
+
+* Add exception.code for easy testing:
+  Example: if (err.code == 'EADDRINUSE');
+
+* Add process.stderr.
+
+* require.main is the main module. (Isaac Schlueter)
+
+* dgram: setMulticastTTL, setMulticastLoopback and addMembership.
+  (Joe Walnes)
+
+* Fix throttling in TLS connections
+
+* Add socket.bufferSize
+
+* MinGW improvements (Bert Belder)
+
+* Upgrade V8 to 3.1.1
+
+2011.01.27, Version 0.3.7 (unstable)
+
+* Expose agent in http and https client. (Mikeal Rogers)
+
+* Fix bug in http request's end method. (Ali Farhadi)
+
+* MinGW: better net support (Bert Belder)
+
+* fs.open should set FD_CLOEXEC
+
+* DTrace probes (Bryan Cantrill)
+
+* REPL fixes and improvements (isaacs, Bert Belder)
+
+* Fix many bugs with legacy http.Client interface
+
+* Deprecate process.assert. Use require('assert').ok
+
+* Add callback parameter to socket.setTimeout(). (Ali Farhadi)
+
+* Fixing bug in http request default encoding (Ali Farhadi)
+
+* require: A module ID with a trailing slash must be a dir.
+  (isaacs)
+
+* Add ext_key_usage to getPeerCertificate (Greg Hughes)
+
+* Error when child_process.exec hits maxBuffer.
+
+* Fix option parsing in tls.connect()
+
+* Upgrade to V8 3.0.10
+
+
+2011.01.21, Version 0.3.6 (unstable), bb3e71466e5240626d9d21cf791fe43e87d90011
+
+* REPL and other improvements on MinGW (Bert Belder)
+
+* listen/bind errors should close net.Server
+
+* New HTTP and HTTPS client APIs
+
+* Upgrade V8 to 3.0.9
+
+
+2011.01.16, Version 0.3.5 (unstable), b622bc6305e3c675e0edfcdbaa387d849ad0bba0
+
+* Built-in debugger improvements.
+
+* Add setsid, setuid, setgid options to child_process.spawn
+  (Isaac Schlueter)
+
+* tty module improvements.
+
+* Upgrade libev to 4.3, libeio to latest, c-ares to 1.7.4
+
+* Allow third party hooks before main module load.
+  (See 496be457b6a2bc5b01ec13644b9c9783976159b2)
+
+* Don't stat() on cached modules. (Felix Geisendörfer)
+
+
+2011.01.08, Version 0.3.4 (unstable)
+
+* Primordal mingw build (Bert Belder)
+
+* HTTPS server
+
+* Built in debugger 'node debug script.js' 
+
+* realpath files during module load (Mihai Călin Bazon)
+
+* Rename net.Stream to net.Socket (existing name will continue to be
+  supported)
+
+* Fix process.platform
+
+
+2011.01.02, Version 0.3.3 (unstable), 57544ba1c54c7d0da890317deeb73076350c5647
+
+* TLS improvements.
+
+* url.parse(url, true) defaults query field to {} (Jeremy Martin)
+
+* Upgrade V8 to 3.0.4
+
+* Handle ECONNABORT properly (Theo Schlossnagle)
+
+* Fix memory leaks (Tom Hughes)
+
+* Add os.cpus(), os.freemem(), os.totalmem(), os.loadavg() and other
+  functions for OSX, Linux, and Cygwin. (Brian White)
+
+* Fix REPL syntax error bug (GH-543), improve how REPL commands are
+  evaulated.
+
+* Use process.stdin instead of process.openStdin().
+
+* Disable TLS tests when node doesn't have OpenSSL.
+
+
+2010.12.16, Version 0.3.2 (unstable), 4bb914bde9f3c2d6de00853353b6b8fc9c66143a
+
+* Rip out the old (broken) TLS implementation introduce new tested
+  implementation and API. See docs. HTTPS not supported in this release.
+
+* Introduce 'os' and 'tty' modules.
+
+* Callback parameters for socket.write() and socket.connect().
+
+* Support CNAME lookups in DNS module. (Ben Noordhuis)
+
+* cmake support (Tom Hughes)
+
+* 'make lint'
+
+* oprofile support (./configure --oprofile)
+
+* Lots of bug fixes, including:
+  - Memory leak in ChildProcess:Spawn(). (Tom Hughes)
+  - buffer.slice(0, 0)
+  - Global variable leaks
+  - clearTimeouts calling multiple times (Michael W)
+  - utils.inspect's detection of circular structures (Tim Cooijmans)
+  - Apple's threaded write()s bug (Jorge Chamorro Bieling)
+  - Make sure raw mode is disabled when exiting a terminal-based REPL.
+    (Brian White)
+
+* Deprecate process.compile, process.ENV
+
+* Upgrade V8 to 3.0.3, upgrade http-parser.
+
+
+2010.11.16, Version 0.3.1 (unstable), ce9a54aa1fbf709dd30316af8a2f14d83150e947
+
+* TLS improvments (Paul Querna)
+  - Centralize error handling in SecureStream
+  - Add SecurePair for handling of a ssl/tls stream.
+
+* New documentation organization (Micheil Smith)
+
+* allowHalfOpen TCP connections disabled by default.
+
+* Add C++ API for constructing fast buffer from string
+
+* Move idle timers into its own module
+
+* Gracefully handle EMFILE and server.maxConnections
+
+* make "node --eval" eval in the global scope.
+  (Jorge Chamorro Bieling)
+
+* Let exit listeners know the exit code (isaacs)
+
+* Handle cyclic links smarter in fs.realpath (isaacs)
+
+* Remove node-repl (just use 'node' without args)
+
+* Rewrite libeio After callback to use req->result instead of req->errorno
+  for error checking (Micheil Smith)
+
+* Remove warning about deprecating 'sys' - too aggressive
+
+* Make writes to process.env update the real environment. (Ben Noordhuis)
+
+* Set FD_CLOEXEC flag on stdio FDs before spawning. (Guillaume Tuton)
+
+* Move ev_loop out of javascript
+
+* Switch \n with \r\n for all strings printed out.
+
+* Added support for cross compilation (Rasmus Andersson)
+
+* Add --profile flag to configure script, enables gprof profiling.
+  (Ben Noordhuis)
+
+* writeFileSync could exhibit pathological behavior when a buffer
+  could not be written to the file in a single write() call.
+
+* new path.join behavior (isaacs)
+  - Express desired path.join behavior in tests.
+  - Update fs.realpath to reflect new path.join behavior
+  - Update url.resolve() to use new path.join behavior.
+
+* API: Move process.binding('evals') to require('vm')
+
+* Fix V8 build on Cygwin (Bert Belder)
+
+* Add ref to buffer during fs.write and fs.read
+
+* Fix segfault on test-crypto
+
+* Upgrade http-parser to latest and V8 to 2.5.3
+
+
+2010.10.23, Version 0.3.0 (unstable) 1582cfebd6719b2d2373547994b3dca5c8c569c0
+
+* Bugfix: Do not spin on aceept() with EMFILE
+
+* Improvments to readline.js (Trent Mick, Johan Euphrosine, Brian White)
+
+* Safe constructors (missing 'new' doesn't segfault)
+
+* Fix process.nextTick so thrown errors don't confuse it.
+  (Benjamin Thomas)
+
+* Allow Strings for ports on net.Server.listen (Bradley Meck)
+
+* fs bugfixes (Tj Holowaychuk, Tobie Langel, Marco Rogers, isaacs)
+
+* http bug fixes (Fedor Indutny, Mikeal Rogers) 
+
+* Faster buffers; breaks C++ API (Tim-Smart, Stéphan Kochen)
+
+* crypto, tls improvements (Paul Querna)
+
+* Add lfs flags to node addon script
+
+* Simpler querystring parsing; breaks API (Peter Griess)
+
+* HTTP trailers (Mark Nottingham)
+
+* http 100-continue support (Mark Nottingham)
+
+* Module system simplifications (Herbert Vojčík, isaacs, Tim-Smart)
+  - remove require.async
+  - remove registerExtension, add .extensions
+  - expose require.resolve
+  - expose require.cache
+  - require looks in  node_modules folders
+
+* Add --eval command line option (TJ Holowaychuk)
+
+* Commas last in sys.inspect
+
+* Constatnts moved from process object to require('constants')
+
+* Fix parsing of linux memory (Vitali Lovich)
+
+* inspect shows function names (Jorge Chamorro Bieling)
+
+* uncaughtException corner cases (Felix Geisendörfer)
+
+* TCP clients now buffer writes before connection
+
+* Rename sys module to 'util' (Micheil Smith)
+
+* Properly set stdio handlers to blocking on SIGTERM and SIGINT
+  (Tom Hughes)
+
+* Add destroy methods to HTTP messages
+
+* base64 improvements (isaacs, Jorge Chamorro Bieling)
+
+* API for defining REPL commands (Sami Samhuri)
+
+* child_process.exec timeout fix (Aaron Heckmann)
+
+* Upgrade V8 to 2.5.1, Libev to 4.00, libeio, http-parser
+
+
+2010.08.20, Version 0.2.0, 9283e134e558900ba89d9a33c18a9bdedab07cb9
 
 * process.title support for FreeBSD, Macintosh, Linux
 
