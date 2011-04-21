@@ -974,6 +974,11 @@ Handle<Value> Connection::ClearIn(const Arguments& args) {
 
     // Written nothing at all
     if (bytes_written <= 0) {
+      // If we has failed to write first chunk
+      // total_bytes_written can have negative value
+      if (total_bytes_written == 0) {
+        total_bytes_written += bytes_written;
+      }
       break;
     }
 
