@@ -104,6 +104,7 @@ static Persistent<String> emit_symbol;
 
 
 static char *eval_string = NULL;
+static char *console_selector = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
 static bool debug_wait_connect = false;
@@ -2037,6 +2038,11 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
     process->Set(String::NewSymbol("_eval"), String::New(eval_string));
   }
 
+  // --console-to-stderr
+  if (console_selector) {
+    process->Set(String::NewSymbol("_console_selector"), String::New(console_selector));
+  }
+
   size_t size = 2*PATH_MAX;
   char execPath[size];
   if (Platform::GetExecutablePath(execPath, &size) != 0) {
@@ -2221,6 +2227,9 @@ static void ParseArgs(int argc, char **argv) {
       }
       argv[i] = const_cast<char*>("");
       eval_string = argv[++i];
+    } else if (strcmp(arg, "--console-to-stderr") == 0) {
+      console_selector="stderr";
+      argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--v8-options") == 0) {
       argv[i] = const_cast<char*>("--help");
     } else if (argv[i][0] != '-') {
