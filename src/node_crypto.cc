@@ -959,12 +959,38 @@ Handle<Value> Connection::ClearIn(const Arguments& args) {
     if (rv < 0) return scope.Close(Integer::New(rv));
   }
 
-  int bytes_written = SSL_write(ss->ssl_, buffer_data + off, len);
+  const int chunkSize = 1500;
+  int rv = 0;
+  int offset = 0;
+  int total_bytes_written = 0;
 
-  ss->HandleSSLError("SSL_write:ClearIn", bytes_written);
+  while (len > 0) {
+    int chunkSize_ = chunkSize > len ? len : chunkSize;
+    int bytes_written = SSL_write(ss->ssl_,
+                                  buffer_data + off + offset,
+                                  chunkSize_);
+    bytes_written = ss->HandleSSLError("SSL_write:ClearIn",
+                                       bytes_written);
+
+    // Written nothing at all
+    if (bytes_written <= 0) {
+      break;
+    }
+
+    total_bytes_written += bytes_written;
+
+    // Written less than planned
+    if (bytes_written < chunkSize_) {
+      break;
+    }
+
+    offset += chunkSize_;
+    len -= chunkSize_;
+  }
+
   ss->SetShutdownFlags();
 
-  return scope.Close(Integer::New(bytes_written));
+  return scope.Close(Integer::New(total_bytes_written));
 }
 
 
