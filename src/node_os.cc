@@ -45,6 +45,18 @@ namespace node {
 
 using namespace v8;
 
+static Handle<Value> GetArch(const Arguments& args) {
+  HandleScope scope;
+  char type[256];
+  struct utsname info;
+
+  uname(&info);
+  strncpy(type, info.machine, strlen(info.machine));
+  type[strlen(info.machine)] = 0;
+
+  return scope.Close(String::New(type));
+}
+
 static Handle<Value> GetHostname(const Arguments& args) {
   HandleScope scope;
   char s[255];
@@ -184,6 +196,7 @@ static Handle<Value> OpenOSHandle(const Arguments& args) {
 void OS::Initialize(v8::Handle<v8::Object> target) {
   HandleScope scope;
 
+  NODE_SET_METHOD(target, "getArch", GetArch);
   NODE_SET_METHOD(target, "getHostname", GetHostname);
   NODE_SET_METHOD(target, "getLoadAvg", GetLoadAvg);
   NODE_SET_METHOD(target, "getUptime", GetUptime);
