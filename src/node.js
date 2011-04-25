@@ -30,13 +30,15 @@
   function startup() {
     startup.globalVariables();
     startup.globalTimeouts();
-    startup.globalConsole();
 
     startup.processAssert();
     startup.processNextTick();
     startup.processStdio();
     startup.processKillAndExit();
     startup.processSignalHandlers();
+
+    // Needs to be after 'startup.processStdio()'
+    startup.globalConsole();
 
     startup.removedMethods();
 
