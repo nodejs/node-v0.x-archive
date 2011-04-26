@@ -1,11 +1,18 @@
 ## console
 
-Browser-like object for printing to stdout and stderr.
+Browser-like object for printing to stdout and stderr. For all logging functions
+below, you may override the default stream with _any_ desired stream, by setting
+the `stream` property of the logging function to a different Stream object.
+
+For instance, to redirect `console.log()` to stderr instead of stdout, try this:
+
+    console.log.stream = process.stderr;
+
 
 ### console.log()
 
-Prints to stdout with newline. This function can take multiple arguments in a
-`printf()`-like way. Example:
+Prints to stdout (by default) with newline. This function can take multiple
+arguments in a `printf()`-like way. Example:
 
     console.log('count: %d', count);
 
@@ -19,11 +26,11 @@ Same as `console.log`.
 ### console.warn()
 ### console.error()
 
-Same as `console.log` but prints to stderr.
+Same as `console.log` but prints to stderr (by default).
 
 ### console.dir(obj)
 
-Uses `util.inspect` on `obj` and prints resulting string to stderr.
+Uses `util.inspect` on `obj` and prints resulting string to stderr (by default).
 
 ### console.time(label)
 
