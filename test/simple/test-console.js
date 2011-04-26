@@ -40,3 +40,15 @@ assert.equal('foo bar hop\n', strings.shift());
 assert.equal("{ slashes: '\\\\\\\\' }\n", strings.shift());
 
 assert.equal(true, process.stderr.write("hello world"));
+
+
+// Test that setting the 'stream' property on these functions
+// will write to the desired Stream object.
+var s;
+console.log.stream = {
+  write: function(str) {
+    s = str;
+  }
+}
+console.log('Test!');
+assert.equal(s, 'Test!\n');
