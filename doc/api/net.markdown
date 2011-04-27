@@ -26,10 +26,12 @@ the socket is established the `'connect'` event will be emitted.
 
 The arguments for this method change the type of connection:
 
-* `net.createConnection(port, [host])`
+* `net.createConnection(port, [host], [options])`
 
   Creates a TCP connection to `port` on `host`. If `host` is omitted, `localhost`
   will be assumed.
+	
+	options allow to set the local address by passing { bind: { host: "name", port: number } }.
 
 * `net.createConnection(path)`
 
