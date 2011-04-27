@@ -2362,7 +2362,7 @@ class Hash : public ObjectWrap {
 
   bool HashInit (const char* hashType) {
 
-    if(strcasecmp(hashType, "crc32") == 0) {
+    if(strcmp(hashType, "crc32") == 0) {
       crc32_ = 0;
       initialised_ = true;
       is_crc32_ = true;
@@ -2468,12 +2468,13 @@ class Hash : public ObjectWrap {
     if(!hash->is_crc32_) {
       EVP_DigestFinal_ex(&hash->mdctx, md_value, &md_len);
       EVP_MD_CTX_cleanup(&hash->mdctx);
+
+      if (md_len == 0) {
+	return scope.Close(String::New(""));
+      }
     } 
     hash->initialised_ = false;
 
-    if (md_len == 0) {
-      return scope.Close(String::New(""));
-    }
 
 
     if (args.Length() == 0 || !args[0]->IsString()) {
@@ -2502,7 +2503,7 @@ class Hash : public ObjectWrap {
 
       } else if (strcasecmp(*encoding, "decimal") == 0) {
 	if(hash->is_crc32_) {
-	  return scope.Close(Integer::New(hash->crc32_));
+	  return scope.Close(Integer::NewFromUnsigned(hash->crc32_));
 	} else {
 	  return ThrowException(Exception::Error(String::New("Cannot express as an integer")));
 	}
