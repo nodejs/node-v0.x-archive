@@ -19,20 +19,30 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var binding = process.binding('os');
+// Called by test/simple/test-regress-GH-892.js
 
-exports.hostname = binding.getHostname;
-exports.loadavg = binding.getLoadAvg;
-exports.uptime = binding.getUptime;
-exports.freemem = binding.getFreeMem;
-exports.totalmem = binding.getTotalMem;
-exports.cpus = binding.getCPUs;
-exports.type = binding.getOSType;
-exports.release = binding.getOSRelease;
-exports.getNetworkInterfaces = binding.getInterfaceAddresses;
-exports.arch = function() {
-  return process.arch;
+var https = require('https');
+var fs = require('fs');
+var assert = require('assert');
+
+var PORT = parseInt(process.argv[2]);
+var bytesExpected = parseInt(process.argv[3]);
+
+var gotResponse = false;
+
+var options = {
+  method: 'POST',
+  port: PORT
 };
-exports.platform = function() {
-  return process.platform;
-};
+
+var req = https.request(options, function(res) {
+  assert.equal(200, res.statusCode);
+  gotResponse = true;
+  console.error("DONE");
+});
+
+req.end(new Buffer(bytesExpected));
+
+process.on('exit', function() {
+  assert.ok(gotResponse);
+});

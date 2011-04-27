@@ -19,20 +19,42 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var binding = process.binding('os');
+// This tool is to make pretty HTML from --cov output.
 
-exports.hostname = binding.getHostname;
-exports.loadavg = binding.getLoadAvg;
-exports.uptime = binding.getUptime;
-exports.freemem = binding.getFreeMem;
-exports.totalmem = binding.getTotalMem;
-exports.cpus = binding.getCPUs;
-exports.type = binding.getOSType;
-exports.release = binding.getOSRelease;
-exports.getNetworkInterfaces = binding.getInterfaceAddresses;
-exports.arch = function() {
-  return process.arch;
-};
-exports.platform = function() {
-  return process.platform;
-};
+var fs = require('fs');
+var path = require('path');
+
+var jsonFilename = process.argv[2];
+if (!jsonFilename) {
+  console.error("covhtml.js node-cov.json > out.html");
+  process.exit(1);
+}
+
+var jsonFile = fs.readFileSync(jsonFilename);
+var cov = JSON.parse(jsonFile);
+
+var out = '<html><style>pre { margin: 0; padding: 0; } </style><body>';
+
+for (var fn in cov) {
+  var source = fs.readFileSync(fn, 'utf8');
+  var lines = source.split('\n');
+
+  out += '<h2>' + path.basename(fn) + '</h2>\n<div>\n';
+
+  for (var i = 0; i < lines.length; i++) {
+    lines[i] = lines[i].replace('<', '&lt;');
+    lines[i] = lines[i].replace('>', '&gt;');
+    if (cov[fn][i]) {
+      out += '<pre>'
+    } else {
+      out += '<pre style="background: #faa">'
+    }
+    out += lines[i] + '</pre>\n';
+  }
+
+  out += '</div>\n';
+}
+
+out += '</body></html>'
+
+console.log(out);

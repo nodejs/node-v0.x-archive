@@ -376,6 +376,8 @@ def configure(conf):
       conf.fatal("Cannot find socket library")
     if not conf.check(lib='nsl', uselib_store="NSL"):
       conf.fatal("Cannot find nsl library")
+    if not conf.check(lib='kstat', uselib_store="KSTAT"):
+      conf.fatal("Cannot find kstat library")
 
   conf.sub_config('deps/libeio')
 
@@ -498,6 +500,9 @@ def configure(conf):
     conf.env.append_value('CPPFLAGS', '-DHAVE_FDATASYNC=1')
   else:
     conf.env.append_value('CPPFLAGS', '-DHAVE_FDATASYNC=0')
+
+  # arch
+  conf.env.append_value('CPPFLAGS', '-DARCH="' + conf.env['DEST_CPU'] + '"')
 
   # platform
   conf.env.append_value('CPPFLAGS', '-DPLATFORM="' + conf.env['DEST_OS'] + '"')
@@ -819,7 +824,7 @@ def build(bld):
   node = bld.new_task_gen("cxx", product_type)
   node.name         = "node"
   node.target       = "node"
-  node.uselib = 'RT EV OPENSSL CARES EXECINFO DL KVM SOCKET NSL UTIL OPROFILE'
+  node.uselib = 'RT EV OPENSSL CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
   node.add_objects = 'eio http_parser'
   if product_type_is_lib:
     node.install_path = '${LIBDIR}'
@@ -887,7 +892,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.4.5' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.4.6' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 

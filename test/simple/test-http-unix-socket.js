@@ -21,49 +21,58 @@
 
 var common = require('../common');
 var assert = require('assert');
-var os = require('os');
+var fs = require('fs');
+var http = require('http');
 
+var SOCKET = common.tmpDir + '/http.sock';
 
-var hostname = os.hostname()
-console.log("hostname = %s", hostname);
-assert.ok(hostname.length > 0);
+var server = http.createServer(function(req, res) {
+  res.writeHead(200, {'Content-Type': 'text/plain',
+                      'Connection': 'close'
+                     });
+  res.write('hello ');
+  res.write('world\n');
+  res.end();
+});
 
-var uptime = os.uptime();
-console.log("uptime = %d", uptime);
-assert.ok(uptime > 0);
+server.listen(SOCKET, function() {
 
-var cpus = os.cpus();
-console.log("cpus = ", cpus);
-assert.ok(cpus.length > 0);
+  var options = {
+    socketPath: SOCKET,
+    path: '/'
+  };
 
-var type = os.type();
-console.log("type = ", type);
-assert.ok(type.length > 0);
+  var req = http.get(options, function(res) {
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.headers['content-type'], 'text/plain');
+    res.body = '';
+    res.setEncoding('utf8');
+    res.on('data', function (chunk) {
+      res.body += chunk;
+    });
+    res.on('end', function() {
+      assert.equal(res.body, 'hello world\n');
+      server.close();
+    });
+  });
 
-var release = os.release();
-console.log("release = ", release);
-assert.ok(release.length > 0);
+  req.on('error', function(e) {
+    console.log(e.stack);
+    process.exit(1);
+  });
 
-var platform = os.platform();
-console.log("platform = ", platform);
-assert.ok(platform.length > 0);
+  req.end();
 
-var arch = os.arch();
-console.log("arch = ", arch);
-assert.ok(arch.length > 0);
+});
 
-if (process.platform != 'sunos') {
-  // not implemeneted yet
-  assert.ok(os.loadavg().length > 0);
-  assert.ok(os.freemem() > 0);
-  assert.ok(os.totalmem() > 0);
-}
+server.on('close', function() {
+  try {
+    fs.unlinkSync(SOCKET);
+  } catch (e) {}
+});
 
-
-var interfaces = os.getNetworkInterfaces();
-console.error(interfaces);
-switch (platform) {
-  case 'linux':
-    assert.equal('127.0.0.1', interfaces.lo.ip);
-    break;
-}
+process.on('exit', function() {
+  try {
+    server.close();
+  } catch (e) {}
+});

@@ -19,20 +19,25 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var binding = process.binding('os');
+var common = require('../common');
+var assert = require('assert');
+var events = require('events');
 
-exports.hostname = binding.getHostname;
-exports.loadavg = binding.getLoadAvg;
-exports.uptime = binding.getUptime;
-exports.freemem = binding.getFreeMem;
-exports.totalmem = binding.getTotalMem;
-exports.cpus = binding.getCPUs;
-exports.type = binding.getOSType;
-exports.release = binding.getOSRelease;
-exports.getNetworkInterfaces = binding.getInterfaceAddresses;
-exports.arch = function() {
-  return process.arch;
-};
-exports.platform = function() {
-  return process.platform;
-};
+
+function listener() {}
+
+var e1 = new events.EventEmitter();
+e1.addListener('foo', listener);
+e1.addListener('bar', listener);
+e1.removeAllListeners('foo');
+assert.deepEqual([], e1.listeners('foo'));
+assert.deepEqual([listener], e1.listeners('bar'));
+
+
+var e2 = new events.EventEmitter();
+e2.addListener('foo', listener);
+e2.addListener('bar', listener);
+e2.removeAllListeners();
+console.error(e2);
+assert.deepEqual([], e2.listeners('foo'));
+assert.deepEqual([], e2.listeners('bar'));

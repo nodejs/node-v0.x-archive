@@ -70,6 +70,33 @@ given to the completion callback.
 
 Synchronous ftruncate(2).
 
+### fs.chown(path, mode, [callback])
+
+Asycnronous chown(2). No arguments other than a possible exception are given
+to the completion callback.
+
+### fs.chownSync(path, mode)
+
+Synchronous chown(2).
+
+### fs.fchown(path, mode, [callback])
+
+Asycnronous fchown(2). No arguments other than a possible exception are given
+to the completion callback.
+
+### fs.fchownSync(path, mode)
+
+Synchronous fchown(2).
+
+### fs.lchown(path, mode, [callback])
+
+Asycnronous lchown(2). No arguments other than a possible exception are given
+to the completion callback.
+
+### fs.lchownSync(path, mode)
+
+Synchronous lchown(2).
+
 ### fs.chmod(path, mode, [callback])
 
 Asynchronous chmod(2). No arguments other than a possible exception are given
@@ -78,6 +105,24 @@ to the completion callback.
 ### fs.chmodSync(path, mode)
 
 Synchronous chmod(2).
+
+### fs.fchmod(fd, mode, [callback])
+
+Asynchronous fchmod(2). No arguments other than a possible exception
+are given to the completion callback.
+
+### fs.fchmodSync(path, mode)
+
+Synchronous fchmod(2).
+
+### fs.lchmod(fd, mode, [callback])
+
+Asynchronous lchmod(2). No arguments other than a possible exception
+are given to the completion callback.
+
+### fs.lchmodSync(path, mode)
+
+Synchronous lchmod(2).
 
 ### fs.stat(path, [callback])
 
@@ -379,7 +424,7 @@ Returns a new ReadStream object (See `Readable Stream`).
 
 `options` can include `start` and `end` values to read a range of bytes from
 the file instead of the entire file.  Both `start` and `end` are inclusive and
-start at 0.  When used, both the limits must be specified always.
+start at 0.
 
 An example to read the last 10 bytes of a file which is 100 bytes long:
 
@@ -395,6 +440,11 @@ An example to read the last 10 bytes of a file which is 100 bytes long:
 `function (fd) { }`
 
  `fd` is the file descriptor used by the WriteStream.
+
+### file.bytesWritten
+
+The number of bytes written so far. Does not include data that is still queued
+for writing.
 
 ### fs.createWriteStream(path, [options])
 
