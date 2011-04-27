@@ -30,6 +30,8 @@
 #include "api.h"
 #include "global-handles.h"
 
+#include "vm-state-inl.h"
+
 namespace v8 {
 namespace internal {
 
@@ -379,7 +381,7 @@ bool GlobalHandles::PostGarbageCollectionProcessing() {
   // At the same time deallocate all DESTROYED nodes.
   ASSERT(Heap::gc_state() == Heap::NOT_IN_GC);
   const int initial_post_gc_processing_count = ++post_gc_processing_count;
-  bool weak_callback_invoked = false;
+  bool next_gc_likely_to_collect_more = false;
   Node** p = &head_;
   while (*p != NULL) {
     if ((*p)->PostGarbageCollectionProcessing()) {
@@ -390,7 +392,6 @@ bool GlobalHandles::PostGarbageCollectionProcessing() {
         // restart the processing).
         break;
       }
-      weak_callback_invoked = true;
     }
     if ((*p)->state_ == Node::DESTROYED) {
       // Delete the link.
@@ -401,6 +402,7 @@ bool GlobalHandles::PostGarbageCollectionProcessing() {
       }
       node->set_next_free(first_deallocated());
       set_first_deallocated(node);
+      next_gc_likely_to_collect_more = true;
     } else {
       p = (*p)->next_addr();
     }
@@ -409,7 +411,8 @@ bool GlobalHandles::PostGarbageCollectionProcessing() {
   if (first_deallocated()) {
     first_deallocated()->set_next(head());
   }
-  return weak_callback_invoked;
+
+  return next_gc_likely_to_collect_more;
 }
 
 
@@ -486,7 +489,7 @@ void GlobalHandles::PrintStats() {
   }
 
   PrintF("Global Handle Statistics:\n");
-  PrintF("  allocated memory = %dB\n", sizeof(Node) * total);
+  PrintF("  allocated memory = %" V8_PTR_PREFIX "dB\n", sizeof(Node) * total);
   PrintF("  # weak       = %d\n", weak);
   PrintF("  # pending    = %d\n", pending);
   PrintF("  # near_death = %d\n", near_death);
@@ -497,8 +500,10 @@ void GlobalHandles::PrintStats() {
 void GlobalHandles::Print() {
   PrintF("Global handles:\n");
   for (Node* current = head_; current != NULL; current = current->next()) {
-    PrintF("  handle %p to %p (weak=%d)\n", current->handle().location(),
-           *current->handle(), current->state_ == Node::WEAK);
+    PrintF("  handle %p to %p (weak=%d)\n",
+           reinterpret_cast<void*>(current->handle().location()),
+           reinterpret_cast<void*>(*current->handle()),
+           current->state_ == Node::WEAK);
   }
 }
 

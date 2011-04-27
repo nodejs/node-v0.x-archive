@@ -28,7 +28,7 @@
 #ifndef V8_IC_H_
 #define V8_IC_H_
 
-#include "assembler.h"
+#include "macro-assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -53,8 +53,9 @@ namespace internal {
   ICU(LoadPropertyWithInterceptorForCall)             \
   ICU(KeyedLoadPropertyWithInterceptor)               \
   ICU(StoreInterceptorProperty)                       \
-  ICU(BinaryOp_Patch)
-
+  ICU(BinaryOp_Patch)                                 \
+  ICU(TypeRecordingBinaryOp_Patch)                    \
+  ICU(CompareIC_Miss)
 //
 // IC is the base class for LoadIC, StoreIC, CallIC, KeyedLoadIC,
 // and KeyedStoreIC.
@@ -191,15 +192,30 @@ class CallICBase: public IC {
   explicit CallICBase(Code::Kind kind) : IC(EXTRA_CALL_FRAME), kind_(kind) {}
 
  public:
-  Object* LoadFunction(State state, Handle<Object> object, Handle<String> name);
+  MUST_USE_RESULT MaybeObject* LoadFunction(State state,
+                                            Code::ExtraICState extra_ic_state,
+                                            Handle<Object> object,
+                                            Handle<String> name);
 
  protected:
   Code::Kind kind_;
+
+  bool TryUpdateExtraICState(LookupResult* lookup,
+                             Handle<Object> object,
+                             Code::ExtraICState* extra_ic_state);
+
+  MUST_USE_RESULT MaybeObject* ComputeMonomorphicStub(
+      LookupResult* lookup,
+      State state,
+      Code::ExtraICState extra_ic_state,
+      Handle<Object> object,
+      Handle<String> name);
 
   // Update the inline cache and the global stub cache based on the
   // lookup result.
   void UpdateCaches(LookupResult* lookup,
                     State state,
+                    Code::ExtraICState extra_ic_state,
                     Handle<Object> object,
                     Handle<String> name);
 
@@ -208,7 +224,7 @@ class CallICBase: public IC {
   // Otherwise, it returns the undefined value.
   Object* TryCallAsFunction(Object* object);
 
-  void ReceiverToObject(Handle<Object> object);
+  void ReceiverToObjectIfRequired(Handle<Object> callee, Handle<Object> object);
 
   static void Clear(Address address, Code* target);
   friend class IC;
@@ -235,7 +251,9 @@ class KeyedCallIC: public CallICBase {
     ASSERT(target()->is_keyed_call_stub());
   }
 
-  Object* LoadFunction(State state, Handle<Object> object, Handle<Object> key);
+  MUST_USE_RESULT MaybeObject* LoadFunction(State state,
+                                            Handle<Object> object,
+                                            Handle<Object> key);
 
   // Code generator routines.
   static void GenerateInitialize(MacroAssembler* masm, int argc) {
@@ -251,7 +269,9 @@ class LoadIC: public IC {
  public:
   LoadIC() : IC(NO_EXTRA_FRAME) { ASSERT(target()->is_load_stub()); }
 
-  Object* Load(State state, Handle<Object> object, Handle<String> name);
+  MUST_USE_RESULT MaybeObject* Load(State state,
+                                    Handle<Object> object,
+                                    Handle<String> name);
 
   // Code generator routines.
   static void GenerateInitialize(MacroAssembler* masm) { GenerateMiss(masm); }
@@ -264,7 +284,8 @@ class LoadIC: public IC {
 
   // Specialized code generator routines.
   static void GenerateArrayLength(MacroAssembler* masm);
-  static void GenerateStringLength(MacroAssembler* masm);
+  static void GenerateStringLength(MacroAssembler* masm,
+                                   bool support_wrappers);
   static void GenerateFunctionPrototype(MacroAssembler* masm);
 
   // Clear the use of the inlined version.
@@ -298,6 +319,11 @@ class LoadIC: public IC {
 
   static bool PatchInlinedLoad(Address address, Object* map, int index);
 
+  static bool PatchInlinedContextualLoad(Address address,
+                                         Object* map,
+                                         Object* cell,
+                                         bool is_dont_delete);
+
   friend class IC;
 };
 
@@ -306,7 +332,9 @@ class KeyedLoadIC: public IC {
  public:
   KeyedLoadIC() : IC(NO_EXTRA_FRAME) { ASSERT(target()->is_keyed_load_stub()); }
 
-  Object* Load(State state, Handle<Object> object, Handle<Object> key);
+  MUST_USE_RESULT MaybeObject* Load(State state,
+                                    Handle<Object> object,
+                                    Handle<Object> key);
 
   // Code generator routines.
   static void GenerateMiss(MacroAssembler* masm);
@@ -318,12 +346,6 @@ class KeyedLoadIC: public IC {
   static void GenerateGeneric(MacroAssembler* masm);
   static void GenerateString(MacroAssembler* masm);
 
-  // Generators for external array types. See objects.h.
-  // These are similar to the generic IC; they optimize the case of
-  // operating upon external array types but fall back to the runtime
-  // for all other types.
-  static void GenerateExternalArray(MacroAssembler* masm,
-                                    ExternalArrayType array_type);
   static void GenerateIndexedInterceptor(MacroAssembler* masm);
 
   // Clear the use of the inlined version.
@@ -359,7 +381,6 @@ class KeyedLoadIC: public IC {
   static Code* string_stub() {
     return Builtins::builtin(Builtins::KeyedLoadIC_String);
   }
-  static Code* external_array_stub(JSObject::ElementsKind elements_kind);
 
   static Code* indexed_interceptor_stub() {
     return Builtins::builtin(Builtins::KeyedLoadIC_IndexedInterceptor);
@@ -379,17 +400,21 @@ class StoreIC: public IC {
  public:
   StoreIC() : IC(NO_EXTRA_FRAME) { ASSERT(target()->is_store_stub()); }
 
-  Object* Store(State state,
-                Handle<Object> object,
-                Handle<String> name,
-                Handle<Object> value);
+  MUST_USE_RESULT MaybeObject* Store(State state,
+                                     StrictModeFlag strict_mode,
+                                     Handle<Object> object,
+                                     Handle<String> name,
+                                     Handle<Object> value);
 
   // Code generators for stub routines. Only called once at startup.
   static void GenerateInitialize(MacroAssembler* masm) { GenerateMiss(masm); }
   static void GenerateMiss(MacroAssembler* masm);
-  static void GenerateMegamorphic(MacroAssembler* masm);
+  static void GenerateMegamorphic(MacroAssembler* masm,
+                                  StrictModeFlag strict_mode);
   static void GenerateArrayLength(MacroAssembler* masm);
   static void GenerateNormal(MacroAssembler* masm);
+  static void GenerateGlobalProxy(MacroAssembler* masm,
+                                  StrictModeFlag strict_mode);
 
   // Clear the use of an inlined version.
   static void ClearInlinedVersion(Address address);
@@ -402,16 +427,37 @@ class StoreIC: public IC {
   // Update the inline cache and the global stub cache based on the
   // lookup result.
   void UpdateCaches(LookupResult* lookup,
-                    State state, Handle<JSObject> receiver,
+                    State state,
+                    StrictModeFlag strict_mode,
+                    Handle<JSObject> receiver,
                     Handle<String> name,
                     Handle<Object> value);
+
+  void set_target(Code* code) {
+    // Strict mode must be preserved across IC patching.
+    ASSERT((code->extra_ic_state() & kStrictMode) ==
+           (target()->extra_ic_state() & kStrictMode));
+    IC::set_target(code);
+  }
 
   // Stub accessors.
   static Code* megamorphic_stub() {
     return Builtins::builtin(Builtins::StoreIC_Megamorphic);
   }
+  static Code* megamorphic_stub_strict() {
+    return Builtins::builtin(Builtins::StoreIC_Megamorphic_Strict);
+  }
   static Code* initialize_stub() {
     return Builtins::builtin(Builtins::StoreIC_Initialize);
+  }
+  static Code* initialize_stub_strict() {
+    return Builtins::builtin(Builtins::StoreIC_Initialize_Strict);
+  }
+  static Code* global_proxy_stub() {
+    return Builtins::builtin(Builtins::StoreIC_GlobalProxy);
+  }
+  static Code* global_proxy_stub_strict() {
+    return Builtins::builtin(Builtins::StoreIC_GlobalProxy_Strict);
   }
 
   static void Clear(Address address, Code* target);
@@ -428,23 +474,18 @@ class KeyedStoreIC: public IC {
  public:
   KeyedStoreIC() : IC(NO_EXTRA_FRAME) { }
 
-  Object* Store(State state,
-                Handle<Object> object,
-                Handle<Object> name,
-                Handle<Object> value);
+  MUST_USE_RESULT MaybeObject* Store(State state,
+                                     StrictModeFlag strict_mode,
+                                     Handle<Object> object,
+                                     Handle<Object> name,
+                                     Handle<Object> value);
 
   // Code generators for stub routines.  Only called once at startup.
   static void GenerateInitialize(MacroAssembler* masm) { GenerateMiss(masm); }
   static void GenerateMiss(MacroAssembler* masm);
-  static void GenerateRuntimeSetProperty(MacroAssembler* masm);
-  static void GenerateGeneric(MacroAssembler* masm);
-
-  // Generators for external array types. See objects.h.
-  // These are similar to the generic IC; they optimize the case of
-  // operating upon external array types but fall back to the runtime
-  // for all other types.
-  static void GenerateExternalArray(MacroAssembler* masm,
-                                    ExternalArrayType array_type);
+  static void GenerateRuntimeSetProperty(MacroAssembler* masm,
+                                         StrictModeFlag strict_mode);
+  static void GenerateGeneric(MacroAssembler* masm, StrictModeFlag strict_mode);
 
   // Clear the inlined version so the IC is always hit.
   static void ClearInlinedVersion(Address address);
@@ -456,21 +497,37 @@ class KeyedStoreIC: public IC {
   // Update the inline cache.
   void UpdateCaches(LookupResult* lookup,
                     State state,
+                    StrictModeFlag strict_mode,
                     Handle<JSObject> receiver,
                     Handle<String> name,
                     Handle<Object> value);
+
+  void set_target(Code* code) {
+    // Strict mode must be preserved across IC patching.
+    ASSERT((code->extra_ic_state() & kStrictMode) ==
+           (target()->extra_ic_state() & kStrictMode));
+    IC::set_target(code);
+  }
 
   // Stub accessors.
   static Code* initialize_stub() {
     return Builtins::builtin(Builtins::KeyedStoreIC_Initialize);
   }
+  static Code* initialize_stub_strict() {
+    return Builtins::builtin(Builtins::KeyedStoreIC_Initialize_Strict);
+  }
   static Code* megamorphic_stub() {
     return Builtins::builtin(Builtins::KeyedStoreIC_Generic);
+  }
+  static Code* megamorphic_stub_strict() {
+    return Builtins::builtin(Builtins::KeyedStoreIC_Generic_Strict);
   }
   static Code* generic_stub() {
     return Builtins::builtin(Builtins::KeyedStoreIC_Generic);
   }
-  static Code* external_array_stub(JSObject::ElementsKind elements_kind);
+  static Code* generic_stub_strict() {
+    return Builtins::builtin(Builtins::KeyedStoreIC_Generic_Strict);
+  }
 
   static void Clear(Address address, Code* target);
 
@@ -490,6 +547,7 @@ class BinaryOpIC: public IC {
  public:
 
   enum TypeInfo {
+    UNINIT_OR_SMI,
     DEFAULT,  // Initial state. When first executed, patches to one
               // of the following states depending on the operands types.
     HEAP_NUMBERS,  // Both arguments are HeapNumbers.
@@ -501,14 +559,81 @@ class BinaryOpIC: public IC {
 
   void patch(Code* code);
 
-  static void Clear(Address address, Code* target);
-
   static const char* GetName(TypeInfo type_info);
 
   static State ToState(TypeInfo type_info);
 
   static TypeInfo GetTypeInfo(Object* left, Object* right);
 };
+
+
+// Type Recording BinaryOpIC, that records the types of the inputs and outputs.
+class TRBinaryOpIC: public IC {
+ public:
+
+  enum TypeInfo {
+    UNINITIALIZED,
+    SMI,
+    INT32,
+    HEAP_NUMBER,
+    ODDBALL,
+    STRING,  // Only used for addition operation.  At least one string operand.
+    GENERIC
+  };
+
+  TRBinaryOpIC() : IC(NO_EXTRA_FRAME) { }
+
+  void patch(Code* code);
+
+  static const char* GetName(TypeInfo type_info);
+
+  static State ToState(TypeInfo type_info);
+
+  static TypeInfo GetTypeInfo(Handle<Object> left, Handle<Object> right);
+
+  static TypeInfo JoinTypes(TypeInfo x, TypeInfo y);
+};
+
+
+class CompareIC: public IC {
+ public:
+  enum State {
+    UNINITIALIZED,
+    SMIS,
+    HEAP_NUMBERS,
+    OBJECTS,
+    GENERIC
+  };
+
+  explicit CompareIC(Token::Value op) : IC(EXTRA_CALL_FRAME), op_(op) { }
+
+  // Update the inline cache for the given operands.
+  void UpdateCaches(Handle<Object> x, Handle<Object> y);
+
+  // Factory method for getting an uninitialized compare stub.
+  static Handle<Code> GetUninitialized(Token::Value op);
+
+  // Helper function for computing the condition for a compare operation.
+  static Condition ComputeCondition(Token::Value op);
+
+  // Helper function for determining the state of a compare IC.
+  static State ComputeState(Code* target);
+
+  static const char* GetStateName(State state);
+
+ private:
+  State TargetState(State state, bool has_inlined_smi_code,
+                    Handle<Object> x, Handle<Object> y);
+
+  bool strict() const { return op_ == Token::EQ_STRICT; }
+  Condition GetCondition() const { return ComputeCondition(op_); }
+  State GetState() { return ComputeState(target()); }
+
+  Token::Value op_;
+};
+
+// Helper for TRBinaryOpIC and CompareIC.
+void PatchInlinedSmiCode(Address address);
 
 } }  // namespace v8::internal
 

@@ -1,19 +1,19 @@
 /*
  * libev simple C++ wrapper classes
  *
- * Copyright (c) 2007,2008 Marc Alexander Lehmann <libev@schmorp.de>
+ * Copyright (c) 2007,2008,2010 Marc Alexander Lehmann <libev@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
  * tion, are permitted provided that the following conditions are met:
- * 
+ *
  *   1.  Redistributions of source code must retain the above copyright notice,
  *       this list of conditions and the following disclaimer.
- * 
+ *
  *   2.  Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MER-
  * CHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
@@ -58,13 +58,15 @@ namespace ev {
 
   typedef ev_tstamp tstamp;
 
-  enum
-  {
+  enum {
     UNDEF    = EV_UNDEF,
     NONE     = EV_NONE,
     READ     = EV_READ,
     WRITE    = EV_WRITE,
+#if EV_COMPAT3
     TIMEOUT  = EV_TIMEOUT,
+#endif
+    TIMER    = EV_TIMER,
     PERIODIC = EV_PERIODIC,
     SIGNAL   = EV_SIGNAL,
     CHILD    = EV_CHILD,
@@ -76,7 +78,7 @@ namespace ev {
     ASYNC    = EV_ASYNC,
     EMBED    = EV_EMBED,
 #   undef ERROR // some systems stupidly #define ERROR
-    ERROR    = EV_ERROR,
+    ERROR    = EV_ERROR
   };
 
   enum
@@ -95,14 +97,18 @@ namespace ev {
 
   enum
   {
+#if EV_COMPAT3
     NONBLOCK = EVLOOP_NONBLOCK,
-    ONESHOT  = EVLOOP_ONESHOT
+    ONESHOT  = EVLOOP_ONESHOT,
+#endif
+    NOWAIT   = EVRUN_NOWAIT,
+    ONCE     = EVRUN_ONCE
   };
 
   enum how_t
   {
-    ONE = EVUNLOOP_ONE,
-    ALL = EVUNLOOP_ALL
+    ONE = EVBREAK_ONE,
+    ALL = EVBREAK_ALL
   };
 
   struct bad_loop
@@ -188,23 +194,31 @@ namespace ev {
     }
 #endif
 
+#if EV_COMPAT3
     void loop (int flags = 0)
     {
-      ev_loop (EV_AX_ flags);
+      ev_run (EV_AX_ flags);
     }
 
     void unloop (how_t how = ONE) throw ()
     {
-      ev_unloop (EV_AX_ how);
+      ev_break (EV_AX_ how);
+    }
+#endif
+
+    void run (int flags = 0)
+    {
+      ev_run (EV_AX_ flags);
+    }
+
+    void break_loop (how_t how = ONE) throw ()
+    {
+      ev_break (EV_AX_ how);
     }
 
     void post_fork () throw ()
     {
-#if EV_MULTIPLICITY
       ev_loop_fork (EV_AX);
-#else
-      ev_default_fork ();
-#endif
     }
 
     unsigned int backend () const throw ()
@@ -227,15 +241,15 @@ namespace ev {
       ev_unref (EV_AX);
     }
 
-#if EV_MINIMAL < 2
-    unsigned int count () const throw ()
+#if EV_FEATURE_API
+    unsigned int iteration () const throw ()
     {
-      return ev_loop_count (EV_AX);
+      return ev_iteration (EV_AX);
     }
 
     unsigned int depth () const throw ()
     {
-      return ev_loop_depth (EV_AX);
+      return ev_depth (EV_AX);
     }
 
     void set_io_collect_interval (tstamp interval) throw ()
@@ -377,11 +391,6 @@ namespace ev {
         throw bad_loop ();
     }
 
-    ~default_loop () throw ()
-    {
-      ev_default_destroy ();
-    }
-
   private:
     default_loop (const default_loop &);
     default_loop &operator = (const default_loop &);
@@ -415,6 +424,7 @@ namespace ev {
     #if EV_MULTIPLICITY
       EV_PX;
 
+      // loop set
       void set (EV_P) throw ()
       {
         this->EV_A = EV_A;
@@ -480,7 +490,7 @@ namespace ev {
     template<class K, void (K::*method)()>
     static void method_noargs_thunk (EV_P_ ev_watcher *w, int revents)
     {
-      static_cast<K *>(w->data)->*method
+      (static_cast<K *>(w->data)->*method)
         ();
     }
 
@@ -674,6 +684,7 @@ namespace ev {
   EV_END_WATCHER (periodic, periodic)
   #endif
 
+  #if EV_SIGNAL_ENABLE
   EV_BEGIN_WATCHER (sig, signal)
     void set (int signum) throw ()
     {
@@ -689,7 +700,9 @@ namespace ev {
       start ();
     }
   EV_END_WATCHER (sig, signal)
+  #endif
 
+  #if EV_CHILD_ENABLE
   EV_BEGIN_WATCHER (child, child)
     void set (int pid, int trace = 0) throw ()
     {
@@ -705,6 +718,7 @@ namespace ev {
       start ();
     }
   EV_END_WATCHER (child, child)
+  #endif
 
   #if EV_STAT_ENABLE
   EV_BEGIN_WATCHER (stat, stat)
@@ -730,19 +744,23 @@ namespace ev {
   EV_END_WATCHER (stat, stat)
   #endif
 
-#if EV_IDLE_ENABLE
+  #if EV_IDLE_ENABLE
   EV_BEGIN_WATCHER (idle, idle)
     void set () throw () { }
   EV_END_WATCHER (idle, idle)
-#endif
+  #endif
 
+  #if EV_PREPARE_ENABLE
   EV_BEGIN_WATCHER (prepare, prepare)
     void set () throw () { }
   EV_END_WATCHER (prepare, prepare)
+  #endif
 
+  #if EV_CHECK_ENABLE
   EV_BEGIN_WATCHER (check, check)
     void set () throw () { }
   EV_END_WATCHER (check, check)
+  #endif
 
   #if EV_EMBED_ENABLE
   EV_BEGIN_WATCHER (embed, embed)
@@ -775,8 +793,6 @@ namespace ev {
 
   #if EV_ASYNC_ENABLE
   EV_BEGIN_WATCHER (async, async)
-    void set () throw () { }
-
     void send () throw ()
     {
       ev_async_send (EV_A_ static_cast<ev_async *>(this));

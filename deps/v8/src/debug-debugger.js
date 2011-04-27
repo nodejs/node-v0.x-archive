@@ -45,7 +45,7 @@ Debug.DebugEvent = { Break: 1,
                      ScriptCollected: 6 };
 
 // Types of exceptions that can be broken upon.
-Debug.ExceptionBreak = { All : 0,
+Debug.ExceptionBreak = { Caught : 0,
                          Uncaught: 1 };
 
 // The different types of steps.
@@ -87,13 +87,34 @@ var debugger_flags = {
       this.value = !!value;
       %SetDisableBreak(!this.value);
     }
-  }
+  },
+  breakOnCaughtException: {
+    getValue: function() { return Debug.isBreakOnException(); },
+    setValue: function(value) {
+      if (value) {
+        Debug.setBreakOnException();
+      } else {
+        Debug.clearBreakOnException();
+      }
+    }
+  },
+  breakOnUncaughtException: {
+    getValue: function() { return Debug.isBreakOnUncaughtException(); },
+    setValue: function(value) {
+      if (value) {
+        Debug.setBreakOnUncaughtException();
+      } else {
+        Debug.clearBreakOnUncaughtException();
+      }
+    }
+  },
 };
+var lol_is_enabled = %HasLOLEnabled();
 
 
 // Create a new break point object and add it to the list of break points.
-function MakeBreakPoint(source_position, opt_line, opt_column, opt_script_break_point) {
-  var break_point = new BreakPoint(source_position, opt_line, opt_column, opt_script_break_point);
+function MakeBreakPoint(source_position, opt_script_break_point) {
+  var break_point = new BreakPoint(source_position, opt_script_break_point);
   break_points.push(break_point);
   return break_point;
 }
@@ -103,10 +124,8 @@ function MakeBreakPoint(source_position, opt_line, opt_column, opt_script_break_
 // NOTE: This object does not have a reference to the function having break
 // point as this would cause function not to be garbage collected when it is
 // not used any more. We do not want break points to keep functions alive.
-function BreakPoint(source_position, opt_line, opt_column, opt_script_break_point) {
+function BreakPoint(source_position, opt_script_break_point) {
   this.source_position_ = source_position;
-  this.source_line_ = opt_line;
-  this.source_column_ = opt_column;
   if (opt_script_break_point) {
     this.script_break_point_ = opt_script_break_point;
   } else {
@@ -404,7 +423,7 @@ ScriptBreakPoint.prototype.set = function (script) {
   if (position === null) return;
 
   // Create a break point object and set the break point.
-  break_point = MakeBreakPoint(position, this.line(), this.column(), this);
+  break_point = MakeBreakPoint(position, this);
   break_point.setIgnoreCount(this.ignoreCount());
   var actual_position = %SetScriptBreakPoint(script, position, break_point);
   if (IS_UNDEFINED(actual_position)) {
@@ -619,7 +638,7 @@ Debug.setBreakPoint = function(func, opt_line, opt_column, opt_condition) {
                                         opt_condition);
   } else {
     // Set a break point directly on the function.
-    var break_point = MakeBreakPoint(source_position, opt_line, opt_column);
+    var break_point = MakeBreakPoint(source_position);
     var actual_position =
         %SetFunctionBreakPoint(func, source_position, break_point);
     actual_position += this.sourcePosition(func);
@@ -632,15 +651,40 @@ Debug.setBreakPoint = function(func, opt_line, opt_column, opt_condition) {
 };
 
 
+Debug.setBreakPointByScriptIdAndPosition = function(script_id, position,
+                                                    condition, enabled)
+{
+  break_point = MakeBreakPoint(position);
+  break_point.setCondition(condition);
+  if (!enabled)
+    break_point.disable();
+  var scripts = this.scripts();
+  for (var i = 0; i < scripts.length; i++) {
+    if (script_id == scripts[i].id) {
+      break_point.actual_position = %SetScriptBreakPoint(scripts[i], position,
+                                                         break_point);
+      break;
+    }
+  }
+  return break_point;
+};
+
+
 Debug.enableBreakPoint = function(break_point_number) {
   var break_point = this.findBreakPoint(break_point_number, false);
-  break_point.enable();
+  // Only enable if the breakpoint hasn't been deleted:
+  if (break_point) {
+    break_point.enable();
+  }
 };
 
 
 Debug.disableBreakPoint = function(break_point_number) {
   var break_point = this.findBreakPoint(break_point_number, false);
-  break_point.disable();
+  // Only enable if the breakpoint hasn't been deleted:
+  if (break_point) {
+    break_point.disable();
+  }
 };
 
 
@@ -678,6 +722,17 @@ Debug.clearAllBreakPoints = function() {
     %ClearBreakPoint(break_point);
   }
   break_points = [];
+};
+
+
+Debug.disableAllBreakPoints = function() {
+  // Disable all user defined breakpoints:
+  for (var i = 1; i < next_break_point_number; i++) {
+    Debug.disableBreakPoint(i);
+  }
+  // Disable all exception breakpoints:
+  %ChangeBreakOnException(Debug.ExceptionBreak.Caught, false);
+  %ChangeBreakOnException(Debug.ExceptionBreak.Uncaught, false);
 };
 
 
@@ -781,11 +836,15 @@ Debug.clearStepping = function() {
 }
 
 Debug.setBreakOnException = function() {
-  return %ChangeBreakOnException(Debug.ExceptionBreak.All, true);
+  return %ChangeBreakOnException(Debug.ExceptionBreak.Caught, true);
 };
 
 Debug.clearBreakOnException = function() {
-  return %ChangeBreakOnException(Debug.ExceptionBreak.All, false);
+  return %ChangeBreakOnException(Debug.ExceptionBreak.Caught, false);
+};
+
+Debug.isBreakOnException = function() {
+  return !!%IsBreakOnException(Debug.ExceptionBreak.Caught);
 };
 
 Debug.setBreakOnUncaughtException = function() {
@@ -794,6 +853,10 @@ Debug.setBreakOnUncaughtException = function() {
 
 Debug.clearBreakOnUncaughtException = function() {
   return %ChangeBreakOnException(Debug.ExceptionBreak.Uncaught, false);
+};
+
+Debug.isBreakOnUncaughtException = function() {
+  return !!%IsBreakOnException(Debug.ExceptionBreak.Uncaught);
 };
 
 Debug.showBreakPoints = function(f, full) {
@@ -830,6 +893,7 @@ Debug.debuggerFlags = function() {
   return debugger_flags;
 };
 
+Debug.MakeMirror = MakeMirror;
 
 function MakeExecutionState(break_id) {
   return new ExecutionState(break_id);
@@ -848,9 +912,11 @@ ExecutionState.prototype.prepareStep = function(opt_action, opt_count) {
   return %PrepareStep(this.break_id, action, count);
 }
 
-ExecutionState.prototype.evaluateGlobal = function(source, disable_break) {
-  return MakeMirror(
-      %DebugEvaluateGlobal(this.break_id, source, Boolean(disable_break)));
+ExecutionState.prototype.evaluateGlobal = function(source, disable_break,
+    opt_additional_context) {
+  return MakeMirror(%DebugEvaluateGlobal(this.break_id, source,
+                                         Boolean(disable_break),
+                                         opt_additional_context));
 };
 
 ExecutionState.prototype.frameCount = function() {
@@ -867,10 +933,6 @@ ExecutionState.prototype.frame = function(opt_index) {
   if (opt_index < 0 || opt_index >= this.frameCount())
     throw new Error('Illegal frame index.');
   return new FrameMirror(this.break_id, opt_index);
-};
-
-ExecutionState.prototype.cframesValue = function(opt_from_index, opt_to_index) {
-  return %GetCFrames(this.break_id);
 };
 
 ExecutionState.prototype.setSelectedFrame = function(index) {
@@ -1273,7 +1335,7 @@ DebugCommandProcessor.prototype.processDebugJSONRequest = function(json_request)
   try {
     try {
       // Convert the JSON string to an object.
-      request = %CompileString('(' + json_request + ')', false)();
+      request = %CompileString('(' + json_request + ')')();
 
       // Create an initial response.
       response = this.createResponse(request);
@@ -1314,6 +1376,10 @@ DebugCommandProcessor.prototype.processDebugJSONRequest = function(json_request)
         this.clearBreakPointRequest_(request, response);
       } else if (request.command == 'clearbreakpointgroup') {
         this.clearBreakPointGroupRequest_(request, response);
+      } else if (request.command == 'disconnect') {
+        this.disconnectRequest_(request, response);
+      } else if (request.command == 'setexceptionbreak') {
+        this.setExceptionBreakRequest_(request, response);
       } else if (request.command == 'listbreakpoints') {
         this.listBreakpointsRequest_(request, response);
       } else if (request.command == 'backtrace') {
@@ -1326,6 +1392,8 @@ DebugCommandProcessor.prototype.processDebugJSONRequest = function(json_request)
         this.scopeRequest_(request, response);
       } else if (request.command == 'evaluate') {
         this.evaluateRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'getobj') {
+        this.getobjRequest_(request, response);
       } else if (request.command == 'lookup') {
         this.lookupRequest_(request, response);
       } else if (request.command == 'references') {
@@ -1346,6 +1414,35 @@ DebugCommandProcessor.prototype.processDebugJSONRequest = function(json_request)
         this.changeLiveRequest_(request, response);
       } else if (request.command == 'flags') {
         this.debuggerFlagsRequest_(request, response);
+      } else if (request.command == 'v8flags') {
+        this.v8FlagsRequest_(request, response);
+
+      // GC tools:
+      } else if (request.command == 'gc') {
+        this.gcRequest_(request, response);
+
+      // LiveObjectList tools:
+      } else if (lol_is_enabled && request.command == 'lol-capture') {
+        this.lolCaptureRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-delete') {
+        this.lolDeleteRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-diff') {
+        this.lolDiffRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-getid') {
+        this.lolGetIdRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-info') {
+        this.lolInfoRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-reset') {
+        this.lolResetRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-retainers') {
+        this.lolRetainersRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-path') {
+        this.lolPathRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-print') {
+        this.lolPrintRequest_(request, response);
+      } else if (lol_is_enabled && request.command == 'lol-stats') {
+        this.lolStatsRequest_(request, response);
+
       } else {
         throw new Error('Unknown command "' + request.command + '" in request');
       }
@@ -1663,7 +1760,63 @@ DebugCommandProcessor.prototype.listBreakpointsRequest_ = function(request, resp
     array.push(description);
   }
 
-  response.body = { breakpoints: array }
+  response.body = {
+    breakpoints: array,
+    breakOnExceptions: Debug.isBreakOnException(),
+    breakOnUncaughtExceptions: Debug.isBreakOnUncaughtException()
+  }
+}
+
+
+DebugCommandProcessor.prototype.disconnectRequest_ =
+    function(request, response) {
+  Debug.disableAllBreakPoints();
+  this.continueRequest_(request, response);
+}
+
+
+DebugCommandProcessor.prototype.setExceptionBreakRequest_ =
+    function(request, response) {
+  // Check for legal request.
+  if (!request.arguments) {
+    response.failed('Missing arguments');
+    return;
+  }
+
+  // Pull out and check the 'type' argument:
+  var type = request.arguments.type;
+  if (!type) {
+    response.failed('Missing argument "type"');
+    return;
+  }
+
+  // Initialize the default value of enable:
+  var enabled;
+  if (type == 'all') {
+    enabled = !Debug.isBreakOnException();
+  } else if (type == 'uncaught') {
+    enabled = !Debug.isBreakOnUncaughtException();
+  }  
+
+  // Pull out and check the 'enabled' argument if present:
+  if (!IS_UNDEFINED(request.arguments.enabled)) {
+    enabled = request.arguments.enabled;
+    if ((enabled != true) && (enabled != false)) {
+      response.failed('Illegal value for "enabled":"' + enabled + '"');
+    }
+  }
+
+  // Now set the exception break state:
+  if (type == 'all') {
+    %ChangeBreakOnException(Debug.ExceptionBreak.Caught, enabled);
+  } else if (type == 'uncaught') {
+    %ChangeBreakOnException(Debug.ExceptionBreak.Uncaught, enabled);
+  } else {
+    response.failed('Unknown "type":"' + type + '"');
+  }
+
+  // Add the cleared break point number to the response.
+  response.body = { 'type': type, 'enabled': enabled };
 }
 
 
@@ -1720,11 +1873,6 @@ DebugCommandProcessor.prototype.backtraceRequest_ = function(request, response) 
     totalFrames: total_frames,
     frames: frames
   }
-};
-
-
-DebugCommandProcessor.prototype.backtracec = function(cmd, args) {
-  return this.exec_state_.cframesValue();
 };
 
 
@@ -1818,6 +1966,7 @@ DebugCommandProcessor.prototype.evaluateRequest_ = function(request, response) {
   var frame = request.arguments.frame;
   var global = request.arguments.global;
   var disable_break = request.arguments.disable_break;
+  var additional_context = request.arguments.additional_context;
 
   // The expression argument could be an integer so we convert it to a
   // string.
@@ -1831,12 +1980,30 @@ DebugCommandProcessor.prototype.evaluateRequest_ = function(request, response) {
   if (!IS_UNDEFINED(frame) && global) {
     return response.failed('Arguments "frame" and "global" are exclusive');
   }
+  
+  var additional_context_object;
+  if (additional_context) {
+    additional_context_object = {};
+    for (var i = 0; i < additional_context.length; i++) {
+      var mapping = additional_context[i];
+      if (!IS_STRING(mapping.name) || !IS_NUMBER(mapping.handle)) {
+        return response.failed("Context element #" + i + 
+            " must contain name:string and handle:number");
+      } 
+      var context_value_mirror = LookupMirror(mapping.handle);
+      if (!context_value_mirror) {
+        return response.failed("Context object '" + mapping.name +
+            "' #" + mapping.handle + "# not found");
+      }
+      additional_context_object[mapping.name] = context_value_mirror.value(); 
+    }
+  }
 
   // Global evaluate.
   if (global) {
     // Evaluate in the global context.
-    response.body =
-        this.exec_state_.evaluateGlobal(expression, Boolean(disable_break));
+    response.body = this.exec_state_.evaluateGlobal(
+        expression, Boolean(disable_break), additional_context_object);
     return;
   }
 
@@ -1858,14 +2025,32 @@ DebugCommandProcessor.prototype.evaluateRequest_ = function(request, response) {
     }
     // Evaluate in the specified frame.
     response.body = this.exec_state_.frame(frame_number).evaluate(
-        expression, Boolean(disable_break));
+        expression, Boolean(disable_break), additional_context_object);
     return;
   } else {
     // Evaluate in the selected frame.
     response.body = this.exec_state_.frame().evaluate(
-        expression, Boolean(disable_break));
+        expression, Boolean(disable_break), additional_context_object);
     return;
   }
+};
+
+
+DebugCommandProcessor.prototype.getobjRequest_ = function(request, response) {
+  if (!request.arguments) {
+    return response.failed('Missing arguments');
+  }
+
+  // Pull out arguments.
+  var obj_id = request.arguments.obj_id;
+
+  // Check for legal arguments.
+  if (IS_UNDEFINED(obj_id)) {
+    return response.failed('Argument "obj_id" missing');
+  }
+
+  // Dump the object.
+  response.body = MakeMirror(%GetLOLObj(obj_id));
 };
 
 
@@ -2006,6 +2191,16 @@ DebugCommandProcessor.prototype.scriptsRequest_ = function(request, response) {
         idsToInclude[ids[i]] = true;
       }
     }
+
+    var filterStr = null;
+    var filterNum = null;
+    if (!IS_UNDEFINED(request.arguments.filter)) {
+      var num = %ToNumber(request.arguments.filter);
+      if (!isNaN(num)) {
+        filterNum = num;
+      }
+      filterStr = request.arguments.filter;
+    }
   }
 
   // Collect all scripts in the heap.
@@ -2016,6 +2211,21 @@ DebugCommandProcessor.prototype.scriptsRequest_ = function(request, response) {
   for (var i = 0; i < scripts.length; i++) {
     if (idsToInclude && !idsToInclude[scripts[i].id]) {
       continue;
+    }
+    if (filterStr || filterNum) {
+      var script = scripts[i];
+      var found = false;
+      if (filterNum && !found) {
+        if (script.id && script.id === filterNum) {
+          found = true;
+        }
+      }
+      if (filterStr && !found) {
+        if (script.name && script.name.indexOf(filterStr) >= 0) {
+          found = true;
+        }
+      }
+      if (!found) continue;
     }
     if (types & ScriptTypeFlag(scripts[i].type)) {
       response.body.push(MakeMirror(scripts[i]));
@@ -2090,7 +2300,7 @@ DebugCommandProcessor.prototype.changeLiveRequest_ = function(request, response)
   }
   var script_id = request.arguments.script_id;
   var preview_only = !!request.arguments.preview_only;
-  
+
   var scripts = %DebugGetLoadedScripts();
 
   var the_script = null;
@@ -2111,11 +2321,11 @@ DebugCommandProcessor.prototype.changeLiveRequest_ = function(request, response)
   }
 
   var new_source = request.arguments.new_source;
-  
+
   var result_description = Debug.LiveEdit.SetScriptSource(the_script,
       new_source, preview_only, change_log);
   response.body = {change_log: change_log, result: result_description};
-  
+
   if (!preview_only && !this.running_ && result_description.stack_modified) {
     response.body.stepin_recommended = true;
   }
@@ -2155,6 +2365,105 @@ DebugCommandProcessor.prototype.debuggerFlagsRequest_ = function(request,
 }
 
 
+DebugCommandProcessor.prototype.v8FlagsRequest_ = function(request, response) {
+  var flags = request.arguments.flags;
+  if (!flags) flags = '';
+  %SetFlags(flags);
+};
+
+
+DebugCommandProcessor.prototype.gcRequest_ = function(request, response) {
+  var type = request.arguments.type;
+  if (!type) type = 'all';
+
+  var before = %GetHeapUsage();
+  %CollectGarbage(type);
+  var after = %GetHeapUsage();
+
+  response.body = { "before": before, "after": after };
+};
+
+
+DebugCommandProcessor.prototype.lolCaptureRequest_ =
+    function(request, response) {
+  response.body = %CaptureLOL();
+};
+
+
+DebugCommandProcessor.prototype.lolDeleteRequest_ =
+    function(request, response) {
+  var id = request.arguments.id;
+  var result = %DeleteLOL(id);
+  if (result) {
+    response.body = { id: id };
+  } else {
+    response.failed('Failed to delete: live object list ' + id + ' not found.');
+  }
+};
+
+
+DebugCommandProcessor.prototype.lolDiffRequest_ = function(request, response) {
+  var id1 = request.arguments.id1;
+  var id2 = request.arguments.id2;
+  var verbose = request.arguments.verbose;
+  var filter = request.arguments.filter;
+  if (verbose === true) {
+    var start = request.arguments.start;
+    var count = request.arguments.count;
+    response.body = %DumpLOL(id1, id2, start, count, filter);
+  } else {
+    response.body = %SummarizeLOL(id1, id2, filter);
+  }
+};
+
+
+DebugCommandProcessor.prototype.lolGetIdRequest_ = function(request, response) {
+  var address = request.arguments.address;
+  response.body = {};
+  response.body.id = %GetLOLObjId(address);
+};
+
+
+DebugCommandProcessor.prototype.lolInfoRequest_ = function(request, response) {
+  var start = request.arguments.start;
+  var count = request.arguments.count;
+  response.body = %InfoLOL(start, count);
+};
+
+
+DebugCommandProcessor.prototype.lolResetRequest_ = function(request, response) {
+  %ResetLOL();
+};
+
+
+DebugCommandProcessor.prototype.lolRetainersRequest_ =
+    function(request, response) {
+  var id = request.arguments.id;
+  var verbose = request.arguments.verbose;
+  var start = request.arguments.start;
+  var count = request.arguments.count;
+  var filter = request.arguments.filter;
+
+  response.body = %GetLOLObjRetainers(id, Mirror.prototype, verbose,
+                                      start, count, filter);
+};
+
+
+DebugCommandProcessor.prototype.lolPathRequest_ = function(request, response) {
+  var id1 = request.arguments.id1;
+  var id2 = request.arguments.id2;
+  response.body = {};
+  response.body.path = %GetLOLPath(id1, id2, Mirror.prototype);
+};
+
+
+DebugCommandProcessor.prototype.lolPrintRequest_ = function(request, response) {
+  var id = request.arguments.id;
+  response.body = {};
+  response.body.dump = %PrintLOLObj(id);
+};
+
+
 // Check whether the previously processed command caused the VM to become
 // running.
 DebugCommandProcessor.prototype.isRunning = function() {
@@ -2176,29 +2485,6 @@ function NumberToHex8Str(n) {
   }
   return r;
 };
-
-DebugCommandProcessor.prototype.formatCFrames = function(cframes_value) {
-  var result = "";
-  if (cframes_value == null || cframes_value.length == 0) {
-    result += "(stack empty)";
-  } else {
-    for (var i = 0; i < cframes_value.length; ++i) {
-      if (i != 0) result += "\n";
-      result += this.formatCFrame(cframes_value[i]);
-    }
-  }
-  return result;
-};
-
-
-DebugCommandProcessor.prototype.formatCFrame = function(cframe_value) {
-  var result = "";
-  result += "0x" + NumberToHex8Str(cframe_value.address);
-  if (!IS_UNDEFINED(cframe_value.text)) {
-    result += " " + cframe_value.text;
-  }
-  return result;
-}
 
 
 /**

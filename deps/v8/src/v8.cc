@@ -29,12 +29,15 @@
 
 #include "bootstrapper.h"
 #include "debug.h"
+#include "deoptimizer.h"
+#include "heap-profiler.h"
+#include "hydrogen.h"
+#include "lithium-allocator.h"
+#include "log.h"
+#include "runtime-profiler.h"
 #include "serialize.h"
 #include "simulator.h"
 #include "stub-cache.h"
-#include "heap-profiler.h"
-#include "oprofile-agent.h"
-#include "log.h"
 
 namespace v8 {
 namespace internal {
@@ -43,12 +46,22 @@ bool V8::is_running_ = false;
 bool V8::has_been_setup_ = false;
 bool V8::has_been_disposed_ = false;
 bool V8::has_fatal_error_ = false;
+bool V8::use_crankshaft_ = true;
+
 
 bool V8::Initialize(Deserializer* des) {
   bool create_heap_objects = des == NULL;
   if (has_been_disposed_ || has_fatal_error_) return false;
   if (IsRunning()) return true;
 
+#if defined(V8_TARGET_ARCH_ARM) && !defined(USE_ARM_EABI)
+  use_crankshaft_ = false;
+#else
+  use_crankshaft_ = FLAG_crankshaft;
+#endif
+
+  // Peephole optimization might interfere with deoptimization.
+  FLAG_peephole_optimization = !use_crankshaft_;
   is_running_ = true;
   has_been_setup_ = true;
   has_fatal_error_ = false;
@@ -68,8 +81,12 @@ bool V8::Initialize(Deserializer* des) {
   OS::Setup();
 
   // Initialize other runtime facilities
-#if !V8_HOST_ARCH_ARM && V8_TARGET_ARCH_ARM
-  ::assembler::arm::Simulator::Initialize();
+#if defined(USE_SIMULATOR)
+#if defined(V8_TARGET_ARCH_ARM)
+  Simulator::Initialize();
+#elif defined(V8_TARGET_ARCH_MIPS)
+  ::assembler::mips::Simulator::Initialize();
+#endif
 #endif
 
   { // NOLINT
@@ -116,7 +133,9 @@ bool V8::Initialize(Deserializer* des) {
   // objects in place for creating the code object used for probing.
   CPU::Setup();
 
-  OProfileAgent::Initialize();
+  Deoptimizer::Setup();
+  LAllocator::Setup();
+  RuntimeProfiler::Setup();
 
   // If we are deserializing, log non-function code objects and compiled
   // functions found in the snapshot.
@@ -139,7 +158,12 @@ void V8::SetFatalError() {
 void V8::TearDown() {
   if (!has_been_setup_ || has_been_disposed_) return;
 
-  OProfileAgent::TearDown();
+  if (FLAG_time_hydrogen) HStatistics::Instance()->Print();
+
+  // We must stop the logger before we tear down other components.
+  Logger::EnsureTickerStopped();
+
+  Deoptimizer::TearDown();
 
   if (FLAG_preemption) {
     v8::Locker locker;
@@ -152,12 +176,11 @@ void V8::TearDown() {
   Top::TearDown();
 
   HeapProfiler::TearDown();
-
   CpuProfiler::TearDown();
-
-  Heap::TearDown();
+  RuntimeProfiler::TearDown();
 
   Logger::TearDown();
+  Heap::TearDown();
 
   is_running_ = false;
   has_been_disposed_ = true;
@@ -172,22 +195,41 @@ static uint32_t random_seed() {
 }
 
 
-uint32_t V8::Random() {
-  // Random number generator using George Marsaglia's MWC algorithm.
-  static uint32_t hi = 0;
-  static uint32_t lo = 0;
+typedef struct {
+  uint32_t hi;
+  uint32_t lo;
+} random_state;
 
+
+// Random number generator using George Marsaglia's MWC algorithm.
+static uint32_t random_base(random_state *state) {
   // Initialize seed using the system random(). If one of the seeds
   // should ever become zero again, or if random() returns zero, we
   // avoid getting stuck with zero bits in hi or lo by re-initializing
   // them on demand.
-  if (hi == 0) hi = random_seed();
-  if (lo == 0) lo = random_seed();
+  if (state->hi == 0) state->hi = random_seed();
+  if (state->lo == 0) state->lo = random_seed();
 
   // Mix the bits.
-  hi = 36969 * (hi & 0xFFFF) + (hi >> 16);
-  lo = 18273 * (lo & 0xFFFF) + (lo >> 16);
-  return (hi << 16) + (lo & 0xFFFF);
+  state->hi = 36969 * (state->hi & 0xFFFF) + (state->hi >> 16);
+  state->lo = 18273 * (state->lo & 0xFFFF) + (state->lo >> 16);
+  return (state->hi << 16) + (state->lo & 0xFFFF);
+}
+
+
+// Used by JavaScript APIs
+uint32_t V8::Random() {
+  static random_state state = {0, 0};
+  return random_base(&state);
+}
+
+
+// Used internally by the JIT and memory allocator for security
+// purposes. So, we keep a different state to prevent informations
+// leaks that could be used in an exploit.
+uint32_t V8::RandomPrivate() {
+  static random_state state = {0, 0};
+  return random_base(&state);
 }
 
 

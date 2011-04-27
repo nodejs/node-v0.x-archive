@@ -30,7 +30,7 @@
 
 // The original source code covered by the above license above has been
 // modified significantly by Google Inc.
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 
 // A light-weight IA32 Assembler.
 
@@ -64,15 +64,28 @@ namespace internal {
 // and best performance in optimized code.
 //
 struct Register {
-  bool is_valid() const  { return 0 <= code_ && code_ < 8; }
-  bool is(Register reg) const  { return code_ == reg.code_; }
+  static const int kNumAllocatableRegisters = 6;
+  static const int kNumRegisters = 8;
+
+  static inline const char* AllocationIndexToString(int index);
+
+  static inline int ToAllocationIndex(Register reg);
+
+  static inline Register FromAllocationIndex(int index);
+
+  static Register from_code(int code) {
+    Register r = { code };
+    return r;
+  }
+  bool is_valid() const { return 0 <= code_ && code_ < kNumRegisters; }
+  bool is(Register reg) const { return code_ == reg.code_; }
   // eax, ebx, ecx and edx are byte registers, the rest are not.
-  bool is_byte_register() const  { return code_ <= 3; }
-  int code() const  {
+  bool is_byte_register() const { return code_ <= 3; }
+  int code() const {
     ASSERT(is_valid());
     return code_;
   }
-  int bit() const  {
+  int bit() const {
     ASSERT(is_valid());
     return 1 << code_;
   }
@@ -80,6 +93,7 @@ struct Register {
   // Unfortunately we can't make this private in a struct.
   int code_;
 };
+
 
 const Register eax = { 0 };
 const Register ecx = { 1 };
@@ -92,15 +106,69 @@ const Register edi = { 7 };
 const Register no_reg = { -1 };
 
 
+inline const char* Register::AllocationIndexToString(int index) {
+  ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+  // This is the mapping of allocation indices to registers.
+  const char* const kNames[] = { "eax", "ecx", "edx", "ebx", "esi", "edi" };
+  return kNames[index];
+}
+
+
+inline int Register::ToAllocationIndex(Register reg) {
+  ASSERT(reg.is_valid() && !reg.is(esp) && !reg.is(ebp));
+  return (reg.code() >= 6) ? reg.code() - 2 : reg.code();
+}
+
+
+inline Register Register::FromAllocationIndex(int index)  {
+  ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+  return (index >= 4) ? from_code(index + 2) : from_code(index);
+}
+
+
 struct XMMRegister {
-  bool is_valid() const  { return 0 <= code_ && code_ < 8; }
-  int code() const  {
+  static const int kNumAllocatableRegisters = 7;
+  static const int kNumRegisters = 8;
+
+  static int ToAllocationIndex(XMMRegister reg) {
+    ASSERT(reg.code() != 0);
+    return reg.code() - 1;
+  }
+
+  static XMMRegister FromAllocationIndex(int index) {
+    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    return from_code(index + 1);
+  }
+
+  static const char* AllocationIndexToString(int index) {
+    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    const char* const names[] = {
+      "xmm1",
+      "xmm2",
+      "xmm3",
+      "xmm4",
+      "xmm5",
+      "xmm6",
+      "xmm7"
+    };
+    return names[index];
+  }
+
+  static XMMRegister from_code(int code) {
+    XMMRegister r = { code };
+    return r;
+  }
+
+  bool is_valid() const { return 0 <= code_ && code_ < kNumRegisters; }
+  bool is(XMMRegister reg) const { return code_ == reg.code_; }
+  int code() const {
     ASSERT(is_valid());
     return code_;
   }
 
   int code_;
 };
+
 
 const XMMRegister xmm0 = { 0 };
 const XMMRegister xmm1 = { 1 };
@@ -110,6 +178,10 @@ const XMMRegister xmm4 = { 4 };
 const XMMRegister xmm5 = { 5 };
 const XMMRegister xmm6 = { 6 };
 const XMMRegister xmm7 = { 7 };
+
+
+typedef XMMRegister DoubleRegister;
+
 
 enum Condition {
   // any value < 0 is considered no_condition
@@ -202,6 +274,7 @@ class Immediate BASE_EMBEDDED {
   inline explicit Immediate(const ExternalReference& ext);
   inline explicit Immediate(Handle<Object> handle);
   inline explicit Immediate(Smi* value);
+  inline explicit Immediate(Address addr);
 
   static Immediate CodeRelativeOffset(Label* label) {
     return Immediate(label);
@@ -279,6 +352,11 @@ class Operand BASE_EMBEDDED {
                              const ExternalReference& arr) {
     return Operand(index, scale, reinterpret_cast<int32_t>(arr.address()),
                    RelocInfo::EXTERNAL_REFERENCE);
+  }
+
+  static Operand Cell(Handle<JSGlobalPropertyCell> cell) {
+    return Operand(reinterpret_cast<int32_t>(cell.location()),
+                   RelocInfo::GLOBAL_PROPERTY_CELL);
   }
 
   // Returns true if this Operand is a wrapper for the specified register.
@@ -369,13 +447,17 @@ class Displacement BASE_EMBEDDED {
 //   }
 class CpuFeatures : public AllStatic {
  public:
-  // Detect features of the target CPU. Set safe defaults if the serializer
-  // is enabled (snapshots must be portable).
-  static void Probe();
+  // Detect features of the target CPU. If the portable flag is set,
+  // the method sets safe defaults if the serializer is enabled
+  // (snapshots must be portable).
+  static void Probe(bool portable);
+  static void Clear() { supported_ = 0; }
+
   // Check whether a feature is supported by the target CPU.
   static bool IsSupported(CpuFeature f) {
     if (f == SSE2 && !FLAG_enable_sse2) return false;
     if (f == SSE3 && !FLAG_enable_sse3) return false;
+    if (f == SSE4_1 && !FLAG_enable_sse4_1) return false;
     if (f == CMOV && !FLAG_enable_cmov) return false;
     if (f == RDTSC && !FLAG_enable_rdtsc) return false;
     return (supported_ & (static_cast<uint64_t>(1) << f)) != 0;
@@ -483,6 +565,20 @@ class Assembler : public Malloced {
   // The debug break slot must be able to contain a call instruction.
   static const int kDebugBreakSlotLength = kCallInstructionLength;
 
+  // One byte opcode for test eax,0xXXXXXXXX.
+  static const byte kTestEaxByte = 0xA9;
+  // One byte opcode for test al, 0xXX.
+  static const byte kTestAlByte = 0xA8;
+  // One byte opcode for nop.
+  static const byte kNopByte = 0x90;
+
+  // One byte opcode for a short unconditional jump.
+  static const byte kJmpShortOpcode = 0xEB;
+  // One byte prefix for a short conditional jump.
+  static const byte kJccShortPrefix = 0x70;
+  static const byte kJncShortOpcode = kJccShortPrefix | not_carry;
+  static const byte kJcShortOpcode = kJccShortPrefix | carry;
+
   // ---------------------------------------------------------------------------
   // Code generation
   //
@@ -518,9 +614,9 @@ class Assembler : public Malloced {
   void popfd();
 
   void push(const Immediate& x);
+  void push_imm32(int32_t imm32);
   void push(Register src);
   void push(const Operand& src);
-  void push(Label* label, RelocInfo::Mode relocation_mode);
 
   void pop(Register dst);
   void pop(const Operand& dst);
@@ -595,6 +691,7 @@ class Assembler : public Malloced {
   void cmp(const Operand& op, Handle<Object> handle);
 
   void dec_b(Register dst);
+  void dec_b(const Operand& dst);
 
   void dec(Register dst);
   void dec(const Operand& dst);
@@ -687,12 +784,12 @@ class Assembler : public Malloced {
   // but it may be bound only once.
 
   void bind(Label* L);  // binds an unbound label L to the current code position
+  void bind(NearLabel* L);
 
   // Calls
   void call(Label* L);
   void call(byte* entry, RelocInfo::Mode rmode);
   void call(const Operand& adr);
-  void call(const ExternalReference& target);
   void call(Handle<Code> code, RelocInfo::Mode rmode);
 
   // Jumps
@@ -701,10 +798,16 @@ class Assembler : public Malloced {
   void jmp(const Operand& adr);
   void jmp(Handle<Code> code, RelocInfo::Mode rmode);
 
+  // Short jump
+  void jmp(NearLabel* L);
+
   // Conditional jumps
   void j(Condition cc, Label* L, Hint hint = no_hint);
   void j(Condition cc, byte* entry, RelocInfo::Mode rmode, Hint hint = no_hint);
   void j(Condition cc, Handle<Code> code, Hint hint = no_hint);
+
+  // Conditional short jump
+  void j(Condition cc, NearLabel* L, Hint hint = no_hint);
 
   // Floating-point operations
   void fld(int i);
@@ -713,6 +816,7 @@ class Assembler : public Malloced {
   void fld1();
   void fldz();
   void fldpi();
+  void fldln2();
 
   void fld_s(const Operand& adr);
   void fld_d(const Operand& adr);
@@ -737,6 +841,7 @@ class Assembler : public Malloced {
   void fchs();
   void fcos();
   void fsin();
+  void fyl2x();
 
   void fadd(int i);
   void fsub(int i);
@@ -788,8 +893,14 @@ class Assembler : public Malloced {
   void xorpd(XMMRegister dst, XMMRegister src);
   void sqrtsd(XMMRegister dst, XMMRegister src);
 
+  void andpd(XMMRegister dst, XMMRegister src);
+
   void ucomisd(XMMRegister dst, XMMRegister src);
   void movmskpd(Register dst, XMMRegister src);
+
+  void cmpltsd(XMMRegister dst, XMMRegister src);
+
+  void movaps(XMMRegister dst, XMMRegister src);
 
   void movdqa(XMMRegister dst, const Operand& src);
   void movdqa(const Operand& dst, XMMRegister src);
@@ -801,10 +912,21 @@ class Assembler : public Malloced {
   void movdbl(const Operand& dst, XMMRegister src);
 
   void movd(XMMRegister dst, const Operand& src);
+  void movd(const Operand& src, XMMRegister dst);
   void movsd(XMMRegister dst, XMMRegister src);
 
+  void pand(XMMRegister dst, XMMRegister src);
   void pxor(XMMRegister dst, XMMRegister src);
+  void por(XMMRegister dst, XMMRegister src);
   void ptest(XMMRegister dst, XMMRegister src);
+
+  void psllq(XMMRegister reg, int8_t shift);
+  void psllq(XMMRegister dst, XMMRegister src);
+  void psrlq(XMMRegister reg, int8_t shift);
+  void psrlq(XMMRegister dst, XMMRegister src);
+  void pshufd(XMMRegister dst, XMMRegister src, int8_t shuffle);
+  void pextrd(const Operand& dst, XMMRegister src, int8_t offset);
+  void pinsrd(XMMRegister dst, const Operand& src, int8_t offset);
 
   // Parallel XMM operations.
   void movntdqa(XMMRegister src, const Operand& dst);
@@ -828,20 +950,16 @@ class Assembler : public Malloced {
   void RecordDebugBreakSlot();
 
   // Record a comment relocation entry that can be used by a disassembler.
-  // Use --debug_code to enable.
-  void RecordComment(const char* msg);
+  // Use --code-comments to enable, or provide "force = true" flag to always
+  // write a comment.
+  void RecordComment(const char* msg, bool force = false);
 
-  void RecordPosition(int pos);
-  void RecordStatementPosition(int pos);
-  bool WriteRecordedPositions();
+  // Writes a single byte or word of data in the code stream.  Used for
+  // inline tables, e.g., jump-tables.
+  void db(uint8_t data);
+  void dd(uint32_t data);
 
-  // Writes a single word of data in the code stream.
-  // Used for inline tables, e.g., jump-tables.
-  void dd(uint32_t data, RelocInfo::Mode reloc_info);
-
-  int pc_offset() const  { return pc_ - buffer_; }
-  int current_statement_position() const { return current_statement_position_; }
-  int current_position() const  { return current_position_; }
+  int pc_offset() const { return pc_ - buffer_; }
 
   // Check if there is less than kGap bytes available in the buffer.
   // If this is the case, we need to grow the buffer before emitting
@@ -852,6 +970,12 @@ class Assembler : public Malloced {
   inline int available_space() const { return reloc_info_writer.pos() - pc_; }
 
   static bool IsNop(Address addr) { return *addr == 0x90; }
+
+  PositionsRecorder* positions_recorder() { return &positions_recorder_; }
+
+  int relocation_writer_size() {
+    return (buffer_ + buffer_size_) - reloc_info_writer.pos();
+  }
 
   // Avoid overflows for displacements etc.
   static const int kMaximalBufferSize = 512*MB;
@@ -865,9 +989,10 @@ class Assembler : public Malloced {
   void emit_sse_operand(XMMRegister dst, XMMRegister src);
   void emit_sse_operand(Register dst, XMMRegister src);
 
- private:
   byte* addr_at(int pos)  { return buffer_ + pos; }
+ private:
   byte byte_at(int pos)  { return buffer_[pos]; }
+  void set_byte_at(int pos, byte value) { buffer_[pos] = value; }
   uint32_t long_at(int pos)  {
     return *reinterpret_cast<uint32_t*>(addr_at(pos));
   }
@@ -902,7 +1027,6 @@ class Assembler : public Malloced {
   // labels
   void print(Label* L);
   void bind_to(Label* L, int pos);
-  void link_to(Label* L, Label* appendix);
 
   // displacements
   inline Displacement disp_at(Label* L);
@@ -931,11 +1055,9 @@ class Assembler : public Malloced {
   // push-pop elimination
   byte* last_pc_;
 
-  // source position information
-  int current_statement_position_;
-  int current_position_;
-  int written_statement_position_;
-  int written_position_;
+  PositionsRecorder positions_recorder_;
+
+  friend class PositionsRecorder;
 };
 
 

@@ -1,4 +1,24 @@
-// Copyright 2009 Ryan Dahl <ry@tinyclouds.org>
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #ifndef SRC_NODE_H_
 #define SRC_NODE_H_
 
@@ -17,7 +37,12 @@
 
 namespace node {
 
-int Start (int argc, char *argv[]);
+int Start(int argc, char *argv[]);
+
+char** Init(int argc, char *argv[]);
+v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
+void Load(v8::Handle<v8::Object> process);
+void EmitExit(v8::Handle<v8::Object> process);
 
 #define NODE_PSYMBOL(s) Persistent<String>::New(String::NewSymbol(s))
 
@@ -38,16 +63,17 @@ int Start (int argc, char *argv[]);
 do {                                                                      \
   v8::Local<v8::Signature> __callback##_SIG = v8::Signature::New(templ);  \
   v8::Local<v8::FunctionTemplate> __callback##_TEM =                      \
-    FunctionTemplate::New(callback, v8::Handle<v8::Value>(),              \
+    v8::FunctionTemplate::New(callback, v8::Handle<v8::Value>(),          \
                           __callback##_SIG);                              \
   templ->PrototypeTemplate()->Set(v8::String::NewSymbol(name),            \
                                   __callback##_TEM);                      \
 } while (0)
 
-enum encoding {ASCII, UTF8, BASE64, BINARY};
+enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
 void FatalException(v8::TryCatch &try_catch);
+void DisplayExceptionLine(v8::TryCatch &try_catch); // hack
 
 v8::Local<v8::Value> Encode(const void *buf, size_t len,
                             enum encoding encoding = BINARY);
@@ -62,7 +88,28 @@ ssize_t DecodeWrite(char *buf,
                     v8::Handle<v8::Value>,
                     enum encoding encoding = BINARY);
 
-v8::Local<v8::Object> BuildStatsObject(struct stat * s);
+// Use different stat structs & calls on windows and posix;
+// on windows, _stati64 is utf-8 and big file aware.
+#if __POSIX__
+# define NODE_STAT        stat
+# define NODE_FSTAT       fstat
+# define NODE_STAT_STRUCT struct stat
+#else // __MINGW32__
+# define NODE_STAT        _stati64
+# define NODE_FSTAT       _fstati64
+# define NODE_STAT_STRUCT struct _stati64
+#endif
+
+v8::Local<v8::Object> BuildStatsObject(NODE_STAT_STRUCT *s);
+
+
+/**
+ * Call this when your constructor is invoked as a regular function, e.g. Buffer(10) instead of new Buffer(10).
+ * @param constructorTemplate Constructor template to instantiate from.
+ * @param args The arguments object passed to your constructor.
+ * @see v8::Arguments::IsConstructCall
+ */
+v8::Handle<v8::Value> FromConstructorTemplate(v8::Persistent<v8::FunctionTemplate>& constructorTemplate, const v8::Arguments& args);
 
 
 static inline v8::Persistent<v8::Function>* cb_persist(

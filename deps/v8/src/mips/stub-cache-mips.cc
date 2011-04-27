@@ -44,7 +44,8 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
                               Register receiver,
                               Register name,
                               Register scratch,
-                              Register extra) {
+                              Register extra,
+                              Register extra2) {
   UNIMPLEMENTED_MIPS();
 }
 
@@ -391,6 +392,20 @@ Object* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
 
 Object* ConstructStubCompiler::CompileConstructStub(
     SharedFunctionInfo* shared) {
+  UNIMPLEMENTED_MIPS();
+  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+}
+
+
+Object* ExternalArrayStubCompiler::CompileKeyedLoadStub(
+    ExternalArrayType array_type, Code::Flags flags) {
+  UNIMPLEMENTED_MIPS();
+  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+}
+
+
+Object* ExternalArrayStubCompiler::CompileKeyedStoreStub(
+    ExternalArrayType array_type, Code::Flags flags) {
   UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }

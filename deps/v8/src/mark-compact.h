@@ -53,7 +53,8 @@ class MarkCompactCollector: public AllStatic {
   // Object* that will be the object after forwarding.  There is a separate
   // allocation function for each (compactable) space based on the location
   // of the object before compaction.
-  typedef Object* (*AllocationFunction)(HeapObject* object, int object_size);
+  typedef MaybeObject* (*AllocationFunction)(HeapObject* object,
+                                             int object_size);
 
   // Type of functions to encode the forwarding address for an object.
   // Given the object, its size, and the new (non-failure) object it will be
@@ -117,6 +118,9 @@ class MarkCompactCollector: public AllStatic {
 
   // Determine type of object and emit deletion log event.
   static void ReportDeleteIfNeeded(HeapObject* obj);
+
+  // Returns size of a possibly marked object.
+  static int SizeOfMarkedObject(HeapObject* obj);
 
   // Distinguishable invalid map encodings (for single word and multiple words)
   // that indicate free regions.

@@ -1,4 +1,24 @@
-// Copyright 2009 Ryan Dahl <ry@tinyclouds.org>
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node_child_process.h>
 #include <node.h>
 
@@ -9,11 +29,20 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <pwd.h> /* getpwnam() */
+#include <grp.h> /* getgrnam() */
 #if defined(__FreeBSD__ ) || defined(__OpenBSD__)
 #include <sys/wait.h>
 #endif
 
+# ifdef __APPLE__
+# include <crt_externs.h>
+# define environ (*_NSGetEnviron())
+# else
 extern char **environ;
+# endif
+
+#include <limits.h> /* PATH_MAX */
 
 namespace node {
 
@@ -29,6 +58,16 @@ static inline int SetNonBlocking(int fd) {
   int r = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
   if (r != 0) {
     perror("SetNonBlocking()");
+  }
+  return r;
+}
+
+
+static inline int SetCloseOnExec(int fd) {
+  int flags = fcntl(fd, F_GETFD, 0);
+  int r = fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+  if (r != 0) {
+    perror("SetCloseOnExec()");
   }
   return r;
 }
@@ -79,7 +118,11 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
       !args[0]->IsString() ||
       !args[1]->IsArray() ||
       !args[2]->IsString() ||
-      !args[3]->IsArray()) {
+      !args[3]->IsArray() ||
+      !args[4]->IsArray() ||
+      !args[5]->IsBoolean() ||
+      !(args[6]->IsInt32() || args[6]->IsString()) ||
+      !(args[7]->IsInt32() || args[7]->IsString())) {
     return ThrowException(Exception::Error(String::New("Bad argument.")));
   }
 
@@ -129,12 +172,61 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
     }
   }
 
+  int do_setsid = false;
+  if (args[5]->IsBoolean()) {
+    do_setsid = args[5]->BooleanValue();
+  }
+
+
   int fds[3];
 
-  int r = child->Spawn(argv[0], argv, cwd, env, fds, custom_fds);
+  char *custom_uname = NULL;
+  int custom_uid = -1;
+  if (args[6]->IsNumber()) {
+    custom_uid = args[6]->Int32Value();
+  } else if (args[6]->IsString()) {
+    String::Utf8Value pwnam(args[6]->ToString());
+    custom_uname = (char *)calloc(sizeof(char), pwnam.length() + 1);
+    strncpy(custom_uname, *pwnam, pwnam.length() + 1);
+  } else {
+    return ThrowException(Exception::Error(
+      String::New("setuid argument must be a number or a string")));
+  }
+
+  char *custom_gname = NULL;
+  int custom_gid = -1;
+  if (args[7]->IsNumber()) {
+    custom_gid = args[7]->Int32Value();
+  } else if (args[7]->IsString()) {
+    String::Utf8Value grnam(args[7]->ToString());
+    custom_gname = (char *)calloc(sizeof(char), grnam.length() + 1);
+    strncpy(custom_gname, *grnam, grnam.length() + 1);
+  } else {
+    return ThrowException(Exception::Error(
+      String::New("setgid argument must be a number or a string")));
+  }
+
+
+
+  int r = child->Spawn(argv[0],
+                       argv,
+                       cwd,
+                       env,
+                       fds,
+                       custom_fds,
+                       do_setsid,
+                       custom_uid,
+                       custom_uname,
+                       custom_gid,
+                       custom_gname);
+
+  if (custom_uname != NULL) free(custom_uname);
+  if (custom_gname != NULL) free(custom_gname);
 
   for (i = 0; i < argv_length; i++) free(argv[i]);
   delete [] argv;
+
+  free(cwd);
 
   for (i = 0; i < envc; i++) free(env[i]);
   delete [] env;
@@ -162,7 +254,8 @@ Handle<Value> ChildProcess::Kill(const Arguments& args) {
   assert(child);
 
   if (child->pid_ < 1) {
-    return ThrowException(Exception::Error(String::New("No such process")));
+    // nothing to do
+    return False();
   }
 
   int sig = SIGTERM;
@@ -171,15 +264,15 @@ Handle<Value> ChildProcess::Kill(const Arguments& args) {
     if (args[0]->IsNumber()) {
       sig = args[0]->Int32Value();
     } else {
-      return ThrowException(Exception::Error(String::New("Bad argument.")));
+      return ThrowException(Exception::TypeError(String::New("Bad argument.")));
     }
   }
 
   if (child->Kill(sig) != 0) {
-    return ThrowException(Exception::Error(String::New(strerror(errno))));
+    return ThrowException(ErrnoException(errno, "Kill"));
   }
 
-  return Undefined();
+  return True();
 }
 
 
@@ -203,7 +296,12 @@ int ChildProcess::Spawn(const char *file,
                         const char *cwd,
                         char **env,
                         int stdio_fds[3],
-                        int custom_fds[3]) {
+                        int custom_fds[3],
+                        bool do_setsid,
+                        int custom_uid,
+                        char *custom_uname,
+                        int custom_gid,
+                        char *custom_gname) {
   HandleScope scope;
   assert(pid_ == -1);
   assert(!ev_is_active(&child_watcher_));
@@ -211,11 +309,27 @@ int ChildProcess::Spawn(const char *file,
   int stdin_pipe[2], stdout_pipe[2], stderr_pipe[2];
 
   /* An implementation of popen(), basically */
-  if (custom_fds[0] == -1 && pipe(stdin_pipe) < 0 ||
-      custom_fds[1] == -1 && pipe(stdout_pipe) < 0 ||
-      custom_fds[2] == -1 && pipe(stderr_pipe) < 0) {
+  if ((custom_fds[0] == -1 && pipe(stdin_pipe) < 0) ||
+      (custom_fds[1] == -1 && pipe(stdout_pipe) < 0) ||
+      (custom_fds[2] == -1 && pipe(stderr_pipe) < 0)) {
     perror("pipe()");
     return -1;
+  }
+
+  // Set the close-on-exec FD flag
+  if (custom_fds[0] == -1) {
+    SetCloseOnExec(stdin_pipe[0]);
+    SetCloseOnExec(stdin_pipe[1]);
+  }
+
+  if (custom_fds[1] == -1) {
+    SetCloseOnExec(stdout_pipe[0]);
+    SetCloseOnExec(stdout_pipe[1]);
+  }
+
+  if (custom_fds[2] == -1) {
+    SetCloseOnExec(stderr_pipe[0]);
+    SetCloseOnExec(stderr_pipe[1]);
   }
 
   // Save environ in the case that we get it clobbered
@@ -228,6 +342,11 @@ int ChildProcess::Spawn(const char *file,
       return -4;
 
     case 0:  // Child.
+      if (do_setsid && setsid() < 0) {
+        perror("setsid");
+        _exit(127);
+      }
+
       if (custom_fds[0] == -1) {
         close(stdin_pipe[1]);  // close write end
         dup2(stdin_pipe[0],  STDIN_FILENO);
@@ -256,6 +375,61 @@ int ChildProcess::Spawn(const char *file,
         perror("chdir()");
         _exit(127);
       }
+
+
+      static char buf[PATH_MAX + 1];
+
+      int gid = -1;
+      if (custom_gid != -1) {
+        gid = custom_gid;
+      } else if (custom_gname != NULL) {
+        struct group grp, *grpp = NULL;
+        int err = getgrnam_r(custom_gname,
+                             &grp,
+                             buf,
+                             PATH_MAX + 1,
+                             &grpp);
+
+        if (err || grpp == NULL) {
+          perror("getgrnam_r()");
+          _exit(127);
+        }
+
+        gid = grpp->gr_gid;
+      }
+
+
+      int uid = -1;
+      if (custom_uid != -1) {
+        uid = custom_uid;
+      } else if (custom_uname != NULL) {
+        struct passwd pwd, *pwdp = NULL;
+        int err = getpwnam_r(custom_uname,
+                             &pwd,
+                             buf,
+                             PATH_MAX + 1,
+                             &pwdp);
+
+        if (err || pwdp == NULL) {
+          perror("getpwnam_r()");
+          _exit(127);
+        }
+
+        uid = pwdp->pw_uid;
+      }
+
+
+      if (gid != -1 && setgid(gid)) {
+        perror("setgid()");
+        _exit(127);
+      }
+
+      if (uid != -1 && setuid(uid)) {
+        perror("setuid()");
+        _exit(127);
+      }
+
+
 
       environ = env;
 

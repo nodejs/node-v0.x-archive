@@ -37,34 +37,6 @@ namespace v8 {
 namespace internal {
 
 
-// Implementation is from "Hacker's Delight" by Henry S. Warren, Jr.,
-// figure 3-3, page 48, where the function is called clp2.
-uint32_t RoundUpToPowerOf2(uint32_t x) {
-  ASSERT(x <= 0x80000000u);
-  x = x - 1;
-  x = x | (x >> 1);
-  x = x | (x >> 2);
-  x = x | (x >> 4);
-  x = x | (x >> 8);
-  x = x | (x >> 16);
-  return x + 1;
-}
-
-
-// Thomas Wang, Integer Hash Functions.
-// http://www.concentric.net/~Ttwang/tech/inthash.htm
-uint32_t ComputeIntegerHash(uint32_t key) {
-  uint32_t hash = key;
-  hash = ~hash + (hash << 15);  // hash = (hash << 15) - hash - 1;
-  hash = hash ^ (hash >> 12);
-  hash = hash + (hash << 2);
-  hash = hash ^ (hash >> 4);
-  hash = hash * 2057;  // hash = (hash + (hash << 3)) + (hash << 11);
-  hash = hash ^ (hash >> 16);
-  return hash;
-}
-
-
 void PrintF(const char* format, ...) {
   va_list arguments;
   va_start(arguments, format);
@@ -73,8 +45,16 @@ void PrintF(const char* format, ...) {
 }
 
 
-void Flush() {
-  fflush(stdout);
+void PrintF(FILE* out, const char* format, ...) {
+  va_list arguments;
+  va_start(arguments, format);
+  OS::VFPrint(out, format, arguments);
+  va_end(arguments);
+}
+
+
+void Flush(FILE* out) {
+  fflush(out);
 }
 
 
@@ -196,6 +176,23 @@ int WriteCharsToFile(const char* str, int size, FILE* f) {
 }
 
 
+int AppendChars(const char* filename,
+                const char* str,
+                int size,
+                bool verbose) {
+  FILE* f = OS::FOpen(filename, "ab");
+  if (f == NULL) {
+    if (verbose) {
+      OS::PrintError("Cannot open file %s for writing.\n", filename);
+    }
+    return 0;
+  }
+  int written = WriteCharsToFile(str, size, f);
+  fclose(f);
+  return written;
+}
+
+
 int WriteChars(const char* filename,
                const char* str,
                int size,
@@ -242,11 +239,16 @@ void StringBuilder::AddSubstring(const char* s, int n) {
 
 
 void StringBuilder::AddFormatted(const char* format, ...) {
+  va_list arguments;
+  va_start(arguments, format);
+  AddFormattedList(format, arguments);
+  va_end(arguments);
+}
+
+
+void StringBuilder::AddFormattedList(const char* format, va_list list) {
   ASSERT(!is_finalized() && position_ < buffer_.length());
-  va_list args;
-  va_start(args, format);
-  int n = OS::VSNPrintF(buffer_ + position_, format, args);
-  va_end(args);
+  int n = OS::VSNPrintF(buffer_ + position_, format, list);
   if (n < 0 || n >= (buffer_.length() - position_)) {
     position_ = buffer_.length();
   } else {
@@ -274,12 +276,96 @@ char* StringBuilder::Finalize() {
 }
 
 
-int TenToThe(int exponent) {
-  ASSERT(exponent <= 9);
-  ASSERT(exponent >= 1);
-  int answer = 10;
-  for (int i = 1; i < exponent; i++) answer *= 10;
-  return answer;
+MemoryMappedExternalResource::MemoryMappedExternalResource(const char* filename)
+    : filename_(NULL),
+      data_(NULL),
+      length_(0),
+      remove_file_on_cleanup_(false) {
+  Init(filename);
 }
+
+
+MemoryMappedExternalResource::
+    MemoryMappedExternalResource(const char* filename,
+                                 bool remove_file_on_cleanup)
+    : filename_(NULL),
+      data_(NULL),
+      length_(0),
+      remove_file_on_cleanup_(remove_file_on_cleanup) {
+  Init(filename);
+}
+
+
+MemoryMappedExternalResource::~MemoryMappedExternalResource() {
+  // Release the resources if we had successfully acquired them:
+  if (file_ != NULL) {
+    delete file_;
+    if (remove_file_on_cleanup_) {
+      OS::Remove(filename_);
+    }
+    DeleteArray<char>(filename_);
+  }
+}
+
+
+void MemoryMappedExternalResource::Init(const char* filename) {
+  file_ = OS::MemoryMappedFile::open(filename);
+  if (file_ != NULL) {
+    filename_ = StrDup(filename);
+    data_ = reinterpret_cast<char*>(file_->memory());
+    length_ = file_->size();
+  }
+}
+
+
+bool MemoryMappedExternalResource::EnsureIsAscii(bool abort_if_failed) const {
+  bool is_ascii = true;
+
+  int line_no = 1;
+  const char* start_of_line = data_;
+  const char* end = data_ + length_;
+  for (const char* p = data_; p < end; p++) {
+    char c = *p;
+    if ((c & 0x80) != 0) {
+      // Non-ascii detected:
+      is_ascii = false;
+
+      // Report the error and abort if appropriate:
+      if (abort_if_failed) {
+        int char_no = static_cast<int>(p - start_of_line) - 1;
+
+        ASSERT(filename_ != NULL);
+        PrintF("\n\n\n"
+               "Abort: Non-Ascii character 0x%.2x in file %s line %d char %d",
+               c, filename_, line_no, char_no);
+
+        // Allow for some context up to kNumberOfLeadingContextChars chars
+        // before the offending non-ascii char to help the user see where
+        // the offending char is.
+        const int kNumberOfLeadingContextChars = 10;
+        const char* err_context = p - kNumberOfLeadingContextChars;
+        if (err_context < data_) {
+          err_context = data_;
+        }
+        // Compute the length of the error context and print it.
+        int err_context_length = static_cast<int>(p - err_context);
+        if (err_context_length != 0) {
+          PrintF(" after \"%.*s\"", err_context_length, err_context);
+        }
+        PrintF(".\n\n\n");
+        OS::Abort();
+      }
+
+      break;  // Non-ascii detected.  No need to continue scanning.
+    }
+    if (c == '\n') {
+      start_of_line = p;
+      line_no++;
+    }
+  }
+
+  return is_ascii;
+}
+
 
 } }  // namespace v8::internal

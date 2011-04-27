@@ -70,24 +70,37 @@ const char* Variable::Mode2String(Mode mode) {
 }
 
 
-Property* Variable::AsProperty() {
+Property* Variable::AsProperty() const {
   return rewrite_ == NULL ? NULL : rewrite_->AsProperty();
 }
 
 
-Variable* Variable::AsVariable()  {
-  return rewrite_ == NULL || rewrite_->AsSlot() != NULL ? this : NULL;
-}
-
-
-Slot* Variable::slot() const {
-  return rewrite_ != NULL ? rewrite_->AsSlot() : NULL;
+Slot* Variable::AsSlot() const {
+  return rewrite_ == NULL ? NULL : rewrite_->AsSlot();
 }
 
 
 bool Variable::IsStackAllocated() const {
-  Slot* s = slot();
-  return s != NULL && s->IsStackAllocated();
+  Slot* slot = AsSlot();
+  return slot != NULL && slot->IsStackAllocated();
+}
+
+
+bool Variable::IsParameter() const {
+  Slot* s = AsSlot();
+  return s != NULL && s->type() == Slot::PARAMETER;
+}
+
+
+bool Variable::IsStackLocal() const {
+  Slot* s = AsSlot();
+  return s != NULL && s->type() == Slot::LOCAL;
+}
+
+
+bool Variable::IsContextSlot() const {
+  Slot* s = AsSlot();
+  return s != NULL && s->type() == Slot::CONTEXT;
 }
 
 
@@ -99,12 +112,12 @@ Variable::Variable(Scope* scope,
   : scope_(scope),
     name_(name),
     mode_(mode),
-    is_valid_LHS_(is_valid_LHS),
     kind_(kind),
     local_if_not_shadowed_(NULL),
+    rewrite_(NULL),
+    is_valid_LHS_(is_valid_LHS),
     is_accessed_from_inner_scope_(false),
-    is_used_(false),
-    rewrite_(NULL) {
+    is_used_(false) {
   // names must be canonicalized for fast equality checks
   ASSERT(name->IsSymbol());
 }

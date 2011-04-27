@@ -45,10 +45,12 @@ class Descriptor BASE_EMBEDDED {
     return Smi::cast(value)->value();
   }
 
-  Object* KeyToSymbol() {
+  MUST_USE_RESULT MaybeObject* KeyToSymbol() {
     if (!StringShape(key_).IsSymbol()) {
-      Object* result = Heap::LookupSymbol(key_);
-      if (result->IsFailure()) return result;
+      Object* result;
+      { MaybeObject* maybe_result = Heap::LookupSymbol(key_);
+        if (!maybe_result->ToObject(&result)) return maybe_result;
+      }
       key_ = String::cast(result);
     }
     return key_;
@@ -58,8 +60,8 @@ class Descriptor BASE_EMBEDDED {
   Object* GetValue() { return value_; }
   PropertyDetails GetDetails() { return details_; }
 
-#ifdef DEBUG
-  void Print();
+#ifdef OBJECT_PRINT
+  void Print(FILE* out);
 #endif
 
   void SetEnumerationIndex(int index) {
@@ -264,10 +266,24 @@ class LookupResult BASE_EMBEDDED {
     return Map::cast(GetValue());
   }
 
+  Map* GetTransitionMapFromMap(Map* map) {
+    ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
+    ASSERT(type() == MAP_TRANSITION);
+    return Map::cast(map->instance_descriptors()->GetValue(number_));
+  }
+
   int GetFieldIndex() {
     ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
     ASSERT(type() == FIELD);
     return Descriptor::IndexFromValue(GetValue());
+  }
+
+  int GetLocalFieldIndexFromMap(Map* map) {
+    ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
+    ASSERT(type() == FIELD);
+    return Descriptor::IndexFromValue(
+        map->instance_descriptors()->GetValue(number_)) -
+        map->inobject_properties();
   }
 
   int GetDictionaryEntry() {
@@ -280,6 +296,12 @@ class LookupResult BASE_EMBEDDED {
     return JSFunction::cast(GetValue());
   }
 
+  JSFunction* GetConstantFunctionFromMap(Map* map) {
+    ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
+    ASSERT(type() == CONSTANT_FUNCTION);
+    return JSFunction::cast(map->instance_descriptors()->GetValue(number_));
+  }
+
   Object* GetCallbackObject() {
     if (lookup_type_ == CONSTANT_TYPE) {
       // For now we only have the __proto__ as constant type.
@@ -288,8 +310,8 @@ class LookupResult BASE_EMBEDDED {
     return GetValue();
   }
 
-#ifdef DEBUG
-  void Print();
+#ifdef OBJECT_PRINT
+  void Print(FILE* out);
 #endif
 
   Object* GetValue() {

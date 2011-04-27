@@ -41,6 +41,9 @@ namespace internal {
 
 void CodeCreateEventRecord::UpdateCodeMap(CodeMap* code_map) {
   code_map->AddCode(start, entry, size);
+  if (sfi_address != NULL) {
+    entry->set_shared_id(code_map->GetSFITag(sfi_address));
+  }
 }
 
 
@@ -54,8 +57,8 @@ void CodeDeleteEventRecord::UpdateCodeMap(CodeMap* code_map) {
 }
 
 
-void CodeAliasEventRecord::UpdateCodeMap(CodeMap* code_map) {
-  code_map->AddAlias(start, entry, code_start);
+void SFIMoveEventRecord::UpdateCodeMap(CodeMap* code_map) {
+  code_map->MoveCode(from, to);
 }
 
 
@@ -82,14 +85,11 @@ TickSample* ProfilerEventsProcessor::TickSampleEvent() {
 
 bool ProfilerEventsProcessor::FilterOutCodeCreateEvent(
     Logger::LogEventsAndTags tag) {
-  // In browser mode, leave only callbacks and non-native JS entries.
-  // We filter out regular expressions as currently we can't tell
-  // whether they origin from native scripts, so let's not confise people by
-  // showing them weird regexes they didn't wrote.
   return FLAG_prof_browser_mode
       && (tag != Logger::CALLBACK_TAG
           && tag != Logger::FUNCTION_TAG
           && tag != Logger::LAZY_COMPILE_TAG
+          && tag != Logger::REG_EXP_TAG
           && tag != Logger::SCRIPT_TAG);
 }
 

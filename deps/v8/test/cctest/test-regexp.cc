@@ -64,7 +64,7 @@ static bool CheckParse(const char* input) {
   ZoneScope zone_scope(DELETE_ON_EXIT);
   FlatStringReader reader(CStrVector(input));
   RegExpCompileData result;
-  return v8::internal::ParseRegExp(&reader, false, &result);
+  return v8::internal::RegExpParser::ParseRegExp(&reader, false, &result);
 }
 
 
@@ -74,7 +74,7 @@ static SmartPointer<const char> Parse(const char* input) {
   ZoneScope zone_scope(DELETE_ON_EXIT);
   FlatStringReader reader(CStrVector(input));
   RegExpCompileData result;
-  CHECK(v8::internal::ParseRegExp(&reader, false, &result));
+  CHECK(v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
   CHECK(result.tree != NULL);
   CHECK(result.error.is_null());
   SmartPointer<const char> output = result.tree->ToString();
@@ -88,7 +88,7 @@ static bool CheckSimple(const char* input) {
   ZoneScope zone_scope(DELETE_ON_EXIT);
   FlatStringReader reader(CStrVector(input));
   RegExpCompileData result;
-  CHECK(v8::internal::ParseRegExp(&reader, false, &result));
+  CHECK(v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
   CHECK(result.tree != NULL);
   CHECK(result.error.is_null());
   return result.simple;
@@ -106,7 +106,7 @@ static MinMaxPair CheckMinMaxMatch(const char* input) {
   ZoneScope zone_scope(DELETE_ON_EXIT);
   FlatStringReader reader(CStrVector(input));
   RegExpCompileData result;
-  CHECK(v8::internal::ParseRegExp(&reader, false, &result));
+  CHECK(v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
   CHECK(result.tree != NULL);
   CHECK(result.error.is_null());
   int min_match = result.tree->min_match();
@@ -176,11 +176,23 @@ TEST(Parser) {
   CHECK_PARSE_EQ("[\\d-z]", "[0-9 - z]");
   CHECK_PARSE_EQ("[\\d-\\d]", "[0-9 - 0-9]");
   CHECK_PARSE_EQ("[z-\\d]", "[z - 0-9]");
+  // Control character outside character class.
   CHECK_PARSE_EQ("\\cj\\cJ\\ci\\cI\\ck\\cK",
                  "'\\x0a\\x0a\\x09\\x09\\x0b\\x0b'");
-  CHECK_PARSE_EQ("\\c!", "'c!'");
-  CHECK_PARSE_EQ("\\c_", "'c_'");
-  CHECK_PARSE_EQ("\\c~", "'c~'");
+  CHECK_PARSE_EQ("\\c!", "'\\c!'");
+  CHECK_PARSE_EQ("\\c_", "'\\c_'");
+  CHECK_PARSE_EQ("\\c~", "'\\c~'");
+  CHECK_PARSE_EQ("\\c1", "'\\c1'");
+  // Control character inside character class.
+  CHECK_PARSE_EQ("[\\c!]", "[\\ c !]");
+  CHECK_PARSE_EQ("[\\c_]", "[\\x1f]");
+  CHECK_PARSE_EQ("[\\c~]", "[\\ c ~]");
+  CHECK_PARSE_EQ("[\\ca]", "[\\x01]");
+  CHECK_PARSE_EQ("[\\cz]", "[\\x1a]");
+  CHECK_PARSE_EQ("[\\cA]", "[\\x01]");
+  CHECK_PARSE_EQ("[\\cZ]", "[\\x1a]");
+  CHECK_PARSE_EQ("[\\c1]", "[\\x11]");
+
   CHECK_PARSE_EQ("[a\\]c]", "[a ] c]");
   CHECK_PARSE_EQ("\\[\\]\\{\\}\\(\\)\\%\\^\\#\\ ", "'[]{}()%^# '");
   CHECK_PARSE_EQ("[\\[\\]\\{\\}\\(\\)\\%\\^\\#\\ ]", "[[ ] { } ( ) % ^ #  ]");
@@ -234,7 +246,7 @@ TEST(Parser) {
   CHECK_PARSE_EQ("\\x34", "'\x34'");
   CHECK_PARSE_EQ("\\x60", "'\x60'");
   CHECK_PARSE_EQ("\\x3z", "'x3z'");
-  CHECK_PARSE_EQ("\\c", "'c'");
+  CHECK_PARSE_EQ("\\c", "'\\c'");
   CHECK_PARSE_EQ("\\u0034", "'\x34'");
   CHECK_PARSE_EQ("\\u003z", "'u003z'");
   CHECK_PARSE_EQ("foo[z]*", "(: 'foo' (# 0 - g [z]))");
@@ -365,7 +377,7 @@ static void ExpectError(const char* input,
   ZoneScope zone_scope(DELETE_ON_EXIT);
   FlatStringReader reader(CStrVector(input));
   RegExpCompileData result;
-  CHECK_EQ(false, v8::internal::ParseRegExp(&reader, false, &result));
+  CHECK(!v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
   CHECK(result.tree == NULL);
   CHECK(!result.error.is_null());
   SmartPointer<char> str = result.error->ToCString(ALLOW_NULLS);
@@ -473,7 +485,8 @@ static RegExpNode* Compile(const char* input, bool multiline, bool is_ascii) {
   V8::Initialize(NULL);
   FlatStringReader reader(CStrVector(input));
   RegExpCompileData compile_data;
-  if (!v8::internal::ParseRegExp(&reader, multiline, &compile_data))
+  if (!v8::internal::RegExpParser::ParseRegExp(&reader, multiline,
+                                               &compile_data))
     return NULL;
   Handle<String> pattern = Factory::NewStringFromUtf8(CStrVector(input));
   RegExpEngine::Compile(&compile_data, false, multiline, pattern, is_ascii);

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -33,6 +33,8 @@
 
 namespace v8 {
 namespace internal {
+
+class CompilationInfo;
 
 
 // A hash map to support fast variable declaration and lookup.
@@ -97,11 +99,23 @@ class Scope: public ZoneObject {
 
   virtual ~Scope() { }
 
+  // Compute top scope and allocate variables. For lazy compilation the top
+  // scope only contains the single lazily compiled function, so this
+  // doesn't re-allocate variables repeatedly.
+  static bool Analyze(CompilationInfo* info);
+
+  static Scope* DeserializeScopeChain(CompilationInfo* info,
+                                      Scope* innermost_scope);
+
   // The scope name is only used for printing/debugging.
-  void SetScopeName(Handle<String> scope_name)  { scope_name_ = scope_name; }
+  void SetScopeName(Handle<String> scope_name) { scope_name_ = scope_name; }
 
-  void Initialize(bool inside_with);
+  virtual void Initialize(bool inside_with);
 
+  // Called just before leaving a scope.
+  virtual void Leave() {
+    // No cleanup or fixup necessary.
+  }
 
   // ---------------------------------------------------------------------------
   // Declarations
@@ -145,11 +159,11 @@ class Scope: public ZoneObject {
   // such a variable again if it was added; otherwise this is a no-op.
   void RemoveUnresolved(VariableProxy* var);
 
-  // Creates a new temporary variable in this scope and binds a proxy to it.
-  // The name is only used for printing and cannot be used to find the variable.
-  // In particular, the only way to get hold of the temporary is by keeping the
-  // VariableProxy* around.
-  virtual VariableProxy* NewTemporary(Handle<String> name);
+  // Creates a new temporary variable in this scope.  The name is only used
+  // for printing and cannot be used to find the variable.  In particular,
+  // the only way to get hold of the temporary is by keeping the Variable*
+  // around.
+  virtual Variable* NewTemporary(Handle<String> name);
 
   // Adds the specific declaration node to the list of declarations in
   // this scope. The declarations are processed as part of entering
@@ -177,31 +191,31 @@ class Scope: public ZoneObject {
   // Scope-specific info.
 
   // Inform the scope that the corresponding code contains a with statement.
-  void RecordWithStatement()  { scope_contains_with_ = true; }
+  void RecordWithStatement() { scope_contains_with_ = true; }
 
   // Inform the scope that the corresponding code contains an eval call.
-  void RecordEvalCall()  { scope_calls_eval_ = true; }
+  void RecordEvalCall() { scope_calls_eval_ = true; }
 
 
   // ---------------------------------------------------------------------------
   // Predicates.
 
   // Specific scope types.
-  bool is_eval_scope() const  { return type_ == EVAL_SCOPE; }
-  bool is_function_scope() const  { return type_ == FUNCTION_SCOPE; }
-  bool is_global_scope() const  { return type_ == GLOBAL_SCOPE; }
+  bool is_eval_scope() const { return type_ == EVAL_SCOPE; }
+  bool is_function_scope() const { return type_ == FUNCTION_SCOPE; }
+  bool is_global_scope() const { return type_ == GLOBAL_SCOPE; }
 
   // Information about which scopes calls eval.
-  bool calls_eval() const  { return scope_calls_eval_; }
-  bool outer_scope_calls_eval() const  { return outer_scope_calls_eval_; }
+  bool calls_eval() const { return scope_calls_eval_; }
+  bool outer_scope_calls_eval() const { return outer_scope_calls_eval_; }
 
   // Is this scope inside a with statement.
-  bool inside_with() const  { return scope_inside_with_; }
+  bool inside_with() const { return scope_inside_with_; }
   // Does this scope contain a with statement.
-  bool contains_with() const  { return scope_contains_with_; }
+  bool contains_with() const { return scope_contains_with_; }
 
   // The scope immediately surrounding this scope, or NULL.
-  Scope* outer_scope() const  { return outer_scope_; }
+  Scope* outer_scope() const { return outer_scope_; }
 
   // ---------------------------------------------------------------------------
   // Accessors.
@@ -217,27 +231,27 @@ class Scope: public ZoneObject {
   // The variable holding the function literal for named function
   // literals, or NULL.
   // Only valid for function scopes.
-  Variable* function() const  {
+  Variable* function() const {
     ASSERT(is_function_scope());
     return function_;
   }
 
   // Parameters. The left-most parameter has index 0.
   // Only valid for function scopes.
-  Variable* parameter(int index) const  {
+  Variable* parameter(int index) const {
     ASSERT(is_function_scope());
     return params_[index];
   }
 
-  int num_parameters() const  { return params_.length(); }
+  int num_parameters() const { return params_.length(); }
 
   // The local variable 'arguments' if we need to allocate it; NULL otherwise.
   // If arguments() exist, arguments_shadow() exists, too.
-  VariableProxy* arguments()  const  { return arguments_; }
+  Variable* arguments() const { return arguments_; }
 
   // The '.arguments' shadow variable if we need to allocate it; NULL otherwise.
   // If arguments_shadow() exist, arguments() exists, too.
-  VariableProxy* arguments_shadow()  const  { return arguments_shadow_; }
+  Variable* arguments_shadow() const { return arguments_shadow_; }
 
   // Declarations list.
   ZoneList<Declaration*>* declarations() { return &decls_; }
@@ -262,8 +276,8 @@ class Scope: public ZoneObject {
   void AllocateVariables(Handle<Context> context);
 
   // Result of variable allocation.
-  int num_stack_slots() const  { return num_stack_slots_; }
-  int num_heap_slots() const  { return num_heap_slots_; }
+  int num_stack_slots() const { return num_stack_slots_; }
+  int num_heap_slots() const { return num_heap_slots_; }
 
   // Make sure this scope and all outer scopes are eagerly compiled.
   void ForceEagerCompilation()  { force_eager_compilation_ = true; }
@@ -272,10 +286,21 @@ class Scope: public ZoneObject {
   bool AllowsLazyCompilation() const;
 
   // True if the outer context of this scope is always the global context.
-  bool HasTrivialOuterContext() const;
+  virtual bool HasTrivialOuterContext() const;
 
   // The number of contexts between this and scope; zero if this == scope.
   int ContextChainLength(Scope* scope);
+
+  // ---------------------------------------------------------------------------
+  // Strict mode support.
+  bool IsDeclared(Handle<String> name) {
+    // During formal parameter list parsing the scope only contains
+    // two variables inserted at initialization: "this" and "arguments".
+    // "this" is an invalid parameter name and "arguments" is invalid parameter
+    // name in strict mode. Therefore looking up with the map which includes
+    // "this" and "arguments" in addition to all formal parameters is safe.
+    return variables_.Lookup(name) != NULL;
+  }
 
   // ---------------------------------------------------------------------------
   // Debugging.
@@ -322,9 +347,9 @@ class Scope: public ZoneObject {
   // Function variable, if any; function scopes only.
   Variable* function_;
   // Convenience variable; function scopes only.
-  VariableProxy* arguments_;
+  Variable* arguments_;
   // Convenience variable; function scopes only.
-  VariableProxy* arguments_shadow_;
+  Variable* arguments_shadow_;
 
   // Illegal redeclaration.
   Expression* illegal_redecl_;
@@ -343,6 +368,10 @@ class Scope: public ZoneObject {
   // Computed via AllocateVariables; function scopes only.
   int num_stack_slots_;
   int num_heap_slots_;
+
+  // Serialized scopes support.
+  Handle<SerializedScopeInfo> scope_info_;
+  bool resolved() { return !scope_info_.is_null(); }
 
   // Create a non-local variable with a given name.
   // These variables are looked up dynamically at runtime.
@@ -375,23 +404,70 @@ class Scope: public ZoneObject {
   void AllocateNonParameterLocal(Variable* var);
   void AllocateNonParameterLocals();
   void AllocateVariablesRecursively();
+
+ private:
+  Scope(Scope* inner_scope, Handle<SerializedScopeInfo> scope_info);
+
+  void AddInnerScope(Scope* inner_scope) {
+    if (inner_scope != NULL) {
+      inner_scopes_.Add(inner_scope);
+      inner_scope->outer_scope_ = this;
+    }
+  }
+
+  void SetDefaults(Type type,
+                   Scope* outer_scope,
+                   Handle<SerializedScopeInfo> scope_info);
 };
 
 
+// Scope used during pre-parsing.
 class DummyScope : public Scope {
  public:
-  DummyScope() : Scope(GLOBAL_SCOPE) {
+  DummyScope()
+      : Scope(GLOBAL_SCOPE),
+        nesting_level_(1),  // Allows us to Leave the initial scope.
+        inside_with_level_(kNotInsideWith) {
     outer_scope_ = this;
+    scope_inside_with_ = false;
+  }
+
+  virtual void Initialize(bool inside_with) {
+    nesting_level_++;
+    if (inside_with && inside_with_level_ == kNotInsideWith) {
+      inside_with_level_ = nesting_level_;
+    }
+    ASSERT(inside_with_level_ <= nesting_level_);
+  }
+
+  virtual void Leave() {
+    nesting_level_--;
+    ASSERT(nesting_level_ >= 0);
+    if (nesting_level_ < inside_with_level_) {
+      inside_with_level_ = kNotInsideWith;
+    }
+    ASSERT(inside_with_level_ <= nesting_level_);
   }
 
   virtual Variable* Lookup(Handle<String> name)  { return NULL; }
-  virtual Variable* Declare(Handle<String> name, Variable::Mode mode) {
-    return NULL;
-  }
+
   virtual VariableProxy* NewUnresolved(Handle<String> name, bool inside_with) {
     return NULL;
   }
-  virtual VariableProxy* NewTemporary(Handle<String> name)  { return NULL; }
+
+  virtual Variable* NewTemporary(Handle<String> name)  { return NULL; }
+
+  virtual bool HasTrivialOuterContext() const {
+    return (nesting_level_ == 0 || inside_with_level_ <= 0);
+  }
+
+ private:
+  static const int kNotInsideWith = -1;
+  // Number of surrounding scopes of the current scope.
+  int nesting_level_;
+  // Nesting level of outermost scope that is contained in a with statement,
+  // or kNotInsideWith if there are no with's around the current scope.
+  int inside_with_level_;
 };
 
 

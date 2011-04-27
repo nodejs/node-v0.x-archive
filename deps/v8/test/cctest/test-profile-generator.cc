@@ -89,6 +89,26 @@ TEST(ProfileNodeFindOrAddChild) {
 }
 
 
+TEST(ProfileNodeFindOrAddChildForSameFunction) {
+  const char* empty = "";
+  const char* aaa = "aaa";
+  ProfileNode node(NULL, NULL);
+  CodeEntry entry1(i::Logger::FUNCTION_TAG, empty, aaa, empty, 0,
+                     TokenEnumerator::kNoSecurityToken);
+  ProfileNode* childNode1 = node.FindOrAddChild(&entry1);
+  CHECK_NE(NULL, childNode1);
+  CHECK_EQ(childNode1, node.FindOrAddChild(&entry1));
+  // The same function again.
+  CodeEntry entry2(i::Logger::FUNCTION_TAG, empty, aaa, empty, 0,
+                   TokenEnumerator::kNoSecurityToken);
+  CHECK_EQ(childNode1, node.FindOrAddChild(&entry2));
+  // Now with a different security token.
+  CodeEntry entry3(i::Logger::FUNCTION_TAG, empty, aaa, empty, 0,
+                   TokenEnumerator::kNoSecurityToken + 1);
+  CHECK_EQ(childNode1, node.FindOrAddChild(&entry3));
+}
+
+
 namespace {
 
 class ProfileTreeTestHelper {
@@ -580,13 +600,13 @@ TEST(RecordTickSample) {
   //      -> ccc -> aaa  - sample3
   TickSample sample1;
   sample1.pc = ToAddress(0x1600);
-  sample1.function = ToAddress(0x1500);
+  sample1.tos = ToAddress(0x1500);
   sample1.stack[0] = ToAddress(0x1510);
   sample1.frames_count = 1;
   generator.RecordTickSample(sample1);
   TickSample sample2;
   sample2.pc = ToAddress(0x1925);
-  sample2.function = ToAddress(0x1900);
+  sample2.tos = ToAddress(0x1900);
   sample2.stack[0] = ToAddress(0x1780);
   sample2.stack[1] = ToAddress(0x10000);  // non-existent.
   sample2.stack[2] = ToAddress(0x1620);
@@ -594,7 +614,7 @@ TEST(RecordTickSample) {
   generator.RecordTickSample(sample2);
   TickSample sample3;
   sample3.pc = ToAddress(0x1510);
-  sample3.function = ToAddress(0x1500);
+  sample3.tos = ToAddress(0x1500);
   sample3.stack[0] = ToAddress(0x1910);
   sample3.stack[1] = ToAddress(0x1610);
   sample3.frames_count = 2;
@@ -737,6 +757,10 @@ static const ProfileNode* PickChild(const ProfileNode* parent,
 
 
 TEST(RecordStackTraceAtStartProfiling) {
+  // This test does not pass with inlining enabled since inlined functions
+  // don't appear in the stack trace.
+  i::FLAG_use_inlining = false;
+
   if (env.IsEmpty()) {
     v8::HandleScope scope;
     const char* extensions[] = { "v8/profiler" };
@@ -758,12 +782,16 @@ TEST(RecordStackTraceAtStartProfiling) {
       CpuProfiler::GetProfile(NULL, 0);
   const ProfileTree* topDown = profile->top_down();
   const ProfileNode* current = topDown->root();
+  const_cast<ProfileNode*>(current)->Print(0);
   // The tree should look like this:
   //  (root)
   //   (anonymous function)
   //     a
   //       b
   //         c
+  // There can also be:
+  //           startProfiling
+  // if the sampler managed to get a tick.
   current = PickChild(current, "(anonymous function)");
   CHECK_NE(NULL, const_cast<ProfileNode*>(current));
   current = PickChild(current, "a");
@@ -772,7 +800,12 @@ TEST(RecordStackTraceAtStartProfiling) {
   CHECK_NE(NULL, const_cast<ProfileNode*>(current));
   current = PickChild(current, "c");
   CHECK_NE(NULL, const_cast<ProfileNode*>(current));
-  CHECK_EQ(0, current->children()->length());
+  CHECK(current->children()->length() == 0 ||
+        current->children()->length() == 1);
+  if (current->children()->length() == 1) {
+    current = PickChild(current, "startProfiling");
+    CHECK_EQ(0, current->children()->length());
+  }
 }
 
 

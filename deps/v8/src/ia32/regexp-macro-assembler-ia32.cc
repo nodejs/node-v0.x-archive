@@ -133,7 +133,6 @@ int RegExpMacroAssemblerIA32::stack_limit_slack()  {
 
 void RegExpMacroAssemblerIA32::AdvanceCurrentPosition(int by) {
   if (by != 0) {
-    Label inside_string;
     __ add(Operand(edi), Immediate(by * char_size()));
   }
 }
@@ -212,9 +211,7 @@ void RegExpMacroAssemblerIA32::CheckCharacters(Vector<const uc16> str,
   // If input is ASCII, don't even bother calling here if the string to
   // match contains a non-ascii character.
   if (mode_ == ASCII) {
-    for (int i = 0; i < str.length(); i++) {
-      ASSERT(str[i] <= String::kMaxAsciiCharCodeU);
-    }
+    ASSERT(String::IsAscii(str.start(), str.length()));
   }
 #endif
   int byte_length = str.length() * char_size();
@@ -655,7 +652,7 @@ bool RegExpMacroAssemblerIA32::CheckSpecialCharacterClass(uc16 type,
 
 void RegExpMacroAssemblerIA32::Fail() {
   ASSERT(FAILURE == 0);  // Return value for failure is zero.
-  __ xor_(eax, Operand(eax));  // zero eax.
+  __ Set(eax, Immediate(0));
   __ jmp(&exit_label_);
 }
 
@@ -964,6 +961,17 @@ void RegExpMacroAssemblerIA32::ReadStackPointerFromRegister(int reg) {
   __ add(backtrack_stackpointer(), Operand(ebp, kStackHighEnd));
 }
 
+void RegExpMacroAssemblerIA32::SetCurrentPositionFromEnd(int by)  {
+  NearLabel after_position;
+  __ cmp(edi, -by * char_size());
+  __ j(greater_equal, &after_position);
+  __ mov(edi, -by * char_size());
+  // On RegExp code entry (where this operation is used), the character before
+  // the current position is expected to be already loaded.
+  // We have advanced the position, so it's safe to read backwards.
+  LoadCurrentCharacterUnchecked(-1, 1);
+  __ bind(&after_position);
+}
 
 void RegExpMacroAssemblerIA32::SetRegister(int register_index, int to) {
   ASSERT(register_index >= num_saved_registers_);  // Reserved for positions!
@@ -1057,7 +1065,7 @@ int RegExpMacroAssemblerIA32::CheckStackGuardState(Address* return_address,
   ASSERT(*return_address <=
       re_code->instruction_start() + re_code->instruction_size());
 
-  Object* result = Execution::HandleStackGuardInterrupt();
+  MaybeObject* result = Execution::HandleStackGuardInterrupt();
 
   if (*code_handle != re_code) {  // Return address no longer valid
     int delta = *code_handle - re_code;

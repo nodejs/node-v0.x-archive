@@ -104,7 +104,7 @@ TEST(ExternalReferenceEncoder) {
   ExternalReferenceEncoder encoder;
   CHECK_EQ(make_code(BUILTIN, Builtins::ArrayCode),
            Encode(encoder, Builtins::ArrayCode));
-  CHECK_EQ(make_code(RUNTIME_FUNCTION, Runtime::kAbort),
+  CHECK_EQ(make_code(v8::internal::RUNTIME_FUNCTION, Runtime::kAbort),
            Encode(encoder, Runtime::kAbort));
   CHECK_EQ(make_code(IC_UTILITY, IC::kLoadCallbackProperty),
            Encode(encoder, IC_Utility(IC::kLoadCallbackProperty)));
@@ -142,7 +142,8 @@ TEST(ExternalReferenceDecoder) {
   CHECK_EQ(AddressOf(Builtins::ArrayCode),
            decoder.Decode(make_code(BUILTIN, Builtins::ArrayCode)));
   CHECK_EQ(AddressOf(Runtime::kAbort),
-           decoder.Decode(make_code(RUNTIME_FUNCTION, Runtime::kAbort)));
+           decoder.Decode(make_code(v8::internal::RUNTIME_FUNCTION,
+                                    Runtime::kAbort)));
   CHECK_EQ(AddressOf(IC_Utility(IC::kLoadCallbackProperty)),
            decoder.Decode(make_code(IC_UTILITY, IC::kLoadCallbackProperty)));
   ExternalReference keyed_load_function =
@@ -216,6 +217,7 @@ void FileByteSink::WriteSpaceUsed(
   Vector<char> name = Vector<char>::New(file_name_length + 1);
   OS::SNPrintF(name, "%s.size", file_name_);
   FILE* fp = OS::FOpen(name.start(), "w");
+  name.Dispose();
   fprintf(fp, "new %d\n", new_space_used);
   fprintf(fp, "pointer %d\n", pointer_space_used);
   fprintf(fp, "data %d\n", data_space_used);
@@ -381,6 +383,7 @@ TEST(PartialSerialization) {
   env.Dispose();
 
   FileByteSink startup_sink(startup_name.start());
+  startup_name.Dispose();
   StartupSerializer startup_serializer(&startup_sink);
   startup_serializer.SerializeStrongReferences();
 
@@ -403,6 +406,7 @@ static void ReserveSpaceForPartialSnapshot(const char* file_name) {
   Vector<char> name = Vector<char>::New(file_name_length + 1);
   OS::SNPrintF(name, "%s.size", file_name);
   FILE* fp = OS::FOpen(name.start(), "r");
+  name.Dispose();
   int new_size, pointer_size, data_size, code_size, map_size, cell_size;
   int large_size;
 #ifdef _MSC_VER
@@ -438,6 +442,7 @@ DEPENDENT_TEST(PartialDeserialization, PartialSerialization) {
     OS::SNPrintF(startup_name, "%s.startup", FLAG_testing_serialization_file);
 
     CHECK(Snapshot::Initialize(startup_name.start()));
+    startup_name.Dispose();
 
     const char* file_name = FLAG_testing_serialization_file;
     ReserveSpaceForPartialSnapshot(file_name);
@@ -495,6 +500,7 @@ TEST(ContextSerialization) {
   env.Dispose();
 
   FileByteSink startup_sink(startup_name.start());
+  startup_name.Dispose();
   StartupSerializer startup_serializer(&startup_sink);
   startup_serializer.SerializeStrongReferences();
 
@@ -519,6 +525,7 @@ DEPENDENT_TEST(ContextDeserialization, ContextSerialization) {
     OS::SNPrintF(startup_name, "%s.startup", FLAG_testing_serialization_file);
 
     CHECK(Snapshot::Initialize(startup_name.start()));
+    startup_name.Dispose();
 
     const char* file_name = FLAG_testing_serialization_file;
     ReserveSpaceForPartialSnapshot(file_name);
@@ -576,7 +583,8 @@ TEST(LinearAllocation) {
     for (int i = 0;
          i + kSmallFixedArraySize <= new_space_size;
          i += kSmallFixedArraySize) {
-      Object* obj = Heap::AllocateFixedArray(kSmallFixedArrayLength);
+      Object* obj =
+          Heap::AllocateFixedArray(kSmallFixedArrayLength)->ToObjectChecked();
       if (new_last != NULL) {
         CHECK(reinterpret_cast<char*>(obj) ==
               reinterpret_cast<char*>(new_last) + kSmallFixedArraySize);
@@ -588,7 +596,8 @@ TEST(LinearAllocation) {
     for (int i = 0;
          i + kSmallFixedArraySize <= size;
          i += kSmallFixedArraySize) {
-      Object* obj = Heap::AllocateFixedArray(kSmallFixedArrayLength, TENURED);
+      Object* obj = Heap::AllocateFixedArray(kSmallFixedArrayLength,
+                                             TENURED)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kSmallFixedArraySize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
@@ -605,7 +614,8 @@ TEST(LinearAllocation) {
 
     Object* data_last = NULL;
     for (int i = 0; i + kSmallStringSize <= size; i += kSmallStringSize) {
-      Object* obj = Heap::AllocateRawAsciiString(kSmallStringLength, TENURED);
+      Object* obj = Heap::AllocateRawAsciiString(kSmallStringLength,
+                                                 TENURED)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kSmallStringSize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
@@ -622,7 +632,8 @@ TEST(LinearAllocation) {
 
     Object* map_last = NULL;
     for (int i = 0; i + kMapSize <= size; i += kMapSize) {
-      Object* obj = Heap::AllocateMap(JS_OBJECT_TYPE, 42 * kPointerSize);
+      Object* obj = Heap::AllocateMap(JS_OBJECT_TYPE,
+                                      42 * kPointerSize)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kMapSize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
@@ -644,7 +655,7 @@ TEST(LinearAllocation) {
       int large_object_array_length =
           (size - FixedArray::kHeaderSize) / kPointerSize;
       Object* obj = Heap::AllocateFixedArray(large_object_array_length,
-                                             TENURED);
+                                             TENURED)->ToObjectChecked();
       CHECK(!obj->IsFailure());
     }
   }

@@ -31,7 +31,13 @@
 # char arrays. It is used for embedded JavaScript code in the V8
 # library.
 
-import os, re, sys, string
+import os
+from os.path import dirname
+import re
+import sys
+import string
+
+sys.path.append(dirname(__file__) + "/../deps/v8/tools");
 import jsmin
 
 
@@ -47,7 +53,7 @@ def ToCArray(filename, lines):
 
     value = ord(chr)
 
-    if value > 128:
+    if value >= 128:
       print 'non-ascii value ' + filename + ':' + str(row) + ':' + str(col)
       sys.exit(1);
 
@@ -211,13 +217,31 @@ namespace node {
 
 %(source_lines)s\
 
+struct _native {
+  const char* name;
+  const char* source;
+  size_t source_len;
+};
+
+static const struct _native natives[] = {
+
+%(native_lines)s\
+
+  { NULL, NULL } /* sentinel */
+
+};
+
 }
 #endif
 """
 
 
+NATIVE_DECLARATION = """\
+  { "%(id)s", %(id)s_native, sizeof(%(id)s_native)-1 },
+"""
+
 SOURCE_DECLARATION = """\
-  static const char native_%(id)s[] = { %(data)s };
+  const char %(id)s_native[] = { %(data)s };
 """
 
 
@@ -252,6 +276,9 @@ def JS2C(source, target):
   # Build source code lines
   source_lines = [ ]
   source_lines_empty = []
+
+  native_lines = []
+
   for s in modules:
     delay = str(s).endswith('-delay.js')
     lines = ReadFile(str(s))
@@ -269,6 +296,7 @@ def JS2C(source, target):
       ids.append((id, len(lines)))
     source_lines.append(SOURCE_DECLARATION % { 'id': id, 'data': data })
     source_lines_empty.append(SOURCE_DECLARATION % { 'id': id, 'data': 0 })
+    native_lines.append(NATIVE_DECLARATION % { 'id': id })
   
   # Build delay support functions
   get_index_cases = [ ]
@@ -312,6 +340,7 @@ def JS2C(source, target):
     'builtin_count': len(ids) + len(delay_ids),
     'delay_count': len(delay_ids),
     'source_lines': "\n".join(source_lines),
+    'native_lines': "\n".join(native_lines),
     'get_index_cases': "".join(get_index_cases),
     'get_script_source_cases': "".join(get_script_source_cases),
     'get_script_name_cases': "".join(get_script_name_cases)
@@ -329,3 +358,11 @@ def JS2C(source, target):
       'get_script_name_cases': "".join(get_script_name_cases)
     })
     output.close()
+
+def main():
+  natives = sys.argv[1]
+  source_files = sys.argv[2:]
+  JS2C(source_files, [natives])
+
+if __name__ == "__main__":
+  main()

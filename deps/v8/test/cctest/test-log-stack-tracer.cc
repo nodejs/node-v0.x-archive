@@ -33,12 +33,14 @@
 
 #include "v8.h"
 
+#include "api.h"
 #include "codegen.h"
 #include "log.h"
 #include "top.h"
 #include "cctest.h"
 #include "disassembler.h"
 #include "register-allocator-inl.h"
+#include "vm-state-inl.h"
 
 using v8::Function;
 using v8::Local;
@@ -199,45 +201,16 @@ static void InitializeVM() {
 }
 
 
-static Handle<JSFunction> CompileFunction(const char* source) {
-  Handle<JSFunction> result(JSFunction::cast(
-      *v8::Utils::OpenHandle(*Script::Compile(String::New(source)))));
-  return result;
+static bool IsAddressWithinFuncCode(JSFunction* function, Address addr) {
+  i::Code* code = function->code();
+  return code->contains(addr);
 }
 
-
-static Local<Value> GetGlobalProperty(const char* name) {
-  return env->Global()->Get(String::New(name));
-}
-
-
-static Handle<JSFunction> GetGlobalJSFunction(const char* name) {
-  Handle<JSFunction> result(JSFunction::cast(
-      *v8::Utils::OpenHandle(*GetGlobalProperty(name))));
-  return result;
-}
-
-
-static void CheckObjectIsJSFunction(const char* func_name,
-                                    Address addr) {
-  i::Object* obj = reinterpret_cast<i::Object*>(addr);
-  CHECK(obj->IsJSFunction());
-  CHECK(JSFunction::cast(obj)->shared()->name()->IsString());
-  i::SmartPointer<char> found_name =
-      i::String::cast(
-          JSFunction::cast(
-              obj)->shared()->name())->ToCString();
-  CHECK_EQ(func_name, *found_name);
-}
-
-
-static void SetGlobalProperty(const char* name, Local<Value> value) {
-  env->Global()->Set(String::New(name), value);
-}
-
-
-static Handle<v8::internal::String> NewString(const char* s) {
-  return i::Factory::NewStringFromAscii(i::CStrVector(s));
+static bool IsAddressWithinFuncCode(const char* func_name, Address addr) {
+  v8::Local<v8::Value> func = env->Global()->Get(v8_str(func_name));
+  CHECK(func->IsFunction());
+  JSFunction* js_func = JSFunction::cast(*v8::Utils::OpenHandle(*func));
+  return IsAddressWithinFuncCode(js_func, addr);
 }
 
 
@@ -254,11 +227,12 @@ static v8::Handle<Value> construct_call(const v8::Arguments& args) {
   CHECK(calling_frame->is_java_script());
 
 #if defined(V8_HOST_ARCH_32_BIT)
-  int32_t low_bits = reinterpret_cast<intptr_t>(calling_frame->fp());
+  int32_t low_bits = reinterpret_cast<int32_t>(calling_frame->fp());
   args.This()->Set(v8_str("low_bits"), v8_num(low_bits >> 1));
 #elif defined(V8_HOST_ARCH_64_BIT)
-  int32_t low_bits = reinterpret_cast<uintptr_t>(calling_frame->fp());
-  int32_t high_bits = reinterpret_cast<uintptr_t>(calling_frame->fp()) >> 32;
+  uint64_t fp = reinterpret_cast<uint64_t>(calling_frame->fp());
+  int32_t low_bits = static_cast<int32_t>(fp & 0xffffffff);
+  int32_t high_bits = static_cast<int32_t>(fp >> 32);
   args.This()->Set(v8_str("low_bits"), v8_num(low_bits));
   args.This()->Set(v8_str("high_bits"), v8_num(high_bits));
 #else
@@ -285,26 +259,18 @@ static void CreateTraceCallerFunction(const char* func_name,
                                       const char* trace_func_name) {
   i::EmbeddedVector<char, 256> trace_call_buf;
   i::OS::SNPrintF(trace_call_buf,
-                  "fp = new FPGrabber(); %s(fp.low_bits, fp.high_bits);",
-                  trace_func_name);
+                  "function %s() {"
+                  "  fp = new FPGrabber();"
+                  "  %s(fp.low_bits, fp.high_bits);"
+                  "}",
+                  func_name, trace_func_name);
 
   // Create the FPGrabber function, which grabs the caller's frame pointer
   // when called as a constructor.
   CreateFramePointerGrabberConstructor("FPGrabber");
 
   // Compile the script.
-  Handle<JSFunction> func = CompileFunction(trace_call_buf.start());
-  CHECK(!func.is_null());
-  func->shared()->set_name(*NewString(func_name));
-
-#ifdef DEBUG
-  v8::internal::Code* func_code = func->code();
-  CHECK(func_code->IsCode());
-  func_code->Print();
-#endif
-
-  SetGlobalProperty(func_name, v8::ToApi<Value>(func));
-  CHECK_EQ(*func, *GetGlobalJSFunction(func_name));
+  CompileRun(trace_call_buf.start());
 }
 
 
@@ -332,13 +298,20 @@ TEST(CFromJSStackTrace) {
   // script [JS]
   //   JSTrace() [JS]
   //     JSFuncDoTrace() [JS] [captures EBP value and encodes it as Smi]
-  //       trace(EBP encoded as Smi) [native (extension)]
+  //       trace(EBP) [native (extension)]
   //         DoTrace(EBP) [native]
   //           StackTracer::Trace
-  CHECK_GT(sample.frames_count, 1);
+
+  // The VM state tracking keeps track of external callbacks and puts
+  // them at the top of the sample stack.
+  int base = 0;
+  CHECK(sample.stack[0] == FUNCTION_ADDR(TraceExtension::Trace));
+  base++;
+
   // Stack tracing will start from the first JS function, i.e. "JSFuncDoTrace"
-  CheckObjectIsJSFunction("JSFuncDoTrace", sample.stack[0]);
-  CheckObjectIsJSFunction("JSTrace", sample.stack[1]);
+  CHECK_GT(sample.frames_count, base + 1);
+  CHECK(IsAddressWithinFuncCode("JSFuncDoTrace", sample.stack[base + 0]));
+  CHECK(IsAddressWithinFuncCode("JSTrace", sample.stack[base + 1]));
 }
 
 
@@ -348,6 +321,10 @@ TEST(CFromJSStackTrace) {
 // Top::c_entry_fp value. In this case, StackTracer uses passed frame
 // pointer value as a starting point for stack walking.
 TEST(PureJSStackTrace) {
+  // This test does not pass with inlining enabled since inlined functions
+  // don't appear in the stack trace.
+  i::FLAG_use_inlining = false;
+
   TickSample sample;
   InitTraceEnv(&sample);
 
@@ -370,19 +347,22 @@ TEST(PureJSStackTrace) {
   // script [JS]
   //   OuterJSTrace() [JS]
   //     JSTrace() [JS]
-  //       JSFuncDoTrace() [JS] [captures EBP value and encodes it as Smi]
-  //         js_trace(EBP encoded as Smi) [native (extension)]
+  //       JSFuncDoTrace() [JS]
+  //         js_trace(EBP) [native (extension)]
   //           DoTraceHideCEntryFPAddress(EBP) [native]
   //             StackTracer::Trace
   //
-  // The last JS function called. It is only visible through
-  // sample.function, as its return address is above captured EBP value.
-  CHECK_EQ(GetGlobalJSFunction("JSFuncDoTrace")->address(),
-           sample.function);
-  CHECK_GT(sample.frames_count, 1);
+
+  // The VM state tracking keeps track of external callbacks and puts
+  // them at the top of the sample stack.
+  int base = 0;
+  CHECK(sample.stack[0] == FUNCTION_ADDR(TraceExtension::JSTrace));
+  base++;
+
   // Stack sampling will start from the caller of JSFuncDoTrace, i.e. "JSTrace"
-  CheckObjectIsJSFunction("JSTrace", sample.stack[0]);
-  CheckObjectIsJSFunction("OuterJSTrace", sample.stack[1]);
+  CHECK_GT(sample.frames_count, base + 1);
+  CHECK(IsAddressWithinFuncCode("JSTrace", sample.stack[base + 0]));
+  CHECK(IsAddressWithinFuncCode("OuterJSTrace", sample.stack[base + 1]));
 }
 
 

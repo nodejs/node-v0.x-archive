@@ -1,4 +1,24 @@
-// Copyright 2009 Ryan Dahl <ry@tinyclouds.org>
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node_io_watcher.h>
 
 #include <node.h>
@@ -51,9 +71,7 @@ void IOWatcher::Callback(EV_P_ ev_io *w, int revents) {
   argv[0] = Local<Value>::New(revents & EV_READ ? True() : False());
   argv[1] = Local<Value>::New(revents & EV_WRITE ? True() : False());
 
-  io->Ref();
   callback->Call(io->handle_, 2, argv);
-  io->Unref();
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
@@ -68,6 +86,10 @@ void IOWatcher::Callback(EV_P_ ev_io *w, int revents) {
 //  io.start();
 //
 Handle<Value> IOWatcher::New(const Arguments& args) {
+  if (!args.IsConstructCall()) {
+    return FromConstructorTemplate(constructor_template, args);
+  }
+
   HandleScope scope;
   IOWatcher *s = new IOWatcher();
   s->Wrap(args.This());
@@ -135,6 +157,7 @@ Handle<Value> IOWatcher::Set(const Arguments& args) {
 
   if (args[2]->IsTrue()) events |= EV_WRITE;
 
+  assert(!io->watcher_.active);
   ev_io_set(&io->watcher_, fd, events);
 
   return Undefined();

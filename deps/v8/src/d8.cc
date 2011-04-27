@@ -127,11 +127,13 @@ bool Shell::ExecuteString(Handle<String> source,
   } else {
     Handle<Value> result = script->Run();
     if (result.IsEmpty()) {
+      ASSERT(try_catch.HasCaught());
       // Print errors that happened during execution.
       if (report_exceptions && !i::FLAG_debugger)
         ReportException(&try_catch);
       return false;
     } else {
+      ASSERT(!try_catch.HasCaught());
       if (print_result && !result->IsUndefined()) {
         // If all went well and the result wasn't undefined then print
         // the returned value.
@@ -403,7 +405,7 @@ void Shell::AddHistogramSample(void* histogram, int sample) {
 void Shell::Initialize() {
   Shell::counter_map_ = new CounterMap();
   // Set up counters
-  if (i::FLAG_map_counters != NULL)
+  if (i::StrLength(i::FLAG_map_counters) != 0)
     MapCounters(i::FLAG_map_counters);
   if (i::FLAG_dump_counters) {
     V8::SetCounterFunction(LookupCounter);
@@ -422,6 +424,12 @@ void Shell::Initialize() {
   global_template->Set(String::New("load"), FunctionTemplate::New(Load));
   global_template->Set(String::New("quit"), FunctionTemplate::New(Quit));
   global_template->Set(String::New("version"), FunctionTemplate::New(Version));
+
+#ifdef LIVE_OBJECT_LIST
+  global_template->Set(String::New("lol_is_enabled"), Boolean::New(true));
+#else
+  global_template->Set(String::New("lol_is_enabled"), Boolean::New(false));
+#endif
 
   Handle<ObjectTemplate> os_templ = ObjectTemplate::New();
   AddOSMethods(os_templ);
@@ -599,7 +607,8 @@ void Shell::RunShell() {
 class ShellThread : public i::Thread {
  public:
   ShellThread(int no, i::Vector<const char> files)
-    : no_(no), files_(files) { }
+    : Thread("d8:ShellThread"),
+      no_(no), files_(files) { }
   virtual void Run();
  private:
   int no_;

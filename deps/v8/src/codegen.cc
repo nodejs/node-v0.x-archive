@@ -31,7 +31,6 @@
 #include "codegen-inl.h"
 #include "compiler.h"
 #include "debug.h"
-#include "oprofile-agent.h"
 #include "prettyprinter.h"
 #include "register-allocator-inl.h"
 #include "rewriter.h"
@@ -70,9 +69,10 @@ void CodeGenerator::ProcessDeferred() {
     DeferredCode* code = deferred_.RemoveLast();
     ASSERT(masm_ == code->masm());
     // Record position of deferred code stub.
-    masm_->RecordStatementPosition(code->statement_position());
+    masm_->positions_recorder()->RecordStatementPosition(
+        code->statement_position());
     if (code->position() != RelocInfo::kNoPosition) {
-      masm_->RecordPosition(code->position());
+      masm_->positions_recorder()->RecordPosition(code->position());
     }
     // Generate the code.
     Comment cmnt(masm_, code->comment());
@@ -138,6 +138,16 @@ void CodeGenerator::MakeCodePrologue(CompilationInfo* info) {
     print_source = FLAG_print_source;
     print_ast = FLAG_print_ast;
     print_json_ast = FLAG_print_json_ast;
+    Vector<const char> filter = CStrVector(FLAG_hydrogen_filter);
+    if (print_source && !filter.is_empty()) {
+      print_source = info->function()->name()->IsEqualTo(filter);
+    }
+    if (print_ast && !filter.is_empty()) {
+      print_ast = info->function()->name()->IsEqualTo(filter);
+    }
+    if (print_json_ast && !filter.is_empty()) {
+      print_json_ast = info->function()->name()->IsEqualTo(filter);
+    }
     ftype = "user-defined";
   }
 
@@ -173,14 +183,24 @@ Handle<Code> CodeGenerator::MakeCodeEpilogue(MacroAssembler* masm,
   masm->GetCode(&desc);
   Handle<Code> code = Factory::NewCode(desc, flags, masm->CodeObject());
 
+  if (!code.is_null()) {
+    Counters::total_compiled_code_size.Increment(code->instruction_size());
+  }
+  return code;
+}
+
+
+void CodeGenerator::PrintCode(Handle<Code> code, CompilationInfo* info) {
 #ifdef ENABLE_DISASSEMBLER
   bool print_code = Bootstrapper::IsActive()
       ? FLAG_print_builtin_code
-      : FLAG_print_code;
-  if (print_code) {
+      : (FLAG_print_code || (info->IsOptimizing() && FLAG_print_opt_code));
+  Vector<const char> filter = CStrVector(FLAG_hydrogen_filter);
+  FunctionLiteral* function = info->function();
+  bool match = filter.is_empty() || function->debug_name()->IsEqualTo(filter);
+  if (print_code && match) {
     // Print the source code if available.
     Handle<Script> script = info->script();
-    FunctionLiteral* function = info->function();
     if (!script->IsUndefined() && !script->source()->IsUndefined()) {
       PrintF("--- Raw source ---\n");
       StringInputBuffer stream(String::cast(script->source()));
@@ -194,42 +214,66 @@ Handle<Code> CodeGenerator::MakeCodeEpilogue(MacroAssembler* masm,
       }
       PrintF("\n\n");
     }
-    PrintF("--- Code ---\n");
-    code->Disassemble(*function->name()->ToCString());
+    if (info->IsOptimizing()) {
+      if (FLAG_print_unopt_code) {
+        PrintF("--- Unoptimized code ---\n");
+        info->closure()->shared()->code()->Disassemble(
+            *function->debug_name()->ToCString());
+      }
+      PrintF("--- Optimized code ---\n");
+    } else {
+      PrintF("--- Code ---\n");
+    }
+    code->Disassemble(*function->debug_name()->ToCString());
   }
 #endif  // ENABLE_DISASSEMBLER
-
-  if (!code.is_null()) {
-    Counters::total_compiled_code_size.Increment(code->instruction_size());
-  }
-  return code;
 }
 
 
-// Generate the code. Takes a function literal, generates code for it, assemble
-// all the pieces into a Code object. This function is only to be called by
-// the compiler.cc code.
-Handle<Code> CodeGenerator::MakeCode(CompilationInfo* info) {
+// Generate the code.  Compile the AST and assemble all the pieces into a
+// Code object.
+bool CodeGenerator::MakeCode(CompilationInfo* info) {
+  // When using Crankshaft the classic backend should never be used.
+  ASSERT(!V8::UseCrankshaft());
   Handle<Script> script = info->script();
   if (!script->IsUndefined() && !script->source()->IsUndefined()) {
     int len = String::cast(script->source())->length();
     Counters::total_old_codegen_source_size.Increment(len);
   }
+  if (FLAG_trace_codegen) {
+    PrintF("Classic Compiler - ");
+  }
   MakeCodePrologue(info);
   // Generate code.
   const int kInitialBufferSize = 4 * KB;
   MacroAssembler masm(NULL, kInitialBufferSize);
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  masm.positions_recorder()->StartGDBJITLineInfoRecording();
+#endif
   CodeGenerator cgen(&masm);
   CodeGeneratorScope scope(&cgen);
   cgen.Generate(info);
   if (cgen.HasStackOverflow()) {
     ASSERT(!Top::has_pending_exception());
-    return Handle<Code>::null();
+    return false;
   }
 
-  InLoopFlag in_loop = (cgen.loop_nesting() != 0) ? IN_LOOP : NOT_IN_LOOP;
+  InLoopFlag in_loop = info->is_in_loop() ? IN_LOOP : NOT_IN_LOOP;
   Code::Flags flags = Code::ComputeFlags(Code::FUNCTION, in_loop);
-  return MakeCodeEpilogue(cgen.masm(), flags, info);
+  Handle<Code> code = MakeCodeEpilogue(cgen.masm(), flags, info);
+  // There is no stack check table in code generated by the classic backend.
+  code->SetNoStackCheckTable();
+  CodeGenerator::PrintCode(code, info);
+  info->SetCode(code);  // May be an empty handle.
+#ifdef ENABLE_GDB_JIT_INTERFACE
+  if (FLAG_gdbjit && !code.is_null()) {
+    GDBJITLineInfo* lineinfo =
+        masm.positions_recorder()->DetachGDBJITLineInfo();
+
+    GDBJIT(RegisterDetailedLineInfo(*code, lineinfo));
+  }
+#endif
+  return !code.is_null();
 }
 
 
@@ -250,46 +294,13 @@ bool CodeGenerator::ShouldGenerateLog(Expression* type) {
 #endif
 
 
-Handle<Code> CodeGenerator::ComputeCallInitialize(
-    int argc,
-    InLoopFlag in_loop) {
-  if (in_loop == IN_LOOP) {
-    // Force the creation of the corresponding stub outside loops,
-    // because it may be used when clearing the ICs later - it is
-    // possible for a series of IC transitions to lose the in-loop
-    // information, and the IC clearing code can't generate a stub
-    // that it needs so we need to ensure it is generated already.
-    ComputeCallInitialize(argc, NOT_IN_LOOP);
-  }
-  CALL_HEAP_FUNCTION(
-      StubCache::ComputeCallInitialize(argc, in_loop, Code::CALL_IC),
-      Code);
-}
-
-
-Handle<Code> CodeGenerator::ComputeKeyedCallInitialize(
-    int argc,
-    InLoopFlag in_loop) {
-  if (in_loop == IN_LOOP) {
-    // Force the creation of the corresponding stub outside loops,
-    // because it may be used when clearing the ICs later - it is
-    // possible for a series of IC transitions to lose the in-loop
-    // information, and the IC clearing code can't generate a stub
-    // that it needs so we need to ensure it is generated already.
-    ComputeKeyedCallInitialize(argc, NOT_IN_LOOP);
-  }
-  CALL_HEAP_FUNCTION(
-      StubCache::ComputeCallInitialize(argc, in_loop, Code::KEYED_CALL_IC),
-      Code);
-}
-
 void CodeGenerator::ProcessDeclarations(ZoneList<Declaration*>* declarations) {
   int length = declarations->length();
   int globals = 0;
   for (int i = 0; i < length; i++) {
     Declaration* node = declarations->at(i);
     Variable* var = node->proxy()->var();
-    Slot* slot = var->slot();
+    Slot* slot = var->AsSlot();
 
     // If it was not possible to allocate the variable at compile
     // time, we need to "declare" it at runtime to make sure it
@@ -310,7 +321,7 @@ void CodeGenerator::ProcessDeclarations(ZoneList<Declaration*>* declarations) {
   for (int j = 0, i = 0; i < length; i++) {
     Declaration* node = declarations->at(i);
     Variable* var = node->proxy()->var();
-    Slot* slot = var->slot();
+    Slot* slot = var->AsSlot();
 
     if ((slot != NULL && slot->type() == Slot::LOOKUP) || !var->is_global()) {
       // Skip - already processed.
@@ -325,9 +336,12 @@ void CodeGenerator::ProcessDeclarations(ZoneList<Declaration*>* declarations) {
         }
       } else {
         Handle<SharedFunctionInfo> function =
-            Compiler::BuildFunctionInfo(node->fun(), script(), this);
+            Compiler::BuildFunctionInfo(node->fun(), script());
         // Check for stack-overflow exception.
-        if (HasStackOverflow()) return;
+        if (function.is_null()) {
+          SetStackOverflow();
+          return;
+        }
         array->set(j++, *function);
       }
     }
@@ -357,24 +371,19 @@ const CodeGenerator::InlineFunctionGenerator
 #undef INLINE_FUNCTION_GENERATOR_ADDRESS
 
 
-CodeGenerator::InlineFunctionGenerator
-  CodeGenerator::FindInlineFunctionGenerator(Runtime::FunctionId id) {
-    return kInlineFunctionGenerators[
-      static_cast<int>(id) - static_cast<int>(Runtime::kFirstInlineFunction)];
-}
-
-
 bool CodeGenerator::CheckForInlineRuntimeCall(CallRuntime* node) {
   ZoneList<Expression*>* args = node->arguments();
   Handle<String> name = node->name();
   Runtime::Function* function = node->function();
   if (function != NULL && function->intrinsic_type == Runtime::INLINE) {
-    InlineFunctionGenerator generator =
-        FindInlineFunctionGenerator(function->function_id);
-    if (generator != NULL) {
-      ((*this).*(generator))(args);
-      return true;
-    }
+    int lookup_index = static_cast<int>(function->function_id) -
+        static_cast<int>(Runtime::kFirstInlineFunction);
+    ASSERT(lookup_index >= 0);
+    ASSERT(static_cast<size_t>(lookup_index) <
+           ARRAY_SIZE(kInlineFunctionGenerators));
+    InlineFunctionGenerator generator = kInlineFunctionGenerators[lookup_index];
+    (this->*generator)(args);
+    return true;
   }
   return false;
 }
@@ -403,10 +412,10 @@ bool CodeGenerator::RecordPositions(MacroAssembler* masm,
                                     int pos,
                                     bool right_here) {
   if (pos != RelocInfo::kNoPosition) {
-    masm->RecordStatementPosition(pos);
-    masm->RecordPosition(pos);
+    masm->positions_recorder()->RecordStatementPosition(pos);
+    masm->positions_recorder()->RecordPosition(pos);
     if (right_here) {
-      return masm->WriteRecordedPositions();
+      return masm->positions_recorder()->WriteRecordedPositions();
     }
   }
   return false;
@@ -436,7 +445,7 @@ void CodeGenerator::CodeForDoWhileConditionPosition(DoWhileStatement* stmt) {
 
 void CodeGenerator::CodeForSourcePosition(int pos) {
   if (FLAG_debug_info && pos != RelocInfo::kNoPosition) {
-    masm()->RecordPosition(pos);
+    masm()->positions_recorder()->RecordPosition(pos);
   }
 }
 
@@ -474,27 +483,12 @@ void ArgumentsAccessStub::Generate(MacroAssembler* masm) {
 
 int CEntryStub::MinorKey() {
   ASSERT(result_size_ == 1 || result_size_ == 2);
+  int result = save_doubles_ ? 1 : 0;
 #ifdef _WIN64
-  return result_size_ == 1 ? 0 : 1;
+  return result | ((result_size_ == 1) ? 0 : 2);
 #else
-  return 0;
+  return result;
 #endif
-}
-
-
-bool ApiGetterEntryStub::GetCustomCache(Code** code_out) {
-  Object* cache = info()->load_stub_cache();
-  if (cache->IsUndefined()) {
-    return false;
-  } else {
-    *code_out = Code::cast(cache);
-    return true;
-  }
-}
-
-
-void ApiGetterEntryStub::SetCustomCache(Code* value) {
-  info()->set_load_stub_cache(value);
 }
 
 

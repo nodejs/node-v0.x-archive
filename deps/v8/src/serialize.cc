@@ -192,7 +192,7 @@ void ExternalReferenceTable::PopulateTable() {
   { BUILTIN, \
     Builtins::name, \
     "Builtins::" #name },
-#define DEF_ENTRY_A(name, kind, state) DEF_ENTRY_C(name, ignored)
+#define DEF_ENTRY_A(name, kind, state, extra) DEF_ENTRY_C(name, ignored)
 
   BUILTIN_LIST_C(DEF_ENTRY_C)
   BUILTIN_LIST_A(DEF_ENTRY_A)
@@ -290,10 +290,6 @@ void ExternalReferenceTable::PopulateTable() {
     Add(Top::get_address_from_id((Top::AddressId)i), TOP_ADDRESS, i, chars);
   }
 
-  // Extensions
-  Add(FUNCTION_ADDR(GCExtension::GC), EXTENSION, 1,
-      "GCExtension::GC");
-
   // Accessors
 #define ACCESSOR_DESCRIPTOR_DECLARATION(name) \
   Add((Address)&Accessors::name, \
@@ -336,6 +332,11 @@ void ExternalReferenceTable::PopulateTable() {
       RUNTIME_ENTRY,
       3,
       "V8::Random");
+
+  Add(ExternalReference::delete_handle_scope_extensions().address(),
+      RUNTIME_ENTRY,
+      4,
+      "HandleScope::DeleteExtensions");
 
   // Miscellaneous
   Add(ExternalReference::the_hole_value_location().address(),
@@ -457,6 +458,54 @@ void ExternalReferenceTable::PopulateTable() {
       UNCLASSIFIED,
       29,
       "TranscendentalCache::caches()");
+  Add(ExternalReference::handle_scope_next_address().address(),
+      UNCLASSIFIED,
+      30,
+      "HandleScope::next");
+  Add(ExternalReference::handle_scope_limit_address().address(),
+      UNCLASSIFIED,
+      31,
+      "HandleScope::limit");
+  Add(ExternalReference::handle_scope_level_address().address(),
+      UNCLASSIFIED,
+      32,
+      "HandleScope::level");
+  Add(ExternalReference::new_deoptimizer_function().address(),
+      UNCLASSIFIED,
+      33,
+      "Deoptimizer::New()");
+  Add(ExternalReference::compute_output_frames_function().address(),
+      UNCLASSIFIED,
+      34,
+      "Deoptimizer::ComputeOutputFrames()");
+  Add(ExternalReference::address_of_min_int().address(),
+      UNCLASSIFIED,
+      35,
+      "LDoubleConstant::min_int");
+  Add(ExternalReference::address_of_one_half().address(),
+      UNCLASSIFIED,
+      36,
+      "LDoubleConstant::one_half");
+  Add(ExternalReference::address_of_minus_zero().address(),
+      UNCLASSIFIED,
+      37,
+      "LDoubleConstant::minus_zero");
+  Add(ExternalReference::address_of_negative_infinity().address(),
+      UNCLASSIFIED,
+      38,
+      "LDoubleConstant::negative_infinity");
+  Add(ExternalReference::power_double_double_function().address(),
+      UNCLASSIFIED,
+      39,
+      "power_double_double_function");
+  Add(ExternalReference::power_double_int_function().address(),
+      UNCLASSIFIED,
+      40,
+      "power_double_int_function");
+  Add(ExternalReference::arguments_marker_location().address(),
+      UNCLASSIFIED,
+      41,
+      "Factory::arguments_marker().location()");
 }
 
 
@@ -500,7 +549,7 @@ void ExternalReferenceEncoder::Put(Address key, int index) {
 
 
 ExternalReferenceDecoder::ExternalReferenceDecoder()
-  : encodings_(NewArray<Address*>(kTypeCodeCount)) {
+    : encodings_(NewArray<Address*>(kTypeCodeCount)) {
   ExternalReferenceTable* external_references =
       ExternalReferenceTable::instance();
   for (int type = kFirstTypeCode; type < kTypeCodeCount; ++type) {
@@ -538,14 +587,16 @@ Address Deserializer::Allocate(int space_index, Space* space, int size) {
   if (!SpaceIsLarge(space_index)) {
     ASSERT(!SpaceIsPaged(space_index) ||
            size <= Page::kPageSize - Page::kObjectStartOffset);
-    Object* new_allocation;
+    MaybeObject* maybe_new_allocation;
     if (space_index == NEW_SPACE) {
-      new_allocation = reinterpret_cast<NewSpace*>(space)->AllocateRaw(size);
+      maybe_new_allocation =
+          reinterpret_cast<NewSpace*>(space)->AllocateRaw(size);
     } else {
-      new_allocation = reinterpret_cast<PagedSpace*>(space)->AllocateRaw(size);
+      maybe_new_allocation =
+          reinterpret_cast<PagedSpace*>(space)->AllocateRaw(size);
     }
+    Object* new_allocation = maybe_new_allocation->ToObjectUnchecked();
     HeapObject* new_object = HeapObject::cast(new_allocation);
-    ASSERT(!new_object->IsFailure());
     address = new_object->address();
     high_water_[space_index] = address + size;
   } else {
@@ -554,14 +605,14 @@ Address Deserializer::Allocate(int space_index, Space* space, int size) {
     LargeObjectSpace* lo_space = reinterpret_cast<LargeObjectSpace*>(space);
     Object* new_allocation;
     if (space_index == kLargeData) {
-      new_allocation = lo_space->AllocateRaw(size);
+      new_allocation = lo_space->AllocateRaw(size)->ToObjectUnchecked();
     } else if (space_index == kLargeFixedArray) {
-      new_allocation = lo_space->AllocateRawFixedArray(size);
+      new_allocation =
+          lo_space->AllocateRawFixedArray(size)->ToObjectUnchecked();
     } else {
       ASSERT_EQ(kLargeCode, space_index);
-      new_allocation = lo_space->AllocateRawCode(size);
+      new_allocation = lo_space->AllocateRawCode(size)->ToObjectUnchecked();
     }
-    ASSERT(!new_allocation->IsFailure());
     HeapObject* new_object = HeapObject::cast(new_allocation);
     // Record all large objects in the same space.
     address = new_object->address();
@@ -619,6 +670,8 @@ void Deserializer::Deserialize() {
   external_reference_decoder_ = new ExternalReferenceDecoder();
   Heap::IterateStrongRoots(this, VISIT_ONLY_STRONG);
   Heap::IterateWeakRoots(this, VISIT_ALL);
+
+  Heap::set_global_contexts_list(Heap::undefined_value());
 }
 
 
@@ -1350,6 +1403,13 @@ void Serializer::ObjectSerializer::VisitCodeEntry(Address entry_address) {
   OutputRawData(entry_address);
   serializer_->SerializeObject(target, kPlain, kFirstInstruction);
   bytes_processed_so_far_ += kPointerSize;
+}
+
+
+void Serializer::ObjectSerializer::VisitGlobalPropertyCell(RelocInfo* rinfo) {
+  // We shouldn't have any global property cell references in code
+  // objects in the snapshot.
+  UNREACHABLE();
 }
 
 

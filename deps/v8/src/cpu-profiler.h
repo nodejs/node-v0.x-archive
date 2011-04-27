@@ -30,6 +30,7 @@
 
 #ifdef ENABLE_LOGGING_AND_PROFILING
 
+#include "atomicops.h"
 #include "circular-queue.h"
 #include "unbound-queue.h"
 
@@ -41,6 +42,7 @@ class CodeEntry;
 class CodeMap;
 class CpuProfile;
 class CpuProfilesCollection;
+class HashMap;
 class ProfileGenerator;
 class TokenEnumerator;
 
@@ -48,7 +50,7 @@ class TokenEnumerator;
   V(CODE_CREATION, CodeCreateEventRecord)       \
   V(CODE_MOVE,     CodeMoveEventRecord)         \
   V(CODE_DELETE,   CodeDeleteEventRecord)       \
-  V(CODE_ALIAS,    CodeAliasEventRecord)
+  V(SFI_MOVE,      SFIMoveEventRecord)
 
 
 class CodeEventRecord {
@@ -71,6 +73,7 @@ class CodeCreateEventRecord : public CodeEventRecord {
   Address start;
   CodeEntry* entry;
   unsigned size;
+  Address sfi_address;
 
   INLINE(void UpdateCodeMap(CodeMap* code_map));
 };
@@ -93,11 +96,10 @@ class CodeDeleteEventRecord : public CodeEventRecord {
 };
 
 
-class CodeAliasEventRecord : public CodeEventRecord {
+class SFIMoveEventRecord : public CodeEventRecord {
  public:
-  Address start;
-  CodeEntry* entry;
-  Address code_start;
+  Address from;
+  Address to;
 
   INLINE(void UpdateCodeMap(CodeMap* code_map));
 };
@@ -132,7 +134,7 @@ class TickSampleEventRecord BASE_EMBEDDED {
 class ProfilerEventsProcessor : public Thread {
  public:
   explicit ProfilerEventsProcessor(ProfileGenerator* generator);
-  virtual ~ProfilerEventsProcessor() { }
+  virtual ~ProfilerEventsProcessor() {}
 
   // Thread control.
   virtual void Run();
@@ -146,7 +148,8 @@ class ProfilerEventsProcessor : public Thread {
   void CodeCreateEvent(Logger::LogEventsAndTags tag,
                        String* name,
                        String* resource_name, int line_number,
-                       Address start, unsigned size);
+                       Address start, unsigned size,
+                       Address sfi_address);
   void CodeCreateEvent(Logger::LogEventsAndTags tag,
                        const char* name,
                        Address start, unsigned size);
@@ -155,9 +158,7 @@ class ProfilerEventsProcessor : public Thread {
                        Address start, unsigned size);
   void CodeMoveEvent(Address from, Address to);
   void CodeDeleteEvent(Address from);
-  void FunctionCreateEvent(Address alias, Address start, int security_token_id);
-  void FunctionMoveEvent(Address from, Address to);
-  void FunctionDeleteEvent(Address from);
+  void SFIMoveEvent(Address from, Address to);
   void RegExpCodeCreateEvent(Logger::LogEventsAndTags tag,
                              const char* prefix, String* name,
                              Address start, unsigned size);
@@ -235,21 +236,25 @@ class CpuProfiler {
   static void CodeCreateEvent(Logger::LogEventsAndTags tag,
                               Code* code, String* name);
   static void CodeCreateEvent(Logger::LogEventsAndTags tag,
-                              Code* code, String* name,
+                              Code* code,
+                              SharedFunctionInfo *shared,
+                              String* name);
+  static void CodeCreateEvent(Logger::LogEventsAndTags tag,
+                              Code* code,
+                              SharedFunctionInfo *shared,
                               String* source, int line);
   static void CodeCreateEvent(Logger::LogEventsAndTags tag,
                               Code* code, int args_count);
+  static void CodeMovingGCEvent() {}
   static void CodeMoveEvent(Address from, Address to);
   static void CodeDeleteEvent(Address from);
-  static void FunctionCreateEvent(JSFunction* function);
-  static void FunctionMoveEvent(Address from, Address to);
-  static void FunctionDeleteEvent(Address from);
   static void GetterCallbackEvent(String* name, Address entry_point);
   static void RegExpCodeCreateEvent(Code* code, String* source);
   static void SetterCallbackEvent(String* name, Address entry_point);
+  static void SFIMoveEvent(Address from, Address to);
 
   static INLINE(bool is_profiling()) {
-    return singleton_ != NULL && singleton_->processor_ != NULL;
+    return NoBarrier_Load(&is_profiling_);
   }
 
  private:
@@ -270,6 +275,7 @@ class CpuProfiler {
   int saved_logging_nesting_;
 
   static CpuProfiler* singleton_;
+  static Atomic32 is_profiling_;
 
 #else
   static INLINE(bool is_profiling()) { return false; }

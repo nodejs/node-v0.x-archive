@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 // Test sending and receiving a file descriptor.
 //
 // This test is pretty complex. It ends up spawning test/fixtures/recvfd.js
@@ -25,8 +46,8 @@
 //     seen in a response yet. This is intended to ensure that all blobs
 //     sent out have been relayed back to us.
 
-common = require("../common");
-assert = common.assert
+var common = require('../common');
+var assert = require('assert');
 
 var buffer = require('buffer');
 var child_process = require('child_process');
@@ -34,18 +55,15 @@ var fs = require('fs');
 var net = require('net');
 var netBinding = process.binding('net');
 var path = require('path');
-var sys = require('sys');
 
 var DATA = {
   'ppid' : process.pid,
   'ord' : 0
 };
 
-var SOCK_PATH = path.join(
-  __dirname,
-  '..',
-  path.basename(__filename, '.js') + '.sock'
-);
+var SOCK_PATH = path.join(__dirname,
+                          '..',
+                          path.basename(__filename, '.js') + '.sock');
 
 var logChild = function(d) {
   if (typeof d == 'object') {
@@ -97,7 +115,7 @@ var srv = net.createServer(function(s) {
   buf.write(JSON.stringify(DATA) + '\n', 'utf8');
 
   s.write(str, 'utf8', pipeFDs[1]);
-  if (s.write(buf, undefined, pipeFDs[1])) {
+  if (s.write(buf, pipeFDs[1])) {
     netBinding.close(pipeFDs[1]);
   } else {
     s.addListener('drain', function() {
@@ -109,7 +127,8 @@ srv.listen(SOCK_PATH);
 
 // Spawn a child running test/fixtures/recvfd.js
 var cp = child_process.spawn(process.argv[0],
-                             [path.join(common.fixturesDir, 'recvfd.js'), SOCK_PATH]);
+                             [path.join(common.fixturesDir, 'recvfd.js'),
+                              SOCK_PATH]);
 
 cp.stdout.addListener('data', logChild);
 cp.stderr.addListener('data', logChild);

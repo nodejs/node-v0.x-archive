@@ -2,6 +2,7 @@ import Options
 import platform
 
 PLATFORM_IS_DARWIN = platform.platform().find('Darwin') == 0
+PLATFORM_IS_WIN32 = platform.platform().find('Win') >= 0
 
 def set_options(opt):
   pass
@@ -34,8 +35,13 @@ def configure(conf):
   else:
     conf.check_cc(header_name="sys/queue.h", function_name="kqueue")
 
-  if conf.check_cc(header_name="sys/select.h"):
-    conf.check_cc(header_name="sys/select.h", function_name="select")
+  if PLATFORM_IS_WIN32:
+    # Windows has sys/select.h and select but this config line doesn't detect it properly
+    conf.define('HAVE_SYS_SELECT_H', 1);
+    conf.define('HAVE_SELECT', 1);
+  else:
+    if conf.check_cc(header_name="sys/select.h"):
+      conf.check_cc(header_name="sys/select.h", function_name="select")
 
   if conf.check_cc(header_name="sys/eventfd.h"):
     conf.check_cc(header_name="sys/eventfd.h", function_name="eventfd")
@@ -66,9 +72,10 @@ def configure(conf):
   conf.check_cc(lib="m", header_name="math.h", function_name="ceil")
 
   conf.define("HAVE_CONFIG_H", 1)
-
-  conf.env.append_value('CCFLAGS', ['-DEV_MULTIPLICITY=0'])
-  conf.env.append_value('CXXFLAGS', ['-DEV_MULTIPLICITY=0'])
+  # Not using these.
+  conf.env.append_value('CPPFLAGS', ['-DEV_FORK_ENABLE=0',
+                                     '-DEV_EMBED_ENABLE=0',
+                                     '-DEV_MULTIPLICITY=0'])
 
 def build(bld):
   libev = bld.new_task_gen("cc")

@@ -28,19 +28,33 @@
 #ifndef V8_TOP_H_
 #define V8_TOP_H_
 
+#include "atomicops.h"
+#include "compilation-cache.h"
 #include "frames-inl.h"
+#include "runtime-profiler.h"
 
 namespace v8 {
 namespace internal {
 
+class Simulator;
 
 #define RETURN_IF_SCHEDULED_EXCEPTION() \
   if (Top::has_scheduled_exception()) return Top::PromoteScheduledException()
+
+#define RETURN_IF_EMPTY_HANDLE_VALUE(call, value) \
+  if (call.is_null()) {                           \
+    ASSERT(Top::has_pending_exception());         \
+    return value;                                 \
+  }
+
+#define RETURN_IF_EMPTY_HANDLE(call)      \
+  RETURN_IF_EMPTY_HANDLE_VALUE(call, Failure::Exception())
 
 // Top has static variables used for JavaScript execution.
 
 class SaveContext;  // Forward declaration.
 class ThreadVisitor;  // Defined in v8threads.h
+class VMState;  // Defined in vm-state.h
 
 class ThreadLocalTop BASE_EMBEDDED {
  public:
@@ -83,7 +97,7 @@ class ThreadLocalTop BASE_EMBEDDED {
   // lookups.
   Context* context_;
   int thread_id_;
-  Object* pending_exception_;
+  MaybeObject* pending_exception_;
   bool has_pending_message_;
   const char* pending_message_;
   Object* pending_message_obj_;
@@ -93,7 +107,7 @@ class ThreadLocalTop BASE_EMBEDDED {
   // Use a separate value for scheduled exceptions to preserve the
   // invariants that hold about pending_exception.  We may want to
   // unify them later.
-  Object* scheduled_exception_;
+  MaybeObject* scheduled_exception_;
   bool external_caught_exception_;
   SaveContext* save_context_;
   v8::TryCatch* catcher_;
@@ -101,8 +115,26 @@ class ThreadLocalTop BASE_EMBEDDED {
   // Stack.
   Address c_entry_fp_;  // the frame pointer of the top c entry frame
   Address handler_;   // try-blocks are chained through the stack
+
+#ifdef USE_SIMULATOR
+#ifdef V8_TARGET_ARCH_ARM
+  Simulator* simulator_;
+#elif V8_TARGET_ARCH_MIPS
+  assembler::mips::Simulator* simulator_;
+#endif
+#endif  // USE_SIMULATOR
+
 #ifdef ENABLE_LOGGING_AND_PROFILING
   Address js_entry_sp_;  // the stack pointer of the bottom js entry frame
+  Address external_callback_;  // the external callback we're currently in
+#endif
+
+#ifdef ENABLE_VMSTATE_TRACKING
+  StateTag current_vm_state_;
+
+  // Used for communication with the runtime profiler thread.
+  // Possible values are specified in RuntimeProfilerState.
+  Atomic32 runtime_profiler_state_;
 #endif
 
   // Generated code scratch locations.
@@ -159,21 +191,21 @@ class Top {
   static void set_thread_id(int id) { thread_local_.thread_id_ = id; }
 
   // Interface to pending exception.
-  static Object* pending_exception() {
+  static MaybeObject* pending_exception() {
     ASSERT(has_pending_exception());
     return thread_local_.pending_exception_;
   }
   static bool external_caught_exception() {
     return thread_local_.external_caught_exception_;
   }
-  static void set_pending_exception(Object* exception) {
+  static void set_pending_exception(MaybeObject* exception) {
     thread_local_.pending_exception_ = exception;
   }
   static void clear_pending_exception() {
     thread_local_.pending_exception_ = Heap::the_hole_value();
   }
 
-  static Object** pending_exception_address() {
+  static MaybeObject** pending_exception_address() {
     return &thread_local_.pending_exception_;
   }
   static bool has_pending_exception() {
@@ -202,11 +234,11 @@ class Top {
     return &thread_local_.external_caught_exception_;
   }
 
-  static Object** scheduled_exception_address() {
+  static MaybeObject** scheduled_exception_address() {
     return &thread_local_.scheduled_exception_;
   }
 
-  static Object* scheduled_exception() {
+  static MaybeObject* scheduled_exception() {
     ASSERT(has_scheduled_exception());
     return thread_local_.scheduled_exception_;
   }
@@ -217,12 +249,7 @@ class Top {
     thread_local_.scheduled_exception_ = Heap::the_hole_value();
   }
 
-  static void setup_external_caught() {
-    thread_local_.external_caught_exception_ =
-        has_pending_exception() &&
-        (thread_local_.catcher_ != NULL) &&
-        (try_catch_handler() == thread_local_.catcher_);
-  }
+  static bool IsExternallyCaught();
 
   static void SetCaptureStackTraceForUncaughtExceptions(
       bool capture,
@@ -232,6 +259,11 @@ class Top {
   // Tells whether the current context has experienced an out of memory
   // exception.
   static bool is_out_of_memory();
+
+  static bool is_catchable_by_javascript(MaybeObject* exception) {
+    return (exception != Failure::OutOfMemoryException()) &&
+        (exception != Heap::termination_exception());
+  }
 
   // JS execution stack (see frames.h).
   static Address c_entry_fp(ThreadLocalTop* thread) {
@@ -251,6 +283,72 @@ class Top {
   }
   static inline Address* js_entry_sp_address() {
     return &thread_local_.js_entry_sp_;
+  }
+
+  static Address external_callback() {
+    return thread_local_.external_callback_;
+  }
+  static void set_external_callback(Address callback) {
+    thread_local_.external_callback_ = callback;
+  }
+#endif
+
+#ifdef ENABLE_VMSTATE_TRACKING
+  static StateTag current_vm_state() {
+    return thread_local_.current_vm_state_;
+  }
+
+  static void SetCurrentVMState(StateTag state) {
+    if (RuntimeProfiler::IsEnabled()) {
+      if (state == JS) {
+        // JS or non-JS -> JS transition.
+        RuntimeProfilerState old_state = SwapRuntimeProfilerState(PROF_IN_JS);
+        if (old_state == PROF_NOT_IN_JS_WAITING_FOR_JS) {
+          // If the runtime profiler was waiting, we reset the eager
+          // optimizing data in the compilation cache to get a fresh
+          // start after not running JavaScript code for a while and
+          // signal the runtime profiler so it can resume.
+          CompilationCache::ResetEagerOptimizingData();
+          runtime_profiler_semaphore_->Signal();
+        }
+      } else if (thread_local_.current_vm_state_ == JS) {
+        // JS -> non-JS transition. Update the runtime profiler state.
+        ASSERT(IsInJSState());
+        SetRuntimeProfilerState(PROF_NOT_IN_JS);
+      }
+    }
+    thread_local_.current_vm_state_ = state;
+  }
+
+  // Called in the runtime profiler thread.
+  // Returns whether the current VM state is set to JS.
+  static bool IsInJSState() {
+    ASSERT(RuntimeProfiler::IsEnabled());
+    return static_cast<RuntimeProfilerState>(
+        NoBarrier_Load(&thread_local_.runtime_profiler_state_)) == PROF_IN_JS;
+  }
+
+  // Called in the runtime profiler thread.
+  // Waits for the VM state to transtion from non-JS to JS. Returns
+  // true when notified of the transition, false when the current
+  // state is not the expected non-JS state.
+  static bool WaitForJSState() {
+    ASSERT(RuntimeProfiler::IsEnabled());
+    // Try to switch to waiting state.
+    RuntimeProfilerState old_state = CompareAndSwapRuntimeProfilerState(
+        PROF_NOT_IN_JS, PROF_NOT_IN_JS_WAITING_FOR_JS);
+    if (old_state == PROF_NOT_IN_JS) {
+      runtime_profiler_semaphore_->Wait();
+      return true;
+    }
+    return false;
+  }
+
+  // When shutting down we join the profiler thread. Doing so while
+  // it's waiting on a semaphore will cause a deadlock, so we have to
+  // wake it up first.
+  static void WakeUpRuntimeProfilerThreadBeforeShutdown() {
+    runtime_profiler_semaphore_->Signal();
   }
 #endif
 
@@ -286,17 +384,20 @@ class Top {
   // Re-throw an exception.  This involves no error reporting since
   // error reporting was handled when the exception was thrown
   // originally.
-  static Failure* ReThrow(Object* exception, MessageLocation* location = NULL);
+  static Failure* ReThrow(MaybeObject* exception,
+                          MessageLocation* location = NULL);
   static void ScheduleThrow(Object* exception);
   static void ReportPendingMessages();
   static Failure* ThrowIllegalOperation();
 
   // Promote a scheduled exception to pending. Asserts has_scheduled_exception.
-  static Object* PromoteScheduledException();
-  static void DoThrow(Object* exception,
+  static Failure* PromoteScheduledException();
+  static void DoThrow(MaybeObject* exception,
                       MessageLocation* location,
                       const char* message);
-  static bool ShouldReturnException(bool* is_caught_externally,
+  // Checks if exception should be reported and finds out if it's
+  // caught externally.
+  static bool ShouldReportException(bool* can_be_caught_externally,
                                     bool catchable_by_javascript);
 
   // Attempts to compute the current source location, storing the
@@ -360,6 +461,51 @@ class Top {
   static const char* kStackOverflowMessage;
 
  private:
+#ifdef ENABLE_VMSTATE_TRACKING
+  // Set of states used when communicating with the runtime profiler.
+  //
+  // The set of possible transitions is divided between the VM and the
+  // profiler threads.
+  //
+  // The VM thread can perform these transitions:
+  //   o IN_JS -> NOT_IN_JS
+  //   o NOT_IN_JS -> IN_JS
+  //   o NOT_IN_JS_WAITING_FOR_JS -> IN_JS notifying the profiler thread
+  //     using the semaphore.
+  // All the above transitions are caused by VM state changes.
+  //
+  // The profiler thread can only perform a single transition
+  // NOT_IN_JS -> NOT_IN_JS_WAITING_FOR_JS before it starts waiting on
+  // the semaphore.
+  enum RuntimeProfilerState {
+    PROF_NOT_IN_JS,
+    PROF_NOT_IN_JS_WAITING_FOR_JS,
+    PROF_IN_JS
+  };
+
+  static void SetRuntimeProfilerState(RuntimeProfilerState state) {
+    NoBarrier_Store(&thread_local_.runtime_profiler_state_, state);
+  }
+
+  static RuntimeProfilerState SwapRuntimeProfilerState(
+      RuntimeProfilerState state) {
+    return static_cast<RuntimeProfilerState>(
+        NoBarrier_AtomicExchange(&thread_local_.runtime_profiler_state_,
+                                 state));
+  }
+
+  static RuntimeProfilerState CompareAndSwapRuntimeProfilerState(
+      RuntimeProfilerState old_state,
+      RuntimeProfilerState state) {
+    return static_cast<RuntimeProfilerState>(
+        NoBarrier_CompareAndSwap(&thread_local_.runtime_profiler_state_,
+                                 old_state,
+                                 state));
+  }
+
+  static Semaphore* runtime_profiler_semaphore_;
+#endif  // ENABLE_VMSTATE_TRACKING
+
   // The context that initiated this JS execution.
   static ThreadLocalTop thread_local_;
   static void InitializeThreadLocal();
@@ -376,6 +522,7 @@ class Top {
   friend class SaveContext;
   friend class AssertNoContextChange;
   friend class ExecutionAccess;
+  friend class ThreadLocalTop;
 
   static void FillCache();
 };
@@ -445,8 +592,15 @@ class AssertNoContextChange BASE_EMBEDDED {
 
 class ExecutionAccess BASE_EMBEDDED {
  public:
-  ExecutionAccess();
-  ~ExecutionAccess();
+  ExecutionAccess() { Lock(); }
+  ~ExecutionAccess() { Unlock(); }
+
+  static void Lock() { Top::break_access_->Lock(); }
+  static void Unlock() { Top::break_access_->Unlock(); }
+
+  static bool TryLock() {
+    return Top::break_access_->TryLock();
+  }
 };
 
 } }  // namespace v8::internal

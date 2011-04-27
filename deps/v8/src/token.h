@@ -28,6 +28,8 @@
 #ifndef V8_TOKEN_H_
 #define V8_TOKEN_H_
 
+#include "checks.h"
+
 namespace v8 {
 namespace internal {
 
@@ -153,38 +155,6 @@ namespace internal {
   K(WHILE, "while", 0)                                                  \
   K(WITH, "with", 0)                                                    \
                                                                         \
-  /* Future reserved words (ECMA-262, section 7.5.3, page 14). */       \
-  F(ABSTRACT, "abstract", 0)                                            \
-  F(BOOLEAN, "boolean", 0)                                              \
-  F(BYTE, "byte", 0)                                                    \
-  F(CHAR, "char", 0)                                                    \
-  F(CLASS, "class", 0)                                                  \
-  K(CONST, "const", 0)                                                  \
-  F(DOUBLE, "double", 0)                                                \
-  F(ENUM, "enum", 0)                                                    \
-  F(EXPORT, "export", 0)                                                \
-  F(EXTENDS, "extends", 0)                                              \
-  F(FINAL, "final", 0)                                                  \
-  F(FLOAT, "float", 0)                                                  \
-  F(GOTO, "goto", 0)                                                    \
-  F(IMPLEMENTS, "implements", 0)                                        \
-  F(IMPORT, "import", 0)                                                \
-  F(INT, "int", 0)                                                      \
-  F(INTERFACE, "interface", 0)                                          \
-  F(LONG, "long", 0)                                                    \
-  K(NATIVE, "native", 0)                                                \
-  F(PACKAGE, "package", 0)                                              \
-  F(PRIVATE, "private", 0)                                              \
-  F(PROTECTED, "protected", 0)                                          \
-  F(PUBLIC, "public", 0)                                                \
-  F(SHORT, "short", 0)                                                  \
-  F(STATIC, "static", 0)                                                \
-  F(SUPER, "super", 0)                                                  \
-  F(SYNCHRONIZED, "synchronized", 0)                                    \
-  F(THROWS, "throws", 0)                                                \
-  F(TRANSIENT, "transient", 0)                                          \
-  F(VOLATILE, "volatile", 0)                                            \
-                                                                        \
   /* Literals (ECMA-262, section 7.8, page 16). */                      \
   K(NULL_LITERAL, "null", 0)                                            \
   K(TRUE_LITERAL, "true", 0)                                            \
@@ -194,6 +164,11 @@ namespace internal {
                                                                         \
   /* Identifiers (not keywords or future reserved words). */            \
   T(IDENTIFIER, NULL, 0)                                                \
+                                                                        \
+  /* Future reserved words (ECMA-262, section 7.6.1.2). */              \
+  T(FUTURE_RESERVED_WORD, NULL, 0)                                      \
+  K(CONST, "const", 0)                                                  \
+  K(NATIVE, "native", 0)                                                \
                                                                         \
   /* Illegal token - not able to scan. */                               \
   T(ILLEGAL, "ILLEGAL", 0)                                              \
@@ -215,7 +190,7 @@ class Token {
   // Returns a string corresponding to the C++ token name
   // (e.g. "LT" for the token LT).
   static const char* Name(Value tok) {
-    ASSERT(0 <= tok && tok < NUM_TOKENS);
+    ASSERT(tok < NUM_TOKENS);  // tok is unsigned
     return name_[tok];
   }
 
@@ -234,6 +209,40 @@ class Token {
 
   static bool IsCompareOp(Value op) {
     return EQ <= op && op <= IN;
+  }
+
+  static bool IsOrderedCompareOp(Value op) {
+    return op == LT || op == LTE || op == GT || op == GTE;
+  }
+
+  static Value NegateCompareOp(Value op) {
+    ASSERT(IsCompareOp(op));
+    switch (op) {
+      case EQ: return NE;
+      case NE: return EQ;
+      case EQ_STRICT: return NE_STRICT;
+      case LT: return GTE;
+      case GT: return LTE;
+      case LTE: return GT;
+      case GTE: return LT;
+      default:
+        return op;
+    }
+  }
+
+  static Value InvertCompareOp(Value op) {
+    ASSERT(IsCompareOp(op));
+    switch (op) {
+      case EQ: return NE;
+      case NE: return EQ;
+      case EQ_STRICT: return NE_STRICT;
+      case LT: return GT;
+      case GT: return LT;
+      case LTE: return GTE;
+      case GTE: return LTE;
+      default:
+        return op;
+    }
   }
 
   static bool IsBitOp(Value op) {
@@ -256,14 +265,14 @@ class Token {
   // (.e., "<" for the token LT) or NULL if the token doesn't
   // have a (unique) string (e.g. an IDENTIFIER).
   static const char* String(Value tok) {
-    ASSERT(0 <= tok && tok < NUM_TOKENS);
+    ASSERT(tok < NUM_TOKENS);  // tok is unsigned.
     return string_[tok];
   }
 
   // Returns the precedence > 0 for binary and compare
   // operators; returns 0 otherwise.
   static int Precedence(Value tok) {
-    ASSERT(0 <= tok && tok < NUM_TOKENS);
+    ASSERT(tok < NUM_TOKENS);  // tok is unsigned.
     return precedence_[tok];
   }
 

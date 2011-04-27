@@ -165,6 +165,8 @@ TEST(DisasmIa320) {
   __ mov(Operand(ebx, ecx, times_4, 10000), edx);
   __ nop();
   __ dec_b(edx);
+  __ dec_b(Operand(eax, 10));
+  __ dec_b(Operand(ebx, ecx, times_4, 10000));
   __ dec(edx);
   __ cdq();
 
@@ -334,8 +336,10 @@ TEST(DisasmIa320) {
   // 0xD9 instructions
   __ nop();
 
+  __ fld(1);
   __ fld1();
   __ fldz();
+  __ fldpi();
   __ fabs();
   __ fchs();
   __ fprem();
@@ -412,15 +416,54 @@ TEST(DisasmIa320) {
     }
   }
 
+  // andpd, cmpltsd, movaps, psllq, psrlq, por.
+  {
+    if (CpuFeatures::IsSupported(SSE2)) {
+      CpuFeatures::Scope fscope(SSE2);
+      __ andpd(xmm0, xmm1);
+      __ andpd(xmm1, xmm2);
+
+      __ cmpltsd(xmm0, xmm1);
+      __ cmpltsd(xmm1, xmm2);
+
+      __ movaps(xmm0, xmm1);
+      __ movaps(xmm1, xmm2);
+
+      __ psllq(xmm0, 17);
+      __ psllq(xmm1, 42);
+
+      __ psllq(xmm0, xmm1);
+      __ psllq(xmm1, xmm2);
+
+      __ psrlq(xmm0, 17);
+      __ psrlq(xmm1, 42);
+
+      __ psrlq(xmm0, xmm1);
+      __ psrlq(xmm1, xmm2);
+
+      __ por(xmm0, xmm1);
+      __ por(xmm1, xmm2);
+    }
+  }
+
+  {
+    if (CpuFeatures::IsSupported(SSE4_1)) {
+      CpuFeatures::Scope scope(SSE4_1);
+      __ pextrd(Operand(eax), xmm0, 1);
+      __ pinsrd(xmm1, Operand(eax), 0);
+    }
+  }
+
   __ ret(0);
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
-#ifdef DEBUG
+#ifdef OBJECT_PRINT
   Code::cast(code)->Print();
   byte* begin = Code::cast(code)->instruction_start();
   byte* end = begin + Code::cast(code)->instruction_size();

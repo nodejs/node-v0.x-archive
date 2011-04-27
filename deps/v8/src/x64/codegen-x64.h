@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -298,9 +298,7 @@ enum ArgumentsAllocationMode {
 
 class CodeGenerator: public AstVisitor {
  public:
-  // Takes a function literal, generates code for it. This function should only
-  // be called by compiler.cc.
-  static Handle<Code> MakeCode(CompilationInfo* info);
+  static bool MakeCode(CompilationInfo* info);
 
   // Printing of AST, etc. as requested by flags.
   static void MakeCodePrologue(CompilationInfo* info);
@@ -309,6 +307,9 @@ class CodeGenerator: public AstVisitor {
   static Handle<Code> MakeCodeEpilogue(MacroAssembler* masm,
                                        Code::Flags flags,
                                        CompilationInfo* info);
+
+  // Print the code after compiling it.
+  static void PrintCode(Handle<Code> code, CompilationInfo* info);
 
 #ifdef ENABLE_LOGGING_AND_PROFILING
   static bool ShouldGenerateLog(Expression* type);
@@ -343,10 +344,6 @@ class CodeGenerator: public AstVisitor {
   bool in_spilled_code() const { return in_spilled_code_; }
   void set_in_spilled_code(bool flag) { in_spilled_code_ = flag; }
 
-  static Operand ContextOperand(Register context, int index) {
-    return Operand(context, Context::SlotOffset(index));
-  }
-
  private:
   // Type of a member function that generates inline code for a native function.
   typedef void (CodeGenerator::*InlineFunctionGenerator)
@@ -360,6 +357,7 @@ class CodeGenerator: public AstVisitor {
   // Accessors
   inline bool is_eval();
   inline Scope* scope();
+  inline StrictModeFlag strict_mode_flag();
 
   // Generating deferred code.
   void ProcessDeferred();
@@ -376,8 +374,9 @@ class CodeGenerator: public AstVisitor {
   // Node visitors.
   void VisitStatements(ZoneList<Statement*>* statements);
 
-#define DEF_VISIT(type) \
-  void Visit##type(type* node);
+  virtual void VisitSlot(Slot* node);
+#define DEF_VISIT(type)                         \
+  virtual void Visit##type(type* node);
   AST_NODE_LIST(DEF_VISIT)
 #undef DEF_VISIT
 
@@ -419,10 +418,6 @@ class CodeGenerator: public AstVisitor {
                                             JumpTarget* slow);
 
   // Expressions
-  static Operand GlobalObject() {
-    return ContextOperand(rsi, Context::GLOBAL_INDEX);
-  }
-
   void LoadCondition(Expression* x,
                      ControlDestination* destination,
                      bool force_control);
@@ -586,23 +581,17 @@ class CodeGenerator: public AstVisitor {
 
   void CheckStack();
 
-  static InlineFunctionGenerator FindInlineFunctionGenerator(
-      Runtime::FunctionId function_id);
-
   bool CheckForInlineRuntimeCall(CallRuntime* node);
 
   void ProcessDeclarations(ZoneList<Declaration*>* declarations);
-
-  static Handle<Code> ComputeCallInitialize(int argc, InLoopFlag in_loop);
-
-  static Handle<Code> ComputeKeyedCallInitialize(int argc, InLoopFlag in_loop);
 
   // Declare global variables and functions in the given array of
   // name/value pairs.
   void DeclareGlobals(Handle<FixedArray> pairs);
 
   // Instantiate the function based on the shared function info.
-  void InstantiateFunction(Handle<SharedFunctionInfo> function_info);
+  void InstantiateFunction(Handle<SharedFunctionInfo> function_info,
+                           bool pretenure);
 
   // Support for type checks.
   void GenerateIsSmi(ZoneList<Expression*>* args);
@@ -661,8 +650,6 @@ class CodeGenerator: public AstVisitor {
 
   void GenerateRegExpConstructResult(ZoneList<Expression*>* args);
 
-  void GenerateRegExpCloneResult(ZoneList<Expression*>* args);
-
   // Support for fast native caches.
   void GenerateGetFromCache(ZoneList<Expression*>* args);
 
@@ -682,13 +669,16 @@ class CodeGenerator: public AstVisitor {
   void GenerateMathSin(ZoneList<Expression*>* args);
   void GenerateMathCos(ZoneList<Expression*>* args);
   void GenerateMathSqrt(ZoneList<Expression*>* args);
+  void GenerateMathLog(ZoneList<Expression*>* args);
 
+  // Check whether two RegExps are equivalent.
   void GenerateIsRegExpEquivalent(ZoneList<Expression*>* args);
 
   void GenerateHasCachedArrayIndex(ZoneList<Expression*>* args);
   void GenerateGetCachedArrayIndex(ZoneList<Expression*>* args);
+  void GenerateFastAsciiArrayJoin(ZoneList<Expression*>* args);
 
-// Simple condition analysis.
+  // Simple condition analysis.
   enum ConditionAnalysis {
     ALWAYS_TRUE,
     ALWAYS_FALSE,

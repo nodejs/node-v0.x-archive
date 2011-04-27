@@ -67,12 +67,12 @@ class List {
   // Returns a reference to the element at index i.  This reference is
   // not safe to use after operations that can change the list's
   // backing store (eg, Add).
-  inline T& operator[](int i) const  {
+  inline T& operator[](int i) const {
     ASSERT(0 <= i);
     ASSERT(i < length_);
     return data_[i];
   }
-  inline T& at(int i) const  { return operator[](i); }
+  inline T& at(int i) const { return operator[](i); }
   inline T& last() const { return at(length_ - 1); }
   inline T& first() const { return at(0); }
 
@@ -91,6 +91,9 @@ class List {
   // Add all the elements from the argument list to this list.
   void AddAll(const List<T, P>& other);
 
+  // Inserts the element at the specific index.
+  void InsertAt(int index, const T& element);
+
   // Added 'count' elements with the value 'value' and returns a
   // vector that allows access to the elements.  The vector is valid
   // until the next change is made to this list.
@@ -101,6 +104,10 @@ class List {
   // removed element.  This function's complexity is linear in the
   // size of the list.
   T Remove(int i);
+
+  // Remove the given element from the list. Returns whether or not
+  // the input is included in the list in the first place.
+  bool RemoveElement(const T& elm);
 
   // Removes the last element without deleting it even if T is a
   // pointer type. Returns the removed element.
@@ -113,7 +120,11 @@ class List {
   // Drops all but the first 'pos' elements from the list.
   INLINE(void Rewind(int pos));
 
-  bool Contains(const T& elm);
+  // Drop the last 'count' elements from the list.
+  INLINE(void RewindBy(int count)) { Rewind(length_ - count); }
+
+  bool Contains(const T& elm) const;
+  int CountOccurrences(const T& elm, int start, int end) const;
 
   // Iterate through all list entries, starting at index 0.
   void Iterate(void (*callback)(T* x));
@@ -147,14 +158,6 @@ class List {
 
   DISALLOW_COPY_AND_ASSIGN(List);
 };
-
-class FrameElement;
-
-// Add() is inlined, ResizeAdd() called by Add() is inlined except for
-// Lists of FrameElements, and ResizeAddInternal() is inlined in ResizeAdd().
-template <>
-void List<FrameElement,
-          FreeStoreAllocationPolicy>::ResizeAdd(const FrameElement& element);
 
 } }  // namespace v8::internal
 

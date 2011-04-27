@@ -115,7 +115,7 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   patcher.masm()->mov(v8::internal::lr, v8::internal::pc);
   patcher.masm()->ldr(v8::internal::pc, MemOperand(v8::internal::pc, -4));
 #endif
-  patcher.Emit(Debug::debug_break_return()->entry());
+  patcher.Emit(Debug::debug_break_slot()->entry());
 }
 
 
@@ -279,7 +279,7 @@ void Debug::GenerateSlot(MacroAssembler* masm) {
   __ bind(&check_codesize);
   __ RecordDebugBreakSlot();
   for (int i = 0; i < Assembler::kDebugBreakSlotInstructions; i++) {
-    __ nop(2);
+    __ nop(MacroAssembler::DEBUG_BREAK_NOP);
   }
   ASSERT_EQ(Assembler::kDebugBreakSlotInstructions,
             masm->InstructionsGeneratedSince(&check_codesize));

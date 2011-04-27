@@ -225,7 +225,16 @@ class Context: public FixedArray {
     OUT_OF_MEMORY_INDEX,
     MAP_CACHE_INDEX,
     CONTEXT_DATA_INDEX,
-    GLOBAL_CONTEXT_SLOTS
+
+    // Properties from here are treated as weak references by the full GC.
+    // Scavenge treats them as strong references.
+    OPTIMIZED_FUNCTIONS_LIST,  // Weak.
+    NEXT_CONTEXT_LINK,  // Weak.
+
+    // Total number of slots.
+    GLOBAL_CONTEXT_SLOTS,
+
+    FIRST_WEAK_SLOT = OPTIMIZED_FUNCTIONS_LIST
   };
 
   // Direct slot access.
@@ -283,6 +292,12 @@ class Context: public FixedArray {
     return IsCatchContext() && extension() == object;
   }
 
+  // A global context hold a list of all functions which have been optimized.
+  void AddOptimizedFunction(JSFunction* function);
+  void RemoveOptimizedFunction(JSFunction* function);
+  Object* OptimizedFunctionsListHead();
+  void ClearOptimizedFunctions();
+
 #define GLOBAL_CONTEXT_FIELD_ACCESSORS(index, type, name) \
   void  set_##name(type* value) {                         \
     ASSERT(IsGlobalContext());                            \
@@ -332,6 +347,17 @@ class Context: public FixedArray {
   static int SlotOffset(int index) {
     return kHeaderSize + index * kPointerSize - kHeapObjectTag;
   }
+
+  static const int kSize = kHeaderSize + GLOBAL_CONTEXT_SLOTS * kPointerSize;
+
+  // GC support.
+  typedef FixedBodyDescriptor<
+      kHeaderSize, kSize, kSize> ScavengeBodyDescriptor;
+
+  typedef FixedBodyDescriptor<
+      kHeaderSize,
+      kHeaderSize + FIRST_WEAK_SLOT * kPointerSize,
+      kSize> MarkCompactBodyDescriptor;
 
  private:
   // Unchecked access to the slots.

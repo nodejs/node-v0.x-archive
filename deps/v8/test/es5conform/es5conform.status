@@ -29,6 +29,8 @@ prefix es5conform
 def UNIMPLEMENTED = PASS || FAIL
 def FAIL_OK = FAIL, OKAY
 
+
+##############################################################################
 # Non UTF8 characters in test files.
 chapter10/10.4/10.4.2/10.4.2-3-c-2-s: FAIL_OK
 chapter10/10.4/10.4.2/10.4.2-3-c-1-s: FAIL_OK
@@ -39,16 +41,8 @@ chapter10/10.4/10.4.2/10.4.2-2-c-1: FAIL_OK
 # We are compatible with Safari and Firefox.
 chapter11/11.1/11.1.5: UNIMPLEMENTED
 
-# Delete returns true in eval even when it should return false.
-# Please see http://code.google.com/p/v8/issues/detail?id=759
-chapter11/11.4/11.4.1//11.4.1-4.a-5: FAIL
-chapter11/11.4/11.4.1//11.4.1-4.a-7: FAIL
-
 # We do not have a global object called 'global' as required by tests.
 chapter15/15.1: FAIL_OK
-
-# NOT IMPLEMENTED: bind
-chapter15/15.2/15.2.3/15.2.3.3/15.2.3.3-4-38: UNIMPLEMENTED
 
 # NaN is writable. We are compatible with JSC.
 chapter15/15.2/15.2.3/15.2.3.3/15.2.3.3-4-178: FAIL_OK
@@ -86,7 +80,7 @@ chapter15/15.2/15.2.3/15.2.3.3/15.2.3.3-4-215: UNIMPLEMENTED
 # than those described in the spec - but according to spec they can 
 # have additional properties.
 # All compareArray calls in these tests could be exchanged with a 
-# isSubsetOfArray call (I will upload a path to the es5conform site).
+# isSubsetOfArray call (I will upload a patch to the es5conform site).
 
 # SUBSETFAIL
 chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-1: FAIL_OK
@@ -97,7 +91,7 @@ chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-2: FAIL_OK
 # SUBSETFAIL
 chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-3: FAIL_OK
 
-# SUBSETFAIL + we do not implement Function.prototype.bind.
+# SUBSETFAIL
 chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-4: FAIL_OK
 
 # SUBSETFAIL
@@ -108,12 +102,6 @@ chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-6: FAIL_OK
 
 # SUBSETFAIL
 chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-7: FAIL_OK
-
-# SUBSETFAIL
-chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-8: FAIL_OK
-
-# SUBSETFAIL
-chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-9: FAIL_OK
 
 # SUBSETFAIL
 chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-11: FAIL_OK
@@ -184,9 +172,6 @@ chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-34: FAIL_OK
 # SUBSETFAIL
 chapter15/15.2/15.2.3/15.2.3.4/15.2.3.4-4-35: FAIL_OK
 
-# NOT IMPLEMENTED: bind on Function.prototype.
-chapter15/15.3/15.3.4/15.3.4.5/15.3.4.5-0-1: UNIMPLEMENTED
-
 # Bad test - the spec does not say anything about throwing errors
 # on calling Array.prototype.indexOf with undefined as argument.
 chapter15/15.4/15.4.4/15.4.4.14/15.4.4.14-1-1: FAIL_OK
@@ -243,6 +228,147 @@ chapter15/15.10/15.10.7/15.10.7.4/15.10.7.4-1: FAIL_OK
 chapter15/15.10/15.10.7/15.10.7.4/15.10.7.4-2: FAIL_OK
 chapter15/15.10/15.10.7/15.10.7.5/15.10.7.5-1: FAIL_OK
 chapter15/15.10/15.10.7/15.10.7.5/15.10.7.5-2: FAIL_OK
+
+##############################################################################
+# Unimplemented parts of strict mode
+# Setting expectations to fail only so that the tests trigger as soon as
+# the strict mode feature gets implemented
+
+# A directive preceeding an 'use strict' directive may not contain
+# an OctalEscapeSequence
+# Incorrect test - need double escape in eval.
+chapter07/7.8/7.8.4/7.8.4-1-s: FAIL
+
+# arguments[i] remains same after changing actual parameters in strict mode
+chapter10/10.6/10.6-10-c-ii-1-s: FAIL
+# arguments[i] doesn't map to actual parameters in strict mode
+chapter10/10.6/10.6-10-c-ii-2-s: FAIL
+
+# Accessing caller property of Arguments object throws TypeError in strict mode
+chapter10/10.6/10.6-13-b-1-s: FAIL
+# arguments.caller exists in strict mode
+chapter10/10.6/10.6-13-b-2-s: FAIL
+# arguments.caller is non-configurable in strict mode
+chapter10/10.6/10.6-13-b-3-s: FAIL
+# Accessing callee property of Arguments object throws TypeError in strict mode
+chapter10/10.6/10.6-13-c-1-s: FAIL
+# arguments.callee is non-configurable in strict mode
+chapter10/10.6/10.6-13-c-3-s: FAIL
+
+# simple assignment throws TypeError if LeftHandSide is a property reference
+# with a primitive base value (this is undefined)
+chapter11/11.13/11.13.1/11.13.1-1-7-s: FAIL
+
+# simple assignment throws TypeError if LeftHandSide is a readonly property
+# in strict mode (Global.NaN)
+chapter11/11.13/11.13.1/11.13.1-4-2-s: FAIL
+# simple assignment throws TypeError if LeftHandSide is a readonly property
+# in strict mode (Global.Infinity)
+chapter11/11.13/11.13.1/11.13.1-4-3-s: FAIL
+# simple assignment throws TypeError if LeftHandSide is a readonly property
+# in strict mode (Global.length)
+chapter11/11.13/11.13.1/11.13.1-4-4-s: FAIL
+# simple assignment throws TypeError if LeftHandSide is a readonly property
+# in strict mode (Global.undefined)
+chapter11/11.13/11.13.1/11.13.1-4-27-s: FAIL
+
+# delete operator throws TypeError when when deleting a non-configurable
+# data property in strict mode (Global.NaN)
+# Invalid test case - "this" is not a global object within the test case.
+# (http://es5conform.codeplex.com/workitem/29151)
+chapter11/11.4/11.4.1/11.4.1-4.a-4-s: FAIL_OK
+
+# delete operator throws ReferenceError when deleting a direct reference
+# to a var in strict mode
+# Invalid test case. Test expects ReferenceError instead of SyntaxError.
+# http://es5conform.codeplex.com/workitem/29084
+chapter11/11.4/11.4.1/11.4.1-5-1-s: FAIL
+# delete operator throws ReferenceError when deleting a direct reference
+# to a function argument in strict mode
+# Invalid test case. Test expects ReferenceError instead of SyntaxError.
+# http://es5conform.codeplex.com/workitem/29084
+chapter11/11.4/11.4.1/11.4.1-5-2-s: FAIL
+# delete operator throws ReferenceError when deleting a direct reference
+# to a function name in strict mode
+# Invalid test case. Test expects ReferenceError instead of SyntaxError.
+# http://es5conform.codeplex.com/workitem/29084
+chapter11/11.4/11.4.1/11.4.1-5-3-s: FAIL
+
+# eval - a function declaring a var named 'eval' throws EvalError in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-1-s: FAIL
+# eval - a function assigning into 'eval' throws EvalError in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-2-s: FAIL
+# eval - a function expr declaring a var named 'eval' throws EvalError
+# in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-3-s: FAIL
+# eval - a function expr assigning into 'eval' throws a EvalError in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-4-s: FAIL
+# eval - a Function declaring var named 'eval' throws EvalError in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-5-s: FAIL
+# eval - a Function assigning into 'eval' throws EvalError in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-6-s: FAIL
+# eval - a direct eval declaring a var named 'eval' throws EvalError
+# in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-7-s: FAIL
+# eval - a direct eval assigning into 'eval' throws EvalError in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-8-s: FAIL
+# eval - an indirect eval declaring a var named 'eval' throws EvalError
+# in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-9-s: FAIL
+# eval - an indirect eval assigning into 'eval' throws EvalError in strict mode
+# Invalid test case. SyntaxError should be expected instead of EvalError.
+chapter12/12.2/12.2.1/12.2.1-10-s: FAIL
+
+# SyntaxError if eval used as function identifier in function declaration
+# with strict body
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-3-s: FAIL
+# SyntaxError if eval used as function identifier in function expression
+# with strict body
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-4-s: FAIL
+# SyntaxError if eval used as function identifier in function declaration
+# in strict code
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-5-s: FAIL
+# SyntaxError if eval used as function identifier in function expression
+# in strict code
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-6-s: FAIL
+# SyntaxError if arguments used as function identifier in function declaration
+# with strict body
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-9-s: FAIL
+# SyntaxError if arguments used as function identifier in function expression
+# with strict body
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-10-s: FAIL
+# SyntaxError if arguments used as function identifier in function declaration
+# in strict code
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-11-s: FAIL
+# SyntaxError if arguments used as function identifier in function expression
+# in strict code
+# Test fails to return true on success (invalid test case).
+chapter13/13.1/13.1-3-12-s: FAIL
+
+# Duplicate combined parameter name allowed in Function constructor called
+# in strict mode if body not strict
+# Test fails to return true on success (invalid test case).
+chapter15/15.3/15.3.2/15.3.2.1/15.3.2.1-11-6-s: FAIL
+
+# Array.prototype.reduce - null passed as thisValue to strict callbackfn
+# Invalid test case: http://es5conform.codeplex.com/workitem/29085
+chapter15/15.4/15.4.4/15.4.4.21/15.4.4.21-9-c-ii-4-s: FAIL
 
 [ $arch == mips ]
 

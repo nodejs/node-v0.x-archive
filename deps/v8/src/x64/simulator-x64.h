@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -30,11 +30,25 @@
 
 #include "allocation.h"
 
-// Since there is no simulator for the ia32 architecture the only thing we can
+namespace v8 {
+namespace internal {
+
+// Since there is no simulator for the x64 architecture the only thing we can
 // do is to call the entry directly.
 // TODO(X64): Don't pass p0, since it isn't used?
 #define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
-  entry(p0, p1, p2, p3, p4);
+  (entry(p0, p1, p2, p3, p4))
+
+typedef int (*regexp_matcher)(String*, int, const byte*,
+                              const byte*, int*, Address, int);
+
+// Call the generated regexp code directly. The code at the entry address should
+// expect seven int/pointer sized arguments and return an int.
+#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
+  (FUNCTION_CAST<regexp_matcher>(entry)(p0, p1, p2, p3, p4, p5, p6))
+
+#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
+  (reinterpret_cast<TryCatch*>(try_catch_address))
 
 // The stack limit beyond which we will throw stack overflow errors in
 // generated code. Because generated code on x64 uses the C stack, we
@@ -52,12 +66,6 @@ class SimulatorStack : public v8::internal::AllStatic {
   static inline void UnregisterCTryCatch() { }
 };
 
-// Call the generated regexp code directly. The entry function pointer should
-// expect eight int/pointer sized arguments and return an int.
-#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6) \
-  entry(p0, p1, p2, p3, p4, p5, p6)
-
-#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
-  reinterpret_cast<TryCatch*>(try_catch_address)
+} }  // namespace v8::internal
 
 #endif  // V8_X64_SIMULATOR_X64_H_
