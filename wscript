@@ -587,10 +587,13 @@ def v8_cmd(bld, variant):
   else:
     snapshot = ""
 
-  if bld.env["USE_OPROFILE"]:
-    profile = "prof=oprofile"
-  else:
-    profile = ""
+#  if bld.env["USE_OPROFILE"]:
+#    profile = "prof=oprofile"
+#  else:
+#    profile = ""
+
+  # V8 3.1.5 (commit 550f73a) dropped oprofile support
+  profile = ""
 
   cmd_R = sys.executable + ' "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s toolchain=%s library=static %s %s'
 
