@@ -1993,10 +1993,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
 
   // process.arch
-  process->Set(String::NewSymbol("arch"), String::New(ARCH));
+  process->Set(String::NewSymbol("arch"), String::New("ARCH"));
 
   // process.platform
-  process->Set(String::NewSymbol("platform"), String::New(PLATFORM));
+  process->Set(String::NewSymbol("platform"), String::New("PLATFORM"));
 
   // process.argv
   Local<Array> arguments = Array::New(argc - option_end_index + 1);
