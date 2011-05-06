@@ -168,7 +168,8 @@ code.pre {
 
 #container {
   position: relative;
-  padding: 6em;
+  margin-left: 4em;
+  width: 65%;
   max-width: 50em;
   text-align: left;
 }
@@ -191,7 +192,18 @@ hr {
 }
 
 #toc {
-  
+  position:fixed;
+  top: 0;
+  right: 0;
+  width: 25%;
+  max-width: 24em;
+  height: 95%;
+  margin: 1em;
+  border: 1px solid #d8d8d8;
+  padding-left: 0.5em;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  white-space: nowrap;
 }
 
   #toc h2 {
