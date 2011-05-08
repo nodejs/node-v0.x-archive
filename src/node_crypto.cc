@@ -98,13 +98,7 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
   if (args.Length() == 1 && args[0]->IsString()) {
     String::Utf8Value sslmethod(args[0]->ToString());
 
-    if (strcmp(*sslmethod, "SSLv2_method") == 0) {
-      method = SSLv2_method();
-    } else if (strcmp(*sslmethod, "SSLv2_server_method") == 0) {
-      method = SSLv2_server_method();
-    } else if (strcmp(*sslmethod, "SSLv2_client_method") == 0) {
-      method = SSLv2_client_method();
-    } else if (strcmp(*sslmethod, "SSLv3_method") == 0) {
+    if (strcmp(*sslmethod, "SSLv3_method") == 0) {
       method = SSLv3_method();
     } else if (strcmp(*sslmethod, "SSLv3_server_method") == 0) {
       method = SSLv3_server_method();
@@ -122,6 +116,8 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
       method = TLSv1_server_method();
     } else if (strcmp(*sslmethod, "TLSv1_client_method") == 0) {
       method = TLSv1_client_method();
+    } else if (strcmp(*sslmethod, "SSLv2_method") == 0 || strcmp(*sslmethod, "SSLv2_server_method") == 0 || strcmp(*sslmethod, "SSLv2_client_method") == 0) {
+      return ThrowException(Exception::Error(String::New("SSLv2 methods disabled due to security reasons")));
     } else {
       return ThrowException(Exception::Error(String::New("Unknown method")));
     }
