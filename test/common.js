@@ -27,6 +27,7 @@ exports.fixturesDir = path.join(exports.testDir, 'fixtures');
 exports.libDir = path.join(exports.testDir, '../lib');
 exports.tmpDir = path.join(exports.testDir, 'tmp');
 exports.PORT = 12346;
+exports.MYPORT = 12348;
 
 var util = require('util');
 for (var i in util) exports[i] = util[i];
