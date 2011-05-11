@@ -33,6 +33,7 @@ class Platform {
   static const char* GetProcessTitle(int *len);
 
   static int GetMemory(size_t *rss, size_t *vsize);
+  static int GetProcessMemory(size_t *rss, size_t *vsize, int pid);
   static int GetExecutablePath(char* buffer, size_t* size);
   static int GetCPUInfo(v8::Local<v8::Array> *cpus);
   static double GetFreeMemory();
