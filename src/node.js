@@ -331,7 +331,7 @@
     'mixin': 'process.mixin() has been removed.',
     'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
     'inherits': 'process.inherits() has moved to sys.inherits.',
-    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength',
+    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
   };
 
   startup.removedMethods = function() {
