@@ -58,3 +58,10 @@ dns.lookup('ipv6.google.com', function(error, result, addressType) {
   //assert.equal('string', typeof result);
   assert.equal(6, addressType);
 });
+
+dns.resolve('127.0.0.1', 'PTR', function(error, domains) {
+  if (error) throw error;
+  assert.equal(domains.length, 1);
+  assert.equal(domains[0], 'localhost');
+});
+
