@@ -815,7 +815,7 @@ static Handle<Value> Chmod(const Arguments& args) {
   }
 }
 
-
+#ifdef __POSIX__
 /* fs.fchmod(fd, mode);
  * Wrapper for fchmod(1) / EIO_FCHMOD
  */
@@ -836,6 +836,7 @@ static Handle<Value> FChmod(const Arguments& args) {
     return Undefined();
   }
 }
+#endif // __POSIX__
 
 
 #ifdef __POSIX__
@@ -908,7 +909,7 @@ static inline void ToTimevals(eio_tstamp atime,
   times[1].tv_usec = 10e5 * (mtime - (long) mtime);
 }
 
-
+#ifdef __POSIX__
 static Handle<Value> UTimes(const Arguments& args) {
   HandleScope scope;
 
@@ -937,6 +938,7 @@ static Handle<Value> UTimes(const Arguments& args) {
 
   return Undefined();
 }
+#endif // __POSIX__
 
 
 static Handle<Value> FUTimes(const Arguments& args) {
@@ -1002,16 +1004,16 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "write", Write);
 
   NODE_SET_METHOD(target, "chmod", Chmod);
-  NODE_SET_METHOD(target, "fchmod", FChmod);
 #ifdef __POSIX__
+  NODE_SET_METHOD(target, "fchmod", FChmod);
   //NODE_SET_METHOD(target, "lchmod", LChmod);
 
   NODE_SET_METHOD(target, "chown", Chown);
   NODE_SET_METHOD(target, "fchown", FChown);
   //NODE_SET_METHOD(target, "lchown", LChown);
-#endif // __POSIX__
 
   NODE_SET_METHOD(target, "utimes", UTimes);
+#endif // __POSIX__
   NODE_SET_METHOD(target, "futimes", FUTimes);
 
   errno_symbol = NODE_PSYMBOL("errno");
