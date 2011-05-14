@@ -21,31 +21,30 @@
 
 var common = require('../common');
 var assert = require('assert');
-var http = require('http');
+var tls = require('tls');
+var fs = require('fs');
 
-var server = http.createServer(function(req, res) {
-  console.log('got request. setting 100ms second timeout');
-  req.connection.setTimeout(100);
+var hadTimeout = false;
 
-  req.on('close', function(err) {
-    assert.strictEqual(err.code, 'timeout');
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+};
 
-    common.debug('TIMEOUT');
+var server = tls.Server(options, function(socket) {
+  socket.setTimeout(100);
+
+  socket.on('timeout', function(err) {
+    hadTimeout = true;
+    socket.end();
     server.close();
   });
 });
 
 server.listen(common.PORT, function() {
-  console.log('Server running at http://127.0.0.1:' + common.PORT + '/');
+  var socket = tls.connect(common.PORT);
+});
 
-  var errorTimer = setTimeout(function() {
-    throw new Error('Timeout was not sucessful');
-  }, 2000);
-
-  var url = 'http://localhost:' + common.PORT + '/';
-
-  http.cat(url, 'utf8', function(err, content) {
-    clearTimeout(errorTimer);
-    console.log('HTTP REQUEST COMPLETE (this is good)');
-  });
+process.on('exit', function() {
+  assert.ok(hadTimeout);
 });
