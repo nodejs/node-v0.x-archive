@@ -150,13 +150,13 @@ static int tick_time_head;
 static void StartGCTimer () {
   if (!ev_is_active(&gc_timer)) {
     ev_timer_start(EV_DEFAULT_UC_ &gc_timer);
-    ev_unref(EV_DEFAULT_UC);
+    uv_unref();
   }
 }
 
 static void StopGCTimer () {
   if (ev_is_active(&gc_timer)) {
-    ev_ref(EV_DEFAULT_UC);
+    uv_ref();
     ev_timer_stop(EV_DEFAULT_UC_ &gc_timer);
   }
 }
@@ -2368,7 +2368,7 @@ char** Init(int argc, char *argv[]) {
 
   ev_check_init(&node::gc_check, node::Check);
   ev_check_start(EV_DEFAULT_UC_ &node::gc_check);
-  ev_unref(EV_DEFAULT_UC);
+  uv_unref();
 
   ev_idle_init(&node::gc_idle, node::Idle);
   ev_timer_init(&node::gc_timer, node::CheckStatus, 5., 5.);
@@ -2380,11 +2380,11 @@ char** Init(int argc, char *argv[]) {
 
     ev_async_init(&node::eio_want_poll_notifier, node::WantPollNotifier);
     ev_async_start(EV_DEFAULT_UC_ &node::eio_want_poll_notifier);
-    ev_unref(EV_DEFAULT_UC);
+    uv_unref();
 
     ev_async_init(&node::eio_done_poll_notifier, node::DonePollNotifier);
     ev_async_start(EV_DEFAULT_UC_ &node::eio_done_poll_notifier);
-    ev_unref(EV_DEFAULT_UC);
+    uv_unref();
 
     eio_init(node::EIOWantPoll, node::EIODonePoll);
     // Don't handle more than 10 reqs on each eio_poll(). This is to avoid
@@ -2408,7 +2408,7 @@ char** Init(int argc, char *argv[]) {
   // Start the async watcher.
   ev_async_start(EV_DEFAULT_UC_ &node::debug_watcher);
   // unref it so that we exit the event loop despite it being active.
-  ev_unref(EV_DEFAULT_UC);
+  uv_unref();
 
 
   // If the --debug flag was specified then initialize the debug thread.
@@ -2472,7 +2472,7 @@ int Start(int argc, char *argv[]) {
   // All our arguments are loaded. We've evaluated all of the scripts. We
   // might even have created TCP servers. Now we enter the main eventloop. If
   // there are no watchers on the loop (except for the ones that were
-  // ev_unref'd) then this function exits. As long as there are active
+  // uv_unref'd) then this function exits. As long as there are active
   // watchers, it blocks.
   uv_run();
 

@@ -101,7 +101,7 @@ Handle<Value> StatWatcher::Start(const Arguments& args) {
   handler->persistent_ = args[1]->IsTrue();
 
   if (!handler->persistent_) {
-    ev_unref(EV_DEFAULT_UC);
+    uv_unref();
   }
 
   handler->Ref();
@@ -121,7 +121,7 @@ Handle<Value> StatWatcher::Stop(const Arguments& args) {
 
 void StatWatcher::Stop () {
   if (watcher_.active) {
-    if (!persistent_) ev_ref(EV_DEFAULT_UC);
+    if (!persistent_) uv_ref();
     ev_stat_stop(EV_DEFAULT_UC_ &watcher_);
     free(path_);
     path_ = NULL;
