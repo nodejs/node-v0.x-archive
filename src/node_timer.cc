@@ -144,7 +144,7 @@ Handle<Value> Timer::Start(const Arguments& args) {
 
   // Update the event loop time. Need to call this because processing JS can
   // take non-negligible amounts of time.
-  ev_now_update(EV_DEFAULT_UC);
+  uv_update_time();
 
   ev_timer_start(EV_DEFAULT_UC_ &timer->watcher_);
 
