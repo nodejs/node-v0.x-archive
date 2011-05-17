@@ -31,3 +31,6 @@
 - Use http_parser_execute2() in node_http_parser.cc and make req.pause()
   work correctly
   https://github.com/ry/http-parser/blob/c95a5479596e95b7cdd88ca9d7b32fd3afb4379c/http_parser.h#L266
+
+- Get a WxWidgets wrapper going for Node.JS
+Just staring work here: https://github.com/Poincare/node
