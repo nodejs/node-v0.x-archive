@@ -1209,7 +1209,6 @@ ssize_t DecodeWrite(char *buf,
 
   for (size_t i = 0; i < buflen; i++) {
     unsigned char *b = reinterpret_cast<unsigned char*>(&twobytebuf[i]);
-    assert(b[1] == 0);
     buf[i] = b[0];
   }
 
@@ -2348,13 +2347,6 @@ char** Init(int argc, char *argv[]) {
   // Initialize winsock and soem related caches
   wsa_init();
 #endif // __MINGW32__
-
-  // Initialize the default ev loop.
-#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
-  ev_default_loop(EVBACKEND_KQUEUE);
-#else
-  ev_default_loop(EVFLAG_AUTO);
-#endif
 
   uv_prepare_init(&node::prepare_tick_watcher, NULL, NULL);
   uv_prepare_start(&node::prepare_tick_watcher, PrepareTick);
