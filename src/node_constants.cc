@@ -103,6 +103,11 @@ void DefineConstants(Handle<Object> target) {
   NODE_DEFINE_CONSTANT(target, O_SYNC);
 #endif
 
+#ifdef O_SYMLINK
+  NODE_DEFINE_CONSTANT(target, O_SYMLINK);
+#endif
+
+
 #ifdef S_IRWXU
   NODE_DEFINE_CONSTANT(target, S_IRWXU);
 #endif
@@ -911,6 +916,11 @@ void DefineConstants(Handle<Object> target) {
 
 #ifdef SSL_OP_CRYPTOPRO_TLSEXT_BUG
   NODE_DEFINE_CONSTANT(target, SSL_OP_CRYPTOPRO_TLSEXT_BUG);
+#endif
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+#define NPN_ENABLED 1
+  NODE_DEFINE_CONSTANT(target, NPN_ENABLED);
 #endif
 }
 

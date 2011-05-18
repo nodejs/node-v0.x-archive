@@ -38,6 +38,8 @@
     startup.processKillAndExit();
     startup.processSignalHandlers();
 
+    startup.processChannel();
+
     startup.removedMethods();
 
     startup.resolveArgv0();
@@ -111,6 +113,9 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
+    if (process.cov) {
+      global.__cov = {};
+    }
   };
 
   startup.globalTimeouts = function() {
@@ -304,6 +309,19 @@
     };
   };
 
+
+  startup.processChannel = function() {
+    // If we were spawned with env NODE_CHANNEL_FD then load that up and
+    // start parsing data from that stream.
+    if (process.env.NODE_CHANNEL_FD) {
+      var fd = parseInt(process.env.NODE_CHANNEL_FD);
+      assert(fd >= 0);
+      var cp = NativeModule.require('child_process');
+      cp._forkChild(fd);
+      assert(process.send);
+    }
+  }
+
   startup._removedProcessMethods = {
     'assert': 'process.assert() use require("assert").ok() instead',
     'debug': 'process.debug() use console.error() instead',
@@ -342,6 +360,20 @@
     if (!isWindows && argv0.indexOf('/') !== -1 && argv0.charAt(0) !== '/') {
       var path = NativeModule.require('path');
       process.argv[0] = path.join(cwd, process.argv[0]);
+    }
+
+    if (process.cov) {
+      process.on('exit', function() {
+        var coverage = JSON.stringify(__cov);
+        var path = NativeModule.require('path');
+        var fs = NativeModule.require('fs');
+        var filename = path.join(cwd, 'node-cov.json');
+        try {
+          fs.unlinkSync(filename);
+        } catch(e) {
+        }
+        fs.writeFileSync(filename, coverage);
+      });
     }
   };
 

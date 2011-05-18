@@ -21,6 +21,8 @@
 
 #include <node.h>
 
+#include <uv.h>
+
 #include <v8-debug.h>
 #include <node_dtrace.h>
 
@@ -107,12 +109,13 @@ static char *eval_string = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
 static bool debug_wait_connect = false;
+static bool cov = false;
 static int debug_port=5858;
 static int max_stack_size = 0;
 
-static ev_check check_tick_watcher;
-static ev_prepare prepare_tick_watcher;
-static ev_idle tick_spinner;
+static uv_handle_t check_tick_watcher;
+static uv_handle_t prepare_tick_watcher;
+static uv_handle_t tick_spinner;
 static bool need_tick_cb;
 static Persistent<String> tick_callback_sym;
 
@@ -199,6 +202,12 @@ static void Check(EV_P_ ev_check *watcher, int revents) {
 }
 
 
+static void Spin(uv_handle_t* handle, int status) {
+  assert(handle == &tick_spinner);
+  assert(status == 0);
+}
+
+
 static Handle<Value> NeedTickCallback(const Arguments& args) {
   HandleScope scope;
   need_tick_cb = true;
@@ -207,14 +216,8 @@ static Handle<Value> NeedTickCallback(const Arguments& args) {
   // there is nothing left to do in the event loop and libev will exit. The
   // ev_prepare callback isn't called before exiting. Thus we start this
   // tick_spinner to keep the event loop alive long enough to handle it.
-  ev_idle_start(EV_DEFAULT_UC_ &tick_spinner);
+  uv_idle_start(&tick_spinner, Spin);
   return Undefined();
-}
-
-
-static void Spin(EV_P_ ev_idle *watcher, int revents) {
-  assert(watcher == &tick_spinner);
-  assert(revents == EV_IDLE);
 }
 
 
@@ -223,7 +226,7 @@ static void Tick(void) {
   if (!need_tick_cb) return;
 
   need_tick_cb = false;
-  ev_idle_stop(EV_DEFAULT_UC_ &tick_spinner);
+  uv_idle_stop(&tick_spinner);
 
   HandleScope scope;
 
@@ -247,16 +250,16 @@ static void Tick(void) {
 }
 
 
-static void PrepareTick(EV_P_ ev_prepare *watcher, int revents) {
-  assert(watcher == &prepare_tick_watcher);
-  assert(revents == EV_PREPARE);
+static void PrepareTick(uv_handle_t* handle, int status) {
+  assert(handle == &prepare_tick_watcher);
+  assert(status == 0);
   Tick();
 }
 
 
-static void CheckTick(EV_P_ ev_check *watcher, int revents) {
-  assert(watcher == &check_tick_watcher);
-  assert(revents == EV_CHECK);
+static void CheckTick(uv_handle_t* handle, int status) {
+  assert(handle == &check_tick_watcher);
+  assert(status == 0);
   Tick();
 }
 
@@ -1206,7 +1209,6 @@ ssize_t DecodeWrite(char *buf,
 
   for (size_t i = 0; i < buflen; i++) {
     unsigned char *b = reinterpret_cast<unsigned char*>(&twobytebuf[i]);
-    assert(b[1] == 0);
     buf[i] = b[0];
   }
 
@@ -1277,13 +1279,24 @@ static void ReportException(TryCatch &try_catch, bool show_line) {
 
   String::Utf8Value trace(try_catch.StackTrace());
 
-  if (trace.length() > 0) {
+  // range errors have a trace member set to undefined
+  if (trace.length() > 0 && !try_catch.StackTrace()->IsUndefined()) {
     fprintf(stderr, "%s\n", *trace);
   } else {
     // this really only happens for RangeErrors, since they're the only
-    // kind that won't have all this info in the trace.
+    // kind that won't have all this info in the trace, or when non-Error
+    // objects are thrown manually.
     Local<Value> er = try_catch.Exception();
-    String::Utf8Value msg(!er->IsObject() ? er->ToString()
+    bool isErrorObject = er->IsObject() &&
+      !(er->ToObject()->Get(String::New("message"))->IsUndefined()) &&
+      !(er->ToObject()->Get(String::New("name"))->IsUndefined());
+
+    if (isErrorObject) {
+      String::Utf8Value name(er->ToObject()->Get(String::New("name")));
+      fprintf(stderr, "%s: ", *name);
+    }
+
+    String::Utf8Value msg(!isErrorObject ? er->ToString()
                          : er->ToObject()->Get(String::New("message"))->ToString());
     fprintf(stderr, "%s\n", *msg);
   }
@@ -1991,6 +2004,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
 
 
+  // process.arch
+  process->Set(String::NewSymbol("arch"), String::New(ARCH));
+
   // process.platform
   process->Set(String::NewSymbol("platform"), String::New(PLATFORM));
 
@@ -2029,6 +2045,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   process->Set(String::NewSymbol("ENV"), ENV);
 
   process->Set(String::NewSymbol("pid"), Integer::New(getpid()));
+  process->Set(String::NewSymbol("cov"), cov ? True() : False());
 
   // -e, --eval
   if (eval_string) {
@@ -2171,6 +2188,7 @@ static void PrintHelp() {
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
+         "  --cov                code coverage; writes node-cov.json \n"
          "\n"
          "Enviromental variables:\n"
          "NODE_PATH              ':'-separated list of directories\n"
@@ -2192,6 +2210,9 @@ static void ParseArgs(int argc, char **argv) {
     const char *arg = argv[i];
     if (strstr(arg, "--debug") == arg) {
       ParseDebugOpt(arg);
+      argv[i] = const_cast<char*>("");
+    } else if (!strcmp(arg, "--cov")) {
+      cov = true;
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
@@ -2242,7 +2263,7 @@ static void EnableDebug(bool wait_connect) {
   assert(r);
 
   // Print out some information.
-  fprintf(stderr, "debugger listening on port %d\r\n", debug_port);
+  fprintf(stderr, "debugger listening on port %d", debug_port);
 }
 
 
@@ -2327,22 +2348,15 @@ char** Init(int argc, char *argv[]) {
   wsa_init();
 #endif // __MINGW32__
 
-  // Initialize the default ev loop.
-#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
-  ev_default_loop(EVBACKEND_KQUEUE);
-#else
-  ev_default_loop(EVFLAG_AUTO);
-#endif
+  uv_prepare_init(&node::prepare_tick_watcher, NULL, NULL);
+  uv_prepare_start(&node::prepare_tick_watcher, PrepareTick);
+  uv_unref();
 
-  ev_prepare_init(&node::prepare_tick_watcher, node::PrepareTick);
-  ev_prepare_start(EV_DEFAULT_UC_ &node::prepare_tick_watcher);
-  ev_unref(EV_DEFAULT_UC);
+  uv_check_init(&node::check_tick_watcher, NULL, NULL);
+  uv_check_start(&node::check_tick_watcher, node::CheckTick);
+  uv_unref();
 
-  ev_check_init(&node::check_tick_watcher, node::CheckTick);
-  ev_check_start(EV_DEFAULT_UC_ &node::check_tick_watcher);
-  ev_unref(EV_DEFAULT_UC);
-
-  ev_idle_init(&node::tick_spinner, node::Spin);
+  uv_idle_init(&node::tick_spinner, NULL, NULL);
 
   ev_check_init(&node::gc_check, node::Check);
   ev_check_start(EV_DEFAULT_UC_ &node::gc_check);
@@ -2417,7 +2431,17 @@ void EmitExit(v8::Handle<v8::Object> process) {
 }
 
 
+uv_buf UVAlloc(uv_handle_t* handle, size_t suggested_size) {
+  char* base = (char*)malloc(suggested_size);
+  uv_buf buf;
+  buf.base = base;
+  buf.len = suggested_size;
+  return buf;
+}
+
+
 int Start(int argc, char *argv[]) {
+  uv_init(UVAlloc);
   v8::V8::Initialize();
   v8::HandleScope handle_scope;
 
@@ -2442,7 +2466,7 @@ int Start(int argc, char *argv[]) {
   // there are no watchers on the loop (except for the ones that were
   // ev_unref'd) then this function exits. As long as there are active
   // watchers, it blocks.
-  ev_loop(EV_DEFAULT_UC_ 0);
+  uv_run();
 
   EmitExit(process);
 

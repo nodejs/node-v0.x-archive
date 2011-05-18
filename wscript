@@ -143,13 +143,6 @@ def set_options(opt):
                 , dest='openssl_libpath'
                 )
 
-  opt.add_option( '--oprofile'
-                , action='store_true'
-                , default=False
-                , help="add oprofile support"
-                , dest='use_oprofile'
-                )
-
   opt.add_option( '--gdb'
                 , action='store_true'
                 , default=False
@@ -179,27 +172,6 @@ def set_options(opt):
                 , dest='shared_cares_libpath'
                 )
 
-
-  opt.add_option('--shared-libev'
-                , action='store_true'
-                , default=False
-                , help='Link to a shared libev DLL instead of static linking'
-                , dest='shared_libev'
-                )
-
-  opt.add_option( '--shared-libev-includes'
-                , action='store'
-                , default=False
-                , help='Directory containing libev header files'
-                , dest='shared_libev_includes'
-                )
-
-  opt.add_option( '--shared-libev-libpath'
-                , action='store'
-                , default=False
-                , help='A directory to search for the shared libev DLL'
-                , dest='shared_libev_libpath'
-                )
 
   opt.add_option( '--with-dtrace'
                 , action='store_true'
@@ -250,13 +222,8 @@ def configure(conf):
 
   conf.env["USE_SHARED_V8"] = o.shared_v8 or o.shared_v8_includes or o.shared_v8_libpath or o.shared_v8_libname
   conf.env["USE_SHARED_CARES"] = o.shared_cares or o.shared_cares_includes or o.shared_cares_libpath
-  conf.env["USE_SHARED_LIBEV"] = o.shared_libev or o.shared_libev_includes or o.shared_libev_libpath
 
-  conf.env["USE_OPROFILE"] = o.use_oprofile
   conf.env["USE_GDBJIT"] = o.use_gdbjit
-
-  if o.use_oprofile:
-    conf.check(lib=['bfd', 'opagent'], uselib_store="OPROFILE")
 
   conf.check(lib='dl', uselib_store='DL')
   if not sys.platform.startswith("sunos") and not sys.platform.startswith("cygwin") and not sys.platform.startswith("win32"):
@@ -422,22 +389,6 @@ def configure(conf):
   else:
     conf.sub_config('deps/c-ares')
 
-
-  if conf.env['USE_SHARED_LIBEV']:
-    libev_includes = [];
-    if o.shared_libev_includes: libev_includes.append(o.shared_libev_includes);
-    libev_libpath = [];
-    if o.shared_libev_libpath: libev_libpath.append(o.shared_libev_libpath);
-    if not conf.check_cxx(lib='ev', header_name='ev.h',
-                          uselib_store='EV',
-                          includes=libev_includes,
-                          libpath=libev_libpath):
-      conf.fatal("Cannot find libev")
-  else:
-    conf.sub_config('deps/libev')
-
-
-
   conf.define("HAVE_CONFIG_H", 1)
 
   if sys.platform.startswith("sunos"):
@@ -501,6 +452,9 @@ def configure(conf):
   else:
     conf.env.append_value('CPPFLAGS', '-DHAVE_FDATASYNC=0')
 
+  # arch
+  conf.env.append_value('CPPFLAGS', '-DARCH="' + conf.env['DEST_CPU'] + '"')
+
   # platform
   conf.env.append_value('CPPFLAGS', '-DPLATFORM="' + conf.env['DEST_OS'] + '"')
 
@@ -549,7 +503,6 @@ def configure(conf):
 
   # Configure default variant
   conf.setenv('default')
-  conf.env.append_value('CPPFLAGS', '-DNDEBUG')
   default_compile_flags = ['-g', '-O3']
   conf.env.append_value('CCFLAGS', default_compile_flags)
   conf.env.append_value('CXXFLAGS', default_compile_flags)
@@ -584,12 +537,7 @@ def v8_cmd(bld, variant):
   else:
     snapshot = ""
 
-  if bld.env["USE_OPROFILE"]:
-    profile = "prof=oprofile"
-  else:
-    profile = ""
-
-  cmd_R = sys.executable + ' "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s toolchain=%s library=static %s %s'
+  cmd_R = sys.executable + ' "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s toolchain=%s library=static %s'
 
   cmd = cmd_R % ( scons
                 , Options.options.jobs
@@ -599,7 +547,6 @@ def v8_cmd(bld, variant):
                 , arch
                 , toolchain
                 , snapshot
-                , profile
                 )
 
   if bld.env["USE_GDBJIT"]:
@@ -627,7 +574,6 @@ def build_v8(bld):
   t = join(bld.srcnode.abspath(bld.env_of_name("default")), v8.target)
   bld.env_of_name('default').append_value("LINKFLAGS_V8", t)
 
-
   ### v8 debug
   if bld.env["USE_DEBUG"]:
     v8_debug = v8.clone("debug")
@@ -639,6 +585,47 @@ def build_v8(bld):
     bld.env_of_name('debug').append_value("LINKFLAGS_V8_G", t)
 
   bld.install_files('${PREFIX}/include/node/', 'deps/v8/include/*.h')
+
+def sh_escape(s):
+  return s.replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
+
+def uv_cmd(bld, variant):
+  srcdeps = join(bld.path.abspath(), "deps")
+  srcdir = join(srcdeps, "uv")
+  blddir = bld.srcnode.abspath(bld.env_of_name(variant)) + '/deps/uv'
+  #
+  # FIXME This is awful! We're copying the entire source directory into the
+  # build directory before each compile. This could be much improved by
+  # modifying libuv's build to send object files to a separate directory.
+  #
+  cmd = 'cp -r ' + sh_escape(srcdir)  + '/* ' + sh_escape(blddir) + \
+        ' &&  make -C ' + sh_escape(blddir)
+  return cmd
+
+
+def build_uv(bld):
+  uv = bld.new_task_gen(
+    name = 'uv',
+    source = 'deps/uv/uv.h',
+    target = 'deps/uv/uv.a',
+    before = "cxx",
+    rule = uv_cmd(bld, 'default')
+  )
+
+  #bld.env["CPPPATH_UV"] = 'deps/uv/'
+
+  t = join(bld.srcnode.abspath(bld.env_of_name("default")), uv.target)
+  bld.env_of_name('default').append_value("LINKFLAGS_UV", t)
+
+  if bld.env["USE_DEBUG"]:
+    uv_debug = uv.clone("debug")
+    uv_debug.rule = uv_cmd(bld, 'debug')
+
+    t = join(bld.srcnode.abspath(bld.env_of_name("debug")), uv_debug.target)
+    bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
+
+  bld.install_files('${PREFIX}/include/node/', 'deps/uv/*.h')
+  bld.install_files('${PREFIX}/include/node/', 'deps/uv/ev/*.h')
 
 
 def build(bld):
@@ -661,8 +648,9 @@ def build(bld):
 
   bld.add_subdirs('deps/libeio')
 
+  build_uv(bld)
+
   if not bld.env['USE_SHARED_V8']: build_v8(bld)
-  if not bld.env['USE_SHARED_LIBEV']: bld.add_subdirs('deps/libev')
   if not bld.env['USE_SHARED_CARES']: bld.add_subdirs('deps/c-ares')
 
 
@@ -750,8 +738,8 @@ def build(bld):
     native_cc_debug = native_cc.clone("debug")
     native_cc_debug.rule = javascript_in_c_debug
 
-  native_cc.rule = javascript_in_c
-  
+  native_cc.rule = javascript_in_c_debug
+
   if bld.env["USE_DTRACE"]:
     dtrace = bld.new_task_gen(
       name   = "dtrace",
@@ -821,7 +809,7 @@ def build(bld):
   node = bld.new_task_gen("cxx", product_type)
   node.name         = "node"
   node.target       = "node"
-  node.uselib = 'RT EV OPENSSL CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
+  node.uselib = 'RT OPENSSL CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
   node.add_objects = 'eio http_parser'
   if product_type_is_lib:
     node.install_path = '${LIBDIR}'
@@ -866,13 +854,11 @@ def build(bld):
     src/
     deps/libeio
     deps/http_parser
+    deps/uv
+    deps/uv/ev
   """
 
   if not bld.env["USE_SHARED_V8"]: node.includes += ' deps/v8/include '
-
-  if not bld.env["USE_SHARED_LIBEV"]:
-    node.add_objects += ' ev '
-    node.includes += ' deps/libev '
 
   if not bld.env["USE_SHARED_CARES"]:
     node.add_objects += ' cares '
@@ -889,7 +875,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.4.5' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.4.7' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 
@@ -904,14 +890,14 @@ def build(bld):
   if bld.env["USE_DEBUG"]:
     node_g = node.clone("debug")
     node_g.target = "node_g"
-    node_g.uselib += ' V8_G'
+    node_g.uselib += ' V8_G UV '
 
     node_conf_g = node_conf.clone("debug")
     node_conf_g.dict = subflags(node_g)
     node_conf_g.install_path = None
 
   # After creating the debug clone, append the V8 dep
-  node.uselib += ' V8'
+  node.uselib += ' V8 UV '
 
   bld.install_files('${PREFIX}/include/node/', """
     config.h

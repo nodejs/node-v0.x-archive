@@ -540,3 +540,40 @@ console.log(z.length)
 assert.equal(2, z.length);
 assert.equal(0x66, z[0]);
 assert.equal(0x6f, z[1]);
+
+assert.equal(0, Buffer('hello').slice(0, 0).length)
+
+b = new Buffer(50);
+b.fill("h");
+for (var i = 0; i < b.length; i++) {
+  assert.equal("h".charCodeAt(0), b[i]);
+}
+
+b.fill(0);
+for (var i = 0; i < b.length; i++) {
+  assert.equal(0, b[i]);
+}
+
+b.fill(1, 16, 32);
+for (var i = 0; i < 16; i++) assert.equal(0, b[i]);
+for (; i < 32; i++) assert.equal(1, b[i]);
+for (; i < b.length; i++) assert.equal(0, b[i]);
+
+var b = new SlowBuffer(10);
+b.write('あいうえお', 'ucs2');
+assert.equal(b.toString('ucs2'), 'あいうえお');
+
+// Binary encoding should write only one byte per character.
+var b = Buffer([0xde, 0xad, 0xbe, 0xef]);
+var s = String.fromCharCode(0xffff);
+b.write(s, 0, 'binary')
+assert.equal(0xff, b[0]);
+assert.equal(0xad, b[1]);
+assert.equal(0xbe, b[2]);
+assert.equal(0xef, b[3]);
+s = String.fromCharCode(0xaaee);
+b.write(s, 0, 'binary')
+assert.equal(0xee, b[0]);
+assert.equal(0xad, b[1]);
+assert.equal(0xbe, b[2]);
+assert.equal(0xef, b[3]);

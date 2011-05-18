@@ -88,7 +88,7 @@ sent to the server on that socket.
 
 If a client connection emits an 'error' event - it will forwarded here.
 
-### http.createServer(requestListener)
+### http.createServer([requestListener])
 
 Returns a new web server object.
 
@@ -142,9 +142,29 @@ body chunk is a string.  The body encoding is set with
 
 `function () { }`
 
-Emitted exactly once for each message. No arguments.  After
-emitted no other events will be emitted on the request.
+Emitted exactly once for each request. After that, no more `'data'` events
+will be emitted on the request.
 
+### Event: 'close'
+
+`function (err) { }`
+
+Indicates that the underlaying connection was terminated before
+`response.end()` was called or able to flush.
+
+The `err` parameter is always present and indicates the reason for the timeout:
+
+`err.code === 'timeout'` indicates that the underlaying connection timed out.
+This may happen because all incoming connections have a default timeout of 2
+minutes.
+
+`err.code === 'aborted'` means that the client has closed the underlaying
+connection prematurely.
+
+Just like `'end'`, this event occurs only once per request, and no more `'data'`
+events will fire afterwards.
+
+Note: `'close'` can fire after `'end'`, but not vice versa.
 
 ### request.method
 
@@ -259,6 +279,11 @@ be called before `response.end()` is called.
 If you call `response.write()` or `response.end()` before calling this, the
 implicit/mutable headers will be calculated and call this function for you.
 
+Note: that Content-Length is given in bytes not characters. The above example
+works because the string `'hello world'` contains only single byte characters.
+If the body contains higher coded characters then `Buffer.byteLength()`
+should be used to determine the number of bytes in a given encoding.
+
 ### response.statusCode
 
 When using implicit headers (not calling `response.writeHead()` explicitly), this property
@@ -363,6 +388,7 @@ Options:
 
 - `host`: A domain name or IP address of the server to issue the request to.
 - `port`: Port of remote server.
+- `socketPath`: Unix Domain Socket (use one of host:port or socketPath)
 - `method`: A string specifying the HTTP request method. Possible values:
   `'GET'` (default), `'POST'`, `'PUT'`, and `'DELETE'`.
 - `path`: Request path. Should include query string and fragments if any.
@@ -389,6 +415,10 @@ Example:
       res.on('data', function (chunk) {
         console.log('BODY: ' + chunk);
       });
+    });
+
+    req.on('error', function(e) {
+      console.log('problem with request: ' + e.message);
     });
 
     // write data to request body
@@ -438,12 +468,18 @@ Example:
 
 
 ## http.Agent
-## http.getAgent(host, port)
+## http.getAgent(options)
 
 `http.request()` uses a special `Agent` for managing multiple connections to
 an HTTP server. Normally `Agent` instances should not be exposed to user
 code, however in certain situations it's useful to check the status of the
 agent. The `http.getAgent()` function allows you to access the agents.
+
+Options:
+
+- `host`: A domain name or IP address of the server to issue the request to.
+- `port`: Port of remote server.
+- `socketPath`: Unix Domain Socket (use one of host:port or socketPath)
 
 ### Event: 'upgrade'
 
