@@ -49,7 +49,7 @@ Readline supports tab completion, you can pass a custom completion function that
 
 ### readline.setPrompt(string)
 
-Set the prompt to a to the string provided.
+Set the prompt to the string provided.
 
 ### readline.prompt()
 
@@ -57,7 +57,7 @@ Display the prompt.
 
 ### readline.question(string, callback)
 
-Display the prompt, supply a specific message and a callback.
+Set the prompt to the string provided, after input is captured, call the callback.
 
 ### key and key combination behaviors
 
