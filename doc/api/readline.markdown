@@ -68,44 +68,44 @@ Display the prompt, supply a specific message and a callback.
 
 #### Control key pressed
   
-  `ctrl + c` emit SIGINT
-  `ctrl + h` delete left
-  `ctrl + d` delete right or EOF
-  `ctrl + u` delete the whole line
-  `ctrl + k` delete from current to end of line
-  `ctrl + a` move cursor to the start of the line
-  `ctrl + e` move cursor to the end of the line
-  `ctrl + b` move cursor back one character
-  `ctrl + f` move cursor forward one character
-  `ctrl + n` next history item
-  `ctrl + p` previous history item
-  `ctrl + z` exit readline (process.kill(process.pid, 'SIGTSTP'))
+    `ctrl + c` emit SIGINT
+    `ctrl + h` delete left
+    `ctrl + d` delete right or EOF
+    `ctrl + u` delete the whole line
+    `ctrl + k` delete from current to end of line
+    `ctrl + a` move cursor to the start of the line
+    `ctrl + e` move cursor to the end of the line
+    `ctrl + b` move cursor back one character
+    `ctrl + f` move cursor forward one character
+    `ctrl + n` next history item
+    `ctrl + p` previous history item
+    `ctrl + z` exit readline
 
-  `ctrl + delete`                   delete forward to a word boundary
-  `ctrl + w` or `ctrl + backspace`  delete backwards to a word boundary  
-  `ctrl + backspace`                delete word left
+    `ctrl + delete`                   delete forward to a word boundary
+    `ctrl + w` or `ctrl + backspace`  delete backwards to a word boundary  
+    `ctrl + backspace`                delete word left
 
-  `ctrl + left` move cursor word left
-  `ctrl + right` move cursor word right
+    `ctrl + left` move cursor word left
+    `ctrl + right` move cursor word right
 
 #### Meta key pressed
 
-  `meta + b`                    move cursor backward word
-  `meta + f`                    move cursor forward word
-  `meta + d` or `meta + delete` delete forward word
-  `meta + backspace'            delete backwards to a word boundary
+    `meta + b`                    move cursor backward word
+    `meta + f`                    move cursor forward word
+    `meta + d` or `meta + delete` delete forward word
+    `meta + backspace'            delete backwards to a word boundary
 
 #### No modifier keys pressed
 
-  `enter`       emits the `line` the event and adds the value of the line as history.
-  `backspace`   delete a character to the left
-  `delete`      delete a character to the right
-  `tab`         attempt tab completion (see the `completer` object as detailed above)
-  `left`        move cursor left
-  `right`       move cursor right
-  `home`        move cursor to the beginning of the line
-  `end`         move cursor to the end of the line
+    `enter`       emits the `line` the event and adds the value of the line as history.
+    `backspace`   delete a character to the left
+    `delete`      delete a character to the right
+    `tab`         attempt tab completion (see the `completer` object as detailed above)
+    `left`        move cursor left
+    `right`       move cursor right
+    `home`        move cursor to the beginning of the line
+    `end`         move cursor to the end of the line
   
-  `up`          previous history item
-  `down`        next history item
+    `up`          previous history item
+    `down`        next history item
 
