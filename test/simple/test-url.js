@@ -169,11 +169,11 @@ var parseTests = {
     'pathname': '/etc/passwd',
     'hostname': ''
   },
-  'file:///etc/node/' : {
-    'href': 'file:///etc/node/',
+  'file://localhost/etc/node/' : {
+    'href': 'file://localhost/etc/node/',
     'protocol': 'file:',
     'pathname': '/etc/node/',
-    'hostname': ''
+    'hostname': 'localhost'
   },
   'http:/baz/../foo/bar' : {
     'href': 'http:/baz/../foo/bar',
