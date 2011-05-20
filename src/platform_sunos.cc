@@ -32,6 +32,13 @@
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/loadavg.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+
+
 
 #if (!defined(_LP64)) && (_FILE_OFFSET_BITS - 0 == 64)
 #define PROCFS_FILE_OFFSET_BITS_HACK 1
@@ -161,7 +168,7 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
   *cpus = Array::New();
 
   lookup_instance = 0;
-  while (ksp = kstat_lookup(kc, "cpu_info", lookup_instance, NULL)){
+  while (ksp = kstat_lookup(kc, (char *)"cpu_info", lookup_instance, NULL)){
     cpuinfo  = Object::New();
 
     if (kstat_read(kc, ksp, NULL) == -1) {
@@ -176,9 +183,9 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
       cpuinfo->Set(String::New("error"), String::New(strerror(errno)));
       (*cpus)->Set(lookup_instance, cpuinfo);
     } else {
-      knp = (kstat_named_t *) kstat_data_lookup(ksp, "clock_MHz");
+      knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"clock_MHz");
       cpuinfo->Set(String::New("speed"), data_named(knp));
-      knp = (kstat_named_t *) kstat_data_lookup(ksp, "brand");
+      knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"brand");
       cpuinfo->Set(String::New("model"), data_named(knp));
       (*cpus)->Set(lookup_instance, cpuinfo);
     }
@@ -187,7 +194,7 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
   }
 
   lookup_instance = 0;
-  while (ksp = kstat_lookup(kc, "cpu", lookup_instance, "sys")){
+  while (ksp = kstat_lookup(kc, (char *)"cpu", lookup_instance, (char *)"sys")){
     cpuinfo = (*cpus)->Get(lookup_instance)->ToObject();
     cputimes = Object::New();
 
@@ -195,13 +202,13 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
       cputimes->Set(String::New("error"), String::New(strerror(errno)));
       cpuinfo->Set(String::New("times"), cpuinfo);
     } else {
-      knp = (kstat_named_t *) kstat_data_lookup(ksp, "cpu_ticks_kernel");
+      knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"cpu_ticks_kernel");
       cputimes->Set(String::New("system"), data_named(knp));
-      knp = (kstat_named_t *) kstat_data_lookup(ksp, "cpu_ticks_user");
+      knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"cpu_ticks_user");
       cputimes->Set(String::New("user"), data_named(knp));
-      knp = (kstat_named_t *) kstat_data_lookup(ksp, "cpu_ticks_idle");
+      knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"cpu_ticks_idle");
       cputimes->Set(String::New("idle"), data_named(knp));
-      knp = (kstat_named_t *) kstat_data_lookup(ksp, "intr");
+      knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"intr");
       cputimes->Set(String::New("irq"), data_named(knp));
 
       cpuinfo->Set(String::New("times"), cputimes);
@@ -217,12 +224,37 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
 
 
 double Platform::GetFreeMemory() {
-  return 0.0;
+  kstat_ctl_t   *kc;
+  kstat_t       *ksp;
+  kstat_named_t *knp;
+
+  double pagesize = static_cast<double>(sysconf(_SC_PAGESIZE));
+  ulong_t freemem;
+
+  if((kc = kstat_open()) == NULL)
+    throw "could not open kstat";
+
+  ksp = kstat_lookup(kc, (char *)"unix", 0, (char *)"system_pages");
+
+  if(kstat_read(kc, ksp, NULL) == -1){
+    throw "could not read kstat";
+  }
+  else {
+    knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"freemem");
+    freemem = knp->value.ul;
+  }
+
+  kstat_close(kc);
+
+  return static_cast<double>(freemem)*pagesize;
 }
 
 
 double Platform::GetTotalMemory() {
-  return 0.0;
+  double pagesize = static_cast<double>(sysconf(_SC_PAGESIZE));
+  double pages = static_cast<double>(sysconf(_SC_PHYS_PAGES));
+
+  return pagesize*pages;
 }
 
 double Platform::GetUptimeImpl() {
@@ -236,12 +268,12 @@ double Platform::GetUptimeImpl() {
   if ((kc = kstat_open()) == NULL)
     throw "could not open kstat";
 
-  ksp = kstat_lookup(kc, "unix", 0, "system_misc");
+  ksp = kstat_lookup(kc, (char *)"unix", 0, (char *)"system_misc");
 
   if (kstat_read(kc, ksp, NULL) == -1) {
     throw "unable to read kstat";
   } else {
-    knp = (kstat_named_t *) kstat_data_lookup(ksp, "clk_intr");
+    knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"clk_intr");
     clk_intr = knp->value.ul;
   }
 
@@ -265,7 +297,64 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 
 Handle<Value> Platform::GetInterfaceAddresses() {
   HandleScope scope;
-  return scope.Close(Object::New());
+  struct ::ifaddrs *addrs, *ent;
+  struct ::sockaddr_in *in4;
+  struct ::sockaddr_in6 *in6;
+  char ip[INET6_ADDRSTRLEN];
+  Local<Object> ret, o;
+  Local<String> name, ipaddr, family;
+  Local<Array> ifarr;
+
+  if (getifaddrs(&addrs) != 0) {
+    return ThrowException(ErrnoException(errno, "getifaddrs"));
+  }
+
+  ret = Object::New();
+
+  for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
+    bzero(&ip, sizeof (ip));
+    if (!(ent->ifa_flags & IFF_UP && ent->ifa_flags & IFF_RUNNING)) {
+      continue;
+    }
+
+    if (ent->ifa_addr == NULL) {
+      continue;
+    }
+
+    name = String::New(ent->ifa_name);
+    if (ret->Has(name)) {
+      ifarr = Local<Array>::Cast(ret->Get(name));
+    } else {
+      ifarr = Array::New();
+      ret->Set(name, ifarr);
+    }
+
+    if (ent->ifa_addr->sa_family == AF_INET6) {
+      in6 = (struct sockaddr_in6 *)ent->ifa_addr;
+      inet_ntop(AF_INET6, &(in6->sin6_addr), ip, INET6_ADDRSTRLEN);
+      family = String::New("IPv6");
+    } else if (ent->ifa_addr->sa_family == AF_INET) {
+      in4 = (struct sockaddr_in *)ent->ifa_addr;
+      inet_ntop(AF_INET, &(in4->sin_addr), ip, INET6_ADDRSTRLEN);
+      family = String::New("IPv4");
+    } else {
+      (void) strlcpy(ip, "<unknown sa family>", INET6_ADDRSTRLEN);
+      family = String::New("<unknown>");
+    }
+
+    o = Object::New();
+    o->Set(String::New("address"), String::New(ip));
+    o->Set(String::New("family"), family);
+    o->Set(String::New("internal"), ent->ifa_flags & IFF_PRIVATE || ent->ifa_flags &
+	IFF_LOOPBACK ? True() : False());
+
+    ifarr->Set(ifarr->Length(), o);
+
+  }
+
+  freeifaddrs(addrs);
+
+  return scope.Close(ret);
 }
 
 
