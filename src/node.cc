@@ -95,11 +95,6 @@ static Persistent<String> syscall_symbol;
 static Persistent<String> errpath_symbol;
 static Persistent<String> code_symbol;
 
-static Persistent<String> rss_symbol;
-static Persistent<String> vsize_symbol;
-static Persistent<String> heap_total_symbol;
-static Persistent<String> heap_used_symbol;
-
 static Persistent<String> listeners_symbol;
 static Persistent<String> uncaught_exception_symbol;
 static Persistent<String> emit_symbol;
@@ -1540,42 +1535,6 @@ static Handle<Value> Uptime(const Arguments& args) {
   return scope.Close(Number::New(uptime));
 }
 
-v8::Handle<v8::Value> MemoryUsage(const v8::Arguments& args) {
-  HandleScope scope;
-  assert(args.Length() == 0);
-
-  size_t rss, vsize;
-
-  int r = Platform::GetMemory(&rss, &vsize);
-
-  if (r != 0) {
-    return ThrowException(Exception::Error(String::New(strerror(errno))));
-  }
-
-  Local<Object> info = Object::New();
-
-  if (rss_symbol.IsEmpty()) {
-    rss_symbol = NODE_PSYMBOL("rss");
-    vsize_symbol = NODE_PSYMBOL("vsize");
-    heap_total_symbol = NODE_PSYMBOL("heapTotal");
-    heap_used_symbol = NODE_PSYMBOL("heapUsed");
-  }
-
-  info->Set(rss_symbol, Integer::NewFromUnsigned(rss));
-  info->Set(vsize_symbol, Integer::NewFromUnsigned(vsize));
-
-  // V8 memory usage
-  HeapStatistics v8_heap_stats;
-  V8::GetHeapStatistics(&v8_heap_stats);
-  info->Set(heap_total_symbol,
-            Integer::NewFromUnsigned(v8_heap_stats.total_heap_size()));
-  info->Set(heap_used_symbol,
-            Integer::NewFromUnsigned(v8_heap_stats.used_heap_size()));
-
-  return scope.Close(info);
-}
-
-
 #ifdef __POSIX__
 
 Handle<Value> Kill(const Arguments& args) {
@@ -2082,7 +2041,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 #endif // __POSIX__
 
   NODE_SET_METHOD(process, "uptime", Uptime);
-  NODE_SET_METHOD(process, "memoryUsage", MemoryUsage);
 
   NODE_SET_METHOD(process, "binding", Binding);
 
