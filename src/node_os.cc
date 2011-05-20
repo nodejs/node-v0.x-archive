@@ -45,6 +45,11 @@ namespace node {
 
 using namespace v8;
 
+static Persistent<String> rss_symbol;
+static Persistent<String> vsize_symbol;
+static Persistent<String> heap_total_symbol;
+static Persistent<String> heap_used_symbol;
+
 static Handle<Value> GetHostname(const Arguments& args) {
   HandleScope scope;
   char s[255];
@@ -114,6 +119,51 @@ static Handle<Value> GetCPUInfo(const Arguments& args) {
   }
 
   return scope.Close(cpus);
+}
+
+v8::Handle<v8::Value> GetMemoryUsage(const v8::Arguments& args) {
+  HandleScope scope;
+  assert(args.Length() == 0 || args.Length() == 1);
+
+  size_t rss, vsize;
+
+  int r;
+  if (args.Length() == 0) {
+    r = Platform::GetMemory(&rss, &vsize);
+  } else {
+    r = Platform::GetProcessMemory(&rss, &vsize, args[0]->IntegerValue());
+  }
+
+  if (r != 0) {
+    return ThrowException(Exception::Error(String::New(strerror(errno))));
+  }
+
+  Local<Object> info = Object::New();
+
+  if (rss_symbol.IsEmpty()) {
+    rss_symbol = NODE_PSYMBOL("rss");
+    vsize_symbol = NODE_PSYMBOL("vsize");
+    heap_total_symbol = NODE_PSYMBOL("heapTotal");
+    heap_used_symbol = NODE_PSYMBOL("heapUsed");
+  }
+
+  info->Set(rss_symbol, Integer::NewFromUnsigned(rss));
+  info->Set(vsize_symbol, Integer::NewFromUnsigned(vsize));
+
+  // If a pid was given, only return the rss and vsize.
+  if (args.Length() == 1) {
+    return scope.Close(info);
+  }
+
+  // V8 memory usage
+  HeapStatistics v8_heap_stats;
+  V8::GetHeapStatistics(&v8_heap_stats);
+  info->Set(heap_total_symbol,
+            Integer::NewFromUnsigned(v8_heap_stats.total_heap_size()));
+  info->Set(heap_used_symbol,
+            Integer::NewFromUnsigned(v8_heap_stats.used_heap_size()));
+
+  return scope.Close(info);
 }
 
 static Handle<Value> GetFreeMemory(const Arguments& args) {
@@ -187,6 +237,7 @@ void OS::Initialize(v8::Handle<v8::Object> target) {
   NODE_SET_METHOD(target, "getHostname", GetHostname);
   NODE_SET_METHOD(target, "getLoadAvg", GetLoadAvg);
   NODE_SET_METHOD(target, "getUptime", GetUptime);
+  NODE_SET_METHOD(target, "getMemoryUsage", GetMemoryUsage);
   NODE_SET_METHOD(target, "getTotalMem", GetTotalMemory);
   NODE_SET_METHOD(target, "getFreeMem", GetFreeMemory);
   NODE_SET_METHOD(target, "getCPUs", GetCPUInfo);

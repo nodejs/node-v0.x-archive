@@ -76,6 +76,11 @@ const char* Platform::GetProcessTitle(int *len) {
 }
 
 
+int Platform::GetProcessMemory(size_t *rss, size_t *vsize, int pid) {
+  assert(0 && "implement me");
+}
+
+
 int Platform::GetMemory(size_t *rss, size_t *vsize) {
   pid_t pid = getpid();
 
