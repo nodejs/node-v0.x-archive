@@ -70,6 +70,12 @@ const char* Platform::GetProcessTitle(int *len) {
   return NULL;
 }
 
+
+int Platform::GetProcessMemory(size_t *rss, size_t *vsize, int pid) {
+  assert(0 && "implement me");
+}
+
+
 // Researched by Tim Becker and Michael Knight
 // http://blog.kuriositaet.de/?p=257
 int Platform::GetMemory(size_t *rss, size_t *vsize) {

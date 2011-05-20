@@ -121,7 +121,7 @@ static Handle<Value> GetCPUInfo(const Arguments& args) {
   return scope.Close(cpus);
 }
 
-v8::Handle<v8::Value> MemoryUsage(const v8::Arguments& args) {
+v8::Handle<v8::Value> GetMemoryUsage(const v8::Arguments& args) {
   HandleScope scope;
   assert(args.Length() == 0 || args.Length() == 1);
 
@@ -237,7 +237,7 @@ void OS::Initialize(v8::Handle<v8::Object> target) {
   NODE_SET_METHOD(target, "getHostname", GetHostname);
   NODE_SET_METHOD(target, "getLoadAvg", GetLoadAvg);
   NODE_SET_METHOD(target, "getUptime", GetUptime);
-  NODE_SET_METHOD(target, "getMemoryUsage", MemoryUsage);
+  NODE_SET_METHOD(target, "getMemoryUsage", GetMemoryUsage);
   NODE_SET_METHOD(target, "getTotalMem", GetTotalMemory);
   NODE_SET_METHOD(target, "getFreeMem", GetFreeMemory);
   NODE_SET_METHOD(target, "getCPUs", GetCPUInfo);

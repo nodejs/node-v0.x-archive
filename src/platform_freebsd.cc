@@ -66,6 +66,12 @@ const char* Platform::GetProcessTitle(int *len) {
   return NULL;
 }
 
+
+int Platform::GetProcessMemory(size_t *rss, size_t *vsize, int pid) {
+  assert(0 && "implement me");
+}
+
+
 int Platform::GetMemory(size_t *rss, size_t *vsize) {
   kvm_t *kd = NULL;
   struct kinfo_proc *kinfo = NULL;
