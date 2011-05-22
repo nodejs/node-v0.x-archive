@@ -1154,6 +1154,10 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
+  if (Buffer::HasInstance(val)) {
+    return Buffer::Length(val->ToObject());
+  }
+
   Local<String> str = val->ToString();
 
   if (encoding == UTF8) return str->Utf8Length();
@@ -1185,6 +1189,13 @@ ssize_t DecodeWrite(char *buf,
                     "Use 'binary'.\n");
     assert(0);
     return -1;
+  }
+
+  if (Buffer::HasInstance(val)) {
+    Local<Object> obj = val->ToObject();
+    const ssize_t size = Buffer::Length(obj);
+    memcpy(buf, Buffer::Data(obj), size);
+    return size;
   }
 
   Local<String> str = val->ToString();
