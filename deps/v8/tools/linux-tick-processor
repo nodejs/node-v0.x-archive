@@ -8,7 +8,7 @@ fi
 [ "$D8_PATH" ] || D8_PATH=$tools_path/..
 d8_exec=$D8_PATH/d8
 
-if [ "$1" == "--no-build" ]; then
+if [ "$1" = "--no-build" ]; then
   shift
 else
 # compile d8 if it doesn't exist, assuming this script

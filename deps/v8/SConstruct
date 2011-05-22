@@ -184,6 +184,10 @@ LIBRARY_FLAGS = {
       'LIBPATH' : ['/usr/local/lib'],
       'CCFLAGS':      ['-ansi'],
     },
+    'os:netbsd': {
+      'CPPPATH' : ['/usr/local/include'],
+      'LIBPATH' : ['/usr/local/lib'],
+    },
     'os:solaris': {
       # On Solaris, to get isinf, INFINITY, fpclassify and other macros one
       # needs to define __C99FEATURES__.
@@ -370,6 +374,9 @@ MKSNAPSHOT_EXTRA_FLAGS = {
     'os:openbsd': {
       'LIBS': ['execinfo', 'pthread']
     },
+    'os:netbsd': {
+      'LIBS': ['execinfo', 'pthread']
+    },
     'os:win32': {
       'LIBS': ['winmm', 'ws2_32'],
     },
@@ -420,6 +427,9 @@ CCTEST_EXTRA_FLAGS = {
       'LINKFLAGS':    ['-mt']
     },
     'os:openbsd': {
+      'LIBS':         ['execinfo', 'pthread']
+    },
+    'os:netbsd': {
       'LIBS':         ['execinfo', 'pthread']
     },
     'os:win32': {
@@ -486,6 +496,10 @@ SAMPLE_FLAGS = {
       'LINKFLAGS': ['-mt']
     },
     'os:openbsd': {
+      'LIBPATH' : ['/usr/local/lib'],
+      'LIBS':     ['execinfo', 'pthread']
+    },
+    'os:netbsd': {
       'LIBPATH' : ['/usr/local/lib'],
       'LIBS':     ['execinfo', 'pthread']
     },
@@ -623,6 +637,9 @@ D8_FLAGS = {
     'os:openbsd': {
       'LIBS': ['pthread'],
     },
+    'os:netbsd': {
+      'LIBS': ['pthread'],
+    },
     'os:android': {
       'LIBPATH':     [ANDROID_TOP + '/out/target/product/generic/obj/lib',
                       ANDROID_TOP + '/prebuilt/linux-x86/toolchain/arm-eabi-4.4.0/lib/gcc/arm-eabi/4.4.0/interwork'],
@@ -706,7 +723,7 @@ SIMPLE_OPTIONS = {
     'help': 'the toolchain to use'
   },
   'os': {
-    'values': ['freebsd', 'linux', 'macos', 'win32', 'android', 'openbsd', 'solaris', 'cygwin'],
+    'values': ['freebsd', 'linux', 'macos', 'win32', 'android', 'openbsd', 'solaris', 'cygwin', 'netbsd'],
     'guess': GuessOS,
     'help': 'the os to build for'
   },
