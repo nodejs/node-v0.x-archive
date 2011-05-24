@@ -24,7 +24,7 @@
 
 #include "ngx-queue.h"
 
-#include "ev/ev.h"
+#include "ev.h"
 
 #include <sys/socket.h>
 #include <netinet/in.h>
