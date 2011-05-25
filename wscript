@@ -599,7 +599,7 @@ def uv_cmd(bld, variant):
   # modifying libuv's build to send object files to a separate directory.
   #
   cmd = 'cp -r ' + sh_escape(srcdir)  + '/* ' + sh_escape(blddir) + \
-        ' &&  make -C ' + sh_escape(blddir)
+        ' &&  if [[ -z "$NODE_MAKE" ]]; then NODE_MAKE=make; fi; $NODE_MAKE -C ' + sh_escape(blddir)
   return cmd
 
 
@@ -625,7 +625,7 @@ def build_uv(bld):
     bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
 
   bld.install_files('${PREFIX}/include/node/', 'deps/uv/*.h')
-  bld.install_files('${PREFIX}/include/node/', 'deps/uv/ev/*.h')
+  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/ev/*.h')
 
 
 def build(bld):
@@ -875,7 +875,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.4.7' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.4.8' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 
