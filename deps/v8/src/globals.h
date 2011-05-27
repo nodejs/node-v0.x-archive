@@ -177,7 +177,7 @@ typedef byte* Address;
 #endif
 
 #if (defined(__APPLE__) && defined(__MACH__)) || \
-    defined(__FreeBSD__) || defined(__OpenBSD__)
+    defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #define USING_BSD_ABI
 #endif
 

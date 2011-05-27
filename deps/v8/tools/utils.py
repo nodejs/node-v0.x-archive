@@ -57,6 +57,8 @@ def GuessOS():
     return 'win32'
   elif id == 'FreeBSD':
     return 'freebsd'
+  elif id == 'NetBSD':
+    return 'netbsd'
   elif id == 'OpenBSD':
     return 'openbsd'
   elif id == 'SunOS':

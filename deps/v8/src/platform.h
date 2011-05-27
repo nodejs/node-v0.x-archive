@@ -46,6 +46,10 @@
 
 #define V8_INFINITY INFINITY
 
+#ifdef __NetBSD__
+#define isless(x, y) __builtin_isless(x, y)
+#endif
+
 // Windows specific stuff.
 #ifdef WIN32
 

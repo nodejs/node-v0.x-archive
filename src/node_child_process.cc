@@ -31,7 +31,7 @@
 #include <sys/types.h>
 #include <pwd.h> /* getpwnam() */
 #include <grp.h> /* getgrnam() */
-#if defined(__FreeBSD__ ) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #include <sys/wait.h>
 #endif
 

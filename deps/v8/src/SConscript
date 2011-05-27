@@ -230,6 +230,7 @@ SOURCES = {
   'simulator:arm': ['arm/simulator-arm.cc'],
   'simulator:mips': ['mips/simulator-mips.cc'],
   'os:freebsd': ['platform-freebsd.cc', 'platform-posix.cc'],
+  'os:netbsd': ['platform-netbsd.cc', 'platform-posix.cc'],
   'os:openbsd': ['platform-openbsd.cc', 'platform-posix.cc'],
   'os:linux':   ['platform-linux.cc', 'platform-posix.cc'],
   'os:android': ['platform-linux.cc', 'platform-posix.cc'],
