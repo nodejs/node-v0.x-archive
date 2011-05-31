@@ -76,6 +76,11 @@ void SecureContext::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setOptions", SecureContext::SetOptions);
   NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
 
+#ifdef OPENSSL_PSK_SUPPORT
+  NODE_SET_PROTOTYPE_METHOD(t, "setPskHint", SecureContext::SetPskHint);
+  NODE_SET_PROTOTYPE_METHOD(t, "setPskServerCallback", SecureContext::SetPskServerCallback);
+#endif
+
   target->Set(String::NewSymbol("SecureContext"), t->GetFunction());
 }
 
@@ -145,6 +150,11 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
   // SSL_CTX_set_session_cache_mode(sc->ctx_,SSL_SESS_CACHE_OFF);
 
   sc->ca_store_ = NULL;
+
+  // Establish a back link from the SSL_CTX struct to the SecureContext object
+  // using OpenSSL's application-specific data storage. Used by PSK support.
+  SSL_CTX_set_app_data(sc->ctx_, sc);
+
   return True();
 }
 
@@ -196,6 +206,75 @@ static X509* LoadX509 (Handle<Value> v) {
   return x509;
 }
 
+
+#ifdef OPENSSL_PSK_SUPPORT
+
+unsigned int SecureContext::PskServerCallback_(SSL *ssl,
+                                               const char *identity,
+                                               unsigned char *psk,
+                                               unsigned int max_psk_len) {
+
+  // translate back from the connection to the context
+  SSL_CTX *ctx = SSL_get_SSL_CTX(ssl);
+
+  // then from the SSL_CTX to the SecureContext
+  SecureContext *sc = static_cast<SecureContext*>(SSL_CTX_get_app_data(ctx));
+
+  Local<Value> argv[1];
+  argv[0] = Local<Value>::New(String::New(identity));
+
+  Local<Value> result = sc->psk_server_cb_->Call(Context::GetCurrent()->Global(), 1, argv);
+
+  // The result is expected to be a buffer containing the key. If this
+  // isn't the case then return 0, indicating that the identity isn't found.
+  if (Buffer::HasInstance(result)) {
+
+    // write the key into the buffer provided
+    Local<Object> keyBuffer = result->ToObject();
+    int len = Buffer::Length(keyBuffer);
+    if (len <= max_psk_len) {  // avoids buffer overrun, but should have better error handling
+      memcpy (psk, Buffer::Data(keyBuffer), len);
+      return len;
+    }
+
+    // TODO: is it possible to throw an exception here and have it show up in JS?
+    // That would allow for better error reporting.
+  }
+
+  return 0;
+}
+
+Handle<Value> SecureContext::SetPskHint(const Arguments& args) {
+  HandleScope scope;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  if (args.Length() != 1 || !args[0]->IsString()) {
+    return ThrowException(Exception::TypeError(String::New("Bad parameter")));
+  }
+
+  String::Utf8Value hint(args[0]->ToString());
+
+  return SSL_CTX_use_psk_identity_hint(sc->ctx_, *hint) ? True() : False();
+}
+
+Handle<Value> SecureContext::SetPskServerCallback(const v8::Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() != 1 || !args[0]->IsFunction()) {
+    return ThrowException(Exception::TypeError(String::New("Single function parameter required")));
+  }
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  sc->psk_server_cb_ = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+
+  SSL_CTX_set_psk_server_callback(sc->ctx_, SecureContext::PskServerCallback_);
+
+  return True();
+}
+
+#endif // OPENSSL_PSK_SUPPORT
 
 Handle<Value> SecureContext::SetKey(const Arguments& args) {
   HandleScope scope;
@@ -288,7 +367,6 @@ end:
   if (x != NULL) X509_free(x);
   return ret;
 }
-
 
 Handle<Value> SecureContext::SetCert(const Arguments& args) {
   HandleScope scope;
@@ -582,6 +660,10 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", Connection::SetNPNProtocols);
 #endif
 
+#ifdef OPENSSL_PSK_SUPPORT
+  NODE_SET_PROTOTYPE_METHOD(t, "setPskClientCallback", Connection::SetPskClientCallback);
+#endif
+
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
 }
 
@@ -721,8 +803,13 @@ Handle<Value> Connection::New(const Arguments& args) {
   p->bio_read_ = BIO_new(BIO_s_mem());
   p->bio_write_ = BIO_new(BIO_s_mem());
 
-#ifdef OPENSSL_NPN_NEGOTIATED
+  // Establish a back link from the SSL struct to the Connection object
+  // using OpenSSL's application-specific data storage.
+  // Used by both NPN and PSK support.
   SSL_set_app_data(p->ssl_, p);
+
+
+#ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
     SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
@@ -1110,7 +1197,21 @@ Handle<Value> Connection::IsInitFinished(const Arguments& args) {
   Connection *ss = Connection::Unwrap(args);
 
   if (ss->ssl_ == NULL) return False();
-  return SSL_is_init_finished(ss->ssl_) ? True() : False();
+
+  if (SSL_is_init_finished(ss->ssl_)) {
+#ifdef OPENSSL_PSK_SUPPORT
+    // if we're using PSK, set the pskIdentity string on
+    // the Connection for use by Javascript
+    const char* pskId = SSL_get_psk_identity(ss->ssl_);
+    if (pskId) {
+      ss->handle_->Set(String::New("pskIdentity"), String::New(pskId));
+    }
+#endif
+    return True();
+  }
+  else {
+    return False();
+  }
 }
 
 
@@ -1329,6 +1430,87 @@ Handle<Value> Connection::SetNPNProtocols(const Arguments& args) {
   return True();
 };
 #endif
+
+
+#ifdef OPENSSL_PSK_SUPPORT
+Handle<Value> Connection::SetPskClientCallback(const v8::Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() != 1 || !args[0]->IsFunction()) {
+    return ThrowException(Exception::TypeError(String::New("Single function parameter required")));
+  }
+
+  Connection *ss = ObjectWrap::Unwrap<Connection>(args.Holder());
+
+  ss->psk_client_cb_ = Persistent<Function>::New(Local<Function>::Cast(args[0]));
+
+  SSL_set_psk_client_callback(ss->ssl_, Connection::PskClientCallback_);
+
+  return True();
+}
+
+
+unsigned int Connection::PskClientCallback_(SSL *ssl,
+                                            const char *hint,
+                                            char *identity,
+                                            unsigned int max_identity_len,
+                                            unsigned char *psk,
+                                            unsigned int max_psk_len) {
+
+  HandleScope scope;
+
+  Connection *ss = static_cast<Connection*>(SSL_get_app_data(ssl));
+
+  Local<Value> argv[1];
+  argv[0] = Local<Value>::New(hint ? String::New(hint) : Undefined());
+
+  if (ss->psk_client_cb_->IsNull()) {
+    // no callback set
+    return 0;
+  }
+
+  // call the JS callback. It's wrapped in a TryCatch because otherwise if it throws
+  // we wind up with a segfault. Eating the error isn't great; it would be better to
+  // put the Connection into an error state and hopefully get the message back to the
+  // application code somehow.
+  TryCatch tc;
+
+  Local<Value> result = ss->psk_client_cb_->Call(Context::GetCurrent()->Global(), 1, argv);
+
+  if (tc.HasCaught()) {
+    return 0;
+  }
+
+  // The result is expected to be an object with "identity" string and "key"
+  // buffer values. If this isn't the case then return 0, indicating that the
+  // identity isn't found.
+  if (result->IsObject()) {
+    Local<Object> idAndKey = result->ToObject();
+
+    Local<Value> id = idAndKey->Get(String::New("identity"));
+    Local<Value> key = idAndKey->Get(String::New("key"));
+
+    if (id->IsString() && Buffer::HasInstance(key)) {
+
+      // write the chosen client identity string into the buffer provided
+      id->ToString()->WriteAscii(identity, 0, max_identity_len);
+
+      // write the id's binary key into the buffer provided
+      Local<Object> keyBuffer = key->ToObject();
+      int len = Buffer::Length(keyBuffer);
+      if (len <= max_psk_len) {  // avoids buffer overrun, but should have better error handling
+        memcpy (psk, Buffer::Data(keyBuffer), len);
+        return len;
+      }
+    }
+
+    // TODO: is it possible to throw an exception here and have it show up in JS?
+    // That would allow for better error reporting.
+  }
+
+  return 0;
+}
+#endif // OPENSSL_PSK_SUPPORT
 
 
 static void HexEncode(unsigned char *md_value,
