@@ -303,7 +303,7 @@ def configure(conf):
                    "Use configure --without-ssl to disable this message.")
       else:
         conf.fatal("Could not autodetect OpenSSL support. " +
-                   "Make sure OpenSSL development packages are installed. " +
+                   "Make sure OpenSSL development packages are installed to phyton. " +
                    "Use configure --without-ssl to disable this message.")
   else:
     Options.options.use_openssl = conf.env["USE_OPENSSL"] = False
