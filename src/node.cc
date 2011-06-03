@@ -1642,16 +1642,24 @@ typedef void (*extInit)(Handle<Object> exports);
 Handle<Value> DLOpen(const v8::Arguments& args) {
   HandleScope scope;
 
-  if (args.Length() < 2) return Undefined();
+  if (args.Length() < 3) return Undefined();
 
   String::Utf8Value filename(args[0]->ToString()); // Cast
   Local<Object> target = args[1]->ToObject(); // Cast
+  // if true, look for the symbols in this binary, don't load one.
+  bool snode = args[2]->ToBoolean()->Value(); // Cast  
 
   // Actually call dlopen().
   // FIXME: This is a blocking function and should be called asynchronously!
   // This function should be moved to file.cc and use libeio to make this
   // system call.
-  void *handle = dlopen(*filename, RTLD_LAZY);
+  //
+  void *handle;
+  if (snode) {
+    handle = dlopen(NULL, RTLD_LAZY);
+  } else {
+    handle = dlopen(*filename, RTLD_LAZY);
+  }
 
   // Handle errors.
   if (handle == NULL) {
