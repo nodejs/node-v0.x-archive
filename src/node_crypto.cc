@@ -2938,16 +2938,10 @@ class Verify : public ObjectWrap {
 };
 
 
-void InitCrypto(Handle<Object> target) {
-  HandleScope scope;
-
-  SSL_library_init();
-  OpenSSL_add_all_algorithms();
-  OpenSSL_add_all_digests();
-  SSL_load_error_strings();
-  ERR_load_crypto_strings();
-
+static void DisableSSLCompression() {
+#if OPENSSL_VERSION_NUMBER >= 0x00908000L
   // Turn off compression. Saves memory - do it in userland.
+  // This technique only works with OpenSSL version 0.9.8 and later
   STACK_OF(SSL_COMP)* comp_methods = SSL_COMP_get_compression_methods();
 #if 0
   if (comp_methods && sk_SSL_COMP_num(comp_methods) > 0) {
@@ -2958,6 +2952,19 @@ void InitCrypto(Handle<Object> target) {
 #endif
   sk_SSL_COMP_zero(comp_methods);
   assert(sk_SSL_COMP_num(comp_methods) == 0);
+#endif
+}
+
+void InitCrypto(Handle<Object> target) {
+  HandleScope scope;
+
+  SSL_library_init();
+  OpenSSL_add_all_algorithms();
+  OpenSSL_add_all_digests();
+  SSL_load_error_strings();
+  ERR_load_crypto_strings();
+
+  DisableSSLCompression();
 
   SecureContext::Initialize(target);
   Connection::Initialize(target);
