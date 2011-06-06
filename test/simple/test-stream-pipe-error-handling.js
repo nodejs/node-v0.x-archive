@@ -19,37 +19,40 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-assert = require('assert');
-child = require('child_process');
+var common = require('../common');
+var assert = require('assert');
+var Stream = require('stream').Stream;
 
-nodejs = '"' + process.execPath + '"';
+(function testErrorListenerCatches() {
+  var source = new Stream();
+  var dest = new Stream();
 
-if (module.parent) {
-  // signal we've been loaded as a module
-  console.log('Loaded as a module, exiting with status code 42.');
-  process.exit(42);
-}
+  source.pipe(dest);
 
-// assert that the result of the final expression is written to stdout
-child.exec(nodejs + ' --eval "1337; 42"',
-    function(err, stdout, stderr) {
-      assert.equal(parseInt(stdout), 42);
-    });
+  var gotErr = null;
+  source.on('error', function(err) {
+    gotErr = err;
+  });
 
-// assert that module loading works
-child.exec(nodejs + ' --eval "require(\'' + __filename + '\')"',
-    function(status, stdout, stderr) {
-      assert.equal(status.code, 42);
-    });
+  var err = new Error('This stream turned into bacon.');
+  source.emit('error', err);
+  assert.strictEqual(gotErr, err);
+})();
 
-// module path resolve bug, regression test
-child.exec(nodejs + ' --eval "require(\'./test/simple/test-cli-eval.js\')"',
-    function(status, stdout, stderr) {
-      assert.equal(status.code, 42);
-    });
+(function testErrorWithoutListenerThrows() {
+  var source = new Stream();
+  var dest = new Stream();
 
-// empty program should do nothing
-child.exec(nodejs + ' -e ""', function(status, stdout, stderr) {
-  assert.equal(stdout, 'undefined\n');
-  assert.equal(stderr, '');
-});
+  source.pipe(dest);
+
+  var err = new Error('This stream turned into bacon.');
+
+  var gotErr = null;
+  try {
+    source.emit('error', err);
+  } catch (e) {
+    gotErr = e;
+  }
+
+  assert.strictEqual(gotErr, err);
+})();
