@@ -26,7 +26,7 @@
 #include <stdio.h>
 
 
-#define TARGET_CONNECTIONS          100
+static int TARGET_CONNECTIONS;
 #define WRITE_BUFFER_SIZE           8192
 #define MAX_SIMULTANEOUS_CONNECTS   100
 
@@ -35,21 +35,24 @@
 #define STATS_COUNT                 5
 
 
-static void do_write(uv_handle_t* handle);
+static void do_write(uv_tcp_t*);
 static void maybe_connect_some();
 
 static uv_req_t* req_alloc();
 static void req_free(uv_req_t* uv_req);
 
-static uv_buf buf_alloc(uv_handle_t* handle, size_t size);
-static void buf_free(uv_buf uv_buf);
+static uv_buf_t buf_alloc(uv_tcp_t*, size_t size);
+static void buf_free(uv_buf_t uv_buf_t);
 
 
-static struct sockaddr_in server_addr;
+static uv_tcp_t server;
+static struct sockaddr_in listen_addr;
+static struct sockaddr_in connect_addr;
 
 static int64_t start_time;
 
 static int max_connect_socket = 0;
+static int max_read_sockets = 0;
 static int read_sockets = 0;
 static int write_sockets = 0;
 
@@ -62,8 +65,12 @@ static int stats_left = 0;
 
 static char write_buffer[WRITE_BUFFER_SIZE];
 
-static uv_handle_t read_handles[TARGET_CONNECTIONS];
-static uv_handle_t write_handles[TARGET_CONNECTIONS];
+/* Make this as large as you need. */
+#define MAX_WRITE_HANDLES 1000
+
+static uv_tcp_t write_handles[MAX_WRITE_HANDLES];
+
+static uv_timer_t timer_handle;
 
 
 static double gbit(int64_t bytes, int64_t passed_ms) {
@@ -72,24 +79,23 @@ static double gbit(int64_t bytes, int64_t passed_ms) {
 }
 
 
-static void show_stats(uv_req_t *req, int64_t skew, int status) {
-  int64_t msec = STATS_INTERVAL + skew;
+static void show_stats(uv_handle_t *handle, int status) {
+  int64_t diff;
 
 #if PRINT_STATS
-  LOGF("connections: %d, read: %.1f gbit/s, write: %.1f gbit/s\n",
-       read_sockets,
-       gbit(nrecv, msec),
-       gbit(nsent, msec));
+  LOGF("connections: %d, write: %.1f gbit/s\n",
+       write_sockets,
+       gbit(nsent, STATS_INTERVAL));
 #endif
 
   /* Exit if the show is over */
   if (!--stats_left) {
 
     uv_update_time();
-    int64_t diff = uv_now() - start_time;
+    diff = uv_now() - start_time;
 
-    LOGF("pump_%d: %.1f gbit/s\n", read_sockets,
-        gbit(nrecv_total, diff));
+    LOGF("pump%d_client: %.1f gbit/s\n", write_sockets,
+        gbit(nsent_total, diff));
 
     exit(0);
   }
@@ -97,10 +103,41 @@ static void show_stats(uv_req_t *req, int64_t skew, int status) {
   /* Reset read and write counters */
   nrecv = 0;
   nsent = 0;
+}
 
-  uv_timeout(req, (STATS_INTERVAL - skew > 0)
-                   ? STATS_INTERVAL - skew
-                   : 0);
+
+static void read_show_stats() {
+  int64_t diff;
+
+  uv_update_time();
+  diff = uv_now() - start_time;
+
+  LOGF("pump%d_server: %.1f gbit/s\n", max_read_sockets,
+      gbit(nrecv_total, diff));
+}
+
+
+
+void write_sockets_close_cb(uv_handle_t* handle, int status) {
+  ASSERT(status == 0);
+  /* If any client closes, the process is done. */
+  exit(0);
+}
+
+
+void read_sockets_close_cb(uv_handle_t* handle, int status) {
+  ASSERT(status == 0);
+
+  free(handle);
+  read_sockets--;
+
+  /* If it's past the first second and everyone has closed their connection
+   * Then print stats.
+   */
+  if (uv_now() - start_time > 1000 && read_sockets == 0) {
+    read_show_stats();
+    uv_close((uv_handle_t*)&server);
+  }
 }
 
 
@@ -108,21 +145,29 @@ static void start_stats_collection() {
   uv_req_t* req = req_alloc();
   int r;
 
-  /* Show-stats timeout */
+  /* Show-stats timer */
   stats_left = STATS_COUNT;
-  uv_req_init(req, NULL, (void*)show_stats);
-  r = uv_timeout(req, STATS_INTERVAL);
+  r = uv_timer_init(&timer_handle, NULL, NULL);
   ASSERT(r == 0);
+  r = uv_timer_start(&timer_handle, show_stats, STATS_INTERVAL, STATS_INTERVAL);
+  ASSERT(r == 0);
+
+  uv_update_time();
+  start_time = uv_now();
 }
 
 
-void close_cb(uv_handle_t* handle, int status) {
-  ASSERT(status == 0);
-}
+static void read_cb(uv_tcp_t* tcp, int bytes, uv_buf_t buf) {
+  if (nrecv_total == 0) {
+    ASSERT(start_time == 0);
+    uv_update_time();
+    start_time = uv_now();
+  }
 
-
-static void read_cb(uv_handle_t* handle, int bytes, uv_buf buf) {
-  ASSERT(bytes >= 0);
+  if (bytes < 0) {
+    uv_close((uv_handle_t*)tcp);
+    return;
+  }
 
   buf_free(buf);
 
@@ -132,7 +177,7 @@ static void read_cb(uv_handle_t* handle, int bytes, uv_buf buf) {
 
 
 static void write_cb(uv_req_t *req, int status) {
-  uv_buf* buf = (uv_buf*) req->data;
+  uv_buf_t* buf = (uv_buf_t*) req->data;
 
   ASSERT(status == 0);
 
@@ -141,32 +186,40 @@ static void write_cb(uv_req_t *req, int status) {
   nsent += sizeof write_buffer;
   nsent_total += sizeof write_buffer;
 
-  do_write(req->handle);
+  do_write((uv_tcp_t*)req->handle);
 }
 
 
-static void do_write(uv_handle_t* handle) {
+static void do_write(uv_tcp_t* tcp) {
   uv_req_t* req;
-  uv_buf buf;
+  uv_buf_t buf;
   int r;
 
   buf.base = (char*) &write_buffer;
   buf.len = sizeof write_buffer;
 
-  while (handle->write_queue_size == 0) {
+  while (tcp->write_queue_size == 0) {
     req = req_alloc();
-    uv_req_init(req, handle, write_cb);
+    uv_req_init(req, (uv_handle_t*)tcp, write_cb);
 
     r = uv_write(req, &buf, 1);
     ASSERT(r == 0);
   }
 }
 
-static void maybe_start_writing() {
+
+static void connect_cb(uv_req_t* req, int status) {
   int i;
 
-  if (read_sockets == TARGET_CONNECTIONS &&
-      write_sockets == TARGET_CONNECTIONS) {
+  if (status) LOG(uv_strerror(uv_last_error()));
+  ASSERT(status == 0);
+
+  write_sockets++;
+  req_free(req);
+
+  maybe_connect_some();
+
+  if (write_sockets == TARGET_CONNECTIONS) {
     start_stats_collection();
 
     /* Yay! start writing */
@@ -177,84 +230,43 @@ static void maybe_start_writing() {
 }
 
 
-static void connect_cb(uv_req_t* req, int status) {
-  if (status) LOG(uv_strerror(uv_last_error()));
-  ASSERT(status == 0);
-
-  write_sockets++;
-  req_free(req);
-
-  maybe_connect_some();
-  maybe_start_writing();
-}
-
-
-static void do_connect(uv_handle_t* handle, struct sockaddr* addr) {
+static void maybe_connect_some() {
   uv_req_t* req;
+  uv_tcp_t* tcp;
   int r;
 
-  r = uv_tcp_init(handle, close_cb, NULL);
-  ASSERT(r == 0);
-
-  req = req_alloc();
-  uv_req_init(req, handle, connect_cb);
-  r = uv_connect(req, addr);
-  ASSERT(r == 0);
-}
-
-
-static void maybe_connect_some() {
   while (max_connect_socket < TARGET_CONNECTIONS &&
          max_connect_socket < write_sockets + MAX_SIMULTANEOUS_CONNECTS) {
-    do_connect(&write_handles[max_connect_socket++],
-               (struct sockaddr*) &server_addr);
+    tcp = &write_handles[max_connect_socket++];
+
+    r = uv_tcp_init(tcp, write_sockets_close_cb, NULL);
+    ASSERT(r == 0);
+
+    req = req_alloc();
+    uv_req_init(req, (uv_handle_t*)tcp, connect_cb);
+    r = uv_connect(req, connect_addr);
+    ASSERT(r == 0);
   }
 }
 
 
-static void accept_cb(uv_handle_t* server) {
-  uv_handle_t* handle;
+static void connection_cb(uv_tcp_t* s, int status) {
+  uv_tcp_t* tcp;
   int r;
 
-  ASSERT(read_sockets < TARGET_CONNECTIONS);
-  handle = &read_handles[read_sockets];
+  ASSERT(&server == s);
+  ASSERT(status == 0);
 
-  r = uv_accept(server, handle, close_cb, NULL);
+  tcp = malloc(sizeof(uv_tcp_t));
+
+  r = uv_accept(s, tcp, read_sockets_close_cb, NULL);
   ASSERT(r == 0);
 
-  r = uv_read_start(handle, read_cb);
+  r = uv_read_start(tcp, buf_alloc, read_cb);
   ASSERT(r == 0);
 
   read_sockets++;
-
-  maybe_start_writing();
-}
-
-
-BENCHMARK_IMPL(pump) {
-  uv_handle_t server;
-  int r;
-
-  uv_init(buf_alloc);
-
-  /* Server */
-  server_addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
-  r = uv_tcp_init(&server, close_cb, NULL);
-  ASSERT(r == 0);
-  r = uv_bind(&server, (struct sockaddr*) &server_addr);
-  ASSERT(r == 0);
-  r = uv_listen(&server, TARGET_CONNECTIONS, accept_cb);
-  ASSERT(r == 0);
-
-  uv_update_time();
-  start_time = uv_now();
-
-  /* Start making connections */
-  maybe_connect_some();
-
-  uv_run();
-
-  return 0;
+  max_read_sockets++;
 }
 
 
@@ -298,7 +310,7 @@ static void req_free(uv_req_t* uv_req) {
  */
 
 typedef struct buf_list_s {
-  uv_buf uv_buf;
+  uv_buf_t uv_buf_t;
   struct buf_list_s* next;
 } buf_list_t;
 
@@ -306,26 +318,73 @@ typedef struct buf_list_s {
 static buf_list_t* buf_freelist = NULL;
 
 
-static uv_buf buf_alloc(uv_handle_t* handle, size_t size) {
+static uv_buf_t buf_alloc(uv_tcp_t* tcp, size_t size) {
   buf_list_t* buf;
 
   buf = buf_freelist;
   if (buf != NULL) {
     buf_freelist = buf->next;
-    return buf->uv_buf;
+    return buf->uv_buf_t;
   }
 
   buf = (buf_list_t*) malloc(size + sizeof *buf);
-  buf->uv_buf.len = (unsigned int)size;
-  buf->uv_buf.base = ((char*) buf) + sizeof *buf;
+  buf->uv_buf_t.len = (unsigned int)size;
+  buf->uv_buf_t.base = ((char*) buf) + sizeof *buf;
 
-  return buf->uv_buf;
+  return buf->uv_buf_t;
 }
 
 
-static void buf_free(uv_buf uv_buf) {
-  buf_list_t* buf = (buf_list_t*) (uv_buf.base - sizeof *buf);
+static void buf_free(uv_buf_t uv_buf_t) {
+  buf_list_t* buf = (buf_list_t*) (uv_buf_t.base - sizeof *buf);
 
   buf->next = buf_freelist;
   buf_freelist = buf;
+}
+
+
+HELPER_IMPL(pump_server) {
+  int r;
+
+  uv_init();
+  listen_addr = uv_ip4_addr("0.0.0.0", TEST_PORT);
+
+  /* Server */
+  r = uv_tcp_init(&server, NULL, NULL);
+  ASSERT(r == 0);
+  r = uv_bind(&server, listen_addr);
+  ASSERT(r == 0);
+  r = uv_listen(&server, MAX_WRITE_HANDLES, connection_cb);
+  ASSERT(r == 0);
+
+  uv_run();
+
+  return 0;
+}
+
+
+void pump(int n) {
+  ASSERT(n <= MAX_WRITE_HANDLES);
+  TARGET_CONNECTIONS = n;
+
+  uv_init();
+
+  connect_addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
+
+  /* Start making connections */
+  maybe_connect_some();
+
+  uv_run();
+}
+
+
+BENCHMARK_IMPL(pump100_client) {
+  pump(100);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(pump1_client) {
+  pump(1);
+  return 0;
 }

@@ -119,9 +119,12 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\uv-win.c" />
+    <ClCompile Include="..\uv-common.c" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\AUTHORS" />
+    <None Include="..\config-mingw.mk" />
+    <None Include="..\config-unix.mk" />
     <None Include="..\iocp-links.html" />
     <None Include="..\LICENSE" />
     <None Include="..\Makefile" />

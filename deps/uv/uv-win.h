@@ -33,68 +33,80 @@
 
 
 /**
- * It should be possible to cast uv_buf[] to WSABUF[]
+ * It should be possible to cast uv_buf_t[] to WSABUF[]
  * see http://msdn.microsoft.com/en-us/library/ms741542(v=vs.85).aspx
  */
-typedef struct uv_buf {
+typedef struct uv_buf_t {
   ULONG len;
   char* base;
-} uv_buf;
+} uv_buf_t;
 
-#define uv_req_private_fields            \
+#define UV_REQ_PRIVATE_FIELDS             \
   union {                                 \
     /* Used by I/O operations */          \
     struct {                              \
       OVERLAPPED overlapped;              \
       size_t queued_bytes;                \
     };                                    \
-    /* Used by timers */                  \
-    struct {                              \
-      RB_ENTRY(uv_req_s) tree_entry;     \
-      int64_t due;                        \
-    };                                    \
   };                                      \
-  int flags;
+  int flags;                              \
+  uv_err_t error;                         \
+  struct uv_req_s* next_req;
 
-#define uv_tcp_connection_fields         \
+#define uv_tcp_connection_fields          \
+  uv_alloc_cb alloc_cb;                   \
   void* read_cb;                          \
-  struct uv_req_s read_req;              \
+  struct uv_req_s read_req;               \
   unsigned int write_reqs_pending;        \
   uv_req_t* shutdown_req;
 
-#define uv_tcp_server_fields             \
-  void *accept_cb;                        \
+#define uv_tcp_server_fields              \
+  void *connection_cb;                    \
   SOCKET accept_socket;                   \
-  struct uv_req_s accept_req;            \
+  struct uv_req_s accept_req;             \
   char accept_buffer[sizeof(struct sockaddr_storage) * 2 + 32];
 
-#define uv_tcp_fields                    \
+#define UV_TCP_PRIVATE_FIELDS             \
   unsigned int reqs_pending;              \
   union {                                 \
     SOCKET socket;                        \
     HANDLE handle;                        \
   };                                      \
   union {                                 \
-    struct { uv_tcp_connection_fields }; \
-    struct { uv_tcp_server_fields     }; \
+    struct { uv_tcp_connection_fields };  \
+    struct { uv_tcp_server_fields     };  \
   };
 
-#define uv_loop_fields                   \
-  uv_handle_t* loop_prev;                \
-  uv_handle_t* loop_next;                \
+#define UV_TIMER_PRIVATE_FIELDS           \
+  RB_ENTRY(uv_timer_s) tree_entry;        \
+  int64_t due;                            \
+  int64_t repeat;                         \
+  void* timer_cb;
+
+#define UV_LOOP_PRIVATE_FIELDS            \
+  uv_handle_t* loop_prev;                 \
+  uv_handle_t* loop_next;                 \
   void* loop_cb;
 
-#define uv_async_fields                  \
-  struct uv_req_s async_req;             \
+#define UV_ASYNC_PRIVATE_FIELDS           \
+  struct uv_req_s async_req;              \
   /* char to avoid alignment issues */    \
   char volatile async_sent;
 
-#define uv_handle_private_fields         \
-  uv_handle_t* endgame_next;             \
+#define UV_PREPARE_PRIVATE_FIELDS /* empty */
+#define UV_CHECK_PRIVATE_FIELDS   /* empty */
+#define UV_IDLE_PRIVATE_FIELDS    /* empty */
+
+/*
+ * TODO: remove UV_LOOP_PRIVATE_FIELDS from UV_HANDLE_PRIVATE_FIELDS and
+ * use it in UV_(PREPARE|CHECK|IDLE)_PRIVATE_FIELDS instead.
+ */
+
+#define UV_HANDLE_PRIVATE_FIELDS          \
+  uv_handle_t* endgame_next;              \
   unsigned int flags;                     \
-  uv_err_t error;                        \
-  union {                                 \
-    struct { uv_tcp_fields  };           \
-    struct { uv_loop_fields };           \
-    struct { uv_async_fields };          \
-  };
+  uv_err_t error;                         \
+  UV_LOOP_PRIVATE_FIELDS
+
+
+int uv_utf16_to_utf8(wchar_t* utf16Buffer, size_t utf16Size, char* utf8Buffer, size_t utf8Size);

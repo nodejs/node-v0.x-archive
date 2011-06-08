@@ -143,6 +143,13 @@ def set_options(opt):
                 , dest='openssl_libpath'
                 )
 
+  opt.add_option( '--no-ssl2'
+                , action='store_true'
+                , default=False
+                , help="Disable OpenSSL v2"
+                , dest='openssl_nov2'
+                )
+
   opt.add_option( '--gdb'
                 , action='store_true'
                 , default=False
@@ -257,6 +264,11 @@ def configure(conf):
   if not Options.options.without_ssl:
     # Don't override explicitly supplied openssl paths with pkg-config results.
     explicit_openssl = o.openssl_includes or o.openssl_libpath
+
+    # Disable ssl v2 methods
+    if o.openssl_nov2:
+      conf.env.append_value("CPPFLAGS", "-DOPENSSL_NO_SSL2=1")
+
     if not explicit_openssl and conf.check_cfg(package='openssl',
                                                args='--cflags --libs',
                                                uselib_store='OPENSSL'):
@@ -599,7 +611,7 @@ def uv_cmd(bld, variant):
   # modifying libuv's build to send object files to a separate directory.
   #
   cmd = 'cp -r ' + sh_escape(srcdir)  + '/* ' + sh_escape(blddir) + \
-        ' &&  make -C ' + sh_escape(blddir)
+        ' &&  if [[ -z "$NODE_MAKE" ]]; then NODE_MAKE=make; fi; $NODE_MAKE -C ' + sh_escape(blddir)
   return cmd
 
 
@@ -625,7 +637,7 @@ def build_uv(bld):
     bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
 
   bld.install_files('${PREFIX}/include/node/', 'deps/uv/*.h')
-  bld.install_files('${PREFIX}/include/node/', 'deps/uv/ev/*.h')
+  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/ev/*.h')
 
 
 def build(bld):
@@ -835,6 +847,7 @@ def build(bld):
     src/node_os.cc
     src/node_dtrace.cc
     src/node_string.cc
+    src/timer_wrap.cc
   """
 
   if sys.platform.startswith("win32"):
@@ -875,7 +888,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.4.7' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.4.8' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 
