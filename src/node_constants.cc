@@ -105,6 +105,23 @@ void DefineConstants(Handle<Object> target) {
 #endif
 
 
+#ifdef LOCK_SH
+  NODE_DEFINE_CONSTANT(target, LOCK_SH);
+#endif
+
+#ifdef LOCK_EX
+  NODE_DEFINE_CONSTANT(target, LOCK_EX);
+#endif
+
+#ifdef LOCK_NB
+  NODE_DEFINE_CONSTANT(target, LOCK_NB);
+#endif
+
+#ifdef LOCK_UN
+  NODE_DEFINE_CONSTANT(target, LOCK_UN);
+#endif
+
+
 #ifdef S_IRWXU
   NODE_DEFINE_CONSTANT(target, S_IRWXU);
 #endif

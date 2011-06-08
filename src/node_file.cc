@@ -129,6 +129,7 @@ static int After(eio_req *req) {
       case EIO_FCHMOD:
       case EIO_CHOWN:
       case EIO_FCHOWN:
+      case EIO_CUSTOM:
         // These, however, don't.
         argc = 1;
         break;
@@ -519,6 +520,102 @@ static Handle<Value> Fsync(const Arguments& args) {
     int ret = fsync(fd);
 #endif
     if (ret != 0) return ThrowException(ErrnoException(errno));
+    return Undefined();
+  }
+}
+
+struct flock_data_t {
+  Persistent<Function> cb;
+  int fd;
+  int oper;
+};
+
+static int EIO_Flock(eio_req *req) {
+  flock_data_t* flock_data = static_cast<flock_data_t *>(req->data);
+
+#ifdef __MINGW32__
+  int i = _win32_flock(flock_data->fd, flock_data->oper);
+#else
+  int i = flock(flock_data->fd, flock_data->oper);
+#endif
+  
+  req->result = i;
+  return 0;
+}
+
+#ifdef __MINGW32__
+static int _win32_flock(int fd, int oper) {
+  OVERLAPPED o;
+  HANDLE fh;
+
+  int i = -1;
+
+  fh = (HANDLE)_get_osfhandle(fd);
+  if (fh == (HANDLE)-1)
+    return ThrowException(ErrnoException(errno));
+  
+  memset(&o, 0, sizeof(o));
+
+  switch(oper) {
+  case LOCK_SH:               /* shared lock */
+      if (LockFileEx(fh, 0, 0, LK_LEN, 0, &o))
+        i = 0;
+      break;
+  case LOCK_EX:               /* exclusive lock */
+      if (LockFileEx(fh, LOCKFILE_EXCLUSIVE_LOCK, 0, LK_LEN, 0, &o))
+        i = 0;
+      break;
+  case LOCK_SH|LOCK_NB:       /* non-blocking shared lock */
+      if (LockFileEx(fh, LOCKFILE_FAIL_IMMEDIATELY, 0, LK_LEN, 0, &o))
+        i = 0;
+      break;
+  case LOCK_EX|LOCK_NB:       /* non-blocking exclusive lock */
+      if (LockFileEx(fh, LOCKFILE_EXCLUSIVE_LOCK|LOCKFILE_FAIL_IMMEDIATELY,
+                     0, LK_LEN, 0, &o))
+        i = 0;
+      break;
+  case LOCK_UN:               /* unlock lock */
+      if (UnlockFileEx(fh, 0, LK_LEN, 0, &o))
+        i = 0;
+      break;
+  default:                    /* unknown */
+      errno = EINVAL;
+      return -1;
+  }
+  if (i == -1) {
+    if (GetLastError() == ERROR_LOCK_VIOLATION)
+      errno = WSAEWOULDBLOCK;
+    else
+      errno = EINVAL;
+  }
+  return i;
+}
+#endif
+
+static Handle<Value> Flock(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 2 || !args[0]->IsInt32() || !args[1]->IsInt32()) {
+    return THROW_BAD_ARGS;
+  }
+
+  flock_data_t* flock_data = new flock_data_t();
+  
+  flock_data->fd = args[0]->Int32Value();
+  flock_data->oper = args[1]->Int32Value();
+
+  if (args[2]->IsFunction()) {
+    flock_data->cb = Persistent<Function>::New(Local<Function>::Cast(args[2]));
+    eio_custom(EIO_Flock, EIO_PRI_DEFAULT, After, flock_data);
+    ev_ref(EV_DEFAULT_UC);
+    return Undefined();
+  } else {
+#ifdef __MINGW32__
+    int i = _win32_flock(flock_data->fd, flock_data->oper);
+#else
+    int i = flock(flock_data->fd, flock_data->oper);
+#endif
+    if (i != 0) return ThrowException(ErrnoException(errno));
     return Undefined();
   }
 }
@@ -982,6 +1079,7 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "read", Read);
   NODE_SET_METHOD(target, "fdatasync", Fdatasync);
   NODE_SET_METHOD(target, "fsync", Fsync);
+  NODE_SET_METHOD(target, "flock", Flock);
   NODE_SET_METHOD(target, "rename", Rename);
   NODE_SET_METHOD(target, "truncate", Truncate);
   NODE_SET_METHOD(target, "rmdir", RMDir);
