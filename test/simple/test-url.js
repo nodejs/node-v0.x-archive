@@ -82,9 +82,7 @@ var parseTests = {
     'pathname': '/Y'
   },
   // an unexpected invalid char in the hostname.
-  // The 2 next steps should not work
-  // Regarding IDNA host is splitted by dot
-  // and then encode so 2nd part: cOm -> xn--com
+  // IDNA cannot proceed correctly this wrong hostname
   /*
   'HtTp://x.y.cOm*a/b/c?d=e#f g<h>i' : {
     'href': 'http://x.y.com/*a/b/c?d=e#f',
