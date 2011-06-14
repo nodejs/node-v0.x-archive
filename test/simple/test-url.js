@@ -82,8 +82,6 @@ var parseTests = {
     'pathname': '/Y'
   },
   // an unexpected invalid char in the hostname.
-  // IDNA cannot proceed correctly this wrong hostname
-  /*
   'HtTp://x.y.cOm*a/b/c?d=e#f g<h>i' : {
     'href': 'http://x.y.com/*a/b/c?d=e#f',
     'protocol': 'http:',
@@ -105,7 +103,6 @@ var parseTests = {
     'query': 'd=e',
     'hash': '#f'
   },
-  */
   'http://x...y...#p': {
     'href': 'http://x...y.../#p',
     'protocol': 'http:',
@@ -299,6 +296,16 @@ var parseTests = {
     'host': 'www.xn--ffchen-9ta.com',
     'hostname': 'www.xn--ffchen-9ta.com',
     'pathname': '/'
+  },
+  'http://www.Äffchen.cOm*A/b/c?d=e#f g<h>i' : {
+    'href': 'http://www.xn--ffchen-9ta.com/*A/b/c?d=e#f',
+    'protocol': 'http:',
+    'host': 'www.xn--ffchen-9ta.com',
+    'hostname': 'www.xn--ffchen-9ta.com',
+    'pathname': '/*A/b/c',
+    'search': '?d=e',
+    'query': 'd=e',
+    'hash': '#f'
   },
   'http://SÉLIER.COM/' : {
     'href': 'http://xn--slier-bsa.com/',
