@@ -85,7 +85,8 @@ class TimerWrap {
 
   TimerWrap(Handle<Object> object) {
     active_ = false;
-    int r = uv_timer_init(&handle_, OnClose, this);
+    int r = uv_timer_init(&handle_);
+    handle_.data = this;
     assert(r == 0); // How do we proxy this error up to javascript?
                     // Suggestion: uv_timer_init() returns void.
     assert(object_.IsEmpty());
@@ -101,14 +102,12 @@ class TimerWrap {
 
   ~TimerWrap() {
     if (!active_) uv_ref();
-    assert(!object_.IsEmpty());
-    object_->SetPointerInInternalField(0, NULL);
-    object_.Dispose();
+    assert(object_.IsEmpty());
   }
 
   void StateChange() {
     bool was_active = active_;
-    active_ = uv_is_active(&handle_);
+    active_ = uv_is_active((uv_handle_t*) &handle_);
 
     if (!was_active && active_) {
       // If our state is changing from inactive to active, we
@@ -122,7 +121,7 @@ class TimerWrap {
   }
 
   // Free the C++ object on the close callback.
-  static void OnClose(uv_handle_t* handle, int status) {
+  static void OnClose(uv_handle_t* handle) {
     TimerWrap* wrap = static_cast<TimerWrap*>(handle->data);
     delete wrap;
   }
@@ -182,8 +181,6 @@ class TimerWrap {
 
     uv_timer_set_repeat(&wrap->handle_, repeat);
 
-    wrap->StateChange();
-
     return scope.Close(Integer::New(0));
   }
 
@@ -196,8 +193,6 @@ class TimerWrap {
 
     if (repeat < 0) SetErrno(uv_last_error().code);
 
-    wrap->StateChange();
-
     return scope.Close(Integer::New(repeat));
   }
 
@@ -207,11 +202,16 @@ class TimerWrap {
 
     UNWRAP
 
-    int r = uv_close(&wrap->handle_);
+    int r = uv_close((uv_handle_t*) &wrap->handle_, OnClose);
 
     if (r) SetErrno(uv_last_error().code);
 
     wrap->StateChange();
+
+    assert(!wrap->object_.IsEmpty());
+    wrap->object_->SetPointerInInternalField(0, NULL);
+    wrap->object_.Dispose();
+    wrap->object_.Clear();
 
     return scope.Close(Integer::New(r));
   }
@@ -228,7 +228,7 @@ class TimerWrap {
     MakeCallback(wrap->object_, "ontimeout", 1, argv);
   }
 
-  uv_handle_t handle_;
+  uv_timer_t handle_;
   Persistent<Object> object_;
   // This member is set false initially. When the timer is turned
   // on uv_ref is called. When the timer is turned off uv_unref is
