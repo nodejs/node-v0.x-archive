@@ -625,7 +625,7 @@ static Handle<Value> GetSockFamily(const Arguments& args) {
     default:
       result = Integer::New((address_storage).ss_family);
   }
-  scope.Close(result);
+  return scope.Close(result);
 }
 
 static Handle<Value> GetPeerName(const Arguments& args) {
