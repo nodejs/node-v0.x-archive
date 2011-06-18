@@ -450,6 +450,12 @@ static Handle<Value> Rename(const Arguments& args) {
   }
 }
 
+#ifndef __USE_FILE_OFFSET64
+#define GET_TRUNCATE_LEN(a) (a)->UInt32Value();
+#else
+#define GET_TRUNCATE_LEN(a) (a)->IntegerValue();
+#endif
+
 static Handle<Value> Truncate(const Arguments& args) {
   HandleScope scope;
 
@@ -458,7 +464,7 @@ static Handle<Value> Truncate(const Arguments& args) {
   }
 
   int fd = args[0]->Int32Value();
-  off_t len = args[1]->Uint32Value();
+  off_t len = GET_TRUNCATE_LEN(args[1]);
 
   if (args[2]->IsFunction()) {
     ASYNC_CALL(ftruncate, args[2], fd, len)
@@ -660,7 +666,15 @@ static Handle<Value> Open(const Arguments& args) {
   }
 }
 
+#ifndef __USE_FILE_OFFSET64
 #define GET_OFFSET(a) (a)->IsInt32() ? (a)->IntegerValue() : -1;
+#else
+static inline int IsInt64(double x) {
+  return x == static_cast<double>(static_cast<int64_t>(x));
+}
+#define GET_OFFSET(a) \
+  (a)->IsNumber() && IsInt64((a)->NumberValue()) ? (a)->IntegerValue() : -1;
+#endif
 
 // bytesWritten = write(fd, data, position, enc, callback)
 // Wrapper for write(2).
