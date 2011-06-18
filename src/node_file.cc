@@ -450,7 +450,7 @@ static Handle<Value> Rename(const Arguments& args) {
   }
 }
 
-#ifndef __USE_FILE_OFFSET64
+#ifndef _LARGEFILE_SOURCE
 #define GET_TRUNCATE_LEN(a) (a)->UInt32Value();
 #else
 #define GET_TRUNCATE_LEN(a) (a)->IntegerValue();
@@ -666,7 +666,7 @@ static Handle<Value> Open(const Arguments& args) {
   }
 }
 
-#ifndef __USE_FILE_OFFSET64
+#ifndef _LARGEFILE_SOURCE
 #define GET_OFFSET(a) (a)->IsInt32() ? (a)->IntegerValue() : -1;
 #else
 static inline int IsInt64(double x) {
