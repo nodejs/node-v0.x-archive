@@ -38,3 +38,16 @@ assert.equal(readBuf.toString(), message);
 fs.readSync(fd, readBuf, 0, 1, 0);
 assert.equal(readBuf[0], 0);
 
+var exceptionRaised = false;
+try {
+  fs.writeSync(fd, writeBuf, 0, writeBuf.length, 42.000001);
+} catch (err) {
+  console.log(err);
+  exceptionRaised = true;
+  assert.equal(err.message, 'Not an integer');
+}
+
+process.on('exit', function() {
+  assert.ok(exceptionRaised);
+});
+
