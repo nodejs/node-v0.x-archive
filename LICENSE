@@ -70,9 +70,4 @@ The externally maintained libraries used by Node are:
   - lib/buffer_ieee754.js is copyright 2008 Fair Oaks Labs, Inc. and released
     under the New BSD license.
 
-  - lib/punycode.js is copyright 2003 The Internet Society. The author grants
-    irrevocable permission to anyone to use, modify, and distribute it in
-    any way that does not diminish the rights of anyone else to use,
-    modify, and distribute it, provided that redistributed derivative
-    works do not contain misleading author or version information.
-    Derivative works need not be licensed under similar terms.
+  - lib/punycode.js is copyright 2011 Ben Noordhuis and released under the MIT license.
