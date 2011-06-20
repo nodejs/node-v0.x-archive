@@ -35,3 +35,4 @@ assert.equal(punycode.decode('Bcher-kva'), 'Bücher');
 assert.equal(punycode.decode(
     'Willst du die Blthe des frhen, die Frchte des spteren Jahres-x9e96lkal'),
     'Willst du die Blüthe des frühen, die Früchte des späteren Jahres');
+assert.equal(punycode.decode('wgv71a119e'), '日本語');
