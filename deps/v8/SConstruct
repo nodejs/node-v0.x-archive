@@ -179,6 +179,11 @@ LIBRARY_FLAGS = {
       'LIBPATH' : ['/usr/local/lib'],
       'CCFLAGS':      ['-ansi'],
     },
+    'os:netbsd': {
+      'CPPPATH' : ['/usr/local/include'],
+      'LIBPATH' : ['/usr/local/lib'],
+      'CCFLAGS':      ['-ansi'],
+    },
     'os:openbsd': {
       'CPPPATH' : ['/usr/local/include'],
       'LIBPATH' : ['/usr/local/lib'],
@@ -367,6 +372,9 @@ MKSNAPSHOT_EXTRA_FLAGS = {
       'LIBS': ['m', 'pthread', 'socket', 'nsl', 'rt'],
       'LINKFLAGS': ['-mt']
     },
+    'os:netbsd': {
+      'LIBS': ['pthread']
+    },
     'os:openbsd': {
       'LIBS': ['execinfo', 'pthread']
     },
@@ -418,6 +426,9 @@ CCTEST_EXTRA_FLAGS = {
     'os:solaris': {
       'LIBS':         ['m', 'pthread', 'socket', 'nsl', 'rt'],
       'LINKFLAGS':    ['-mt']
+    },
+    'os:netbsd': {
+      'LIBS':         ['pthread']
     },
     'os:openbsd': {
       'LIBS':         ['execinfo', 'pthread']
@@ -484,6 +495,10 @@ SAMPLE_FLAGS = {
       'LIBPATH' : ['/usr/local/lib'],
       'LIBS':     ['m', 'pthread', 'socket', 'nsl', 'rt'],
       'LINKFLAGS': ['-mt']
+    },
+    'os:netbsd': {
+      'LIBPATH' : ['/usr/local/lib'],
+      'LIBS':     ['pthread']
     },
     'os:openbsd': {
       'LIBPATH' : ['/usr/local/lib'],
@@ -620,6 +635,9 @@ D8_FLAGS = {
       'LIBS': ['m', 'pthread', 'socket', 'nsl', 'rt'],
       'LINKFLAGS': ['-mt']
     },
+    'os:netbsd': {
+      'LIBS': ['pthread'],
+    },
     'os:openbsd': {
       'LIBS': ['pthread'],
     },
@@ -706,7 +724,7 @@ SIMPLE_OPTIONS = {
     'help': 'the toolchain to use'
   },
   'os': {
-    'values': ['freebsd', 'linux', 'macos', 'win32', 'android', 'openbsd', 'solaris', 'cygwin'],
+    'values': ['netbsd', 'freebsd', 'linux', 'macos', 'win32', 'android', 'openbsd', 'solaris', 'cygwin'],
     'guess': GuessOS,
     'help': 'the os to build for'
   },
