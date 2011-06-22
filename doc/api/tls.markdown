@@ -29,11 +29,10 @@ Alternatively you can send the CSR to a Certificate Authority for signing.
 If node is compiled with OpenSSL v1.0.0 or later then TLS-PSK (RFC 4279) support is
 available as an alternative to normal certificate-based authentication. PSK uses
 a pre-shared key instead of certificates to authenticate a TLS connection, providing
-mutual authentication (normal cert-based TLS is usually only one-way authentication).
-PSK and certificate auth are not mutually exclusive; one server can accommodate both,
-with the variety used determined by the normal cipher negotiation step.
-Note that PSK is only a good choice where means exist to securely share a key with
-every connecting machine, so it does not replace PKI for the majority of TLS uses.
+mutual authentication. PSK and certificate auth are not mutually exclusive; one server
+can accommodate both, with the variety used determined by the normal cipher negotiation
+step. Note that PSK is only a good choice where means exist to securely share a key
+with every connecting machine, so it does not replace PKI for the majority of TLS uses.
 
 ### s = tls.connect(port, [host], [options], callback)
 

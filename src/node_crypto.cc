@@ -237,8 +237,6 @@ unsigned int SecureContext::PskServerCallback_(SSL *ssl,
       return len;
     }
 
-    // TODO: is it possible to throw an exception here and have it show up in JS?
-    // That would allow for better error reporting.
   }
 
   return 0;
@@ -1504,8 +1502,6 @@ unsigned int Connection::PskClientCallback_(SSL *ssl,
       }
     }
 
-    // TODO: is it possible to throw an exception here and have it show up in JS?
-    // That would allow for better error reporting.
   }
 
   return 0;

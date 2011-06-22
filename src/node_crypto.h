@@ -38,9 +38,11 @@
 #include <node_buffer.h>
 #endif
 
-// TLS-PSK support requires OpenSSL v1.0.0 or later
+// TLS-PSK support requires OpenSSL v1.0.0 or later built with PSK enabled
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
+#ifndef OPENSSL_NO_PSK
 #define OPENSSL_PSK_SUPPORT
+#endif
 #endif
 
 
