@@ -113,9 +113,6 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
-    if (process.cov) {
-      global.__cov = {};
-    }
   };
 
   startup.globalTimeouts = function() {
@@ -364,20 +361,6 @@
       var path = NativeModule.require('path');
       process.argv[0] = path.join(cwd, process.argv[0]);
     }
-
-    if (process.cov) {
-      process.on('exit', function() {
-        var coverage = JSON.stringify(__cov);
-        var path = NativeModule.require('path');
-        var fs = NativeModule.require('fs');
-        var filename = path.join(cwd, 'node-cov.json');
-        try {
-          fs.unlinkSync(filename);
-        } catch(e) {
-        }
-        fs.writeFileSync(filename, coverage);
-      });
-    }
   };
 
   // Below you find a minimal module system, which is used to load the node
@@ -387,7 +370,19 @@
   var Script = process.binding('evals').NodeScript;
   var runInThisContext = Script.runInThisContext;
 
+  // A special hook to test the new platform layer. Use the command-line
+  // flag --use-uv to enable the libuv backend instead of the legacy
+  // backend.
+  function translateId(id) {
+    if (id == 'net') {
+      return process.useUV || process.env.NODE_USE_UV ? 'net_uv' : 'net_legacy';
+    } else {
+      return id;
+    }
+  }
+
   function NativeModule(id) {
+    id = translateId(id);
     this.filename = id + '.js';
     this.id = id;
     this.exports = {};
@@ -398,6 +393,8 @@
   NativeModule._cache = {};
 
   NativeModule.require = function(id) {
+    id = translateId(id);
+
     if (id == 'native_module') {
       return NativeModule;
     }
@@ -420,14 +417,17 @@
   };
 
   NativeModule.getCached = function(id) {
+    id = translateId(id);
     return NativeModule._cache[id];
   }
 
   NativeModule.exists = function(id) {
+    id = translateId(id);
     return (id in NativeModule._source);
   }
 
   NativeModule.getSource = function(id) {
+    id = translateId(id);
     return NativeModule._source[id];
   }
 
@@ -436,7 +436,7 @@
   };
 
   NativeModule.wrapper = [
-    '(function (exports, require, module, __filename, __dirname) { ',
+    '(function (exports, require, module, __filename, __dirname, define) { ',
     '\n});'
   ];
 

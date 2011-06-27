@@ -109,7 +109,6 @@ static char *eval_string = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
 static bool debug_wait_connect = false;
-static bool cov = false;
 static int debug_port=5858;
 static int max_stack_size = 0;
 
@@ -122,6 +121,18 @@ static Persistent<String> tick_callback_sym;
 static uv_async_t eio_want_poll_notifier;
 static uv_async_t eio_done_poll_notifier;
 static uv_idle_t eio_poller;
+
+
+// XXX use_uv defaults to false on POSIX platforms and to true on Windows
+// platforms. This can be set with "--use-uv" command-line flag. We intend
+// to remove the legacy backend once the libuv backend is passing all of the
+// tests.
+#ifdef __POSIX__
+static bool use_uv = false;
+#else
+static bool use_uv = true;
+#endif
+
 
 // Buffer for getpwnam_r(), getgrpam_r() and other misc callers; keep this
 // scoped at file-level rather than method-level to avoid excess stack usage.
@@ -1287,7 +1298,7 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     //
     // When reporting errors on the first line of a script, this wrapper
     // function is leaked to the user. This HACK is to remove it. The length
-    // of the wrapper is 62. That wrapper is defined in src/node.js
+    // of the wrapper is 70. That wrapper is defined in src/node.js
     //
     // If that wrapper is ever changed, then this number also has to be
     // updated. Or - someone could clean this up so that the two peices
@@ -1295,7 +1306,7 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     //
     // Even better would be to get support into V8 for wrappers that
     // shouldn't be reported to users.
-    int offset = linenum == 1 ? 62 : 0;
+    int offset = linenum == 1 ? 70 : 0;
 
     fprintf(stderr, "%s\n", sourceline_string + offset);
     // Print wavy underline (GetUnderline is deprecated).
@@ -2081,7 +2092,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   process->Set(String::NewSymbol("ENV"), ENV);
 
   process->Set(String::NewSymbol("pid"), Integer::New(getpid()));
-  process->Set(String::NewSymbol("cov"), cov ? True() : False());
+  process->Set(String::NewSymbol("useUV"), use_uv ? True() : False());
 
   // -e, --eval
   if (eval_string) {
@@ -2224,7 +2235,7 @@ static void PrintHelp() {
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
-         "  --cov                code coverage; writes node-cov.json \n"
+         "  --use-uv             use the libuv backend\n"
          "\n"
          "Enviromental variables:\n"
          "NODE_PATH              ':'-separated list of directories\n"
@@ -2247,8 +2258,8 @@ static void ParseArgs(int argc, char **argv) {
     if (strstr(arg, "--debug") == arg) {
       ParseDebugOpt(arg);
       argv[i] = const_cast<char*>("");
-    } else if (!strcmp(arg, "--cov")) {
-      cov = true;
+    } else if (!strcmp(arg, "--use-uv")) {
+      use_uv = true;
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
