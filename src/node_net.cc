@@ -1111,7 +1111,7 @@ static Handle<Value> SendMsg(const Arguments& args) {
   // Grab the actul data to be written, stuffing it into iov
   if (!Buffer::HasInstance(args[1])) {
     return ThrowException(Exception::TypeError(
-      String::New("Expected either a string or a buffer")));
+      String::New("Expected a buffer")));
   }
 
   Local<Object> buffer_obj = args[1]->ToObject();
@@ -1237,7 +1237,7 @@ static Handle<Value> SendTo(const Arguments& args) {
   // Grab the actul data to be written
   if (!Buffer::HasInstance(args[1])) {
     return ThrowException(Exception::TypeError(
-      String::New("Expected either a string or a buffer")));
+      String::New("Expected a buffer")));
   }
 
   Local<Object> buffer_obj = args[1]->ToObject();
