@@ -41,12 +41,15 @@ typedef intptr_t ssize_t;
 
 typedef struct uv_err_s uv_err_t;
 typedef struct uv_handle_s uv_handle_t;
+typedef struct uv_stream_s uv_stream_t;
 typedef struct uv_tcp_s uv_tcp_t;
 typedef struct uv_timer_s uv_timer_t;
 typedef struct uv_prepare_s uv_prepare_t;
 typedef struct uv_check_s uv_check_t;
 typedef struct uv_idle_s uv_idle_t;
 typedef struct uv_req_s uv_req_t;
+typedef struct uv_async_s uv_async_t;
+typedef struct uv_getaddrinfo_s uv_getaddrinfo_t;
 
 
 #if defined(__unix__) || defined(__POSIX__) || defined(__APPLE__)
@@ -64,16 +67,20 @@ typedef struct uv_req_s uv_req_t;
  * In the case of uv_read_cb the uv_buf_t returned should be freed by the
  * user.
  */
-typedef uv_buf_t (*uv_alloc_cb)(uv_tcp_t* tcp, size_t suggested_size);
-typedef void (*uv_read_cb)(uv_tcp_t* tcp, ssize_t nread, uv_buf_t buf);
+typedef uv_buf_t (*uv_alloc_cb)(uv_stream_t* tcp, size_t suggested_size);
+typedef void (*uv_read_cb)(uv_stream_t* tcp, ssize_t nread, uv_buf_t buf);
 typedef void (*uv_write_cb)(uv_req_t* req, int status);
 typedef void (*uv_connect_cb)(uv_req_t* req, int status);
 typedef void (*uv_shutdown_cb)(uv_req_t* req, int status);
-typedef void (*uv_connection_cb)(uv_tcp_t* server, int status);
+typedef void (*uv_connection_cb)(uv_handle_t* server, int status);
 typedef void (*uv_close_cb)(uv_handle_t* handle);
-/* TODO: do loop_cb and async_cb really need a status argument? */
-typedef void (*uv_loop_cb)(uv_handle_t* handle, int status);
-typedef void (*uv_async_cb)(uv_handle_t* handle, int status);
+typedef void (*uv_timer_cb)(uv_timer_t* handle, int status);
+/* TODO: do these really need a status argument? */
+typedef void (*uv_async_cb)(uv_async_t* handle, int status);
+typedef void (*uv_prepare_cb)(uv_prepare_t* handle, int status);
+typedef void (*uv_check_cb)(uv_check_t* handle, int status);
+typedef void (*uv_idle_cb)(uv_idle_t* handle, int status);
+typedef void (*uv_getaddrinfo_cb)(uv_getaddrinfo_t* handle, int status, struct addrinfo* res);
 
 
 /* Expand this list if necessary. */
@@ -112,7 +119,12 @@ typedef enum {
   UV_EPROTO,
   UV_EPROTONOSUPPORT,
   UV_EPROTOTYPE,
-  UV_ETIMEDOUT
+  UV_ETIMEDOUT,
+  UV_ECHARSET,
+  UV_EAIFAMNOSUPPORT,
+  UV_EAINONAME,
+  UV_EAISERVICE,
+  UV_EAISOCKTYPE
 } uv_err_code;
 
 typedef enum {
@@ -125,7 +137,10 @@ typedef enum {
   UV_PREPARE,
   UV_CHECK,
   UV_IDLE,
-  UV_ASYNC
+  UV_ASYNC,
+  UV_ARES,
+  UV_ARES_TASK,
+  UV_GETADDRINFO
 } uv_handle_type;
 
 typedef enum {
@@ -163,6 +178,8 @@ struct uv_req_s {
  */
 void uv_req_init(uv_req_t* req, uv_handle_t* handle, void* cb);
 
+int uv_shutdown(uv_req_t* req);
+
 
 #define UV_HANDLE_FIELDS \
   /* read-only */ \
@@ -191,30 +208,21 @@ int uv_is_active(uv_handle_t* handle);
 int uv_close(uv_handle_t* handle, uv_close_cb close_cb);
 
 
-/*
- * A subclass of uv_handle_t representing a TCP stream or TCP server. In the
- * future this will probably be split into two classes - one a stream and
- * the other a server.
- */
-struct uv_tcp_s {
+#define UV_STREAM_FIELDS \
+  /* number of bytes queued for writing */ \
+  size_t write_queue_size; \
+  /* private */ \
+  UV_STREAM_PRIVATE_FIELDS \
+
+/* The abstract base class for all streams. */
+struct uv_stream_s {
   UV_HANDLE_FIELDS
-  size_t write_queue_size; /* number of bytes queued for writing */
-  UV_TCP_PRIVATE_FIELDS
+  UV_STREAM_FIELDS
 };
 
-int uv_tcp_init(uv_tcp_t* handle);
-
-int uv_bind(uv_tcp_t* handle, struct sockaddr_in);
-
-int uv_connect(uv_req_t* req, struct sockaddr_in);
-
-int uv_shutdown(uv_req_t* req);
-
-int uv_listen(uv_tcp_t* handle, int backlog, uv_connection_cb cb);
-
-/* This call is used in conjunction with uv_listen() to accept incoming TCP
+/* This call is used in conjunction with uv_listen() to accept incoming
  * connections. Call uv_accept after receiving a uv_connection_cb to accept
- * the connection. Before calling uv_accept use uv_tcp_init() must be
+ * the connection. Before calling uv_accept use uv_*_init() must be
  * called on the client. Non-zero return value indicates an error.
  *
  * When the uv_connection_cb is called it is guaranteed that uv_accept will
@@ -222,7 +230,7 @@ int uv_listen(uv_tcp_t* handle, int backlog, uv_connection_cb cb);
  * once, it may fail. It is suggested to only call uv_accept once per
  * uv_connection_cb call.
  */
-int uv_accept(uv_tcp_t* server, uv_tcp_t* client);
+int uv_accept(uv_handle_t* server, uv_stream_t* client);
 
 /* Read data from an incoming stream. The callback will be made several
  * several times until there is no more data to read or uv_read_stop is
@@ -233,9 +241,9 @@ int uv_accept(uv_tcp_t* server, uv_tcp_t* client);
  * eof; it happens when libuv requested a buffer through the alloc callback
  * but then decided that it didn't need that buffer.
  */
-int uv_read_start(uv_tcp_t*, uv_alloc_cb alloc_cb, uv_read_cb read_cb);
+int uv_read_start(uv_stream_t*, uv_alloc_cb alloc_cb, uv_read_cb read_cb);
 
-int uv_read_stop(uv_tcp_t*);
+int uv_read_stop(uv_stream_t*);
 
 /* Write data to stream. Buffers are written in order. Example:
  *
@@ -258,6 +266,27 @@ int uv_write(uv_req_t* req, uv_buf_t bufs[], int bufcnt);
 
 
 /*
+ * A subclass of uv_stream_t representing a TCP stream or TCP server. In the
+ * future this will probably be split into two classes - one a stream and
+ * the other a server.
+ */
+struct uv_tcp_s {
+  UV_HANDLE_FIELDS
+  UV_STREAM_FIELDS
+  UV_TCP_PRIVATE_FIELDS
+};
+
+int uv_tcp_init(uv_tcp_t* handle);
+
+int uv_tcp_bind(uv_tcp_t* handle, struct sockaddr_in);
+int uv_tcp_bind6(uv_tcp_t* handle, struct sockaddr_in6);
+
+int uv_tcp_connect(uv_req_t* req, struct sockaddr_in);
+
+int uv_tcp_listen(uv_tcp_t* handle, int backlog, uv_connection_cb cb);
+
+
+/*
  * Subclass of uv_handle_t. libev wrapper. Every active prepare handle gets
  * its callback called exactly once per loop iteration, just before the
  * system blocks to wait for completed i/o.
@@ -269,7 +298,7 @@ struct uv_prepare_s {
 
 int uv_prepare_init(uv_prepare_t* prepare);
 
-int uv_prepare_start(uv_prepare_t* prepare, uv_loop_cb cb);
+int uv_prepare_start(uv_prepare_t* prepare, uv_prepare_cb cb);
 
 int uv_prepare_stop(uv_prepare_t* prepare);
 
@@ -286,7 +315,7 @@ struct uv_check_s {
 
 int uv_check_init(uv_check_t* check);
 
-int uv_check_start(uv_check_t* check, uv_loop_cb cb);
+int uv_check_start(uv_check_t* check, uv_check_cb cb);
 
 int uv_check_stop(uv_check_t* check);
 
@@ -304,7 +333,7 @@ struct uv_idle_s {
 
 int uv_idle_init(uv_idle_t* idle);
 
-int uv_idle_start(uv_idle_t* idle, uv_loop_cb cb);
+int uv_idle_start(uv_idle_t* idle, uv_idle_cb cb);
 
 int uv_idle_stop(uv_idle_t* idle);
 
@@ -317,10 +346,10 @@ int uv_idle_stop(uv_idle_t* idle);
  * after the call to async_send. Unlike all other libuv functions,
  * uv_async_send can be called from another thread.
  */
-typedef struct {
+struct uv_async_s {
   UV_HANDLE_FIELDS
   UV_ASYNC_PRIVATE_FIELDS
-} uv_async_t;
+};
 
 int uv_async_init(uv_async_t* async, uv_async_cb async_cb);
 
@@ -338,7 +367,7 @@ struct uv_timer_s {
 
 int uv_timer_init(uv_timer_t* timer);
 
-int uv_timer_start(uv_timer_t* timer, uv_loop_cb cb, int64_t timeout, int64_t repeat);
+int uv_timer_start(uv_timer_t* timer, uv_timer_cb cb, int64_t timeout, int64_t repeat);
 
 int uv_timer_stop(uv_timer_t* timer);
 
@@ -358,6 +387,37 @@ int uv_timer_again(uv_timer_t* timer);
 void uv_timer_set_repeat(uv_timer_t* timer, int64_t repeat);
 
 int64_t uv_timer_get_repeat(uv_timer_t* timer);
+
+
+/* c-ares integration initialize and terminate */
+int uv_ares_init_options(ares_channel *channelptr,
+                        struct ares_options *options,
+                        int optmask);
+
+void uv_ares_destroy(ares_channel channel);
+
+
+/*
+ * Subclass of uv_handle_t. Used for integration of getaddrinfo.
+ */
+struct uv_getaddrinfo_s {
+  UV_HANDLE_FIELDS
+  UV_GETADDRINFO_PRIVATE_FIELDS
+};
+
+
+/* uv_getaddrinfo
+ * return code of UV_OK means that request is accepted,
+ * and callback will be called with result.
+ * Other return codes mean that there will not be a callback.
+ * Input arguments may be released after return from this call.
+ * Callback must not call freeaddrinfo
+ */
+ int uv_getaddrinfo(uv_getaddrinfo_t* handle,
+                    uv_getaddrinfo_cb getaddrinfo_cb,
+                    const char* node,
+                    const char* service,
+                    const struct addrinfo* hints);
 
 
 /*
@@ -385,9 +445,22 @@ int64_t uv_now();
 
 /* Utility */
 struct sockaddr_in uv_ip4_addr(const char* ip, int port);
+struct sockaddr_in6 uv_ip6_addr(const char* ip, int port);
 
 /* Gets the executable path */
-int uv_get_exepath(char* buffer, size_t* size);
+int uv_exepath(char* buffer, size_t* size);
+
+/*
+ * Returns the current high-resolution real time. This is expressed in
+ * nanoseconds. It is relative to an arbitrary time in the past. It is not
+ * related to the time of day and therefore not subject to clock drift. The
+ * primary use is for measuring performance between intervals.
+ *
+ * Note not every platform can support nanosecond resolution; however, this
+ * value will always be in nanoseconds.
+ */
+extern uint64_t uv_hrtime(void);
+
 
 /* the presence of this union forces similar struct layout */
 union uv_any_handle {
@@ -397,6 +470,7 @@ union uv_any_handle {
   uv_idle_t idle;
   uv_async_t async;
   uv_timer_t timer;
+  uv_getaddrinfo_t getaddrinfo;
 };
 
 /* Diagnostic counters */
@@ -412,33 +486,6 @@ typedef struct {
 } uv_counters_t;
 
 uv_counters_t* uv_counters();
-
-#ifndef	SEC
-#define	SEC		1
-#endif
-
-#ifndef	MILLISEC
-#define	MILLISEC	1000
-#endif
-
-#ifndef	MICROSEC
-#define	MICROSEC	1000000
-#endif
-
-#ifndef	NANOSEC
-#define	NANOSEC		1000000000
-#endif
-
-/*
- * Returns the current high-resolution real time. This is expressed in
- * nanoseconds. It is relative to an arbitrary time in the past. It is not
- * related to the time of day and therefore not subject to clock drift. The
- * primary use is for measuring performance between intervals.
- *
- * Note not every platform can support nanosecond resolution; however, this
- * value will always be in nanoseconds.
- */
-extern uint64_t uv_get_hrtime(void);
 
 #ifdef __cplusplus
 }

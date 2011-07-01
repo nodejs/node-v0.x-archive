@@ -19,6 +19,8 @@
  */
 
 #include "uv.h"
+#include "uv-common.h"
+#include "uv-eio.h"
 
 #include <stddef.h> /* NULL */
 #include <stdio.h> /* printf */
@@ -44,13 +46,24 @@
 
 static uv_err_t last_err;
 
+struct uv_ares_data_s {
+  ares_channel channel;
+  /*
+   * While the channel is active this timer is called once per second to be sure
+   * that we're always calling ares_process. See the warning above the
+   * definition of ares_timeout().
+   */
+  ev_timer timer;
+};
+
+static struct uv_ares_data_s ares_data;
+
 
 void uv__tcp_io(EV_P_ ev_io* watcher, int revents);
 void uv__next(EV_P_ ev_idle* watcher, int revents);
 static void uv__tcp_connect(uv_tcp_t*);
 int uv_tcp_open(uv_tcp_t*, int fd);
 static void uv__finish_close(uv_handle_t* handle);
-
 
 /* flags */
 enum {
@@ -64,6 +77,30 @@ enum {
 
 void uv_flag_set(uv_handle_t* handle, int flag) {
   handle->flags |= flag;
+}
+
+
+/* TODO Share this code with Windows. */
+/* TODO Expose callback to user to handle fatal error like V8 does. */
+static void uv_fatal_error(const int errorno, const char* syscall) {
+  char* buf = NULL;
+  const char* errmsg;
+
+  if (buf) {
+    errmsg = buf;
+  } else {
+    errmsg = "Unknown error";
+  }
+
+  if (syscall) {
+    fprintf(stderr, "\nlibuv fatal error. %s: (%d) %s\n", syscall, errorno,
+        errmsg);
+  } else {
+    fprintf(stderr, "\nlibuv fatal error. (%d) %s\n", errorno, errmsg);
+  }
+
+  *((char*)NULL) = 0xff; /* Force debug break */
+  abort();
 }
 
 
@@ -218,6 +255,7 @@ int uv_tcp_init(uv_tcp_t* tcp) {
   tcp->fd = -1;
   tcp->delayed_error = 0;
   ngx_queue_init(&tcp->write_queue);
+  ngx_queue_init(&tcp->write_completed_queue);
   tcp->write_queue_size = 0;
 
   ev_init(&tcp->read_watcher, uv__tcp_io);
@@ -227,19 +265,18 @@ int uv_tcp_init(uv_tcp_t* tcp) {
   tcp->write_watcher.data = tcp;
 
   assert(ngx_queue_empty(&tcp->write_queue));
+  assert(ngx_queue_empty(&tcp->write_completed_queue));
   assert(tcp->write_queue_size == 0);
 
   return 0;
 }
 
 
-int uv_bind(uv_tcp_t* tcp, struct sockaddr_in addr) {
-  int addrsize = sizeof(struct sockaddr_in);
-  int domain = AF_INET;
+int uv__bind(uv_tcp_t* tcp, int domain, struct sockaddr* addr, int addrsize) {
   int r;
 
   if (tcp->fd <= 0) {
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = socket(domain, SOCK_STREAM, 0);
 
     if (fd < 0) {
       uv_err_new((uv_handle_t*)tcp, errno);
@@ -254,12 +291,7 @@ int uv_bind(uv_tcp_t* tcp, struct sockaddr_in addr) {
 
   assert(tcp->fd >= 0);
 
-  if (addr.sin_family != AF_INET) {
-    uv_err_new((uv_handle_t*)tcp, EFAULT);
-    return -1;
-  }
-
-  r = bind(tcp->fd, (struct sockaddr*) &addr, addrsize);
+  r = bind(tcp->fd, addr, addrsize);
   tcp->delayed_error = 0;
 
   if (r) {
@@ -275,6 +307,26 @@ int uv_bind(uv_tcp_t* tcp, struct sockaddr_in addr) {
   }
 
   return 0;
+}
+
+
+int uv_tcp_bind(uv_tcp_t* tcp, struct sockaddr_in addr) {
+  if (addr.sin_family != AF_INET) {
+    uv_err_new((uv_handle_t*)tcp, EFAULT);
+    return -1;
+  }
+
+  return uv__bind(tcp, AF_INET, (struct sockaddr*)&addr, sizeof(struct sockaddr_in));
+}
+
+
+int uv_tcp_bind6(uv_tcp_t* tcp, struct sockaddr_in6 addr) {
+  if (addr.sin6_family != AF_INET6) {
+    uv_err_new((uv_handle_t*)tcp, EFAULT);
+    return -1;
+  }
+
+  return uv__bind(tcp, AF_INET6, (struct sockaddr*)&addr, sizeof(struct sockaddr_in6));
 }
 
 
@@ -311,8 +363,8 @@ int uv_tcp_open(uv_tcp_t* tcp, int fd) {
 
 void uv__server_io(EV_P_ ev_io* watcher, int revents) {
   int fd;
-  struct sockaddr addr;
-  socklen_t addrlen;
+  struct sockaddr_storage addr;
+  socklen_t addrlen = sizeof(struct sockaddr_storage);
   uv_tcp_t* tcp = watcher->data;
 
   assert(watcher == &tcp->read_watcher ||
@@ -328,7 +380,7 @@ void uv__server_io(EV_P_ ev_io* watcher, int revents) {
 
   while (1) {
     assert(tcp->accepted_fd < 0);
-    fd = accept(tcp->fd, &addr, &addrlen);
+    fd = accept(tcp->fd, (struct sockaddr*)&addr, &addrlen);
 
     if (fd < 0) {
       if (errno == EAGAIN) {
@@ -339,12 +391,12 @@ void uv__server_io(EV_P_ ev_io* watcher, int revents) {
         return;
       } else {
         uv_err_new((uv_handle_t*)tcp, errno);
-        tcp->connection_cb(tcp, -1);
+        tcp->connection_cb((uv_handle_t*)tcp, -1);
       }
 
     } else {
       tcp->accepted_fd = fd;
-      tcp->connection_cb(tcp, 0);
+      tcp->connection_cb((uv_handle_t*)tcp, 0);
       if (tcp->accepted_fd >= 0) {
         /* The user hasn't yet accepted called uv_accept() */
         ev_io_stop(EV_DEFAULT_ &tcp->read_watcher);
@@ -355,26 +407,29 @@ void uv__server_io(EV_P_ ev_io* watcher, int revents) {
 }
 
 
-int uv_accept(uv_tcp_t* server, uv_tcp_t* client) {
-  if (server->accepted_fd < 0) {
-    uv_err_new((uv_handle_t*) server, EAGAIN);
+int uv_accept(uv_handle_t* server, uv_stream_t* client) {
+  uv_tcp_t* tcpServer = (uv_tcp_t*)server;
+  uv_tcp_t* tcpClient = (uv_tcp_t*)client;
+
+  if (tcpServer->accepted_fd < 0) {
+    uv_err_new(server, EAGAIN);
     return -1;
   }
 
-  if (uv_tcp_open(client, server->accepted_fd)) {
+  if (uv_tcp_open(tcpClient, tcpServer->accepted_fd)) {
     /* Ignore error for now */
-    server->accepted_fd = -1;
-    close(server->accepted_fd);
+    tcpServer->accepted_fd = -1;
+    close(tcpServer->accepted_fd);
     return -1;
   } else {
-    server->accepted_fd = -1;
-    ev_io_start(EV_DEFAULT_ &server->read_watcher);
+    tcpServer->accepted_fd = -1;
+    ev_io_start(EV_DEFAULT_ &tcpServer->read_watcher);
     return 0;
   }
 }
 
 
-int uv_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
+int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   int r;
 
   assert(tcp->fd >= 0);
@@ -528,12 +583,14 @@ static void uv__drain(uv_tcp_t* tcp) {
 }
 
 
-void uv__write(uv_tcp_t* tcp) {
+/* On success returns NULL. On error returns a pointer to the write request
+ * which had the error.
+ */
+static uv_req_t* uv__write(uv_tcp_t* tcp) {
   uv_req_t* req;
   struct iovec* iov;
   int iovcnt;
   ssize_t n;
-  uv_write_cb cb;
 
   assert(tcp->fd >= 0);
 
@@ -543,8 +600,7 @@ void uv__write(uv_tcp_t* tcp) {
   req = uv_write_queue_head(tcp);
   if (!req) {
     assert(tcp->write_queue_size == 0);
-    uv__drain(tcp);
-    return;
+    return NULL;
   }
 
   assert(req->handle == (uv_handle_t*)tcp);
@@ -562,21 +618,16 @@ void uv__write(uv_tcp_t* tcp) {
 
   n = writev(tcp->fd, iov, iovcnt);
 
-  cb = (uv_write_cb)req->cb;
-
   if (n < 0) {
     if (errno != EAGAIN) {
-      uv_err_t err = uv_err_new((uv_handle_t*)tcp, errno);
-
-      if (cb) {
-        cb(req, -1);
-      }
-      return;
+      /* Error */
+      uv_err_new((uv_handle_t*)tcp, errno);
+      return req;
     }
   } else {
     /* Successful write */
 
-    /* The loop updates the counters. */
+    /* Update the counters. */
     while (n > 0) {
       uv_buf_t* buf = &(req->bufs[req->write_index]);
       size_t len = buf->len;
@@ -611,19 +662,13 @@ void uv__write(uv_tcp_t* tcp) {
           free(req->bufs); /* FIXME: we should not be allocing for each read */
           req->bufs = NULL;
 
-          /* NOTE: call callback AFTER freeing the request data. */
-          if (cb) {
-            cb(req, 0);
-          }
-
-          if (!ngx_queue_empty(&tcp->write_queue)) {
-            assert(tcp->write_queue_size > 0);
-          } else {
-            /* Write queue drained. */
-            uv__drain(tcp);
-          }
-
-          return;
+          /* Add it to the write_completed_queue where it will have its
+           * callback called in the near future.
+           * TODO: start trying to write the next request.
+           */
+          ngx_queue_insert_tail(&tcp->write_completed_queue, &req->queue);
+          ev_feed_event(EV_DEFAULT_ &tcp->write_watcher, EV_WRITE);
+          return NULL;
         }
       }
     }
@@ -632,9 +677,42 @@ void uv__write(uv_tcp_t* tcp) {
   /* Either we've counted n down to zero or we've got EAGAIN. */
   assert(n == 0 || n == -1);
 
-  /* We're not done yet. */
-  assert(ev_is_active(&tcp->write_watcher));
+  /* We're not done. */
   ev_io_start(EV_DEFAULT_ &tcp->write_watcher);
+
+  return NULL;
+}
+
+
+static void uv__write_callbacks(uv_tcp_t* tcp) {
+  uv_write_cb cb;
+  int callbacks_made = 0;
+  ngx_queue_t* q;
+  uv_req_t* req;
+
+  while (!ngx_queue_empty(&tcp->write_completed_queue)) {
+    /* Pop a req off write_completed_queue. */
+    q = ngx_queue_head(&tcp->write_completed_queue);
+    assert(q);
+    req = ngx_queue_data(q, struct uv_req_s, queue);
+    ngx_queue_remove(q);
+
+    cb = (uv_write_cb) req->cb;
+
+    /* NOTE: call callback AFTER freeing the request data. */
+    if (cb) {
+      cb(req, 0);
+    }
+
+    callbacks_made++;
+  }
+
+  assert(ngx_queue_empty(&tcp->write_completed_queue));
+
+  /* Write queue drained. */
+  if (!uv_write_queue_head(tcp)) {
+    uv__drain(tcp);
+  }
 }
 
 
@@ -648,7 +726,7 @@ void uv__read(uv_tcp_t* tcp) {
    */
   while (tcp->read_cb && uv_flag_is_set((uv_handle_t*)tcp, UV_READING)) {
     assert(tcp->alloc_cb);
-    buf = tcp->alloc_cb(tcp, 64 * 1024);
+    buf = tcp->alloc_cb((uv_stream_t*)tcp, 64 * 1024);
 
     assert(buf.len > 0);
     assert(buf.base);
@@ -665,12 +743,12 @@ void uv__read(uv_tcp_t* tcp) {
           ev_io_start(EV_DEFAULT_UC_ &tcp->read_watcher);
         }
         uv_err_new((uv_handle_t*)tcp, EAGAIN);
-        tcp->read_cb(tcp, 0, buf);
+        tcp->read_cb((uv_stream_t*)tcp, 0, buf);
         return;
       } else {
         /* Error. User should call uv_close(). */
         uv_err_new((uv_handle_t*)tcp, errno);
-        tcp->read_cb(tcp, -1, buf);
+        tcp->read_cb((uv_stream_t*)tcp, -1, buf);
         assert(!ev_is_active(&tcp->read_watcher));
         return;
       }
@@ -678,11 +756,11 @@ void uv__read(uv_tcp_t* tcp) {
       /* EOF */
       uv_err_new_artificial((uv_handle_t*)tcp, UV_EOF);
       ev_io_stop(EV_DEFAULT_UC_ &tcp->read_watcher);
-      tcp->read_cb(tcp, -1, buf);
+      tcp->read_cb((uv_stream_t*)tcp, -1, buf);
       return;
     } else {
       /* Successful read */
-      tcp->read_cb(tcp, nread, buf);
+      tcp->read_cb((uv_stream_t*)tcp, nread, buf);
     }
   }
 }
@@ -727,7 +805,17 @@ void uv__tcp_io(EV_P_ ev_io* watcher, int revents) {
     }
 
     if (revents & EV_WRITE) {
-      uv__write(tcp);
+      uv_req_t* req = uv__write(tcp);
+      if (req) {
+        /* Error. Notify the user. */
+        uv_write_cb cb = (uv_write_cb) req->cb;
+
+        if (cb) {
+          cb(req, -1);
+        }
+      } else {
+        uv__write_callbacks(tcp);
+      }
     }
   }
 }
@@ -788,7 +876,7 @@ static void uv__tcp_connect(uv_tcp_t* tcp) {
 }
 
 
-int uv_connect(uv_req_t* req, struct sockaddr_in addr) {
+int uv_tcp_connect(uv_req_t* req, struct sockaddr_in addr) {
   uv_tcp_t* tcp = (uv_tcp_t*)req->handle;
   int addrsize;
   int r;
@@ -872,6 +960,7 @@ static size_t uv__buf_count(uv_buf_t bufs[], int bufcnt) {
  */
 int uv_write(uv_req_t* req, uv_buf_t bufs[], int bufcnt) {
   uv_tcp_t* tcp = (uv_tcp_t*)req->handle;
+  int empty_queue = (tcp->write_queue_size == 0);
   assert(tcp->fd >= 0);
 
   ngx_queue_init(&req->queue);
@@ -893,7 +982,29 @@ int uv_write(uv_req_t* req, uv_buf_t bufs[], int bufcnt) {
   assert(tcp->write_watcher.data == tcp);
   assert(tcp->write_watcher.fd == tcp->fd);
 
-  ev_io_start(EV_DEFAULT_ &tcp->write_watcher);
+  /* If the queue was empty when this function began, we should attempt to
+   * do the write immediately. Otherwise start the write_watcher and wait
+   * for the fd to become writable.
+   */
+  if (empty_queue) {
+    if (uv__write(tcp)) {
+      /* Error. uv_last_error has been set. */
+      return -1;
+    }
+  }
+
+  /* If the queue is now empty - we've flushed the request already. That
+   * means we need to make the callback. The callback can only be done on a
+   * fresh stack so we feed the event loop in order to service it.
+   */
+  if (ngx_queue_empty(&tcp->write_queue)) {
+    ev_feed_event(EV_DEFAULT_ &tcp->write_watcher, EV_WRITE);
+  } else {
+    /* Otherwise there is data to write - so we should wait for the file
+     * descriptor to become writable.
+     */
+    ev_io_start(EV_DEFAULT_ &tcp->write_watcher);
+  }
 
   return 0;
 }
@@ -919,7 +1030,9 @@ int64_t uv_now() {
 }
 
 
-int uv_read_start(uv_tcp_t* tcp, uv_alloc_cb alloc_cb, uv_read_cb read_cb) {
+int uv_read_start(uv_stream_t* stream, uv_alloc_cb alloc_cb, uv_read_cb read_cb) {
+  uv_tcp_t* tcp = (uv_tcp_t*)stream;
+
   /* The UV_READING flag is irrelevant of the state of the tcp - it just
    * expresses the desired state of the user.
    */
@@ -944,7 +1057,9 @@ int uv_read_start(uv_tcp_t* tcp, uv_alloc_cb alloc_cb, uv_read_cb read_cb) {
 }
 
 
-int uv_read_stop(uv_tcp_t* tcp) {
+int uv_read_stop(uv_stream_t* stream) {
+  uv_tcp_t* tcp = (uv_tcp_t*)stream;
+
   uv_flag_unset((uv_handle_t*)tcp, UV_READING);
 
   ev_io_stop(EV_DEFAULT_UC_ &tcp->read_watcher);
@@ -967,7 +1082,7 @@ static void uv__prepare(EV_P_ ev_prepare* w, int revents) {
   uv_prepare_t* prepare = w->data;
 
   if (prepare->prepare_cb) {
-    prepare->prepare_cb((uv_handle_t*)prepare, 0);
+    prepare->prepare_cb(prepare, 0);
   }
 }
 
@@ -985,7 +1100,7 @@ int uv_prepare_init(uv_prepare_t* prepare) {
 }
 
 
-int uv_prepare_start(uv_prepare_t* prepare, uv_loop_cb cb) {
+int uv_prepare_start(uv_prepare_t* prepare, uv_prepare_cb cb) {
   int was_active = ev_is_active(&prepare->prepare_watcher);
 
   prepare->prepare_cb = cb;
@@ -1017,7 +1132,7 @@ static void uv__check(EV_P_ ev_check* w, int revents) {
   uv_check_t* check = w->data;
 
   if (check->check_cb) {
-    check->check_cb((uv_handle_t*)check, 0);
+    check->check_cb(check, 0);
   }
 }
 
@@ -1035,7 +1150,7 @@ int uv_check_init(uv_check_t* check) {
 }
 
 
-int uv_check_start(uv_check_t* check, uv_loop_cb cb) {
+int uv_check_start(uv_check_t* check, uv_check_cb cb) {
   int was_active = ev_is_active(&check->check_watcher);
 
   check->check_cb = cb;
@@ -1067,7 +1182,7 @@ static void uv__idle(EV_P_ ev_idle* w, int revents) {
   uv_idle_t* idle = (uv_idle_t*)(w->data);
 
   if (idle->idle_cb) {
-    idle->idle_cb((uv_handle_t*)idle, 0);
+    idle->idle_cb(idle, 0);
   }
 }
 
@@ -1086,7 +1201,7 @@ int uv_idle_init(uv_idle_t* idle) {
 }
 
 
-int uv_idle_start(uv_idle_t* idle, uv_loop_cb cb) {
+int uv_idle_start(uv_idle_t* idle, uv_idle_cb cb) {
   int was_active = ev_is_active(&idle->idle_watcher);
 
   idle->idle_cb = cb;
@@ -1137,7 +1252,7 @@ static void uv__async(EV_P_ ev_async* w, int revents) {
   uv_async_t* async = w->data;
 
   if (async->async_cb) {
-    async->async_cb((uv_handle_t*)async, 0);
+    async->async_cb(async, 0);
   }
 }
 
@@ -1172,7 +1287,7 @@ static void uv__timer_cb(EV_P_ ev_timer* w, int revents) {
   }
 
   if (timer->timer_cb) {
-    timer->timer_cb((uv_handle_t*)timer, 0);
+    timer->timer_cb(timer, 0);
   }
 }
 
@@ -1188,7 +1303,7 @@ int uv_timer_init(uv_timer_t* timer) {
 }
 
 
-int uv_timer_start(uv_timer_t* timer, uv_loop_cb cb, int64_t timeout,
+int uv_timer_start(uv_timer_t* timer, uv_timer_cb cb, int64_t timeout,
     int64_t repeat) {
   if (ev_is_active(&timer->timer_watcher)) {
     return -1;
@@ -1232,4 +1347,221 @@ int64_t uv_timer_get_repeat(uv_timer_t* timer) {
   return (int64_t)(1000 * timer->timer_watcher.repeat);
 }
 
+
+/*
+ * This is called once per second by ares_data.timer. It is used to 
+ * constantly callback into c-ares for possibly processing timeouts.
+ */
+static void uv__ares_timeout(EV_P_ struct ev_timer* watcher, int revents) {
+  assert(watcher == &ares_data.timer);
+  assert(revents == EV_TIMER);
+  assert(!uv_ares_handles_empty());
+  ares_process_fd(ares_data.channel, ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+}
+
+
+static void uv__ares_io(EV_P_ struct ev_io* watcher, int revents) {
+  /* Reset the idle timer */
+  ev_timer_again(EV_A_ &ares_data.timer);
+
+  /* Process DNS responses */
+  ares_process_fd(ares_data.channel,
+      revents & EV_READ ? watcher->fd : ARES_SOCKET_BAD,
+      revents & EV_WRITE ? watcher->fd : ARES_SOCKET_BAD);
+}
+
+
+/* Allocates and returns a new uv_ares_task_t */
+static uv_ares_task_t* uv__ares_task_create(int fd) {
+  uv_ares_task_t* h = malloc(sizeof(uv_ares_task_t));
+
+  if (h == NULL) {
+    uv_fatal_error(ENOMEM, "malloc");
+  }
+
+  h->sock = fd;
+
+  ev_io_init(&h->read_watcher, uv__ares_io, fd, EV_READ);
+  ev_io_init(&h->write_watcher, uv__ares_io, fd, EV_WRITE);
+
+  h->read_watcher.data = h;
+  h->write_watcher.data = h;
+}
+
+
+/* Callback from ares when socket operation is started */
+static void uv__ares_sockstate_cb(void* data, ares_socket_t sock,
+    int read, int write) {
+  uv_ares_task_t* h = uv_find_ares_handle(sock);
+
+  if (read || write) {
+    if (!h) {
+      /* New socket */
+
+      /* If this is the first socket then start the timer. */
+      if (!ev_is_active(&ares_data.timer)) {
+        assert(uv_ares_handles_empty());
+        ev_timer_again(EV_DEFAULT_UC_ &ares_data.timer);
+      }
+
+      h = uv__ares_task_create(sock);
+      uv_add_ares_handle(h);
+    }
+
+    if (read) {
+      ev_io_start(EV_DEFAULT_UC_ &h->read_watcher);
+    } else {
+      ev_io_stop(EV_DEFAULT_UC_ &h->read_watcher);
+    }
+
+    if (write) {
+      ev_io_start(EV_DEFAULT_UC_ &h->write_watcher);
+    } else {
+      ev_io_stop(EV_DEFAULT_UC_ &h->write_watcher);
+    }
+
+  } else {
+    /*
+     * read == 0 and write == 0 this is c-ares's way of notifying us that
+     * the socket is now closed. We must free the data associated with
+     * socket.
+     */
+    assert(h && "When an ares socket is closed we should have a handle for it");
+
+    ev_io_stop(EV_DEFAULT_UC_ &h->read_watcher);
+    ev_io_stop(EV_DEFAULT_UC_ &h->write_watcher);
+
+    uv_remove_ares_handle(h);
+    free(h);
+
+    if (uv_ares_handles_empty()) {
+      ev_timer_stop(EV_DEFAULT_UC_ &ares_data.timer);
+    }
+  }
+}
+
+
+/* c-ares integration initialize and terminate */
+/* TODO: share this with windows? */
+int uv_ares_init_options(ares_channel *channelptr,
+                         struct ares_options *options,
+                         int optmask) {
+  int rc;
+
+  /* only allow single init at a time */
+  if (ares_data.channel != NULL) {
+    uv_err_new_artificial(NULL, UV_EALREADY);
+    return -1;
+  }
+
+  /* set our callback as an option */
+  options->sock_state_cb = uv__ares_sockstate_cb;
+  options->sock_state_cb_data = &ares_data;
+  optmask |= ARES_OPT_SOCK_STATE_CB;
+
+  /* We do the call to ares_init_option for caller. */
+  rc = ares_init_options(channelptr, options, optmask);
+
+  /* if success, save channel */
+  if (rc == ARES_SUCCESS) {
+    ares_data.channel = *channelptr;
+  }
+
+  /*
+   * Initialize the timeout timer. The timer won't be started until the
+   * first socket is opened.
+   */
+  ev_init(&ares_data.timer, uv__ares_timeout);
+  ares_data.timer.repeat = 1.0;
+
+  return rc;
+}
+
+
+/* TODO share this with windows? */
+void uv_ares_destroy(ares_channel channel) {
+  /* only allow destroy if did init */
+  if (ares_data.channel != NULL) {
+    ev_timer_stop(EV_DEFAULT_UC_ &ares_data.timer);
+    ares_destroy(channel);
+    ares_data.channel = NULL;
+  }
+}
+
+
+static int uv_getaddrinfo_done(eio_req* req) {
+  uv_getaddrinfo_t* handle = req->data;
+
+  uv_unref();
+
+  free(handle->hints);
+  free(handle->service);
+  free(handle->hostname);
+
+  if (handle->retcode != 0) {
+    /* TODO how to display gai error strings? */
+    uv_err_new(NULL, handle->retcode);
+  }
+
+  handle->cb(handle, handle->retcode, handle->res);
+
+  freeaddrinfo(handle->res);
+  handle->res = NULL;
+
+  return 0;
+}
+
+
+static int getaddrinfo_thread_proc(eio_req *req) {
+  uv_getaddrinfo_t* handle = req->data;
+
+  handle->retcode = getaddrinfo(handle->hostname,
+                                handle->service,
+                                &handle->hints,
+                                &handle->res);
+  return 0;
+}
+
+
+/* stub implementation of uv_getaddrinfo */
+int uv_getaddrinfo(uv_getaddrinfo_t* handle,
+                   uv_getaddrinfo_cb cb,
+                   const char* hostname,
+                   const char* service,
+                   const struct addrinfo* hints) {
+  uv_eio_init();
+
+  if (handle == NULL || cb == NULL ||
+      (hostname == NULL && service == NULL)) {
+    uv_err_new_artificial(NULL, UV_EINVAL);
+    return -1;
+  }
+
+  memset(handle, 0, sizeof(uv_getaddrinfo_t));
+
+  /* TODO don't alloc so much. */
+
+  if (hints) {
+    handle->hints = malloc(sizeof(struct addrinfo));
+    memcpy(&handle->hints, hints, sizeof(struct addrinfo));
+  }
+
+  /* TODO security! check lengths, check return values. */
+
+  handle->cb = cb;
+  handle->hostname = hostname ? strdup(hostname) : NULL;
+  handle->service = service ? strdup(service) : NULL;
+
+  /* TODO check handle->hostname == NULL */
+  /* TODO check handle->service == NULL */
+
+  uv_ref();
+
+  eio_req* req = eio_custom(getaddrinfo_thread_proc, EIO_PRI_DEFAULT,
+      uv_getaddrinfo_done, handle);
+  assert(req);
+  assert(req->data == handle);
+
+  return 0;
+}
 

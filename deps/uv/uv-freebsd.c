@@ -21,7 +21,7 @@
 #include "uv.h"
 
 
-int uv_get_exepath(char* buffer, size_t* size) {
+int uv_exepath(char* buffer, size_t* size) {
   uint32_t usize;
   int result;
   char* path;

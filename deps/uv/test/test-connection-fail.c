@@ -46,7 +46,7 @@ static void timer_close_cb(uv_handle_t* handle) {
 }
 
 
-static void timer_cb(uv_handle_t* handle, int status) {
+static void timer_cb(uv_timer_t* handle, int status) {
   ASSERT(status == 0);
   timer_cb_calls++;
 
@@ -62,7 +62,7 @@ static void timer_cb(uv_handle_t* handle, int status) {
   uv_close((uv_handle_t*)&tcp, on_close);
 
   /* Close the timer. */
-  uv_close(handle, timer_close_cb);
+  uv_close((uv_handle_t*)handle, timer_close_cb);
 }
 
 
@@ -105,8 +105,8 @@ void connection_fail(uv_connect_cb connect_cb) {
   /* so these handles can be pre-initialized. */
   uv_req_init(&req, (uv_handle_t*)&tcp, connect_cb);
 
-  uv_bind(&tcp, client_addr);
-  r = uv_connect(&req, server_addr);
+  uv_tcp_bind(&tcp, client_addr);
+  r = uv_tcp_connect(&req, server_addr);
   ASSERT(!r);
 
   uv_run();

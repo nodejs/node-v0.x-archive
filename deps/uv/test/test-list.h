@@ -28,6 +28,11 @@ TEST_DECLARE   (bind_error_addrnotavail_2)
 TEST_DECLARE   (bind_error_fault)
 TEST_DECLARE   (bind_error_inval)
 TEST_DECLARE   (bind_localhost_ok)
+TEST_DECLARE   (bind6_error_addrinuse)
+TEST_DECLARE   (bind6_error_addrnotavail)
+TEST_DECLARE   (bind6_error_fault)
+TEST_DECLARE   (bind6_error_inval)
+TEST_DECLARE   (bind6_localhost_ok)
 TEST_DECLARE   (connection_fail)
 TEST_DECLARE   (connection_fail_doesnt_auto_close)
 TEST_DECLARE   (shutdown_eof)
@@ -43,9 +48,13 @@ TEST_DECLARE   (check_ref)
 TEST_DECLARE   (async)
 TEST_DECLARE   (get_currentexe)
 TEST_DECLARE   (hrtime)
+TEST_DECLARE   (getaddrinfo_basic)
+TEST_DECLARE   (getaddrinfo_concurrent)
+TEST_DECLARE   (gethostbyname)
 TEST_DECLARE   (fail_always)
 TEST_DECLARE   (pass_always)
 HELPER_DECLARE (echo_server)
+
 
 TASK_LIST_START
   TEST_ENTRY  (ping_pong)
@@ -57,16 +66,17 @@ TASK_LIST_START
   TEST_HELPER (tcp_writealot, echo_server)
 
   TEST_ENTRY  (bind_error_addrinuse)
-
   TEST_ENTRY  (bind_error_addrnotavail_1)
-
   TEST_ENTRY  (bind_error_addrnotavail_2)
-
   TEST_ENTRY  (bind_error_fault)
-
   TEST_ENTRY  (bind_error_inval)
-
   TEST_ENTRY  (bind_localhost_ok)
+
+  TEST_ENTRY  (bind6_error_addrinuse)
+  TEST_ENTRY  (bind6_error_addrnotavail)
+  TEST_ENTRY  (bind6_error_fault)
+  TEST_ENTRY  (bind6_error_inval)
+  TEST_ENTRY  (bind6_localhost_ok)
 
   TEST_ENTRY  (connection_fail)
   TEST_ENTRY  (connection_fail_doesnt_auto_close)
@@ -94,6 +104,12 @@ TASK_LIST_START
   TEST_ENTRY  (get_currentexe)
 
   TEST_ENTRY  (hrtime)
+
+  TEST_ENTRY  (getaddrinfo_basic)
+  TEST_ENTRY  (getaddrinfo_concurrent)
+
+  TEST_ENTRY  (gethostbyname)
+  TEST_HELPER (gethostbyname, echo_server)
 
 #if 0
   /* These are for testing the test runner. */
