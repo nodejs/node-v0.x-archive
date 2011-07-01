@@ -96,7 +96,12 @@
 
 #else
 
-# include "config.h"
+# ifdef EIO_CONFIG_H
+#  include EIO_CONFIG_H
+# else
+#  include "config.h"
+# endif
+
 # include <sys/time.h>
 # include <sys/select.h>
 # include <unistd.h>
