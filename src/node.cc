@@ -2235,8 +2235,8 @@ static void ParseDebugOpt(const char* arg) {
 }
 
 static void PrintHelp() {
-  printf("Usage: node [options] script.js [arguments] \n"
-         "       node debug script.js [arguments] \n"
+  printf("Usage: node [options] [ -e script | script.js ] [arguments] \n"
+         "       node debug [ -e script | script.js ] [arguments] \n"
          "\n"
          "Options:\n"
          "  -v, --version        print node's version\n"
