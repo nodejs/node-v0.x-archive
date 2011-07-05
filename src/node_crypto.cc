@@ -1617,7 +1617,8 @@ class Cipher : public ObjectWrap {
 
     cipher->incomplete_base64=NULL;
 
-    if (args.Length() <= 1 || !args[0]->IsString() || !args[1]->IsString()) {
+    if (args.Length() <= 1 || !args[0]->IsString()
+    || !(args[1]->IsString() || Buffer::HasInstance(args[1]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key")));
     }
@@ -1655,7 +1656,9 @@ class Cipher : public ObjectWrap {
 
     cipher->incomplete_base64=NULL;
 
-    if (args.Length() <= 2 || !args[0]->IsString() || !args[1]->IsString() || !args[2]->IsString()) {
+    if (args.Length() <= 2 || !args[0]->IsString()
+    || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
+    || !(args[2]->IsString() || Buffer::HasInstance(args[2]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key, and iv as argument")));
     }
@@ -1985,7 +1988,8 @@ class Decipher : public ObjectWrap {
     cipher->incomplete_utf8=NULL;
     cipher->incomplete_hex_flag=false;
 
-    if (args.Length() <= 1 || !args[0]->IsString() || !args[1]->IsString()) {
+    if (args.Length() <= 1 || !args[0]->IsString()
+    || !(args[1]->IsString() || Buffer::HasInstance(args[1]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key as argument")));
     }
@@ -2023,7 +2027,9 @@ class Decipher : public ObjectWrap {
     cipher->incomplete_utf8=NULL;
     cipher->incomplete_hex_flag=false;
 
-    if (args.Length() <= 2 || !args[0]->IsString() || !args[1]->IsString() || !args[2]->IsString()) {
+    if (args.Length() <= 2 || !args[0]->IsString()
+    || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
+    || !(args[2]->IsString() || Buffer::HasInstance(args[2]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key, and iv as argument")));
     }

@@ -112,35 +112,46 @@ var verified = crypto.createVerify('RSA-SHA256')
                      .verify(certPem, s2); // binary
 assert.ok(verified, 'sign and verify (binary)');
 
-// Test encryption and decryption
 var plaintext = 'Keep this a secret? No! Tell everyone about node.js!';
-var cipher = crypto.createCipher('aes192', 'MySecretKey123');
 
-// encrypt plaintext which is in utf8 format
-// to a ciphertext which will be in hex
-var ciph = cipher.update(plaintext, 'utf8', 'hex');
-// Only use binary or hex, not base64.
-ciph += cipher.final('hex');
+function testCipher(key) {
+  // Test encryption and decryption
+  var cipher = crypto.createCipher('aes192', key);
 
-var decipher = crypto.createDecipher('aes192', 'MySecretKey123');
-var txt = decipher.update(ciph, 'hex', 'utf8');
-txt += decipher.final('utf8');
+  // encrypt plaintext which is in utf8 format
+  // to a ciphertext which will be in hex
+  var ciph = cipher.update(plaintext, 'utf8', 'hex');
+  // Only use binary or hex, not base64.
+  ciph += cipher.final('hex');
 
-assert.equal(txt, plaintext, 'encryption and decryption');
+  var decipher = crypto.createDecipher('aes192', key);
+  var txt = decipher.update(ciph, 'hex', 'utf8');
+  txt += decipher.final('utf8');
 
-// Test encyrption and decryption with explicit key and iv
-var encryption_key = '0123456789abcd0123456789';
-var iv = '12345678';
+  assert.equal(txt, plaintext, 'encryption and decryption');
+}
 
-var cipher = crypto.createCipheriv('des-ede3-cbc', encryption_key, iv);
-var ciph = cipher.update(plaintext, 'utf8', 'hex');
-ciph += cipher.final('hex');
+function testCipherIv(key, iv) {
+  // Test encyrption and decryption with explicit key and iv
+  var encryption_key = '0123456789abcd0123456789';
+  var iv = '12345678';
 
-var decipher = crypto.createDecipheriv('des-ede3-cbc', encryption_key, iv);
-var txt = decipher.update(ciph, 'hex', 'utf8');
-txt += decipher.final('utf8');
+  var cipher = crypto.createCipheriv('des-ede3-cbc', key, iv);
+  var ciph = cipher.update(plaintext, 'utf8', 'hex');
+  ciph += cipher.final('hex');
 
-assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
+  var decipher = crypto.createDecipheriv('des-ede3-cbc', key, iv);
+  var txt = decipher.update(ciph, 'hex', 'utf8');
+  txt += decipher.final('utf8');
+
+  assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
+}
+
+testCipher('MySecretKey123');
+testCipher(new Buffer('MySecretKey123'));
+
+testCipherIv('0123456789abcd0123456789', '12345678');
+testCipherIv(new Buffer('0123456789abcd0123456789'), new Buffer('12345678'));
 
 // update() should only take buffers / strings
 assert.throws(function() {
