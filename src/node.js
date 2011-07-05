@@ -28,6 +28,9 @@
   global = this;
 
   function startup() {
+
+    if (process.env.NODE_USE_UV == '1') process.useUV = true;
+
     startup.globalVariables();
     startup.globalTimeouts();
     startup.globalConsole();
@@ -78,7 +81,13 @@
     } else if (process._eval != null) {
       // User passed '-e' or '--eval' arguments to Node.
       var Module = NativeModule.require('module');
-      var rv = new Module()._compile('return eval(process._eval)', 'eval');
+      var path = NativeModule.require('path');
+      var cwd = process.cwd();
+
+      var module = new Module('eval');
+      module.filename = path.join(cwd, 'eval');
+      module.paths = Module._nodeModulePaths(cwd);
+      var rv = module._compile('return eval(process._eval)', 'eval');
       console.log(rv);
 
     } else {
@@ -374,14 +383,15 @@
   // flag --use-uv to enable the libuv backend instead of the legacy
   // backend.
   function translateId(id) {
-    var useUV = process.useUV || process.env.NODE_USE_UV;
-
     switch (id) {
       case 'net':
-        return useUV ? 'net_uv' : 'net_legacy';
+        return process.useUV ? 'net_uv' : 'net_legacy';
 
       case 'timers':
-        return useUV ? 'timers_uv' : 'timers_legacy';
+        return process.useUV ? 'timers_uv' : 'timers_legacy';
+
+      case 'dns':
+        return process.useUV ? 'dns_uv' : 'dns_legacy';
 
       default:
         return id;
