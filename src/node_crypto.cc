@@ -53,6 +53,9 @@ using namespace v8;
 static Persistent<String> errno_symbol;
 static Persistent<String> syscall_symbol;
 static Persistent<String> subject_symbol;
+static Persistent<String> subjectaltname_symbol;
+static Persistent<String> modulus_symbol;
+static Persistent<String> exponent_symbol;
 static Persistent<String> issuer_symbol;
 static Persistent<String> valid_from_symbol;
 static Persistent<String> valid_to_symbol;
@@ -1003,7 +1006,44 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
       OPENSSL_free(issuer);
     }
     char buf[256];
-    BIO* bio = BIO_new(BIO_s_mem());
+    BIO* bio = NULL;
+    ASN1_OBJECT *oid;
+    oid = OBJ_txt2obj("2.5.29.17", 1); // OID 2.5.29.17 is Subject AltName
+    int count = 0, j;
+    count = X509_get_ext_count(peer_cert);
+    for (j = 0; j < count; j++) {
+        X509_EXTENSION *ext = X509_get_ext(peer_cert, j);
+        if (OBJ_cmp(ext->object, oid) == 0) {
+            bio = BIO_new(BIO_s_mem());
+            if (X509V3_EXT_print(bio, ext, 0, 0) == 1) {
+                memset(buf, 0, sizeof(buf));
+                BIO_read(bio, buf, sizeof(buf) - 1);
+                info->Set(subjectaltname_symbol, String::New(buf));
+            }
+            BIO_vfree(bio);
+            break;
+        }
+    }
+
+    EVP_PKEY *pkey = NULL;
+    RSA *rsa = NULL;
+    if( NULL != (pkey = X509_get_pubkey(peer_cert))
+        && NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
+        bio = BIO_new(BIO_s_mem());
+        BN_print(bio, rsa->n);
+        memset(buf, 0, sizeof(buf));
+        BIO_read(bio, buf, sizeof(buf) - 1);
+        info->Set(modulus_symbol, String::New(buf) );
+        BIO_free(bio);
+
+        bio = BIO_new(BIO_s_mem());
+        BN_print(bio, rsa->e);
+        memset(buf, 0, sizeof(buf));
+        BIO_read(bio, buf, sizeof(buf) - 1);
+        info->Set(exponent_symbol, String::New(buf) );
+        BIO_free(bio);
+    }
+    bio = BIO_new(BIO_s_mem());
     ASN1_TIME_print(bio, X509_get_notBefore(peer_cert));
     memset(buf, 0, sizeof(buf));
     BIO_read(bio, buf, sizeof(buf) - 1);
@@ -3659,6 +3699,9 @@ void InitCrypto(Handle<Object> target) {
   issuer_symbol     = NODE_PSYMBOL("issuer");
   valid_from_symbol = NODE_PSYMBOL("valid_from");
   valid_to_symbol   = NODE_PSYMBOL("valid_to");
+  subjectaltname_symbol = NODE_PSYMBOL("subjectaltname");
+  modulus_symbol        = NODE_PSYMBOL("modulus");
+  exponent_symbol       = NODE_PSYMBOL("exponent");
   fingerprint_symbol   = NODE_PSYMBOL("fingerprint");
   name_symbol       = NODE_PSYMBOL("name");
   version_symbol    = NODE_PSYMBOL("version");
