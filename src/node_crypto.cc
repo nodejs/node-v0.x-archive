@@ -42,6 +42,9 @@
     return ThrowException(Exception::TypeError(String::New("Not a string or buffer"))); \
   }
 
+static const char *PUBLIC_KEY_PFX =  "-----BEGIN PUBLIC KEY-----";
+static const int PUBLIC_KEY_PFX_LEN = strlen(PUBLIC_KEY_PFX);
+
 namespace node {
 namespace crypto {
 
@@ -99,11 +102,23 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
     String::Utf8Value sslmethod(args[0]->ToString());
 
     if (strcmp(*sslmethod, "SSLv2_method") == 0) {
+#ifndef OPENSSL_NO_SSL2
       method = SSLv2_method();
+#else
+      return ThrowException(Exception::Error(String::New("SSLv2 methods disabled")));
+#endif
     } else if (strcmp(*sslmethod, "SSLv2_server_method") == 0) {
+#ifndef OPENSSL_NO_SSL2
       method = SSLv2_server_method();
+#else
+      return ThrowException(Exception::Error(String::New("SSLv2 methods disabled")));
+#endif
     } else if (strcmp(*sslmethod, "SSLv2_client_method") == 0) {
+#ifndef OPENSSL_NO_SSL2
       method = SSLv2_client_method();
+#else
+      return ThrowException(Exception::Error(String::New("SSLv2 methods disabled")));
+#endif
     } else if (strcmp(*sslmethod, "SSLv3_method") == 0) {
       method = SSLv3_method();
     } else if (strcmp(*sslmethod, "SSLv3_server_method") == 0) {
@@ -1635,7 +1650,7 @@ class Cipher : public ObjectWrap {
 
   static Handle<Value> CipherInitIv(const Arguments& args) {
     Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
-    
+
     HandleScope scope;
 
     cipher->incomplete_base64=NULL;
@@ -1670,7 +1685,7 @@ class Cipher : public ObjectWrap {
     assert(iv_written == iv_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
-      
+
     bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
     delete [] key_buf;
@@ -1827,8 +1842,10 @@ class Cipher : public ObjectWrap {
     initialised_ = false;
   }
 
-  ~Cipher ()
-  {
+  ~Cipher () {
+    if (initialised_) {
+      EVP_CIPHER_CTX_cleanup(&ctx);
+    }
   }
 
  private:
@@ -1962,7 +1979,7 @@ class Decipher : public ObjectWrap {
 
   static Handle<Value> DecipherInit(const Arguments& args) {
     Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
-    
+
     HandleScope scope;
 
     cipher->incomplete_utf8=NULL;
@@ -1986,7 +2003,7 @@ class Decipher : public ObjectWrap {
     assert(key_written == key_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
-      
+
     bool r = cipher->DecipherInit(*cipherType, key_buf,key_len);
 
     delete [] key_buf;
@@ -2000,7 +2017,7 @@ class Decipher : public ObjectWrap {
 
   static Handle<Value> DecipherInitIv(const Arguments& args) {
     Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
-    
+
     HandleScope scope;
 
     cipher->incomplete_utf8=NULL;
@@ -2036,7 +2053,7 @@ class Decipher : public ObjectWrap {
     assert(iv_written == iv_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
-      
+
     bool r = cipher->DecipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
     delete [] key_buf;
@@ -2276,7 +2293,11 @@ class Decipher : public ObjectWrap {
     initialised_ = false;
   }
 
-  ~Decipher () { }
+  ~Decipher () {
+    if (initialised_) {
+      EVP_CIPHER_CTX_cleanup(&ctx);
+    }
+  }
 
  private:
 
@@ -2397,7 +2418,7 @@ class Hmac : public ObjectWrap {
     }
 
     int r;
-  
+
     if( Buffer::HasInstance(args[0])) {
       Local<Object> buffer_obj = args[0]->ToObject();
       char *buffer_data = Buffer::Data(buffer_obj);
@@ -2466,7 +2487,11 @@ class Hmac : public ObjectWrap {
     initialised_ = false;
   }
 
-  ~Hmac () { }
+  ~Hmac () {
+    if (initialised_) {
+      HMAC_CTX_cleanup(&ctx);
+    }
+  }
 
  private:
 
@@ -2622,7 +2647,11 @@ class Hash : public ObjectWrap {
     initialised_ = false;
   }
 
-  ~Hash () { }
+  ~Hash () {
+    if (initialised_) {
+      EVP_MD_CTX_cleanup(&mdctx);
+    }
+  }
 
  private:
 
@@ -2827,7 +2856,11 @@ class Sign : public ObjectWrap {
     initialised_ = false;
   }
 
-  ~Sign () { }
+  ~Sign () {
+    if (initialised_) {
+      EVP_MD_CTX_cleanup(&mdctx);
+    }
+  }
 
  private:
 
@@ -2876,29 +2909,54 @@ class Verify : public ObjectWrap {
   int VerifyFinal(char* key_pem, int key_pemLen, unsigned char* sig, int siglen) {
     if (!initialised_) return 0;
 
+    EVP_PKEY* pkey = NULL;
     BIO *bp = NULL;
-    EVP_PKEY* pkey;
-    X509 *x509;
+    X509 *x509 = NULL;
+    int r = 0;
 
     bp = BIO_new(BIO_s_mem());
-    if(!BIO_write(bp, key_pem, key_pemLen)) return 0;
-
-    x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL );
-    if (x509==NULL) return 0;
-
-    pkey=X509_get_pubkey(x509);
-    if (pkey==NULL) return 0;
-
-    int r = EVP_VerifyFinal(&mdctx, sig, siglen, pkey);
-    EVP_PKEY_free (pkey);
-
-    if (r != 1) {
-      ERR_print_errors_fp (stderr);
+    if (bp == NULL) {
+      ERR_print_errors_fp(stderr);
+      return 0;
     }
-    X509_free(x509);
-    BIO_free(bp);
+    if(!BIO_write(bp, key_pem, key_pemLen)) {
+      ERR_print_errors_fp(stderr);
+      return 0;
+    }
+
+    // Check if this is a PKCS#8 public key before trying as X.509
+    if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
+      pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
+      if (pkey == NULL) {
+        ERR_print_errors_fp(stderr);
+        return 0;
+      }
+    } else {
+      // X.509 fallback
+      x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
+      if (x509 == NULL) {
+        ERR_print_errors_fp(stderr);
+        return 0;
+      }
+
+      pkey = X509_get_pubkey(x509);
+      if (pkey == NULL) {
+        ERR_print_errors_fp(stderr);
+        return 0;
+      }
+    }
+
+    r = EVP_VerifyFinal(&mdctx, sig, siglen, pkey);
+
+    if(pkey != NULL)
+      EVP_PKEY_free (pkey);
+    if (x509 != NULL)
+      X509_free(x509);
+    if (bp != NULL)
+      BIO_free(bp);
     EVP_MD_CTX_cleanup(&mdctx);
     initialised_ = false;
+
     return r;
   }
 
@@ -3043,7 +3101,11 @@ class Verify : public ObjectWrap {
     initialised_ = false;
   }
 
-  ~Verify () { }
+  ~Verify () {
+    if (initialised_) {
+      EVP_MD_CTX_cleanup(&mdctx);
+    }
+  }
 
  private:
 
@@ -3576,16 +3638,12 @@ void InitCrypto(Handle<Object> target) {
   ERR_load_crypto_strings();
 
   // Turn off compression. Saves memory - do it in userland.
+#ifdef SSL_COMP_get_compression_methods
+  // Before OpenSSL 0.9.8 this was not possible.
   STACK_OF(SSL_COMP)* comp_methods = SSL_COMP_get_compression_methods();
-#if 0
-  if (comp_methods && sk_SSL_COMP_num(comp_methods) > 0) {
-    default_compression_method = sk_SSL_COMP_pop(comp_methods);
-    fprintf(stderr, "SSL_COMP_get_name %s\n",
-        SSL_COMP_get_name(default_compression_method->method));
-  }
-#endif
   sk_SSL_COMP_zero(comp_methods);
   assert(sk_SSL_COMP_num(comp_methods) == 0);
+#endif
 
   SecureContext::Initialize(target);
   Connection::Initialize(target);

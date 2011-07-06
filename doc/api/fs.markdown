@@ -148,14 +148,15 @@ See the [fs.Stats](#fs.Stats) section below for more information.
 ### fs.lstat(path, [callback])
 
 Asynchronous lstat(2). The callback gets two arguments `(err, stats)` where
-`stats` is a `fs.Stats` object. lstat() is identical to stat(), except that if
-path is a symbolic link, then the link itself is stat-ed, not the file that it
+`stats` is a `fs.Stats` object. `lstat()` is identical to `stat()`, except that if
+`path` is a symbolic link, then the link itself is stat-ed, not the file that it
 refers to.
 
 ### fs.fstat(fd, [callback])
 
 Asynchronous fstat(2). The callback gets two arguments `(err, stats)` where
-`stats` is a `fs.Stats` object.
+`stats` is a `fs.Stats` object. `fstat()` is identical to `stat()`, except that
+the file to be stat-ed is specified by the file descriptor `fd`.
 
 ### fs.statSync(path)
 
@@ -360,7 +361,8 @@ returns a buffer.
 ### fs.writeFile(filename, data, encoding='utf8', [callback])
 
 Asynchronously writes data to a file, replacing the file if it already exists.
-`data` can be a string or a buffer.
+`data` can be a string or a buffer. The `encoding` argument is ignored if
+`data` is a buffer.
 
 Example:
 

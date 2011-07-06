@@ -68,8 +68,7 @@ parent directory of the current module, and adds `/node_modules`, and
 attempts to load the module from that location.
 
 If it is not found there, then it moves to the parent directory, and so
-on, until either the module is found, or the root of the tree is
-reached.
+on, until the root of the tree is reached.
 
 For example, if the file at `'/home/ry/projects/foo.js'` called
 `require('bar.js')`, then node would look in the following locations, in
@@ -82,28 +81,6 @@ this order:
 
 This allows programs to localize their dependencies, so that they do not
 clash.
-
-#### Optimizations to the `node_modules` Lookup Process
-
-When there are many levels of nested dependencies, it is possible for
-these file trees to get fairly long.  The following optimizations are thus
-made to the process.
-
-First, `/node_modules` is never appended to a folder already ending in
-`/node_modules`.
-
-Second, if the file calling `require()` is already inside a `node_modules`
-hierarchy, then the top-most `node_modules` folder is treated as the
-root of the search tree.
-
-For example, if the file at
-`'/home/ry/projects/foo/node_modules/bar/node_modules/baz/quux.js'`
-called `require('asdf.js')`, then node would search the following
-locations:
-
-* `/home/ry/projects/foo/node_modules/bar/node_modules/baz/node_modules/asdf.js`
-* `/home/ry/projects/foo/node_modules/bar/node_modules/asdf.js`
-* `/home/ry/projects/foo/node_modules/asdf.js`
 
 ### Folders as Modules
 
@@ -329,6 +306,56 @@ For a file `foo.js`, this will be `true` if run via `node foo.js`, but
 Because `module` provides a `filename` property (normally equivalent to
 `__filename`), the entry point of the current application can be obtained
 by checking `require.main.filename`.
+
+
+## AMD Compatibility
+
+Node's modules have access to a function named `define`, which may be
+used to specify the module's return value.  This is not necessary in node
+programs, but is present in the node API in order to provide
+compatibility with module loaders that use the Asynchronous Module
+Definition pattern.
+
+The example module above could be structured like so:
+
+    define(function (require, exports, module) {
+      var PI = Math.PI;
+
+      exports.area = function (r) {
+        return PI * r * r;
+      };
+
+      exports.circumference = function (r) {
+        return 2 * PI * r;
+      };
+    });
+
+* Only the last argument to `define()` matters.  Other module loaders
+  sometimes use a `define(id, [deps], cb)` pattern, but since this is
+  not relevant in node programs, the other arguments are ignored.
+* If the `define` callback returns a value other than `undefined`, then
+  that value is assigned to `module.exports`.
+* **Important**: Despite being called "AMD", the node module loader **is
+  in fact synchronous**, and using `define()` does not change this fact.
+  Node executes the callback immediately, so please plan your programs
+  accordingly.
+
+
+### Accessing the main module
+
+When a file is run directly from Node, `require.main` is set to its
+`module`. That means that you can determine whether a file has been run
+directly by testing
+
+    require.main === module
+
+For a file `foo.js`, this will be `true` if run via `node foo.js`, but
+`false` if run by `require('./foo')`.
+
+Because `module` provides a `filename` property (normally equivalent to
+`__filename`), the entry point of the current application can be obtained
+by checking `require.main.filename`.
+
 
 ## Addenda: Package Manager Tips
 

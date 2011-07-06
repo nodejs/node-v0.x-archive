@@ -60,12 +60,12 @@ process.on('exit', function() {
                       process,
                       global];
 
-  if (global.gc) {
-    knownGlobals.push(gc);
+  if (global.errno) {
+    knownGlobals.push(errno);
   }
 
-  if (global.__cov) {
-    knownGlobals.push(__cov);
+  if (global.gc) {
+    knownGlobals.push(gc);
   }
 
   if (global.DTRACE_HTTP_SERVER_RESPONSE) {

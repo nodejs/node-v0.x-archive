@@ -22,7 +22,9 @@
 #include <node.h>
 #include <node_file.h>
 #include <node_buffer.h>
-#include <node_stat_watcher.h>
+#ifdef __POSIX__
+# include <node_stat_watcher.h>
+#endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -604,7 +606,7 @@ static Handle<Value> SendFile(const Arguments& args) {
     ssize_t sent = eio_sendfile_sync (out_fd, in_fd, in_offset, length);
     // XXX is this the right errno to use?
     if (sent < 0) return ThrowException(ErrnoException(errno));
-    return Integer::New(sent);
+    return scope.Close(Integer::New(sent));
   }
 }
 
@@ -662,8 +664,8 @@ static Handle<Value> Open(const Arguments& args) {
     ASYNC_CALL(open, args[3], *path, flags, mode)
   } else {
     int fd = open(*path, flags, mode);
-    SetCloseOnExec(fd);
     if (fd < 0) return ThrowException(ErrnoException(errno, NULL, "", *path));
+    SetCloseOnExec(fd);
     return scope.Close(Integer::New(fd));
   }
 }
@@ -816,6 +818,7 @@ static Handle<Value> Chmod(const Arguments& args) {
 }
 
 
+#ifdef __POSIX__
 /* fs.fchmod(fd, mode);
  * Wrapper for fchmod(1) / EIO_FCHMOD
  */
@@ -836,6 +839,7 @@ static Handle<Value> FChmod(const Arguments& args) {
     return Undefined();
   }
 }
+#endif // __POSIX__
 
 
 #ifdef __POSIX__
@@ -909,6 +913,7 @@ static inline void ToTimevals(eio_tstamp atime,
 }
 
 
+#ifdef __POSIX__
 static Handle<Value> UTimes(const Arguments& args) {
   HandleScope scope;
 
@@ -937,6 +942,7 @@ static Handle<Value> UTimes(const Arguments& args) {
 
   return Undefined();
 }
+#endif // __POSIX__
 
 
 static Handle<Value> FUTimes(const Arguments& args) {
@@ -1002,16 +1008,16 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "write", Write);
 
   NODE_SET_METHOD(target, "chmod", Chmod);
-  NODE_SET_METHOD(target, "fchmod", FChmod);
 #ifdef __POSIX__
+  NODE_SET_METHOD(target, "fchmod", FChmod);
   //NODE_SET_METHOD(target, "lchmod", LChmod);
 
   NODE_SET_METHOD(target, "chown", Chown);
   NODE_SET_METHOD(target, "fchown", FChown);
   //NODE_SET_METHOD(target, "lchown", LChown);
-#endif // __POSIX__
 
   NODE_SET_METHOD(target, "utimes", UTimes);
+#endif // __POSIX__
   NODE_SET_METHOD(target, "futimes", FUTimes);
 
   errno_symbol = NODE_PSYMBOL("errno");
@@ -1026,8 +1032,11 @@ void InitFs(Handle<Object> target) {
   stats_constructor_template = Persistent<FunctionTemplate>::New(stat_templ);
   target->Set(String::NewSymbol("Stats"),
                stats_constructor_template->GetFunction());
-  StatWatcher::Initialize(target);
   File::Initialize(target);
+
+#ifdef __POSIX__
+  StatWatcher::Initialize(target);
+#endif
 
 #ifdef __MINGW32__
   // Open files in binary mode by default

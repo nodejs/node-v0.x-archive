@@ -422,7 +422,7 @@ void *tty_keypress_callback;
 void *tty_resize_callback;
 static bool tty_watcher_initialized = false;
 static bool tty_watcher_active = false;
-static uv_handle_t tty_avail_notifier;
+static uv_async_t tty_avail_notifier;
 
 
 static void CALLBACK tty_want_poll(void *context, BOOLEAN didTimeout) {
@@ -469,6 +469,7 @@ static void tty_watcher_start() {
   assert(tty_watcher_initialized);
   if (!tty_watcher_active) {
     tty_watcher_active = true;
+    uv_ref();
     tty_watcher_arm();
   }
 }
@@ -477,6 +478,7 @@ static void tty_watcher_start() {
 static void tty_watcher_stop() {
   if (tty_watcher_active) {
     tty_watcher_active = false;
+    uv_unref();
     tty_watcher_disarm();
   }
 }
@@ -491,7 +493,7 @@ static inline void tty_emit_error(Handle<Value> err) {
 }
 
 
-static void tty_poll(uv_handle_t* handle, int status) {
+static void tty_poll(uv_async_t* handle, int status) {
   assert(handle == &tty_avail_notifier);
   assert(status == 0);
 
@@ -577,7 +579,9 @@ static void tty_poll(uv_handle_t* handle, int status) {
   }
 
   // Rearm the watcher
-  tty_watcher_arm();
+  if (tty_watcher_active) {
+    tty_watcher_arm();
+  }
 
   // Emit fatal errors and unhandled error events
   if (try_catch.HasCaught()) {
@@ -608,8 +612,6 @@ static Handle<Value> InitTTYWatcher(const Arguments& args) {
   tty_resize_callback = args[3]->IsFunction()
       ? cb_persist(args[3])
       : NULL;
-
-  uv_async_init(&tty_avail_notifier, tty_poll, NULL, NULL);
 
   tty_watcher_initialized = true;
   tty_wait_handle = NULL;
@@ -657,6 +659,9 @@ static Handle<Value> StopTTYWatcher(const Arguments& args) {
 
 void Stdio::Initialize(v8::Handle<v8::Object> target) {
   init_scancode_table();
+  
+  uv_async_init(&tty_avail_notifier, tty_poll);
+  uv_unref();
 
   name_symbol = NODE_PSYMBOL("name");
   shift_symbol = NODE_PSYMBOL("shift");

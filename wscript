@@ -143,6 +143,13 @@ def set_options(opt):
                 , dest='openssl_libpath'
                 )
 
+  opt.add_option( '--no-ssl2'
+                , action='store_true'
+                , default=False
+                , help="Disable OpenSSL v2"
+                , dest='openssl_nov2'
+                )
+
   opt.add_option( '--gdb'
                 , action='store_true'
                 , default=False
@@ -257,6 +264,11 @@ def configure(conf):
   if not Options.options.without_ssl:
     # Don't override explicitly supplied openssl paths with pkg-config results.
     explicit_openssl = o.openssl_includes or o.openssl_libpath
+
+    # Disable ssl v2 methods
+    if o.openssl_nov2:
+      conf.env.append_value("CPPFLAGS", "-DOPENSSL_NO_SSL2=1")
+
     if not explicit_openssl and conf.check_cfg(package='openssl',
                                                args='--cflags --libs',
                                                uselib_store='OPENSSL'):
@@ -339,14 +351,23 @@ def configure(conf):
     conf.env.append_value('CPPFLAGS', '-DHAVE_MONOTONIC_CLOCK=0')
 
   if sys.platform.startswith("sunos"):
+    code =  """
+      #include <ifaddrs.h>
+      int main(void) {
+        struct ifaddrs hello;
+        return 0;
+      }
+    """
+
+    if conf.check_cc(msg="Checking for ifaddrs on solaris", fragment=code):
+      conf.env.append_value('CPPFLAGS',  '-DSUNOS_HAVE_IFADDRS')
+
     if not conf.check(lib='socket', uselib_store="SOCKET"):
       conf.fatal("Cannot find socket library")
     if not conf.check(lib='nsl', uselib_store="NSL"):
       conf.fatal("Cannot find nsl library")
     if not conf.check(lib='kstat', uselib_store="KSTAT"):
       conf.fatal("Cannot find kstat library")
-
-  conf.sub_config('deps/libeio')
 
   if conf.env['USE_SHARED_V8']:
     v8_includes = [];
@@ -369,25 +390,6 @@ def configure(conf):
                             includes=v8_includes,
                             libpath=v8_libpath):
         conf.fatal("Cannot find v8_g")
-
-  if sys.platform.startswith("win32"):
-    # On win32 CARES is always static, so we can call internal functions like ares_inet_pton et al. 
-    # CARES_STATICLIB must be defined or gcc will try to make DLL stub calls
-    conf.env.append_value('CPPFLAGS', '-DCARES_STATICLIB=1')
-    conf.sub_config('deps/c-ares')
-  elif conf.env['USE_SHARED_CARES']:
-    cares_includes = [];
-    if o.shared_cares_includes: cares_includes.append(o.shared_cares_includes);
-    cares_libpath = [];
-    if o.shared_cares_libpath: cares_libpath.append(o.shared_cares_libpath);
-    if not conf.check_cxx(lib='cares',
-                          header_name='ares.h',
-                          uselib_store='CARES',
-                          includes=cares_includes,
-                          libpath=cares_libpath):
-      conf.fatal("Cannot find c-ares")
-  else:
-    conf.sub_config('deps/c-ares')
 
   conf.define("HAVE_CONFIG_H", 1)
 
@@ -425,12 +427,9 @@ def configure(conf):
       conf.env.append_value('CXXFLAGS', flags)
       conf.env.append_value('LINKFLAGS', flags)
 
-  # Needed for getaddrinfo in libeio
-  conf.env.append_value("CPPFLAGS", "-DX_STACKSIZE=%d" % (1024*64))
   # LFS
   conf.env.append_value('CPPFLAGS',  '-D_LARGEFILE_SOURCE')
   conf.env.append_value('CPPFLAGS',  '-D_FILE_OFFSET_BITS=64')
-  conf.env.append_value('CPPFLAGS',  '-DEV_MULTIPLICITY=0')
 
   # Makes select on windows support more than 64 FDs
   if sys.platform.startswith("win32"):
@@ -587,7 +586,7 @@ def build_v8(bld):
   bld.install_files('${PREFIX}/include/node/', 'deps/v8/include/*.h')
 
 def sh_escape(s):
-  return s.replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
+  return s.replace("\\", "\\\\").replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
 
 def uv_cmd(bld, variant):
   srcdeps = join(bld.path.abspath(), "deps")
@@ -598,8 +597,11 @@ def uv_cmd(bld, variant):
   # build directory before each compile. This could be much improved by
   # modifying libuv's build to send object files to a separate directory.
   #
-  cmd = 'cp -r ' + sh_escape(srcdir)  + '/* ' + sh_escape(blddir) + \
-        ' &&  if [[ -z "$NODE_MAKE" ]]; then NODE_MAKE=make; fi; $NODE_MAKE -C ' + sh_escape(blddir)
+  cmd = 'cp -r ' + sh_escape(srcdir)  + '/* ' + sh_escape(blddir)
+  if not sys.platform.startswith('win32'):
+    cmd += ' && if [[ -z "$NODE_MAKE" ]]; then NODE_MAKE=make; fi; $NODE_MAKE -C ' + sh_escape(blddir)
+  else:
+    cmd += ' && make -C ' + sh_escape(blddir)
   return cmd
 
 
@@ -646,12 +648,9 @@ def build(bld):
   print "Parallel Jobs: " + str(Options.options.jobs)
   print "Product type: " + product_type
 
-  bld.add_subdirs('deps/libeio')
-
   build_uv(bld)
 
   if not bld.env['USE_SHARED_V8']: build_v8(bld)
-  if not bld.env['USE_SHARED_CARES']: bld.add_subdirs('deps/c-ares')
 
 
   ### http_parser
@@ -810,7 +809,7 @@ def build(bld):
   node.name         = "node"
   node.target       = "node"
   node.uselib = 'RT OPENSSL CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
-  node.add_objects = 'eio http_parser'
+  node.add_objects = 'http_parser'
   if product_type_is_lib:
     node.install_path = '${LIBDIR}'
   else:
@@ -822,28 +821,30 @@ def build(bld):
     src/node_javascript.cc
     src/node_extensions.cc
     src/node_http_parser.cc
-    src/node_net.cc
-    src/node_io_watcher.cc
     src/node_constants.cc
-    src/node_cares.cc
     src/node_events.cc
     src/node_file.cc
-    src/node_signal_watcher.cc
-    src/node_stat_watcher.cc
-    src/node_timer.cc
     src/node_script.cc
     src/node_os.cc
     src/node_dtrace.cc
     src/node_string.cc
     src/timer_wrap.cc
+    src/tcp_wrap.cc
+    src/cares_wrap.cc
   """
 
   if sys.platform.startswith("win32"):
     node.source += " src/node_stdio_win32.cc "
     node.source += " src/node_child_process_win32.cc "
   else:
+    node.source += " src/node_cares.cc "
+    node.source += " src/node_net.cc "
+    node.source += " src/node_signal_watcher.cc "
+    node.source += " src/node_stat_watcher.cc "
+    node.source += " src/node_io_watcher.cc "
     node.source += " src/node_stdio.cc "
     node.source += " src/node_child_process.cc "
+    node.source += " src/node_timer.cc "
 
   node.source += bld.env["PLATFORM_FILE"]
   if not product_type_is_lib:
@@ -853,17 +854,16 @@ def build(bld):
 
   node.includes = """
     src/
-    deps/libeio
     deps/http_parser
     deps/uv
     deps/uv/ev
+    deps/uv/eio
   """
 
   if not bld.env["USE_SHARED_V8"]: node.includes += ' deps/v8/include '
 
   if not bld.env["USE_SHARED_CARES"]:
-    node.add_objects += ' cares '
-    node.includes += '  deps/c-ares deps/c-ares/' + bld.env['DEST_OS'] + '-' + bld.env['DEST_CPU']
+    node.includes += '  deps/uv/c-ares '
 
   if sys.platform.startswith('cygwin'):
     bld.env.append_value('LINKFLAGS', '-Wl,--export-all-symbols')
@@ -876,7 +876,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.4.8' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.5.0' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 
@@ -907,6 +907,10 @@ def build(bld):
     src/node_buffer.h
     src/node_events.h
     src/node_version.h
+  """)
+  bld.install_files('${PREFIX}/include/node/c-ares', """
+    deps/uv/c-ares/ares.h
+    deps/uv/c-ares/ares_version.h
   """)
 
   # Only install the man page if it exists.

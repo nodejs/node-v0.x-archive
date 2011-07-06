@@ -31,11 +31,10 @@ static int repeat_close_cb_called = 0;
 static int64_t start_time;
 
 
-static void once_close_cb(uv_handle_t* handle, int status) {
+static void once_close_cb(uv_handle_t* handle) {
   printf("ONCE_CLOSE_CB\n");
 
   ASSERT(handle != NULL);
-  ASSERT(status == 0);
 
   once_close_cb_called++;
 
@@ -43,7 +42,7 @@ static void once_close_cb(uv_handle_t* handle, int status) {
 }
 
 
-static void once_cb(uv_handle_t* handle, int status) {
+static void once_cb(uv_timer_t* handle, int status) {
   printf("ONCE_CB %d\n", once_cb_called);
 
   ASSERT(handle != NULL);
@@ -51,24 +50,23 @@ static void once_cb(uv_handle_t* handle, int status) {
 
   once_cb_called++;
 
-  uv_close(handle);
+  uv_close((uv_handle_t*)handle, once_close_cb);
 
   /* Just call this randomly for the code coverage. */
   uv_update_time();
 }
 
 
-static void repeat_close_cb(uv_handle_t* handle, int status) {
+static void repeat_close_cb(uv_handle_t* handle) {
   printf("REPEAT_CLOSE_CB\n");
 
   ASSERT(handle != NULL);
-  ASSERT(status == 0);
 
   repeat_close_cb_called++;
 }
 
 
-static void repeat_cb(uv_handle_t* handle, int status) {
+static void repeat_cb(uv_timer_t* handle, int status) {
   printf("REPEAT_CB\n");
 
   ASSERT(handle != NULL);
@@ -77,56 +75,44 @@ static void repeat_cb(uv_handle_t* handle, int status) {
   repeat_cb_called++;
 
   if (repeat_cb_called == 5) {
-    uv_close(handle);
+    uv_close((uv_handle_t*)handle, repeat_close_cb);
   }
 }
 
 
-static void never_close_cb(uv_handle_t* handle, int status) {
-  FATAL("never_close_cb should never be called");
-}
-
-
-static void never_cb(uv_handle_t* handle, int status) {
+static void never_cb(uv_timer_t* handle, int status) {
   FATAL("never_cb should never be called");
 }
 
 
-static uv_buf_t alloc_cb(uv_handle_t* handle, size_t size) {
-  uv_buf_t buf = {0, 0};
-  FATAL("alloc should not be called");
-  return buf;
-}
-
-
 TEST_IMPL(timer) {
-  uv_handle_t *once;
-  uv_handle_t repeat, never;
+  uv_timer_t *once;
+  uv_timer_t repeat, never;
   int i, r;
 
-  uv_init(alloc_cb);
+  uv_init();
 
   start_time = uv_now();
   ASSERT(0 < start_time);
 
   /* Let 10 timers time out in 500 ms total. */
   for (i = 0; i < 10; i++) {
-    once = (uv_handle_t*)malloc(sizeof(*once));
+    once = (uv_timer_t*)malloc(sizeof(*once));
     ASSERT(once != NULL);
-    r = uv_timer_init(once, once_close_cb, NULL);
+    r = uv_timer_init(once);
     ASSERT(r == 0);
     r = uv_timer_start(once, once_cb, i * 50, 0);
     ASSERT(r == 0);
   }
 
   /* The 11th timer is a repeating timer that runs 4 times */
-  r = uv_timer_init(&repeat, repeat_close_cb, NULL);
+  r = uv_timer_init(&repeat);
   ASSERT(r == 0);
   r = uv_timer_start(&repeat, repeat_cb, 100, 100);
   ASSERT(r == 0);
 
   /* The 12th timer should not do anything. */
-  r = uv_timer_init(&never, never_close_cb, NULL);
+  r = uv_timer_init(&never);
   ASSERT(r == 0);
   r = uv_timer_start(&never, never_cb, 100, 100);
   ASSERT(r == 0);

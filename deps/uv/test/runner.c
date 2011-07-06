@@ -24,6 +24,7 @@
 #include "runner.h"
 #include "task.h"
 
+char executable_path[PATHMAX] = { '\0' };
 
 /* Start a specific process declared by TEST_ENTRY or TEST_HELPER. */
 /* Returns the exit code of the specific process. */
@@ -75,6 +76,9 @@ int run_task(task_entry_t *test, int timeout, int benchmark_output) {
     }
   }
 
+  /* Wait a little bit to allow servers to start. Racy. */
+  uv_sleep(100);
+
   /* Start the main test process. */
   if (process_start(test->process_name, &processes[process_count]) == -1) {
     snprintf((char*)&errmsg, sizeof(errmsg), "process `%s` failed to start.",
@@ -117,8 +121,7 @@ finalize:
 
   /* Show error and output from processes if the test failed. */
   if (!success) {
-    LOG("\n=============================================================\n");
-    LOGF("`%s` failed: %s\n", test->task_name, errmsg);
+    LOGF("\n`%s` failed: %s\n", test->task_name, errmsg);
 
     for (i = 0; i < process_count; i++) {
       switch (process_output_size(&processes[i])) {
@@ -138,7 +141,7 @@ finalize:
         break;
       }
     }
-    LOG("\n");
+    LOG("=============================================================\n");
 
   /* In benchmark mode show concise output from the main process. */
   } else if (benchmark_output) {
@@ -152,8 +155,9 @@ finalize:
       break;
 
      default:
-      //LOGF("%s: ", test->task_name);
-      process_copy_output(main_process, fileno(stderr));
+      for (i = 0; i < process_count; i++) {
+        process_copy_output(&processes[i], fileno(stderr));
+      }
       break;
     }
   }

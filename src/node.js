@@ -28,6 +28,9 @@
   global = this;
 
   function startup() {
+
+    if (process.env.NODE_USE_UV == '1') process.useUV = true;
+
     startup.globalVariables();
     startup.globalTimeouts();
     startup.globalConsole();
@@ -78,7 +81,13 @@
     } else if (process._eval != null) {
       // User passed '-e' or '--eval' arguments to Node.
       var Module = NativeModule.require('module');
-      var rv = new Module()._compile('return eval(process._eval)', 'eval');
+      var path = NativeModule.require('path');
+      var cwd = process.cwd();
+
+      var module = new Module('eval');
+      module.filename = path.join(cwd, 'eval');
+      module.paths = Module._nodeModulePaths(cwd);
+      var rv = module._compile('return eval(process._eval)', 'eval');
       console.log(rv);
 
     } else {
@@ -113,9 +122,6 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
-    if (process.cov) {
-      global.__cov = {};
-    }
   };
 
   startup.globalTimeouts = function() {
@@ -194,7 +200,10 @@
 
   startup.processStdio = function() {
     var binding = process.binding('stdio'),
-        net = NativeModule.require('net'),
+        // FIXME Remove conditional when net is supported again on windows.
+        net = (process.platform !== "win32")
+              ? NativeModule.require('net')
+              : undefined,
         fs = NativeModule.require('fs'),
         tty = NativeModule.require('tty');
 
@@ -361,20 +370,6 @@
       var path = NativeModule.require('path');
       process.argv[0] = path.join(cwd, process.argv[0]);
     }
-
-    if (process.cov) {
-      process.on('exit', function() {
-        var coverage = JSON.stringify(__cov);
-        var path = NativeModule.require('path');
-        var fs = NativeModule.require('fs');
-        var filename = path.join(cwd, 'node-cov.json');
-        try {
-          fs.unlinkSync(filename);
-        } catch(e) {
-        }
-        fs.writeFileSync(filename, coverage);
-      });
-    }
   };
 
   // Below you find a minimal module system, which is used to load the node
@@ -384,7 +379,27 @@
   var Script = process.binding('evals').NodeScript;
   var runInThisContext = Script.runInThisContext;
 
+  // A special hook to test the new platform layer. Use the command-line
+  // flag --use-uv to enable the libuv backend instead of the legacy
+  // backend.
+  function translateId(id) {
+    switch (id) {
+      case 'net':
+        return process.useUV ? 'net_uv' : 'net_legacy';
+
+      case 'timers':
+        return process.useUV ? 'timers_uv' : 'timers_legacy';
+
+      case 'dns':
+        return process.useUV ? 'dns_uv' : 'dns_legacy';
+
+      default:
+        return id;
+    }
+  }
+
   function NativeModule(id) {
+    id = translateId(id);
     this.filename = id + '.js';
     this.id = id;
     this.exports = {};
@@ -395,6 +410,8 @@
   NativeModule._cache = {};
 
   NativeModule.require = function(id) {
+    id = translateId(id);
+
     if (id == 'native_module') {
       return NativeModule;
     }
@@ -417,14 +434,17 @@
   };
 
   NativeModule.getCached = function(id) {
+    id = translateId(id);
     return NativeModule._cache[id];
   }
 
   NativeModule.exists = function(id) {
+    id = translateId(id);
     return (id in NativeModule._source);
   }
 
   NativeModule.getSource = function(id) {
+    id = translateId(id);
     return NativeModule._source[id];
   }
 
@@ -433,7 +453,7 @@
   };
 
   NativeModule.wrapper = [
-    '(function (exports, require, module, __filename, __dirname) { ',
+    '(function (exports, require, module, __filename, __dirname, define) { ',
     '\n});'
   ];
 

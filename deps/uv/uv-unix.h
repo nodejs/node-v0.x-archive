@@ -26,7 +26,9 @@
 
 #include "ev/ev.h"
 
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
@@ -37,45 +39,82 @@ typedef struct {
   size_t len;
 } uv_buf_t;
 
+#define UV_REQ_BUFSML_SIZE (4)
 
-#define uv_req_private_fields \
+#define UV_REQ_PRIVATE_FIELDS \
   int write_index; \
   ev_timer timer; \
   ngx_queue_t queue; \
   uv_buf_t* bufs; \
-  int bufcnt;
+  int bufcnt; \
+  uv_buf_t bufsml[UV_REQ_BUFSML_SIZE];
 
 
 /* TODO: union or classes please! */
-#define uv_handle_private_fields \
+#define UV_HANDLE_PRIVATE_FIELDS \
   int fd; \
   int flags; \
-  ev_idle next_watcher; \
-/* UV_TCP */ \
-  int delayed_error; \
+  ev_idle next_watcher;
+
+
+#define UV_STREAM_PRIVATE_FIELDS \
   uv_read_cb read_cb; \
-  uv_accept_cb accept_cb; \
+  uv_alloc_cb alloc_cb;
+
+
+/* UV_TCP */
+#define UV_TCP_PRIVATE_FIELDS \
+  int delayed_error; \
+  uv_connection_cb connection_cb; \
   int accepted_fd; \
   uv_req_t *connect_req; \
   uv_req_t *shutdown_req; \
   ev_io read_watcher; \
   ev_io write_watcher; \
   ngx_queue_t write_queue; \
-/* UV_PREPARE */ \
-  ev_prepare prepare_watcher; \
-  uv_loop_cb prepare_cb; \
-/* UV_CHECK */ \
-  ev_check check_watcher; \
-  uv_loop_cb check_cb; \
-/* UV_IDLE */ \
-  ev_idle idle_watcher; \
-  uv_loop_cb idle_cb; \
-/* UV_ASYNC */ \
-  ev_async async_watcher; \
-  uv_loop_cb async_cb; \
-/* UV_TIMER */ \
-  ev_timer timer_watcher; \
-  uv_loop_cb timer_cb;
+  ngx_queue_t write_completed_queue;
 
+
+/* UV_PREPARE */ \
+#define UV_PREPARE_PRIVATE_FIELDS \
+  ev_prepare prepare_watcher; \
+  uv_prepare_cb prepare_cb;
+
+
+/* UV_CHECK */
+#define UV_CHECK_PRIVATE_FIELDS \
+  ev_check check_watcher; \
+  uv_check_cb check_cb;
+
+
+/* UV_IDLE */
+#define UV_IDLE_PRIVATE_FIELDS \
+  ev_idle idle_watcher; \
+  uv_idle_cb idle_cb;
+
+
+/* UV_ASYNC */
+#define UV_ASYNC_PRIVATE_FIELDS \
+  ev_async async_watcher; \
+  uv_async_cb async_cb;
+
+
+/* UV_TIMER */
+#define UV_TIMER_PRIVATE_FIELDS \
+  ev_timer timer_watcher; \
+  uv_timer_cb timer_cb;
+
+#define UV_ARES_TASK_PRIVATE_FIELDS \
+  int sock; \
+  ev_io read_watcher; \
+  ev_io write_watcher;
+
+#define UV_GETADDRINFO_PRIVATE_FIELDS \
+  uv_getaddrinfo_cb cb; \
+  struct addrinfo* hints; \
+  char* hostname; \
+  char* service; \
+  struct addrinfo* res; \
+  int retcode;
 
 #endif /* UV_UNIX_H */
