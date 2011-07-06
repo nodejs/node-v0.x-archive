@@ -1639,7 +1639,7 @@ typedef void (*extInit)(Handle<Object> exports);
 
 // Return true iff the module name in args[0] can be located
 // in this binary (via dlopen). Only supports new module format.
-Handle<Value> HasModule(const v8::Arguments& args) {
+Handle<Value> HasStaticModule(const v8::Arguments& args) {
   HandleScope scope;
 
   if (args.Length() < 1) return Undefined();
@@ -2161,7 +2161,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "umask", Umask);
   NODE_SET_METHOD(process, "dlopen", DLOpen);
-  NODE_SET_METHOD(process, "hasModule", HasModule); 
+  NODE_SET_METHOD(process, "hasStaticModule", HasStaticModule); 
   NODE_SET_METHOD(process, "_kill", Kill);
 #endif // __POSIX__
 
