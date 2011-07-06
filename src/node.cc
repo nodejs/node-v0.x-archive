@@ -1637,6 +1637,42 @@ Handle<Value> Kill(const Arguments& args) {
 
 typedef void (*extInit)(Handle<Object> exports);
 
+// Return true iff the module name in args[0] can be located
+// in this binary (via dlopen). Only supports new module format.
+Handle<Value> HasModule(const v8::Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 1) return Undefined();
+
+  String::Utf8Value symbol(args[0]->ToString());
+  char *symstr = NULL;
+  {
+    char *sym = *symbol;
+    char *p = strrchr(sym, '/');
+    if (p != NULL) {
+      sym = p+1;
+    }
+
+    p = strrchr(sym, '.');
+    if (p != NULL) {
+      *p = '\0';
+    }
+
+    size_t slen = strlen(sym);
+    symstr = static_cast<char*>(calloc(1, slen + sizeof("_module") + 1));
+    memcpy(symstr, sym, slen);
+    memcpy(symstr+slen, "_module", sizeof("_module") + 1);
+  }
+
+  // Get the init() function from the dynamically shared object.
+  void *handle = dlopen(NULL, RTLD_LAZY);
+  node_module_struct *mod = static_cast<node_module_struct *>(
+      dlsym(handle, symstr));
+  free(symstr);
+
+  return (mod ? True() : False());
+}
+
 // DLOpen is node.dlopen(). Used to load 'module.node' dynamically shared
 // objects.
 Handle<Value> DLOpen(const v8::Arguments& args) {
@@ -2125,6 +2161,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "umask", Umask);
   NODE_SET_METHOD(process, "dlopen", DLOpen);
+  NODE_SET_METHOD(process, "hasModule", HasModule); 
   NODE_SET_METHOD(process, "_kill", Kill);
 #endif // __POSIX__
 
