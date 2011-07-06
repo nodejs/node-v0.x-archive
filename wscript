@@ -351,6 +351,17 @@ def configure(conf):
     conf.env.append_value('CPPFLAGS', '-DHAVE_MONOTONIC_CLOCK=0')
 
   if sys.platform.startswith("sunos"):
+    code =  """
+      #include <ifaddrs.h>
+      int main(void) {
+        struct ifaddrs hello;
+        return 0;
+      }
+    """
+
+    if conf.check_cc(msg="Checking for ifaddrs on solaris", fragment=code):
+      conf.env.append_value('CPPFLAGS',  '-DSUNOS_HAVE_IFADDRS')
+
     if not conf.check(lib='socket', uselib_store="SOCKET"):
       conf.fatal("Cannot find socket library")
     if not conf.check(lib='nsl', uselib_store="NSL"):
@@ -865,7 +876,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.4.9' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.5.0' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 
