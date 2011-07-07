@@ -118,7 +118,7 @@ addTest(function (client, done) {
 addTest(function (client, done) {
   console.error("setbreakpoint");
 
-  client.setBreakpoint("some-file.js", 1, function(res) {
+  client.setbreakpoint("some-file.js", 1, function(res) {
     assert.ok(res.success);
 
 
