@@ -89,4 +89,15 @@ bool EventEmitter::Emit(Handle<String> event, int argc, Handle<Value> argv[]) {
   return true;
 }
 
+bool EventEmitter::HaveListeners(Handle<String> event) {
+  HandleScope scope;
+  // HandleScope not needed here because only called from one of the two
+  // functions below
+  Local<Value> events_v = handle_->Get(events_symbol);
+  if (!events_v->IsObject()) return false;
+  Local<Object> events = events_v->ToObject();
+  Local<Value> listeners_v = events->Get(event);
+  return (listeners_v->IsFunction() || listeners_v->IsArray());
+}
+
 }  // namespace node

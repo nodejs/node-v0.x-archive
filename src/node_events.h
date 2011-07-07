@@ -37,6 +37,7 @@ class EventEmitter : public ObjectWrap {
             v8::Handle<v8::Value> argv[]);
 
  protected:
+  bool HaveListeners(v8::Handle<v8::String> event);
   EventEmitter() : ObjectWrap () { }
 };
 
