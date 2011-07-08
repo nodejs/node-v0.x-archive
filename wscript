@@ -638,7 +638,7 @@ def build_uv(bld):
 
   bld.install_files('${PREFIX}/include/node/', 'deps/uv/include/*.h')
 
-  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/src/ev/*.h')
+  bld.install_files('${PREFIX}/include/node/', 'deps/uv/src/ev/*.h')
   bld.install_files('${PREFIX}/include/node/c-ares', """
     deps/uv/include/ares.h
     deps/uv/include/ares_version.h
