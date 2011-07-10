@@ -38,7 +38,7 @@
 # define uv_inet_pton ares_inet_pton
 # define uv_inet_ntop ares_inet_ntop
 
-#else // __POSIX__
+#else  // __POSIX__
 # include <arpa/inet.h>
 # define uv_inet_pton inet_pton
 # define uv_inet_ntop inet_ntop
@@ -149,7 +149,7 @@ class QueryWrap {
     object_ = Persistent<Object>::New(Object::New());
   }
 
-  ~QueryWrap() {
+  virtual ~QueryWrap() {
     assert(!object_.IsEmpty());
 
     object_->DeleteHiddenValue(onanswer_sym);
@@ -594,7 +594,7 @@ static void Initialize(Handle<Object> target) {
 }
 
 
-} // namespace cares_wrap
+}  // namespace cares_wrap
 
 }  // namespace node
 
