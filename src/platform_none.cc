@@ -42,6 +42,11 @@ const char* OS::GetProcessTitle(int *len) {
 }
 
 
+int Platform::GetProcessMemory(size_t *rss, size_t *vsize, int pid) {
+  assert(0 && "implement me");
+}
+
+
 int OS::GetMemory(size_t *rss, size_t *vsize) {
   // Not implemented
   *rss = 0;

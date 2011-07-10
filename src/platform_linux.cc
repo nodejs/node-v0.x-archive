@@ -85,9 +85,21 @@ const char* Platform::GetProcessTitle(int *len) {
   return NULL;
 }
 
-
 int Platform::GetMemory(size_t *rss, size_t *vsize) {
-  FILE *f = fopen("/proc/self/stat", "r");
+  return Platform::GetProcessMemory(rss, vsize, NULL);
+}
+
+int Platform::GetProcessMemory(size_t *rss, size_t *vsize, int pid) {
+  FILE *f;
+  /* If pid == NULL, look at the current process */
+  if (pid == NULL) {
+    f = fopen("/proc/self/stat", "r");
+  } else {
+    char path[256];
+    snprintf(path, sizeof(path), "/proc/%u/stat", pid);
+    f = fopen(path, "r");
+  }
+  
   if (!f) return -1;
 
   int itmp;

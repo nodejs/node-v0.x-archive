@@ -21,8 +21,20 @@
 
 var common = require('../common');
 var assert = require('assert');
+var os = require('os');
 
-var r = process.memoryUsage();
+var k = process.memoryUsage();
+console.log(common.inspect(k));
+assert.equal(true, k['rss'] > 0);
+assert.equal(true, k['vsize'] > 0);
+
+var r = os.memoryUsage();
 console.log(common.inspect(r));
 assert.equal(true, r['rss'] > 0);
 assert.equal(true, r['vsize'] > 0);
+
+var d = os.memoryUsage(1);
+console.log(common.inspect(r));
+assert.equal(true, d['rss'] > 0);
+assert.equal(true, d['vsize'] > 0);
+
