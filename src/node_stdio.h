@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef node_stdio_h
-#define node_stdio_h
+#ifndef SRC_NODE_STDIO_H_
+#define SRC_NODE_STDIO_H_
 
 #include <node.h>
 #include <v8.h>
@@ -35,4 +35,4 @@ public:
 };
 
 }  // namespace node
-#endif  // node_stdio_h
+#endif  // SRC_NODE_STDIO_H_

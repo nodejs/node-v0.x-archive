@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_PLATFORM_H_
-#define NODE_PLATFORM_H_
+#ifndef SRC_PLATFORM_H_
+#define SRC_PLATFORM_H_
 
 #include <v8.h>
 
@@ -50,4 +50,4 @@ class Platform {
 
 
 }  // namespace node
-#endif  // NODE_PLATFORM_H_
+#endif  // SRC_PLATFORM_H_

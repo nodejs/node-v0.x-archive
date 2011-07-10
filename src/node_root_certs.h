@@ -3612,4 +3612,4 @@ const char* root_certs[] = {
 
 } // namespace node
 
-#endif // SRC_NODE_ROOT_CERTS_H_
+#endif  // SRC_NODE_ROOT_CERTS_H_

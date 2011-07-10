@@ -22,8 +22,8 @@
 
 #include "node_config.h"
 
-#ifndef NODE_VERSION_H
-#define NODE_VERSION_H
+#ifndef SRC_NODE_VERSION_H_
+#define SRC_NODE_VERSION_H_
 
 #define NODE_MAJOR_VERSION 0
 #define NODE_MINOR_VERSION 5
@@ -53,4 +53,4 @@
   || ((major) == NODE_MAJOR_VERSION && (minor) < NODE_MINOR_VERSION) \
   || ((major) == NODE_MAJOR_VERSION && (minor) == NODE_MINOR_VERSION && (patch) <= NODE_PATCH_VERSION))
 
-#endif /* NODE_VERSION_H */
+#endif  // SRC_NODE_VERSION_H_
