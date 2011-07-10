@@ -230,7 +230,7 @@ Handle<Value> WrappedScript::CreateContext(const Arguments& args) {
     for (uint32_t i = 0; i < keys->Length(); i++) {
       Handle<String> key = keys->Get(Integer::New(i))->ToString();
       Handle<Value> value = sandbox->Get(key);
-      if(value == sandbox) { value = context; }
+      if (value == sandbox) { value = context; }
       context->Set(key, value);
     }
   }
@@ -288,9 +288,8 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   }
 
   const int sandbox_index = input_flag == compileCode ? 1 : 0;
-  if (context_flag == userContext
-    && !WrappedContext::InstanceOf(args[sandbox_index]))
-  {
+  if (context_flag == userContext &&
+      !WrappedContext::InstanceOf(args[sandbox_index])) {
     return ThrowException(Exception::TypeError(
           String::New("needs a 'context' argument.")));
   }
