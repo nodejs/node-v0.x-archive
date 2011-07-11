@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_BUFFER_H_
-#define NODE_BUFFER_H_
+#ifndef SRC_NODE_BUFFER_H_
+#define SRC_NODE_BUFFER_H_
 
 #include <node.h>
 #include <node_object_wrap.h>
@@ -129,4 +129,4 @@ class Buffer : public ObjectWrap {
 
 }  // namespace node buffer
 
-#endif  // NODE_BUFFER_H_
+#endif  // SRC_NODE_BUFFER_H_

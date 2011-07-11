@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_PLATFORM_WIN32_H_
-#define NODE_PLATFORM_WIN32_H_
+#ifndef SRC_PLATFORM_WIN32_H_
+#define SRC_PLATFORM_WIN32_H_
 
 // Require at least Windows XP SP1
 // (GetProcessId requires it)
@@ -68,5 +68,5 @@ void winapi_perror(const char* prefix);
 
 }
 
-#endif  // NODE_PLATFORM_WIN32_H_
+#endif  // SRC_PLATFORM_WIN32_H_
 

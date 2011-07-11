@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_IO_H_
-#define NODE_IO_H_
+#ifndef SRC_NODE_IO_WATCHER_H_
+#define SRC_NODE_IO_WATCHER_H_
 
 #include <node_object_wrap.h>
 #include <ev.h>
@@ -60,5 +60,5 @@ class IOWatcher : ObjectWrap {
 };
 
 }  // namespace node
-#endif  // NODE_IO_H_
+#endif  // SRC_NODE_IO_WATCHER_H_
 

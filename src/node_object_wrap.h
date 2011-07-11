@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef object_wrap_h
-#define object_wrap_h
+#ifndef SRC_NODE_OBJECT_WRAP_H_
+#define SRC_NODE_OBJECT_WRAP_H_
 
 #include <v8.h>
 #include <assert.h>
@@ -110,4 +110,4 @@ class ObjectWrap {
 };
 
 } // namespace node
-#endif // object_wrap_h
+#endif  // SRC_NODE_OBJECT_WRAP_H_

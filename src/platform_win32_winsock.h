@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_PLATFORM_WIN32_WINSOCK_H_
-#define NODE_PLATFORM_WIN32_WINSOCK_H_
+#ifndef SRC_PLATFORM_WIN32_WINSOCK_H_
+#define SRC_PLATFORM_WIN32_WINSOCK_H_
 
 #include <platform_win32.h>
 
@@ -43,4 +43,4 @@ int wsa_sync_async_socketpair(int af, int type, int proto, SOCKET *syncSocket, S
 
 } // namespace node
 
-#endif  // NODE_PLATFORM_WIN32_WINSOCK_H_
+#endif  // SRC_PLATFORM_WIN32_WINSOCK_H_

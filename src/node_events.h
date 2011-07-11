@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_EVENTS_H_
-#define SRC_EVENTS_H_
+#ifndef SRC_NODE_EVENTS_H_
+#define SRC_NODE_EVENTS_H_
 
 #include <node_object_wrap.h>
 #include <v8.h>
@@ -41,4 +41,4 @@ class EventEmitter : public ObjectWrap {
 };
 
 }  // namespace node
-#endif  // SRC_EVENTS_H_
+#endif  // SRC_NODE_EVENTS_H_
