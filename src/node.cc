@@ -2240,7 +2240,6 @@ static void PrintHelp() {
          "\n"
          "Options:\n"
          "  -v, --version        print node's version\n"
-         "  -e, --eval script    evaluate script\n"
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
@@ -2487,12 +2486,10 @@ void EmitExit(v8::Handle<v8::Object> process) {
 
 int Start(int argc, char *argv[]) {
   uv_init();
-
-  // This needs to run *before* V8::Initialize()
-  argv = Init(argc, argv);
-
   v8::V8::Initialize();
   v8::HandleScope handle_scope;
+
+  argv = Init(argc, argv);
 
   // Create the one and only Context.
   Persistent<v8::Context> context = v8::Context::New();

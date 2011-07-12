@@ -36,10 +36,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-#ifdef SUNOS_HAVE_IFADDRS
-# include <ifaddrs.h>
-#endif
+#include <ifaddrs.h>
 
 
 
@@ -300,11 +297,6 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 
 Handle<Value> Platform::GetInterfaceAddresses() {
   HandleScope scope;
-
-#ifndef SUNOS_HAVE_IFADDRS
-  return ThrowException(Exception::Error(String::New(
-    "This version of sunos doesn't support getifaddrs")));
-#else
   struct ::ifaddrs *addrs, *ent;
   struct ::sockaddr_in *in4;
   struct ::sockaddr_in6 *in6;
@@ -363,8 +355,6 @@ Handle<Value> Platform::GetInterfaceAddresses() {
   freeifaddrs(addrs);
 
   return scope.Close(ret);
-
-#endif  // SUNOS_HAVE_IFADDRS
 }
 
 
