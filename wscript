@@ -485,11 +485,10 @@ def configure(conf):
   conf.set_env_name('debug', debug_env)
 
   if (sys.platform.startswith("win32")):
-    # Static pthread - crashes
-    #conf.env.append_value('LINKFLAGS', '../deps/pthreads-w32/libpthreadGC2.a')
-    #debug_env.append_value('LINKFLAGS', '../deps/pthreads-w32/libpthreadGC2d.a')
-    # Pthread dll
-    conf.env.append_value('LIB', 'pthread.dll')
+    # Static pthread
+    conf.env.append_value('LINKFLAGS', '../deps/pthread-win32/libpthreadGC2.a')
+    debug_env.append_value('LINKFLAGS', '../deps/pthread-win32/libpthreadGC2d.a')
+    conf.env.append_value('CPPFLAGS', "-DPTW32_STATIC_LIB")
 
   # Configure debug variant
   conf.setenv('debug')
@@ -568,6 +567,11 @@ def build_v8(bld):
     rule          = v8_cmd(bld, "default"),
     before        = "cxx",
     install_path  = None)
+
+  v8.env.env = dict(os.environ)
+  v8.env.env['CC'] = sh_escape(bld.env['CC'][0])
+  v8.env.env['CXX'] = sh_escape(bld.env['CXX'][0])
+
   v8.uselib = "EXECINFO"
   bld.env["CPPPATH_V8"] = "deps/v8/include"
   t = join(bld.srcnode.abspath(bld.env_of_name("default")), v8.target)
@@ -586,7 +590,10 @@ def build_v8(bld):
   bld.install_files('${PREFIX}/include/node/', 'deps/v8/include/*.h')
 
 def sh_escape(s):
-  return s.replace("\\", "\\\\").replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
+  if sys.platform.startswith('win32'):
+    return '"' + s + '"'
+  else:
+    return s.replace("\\", "\\\\").replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
 
 def uv_cmd(bld, variant):
   srcdeps = join(bld.path.abspath(), "deps")
@@ -608,13 +615,16 @@ def uv_cmd(bld, variant):
 def build_uv(bld):
   uv = bld.new_task_gen(
     name = 'uv',
-    source = 'deps/uv/uv.h',
+    source = 'deps/uv/include/uv.h',
     target = 'deps/uv/uv.a',
     before = "cxx",
     rule = uv_cmd(bld, 'default')
   )
 
-  #bld.env["CPPPATH_UV"] = 'deps/uv/'
+  uv.env.env = dict(os.environ)
+  uv.env.env['CC'] = sh_escape(bld.env['CC'][0])
+  uv.env.env['CXX'] = sh_escape(bld.env['CXX'][0])
+  uv.env.env['CPPFLAGS'] = "-DPTW32_STATIC_LIB"
 
   t = join(bld.srcnode.abspath(bld.env_of_name("default")), uv.target)
   bld.env_of_name('default').append_value("LINKFLAGS_UV", t)
@@ -626,8 +636,13 @@ def build_uv(bld):
     t = join(bld.srcnode.abspath(bld.env_of_name("debug")), uv_debug.target)
     bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
 
-  bld.install_files('${PREFIX}/include/node/', 'deps/uv/*.h')
-  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/ev/*.h')
+  bld.install_files('${PREFIX}/include/node/', 'deps/uv/include/*.h')
+
+  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/src/ev/*.h')
+  bld.install_files('${PREFIX}/include/node/c-ares', """
+    deps/uv/include/ares.h
+    deps/uv/include/ares_version.h
+  """)
 
 
 def build(bld):
@@ -855,21 +870,23 @@ def build(bld):
   node.includes = """
     src/
     deps/http_parser
-    deps/uv
-    deps/uv/ev
-    deps/uv/eio
+    deps/uv/include
+    deps/uv/src/ev
+    deps/uv/src/ares
   """
 
   if not bld.env["USE_SHARED_V8"]: node.includes += ' deps/v8/include '
-
-  if not bld.env["USE_SHARED_CARES"]:
-    node.includes += '  deps/uv/c-ares '
 
   if sys.platform.startswith('cygwin'):
     bld.env.append_value('LINKFLAGS', '-Wl,--export-all-symbols')
     bld.env.append_value('LINKFLAGS', '-Wl,--out-implib,default/libnode.dll.a')
     bld.env.append_value('LINKFLAGS', '-Wl,--output-def,default/libnode.def')
     bld.install_files('${LIBDIR}', "build/default/libnode.*")
+
+  if (sys.platform.startswith("win32")):
+    # Static libgcc
+    bld.env.append_value('LINKFLAGS', '-static-libgcc')
+    bld.env.append_value('LINKFLAGS', '-static-libstdc++')
 
   def subflags(program):
     x = { 'CCFLAGS'   : " ".join(program.env["CCFLAGS"]).replace('"', '\\"')
@@ -907,10 +924,6 @@ def build(bld):
     src/node_buffer.h
     src/node_events.h
     src/node_version.h
-  """)
-  bld.install_files('${PREFIX}/include/node/c-ares', """
-    deps/uv/c-ares/ares.h
-    deps/uv/c-ares/ares_version.h
   """)
 
   # Only install the man page if it exists.

@@ -99,6 +99,8 @@ class TCPWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "connect", Connect);
     NODE_SET_PROTOTYPE_METHOD(t, "shutdown", Shutdown);
     NODE_SET_PROTOTYPE_METHOD(t, "close", Close);
+    NODE_SET_PROTOTYPE_METHOD(t, "bind6", Bind6);
+    NODE_SET_PROTOTYPE_METHOD(t, "connect6", Connect6);
 
     constructor = Persistent<Function>::New(t->GetFunction());
 
@@ -168,6 +170,23 @@ class TCPWrap {
     return scope.Close(Integer::New(r));
   }
 
+  static Handle<Value> Bind6(const Arguments& args) {
+    HandleScope scope;
+
+    UNWRAP
+
+    String::AsciiValue ip6_address(args[0]->ToString());
+    int port = args[1]->Int32Value();
+
+    struct sockaddr_in6 address = uv_ip6_addr(*ip6_address, port);
+    int r = uv_tcp_bind6(&wrap->handle_, address);
+
+    // Error starting the tcp.
+    if (r) SetErrno(uv_last_error().code);
+
+    return scope.Close(Integer::New(r));
+  }
+
   static Handle<Value> Listen(const Arguments& args) {
     HandleScope scope;
 
@@ -187,8 +206,12 @@ class TCPWrap {
     HandleScope scope;
 
     TCPWrap* wrap = static_cast<TCPWrap*>(handle->data);
-
     assert(&wrap->handle_ == (uv_tcp_t*)handle);
+
+    // We should not be getting this callback if someone as already called
+    // uv_close() on the handle. Since we've destroyed object_ at the same
+    // time as calling uv_close() we can test for this here.
+    assert(wrap->object_.IsEmpty() == false);
 
     if (status != 0) {
       // TODO Handle server error (call onerror?)
@@ -269,7 +292,7 @@ class TCPWrap {
       Local<Object> slab_obj = slab_v->ToObject();
       slab = Buffer::Data(slab_obj);
       assert(Buffer::Length(slab_obj) == SLAB_SIZE);
-      assert(SLAB_SIZE > slab_used);
+      assert(SLAB_SIZE >= slab_used);
 
       // If less than 64kb is remaining on the slab allocate a new one.
       if (SLAB_SIZE - slab_used < 64 * 1024) {
@@ -295,6 +318,11 @@ class TCPWrap {
     HandleScope scope;
 
     TCPWrap* wrap = static_cast<TCPWrap*>(handle->data);
+
+    // We should not be getting this callback if someone as already called
+    // uv_close() on the handle. Since we've destroyed object_ at the same
+    // time as calling uv_close() we can test for this here.
+    assert(wrap->object_.IsEmpty() == false);
 
     // Remove the reference to the slab to avoid memory leaks;
     Local<Value> slab_v = wrap->object_->GetHiddenValue(slab_sym);
@@ -350,6 +378,9 @@ class TCPWrap {
     TCPWrap* wrap = (TCPWrap*) req->handle->data;
 
     HandleScope scope;
+
+    // The request object should still be there.
+    assert(req_wrap->object_.IsEmpty() == false);
 
     if (status) {
       SetErrno(uv_last_error().code);
@@ -420,6 +451,9 @@ class TCPWrap {
 
     HandleScope scope;
 
+    // The request object should still be there.
+    assert(req_wrap->object_.IsEmpty() == false);
+
     if (status) {
       SetErrno(uv_last_error().code);
     }
@@ -462,9 +496,39 @@ class TCPWrap {
     }
   }
 
+  static Handle<Value> Connect6(const Arguments& args) {
+    HandleScope scope;
+
+    UNWRAP
+
+    String::AsciiValue ip_address(args[0]->ToString());
+    int port = args[1]->Int32Value();
+
+    struct sockaddr_in6 address = uv_ip6_addr(*ip_address, port);
+
+    // I hate when people program C++ like it was C, and yet I do it too.
+    // I'm too lazy to come up with the perfect class hierarchy here. Let's
+    // just do some type munging.
+    ReqWrap* req_wrap = new ReqWrap((uv_handle_t*) &wrap->handle_,
+                                    (void*)AfterConnect);
+
+    int r = uv_tcp_connect6(&req_wrap->req_, address);
+
+    if (r) {
+      SetErrno(uv_last_error().code);
+      delete req_wrap;
+      return scope.Close(v8::Null());
+    } else {
+      return scope.Close(req_wrap->object_);
+    }
+  }
+
   static void AfterShutdown(uv_req_t* req, int status) {
     ReqWrap* req_wrap = (ReqWrap*) req->data;
     TCPWrap* wrap = (TCPWrap*) req->handle->data;
+
+    // The request object should still be there.
+    assert(req_wrap->object_.IsEmpty() == false);
 
     HandleScope scope;
 
