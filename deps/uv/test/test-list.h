@@ -20,7 +20,6 @@
  */
 
 TEST_DECLARE   (ping_pong)
-TEST_DECLARE   (ping_pong_v6)
 TEST_DECLARE   (delayed_accept)
 TEST_DECLARE   (tcp_writealot)
 TEST_DECLARE   (bind_error_addrinuse)
@@ -60,9 +59,6 @@ HELPER_DECLARE (echo_server)
 TASK_LIST_START
   TEST_ENTRY  (ping_pong)
   TEST_HELPER (ping_pong, echo_server)
-
-  TEST_ENTRY  (ping_pong_v6)
-  TEST_HELPER (ping_pong_v6, echo_server)
 
   TEST_ENTRY  (delayed_accept)
 

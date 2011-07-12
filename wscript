@@ -351,17 +351,6 @@ def configure(conf):
     conf.env.append_value('CPPFLAGS', '-DHAVE_MONOTONIC_CLOCK=0')
 
   if sys.platform.startswith("sunos"):
-    code =  """
-      #include <ifaddrs.h>
-      int main(void) {
-        struct ifaddrs hello;
-        return 0;
-      }
-    """
-
-    if conf.check_cc(msg="Checking for ifaddrs on solaris", fragment=code):
-      conf.env.append_value('CPPFLAGS',  '-DSUNOS_HAVE_IFADDRS')
-
     if not conf.check(lib='socket', uselib_store="SOCKET"):
       conf.fatal("Cannot find socket library")
     if not conf.check(lib='nsl', uselib_store="NSL"):
@@ -568,11 +557,6 @@ def build_v8(bld):
     rule          = v8_cmd(bld, "default"),
     before        = "cxx",
     install_path  = None)
-
-  v8.env.env = dict(os.environ)
-  v8.env.env['CC'] = sh_escape(bld.env['CC'][0])
-  v8.env.env['CXX'] = sh_escape(bld.env['CXX'][0])
-
   v8.uselib = "EXECINFO"
   bld.env["CPPPATH_V8"] = "deps/v8/include"
   t = join(bld.srcnode.abspath(bld.env_of_name("default")), v8.target)
@@ -591,10 +575,7 @@ def build_v8(bld):
   bld.install_files('${PREFIX}/include/node/', 'deps/v8/include/*.h')
 
 def sh_escape(s):
-  if sys.platform.startswith('win32'):
-    return '"' + s + '"'
-  else:
-    return s.replace("\\", "\\\\").replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
+  return s.replace("\\", "\\\\").replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
 
 def uv_cmd(bld, variant):
   srcdeps = join(bld.path.abspath(), "deps")
@@ -616,15 +597,13 @@ def uv_cmd(bld, variant):
 def build_uv(bld):
   uv = bld.new_task_gen(
     name = 'uv',
-    source = 'deps/uv/include/uv.h',
+    source = 'deps/uv/uv.h',
     target = 'deps/uv/uv.a',
     before = "cxx",
     rule = uv_cmd(bld, 'default')
   )
 
-  uv.env.env = dict(os.environ)
-  uv.env.env['CC'] = sh_escape(bld.env['CC'][0])
-  uv.env.env['CXX'] = sh_escape(bld.env['CXX'][0])
+  #bld.env["CPPPATH_UV"] = 'deps/uv/'
 
   t = join(bld.srcnode.abspath(bld.env_of_name("default")), uv.target)
   bld.env_of_name('default').append_value("LINKFLAGS_UV", t)
@@ -636,13 +615,8 @@ def build_uv(bld):
     t = join(bld.srcnode.abspath(bld.env_of_name("debug")), uv_debug.target)
     bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
 
-  bld.install_files('${PREFIX}/include/node/', 'deps/uv/include/*.h')
-
-  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/src/ev/*.h')
-  bld.install_files('${PREFIX}/include/node/c-ares', """
-    deps/uv/include/ares.h
-    deps/uv/include/ares_version.h
-  """)
+  bld.install_files('${PREFIX}/include/node/', 'deps/uv/*.h')
+  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/ev/*.h')
 
 
 def build(bld):
@@ -870,12 +844,15 @@ def build(bld):
   node.includes = """
     src/
     deps/http_parser
-    deps/uv/include
-    deps/uv/src/ev
-    deps/uv/src/ares
+    deps/uv
+    deps/uv/ev
+    deps/uv/eio
   """
 
   if not bld.env["USE_SHARED_V8"]: node.includes += ' deps/v8/include '
+
+  if not bld.env["USE_SHARED_CARES"]:
+    node.includes += '  deps/uv/c-ares '
 
   if sys.platform.startswith('cygwin'):
     bld.env.append_value('LINKFLAGS', '-Wl,--export-all-symbols')
@@ -888,7 +865,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.5.0' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : '0.4.9' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
         }
     return x
 
@@ -919,6 +896,10 @@ def build(bld):
     src/node_buffer.h
     src/node_events.h
     src/node_version.h
+  """)
+  bld.install_files('${PREFIX}/include/node/c-ares', """
+    deps/uv/c-ares/ares.h
+    deps/uv/c-ares/ares_version.h
   """)
 
   # Only install the man page if it exists.
