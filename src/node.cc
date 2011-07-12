@@ -1673,6 +1673,7 @@ Handle<Value> HasStaticModule(const v8::Arguments& args) {
     size_t slen = strlen(sym);
     symstr = static_cast<char*>(calloc(1, slen + sizeof("_module") + 1));
     memcpy(symstr, sym, slen);
+    // This interface only supports new style modules.
     memcpy(symstr+slen, "_module", sizeof("_module") + 1);
   }
 
@@ -1682,7 +1683,12 @@ Handle<Value> HasStaticModule(const v8::Arguments& args) {
       dlsym(handle, symstr));
   free(symstr);
 
-  return (mod ? True() : False());
+  // Check the version, too.
+  if (mod && mod->version == NODE_MODULE_VERSION) {
+    return True();
+  }
+
+  return False();
 }
 
 // DLOpen is node.dlopen(). Used to load 'module.node' dynamically shared
