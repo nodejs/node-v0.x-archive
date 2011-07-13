@@ -468,7 +468,10 @@ Handle<Value> Buffer::Utf8Write(const Arguments &args) {
   constructor_template->GetFunction()->Set(chars_written_sym,
                                            Integer::New(char_written));
 
-  if (written > 0 && p[written-1] == '\0') written--;
+  if (written > 0 && p[written-1] == '\0' &&
+      ((written < max_length) || (written > s->Utf8Length()))) {
+    written--;
+  }
 
   return scope.Close(Integer::New(written));
 }

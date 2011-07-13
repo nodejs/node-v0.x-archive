@@ -526,3 +526,15 @@ assert.equal(0xef, b[3]);
 assert.throws(function() {
   new Buffer('"pong"', 0, 6, 8031, '127.0.0.1')
 });
+
+// Test null terminated UTF-8 string
+var buf = new Buffer('\0');
+assert.equal(buf.length, 1);
+buf = new Buffer('\0\0');
+assert.equal(buf.length, 2);
+buf = new Buffer(10);
+var written = buf.write('あいう'); // 3bytes * 3
+assert.equal(written, 9);
+written = buf.write('あいう\0'); // 3bytes * 3 + 1byte
+assert.equal(written, 10);
+
