@@ -9,8 +9,8 @@ var common = require('../common');
 var https = require('https');
 
 var opt = {
-	host: 'encrypted.google.com',
-	path: '/'
+  host: 'encrypted.google.com',
+  path: '/'
 };
 
 var req = https.get(opt, function (res) {
