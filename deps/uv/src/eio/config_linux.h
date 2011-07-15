@@ -56,6 +56,7 @@
 #else
 #define HAVE_SYNC_FILE_RANGE LINUX_VERSION_AT_LEAST(2, 6, 17)
 #endif
+
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #define HAVE_SYS_STAT_H 1
 
