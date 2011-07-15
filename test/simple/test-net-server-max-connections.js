@@ -40,74 +40,74 @@ var closes = 0;
 var some;
 
 
-var server = net.createServer(function (connection) {
-    console.log('connections: %d', server.connections);
-    count++;
-    connection.write('hey');
-    waits.push(function () { connection.end(); });
+var server = net.createServer(function(connection) {
+  console.log('connections: %d', server.connections);
+  count++;
+  connection.write('hey');
+  waits.push(function() { connection.end(); });
 });
 
 server.maxConnections = MAX;
 
-server.listen(common.PORT, function () {
-    makeConnections(MAX + EX);
+server.listen(common.PORT, function() {
+  makeConnections(MAX + EX);
 });
 
 
 function makeConnections(num) {
   for (var i = 0; i < num; i++) {
-    setTimeout(function () {
-        
-        var c = net.createConnection(common.PORT);
-        var gotData = false;
-        
-        c.on('end', function() { c.end(); });
-        
-        c.on('data', function (b) {
-          gotData = true;
-          assert.ok(0 < b.length);
-        });
-        
-        c.on('error', function(e) {
-          console.error('error: %s', e);
-        });
-        
-        c.on('close', function() {
-          closes++;
-         
-          if (!gotData) {
-              assert.equal(server.connections, MAX);
-              if(!--ex || close) { closeConnections(); }
-          }
-          
-          if (gotData && (--count === (MAX - some)) && !close) {
-              close = true;
-              
-              // make sure the connections are closed
-              var back = 1;
-              (function backoff () {
-                  back *= 2;
-                  if (server.connections > count) {
-                    setTimeout(backoff, back)
-                  } else {
-                    makeConnections(MAX - count + 1);
-                  }
-              }());
-              
-          }
-          
-        });
-        
+    setTimeout(function() {
+
+      var c = net.createConnection(common.PORT);
+      var gotData = false;
+
+      c.on('end', function() { c.end(); });
+
+      c.on('data', function(b) {
+        gotData = true;
+        assert.ok(0 < b.length);
+      });
+
+      c.on('error', function(e) {
+        console.error('error: %s', e);
+      });
+
+      c.on('close', function() {
+        closes++;
+
+        if (!gotData) {
+          assert.equal(server.connections, MAX);
+          if (!--ex || close) { closeConnections(); }
+        }
+
+        if (gotData && (--count === (MAX - some)) && !close) {
+          close = true;
+
+          // make sure the connections are closed
+          var back = 1;
+          (function backoff() {
+            back *= 2;
+            if (server.connections > count) {
+              setTimeout(backoff, back);
+            } else {
+              makeConnections(MAX - count + 1);
+            }
+          }());
+
+        }
+
+      });
+
     }, i);
   }
 }
 
 function closeConnections() {
- if (!close) {
+  if (!close) {
     assert.equal(waits.length, MAX);
     some = Math.floor(Math.random() * (MAX - 1) + 1);
     console.error('closing %d connections', some);
-    for (var i=0; i < some; i++) { (waits.shift())(); }
+    for (var i = 0; i < some; i++) { (waits.shift())(); }
   } else {
     var cb;
     while (cb = waits.shift()) { cb(); }
