@@ -1713,7 +1713,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   // FIXME: This is a blocking function and should be called asynchronously!
   // This function should be moved to file.cc and use libeio to make this
   // system call.
-  //
+
   void *handle;
   if (snode) {
     handle = dlopen(NULL, RTLD_LAZY);
