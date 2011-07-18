@@ -59,6 +59,7 @@ struct uv_ares_data_s {
 static struct uv_ares_data_s ares_data;
 
 
+void uv__req_init(uv_req_t*);
 void uv__tcp_io(EV_P_ ev_io* watcher, int revents);
 void uv__next(EV_P_ ev_idle* watcher, int revents);
 static void uv__tcp_connect(uv_tcp_t*);
@@ -99,7 +100,6 @@ static void uv_fatal_error(const int errorno, const char* syscall) {
     fprintf(stderr, "\nlibuv fatal error. (%d) %s\n", errorno, errmsg);
   }
 
-  *((char*)NULL) = 0xff; /* Force debug break */
   abort();
 }
 
@@ -169,8 +169,8 @@ int uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
   switch (handle->type) {
     case UV_TCP:
       tcp = (uv_tcp_t*) handle;
+      uv_read_stop((uv_stream_t*)tcp);
       ev_io_stop(EV_DEFAULT_ &tcp->write_watcher);
-      ev_io_stop(EV_DEFAULT_ &tcp->read_watcher);
       break;
 
     case UV_PREPARE:
@@ -519,9 +519,9 @@ void uv__finish_close(uv_handle_t* handle) {
 }
 
 
-uv_req_t* uv_write_queue_head(uv_tcp_t* tcp) {
+uv_write_t* uv_write_queue_head(uv_tcp_t* tcp) {
   ngx_queue_t* q;
-  uv_req_t* req;
+  uv_write_t* req;
 
   if (ngx_queue_empty(&tcp->write_queue)) {
     return NULL;
@@ -532,7 +532,7 @@ uv_req_t* uv_write_queue_head(uv_tcp_t* tcp) {
     return NULL;
   }
 
-  req = ngx_queue_data(q, struct uv_req_s, queue);
+  req = ngx_queue_data(q, struct uv_write_s, queue);
   assert(req);
 
   return req;
@@ -553,8 +553,7 @@ void uv__next(EV_P_ ev_idle* watcher, int revents) {
 
 
 static void uv__drain(uv_tcp_t* tcp) {
-  uv_req_t* req;
-  uv_shutdown_cb cb;
+  uv_shutdown_t* req;
 
   assert(!uv_write_queue_head(tcp));
   assert(tcp->write_queue_size == 0);
@@ -568,16 +567,19 @@ static void uv__drain(uv_tcp_t* tcp) {
     assert(tcp->shutdown_req);
 
     req = tcp->shutdown_req;
-    cb = (uv_shutdown_cb)req->cb;
 
     if (shutdown(tcp->fd, SHUT_WR)) {
       /* Error. Report it. User should call uv_close(). */
       uv_err_new((uv_handle_t*)tcp, errno);
-      if (cb) cb(req, -1);
+      if (req->cb) {
+        req->cb(req, -1);
+      }
     } else {
       uv_err_new((uv_handle_t*)tcp, 0);
       uv_flag_set((uv_handle_t*)tcp, UV_SHUT);
-      if (cb) cb(req, 0);
+      if (req->cb) {
+        req->cb(req, 0);
+      }
     }
   }
 }
@@ -586,8 +588,8 @@ static void uv__drain(uv_tcp_t* tcp) {
 /* On success returns NULL. On error returns a pointer to the write request
  * which had the error.
  */
-static uv_req_t* uv__write(uv_tcp_t* tcp) {
-  uv_req_t* req;
+static uv_write_t* uv__write(uv_tcp_t* tcp) {
+  uv_write_t* req;
   struct iovec* iov;
   int iovcnt;
   ssize_t n;
@@ -603,7 +605,7 @@ static uv_req_t* uv__write(uv_tcp_t* tcp) {
     return NULL;
   }
 
-  assert(req->handle == (uv_handle_t*)tcp);
+  assert(req->handle == (uv_stream_t*)tcp);
 
   /* Cast to iovec. We had to have our own uv_buf_t instead of iovec
    * because Windows's WSABUF is not an iovec.
@@ -633,7 +635,7 @@ static uv_req_t* uv__write(uv_tcp_t* tcp) {
     /* Successful write */
 
     /* Update the counters. */
-    while (n > 0) {
+    while (n >= 0) {
       uv_buf_t* buf = &(req->bufs[req->write_index]);
       size_t len = buf->len;
 
@@ -692,23 +694,20 @@ static uv_req_t* uv__write(uv_tcp_t* tcp) {
 
 
 static void uv__write_callbacks(uv_tcp_t* tcp) {
-  uv_write_cb cb;
   int callbacks_made = 0;
   ngx_queue_t* q;
-  uv_req_t* req;
+  uv_write_t* req;
 
   while (!ngx_queue_empty(&tcp->write_completed_queue)) {
     /* Pop a req off write_completed_queue. */
     q = ngx_queue_head(&tcp->write_completed_queue);
     assert(q);
-    req = ngx_queue_data(q, struct uv_req_s, queue);
+    req = ngx_queue_data(q, struct uv_write_s, queue);
     ngx_queue_remove(q);
 
-    cb = (uv_write_cb) req->cb;
-
     /* NOTE: call callback AFTER freeing the request data. */
-    if (cb) {
-      cb(req, 0);
+    if (req->cb) {
+      req->cb(req, 0);
     }
 
     callbacks_made++;
@@ -773,10 +772,16 @@ void uv__read(uv_tcp_t* tcp) {
 }
 
 
-int uv_shutdown(uv_req_t* req) {
-  uv_tcp_t* tcp = (uv_tcp_t*)req->handle;
+int uv_shutdown(uv_shutdown_t* req, uv_stream_t* handle, uv_shutdown_cb cb) {
+  uv_tcp_t* tcp = (uv_tcp_t*)handle;
+  assert(handle->type == UV_TCP &&
+      "uv_shutdown (unix) only supports uv_tcp_t right now");
   assert(tcp->fd >= 0);
-  assert(tcp->type == UV_TCP);
+
+  /* Initialize request */
+  uv__req_init((uv_req_t*)req);
+  req->handle = handle;
+  req->cb = cb;
 
   if (uv_flag_is_set((uv_handle_t*)tcp, UV_SHUT) ||
       uv_flag_is_set((uv_handle_t*)tcp, UV_CLOSED) ||
@@ -797,11 +802,11 @@ int uv_shutdown(uv_req_t* req) {
 
 void uv__tcp_io(EV_P_ ev_io* watcher, int revents) {
   uv_tcp_t* tcp = watcher->data;
+
+  assert(tcp->type == UV_TCP);
   assert(watcher == &tcp->read_watcher ||
          watcher == &tcp->write_watcher);
-
   assert(tcp->fd >= 0);
-
   assert(!uv_flag_is_set((uv_handle_t*)tcp, UV_CLOSING));
 
   if (tcp->connect_req) {
@@ -812,13 +817,11 @@ void uv__tcp_io(EV_P_ ev_io* watcher, int revents) {
     }
 
     if (revents & EV_WRITE) {
-      uv_req_t* req = uv__write(tcp);
+      uv_write_t* req = uv__write(tcp);
       if (req) {
         /* Error. Notify the user. */
-        uv_write_cb cb = (uv_write_cb) req->cb;
-
-        if (cb) {
-          cb(req, -1);
+        if (req->cb) {
+          req->cb(req, -1);
         }
       } else {
         uv__write_callbacks(tcp);
@@ -835,13 +838,11 @@ void uv__tcp_io(EV_P_ ev_io* watcher, int revents) {
  */
 static void uv__tcp_connect(uv_tcp_t* tcp) {
   int error;
-  uv_req_t* req;
-  uv_connect_cb connect_cb;
+  uv_connect_t* req = tcp->connect_req;
   socklen_t errorsize = sizeof(int);
 
+  assert(tcp->type == UV_TCP);
   assert(tcp->fd >= 0);
-
-  req = tcp->connect_req;
   assert(req);
 
   if (tcp->delayed_error) {
@@ -861,9 +862,8 @@ static void uv__tcp_connect(uv_tcp_t* tcp) {
 
     /* Successful connection */
     tcp->connect_req = NULL;
-    connect_cb = (uv_connect_cb) req->cb;
-    if (connect_cb) {
-      connect_cb(req, 0);
+    if (req->cb) {
+      req->cb(req, 0);
     }
 
   } else if (error == EINPROGRESS) {
@@ -871,21 +871,18 @@ static void uv__tcp_connect(uv_tcp_t* tcp) {
     return;
   } else {
     /* Error */
-    uv_err_t err = uv_err_new((uv_handle_t*)tcp, error);
+    uv_err_new((uv_handle_t*)tcp, error);
 
     tcp->connect_req = NULL;
-
-    connect_cb = (uv_connect_cb) req->cb;
-    if (connect_cb) {
-      connect_cb(req, -1);
+    if (req->cb) {
+      req->cb(req, -1);
     }
   }
 }
 
 
-static int uv__connect(uv_req_t* req, struct sockaddr* addr,
-    socklen_t addrlen) {
-  uv_tcp_t* tcp = (uv_tcp_t*)req->handle;
+static int uv__connect(uv_connect_t* req, uv_tcp_t* tcp, struct sockaddr* addr,
+    socklen_t addrlen, uv_connect_cb cb) {
   int r;
 
   if (tcp->fd <= 0) {
@@ -902,6 +899,9 @@ static int uv__connect(uv_req_t* req, struct sockaddr* addr,
     }
   }
 
+  uv__req_init((uv_req_t*)req);
+  req->cb = cb;
+  req->handle = (uv_stream_t*)tcp;
   req->type = UV_CONNECT;
   ngx_queue_init(&req->queue);
 
@@ -948,17 +948,42 @@ static int uv__connect(uv_req_t* req, struct sockaddr* addr,
 }
 
 
-int uv_tcp_connect(uv_req_t* req, struct sockaddr_in addr) {
-  assert(addr.sin_family == AF_INET);
-  return uv__connect(req, (struct sockaddr*) &addr,
-      sizeof(struct sockaddr_in));
+int uv_tcp_connect(uv_connect_t* req, uv_tcp_t* handle,
+    struct sockaddr_in address, uv_connect_cb cb) {
+  assert(handle->type == UV_TCP);
+  assert(address.sin_family == AF_INET);
+  return uv__connect(req, handle, (struct sockaddr*) &address,
+      sizeof(struct sockaddr_in), cb);
 }
 
 
-int uv_tcp_connect6(uv_req_t* req, struct sockaddr_in6 addr) {
-  assert(addr.sin6_family == AF_INET6);
-  return uv__connect(req, (struct sockaddr*) &addr,
-      sizeof(struct sockaddr_in6));
+int uv_tcp_connect6(uv_connect_t* req, uv_tcp_t* handle,
+    struct sockaddr_in6 address, uv_connect_cb cb) {
+  assert(handle->type == UV_TCP);
+  assert(address.sin6_family == AF_INET6);
+  return uv__connect(req, handle, (struct sockaddr*) &address,
+      sizeof(struct sockaddr_in6), cb);
+}
+
+
+int uv_getsockname(uv_tcp_t* handle, struct sockaddr* name, int* namelen) {
+  socklen_t socklen;
+  int saved_errno;
+
+  /* Don't clobber errno. */
+  saved_errno = errno;
+
+  /* sizeof(socklen_t) != sizeof(int) on some systems. */
+  socklen = (socklen_t)*namelen;
+
+  if (getsockname(handle->fd, name, &socklen) == -1) {
+    uv_err_new((uv_handle_t*)handle, errno);
+  } else {
+    *namelen = (int)socklen;
+  }
+
+  errno = saved_errno;
+  return 0;
 }
 
 
@@ -977,9 +1002,21 @@ static size_t uv__buf_count(uv_buf_t bufs[], int bufcnt) {
 /* The buffers to be written must remain valid until the callback is called.
  * This is not required for the uv_buf_t array.
  */
-int uv_write(uv_req_t* req, uv_buf_t bufs[], int bufcnt) {
-  uv_tcp_t* tcp = (uv_tcp_t*)req->handle;
-  int empty_queue = (tcp->write_queue_size == 0);
+int uv_write(uv_write_t* req, uv_stream_t* handle, uv_buf_t bufs[], int bufcnt,
+    uv_write_cb cb) {
+  int empty_queue;
+  uv_tcp_t* tcp = (uv_tcp_t*)handle;
+
+  /* Initialize the req */
+  uv__req_init((uv_req_t*) req);
+  req->cb = cb;
+  req->handle = handle;
+  ngx_queue_init(&req->queue);
+
+  assert(handle->type == UV_TCP &&
+      "uv_write (unix) does not yet support other types of streams");
+
+  empty_queue = (tcp->write_queue_size == 0);
   assert(tcp->fd >= 0);
 
   ngx_queue_init(&req->queue);
@@ -996,7 +1033,9 @@ int uv_write(uv_req_t* req, uv_buf_t bufs[], int bufcnt) {
   memcpy(req->bufs, bufs, bufcnt * sizeof(uv_buf_t));
   req->bufcnt = bufcnt;
 
-  // fprintf(stderr, "cnt: %d bufs: %p bufsml: %p\n", bufcnt, req->bufs, req->bufsml);
+  /*
+   * fprintf(stderr, "cnt: %d bufs: %p bufsml: %p\n", bufcnt, req->bufs, req->bufsml);
+   */
 
   req->write_index = 0;
   tcp->write_queue_size += uv__buf_count(bufs, bufcnt);
@@ -1096,12 +1135,10 @@ int uv_read_stop(uv_stream_t* stream) {
 }
 
 
-void uv_req_init(uv_req_t* req, uv_handle_t* handle, void* cb) {
+void uv__req_init(uv_req_t* req) {
   uv_counters()->req_init++;
   req->type = UV_UNKNOWN_REQ;
-  req->cb = cb;
-  req->handle = handle;
-  ngx_queue_init(&req->queue);
+  req->data = NULL;
 }
 
 
@@ -1166,7 +1203,7 @@ static void uv__check(EV_P_ ev_check* w, int revents) {
 
 int uv_check_init(uv_check_t* check) {
   uv__handle_init((uv_handle_t*)check, UV_CHECK);
-  uv_counters()->check_init;
+  uv_counters()->check_init++;
 
   ev_check_init(&check->check_watcher, uv__check);
   check->check_watcher.data = check;
@@ -1303,6 +1340,7 @@ int uv_async_init(uv_async_t* async, uv_async_cb async_cb) {
 
 int uv_async_send(uv_async_t* async) {
   ev_async_send(EV_DEFAULT_UC_ &async->async_watcher);
+  return 0;
 }
 
 
@@ -1413,6 +1451,8 @@ static uv_ares_task_t* uv__ares_task_create(int fd) {
 
   h->read_watcher.data = h;
   h->write_watcher.data = h;
+
+  return h;
 }
 
 
@@ -1544,7 +1584,7 @@ static int getaddrinfo_thread_proc(eio_req *req) {
 
   handle->retcode = getaddrinfo(handle->hostname,
                                 handle->service,
-                                &handle->hints,
+                                handle->hints,
                                 &handle->res);
   return 0;
 }
@@ -1556,6 +1596,7 @@ int uv_getaddrinfo(uv_getaddrinfo_t* handle,
                    const char* hostname,
                    const char* service,
                    const struct addrinfo* hints) {
+  eio_req* req;
   uv_eio_init();
 
   if (handle == NULL || cb == NULL ||
@@ -1584,7 +1625,7 @@ int uv_getaddrinfo(uv_getaddrinfo_t* handle,
 
   uv_ref();
 
-  eio_req* req = eio_custom(getaddrinfo_thread_proc, EIO_PRI_DEFAULT,
+  req = eio_custom(getaddrinfo_thread_proc, EIO_PRI_DEFAULT,
       uv_getaddrinfo_done, handle);
   assert(req);
   assert(req->data == handle);
@@ -1592,3 +1633,23 @@ int uv_getaddrinfo(uv_getaddrinfo_t* handle,
   return 0;
 }
 
+
+int uv_pipe_init(uv_pipe_t* handle) {
+  assert(0 && "implement me");
+}
+
+
+int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
+  assert(0 && "implement me");
+}
+
+
+int uv_pipe_listen(uv_pipe_t* handle, uv_connection_cb cb) {
+  assert(0 && "implement me");
+}
+
+
+int uv_pipe_connect(uv_connect_t* req, uv_pipe_t* handle,
+    const char* name, uv_connect_cb cb) {
+  assert(0 && "implement me");
+}

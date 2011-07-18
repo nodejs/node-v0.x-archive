@@ -24,8 +24,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static char BUFFER[1024];
-
 static int connection_cb_called = 0;
 static int do_accept_called = 0;
 static int close_cb_called = 0;
@@ -52,8 +50,8 @@ static void close_cb(uv_handle_t* handle) {
 static void do_accept(uv_timer_t* timer_handle, int status) {
   uv_tcp_t* server;
   uv_tcp_t* accepted_handle = (uv_tcp_t*)malloc(sizeof *accepted_handle);
+  uint64_t tcpcnt;
   int r;
-  int tcpcnt;
 
   ASSERT(timer_handle != NULL);
   ASSERT(status == 0);
@@ -149,7 +147,7 @@ static void read_cb(uv_stream_t* tcp, ssize_t nread, uv_buf_t buf) {
 }
 
 
-static void connect_cb(uv_req_t* req, int status) {
+static void connect_cb(uv_connect_t* req, int status) {
   int r;
 
   ASSERT(req != NULL);
@@ -169,7 +167,7 @@ static void connect_cb(uv_req_t* req, int status) {
 static void client_connect() {
   struct sockaddr_in addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
   uv_tcp_t* client = (uv_tcp_t*)malloc(sizeof *client);
-  uv_req_t* connect_req = (uv_req_t*)malloc(sizeof *connect_req);
+  uv_connect_t* connect_req = malloc(sizeof *connect_req);
   int r;
 
   ASSERT(client != NULL);
@@ -178,8 +176,7 @@ static void client_connect() {
   r = uv_tcp_init(client);
   ASSERT(r == 0);
 
-  uv_req_init(connect_req, (uv_handle_t*)client, connect_cb);
-  r = uv_tcp_connect(connect_req, addr);
+  r = uv_tcp_connect(connect_req, client, addr, connect_cb);
   ASSERT(r == 0);
 }
 

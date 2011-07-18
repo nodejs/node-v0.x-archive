@@ -31,6 +31,8 @@
 
 #include "tree.h"
 
+#define MAX_PIPENAME_LEN 256
+
 /**
  * It should be possible to cast uv_buf_t[] to WSABUF[]
  * see http://msdn.microsoft.com/en-us/library/ms741542(v=vs.85).aspx
@@ -48,34 +50,63 @@ typedef struct uv_buf_t {
       size_t queued_bytes;                \
     };                                    \
   };                                      \
-  int flags;                              \
   uv_err_t error;                         \
   struct uv_req_s* next_req;
 
+#define UV_WRITE_PRIVATE_FIELDS           \
+  /* empty */
+
+#define UV_CONNECT_PRIVATE_FIELDS         \
+  /* empty */
+
+#define UV_SHUTDOWN_PRIVATE_FIELDS        \
+  /* empty */
+
+#define UV_PRIVATE_REQ_TYPES              \
+  typedef struct uv_pipe_accept_s {       \
+    UV_REQ_FIELDS                         \
+    HANDLE pipeHandle;                    \
+    struct uv_pipe_accept_s* next_pending; \
+  } uv_pipe_accept_t;
+
+#define uv_stream_connection_fields       \
+  unsigned int write_reqs_pending;        \
+  uv_shutdown_t* shutdown_req;
+
+#define uv_stream_server_fields           \
+  uv_connection_cb connection_cb;
+
 #define UV_STREAM_PRIVATE_FIELDS          \
+  unsigned int reqs_pending;              \
   uv_alloc_cb alloc_cb;                   \
   uv_read_cb read_cb;                     \
-  struct uv_req_s read_req;               \
-  
-#define uv_tcp_connection_fields          \
-  unsigned int write_reqs_pending;        \
-  uv_req_t* shutdown_req;
-
-#define uv_tcp_server_fields              \
-  uv_connection_cb connection_cb;         \
-  SOCKET accept_socket;                   \
-  struct uv_req_s accept_req;             \
-  char accept_buffer[sizeof(struct sockaddr_storage) * 2 + 32];
+  uv_req_t read_req;                      \
+  union {                                 \
+    struct { uv_stream_connection_fields };  \
+    struct { uv_stream_server_fields     };  \
+  };
 
 #define UV_TCP_PRIVATE_FIELDS             \
-  unsigned int reqs_pending;              \
   union {                                 \
     SOCKET socket;                        \
     HANDLE handle;                        \
   };                                      \
+  SOCKET accept_socket;                   \
+  char accept_buffer[sizeof(struct sockaddr_storage) * 2 + 32]; \
+  struct uv_req_s accept_req;             \
+
+#define uv_pipe_server_fields             \
+    char* name;                           \
+    uv_pipe_accept_t accept_reqs[4];      \
+    uv_pipe_accept_t* pending_accepts;
+
+#define uv_pipe_connection_fields         \
+  HANDLE handle;
+
+#define UV_PIPE_PRIVATE_FIELDS            \
   union {                                 \
-    struct { uv_tcp_connection_fields };  \
-    struct { uv_tcp_server_fields     };  \
+    struct { uv_pipe_server_fields };     \
+    struct { uv_pipe_connection_fields }; \
   };
 
 #define UV_TIMER_PRIVATE_FIELDS           \
@@ -86,6 +117,7 @@ typedef struct uv_buf_t {
 
 #define UV_ASYNC_PRIVATE_FIELDS           \
   struct uv_req_s async_req;              \
+  uv_async_cb async_cb;                   \
   /* char to avoid alignment issues */    \
   char volatile async_sent;
 

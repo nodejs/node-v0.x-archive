@@ -19,11 +19,27 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var path = require('path');
+require('../common');
+var assert = require('assert');
+var exec = require('child_process').exec;
 
-require.paths.unshift(path.join(__dirname, '../p2'));
+var success_count = 0;
+var error_count = 0;
 
-exports.foo = require('foo');
+var cmd = [process.execPath, '-e', '"process.argv"', 'foo', 'bar'].join(' ');
+var expected = "[ '" + process.execPath + "',\n  'foo',\n  'bar' ]\n";
+var child = exec(cmd, function(err, stdout, stderr) {
+  if (err) {
+    console.log(err.toString());
+    ++error_count;
+    return;
+  }
+  assert.equal(stdout, expected);
+  ++success_count;
+});
 
-exports.expect = require(path.join(__dirname, '../p2/bar'));
-exports.actual = exports.foo.bar;
+process.addListener('exit', function() {
+  assert.equal(1, success_count);
+  assert.equal(0, error_count);
+});
+

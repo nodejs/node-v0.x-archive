@@ -19,5 +19,34 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-require.paths.unshift(__dirname);
-exports.bar = require('bar'); // surprise! this is not /p2/bar, this is /p1/bar
+if (!process.versions.openssl) {
+  console.error("Skipping because node compiled without OpenSSL.");
+  process.exit(0);
+}
+
+var common = require('../common');
+var assert = require('assert');
+var fs = require('fs');
+var tls = require('tls');
+var path = require('path');
+
+(function() {
+  var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
+  var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+
+  var errorEmitted = false;
+
+  process.on('exit', function() {
+    assert.ok(!errorEmitted);
+  });
+
+  var conn = tls.connect(common.PORT, {cert:cert, key:key}, function() {
+    assert.ok(false); // callback should never be executed
+  });
+  conn.destroy();
+
+  conn.on('error', function() {
+    errorEmitted = true;
+  });
+})();
+
