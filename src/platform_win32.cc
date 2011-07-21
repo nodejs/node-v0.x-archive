@@ -29,10 +29,45 @@
 #include <stdlib.h>
 #include <sys/param.h> // for MAXPATHLEN
 #include <unistd.h> // getpagesize
+#include <cpuid.h> // __get_cpuid
+#include <powrprof.h>
 
 #include <platform_win32.h>
 
 #include <platform_win32_winsock.cc>
+
+typedef struct _PROCESSOR_POWER_INFORMATION {
+  ULONG Number;
+  ULONG MaxMhz;
+  ULONG CurrentMhz;
+  ULONG MhzLimit;
+  ULONG MaxIdleState;
+  ULONG CurrentIdleState;
+} PROCESSOR_POWER_INFORMATION, *PPROCESSOR_POWER_INFORMATION;
+
+typedef struct _SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION {
+  LARGE_INTEGER IdleTime;
+  LARGE_INTEGER KernelTime;
+  LARGE_INTEGER UserTime;
+  LARGE_INTEGER DpcTime;
+  LARGE_INTEGER InterruptTime;
+  ULONG InterruptCount;
+} SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION,
+  *PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION;
+
+#define SystemProcessorPerformanceInformation 0x08
+
+typedef ULONG (__stdcall *NT_QUERY_SYSTEM_INFORMATION)(
+  ULONG SystemInformationClass,
+  PVOID SystemInformation,
+  ULONG SystemInformationLength,
+  PULONG ReturnLength
+);
+
+NT_QUERY_SYSTEM_INFORMATION NtQuerySystemInformation =
+  (NT_QUERY_SYSTEM_INFORMATION)GetProcAddress(GetModuleHandle("ntdll.dll"),
+   "NtQuerySystemInformation");
+
 
 namespace node {
 
@@ -223,21 +258,99 @@ int Platform::GetMemory(size_t *rss, size_t *vsize) {
 
 
 double Platform::GetFreeMemory() {
-  return -1;
+  MEMORYSTATUSEX status;
+  status.dwLength = sizeof(status);
+  GlobalMemoryStatusEx(&status);
+  return static_cast<double>(status.ullAvailPhys);
 }
 
 double Platform::GetTotalMemory() {
-  return -1;
+  MEMORYSTATUSEX status;
+  status.dwLength = sizeof(status);
+  GlobalMemoryStatusEx(&status);
+  return static_cast<double>(status.ullTotalPhys);  
 }
 
 
 int Platform::GetCPUInfo(Local<Array> *cpus) {
-  return -1;
+  HandleScope scope;
+  Local<Object> cpuinfo;
+  Local<Object> cputimes;
+  unsigned int i = 0, numcpus, j, max_ext_funcs;
+  unsigned int regs[4];
+  char CPUName[64];
+  char CPUVendor[32];
+  SYSTEM_INFO si;
+
+  memset(CPUVendor, 0, sizeof(CPUVendor));
+  __get_cpuid(0, &regs[0], &regs[1], &regs[2], &regs[3]);
+  *((int*)CPUVendor) = regs[1];
+  *((int*)(CPUVendor+4)) = regs[3];
+  *((int*)(CPUVendor+8)) = regs[2];
+
+  memset(CPUName, 0, sizeof(CPUName));
+  __get_cpuid(0x80000000, &regs[0], &regs[1], &regs[2], &regs[3]);
+  max_ext_funcs = regs[0];
+  if (max_ext_funcs >= 0x80000004) {
+    for (j = 0x80000002; j <= 0x80000004; ++j) {
+      __get_cpuid(j, &regs[0], &regs[1], &regs[2], &regs[3]);
+      if  (j == 0x80000002)
+        memcpy(CPUName, regs, sizeof(regs));
+      else if  (j == 0x80000003)
+        memcpy(CPUName + 16, regs, sizeof(regs));
+      else if  (j == 0x80000004)
+        memcpy(CPUName + 32, regs, sizeof(regs));
+    }
+  }
+
+  GetSystemInfo(&si);
+  unsigned int mask = static_cast<unsigned int>(si.dwActiveProcessorMask);
+  for (numcpus = 0; mask; ++numcpus)
+    mask &= mask - 1;
+
+  PROCESSOR_POWER_INFORMATION ppi[numcpus];
+  if (CallNtPowerInformation(ProcessorInformation, NULL, 0, &ppi,
+      sizeof(PROCESSOR_POWER_INFORMATION) * numcpus) != ERROR_SUCCESS)
+    return -1;
+
+  SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION srpi[numcpus];
+  DWORD returnLength = 0;
+  if (NtQuerySystemInformation(SystemProcessorPerformanceInformation, &srpi,
+      sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION) * numcpus,
+      &returnLength ) != ERROR_SUCCESS)
+    return -1;
+
+  *cpus = Array::New(numcpus);
+  for (i = 0; i < numcpus; ++i) {
+    cpuinfo = Object::New();
+    cputimes = Object::New();
+    cputimes->Set(String::New("user"), Number::New(srpi[i].UserTime.QuadPart
+                                                   / 100000L));
+    cputimes->Set(String::New("nice"), Number::New(0));
+    // According to: http://www.netperf.org/svn/netperf2/trunk/src/netcpu_ntperf.c
+    // KernelTime in Windows includes both actual kernel time AND idle time
+    cputimes->Set(String::New("sys"), Number::New((srpi[i].KernelTime.QuadPart
+                                                   - srpi[i].IdleTime.QuadPart)
+                                                  / 100000L));
+    cputimes->Set(String::New("idle"), Number::New(srpi[i].IdleTime.QuadPart
+                                                   / 100000L));
+    cputimes->Set(String::New("irq"), Number::New(srpi[i].InterruptTime.QuadPart
+                                                  / 100000L));
+
+    cpuinfo->Set(String::New("model"), String::New(CPUName));
+    cpuinfo->Set(String::New("speed"), Number::New(ppi[i].CurrentMhz));
+    cpuinfo->Set(String::New("times"), cputimes);
+    (*cpus)->Set(i, cpuinfo);
+  }
+  return 0;
 }
 
 
 double Platform::GetUptimeImpl() {
-  return -1;
+  __int64 qpcnt, qpfreq;
+  QueryPerformanceFrequency((LARGE_INTEGER *)&qpfreq);
+  QueryPerformanceCounter((LARGE_INTEGER *)&qpcnt);
+  return static_cast<double>(qpcnt/((LARGE_INTEGER *)&qpfreq)->QuadPart);
 }
 
 int Platform::GetLoadAvg(Local<Array> *loads) {
