@@ -28,20 +28,23 @@ var fs = require('fs');
 var filename = path.join(common.fixturesDir, 'watch.txt');
 fs.writeFileSync(filename, "hello");
 
-try {
-  fs.watchFile(filename);
-} catch (e) {
-  assert.equal(e.message, 'watchFile requires a listener function');
-}
+assert.throws(
+  function() {
+    fs.watchFile(filename);
+  },
+  function(e) {
+    return e.message === 'watchFile requires a listener function';
+  }
+);
 
-try {
-  fs.watchFile(filename, function(curr, prev) {
-    fs.unwatchFile(filename);
-    fs.unlinkSync(filename);
-  });
-} catch (e) {
-  assert.ok(false);
-}
+assert.doesNotThrow(
+  function() {
+    fs.watchFile(filename, function(curr, prev) {
+      fs.unwatchFile(filename);
+      fs.unlinkSync(filename);
+    });
+  }
+);
 
 setTimeout(function() {
   fs.writeFileSync(filename, "world");
