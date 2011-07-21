@@ -62,7 +62,6 @@ extern "C" {
 # include <node_io_watcher.h>
 #endif
 #include <node_net.h>
-#include <node_events.h>
 #include <node_cares.h>
 #include <node_file.h>
 #include <node_http_parser.h>
@@ -158,8 +157,8 @@ static uv_timer_t gc_timer;
 bool need_gc;
 
 
-#define FAST_TICK 0.7
-#define GC_WAIT_TIME 5.
+#define FAST_TICK 700.
+#define GC_WAIT_TIME 5000.
 #define RPM_SAMPLES 100
 #define TICK_TIME(n) tick_times[(tick_time_head - (n)) % RPM_SAMPLES]
 static int64_t tick_times[RPM_SAMPLES];
@@ -169,7 +168,7 @@ static void CheckStatus(uv_timer_t* watcher, int status);
 
 static void StartGCTimer () {
   if (!uv_is_active((uv_handle_t*) &gc_timer)) {
-    uv_timer_start(&node::gc_timer, node::CheckStatus, 5., 5.);
+    uv_timer_start(&node::gc_timer, node::CheckStatus, 5000., 5000.);
   }
 }
 
@@ -181,8 +180,6 @@ static void StopGCTimer () {
 
 static void Idle(uv_idle_t* watcher, int status) {
   assert((uv_idle_t*) watcher == &gc_idle);
-
-  //fprintf(stderr, "idle\n");
 
   if (V8::IdleNotification()) {
     uv_idle_stop(&gc_idle);
@@ -2022,7 +2019,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   int i, j;
 
   Local<FunctionTemplate> process_template = FunctionTemplate::New();
-  node::EventEmitter::Initialize(process_template);
 
   process = Persistent<Object>::New(process_template->GetFunction()->NewInstance());
 
@@ -2115,7 +2111,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   size_t size = 2*PATH_MAX;
   char execPath[size];
-  if (Platform::GetExecutablePath(execPath, &size) != 0) {
+  if (uv_exepath(execPath, &size) != 0) {
     // as a last ditch effort, fallback on argv[0] ?
     process->Set(String::NewSymbol("execPath"), String::New(argv[0]));
   } else {
@@ -2146,10 +2142,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "memoryUsage", MemoryUsage);
 
   NODE_SET_METHOD(process, "binding", Binding);
-
-  // Assign the EventEmitter. It was created in main().
-  process->Set(String::NewSymbol("EventEmitter"),
-               EventEmitter::constructor_template->GetFunction());
 
   return process;
 }
@@ -2241,11 +2233,12 @@ static void ParseDebugOpt(const char* arg) {
 }
 
 static void PrintHelp() {
-  printf("Usage: node [options] script.js [arguments] \n"
-         "       node debug script.js [arguments] \n"
+  printf("Usage: node [options] [ -e script | script.js ] [arguments] \n"
+         "       node debug [ -e script | script.js ] [arguments] \n"
          "\n"
          "Options:\n"
          "  -v, --version        print node's version\n"
+         "  -e, --eval script    evaluate script\n"
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"

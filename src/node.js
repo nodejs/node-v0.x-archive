@@ -27,9 +27,15 @@
 (function(process) {
   global = this;
 
+  var EventEmitter;
+
   function startup() {
 
     if (process.env.NODE_USE_UV == '1') process.useUV = true;
+
+    EventEmitter = NativeModule.require('events').EventEmitter;
+    process.__proto__ = EventEmitter.prototype;
+    process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
     startup.globalVariables();
     startup.globalTimeouts();
@@ -65,6 +71,18 @@
       var d = NativeModule.require('_debugger');
       d.start();
 
+    } else if (process._eval != null) {
+      // User passed '-e' or '--eval' arguments to Node.
+      var Module = NativeModule.require('module');
+      var path = NativeModule.require('path');
+      var cwd = process.cwd();
+
+      var module = new Module('eval');
+      module.filename = path.join(cwd, 'eval');
+      module.paths = Module._nodeModulePaths(cwd);
+      var rv = module._compile('return eval(process._eval)', 'eval');
+      console.log(rv);
+
     } else if (process.argv[1]) {
       // make process.argv[1] into a full path
       if (!(/^http:\/\//).exec(process.argv[1])) {
@@ -77,18 +95,6 @@
       // test/simple/test-exception-handler2.js working.
       // Main entry point into most programs:
       process.nextTick(Module.runMain);
-
-    } else if (process._eval != null) {
-      // User passed '-e' or '--eval' arguments to Node.
-      var Module = NativeModule.require('module');
-      var path = NativeModule.require('path');
-      var cwd = process.cwd();
-
-      var module = new Module('eval');
-      module.filename = path.join(cwd, 'eval');
-      module.paths = Module._nodeModulePaths(cwd);
-      var rv = module._compile('return eval(process._eval)', 'eval');
-      console.log(rv);
 
     } else {
       var binding = process.binding('stdio');
@@ -202,7 +208,7 @@
     var binding = process.binding('stdio'),
         // FIXME Remove conditional when net is supported again on windows.
         net = (process.platform !== "win32")
-              ? NativeModule.require('net')
+              ? NativeModule.require('net_legacy') // fixme!
               : undefined,
         fs = NativeModule.require('fs'),
         tty = NativeModule.require('tty');
@@ -226,8 +232,7 @@
 
     // process.stderr
 
-    var events = NativeModule.require('events');
-    var stderr = process.stderr = new events.EventEmitter();
+    var stderr = process.stderr = new EventEmitter();
     stderr.writable = true;
     stderr.readable = false;
     stderr.write = process.binding('stdio').writeError;
@@ -276,7 +281,6 @@
   startup.processSignalHandlers = function() {
     // Load events module in order to access prototype elements on process like
     // process.addListener.
-    var events = NativeModule.require('events');
     var signalWatchers = {};
     var addListener = process.addListener;
     var removeListener = process.removeListener;

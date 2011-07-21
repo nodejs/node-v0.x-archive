@@ -143,14 +143,13 @@ require.extensions['.test'] = function(module, filename) {
 };
 
 assert.equal(require('../fixtures/registerExt2').custom, 'passed');
-common.debug('load modules by absolute id, then change require.paths, ' +
-             'and load another module with the same absolute id.');
-// this will throw if it fails.
-var foo = require('../fixtures/require-path/p1/foo');
-assert.ok(foo.bar.expect === foo.bar.actual);
 
 assert.equal(require('../fixtures/foo').foo, 'ok',
              'require module with no extension');
+
+assert.throws(function() {
+  require.paths;
+}, /removed/, 'Accessing require.paths should throw.');
 
 // Should not attempt to load a directory
 try {
@@ -205,6 +204,20 @@ assert.equal(amdObj.ok, amdreg.ok, 'amd object literal failed');
 
 var amdExtraArgs = require(amdFolder + '/extra-args.js');
 assert.equal(amdExtraArgs.ok, amdreg.ok, 'amd extra args failed');
+
+
+// make sure that module.require() is the same as
+// doing require() inside of that module.
+var parent = require('../fixtures/module-require/parent/');
+var child = require('../fixtures/module-require/child/');
+assert.equal(child.loaded, parent.loaded);
+
+
+// #1357 Loading JSON files with require()
+var json = require('../fixtures/packages/main/package.json');
+assert.deepEqual(json, { name: 'package-name',
+                         version: '1.2.3',
+                         main: 'package-main-module' });
 
 
 process.addListener('exit', function() {

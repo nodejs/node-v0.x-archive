@@ -41,13 +41,21 @@ typedef struct {
 
 #define UV_REQ_BUFSML_SIZE (4)
 
-#define UV_REQ_PRIVATE_FIELDS \
-  int write_index; \
-  ev_timer timer; \
+#define UV_REQ_PRIVATE_FIELDS  /* empty */
+
+#define UV_WRITE_PRIVATE_FIELDS \
   ngx_queue_t queue; \
+  int write_index; \
   uv_buf_t* bufs; \
   int bufcnt; \
   uv_buf_t bufsml[UV_REQ_BUFSML_SIZE];
+
+#define UV_SHUTDOWN_PRIVATE_FIELDS /* empty */
+
+#define UV_CONNECT_PRIVATE_FIELDS \
+  ngx_queue_t queue;
+
+#define UV_PRIVATE_REQ_TYPES /* empty */
 
 
 /* TODO: union or classes please! */
@@ -59,20 +67,27 @@ typedef struct {
 
 #define UV_STREAM_PRIVATE_FIELDS \
   uv_read_cb read_cb; \
-  uv_alloc_cb alloc_cb;
-
-
-/* UV_TCP */
-#define UV_TCP_PRIVATE_FIELDS \
-  int delayed_error; \
-  uv_connection_cb connection_cb; \
-  int accepted_fd; \
-  uv_req_t *connect_req; \
-  uv_req_t *shutdown_req; \
+  uv_alloc_cb alloc_cb; \
+  uv_connect_t *connect_req; \
+  uv_shutdown_t *shutdown_req; \
   ev_io read_watcher; \
   ev_io write_watcher; \
   ngx_queue_t write_queue; \
-  ngx_queue_t write_completed_queue;
+  ngx_queue_t write_completed_queue; \
+  int delayed_error; \
+  uv_connection_cb connection_cb; \
+  int accepted_fd;
+
+
+/* UV_TCP */
+#define UV_TCP_PRIVATE_FIELDS
+
+
+/* UV_NAMED_PIPE */
+#define UV_PIPE_PRIVATE_TYPEDEF
+#define UV_PIPE_PRIVATE_FIELDS \
+  UV_TCP_PRIVATE_FIELDS \
+  const char* pipe_fname; /* strdup'ed */ \
 
 
 /* UV_PREPARE */ \
