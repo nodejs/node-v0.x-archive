@@ -31,7 +31,7 @@
 // http://src.chromium.org/viewvc/chrome/trunk/src/base/mac_util.mm
 
 #include <CoreFoundation/CoreFoundation.h>
-#include <Carbon/Carbon.h> // Oh noes! See discussion blow at GetCurrentProcess
+#include <Carbon/Carbon.h>  // Oh noes! See discussion blow at GetCurrentProcess
 #ifndef NDEBUG
   #include <err.h>
 #endif
@@ -39,7 +39,7 @@
 namespace node {
 
 void Platform::SetProcessTitle(char *title) {
-  static int symbol_lookup_status = 0; // 1=ok, 2=unavailable
+  static int symbol_lookup_status = 0;  // 1=ok, 2=unavailable
   if (symbol_lookup_status == 2) {
     // feature is unavailable
     return;
@@ -123,7 +123,7 @@ void Platform::SetProcessTitle(char *title) {
     // the ports are opened.
     ProcessSerialNumber psn;
     GetCurrentProcess(&psn);
-    symbol_lookup_status = 1; // 1=ok
+    symbol_lookup_status = 1;  // 1=ok
   }
 
   PrivateLSASN asn = ls_get_current_application_asn_func();
