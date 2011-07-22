@@ -279,14 +279,7 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
   unsigned int i = 0, numcpus, j, max_ext_funcs;
   unsigned int regs[4];
   char CPUName[64];
-  char CPUVendor[32];
   SYSTEM_INFO si;
-
-  memset(CPUVendor, 0, sizeof(CPUVendor));
-  __get_cpuid(0, &regs[0], &regs[1], &regs[2], &regs[3]);
-  *((int*)CPUVendor) = regs[1];
-  *((int*)(CPUVendor+4)) = regs[3];
-  *((int*)(CPUVendor+8)) = regs[2];
 
   memset(CPUName, 0, sizeof(CPUName));
   __get_cpuid(0x80000000, &regs[0], &regs[1], &regs[2], &regs[3]);
