@@ -1548,6 +1548,26 @@ static Handle<Value> SetUid(const Arguments& args) {
   return Undefined();
 }
 
+static Handle<Value> Chroot(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 1) {
+    return ThrowException(Exception::Error(
+          String::New("chroot requires 1 argument")));
+  }
+
+  String::Utf8Value directory(args[0]->ToString());
+  int result;
+
+
+  if ((result = chroot(*directory)) != 0) {
+    return ThrowException(ErrnoException(errno, "chroot"));
+  }
+
+  chdir("/");
+  return Undefined();
+}
+
 #endif // __POSIX__
 
 
@@ -2136,6 +2156,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "umask", Umask);
   NODE_SET_METHOD(process, "dlopen", DLOpen);
   NODE_SET_METHOD(process, "_kill", Kill);
+
+  NODE_SET_METHOD(process, "chroot", Chroot);
 #endif // __POSIX__
 
   NODE_SET_METHOD(process, "uptime", Uptime);
