@@ -50,6 +50,12 @@ to the user to test `s.authorized` to see if the server certificate was
 signed by one of the specified CAs. If `s.authorized === false` then the error
 can be found in `s.authorizationError`.
 
+### s = tls.start(socket, [options], callback)
+
+Similar to `tls.connect()`, but performs a TLS/SSL handshake over an
+existing socket. The caller should take care to remove any `data`
+listeners before calling this method and add data listeners to the
+cleartext `CryptoStream` object upon authorization.
 
 ### STARTTLS
 
