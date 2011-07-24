@@ -38,6 +38,14 @@
 #include <node_buffer.h>
 #endif
 
+// TLS-PSK support requires OpenSSL v1.0.0 or later built with PSK enabled
+#if OPENSSL_VERSION_NUMBER >= 0x10000000L
+#ifndef OPENSSL_NO_PSK
+#define OPENSSL_PSK_SUPPORT
+#endif
+#endif
+
+
 #define EVP_F_EVP_DECRYPTFINAL 101
 
 
@@ -93,6 +101,15 @@ class SecureContext : ObjectWrap {
   }
 
  private:
+
+#ifdef OPENSSL_PSK_SUPPORT
+  v8::Persistent<v8::Function> psk_server_cb_;
+  static v8::Handle<v8::Value> SetPskHint(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetPskServerCallback(const v8::Arguments& args);
+  static unsigned int PskServerCallback_(SSL *ssl, const char *identity,
+               unsigned char *psk, unsigned int max_psk_len);
+#endif
+
 };
 
 class Connection : ObjectWrap {
@@ -165,6 +182,15 @@ class Connection : ObjectWrap {
   SSL *ssl_;
   
   bool is_server_; /* coverity[member_decl] */
+
+#ifdef OPENSSL_PSK_SUPPORT
+  static v8::Handle<v8::Value> SetPskClientCallback(const v8::Arguments& args);
+  static unsigned int PskClientCallback_(SSL *ssl, const char *hint,
+                                         char *identity, unsigned int max_identity_len,
+                                         unsigned char *psk, unsigned int max_psk_len);
+  v8::Persistent<v8::Function> psk_client_cb_;
+#endif
+
 };
 
 void InitCrypto(v8::Handle<v8::Object> target);
