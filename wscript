@@ -493,6 +493,7 @@ def configure(conf):
   if sys.platform.startswith("win32"):
     conf.env.append_value('LIB', 'ws2_32')
     conf.env.append_value('LIB', 'winmm')
+    conf.env.append_value('LIB', 'powrprof');
 
   conf.env.append_value('CPPFLAGS', '-Wno-unused-parameter');
   conf.env.append_value('CPPFLAGS', '-D_FORTIFY_SOURCE=2');
