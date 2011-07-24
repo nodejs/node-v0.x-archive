@@ -28,7 +28,8 @@
 
 #include <string.h>
 #include <stdlib.h>
-
+#include <zlib.h>
+#include <arpa/inet.h>
 #include <errno.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
@@ -2497,6 +2498,8 @@ class Hmac : public ObjectWrap {
 
   HMAC_CTX ctx; /* coverity[member_decl] */
   const EVP_MD *md; /* coverity[member_decl] */
+
+  uLong crc32;
   bool initialised_;
 };
 
@@ -2517,6 +2520,15 @@ class Hash : public ObjectWrap {
   }
 
   bool HashInit (const char* hashType) {
+
+    if(strcmp(hashType, "crc32") == 0) {
+      crc32_ = 0;
+      initialised_ = true;
+      is_crc32_ = true;
+      return true;
+    }
+    is_crc32_ = false;
+
     md = EVP_get_digestbyname(hashType);
     if(!md) {
       fprintf(stderr, "node-crypto : Unknown message digest %s\n", hashType);
@@ -2530,6 +2542,11 @@ class Hash : public ObjectWrap {
 
   int HashUpdate(char* data, int len) {
     if (!initialised_) return 0;
+
+    if(is_crc32_) {
+      crc32_ = crc32(crc32_, (const Bytef*)data, len);
+      return 1;
+    } 
     EVP_DigestUpdate(&mdctx, data, len);
     return 1;
   }
@@ -2604,42 +2621,75 @@ class Hash : public ObjectWrap {
     unsigned char md_value[EVP_MAX_MD_SIZE];
     unsigned int md_len;
 
-    EVP_DigestFinal_ex(&hash->mdctx, md_value, &md_len);
-    EVP_MD_CTX_cleanup(&hash->mdctx);
+    Local<Value> outString;
+
+
+    if(!hash->is_crc32_) {
+      EVP_DigestFinal_ex(&hash->mdctx, md_value, &md_len);
+      EVP_MD_CTX_cleanup(&hash->mdctx);
+
+      if (md_len == 0) {
+	return scope.Close(String::New(""));
+      }
+    } 
     hash->initialised_ = false;
 
-    if (md_len == 0) {
-      return scope.Close(String::New(""));
-    }
 
-    Local<Value> outString;
 
     if (args.Length() == 0 || !args[0]->IsString()) {
       // Binary
-      outString = Encode(md_value, md_len, BINARY);
+
+      if(hash->is_crc32_) {
+	outString = Encode(&hash->crc32_, 4, BINARY);
+      } else {
+	outString = Encode(md_value, md_len, BINARY);
+      }
     } else {
       String::Utf8Value encoding(args[0]->ToString());
       if (strcasecmp(*encoding, "hex") == 0) {
         // Hex encoding
         char* md_hexdigest;
         int md_hex_len;
-        HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
+
+	if(hash->is_crc32_) {
+	  hash->crc32_ = htonl(hash->crc32_);
+	  HexEncode((unsigned char *)&hash->crc32_, 4, &md_hexdigest, &md_hex_len);
+	} else {
+	  HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
+	}
         outString = Encode(md_hexdigest, md_hex_len, BINARY);
         delete [] md_hexdigest;
+
+      } else if (strcasecmp(*encoding, "decimal") == 0) {
+	if(hash->is_crc32_) {
+	  return scope.Close(Integer::NewFromUnsigned(hash->crc32_));
+	} else {
+	  return ThrowException(Exception::Error(String::New("Cannot express as an integer")));
+	}
       } else if (strcasecmp(*encoding, "base64") == 0) {
         char* md_hexdigest;
         int md_hex_len;
-        base64(md_value, md_len, &md_hexdigest, &md_hex_len);
+	if(hash->is_crc32_) {
+	  base64((unsigned char *)&hash->crc32_, 4, &md_hexdigest, &md_hex_len);
+	} else {
+	  base64(md_value, md_len, &md_hexdigest, &md_hex_len);
+	}
         outString = Encode(md_hexdigest, md_hex_len, BINARY);
         delete [] md_hexdigest;
       } else if (strcasecmp(*encoding, "binary") == 0) {
-        outString = Encode(md_value, md_len, BINARY);
+
+	if(hash->is_crc32_) {
+	  outString = Encode(&hash->crc32_, 4, BINARY);
+	} else {
+	  outString = Encode(md_value, md_len, BINARY);
+	}
+
       } else {
         fprintf(stderr, "node-crypto : Hash .digest encoding "
                         "can be binary, hex or base64\n");
       }
     }
-
+    
     return scope.Close(outString);
   }
 
@@ -2658,6 +2708,8 @@ class Hash : public ObjectWrap {
   EVP_MD_CTX mdctx; /* coverity[member_decl] */
   const EVP_MD *md; /* coverity[member_decl] */
   bool initialised_;
+  bool is_crc32_;
+  uint32_t crc32_;
 };
 
 class Sign : public ObjectWrap {

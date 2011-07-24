@@ -26,7 +26,7 @@ Creates and returns a hash object, a cryptographic hash with the given algorithm
 which can be used to generate hash digests.
 
 `algorithm` is dependent on the available algorithms supported by the version
-of OpenSSL on the platform. Examples are `'sha1'`, `'md5'`, `'sha256'`, `'sha512'`, etc.
+of OpenSSL on the platform. Examples are `'sha1'`, `'md5'`, `'sha256'`, `'sha512'`, `'crc32'` etc.
 On recent releases, `openssl list-message-digest-algorithms` will display the available digest algorithms.
 
 Example: this program that takes the sha1 sum of a file
@@ -55,8 +55,9 @@ This can be called many times with new data as it is streamed.
 ### hash.digest(encoding='binary')
 
 Calculates the digest of all of the passed data to be hashed.
-The `encoding` can be `'hex'`, `'binary'` or `'base64'`.
+The `encoding` can be `'hex'`, `'binary'` or `'base64'` or `'decimal'`.
 
+Only `'crc32'` digests currently can be expressed in `'decimal'`.
 
 ### crypto.createHmac(algorithm, key)
 
