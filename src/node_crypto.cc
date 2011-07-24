@@ -2386,15 +2386,25 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* buf = new char[len];
-    ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
-    assert(written == len);
-
+    bool r;
     String::Utf8Value hashType(args[0]->ToString());
 
-    bool r = hmac->HmacInit(*hashType, buf, len);
+    if( Buffer::HasInstance(args[1])) {
+      Local<Object> buffer_obj = args[1]->ToObject();
+      char *buffer_data = Buffer::Data(buffer_obj);
+      size_t buffer_length = Buffer::Length(buffer_obj);
 
-    delete [] buf;
+      r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
+    } else {
+      char* buf = new char[len];
+      ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
+      assert(written == len);
+
+
+      r = hmac->HmacInit(*hashType, buf, len);
+
+      delete [] buf;
+    }
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("hmac error")));
