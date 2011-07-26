@@ -284,6 +284,7 @@ namespace internal {
   F(CreateJSProxy, 2, 1) \
   F(IsJSProxy, 1, 1) \
   F(GetHandler, 1, 1) \
+  F(Fix, 1, 1) \
   \
   /* Statements */ \
   F(NewClosure, 3, 1) \
@@ -349,7 +350,10 @@ namespace internal {
   F(HasExternalIntElements, 1, 1) \
   F(HasExternalUnsignedIntElements, 1, 1) \
   F(HasExternalFloatElements, 1, 1) \
-  F(HasExternalDoubleElements, 1, 1)
+  F(HasExternalDoubleElements, 1, 1) \
+  /* profiler */ \
+  F(ProfilerResume, 0, 1) \
+  F(ProfilerPause, 0, 1)
 
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
@@ -369,7 +373,7 @@ namespace internal {
   F(GetFrameCount, 1, 1) \
   F(GetFrameDetails, 2, 1) \
   F(GetScopeCount, 2, 1) \
-  F(GetScopeDetails, 3, 1) \
+  F(GetScopeDetails, 4, 1) \
   F(DebugPrintScopes, 0, 1) \
   F(GetThreadCount, 1, 1) \
   F(GetThreadDetails, 2, 1) \
@@ -382,7 +386,7 @@ namespace internal {
   F(IsBreakOnException, 1, 1) \
   F(PrepareStep, 3, 1) \
   F(ClearStepping, 0, 1) \
-  F(DebugEvaluate, 5, 1) \
+  F(DebugEvaluate, 6, 1) \
   F(DebugEvaluateGlobal, 4, 1) \
   F(DebugGetLoadedScripts, 0, 1) \
   F(DebugReferencedBy, 3, 1) \
@@ -427,14 +431,6 @@ namespace internal {
 #define RUNTIME_FUNCTION_LIST_DEBUGGER_SUPPORT(F)
 #endif
 
-#ifdef ENABLE_LOGGING_AND_PROFILING
-#define RUNTIME_FUNCTION_LIST_PROFILER_SUPPORT(F) \
-  F(ProfilerResume, 0, 1) \
-  F(ProfilerPause, 0, 1)
-#else
-#define RUNTIME_FUNCTION_LIST_PROFILER_SUPPORT(F)
-#endif
-
 #ifdef DEBUG
 #define RUNTIME_FUNCTION_LIST_DEBUG(F) \
   /* Testing */ \
@@ -452,8 +448,7 @@ namespace internal {
   RUNTIME_FUNCTION_LIST_ALWAYS_1(F) \
   RUNTIME_FUNCTION_LIST_ALWAYS_2(F) \
   RUNTIME_FUNCTION_LIST_DEBUG(F) \
-  RUNTIME_FUNCTION_LIST_DEBUGGER_SUPPORT(F) \
-  RUNTIME_FUNCTION_LIST_PROFILER_SUPPORT(F)
+  RUNTIME_FUNCTION_LIST_DEBUGGER_SUPPORT(F)
 
 // ----------------------------------------------------------------------------
 // INLINE_FUNCTION_LIST defines all inlined functions accessed
@@ -642,7 +637,7 @@ class Runtime : public AllStatic {
 
   MUST_USE_RESULT static MaybeObject* ForceDeleteObjectProperty(
       Isolate* isolate,
-      Handle<JSObject> object,
+      Handle<JSReceiver> object,
       Handle<Object> key);
 
   MUST_USE_RESULT static MaybeObject* GetObjectProperty(

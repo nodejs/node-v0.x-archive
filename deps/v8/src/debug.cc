@@ -772,9 +772,9 @@ bool Debug::CompileDebuggerScript(int index) {
   bool caught_exception = false;
   Handle<JSFunction> function =
       factory->NewFunctionFromSharedFunctionInfo(function_info, context);
-  Handle<Object> result =
-      Execution::TryCall(function, Handle<Object>(context->global()),
-                         0, NULL, &caught_exception);
+
+  Execution::TryCall(function, Handle<Object>(context->global()),
+                     0, NULL, &caught_exception);
 
   // Check for caught exceptions.
   if (caught_exception) {
@@ -1821,6 +1821,13 @@ void Debug::SetAfterBreakTarget(JavaScriptFrame* frame) {
 bool Debug::IsBreakAtReturn(JavaScriptFrame* frame) {
   HandleScope scope(isolate_);
 
+  // If there are no break points this cannot be break at return, as
+  // the debugger statement and stack guard bebug break cannot be at
+  // return.
+  if (!has_break_points_) {
+    return false;
+  }
+
   // Get the executing function in which the debug break occurred.
   Handle<SharedFunctionInfo> shared =
       Handle<SharedFunctionInfo>(JSFunction::cast(frame->function())->shared());
@@ -1879,8 +1886,7 @@ void Debug::ClearMirrorCache() {
       *function_name));
   ASSERT(fun->IsJSFunction());
   bool caught_exception;
-  Handle<Object> js_object = Execution::TryCall(
-      Handle<JSFunction>::cast(fun),
+  Execution::TryCall(Handle<JSFunction>::cast(fun),
       Handle<JSObject>(Debug::debug_context()->global()),
       0, NULL, &caught_exception);
 }
@@ -2245,8 +2251,7 @@ void Debugger::OnAfterCompile(Handle<Script> script,
   bool caught_exception = false;
   const int argc = 1;
   Object** argv[argc] = { reinterpret_cast<Object**>(wrapper.location()) };
-  Handle<Object> result = Execution::TryCall(
-      Handle<JSFunction>::cast(update_script_break_points),
+  Execution::TryCall(Handle<JSFunction>::cast(update_script_break_points),
       Isolate::Current()->js_builtins_object(), argc, argv,
       &caught_exception);
   if (caught_exception) {
@@ -2923,7 +2928,7 @@ v8::Handle<v8::Context> MessageImpl::GetEventContext() const {
   v8::Handle<v8::Context> context = GetDebugEventContext(isolate);
   // Isolate::context() may be NULL when "script collected" event occures.
   ASSERT(!context.IsEmpty() || event_ == v8::ScriptCollected);
-  return GetDebugEventContext(isolate);
+  return context;
 }
 
 

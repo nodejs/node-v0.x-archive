@@ -130,8 +130,6 @@ static void idle_2_close_cb(uv_handle_t* handle) {
 
 
 static void idle_2_cb(uv_idle_t* handle, int status) {
-  int r;
-
   LOG("IDLE_2_CB\n");
 
   ASSERT(handle == &idle_2_handle);
@@ -139,8 +137,7 @@ static void idle_2_cb(uv_idle_t* handle, int status) {
 
   idle_2_cb_called++;
 
-  r = uv_close((uv_handle_t*)handle, idle_2_close_cb);
-  ASSERT(r == 0);
+  uv_close((uv_handle_t*)handle, idle_2_close_cb);
 }
 
 
@@ -230,23 +227,18 @@ static void check_cb(uv_check_t* handle, int status) {
 
   } else {
     /* End of the test - close all handles */
-    r = uv_close((uv_handle_t*)&prepare_1_handle, prepare_1_close_cb);
-    ASSERT(r == 0);
-    r = uv_close((uv_handle_t*)&check_handle, check_close_cb);
-    ASSERT(r == 0);
-    r = uv_close((uv_handle_t*)&prepare_2_handle, prepare_2_close_cb);
-    ASSERT(r == 0);
+    uv_close((uv_handle_t*)&prepare_1_handle, prepare_1_close_cb);
+    uv_close((uv_handle_t*)&check_handle, check_close_cb);
+    uv_close((uv_handle_t*)&prepare_2_handle, prepare_2_close_cb);
 
     for (i = 0; i < IDLE_COUNT; i++) {
-      r = uv_close((uv_handle_t*)&idle_1_handles[i], idle_1_close_cb);
-      ASSERT(r == 0);
+      uv_close((uv_handle_t*)&idle_1_handles[i], idle_1_close_cb);
     }
 
     /* This handle is closed/recreated every time, close it only if it is */
     /* active.*/
     if (idle_2_is_active) {
-      r = uv_close((uv_handle_t*)&idle_2_handle, idle_2_close_cb);
-      ASSERT(r == 0);
+      uv_close((uv_handle_t*)&idle_2_handle, idle_2_close_cb);
     }
   }
 
@@ -365,55 +357,5 @@ TEST_IMPL(loop_handles) {
 
   ASSERT(timer_cb_called > 0);
 
-  return 0;
-}
-
-
-TEST_IMPL(ref) {
-  uv_init();
-  uv_run();
-  return 0;
-}
-
-
-TEST_IMPL(idle_ref) {
-  uv_idle_t h;
-  uv_init();
-  uv_idle_init(&h);
-  uv_idle_start(&h, NULL);
-  uv_unref();
-  uv_run();
-  return 0;
-}
-
-
-TEST_IMPL(async_ref) {
-  uv_async_t h;
-  uv_init();
-  uv_async_init(&h, NULL);
-  uv_unref();
-  uv_run();
-  return 0;
-}
-
-
-TEST_IMPL(prepare_ref) {
-  uv_prepare_t h;
-  uv_init();
-  uv_prepare_init(&h);
-  uv_prepare_start(&h, NULL);
-  uv_unref();
-  uv_run();
-  return 0;
-}
-
-
-TEST_IMPL(check_ref) {
-  uv_check_t h;
-  uv_init();
-  uv_check_init(&h);
-  uv_check_start(&h, NULL);
-  uv_unref();
-  uv_run();
   return 0;
 }

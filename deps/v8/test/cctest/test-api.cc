@@ -1026,6 +1026,90 @@ THREADED_TEST(OutOfSignedRangeUnsignedInteger) {
 }
 
 
+THREADED_TEST(IsNativeError) {
+  v8::HandleScope scope;
+  LocalContext env;
+  v8::Handle<Value> syntax_error = CompileRun(
+      "var out = 0; try { eval(\"#\"); } catch(x) { out = x; } out; ");
+  CHECK(syntax_error->IsNativeError());
+  v8::Handle<Value> not_error = CompileRun("{a:42}");
+  CHECK(!not_error->IsNativeError());
+  v8::Handle<Value> not_object = CompileRun("42");
+  CHECK(!not_object->IsNativeError());
+}
+
+
+THREADED_TEST(StringObject) {
+  v8::HandleScope scope;
+  LocalContext env;
+  v8::Handle<Value> boxed_string = CompileRun("new String(\"test\")");
+  CHECK(boxed_string->IsStringObject());
+  v8::Handle<Value> unboxed_string = CompileRun("\"test\"");
+  CHECK(!unboxed_string->IsStringObject());
+  v8::Handle<Value> boxed_not_string = CompileRun("new Number(42)");
+  CHECK(!boxed_not_string->IsStringObject());
+  v8::Handle<Value> not_object = CompileRun("0");
+  CHECK(!not_object->IsStringObject());
+  v8::Handle<v8::StringObject> as_boxed = boxed_string.As<v8::StringObject>();
+  CHECK(!as_boxed.IsEmpty());
+  Local<v8::String> the_string = as_boxed->StringValue();
+  CHECK(!the_string.IsEmpty());
+  ExpectObject("\"test\"", the_string);
+  v8::Handle<v8::Value> new_boxed_string = v8::StringObject::New(the_string);
+  CHECK(new_boxed_string->IsStringObject());
+  as_boxed = new_boxed_string.As<v8::StringObject>();
+  the_string = as_boxed->StringValue();
+  CHECK(!the_string.IsEmpty());
+  ExpectObject("\"test\"", the_string);
+}
+
+
+THREADED_TEST(NumberObject) {
+  v8::HandleScope scope;
+  LocalContext env;
+  v8::Handle<Value> boxed_number = CompileRun("new Number(42)");
+  CHECK(boxed_number->IsNumberObject());
+  v8::Handle<Value> unboxed_number = CompileRun("42");
+  CHECK(!unboxed_number->IsNumberObject());
+  v8::Handle<Value> boxed_not_number = CompileRun("new Boolean(false)");
+  CHECK(!boxed_not_number->IsNumberObject());
+  v8::Handle<v8::NumberObject> as_boxed = boxed_number.As<v8::NumberObject>();
+  CHECK(!as_boxed.IsEmpty());
+  double the_number = as_boxed->NumberValue();
+  CHECK_EQ(42.0, the_number);
+  v8::Handle<v8::Value> new_boxed_number = v8::NumberObject::New(43);
+  CHECK(new_boxed_number->IsNumberObject());
+  as_boxed = new_boxed_number.As<v8::NumberObject>();
+  the_number = as_boxed->NumberValue();
+  CHECK_EQ(43.0, the_number);
+}
+
+
+THREADED_TEST(BooleanObject) {
+  v8::HandleScope scope;
+  LocalContext env;
+  v8::Handle<Value> boxed_boolean = CompileRun("new Boolean(true)");
+  CHECK(boxed_boolean->IsBooleanObject());
+  v8::Handle<Value> unboxed_boolean = CompileRun("true");
+  CHECK(!unboxed_boolean->IsBooleanObject());
+  v8::Handle<Value> boxed_not_boolean = CompileRun("new Number(42)");
+  CHECK(!boxed_not_boolean->IsBooleanObject());
+  v8::Handle<v8::BooleanObject> as_boxed =
+      boxed_boolean.As<v8::BooleanObject>();
+  CHECK(!as_boxed.IsEmpty());
+  bool the_boolean = as_boxed->BooleanValue();
+  CHECK_EQ(true, the_boolean);
+  v8::Handle<v8::Value> boxed_true = v8::BooleanObject::New(true);
+  v8::Handle<v8::Value> boxed_false = v8::BooleanObject::New(false);
+  CHECK(boxed_true->IsBooleanObject());
+  CHECK(boxed_false->IsBooleanObject());
+  as_boxed = boxed_true.As<v8::BooleanObject>();
+  CHECK_EQ(true, as_boxed->BooleanValue());
+  as_boxed = boxed_false.As<v8::BooleanObject>();
+  CHECK_EQ(false, as_boxed->BooleanValue());
+}
+
+
 THREADED_TEST(Number) {
   v8::HandleScope scope;
   LocalContext env;
@@ -2048,10 +2132,15 @@ THREADED_TEST(GetSetProperty) {
 THREADED_TEST(PropertyAttributes) {
   v8::HandleScope scope;
   LocalContext context;
+  // none
+  Local<String> prop = v8_str("none");
+  context->Global()->Set(prop, v8_num(7));
+  CHECK_EQ(v8::None, context->Global()->GetPropertyAttributes(prop));
   // read-only
-  Local<String> prop = v8_str("read_only");
+  prop = v8_str("read_only");
   context->Global()->Set(prop, v8_num(7), v8::ReadOnly);
   CHECK_EQ(7, context->Global()->Get(prop)->Int32Value());
+  CHECK_EQ(v8::ReadOnly, context->Global()->GetPropertyAttributes(prop));
   Script::Compile(v8_str("read_only = 9"))->Run();
   CHECK_EQ(7, context->Global()->Get(prop)->Int32Value());
   context->Global()->Set(prop, v8_num(10));
@@ -2062,6 +2151,25 @@ THREADED_TEST(PropertyAttributes) {
   CHECK_EQ(13, context->Global()->Get(prop)->Int32Value());
   Script::Compile(v8_str("delete dont_delete"))->Run();
   CHECK_EQ(13, context->Global()->Get(prop)->Int32Value());
+  CHECK_EQ(v8::DontDelete, context->Global()->GetPropertyAttributes(prop));
+  // dont-enum
+  prop = v8_str("dont_enum");
+  context->Global()->Set(prop, v8_num(28), v8::DontEnum);
+  CHECK_EQ(v8::DontEnum, context->Global()->GetPropertyAttributes(prop));
+  // absent
+  prop = v8_str("absent");
+  CHECK_EQ(v8::None, context->Global()->GetPropertyAttributes(prop));
+  Local<Value> fake_prop = v8_num(1);
+  CHECK_EQ(v8::None, context->Global()->GetPropertyAttributes(fake_prop));
+  // exception
+  TryCatch try_catch;
+  Local<Value> exception =
+      CompileRun("({ toString: function() { throw 'exception';} })");
+  CHECK_EQ(v8::None, context->Global()->GetPropertyAttributes(exception));
+  CHECK(try_catch.HasCaught());
+  String::AsciiValue exception_value(try_catch.Exception());
+  CHECK_EQ("exception", *exception_value);
+  try_catch.Reset();
 }
 
 
@@ -12633,9 +12741,10 @@ v8::Handle<Value> AnalyzeStackInNativeCode(const v8::Arguments& args) {
                     stackTrace->GetFrame(0));
     checkStackFrame(origin, "foo", 6, 3, false, false,
                     stackTrace->GetFrame(1));
-    checkStackFrame(NULL, "", 1, 1, false, false,
+    // This is the source string inside the eval which has the call to foo.
+    checkStackFrame(NULL, "", 1, 5, false, false,
                     stackTrace->GetFrame(2));
-    // The last frame is an anonymous function that has the initial call.
+    // The last frame is an anonymous function which has the initial eval call.
     checkStackFrame(origin, "", 8, 7, false, false,
                     stackTrace->GetFrame(3));
 
@@ -12654,9 +12763,10 @@ v8::Handle<Value> AnalyzeStackInNativeCode(const v8::Arguments& args) {
     bool is_eval = false;
 #endif  // ENABLE_DEBUGGER_SUPPORT
 
-    checkStackFrame(NULL, "", 1, 1, is_eval, false,
+    // This is the source string inside the eval which has the call to baz.
+    checkStackFrame(NULL, "", 1, 5, is_eval, false,
                     stackTrace->GetFrame(2));
-    // The last frame is an anonymous function that has the initial call to foo.
+    // The last frame is an anonymous function which has the initial eval call.
     checkStackFrame(origin, "", 10, 1, false, false,
                     stackTrace->GetFrame(3));
 

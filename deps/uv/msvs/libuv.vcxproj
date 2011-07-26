@@ -78,7 +78,7 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\c-ares\config_win32</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\include;..\src\ares\config_win32</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -88,52 +88,31 @@
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\c-ares\config_win32</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\include;..\src\ares\config_win32</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>..\c-ares\config_win32</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\include;..\src\ares\config_win32</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <OmitFramePointers>true</OmitFramePointers>
     </ClCompile>
+    <Lib>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
+    </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>..\c-ares\config_win32</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\include;..\src\ares\config_win32</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <OmitFramePointers>true</OmitFramePointers>
     </ClCompile>
+    <Lib>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
+    </Lib>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClInclude Include="..\ngx-queue.h" />
-    <ClInclude Include="..\uv-unix.h">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClInclude>
-    <ClInclude Include="..\uv-win.h" />
-    <ClInclude Include="..\uv.h" />
-    <ClInclude Include="..\tree.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\uv-unix.c">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\uv-win.c" />
-    <ClCompile Include="..\uv-common.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\AUTHORS" />
-    <None Include="..\config-mingw.mk" />
-    <None Include="..\config-unix.mk" />
-    <None Include="..\iocp-links.html" />
-    <None Include="..\LICENSE" />
-    <None Include="..\Makefile" />
-    <None Include="..\README" />
-  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="c-ares.vcxproj">
       <Project>{2b6a4644-eba9-dfb5-af35-6c56edf05c7f}</Project>
@@ -143,6 +122,35 @@
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
       <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\uv-common.c" />
+    <ClCompile Include="..\src\win\async.c" />
+    <ClCompile Include="..\src\win\cares.c" />
+    <ClCompile Include="..\src\win\core.c" />
+    <ClCompile Include="..\src\win\error.c" />
+    <ClCompile Include="..\src\win\getaddrinfo.c" />
+    <ClCompile Include="..\src\win\handle.c" />
+    <ClCompile Include="..\src\win\loop-watcher.c" />
+    <ClCompile Include="..\src\win\pipe.c" />
+    <ClCompile Include="..\src\win\req.c" />
+    <ClCompile Include="..\src\win\stream.c" />
+    <ClCompile Include="..\src\win\tcp.c" />
+    <ClCompile Include="..\src\win\timer.c" />
+    <ClCompile Include="..\src\win\util.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\ares.h" />
+    <ClInclude Include="..\include\ares_version.h" />
+    <ClInclude Include="..\include\tree.h" />
+    <ClInclude Include="..\include\uv-win.h" />
+    <ClInclude Include="..\include\uv.h" />
+    <ClInclude Include="..\src\uv-common.h" />
+    <ClInclude Include="..\src\win\internal.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\config-mingw.mk" />
+    <None Include="..\Makefile" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

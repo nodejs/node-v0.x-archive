@@ -1,3 +1,75 @@
+2011-07-20: Version 3.4.14
+
+        Fix the debugger for strict-mode functions. (Chromium issue 89236)
+
+        Add GetPropertyAttribute method for Object in the API. (Patch by Peter Varga)
+
+        Fix -Wunused-but-set-variable for gcc-4.6 on x64. (Issue 1291)
+
+
+2011-07-18: Version 3.4.13
+
+        Improved debugger support to allow inspection of optimized frames (issue
+        1140).
+
+        Fixed a bug in prototype transitions cache clearing introduced by r8165.
+
+        Fixed shortcutting bug in HInferRepresentation. Patch by Andy Wingo.
+
+        Fixed a memory leak in sample/shell.cc (dispose semaphores).
+
+        Simplified HClampToUint8. Patch by Andy Wingo.
+
+        Exposed APIs for detecting boxed primitives, native errors. Patch by
+        Luke Zarko.
+
+        Added map check for COW elements to crankshaft array handling code
+        (issue 1560).
+
+        Sample shell and (a light version of) D8 links against a shared library
+        now.
+
+        Fixed bug in array filter and reduce functions (issue 1559).
+
+        Avoid TLS load in AstNode constructor.
+
+        Introduced a random entropy source which can optionally be provided at
+        initialization. (Chromium issue 89462).
+
+
+2011-07-13: Version 3.4.12
+
+        Added --prof profiling option to d8 shell.
+
+        Fixed a bug where reading a directory in d8 shell hangs (issue 1533).
+
+        Fixed a potential assertion failure in const declarations.
+
+        Fixed an assertion failure in descriptor arrays (issue 1526).
+
+        Enabled fast thread-local storage by default on supported platforms.
+
+        Improved reporting of source position for global variable loads
+        (issue 1527).
+
+
+2011-07-11: Version 3.4.11
+
+        Fixed MinGW32 build.
+
+        Fixed a GC bug with RegExp code flushing.
+
+        Implemented Object.defineProperty for proxies.
+
+        Fixed a bug in for/in iteration of arguments objects (issue 1531).
+
+        Added debugger support for inspecting optimized frames (issue 1140).
+
+        Allowed JSObject::PreventExtensions to work for arguments objects.
+
+        Bugfixes and performance work.
+
+
 2011-07-06: Version 3.4.10
 
         Fixed debugger not breaking on certain "if" statements (issue 1523).
@@ -36,7 +108,7 @@
 
         Ensure 16-byte stack alignment on Solaris (issue 1505).
 
-        Fix "illegal access" when calling parseInt with a radix 
+        Fix "illegal access" when calling parseInt with a radix
         that is not a smi. (issue 1246).
 
 

@@ -26,6 +26,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 {
+  'variables': {
+    'generated_file': '<(SHARED_INTERMEDIATE_DIR)/resources.cc',
+  },
   'includes': [ '../../build/v8-features.gypi' ],
   'targets': [
     {
@@ -33,11 +36,13 @@
       'type': 'executable',
       'dependencies': [
         '../../tools/gyp/v8.gyp:v8',
+        'resources',
       ],
       'include_dirs': [
         '../../src',
       ],
       'sources': [
+        '<(generated_file)',
         'cctest.cc',
         'gay-fixed.cc',
         'gay-precision.cc',
@@ -71,7 +76,6 @@
         'test-lock.cc',
         'test-lockers.cc',
         'test-log.cc',
-        'test-log-utils.cc',
         'test-mark-compact.cc',
         'test-parsing.cc',
         'test-profile-generator.cc',
@@ -130,6 +134,42 @@
             'test-platform-win32.cc',
           ],
         }],
+      ],
+    },
+    {
+      'target_name': 'resources',
+      'type': 'none',
+      'variables': {
+        'file_list': [
+           '../../tools/splaytree.js',
+           '../../tools/codemap.js',
+           '../../tools/csvparser.js',
+           '../../tools/consarray.js',
+           '../../tools/profile.js',
+           '../../tools/profile_view.js',
+           '../../tools/logreader.js',
+           'log-eq-of-logging-and-traversal.js',
+        ],
+      },
+      'actions': [
+        {
+          'action_name': 'js2c',
+          'inputs': [
+            '../../tools/js2c.py',
+            '<@(file_list)',
+          ],
+          'outputs': [
+            '<(generated_file)',
+          ],
+          'action': [
+            'python',
+            '../../tools/js2c.py',
+            '<@(_outputs)',
+            'TEST',  # type
+            'off',  # compression
+            '<@(file_list)',
+          ],
+        }
       ],
     },
   ],

@@ -36,7 +36,7 @@ typedef bool (*NativeSourceCallback)(Vector<const char> name,
                                      int index);
 
 enum NativeType {
-  CORE, EXPERIMENTAL, D8
+  CORE, EXPERIMENTAL, D8, TEST
 };
 
 template <NativeType type>

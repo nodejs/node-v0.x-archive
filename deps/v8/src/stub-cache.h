@@ -662,12 +662,14 @@ class KeyedLoadStubCompiler: public StubCompiler {
 
   static void GenerateLoadFastElement(MacroAssembler* masm);
 
+  static void GenerateLoadFastDoubleElement(MacroAssembler* masm);
+
+  static void GenerateLoadDictionaryElement(MacroAssembler* masm);
+
  private:
   MaybeObject* GetCode(PropertyType type,
                        String* name,
                        InlineCacheState state = MONOMORPHIC);
-
-  MaybeObject* ComputeSharedKeyedLoadElementStub(Map* receiver_map);
 };
 
 
@@ -717,15 +719,18 @@ class KeyedStoreStubCompiler: public StubCompiler {
   static void GenerateStoreFastElement(MacroAssembler* masm,
                                        bool is_js_array);
 
+  static void GenerateStoreFastDoubleElement(MacroAssembler* masm,
+                                             bool is_js_array);
+
   static void GenerateStoreExternalArray(MacroAssembler* masm,
                                          JSObject::ElementsKind elements_kind);
+
+  static void GenerateStoreDictionaryElement(MacroAssembler* masm);
 
  private:
   MaybeObject* GetCode(PropertyType type,
                        String* name,
                        InlineCacheState state = MONOMORPHIC);
-
-  MaybeObject* ComputeSharedKeyedStoreElementStub(Map* receiver_map);
 
   StrictModeFlag strict_mode_;
 };

@@ -327,8 +327,17 @@ var parseTests = {
     'host': 'xn--hgi.ws',
     'hostname': 'xn--hgi.ws',
     'pathname': '/➡'
+  },
+  'http://bucket_name.s3.amazonaws.com/image.jpg': {
+    protocol: 'http:',
+    slashes: true,
+    host: 'bucket_name.s3.amazonaws.com',
+    hostname: 'bucket_name.s3.amazonaws.com',
+    pathname: '/image.jpg',
+    href: 'http://bucket_name.s3.amazonaws.com/image.jpg'
   }
 };
+
 for (var u in parseTests) {
   var actual = url.parse(u),
       expected = parseTests[u];
@@ -533,6 +542,21 @@ relativeTests.forEach(function(relativeTest) {
   assert.equal(e, a,
                'resolve(' + [relativeTest[0], relativeTest[1]] + ') == ' + e +
                '\n  actual=' + a);
+});
+
+
+// https://github.com/joyent/node/issues/568
+[
+  undefined,
+  null,
+  true,
+  false,
+  0.0,
+  0,
+  [],
+  {}
+].forEach(function(val) {
+  assert.throws(function() { url.parse(val); }, TypeError);
 });
 
 

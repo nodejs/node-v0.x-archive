@@ -784,6 +784,21 @@ void HChange::PrintDataTo(StringStream* stream) {
 }
 
 
+HValue* HCheckInstanceType::Canonicalize() {
+  if (check_ == IS_STRING &&
+      !value()->type().IsUninitialized() &&
+      value()->type().IsString()) {
+    return NULL;
+  }
+  if (check_ == IS_SYMBOL &&
+      value()->IsConstant() &&
+      HConstant::cast(value())->handle()->IsSymbol()) {
+    return NULL;
+  }
+  return this;
+}
+
+
 void HCheckInstanceType::GetCheckInterval(InstanceType* first,
                                           InstanceType* last) {
   ASSERT(is_interval_check());
@@ -1351,6 +1366,19 @@ bool HLoadKeyedFastElement::RequiresHoleCheck() const {
 }
 
 
+void HLoadKeyedFastDoubleElement::PrintDataTo(StringStream* stream) {
+  elements()->PrintNameTo(stream);
+  stream->Add("[");
+  key()->PrintNameTo(stream);
+  stream->Add("]");
+}
+
+
+bool HLoadKeyedFastDoubleElement::RequiresHoleCheck() const {
+  return true;
+}
+
+
 void HLoadKeyedGeneric::PrintDataTo(StringStream* stream) {
   object()->PrintNameTo(stream);
   stream->Add("[");
@@ -1429,6 +1457,15 @@ void HStoreNamedField::PrintDataTo(StringStream* stream) {
 
 void HStoreKeyedFastElement::PrintDataTo(StringStream* stream) {
   object()->PrintNameTo(stream);
+  stream->Add("[");
+  key()->PrintNameTo(stream);
+  stream->Add("] = ");
+  value()->PrintNameTo(stream);
+}
+
+
+void HStoreKeyedFastDoubleElement::PrintDataTo(StringStream* stream) {
+  elements()->PrintNameTo(stream);
   stream->Add("[");
   key()->PrintNameTo(stream);
   stream->Add("] = ");

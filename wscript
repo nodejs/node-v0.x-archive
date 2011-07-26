@@ -204,6 +204,23 @@ def set_options(opt):
                 , dest='dest_cpu'
                 )
 
+def get_node_version():
+  def get_define_value(lines, define):
+    for line in lines:
+      if define in line:
+        return line.split()[-1] #define <NAME> <VALUE>
+
+  lines = open("src/node_version.h").readlines()
+  node_major_version = get_define_value(lines, 'NODE_MAJOR_VERSION')
+  node_minor_version = get_define_value(lines, 'NODE_MINOR_VERSION')
+  node_patch_version = get_define_value(lines, 'NODE_PATCH_VERSION')
+  node_is_release    = get_define_value(lines, 'NODE_VERSION_IS_RELEASE')
+
+  return "%s.%s.%s%s" % ( node_major_version,
+                           node_minor_version,
+                           node_patch_version,
+                           "-pre" if node_is_release == "0" else ""
+                         )
 
 
 
@@ -632,6 +649,8 @@ def build_uv(bld):
   if bld.env["USE_DEBUG"]:
     uv_debug = uv.clone("debug")
     uv_debug.rule = uv_cmd(bld, 'debug')
+    uv_debug.env.env = dict(os.environ)
+    uv_debug.env.env['CPPFLAGS'] = "-DPTW32_STATIC_LIB"
 
     t = join(bld.srcnode.abspath(bld.env_of_name("debug")), uv_debug.target)
     bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
@@ -837,14 +856,16 @@ def build(bld):
     src/node_extensions.cc
     src/node_http_parser.cc
     src/node_constants.cc
-    src/node_events.cc
     src/node_file.cc
     src/node_script.cc
     src/node_os.cc
     src/node_dtrace.cc
     src/node_string.cc
     src/timer_wrap.cc
+    src/handle_wrap.cc
+    src/stream_wrap.cc
     src/tcp_wrap.cc
+    src/pipe_wrap.cc
     src/cares_wrap.cc
   """
 
@@ -893,7 +914,7 @@ def build(bld):
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.5.0' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : get_node_version()
         }
     return x
 
@@ -922,7 +943,6 @@ def build(bld):
     src/node.h
     src/node_object_wrap.h
     src/node_buffer.h
-    src/node_events.h
     src/node_version.h
   """)
 

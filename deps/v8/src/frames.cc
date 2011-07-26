@@ -36,6 +36,8 @@
 #include "scopeinfo.h"
 #include "string-stream.h"
 
+#include "allocation-inl.h"
+
 namespace v8 {
 namespace internal {
 
@@ -346,7 +348,6 @@ void SafeStackFrameIterator::Reset() {
 // -------------------------------------------------------------------------
 
 
-#ifdef ENABLE_LOGGING_AND_PROFILING
 SafeStackTraceFrameIterator::SafeStackTraceFrameIterator(
     Isolate* isolate,
     Address fp, Address sp, Address low_bound, Address high_bound) :
@@ -362,7 +363,6 @@ void SafeStackTraceFrameIterator::Advance() {
     if (frame()->is_java_script()) return;
   }
 }
-#endif
 
 
 Code* StackFrame::GetSafepointData(Isolate* isolate,
@@ -371,7 +371,6 @@ Code* StackFrame::GetSafepointData(Isolate* isolate,
                                    unsigned* stack_slots) {
   PcToCodeCache::PcToCodeCacheEntry* entry =
       isolate->pc_to_code_cache()->GetCacheEntry(pc);
-  SafepointEntry cached_safepoint_entry = entry->safepoint_entry;
   if (!entry->safepoint_entry.is_valid()) {
     entry->safepoint_entry = entry->code->GetSafepointEntry(pc);
     ASSERT(entry->safepoint_entry.is_valid());

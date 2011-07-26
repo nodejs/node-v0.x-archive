@@ -779,8 +779,13 @@ class Assembler : public AssemblerBase {
   void fcmp(FPURegister src1, const double src2, FPUCondition cond);
 
   // Check the code size generated from label to here.
-  int InstructionsGeneratedSince(Label* l) {
-    return (pc_offset() - l->pos()) / kInstrSize;
+  int SizeOfCodeGeneratedSince(Label* label) {
+    return pc_offset() - label->pos();
+  }
+
+  // Check the number of instructions generated from label to here.
+  int InstructionsGeneratedSince(Label* label) {
+    return SizeOfCodeGeneratedSince(label) / kInstrSize;
   }
 
   // Class for scoping postponing the trampoline pool generation.
@@ -828,7 +833,17 @@ class Assembler : public AssemblerBase {
 
   // Record the AST id of the CallIC being compiled, so that it can be placed
   // in the relocation information.
-  void RecordAstId(unsigned ast_id) { ast_id_for_reloc_info_ = ast_id; }
+  void SetRecordedAstId(unsigned ast_id) {
+    ASSERT(recorded_ast_id_ == kNoASTId);
+    recorded_ast_id_ = ast_id;
+  }
+
+  unsigned RecordedAstId() {
+    ASSERT(recorded_ast_id_ != kNoASTId);
+    return recorded_ast_id_;
+  }
+
+  void ClearRecordedAstId() { recorded_ast_id_ = kNoASTId; }
 
   // Record a comment relocation entry that can be used by a disassembler.
   // Use --code-comments to enable.
@@ -921,7 +936,7 @@ class Assembler : public AssemblerBase {
   // Relocation for a type-recording IC has the AST id added to it.  This
   // member variable is a way to pass the information from the call site to
   // the relocation info.
-  unsigned ast_id_for_reloc_info_;
+  unsigned recorded_ast_id_;
 
   bool emit_debug_code() const { return emit_debug_code_; }
 

@@ -2386,15 +2386,25 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* buf = new char[len];
-    ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
-    assert(written == len);
-
     String::Utf8Value hashType(args[0]->ToString());
 
-    bool r = hmac->HmacInit(*hashType, buf, len);
+    bool r;
 
-    delete [] buf;
+    if( Buffer::HasInstance(args[1])) {
+      Local<Object> buffer_obj = args[1]->ToObject();
+      char* buffer_data = Buffer::Data(buffer_obj);
+      size_t buffer_length = Buffer::Length(buffer_obj);
+
+      r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
+    } else {
+      char* buf = new char[len];
+      ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
+      assert(written == len);
+
+      r = hmac->HmacInit(*hashType, buf, len);
+
+      delete [] buf;
+    }
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("hmac error")));
@@ -3638,9 +3648,14 @@ void InitCrypto(Handle<Object> target) {
   ERR_load_crypto_strings();
 
   // Turn off compression. Saves memory - do it in userland.
-#ifdef SSL_COMP_get_compression_methods
-  // Before OpenSSL 0.9.8 this was not possible.
-  STACK_OF(SSL_COMP)* comp_methods = SSL_COMP_get_compression_methods();
+#if !defined(OPENSSL_NO_COMP)
+  STACK_OF(SSL_COMP)* comp_methods =
+#if OPENSSL_VERSION_NUMBER < 0x00908000L
+    SSL_COMP_get_compression_method()
+#else
+    SSL_COMP_get_compression_methods()
+#endif
+  ;
   sk_SSL_COMP_zero(comp_methods);
   assert(sk_SSL_COMP_num(comp_methods) == 0);
 #endif
