@@ -19,43 +19,21 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-assert = require('assert');
-child = require('child_process');
+var common = require('../common');
+var assert = require('assert');
+var net = require('net');
 
-nodejs = '"' + process.execPath + '"';
+var server = net.createServer(function(socket) {
+  server.close();
+  process.nextTick(function() {
+    socket.destroy();
+  });
+});
 
-if (module.parent) {
-  // signal we've been loaded as a module
-  console.log('Loaded as a module, exiting with status code 42.');
-  process.exit(42);
-}
+server.listen(common.PORT, function() {
+  net.createConnection(common.PORT);
+});
 
-// assert that nothing is written to stdout
-child.exec(nodejs + ' --eval 42',
-    function(err, stdout, stderr) {
-      assert.equal(stdout, '');
-    });
-
-// assert that nothing is written to stdout
-child.exec(nodejs + ' --eval console.log(42)',
-    function(err, stdout, stderr) {
-      assert.equal(stdout, '');
-    });
-
-// assert that module loading works
-child.exec(nodejs + ' --eval "require(\'' + __filename + '\')"',
-    function(status, stdout, stderr) {
-      assert.equal(status.code, 42);
-    });
-
-// module path resolve bug, regression test
-child.exec(nodejs + ' --eval "require(\'./test/simple/test-cli-eval.js\')"',
-    function(status, stdout, stderr) {
-      assert.equal(status.code, 42);
-    });
-
-// empty program should do nothing
-child.exec(nodejs + ' -e ""', function(status, stdout, stderr) {
-  assert.equal(stdout, '');
-  assert.equal(stderr, '');
+server.on('close', function() {
+  assert.equal(server.connections, 0);
 });

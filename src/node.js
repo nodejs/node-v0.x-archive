@@ -32,6 +32,7 @@
   function startup() {
 
     if (process.env.NODE_USE_UV == '1') process.features.uv = true;
+    if (process.env.NODE_USE_HTTP2 == '1') process.features.http2 = true;
 
     EventEmitter = NativeModule.require('events').EventEmitter;
     process.__proto__ = EventEmitter.prototype;
@@ -80,8 +81,7 @@
       var module = new Module('eval');
       module.filename = path.join(cwd, 'eval');
       module.paths = Module._nodeModulePaths(cwd);
-      var rv = module._compile('return eval(process._eval)', 'eval');
-      console.log(rv);
+      module._compile('eval(process._eval)', 'eval');
 
     } else if (process.argv[1]) {
       // make process.argv[1] into a full path
@@ -388,6 +388,12 @@
   // backend.
   function translateId(id) {
     switch (id) {
+      case 'http':
+        return process.features.http2 ? 'http2' : 'http';
+
+      case 'https':
+        return process.features.http2 ? 'https2' : 'https';
+
       case 'net':
         return process.features.uv ? 'net_uv' : 'net_legacy';
 

@@ -19,42 +19,18 @@
  * IN THE SOFTWARE.
  */
 
-#include <stdio.h>
-#include <string.h>
+#include <assert.h>
 
-#include "runner.h"
-#include "task.h"
-
-/* Actual tests and helpers are defined in test-list.h */
-#include "test-list.h"
+#include "uv.h"
+#include "../uv-common.h"
+#include "internal.h"
 
 
-/* The time in milliseconds after which a single test times out. */
-#define TEST_TIMEOUT  5000
+int uv_spawn(uv_process_t* process, uv_process_options_t options) {
+  assert(0 && "implement me");
+}
 
 
-int main(int argc, char **argv) {
-  int i;
-
-  platform_init(argc, argv);
-
-  switch (argc) {
-  case 1: return run_tests(TEST_TIMEOUT, 0);
-  case 2: {
-    if (strcmp(argv[1], "spawn_helper1") == 0) {
-      return 1;
-    }
-
-    if (strcmp(argv[1], "spawn_helper2") == 0) {
-      printf("hello world\n");
-      return 1;
-    }
-
-    return run_test(argv[1], TEST_TIMEOUT, 0);
-  }
-  case 3: return run_test_part(argv[1], argv[2]);
-  default:
-    LOGF("Too many arguments.\n");
-    return 1;
-  }
+int uv_process_kill(uv_process_t* process, int signum) {
+  assert(0 && "implement me");
 }

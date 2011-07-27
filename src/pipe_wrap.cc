@@ -30,7 +30,7 @@ using v8::Context;
 using v8::Arguments;
 using v8::Integer;
 
-static Persistent<Function> constructor;
+Persistent<Function> pipeConstructor;
 
 
 // TODO share with TCPWrap?
@@ -61,9 +61,9 @@ class PipeWrap : StreamWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "listen", Listen);
     NODE_SET_PROTOTYPE_METHOD(t, "connect", Connect);
 
-    constructor = Persistent<Function>::New(t->GetFunction());
+    pipeConstructor = Persistent<Function>::New(t->GetFunction());
 
-    target->Set(String::NewSymbol("Pipe"), constructor);
+    target->Set(String::NewSymbol("Pipe"), pipeConstructor);
   }
 
  private:
@@ -111,7 +111,7 @@ class PipeWrap : StreamWrap {
 
     int backlog = args[0]->Int32Value();
 
-    int r = uv_pipe_listen(&wrap->handle_, OnConnection);
+    int r = uv_listen((uv_stream_t*)&wrap->handle_, backlog, OnConnection);
 
     // Error starting the pipe.
     if (r) SetErrno(uv_last_error().code);
@@ -120,7 +120,7 @@ class PipeWrap : StreamWrap {
   }
 
   // TODO maybe share with TCPWrap?
-  static void OnConnection(uv_handle_t* handle, int status) {
+  static void OnConnection(uv_stream_t* handle, int status) {
     HandleScope scope;
 
     PipeWrap* wrap = static_cast<PipeWrap*>(handle->data);
@@ -137,7 +137,7 @@ class PipeWrap : StreamWrap {
     }
 
     // Instanciate the client javascript object and handle.
-    Local<Object> client_obj = constructor->NewInstance();
+    Local<Object> client_obj = pipeConstructor->NewInstance();
 
     // Unwrap the client javascript object.
     assert(client_obj->InternalFieldCount() > 0);

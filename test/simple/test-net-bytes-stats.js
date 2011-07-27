@@ -19,43 +19,53 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-assert = require('assert');
-child = require('child_process');
+var common = require('../common');
+var assert = require('assert');
+var net = require('net');
 
-nodejs = '"' + process.execPath + '"';
+var tcpPort = common.PORT;
+var bytesRead = 0;
+var bytesWritten = 0;
+var count = 0;
 
-if (module.parent) {
-  // signal we've been loaded as a module
-  console.log('Loaded as a module, exiting with status code 42.');
-  process.exit(42);
-}
+var tcp = net.Server(function(s) {
+  console.log('tcp server connection');
 
-// assert that nothing is written to stdout
-child.exec(nodejs + ' --eval 42',
-    function(err, stdout, stderr) {
-      assert.equal(stdout, '');
+  s.on('end', function() {
+    bytesRead += s.bytesRead;
+    console.log('tcp socket disconnect #' + count);
+  });
+});
+
+tcp.listen(common.PORT, function () {
+  var socket = net.createConnection(tcpPort);
+
+  socket.on('connect', function() {
+    count++;
+    console.log('tcp client connection #' + count);
+
+    socket.write('foo', function () {
+      socket.end('bar');
     });
+  });
 
-// assert that nothing is written to stdout
-child.exec(nodejs + ' --eval console.log(42)',
-    function(err, stdout, stderr) {
-      assert.equal(stdout, '');
-    });
+  socket.on('end', function() {
+    bytesWritten += socket.bytesWritten;
+    console.log('tcp client disconnect #' + count);
+  });
 
-// assert that module loading works
-child.exec(nodejs + ' --eval "require(\'' + __filename + '\')"',
-    function(status, stdout, stderr) {
-      assert.equal(status.code, 42);
-    });
+  socket.on('close', function() {
+    console.log('Bytes read: ' + bytesRead);
+    console.log('Bytes written: ' + bytesWritten);
+    if (count < 2) {
+      socket.connect(tcpPort);
+    } else {
+      tcp.close();
+    };
+  });
+});
 
-// module path resolve bug, regression test
-child.exec(nodejs + ' --eval "require(\'./test/simple/test-cli-eval.js\')"',
-    function(status, stdout, stderr) {
-      assert.equal(status.code, 42);
-    });
-
-// empty program should do nothing
-child.exec(nodejs + ' -e ""', function(status, stdout, stderr) {
-  assert.equal(stdout, '');
-  assert.equal(stderr, '');
+process.on('exit', function () {
+  assert.equal(bytesRead, 12);
+  assert.equal(bytesWritten, 12);
 });
