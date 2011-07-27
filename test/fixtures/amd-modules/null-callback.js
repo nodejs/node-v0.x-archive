@@ -1,3 +1,3 @@
-define(null,function() {
-	return { ok: true };
+define(null, function() {
+  return { ok: true };
 });

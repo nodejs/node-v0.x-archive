@@ -1,3 +1,3 @@
 define(function() {
-	return { ok : true };
+  return { ok: true };
 });
