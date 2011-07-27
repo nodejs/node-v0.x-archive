@@ -1,1 +1,1 @@
-define({ ok: require("./regular.js").ok });
+define({ ok: true });
