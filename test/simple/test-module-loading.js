@@ -189,22 +189,49 @@ assert.equal(require(loadOrder + 'file9').file9, 'file9/index.reg2', msg);
 
 // test the async module definition pattern modules
 var amdFolder = '../fixtures/amd-modules';
-var amdreg = require(amdFolder + '/regular.js');
-assert.deepEqual(amdreg.ok, {ok: true}, 'regular amd module failed');
+var amdObject = require(amdFolder + '/object');
+assert.deepEqual(amdObject, {ok: true}, 'amd object literal failed');
 
 // make sure they all get the same 'ok' object.
-var amdModuleExports = require(amdFolder + '/module-exports.js');
-assert.equal(amdModuleExports.ok, amdreg.ok, 'amd module.exports failed');
+var amdCallback = require(amdFolder + '/callback');
+assert.equal(amdCallback.ok, amdObject.ok, 'amd callback failed');
 
-var amdReturn = require(amdFolder + '/return.js');
-assert.equal(amdReturn.ok, amdreg.ok, 'amd return failed');
+var amdIdCallback = require(amdFolder + '/id-callback');
+assert.equal(amdIdCallback['id-callback'].ok, amdObject.ok, 'amd callback with id failed');
 
-var amdObj = require(amdFolder + '/object.js');
-assert.equal(amdObj.ok, amdreg.ok, 'amd object literal failed');
+var amdDepsCallback = require(amdFolder + '/deps-callback');
+assert.equal(amdDepsCallback.ok, amdObject.ok, 'amd callback with dependencies failed');
 
-var amdExtraArgs = require(amdFolder + '/extra-args.js');
-assert.equal(amdExtraArgs.ok, amdreg.ok, 'amd extra args failed');
+var amdNullCallback = require(amdFolder + '/null-callback');
+assert.equal(amdNullCallback.ok, amdObject.ok, 'amd callback with null failed');
 
+var amdAll = require(amdFolder + '/all');
+assert.equal(amdAll['all'].ok, amdObject.ok, 'amd callback with id and dependencies failed');
+
+var amdExtra = require(amdFolder + '/extra');
+assert.equal(amdExtra['extra'].ok, amdObject.ok, 'amd callback with extra arguments failed');
+
+var amdMultiple = require(amdFolder + '/multiple');
+assert.equal(amdMultiple['one'].ok, amdObject.ok, 'amd callback with multiple id\'d defines failed');
+assert.equal(amdMultiple['two'].ok, amdObject.ok, 'amd callback with multiple id\'d defines failed');
+
+var errorThrown = false;
+try {
+  var amdIdError = require(amdFolder + '/id-error');
+} catch (e) {
+  errorThrown = true;
+}
+common.debug(errorThrown);
+assert.equal(errorThrown, true, 'amd no id modules after module with id failed');
+
+var errorThrown = false;
+try {
+  var amdNoIdError = require(amdFolder + '/no-id-error');
+} catch (e) {
+  errorThrown = true;
+}
+common.debug(errorThrown);
+assert.equal(errorThrown, true, 'amd id modules after module with no id failed');
 
 // make sure that module.require() is the same as
 // doing require() inside of that module.
