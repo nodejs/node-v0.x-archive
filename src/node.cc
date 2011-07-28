@@ -1860,6 +1860,7 @@ static void DebugBreakMessageHandler(const Debug::Message& message) {
 
 
 Persistent<Object> binding_cache;
+Persistent<Array> module_load_list;
 
 static Handle<Value> Binding(const Arguments& args) {
   HandleScope scope;
@@ -1876,8 +1877,16 @@ static Handle<Value> Binding(const Arguments& args) {
 
   if (binding_cache->Has(module)) {
     exports = binding_cache->Get(module)->ToObject();
+    return scope.Close(exports);
+  }
 
-  } else if ((modp = get_builtin_module(*module_v)) != NULL) {
+  // Append a string to process.moduleLoadList
+  char buf[1024];
+  snprintf(buf, 1024, "Binding %s", *module_v);
+  uint32_t l = module_load_list->Length();
+  module_load_list->Set(l, String::New(buf));
+
+  if ((modp = get_builtin_module(*module_v)) != NULL) {
     exports = Object::New();
     modp->register_func(exports);
     binding_cache->Set(module, exports);
@@ -2048,6 +2057,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   // process.installPrefix
   process->Set(String::NewSymbol("installPrefix"), String::New(NODE_PREFIX));
+
+  // process.moduleLoadList
+  module_load_list = Persistent<Array>::New(Array::New());
+  process->Set(String::NewSymbol("moduleLoadList"), module_load_list);
 
   Local<Object> versions = Object::New();
   char buf[20];
@@ -2343,19 +2356,20 @@ static void EnableDebug(bool wait_connect) {
 static volatile bool hit_signal;
 
 
-static void EnableDebugSignalHandler(int signal) {
-  // This is signal safe.
-  hit_signal = true;
-  v8::Debug::DebugBreak();
-}
-
-
 static void DebugSignalCB(const Debug::EventDetails& details) {
   if (hit_signal && details.GetEvent() == v8::Break) {
     hit_signal = false;
     fprintf(stderr, "Hit SIGUSR1 - starting debugger agent.\n");
     EnableDebug(false);
   }
+}
+
+
+static void EnableDebugSignalHandler(int signal) {
+  // This is signal safe.
+  hit_signal = true;
+  v8::Debug::SetDebugEventListener2(DebugSignalCB);
+  v8::Debug::DebugBreak();
 }
 
 
@@ -2480,7 +2494,6 @@ char** Init(int argc, char *argv[]) {
   } else {
 #ifdef __POSIX__
     RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
-    Debug::SetDebugEventListener2(DebugSignalCB);
 #endif // __POSIX__
   }
 
