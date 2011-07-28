@@ -11,13 +11,17 @@ automatically set as a listener for the `'connection'` event.
 
 `options` is an object with the following defaults:
 
-    { allowHalfOpen: false
+    { allowHalfOpen: false,
+      autoDiscovery: false
     }
 
 If `allowHalfOpen` is `true`, then the socket won't automatically send FIN
 packet when the other end of the socket sends a FIN packet. The socket becomes
 non-readable, but still writable. You should call the end() method explicitly.
 See `'end'` event for more information.
+
+If `autoDiscovery` is `true`, then the socket will bind to the closest
+available address when listening rather than throwing an EADDRINUSE error.
 
 ### net.createConnection(arguments...)
 
