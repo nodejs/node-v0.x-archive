@@ -585,6 +585,12 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", Connection::SetNPNProtocols);
 #endif
 
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  NODE_SET_PROTOTYPE_METHOD(t, "getServername", Connection::GetServername);
+  NODE_SET_PROTOTYPE_METHOD(t, "setSNIContexts",  Connection::SetSNIContexts);
+#endif
+
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
 }
 
@@ -704,6 +710,29 @@ int Connection::SelectNextProtoCallback_(SSL *s,
 }                                  
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
+  Connection *p = static_cast<Connection*> SSL_get_app_data(s);
+
+  const char* servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+
+  if (servername) {
+    if (!p->servername_.IsEmpty()) {
+      p->servername_.Dispose();
+    }
+    p->servername_ = Persistent<String>::New(String::New(servername));
+
+    // Lookup servername in sniContexts_
+    if (!p->sniContexts_.IsEmpty() && p->sniContexts_->Has(p->servername_)) {
+      SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(
+          Local<Object>::Cast(p->sniContexts_->Get(p->servername_)));
+      SSL_set_SSL_CTX(s, sc->ctx_);
+    }
+  }
+
+  return SSL_TLSEXT_ERR_OK;
+}
+#endif
 
 Handle<Value> Connection::New(const Arguments& args) {
   HandleScope scope;
@@ -724,8 +753,9 @@ Handle<Value> Connection::New(const Arguments& args) {
   p->bio_read_ = BIO_new(BIO_s_mem());
   p->bio_write_ = BIO_new(BIO_s_mem());
 
-#ifdef OPENSSL_NPN_NEGOTIATED
   SSL_set_app_data(p->ssl_, p);
+
+#ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
     SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
@@ -737,6 +767,15 @@ Handle<Value> Connection::New(const Arguments& args) {
     SSL_CTX_set_next_proto_select_cb(sc->ctx_,
                                      SelectNextProtoCallback_,
                                      NULL);
+  }
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  if (is_server) {
+    SSL_CTX_set_tlsext_servername_callback(sc->ctx_, SelectSNIContextCallback_);
+  } else {
+    String::Utf8Value servername(args[2]->ToString());
+    SSL_set_tlsext_host_name(p->ssl_, *servername);
   }
 #endif
 
@@ -1333,6 +1372,38 @@ Handle<Value> Connection::SetNPNProtocols(const Arguments& args) {
 };
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+Handle<Value> Connection::GetServername(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->is_server_ && !ss->servername_.IsEmpty()) {
+    return ss->servername_;
+  } else {
+    return False();
+  }
+}
+
+Handle<Value> Connection::SetSNIContexts(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (args.Length() < 1) {
+    return ThrowException(Exception::Error(String::New(
+           "Must give a Object as first argument")));
+  }
+
+  // Release old handle
+  if (!ss->sniContexts_.IsEmpty()) {
+    ss->sniContexts_.Dispose();
+  }
+  ss->sniContexts_ = Persistent<Object>::New(args[0]->ToObject());
+
+  return True();
+}
+#endif
 
 static void HexEncode(unsigned char *md_value,
                       int md_len,

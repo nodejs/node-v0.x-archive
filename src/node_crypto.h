@@ -104,6 +104,11 @@ class Connection : ObjectWrap {
   v8::Persistent<v8::Value> selectedNPNProto_;
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  v8::Persistent<v8::Object> sniContexts_;
+  v8::Persistent<v8::String> servername_;
+#endif
+
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
   static v8::Handle<v8::Value> EncIn(const v8::Arguments& args);
@@ -135,6 +140,13 @@ class Connection : ObjectWrap {
                                       unsigned int inlen, void *arg);
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  // SNI
+  static v8::Handle<v8::Value> GetServername(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetSNIContexts(const v8::Arguments& args);
+  static int SelectSNIContextCallback_(SSL *s, int *ad, void* arg);
+#endif
+
   int HandleBIOError(BIO *bio, const char* func, int rv);
   int HandleSSLError(const char* func, int rv);
 
@@ -161,6 +173,11 @@ class Connection : ObjectWrap {
 #ifdef OPENSSL_NPN_NEGOTIATED
     if (!npnProtos_.IsEmpty()) npnProtos_.Dispose();
     if (!selectedNPNProto_.IsEmpty()) selectedNPNProto_.Dispose();
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+   if (!sniContexts_.IsEmpty()) sniContexts_.Dispose();
+   if (!servername_.IsEmpty()) servername_.Dispose();
 #endif
   }
 
