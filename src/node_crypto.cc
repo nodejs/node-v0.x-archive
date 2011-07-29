@@ -740,7 +740,8 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       TryCatch try_catch;
 
       // Call it
-      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(), 1,
+      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(),
+                                        1,
                                         argv);
 
       if (try_catch.HasCaught()) {
