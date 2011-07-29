@@ -61,11 +61,14 @@ static Persistent<String> name_symbol;
 static Persistent<String> version_symbol;
 static Persistent<String> ext_key_usage_symbol;
 
+static Persistent<FunctionTemplate> SC_constructor;
 
 void SecureContext::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(SecureContext::New);
+  SC_constructor = Persistent<FunctionTemplate>::New(t);
+
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("SecureContext"));
 
@@ -588,7 +591,7 @@ void Connection::Initialize(Handle<Object> target) {
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   NODE_SET_PROTOTYPE_METHOD(t, "getServername", Connection::GetServername);
-  NODE_SET_PROTOTYPE_METHOD(t, "setSNIContexts",  Connection::SetSNIContexts);
+  NODE_SET_PROTOTYPE_METHOD(t, "setSNICallback",  Connection::SetSNICallback);
 #endif
 
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
@@ -712,6 +715,8 @@ int Connection::SelectNextProtoCallback_(SSL *s,
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
+  HandleScope scope;
+
   Connection *p = static_cast<Connection*> SSL_get_app_data(s);
 
   const char* servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
@@ -722,11 +727,33 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
     }
     p->servername_ = Persistent<String>::New(String::New(servername));
 
-    // Lookup servername in sniContexts_
-    if (!p->sniContexts_.IsEmpty() && p->sniContexts_->Has(p->servername_)) {
-      SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(
-          Local<Object>::Cast(p->sniContexts_->Get(p->servername_)));
-      SSL_set_SSL_CTX(s, sc->ctx_);
+    // Call sniCallback_ and use it's return value as context
+    if (!p->sniCallback_.IsEmpty()) {
+      if (!p->sniContext_.IsEmpty()) {
+        p->sniContext_.Dispose();
+      }
+
+      // Get callback init args
+      Local<Value> argv[1] = {*p->servername_};
+      Local<Function> callback = *p->sniCallback_;
+
+      TryCatch try_catch;
+
+      // Call it
+      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(), 1,
+                                        argv);
+
+      if (try_catch.HasCaught()) {
+        FatalException(try_catch);
+      }
+
+      // If ret is SecureContext
+      if (SC_constructor->HasInstance(ret)) {
+        p->sniContext_ = Persistent<Value>::New(ret);
+        SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(
+                                Local<Object>::Cast(ret));
+        SSL_set_SSL_CTX(s, sc->ctx_);
+      }
     }
   }
 
@@ -1385,21 +1412,22 @@ Handle<Value> Connection::GetServername(const Arguments& args) {
   }
 }
 
-Handle<Value> Connection::SetSNIContexts(const Arguments& args) {
+Handle<Value> Connection::SetSNICallback(const Arguments& args) {
   HandleScope scope;
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (args.Length() < 1) {
+  if (args.Length() < 1 || !args[0]->IsFunction()) {
     return ThrowException(Exception::Error(String::New(
-           "Must give a Object as first argument")));
+           "Must give a Function as first argument")));
   }
 
   // Release old handle
-  if (!ss->sniContexts_.IsEmpty()) {
-    ss->sniContexts_.Dispose();
+  if (!ss->sniCallback_.IsEmpty()) {
+    ss->sniCallback_.Dispose();
   }
-  ss->sniContexts_ = Persistent<Object>::New(args[0]->ToObject());
+  ss->sniCallback_ = Persistent<Function>::New(
+                            Local<Function>::Cast(args[0]));
 
   return True();
 }

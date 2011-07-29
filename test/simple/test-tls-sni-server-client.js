@@ -28,6 +28,7 @@ if (!process.versions.openssl) {
 var common = require('../common'),
     assert = require('assert'),
     fs = require('fs'),
+    crypto = require('crypto'),
     tls = require('tls');
 
 function filenamePEM(n) {
@@ -41,20 +42,23 @@ function loadPEM(n) {
 var serverOptions = {
   key: loadPEM('agent2-key'),
   cert: loadPEM('agent2-cert'),
-  crl: loadPEM('ca2-crl')
+  crl: loadPEM('ca2-crl'),
+  SNICallback: function(servername) {
+    return SNIContexts[servername];
+  }
 };
 
-serverOptions.SNIContexts = {
-  'a.example.com': {
+var SNIContexts = {
+  'a.example.com': crypto.createCredentials({
     key: serverOptions.key,
     cert: serverOptions.cert,
     crl: serverOptions.crl
-  },
-  'b.example.com': {
+  }).ctx,
+  'b.example.com': crypto.createCredentials({
     key: serverOptions.key,
     cert: serverOptions.cert,
     crl: serverOptions.crl
-  }
+  }).ctx
 };
 
 

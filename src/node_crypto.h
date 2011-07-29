@@ -105,7 +105,8 @@ class Connection : ObjectWrap {
 #endif
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-  v8::Persistent<v8::Object> sniContexts_;
+  v8::Persistent<v8::Function> sniCallback_;
+  v8::Persistent<v8::Value> sniContext_;
   v8::Persistent<v8::String> servername_;
 #endif
 
@@ -143,7 +144,7 @@ class Connection : ObjectWrap {
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   // SNI
   static v8::Handle<v8::Value> GetServername(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetSNIContexts(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetSNICallback(const v8::Arguments& args);
   static int SelectSNIContextCallback_(SSL *s, int *ad, void* arg);
 #endif
 
@@ -176,7 +177,8 @@ class Connection : ObjectWrap {
 #endif
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-   if (!sniContexts_.IsEmpty()) sniContexts_.Dispose();
+   if (!sniCallback_.IsEmpty()) sniCallback_.Dispose();
+   if (!sniContext_.IsEmpty()) sniContext_.Dispose();
    if (!servername_.IsEmpty()) servername_.Dispose();
 #endif
   }
