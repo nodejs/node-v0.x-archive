@@ -40,44 +40,42 @@ function loadPEM(n) {
 
 var serverOptions = {
   key: loadPEM('agent2-key'),
-  cert: loadPEM('agent2-cert'),
-  crl: loadPEM('ca2-crl')
+  cert: loadPEM('agent2-cert')
 };
 
 var SNIContexts = {
   'a.example.com': {
-    key: serverOptions.key,
-    cert: serverOptions.cert,
-    crl: serverOptions.crl
+    key: loadPEM('agent1-key'),
+    cert: loadPEM('agent1-cert')
   },
   'asterisk.test.com': {
-    key: serverOptions.key,
-    cert: serverOptions.cert,
-    crl: serverOptions.crl
+    key: loadPEM('agent3-key'),
+    cert: loadPEM('agent3-cert')
   }
 };
 
 
 var clientsOptions = [{
-  key: serverOptions.key,
-  cert: serverOptions.cert,
-  crl: serverOptions.crl,
+  key: loadPEM('agent1-key'),
+  cert: loadPEM('agent1-cert'),
+  ca: [loadPEM('ca1-cert')],
   servername: 'a.example.com'
 },{
-  key: serverOptions.key,
-  cert: serverOptions.cert,
-  crl: serverOptions.crl,
+  key: loadPEM('agent2-key'),
+  cert: loadPEM('agent2-cert'),
+  ca: [loadPEM('ca2-cert')],
   servername: 'b.test.com'
 },{
-  key: serverOptions.key,
-  cert: serverOptions.cert,
-  crl: serverOptions.crl,
+  key: loadPEM('agent3-key'),
+  cert: loadPEM('agent3-cert'),
+  ca: [loadPEM('ca1-cert')],
   servername: 'c.wrong.com'
 }];
 
 var serverPort = common.PORT;
 
-var serverResults = [];
+var serverResults = [],
+    clientResults = [];
 
 var server = tls.createServer(serverOptions, function(c) {
   serverResults.push(c.servername);
@@ -91,6 +89,7 @@ server.listen(serverPort, startTest);
 function startTest() {
   function connectClient(options, callback) {
     var client = tls.connect(serverPort, 'localhost', options, function() {
+      clientResults.push(client.authorized);
       client.destroy();
 
       callback();
@@ -109,4 +108,5 @@ function startTest() {
 process.on('exit', function() {
   assert.deepEqual(serverResults, ['a.example.com', 'b.test.com',
                                    'c.wrong.com']);
+  assert.deepEqual(clientResults, [true, true, false]);
 });
