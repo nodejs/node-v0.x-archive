@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
+if (!process.versions.openssl || !process.features.sni) {
   console.error("Skipping because node compiled without OpenSSL or " +
                 "with old OpenSSL version.");
   process.exit(0);
