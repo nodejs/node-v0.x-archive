@@ -28,7 +28,6 @@ if (!process.versions.openssl) {
 var common = require('../common'),
     assert = require('assert'),
     fs = require('fs'),
-    crypto = require('crypto'),
     tls = require('tls');
 
 function filenamePEM(n) {
@@ -42,23 +41,20 @@ function loadPEM(n) {
 var serverOptions = {
   key: loadPEM('agent2-key'),
   cert: loadPEM('agent2-cert'),
-  crl: loadPEM('ca2-crl'),
-  SNICallback: function(servername) {
-    return SNIContexts[servername];
-  }
+  crl: loadPEM('ca2-crl')
 };
 
 var SNIContexts = {
-  'a.example.com': crypto.createCredentials({
+  'a.example.com': {
     key: serverOptions.key,
     cert: serverOptions.cert,
     crl: serverOptions.crl
-  }).ctx,
-  'b.example.com': crypto.createCredentials({
+  },
+  'asterisk.test.com': {
     key: serverOptions.key,
     cert: serverOptions.cert,
     crl: serverOptions.crl
-  }).ctx
+  }
 };
 
 
@@ -71,7 +67,12 @@ var clientsOptions = [{
   key: serverOptions.key,
   cert: serverOptions.cert,
   crl: serverOptions.crl,
-  servername: 'b.example.com'
+  servername: 'b.test.com'
+},{
+  key: serverOptions.key,
+  cert: serverOptions.cert,
+  crl: serverOptions.crl,
+  servername: 'c.wrong.com'
 }];
 
 var serverPort = common.PORT;
@@ -81,6 +82,10 @@ var serverResults = [];
 var server = tls.createServer(serverOptions, function(c) {
   serverResults.push(c.servername);
 });
+
+server.addContext('a.example.com', SNIContexts['a.example.com']);
+server.addContext('*.test.com', SNIContexts['asterisk.test.com']);
+
 server.listen(serverPort, startTest);
 
 function startTest() {
@@ -94,11 +99,14 @@ function startTest() {
 
   connectClient(clientsOptions[0], function() {
     connectClient(clientsOptions[1], function() {
-      server.close();
+      connectClient(clientsOptions[2], function() {
+        server.close();
+      });
     });
   });
 };
 
 process.on('exit', function() {
-  assert.deepEqual(serverResults, ['a.example.com', 'b.example.com']);
+  assert.deepEqual(serverResults, ['a.example.com', 'b.test.com',
+                                   'c.wrong.com']);
 });

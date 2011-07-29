@@ -753,6 +753,8 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
         SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(
                                 Local<Object>::Cast(ret));
         SSL_set_SSL_CTX(s, sc->ctx_);
+      } else {
+        return SSL_TLSEXT_ERR_NOACK;
       }
     }
   }
