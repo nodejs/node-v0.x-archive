@@ -61,13 +61,13 @@ static Persistent<String> name_symbol;
 static Persistent<String> version_symbol;
 static Persistent<String> ext_key_usage_symbol;
 
-static Persistent<FunctionTemplate> SC_constructor;
+static Persistent<FunctionTemplate> secure_context_constructor;
 
 void SecureContext::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(SecureContext::New);
-  SC_constructor = Persistent<FunctionTemplate>::New(t);
+  secure_context_constructor = Persistent<FunctionTemplate>::New(t);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("SecureContext"));
@@ -748,7 +748,7 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       }
 
       // If ret is SecureContext
-      if (SC_constructor->HasInstance(ret)) {
+      if (secure_context_constructor->HasInstance(ret)) {
         p->sniContext_ = Persistent<Value>::New(ret);
         SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(
                                 Local<Object>::Cast(ret));
