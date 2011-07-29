@@ -2043,8 +2043,8 @@ static Handle<Object> GetFeatures() {
   obj->Set(String::NewSymbol("uv"), Boolean::New(use_uv));
   obj->Set(String::NewSymbol("http2"), Boolean::New(use_http2));
   obj->Set(String::NewSymbol("ipv6"), True()); // TODO ping libuv
-  obj->Set(String::NewSymbol("npn"), Boolean::New(use_npn));
-  obj->Set(String::NewSymbol("sni"), Boolean::New(use_sni));
+  obj->Set(String::NewSymbol("tls_npn"), Boolean::New(use_npn));
+  obj->Set(String::NewSymbol("tls_sni"), Boolean::New(use_sni));
   obj->Set(String::NewSymbol("tls"),
       Boolean::New(get_builtin_module("crypto") != NULL));
 
