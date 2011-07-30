@@ -19,56 +19,45 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var writeError = process.binding('stdio').writeError;
-var util = require('util');
+var common = require('../common');
+var assert = require('assert');
+var Process = process.binding('process_wrap').Process;
+var Pipe = process.binding('pipe_wrap').Pipe;
+var pipe = new Pipe();
+var p = new Process();
 
-exports.log = function() {
-  process.stdout.write(util.format.apply(this, arguments) + '\n');
-};
+var processExited = false;
+var gotPipeEOF = false;
+var gotPipeData = false;
 
+p.onexit = function() {
+  console.log("exit");
+  p.close();
+  pipe.readStart();
 
-exports.info = exports.log;
+  processExited = true;
+}
 
-
-exports.warn = function() {
-  writeError(util.format.apply(this, arguments) + '\n');
-};
-
-
-exports.error = exports.warn;
-
-
-exports.dir = function(object) {
-  process.stdout.write(util.inspect(object) + '\n');
-};
-
-
-var times = {};
-exports.time = function(label) {
-  times[label] = Date.now();
-};
-
-
-exports.timeEnd = function(label) {
-  var duration = Date.now() - times[label];
-  exports.log('%s: %dms', label, duration);
-};
-
-
-exports.trace = function(label) {
-  // TODO probably can to do this better with V8's debug object once that is
-  // exposed.
-  var err = new Error;
-  err.name = 'Trace';
-  err.message = label || '';
-  Error.captureStackTrace(err, arguments.callee);
-  console.error(err.stack);
-};
-
-
-exports.assert = function(expression) {
-  if (!expression) {
-    var arr = Array.prototype.slice.call(arguments, 1);
-    require('assert').ok(false, util.format.apply(this, arr));
+pipe.onread = function(b, off, len) {
+  assert.ok(processExited);
+  if (b) {
+    gotPipeData = true;
+    console.log("read %d", len);
+  } else {
+    gotPipeEOF = true;
+    pipe.close();
   }
-};
+}
+
+p.spawn({
+  file: process.execPath,
+  args: [ process.execPath, "-v" ],
+  stdoutStream: pipe
+});
+
+
+process.on('exit', function() {
+  assert.ok(processExited);
+  assert.ok(gotPipeEOF);
+  assert.ok(gotPipeData);
+});

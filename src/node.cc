@@ -142,6 +142,18 @@ static bool use_uv = true;
 // disabled by default for now
 static bool use_http2 = false;
 
+#ifdef OPENSSL_NPN_NEGOTIATED
+static bool use_npn = true;
+#else
+static bool use_npn = false;
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+static bool use_sni = true;
+#else
+static bool use_sni = false;
+#endif
+
 // Buffer for getpwnam_r(), getgrpam_r() and other misc callers; keep this
 // scoped at file-level rather than method-level to avoid excess stack usage.
 static char getbuf[PATH_MAX + 1];
@@ -1304,7 +1316,7 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     //
     // When reporting errors on the first line of a script, this wrapper
     // function is leaked to the user. This HACK is to remove it. The length
-    // of the wrapper is 70. That wrapper is defined in src/node.js
+    // of the wrapper is 62. That wrapper is defined in src/node.js
     //
     // If that wrapper is ever changed, then this number also has to be
     // updated. Or - someone could clean this up so that the two peices
@@ -1312,7 +1324,7 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     //
     // Even better would be to get support into V8 for wrappers that
     // shouldn't be reported to users.
-    int offset = linenum == 1 ? 70 : 0;
+    int offset = linenum == 1 ? 62 : 0;
 
     fprintf(stderr, "%s\n", sourceline_string + offset);
     // Print wavy underline (GetUnderline is deprecated).
@@ -2031,6 +2043,8 @@ static Handle<Object> GetFeatures() {
   obj->Set(String::NewSymbol("uv"), Boolean::New(use_uv));
   obj->Set(String::NewSymbol("http2"), Boolean::New(use_http2));
   obj->Set(String::NewSymbol("ipv6"), True()); // TODO ping libuv
+  obj->Set(String::NewSymbol("tls_npn"), Boolean::New(use_npn));
+  obj->Set(String::NewSymbol("tls_sni"), Boolean::New(use_sni));
   obj->Set(String::NewSymbol("tls"),
       Boolean::New(get_builtin_module("crypto") != NULL));
 
