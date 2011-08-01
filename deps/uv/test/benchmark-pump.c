@@ -47,7 +47,7 @@ static void buf_free(uv_buf_t uv_buf_t);
 
 static uv_tcp_t tcpServer;
 static uv_pipe_t pipeServer;
-static uv_handle_t* server;
+static uv_stream_t* server;
 static struct sockaddr_in listen_addr;
 static struct sockaddr_in connect_addr;
 
@@ -143,13 +143,12 @@ void read_sockets_close_cb(uv_handle_t* handle) {
    */
   if (uv_now() - start_time > 1000 && read_sockets == 0) {
     read_show_stats();
-    uv_close(server, NULL);
+    uv_close((uv_handle_t*)server, NULL);
   }
 }
 
 
 static void start_stats_collection() {
-  uv_req_t* req = req_alloc();
   int r;
 
   /* Show-stats timer */
@@ -184,8 +183,6 @@ static void read_cb(uv_stream_t* stream, ssize_t bytes, uv_buf_t buf) {
 
 
 static void write_cb(uv_write_t* req, int status) {
-  uv_buf_t* buf = (uv_buf_t*) req->data;
-
   ASSERT(status == 0);
 
   req_free((uv_req_t*) req);
@@ -266,7 +263,7 @@ static void maybe_connect_some() {
 }
 
 
-static void connection_cb(uv_handle_t* s, int status) {
+static void connection_cb(uv_stream_t* s, int status) {
   uv_stream_t* stream;
   int r;
 
@@ -373,12 +370,12 @@ HELPER_IMPL(tcp_pump_server) {
   listen_addr = uv_ip4_addr("0.0.0.0", TEST_PORT);
 
   /* Server */
-  server = (uv_handle_t*)&tcpServer;
+  server = (uv_stream_t*)&tcpServer;
   r = uv_tcp_init(&tcpServer);
   ASSERT(r == 0);
   r = uv_tcp_bind(&tcpServer, listen_addr);
   ASSERT(r == 0);
-  r = uv_tcp_listen(&tcpServer, MAX_WRITE_HANDLES, connection_cb);
+  r = uv_listen((uv_stream_t*)&tcpServer, MAX_WRITE_HANDLES, connection_cb);
   ASSERT(r == 0);
 
   uv_run();
@@ -394,12 +391,12 @@ HELPER_IMPL(pipe_pump_server) {
   uv_init();
 
   /* Server */
-  server = (uv_handle_t*)&pipeServer;
+  server = (uv_stream_t*)&pipeServer;
   r = uv_pipe_init(&pipeServer);
   ASSERT(r == 0);
   r = uv_pipe_bind(&pipeServer, TEST_PIPENAME);
   ASSERT(r == 0);
-  r = uv_pipe_listen(&pipeServer, connection_cb);
+  r = uv_listen((uv_stream_t*)&pipeServer, MAX_WRITE_HANDLES, connection_cb);
   ASSERT(r == 0);
 
   uv_run();

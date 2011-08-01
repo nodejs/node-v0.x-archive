@@ -19,9 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var NPN_ENABLED = process.binding('constants').NPN_ENABLED;
-
-if (!process.versions.openssl || !NPN_ENABLED) {
+if (!process.features.tls_npn) {
   console.error("Skipping because node compiled without OpenSSL or " +
                 "with old OpenSSL version.");
   process.exit(0);

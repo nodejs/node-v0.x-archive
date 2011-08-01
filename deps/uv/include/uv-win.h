@@ -42,6 +42,14 @@ typedef struct uv_buf_t {
   char* base;
 } uv_buf_t;
 
+#define UV_REQ_TYPE_PRIVATE               \
+  /* TODO: remove the req suffix */       \
+  UV_ARES_EVENT_REQ,                      \
+  UV_ARES_CLEANUP_REQ,                    \
+  UV_GETADDRINFO_REQ,                     \
+  UV_PROCESS_EXIT,                        \
+  UV_PROCESS_CLOSE
+
 #define UV_REQ_PRIVATE_FIELDS             \
   union {                                 \
     /* Used by I/O operations */          \
@@ -158,5 +166,21 @@ typedef struct uv_buf_t {
   struct addrinfoW* res;                  \
   int retcode;
 
-int uv_utf16_to_utf8(wchar_t* utf16Buffer, size_t utf16Size, char* utf8Buffer, size_t utf8Size);
+#define UV_PROCESS_PRIVATE_FIELDS         \
+  struct uv_process_exit_s {              \
+    UV_REQ_FIELDS                         \
+  } exit_req;                             \
+  struct uv_process_close_s {             \
+    UV_REQ_FIELDS                         \
+  } close_req;                            \
+  struct uv_process_stdio_s {             \
+    uv_pipe_t* server_pipe;               \
+    HANDLE child_pipe;                    \
+  } stdio_pipes[3];                       \
+  int exit_signal;                        \
+  HANDLE wait_handle;                     \
+  HANDLE process_handle;                  \
+  HANDLE close_handle;
+
+int uv_utf16_to_utf8(const wchar_t* utf16Buffer, size_t utf16Size, char* utf8Buffer, size_t utf8Size);
 int uv_utf8_to_utf16(const char* utf8Buffer, wchar_t* utf16Buffer, size_t utf16Size);

@@ -166,6 +166,7 @@ UVTEST += simple/test-next-tick-errors
 UVTEST += simple/test-next-tick-ordering
 UVTEST += simple/test-next-tick-ordering2
 UVTEST += simple/test-next-tick-starvation
+UVTEST += simple/test-module-load-list
 UVTEST += simple/test-path
 UVTEST += simple/test-pipe-stream
 UVTEST += simple/test-pump-file2tcp
@@ -231,6 +232,13 @@ UVTEST += simple/test-tls-request-timeout
 #UVTEST += simple/test-tls-securepair-server # broken
 #UVTEST += simple/test-tls-server-verify # broken
 UVTEST += simple/test-tls-set-encoding
+
+# child_process
+UVTEST += simple/test-child-process-exit-code
+UVTEST += simple/test-child-process-buffering
+UVTEST += simple/test-child-process-exec-cwd
+UVTEST += simple/test-child-process-cwd
+UVTEST += simple/test-child-process-env
 
 
 test-uv: all

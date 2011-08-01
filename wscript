@@ -493,6 +493,10 @@ def configure(conf):
   if sys.platform.startswith("win32"):
     conf.env.append_value('LIB', 'ws2_32')
     conf.env.append_value('LIB', 'winmm')
+    # remove the next two lines when this issue is fixed:
+    # https://github.com/joyent/libuv/issues/118
+    conf.env.append_value('LIB', 'rpcrt4')
+    conf.env.append_value('LIB', 'ole32')
 
   conf.env.append_value('CPPFLAGS', '-Wno-unused-parameter');
   conf.env.append_value('CPPFLAGS', '-D_FORTIFY_SOURCE=2');
@@ -867,6 +871,8 @@ def build(bld):
     src/tcp_wrap.cc
     src/pipe_wrap.cc
     src/cares_wrap.cc
+    src/stdio_wrap.cc
+    src/process_wrap.cc
   """
 
   if sys.platform.startswith("win32"):
@@ -954,14 +960,6 @@ def build(bld):
   bld.install_files('${PREFIX}/bin/', 'tools/node-waf', chmod=0755)
   bld.install_files('${LIBDIR}/node/wafadmin', 'tools/wafadmin/*.py')
   bld.install_files('${LIBDIR}/node/wafadmin/Tools', 'tools/wafadmin/Tools/*.py')
-
-  # create a pkg-config(1) file
-  node_conf = bld.new_task_gen('subst', before="cxx")
-  node_conf.source = 'tools/nodejs.pc.in'
-  node_conf.target = 'tools/nodejs.pc'
-  node_conf.dict = subflags(node)
-
-  bld.install_files('${LIBDIR}/pkgconfig', 'tools/nodejs.pc')
 
 def shutdown():
   Options.options.debug

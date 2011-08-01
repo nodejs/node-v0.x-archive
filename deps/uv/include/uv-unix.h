@@ -88,6 +88,7 @@ typedef struct {
 #define UV_PIPE_PRIVATE_FIELDS \
   UV_TCP_PRIVATE_FIELDS \
   const char* pipe_fname; /* strdup'ed */ \
+  void* pipe_flock;
 
 
 /* UV_PREPARE */ \
@@ -131,5 +132,8 @@ typedef struct {
   char* service; \
   struct addrinfo* res; \
   int retcode;
+
+#define UV_PROCESS_PRIVATE_FIELDS \
+  ev_child child_watcher;
 
 #endif /* UV_UNIX_H */
