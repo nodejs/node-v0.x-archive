@@ -35,13 +35,13 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/file.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <limits.h> /* PATH_MAX */
+#include <sys/uio.h> /* writev */
 
 #ifdef __sun
 # include <sys/types.h>
@@ -64,7 +64,6 @@
 extern char **environ;
 # endif
 
-
 static uv_err_t last_err;
 
 struct uv_ares_data_s {
@@ -79,36 +78,9 @@ struct uv_ares_data_s {
 
 static struct uv_ares_data_s ares_data;
 
-typedef struct {
-  const char* lockfile;
-  int lockfd;
-} uv_flock_t;
-
-
-/* Create a new advisory file lock for `filename`.
- * Call `uv_flock_acquire()` to actually acquire the lock.
- */
-int uv_flock_init(uv_flock_t* lock, const char* filename);
-
-/* Try to acquire the file lock. Returns 0 on success, -1 on error.
- * Does not wait for the lock to be released if it is held by another process.
- *
- * If `locked` is not NULL, the memory pointed it points to is set to 1 if
- * the file is locked by another process. Only relevant in error scenarios.
- */
-int uv_flock_acquire(uv_flock_t* lock, int* locked);
-
-/* Release the file lock. Returns 0 on success, -1 on error.
- */
-int uv_flock_release(uv_flock_t* lock);
-
-/* Destroy the file lock. Releases the file lock and associated resources.
- */
-int uv_flock_destroy(uv_flock_t* lock);
-
 void uv__req_init(uv_req_t*);
 void uv__next(EV_P_ ev_idle* watcher, int revents);
-static int uv__stream_open(uv_stream_t*, int fd);
+static int uv__stream_open(uv_stream_t*, int fd, int flags);
 static void uv__finish_close(uv_handle_t* handle);
 static uv_err_t uv_err_new(uv_handle_t* handle, int sys_error);
 
@@ -142,7 +114,9 @@ enum {
   UV_CLOSED   = 0x00000002, /* close(2) finished. */
   UV_READING  = 0x00000004, /* uv_read_start() called. */
   UV_SHUTTING = 0x00000008, /* uv_shutdown() called but not complete. */
-  UV_SHUT     = 0x00000010  /* Write side closed. */
+  UV_SHUT     = 0x00000010, /* Write side closed. */
+  UV_READABLE = 0x00000020, /* The stream is readable */
+  UV_WRITABLE = 0x00000040  /* The stream is writable */
 };
 
 
@@ -369,7 +343,7 @@ static int uv__bind(uv_tcp_t* tcp, int domain, struct sockaddr* addr,
       goto out;
     }
 
-    if (uv__stream_open((uv_stream_t*)tcp, fd)) {
+    if (uv__stream_open((uv_stream_t*)tcp, fd, UV_READABLE | UV_WRITABLE)) {
       status = -2;
       uv__close(fd);
       goto out;
@@ -417,11 +391,13 @@ int uv_tcp_bind6(uv_tcp_t* tcp, struct sockaddr_in6 addr) {
 }
 
 
-static int uv__stream_open(uv_stream_t* stream, int fd) {
+static int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
   socklen_t yes;
 
   assert(fd >= 0);
   stream->fd = fd;
+
+  uv_flag_set((uv_handle_t*)stream, flags);
 
   /* Reuse the port address if applicable. */
   yes = 1;
@@ -505,7 +481,8 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
     goto out;
   }
 
-  if (uv__stream_open(streamClient, streamServer->accepted_fd)) {
+  if (uv__stream_open(streamClient, streamServer->accepted_fd,
+        UV_READABLE | UV_WRITABLE)) {
     /* TODO handle error */
     streamServer->accepted_fd = -1;
     uv__close(streamServer->accepted_fd);
@@ -550,7 +527,7 @@ static int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
       return -1;
     }
 
-    if (uv__stream_open((uv_stream_t*)tcp, fd)) {
+    if (uv__stream_open((uv_stream_t*)tcp, fd, UV_READABLE)) {
       uv__close(fd);
       return -1;
     }
@@ -898,29 +875,30 @@ static void uv__read(uv_stream_t* stream) {
 }
 
 
-int uv_shutdown(uv_shutdown_t* req, uv_stream_t* handle, uv_shutdown_cb cb) {
-  uv_tcp_t* tcp = (uv_tcp_t*)handle;
-  assert((handle->type == UV_TCP || handle->type == UV_NAMED_PIPE)
-      && "uv_shutdown (unix) only supports uv_tcp_t right now");
-  assert(tcp->fd >= 0);
+int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
+  assert((stream->type == UV_TCP || stream->type == UV_NAMED_PIPE) &&
+         "uv_shutdown (unix) only supports uv_handle_t right now");
+  assert(stream->fd >= 0);
 
-  /* Initialize request */
-  uv__req_init((uv_req_t*)req);
-  req->handle = handle;
-  req->cb = cb;
-
-  if (uv_flag_is_set((uv_handle_t*)tcp, UV_SHUT) ||
-      uv_flag_is_set((uv_handle_t*)tcp, UV_CLOSED) ||
-      uv_flag_is_set((uv_handle_t*)tcp, UV_CLOSING)) {
+  if (!uv_flag_is_set((uv_handle_t*)stream, UV_WRITABLE) ||
+      uv_flag_is_set((uv_handle_t*)stream, UV_SHUT) ||
+      uv_flag_is_set((uv_handle_t*)stream, UV_CLOSED) ||
+      uv_flag_is_set((uv_handle_t*)stream, UV_CLOSING)) {
+    uv_err_new((uv_handle_t*)stream, EINVAL);
     return -1;
   }
 
-  tcp->shutdown_req = req;
+  /* Initialize request */
+  uv__req_init((uv_req_t*)req);
+  req->handle = stream;
+  req->cb = cb;
+
+  stream->shutdown_req = req;
   req->type = UV_SHUTDOWN;
 
-  uv_flag_set((uv_handle_t*)tcp, UV_SHUTTING);
+  uv_flag_set((uv_handle_t*)stream, UV_SHUTTING);
 
-  ev_io_start(EV_DEFAULT_UC_ &tcp->write_watcher);
+  ev_io_start(EV_DEFAULT_UC_ &stream->write_watcher);
 
   return 0;
 }
@@ -1029,7 +1007,7 @@ static int uv__connect(uv_connect_t* req,
       return -1;
     }
 
-    if (uv__stream_open(stream, sockfd)) {
+    if (uv__stream_open(stream, sockfd, UV_READABLE | UV_WRITABLE)) {
       uv__close(sockfd);
       return -2;
     }
@@ -1831,13 +1809,13 @@ int uv_pipe_init(uv_pipe_t* handle) {
   uv_counters()->pipe_init++;
 
   handle->type = UV_NAMED_PIPE;
-  handle->pipe_flock = NULL; /* Only set by listener. */
   handle->pipe_fname = NULL; /* Only set by listener. */
 
   ev_init(&handle->write_watcher, uv__stream_io);
   ev_init(&handle->read_watcher, uv__stream_io);
   handle->write_watcher.data = handle;
   handle->read_watcher.data = handle;
+  handle->accepted_fd = -1;
   handle->fd = -1;
 
   ngx_queue_init(&handle->write_completed_queue);
@@ -1850,7 +1828,6 @@ int uv_pipe_init(uv_pipe_t* handle) {
 int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
   struct sockaddr_un sun;
   const char* pipe_fname;
-  uv_flock_t* pipe_flock;
   int saved_errno;
   int locked;
   int sockfd;
@@ -1859,7 +1836,6 @@ int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
 
   saved_errno = errno;
   pipe_fname = NULL;
-  pipe_flock = NULL;
   sockfd = -1;
   status = -1;
   bound = 0;
@@ -1878,20 +1854,6 @@ int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
 
   /* We've got a copy, don't touch the original any more. */
   name = NULL;
-
-  /* Create and acquire a file lock for this UNIX socket. */
-  if ((pipe_flock = malloc(sizeof *pipe_flock)) == NULL
-      || uv_flock_init(pipe_flock, pipe_fname) == -1) {
-    uv_err_new((uv_handle_t*)handle, ENOMEM);
-    goto out;
-  }
-
-  if (uv_flock_acquire(pipe_flock, &locked) == -1) {
-    /* Another process holds the lock so the socket is in use. */
-    uv_err_new_artificial((uv_handle_t*)handle,
-                          locked ? UV_EADDRINUSE : UV_EACCESS);
-    goto out;
-  }
 
   if ((sockfd = uv__socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
     uv_err_new((uv_handle_t*)handle, errno);
@@ -1935,10 +1897,6 @@ out:
       unlink(pipe_fname);
     }
     uv__close(sockfd);
-
-    if (pipe_flock) {
-      uv_flock_destroy(pipe_flock);
-    }
 
     free((void*)pipe_fname);
   }
@@ -1994,11 +1952,6 @@ static int uv_pipe_cleanup(uv_pipe_t* handle) {
      */
     unlink(handle->pipe_fname);
     free((void*)handle->pipe_fname);
-  }
-
-  if (handle->pipe_flock) {
-    uv_flock_destroy((uv_flock_t*)handle->pipe_flock);
-    free(handle->pipe_flock);
   }
 
   errno = saved_errno;
@@ -2227,6 +2180,7 @@ size_t uv__strlcpy(char* dst, const char* src, size_t size) {
 
 uv_stream_t* uv_std_handle(uv_std_type type) {
   assert(0 && "implement me");
+  return NULL;
 }
 
 
@@ -2308,17 +2262,17 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
 
   if (pid == 0) {
     if (stdin_pipe[0] >= 0) {
-      close(stdin_pipe[1]);
+      uv__close(stdin_pipe[1]);
       dup2(stdin_pipe[0],  STDIN_FILENO);
     }
 
     if (stdout_pipe[1] >= 0) {
-      close(stdout_pipe[0]);
+      uv__close(stdout_pipe[0]);
       dup2(stdout_pipe[1], STDOUT_FILENO);
     }
 
     if (stderr_pipe[1] >= 0) {
-      close(stderr_pipe[0]);
+      uv__close(stderr_pipe[0]);
       dup2(stderr_pipe[1], STDERR_FILENO);
     }
 
@@ -2353,37 +2307,40 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
   if (stdin_pipe[1] >= 0) {
     assert(options.stdin_stream);
     assert(stdin_pipe[0] >= 0);
-    close(stdin_pipe[0]);
+    uv__close(stdin_pipe[0]);
     uv__nonblock(stdin_pipe[1], 1);
-    uv__stream_open((uv_stream_t*)options.stdin_stream, stdin_pipe[1]);
+    uv__stream_open((uv_stream_t*)options.stdin_stream, stdin_pipe[1],
+        UV_WRITABLE);
   }
 
   if (stdout_pipe[0] >= 0) {
     assert(options.stdout_stream);
     assert(stdout_pipe[1] >= 0);
-    close(stdout_pipe[1]);
+    uv__close(stdout_pipe[1]);
     uv__nonblock(stdout_pipe[0], 1);
-    uv__stream_open((uv_stream_t*)options.stdout_stream, stdout_pipe[0]);
+    uv__stream_open((uv_stream_t*)options.stdout_stream, stdout_pipe[0],
+        UV_READABLE);
   }
 
   if (stderr_pipe[0] >= 0) {
     assert(options.stderr_stream);
     assert(stderr_pipe[1] >= 0);
-    close(stderr_pipe[1]);
+    uv__close(stderr_pipe[1]);
     uv__nonblock(stderr_pipe[0], 1);
-    uv__stream_open((uv_stream_t*)options.stderr_stream, stderr_pipe[0]);
+    uv__stream_open((uv_stream_t*)options.stderr_stream, stderr_pipe[0],
+        UV_READABLE);
   }
 
   return 0;
 
 error:
   uv_err_new((uv_handle_t*)process, errno);
-  close(stdin_pipe[0]);
-  close(stdin_pipe[1]);
-  close(stdout_pipe[0]);
-  close(stdout_pipe[1]);
-  close(stderr_pipe[0]);
-  close(stderr_pipe[1]);
+  uv__close(stdin_pipe[0]);
+  uv__close(stdin_pipe[1]);
+  uv__close(stdout_pipe[0]);
+  uv__close(stdout_pipe[1]);
+  uv__close(stderr_pipe[0]);
+  uv__close(stderr_pipe[1]);
   return -1;
 }
 
@@ -2397,126 +2354,4 @@ int uv_process_kill(uv_process_t* process, int signum) {
   } else {
     return 0;
   }
-}
-
-
-#define LOCKFILE_SUFFIX ".lock"
-int uv_flock_init(uv_flock_t* lock, const char* filename) {
-  int saved_errno;
-  int status;
-  char* lockfile;
-
-  saved_errno = errno;
-  status = -1;
-
-  lock->lockfd = -1;
-  lock->lockfile = NULL;
-
-  if ((lockfile = malloc(strlen(filename) + sizeof LOCKFILE_SUFFIX)) == NULL) {
-    goto out;
-  }
-
-  strcpy(lockfile, filename);
-  strcat(lockfile, LOCKFILE_SUFFIX);
-  lock->lockfile = lockfile;
-  status = 0;
-
-out:
-  errno = saved_errno;
-  return status;
-}
-#undef LOCKFILE_SUFFIX
-
-
-int uv_flock_acquire(uv_flock_t* lock, int* locked_p) {
-  char buf[32];
-  int saved_errno;
-  int status;
-  int lockfd;
-  int locked;
-
-  saved_errno = errno;
-  status = -1;
-  lockfd = -1;
-  locked = 0;
-
-  do {
-    lockfd = open(lock->lockfile, O_WRONLY | O_CREAT, 0666);
-  }
-  while (lockfd == -1 && errno == EINTR);
-
-  if (lockfd == -1) {
-    goto out;
-  }
-
-  do {
-    status = flock(lockfd, LOCK_EX | LOCK_NB);
-  }
-  while (status == -1 && errno == EINTR);
-
-  if (status == -1) {
-    locked = (errno == EAGAIN); /* Lock is held by another process. */
-    goto out;
-  }
-
-  snprintf(buf, sizeof buf, "%d\n", getpid());
-  do {
-    status = write(lockfd, buf, strlen(buf));
-  }
-  while (status == -1 && errno == EINTR);
-
-  lock->lockfd = lockfd;
-  status = 0;
-
-out:
-  if (status) {
-    uv__close(lockfd);
-  }
-
-  if (locked_p) {
-    *locked_p = locked;
-  }
-
-  errno = saved_errno;
-  return status;
-}
-
-
-int uv_flock_release(uv_flock_t* lock) {
-  int saved_errno;
-  int status;
-
-  saved_errno = errno;
-  status = -1;
-
-  if (unlink(lock->lockfile) == -1) {
-    /* Now what? */
-    goto out;
-  }
-
-  uv__close(lock->lockfd);
-  lock->lockfd = -1;
-  status = 0;
-
-out:
-  errno = saved_errno;
-  return status;
-}
-
-
-int uv_flock_destroy(uv_flock_t* lock) {
-  int saved_errno;
-  int status;
-
-  saved_errno = errno;
-  status = unlink(lock->lockfile);
-
-  uv__close(lock->lockfd);
-  lock->lockfd = -1;
-
-  free((void*)lock->lockfile);
-  lock->lockfile = NULL;
-
-  errno = saved_errno;
-  return status;
 }

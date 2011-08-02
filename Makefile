@@ -35,11 +35,17 @@ uninstall:
 test: all
 	python tools/test.py --mode=release simple message
 
+test-http2: all
+	python tools/test.py --mode=release --use-http2 simple message
+
 test-valgrind: all
 	python tools/test.py --mode=release --valgrind simple message
 
 test-all: all
 	python tools/test.py --mode=debug,release
+
+test-all-http2: all
+	python tools/test.py --mode=debug,release --use-http2
 
 test-all-valgrind: all
 	python tools/test.py --mode=debug,release --valgrind
@@ -229,9 +235,19 @@ UVTEST += simple/test-tls-junk-closes-server
 UVTEST += simple/test-tls-npn-server-client
 UVTEST += simple/test-tls-request-timeout
 #UVTEST += simple/test-tls-securepair-client # broken
-#UVTEST += simple/test-tls-securepair-server # broken
+UVTEST += simple/test-tls-securepair-server 
 #UVTEST += simple/test-tls-server-verify # broken
 UVTEST += simple/test-tls-set-encoding
+
+# child_process
+UVTEST += simple/test-child-process-exit-code
+UVTEST += simple/test-child-process-buffering
+UVTEST += simple/test-child-process-exec-cwd
+UVTEST += simple/test-child-process-cwd
+UVTEST += simple/test-child-process-env
+UVTEST += simple/test-child-process-stdin
+UVTEST += simple/test-child-process-ipc
+UVTEST += simple/test-child-process-deprecated-api
 
 
 test-uv: all

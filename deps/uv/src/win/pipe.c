@@ -21,6 +21,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "uv.h"
 #include "../uv-common.h"
@@ -29,6 +30,11 @@
 
 /* A zero-size buffer for use by uv_pipe_read */
 static char uv_zero_[] = "";
+
+
+static void uv_unique_pipe_name(char* ptr, char* name, size_t size) {
+  _snprintf(name, size, "\\\\.\\pipe\\uv\\%p-%d", ptr, GetCurrentProcessId());
+}
 
 
 int uv_pipe_init(uv_pipe_t* handle) {
@@ -57,6 +63,63 @@ int uv_pipe_init_with_handle(uv_pipe_t* handle, HANDLE pipeHandle) {
      */
     handle->handle = pipeHandle;
     handle->flags |= UV_HANDLE_GIVEN_OS_HANDLE;
+  }
+
+  return err;
+}
+
+
+int uv_stdio_pipe_server(uv_pipe_t* handle, DWORD access, char* name, size_t nameSize) {
+  HANDLE pipeHandle;
+  int errno;
+  int err;
+  char* ptr = (char*)handle;
+
+  while (TRUE) {
+    uv_unique_pipe_name(ptr, name, nameSize);
+
+    pipeHandle = CreateNamedPipeA(name,
+                                  access | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                                  PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                                  1,
+                                  65536,
+                                  65536,
+                                  0,
+                                  NULL);
+
+    if (pipeHandle != INVALID_HANDLE_VALUE) {
+      /* No name collisions.  We're done. */
+      break;
+    }
+
+    errno = GetLastError();
+    if (errno != ERROR_PIPE_BUSY && errno != ERROR_ACCESS_DENIED) {
+      uv_set_sys_error(errno);
+      err = -1;
+      goto done;
+    }
+
+    /* Pipe name collision.  Increment the pointer and try again. */
+    ptr++;
+  }
+
+  if (CreateIoCompletionPort(pipeHandle,
+                             LOOP->iocp,
+                             (ULONG_PTR)handle,
+                             0) == NULL) {
+    uv_set_sys_error(GetLastError());
+    err = -1;
+    goto done;
+  }
+
+  uv_connection_init((uv_stream_t*)handle);
+  handle->handle = pipeHandle;
+  handle->flags |= UV_HANDLE_GIVEN_OS_HANDLE;
+  err = 0;
+
+done:
+  if (err && pipeHandle != INVALID_HANDLE_VALUE) {
+    CloseHandle(pipeHandle);
   }
 
   return err;
@@ -593,7 +656,7 @@ int uv_pipe_write(uv_write_t* req, uv_pipe_t* handle, uv_buf_t bufs[], int bufcn
                      NULL,
                      &req->overlapped);
 
-  if (!result && GetLastError() != WSA_IO_PENDING) {
+  if (!result && GetLastError() != ERROR_IO_PENDING) {
     uv_set_sys_error(GetLastError());
     return -1;
   }
@@ -647,6 +710,8 @@ void uv_process_pipe_read_req(uv_pipe_t* handle, uv_req_t* req) {
         handle->read_cb((uv_stream_t*)handle, -1, buf);
         break;
       }
+
+      /* TODO: do we need to check avail > 0? */
 
       buf = handle->alloc_cb((uv_stream_t*)handle, avail);
       assert(buf.len > 0);
@@ -718,7 +783,6 @@ void uv_process_pipe_accept_req(uv_pipe_t* handle, uv_req_t* raw_req) {
 
   if (req->error.code == UV_OK) {
     assert(req->pipeHandle != INVALID_HANDLE_VALUE);
-
     req->next_pending = handle->pending_accepts;
     handle->pending_accepts = req;
 

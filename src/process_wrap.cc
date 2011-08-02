@@ -106,12 +106,14 @@ class ProcessWrap : public HandleWrap {
     // options.cwd
     Local<Value> cwd_v = js_options->Get(String::New("cwd"));
     if (!cwd_v.IsEmpty() && cwd_v->IsString()) {
-      String::Utf8Value cwd(js_options->ToString());
-      options.cwd = strdup(*cwd);
+      String::Utf8Value cwd(cwd_v->ToString());
+      if (cwd.length() > 0) {
+        options.cwd = strdup(*cwd);
+      }
     }
 
     // options.env
-    Local<Value> env_v = js_options->Get(String::New("env"));
+    Local<Value> env_v = js_options->Get(String::New("envPairs"));
     if (!env_v.IsEmpty() && env_v->IsArray()) {
       Local<Array> env = Local<Array>::Cast(env_v);
       int envc = env->Length();
@@ -148,6 +150,8 @@ class ProcessWrap : public HandleWrap {
 
     wrap->SetHandle((uv_handle_t*)&wrap->process_);
     assert(wrap->process_.data == wrap);
+
+    wrap->object_->Set(String::New("pid"), Integer::New(wrap->process_.pid));
 
     if (options.args) {
       for (int i = 0; options.args[i]; i++) free(options.args[i]);
