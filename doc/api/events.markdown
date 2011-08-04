@@ -1,46 +1,33 @@
 ## Events
 
-Many objects in Node emit events: a `net.Server` emits an event each time
-a peer connects to it, a `fs.readStream` emits an event when the file is
-opened. All objects which emit events are instances of `events.EventEmitter`.
-You can access this module by doing: `require("events");`
+Many objects in Node emit events: a `net.Server` emits an event each time a peer connects to it, a `fs.readStream` emits an event when the file is opened. All objects which emit events are instances of `events.EventEmitter`. You can access this module by doing: `require("events");`
 
-Typically, event names are represented by a camel-cased string, however,
-there aren't any strict restrictions on that, as any string will be accepted.
+Typically, event names are represented by a camel-cased string, however, there aren't any strict restrictions on that, as any string will be accepted.
 
-Functions can then be attached to objects, to be executed when an event
-is emitted. These functions are called _listeners_.
+Functions can then be attached to objects, to be executed when an event is emitted. These functions are called _listeners_.
 
 
 **Namespaces** with **Wildcards**
-To use namespaces/wildcards, pass the `wildcard` option into the EventEmitter constructor.
-When namespaces/wildcards are enabled, events can either be strings (`foo.bar`) separated
-by a delimiter or arrays (`['foo', 'bar']`). The delimiter is also configurable as a 
-constructor option.
+To use namespaces/wildcards, pass the `wildcard` option into the EventEmitter constructor. When namespaces/wildcards are enabled, events can either be strings (`foo.bar`) separated by a delimiter or arrays (`['foo', 'bar']`). The delimiter is also configurable as a  constructor option.
 
-An event name passed to any event emitter method can contain a wild card (the `*` character).
-If the event name is a string, a wildcard may appear as `foo.*`. If the event name is an array, 
-the wildcard may appear as `['foo', '*']`.
+An event name passed to any event emitter method can contain a wild card (the `*` character). If the event name is a string, a wildcard may appear as `foo.*`. If the event name is an array, the wildcard may appear as `['foo', '*']`.
 
-If either of the above described events were passed to the `on` method, subsequent emits such 
-as the following would be observed...
+If either of the above described events were passed to the `on` method, subsequent emits such as the following would be observed...
 
 
    emitter.emit(['foo.bazz']);
    emitter.emit(['foo', 'bar']);
 
 
+When emitting or listening for an event that contains a wildcard, the name of the actual event is available by accessing `this.event` from within the callback.
+
 ### events.EventEmitter
 
 To access the EventEmitter class, `require('events').EventEmitter`.
 
-When an `EventEmitter` instance experiences an error, the typical action is
-to emit an `'error'` event.  Error events are treated as a special case in node.
-If there is no listener for it, then the default action is to print a stack
-trace and exit the program.
+When an `EventEmitter` instance experiences an error, the typical action is to emit an `'error'` event.  Error events are treated as a special case in node. If there is no listener for it, then the default action is to print a stack trace and exit the program.
 
-All EventEmitters emit the event `'newListener'` when new listeners are
-added.
+All EventEmitters emit the event `'newListener'` when new listeners are added.
 
 #### emitter.addListener(event, listener)
 #### emitter.on(event, listener)
