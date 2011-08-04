@@ -12,46 +12,6 @@ Functions can then be attached to objects, to be executed when an event is
 emitted. These functions are called _listeners_.
 
 
-**Namespaces** with **Wildcards**
-To use namespaces/wildcards, pass the `wildcard` option into the EventEmitter
-constructor. When namespaces/wildcards are enabled, events can either be
-strings (`foo.bar`) separated by a delimiter or arrays (`['foo', 'bar']`).
-The delimiter is also configurable as a  constructor option.
-
-An event name passed to any event emitter method can contain a wild card (the
-`*` character). If the event name is a string, a wildcard may appear as
-`foo.*`. If the event name is an array, the wildcard may appear as 
-`['foo', '*']`. 
-
-A `*` is not a catchall for all events, the code `emitter.on('*')` or 
-`emitter.emit('*')` will correlate with events that have a namespace length 
-of 1.
-
-If either of the above described events were passed to the `on` method,
-subsequent emits such as the following would be observed...
-
-
-    emitter.emit('foo.bazz');
-    emitter.emit(['foo', 'bar']);
-
-
-The name of the actual event that was fired is available by accessing 
-`this.event`. This is helpful when there are wildcards involved.
-
-
-    emitter.on('*', function() {
-      console.log(emitter.currentEvent);
-    });
-
-    emitter.on('foo', function() {
-      console.log(this.event); // => `foo`
-      emitter.emit('bar'); // emitting a new event changes the current event.
-      console.log(this.event); // => `bar`
-    });
-
-    emitter.emit('foo');
-
-
 ### events.EventEmitter
 
 To access the EventEmitter class, `require('events').EventEmitter`.
@@ -72,6 +32,55 @@ Adds a listener to the end of the listeners array for the specified event.
     server.on('connection', function (stream) {
       console.log('someone connected!');
     });
+
+
+To use **Namespaces** and **Wildcards**, pass the `wildcard` option into the 
+EventEmitter constructor.
+
+
+    var emitter = new EventEmitter({ wildcard: true });
+
+
+When namespaces/wildcards are enabled, events can either be specified as
+strings (`foo.bar`) separated by a delimiter or arrays (`['foo', 'bar']`).
+The delimiter that separates the event name into "spaces" or segments is
+also configurable as a constructor option.
+
+
+    var emitter = new EventEmitter({ wildcard: true, delimiter: ':' });
+
+
+An event name can contain a wild card (the `*` character). If the event
+name is a string, a wildcard may appear as `foo.*`. If the event name is
+an array, the wildcard may appear as `['foo', '*']`.
+
+A `*` is not a catchall for all events, the code `emitter.on('*')` or
+`emitter.emit('*')` will correlate with events that have a namespace length
+of 1.
+
+If either of the above described events were passed to the `on` method,
+subsequent emits such as the following would be observed...
+
+
+    emitter.emit('foo.bazz');
+    emitter.emit(['foo', 'bar']);
+
+
+The name of the actual event that was fired is available by accessing
+`this.event`. This is helpful when there are wildcards involved.
+
+
+    emitter.on('*', function() {
+      console.log(emitter.currentEvent);
+    });
+
+    emitter.on('foo', function() {
+      console.log(this.event); // => `foo`
+      emitter.emit('bar'); // emitting a new event changes the current event.
+      console.log(this.event); // => `bar`
+    });
+
+    emitter.emit('foo');
 
 
 #### emitter.onAny(listener)
