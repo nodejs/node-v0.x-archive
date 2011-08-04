@@ -2,8 +2,6 @@
 //
 // Tests of logging functions from log.h
 
-#ifdef ENABLE_LOGGING_AND_PROFILING
-
 #ifdef __linux__
 #include <math.h>
 #include <pthread.h>
@@ -14,7 +12,9 @@
 #include "v8.h"
 #include "log.h"
 #include "cpu-profiler.h"
+#include "natives.h"
 #include "v8threads.h"
+#include "v8utils.h"
 #include "cctest.h"
 #include "vm-state-inl.h"
 
@@ -25,269 +25,75 @@ using v8::internal::StrLength;
 
 namespace i = v8::internal;
 
-static void SetUp() {
-  // Log to memory buffer.
-  i::FLAG_logfile = "*";
-  i::FLAG_log = true;
-  Logger::Setup();
-}
-
-static void TearDown() {
-  Logger::TearDown();
-}
-
-
-TEST(EmptyLog) {
-  SetUp();
-  CHECK_EQ(0, Logger::GetLogLines(0, NULL, 0));
-  CHECK_EQ(0, Logger::GetLogLines(100, NULL, 0));
-  CHECK_EQ(0, Logger::GetLogLines(0, NULL, 100));
-  CHECK_EQ(0, Logger::GetLogLines(100, NULL, 100));
-  TearDown();
-}
-
-
-TEST(GetMessages) {
-  SetUp();
-  Logger::StringEvent("aaa", "bbb");
-  Logger::StringEvent("cccc", "dddd");
-  CHECK_EQ(0, Logger::GetLogLines(0, NULL, 0));
-  char log_lines[100];
-  memset(log_lines, 0, sizeof(log_lines));
-  // See Logger::StringEvent.
-  const char* line_1 = "aaa,\"bbb\"\n";
-  const int line_1_len = StrLength(line_1);
-  // The exact size.
-  CHECK_EQ(line_1_len, Logger::GetLogLines(0, log_lines, line_1_len));
-  CHECK_EQ(line_1, log_lines);
-  memset(log_lines, 0, sizeof(log_lines));
-  // A bit more than the first line length.
-  CHECK_EQ(line_1_len, Logger::GetLogLines(0, log_lines, line_1_len + 3));
-  log_lines[line_1_len] = '\0';
-  CHECK_EQ(line_1, log_lines);
-  memset(log_lines, 0, sizeof(log_lines));
-  const char* line_2 = "cccc,\"dddd\"\n";
-  const int line_2_len = StrLength(line_2);
-  // Now start with line_2 beginning.
-  CHECK_EQ(0, Logger::GetLogLines(line_1_len, log_lines, 0));
-  CHECK_EQ(line_2_len, Logger::GetLogLines(line_1_len, log_lines, line_2_len));
-  CHECK_EQ(line_2, log_lines);
-  memset(log_lines, 0, sizeof(log_lines));
-  CHECK_EQ(line_2_len,
-           Logger::GetLogLines(line_1_len, log_lines, line_2_len + 3));
-  CHECK_EQ(line_2, log_lines);
-  memset(log_lines, 0, sizeof(log_lines));
-  // Now get entire buffer contents.
-  const char* all_lines = "aaa,\"bbb\"\ncccc,\"dddd\"\n";
-  const int all_lines_len = StrLength(all_lines);
-  CHECK_EQ(all_lines_len, Logger::GetLogLines(0, log_lines, all_lines_len));
-  CHECK_EQ(all_lines, log_lines);
-  memset(log_lines, 0, sizeof(log_lines));
-  CHECK_EQ(all_lines_len, Logger::GetLogLines(0, log_lines, all_lines_len + 3));
-  CHECK_EQ(all_lines, log_lines);
-  memset(log_lines, 0, sizeof(log_lines));
-  TearDown();
-}
-
-
-static int GetLogLines(int start_pos, i::Vector<char>* buffer) {
-  return Logger::GetLogLines(start_pos, buffer->start(), buffer->length());
-}
-
-
-TEST(BeyondWritePosition) {
-  SetUp();
-  Logger::StringEvent("aaa", "bbb");
-  Logger::StringEvent("cccc", "dddd");
-  // See Logger::StringEvent.
-  const char* all_lines = "aaa,\"bbb\"\ncccc,\"dddd\"\n";
-  const int all_lines_len = StrLength(all_lines);
-  EmbeddedVector<char, 100> buffer;
-  const int beyond_write_pos = all_lines_len;
-  CHECK_EQ(0, Logger::GetLogLines(beyond_write_pos, buffer.start(), 1));
-  CHECK_EQ(0, GetLogLines(beyond_write_pos, &buffer));
-  CHECK_EQ(0, Logger::GetLogLines(beyond_write_pos + 1, buffer.start(), 1));
-  CHECK_EQ(0, GetLogLines(beyond_write_pos + 1, &buffer));
-  CHECK_EQ(0, Logger::GetLogLines(beyond_write_pos + 100, buffer.start(), 1));
-  CHECK_EQ(0, GetLogLines(beyond_write_pos + 100, &buffer));
-  CHECK_EQ(0, Logger::GetLogLines(10 * 1024 * 1024, buffer.start(), 1));
-  CHECK_EQ(0, GetLogLines(10 * 1024 * 1024, &buffer));
-  TearDown();
-}
-
-
-TEST(MemoryLoggingTurnedOff) {
-  // Log to stdout
-  i::FLAG_logfile = "-";
-  i::FLAG_log = true;
-  Logger::Setup();
-  CHECK_EQ(0, Logger::GetLogLines(0, NULL, 0));
-  CHECK_EQ(0, Logger::GetLogLines(100, NULL, 0));
-  CHECK_EQ(0, Logger::GetLogLines(0, NULL, 100));
-  CHECK_EQ(0, Logger::GetLogLines(100, NULL, 100));
-  Logger::TearDown();
-}
-
-
-static void CompileAndRunScript(const char *src) {
-  v8::Script::Compile(v8::String::New(src))->Run();
-}
-
-
-namespace v8 {
-namespace internal {
-
-class LoggerTestHelper : public AllStatic {
- public:
-  static bool IsSamplerActive() { return Logger::IsProfilerSamplerActive(); }
-  static void ResetSamplesTaken() {
-    reinterpret_cast<Sampler*>(Logger::ticker_)->ResetSamplesTaken();
-  }
-  static bool has_samples_taken() {
-    return reinterpret_cast<Sampler*>(Logger::ticker_)->samples_taken() > 0;
-  }
-};
-
-}  // namespace v8::internal
-}  // namespace v8
-
-using v8::internal::LoggerTestHelper;
-
-
 namespace {
 
 class ScopedLoggerInitializer {
  public:
   explicit ScopedLoggerInitializer(bool prof_lazy)
-      : saved_prof_lazy_(i::FLAG_prof_lazy),
+      : saved_log_(i::FLAG_log),
+        saved_prof_lazy_(i::FLAG_prof_lazy),
         saved_prof_(i::FLAG_prof),
         saved_prof_auto_(i::FLAG_prof_auto),
+        temp_file_(NULL),
+        // Need to run this prior to creating the scope.
         trick_to_run_init_flags_(init_flags_(prof_lazy)),
-        need_to_set_up_logger_(i::V8::IsRunning()),
         scope_(),
         env_(v8::Context::New()) {
-    if (need_to_set_up_logger_) Logger::Setup();
     env_->Enter();
   }
 
   ~ScopedLoggerInitializer() {
     env_->Exit();
-    Logger::TearDown();
+    LOGGER->TearDown();
+    if (temp_file_ != NULL) fclose(temp_file_);
     i::FLAG_prof_lazy = saved_prof_lazy_;
     i::FLAG_prof = saved_prof_;
     i::FLAG_prof_auto = saved_prof_auto_;
+    i::FLAG_log = saved_log_;
   }
 
   v8::Handle<v8::Context>& env() { return env_; }
 
+  FILE* StopLoggingGetTempFile() {
+    temp_file_ = LOGGER->TearDown();
+    CHECK_NE(NULL, temp_file_);
+    fflush(temp_file_);
+    rewind(temp_file_);
+    return temp_file_;
+  }
+
  private:
   static bool init_flags_(bool prof_lazy) {
+    i::FLAG_log = true;
     i::FLAG_prof = true;
     i::FLAG_prof_lazy = prof_lazy;
     i::FLAG_prof_auto = false;
-    i::FLAG_logfile = "*";
+    i::FLAG_logfile = i::Log::kLogToTemporaryFile;
     return prof_lazy;
   }
 
+  const bool saved_log_;
   const bool saved_prof_lazy_;
   const bool saved_prof_;
   const bool saved_prof_auto_;
+  FILE* temp_file_;
   const bool trick_to_run_init_flags_;
-  const bool need_to_set_up_logger_;
   v8::HandleScope scope_;
   v8::Handle<v8::Context> env_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedLoggerInitializer);
 };
 
-
-class LogBufferMatcher {
- public:
-  LogBufferMatcher() {
-    // Skip all initially logged stuff.
-    log_pos_ = GetLogLines(0, &buffer_);
-  }
-
-  int log_pos() { return log_pos_; }
-
-  int GetNextChunk() {
-    int chunk_size = GetLogLines(log_pos_, &buffer_);
-    CHECK_GT(buffer_.length(), chunk_size);
-    buffer_[chunk_size] = '\0';
-    log_pos_ += chunk_size;
-    return chunk_size;
-  }
-
-  const char* Find(const char* substr) {
-    return strstr(buffer_.start(), substr);
-  }
-
-  const char* Find(const i::Vector<char>& substr) {
-    return Find(substr.start());
-  }
-
-  bool IsInSequence(const char* s1, const char* s2) {
-    const char* s1_pos = Find(s1);
-    const char* s2_pos = Find(s2);
-    CHECK_NE(NULL, s1_pos);
-    CHECK_NE(NULL, s2_pos);
-    return s1_pos < s2_pos;
-  }
-
-  void PrintBuffer() {
-    puts(buffer_.start());
-  }
-
- private:
-  EmbeddedVector<char, 102400> buffer_;
-  int log_pos_;
-};
-
 }  // namespace
 
 
-static void CheckThatProfilerWorks(LogBufferMatcher* matcher) {
-  CHECK(i::RuntimeProfiler::IsEnabled() ||
-        !LoggerTestHelper::IsSamplerActive());
-  LoggerTestHelper::ResetSamplesTaken();
-
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 0);
-  CHECK(LoggerTestHelper::IsSamplerActive());
-
-  // Verify that the current map of compiled functions has been logged.
-  CHECK_GT(matcher->GetNextChunk(), 0);
-  const char* code_creation = "\ncode-creation,";  // eq. to /^code-creation,/
-  CHECK_NE(NULL, matcher->Find(code_creation));
-
-  // Force compiler to generate new code by parametrizing source.
-  EmbeddedVector<char, 100> script_src;
-  i::OS::SNPrintF(script_src,
-                  "function f%d(x) { return %d * x; }"
-                  "for (var i = 0; i < 10000; ++i) { f%d(i); }",
-                  matcher->log_pos(), matcher->log_pos(), matcher->log_pos());
-  // Run code for 200 msecs to get some ticks.
-  const double end_time = i::OS::TimeCurrentMillis() + 200;
-  while (i::OS::TimeCurrentMillis() < end_time) {
-    CompileAndRunScript(script_src.start());
-    // Yield CPU to give Profiler thread a chance to process ticks.
-    i::OS::Sleep(1);
-  }
-
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 0);
-  CHECK(i::RuntimeProfiler::IsEnabled() ||
-        !LoggerTestHelper::IsSamplerActive());
-
-  // Wait 50 msecs to allow Profiler thread to process the last
-  // tick sample it has got.
-  i::OS::Sleep(50);
-
-  // Now we must have compiler and tick records.
-  CHECK_GT(matcher->GetNextChunk(), 0);
-  matcher->PrintBuffer();
-  CHECK_NE(NULL, matcher->Find(code_creation));
-  const char* tick = "\ntick,";
-  const bool ticks_found = matcher->Find(tick) != NULL;
-  CHECK_EQ(LoggerTestHelper::has_samples_taken(), ticks_found);
+static const char* StrNStr(const char* s1, const char* s2, int n) {
+  if (s1[n] == '\0') return strstr(s1, s2);
+  i::ScopedVector<char> str(n + 1);
+  i::OS::StrNCpy(str, s1, static_cast<size_t>(n));
+  str[n] = '\0';
+  char* found = strstr(str.start(), s2);
+  return found != NULL ? s1 + (found - str.start()) : NULL;
 }
 
 
@@ -296,29 +102,61 @@ TEST(ProfLazyMode) {
 
   if (!i::V8::UseCrankshaft()) return;
 
-  // No sampling should happen prior to resuming profiler unless we
-  // are runtime profiling.
-  CHECK(i::RuntimeProfiler::IsEnabled() ||
-        !LoggerTestHelper::IsSamplerActive());
-
-  LogBufferMatcher matcher;
-  // Nothing must be logged until profiling is resumed.
-  CHECK_EQ(0, matcher.log_pos());
-
-  CompileAndRunScript("var a = (function(x) { return x + 1; })(10);");
-
-  // Nothing must be logged while profiling is suspended.
-  CHECK_EQ(0, matcher.GetNextChunk());
-
-  CheckThatProfilerWorks(&matcher);
-
-  CompileAndRunScript("var a = (function(x) { return x + 1; })(10);");
-
-  // No new data beyond last retrieved position.
-  CHECK_EQ(0, matcher.GetNextChunk());
-
+  LOGGER->StringEvent("test-start", "");
+  CompileRun("var a = (function(x) { return x + 1; })(10);");
+  LOGGER->StringEvent("test-profiler-start", "");
+  v8::V8::ResumeProfiler();
+  CompileRun(
+      "var b = (function(x) { return x + 2; })(10);\n"
+      "var c = (function(x) { return x + 3; })(10);\n"
+      "var d = (function(x) { return x + 4; })(10);\n"
+      "var e = (function(x) { return x + 5; })(10);");
+  v8::V8::PauseProfiler();
+  LOGGER->StringEvent("test-profiler-stop", "");
+  CompileRun("var f = (function(x) { return x + 6; })(10);");
   // Check that profiling can be resumed again.
-  CheckThatProfilerWorks(&matcher);
+  LOGGER->StringEvent("test-profiler-start-2", "");
+  v8::V8::ResumeProfiler();
+  CompileRun(
+      "var g = (function(x) { return x + 7; })(10);\n"
+      "var h = (function(x) { return x + 8; })(10);\n"
+      "var i = (function(x) { return x + 9; })(10);\n"
+      "var j = (function(x) { return x + 10; })(10);");
+  v8::V8::PauseProfiler();
+  LOGGER->StringEvent("test-profiler-stop-2", "");
+  LOGGER->StringEvent("test-stop", "");
+
+  bool exists = false;
+  i::Vector<const char> log(
+      i::ReadFile(initialize_logger.StopLoggingGetTempFile(), &exists, true));
+  CHECK(exists);
+
+  const char* test_start_position =
+      StrNStr(log.start(), "test-start,", log.length());
+  CHECK_NE(NULL, test_start_position);
+  const char* test_profiler_start_position =
+      StrNStr(log.start(), "test-profiler-start,", log.length());
+  CHECK_NE(NULL, test_profiler_start_position);
+  CHECK_GT(test_profiler_start_position, test_start_position);
+  const char* test_profiler_stop_position =
+      StrNStr(log.start(), "test-profiler-stop,", log.length());
+  CHECK_NE(NULL, test_profiler_stop_position);
+  CHECK_GT(test_profiler_stop_position, test_profiler_start_position);
+  const char* test_profiler_start_2_position =
+      StrNStr(log.start(), "test-profiler-start-2,", log.length());
+  CHECK_NE(NULL, test_profiler_start_2_position);
+  CHECK_GT(test_profiler_start_2_position, test_profiler_stop_position);
+
+  // Nothing must be logged until profiling is resumed.
+  CHECK_EQ(NULL, StrNStr(test_start_position,
+                         "code-creation,",
+                         static_cast<int>(test_profiler_start_position -
+                                          test_start_position)));
+  // Nothing must be logged while profiling is suspended.
+  CHECK_EQ(NULL, StrNStr(test_profiler_stop_position,
+                         "code-creation,",
+                         static_cast<int>(test_profiler_start_2_position -
+                                          test_profiler_stop_position)));
 }
 
 
@@ -329,8 +167,8 @@ namespace {
 
 class LoopingThread : public v8::internal::Thread {
  public:
-  LoopingThread()
-      : v8::internal::Thread(),
+  explicit LoopingThread(v8::internal::Isolate* isolate)
+      : v8::internal::Thread(isolate),
         semaphore_(v8::internal::OS::CreateSemaphore(0)),
         run_(true) {
   }
@@ -369,9 +207,12 @@ class LoopingThread : public v8::internal::Thread {
 
 class LoopingJsThread : public LoopingThread {
  public:
+  explicit LoopingJsThread(v8::internal::Isolate* isolate)
+      : LoopingThread(isolate) { }
   void RunLoop() {
     v8::Locker locker;
-    CHECK(v8::internal::ThreadManager::HasId());
+    CHECK(i::Isolate::Current() != NULL);
+    CHECK_GT(i::Isolate::Current()->thread_manager()->CurrentId(), 0);
     SetV8ThreadId();
     while (IsRunning()) {
       v8::HandleScope scope;
@@ -380,7 +221,7 @@ class LoopingJsThread : public LoopingThread {
       {
         v8::Context::Scope context_scope(context);
         SignalRunning();
-        CompileAndRunScript(
+        CompileRun(
             "var j; for (var i=0; i<10000; ++i) { j = Math.sin(i); }");
       }
       context.Dispose();
@@ -392,11 +233,14 @@ class LoopingJsThread : public LoopingThread {
 
 class LoopingNonJsThread : public LoopingThread {
  public:
+  explicit LoopingNonJsThread(v8::internal::Isolate* isolate)
+      : LoopingThread(isolate) { }
   void RunLoop() {
     v8::Locker locker;
     v8::Unlocker unlocker;
     // Now thread has V8's id, but will not run VM code.
-    CHECK(v8::internal::ThreadManager::HasId());
+    CHECK(i::Isolate::Current() != NULL);
+    CHECK_GT(i::Isolate::Current()->thread_manager()->CurrentId(), 0);
     double i = 10;
     SignalRunning();
     while (IsRunning()) {
@@ -409,8 +253,8 @@ class LoopingNonJsThread : public LoopingThread {
 
 class TestSampler : public v8::internal::Sampler {
  public:
-  TestSampler()
-      : Sampler(0, true, true),
+  explicit TestSampler(v8::internal::Isolate* isolate)
+      : Sampler(isolate, 0, true, true),
         semaphore_(v8::internal::OS::CreateSemaphore(0)),
         was_sample_stack_called_(false) {
   }
@@ -441,14 +285,14 @@ TEST(ProfMultipleThreads) {
   TestSampler* sampler = NULL;
   {
     v8::Locker locker;
-    sampler = new TestSampler();
+    sampler = new TestSampler(v8::internal::Isolate::Current());
     sampler->Start();
     CHECK(sampler->IsActive());
   }
 
-  LoopingJsThread jsThread;
+  LoopingJsThread jsThread(v8::internal::Isolate::Current());
   jsThread.Start();
-  LoopingNonJsThread nonJsThread;
+  LoopingNonJsThread nonJsThread(v8::internal::Isolate::Current());
   nonJsThread.Start();
 
   CHECK(!sampler->WasSampleStackCalled());
@@ -515,7 +359,7 @@ TEST(Issue23768) {
   i_source->set_resource(NULL);
 
   // Must not crash.
-  i::Logger::LogCompiledFunctions();
+  LOGGER->LogCompiledFunctions();
 }
 
 
@@ -525,34 +369,34 @@ static v8::Handle<v8::Value> ObjMethod1(const v8::Arguments& args) {
 
 TEST(LogCallbacks) {
   ScopedLoggerInitializer initialize_logger(false);
-  LogBufferMatcher matcher;
 
   v8::Persistent<v8::FunctionTemplate> obj =
       v8::Persistent<v8::FunctionTemplate>::New(v8::FunctionTemplate::New());
-  obj->SetClassName(v8::String::New("Obj"));
+  obj->SetClassName(v8_str("Obj"));
   v8::Handle<v8::ObjectTemplate> proto = obj->PrototypeTemplate();
   v8::Local<v8::Signature> signature = v8::Signature::New(obj);
-  proto->Set(v8::String::New("method1"),
+  proto->Set(v8_str("method1"),
              v8::FunctionTemplate::New(ObjMethod1,
                                        v8::Handle<v8::Value>(),
                                        signature),
              static_cast<v8::PropertyAttribute>(v8::DontDelete));
 
   initialize_logger.env()->Global()->Set(v8_str("Obj"), obj->GetFunction());
-  CompileAndRunScript("Obj.prototype.method1.toString();");
+  CompileRun("Obj.prototype.method1.toString();");
 
-  i::Logger::LogCompiledFunctions();
-  CHECK_GT(matcher.GetNextChunk(), 0);
+  LOGGER->LogCompiledFunctions();
 
-  const char* callback_rec = "code-creation,Callback,";
-  char* pos = const_cast<char*>(matcher.Find(callback_rec));
-  CHECK_NE(NULL, pos);
-  pos += strlen(callback_rec);
-  EmbeddedVector<char, 100> ref_data;
+  bool exists = false;
+  i::Vector<const char> log(
+      i::ReadFile(initialize_logger.StopLoggingGetTempFile(), &exists, true));
+  CHECK(exists);
+
+  i::EmbeddedVector<char, 100> ref_data;
   i::OS::SNPrintF(ref_data,
-                  "0x%" V8PRIxPTR ",1,\"method1\"", ObjMethod1);
-  *(pos + strlen(ref_data.start())) = '\0';
-  CHECK_EQ(ref_data.start(), pos);
+                  "code-creation,Callback,0x%" V8PRIxPTR ",1,\"method1\"\0",
+                  ObjMethod1);
+
+  CHECK_NE(NULL, StrNStr(log.start(), ref_data.start(), log.length()));
 
   obj.Dispose();
 }
@@ -575,524 +419,58 @@ static v8::Handle<v8::Value> Prop2Getter(v8::Local<v8::String> property,
 
 TEST(LogAccessorCallbacks) {
   ScopedLoggerInitializer initialize_logger(false);
-  LogBufferMatcher matcher;
 
   v8::Persistent<v8::FunctionTemplate> obj =
       v8::Persistent<v8::FunctionTemplate>::New(v8::FunctionTemplate::New());
-  obj->SetClassName(v8::String::New("Obj"));
+  obj->SetClassName(v8_str("Obj"));
   v8::Handle<v8::ObjectTemplate> inst = obj->InstanceTemplate();
-  inst->SetAccessor(v8::String::New("prop1"), Prop1Getter, Prop1Setter);
-  inst->SetAccessor(v8::String::New("prop2"), Prop2Getter);
+  inst->SetAccessor(v8_str("prop1"), Prop1Getter, Prop1Setter);
+  inst->SetAccessor(v8_str("prop2"), Prop2Getter);
 
-  i::Logger::LogAccessorCallbacks();
-  CHECK_GT(matcher.GetNextChunk(), 0);
-  matcher.PrintBuffer();
+  LOGGER->LogAccessorCallbacks();
+
+  bool exists = false;
+  i::Vector<const char> log(
+      i::ReadFile(initialize_logger.StopLoggingGetTempFile(), &exists, true));
+  CHECK(exists);
 
   EmbeddedVector<char, 100> prop1_getter_record;
   i::OS::SNPrintF(prop1_getter_record,
                   "code-creation,Callback,0x%" V8PRIxPTR ",1,\"get prop1\"",
                   Prop1Getter);
-  CHECK_NE(NULL, matcher.Find(prop1_getter_record));
+  CHECK_NE(NULL,
+           StrNStr(log.start(), prop1_getter_record.start(), log.length()));
+
   EmbeddedVector<char, 100> prop1_setter_record;
   i::OS::SNPrintF(prop1_setter_record,
                   "code-creation,Callback,0x%" V8PRIxPTR ",1,\"set prop1\"",
                   Prop1Setter);
-  CHECK_NE(NULL, matcher.Find(prop1_setter_record));
+  CHECK_NE(NULL,
+           StrNStr(log.start(), prop1_setter_record.start(), log.length()));
+
   EmbeddedVector<char, 100> prop2_getter_record;
   i::OS::SNPrintF(prop2_getter_record,
                   "code-creation,Callback,0x%" V8PRIxPTR ",1,\"get prop2\"",
                   Prop2Getter);
-  CHECK_NE(NULL, matcher.Find(prop2_getter_record));
+  CHECK_NE(NULL,
+           StrNStr(log.start(), prop2_getter_record.start(), log.length()));
 
   obj.Dispose();
-}
-
-
-TEST(LogTags) {
-  ScopedLoggerInitializer initialize_logger(false);
-  LogBufferMatcher matcher;
-
-  const char* open_tag = "open-tag,";
-  const char* close_tag = "close-tag,";
-
-  // Check compatibility with the old style behavior.
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 0);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 0);
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  CHECK_EQ(NULL, matcher.Find(open_tag));
-  CHECK_EQ(NULL, matcher.Find(close_tag));
-
-  const char* open_tag1 = "open-tag,1\n";
-  const char* close_tag1 = "close-tag,1\n";
-
-  // Check non-nested tag case.
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  CHECK_GT(matcher.GetNextChunk(), 0);
-  CHECK(matcher.IsInSequence(open_tag1, close_tag1));
-
-  const char* open_tag2 = "open-tag,2\n";
-  const char* close_tag2 = "close-tag,2\n";
-
-  // Check nested tags case.
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 2);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 2);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  CHECK_GT(matcher.GetNextChunk(), 0);
-  // open_tag1 < open_tag2 < close_tag2 < close_tag1
-  CHECK(matcher.IsInSequence(open_tag1, open_tag2));
-  CHECK(matcher.IsInSequence(open_tag2, close_tag2));
-  CHECK(matcher.IsInSequence(close_tag2, close_tag1));
-
-  // Check overlapped tags case.
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 2);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 2);
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  CHECK_GT(matcher.GetNextChunk(), 0);
-  // open_tag1 < open_tag2 < close_tag1 < close_tag2
-  CHECK(matcher.IsInSequence(open_tag1, open_tag2));
-  CHECK(matcher.IsInSequence(open_tag2, close_tag1));
-  CHECK(matcher.IsInSequence(close_tag1, close_tag2));
-
-  const char* open_tag3 = "open-tag,3\n";
-  const char* close_tag3 = "close-tag,3\n";
-
-  // Check pausing overflow case.
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 2);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 2);
-  CHECK_EQ(v8::PROFILER_MODULE_CPU, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 3);
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 3);
-  CHECK_EQ(v8::PROFILER_MODULE_NONE, Logger::GetActiveProfilerModules());
-  // Must be no tags, because logging must be disabled.
-  CHECK_EQ(NULL, matcher.Find(open_tag3));
-  CHECK_EQ(NULL, matcher.Find(close_tag3));
 }
 
 
 TEST(IsLoggingPreserved) {
   ScopedLoggerInitializer initialize_logger(false);
 
-  CHECK(Logger::is_logging());
-  Logger::ResumeProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK(Logger::is_logging());
-  Logger::PauseProfiler(v8::PROFILER_MODULE_CPU, 1);
-  CHECK(Logger::is_logging());
-
-  CHECK(Logger::is_logging());
-  Logger::ResumeProfiler(
-      v8::PROFILER_MODULE_HEAP_STATS | v8::PROFILER_MODULE_JS_CONSTRUCTORS, 1);
-  CHECK(Logger::is_logging());
-  Logger::PauseProfiler(
-      v8::PROFILER_MODULE_HEAP_STATS | v8::PROFILER_MODULE_JS_CONSTRUCTORS, 1);
-  CHECK(Logger::is_logging());
-
-  CHECK(Logger::is_logging());
-  Logger::ResumeProfiler(
-      v8::PROFILER_MODULE_CPU |
-      v8::PROFILER_MODULE_HEAP_STATS | v8::PROFILER_MODULE_JS_CONSTRUCTORS, 1);
-  CHECK(Logger::is_logging());
-  Logger::PauseProfiler(
-      v8::PROFILER_MODULE_CPU |
-      v8::PROFILER_MODULE_HEAP_STATS | v8::PROFILER_MODULE_JS_CONSTRUCTORS, 1);
-  CHECK(Logger::is_logging());
+  CHECK(LOGGER->is_logging());
+  LOGGER->ResumeProfiler();
+  CHECK(LOGGER->is_logging());
+  LOGGER->PauseProfiler();
+  CHECK(LOGGER->is_logging());
 }
 
 
-static inline bool IsStringEqualTo(const char* r, const char* s) {
-  return strncmp(r, s, strlen(r)) == 0;
-}
-
-
-static bool Consume(const char* str, char** buf) {
-  if (IsStringEqualTo(str, *buf)) {
-    *buf += strlen(str);
-    return true;
-  }
-  return false;
-}
-
-
-namespace {
-
-// A code entity is a pointer to a position of code-creation event in buffer log
-// offset to a point where entity size begins, i.e.: '255,"func"\n'. This makes
-// comparing code entities pretty easy.
-typedef char* CodeEntityInfo;
-
-class Interval {
- public:
-  Interval()
-      : min_addr_(reinterpret_cast<Address>(-1)),
-        max_addr_(reinterpret_cast<Address>(0)), next_(NULL) {}
-
-  ~Interval() { delete next_; }
-
-  size_t Length() {
-    size_t result = max_addr_ - min_addr_ + 1;
-    if (next_ != NULL) result += next_->Length();
-    return result;
-  }
-
-  void CloneFrom(Interval* src) {
-    while (src != NULL) {
-      RegisterAddress(src->min_addr_);
-      RegisterAddress(src->max_addr_);
-      src = src->next_;
-    }
-  }
-
-  bool Contains(Address addr) {
-    if (min_addr_ <= addr && addr <= max_addr_) {
-      return true;
-    }
-    if (next_ != NULL) {
-      return next_->Contains(addr);
-    } else {
-      return false;
-    }
-  }
-
-  size_t GetIndex(Address addr) {
-    if (min_addr_ <= addr && addr <= max_addr_) {
-      return addr - min_addr_;
-    }
-    CHECK_NE(NULL, next_);
-    return (max_addr_ - min_addr_ + 1) + next_->GetIndex(addr);
-  }
-
-  Address GetMinAddr() {
-    return next_ == NULL ? min_addr_ : i::Min(min_addr_, next_->GetMinAddr());
-  }
-
-  Address GetMaxAddr() {
-    return next_ == NULL ? max_addr_ : i::Max(max_addr_, next_->GetMaxAddr());
-  }
-
-  void RegisterAddress(Address addr) {
-    if (min_addr_ == reinterpret_cast<Address>(-1)
-        || (size_t)(addr > min_addr_ ?
-           addr - min_addr_ : min_addr_ - addr) < MAX_DELTA) {
-      if (addr < min_addr_) min_addr_ = addr;
-      if (addr > max_addr_) max_addr_ = addr;
-    } else {
-      if (next_ == NULL) next_ = new Interval();
-      next_->RegisterAddress(addr);
-    }
-  }
-
-  Address raw_min_addr() { return min_addr_; }
-
-  Address raw_max_addr() { return max_addr_; }
-
-  Interval* get_next() { return next_; }
-
- private:
-  static const size_t MAX_DELTA = 0x100000;
-  Address min_addr_;
-  Address max_addr_;
-  Interval* next_;
-};
-
-
-// A structure used to return log parsing results.
-class ParseLogResult {
- public:
-  ParseLogResult()
-      : entities_map(NULL), entities(NULL),
-        max_entities(0) {}
-
-  ~ParseLogResult() {
-    i::DeleteArray(entities_map);
-    i::DeleteArray(entities);
-  }
-
-  void AllocateEntities() {
-    // Make sure that the test doesn't operate on a bogus log.
-    CHECK_GT(max_entities, 0);
-    CHECK_GT(bounds.GetMinAddr(), 0);
-    CHECK_GT(bounds.GetMaxAddr(), bounds.GetMinAddr());
-
-    entities = i::NewArray<CodeEntityInfo>(max_entities);
-    for (int i = 0; i < max_entities; ++i) {
-      entities[i] = NULL;
-    }
-    const size_t map_length = bounds.Length();
-    entities_map = i::NewArray<int>(static_cast<int>(map_length));
-    for (size_t i = 0; i < map_length; ++i) {
-      entities_map[i] = -1;
-    }
-  }
-
-  bool HasIndexForAddress(Address addr) {
-    return bounds.Contains(addr);
-  }
-
-  size_t GetIndexForAddress(Address addr) {
-    CHECK(HasIndexForAddress(addr));
-    return bounds.GetIndex(addr);
-  }
-
-  CodeEntityInfo GetEntity(Address addr) {
-    if (HasIndexForAddress(addr)) {
-      size_t idx = GetIndexForAddress(addr);
-      int item = entities_map[idx];
-      return item != -1 ? entities[item] : NULL;
-    }
-    return NULL;
-  }
-
-  void ParseAddress(char* start) {
-    Address addr =
-        reinterpret_cast<Address>(strtoul(start, NULL, 16));  // NOLINT
-    bounds.RegisterAddress(addr);
-  }
-
-  Address ConsumeAddress(char** start) {
-    char* end_ptr;
-    Address addr =
-        reinterpret_cast<Address>(strtoul(*start, &end_ptr, 16));  // NOLINT
-    CHECK(HasIndexForAddress(addr));
-    *start = end_ptr;
-    return addr;
-  }
-
-  Interval bounds;
-  // Memory map of entities start addresses.
-  int* entities_map;
-  // An array of code entities.
-  CodeEntityInfo* entities;
-  // Maximal entities count. Actual entities count can be lower,
-  // empty entity slots are pointing to NULL.
-  int max_entities;
-};
-
-}  // namespace
-
-
-typedef void (*ParserBlock)(char* start, char* end, ParseLogResult* result);
-
-static void ParserCycle(
-    char* start, char* end, ParseLogResult* result,
-    ParserBlock block_creation, ParserBlock block_delete,
-    ParserBlock block_move) {
-
-  const char* code_creation = "code-creation,";
-  const char* code_delete = "code-delete,";
-  const char* code_move = "code-move,";
-
-  const char* lazy_compile = "LazyCompile,";
-  const char* script = "Script,";
-  const char* function = "Function,";
-
-  while (start < end) {
-    if (Consume(code_creation, &start)) {
-      if (Consume(lazy_compile, &start)
-          || Consume(script, &start)
-          || Consume(function, &start)) {
-        block_creation(start, end, result);
-      }
-    } else if (Consume(code_delete, &start)) {
-      block_delete(start, end, result);
-    } else if (Consume(code_move, &start)) {
-      block_move(start, end, result);
-    }
-    while (start < end && *start != '\n') ++start;
-    ++start;
-  }
-}
-
-
-static void Pass1CodeCreation(char* start, char* end, ParseLogResult* result) {
-  result->ParseAddress(start);
-  ++result->max_entities;
-}
-
-
-static void Pass1CodeDelete(char* start, char* end, ParseLogResult* result) {
-  result->ParseAddress(start);
-}
-
-
-static void Pass1CodeMove(char* start, char* end, ParseLogResult* result) {
-  result->ParseAddress(start);
-  // Skip old address.
-  while (start < end && *start != ',') ++start;
-  CHECK_GT(end, start);
-  ++start;  // Skip ','.
-  result->ParseAddress(start);
-}
-
-
-static void Pass2CodeCreation(char* start, char* end, ParseLogResult* result) {
-  Address addr = result->ConsumeAddress(&start);
-  CHECK_GT(end, start);
-  ++start;  // Skip ','.
-
-  size_t idx = result->GetIndexForAddress(addr);
-  result->entities_map[idx] = -1;
-  for (int i = 0; i < result->max_entities; ++i) {
-    // Find an empty slot and fill it.
-    if (result->entities[i] == NULL) {
-      result->entities[i] = start;
-      result->entities_map[idx] = i;
-      break;
-    }
-  }
-  // Make sure that a slot was found.
-  CHECK_GE(result->entities_map[idx], 0);
-}
-
-
-static void Pass2CodeDelete(char* start, char* end, ParseLogResult* result) {
-  Address addr = result->ConsumeAddress(&start);
-  size_t idx = result->GetIndexForAddress(addr);
-  // There can be code deletes that are not related to JS code.
-  if (result->entities_map[idx] >= 0) {
-    result->entities[result->entities_map[idx]] = NULL;
-    result->entities_map[idx] = -1;
-  }
-}
-
-
-static void Pass2CodeMove(char* start, char* end, ParseLogResult* result) {
-  Address from_addr = result->ConsumeAddress(&start);
-  CHECK_GT(end, start);
-  ++start;  // Skip ','.
-  Address to_addr = result->ConsumeAddress(&start);
-  CHECK_GT(end, start);
-
-  size_t from_idx = result->GetIndexForAddress(from_addr);
-  size_t to_idx = result->GetIndexForAddress(to_addr);
-  // There can be code moves that are not related to JS code.
-  if (from_idx != to_idx && result->entities_map[from_idx] >= 0) {
-    CHECK_EQ(-1, result->entities_map[to_idx]);
-    result->entities_map[to_idx] = result->entities_map[from_idx];
-    result->entities_map[from_idx] = -1;
-  };
-}
-
-
-static void ParseLog(char* start, char* end, ParseLogResult* result) {
-  // Pass 1: Calculate boundaries of addresses and entities count.
-  ParserCycle(start, end, result,
-              Pass1CodeCreation, Pass1CodeDelete, Pass1CodeMove);
-
-  printf("min_addr: %p, max_addr: %p, entities: %d\n",
-         result->bounds.GetMinAddr(), result->bounds.GetMaxAddr(),
-         result->max_entities);
-
-  result->AllocateEntities();
-
-  // Pass 2: Fill in code entries data.
-  ParserCycle(start, end, result,
-              Pass2CodeCreation, Pass2CodeDelete, Pass2CodeMove);
-}
-
-
-static inline void PrintCodeEntityInfo(CodeEntityInfo entity) {
-  const int max_len = 50;
-  if (entity != NULL) {
-    char* eol = strchr(entity, '\n');
-    int len = static_cast<int>(eol - entity);
-    len = len <= max_len ? len : max_len;
-    printf("%-*.*s ", max_len, len, entity);
-  } else {
-    printf("%*s", max_len + 1, "");
-  }
-}
-
-
-static void PrintCodeEntitiesInfo(
-    bool is_equal, Address addr,
-    CodeEntityInfo l_entity, CodeEntityInfo r_entity) {
-  printf("%c %p ", is_equal ? ' ' : '*', addr);
-  PrintCodeEntityInfo(l_entity);
-  PrintCodeEntityInfo(r_entity);
-  printf("\n");
-}
-
-
-static inline int StrChrLen(const char* s, char c) {
-  return static_cast<int>(strchr(s, c) - s);
-}
-
-
-static bool AreFuncSizesEqual(CodeEntityInfo ref_s, CodeEntityInfo new_s) {
-  int ref_len = StrChrLen(ref_s, ',');
-  int new_len = StrChrLen(new_s, ',');
-  return ref_len == new_len && strncmp(ref_s, new_s, ref_len) == 0;
-}
-
-
-static bool AreFuncNamesEqual(CodeEntityInfo ref_s, CodeEntityInfo new_s) {
-  // Skip size.
-  ref_s = strchr(ref_s, ',') + 1;
-  new_s = strchr(new_s, ',') + 1;
-  CHECK_EQ('"', ref_s[0]);
-  CHECK_EQ('"', new_s[0]);
-  int ref_len = StrChrLen(ref_s + 1, '\"');
-  int new_len = StrChrLen(new_s + 1, '\"');
-  // A special case for ErrorPrototype. Haven't yet figured out why they
-  // are different.
-  const char* error_prototype = "\"ErrorPrototype";
-  if (IsStringEqualTo(error_prototype, ref_s)
-      && IsStringEqualTo(error_prototype, new_s)) {
-    return true;
-  }
-  // Built-in objects have problems too.
-  const char* built_ins[] = {
-      "\"Boolean\"", "\"Function\"", "\"Number\"",
-      "\"Object\"", "\"Script\"", "\"String\""
-  };
-  for (size_t i = 0; i < sizeof(built_ins) / sizeof(*built_ins); ++i) {
-    if (IsStringEqualTo(built_ins[i], new_s)) {
-      return true;
-    }
-  }
-  return ref_len == new_len && strncmp(ref_s, new_s, ref_len) == 0;
-}
-
-
-static bool AreEntitiesEqual(CodeEntityInfo ref_e, CodeEntityInfo new_e) {
-  if (ref_e == NULL && new_e != NULL) return true;
-  if (ref_e != NULL && new_e != NULL) {
-    return AreFuncSizesEqual(ref_e, new_e) && AreFuncNamesEqual(ref_e, new_e);
-  }
-  if (ref_e != NULL && new_e == NULL) {
-    // args_count entities (argument adapters) are not found by heap traversal,
-    // but they are not needed because they doesn't contain any code.
-    ref_e = strchr(ref_e, ',') + 1;
-    const char* args_count = "\"args_count:";
-    return IsStringEqualTo(args_count, ref_e);
-  }
-  return false;
-}
-
+typedef i::NativesCollection<i::TEST> TestSources;
 
 // Test that logging of code create / move / delete events
 // is equivalent to traversal of a resulting heap.
@@ -1106,86 +484,55 @@ TEST(EquivalenceOfLoggingAndTraversal) {
   // P.S. No, V8 can't be re-initialized after disposal, see include/v8.h.
   CHECK(!i::V8::IsRunning());
 
-  i::FLAG_logfile = "*";
-  i::FLAG_log = true;
-  i::FLAG_log_code = true;
-
-  // Make sure objects move.
-  bool saved_always_compact = i::FLAG_always_compact;
-  if (!i::FLAG_never_compact) {
-    i::FLAG_always_compact = true;
-  }
-
-  v8::HandleScope scope;
-  v8::Handle<v8::Value> global_object = v8::Handle<v8::Value>();
-  v8::Handle<v8::Context> env = v8::Context::New(
-      0, v8::Handle<v8::ObjectTemplate>(), global_object);
-  env->Enter();
+  // Start with profiling to capture all code events from the beginning.
+  ScopedLoggerInitializer initialize_logger(false);
 
   // Compile and run a function that creates other functions.
-  CompileAndRunScript(
+  CompileRun(
       "(function f(obj) {\n"
       "  obj.test =\n"
       "    (function a(j) { return function b() { return j; } })(100);\n"
       "})(this);");
-  i::Heap::CollectAllGarbage(false);
-
-  EmbeddedVector<char, 204800> buffer;
-  int log_size;
-  ParseLogResult ref_result;
-
-  // Retrieve the log.
-  {
-    // Make sure that no GCs occur prior to LogCompiledFunctions call.
-    i::AssertNoAllocation no_alloc;
-
-    log_size = GetLogLines(0, &buffer);
-    CHECK_GT(log_size, 0);
-    CHECK_GT(buffer.length(), log_size);
-
-    // Fill a map of compiled code objects.
-    ParseLog(buffer.start(), buffer.start() + log_size, &ref_result);
-  }
+  v8::V8::PauseProfiler();
+  HEAP->CollectAllGarbage(true);
+  LOGGER->StringEvent("test-logging-done", "");
 
   // Iterate heap to find compiled functions, will write to log.
-  i::Logger::LogCompiledFunctions();
-  char* new_log_start = buffer.start() + log_size;
-  const int new_log_size = Logger::GetLogLines(
-      log_size, new_log_start, buffer.length() - log_size);
-  CHECK_GT(new_log_size, 0);
-  CHECK_GT(buffer.length(), log_size + new_log_size);
+  LOGGER->LogCompiledFunctions();
+  LOGGER->StringEvent("test-traversal-done", "");
 
-  // Fill an equivalent map of compiled code objects.
-  ParseLogResult new_result;
-  ParseLog(new_log_start, new_log_start + new_log_size, &new_result);
+  bool exists = false;
+  i::Vector<const char> log(
+      i::ReadFile(initialize_logger.StopLoggingGetTempFile(), &exists, true));
+  CHECK(exists);
+  v8::Handle<v8::String> log_str = v8::String::New(log.start(), log.length());
+  initialize_logger.env()->Global()->Set(v8_str("_log"), log_str);
 
-  // Test their actual equivalence.
-  Interval combined;
-  combined.CloneFrom(&ref_result.bounds);
-  combined.CloneFrom(&new_result.bounds);
-  Interval* iter = &combined;
-  bool results_equal = true;
-
-  while (iter != NULL) {
-    for (Address addr = iter->raw_min_addr();
-         addr <= iter->raw_max_addr(); ++addr) {
-      CodeEntityInfo ref_entity = ref_result.GetEntity(addr);
-      CodeEntityInfo new_entity = new_result.GetEntity(addr);
-      if (ref_entity != NULL || new_entity != NULL) {
-        const bool equal = AreEntitiesEqual(ref_entity, new_entity);
-        if (!equal) results_equal = false;
-        PrintCodeEntitiesInfo(equal, addr, ref_entity, new_entity);
-      }
-    }
-    iter = iter->get_next();
+  i::Vector<const unsigned char> source = TestSources::GetScriptsSource();
+  v8::Handle<v8::String> source_str = v8::String::New(
+      reinterpret_cast<const char*>(source.start()), source.length());
+  v8::TryCatch try_catch;
+  v8::Handle<v8::Script> script = v8::Script::Compile(source_str, v8_str(""));
+  if (script.IsEmpty()) {
+    v8::String::Utf8Value exception(try_catch.Exception());
+    printf("compile: %s\n", *exception);
+    CHECK(false);
   }
-  // Make sure that all log data is written prior crash due to CHECK failure.
-  fflush(stdout);
-  CHECK(results_equal);
-
-  env->Exit();
-  Logger::TearDown();
-  i::FLAG_always_compact = saved_always_compact;
+  v8::Handle<v8::Value> result = script->Run();
+  if (result.IsEmpty()) {
+    v8::String::Utf8Value exception(try_catch.Exception());
+    printf("run: %s\n", *exception);
+    CHECK(false);
+  }
+  // The result either be a "true" literal or problem description.
+  if (!result->IsTrue()) {
+    v8::Local<v8::String> s = result->ToString();
+    i::ScopedVector<char> data(s->Length() + 1);
+    CHECK_NE(NULL, data.start());
+    s->WriteAscii(data.start());
+    printf("%s\n", data.start());
+    // Make sure that our output is written prior crash due to CHECK failure.
+    fflush(stdout);
+    CHECK(false);
+  }
 }
-
-#endif  // ENABLE_LOGGING_AND_PROFILING

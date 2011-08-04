@@ -42,10 +42,8 @@
     return ThrowException(Exception::TypeError(String::New("Not a string or buffer"))); \
   }
 
-static const char *RSA_PUB_KEY_PFX =  "-----BEGIN RSA PUBLIC KEY-----";
-static const char *DSA_PUB_KEY_PFX =  "-----BEGIN PUBLIC KEY-----";
-static const int RSA_PUB_KEY_PFX_LEN = strlen(RSA_PUB_KEY_PFX);
-static const int DSA_PUB_KEY_PFX_LEN = strlen(DSA_PUB_KEY_PFX);
+static const char *PUBLIC_KEY_PFX =  "-----BEGIN PUBLIC KEY-----";
+static const int PUBLIC_KEY_PFX_LEN = strlen(PUBLIC_KEY_PFX);
 
 namespace node {
 namespace crypto {
@@ -63,11 +61,14 @@ static Persistent<String> name_symbol;
 static Persistent<String> version_symbol;
 static Persistent<String> ext_key_usage_symbol;
 
+static Persistent<FunctionTemplate> secure_context_constructor;
 
 void SecureContext::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(SecureContext::New);
+  secure_context_constructor = Persistent<FunctionTemplate>::New(t);
+
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("SecureContext"));
 
@@ -587,6 +588,12 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", Connection::SetNPNProtocols);
 #endif
 
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  NODE_SET_PROTOTYPE_METHOD(t, "getServername", Connection::GetServername);
+  NODE_SET_PROTOTYPE_METHOD(t, "setSNICallback",  Connection::SetSNICallback);
+#endif
+
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
 }
 
@@ -706,6 +713,56 @@ int Connection::SelectNextProtoCallback_(SSL *s,
 }                                  
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
+  HandleScope scope;
+
+  Connection *p = static_cast<Connection*> SSL_get_app_data(s);
+
+  const char* servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+
+  if (servername) {
+    if (!p->servername_.IsEmpty()) {
+      p->servername_.Dispose();
+    }
+    p->servername_ = Persistent<String>::New(String::New(servername));
+
+    // Call sniCallback_ and use it's return value as context
+    if (!p->sniCallback_.IsEmpty()) {
+      if (!p->sniContext_.IsEmpty()) {
+        p->sniContext_.Dispose();
+      }
+
+      // Get callback init args
+      Local<Value> argv[1] = {*p->servername_};
+      Local<Function> callback = *p->sniCallback_;
+
+      TryCatch try_catch;
+
+      // Call it
+      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(),
+                                        1,
+                                        argv);
+
+      if (try_catch.HasCaught()) {
+        FatalException(try_catch);
+      }
+
+      // If ret is SecureContext
+      if (secure_context_constructor->HasInstance(ret)) {
+        p->sniContext_ = Persistent<Value>::New(ret);
+        SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(
+                                Local<Object>::Cast(ret));
+        SSL_set_SSL_CTX(s, sc->ctx_);
+      } else {
+        return SSL_TLSEXT_ERR_NOACK;
+      }
+    }
+  }
+
+  return SSL_TLSEXT_ERR_OK;
+}
+#endif
 
 Handle<Value> Connection::New(const Arguments& args) {
   HandleScope scope;
@@ -726,8 +783,9 @@ Handle<Value> Connection::New(const Arguments& args) {
   p->bio_read_ = BIO_new(BIO_s_mem());
   p->bio_write_ = BIO_new(BIO_s_mem());
 
-#ifdef OPENSSL_NPN_NEGOTIATED
   SSL_set_app_data(p->ssl_, p);
+
+#ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
     SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
@@ -739,6 +797,15 @@ Handle<Value> Connection::New(const Arguments& args) {
     SSL_CTX_set_next_proto_select_cb(sc->ctx_,
                                      SelectNextProtoCallback_,
                                      NULL);
+  }
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  if (is_server) {
+    SSL_CTX_set_tlsext_servername_callback(sc->ctx_, SelectSNIContextCallback_);
+  } else {
+    String::Utf8Value servername(args[2]->ToString());
+    SSL_set_tlsext_host_name(p->ssl_, *servername);
   }
 #endif
 
@@ -1335,6 +1402,39 @@ Handle<Value> Connection::SetNPNProtocols(const Arguments& args) {
 };
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+Handle<Value> Connection::GetServername(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->is_server_ && !ss->servername_.IsEmpty()) {
+    return ss->servername_;
+  } else {
+    return False();
+  }
+}
+
+Handle<Value> Connection::SetSNICallback(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (args.Length() < 1 || !args[0]->IsFunction()) {
+    return ThrowException(Exception::Error(String::New(
+           "Must give a Function as first argument")));
+  }
+
+  // Release old handle
+  if (!ss->sniCallback_.IsEmpty()) {
+    ss->sniCallback_.Dispose();
+  }
+  ss->sniCallback_ = Persistent<Function>::New(
+                            Local<Function>::Cast(args[0]));
+
+  return True();
+}
+#endif
 
 static void HexEncode(unsigned char *md_value,
                       int md_len,
@@ -1825,6 +1925,19 @@ class Cipher : public ObjectWrap {
         outString = Encode(out_hexdigest, out_hex_len, BINARY);
         delete [] out_hexdigest;
       } else if (strcasecmp(*encoding, "base64") == 0) {
+        // Check to see if we need to add in previous base64 overhang
+        if (cipher->incomplete_base64!=NULL){
+          unsigned char* complete_base64 = new unsigned char[out_len+cipher->incomplete_base64_len+1];
+          memcpy(complete_base64, cipher->incomplete_base64, cipher->incomplete_base64_len);
+          memcpy(&complete_base64[cipher->incomplete_base64_len], out_value, out_len);
+          delete [] out_value;
+
+          delete [] cipher->incomplete_base64;
+          cipher->incomplete_base64=NULL;
+
+          out_value=complete_base64;
+          out_len += cipher->incomplete_base64_len;
+        }
         base64(out_value, out_len, &out_hexdigest, &out_hex_len);
         outString = Encode(out_hexdigest, out_hex_len, BINARY);
         delete [] out_hexdigest;
@@ -2388,15 +2501,25 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* buf = new char[len];
-    ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
-    assert(written == len);
-
     String::Utf8Value hashType(args[0]->ToString());
 
-    bool r = hmac->HmacInit(*hashType, buf, len);
+    bool r;
 
-    delete [] buf;
+    if( Buffer::HasInstance(args[1])) {
+      Local<Object> buffer_obj = args[1]->ToObject();
+      char* buffer_data = Buffer::Data(buffer_obj);
+      size_t buffer_length = Buffer::Length(buffer_obj);
+
+      r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
+    } else {
+      char* buf = new char[len];
+      ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
+      assert(written == len);
+
+      r = hmac->HmacInit(*hashType, buf, len);
+
+      delete [] buf;
+    }
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("hmac error")));
@@ -2926,10 +3049,8 @@ class Verify : public ObjectWrap {
       return 0;
     }
 
-    // Check if this is an RSA or DSA "raw" public key before trying
-    // X.509
-    if (strncmp(key_pem, RSA_PUB_KEY_PFX, RSA_PUB_KEY_PFX_LEN) == 0 ||
-        strncmp(key_pem, DSA_PUB_KEY_PFX, DSA_PUB_KEY_PFX_LEN) == 0) {
+    // Check if this is a PKCS#8 public key before trying as X.509
+    if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
       pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
       if (pkey == NULL) {
         ERR_print_errors_fp(stderr);
@@ -2951,8 +3072,6 @@ class Verify : public ObjectWrap {
     }
 
     r = EVP_VerifyFinal(&mdctx, sig, siglen, pkey);
-    if (r != 1)
-      ERR_print_errors_fp (stderr);
 
     if(pkey != NULL)
       EVP_PKEY_free (pkey);
@@ -3644,9 +3763,14 @@ void InitCrypto(Handle<Object> target) {
   ERR_load_crypto_strings();
 
   // Turn off compression. Saves memory - do it in userland.
-#ifdef SSL_COMP_get_compression_methods
-  // Before OpenSSL 0.9.8 this was not possible.
-  STACK_OF(SSL_COMP)* comp_methods = SSL_COMP_get_compression_methods();
+#if !defined(OPENSSL_NO_COMP)
+  STACK_OF(SSL_COMP)* comp_methods =
+#if OPENSSL_VERSION_NUMBER < 0x00908000L
+    SSL_COMP_get_compression_method()
+#else
+    SSL_COMP_get_compression_methods()
+#endif
+  ;
   sk_SSL_COMP_zero(comp_methods);
   assert(sk_SSL_COMP_num(comp_methods) == 0);
 #endif

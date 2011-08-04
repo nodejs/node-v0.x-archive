@@ -65,7 +65,7 @@ The third argument is used to specify additional options, which defaults to:
 
 `cwd` allows you to specify the working directory from which the process is spawned.
 Use `env` to specify environment variables that will be visible to the new process.
-With `customFds` it is possible to hook up the new process' [stdin, stout, stderr] to
+With `customFds` it is possible to hook up the new process' [stdin, stdout, stderr] to
 existing streams; `-1` means that a new stream should be created. `setsid`,
 if set true, will cause the subprocess to be run in a new session.
 
@@ -234,7 +234,24 @@ be sent `'SIGTERM'`. See `signal(7)` for a list of available signals.
     // send SIGHUP to process
     grep.kill('SIGHUP');
 
-Note that while the function is called `kill`, the signal delivered to the child
-process may not actually kill it.  `kill` really just sends a signal to a process.
+Note that while the function is called `kill`, the signal delivered to the
+child process may not actually kill it.  `kill` really just sends a signal
+to a process.
+
+Please note that the example contains a potential race condition on
+(at least) UNIX systems. Here is why:
+
+The canonical approach to starting a child process is to call `fork()` to
+create a copy of the current process, followed by a call to `execve()` to
+replace the copy with the actual child process. This runs in tandem with
+the parent process.
+
+The time between `fork()` and `execve()` is short but it's not zero.
+The child process may not have actually started when `spawn()` returns.
+Thus, if you send a signal immediately after the call to `spawn()`, it may
+end up being delivered to the copy of the current process and *not* the
+actual child process.
+
+The resulting behavior is undefined. It likely won't do what you want it to.
 
 See `kill(2)`

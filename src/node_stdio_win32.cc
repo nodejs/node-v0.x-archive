@@ -25,6 +25,7 @@
 #include <v8.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <io.h>
 
 #include <platform_win32.h>
@@ -493,8 +494,8 @@ static inline void tty_emit_error(Handle<Value> err) {
 }
 
 
-static void tty_poll(uv_handle_t* handle, int status) {
-  assert((uv_async_t*) handle == &tty_avail_notifier);
+static void tty_poll(uv_async_t* handle, int status) {
+  assert(handle == &tty_avail_notifier);
   assert(status == 0);
 
   HandleScope scope;
@@ -579,7 +580,9 @@ static void tty_poll(uv_handle_t* handle, int status) {
   }
 
   // Rearm the watcher
-  tty_watcher_arm();
+  if (tty_watcher_active) {
+    tty_watcher_arm();
+  }
 
   // Emit fatal errors and unhandled error events
   if (try_catch.HasCaught()) {
@@ -660,6 +663,11 @@ void Stdio::Initialize(v8::Handle<v8::Object> target) {
   
   uv_async_init(&tty_avail_notifier, tty_poll);
   uv_unref();
+
+  /* Set stdio streams to binary mode. */
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
 
   name_symbol = NODE_PSYMBOL("name");
   shift_symbol = NODE_PSYMBOL("shift");

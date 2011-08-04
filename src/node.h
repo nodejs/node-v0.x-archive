@@ -22,6 +22,15 @@
 #ifndef SRC_NODE_H_
 #define SRC_NODE_H_
 
+// A dependency include (libeio\xthread.h) defines _WIN32_WINNT to another value
+// This should be defined in make system.
+// See issue https://github.com/joyent/node/issues/1236
+#ifdef __MINGW32__
+#ifndef _WIN32_WINNT
+# define _WIN32_WINNT   0x0501
+#endif
+#endif
+
 #include <uv.h>
 #include <eio.h>
 #include <v8.h>
@@ -44,7 +53,7 @@ v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
 void Load(v8::Handle<v8::Object> process);
 void EmitExit(v8::Handle<v8::Object> process);
 
-#define NODE_PSYMBOL(s) Persistent<String>::New(String::NewSymbol(s))
+#define NODE_PSYMBOL(s) v8::Persistent<v8::String>::New(v8::String::NewSymbol(s))
 
 /* Converts a unixtime to V8 Date */
 #define NODE_UNIXTIME_V8(t) v8::Date::New(1000*static_cast<double>(t))

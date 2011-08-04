@@ -64,9 +64,15 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
 
 
 void Platform::SetProcessTitle(char *title) {
+#ifdef PR_SET_NAME
   if (process_title) free(process_title);
   process_title = strdup(title);
   prctl(PR_SET_NAME, process_title);
+#else
+  Local<Value> ex = Exception::Error(
+    String::New("'process.title' is not writable on your system, sorry."));
+  ThrowException(ex); // Safe, this method is only called from the main thread.
+#endif
 }
 
 
@@ -174,13 +180,6 @@ error:
   return -1;
 }
 
-
-int Platform::GetExecutablePath(char* buffer, size_t* size) {
-  *size = readlink("/proc/self/exe", buffer, *size - 1);
-  if (*size <= 0) return -1;
-  buffer[*size] = '\0';
-  return 0;
-}
 
 int Platform::GetCPUInfo(Local<Array> *cpus) {
   HandleScope scope;

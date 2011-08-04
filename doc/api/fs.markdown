@@ -52,6 +52,9 @@ In busy processes, the programmer is _strongly encouraged_ to use the
 asynchronous versions of these calls. The synchronous versions will block
 the entire process until they complete--halting all connections.
 
+Relative path to filename can be used, remember however that this path will be relative
+to `process.cwd()`.
+
 ### fs.rename(path1, path2, [callback])
 
 Asynchronous rename(2). No arguments other than a possible exception are given
@@ -255,8 +258,27 @@ Synchronous close(2).
 
 ### fs.open(path, flags, [mode], [callback])
 
-Asynchronous file open. See open(2). Flags can be 'r', 'r+', 'w', 'w+', 'a',
-or 'a+'. `mode` defaults to 0666. The callback gets two arguments `(err, fd)`.
+Asynchronous file open. See open(2). `flags` can be:
+
+* `'r'` - Open file for reading.
+An exception occurs if the file does not exist.
+
+* `'r+'` - Open file for reading and writing. 
+An exception occurs if the file does not exist.
+
+* `'w'` - Open file for writing.
+The file is created (if it does not exist) or truncated (if it exists).
+
+* `'w+'` - Open file for reading and writing.
+The file is created (if it does not exist) or truncated (if it exists).
+
+* `'a'` - Open file for appending.
+The file is created if it does not exist.
+
+* `'a+'` - Open file for reading and appending.
+The file is created if it does not exist.
+
+`mode` defaults to `0666`. The callback gets two arguments `(err, fd)`.
 
 ### fs.openSync(path, flags, [mode])
 
@@ -361,7 +383,8 @@ returns a buffer.
 ### fs.writeFile(filename, data, encoding='utf8', [callback])
 
 Asynchronously writes data to a file, replacing the file if it already exists.
-`data` can be a string or a buffer.
+`data` can be a string or a buffer. The `encoding` argument is ignored if
+`data` is a buffer.
 
 Example:
 
@@ -417,6 +440,12 @@ Objects returned from `fs.stat()` and `fs.lstat()` are of this type.
 ## fs.ReadStream
 
 `ReadStream` is a `Readable Stream`.
+
+### Event: 'open'
+
+`function (fd) { }`
+
+ `fd` is the file descriptor used by the ReadStream.
 
 ### fs.createReadStream(path, [options])
 

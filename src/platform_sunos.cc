@@ -36,7 +36,10 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <ifaddrs.h>
+
+#ifdef SUNOS_HAVE_IFADDRS
+# include <ifaddrs.h>
+#endif
 
 
 
@@ -99,25 +102,6 @@ int Platform::GetMemory(size_t *rss, size_t *vsize) {
 
   fclose (f);
 
-  return 0;
-}
-
-
-int Platform::GetExecutablePath(char* buffer, size_t* size) {
-  const char *execname = getexecname();
-  if (!execname) return -1;
-  if (execname[0] == '/') {
-    char *result = strncpy(buffer, execname, *size);
-    *size = strlen(result);
-  } else {
-    char *result = getcwd(buffer, *size);
-    if (!result) return -1;
-    result = strncat(buffer, "/", *size);
-    if (!result) return -1;
-    result = strncat(buffer, execname, *size);
-    if (!result) return -1;
-    *size = strlen(result);
-  }
   return 0;
 }
 
@@ -297,6 +281,11 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 
 Handle<Value> Platform::GetInterfaceAddresses() {
   HandleScope scope;
+
+#ifndef SUNOS_HAVE_IFADDRS
+  return ThrowException(Exception::Error(String::New(
+    "This version of sunos doesn't support getifaddrs")));
+#else
   struct ::ifaddrs *addrs, *ent;
   struct ::sockaddr_in *in4;
   struct ::sockaddr_in6 *in6;
@@ -355,6 +344,8 @@ Handle<Value> Platform::GetInterfaceAddresses() {
   freeifaddrs(addrs);
 
   return scope.Close(ret);
+
+#endif  // SUNOS_HAVE_IFADDRS
 }
 
 

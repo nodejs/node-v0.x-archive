@@ -19,30 +19,30 @@
  * IN THE SOFTWARE.
  */
 
-#include "../uv.h"
+#include "uv.h"
 #include "task.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-
 typedef struct {
-  uv_req_t req;
+  uv_write_t req;
   uv_buf_t buf;
 } write_req_t;
 
-
 static int server_closed;
-static uv_tcp_t server;
+static stream_type serverType;
+static uv_tcp_t tcpServer;
+static uv_pipe_t pipeServer;
+static uv_handle_t* server;
 
-
-static void after_write(uv_req_t* req, int status);
-static void after_read(uv_tcp_t*, ssize_t nread, uv_buf_t buf);
+static void after_write(uv_write_t* req, int status);
+static void after_read(uv_stream_t*, ssize_t nread, uv_buf_t buf);
 static void on_close(uv_handle_t* peer);
 static void on_server_close(uv_handle_t* handle);
-static void on_connection(uv_tcp_t*, int status);
+static void on_connection(uv_stream_t*, int status);
 
 
-static void after_write(uv_req_t* req, int status) {
+static void after_write(uv_write_t* req, int status) {
   write_req_t* wr;
 
   if (status) {
@@ -59,16 +59,16 @@ static void after_write(uv_req_t* req, int status) {
 }
 
 
-static void after_shutdown(uv_req_t* req, int status) {
-  uv_close(req->handle, on_close);
+static void after_shutdown(uv_shutdown_t* req, int status) {
+  uv_close((uv_handle_t*)req->handle, on_close);
   free(req);
 }
 
 
-static void after_read(uv_tcp_t* handle, ssize_t nread, uv_buf_t buf) {
+static void after_read(uv_stream_t* handle, ssize_t nread, uv_buf_t buf) {
   int i;
   write_req_t *wr;
-  uv_req_t* req;
+  uv_shutdown_t* req;
 
   if (nread < 0) {
     /* Error or EOF */
@@ -78,9 +78,8 @@ static void after_read(uv_tcp_t* handle, ssize_t nread, uv_buf_t buf) {
       free(buf.base);
     }
 
-    req = (uv_req_t*) malloc(sizeof *req);
-    uv_req_init(req, (uv_handle_t*)handle, after_shutdown);
-    uv_shutdown(req);
+    req = (uv_shutdown_t*) malloc(sizeof *req);
+    uv_shutdown(req, handle, after_shutdown);
 
     return;
   }
@@ -95,7 +94,7 @@ static void after_read(uv_tcp_t* handle, ssize_t nread, uv_buf_t buf) {
   if (!server_closed) {
     for (i = 0; i < nread; i++) {
       if (buf.base[i] == 'Q') {
-        uv_close((uv_handle_t*)&server, on_server_close);
+        uv_close(server, on_server_close);
         server_closed = 1;
       }
     }
@@ -103,10 +102,9 @@ static void after_read(uv_tcp_t* handle, ssize_t nread, uv_buf_t buf) {
 
   wr = (write_req_t*) malloc(sizeof *wr);
 
-  uv_req_init(&wr->req, (uv_handle_t*)handle, after_write);
   wr->buf.base = buf.base;
   wr->buf.len = nread;
-  if (uv_write(&wr->req, &wr->buf, 1)) {
+  if (uv_write(&wr->req, handle, &wr->buf, 1, after_write)) {
     FATAL("uv_write failed");
   }
 }
@@ -117,7 +115,7 @@ static void on_close(uv_handle_t* peer) {
 }
 
 
-static uv_buf_t echo_alloc(uv_tcp_t* handle, size_t suggested_size) {
+static uv_buf_t echo_alloc(uv_stream_t* handle, size_t suggested_size) {
   uv_buf_t buf;
   buf.base = (char*) malloc(suggested_size);
   buf.len = suggested_size;
@@ -125,49 +123,71 @@ static uv_buf_t echo_alloc(uv_tcp_t* handle, size_t suggested_size) {
 }
 
 
-static void on_connection(uv_tcp_t* server, int status) {
-  uv_tcp_t* handle;
+static void on_connection(uv_stream_t* server, int status) {
+  uv_stream_t* stream;
   int r;
 
+  if (status != 0) {
+    fprintf(stderr, "Connect error %d\n", uv_last_error().code);
+  }
   ASSERT(status == 0);
 
-  handle = (uv_tcp_t*) malloc(sizeof *handle);
-  ASSERT(handle != NULL);
+  switch (serverType) {
+  case TCP:
+    stream = malloc(sizeof(uv_tcp_t));
+    ASSERT(stream != NULL);
+    uv_tcp_init((uv_tcp_t*)stream);
+    break;
 
-  uv_tcp_init(handle);
+  case PIPE:
+    stream = malloc(sizeof(uv_pipe_t));
+    ASSERT(stream != NULL);
+    uv_pipe_init((uv_pipe_t*)stream);
+    break;
 
-  r = uv_accept(server, handle);
+  default:
+    ASSERT(0 && "Bad serverType");
+    abort();
+  }
+
+  /* associate server with stream */
+  stream->data = server;
+
+  r = uv_accept(server, stream);
   ASSERT(r == 0);
 
-  r = uv_read_start(handle, echo_alloc, after_read);
+  r = uv_read_start(stream, echo_alloc, after_read);
   ASSERT(r == 0);
 }
 
 
 static void on_server_close(uv_handle_t* handle) {
-  ASSERT(handle == (uv_handle_t*)&server);
+  ASSERT(handle == server);
 }
 
 
-static int echo_start(int port) {
+static int tcp4_echo_start(int port) {
   struct sockaddr_in addr = uv_ip4_addr("0.0.0.0", port);
   int r;
 
-  r = uv_tcp_init(&server);
+  server = (uv_handle_t*)&tcpServer;
+  serverType = TCP;
+
+  r = uv_tcp_init(&tcpServer);
   if (r) {
     /* TODO: Error codes */
     fprintf(stderr, "Socket creation error\n");
     return 1;
   }
 
-  r = uv_bind(&server, addr);
+  r = uv_tcp_bind(&tcpServer, addr);
   if (r) {
     /* TODO: Error codes */
     fprintf(stderr, "Bind error\n");
     return 1;
   }
 
-  r = uv_listen(&server, 128, on_connection);
+  r = uv_listen((uv_stream_t*)&tcpServer, 128, on_connection);
   if (r) {
     /* TODO: Error codes */
     fprintf(stderr, "Listen error\n");
@@ -178,9 +198,91 @@ static int echo_start(int port) {
 }
 
 
-HELPER_IMPL(echo_server) {
+static int tcp6_echo_start(int port) {
+  struct sockaddr_in6 addr6 = uv_ip6_addr("::1", port);
+  int r;
+
+  server = (uv_handle_t*)&tcpServer;
+  serverType = TCP;
+
+  r = uv_tcp_init(&tcpServer);
+  if (r) {
+    /* TODO: Error codes */
+    fprintf(stderr, "Socket creation error\n");
+    return 1;
+  }
+
+  /* IPv6 is optional as not all platforms support it */
+  r = uv_tcp_bind6(&tcpServer, addr6);
+  if (r) {
+    /* show message but return OK */
+    fprintf(stderr, "IPv6 not supported\n");
+    return 0;
+  }
+
+  r = uv_listen((uv_stream_t*)&tcpServer, 128, on_connection);
+  if (r) {
+    /* TODO: Error codes */
+    fprintf(stderr, "Listen error\n");
+    return 1;
+  }
+
+  return 0;
+}
+
+
+static int pipe_echo_start(char* pipeName) {
+  int r;
+
+  server = (uv_handle_t*)&pipeServer;
+  serverType = PIPE;
+
+  r = uv_pipe_init(&pipeServer);
+  if (r) {
+    fprintf(stderr, "uv_pipe_init: %s\n", uv_strerror(uv_last_error()));
+    return 1;
+  }
+
+  r = uv_pipe_bind(&pipeServer, pipeName);
+  if (r) {
+    fprintf(stderr, "uv_pipe_bind: %s\n", uv_strerror(uv_last_error()));
+    return 1;
+  }
+
+  r = uv_listen((uv_stream_t*)&pipeServer, SOMAXCONN, on_connection);
+  if (r) {
+    fprintf(stderr, "uv_pipe_listen: %s\n", uv_strerror(uv_last_error()));
+    return 1;
+  }
+
+  return 0;
+}
+
+
+HELPER_IMPL(tcp4_echo_server) {
   uv_init();
-  if (echo_start(TEST_PORT))
+  if (tcp4_echo_start(TEST_PORT))
+    return 1;
+
+  uv_run();
+  return 0;
+}
+
+
+HELPER_IMPL(tcp6_echo_server) {
+  uv_init();
+  if (tcp6_echo_start(TEST_PORT))
+    return 1;
+
+  uv_run();
+  return 0;
+}
+
+
+HELPER_IMPL(pipe_echo_server) {
+  uv_init();
+
+  if (pipe_echo_start(TEST_PIPENAME))
     return 1;
 
   uv_run();

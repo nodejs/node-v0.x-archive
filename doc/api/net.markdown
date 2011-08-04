@@ -26,14 +26,16 @@ the socket is established the `'connect'` event will be emitted.
 
 The arguments for this method change the type of connection:
 
-* `net.createConnection(port, [host])`
+* `net.createConnection(port, [host], [callback])`
 
-  Creates a TCP connection to `port` on `host`. If `host` is omitted, `localhost`
-  will be assumed.
+  Creates a TCP connection to `port` on `host`. If `host` is omitted,
+  `localhost` will be assumed.
 
-* `net.createConnection(path)`
+* `net.createConnection(path, [callback])`
 
   Creates unix socket connection to `path`
+
+The `callback` parameter will be added as an listener for the 'connect` event.
 
 ---
 
@@ -320,6 +322,14 @@ The string representation of the remote IP address. For example,
 
 The numeric representation of the remote port. For example,
 `80` or `21`.
+
+#### socket.bytesRead
+
+The amount of received bytes.
+
+#### socket.bytesWritten
+
+The amount of bytes sent.
 
 
 

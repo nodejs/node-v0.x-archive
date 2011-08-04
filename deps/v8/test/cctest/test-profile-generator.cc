@@ -2,8 +2,6 @@
 //
 // Tests of profiles generator and utilities.
 
-#ifdef ENABLE_LOGGING_AND_PROFILING
-
 #include "v8.h"
 #include "profile-generator-inl.h"
 #include "cctest.h"
@@ -56,7 +54,7 @@ TEST(TokenEnumerator) {
     CHECK_EQ(0, te.GetTokenId(*v8::Utils::OpenHandle(*token1)));
   }
   CHECK(!i::TokenEnumeratorTester::token_removed(&te)->at(2));
-  i::Heap::CollectAllGarbage(false);
+  HEAP->CollectAllGarbage(false);
   CHECK(i::TokenEnumeratorTester::token_removed(&te)->at(2));
   CHECK_EQ(1, te.GetTokenId(*v8::Utils::OpenHandle(*token2)));
   CHECK_EQ(0, te.GetTokenId(*v8::Utils::OpenHandle(*token1)));
@@ -824,5 +822,3 @@ TEST(Issue51919) {
   for (int i = 0; i < CpuProfilesCollection::kMaxSimultaneousProfiles; ++i)
     i::DeleteArray(titles[i]);
 }
-
-#endif  // ENABLE_LOGGING_AND_PROFILING

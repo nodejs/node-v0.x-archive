@@ -27,7 +27,17 @@
 (function(process) {
   global = this;
 
+  var EventEmitter;
+
   function startup() {
+
+    if (process.env.NODE_USE_UV == '1') process.features.uv = true;
+    if (process.env.NODE_USE_HTTP1 == '1') process.features.http1 = true;
+
+    EventEmitter = NativeModule.require('events').EventEmitter;
+    process.__proto__ = EventEmitter.prototype;
+    process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
+
     startup.globalVariables();
     startup.globalTimeouts();
     startup.globalConsole();
@@ -62,6 +72,17 @@
       var d = NativeModule.require('_debugger');
       d.start();
 
+    } else if (process._eval != null) {
+      // User passed '-e' or '--eval' arguments to Node.
+      var Module = NativeModule.require('module');
+      var path = NativeModule.require('path');
+      var cwd = process.cwd();
+
+      var module = new Module('eval');
+      module.filename = path.join(cwd, 'eval');
+      module.paths = Module._nodeModulePaths(cwd);
+      module._compile('eval(process._eval)', 'eval');
+
     } else if (process.argv[1]) {
       // make process.argv[1] into a full path
       if (!(/^http:\/\//).exec(process.argv[1])) {
@@ -74,12 +95,6 @@
       // test/simple/test-exception-handler2.js working.
       // Main entry point into most programs:
       process.nextTick(Module.runMain);
-
-    } else if (process._eval != null) {
-      // User passed '-e' or '--eval' arguments to Node.
-      var Module = NativeModule.require('module');
-      var rv = new Module()._compile('return eval(process._eval)', 'eval');
-      console.log(rv);
 
     } else {
       var binding = process.binding('stdio');
@@ -138,8 +153,11 @@
   };
 
   startup.globalConsole = function() {
-    global.console = NativeModule.require('console');
+    global.__defineGetter__('console', function() {
+      return NativeModule.require('console');
+    });
   };
+
 
   startup._lazyConstants = null;
 
@@ -190,52 +208,62 @@
   };
 
   startup.processStdio = function() {
-    var binding = process.binding('stdio'),
-        // FIXME Remove conditional when net is supported again on windows.
-        net = (process.platform !== "win32")
-              ? NativeModule.require('net')
-              : undefined,
-        fs = NativeModule.require('fs'),
-        tty = NativeModule.require('tty');
+    var stdout, stdin;
 
-    // process.stdout
+    process.__defineGetter__('stdout', function() {
+      if (stdout) return stdout;
 
-    var fd = binding.stdoutFD;
+      var binding = process.binding('stdio'),
+          // FIXME Remove conditional when net is supported again on windows.
+          net = (process.platform !== "win32")
+                ? NativeModule.require('net_legacy') // fixme!
+                : undefined,
+          fs = NativeModule.require('fs'),
+          tty = NativeModule.require('tty'),
+          fd = binding.stdoutFD;
 
-    if (binding.isatty(fd)) {
-      process.stdout = new tty.WriteStream(fd);
-    } else if (binding.isStdoutBlocking()) {
-      process.stdout = new fs.WriteStream(null, {fd: fd});
-    } else {
-      process.stdout = new net.Stream(fd);
-      // FIXME Should probably have an option in net.Stream to create a
-      // stream from an existing fd which is writable only. But for now
-      // we'll just add this hack and set the `readable` member to false.
-      // Test: ./node test/fixtures/echo.js < /etc/passwd
-      process.stdout.readable = false;
-    }
+      if (binding.isatty(fd)) {
+        stdout = new tty.WriteStream(fd);
+      } else if (binding.isStdoutBlocking()) {
+        stdout = new fs.WriteStream(null, {fd: fd});
+      } else {
+        stdout = new net.Stream(fd);
+        // FIXME Should probably have an option in net.Stream to create a
+        // stream from an existing fd which is writable only. But for now
+        // we'll just add this hack and set the `readable` member to false.
+        // Test: ./node test/fixtures/echo.js < /etc/passwd
+        stdout.readable = false;
+      }
 
-    // process.stderr
+      return stdout;
+    });
 
-    var events = NativeModule.require('events');
-    var stderr = process.stderr = new events.EventEmitter();
+    var stderr = process.stderr = new EventEmitter();
     stderr.writable = true;
     stderr.readable = false;
     stderr.write = process.binding('stdio').writeError;
     stderr.end = stderr.destroy = stderr.destroySoon = function() { };
 
-    // process.stdin
+    process.__defineGetter__('stdin', function() {
+      if (stdin) return stdin;
 
-    var fd = binding.openStdin();
+      var binding = process.binding('stdio'),
+          net = NativeModule.require('net'),
+          fs = NativeModule.require('fs'),
+          tty = NativeModule.require('tty'),
+          fd = binding.openStdin();
 
-    if (binding.isatty(fd)) {
-      process.stdin = new tty.ReadStream(fd);
-    } else if (binding.isStdinBlocking()) {
-      process.stdin = new fs.ReadStream(null, {fd: fd});
-    } else {
-      process.stdin = new net.Stream(fd);
-      process.stdin.readable = true;
-    }
+      if (binding.isatty(fd)) {
+        stdin = new tty.ReadStream(fd);
+      } else if (binding.isStdinBlocking()) {
+        stdin = new fs.ReadStream(null, {fd: fd});
+      } else {
+        stdin = new net.Stream(fd);
+        stdin.readable = true;
+      }
+
+      return stdin;
+    });
 
     process.openStdin = function() {
       process.stdin.resume();
@@ -267,7 +295,6 @@
   startup.processSignalHandlers = function() {
     // Load events module in order to access prototype elements on process like
     // process.addListener.
-    var events = NativeModule.require('events');
     var signalWatchers = {};
     var addListener = process.addListener;
     var removeListener = process.removeListener;
@@ -374,10 +401,28 @@
   // flag --use-uv to enable the libuv backend instead of the legacy
   // backend.
   function translateId(id) {
-    if (id == 'net') {
-      return process.useUV || process.env.NODE_USE_UV ? 'net_uv' : 'net_legacy';
-    } else {
-      return id;
+    switch (id) {
+      case 'http':
+        return process.features.http1 ? 'http' : 'http2';
+
+      case 'https':
+        return process.features.http1 ? 'https' : 'https2';
+
+      case 'net':
+        return process.features.uv ? 'net_uv' : 'net_legacy';
+
+      case 'child_process':
+        return process.features.uv ? 'child_process_uv' :
+                                     'child_process_legacy';
+
+      case 'timers':
+        return process.features.uv ? 'timers_uv' : 'timers_legacy';
+
+      case 'dns':
+        return process.features.uv ? 'dns_uv' : 'dns_legacy';
+
+      default:
+        return id;
     }
   }
 
@@ -408,6 +453,8 @@
       throw new Error('No such native module ' + id);
     }
 
+    process.moduleLoadList.push("NativeModule " + id);
+
     var nativeModule = new NativeModule(id);
 
     nativeModule.compile();
@@ -436,7 +483,7 @@
   };
 
   NativeModule.wrapper = [
-    '(function (exports, require, module, __filename, __dirname, define) { ',
+    '(function (exports, require, module, __filename, __dirname) { ',
     '\n});'
   ];
 

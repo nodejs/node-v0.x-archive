@@ -20,6 +20,9 @@ The process object. See the [process object](process.html#process) section.
 
 Used to print to stdout and stderr. See the [stdio](stdio.html) section.
 
+### Buffer
+
+Used to handle binary data. See the [buffers](buffers.html) section.
 
 ### require()
 
@@ -36,16 +39,6 @@ but rather than loading the module, just return the resolved filename.
 
 Modules are cached in this object when they are required. By deleting a key
 value from this object, the next `require` will reload the module.
-
-
-### require.paths
-
-An array of search paths for `require()`.  This array can be modified to add
-custom paths.
-
-Example: add a new path to the beginning of the search list
-
-    require.paths.unshift('/usr/local/node');
 
 
 ### __filename
@@ -78,6 +71,15 @@ A reference to the current module. In particular
 `module.exports` is the same as the `exports` object. See `src/node.js`
 for more information.
 `module` isn't actually a global but rather local to each module.
+
+
+### exports
+
+An object which is shared between all instances of the current module and
+made accessible through `require()`.
+`exports` is the same as the `module.exports` object. See `src/node.js`
+for more information.
+`exports` isn't actually a global but rather local to each module.
 
 ### setTimeout(cb, ms)
 ### clearTimeout(t)

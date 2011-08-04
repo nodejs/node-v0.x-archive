@@ -170,14 +170,16 @@ PropertyKind.Indexed = 2;
 
 // A copy of the PropertyType enum from global.h
 PropertyType = {};
-PropertyType.Normal             = 0;
-PropertyType.Field              = 1;
-PropertyType.ConstantFunction   = 2;
-PropertyType.Callbacks          = 3;
-PropertyType.Interceptor        = 4;
-PropertyType.MapTransition      = 5;
-PropertyType.ConstantTransition = 6;
-PropertyType.NullDescriptor     = 7;
+PropertyType.Normal                  = 0;
+PropertyType.Field                   = 1;
+PropertyType.ConstantFunction        = 2;
+PropertyType.Callbacks               = 3;
+PropertyType.Handler                 = 4;
+PropertyType.Interceptor             = 5;
+PropertyType.MapTransition           = 6;
+PropertyType.ExternalArrayTransition = 7;
+PropertyType.ConstantTransition      = 8;
+PropertyType.NullDescriptor          = 9;
 
 
 // Different attributes for a property.
@@ -1241,12 +1243,16 @@ const kFrameDetailsLocalCountIndex = 4;
 const kFrameDetailsSourcePositionIndex = 5;
 const kFrameDetailsConstructCallIndex = 6;
 const kFrameDetailsAtReturnIndex = 7;
-const kFrameDetailsDebuggerFrameIndex = 8;
+const kFrameDetailsFlagsIndex = 8;
 const kFrameDetailsFirstDynamicIndex = 9;
 
 const kFrameDetailsNameIndex = 0;
 const kFrameDetailsValueIndex = 1;
 const kFrameDetailsNameValueSize = 2;
+
+const kFrameDetailsFlagDebuggerFrameMask = 1 << 0;
+const kFrameDetailsFlagOptimizedFrameMask = 1 << 1;
+const kFrameDetailsFlagInlinedFrameIndexMask = 7 << 2;
 
 /**
  * Wrapper for the frame details information retreived from the VM. The frame
@@ -1260,7 +1266,7 @@ const kFrameDetailsNameValueSize = 2;
  *     5: Source position
  *     6: Construct call
  *     7: Is at return
- *     8: Debugger frame
+ *     8: Flags (debugger frame, optimized frame, inlined frame index)
  *     Arguments name, value
  *     Locals name, value
  *     Return value if any
@@ -1306,7 +1312,27 @@ FrameDetails.prototype.isAtReturn = function() {
 
 FrameDetails.prototype.isDebuggerFrame = function() {
   %CheckExecutionState(this.break_id_);
-  return this.details_[kFrameDetailsDebuggerFrameIndex];
+  var f = kFrameDetailsFlagDebuggerFrameMask;
+  return (this.details_[kFrameDetailsFlagsIndex] & f) == f;
+}
+
+
+FrameDetails.prototype.isOptimizedFrame = function() {
+  %CheckExecutionState(this.break_id_);
+  var f = kFrameDetailsFlagOptimizedFrameMask;
+  return (this.details_[kFrameDetailsFlagsIndex] & f) == f;
+}
+
+
+FrameDetails.prototype.isInlinedFrame = function() {
+  return this.inlinedFrameIndex() > 0;
+}
+
+
+FrameDetails.prototype.inlinedFrameIndex = function() {
+  %CheckExecutionState(this.break_id_);
+  var f = kFrameDetailsFlagInlinedFrameIndexMask;
+  return (this.details_[kFrameDetailsFlagsIndex] & f) >> 2
 }
 
 
@@ -1445,6 +1471,21 @@ FrameMirror.prototype.isDebuggerFrame = function() {
 };
 
 
+FrameMirror.prototype.isOptimizedFrame = function() {
+  return this.details_.isOptimizedFrame();
+};
+
+
+FrameMirror.prototype.isInlinedFrame = function() {
+  return this.details_.isInlinedFrame();
+};
+
+
+FrameMirror.prototype.inlinedFrameIndex = function() {
+  return this.details_.inlinedFrameIndex();
+};
+
+
 FrameMirror.prototype.argumentCount = function() {
   return this.details_.argumentCount();
 };
@@ -1534,8 +1575,12 @@ FrameMirror.prototype.scope = function(index) {
 
 
 FrameMirror.prototype.evaluate = function(source, disable_break, opt_context_object) {
-  var result = %DebugEvaluate(this.break_id_, this.details_.frameId(),
-                              source, Boolean(disable_break), opt_context_object);
+  var result = %DebugEvaluate(this.break_id_,
+                              this.details_.frameId(),
+                              this.details_.inlinedFrameIndex(),
+                              source,
+                              Boolean(disable_break),
+                              opt_context_object);
   return MakeMirror(result);
 };
 
@@ -1560,8 +1605,10 @@ FrameMirror.prototype.invocationText = function() {
     // Try to find the function as a property in the receiver. Include the
     // prototype chain in the lookup.
     var property = GetUndefinedMirror();
-    if (!receiver.isUndefined()) {
-      for (var r = receiver; !r.isNull() && property.isUndefined(); r = r.protoObject()) {
+    if (receiver.isObject()) {
+      for (var r = receiver;
+           !r.isNull() && property.isUndefined();
+           r = r.protoObject()) {
         property = r.lookupProperty(func);
       }
     }
@@ -1688,6 +1735,7 @@ function ScopeDetails(frame, index) {
   this.break_id_ = frame.break_id_;
   this.details_ = %GetScopeDetails(frame.break_id_,
                                    frame.details_.frameId(),
+                                   frame.details_.inlinedFrameIndex(),
                                    index);
 }
 

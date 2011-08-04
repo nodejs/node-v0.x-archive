@@ -204,6 +204,23 @@ def set_options(opt):
                 , dest='dest_cpu'
                 )
 
+def get_node_version():
+  def get_define_value(lines, define):
+    for line in lines:
+      if define in line:
+        return line.split()[-1] #define <NAME> <VALUE>
+
+  lines = open("src/node_version.h").readlines()
+  node_major_version = get_define_value(lines, 'NODE_MAJOR_VERSION')
+  node_minor_version = get_define_value(lines, 'NODE_MINOR_VERSION')
+  node_patch_version = get_define_value(lines, 'NODE_PATCH_VERSION')
+  node_is_release    = get_define_value(lines, 'NODE_VERSION_IS_RELEASE')
+
+  return "%s.%s.%s%s" % ( node_major_version,
+                           node_minor_version,
+                           node_patch_version,
+                           "-pre" if node_is_release == "0" else ""
+                         )
 
 
 
@@ -351,14 +368,23 @@ def configure(conf):
     conf.env.append_value('CPPFLAGS', '-DHAVE_MONOTONIC_CLOCK=0')
 
   if sys.platform.startswith("sunos"):
+    code =  """
+      #include <ifaddrs.h>
+      int main(void) {
+        struct ifaddrs hello;
+        return 0;
+      }
+    """
+
+    if conf.check_cc(msg="Checking for ifaddrs on solaris", fragment=code):
+      conf.env.append_value('CPPFLAGS',  '-DSUNOS_HAVE_IFADDRS')
+
     if not conf.check(lib='socket', uselib_store="SOCKET"):
       conf.fatal("Cannot find socket library")
     if not conf.check(lib='nsl', uselib_store="NSL"):
       conf.fatal("Cannot find nsl library")
     if not conf.check(lib='kstat', uselib_store="KSTAT"):
       conf.fatal("Cannot find kstat library")
-
-  conf.sub_config('deps/libeio')
 
   if conf.env['USE_SHARED_V8']:
     v8_includes = [];
@@ -418,8 +444,6 @@ def configure(conf):
       conf.env.append_value('CXXFLAGS', flags)
       conf.env.append_value('LINKFLAGS', flags)
 
-  # Needed for getaddrinfo in libeio
-  conf.env.append_value("CPPFLAGS", "-DX_STACKSIZE=%d" % (1024*64))
   # LFS
   conf.env.append_value('CPPFLAGS',  '-D_LARGEFILE_SOURCE')
   conf.env.append_value('CPPFLAGS',  '-D_FILE_OFFSET_BITS=64')
@@ -478,11 +502,10 @@ def configure(conf):
   conf.set_env_name('debug', debug_env)
 
   if (sys.platform.startswith("win32")):
-    # Static pthread - crashes
-    #conf.env.append_value('LINKFLAGS', '../deps/pthreads-w32/libpthreadGC2.a')
-    #debug_env.append_value('LINKFLAGS', '../deps/pthreads-w32/libpthreadGC2d.a')
-    # Pthread dll
-    conf.env.append_value('LIB', 'pthread.dll')
+    # Static pthread
+    conf.env.append_value('LINKFLAGS', '../deps/pthread-win32/libpthreadGC2.a')
+    debug_env.append_value('LINKFLAGS', '../deps/pthread-win32/libpthreadGC2d.a')
+    conf.env.append_value('CPPFLAGS', "-DPTW32_STATIC_LIB")
 
   # Configure debug variant
   conf.setenv('debug')
@@ -562,6 +585,11 @@ def build_v8(bld):
     rule          = v8_cmd(bld, "default"),
     before        = "cxx",
     install_path  = None)
+
+  v8.env.env = dict(os.environ)
+  v8.env.env['CC'] = sh_escape(bld.env['CC'][0])
+  v8.env.env['CXX'] = sh_escape(bld.env['CXX'][0])
+
   v8.uselib = "EXECINFO"
   bld.env["CPPPATH_V8"] = "deps/v8/include"
   t = join(bld.srcnode.abspath(bld.env_of_name("default")), v8.target)
@@ -580,7 +608,10 @@ def build_v8(bld):
   bld.install_files('${PREFIX}/include/node/', 'deps/v8/include/*.h')
 
 def sh_escape(s):
-  return s.replace("\\", "\\\\").replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
+  if sys.platform.startswith('win32'):
+    return '"' + s + '"'
+  else:
+    return s.replace("\\", "\\\\").replace("(","\\(").replace(")","\\)").replace(" ","\\ ")
 
 def uv_cmd(bld, variant):
   srcdeps = join(bld.path.abspath(), "deps")
@@ -602,13 +633,16 @@ def uv_cmd(bld, variant):
 def build_uv(bld):
   uv = bld.new_task_gen(
     name = 'uv',
-    source = 'deps/uv/uv.h',
+    source = 'deps/uv/include/uv.h',
     target = 'deps/uv/uv.a',
     before = "cxx",
     rule = uv_cmd(bld, 'default')
   )
 
-  #bld.env["CPPPATH_UV"] = 'deps/uv/'
+  uv.env.env = dict(os.environ)
+  uv.env.env['CC'] = sh_escape(bld.env['CC'][0])
+  uv.env.env['CXX'] = sh_escape(bld.env['CXX'][0])
+  uv.env.env['CPPFLAGS'] = "-DPTW32_STATIC_LIB"
 
   t = join(bld.srcnode.abspath(bld.env_of_name("default")), uv.target)
   bld.env_of_name('default').append_value("LINKFLAGS_UV", t)
@@ -616,12 +650,19 @@ def build_uv(bld):
   if bld.env["USE_DEBUG"]:
     uv_debug = uv.clone("debug")
     uv_debug.rule = uv_cmd(bld, 'debug')
+    uv_debug.env.env = dict(os.environ)
+    uv_debug.env.env['CPPFLAGS'] = "-DPTW32_STATIC_LIB"
 
     t = join(bld.srcnode.abspath(bld.env_of_name("debug")), uv_debug.target)
     bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
 
-  bld.install_files('${PREFIX}/include/node/', 'deps/uv/*.h')
-  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/ev/*.h')
+  bld.install_files('${PREFIX}/include/node/', 'deps/uv/include/*.h')
+
+  bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/src/ev/*.h')
+  bld.install_files('${PREFIX}/include/node/c-ares', """
+    deps/uv/include/ares.h
+    deps/uv/include/ares_version.h
+  """)
 
 
 def build(bld):
@@ -641,8 +682,6 @@ def build(bld):
   print "DEST_CPU: " + bld.env['DEST_CPU']
   print "Parallel Jobs: " + str(Options.options.jobs)
   print "Product type: " + product_type
-
-  bld.add_subdirs('deps/libeio')
 
   build_uv(bld)
 
@@ -805,7 +844,7 @@ def build(bld):
   node.name         = "node"
   node.target       = "node"
   node.uselib = 'RT OPENSSL CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
-  node.add_objects = 'eio http_parser'
+  node.add_objects = 'http_parser'
   if product_type_is_lib:
     node.install_path = '${LIBDIR}'
   else:
@@ -818,19 +857,23 @@ def build(bld):
     src/node_extensions.cc
     src/node_http_parser.cc
     src/node_constants.cc
-    src/node_events.cc
     src/node_file.cc
     src/node_script.cc
     src/node_os.cc
     src/node_dtrace.cc
     src/node_string.cc
     src/timer_wrap.cc
+    src/handle_wrap.cc
+    src/stream_wrap.cc
     src/tcp_wrap.cc
+    src/pipe_wrap.cc
+    src/cares_wrap.cc
+    src/stdio_wrap.cc
+    src/process_wrap.cc
   """
 
   if sys.platform.startswith("win32"):
     node.source += " src/node_stdio_win32.cc "
-    node.source += " src/node_child_process_win32.cc "
   else:
     node.source += " src/node_cares.cc "
     node.source += " src/node_net.cc "
@@ -839,6 +882,7 @@ def build(bld):
     node.source += " src/node_io_watcher.cc "
     node.source += " src/node_stdio.cc "
     node.source += " src/node_child_process.cc "
+    node.source += " src/node_timer.cc "
 
   node.source += bld.env["PLATFORM_FILE"]
   if not product_type_is_lib:
@@ -848,16 +892,13 @@ def build(bld):
 
   node.includes = """
     src/
-    deps/libeio
     deps/http_parser
-    deps/uv
-    deps/uv/ev
+    deps/uv/include
+    deps/uv/src/ev
+    deps/uv/src/ares
   """
 
   if not bld.env["USE_SHARED_V8"]: node.includes += ' deps/v8/include '
-
-  if not bld.env["USE_SHARED_CARES"]:
-    node.includes += '  deps/uv/c-ares '
 
   if sys.platform.startswith('cygwin'):
     bld.env.append_value('LINKFLAGS', '-Wl,--export-all-symbols')
@@ -865,12 +906,17 @@ def build(bld):
     bld.env.append_value('LINKFLAGS', '-Wl,--output-def,default/libnode.def')
     bld.install_files('${LIBDIR}', "build/default/libnode.*")
 
+  if (sys.platform.startswith("win32")):
+    # Static libgcc
+    bld.env.append_value('LINKFLAGS', '-static-libgcc')
+    bld.env.append_value('LINKFLAGS', '-static-libstdc++')
+
   def subflags(program):
     x = { 'CCFLAGS'   : " ".join(program.env["CCFLAGS"]).replace('"', '\\"')
         , 'CPPFLAGS'  : " ".join(program.env["CPPFLAGS"]).replace('"', '\\"')
         , 'LIBFLAGS'  : " ".join(program.env["LIBFLAGS"]).replace('"', '\\"')
         , 'PREFIX'    : safe_path(program.env["PREFIX"])
-        , 'VERSION'   : '0.4.8' # FIXME should not be hard-coded, see NODE_VERSION_STRING in src/node_version.
+        , 'VERSION'   : get_node_version()
         }
     return x
 
@@ -899,14 +945,7 @@ def build(bld):
     src/node.h
     src/node_object_wrap.h
     src/node_buffer.h
-    src/node_events.h
     src/node_version.h
-  """)
-  bld.install_files('${PREFIX}/include/node/c-ares', """
-    deps/uv/c-ares/ares.h
-    deps/uv/c-ares/ares_version.h
-    deps/uv/c-ares/ares_build.h
-    deps/uv/c-ares/ares_rules.h
   """)
 
   # Only install the man page if it exists.
@@ -917,14 +956,6 @@ def build(bld):
   bld.install_files('${PREFIX}/bin/', 'tools/node-waf', chmod=0755)
   bld.install_files('${LIBDIR}/node/wafadmin', 'tools/wafadmin/*.py')
   bld.install_files('${LIBDIR}/node/wafadmin/Tools', 'tools/wafadmin/Tools/*.py')
-
-  # create a pkg-config(1) file
-  node_conf = bld.new_task_gen('subst', before="cxx")
-  node_conf.source = 'tools/nodejs.pc.in'
-  node_conf.target = 'tools/nodejs.pc'
-  node_conf.dict = subflags(node)
-
-  bld.install_files('${LIBDIR}/pkgconfig', 'tools/nodejs.pc')
 
 def shutdown():
   Options.options.debug

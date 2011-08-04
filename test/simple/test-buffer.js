@@ -408,6 +408,17 @@ assert.equal(dot[2], 0x2e);
 assert.equal(dot[3], 0x00);
 assert.equal(dot.toString('base64'), '//4uAA==');
 
+// Writing base64 at a position > 0 should not mangle the result.
+//
+// https://github.com/joyent/node/issues/402
+var segments = ['TWFkbmVzcz8h','IFRoaXM=','IGlz','IG5vZGUuanMh'];
+var buf = new Buffer(64);
+var pos = 0;
+
+for (var i = 0; i < segments.length; ++i) {
+  pos += b.write(segments[i], pos, 'base64');
+}
+assert.equal(b.toString('binary', 0, pos), 'Madness?! This is node.js!');
 
 // Creating buffers larger than pool size.
 var l = Buffer.poolSize + 5;
@@ -583,3 +594,77 @@ assert.equal(0xef, b[3]);
 assert.throws(function() {
   new Buffer('"pong"', 0, 6, 8031, '127.0.0.1')
 });
+
+// #1210 Test UTF-8 string includes null character
+var buf = new Buffer('\0');
+assert.equal(buf.length, 1);
+buf = new Buffer('\0\0');
+assert.equal(buf.length, 2);
+
+buf = new Buffer(2);
+var written = buf.write(''); // 0byte
+assert.equal(written, 0);
+written = buf.write('\0'); // 1byte (v8 adds null terminator)
+assert.equal(written, 1);
+written = buf.write('a\0'); // 1byte * 2
+assert.equal(written, 2);
+written = buf.write('あ'); // 3bytes
+assert.equal(written, 0);
+written = buf.write('\0あ'); // 1byte + 3bytes
+assert.equal(written, 1);
+written = buf.write('\0\0あ'); // 1byte * 2 + 3bytes
+assert.equal(written, 2);
+
+buf = new Buffer(10);
+written = buf.write('あいう'); // 3bytes * 3 (v8 adds null terminator)
+assert.equal(written, 9);
+written = buf.write('あいう\0'); // 3bytes * 3 + 1byte
+assert.equal(written, 10);
+
+// #243 Test write() with maxLength
+var buf = new Buffer(4);
+buf.fill(0xFF);
+var written = buf.write('abcd', 1, 2, 'utf8');
+console.log(buf);
+assert.equal(written, 2);
+assert.equal(buf[0], 0xFF);
+assert.equal(buf[1], 0x61);
+assert.equal(buf[2], 0x62);
+assert.equal(buf[3], 0xFF);
+
+buf.fill(0xFF);
+written = buf.write('abcd', 1, 4);
+console.log(buf);
+assert.equal(written, 3);
+assert.equal(buf[0], 0xFF);
+assert.equal(buf[1], 0x61);
+assert.equal(buf[2], 0x62);
+assert.equal(buf[3], 0x63);
+
+buf.fill(0xFF);
+written = buf.write('abcd', 'utf8', 1, 2);  // legacy style
+console.log(buf);
+assert.equal(written, 2);
+assert.equal(buf[0], 0xFF);
+assert.equal(buf[1], 0x61);
+assert.equal(buf[2], 0x62);
+assert.equal(buf[3], 0xFF);
+
+buf.fill(0xFF);
+written = buf.write('abcdef', 1, 2, 'hex');
+console.log(buf);
+assert.equal(written, 2);
+assert.equal(buf[0], 0xFF);
+assert.equal(buf[1], 0xAB);
+assert.equal(buf[2], 0xCD);
+assert.equal(buf[3], 0xFF);
+
+buf.fill(0xFF);
+written = buf.write('abcd', 0, 2, 'ucs2');
+console.log(buf);
+assert.equal(written, 2);
+assert.equal(buf[0], 0x61);
+assert.equal(buf[1], 0x00);
+assert.equal(buf[2], 0xFF);
+assert.equal(buf[3], 0xFF);
+
