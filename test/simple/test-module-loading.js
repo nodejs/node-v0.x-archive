@@ -186,6 +186,23 @@ try {
 assert.equal(require(loadOrder + 'file8').file8, 'file8/index.reg', msg);
 assert.equal(require(loadOrder + 'file9').file9, 'file9/index.reg2', msg);
 
+// add test cases of module loading order for .json 
+assert.equal(require(loadOrder + 'file10').file10, 'file10/index.js', msg);
+assert.equal(require(loadOrder + 'file11').file11, 'file11/index.js', msg);
+try {
+  require(loadOrder + 'file12');
+} catch (e) {
+  assert.ok(e.message.match(/file12\/index\.node/));
+}
+assert.equal(require(loadOrder + 'file13').file13, 'file13/index.json', msg);
+
+// Check the case that the file extension is defined as number.
+// Object.keys() in V8 always returns number keys at first so that we must 
+// reorder the extention array to search module files in order of ".js",
+// ".node" and ".json"
+// http://code.google.com/p/chromium/issues/detail?id=20270
+require.extensions['0'] = require.extensions['.js'];
+assert.equal(require(loadOrder + 'file14').file14, 'file14/index.js', msg);
 
 // make sure that module.require() is the same as
 // doing require() inside of that module.
