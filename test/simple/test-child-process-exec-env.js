@@ -26,6 +26,8 @@ var success_count = 0;
 var error_count = 0;
 var response = '';
 
+var isWindows = process.platform === 'win32';
+
 function after(err, stdout, stderr) {
   if (err) {
     error_count++;
@@ -39,7 +41,14 @@ function after(err, stdout, stderr) {
   }
 }
 
-var child = exec('/usr/bin/env', { env: { 'HELLO': 'WORLD' } }, after);
+var env = { 'HELLO': 'WORLD' };
+
+if (isWindows) {
+  var child = spawn('cmd.exe', ['/c', 'set'], {env: env}, after);
+} else {
+  var child = spawn('/usr/bin/env', [], {env: env}, after);
+}
+
 
 child.stdout.setEncoding('utf8');
 child.stdout.addListener('data', function(chunk) {
