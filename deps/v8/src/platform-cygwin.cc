@@ -166,6 +166,18 @@ void OS::Free(void* address, const size_t size) {
 }
 
 
+void OS::ProtectCode(void* address, const size_t size) {
+  DWORD old_protect;
+  VirtualProtect(address, size, PAGE_EXECUTE_READ, &old_protect);
+}
+
+
+void OS::Guard(void* address, const size_t size) {
+  DWORD oldprotect;
+  VirtualProtect(address, size, PAGE_READONLY | PAGE_GUARD, &oldprotect);
+}
+
+
 void OS::Sleep(int milliseconds) {
   unsigned int ms = static_cast<unsigned int>(milliseconds);
   usleep(1000 * ms);

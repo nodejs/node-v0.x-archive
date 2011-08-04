@@ -41,8 +41,7 @@
   }
 
 
-static const wchar_t DEFAULT_PATH[1] = L"";
-static const wchar_t DEFAULT_PATH_EXT[20] = L".COM;.EXE;.BAT;.CMD";
+static const wchar_t DEFAULT_PATH_EXT[10] = L".COM;.EXE";
 
 
 static void uv_process_init(uv_process_t* handle) {
@@ -73,6 +72,48 @@ static void uv_process_init(uv_process_t* handle) {
   uv_counters()->process_init++;
 
   uv_ref();
+}
+
+
+/*
+ * Quotes command line arguments
+ * Returns a pointer to the end (next char to be written) of the buffer
+ */
+static wchar_t* quote_cmd_arg(wchar_t *source, wchar_t *target,
+    wchar_t terminator) {
+  int len = wcslen(source),
+      i;
+
+  // Check if the string must be quoted;
+  // if unnecessary, don't do it, it may only confuse older programs.
+  if (len == 0) {
+    goto quote;
+  }
+  for (i = 0; i < len; i++) {
+    if (source[i] == L' ' || source[i] == L'"') {
+      goto quote;
+    }
+  }
+
+  // No quotation needed
+  wcsncpy(target, source, len);
+  target += len;
+  *(target++) = terminator;
+  return target;
+
+quote:
+  // Quote
+  *(target++) = L'"';
+  for (i = 0; i < len; i++) {
+    if (source[i] == L'"' || source[i] == L'\\') {
+      *(target++) = '\\';
+    }
+    *(target++) = source[i];
+  }
+  *(target++) = L'"';
+  *(target++) = terminator;
+
+  return target;
 }
 
 
@@ -370,12 +411,20 @@ static wchar_t* make_program_args(char** args) {
   size_t size = 0;
   size_t len;
   int arg_count = 0;
+  wchar_t* buffer;
+  int arg_size;
+  int buffer_size = 0;
 
   /* Count the required size. */
   for (arg = args; *arg; arg++) {
-    size += (uv_utf8_to_utf16(*arg, NULL, 0) * sizeof(wchar_t));
+    arg_size = uv_utf8_to_utf16(*arg, NULL, 0) * sizeof(wchar_t);
+    size += arg_size;
+    buffer_size = arg_size > buffer_size ? arg_size : buffer_size;
     arg_count++;
   }
+
+  /* Adjust for potential quotes. */
+  size *= 2;
 
   /* Arguments are separated with a space. */
   if (arg_count > 0) {
@@ -387,31 +436,36 @@ static wchar_t* make_program_args(char** args) {
     uv_fatal_error(ERROR_OUTOFMEMORY, "malloc");
   }
 
-  ptr = dst;
-  for (arg = args; *arg; arg++, ptr += len) {
-    len = uv_utf8_to_utf16(*arg, ptr, (size_t)(size - (ptr - dst)));
-    if (!len) {
-      free(dst);
-      return NULL;
-    }
-
-    if (*(arg + 1)) {
-      /* Replace with a space if there are more args. */
-      *((ptr + len) - 1) = L' ';
-    }
+  buffer = (wchar_t*)malloc(buffer_size);
+  if (!buffer) {
+    uv_fatal_error(ERROR_OUTOFMEMORY, "malloc");
   }
 
+  ptr = dst;
+  for (arg = args; *arg; arg++) {
+    len = uv_utf8_to_utf16(*arg, buffer, (size_t)(size - (ptr - dst)));
+    if (!len) {
+      goto error;
+    }
+
+    ptr = quote_cmd_arg(buffer, ptr, *(arg + 1) ? L' ' : L'\0');
+  }
+
+  free(buffer);
   return dst;
+
+error:
+  free(dst);
+  free(buffer);
+  return NULL;
 }
 
 /*
   * The way windows takes environment variables is different than what C does;
   * Windows wants a contiguous block of null-terminated strings, terminated
   * with an additional null.
-  * Get a pointer to the pathext and path environment variables as well,
-  * because search_path needs it. These are just pointers into env_win.
   */
-wchar_t* make_program_env(char** env_block, const wchar_t **path,  const wchar_t **path_ext) {
+wchar_t* make_program_env(char** env_block) {
   wchar_t* dst;
   wchar_t* ptr;
   char** env;
@@ -435,14 +489,6 @@ wchar_t* make_program_env(char** env_block, const wchar_t **path,  const wchar_t
       free(dst);
       return NULL;
     }
-
-    /* Try to get a pointer to PATH and PATHEXT */
-    if (_wcsnicmp(L"PATH=", ptr, 5) == 0) {
-      *path = ptr + 5;
-    }
-    if (_wcsnicmp(L"PATHEXT=", ptr, 8) == 0) {
-      *path_ext = ptr + 8;
-    }
   }
 
   *ptr = L'\0';
@@ -450,16 +496,16 @@ wchar_t* make_program_env(char** env_block, const wchar_t **path,  const wchar_t
 }
 
 
-/* 
- * Called on Windows thread-pool thread to indicate that 
- * a child process has exited. 
+/*
+ * Called on Windows thread-pool thread to indicate that
+ * a child process has exited.
  */
 static void CALLBACK exit_wait_callback(void* data, BOOLEAN didTimeout) {
   uv_process_t* process = (uv_process_t*)data;
-  
+
   assert(didTimeout == FALSE);
   assert(process);
-  
+
   memset(&process->exit_req.overlapped, 0, sizeof(process->exit_req.overlapped));
 
   /* Post completed */
@@ -472,13 +518,13 @@ static void CALLBACK exit_wait_callback(void* data, BOOLEAN didTimeout) {
 }
 
 
-/* 
- * Called on Windows thread-pool thread to indicate that 
- * UnregisterWaitEx has completed. 
+/*
+ * Called on Windows thread-pool thread to indicate that
+ * UnregisterWaitEx has completed.
  */
 static void CALLBACK close_wait_callback(void* data, BOOLEAN didTimeout) {
   uv_process_t* process = (uv_process_t*)data;
-  
+
   assert(didTimeout == FALSE);
   assert(process);
 
@@ -491,6 +537,54 @@ static void CALLBACK close_wait_callback(void* data, BOOLEAN didTimeout) {
                                   &process->close_req.overlapped)) {
     uv_fatal_error(GetLastError(), "PostQueuedCompletionStatus");
   }
+}
+
+
+/*
+ * Called on windows thread pool when CreateProcess failed. It writes an error
+ * message to the process' intended stderr and then posts a PROCESS_EXIT
+ * packet to the completion port.
+ */
+static DWORD WINAPI spawn_failure(void* data) {
+  char syscall[] = "CreateProcessW: ";
+  char unknown[] = "unknown error\n";
+  uv_process_t* process = (uv_process_t*) data;
+  HANDLE child_stderr = process->stdio_pipes[2].child_pipe;
+  char* buf = NULL;
+  DWORD count, written;
+
+  WriteFile(child_stderr, syscall, sizeof(syscall) - 1, &written, NULL);
+
+  count = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                         FORMAT_MESSAGE_FROM_SYSTEM |
+                         FORMAT_MESSAGE_IGNORE_INSERTS,
+                         NULL,
+                         process->spawn_errno,
+                         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                         (LPSTR) &buf,
+                         0,
+                         NULL);
+
+  if (buf != NULL && count > 0) {
+    WriteFile(child_stderr, buf, count, &written, NULL);
+    LocalFree(buf);
+  } else {
+    WriteFile(child_stderr, unknown, sizeof(unknown) - 1, &written, NULL);
+  }
+
+  FlushFileBuffers(child_stderr);
+
+  memset(&process->exit_req.overlapped, 0, sizeof(process->exit_req.overlapped));
+
+  /* Post completed */
+  if (!PostQueuedCompletionStatus(LOOP->iocp,
+                                  0,
+                                  0,
+                                  &process->exit_req.overlapped)) {
+    uv_fatal_error(GetLastError(), "PostQueuedCompletionStatus");
+  }
+
+  return 0;
 }
 
 
@@ -513,15 +607,18 @@ void uv_process_proc_exit(uv_process_t* handle) {
     handle->wait_handle = INVALID_HANDLE_VALUE;
   }
 
-  /* Clean-up the process handle. */
   if (handle->process_handle != INVALID_HANDLE_VALUE) {
     /* Get the exit code. */
     if (!GetExitCodeProcess(handle->process_handle, &exit_code)) {
-      exit_code = 1;
+      exit_code = 127;
     }
 
+    /* Clean-up the process handle. */
     CloseHandle(handle->process_handle);
     handle->process_handle = INVALID_HANDLE_VALUE;
+  } else {
+    /* The process never even started in the first place. */
+    exit_code = 127;
   }
 
   /* Fire the exit callback. */
@@ -572,10 +669,10 @@ static int uv_create_stdio_pipe_pair(uv_pipe_t* server_pipe, HANDLE* child_pipe,
   char pipe_name[64];
   DWORD mode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT;
 
-  if (server_pipe->type != UV_NAMED_PIPE) { 
+  if (server_pipe->type != UV_NAMED_PIPE) {
     uv_set_error(UV_EINVAL, 0);
     err = -1;
-    goto done; 
+    goto done;
   }
 
   /* Create server pipe handle. */
@@ -635,20 +732,19 @@ done:
 
 
 int uv_spawn(uv_process_t* process, uv_process_options_t options) {
-  int err, i;
-  const wchar_t* path = NULL;
-  const wchar_t* path_ext = NULL;
+  int err = 0, i;
+  wchar_t* path;
   int size;
   wchar_t* application_path, *application, *arguments, *env, *cwd;
   STARTUPINFOW startup;
   PROCESS_INFORMATION info;
- 
+
   uv_process_init(process);
 
   process->exit_cb = options.exit_cb;
   UTF8_TO_UTF16(options.file, application);
   arguments = options.args ? make_program_args(options.args) : NULL;
-  env = options.env ? make_program_env(options.env, &path, &path_ext) : NULL;
+  env = options.env ? make_program_env(options.env) : NULL;
 
   if (options.cwd) {
     UTF8_TO_UTF16(options.cwd, cwd);
@@ -667,15 +763,24 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
     }
   }
 
-  application_path = search_path(application, 
+  /* Get PATH env. variable. */
+  size = GetEnvironmentVariableW(L"PATH", NULL, 0) + 1;
+  path = (wchar_t*)malloc(size * sizeof(wchar_t));
+  if (!path) {
+    uv_fatal_error(ERROR_OUTOFMEMORY, "malloc");
+  }
+  GetEnvironmentVariableW(L"PATH", path, size * sizeof(wchar_t));
+  path[size - 1] = L'\0';
+
+  application_path = search_path(application,
                                  cwd,
-                                 path ? path : DEFAULT_PATH,
-                                 path_ext ? path_ext : DEFAULT_PATH_EXT);
+                                 path,
+                                 DEFAULT_PATH_EXT);
 
   if (!application_path) {
-    uv_set_error(UV_EINVAL, 0);
-    err = -1;
-    goto done;
+    /* CreateProcess will fail, but this allows us to pass this error to */
+    /* the user asynchronously. */
+    application_path = application;
   }
 
   /* Create stdio pipes. */
@@ -717,42 +822,49 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
   startup.hStdOutput = process->stdio_pipes[1].child_pipe;
   startup.hStdError = process->stdio_pipes[2].child_pipe;
 
-  if (!CreateProcessW(application_path,
-                      arguments,
-                      NULL,
-                      NULL,
-                      1,
-                      CREATE_UNICODE_ENVIRONMENT,
-                      env,
-                      cwd,
-                      &startup,
-                      &info)) {
-    uv_set_sys_error(GetLastError());
-    err = -1;
-    goto done;
-  }
+  if (CreateProcessW(application_path,
+                     arguments,
+                     NULL,
+                     NULL,
+                     1,
+                     CREATE_UNICODE_ENVIRONMENT,
+                     env,
+                     cwd,
+                     &startup,
+                     &info)) {
+    /* Spawn succeeded */
+    process->process_handle = info.hProcess;
+    process->pid = info.dwProcessId;
 
-  process->process_handle = info.hProcess;
-  process->pid = info.dwProcessId;
-  
-  /* Setup notifications for when the child process exits. */
-  if (!RegisterWaitForSingleObject(&process->wait_handle, process->process_handle,
-      exit_wait_callback, (void*)process, INFINITE,
-      WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE)) {
-    uv_set_sys_error(GetLastError());
-    err = -1;
-    goto done;
-  }
+    /* Setup notifications for when the child process exits. */
+    if (!RegisterWaitForSingleObject(&process->wait_handle, process->process_handle,
+        exit_wait_callback, (void*)process, INFINITE,
+        WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE)) {
+      uv_fatal_error(GetLastError(), "RegisterWaitForSingleObject");
+    }
 
-  CloseHandle(info.hThread);
-  err = 0;
+    CloseHandle(info.hThread);
+
+  } else {
+    /* CreateProcessW failed, but this failure should be delivered */
+    /* asynchronously to retain unix compatibility. So pretent spawn */
+    /* succeeded, and start a thread instead that prints an error */
+    /* to the child's intended stderr. */
+    process->spawn_errno = GetLastError();
+    if (!QueueUserWorkItem(spawn_failure, process, WT_EXECUTEDEFAULT)) {
+      uv_fatal_error(GetLastError(), "QueueUserWorkItem");
+    }
+  }
 
 done:
-  free(application_path);
   free(application);
+  if (application_path != application) {
+    free(application_path);
+  }
   free(arguments);
   free(cwd);
   free(env);
+  free(path);
 
   if (err) {
     for (i = 0; i < COUNTOF(process->stdio_pipes); i++) {

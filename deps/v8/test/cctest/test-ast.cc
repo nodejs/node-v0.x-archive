@@ -56,14 +56,3 @@ TEST(List) {
   CHECK_EQ(0, list->length());
   delete list;
 }
-
-
-TEST(DeleteEmpty) {
-  {
-    List<int>* list = new List<int>(0);
-    delete list;
-  }
-  {
-    List<int> list(0);
-  }
-}
