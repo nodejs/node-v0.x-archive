@@ -71,7 +71,7 @@ The name of the actual event that was fired is available by accessing
 
 
     emitter.on('*', function() {
-      console.log(emitter.currentEvent);
+      console.log(this.event);
     });
 
     emitter.on('foo', function() {
