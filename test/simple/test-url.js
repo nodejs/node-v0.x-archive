@@ -335,6 +335,11 @@ var parseTests = {
     hostname: 'bucket_name.s3.amazonaws.com',
     pathname: '/image.jpg',
     href: 'http://bucket_name.s3.amazonaws.com/image.jpg'
+  },
+  'www.example.com' : {
+    'href': 'www.example.com',
+    'host': 'www.example.com',
+    'hostname': 'www.example.com'
   }
 };
 
