@@ -349,14 +349,14 @@ for (var u in parseTests) {
   for (var i in expected) {
     var e = JSON.stringify(expected[i]),
         a = JSON.stringify(actual[i]);
-    assert.equal(e, a,
+    assert.equal(a, e,
                  'parse(' + u + ').' + i + ' == ' + e + '\nactual: ' + a);
   }
 
   var expected = parseTests[u].href,
       actual = url.format(parseTests[u]);
 
-  assert.equal(expected, actual,
+  assert.equal(actual, expected,
                'format(' + u + ') == ' + u + '\nactual:' + actual);
 }
 
@@ -386,7 +386,7 @@ for (var u in parseTestsWithQueryString) {
   for (var i in expected) {
     var e = JSON.stringify(expected[i]),
         a = JSON.stringify(actual[i]);
-    assert.equal(e, a,
+    assert.equal(a, e,
                  'parse(' + u + ').' + i + ' == ' + e + '\nactual: ' + a);
   }
 }
@@ -544,7 +544,7 @@ var relativeTests = [
 relativeTests.forEach(function(relativeTest) {
   var a = url.resolve(relativeTest[0], relativeTest[1]),
       e = relativeTest[2];
-  assert.equal(e, a,
+  assert.equal(a, e,
                'resolve(' + [relativeTest[0], relativeTest[1]] + ') == ' + e +
                '\n  actual=' + a);
 });
@@ -849,7 +849,7 @@ var relativeTests2 = [
 relativeTests2.forEach(function(relativeTest) {
   var a = url.resolve(relativeTest[1], relativeTest[0]),
       e = relativeTest[2];
-  assert.equal(e, a,
+  assert.equal(a, e,
                'resolve(' + [relativeTest[1], relativeTest[0]] + ') == ' + e +
                '\n  actual=' + a);
 });
