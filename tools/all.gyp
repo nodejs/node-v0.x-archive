@@ -9,6 +9,7 @@
         'msvs_settings': {
           'VCCLCompilerTool': {
             'RuntimeLibrary': 1, # static debug
+            'Optimization': 0, # /Od, no optimization
           },
         },
       },
@@ -17,12 +18,25 @@
         'msvs_settings': {
           'VCCLCompilerTool': {
             'RuntimeLibrary': 0, # static release
+            'Optimization': 3, # /Ox, full optimization
+            'FavorSizeOrSpeed': 1, # /Ot, favour speed over size
+            'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible
+            'WholeProgramOptimization': 'true', # /GL, whole program optimization, needed for LTCG
+          },
+          'VCLinkerTool': {
+            'LinkTimeCodeGeneration': 1, # link-time code generation
           },
         },
       }
     },
     'msvs_settings': {
       'VCCLCompilerTool': {
+        'StringPooling': 'true', # pool string literals
+        'DebugInformationFormat': 3, # Generate a PDB
+        'AdditionalOptions': [
+          '/MP', # compile across multiple CPUs, VC2008 setting
+        ],
+        'MultiProcessorCompilation': 'true', # compile across multiple CPUs, VC2010 setting
       },
       'VCLibrarianTool': {
       },
@@ -33,7 +47,13 @@
     'conditions': [
       ['OS == "win"', {
         'defines': [
-          'WIN32'
+          'WIN32',
+          # we don't really want VC++ warning us about
+          # how dangerous C functions are...
+          '_CRT_SECURE_NO_DEPRECATE',
+          # ... or that C implementations shouldn't use
+          # POSIX names
+          '_CRT_NONSTDC_NO_DEPRECATE',
         ],
       }]
     ],
@@ -122,11 +142,14 @@
           'sources': [
             '../src/platform_win32.cc',
             '../src/node_stdio_win32.cc',
-            '../deps/uv/src/eio/eio.c', # file operations depend on eio to link. uv contains eio in unix builds, but not win32. So we need to compile it here instead.
+            # file operations depend on eio to link. uv contains eio in unix builds, but not win32. So we need to compile it here instead.
+            '../deps/uv/src/eio/eio.c',
           ],
           'defines': [
-            'PTW32_STATIC_LIB', # we'll need to add pthread-win32 and build/depend on that.
+            'PTW32_STATIC_LIB',
             'FD_SETSIZE=1024',
+            # we need to use node's preferred "win32" rather than gyp's preferred "win"
+            'PLATFORM="win32"',
           ],
           'libraries': [
             '-lws2_32.lib',
