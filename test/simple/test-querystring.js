@@ -48,7 +48,16 @@ var qsTestCases = [
      'undef': ''}],
   [' foo = bar ', '%20foo%20=%20bar%20', {' foo ': ' bar '}],
   ['foo=%zx', 'foo=%25zx', {'foo': '%zx'}],
-  ['foo=%EF%BF%BD', 'foo=%EF%BF%BD', {'foo': '\ufffd' }]
+  ['foo=%EF%BF%BD', 'foo=%EF%BF%BD', {'foo': '\ufffd' }],
+  ['foo=юникод',
+   'foo=%D1%8E%D0%BD%D0%B8%D0%BA%D0%BE%D0%B4',
+   {'foo': 'юникод'}],
+  ['foo=%8E%D0%BD%D0%B8%D0%BA%D0%BE%D0%B4',
+   'foo=%EF%BF%BD%D0%BD%D0%B8%D0%BA%D0%BE%D0%B4',
+   {'foo': '\ufffdникод'}],
+  ['foo=%8%D1%8E%D0%BD%D0%B8%D0%BA%D0%BE%D0%B4',
+   'foo=%258%D1%8E%D0%BD%D0%B8%D0%BA%D0%BE%D0%B4',
+   {'foo': '%8юникод'}]
 ];
 
 // [ wonkyQS, canonicalQS, obj ]
@@ -174,30 +183,4 @@ assert.equal(f, 'a:b;q:x%3Ay%3By%3Az');
 
 
 assert.deepEqual({}, qs.parse());
-
-
-
-var b = qs.unescapeBuffer('%d3%f2Ug%1f6v%24%5e%98%cb' +
-                          '%0d%ac%a2%2f%9d%eb%d8%a2%e6');
-// <Buffer d3 f2 55 67 1f 36 76 24 5e 98 cb 0d ac a2 2f 9d eb d8 a2 e6>
-assert.equal(0xd3, b[0]);
-assert.equal(0xf2, b[1]);
-assert.equal(0x55, b[2]);
-assert.equal(0x67, b[3]);
-assert.equal(0x1f, b[4]);
-assert.equal(0x36, b[5]);
-assert.equal(0x76, b[6]);
-assert.equal(0x24, b[7]);
-assert.equal(0x5e, b[8]);
-assert.equal(0x98, b[9]);
-assert.equal(0xcb, b[10]);
-assert.equal(0x0d, b[11]);
-assert.equal(0xac, b[12]);
-assert.equal(0xa2, b[13]);
-assert.equal(0x2f, b[14]);
-assert.equal(0x9d, b[15]);
-assert.equal(0xeb, b[16]);
-assert.equal(0xd8, b[17]);
-assert.equal(0xa2, b[18]);
-assert.equal(0xe6, b[19]);
 
