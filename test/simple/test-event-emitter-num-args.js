@@ -24,12 +24,19 @@ var assert = require('assert');
 var events = require('events');
 
 var e = new events.EventEmitter(),
-    num_args_emited = [];
+    num_args_emitted = [],
+    num_global_args_emitted = [];
 
 e.on('numArgs', function() {
   var numArgs = arguments.length;
   console.log('numArgs: ' + numArgs);
-  num_args_emited.push(numArgs);
+  num_args_emitted.push(numArgs);
+});
+
+e.on('*', function() {
+  var numArgs = arguments.length;
+  console.log('numGlobalArgs: ' + numArgs);
+  num_global_args_emitted.push(numArgs);
 });
 
 console.log('start');
@@ -42,7 +49,6 @@ e.emit('numArgs', null, null, null, null);
 e.emit('numArgs', null, null, null, null, null);
 
 process.addListener('exit', function() {
-  assert.deepEqual([0, 1, 2, 3, 4, 5], num_args_emited);
+  assert.deepEqual([0, 1, 2, 3, 4, 5], num_args_emitted);
+  assert.deepEqual([1, 2, 3, 4, 5, 6], num_global_args_emitted);
 });
-
-

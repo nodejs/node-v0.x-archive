@@ -25,12 +25,13 @@ var events = require('events');
 
 var e = new events.EventEmitter();
 
-var events_new_listener_emited = [];
+var events_new_listener_emitted = [];
+var events_global_listener_emitted = [];
 var times_hello_emited = 0;
 
 e.addListener('newListener', function(event, listener) {
   console.log('newListener: ' + event);
-  events_new_listener_emited.push(event);
+  events_new_listener_emitted.push(event);
 });
 
 e.on('hello', function(a, b) {
@@ -38,6 +39,13 @@ e.on('hello', function(a, b) {
   times_hello_emited += 1;
   assert.equal('a', a);
   assert.equal('b', b);
+});
+
+e.on('*', function(event) {
+  console.log('global');
+  events_global_listener_emitted.push(event);
+  assert.equal('a', arguments[1]);
+  assert.equal('b', arguments[2]);
 });
 
 console.log('start');
@@ -51,7 +59,8 @@ f.setMaxListeners(0);
 
 
 process.addListener('exit', function() {
-  assert.deepEqual(['hello'], events_new_listener_emited);
+  assert.deepEqual(['hello', '*'], events_new_listener_emitted);
+  assert.deepEqual(['hello'], events_global_listener_emitted);
   assert.equal(1, times_hello_emited);
 });
 
