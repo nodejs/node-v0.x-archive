@@ -69,7 +69,14 @@ piped to the socket, the plaintext stream is what the user interacts with therea
 
 [Here is some code that does it.](http://gist.github.com/848444)
 
+### NPN and SNI
 
+NPN (Next Protocol Negotitation) and SNI (Server Name Indication) are TLS
+handshake extensions allowing you:
+
+  * NPN - to use one TLS server for multiple protocols (HTTP, SPDY)
+  * SNI - to use one TLS server for multiple hostnames with different SSL
+    certificates.
 
 
 ### tls.Server
