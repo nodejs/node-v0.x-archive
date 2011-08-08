@@ -1923,6 +1923,63 @@ static Handle<Value> Binding(const Arguments& args) {
   return scope.Close(exports);
 }
 
+static Local<String> WatcherTypeToString(int type) {
+  switch (type) {
+    case EV_READ:
+      return String::New("read");
+    case EV_WRITE:
+      return String::New("write");
+    case EV_TIMER:
+      return String::New("timer");
+    case EV_PERIODIC:
+      return String::New("periodic");
+    case EV_CHILD:
+      return String::New("child");
+    case EV_STAT:
+      return String::New("stat");
+    case EV_CUSTOM:
+      return String::New("custom");
+    default:
+      return String::New("unknown");
+  }
+}
+
+static Local<Function> watcher_callback;
+static Handle<Object> watcher_callback_context;
+
+static void WatcherCallback(EV_P_ int type, void *w) {
+  HandleScope scope;
+
+  Local<String> name = WatcherTypeToString(type);
+
+  ev_watcher* watcher = (ev_watcher*)w;
+  ObjectWrap* watcherwrap = (ObjectWrap*)watcher->data;
+  Persistent<Object> handle = watcherwrap->handle_;
+
+  Handle<Value> argv[2] = { name, handle };
+
+  TryCatch try_catch;
+
+  watcher_callback->Call(watcher_callback_context, 2, argv);
+
+  if (try_catch.HasCaught()) {
+    FatalException(try_catch);
+  }
+}
+
+static Handle<Value> Watchers(const Arguments& args) {
+  HandleScope scope;
+
+  watcher_callback = Local<Function>::Cast(args[0]);
+  watcher_callback_context = args.This();
+
+  ev_walk(EV_DEFAULT_
+          EV_READ | EV_WRITE | EV_TIMER | EV_PERIODIC | EV_CHILD |
+          EV_STAT | EV_CUSTOM, WatcherCallback);
+
+  return Undefined();
+}
+
 
 static Handle<Value> ProcessTitleGetter(Local<String> property,
                                         const AccessorInfo& info) {
@@ -2171,6 +2228,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "memoryUsage", MemoryUsage);
 
   NODE_SET_METHOD(process, "binding", Binding);
+
+  NODE_SET_METHOD(process, "watchers", Watchers);
 
   return process;
 }
