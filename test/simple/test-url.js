@@ -336,10 +336,11 @@ var parseTests = {
     pathname: '/image.jpg',
     href: 'http://bucket_name.s3.amazonaws.com/image.jpg'
   },
+  //While this may seem counter-intuitive, a browser will parse
+  //<a href='www.google.com'> as a path.
   'www.example.com' : {
     'href': 'www.example.com',
-    'host': 'www.example.com',
-    'hostname': 'www.example.com'
+    'pathname': 'www.example.com'
   }
 };
 
@@ -844,7 +845,10 @@ var relativeTests2 = [
   ['mini1.xml',
    'file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/',
    'file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/mini1.xml'],
-  ['../b/c', 'foo:a/y/z', 'foo:a/b/c']
+  ['../b/c', 'foo:a/y/z', 'foo:a/b/c'],
+  
+  //changeing auth 
+  ['http://diff:auth@www.example.com', 'http://asdf:qwer@www.example.com', 'http://diff:auth@www.example.com/']
 ];
 relativeTests2.forEach(function(relativeTest) {
   var a = url.resolve(relativeTest[1], relativeTest[0]),
@@ -855,7 +859,7 @@ relativeTests2.forEach(function(relativeTest) {
 });
 
 //if format and parse are inverse operations then
-//resolveObject(parse(x), y) === parse(resolve(x, y))
+//resolveObject(parse(x), y) == parse(resolve(x, y))
 
 //format: [from, path, expected]
 relativeTests.forEach(function (relativeTest) {
