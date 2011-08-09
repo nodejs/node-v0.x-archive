@@ -43,6 +43,29 @@ it is removed.
       console.log('Ah, we have our first user!');
     });
 
+#### emitter.stopPropagation()
+
+ When called the emitter will immediately stop invoking any
+ additional listeners that are present.
+
+     var calls = [];
+     emitter.on('foo', function(){
+       calls.push('one');
+     });
+
+     emitter.on('foo', function(){
+       calls.push('two');
+       emitter.stopPropagation();
+     });
+
+     emitter.on('foo', function(){
+       calls.push('three');
+     });
+
+     emitter.emit('foo');
+     console.log(calls);
+     // => ['one', 'two']
+
 #### emitter.removeListener(event, listener)
 
 Remove a listener from the listener array for the specified event.
