@@ -31,6 +31,12 @@ class ObjectWrap {
  public:
   ObjectWrap ( ) {
     refs_ = 0;
+
+    // Capture the current stack trace so we know who created this wrapper
+    v8::HandleScope scope;
+    v8::Local<v8::StackTrace> trace =
+      v8::StackTrace::CurrentStackTrace(kFrameLimit, v8::StackTrace::kOverview);
+    trace_ = v8::Persistent<v8::StackTrace>::New(trace);
   }
 
 
@@ -54,6 +60,7 @@ class ObjectWrap {
 
 
   v8::Persistent<v8::Object> handle_; // ro
+  v8::Persistent<v8::StackTrace> trace_;
 
  protected:
   inline void Wrap (v8::Handle<v8::Object> handle) {
@@ -107,6 +114,8 @@ class ObjectWrap {
     assert(value.IsNearDeath());
     delete obj;
   }
+
+  static const int kFrameLimit = 10;
 };
 
 } // namespace node

@@ -124,6 +124,11 @@ Persistent<String> type_symbol;
 Persistent<String> handle_symbol;
 Persistent<String> stack_symbol;
 
+Persistent<String> filename_symbol;
+Persistent<String> functionname_symbol;
+Persistent<String> column_symbol;
+Persistent<String> linenumber_symbol;
+
 Persistent<String> read_symbol;
 Persistent<String> write_symbol;
 Persistent<String> timer_symbol;
@@ -1985,6 +1990,12 @@ static Handle<Value> Watchers(const Arguments& args) {
     type_symbol = NODE_PSYMBOL("type");
     handle_symbol = NODE_PSYMBOL("handle");
     stack_symbol = NODE_PSYMBOL("stack");
+
+    filename_symbol = NODE_PSYMBOL("fileName");
+    functionname_symbol = NODE_PSYMBOL("functionName");
+    column_symbol = NODE_PSYMBOL("columnNumber");
+    linenumber_symbol = NODE_PSYMBOL("lineNumber");
+
     read_symbol = NODE_PSYMBOL("read");
     write_symbol = NODE_PSYMBOL("write");
     timer_symbol = NODE_PSYMBOL("timer");
@@ -1998,6 +2009,7 @@ static Handle<Value> Watchers(const Arguments& args) {
 
   Local<Array> array = Array::New(watcher_count);
 
+  // Convert the array of watcher structs to an array of objects
   for (int i = 0; i < watcher_count; i++) {
     watcher_struct watcher_s = watchers[i];
     ev_watcher* watcher = (ev_watcher*)watcher_s.w;
@@ -2007,7 +2019,31 @@ static Handle<Value> Watchers(const Arguments& args) {
 
     if (watcher->data != NULL) {
       ObjectWrap* wrap = (ObjectWrap*)watcher->data;
+
       obj->Set(handle_symbol, wrap->handle_);
+
+      // Convert the stack trace to a string
+      Persistent<StackTrace> trace = wrap->trace_;
+      Local<String> stack_str = String::Empty();
+      int length = trace->GetFrameCount();
+      for (int j = 0; j < length; j++) {
+        Local<StackFrame> frame = trace->GetFrame(j);
+
+        stack_str = String::Concat(stack_str, String::NewSymbol("    at "));
+        stack_str = String::Concat(stack_str, frame->GetFunctionName());
+        stack_str = String::Concat(stack_str, String::NewSymbol(" ("));
+        stack_str = String::Concat(stack_str, frame->GetScriptName());
+        stack_str = String::Concat(stack_str, String::NewSymbol(":"));
+        stack_str = String::Concat(stack_str,
+          Integer::NewFromUnsigned(frame->GetLineNumber())->ToString());
+        stack_str = String::Concat(stack_str, String::NewSymbol(":"));
+        stack_str = String::Concat(stack_str,
+          Integer::NewFromUnsigned(frame->GetColumn())->ToString());
+        stack_str = String::Concat(stack_str, String::NewSymbol(")"));
+        if (j < length - 1)
+          stack_str = String::Concat(stack_str, String::NewSymbol("\n"));
+      }
+      obj->Set(stack_symbol, stack_str);
     }
 
     array->Set(i, obj);
