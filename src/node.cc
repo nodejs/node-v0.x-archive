@@ -110,6 +110,29 @@ static Persistent<String> listeners_symbol;
 static Persistent<String> uncaught_exception_symbol;
 static Persistent<String> emit_symbol;
 
+struct watcher_struct {
+  int type;
+  void *w;
+};
+
+const int MAX_WATCHERS = 100;
+
+static watcher_struct *watchers = NULL;
+static int watcher_count = 0;
+
+Persistent<String> type_symbol;
+Persistent<String> handle_symbol;
+Persistent<String> stack_symbol;
+
+Persistent<String> read_symbol;
+Persistent<String> write_symbol;
+Persistent<String> timer_symbol;
+Persistent<String> periodic_symbol;
+Persistent<String> child_symbol;
+Persistent<String> signal_symbol;
+Persistent<String> stat_symbol;
+Persistent<String> custom_symbol;
+Persistent<String> unknown_symbol;
 
 static char *eval_string = NULL;
 static int option_end_index = 0;
@@ -1923,61 +1946,77 @@ static Handle<Value> Binding(const Arguments& args) {
   return scope.Close(exports);
 }
 
-static Local<String> WatcherTypeToString(int type) {
+static Persistent<String> WatcherTypeToString(int type) {
   switch (type) {
-    case EV_READ:
-      return String::New("read");
-    case EV_WRITE:
-      return String::New("write");
-    case EV_TIMER:
-      return String::New("timer");
-    case EV_PERIODIC:
-      return String::New("periodic");
-    case EV_CHILD:
-      return String::New("child");
-    case EV_STAT:
-      return String::New("stat");
-    case EV_CUSTOM:
-      return String::New("custom");
-    default:
-      return String::New("unknown");
+    case EV_READ:     return read_symbol;
+    case EV_WRITE:    return write_symbol;
+    case EV_TIMER:    return timer_symbol;
+    case EV_PERIODIC: return periodic_symbol;
+    case EV_CHILD:    return child_symbol;
+    case EV_SIGNAL:   return signal_symbol;
+    case EV_STAT:     return stat_symbol;
+    case EV_CUSTOM:   return custom_symbol;
+    default:          return unknown_symbol;
   }
 }
 
-static Local<Function> watcher_callback;
-static Handle<Object> watcher_callback_context;
-
 static void WatcherCallback(EV_P_ int type, void *w) {
-  HandleScope scope;
+  if (watcher_count > MAX_WATCHERS)
+    return;
 
-  Local<String> name = WatcherTypeToString(type);
+  watcher_struct watcher;
+  watcher.type = type;
+  watcher.w = w;
 
-  ev_watcher* watcher = (ev_watcher*)w;
-  ObjectWrap* watcherwrap = (ObjectWrap*)watcher->data;
-  Persistent<Object> handle = watcherwrap->handle_;
-
-  Handle<Value> argv[2] = { name, handle };
-
-  TryCatch try_catch;
-
-  watcher_callback->Call(watcher_callback_context, 2, argv);
-
-  if (try_catch.HasCaught()) {
-    FatalException(try_catch);
-  }
+  watchers[watcher_count++] = watcher;
 }
 
 static Handle<Value> Watchers(const Arguments& args) {
   HandleScope scope;
 
-  watcher_callback = Local<Function>::Cast(args[0]);
-  watcher_callback_context = args.This();
+  watchers = new watcher_struct[MAX_WATCHERS];
+  watcher_count = 0;
 
   ev_walk(EV_DEFAULT_
-          EV_READ | EV_WRITE | EV_TIMER | EV_PERIODIC | EV_CHILD |
+          EV_READ | EV_WRITE | EV_TIMER | EV_PERIODIC | EV_CHILD | EV_SIGNAL |
           EV_STAT | EV_CUSTOM, WatcherCallback);
 
-  return Undefined();
+  if (type_symbol.IsEmpty()) {
+    type_symbol = NODE_PSYMBOL("type");
+    handle_symbol = NODE_PSYMBOL("handle");
+    stack_symbol = NODE_PSYMBOL("stack");
+    read_symbol = NODE_PSYMBOL("read");
+    write_symbol = NODE_PSYMBOL("write");
+    timer_symbol = NODE_PSYMBOL("timer");
+    periodic_symbol = NODE_PSYMBOL("periodic");
+    child_symbol = NODE_PSYMBOL("child");
+    signal_symbol = NODE_PSYMBOL("signal");
+    stat_symbol = NODE_PSYMBOL("stat");
+    custom_symbol = NODE_PSYMBOL("custom");
+    unknown_symbol = NODE_PSYMBOL("unknown");
+  }
+
+  Local<Array> array = Array::New(watcher_count);
+
+  for (int i = 0; i < watcher_count; i++) {
+    watcher_struct watcher_s = watchers[i];
+    ev_watcher* watcher = (ev_watcher*)watcher_s.w;
+
+    Local<Object> obj = Object::New();
+    obj->Set(type_symbol, WatcherTypeToString(watcher_s.type));
+
+    if (watcher->data != NULL) {
+      ObjectWrap* wrap = (ObjectWrap*)watcher->data;
+      obj->Set(handle_symbol, wrap->handle_);
+    }
+
+    array->Set(i, obj);
+  }
+
+  delete[] watchers;
+  watcher_count = 0;
+
+  return scope.Close(array);
 }
 
 
