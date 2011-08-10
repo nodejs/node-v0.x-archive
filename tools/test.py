@@ -663,7 +663,7 @@ class Context(object):
 
   def GetVm(self, mode):
     if mode == 'debug':
-      name = 'build/debug/node_g'
+      name = 'build/debug/node'
     else:
       name = 'build/default/node'
 

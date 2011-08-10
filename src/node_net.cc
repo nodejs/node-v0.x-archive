@@ -519,7 +519,7 @@ do { \
         } else if (addrlen == sizeof(struct sockaddr_un)) { \
           /* first byte is '\0' and all remaining bytes are name;
            * it is not NUL-terminated and may contain embedded NULs */ \
-          (info)->Set(address_symbol, String::New(au->sun_path + 1, sizeof(au->sun_path - 1))); \
+          (info)->Set(address_symbol, String::New(au->sun_path + 1, sizeof(au->sun_path) - 1)); \
         } else { \
           (info)->Set(address_symbol, String::New(au->sun_path)); \
         } \
@@ -1599,7 +1599,7 @@ static int AfterResolve(eio_req *req) {
 }
 
 
-static int Resolve(eio_req *req) {
+static void Resolve(eio_req *req) {
   // Note: this function is executed in the thread pool! CAREFUL
   struct resolve_request * rreq = (struct resolve_request *) req->data;
 
@@ -1612,7 +1612,6 @@ static int Resolve(eio_req *req) {
                             NULL,
                             &hints,
                             &(rreq->address_list));
-  return 0;
 }
 
 

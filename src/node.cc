@@ -29,17 +29,31 @@
 #include <locale.h>
 #include <signal.h>
 #include <stdio.h>
+#if defined(_MSC_VER)
+#define snprintf _snprintf
+#endif
 #include <stdlib.h>
-#include <strings.h>
 #include <string.h>
+#if !defined(_MSC_VER)
+#include <strings.h>
+#else
+#define strcasecmp _stricmp
+#endif
 #include <limits.h> /* PATH_MAX */
 #include <assert.h>
-#include <unistd.h>
+#if !defined(_MSC_VER)
+#include <unistd.h> /* setuid, getuid */
+#else
+#include <direct.h>
+#define chdir _chdir
+#define getcwd _getcwd
+#include <process.h>
+#define getpid _getpid
+#endif
 #include <errno.h>
 #include <sys/types.h>
-#include <unistd.h> /* setuid, getuid */
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) || defined(_MSC_VER)
 # include <platform_win32.h> /* winapi_perror() */
 # ifdef PTW32_STATIC_LIB
 extern "C" {
@@ -69,13 +83,15 @@ extern "C" {
 # include <node_stat_watcher.h>
 # include <node_timer.h>
 #endif
+#if !defined(_MSC_VER)
 #include <node_child_process.h>
+#endif
 #include <node_constants.h>
 #include <node_stdio.h>
 #include <node_javascript.h>
 #include <node_version.h>
 #include <node_string.h>
-#ifdef HAVE_OPENSSL
+#if HAVE_OPENSSL
 # include <node_crypto.h>
 #endif
 #include <node_script.h>
@@ -87,7 +103,7 @@ using namespace v8;
 # ifdef __APPLE__
 # include <crt_externs.h>
 # define environ (*_NSGetEnviron())
-# else
+# elif !defined(_MSC_VER)
 extern char **environ;
 # endif
 
@@ -1428,13 +1444,15 @@ static Handle<Value> Cwd(const Arguments& args) {
 }
 
 
-#ifdef __POSIX__
+#ifndef __POSIX__
+# define umask _umask
+#endif
 
-static Handle<Value> Umask(const Arguments& args){
+static Handle<Value> Umask(const Arguments& args) {
   HandleScope scope;
   unsigned int old;
 
-  if(args.Length() < 1 || args[0]->IsUndefined()) {
+  if (args.Length() < 1 || args[0]->IsUndefined()) {
     old = umask(0);
     umask((mode_t)old);
 
@@ -1468,12 +1486,15 @@ static Handle<Value> Umask(const Arguments& args){
 }
 
 
+#ifdef __POSIX__
+
 static Handle<Value> GetUid(const Arguments& args) {
   HandleScope scope;
   assert(args.Length() == 0);
   int uid = getuid();
   return scope.Close(Integer::New(uid));
 }
+
 
 static Handle<Value> GetGid(const Arguments& args) {
   HandleScope scope;
@@ -1522,6 +1543,7 @@ static Handle<Value> SetGid(const Arguments& args) {
   return Undefined();
 }
 
+
 static Handle<Value> SetUid(const Arguments& args) {
   HandleScope scope;
 
@@ -1560,6 +1582,7 @@ static Handle<Value> SetUid(const Arguments& args) {
   }
   return Undefined();
 }
+
 
 #endif // __POSIX__
 
@@ -2068,8 +2091,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   // process.version
   process->Set(String::NewSymbol("version"), String::New(NODE_VERSION));
 
+#ifdef NODE_PREFIX
   // process.installPrefix
   process->Set(String::NewSymbol("installPrefix"), String::New(NODE_PREFIX));
+#endif
 
   // process.moduleLoadList
   module_load_list = Persistent<Array>::New(Array::New());
@@ -2084,7 +2109,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   versions->Set(String::NewSymbol("ares"), String::New(ARES_VERSION_STR));
   snprintf(buf, 20, "%d.%d", UV_VERSION_MAJOR, UV_VERSION_MINOR);
   versions->Set(String::NewSymbol("uv"), String::New(buf));
-#ifdef HAVE_OPENSSL
+#if HAVE_OPENSSL
   // Stupid code to slice out the version string.
   int c, l = strlen(OPENSSL_VERSION_TEXT);
   for (i = 0; i < l; i++) {
@@ -2152,13 +2177,14 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   }
 
   size_t size = 2*PATH_MAX;
-  char execPath[size];
+  char* execPath = new char[size];
   if (uv_exepath(execPath, &size) != 0) {
     // as a last ditch effort, fallback on argv[0] ?
     process->Set(String::NewSymbol("execPath"), String::New(argv[0]));
   } else {
     process->Set(String::NewSymbol("execPath"), String::New(execPath, size));
   }
+  delete [] execPath;
 
 
   // define various internal methods
@@ -2168,6 +2194,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "chdir", Chdir);
   NODE_SET_METHOD(process, "cwd", Cwd);
 
+  NODE_SET_METHOD(process, "umask", Umask);
+
 #ifdef __POSIX__
   NODE_SET_METHOD(process, "getuid", GetUid);
   NODE_SET_METHOD(process, "setuid", SetUid);
@@ -2175,7 +2203,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "setgid", SetGid);
   NODE_SET_METHOD(process, "getgid", GetGid);
 
-  NODE_SET_METHOD(process, "umask", Umask);
   NODE_SET_METHOD(process, "dlopen", DLOpen);
   NODE_SET_METHOD(process, "_kill", Kill);
 #endif // __POSIX__
@@ -2317,8 +2344,12 @@ static void ParseArgs(int argc, char **argv) {
       printf("%s\n", NODE_VERSION);
       exit(0);
     } else if (strcmp(arg, "--vars") == 0) {
+#ifdef NODE_PREFIX
       printf("NODE_PREFIX: %s\n", NODE_PREFIX);
+#endif
+#ifdef NODE_CFLAGS
       printf("NODE_CFLAGS: %s\n", NODE_CFLAGS);
+#endif
       exit(0);
     } else if (strstr(arg, "--max-stack-size=") == arg) {
       const char *p = 0;
@@ -2525,7 +2556,7 @@ void EmitExit(v8::Handle<v8::Object> process) {
 
 int Start(int argc, char *argv[]) {
 
-#if defined __MINGW32__ && defined PTW32_STATIC_LIB
+#if (defined(__MINGW32__) || defined(_MSC_VER)) && defined(PTW32_STATIC_LIB)
   pthread_win32_process_attach_np();
 #endif
 
@@ -2562,7 +2593,7 @@ int Start(int argc, char *argv[]) {
   V8::Dispose();
 #endif  // NDEBUG
 
-#if defined __MINGW32__ && defined PTW32_STATIC_LIB
+#if (defined(__MINGW32__) || defined(_MSC_VER)) && defined(PTW32_STATIC_LIB)
   pthread_win32_process_detach_np();
 #endif
 

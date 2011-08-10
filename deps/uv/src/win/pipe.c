@@ -361,6 +361,8 @@ int uv_pipe_connect(uv_connect_t* req, uv_pipe_t* handle,
         goto error;
       }
 
+      handle->reqs_pending++;
+
       return 0;
     }
 
