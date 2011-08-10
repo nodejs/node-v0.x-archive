@@ -846,9 +846,11 @@ var relativeTests2 = [
    'file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/',
    'file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/mini1.xml'],
   ['../b/c', 'foo:a/y/z', 'foo:a/b/c'],
-  
-  //changeing auth 
-  ['http://diff:auth@www.example.com', 'http://asdf:qwer@www.example.com', 'http://diff:auth@www.example.com/']
+
+  //changeing auth
+  ['http://diff:auth@www.example.com',
+   'http://asdf:qwer@www.example.com',
+   'http://diff:auth@www.example.com/']
 ];
 relativeTests2.forEach(function(relativeTest) {
   var a = url.resolve(relativeTest[1], relativeTest[0]),
@@ -862,51 +864,53 @@ relativeTests2.forEach(function(relativeTest) {
 //resolveObject(parse(x), y) == parse(resolve(x, y))
 
 //format: [from, path, expected]
-relativeTests.forEach(function (relativeTest) {
-  var actual   = url.resolveObject(url.parse(relativeTest[0]), relativeTest[1]),
+relativeTests.forEach(function(relativeTest) {
+  var actual = url.resolveObject(url.parse(relativeTest[0]), relativeTest[1]),
       expected = url.parse(relativeTest[2]);
-  
+
   for (var i in expected) {
-    var e   = JSON.stringify(expected[i]),
-        a   = JSON.stringify(actual[i]),
+    var e = JSON.stringify(expected[i]),
+        a = JSON.stringify(actual[i]),
         msg = 'resolveObject(' + [relativeTest[0], relativeTest[1]] + ').' + i;
     //just a way to line up the actual under the expected to make it easy to
     //see the problem. e.g.
     //resolveObject(x, y).href == e
     //                    actual: a
-    msg += ' == ' + e + '\n' + Array(msg.length+13).join(' ') + 'actual: ' + a;
-    
+    msg += ' == ' + e + '\n' + Array(msg.length + 13).join(' ') +
+        'actual: ' + a;
+
     assert.equal(a, e, msg);
   }
-  
+
   expected = relativeTest[2];
-  actual   = url.format(actual);
-  
+  actual = url.format(actual);
+
   assert.equal(actual, expected,
                'format(' + actual + ') == ' + expected + '\nactual:' + actual);
 });
 
 //format: [to, from, result]
-relativeTests2.forEach(function (relativeTest) {
-  var actual   = url.resolveObject(url.parse(relativeTest[1]), relativeTest[0]),
+relativeTests2.forEach(function(relativeTest) {
+  var actual = url.resolveObject(url.parse(relativeTest[1]), relativeTest[0]),
       expected = url.parse(relativeTest[2]);
-  
+
   for (var i in expected) {
-    var e   = JSON.stringify(expected[i]),
-        a   = JSON.stringify(actual[i]),
-         msg = 'resolveObject(' + [relativeTest[0], relativeTest[1]] + ').' + i;
+    var e = JSON.stringify(expected[i]),
+        a = JSON.stringify(actual[i]),
+        msg = 'resolveObject(' + [relativeTest[0], relativeTest[1]] + ').' + i;
     //just a way to line up the actual under the expected to make it easy to
     //see the problem. e.g.
     //resolveObject(x, y).href == e
     //                    actual: a
-    msg += ' == ' + e + '\n' + Array(msg.length+13).join(' ') + 'actual: ' + a;
-    
+    msg += ' == ' + e + '\n' + Array(msg.length + 13).join(' ') +
+        'actual: ' + a;
+
     assert.equal(a, e, msg);
   }
-  
+
   var expected = parseTests[u].href,
       actual = url.format(parseTests[u]);
-  
+
   assert.equal(actual, expected,
                'format(' + actual + ') == ' + expected + '\nactual:' + actual);
 });
