@@ -87,6 +87,23 @@ static inline int ResetFlags(int fd) {
 }
 
 
+static inline gid_t GetGroupId(const char *gname) {
+  static char buf[PATH_MAX + 1];
+  struct group grp, *grpp = NULL;
+  int err = getgrnam_r(gname,
+					   &grp,
+					   buf,
+					   PATH_MAX + 1,
+					   &grpp);
+
+  if (err || grpp == NULL) {
+    return (gid_t)-1;
+  }
+
+  return grpp->gr_gid;
+}
+
+
 void ChildProcess::Initialize(Handle<Object> target) {
   HandleScope scope;
 
@@ -125,7 +142,7 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
       !args[4]->IsArray() ||
       !args[5]->IsBoolean() ||
       !(args[6]->IsInt32() || args[6]->IsString()) ||
-      !(args[7]->IsInt32() || args[7]->IsString())) {
+      !(args[7]->IsInt32() || args[7]->IsString() || args[7]->IsArray())) {
     return ThrowException(Exception::Error(String::New("Bad argument.")));
   }
 
@@ -183,30 +200,72 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
 
   int fds[3];
 
-  char *custom_uname = NULL;
+  static char buf[PATH_MAX + 1];
+
   int custom_uid = -1;
   if (args[6]->IsNumber()) {
     custom_uid = args[6]->Int32Value();
   } else if (args[6]->IsString()) {
+	struct passwd pwd, *pwdp = NULL;
     String::Utf8Value pwnam(args[6]->ToString());
-    custom_uname = (char *)calloc(sizeof(char), pwnam.length() + 1);
-    strncpy(custom_uname, *pwnam, pwnam.length() + 1);
+	int err = getpwnam_r(*pwnam,
+						 &pwd,
+						 buf,
+						 PATH_MAX + 1,
+						 &pwdp);
+
+	if (err || pwdp == NULL) {
+      return ThrowException(Exception::Error(
+        String::New("error calling getpwnam_r")));
+	}
+	custom_uid = pwdp->pw_uid;
   } else {
     return ThrowException(Exception::Error(
       String::New("setuid argument must be a number or a string")));
   }
 
-  char *custom_gname = NULL;
-  int custom_gid = -1;
+  int num_custom_gids = 0;
+  gid_t *custom_gids = NULL;
   if (args[7]->IsNumber()) {
-    custom_gid = args[7]->Int32Value();
+	num_custom_gids = 1;
+	custom_gids = (gid_t*) calloc(sizeof(gid_t), num_custom_gids);
+    custom_gids[0] = args[7]->Int32Value();
   } else if (args[7]->IsString()) {
     String::Utf8Value grnam(args[7]->ToString());
-    custom_gname = (char *)calloc(sizeof(char), grnam.length() + 1);
-    strncpy(custom_gname, *grnam, grnam.length() + 1);
+	num_custom_gids = 1;
+	custom_gids = (gid_t*) calloc(sizeof(gid_t), num_custom_gids);
+	custom_gids[0] = GetGroupId(*grnam);
+    if ((int)custom_gids[i] < 0) {
+      free(custom_gids);
+      return ThrowException(Exception::Error(String::Concat(
+        String::New("invalid group name: "),args[7]->ToString())));
+    }
+  } else if (args[7]->IsArray()) {
+    Local<Array> groups = Local<Array>::Cast(args[7]);
+	num_custom_gids = groups->Length();
+    custom_gids = (gid_t*) calloc(sizeof(gid_t), num_custom_gids);
+    for (int i = 0; i < num_custom_gids; i++) {
+      Local<Value> val = groups->Get(Integer::New(i));
+
+	  if (val->IsNumber()) {
+	    custom_gids[i] = val->Int32Value();
+	  } else if (val->IsString()) {
+        String::Utf8Value grnam(val->ToString());
+	    custom_gids[i] = GetGroupId(*grnam);
+        if ((int)custom_gids[i] < 0) {
+          free(custom_gids);
+          return ThrowException(Exception::Error(String::Concat(
+            String::New("invalid group name: "),val->ToString())));
+        }
+	  } else {
+		free(custom_gids);
+        return ThrowException(Exception::Error(
+          String::New("invalid value in setgid array")));
+	  }
+    }
   } else {
     return ThrowException(Exception::Error(
-      String::New("setgid argument must be a number or a string")));
+      String::New("setgid argument must be a number, a string or an array containing only numbers and strings")));
   }
 
   int channel_fd = -1;
@@ -219,13 +278,11 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
                        custom_fds,
                        do_setsid,
                        custom_uid,
-                       custom_uname,
-                       custom_gid,
-                       custom_gname,
+					   num_custom_gids,
+                       custom_gids,
                        &channel_fd);
 
-  if (custom_uname != NULL) free(custom_uname);
-  if (custom_gname != NULL) free(custom_gname);
+  if (custom_gids != NULL) free(custom_gids);
 
   for (i = 0; i < argv_length; i++) free(argv[i]);
   delete [] argv;
@@ -310,9 +367,8 @@ int ChildProcess::Spawn(const char *file,
                         int custom_fds[3],
                         bool do_setsid,
                         int custom_uid,
-                        char *custom_uname,
-                        int custom_gid,
-                        char *custom_gname,
+                        int num_custom_gids,
+                        const gid_t *custom_gids,
                         int* channel) {
   HandleScope scope;
   assert(pid_ == -1);
@@ -414,55 +470,14 @@ int ChildProcess::Spawn(const char *file,
         _exit(127);
       }
 
-
-      static char buf[PATH_MAX + 1];
-
-      int gid = -1;
-      if (custom_gid != -1) {
-        gid = custom_gid;
-      } else if (custom_gname != NULL) {
-        struct group grp, *grpp = NULL;
-        int err = getgrnam_r(custom_gname,
-                             &grp,
-                             buf,
-                             PATH_MAX + 1,
-                             &grpp);
-
-        if (err || grpp == NULL) {
-          perror("getgrnam_r()");
+	  if (num_custom_gids > 0) {
+        if (setgid(custom_gids[0]) || setgroups(num_custom_gids-1,custom_gids+1)) {
+          perror("setgid()");
           _exit(127);
-        }
+		}
+	  }
 
-        gid = grpp->gr_gid;
-      }
-
-
-      int uid = -1;
-      if (custom_uid != -1) {
-        uid = custom_uid;
-      } else if (custom_uname != NULL) {
-        struct passwd pwd, *pwdp = NULL;
-        int err = getpwnam_r(custom_uname,
-                             &pwd,
-                             buf,
-                             PATH_MAX + 1,
-                             &pwdp);
-
-        if (err || pwdp == NULL) {
-          perror("getpwnam_r()");
-          _exit(127);
-        }
-
-        uid = pwdp->pw_uid;
-      }
-
-
-      if (gid != -1 && setgid(gid)) {
-        perror("setgid()");
-        _exit(127);
-      }
-
-      if (uid != -1 && setuid(uid)) {
+      if (custom_uid != -1 && setuid(custom_uid)) {
         perror("setuid()");
         _exit(127);
       }
