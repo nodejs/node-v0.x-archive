@@ -222,6 +222,30 @@ blocks while resolving it to a numerical ID.
     }
 
 
+### process.getgroups()
+
+Gets the supplementary group IDs of the process. (See getgroups(2).)
+These are the numerical group ids, not the group names.
+
+    console.log('Supplementary gids: ' + process.getgroups());
+
+
+### process.setgroups(groups)
+
+Sets the supplementary group IDs of the process. (See setgid(2).)  This accepts
+a list of either numerical IDs or a groupname strings. If any group name is specified,
+this method blocks while resolving it to a numerical ID.
+
+    console.log('Current groups: ' + process.getgroups());
+    try {
+      process.setgroups([501,502]);
+      console.log('New groups: ' + process.getgroups());
+    }
+    catch (err) {
+      console.log('Failed to set groups: ' + err);
+    }
+
+
 ### process.version
 
 A compiled-in property that exposes `NODE_VERSION`.
