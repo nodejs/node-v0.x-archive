@@ -48,8 +48,12 @@
 #include <linux/version.h>
 /* pipe2() requires linux >= 2.6.27 and glibc >= 2.9 */
 #define HAVE_PIPE2 \
-  defined(LINUX_VERSION_CODE) && defined(__GLIBC_PREREQ) && LINUX_VERSION_CODE >= 0x2061B && __GLIBC_PREREQ(2, 9))
+  defined(LINUX_VERSION_CODE) && defined(__GLIBC_PREREQ) && \
+  LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27) && __GLIBC_PREREQ(2, 9))
 #endif
+
+/* XXX disabling HAVE_PIPE2 for now can't compile on 2.6.18 */
+#undef HAVE_PIPE2
 
 #ifdef __sun
 # include <sys/types.h>
@@ -167,6 +171,7 @@ static uv_err_code uv_translate_sys_error(int sys_errno) {
     case 0: return UV_OK;
     case EACCES: return UV_EACCESS;
     case EBADF: return UV_EBADF;
+    case EPIPE: return UV_EPIPE;
     case EAGAIN: return UV_EAGAIN;
     case ECONNRESET: return UV_ECONNRESET;
     case EFAULT: return UV_EFAULT;
@@ -199,19 +204,31 @@ static uv_err_t uv_err_new(uv_handle_t* handle, int sys_error) {
 
 
 void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
-  uv_tcp_t* tcp;
-  uv_pipe_t* pipe;
   uv_async_t* async;
   uv_timer_t* timer;
+  uv_stream_t* stream;
   uv_process_t* process;
 
   handle->close_cb = close_cb;
 
   switch (handle->type) {
+    case UV_NAMED_PIPE:
+      uv_pipe_cleanup((uv_pipe_t*)handle);
+      /* Fall through. */
+
     case UV_TCP:
-      tcp = (uv_tcp_t*) handle;
-      uv_read_stop((uv_stream_t*)tcp);
-      ev_io_stop(EV_DEFAULT_ &tcp->write_watcher);
+      stream = (uv_stream_t*)handle;
+
+      uv_read_stop(stream);
+      ev_io_stop(EV_DEFAULT_ &stream->write_watcher);
+
+      uv__close(stream->fd);
+      stream->fd = -1;
+
+      if (stream->accepted_fd >= 0) {
+        uv__close(stream->accepted_fd);
+        stream->accepted_fd = -1;
+      }
       break;
 
     case UV_PREPARE:
@@ -238,13 +255,6 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
         ev_ref(EV_DEFAULT_UC);
       }
       ev_timer_stop(EV_DEFAULT_ &timer->timer_watcher);
-      break;
-
-    case UV_NAMED_PIPE:
-      pipe = (uv_pipe_t*)handle;
-      uv_pipe_cleanup(pipe);
-      uv_read_stop((uv_stream_t*)handle);
-      ev_io_stop(EV_DEFAULT_ &pipe->write_watcher);
       break;
 
     case UV_PROCESS:
@@ -326,20 +336,20 @@ static int uv__bind(uv_tcp_t* tcp, int domain, struct sockaddr* addr,
     int addrsize) {
   int saved_errno;
   int status;
-  int fd;
 
   saved_errno = errno;
   status = -1;
 
-  if (tcp->fd <= 0) {
-    if ((fd = uv__socket(domain, SOCK_STREAM, 0)) == -1) {
+  if (tcp->fd < 0) {
+    if ((tcp->fd = uv__socket(domain, SOCK_STREAM, 0)) == -1) {
       uv_err_new((uv_handle_t*)tcp, errno);
       goto out;
     }
 
-    if (uv__stream_open((uv_stream_t*)tcp, fd, UV_READABLE | UV_WRITABLE)) {
+    if (uv__stream_open((uv_stream_t*)tcp, tcp->fd, UV_READABLE | UV_WRITABLE)) {
+      uv__close(tcp->fd);
+      tcp->fd = -1;
       status = -2;
-      uv__close(fd);
       goto out;
     }
   }
@@ -422,14 +432,17 @@ void uv__server_io(EV_P_ ev_io* watcher, int revents) {
          watcher == &stream->write_watcher);
   assert(revents == EV_READ);
 
-  assert(!(((uv_handle_t*)stream)->flags & UV_CLOSING));
+  assert(!(stream->flags & UV_CLOSING));
 
   if (stream->accepted_fd >= 0) {
     ev_io_stop(EV_DEFAULT_ &stream->read_watcher);
     return;
   }
 
-  while (1) {
+  /* connection_cb can close the server socket while we're
+   * in the loop so check it on each iteration.
+   */
+  while (stream->fd != -1) {
     assert(stream->accepted_fd < 0);
     fd = uv__accept(stream->fd, (struct sockaddr*)&addr, sizeof addr);
 
@@ -444,7 +457,6 @@ void uv__server_io(EV_P_ ev_io* watcher, int revents) {
         uv_err_new((uv_handle_t*)stream, errno);
         stream->connection_cb((uv_stream_t*)stream, -1);
       }
-
     } else {
       stream->accepted_fd = fd;
       stream->connection_cb((uv_stream_t*)stream, 0);
@@ -508,21 +520,21 @@ int uv_listen(uv_stream_t* stream, int backlog, uv_connection_cb cb) {
 
 static int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   int r;
-  int fd;
 
   if (tcp->delayed_error) {
     uv_err_new((uv_handle_t*)tcp, tcp->delayed_error);
     return -1;
   }
 
-  if (tcp->fd <= 0) {
-    if ((fd = uv__socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+  if (tcp->fd < 0) {
+    if ((tcp->fd = uv__socket(AF_INET, SOCK_STREAM, 0)) == -1) {
       uv_err_new((uv_handle_t*)tcp, errno);
       return -1;
     }
 
-    if (uv__stream_open((uv_stream_t*)tcp, fd, UV_READABLE)) {
-      uv__close(fd);
+    if (uv__stream_open((uv_stream_t*)tcp, tcp->fd, UV_READABLE)) {
+      uv__close(tcp->fd);
+      tcp->fd = -1;
       return -1;
     }
   }
@@ -574,23 +586,9 @@ void uv__finish_close(uv_handle_t* handle) {
 
     case UV_NAMED_PIPE:
     case UV_TCP:
-    {
-      uv_stream_t* stream;
-
-      stream = (uv_stream_t*)handle;
-
-      assert(!ev_is_active(&stream->read_watcher));
-      assert(!ev_is_active(&stream->write_watcher));
-
-      uv__close(stream->fd);
-      stream->fd = -1;
-
-      if (stream->accepted_fd >= 0) {
-        uv__close(stream->accepted_fd);
-        stream->accepted_fd = -1;
-      }
+      assert(!ev_is_active(&((uv_stream_t*)handle)->read_watcher));
+      assert(!ev_is_active(&((uv_stream_t*)handle)->write_watcher));
       break;
-    }
 
     case UV_PROCESS:
       assert(!ev_is_active(&((uv_process_t*)handle)->child_watcher));
@@ -653,9 +651,9 @@ static void uv__drain(uv_stream_t* stream) {
   ev_io_stop(EV_DEFAULT_ &stream->write_watcher);
 
   /* Shutdown? */
-  if ((((uv_handle_t*)stream)->flags & UV_SHUTTING) &&
-      !(((uv_handle_t*)stream)->flags & UV_CLOSING) &&
-      !(((uv_handle_t*)stream)->flags & UV_SHUT)) {
+  if ((stream->flags & UV_SHUTTING) &&
+      !(stream->flags & UV_CLOSING) &&
+      !(stream->flags & UV_SHUT)) {
     assert(stream->shutdown_req);
 
     req = stream->shutdown_req;
@@ -874,10 +872,10 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
          "uv_shutdown (unix) only supports uv_handle_t right now");
   assert(stream->fd >= 0);
 
-  if (!(((uv_handle_t*)stream)->flags & UV_WRITABLE) ||
-      ((uv_handle_t*)stream)->flags & UV_SHUT ||
-      ((uv_handle_t*)stream)->flags & UV_CLOSED ||
-      ((uv_handle_t*)stream)->flags & UV_CLOSING) {
+  if (!(stream->flags & UV_WRITABLE) ||
+      stream->flags & UV_SHUT ||
+      stream->flags & UV_CLOSED ||
+      stream->flags & UV_CLOSING) {
     uv_err_new((uv_handle_t*)stream, EINVAL);
     return -1;
   }
@@ -906,7 +904,7 @@ static void uv__stream_io(EV_P_ ev_io* watcher, int revents) {
          stream->type == UV_NAMED_PIPE);
   assert(watcher == &stream->read_watcher ||
          watcher == &stream->write_watcher);
-  assert(!(((uv_handle_t*)stream)->flags & UV_CLOSING));
+  assert(!(stream->flags & UV_CLOSING));
 
   if (stream->connect_req) {
     uv__stream_connect(stream);
@@ -994,10 +992,6 @@ static int uv__connect(uv_connect_t* req,
 
   if (stream->fd <= 0) {
     if ((sockfd = uv__socket(addr->sa_family, SOCK_STREAM, 0)) == -1) {
-
-    }
-
-    if (sockfd < 0) {
       uv_err_new((uv_handle_t*)stream, errno);
       return -1;
     }
@@ -1990,9 +1984,8 @@ int uv_pipe_connect(uv_connect_t* req,
     goto out;
   }
 
-  handle->fd = sockfd;
-  ev_io_init(&handle->read_watcher, uv__stream_io, sockfd, EV_READ);
-  ev_io_init(&handle->write_watcher, uv__stream_io, sockfd, EV_WRITE);
+  uv__stream_open((uv_stream_t*)handle, sockfd, UV_READABLE | UV_WRITABLE);
+
   ev_io_start(EV_DEFAULT_ &handle->read_watcher);
   ev_io_start(EV_DEFAULT_ &handle->write_watcher);
 
@@ -2074,6 +2067,8 @@ static int uv__socket(int domain, int type, int protocol) {
 
 static int uv__accept(int sockfd, struct sockaddr* saddr, socklen_t slen) {
   int peerfd;
+
+  assert(sockfd >= 0);
 
   do {
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
@@ -2202,6 +2197,9 @@ static void uv__chld(EV_P_ ev_child* watcher, int revents) {
   }
 }
 
+#ifndef SPAWN_WAIT_EXEC
+# define SPAWN_WAIT_EXEC 1
+#endif
 
 int uv_spawn(uv_process_t* process, uv_process_options_t options) {
   /*
@@ -2212,8 +2210,10 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
   int stdin_pipe[2] = { -1, -1 };
   int stdout_pipe[2] = { -1, -1 };
   int stderr_pipe[2] = { -1, -1 };
+#if SPAWN_WAIT_EXEC
   int signal_pipe[2] = { -1, -1 };
   struct pollfd pfd;
+#endif
   int status;
   pid_t pid;
 
@@ -2231,6 +2231,8 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
     if (pipe(stdin_pipe) < 0) {
       goto error;
     }
+    uv__cloexec(stdin_pipe[0], 1);
+    uv__cloexec(stdin_pipe[1], 1);
   }
 
   if (options.stdout_stream) {
@@ -2242,6 +2244,8 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
     if (pipe(stdout_pipe) < 0) {
       goto error;
     }
+    uv__cloexec(stdout_pipe[0], 1);
+    uv__cloexec(stdout_pipe[1], 1);
   }
 
   if (options.stderr_stream) {
@@ -2253,6 +2257,8 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
     if (pipe(stderr_pipe) < 0) {
       goto error;
     }
+    uv__cloexec(stderr_pipe[0], 1);
+    uv__cloexec(stderr_pipe[1], 1);
   }
 
   /* This pipe is used by the parent to wait until
@@ -2275,11 +2281,12 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
    * marked close-on-exec. Then, after the call to `fork()`,
    * the parent polls the read end until it sees POLLHUP.
    */
-#ifdef HAVE_PIPE2
+#if SPAWN_WAIT_EXEC
+# ifdef HAVE_PIPE2
   if (pipe2(signal_pipe, O_CLOEXEC | O_NONBLOCK) < 0) {
     goto error;
   }
-#else
+# else
   if (pipe(signal_pipe) < 0) {
     goto error;
   }
@@ -2287,13 +2294,16 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
   uv__cloexec(signal_pipe[1], 1);
   uv__nonblock(signal_pipe[0], 1);
   uv__nonblock(signal_pipe[1], 1);
+# endif
 #endif
 
   pid = fork();
 
   if (pid == -1) {
+#if SPAWN_WAIT_EXEC
     uv__close(signal_pipe[0]);
     uv__close(signal_pipe[1]);
+#endif
     environ = save_our_env;
     goto error;
   }
@@ -2332,6 +2342,7 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
   /* Restore environment. */
   environ = save_our_env;
 
+#if SPAWN_WAIT_EXEC
   /* POLLHUP signals child has exited or execve()'d. */
   uv__close(signal_pipe[1]);
   do {
@@ -2343,11 +2354,13 @@ int uv_spawn(uv_process_t* process, uv_process_options_t options) {
   while (status == -1 && (errno == EINTR || errno == ENOMEM));
 
   uv__close(signal_pipe[0]);
+  uv__close(signal_pipe[1]);
 
   assert((status == 1)
       && "poll() on pipe read end failed");
   assert((pfd.revents & POLLHUP) == POLLHUP
       && "no POLLHUP on pipe read end");
+#endif
 
   process->pid = pid;
 

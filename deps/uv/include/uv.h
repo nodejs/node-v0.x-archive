@@ -122,6 +122,7 @@ typedef enum {
   UV_ENOTCONN,
   UV_ENOTSOCK,
   UV_ENOTSUP,
+  UV_EPIPE,
   UV_EPROTO,
   UV_EPROTONOSUPPORT,
   UV_EPROTOTYPE,
@@ -228,6 +229,10 @@ int uv_is_active(uv_handle_t* handle);
 /*
  * Request handle to be closed. close_cb will be called asynchronously after
  * this call. This MUST be called on each handle before memory is released.
+ *
+ * Note that handles that wrap file descriptors are closed immediately but
+ * close_cb will still be deferred to the next iteration of the event loop.
+ * It gives you a chance to free up any resources associated with the handle.
  */
 void uv_close(uv_handle_t* handle, uv_close_cb close_cb);
 
