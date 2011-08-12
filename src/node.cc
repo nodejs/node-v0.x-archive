@@ -1584,6 +1584,84 @@ static Handle<Value> SetUid(const Arguments& args) {
 }
 
 
+static Handle<Value> GetGroups(const Arguments& args) {
+  HandleScope scope;
+  assert(args.Length() == 0);
+  int gid = getgid();
+  bool gid_found = false;
+
+  int ngroups = getgroups(0,NULL);
+  if (ngroups < 0) {
+    return ThrowException(Exception::Error(
+		String::New("error in getgroups()")));
+  }
+  gid_t groups[ngroups];
+  if (getgroups(ngroups,groups) < 0) {
+	return ThrowException(Exception::Error(
+		String::New("error in getgroups()")));
+  }
+
+  Local<Array> groups_array = Array::New(ngroups+1);
+  groups_array->Set(0,Integer::New(gid));
+
+  for (int i=0; i<ngroups; i++) {
+    if (groups[i] != gid) {
+      groups_array->Set(i+!gid_found,Integer::New((int)groups[i]));
+	}
+	else {
+      gid_found = true;
+	}
+  }
+  if (gid_found) {
+    groups_array->ForceDelete(Integer::New(ngroups));
+  }
+
+  return scope.Close(groups_array);
+}
+
+
+static Handle<Value> SetGroups(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 1 || !args[0]->IsArray()) {
+    return ThrowException(Exception::Error(
+          String::New("setgroups requires 1 argument, which must be an array")));
+  }
+
+  Local<Array> array = Local<Array>::Cast(args[0]);
+  int ngroups = array->Length();
+  gid_t gids[ngroups];
+
+  for (int i=0;i<ngroups;i++) {
+    if (array->Get(i)->IsNumber()) {
+      gids[i] = array->Get(i)->Int32Value();
+    } else if (array->Get(i)->IsString()) {
+      String::Utf8Value grpnam(array->Get(i)->ToString());
+      struct group grp, *grpp = NULL;
+      int err;
+
+      if ((err = getgrnam_r(*grpnam, &grp, getbuf, ARRAY_SIZE(getbuf), &grpp)) ||
+          grpp == NULL) {
+        if (errno == 0)
+          return ThrowException(Exception::Error(
+            String::New("setgroups group id does not exist")));
+        else
+          return ThrowException(ErrnoException(errno, "getgrnam_r"));
+      }
+
+      gids[i] = grpp->gr_gid;
+      } else {
+        return ThrowException(Exception::Error(
+          String::New("setgroups argument must contain only numbers or strings")));
+      }
+  }
+
+  int result;
+  if ((result = setgroups(ngroups,gids)) != 0) {
+    return ThrowException(ErrnoException(errno, "setgroups"));
+  }
+  return Undefined();
+}
 #endif // __POSIX__
 
 
@@ -2202,6 +2280,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "setgid", SetGid);
   NODE_SET_METHOD(process, "getgid", GetGid);
+
+  NODE_SET_METHOD(process, "getgroups", GetGroups);
+  NODE_SET_METHOD(process, "setgroups", SetGroups);
 
   NODE_SET_METHOD(process, "dlopen", DLOpen);
   NODE_SET_METHOD(process, "_kill", Kill);
