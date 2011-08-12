@@ -478,6 +478,26 @@ Example:
 
 ## http.Agent
 
+In node 0.5.3+ there is a new implementation of the HTTP Agent which is used for pooling sockets used in HTTP client requests.
+
+Previously, a single agent instance help the pool for single host+port. The current implementation now holds sockets for any number of hosts.
+
+The current HTTP Agent also defaults client requests to using Connection:keep-alive. If no pending HTTP requests are waiting on a socket to become free the socket is closed. This means that node's pool has the benefit of keep-alive when under load but still does not require developers to manually close the HTTP clients using keep-alive.
+
+Sockets are removed from the agent's pool when the socket emits either a "close" event or a special "agentRemove" event. This means that if you intend to keep one HTTP request open for a long time and don't want it to stay in the pool you can do something along the lines of:
+
+  http.get(options, function(res) {
+    // Do stuff
+  }).on("socket", function (socket) {
+    socket.emit("agentRemove");
+  });
+  
+Or, alternatively, you could just opt out of pooling entirely using the `agent:false`:
+
+  http.get({host:'localhost', port:80, path:'/', agent:false}, function (res) {
+    // Do stuff
+  })
+
 ## http.globalAgent
 
 Global instance of Agent which is used as the default for all http client requests.
@@ -645,6 +665,17 @@ followed by `request.end()`.
 
 Aborts a request.  (New since v0.3.8.)
 
+### request.setTimeout(timeout, [callback])
+
+Once a socket is assigned to this request and is connected socket.setTimeout(timeout, [callback]) will be called.
+
+### request.setNoDelay(noDelay=true)
+
+Once a socket is assigned to this request and is connected socket.setNoDelay(noDelay) will be called.
+
+### request.setSocketKeepAlive(enable=false, [initialDelay])
+
+Once a socket is assigned to this request and is connected socket.setKeepAlive(enable, [initialDelay]) will be called.
 
 ## http.ClientResponse
 
