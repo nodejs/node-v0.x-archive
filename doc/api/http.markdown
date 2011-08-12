@@ -486,17 +486,17 @@ The current HTTP Agent also defaults client requests to using Connection:keep-al
 
 Sockets are removed from the agent's pool when the socket emits either a "close" event or a special "agentRemove" event. This means that if you intend to keep one HTTP request open for a long time and don't want it to stay in the pool you can do something along the lines of:
 
-  http.get(options, function(res) {
-    // Do stuff
-  }).on("socket", function (socket) {
-    socket.emit("agentRemove");
-  });
+    http.get(options, function(res) {
+      // Do stuff
+    }).on("socket", function (socket) {
+      socket.emit("agentRemove");
+    });
   
 Or, alternatively, you could just opt out of pooling entirely using the `agent:false`:
 
-  http.get({host:'localhost', port:80, path:'/', agent:false}, function (res) {
-    // Do stuff
-  })
+    http.get({host:'localhost', port:80, path:'/', agent:false}, function (res) {
+      // Do stuff
+    })
 
 ## http.globalAgent
 
