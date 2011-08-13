@@ -39,6 +39,9 @@ import js2c
 
 srcdir = '.'
 blddir = 'build'
+if os.environ.has_key('NODE_BUILD_DIR'):
+    blddir = os.environ['NODE_BUILD_DIR']
+
 supported_archs = ('arm', 'ia32', 'x64') # 'mips' supported by v8, but not node
 
 jobs=1
