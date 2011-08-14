@@ -335,6 +335,12 @@ var parseTests = {
     hostname: 'bucket_name.s3.amazonaws.com',
     pathname: '/image.jpg',
     href: 'http://bucket_name.s3.amazonaws.com/image.jpg'
+  },
+  //While this may seem counter-intuitive, a browser will parse
+  //<a href='www.google.com'> as a path.
+  'www.example.com' : {
+    'href': 'www.example.com',
+    'pathname': 'www.example.com'
   }
 };
 
@@ -344,14 +350,14 @@ for (var u in parseTests) {
   for (var i in expected) {
     var e = JSON.stringify(expected[i]),
         a = JSON.stringify(actual[i]);
-    assert.equal(e, a,
+    assert.equal(a, e,
                  'parse(' + u + ').' + i + ' == ' + e + '\nactual: ' + a);
   }
 
   var expected = parseTests[u].href,
       actual = url.format(parseTests[u]);
 
-  assert.equal(expected, actual,
+  assert.equal(actual, expected,
                'format(' + u + ') == ' + u + '\nactual:' + actual);
 }
 
@@ -381,7 +387,7 @@ for (var u in parseTestsWithQueryString) {
   for (var i in expected) {
     var e = JSON.stringify(expected[i]),
         a = JSON.stringify(actual[i]);
-    assert.equal(e, a,
+    assert.equal(a, e,
                  'parse(' + u + ').' + i + ' == ' + e + '\nactual: ' + a);
   }
 }
@@ -539,7 +545,7 @@ var relativeTests = [
 relativeTests.forEach(function(relativeTest) {
   var a = url.resolve(relativeTest[0], relativeTest[1]),
       e = relativeTest[2];
-  assert.equal(e, a,
+  assert.equal(a, e,
                'resolve(' + [relativeTest[0], relativeTest[1]] + ') == ' + e +
                '\n  actual=' + a);
 });
@@ -839,13 +845,73 @@ var relativeTests2 = [
   ['mini1.xml',
    'file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/',
    'file:///C:/DEV/Haskell/lib/HXmlToolbox-3.01/examples/mini1.xml'],
-  ['../b/c', 'foo:a/y/z', 'foo:a/b/c']
+  ['../b/c', 'foo:a/y/z', 'foo:a/b/c'],
+
+  //changeing auth
+  ['http://diff:auth@www.example.com',
+   'http://asdf:qwer@www.example.com',
+   'http://diff:auth@www.example.com/']
 ];
 relativeTests2.forEach(function(relativeTest) {
   var a = url.resolve(relativeTest[1], relativeTest[0]),
       e = relativeTest[2];
-  assert.equal(e, a,
+  assert.equal(a, e,
                'resolve(' + [relativeTest[1], relativeTest[0]] + ') == ' + e +
                '\n  actual=' + a);
+});
+
+//if format and parse are inverse operations then
+//resolveObject(parse(x), y) == parse(resolve(x, y))
+
+//format: [from, path, expected]
+relativeTests.forEach(function(relativeTest) {
+  var actual = url.resolveObject(url.parse(relativeTest[0]), relativeTest[1]),
+      expected = url.parse(relativeTest[2]);
+
+  for (var i in expected) {
+    var e = JSON.stringify(expected[i]),
+        a = JSON.stringify(actual[i]),
+        msg = 'resolveObject(' + [relativeTest[0], relativeTest[1]] + ').' + i;
+    //just a way to line up the actual under the expected to make it easy to
+    //see the problem. e.g.
+    //resolveObject(x, y).href == e
+    //                    actual: a
+    msg += ' == ' + e + '\n' + Array(msg.length + 13).join(' ') +
+        'actual: ' + a;
+
+    assert.equal(a, e, msg);
+  }
+
+  expected = relativeTest[2];
+  actual = url.format(actual);
+
+  assert.equal(actual, expected,
+               'format(' + actual + ') == ' + expected + '\nactual:' + actual);
+});
+
+//format: [to, from, result]
+relativeTests2.forEach(function(relativeTest) {
+  var actual = url.resolveObject(url.parse(relativeTest[1]), relativeTest[0]),
+      expected = url.parse(relativeTest[2]);
+
+  for (var i in expected) {
+    var e = JSON.stringify(expected[i]),
+        a = JSON.stringify(actual[i]),
+        msg = 'resolveObject(' + [relativeTest[0], relativeTest[1]] + ').' + i;
+    //just a way to line up the actual under the expected to make it easy to
+    //see the problem. e.g.
+    //resolveObject(x, y).href == e
+    //                    actual: a
+    msg += ' == ' + e + '\n' + Array(msg.length + 13).join(' ') +
+        'actual: ' + a;
+
+    assert.equal(a, e, msg);
+  }
+
+  var expected = parseTests[u].href,
+      actual = url.format(parseTests[u]);
+
+  assert.equal(actual, expected,
+               'format(' + actual + ') == ' + expected + '\nactual:' + actual);
 });
 
