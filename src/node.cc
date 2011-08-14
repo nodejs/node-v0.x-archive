@@ -141,7 +141,7 @@ Persistent<String> unknown_symbol;
 
 static char *eval_string = NULL;
 static int option_end_index = 0;
-static bool use_debug_agent = false;
+bool use_debug_agent = false;
 static bool debug_wait_connect = false;
 static int debug_port=5858;
 static int max_stack_size = 0;
@@ -2022,28 +2022,30 @@ static Handle<Value> Watchers(const Arguments& args) {
 
       obj->Set(handle_symbol, wrap->handle_);
 
-      // Convert the stack trace to a string
+      // If there is a stack trace, convert it to a string
       Persistent<StackTrace> trace = wrap->trace_;
-      Local<String> stack_str = String::Empty();
-      int length = trace->GetFrameCount();
-      for (int j = 0; j < length; j++) {
-        Local<StackFrame> frame = trace->GetFrame(j);
+      if (!trace.IsEmpty()) {
+        Local<String> stack_str = String::Empty();
+        int length = trace->GetFrameCount();
+        for (int j = 0; j < length; j++) {
+          Local<StackFrame> frame = trace->GetFrame(j);
 
-        stack_str = String::Concat(stack_str, String::NewSymbol("    at "));
-        stack_str = String::Concat(stack_str, frame->GetFunctionName());
-        stack_str = String::Concat(stack_str, String::NewSymbol(" ("));
-        stack_str = String::Concat(stack_str, frame->GetScriptName());
-        stack_str = String::Concat(stack_str, String::NewSymbol(":"));
-        stack_str = String::Concat(stack_str,
-          Integer::NewFromUnsigned(frame->GetLineNumber())->ToString());
-        stack_str = String::Concat(stack_str, String::NewSymbol(":"));
-        stack_str = String::Concat(stack_str,
-          Integer::NewFromUnsigned(frame->GetColumn())->ToString());
-        stack_str = String::Concat(stack_str, String::NewSymbol(")"));
-        if (j < length - 1)
-          stack_str = String::Concat(stack_str, String::NewSymbol("\n"));
+          stack_str = String::Concat(stack_str, String::NewSymbol("    at "));
+          stack_str = String::Concat(stack_str, frame->GetFunctionName());
+          stack_str = String::Concat(stack_str, String::NewSymbol(" ("));
+          stack_str = String::Concat(stack_str, frame->GetScriptName());
+          stack_str = String::Concat(stack_str, String::NewSymbol(":"));
+          stack_str = String::Concat(stack_str,
+            Integer::NewFromUnsigned(frame->GetLineNumber())->ToString());
+          stack_str = String::Concat(stack_str, String::NewSymbol(":"));
+          stack_str = String::Concat(stack_str,
+            Integer::NewFromUnsigned(frame->GetColumn())->ToString());
+          stack_str = String::Concat(stack_str, String::NewSymbol(")"));
+          if (j < length - 1)
+            stack_str = String::Concat(stack_str, String::NewSymbol("\n"));
+        }
+        obj->Set(stack_symbol, stack_str);
       }
-      obj->Set(stack_symbol, stack_str);
     }
 
     array->Set(i, obj);

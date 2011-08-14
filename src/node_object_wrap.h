@@ -27,16 +27,20 @@
 
 namespace node {
 
+extern bool use_debug_agent;
+
 class ObjectWrap {
  public:
   ObjectWrap ( ) {
     refs_ = 0;
 
-    // Capture the current stack trace so we know who created this wrapper
-    v8::HandleScope scope;
-    v8::Local<v8::StackTrace> trace =
-      v8::StackTrace::CurrentStackTrace(kFrameLimit, v8::StackTrace::kOverview);
-    trace_ = v8::Persistent<v8::StackTrace>::New(trace);
+    if (use_debug_agent) {
+      // Capture the current stack trace so we know who created this wrapper
+      v8::HandleScope scope;
+      v8::Local<v8::StackTrace> trace =
+        v8::StackTrace::CurrentStackTrace(kFrameLimit, v8::StackTrace::kOverview);
+      trace_ = v8::Persistent<v8::StackTrace>::New(trace);
+    }
   }
 
 
