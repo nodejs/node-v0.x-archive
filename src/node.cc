@@ -1966,7 +1966,7 @@ static Persistent<String> WatcherTypeToString(int type) {
 }
 
 static void WatcherCallback(EV_P_ int type, void *w) {
-  if (watcher_count > MAX_WATCHERS)
+  if (watcher_count >= MAX_WATCHERS)
     return;
 
   watcher_struct watcher;
