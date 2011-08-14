@@ -52,6 +52,12 @@ class ObjectWrap {
       handle_.Dispose();
       handle_.Clear();
     }
+    if (!trace_.IsEmpty()) {
+      assert(trace_.IsNearDeath());
+      trace_.ClearWeak();
+      trace_.Dispose();
+      trace_.Clear();
+    }
   }
 
 
