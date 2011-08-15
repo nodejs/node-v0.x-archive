@@ -28,6 +28,6 @@ func.toString = function () {
   toStringCalled = true;
 };
 
-console.log(func);
+require('util').inspect(func);
 
 assert.ok(!toStringCalled);
