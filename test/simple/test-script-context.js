@@ -47,10 +47,12 @@ Script.runInNewContext('', null, 'some.js');
 
 // Issue GH-1140:
 common.debug('test runInContext signature');
+var gh1140Exception;
 try {
     Script.runInContext('throw new Error()', context, 'expected-filename.js');
 }
 catch (e) {
-    common.debug("Got stack " + e.stack);
+    gh1140Exception = e;
     assert.ok(/expected-filename/.test(e.stack), 'expected appearance of filename in Error stack');
 }
+assert.ok(gh1140Exception, 'expected exception from runInContext signature test');
