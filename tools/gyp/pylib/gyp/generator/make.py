@@ -29,6 +29,7 @@ import gyp.system_test
 import os.path
 import os
 import sys
+import stat
 
 # Debugging-related imports -- remove me once we're solid.
 import code
@@ -1239,12 +1240,11 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
         self.WriteLn('quiet_cmd_%s = ACTION %s $@' % (name, name))
       if len(dirs) > 0:
         command = 'mkdir -p %s' % ' '.join(dirs) + '; ' + command
+
+      cd_action = 'cd %s; ' % Sourceify(self.path or '.')
+
       # Set LD_LIBRARY_PATH in case the action runs an executable from this
       # build which links to shared libs from this build.
-      if self.path:
-        cd_action = 'cd %s; ' % Sourceify(self.path)
-      else:
-        cd_action = ''
       # actions run on the host, so they should in theory only use host
       # libraries, but until everything is made cross-compile safe, also use
       # target libraries.
@@ -1350,10 +1350,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
         mkdirs = ''
         if len(dirs) > 0:
           mkdirs = 'mkdir -p %s; ' % ' '.join(dirs)
-        if self.path:
-          cd_action = 'cd %s; ' % Sourceify(self.path)
-        else:
-          cd_action = ''
+        cd_action = 'cd %s; ' % Sourceify(self.path or '.')
         # Set LD_LIBRARY_PATH in case the rule runs an executable from this
         # build which links to shared libs from this build.
         # rules run on the host, so they should in theory only use host
@@ -2315,7 +2312,8 @@ def GenerateOutput(target_list, target_dicts, data, params):
     if os.path.exists(mactool_path):
       os.remove(mactool_path)
     CopyMacTool(mactool_path)
-    os.chmod(mactool_path, 0o755)  # Make file executable.
+    os.chmod(mactool_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP |
+        stat.S_IROTH | stat.S_IXOTH)  # Make file executable.
 
   # Find the list of targets that derive from the gyp file(s) being built.
   needed_targets = set()
