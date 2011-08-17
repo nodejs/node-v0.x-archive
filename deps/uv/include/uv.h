@@ -500,6 +500,38 @@ struct uv_getaddrinfo_s {
                     const char* service,
                     const struct addrinfo* hints);
 
+
+/*
+ * Currently supported socket options.
+ * Used by getsockopt and setsockopt.
+ */
+typedef enum {
+  UV_SO_RCVBUF = 0,
+  UV_SO_SNDBUF
+} uv_so_opt_name;
+
+typedef enum {
+  UV_SOL_SOCKET = 0xffff
+} uv_so_opt_level;
+
+
+/* uv_setsockopt
+ * Returns zero if no error occured.
+ * Otherwise a value of -1 is returned.
+ *
+ */
+int uv_setsockopt(uv_stream_t*, int level, int optname, const char *optval,
+    int optlen);
+
+
+/* uv_getsockopt
+ * Returns zero if no error occured.
+ * Otherwise a value of -1 is returned.
+ *
+ */
+int uv_getsockopt(uv_stream_t*, int level, int optname, int optlen);
+
+
 /*
  * Child process. Subclass of uv_handle_t.
  */
