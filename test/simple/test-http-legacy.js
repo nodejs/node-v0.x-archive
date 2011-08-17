@@ -33,7 +33,7 @@ var responses_recvd = 0;
 var body0 = '';
 var body1 = '';
 
-var server = http.Server(function(req, res) {
+var server = http.createServer(function(req, res) {
   if (responses_sent == 0) {
     assert.equal('GET', req.method);
     assert.equal('/hello', url.parse(req.url).pathname);
@@ -52,7 +52,7 @@ var server = http.Server(function(req, res) {
     this.close();
   }
 
-  req.addListener('end', function() {
+  req.on('end', function() {
     res.writeHead(200, {'Content-Type': 'text/plain'});
     res.write('The path was ' + url.parse(req.url).pathname);
     res.end();
@@ -61,41 +61,35 @@ var server = http.Server(function(req, res) {
 
   //assert.equal('127.0.0.1', res.connection.remoteAddress);
 });
-server.listen(common.PORT);
 
-server.addListener('listening', function() {
-  var agent = new http.Agent({ port: common.PORT, maxSockets: 1 });
-  http.get({
-    port: common.PORT,
-    path: '/hello',
-    headers: {'Accept': '*/*', 'Foo': 'bar'},
-    agent: agent
-  }, function(res) {
+server.listen(common.PORT, function() {
+  var client = http.createClient(common.PORT);
+  var req = client.request('/hello', {'Accept': '*/*', 'Foo': 'bar'});
+  setTimeout(function() {
+    req.end();
+  }, 100);
+  req.on('response', function(res) {
     assert.equal(200, res.statusCode);
     responses_recvd += 1;
     res.setEncoding('utf8');
-    res.addListener('data', function(chunk) { body0 += chunk; });
+    res.on('data', function(chunk) { body0 += chunk; });
     common.debug('Got /hello response');
   });
 
   setTimeout(function() {
-    var req = http.request({
-      port: common.PORT,
-      method: 'POST',
-      path:   '/world',
-      agent:  agent
-    }, function(res) {
+    var req = client.request('POST', '/world');
+    req.end();
+    req.on('response', function(res) {
       assert.equal(200, res.statusCode);
       responses_recvd += 1;
       res.setEncoding('utf8');
-      res.addListener('data', function(chunk) { body1 += chunk; });
+      res.on('data', function(chunk) { body1 += chunk; });
       common.debug('Got /world response');
     });
-    req.end();
   }, 1);
 });
 
-process.addListener('exit', function() {
+process.on('exit', function() {
   common.debug('responses_recvd: ' + responses_recvd);
   assert.equal(2, responses_recvd);
 
@@ -105,4 +99,3 @@ process.addListener('exit', function() {
   assert.equal('The path was /hello', body0);
   assert.equal('The path was /world', body1);
 });
-
