@@ -47,6 +47,8 @@ extern char **environ;
 
 #include <limits.h> /* PATH_MAX */
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+
 namespace node {
 
 using namespace v8;
@@ -168,7 +170,7 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
     // Set the custom file descriptor values (if any) for the child process
     Local<Array> custom_fds_handle = Local<Array>::Cast(args[4]);
     int custom_fds_len = custom_fds_handle->Length();
-    for (int i = 0; i < custom_fds_len; i++) {
+    for (int i = 0; i < custom_fds_len && i < ARRAY_SIZE(custom_fds); i++) {
       if (custom_fds_handle->Get(i)->IsUndefined()) continue;
       Local<Integer> fd = custom_fds_handle->Get(i)->ToInteger();
       custom_fds[i] = fd->Value();
