@@ -108,6 +108,34 @@ addTest(function (client, done) {
 });
 
 addTest(function (client, done) {
+  console.error("eval 2+2");
+  client.reqEval("2+2", function (res) {
+    assert.ok(res.success);
+    console.error(res);
+    assert.equal('4', res.body.text);
+    assert.equal(4, res.body.value);
+    done();
+  });
+});
+
+addTest(function (client, done) {
+  console.error("setbreakpoint");
+
+  client.setbreakpoint("some-file.js", 1, function(res) {
+    assert.ok(res.success);
+
+
+    // Verify that the breakpoint has been set
+    client.listbreakpoints(function(res) {
+      assert.equal(res.body.breakpoints.length, 1);
+      assert.equal(res.body.breakpoints[0].line, 1);
+      assert.equal(res.body.breakpoints[0].script_name, "some-file.js");
+      done();
+    });
+  });
+});
+
+addTest(function (client, done) {
   console.error("requesting scripts");
   client.reqScripts(function () {
     console.error("got %d scripts", Object.keys(client.scripts).length);
@@ -121,17 +149,6 @@ addTest(function (client, done) {
       }
     }
     assert.ok(foundMainScript);
-    done();
-  });
-});
-
-addTest(function (client, done) {
-  console.error("eval 2+2");
-  client.reqEval("2+2", function (res) {
-    assert.ok(res.success);
-    console.error(res);
-    assert.equal('4', res.body.text);
-    assert.equal(4, res.body.value);
     done();
   });
 });
@@ -171,7 +188,7 @@ function doTest(cb, done) {
             done();
           });
         });
-      }, 100);
+      }, 200);
     }
   });
 }
