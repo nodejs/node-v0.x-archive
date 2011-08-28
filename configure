@@ -16,6 +16,15 @@ cd "$WORKINGDIR"
 WORKINGDIR=`pwd`
 cd "$CUR_DIR"
 
+if echo `python --version 2>&1` | grep -q "Python 3"; then
+  for file in $(find . -name '*.py' -print) wscript tools/waf-light tools/node-waf; do
+    sed -i 's_^#!.*/usr/bin/python_#!/usr/bin/python2_' "$file"
+    sed -i 's_^#!.*/usr/bin/env.*python_#!/usr/bin/env python2_' "$file"
+  done
+  sed -i "s|cmd_R = 'python |cmd_R = 'python2 |" wscript
+  sed -i "s|python |python2 |" Makefile
+fi
+
 "${WORKINGDIR}/tools/waf-light" --jobs=1 configure $*
 
 exit $?
