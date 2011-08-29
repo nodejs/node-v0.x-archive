@@ -128,7 +128,7 @@ buffer object.  It does not change when the contents of the buffer are changed.
 
 ### buffer.copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
 
-Does copy between buffers. The source and target regions can be overlapped.
+Does a copy between buffers. The source and target regions can be overlapped.
 
 Example: build two Buffers, then copy `buf1` from byte 16 through byte 19
 into `buf2`, starting at the 8th byte in `buf2`.
@@ -145,6 +145,42 @@ into `buf2`, starting at the 8th byte in `buf2`.
     console.log(buf2.toString('ascii', 0, 25));
 
     // !!!!!!!!qrst!!!!!!!!!!!!!
+
+
+### buffer.compare(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
+
+Does a (memcmp) compare between buffers. The source and target regions can be overlapped.
+
+If the contents of `buffer` is greater than the contents of `targetBuffer`, `1` is returned.
+If the contents of `buffer` is less than the contents of `targetBuffer`, `-1` is returned.
+If the contents of both buffers are equal, `0` is returned.
+
+Example: build two Buffers, then compare them, starting at the first byte in both
+buffers.
+
+    buf1 = new Buffer(26);
+    buf2 = new Buffer(26);
+
+    for (var i = 0 ; i < 26 ; i++) {
+      buf1[i] = i + 97; // 97 is ASCII a
+      buf2[i] = 33; // ASCII !
+    }
+
+    console.log(buf1.compare(buf2));
+    console.log(buf2.compare(buf1));
+
+    // 1
+    // -1
+
+    for (var i = 0 ; i < 26 ; i++) {
+      buf2[i] = i + 97; // 97 is ASCII a
+    }
+
+    console.log(buf1.compare(buf2));
+    console.log(buf2.compare(buf1));
+
+    // 0
+    // 0
 
 
 ### buffer.slice(start, end=buffer.length)
