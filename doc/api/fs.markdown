@@ -75,7 +75,7 @@ Synchronous ftruncate(2).
 
 ### fs.chown(path, uid, gid, [callback])
 
-Asycnronous chown(2). No arguments other than a possible exception are given
+Asynchronous chown(2). No arguments other than a possible exception are given
 to the completion callback.
 
 ### fs.chownSync(path, uid, gid)
@@ -84,7 +84,7 @@ Synchronous chown(2).
 
 ### fs.fchown(path, uid, gid, [callback])
 
-Asycnronous fchown(2). No arguments other than a possible exception are given
+Asynchronous fchown(2). No arguments other than a possible exception are given
 to the completion callback.
 
 ### fs.fchownSync(path, uid, gid)
@@ -93,7 +93,7 @@ Synchronous fchown(2).
 
 ### fs.lchown(path, uid, gid, [callback])
 
-Asycnronous lchown(2). No arguments other than a possible exception are given
+Asynchronous lchown(2). No arguments other than a possible exception are given
 to the completion callback.
 
 ### fs.lchownSync(path, uid, gid)
@@ -316,7 +316,7 @@ current position.
 See pwrite(2).
 
 The callback will be given three arguments `(err, written, buffer)` where `written`
-specifies how many _bytes_ were written into `buffer`.
+specifies how many _bytes_ were written from `buffer`.
 
 Note that it is unsafe to use `fs.write` multiple times on the same file
 without waiting for the callback. For this scenario,
