@@ -454,6 +454,62 @@ Handle<Value> Buffer::Copy(const Arguments &args) {
   return scope.Close(Integer::New(to_copy));
 }
 
+// var diff = buffer.compare(target, targetStart, sourceStart, sourceEnd);
+Handle<Value> Buffer::Compare(const Arguments &args) {
+  HandleScope scope;
+
+  Buffer *source = ObjectWrap::Unwrap<Buffer>(args.This());
+
+  if (!Buffer::HasInstance(args[0])) {
+    return ThrowException(Exception::TypeError(String::New(
+            "First arg should be a Buffer")));
+  }
+
+  Local<Object> target = args[0]->ToObject();
+  char *target_data = Buffer::Data(target);
+  ssize_t target_length = Buffer::Length(target);
+
+  ssize_t target_start = args[1]->Int32Value();
+  ssize_t source_start = args[2]->Int32Value();
+  ssize_t source_end = args[3]->IsInt32() ? args[3]->Int32Value()
+                                          : source->length_;
+
+  if (source_end < source_start) {
+    return ThrowException(Exception::Error(String::New(
+            "sourceEnd < sourceStart")));
+  }
+
+  // Compare 0 bytes; we're done
+  if (source_end == source_start) {
+    return scope.Close(Integer::New(0));
+  }
+
+  if (target_start < 0 || target_start >= target_length) {
+    return ThrowException(Exception::Error(String::New(
+            "targetStart out of bounds")));
+  }
+
+  if (source_start < 0 || source_start >= source->length_) {
+    return ThrowException(Exception::Error(String::New(
+            "sourceStart out of bounds")));
+  }
+
+  if (source_end < 0 || source_end > source->length_) {
+    return ThrowException(Exception::Error(String::New(
+            "sourceEnd out of bounds")));
+  }
+
+  ssize_t to_copy = MIN(MIN(source_end - source_start,
+                            target_length - target_start),
+                            source->length_ - source_start);
+
+  int ret = memcmp((const void*)(source->data_ + source_start),
+                   (void *)(target_data + target_start),
+                   to_copy);
+
+  return scope.Close(Integer::New(ret));
+}
+
 
 // var charsWritten = buffer.utf8Write(string, offset, [maxLength]);
 Handle<Value> Buffer::Utf8Write(const Arguments &args) {
@@ -775,6 +831,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "ucs2Write", Buffer::Ucs2Write);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "fill", Buffer::Fill);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "copy", Buffer::Copy);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "compare", Buffer::Compare);
 
   NODE_SET_METHOD(constructor_template->GetFunction(),
                   "byteLength",

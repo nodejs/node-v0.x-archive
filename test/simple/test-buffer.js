@@ -668,3 +668,28 @@ assert.equal(buf[1], 0x00);
 assert.equal(buf[2], 0xFF);
 assert.equal(buf[3], 0xFF);
 
+buf = new Buffer(6);
+buf[0] = 0;
+buf[1] = 1;
+buf[2] = 2;
+buf[3] = 0;
+buf[4] = 1;
+buf[5] = 2;
+assert.equal(buf.compare(buf, 0, 3), 0);
+
+var buf2 = new Buffer(8);
+buf2.fill(1);
+assert.equal(buf.compare(buf2), -1);
+assert.equal(buf2.compare(buf), 1);
+buf2[2] = 0;
+buf2[3] = 1;
+buf2[4] = 2;
+assert.equal(buf.compare(buf2, 2, 3, 5), 0);
+buf2 = new Buffer(6);
+buf2[0] = 0;
+buf2[1] = 1;
+buf2[2] = 2;
+buf2[3] = 0;
+buf2[4] = 1;
+buf2[5] = 2;
+assert.equal(buf.compare(buf2), 0);
