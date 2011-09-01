@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 assert = require('assert');
 child = require('child_process');
 
@@ -30,10 +33,16 @@ if (module.parent) {
   process.exit(42);
 }
 
-// assert that the result of the final expression is written to stdout
-child.exec(nodejs + ' --eval "1337; 42"',
+// assert that nothing is written to stdout
+child.exec(nodejs + ' --eval 42',
     function(err, stdout, stderr) {
-      assert.equal(parseInt(stdout), 42);
+      assert.equal(stdout, '');
+    });
+
+// assert that "42\n" is written to stderr
+child.exec(nodejs + ' --eval \'console.error(42)\'',
+    function(err, stdout, stderr) {
+      assert.equal(stderr, "42\n");
     });
 
 // assert that module loading works
@@ -47,3 +56,9 @@ child.exec(nodejs + ' --eval "require(\'./test/simple/test-cli-eval.js\')"',
     function(status, stdout, stderr) {
       assert.equal(status.code, 42);
     });
+
+// empty program should do nothing
+child.exec(nodejs + ' -e ""', function(status, stdout, stderr) {
+  assert.equal(stdout, '');
+  assert.equal(stderr, '');
+});

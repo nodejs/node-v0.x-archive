@@ -20,12 +20,17 @@ Example:
 ### path.join([path1], [path2], [...])
 
 Join all arguments together and normalize the resulting path.
+Non-string arguments are ignored.
 
 Example:
 
-    node> require('path').join(
-    ...   '/foo', 'bar', 'baz/asdf', 'quux', '..')
+    path.join('/foo', 'bar', 'baz/asdf', 'quux', '..')
+    // returns
     '/foo/bar/baz/asdf'
+
+    path.join('foo', {}, 'bar')
+    // returns
+    'foo/bar'
 
 ### path.resolve([from ...], to)
 
@@ -35,7 +40,7 @@ If `to` isn't already absolute `from` arguments are prepended in right to left
 order, until an absolute path is found. If after using all `from` paths still
 no absolute path is found, the current working directory is used as well. The
 resulting path is normalized, and trailing slashes are removed unless the path 
-gets resolved to the root directory.
+gets resolved to the root directory. Non-string arguments are ignored.
 
 Another way to think of it is as a sequence of `cd` commands in a shell.
 
@@ -65,6 +70,25 @@ Examples:
     path.resolve('wwwroot', 'static_files/png/', '../gif/image.gif')
     // if currently in /home/myself/node, it returns
     '/home/myself/node/wwwroot/static_files/gif/image.gif'
+
+### path.relative(from, to)
+
+Solve the relative path from `from` to `to`.
+
+Sometimes we've got two absolute pathes, and we need to calculate the relative path from one to another.
+It's accually the reverse transform of path.resolve, which means we assume:
+
+    path.resolve(from, path.relative(from, to)) == path.resolve(to)
+
+Examples:
+
+    path.relative('C:\\orandea\\test\\aaa', 'C:\\orandea\\impl\\bbb')
+    // returns
+    '..\\..\\impl\\bbb'
+
+    path.relative('/data/orandea/test/aaa', '/data/orandea/impl/bbb')
+    // returns
+    '../../impl/bbb'
 
 ### path.dirname(p)
 

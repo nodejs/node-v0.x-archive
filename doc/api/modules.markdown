@@ -1,7 +1,5 @@
 ## Modules
 
-Node uses the CommonJS module system.
-
 Node has a simple module loading system.  In Node, files and modules are in
 one-to-one correspondence.  As an example, `foo.js` loads the module
 `circle.js` in the same directory.
@@ -70,8 +68,7 @@ parent directory of the current module, and adds `/node_modules`, and
 attempts to load the module from that location.
 
 If it is not found there, then it moves to the parent directory, and so
-on, until either the module is found, or the root of the tree is
-reached.
+on, until the root of the tree is reached.
 
 For example, if the file at `'/home/ry/projects/foo.js'` called
 `require('bar.js')`, then node would look in the following locations, in
@@ -84,28 +81,6 @@ this order:
 
 This allows programs to localize their dependencies, so that they do not
 clash.
-
-#### Optimizations to the `node_modules` Lookup Process
-
-When there are many levels of nested dependencies, it is possible for
-these file trees to get fairly long.  The following optimizations are thus
-made to the process.
-
-First, `/node_modules` is never appended to a folder already ending in
-`/node_modules`.
-
-Second, if the file calling `require()` is already inside a `node_modules`
-hierarchy, then the top-most `node_modules` folder is treated as the
-root of the search tree.
-
-For example, if the file at
-`'/home/ry/projects/foo/node_modules/bar/node_modules/baz/quux.js'`
-called `require('asdf.js')`, then node would search the following
-locations:
-
-* `/home/ry/projects/foo/node_modules/bar/node_modules/baz/node_modules/asdf.js`
-* `/home/ry/projects/foo/node_modules/bar/node_modules/asdf.js`
-* `/home/ry/projects/foo/node_modules/asdf.js`
 
 ### Folders as Modules
 
@@ -141,6 +116,73 @@ Modules are cached after the first time they are loaded.  This means
 (among other things) that every call to `require('foo')` will get
 exactly the same object returned, if it would resolve to the same file.
 
+Multiple calls to `require('foo')` may not cause the module code to be
+executed multiple times.  This is an important feature.  With it,
+"partially done" objects can be returned, thus allowing transitive
+dependencies to be loaded even when they would cause cycles.
+
+If you want to have a module execute code multiple times, then export a
+function, and call that function.
+
+#### Module Caching Caveats
+
+Modules are cached based on their resolved filename.  Since modules may
+resolve to a different filename based on the location of the calling
+module (loading from `node_modules` folders), it is not a *guarantee*
+that `require('foo')` will always return the exact same object, if it
+would resolve to different files.
+
+### module.exports
+
+The `exports` object is created by the Module system. Sometimes this is not
+acceptable, many want their module to be an instance of some class. To do this
+assign the desired export object to `module.exports`. For example suppose we
+were making a module called `a.js`
+
+    var EventEmitter = require('events').EventEmitter;
+
+    module.exports = new EventEmitter();
+
+    // Do some work, and after some time emit
+    // the 'ready' event from the module itself.
+    setTimeout(function() {
+      module.exports.emit('ready');
+    }, 1000);
+
+Then in another file we could do
+
+    var a = require('./a');
+    a.on('ready', function() {
+      console.log('module a is ready');
+    });
+
+
+Note that assignment to `module.exports` must be done immediately. It cannot be
+done in any callbacks.  This does not work:
+
+x.js:
+
+    setTimeout(function() {
+      module.exports = { a: "hello" };
+    }, 0);
+
+y.js:
+
+    var x = require('./x');
+    console.log(x.a);
+
+
+### module.require
+
+The `module.require` method provides a way to load a module as if
+`require()` was called from the original module.
+
+Note that in order to do this, you must get a reference to the `module`
+object.  Since `require()` returns the `exports`, and the `module` is
+typically *only* available within a specific module's code, it must be
+explicitly exported in order to be used.
+
+
 ### All Together...
 
 To get the exact filename that will be loaded when `require()` is called, use
@@ -149,11 +191,11 @@ the `require.resolve()` function.
 Putting together all of the above, here is the high-level algorithm
 in pseudocode of what require.resolve does:
 
-    require(X)
+    require(X) from module at path Y
     1. If X is a core module,
        a. return the core module
        b. STOP
-    2. If X begins with `./` or `/`,
+    2. If X begins with './' or '/' or '../'
        a. LOAD_AS_FILE(Y + X)
        b. LOAD_AS_DIRECTORY(Y + X)
     3. LOAD_NODE_MODULES(X, dirname(Y))
@@ -186,81 +228,43 @@ in pseudocode of what require.resolve does:
        a. if PARTS[I] = "node_modules" CONTINUE
        c. DIR = path join(PARTS[0 .. I] + "node_modules")
        b. DIRS = DIRS + DIR
+       c. let I = I - 1
     6. return DIRS
 
-### Loading from the `require.paths` Folders
+### Loading from the global folders
 
-In node, `require.paths` is an array of strings that represent paths to
-be searched for modules when they are not prefixed with `'/'`, `'./'`, or
-`'../'`.  For example, if require.paths were set to:
+If the `NODE_PATH` environment variable is set to a colon-delimited list
+of absolute paths, then node will search those paths for modules if they
+are not found elsewhere.  (Note: On Windows, `NODE_PATH` is delimited by
+semicolons instead of colons.)
 
-    [ '/home/micheil/.node_modules',
-      '/usr/local/lib/node_modules' ]
+Additionally, node will search in the following locations:
 
-Then calling `require('bar/baz.js')` would search the following
-locations:
+* 1: `$HOME/.node_modules`
+* 2: `$HOME/.node_libraries`
+* 3: `$PREFIX/lib/node`
 
-* 1: `'/home/micheil/.node_modules/bar/baz.js'`
-* 2: `'/usr/local/lib/node_modules/bar/baz.js'`
+Where `$HOME` is the user's home directory, and `$PREFIX` is node's
+configured `installPrefix`.
 
-The `require.paths` array can be mutated at run time to alter this
-behavior.
+These are mostly for historic reasons.  You are highly encouraged to
+place your dependencies localy in `node_modules` folders.  They will be
+loaded faster, and more reliably.
 
-It is set initially from the `NODE_PATH` environment variable, which is
-a colon-delimited list of absolute paths.  In the previous example,
-the `NODE_PATH` environment variable might have been set to:
+### Accessing the main module
 
-    /home/micheil/.node_modules:/usr/local/lib/node_modules
+When a file is run directly from Node, `require.main` is set to its
+`module`. That means that you can determine whether a file has been run
+directly by testing
 
-Loading from the `require.paths` locations is only performed if the
-module could not be found using the `node_modules` algorithm above.
-Global modules are lower priority than bundled dependencies.
+    require.main === module
 
-#### **Note:** Please Avoid Modifying `require.paths`
+For a file `foo.js`, this will be `true` if run via `node foo.js`, but
+`false` if run by `require('./foo')`.
 
-For compatibility reasons, `require.paths` is still given first priority
-in the module lookup process.  However, it may disappear in a future
-release.
-
-While it seemed like a good idea at the time, and enabled a lot of
-useful experimentation, in practice a mutable `require.paths` list is
-often a troublesome source of confusion and headaches.
-
-##### Setting `require.paths` to some other value does nothing.
-
-This does not do what one might expect:
-
-    require.paths = [ '/usr/lib/node' ];
-
-All that does is lose the reference to the *actual* node module lookup
-paths, and create a new reference to some other thing that isn't used
-for anything.
-
-##### Putting relative paths in `require.paths` is... weird.
-
-If you do this:
-
-    require.paths.push('./lib');
-
-then it does *not* add the full resolved path to where `./lib`
-is on the filesystem.  Instead, it literally adds `'./lib'`,
-meaning that if you do `require('y.js')` in `/a/b/x.js`, then it'll look
-in `/a/b/lib/y.js`.  If you then did `require('y.js')` in
-`/l/m/n/o/p.js`, then it'd look in `/l/m/n/o/lib/y.js`.
-
-In practice, people have used this as an ad hoc way to bundle
-dependencies, but this technique is brittle.
-
-##### Zero Isolation
-
-There is (by regrettable design), only one `require.paths` array used by
-all modules.
-
-As a result, if one node program comes to rely on this behavior, it may
-permanently and subtly alter the behavior of all other node programs in
-the same process.  As the application stack grows, we tend to assemble
-functionality, and it is a problem with those parts interact in ways
-that are difficult to predict.
+Because `module` provides a `filename` property (normally equivalent to
+`__filename`), the entry point of the current application can be obtained
+by checking `require.main.filename`.
 
 ## Addenda: Package Manager Tips
 

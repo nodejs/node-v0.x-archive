@@ -20,7 +20,6 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <node_stdio.h>
-#include <node_events.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -68,7 +67,7 @@ static int EnableRawMode(int fd) {
   raw.c_oflag |= (ONLCR);
   /* control modes - set 8 bit chars */
   raw.c_cflag |= (CS8);
-  /* local modes - choing off, canonical off, no extended functions,
+  /* local modes - echoing off, canonical off, no extended functions,
    * no signal chars (^Z,^C) */
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
   /* control chars - set return condition: min number of bytes and timer.
@@ -165,13 +164,12 @@ static Handle<Value> IsATTY (const Arguments& args) {
 
 
 /* STDERR IS ALWAY SYNC ALWAYS UTF8 */
-static Handle<Value>
-WriteError (const Arguments& args)
-{
+static Handle<Value> WriteError (const Arguments& args) {
   HandleScope scope;
 
-  if (args.Length() < 1)
+  if (args.Length() < 1) {
     return Undefined();
+  }
 
   String::Utf8Value msg(args[0]->ToString());
 
@@ -189,7 +187,7 @@ WriteError (const Arguments& args)
     written += (size_t)r;
   }
 
-  return Undefined();
+  return True();
 }
 
 
@@ -199,15 +197,15 @@ static Handle<Value> OpenStdin(const Arguments& args) {
   if (isatty(STDIN_FILENO)) {
     // XXX selecting on tty fds wont work in windows.
     // Must ALWAYS make a coupling on shitty platforms.
+    int r = -1;
+
     stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    if (stdin_flags == -1) {
-      // TODO DRY
-      return ThrowException(Exception::Error(String::New("fcntl error!")));
+
+    if (stdin_flags != -1) {
+      r = fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK);
     }
 
-    int r = fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK);
     if (r == -1) {
-      // TODO DRY
       return ThrowException(Exception::Error(String::New("fcntl error!")));
     }
   }

@@ -19,12 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
 common.error('before');
 
-var Script = process.binding('evals').Script;
+var Script = process.binding('evals').NodeScript;
 
 // undefined reference
 script = new Script('foo.bar = 5;');

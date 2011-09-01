@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -31,8 +34,12 @@ global.process.stdout.write = function(string) {
 console.log('foo');
 console.log('foo', 'bar');
 console.log('%s %s', 'foo', 'bar', 'hop');
+console.log({slashes: '\\\\'})
 
 global.process.stdout.write = stdout_write;
 assert.equal('foo\n', strings.shift());
 assert.equal('foo bar\n', strings.shift());
 assert.equal('foo bar hop\n', strings.shift());
+assert.equal("{ slashes: '\\\\\\\\' }\n", strings.shift());
+
+assert.equal(true, process.stderr.write("hello world"));

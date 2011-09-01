@@ -135,3 +135,20 @@ for (var i = 0; i < 10000; i++) {
   assertEquals(xl - (i % xl), z.length);
   cache.push(z);
 }
+
+// Substring of substring.
+var cache = [];
+var last = x;
+var offset = 0;
+for (var i = 0; i < 64; i++) {
+  var z = last.substring(i);
+  last = z;
+  cache.push(z);
+  offset += i;
+}
+for (var i = 63; i >= 0; i--) {
+  var z = cache.pop();
+  assertTrue(/\u2028123456789ABCDEF/.test(z));
+  assertEquals(xl - offset, z.length);
+  offset -= i;
+}

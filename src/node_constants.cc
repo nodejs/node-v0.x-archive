@@ -21,18 +21,23 @@
 
 #include <node_constants.h>
 
-#include <ev.h>
+#include <uv.h>
 
 #include <errno.h>
+#if !defined(_MSC_VER)
 #include <unistd.h>
+#endif
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) || defined(_MSC_VER)
 # include <platform_win32.h>
-# include <platform_win32_winsock.h>
+#endif
+
+#if HAVE_OPENSSL
+# include <openssl/ssl.h>
 #endif
 
 namespace node {
@@ -40,9 +45,6 @@ namespace node {
 using namespace v8;
 
 void DefineConstants(Handle<Object> target) {
-  NODE_DEFINE_CONSTANT(target, EV_MINPRI);
-  NODE_DEFINE_CONSTANT(target, EV_MAXPRI);
-
   // file access modes
   NODE_DEFINE_CONSTANT(target, O_RDONLY);
   NODE_DEFINE_CONSTANT(target, O_WRONLY);
@@ -52,8 +54,13 @@ void DefineConstants(Handle<Object> target) {
   NODE_DEFINE_CONSTANT(target, S_IFREG);
   NODE_DEFINE_CONSTANT(target, S_IFDIR);
   NODE_DEFINE_CONSTANT(target, S_IFCHR);
+#ifdef S_IFBLK
   NODE_DEFINE_CONSTANT(target, S_IFBLK);
+#endif
+
+#ifdef S_IFIFO
   NODE_DEFINE_CONSTANT(target, S_IFIFO);
+#endif
 
 #ifdef S_IFLNK
   NODE_DEFINE_CONSTANT(target, S_IFLNK);
@@ -98,6 +105,11 @@ void DefineConstants(Handle<Object> target) {
 #ifdef O_SYNC
   NODE_DEFINE_CONSTANT(target, O_SYNC);
 #endif
+
+#ifdef O_SYMLINK
+  NODE_DEFINE_CONSTANT(target, O_SYMLINK);
+#endif
+
 
 #ifdef S_IRWXU
   NODE_DEFINE_CONSTANT(target, S_IRWXU);
@@ -837,6 +849,81 @@ void DefineConstants(Handle<Object> target) {
 
 #ifdef SIGUNUSED
   NODE_DEFINE_CONSTANT(target, SIGUNUSED);
+#endif
+
+// OpenSSL SSL context options
+
+#ifdef SSL_OP_NO_QUERY_MTU
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NO_QUERY_MTU);
+#endif
+
+#ifdef SSL_OP_COOKIE_EXCHANGE
+  NODE_DEFINE_CONSTANT(target, SSL_OP_COOKIE_EXCHANGE);
+#endif
+
+#ifdef SSL_OP_NO_TICKET
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NO_TICKET);
+#endif
+
+#ifdef SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
+#endif
+
+#ifdef SSL_OP_SINGLE_ECDH_USE
+  NODE_DEFINE_CONSTANT(target, SSL_OP_SINGLE_ECDH_USE);
+#endif
+
+#ifdef SSL_OP_SINGLE_DH_USE
+  NODE_DEFINE_CONSTANT(target, SSL_OP_SINGLE_DH_USE);
+#endif
+
+#ifdef SSL_OP_EPHEMERAL_RSA
+  NODE_DEFINE_CONSTANT(target, SSL_OP_EPHEMERAL_RSA);
+#endif
+
+#ifdef SSL_OP_CIPHER_SERVER_PREFERENCE
+  NODE_DEFINE_CONSTANT(target, SSL_OP_CIPHER_SERVER_PREFERENCE);
+#endif
+
+#ifdef SSL_OP_TLS_ROLLBACK_BUG
+  NODE_DEFINE_CONSTANT(target, SSL_OP_TLS_ROLLBACK_BUG);
+#endif
+
+#ifdef SSL_OP_NO_SSLv2
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NO_SSLv2);
+#endif
+
+#ifdef SSL_OP_NO_SSLv3
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NO_SSLv3);
+#endif
+
+#ifdef SSL_OP_NO_TLSv1
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NO_TLSv1);
+#endif
+
+#ifdef SSL_OP_PKCS1_CHECK_1
+  NODE_DEFINE_CONSTANT(target, SSL_OP_PKCS1_CHECK_1);
+#endif
+
+#ifdef SSL_OP_PKCS1_CHECK_2
+  NODE_DEFINE_CONSTANT(target, SSL_OP_PKCS1_CHECK_2);
+#endif
+
+#ifdef SSL_OP_NETSCAPE_CA_DN_BUG
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NETSCAPE_CA_DN_BUG);
+#endif
+
+#ifdef SSL_OP_NETSCAPE_DEMO_CIPHER_CHANGE_BUG
+  NODE_DEFINE_CONSTANT(target, SSL_OP_NETSCAPE_DEMO_CIPHER_CHANGE_BUG);
+#endif
+
+#ifdef SSL_OP_CRYPTOPRO_TLSEXT_BUG
+  NODE_DEFINE_CONSTANT(target, SSL_OP_CRYPTOPRO_TLSEXT_BUG);
+#endif
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+#define NPN_ENABLED 1
+  NODE_DEFINE_CONSTANT(target, NPN_ENABLED);
 #endif
 }
 

@@ -1,6 +1,7 @@
 ## Global Objects
 
-These object are available in the global scope and can be accessed from anywhere.
+These object are available in all modules. Some of these objects aren't
+actually in the global scope but in the module scope - this will be noted.
 
 ### global
 
@@ -13,25 +14,31 @@ scope; `var something` inside a Node module will be local to that module.
 
 ### process
 
-The process object. See the 'process object' section.
+The process object. See the [process object](process.html#process) section.
+
+### console
+
+Used to print to stdout and stderr. See the [stdio](stdio.html) section.
+
+### Buffer
+
+Used to handle binary data. See the [buffers](buffers.html) section.
 
 ### require()
 
-To require modules. See the 'Modules' section.
+To require modules. See the [Modules](modules.html#modules) section.
+`require` isn't actually a global but rather local to each module.
+
 
 ### require.resolve()
 
 Use the internal `require()` machinery to look up the location of a module,
 but rather than loading the module, just return the resolved filename.
 
-### require.paths
+### require.cache
 
-An array of search paths for `require()`.  This array can be modified to add
-custom paths.
-
-Example: add a new path to the beginning of the search list
-
-    require.paths.unshift('/usr/local/node');
+Modules are cached in this object when they are required. By deleting a key
+value from this object, the next `require` will reload the module.
 
 
 ### __filename
@@ -44,6 +51,8 @@ Example: running `node example.js` from `/Users/mjr`
     console.log(__filename);
     // /Users/mjr/example.js
 
+`__filename` isn't actually a global but rather local to each module.
+
 ### __dirname
 
 The dirname of the script being executed.
@@ -53,9 +62,28 @@ Example: running `node example.js` from `/Users/mjr`
     console.log(__dirname);
     // /Users/mjr
 
+`__dirname` isn't actually a global but rather local to each module.
+
 
 ### module
 
 A reference to the current module. In particular
 `module.exports` is the same as the `exports` object. See `src/node.js`
 for more information.
+`module` isn't actually a global but rather local to each module.
+
+
+### exports
+
+An object which is shared between all instances of the current module and
+made accessible through `require()`.
+`exports` is the same as the `module.exports` object. See `src/node.js`
+for more information.
+`exports` isn't actually a global but rather local to each module.
+
+### setTimeout(cb, ms)
+### clearTimeout(t)
+### setInterval(cb, ms)
+### clearInterval(t)
+
+The timer functions are global variables. See the [timers](timers.html) section.

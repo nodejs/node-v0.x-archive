@@ -34,10 +34,13 @@ if(${node_arch} MATCHES unknown)
   set(node_arch x86)
 endif()
 
+set(NODE_INCLUDE_PREFIX ${CMAKE_INSTALL_PREFIX})
+
 # Copy tools directory for out-of-source build
 string(COMPARE EQUAL $(PROJECT_BINARY_DIR) ${PROJECT_SOURCE_DIR} in_source_build)
-if(NOT ${in_source_build})
+if(NOT in_source_build)
   execute_process(COMMAND cmake -E copy_directory ${PROJECT_SOURCE_DIR}/tools ${PROJECT_BINARY_DIR}/tools)
+  configure_file(${PROJECT_SOURCE_DIR}/deps/v8/tools/jsmin.py ${PROJECT_BINARY_DIR}/tools COPYONLY)
 endif()
 
 # Set some compiler/linker flags..
@@ -102,6 +105,7 @@ endif()
 
 add_definitions(
   -DPLATFORM="${node_platform}"
+  -DARCH="${node_arch}"
   -DX_STACKSIZE=65536
   -D_LARGEFILE_SOURCE
   -D_FILE_OFFSET_BITS=64

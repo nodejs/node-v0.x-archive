@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -42,8 +45,13 @@ file.addListener('open', function(fd) {
   callbacks.open++;
   assert.equal('number', typeof fd);
   assert.ok(file.readable);
-});
 
+  // GH-535
+  file.pause();
+  file.resume();
+  file.pause();
+  file.resume();
+});
 
 file.addListener('data', function(data) {
   assert.ok(data instanceof Buffer);
@@ -116,19 +124,19 @@ file4.addListener('end', function(data) {
   assert.equal(contentRead, 'yz');
 });
 
-try {
-  fs.createReadStream(rangeFile, {start: 10, end: 2});
-  assert.fail('Creating a ReadStream with incorrect range limits must throw.');
-} catch (e) {
-  assert.equal(e.message, 'start must be <= end');
-}
+var file5 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1});
+file5.data = '';
+file5.addListener('data', function(data) {
+  file5.data += data.toString('utf-8');
+});
+file5.addListener('end', function() {
+  assert.equal(file5.data, 'yz\n');
+});
 
-try {
-  fs.createReadStream(rangeFile, {start: 2});
-  assert.fail('Creating a ReadStream with a only one range limits must throw.');
-} catch (e) {
-  assert.equal(e.message, 'Both start and end are needed for range streaming.');
-}
+
+assert.throws(function() {
+  fs.createReadStream(rangeFile, {start: 10, end: 2});
+}, /start must be <= end/);
 
 var stream = fs.createReadStream(rangeFile, { start: 0, end: 0 });
 stream.data = '';

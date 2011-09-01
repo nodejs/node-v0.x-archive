@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 // I hate HTTP. One way of terminating an HTTP response is to not send
 // a content-length header, not send a transfer-encoding: chunked header,
 // and simply terminate the TCP connection. That is identity
@@ -83,7 +86,7 @@ server.listen(common.PORT, function() {
       bodyBuffer += s;
     });
 
-    res.on('end', function() {
+    res.on('close', function() {
       console.log('5) Client got "end" event.');
       gotEnd = true;
     });

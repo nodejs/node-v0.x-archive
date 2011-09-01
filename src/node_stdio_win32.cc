@@ -25,6 +25,7 @@
 #include <v8.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <io.h>
 
 #include <platform_win32.h>
@@ -415,18 +416,19 @@ static Handle<Value> ClearLine(const Arguments& args) {
 
 
 /* TTY watcher data */
-bool tty_watcher_initialized = false;
 HANDLE tty_handle;
 HANDLE tty_wait_handle;
 void *tty_error_callback;
 void *tty_keypress_callback;
 void *tty_resize_callback;
-static ev_async tty_avail_notifier;
+static bool tty_watcher_initialized = false;
+static bool tty_watcher_active = false;
+static uv_async_t tty_avail_notifier;
 
 
 static void CALLBACK tty_want_poll(void *context, BOOLEAN didTimeout) {
   assert(!didTimeout);
-  ev_async_send(EV_DEFAULT_UC_ &tty_avail_notifier);
+  uv_async_send(&tty_avail_notifier);
 }
 
 
@@ -439,10 +441,11 @@ static void tty_watcher_arm() {
   HANDLE old_wait_handle = tty_wait_handle;
   tty_wait_handle = NULL;
 
-  if (ev_is_active(&tty_avail_notifier)) {
-    if (!RegisterWaitForSingleObject(&tty_wait_handle, tty_handle, tty_want_poll, NULL,
-        INFINITE, WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE))
-      ThrowException(ErrnoException(GetLastError(), "RegisterWaitForSingleObject"));
+  assert(tty_watcher_active);
+
+  if (!RegisterWaitForSingleObject(&tty_wait_handle, tty_handle, tty_want_poll, NULL,
+      INFINITE, WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE)) {
+    ThrowException(ErrnoException(GetLastError(), "RegisterWaitForSingleObject"));
   }
 
   if (old_wait_handle != NULL) {
@@ -464,17 +467,20 @@ static void tty_watcher_disarm() {
 
 
 static void tty_watcher_start() {
-  if (!ev_is_active(&tty_avail_notifier)) {
-    ev_async_start(EV_DEFAULT_UC_ &tty_avail_notifier);
+  assert(tty_watcher_initialized);
+  if (!tty_watcher_active) {
+    tty_watcher_active = true;
+    uv_ref(uv_default_loop());
     tty_watcher_arm();
   }
 }
 
 
 static void tty_watcher_stop() {
-  if (ev_is_active(&tty_avail_notifier)) {
+  if (tty_watcher_active) {
+    tty_watcher_active = false;
+    uv_unref(uv_default_loop());
     tty_watcher_disarm();
-    ev_async_stop(EV_DEFAULT_UC_ &tty_avail_notifier);
   }
 }
 
@@ -488,9 +494,9 @@ static inline void tty_emit_error(Handle<Value> err) {
 }
 
 
-static void tty_poll(EV_P_ ev_async *watcher, int revents) {
-  assert(watcher == &tty_avail_notifier);
-  assert(revents == EV_ASYNC);
+static void tty_poll(uv_async_t* handle, int status) {
+  assert(handle == &tty_avail_notifier);
+  assert(status == 0);
 
   HandleScope scope;
   TryCatch try_catch;
@@ -510,7 +516,7 @@ static void tty_poll(EV_P_ ev_async *watcher, int revents) {
   }
 
   for (i = numev; i > 0 &&
-      ev_is_active(EV_DEFAULT_UC_ &tty_avail_notifier); i--) {
+      tty_watcher_active; i--) {
     if (!ReadConsoleInputW(tty_handle, &input, 1, &read)) {
       tty_emit_error(ErrnoException(GetLastError(), "ReadConsoleInputW"));
       break;
@@ -561,7 +567,7 @@ static void tty_poll(EV_P_ ev_async *watcher, int revents) {
         j = k.wRepeatCount;
         do {
           (*callback)->Call(global, 2, argv);
-        } while (--j > 0 && ev_is_active(EV_DEFAULT_UC_ &tty_avail_notifier));
+        } while (--j > 0 && tty_watcher_active);
         break;
 
       case WINDOW_BUFFER_SIZE_EVENT:
@@ -574,7 +580,9 @@ static void tty_poll(EV_P_ ev_async *watcher, int revents) {
   }
 
   // Rearm the watcher
-  tty_watcher_arm();
+  if (tty_watcher_active) {
+    tty_watcher_arm();
+  }
 
   // Emit fatal errors and unhandled error events
   if (try_catch.HasCaught()) {
@@ -605,8 +613,6 @@ static Handle<Value> InitTTYWatcher(const Arguments& args) {
   tty_resize_callback = args[3]->IsFunction()
       ? cb_persist(args[3])
       : NULL;
-
-  ev_async_init(EV_DEFAULT_UC_ &tty_avail_notifier, tty_poll);
 
   tty_watcher_initialized = true;
   tty_wait_handle = NULL;
@@ -654,6 +660,14 @@ static Handle<Value> StopTTYWatcher(const Arguments& args) {
 
 void Stdio::Initialize(v8::Handle<v8::Object> target) {
   init_scancode_table();
+  
+  uv_async_init(uv_default_loop(), &tty_avail_notifier, tty_poll);
+  uv_unref(uv_default_loop());
+
+  /* Set stdio streams to binary mode. */
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
 
   name_symbol = NODE_PSYMBOL("name");
   shift_symbol = NODE_PSYMBOL("shift");
