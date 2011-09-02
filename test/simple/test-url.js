@@ -165,9 +165,9 @@ var parseTests = {
       },
   'file:///etc/passwd' : {
     'href': 'file:///etc/passwd',
+    'slashes': true,
     'protocol': 'file:',
-    'pathname': '/etc/passwd',
-    'hostname': ''
+    'pathname': '/etc/passwd'
   },
   'file://localhost/etc/passwd' : {
     'href': 'file://localhost/etc/passwd',
@@ -183,9 +183,9 @@ var parseTests = {
   },
   'file:///etc/node/' : {
     'href': 'file:///etc/node/',
+    'slashes': true,
     'protocol': 'file:',
-    'pathname': '/etc/node/',
-    'hostname': ''
+    'pathname': '/etc/node/'
   },
   'file://localhost/etc/node/' : {
     'href': 'file://localhost/etc/node/',
@@ -335,6 +335,13 @@ var parseTests = {
     hostname: 'bucket_name.s3.amazonaws.com',
     pathname: '/image.jpg',
     href: 'http://bucket_name.s3.amazonaws.com/image.jpg'
+  },
+  //if local1@domain1 is uses as a relative URL it may
+  //be parse into auth@hostname, but here there is no
+  //way to make it work in url.parse, I add the test to be explicit
+  'local1@domain1': {
+    'pathname': 'local1@domain1',
+    'href': 'local1@domain1'
   }
 };
 
@@ -600,7 +607,7 @@ var relativeTests2 = [
   ['./g', bases[0], 'http://a/b/c/g'],
   ['g/', bases[0], 'http://a/b/c/g/'],
   ['/g', bases[0], 'http://a/g'],
-  ['//g', bases[0], 'http://g'],
+  ['//g', bases[0], 'http://g/'],
   // changed with RFC 2396bis
   //('?y', bases[0], 'http://a/b/c/d;p?y'],
   ['?y', bases[0], 'http://a/b/c/d;p?y'],
@@ -657,7 +664,7 @@ var relativeTests2 = [
   ['./g', bases[1], 'http://a/b/c/g'],
   ['g/', bases[1], 'http://a/b/c/g/'],
   ['/g', bases[1], 'http://a/g'],
-  ['//g', bases[1], 'http://g'],
+  ['//g', bases[1], 'http://g/'],
   // changed in RFC 2396bis
   //('?y', bases[1], 'http://a/b/c/?y'],
   ['?y', bases[1], 'http://a/b/c/d;p?y'],
@@ -717,7 +724,7 @@ var relativeTests2 = [
   ['./g', bases[4], 'http:///s//a/b/g'],
   ['g/', bases[4], 'http:///s//a/b/g/'],
   ['/g', bases[4], 'http:///g'],  // may change to http:///s//a/g
-  ['//g', bases[4], 'http://g'],   // may change to http:///s//g
+  ['//g', bases[4], 'http://g/'],   // may change to http:///s//g
   ['//g/x', bases[4], 'http://g/x'], // may change to http:///s//g/x
   ['///g', bases[4], 'http:///g'],
   ['./', bases[4], 'http:///s//a/b/'],
@@ -849,3 +856,34 @@ relativeTests2.forEach(function(relativeTest) {
                '\n  actual=' + a);
 });
 
+//if format and parse are inverse operations then
+//resolveObject(parse(x), y) == parse(resolve(x, y))
+
+//format: [from, path, expected]
+relativeTests.forEach(function(relativeTest) {
+  var actual = url.resolveObject(url.parse(relativeTest[0]), relativeTest[1]),
+      expected = url.parse(relativeTest[2]);
+
+  assert.deepEqual(actual, expected);
+
+  expected = relativeTest[2];
+  actual = url.format(actual);
+
+  assert.equal(actual, expected,
+               'format(' + actual + ') == ' + expected + '\nactual:' + actual);
+});
+
+//format: [to, from, result]
+relativeTests2.forEach(function(relativeTest) {
+  var actual = url.resolveObject(url.parse(relativeTest[1]), relativeTest[0]),
+      expected = url.parse(relativeTest[2]);
+
+  assert.deepEqual(actual, expected);
+
+  var expected = relativeTest[2],
+      actual = url.format(actual);
+
+  assert.equal(actual, expected,
+               'format(' + relativeTest[1] + ') == ' + expected +
+               '\nactual:' + actual);
+});
