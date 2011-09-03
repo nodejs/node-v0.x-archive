@@ -34,6 +34,8 @@
     process.__proto__ = EventEmitter.prototype;
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
+    process.dispatch = dispatch;
+
     startup.globalVariables();
     startup.globalTimeouts();
     startup.globalConsole();
@@ -189,9 +191,10 @@
       nextTickQueue = [];
 
       try {
-        for (var i = 0; i < l; i++) q[i]();
-      }
-      catch (e) {
+        for (var i = 0; i < l; i++) {
+          dispatch(q, i);
+        }
+      } catch (e) {
         if (i + 1 < l) {
           nextTickQueue = q.slice(i + 1).concat(nextTickQueue);
         }
@@ -533,6 +536,30 @@
   NativeModule.prototype.cache = function() {
     NativeModule._cache[this.id] = this;
   };
+
+  // The single entry point for all outside world calls into Javascript.
+  // (It may not yet be th single entry point yet. v0.6 requires it to be.)
+  function dispatch(obj, method, arg0, arg1, arg2, arg3) {
+    assert(arguments.length < 7);
+ 
+    var domain = obj.domain;
+    if (domain) {
+      domain.enter();
+    }
+
+    try {
+      obj[method](arg0, arg1, arg2, arg3);
+    } catch (e) {
+      domain.emit('error', e);
+      domain.kill();
+    }
+
+    if (domain) {
+      domain.exit();
+    }
+
+    NativeModule.require('domain').pollNewDomains();
+  }
 
   startup();
 });

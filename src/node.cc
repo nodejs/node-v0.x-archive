@@ -100,6 +100,7 @@ extern char **environ;
 namespace node {
 
 static Persistent<Object> process;
+static Persistent<Function> process_dispatch;
 
 static Persistent<String> errno_symbol;
 static Persistent<String> syscall_symbol;
@@ -128,6 +129,9 @@ static uv_idle_t tick_spinner;
 static bool need_tick_cb;
 static Persistent<String> tick_callback_sym;
 
+
+// disabled by default for now
+static bool use_domains = false;
 
 #ifdef OPENSSL_NPN_NEGOTIATED
 static bool use_npn = true;
@@ -867,21 +871,48 @@ void MakeCallback(Handle<Object> object,
                   Handle<Value> argv[]) {
   HandleScope scope;
 
-  Local<Value> callback_v = object->Get(String::New(method));
-  if (!callback_v->IsFunction()) {
-    fprintf(stderr, "method = %s", method);
-  }
-  assert(callback_v->IsFunction());
-  Local<Function> callback = Local<Function>::Cast(callback_v);
+  if (use_domains) {
+    // If this assert fires it means that somehow we're getting into the event
+    // loop before Load() function could complete.
+    assert(!process_dispatch.IsEmpty());
 
-  // TODO Hook for long stack traces to be made here.
+    // TODO Hook for long stack traces to be made here.
 
-  TryCatch try_catch;
+    assert(argc <= 4);
 
-  callback->Call(object, argc, argv);
+    Handle<Value> dispatch_argv[6];
+    dispatch_argv[0] = Local<Value>::New(object);
+    dispatch_argv[1] = String::New(method);
+    for (int i = 0; i < argc; i++) {
+      dispatch_argv[2 + i] = argv[i];
+    }
 
-  if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+    TryCatch try_catch;
+
+    process_dispatch->Call(process, 2 + argc, dispatch_argv);
+
+    if (try_catch.HasCaught()) {
+      FatalException(try_catch);
+    }
+
+  } else {
+    // Legacy dispatch
+    Local<Value> callback_v = object->Get(String::New(method)); 
+    if (!callback_v->IsFunction()) {
+      fprintf(stderr, "method = %s", method);
+    }
+    assert(callback_v->IsFunction());
+    Local<Function> callback = Local<Function>::Cast(callback_v);
+
+    // TODO Hook for long stack traces to be made here.
+
+    TryCatch try_catch;
+   
+    callback->Call(object, argc, argv);
+
+    if (try_catch.HasCaught()) {
+      FatalException(try_catch);
+    }
   }
 }
 
@@ -1813,6 +1844,7 @@ static Handle<Object> GetFeatures() {
   );
 
   obj->Set(String::NewSymbol("uv"), True());
+  obj->Set(String::NewSymbol("domains"), Boolean::New(use_domains));
   obj->Set(String::NewSymbol("ipv6"), True()); // TODO ping libuv
   obj->Set(String::NewSymbol("tls_npn"), Boolean::New(use_npn));
   obj->Set(String::NewSymbol("tls_sni"), Boolean::New(use_sni));
@@ -2010,6 +2042,15 @@ void Load(Handle<Object> process) {
     ReportException(try_catch, true);
     exit(11);
   }
+
+  // Before we enter the event loop, grab a handle to process.dispatch() for
+  // use later. This function is defined in src/node.js. process.dispatch()
+  // is the single javascript entry point for all events originating in
+  // C++ land and the outside world.
+  Local<Value> process_dispatch_v = process->Get(String::New("dispatch"));
+  assert(process_dispatch_v->IsFunction());
+  process_dispatch = Persistent<Function>::New(
+      Local<Function>::Cast(process_dispatch_v));
 }
 
 static void PrintHelp();
@@ -2071,6 +2112,9 @@ static void ParseArgs(int argc, char **argv) {
     const char *arg = argv[i];
     if (strstr(arg, "--debug") == arg) {
       ParseDebugOpt(arg);
+      argv[i] = const_cast<char*>("");
+    } else if (!strcmp(arg, "--domains")) {
+      use_domains = true;
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
