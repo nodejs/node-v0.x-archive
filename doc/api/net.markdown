@@ -42,6 +42,7 @@ The `callback` parameter will be added as an listener for the `'connect'` event.
 ### net.Server
 
 This class is used to create a TCP or UNIX server.
+A server is a `net.Socket` that can listen for new incoming connections.
 
 Here is an example of a echo server which listens for connections
 on port 8124:
@@ -71,6 +72,7 @@ Use `nc` to connect to a UNIX domain socket server:
 Begin accepting connections on the specified `port` and `host`.  If the
 `host` is omitted, the server will accept connections directed to any
 IPv4 address (`INADDR_ANY`).
+Using a port value of zero will assign the next available ephemeral port.
 
 This function is asynchronous. The last parameter `callback` will be called
 when the server has been bound.
@@ -150,6 +152,12 @@ The number of concurrent connections on the server.
 
 `net.Server` is an `EventEmitter` with the following events:
 
+#### Event: 'listening'
+
+`function () {}`
+
+Emitted when the server has been bound after calling `server.listen`.
+
 #### Event: 'connection'
 
 `function (socket) {}`
@@ -162,6 +170,13 @@ Emitted when a new connection is made. `socket` is an instance of
 `function () {}`
 
 Emitted when the server closes.
+
+#### Event: 'error'
+
+`function (exception) {}`
+
+Emitted when an error occurs.  The `'close'` event will be called directly
+following this event.  See example in discussion of `server.listen`.
 
 ---
 
@@ -377,7 +392,7 @@ See also: `socket.setTimeout()`
 
 Emitted when the write buffer becomes empty. Can be used to throttle uploads.
 
-See also: `socket.write()` false return.
+See also: the return values of `socket.write()`
 
 #### Event: 'error'
 
