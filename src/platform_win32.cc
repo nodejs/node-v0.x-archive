@@ -260,128 +260,114 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 Handle<Value> Platform::GetInterfaceAddresses() {
   
   HandleScope scope;
+  Handle<Object> interface_addresses = Object::New();
+  ULONG buffer_length = sizeof (IP_ADAPTER_ADDRESSES);
+  PIP_ADAPTER_ADDRESSES adresses = (IP_ADAPTER_ADDRESSES *) malloc(buffer_length);
 
-  DWORD dwSize = 0;
-  DWORD dwRetVal = 0;
-
-  LPVOID lpMsgBuf = NULL;
-
-  PIP_ADAPTER_ADDRESSES pAddresses = NULL;
-  ULONG outBufLen = 0;
-
-  PIP_ADAPTER_ADDRESSES pCurrAddresses = NULL;
-
-  outBufLen = sizeof (IP_ADAPTER_ADDRESSES);
-  pAddresses = (IP_ADAPTER_ADDRESSES *) malloc(outBufLen);
-
-  if (GetAdaptersAddresses(AF_UNSPEC,0, NULL, pAddresses, &outBufLen)
-	  == ERROR_BUFFER_OVERFLOW) {
-		  free(pAddresses);
-		  pAddresses = (IP_ADAPTER_ADDRESSES *) malloc(outBufLen);
+  if (GetAdaptersAddresses(AF_UNSPEC,0, NULL, adresses, &buffer_length) == ERROR_BUFFER_OVERFLOW) 
+  {
+		  free(adresses);
+		  adresses = (IP_ADAPTER_ADDRESSES *) malloc(buffer_length);
   }
 
-  if (pAddresses == NULL) {
-	  perror("Memory allocation failed for IP_ADAPTER_ADDRESSES struct\n");
+  if (adresses == NULL) 
+  {
+	  perror("malloc");
+	  return scope.Close(interface_addresses);
   }
 
-  dwRetVal = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, pAddresses, &outBufLen);
+  DWORD return_value = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, adresses, &buffer_length);
 
-  Handle<Object> info = Object::New();
-
-  if (dwRetVal == NO_ERROR)
+  if (return_value == NO_ERROR)
  {
-	  pCurrAddresses = pAddresses;
+	  PIP_ADAPTER_ADDRESSES current_address = adresses;
 
-	  while (pCurrAddresses) {
+	  while (current_address) {
 
-		  char *friendlyName;
-		  int length;
-
-		  PIP_ADAPTER_UNICAST_ADDRESS pCurrUnicastAddress = pCurrAddresses->FirstUnicastAddress;
-		  Handle<Array> unicastArray = Array::New();
+		  PIP_ADAPTER_UNICAST_ADDRESS current_unicast_address = current_address->FirstUnicastAddress;
+		  Handle<Array> unicasts = Array::New();
 		  int counter = 0;
 		  
-		  while(pCurrUnicastAddress)
+		  while(current_unicast_address)
 		  {
-			Handle<Object> exInfo = Object::New();
+			Handle<Object> extended_info = Object::New();
 			
-
-			if(pCurrAddresses->FirstUnicastAddress->Address.lpSockaddr->sa_family == AF_INET6)
+			if(current_address->FirstUnicastAddress->Address.lpSockaddr->sa_family == AF_INET6)
 			{
 				char* dest = (char*)malloc(INET6_ADDRSTRLEN);
 				if (!dest) {
 					perror("malloc");
-					continue;
+					break;
 				}
 				DWORD string_length = static_cast<DWORD>(INET6_ADDRSTRLEN);
-				if(WSAAddressToString(pCurrUnicastAddress->Address.lpSockaddr,sizeof(sockaddr_in6),0,dest,&string_length) == SOCKET_ERROR)
+				if(WSAAddressToString(current_unicast_address->Address.lpSockaddr,sizeof(sockaddr_in6),0,dest,&string_length) == SOCKET_ERROR)
 				{
 					winapi_perror("WSAAddressToString");
-					continue;
+					break;
 				}
-				exInfo->Set(String::New("address"),String::New(dest)); 
+				extended_info->Set(String::New("address"),String::New(dest)); 
 				free(dest);
-				exInfo->Set(String::New("family"),String::New("IPv6"));
+				extended_info->Set(String::New("family"),String::New("IPv6"));
 			}
-			else if(pCurrAddresses->FirstUnicastAddress->Address.lpSockaddr->sa_family == AF_INET)
+			else if(current_address->FirstUnicastAddress->Address.lpSockaddr->sa_family == AF_INET)
 			{
 				char* dest = (char*)malloc(INET_ADDRSTRLEN);
 				if (!dest) {
 					perror("malloc");
-					continue;
+					break;
 				}
 				DWORD string_length = static_cast<DWORD>(INET_ADDRSTRLEN);
-				if(WSAAddressToString(pCurrUnicastAddress->Address.lpSockaddr,sizeof(sockaddr_in),0,dest,&string_length) == SOCKET_ERROR)
+				if(WSAAddressToString(current_unicast_address->Address.lpSockaddr,sizeof(sockaddr_in),0,dest,&string_length) == SOCKET_ERROR)
 				{
 					winapi_perror("WSAAddressToString");
-					continue;
+					break;
 				}
-				exInfo->Set(String::New("address"),String::New(dest)); 
+				extended_info->Set(String::New("address"),String::New(dest)); 
 				free(dest);
-				exInfo->Set(String::New("family"),String::New("IPv4"));
+				extended_info->Set(String::New("family"),String::New("IPv4"));
 			}
 			else
 			{
-				exInfo->Set(String::New("address"),String::Empty()); 
-				exInfo->Set(String::New("family"),String::Empty());
+				extended_info->Set(String::New("address"),String::Empty()); 
+				extended_info->Set(String::New("family"),String::Empty());
 			}
 
-			exInfo->Set(String::New("internal"),Boolean::New(false)); //FIXME
+			extended_info->Set(String::New("internal"),Boolean::New(false)); //FIXME
 
-			unicastArray->Set(counter,exInfo);
+			unicasts->Set(counter,extended_info);
 			counter++;
-			pCurrUnicastAddress = pCurrUnicastAddress->Next;
+			current_unicast_address = current_unicast_address->Next;
 		  }
 
-		  length = WideCharToMultiByte(CP_UTF8, 0, pCurrAddresses->FriendlyName, -1, NULL, 0, NULL, NULL);
-		  if (!length) {
+		  int friendly_name_length = WideCharToMultiByte(CP_UTF8, 0, current_address->FriendlyName, -1, NULL, 0, NULL, NULL);
+		  if (!friendly_name_length) {
 			  winapi_perror("WideCharToMultiByte");
-			  continue;
+			  break;
 		  }
 
-		  friendlyName = (char *) malloc(length);
-		  if (!friendlyName) {
+		  char* friendly_name = (char *) malloc(friendly_name_length);
+		  if (!friendly_name) {
 			  perror("malloc");
-			  continue;
+			  break;
 		  }
 
-		  if (!WideCharToMultiByte(CP_UTF8, 0, pCurrAddresses->FriendlyName, -1, friendlyName, length, NULL, NULL)) {
+		  if (!WideCharToMultiByte(CP_UTF8, 0, current_address->FriendlyName, -1, friendly_name, friendly_name_length, NULL, NULL)) {
 			  winapi_perror("WideCharToMultiByte");
-			  free(friendlyName);
-			  continue;
+			  free(friendly_name);
+			  break;
 		  }
 
-		  info->Set(String::New(friendlyName),unicastArray);
-		  free(friendlyName);
-		  pCurrAddresses = pCurrAddresses->Next;
+		  interface_addresses->Set(String::New(friendly_name),unicasts);
+		  free(friendly_name);
+		  current_address = current_address->Next;
 	  }
   } else {
 	  winapi_perror("GetAdaptersAddresses");
   }
 
-  free(pAddresses);
+  free(adresses);
 
-  return scope.Close(info);
+  return scope.Close(interface_addresses);
 }
 
 
