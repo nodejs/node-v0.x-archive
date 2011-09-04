@@ -34,6 +34,7 @@
 
 #include <platform_win32.h>
 #include <psapi.h>
+#include <iphlpapi.h>
 
 namespace node {
 
@@ -257,8 +258,116 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 
 
 Handle<Value> Platform::GetInterfaceAddresses() {
+  
   HandleScope scope;
-  return scope.Close(Object::New());
+  Handle<Object> interface_addresses = Object::New();
+  ULONG buffer_length = sizeof (IP_ADAPTER_ADDRESSES);
+  PIP_ADAPTER_ADDRESSES adresses = (IP_ADAPTER_ADDRESSES *) malloc(buffer_length);
+
+  if (GetAdaptersAddresses(AF_UNSPEC,0, NULL, adresses, &buffer_length) == ERROR_BUFFER_OVERFLOW) 
+  {
+		  free(adresses);
+		  adresses = (IP_ADAPTER_ADDRESSES *) malloc(buffer_length);
+  }
+
+  if (adresses == NULL) 
+  {
+	  perror("malloc");
+	  return scope.Close(interface_addresses);
+  }
+
+  DWORD return_value = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, adresses, &buffer_length);
+
+  if (return_value == NO_ERROR)
+ {
+	  PIP_ADAPTER_ADDRESSES current_address = adresses;
+
+	  while (current_address) {
+
+		  PIP_ADAPTER_UNICAST_ADDRESS current_unicast_address = current_address->FirstUnicastAddress;
+		  Handle<Array> unicasts = Array::New();
+		  int counter = 0;
+		  
+		  while(current_unicast_address)
+		  {
+			Handle<Object> extended_info = Object::New();
+			
+			if(current_address->FirstUnicastAddress->Address.lpSockaddr->sa_family == AF_INET6)
+			{
+				char* dest = (char*)malloc(INET6_ADDRSTRLEN);
+				if (!dest) {
+					perror("malloc");
+					break;
+				}
+				DWORD string_length = static_cast<DWORD>(INET6_ADDRSTRLEN);
+				if(WSAAddressToString(current_unicast_address->Address.lpSockaddr,sizeof(sockaddr_in6),0,dest,&string_length) == SOCKET_ERROR)
+				{
+					winapi_perror("WSAAddressToString");
+					break;
+				}
+				extended_info->Set(String::New("address"),String::New(dest)); 
+				free(dest);
+				extended_info->Set(String::New("family"),String::New("IPv6"));
+			}
+			else if(current_address->FirstUnicastAddress->Address.lpSockaddr->sa_family == AF_INET)
+			{
+				char* dest = (char*)malloc(INET_ADDRSTRLEN);
+				if (!dest) {
+					perror("malloc");
+					break;
+				}
+				DWORD string_length = static_cast<DWORD>(INET_ADDRSTRLEN);
+				if(WSAAddressToString(current_unicast_address->Address.lpSockaddr,sizeof(sockaddr_in),0,dest,&string_length) == SOCKET_ERROR)
+				{
+					winapi_perror("WSAAddressToString");
+					break;
+				}
+				extended_info->Set(String::New("address"),String::New(dest)); 
+				free(dest);
+				extended_info->Set(String::New("family"),String::New("IPv4"));
+			}
+			else
+			{
+				extended_info->Set(String::New("address"),String::Empty()); 
+				extended_info->Set(String::New("family"),String::Empty());
+			}
+
+			extended_info->Set(String::New("internal"),Boolean::New(false)); //FIXME
+
+			unicasts->Set(counter,extended_info);
+			counter++;
+			current_unicast_address = current_unicast_address->Next;
+		  }
+
+		  int friendly_name_length = WideCharToMultiByte(CP_UTF8, 0, current_address->FriendlyName, -1, NULL, 0, NULL, NULL);
+		  if (!friendly_name_length) {
+			  winapi_perror("WideCharToMultiByte");
+			  break;
+		  }
+
+		  char* friendly_name = (char *) malloc(friendly_name_length);
+		  if (!friendly_name) {
+			  perror("malloc");
+			  break;
+		  }
+
+		  if (!WideCharToMultiByte(CP_UTF8, 0, current_address->FriendlyName, -1, friendly_name, friendly_name_length, NULL, NULL)) {
+			  winapi_perror("WideCharToMultiByte");
+			  free(friendly_name);
+			  break;
+		  }
+
+		  interface_addresses->Set(String::New(friendly_name),unicasts);
+		  free(friendly_name);
+		  current_address = current_address->Next;
+	  }
+  } else {
+	  winapi_perror("GetAdaptersAddresses");
+  }
+
+  free(adresses);
+
+  return scope.Close(interface_addresses);
 }
 
 
