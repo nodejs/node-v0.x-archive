@@ -514,6 +514,39 @@ var formatTests = {
     'hostname': 'foo',
     'protocol': 'http:',
     'pathname': '/'
+  },
+  'svn+ssh://foo/bar': {
+    'href': 'svn+ssh://foo/bar',
+    'hostname': 'foo',
+    'protocol': 'svn+ssh:',
+    'pathname': '/bar',
+    'slashes': true
+  },
+  'dash-test://foo/bar': {
+    'href': 'dash-test://foo/bar',
+    'hostname': 'foo',
+    'protocol': 'dash-test:',
+    'pathname': '/bar',
+    'slashes': true
+  },
+  'dash-test:foo/bar': {
+    'href': 'dash-test:foo/bar',
+    'hostname': 'foo',
+    'protocol': 'dash-test:',
+    'pathname': '/bar'
+  },
+  'dot.test://foo/bar': {
+    'href': 'dot.test://foo/bar',
+    'hostname': 'foo',
+    'protocol': 'dot.test:',
+    'pathname': '/bar',
+    'slashes': true
+  },
+  'dot.test:foo/bar': {
+    'href': 'dot.test:foo/bar',
+    'hostname': 'foo',
+    'protocol': 'dot.test:',
+    'pathname': '/bar'
   }
 };
 for (var u in formatTests) {
