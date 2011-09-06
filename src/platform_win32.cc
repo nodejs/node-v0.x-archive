@@ -243,7 +243,8 @@ double Platform::GetTotalMemory() {
 
 
 int Platform::GetCPUInfo(Local<Array> *cpus) {
-
+  
+  HandleScope scope;
   *cpus = Array::New();
 
   for (int i = 0; i < 32; i++) {
