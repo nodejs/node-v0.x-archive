@@ -6,6 +6,7 @@ access it with `require('assert')`.
 ### assert.fail(actual, expected, message, operator)
 
 Throws an exception that displays the values for `actual` and `expected` separated by the provided operator.
+Used internally by the other APIs below, available for use by extensions.
 
 ### assert.ok(value, [message])
 
