@@ -582,6 +582,7 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "getPeerCertificate", Connection::GetPeerCertificate);
   NODE_SET_PROTOTYPE_METHOD(t, "getSession", Connection::GetSession);
   NODE_SET_PROTOTYPE_METHOD(t, "setSession", Connection::SetSession);
+  NODE_SET_PROTOTYPE_METHOD(t, "isSessionReused", Connection::IsSessionReused);
   NODE_SET_PROTOTYPE_METHOD(t, "isInitFinished", Connection::IsInitFinished);
   NODE_SET_PROTOTYPE_METHOD(t, "verifyError", Connection::VerifyError);
   NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", Connection::GetCurrentCipher);
@@ -1147,15 +1148,14 @@ Handle<Value> Connection::GetSession(const Arguments& args) {
   
   Local<Value> s;
   
-  if (slen > 0)
-  {
-    void* pp = ::malloc(slen);
+  if (slen > 0) {
+    void* pp = malloc(slen);
     if (pp)
     {
       unsigned char* p = (unsigned char*)pp;
       i2d_SSL_SESSION(sess, &p);
       s = Encode(pp, slen, BINARY);
-      ::free(pp);
+      free(pp);
     }
     else
       return False();
@@ -1201,10 +1201,20 @@ Handle<Value> Connection::SetSession(const Arguments& args) {
   SSL_SESSION_free(sess);
 
   if (!r) {
-    return ThrowException(Exception::Error(String::New("SSL_set_session error")));
+    Local<String> eStr = String::New("SSL_set_session error");
+    return ThrowException(Exception::Error(eStr));
   }
 
   return True();
+}
+
+Handle<Value> Connection::IsSessionReused(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->ssl_ == NULL) return False();
+  return SSL_session_reused(ss->ssl_) ? True() : False();
 }
 
 
