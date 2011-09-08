@@ -105,7 +105,7 @@ class WrappedScript : ObjectWrap {
 Persistent<Function> cloneObjectMethod;
 
 void CloneObject(Handle<Object> recv,
-                 Handle<Object> source, Handle<Object> target) {
+                 Handle<Value> source, Handle<Value> target) {
   HandleScope scope;
 
   Handle<Value> args[] = {source, target};
@@ -369,7 +369,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
     // Copy everything from the passed in sandbox (either the persistent
     // context for runInContext(), or the sandbox arg to runInNewContext()).
-    CloneObject(args.This(), sandbox, context->Global());
+    CloneObject(args.This(), sandbox, context->Global()->GetPrototype());
   }
 
   // Catch errors
@@ -427,7 +427,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
   if (context_flag == userContext || context_flag == newContext) {
     // success! copy changes back onto the sandbox object.
-    CloneObject(args.This(), context->Global(), sandbox);
+    CloneObject(args.This(), context->Global()->GetPrototype(), sandbox);
   }
 
   if (context_flag == newContext) {
