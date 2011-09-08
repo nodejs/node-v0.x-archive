@@ -106,6 +106,8 @@ Persistent<Function> cloneObjectMethod;
 
 void CloneObject(Handle<Object> recv,
                  Handle<Object> source, Handle<Object> target) {
+  HandleScope scope;
+
   Handle<Value> args[] = {source, target};
   cloneObjectMethod->Call(recv, 2, args);
 }
