@@ -172,6 +172,7 @@ typedef enum {
   UV_ENOTCONN,
   UV_ENOTSOCK,
   UV_ENOTSUP,
+  UV_ENOENT,
   UV_EPIPE,
   UV_EPROTO,
   UV_EPROTONOSUPPORT,
@@ -415,6 +416,8 @@ int uv_tcp_init(uv_loop_t*, uv_tcp_t* handle);
 
 int uv_tcp_bind(uv_tcp_t* handle, struct sockaddr_in);
 int uv_tcp_bind6(uv_tcp_t* handle, struct sockaddr_in6);
+int uv_tcp_getsockname(uv_tcp_t* handle, struct sockaddr* name, int* namelen);
+int uv_tcp_getpeername(uv_tcp_t* handle, struct sockaddr* name, int* namelen);
 
 /*
  * uv_tcp_connect, uv_tcp_connect6
@@ -434,9 +437,6 @@ struct uv_connect_s {
   uv_stream_t* handle;
   UV_CONNECT_PRIVATE_FIELDS
 };
-
-
-int uv_getsockname(uv_handle_t* handle, struct sockaddr* name, int* namelen);
 
 
 /*
@@ -521,6 +521,7 @@ int uv_udp_bind(uv_udp_t* handle, struct sockaddr_in addr, unsigned flags);
  *  0 on success, -1 on error.
  */
 int uv_udp_bind6(uv_udp_t* handle, struct sockaddr_in6 addr, unsigned flags);
+int uv_udp_getsockname(uv_udp_t* handle, struct sockaddr* name, int* namelen);
 
 /*
  * Send data. If the socket has not previously been bound with `uv_udp_bind`
@@ -890,6 +891,7 @@ struct uv_fs_s {
   uv_fs_cb cb;
   ssize_t result;
   void* ptr;
+  char* path;
   int errorno;
   UV_FS_PRIVATE_FIELDS
 };
@@ -948,8 +950,14 @@ int uv_fs_lstat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb);
 int uv_fs_link(uv_loop_t* loop, uv_fs_t* req, const char* path,
     const char* new_path, uv_fs_cb cb);
 
+/* 
+ * This flag can be used with uv_fs_symlink on Windows
+ * to specify whether path argument points to a directory.
+ */
+#define UV_FS_SYMLINK_DIR          0x0001
+
 int uv_fs_symlink(uv_loop_t* loop, uv_fs_t* req, const char* path,
-    const char* new_path, uv_fs_cb cb);
+    const char* new_path, int flags, uv_fs_cb cb);
 
 int uv_fs_readlink(uv_loop_t* loop, uv_fs_t* req, const char* path,
     uv_fs_cb cb);

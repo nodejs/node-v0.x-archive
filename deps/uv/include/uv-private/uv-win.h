@@ -73,7 +73,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   uv_prepare_t* next_prepare_handle;                                          \
   uv_check_t* next_check_handle;                                              \
   uv_idle_t* next_idle_handle;                                                \
-  ares_channel ares_channel;                                                  \
+  ares_channel ares_chan;                                                     \
   int ares_active_sockets;                                                    \
   uv_timer_t ares_polling_timer;                                              \
   /* Last error code */                                                       \
@@ -235,10 +235,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   struct uv_process_close_s {             \
     UV_REQ_FIELDS                         \
   } close_req;                            \
-  struct uv_process_stdio_s {             \
-    uv_pipe_t* server_pipe;               \
-    HANDLE child_pipe;                    \
-  } stdio_pipes[3];                       \
+  HANDLE child_stdio[3];                  \
   int exit_signal;                        \
   DWORD spawn_errno;                      \
   HANDLE wait_handle;                     \
@@ -247,7 +244,8 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
 
 #define UV_FS_PRIVATE_FIELDS              \
   int flags;                              \
-  struct _stat stat;                      \
+  int last_error;                         \
+  struct _stati64 stat;                   \
   void* arg0;                             \
   union {                                 \
     struct {                              \
