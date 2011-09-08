@@ -31,7 +31,9 @@
 #include <sys/stat.h>
 
 
-#if !UNIX
+#if UNIX
+#include <unistd.h> /* unlink, rmdir, etc. */
+#else
 # include <direct.h>
 # include <io.h>
 # define unlink _unlink
@@ -421,6 +423,11 @@ static void check_utime(const char* path, double atime, double mtime) {
 #if _WIN32
   ASSERT(s->st_atime == atime);
   ASSERT(s->st_mtime == mtime);
+#elif !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+  ASSERT(s->st_atimespec.tv_sec  == atime);
+  ASSERT(s->st_atimespec.tv_nsec == 0); /* FIXME check sub-second precision */
+  ASSERT(s->st_mtimespec.tv_sec  == mtime);
+  ASSERT(s->st_mtimespec.tv_nsec == 0); /* FIXME check sub-second precision */
 #else
   ASSERT(s->st_atim.tv_sec  == atime);
   ASSERT(s->st_atim.tv_nsec == 0); /* FIXME check sub-second precision */
@@ -1089,7 +1096,7 @@ TEST_IMPL(fs_symlink) {
   ASSERT(r == 0);
 #ifdef _WIN32
   if (req.result == -1) {
-    if (req.errorno == ENOTSUP) {
+    if (req.errorno == ENOSYS) {
       /*
        * Windows doesn't support symlinks on older versions.
        * We just pass the test and bail out early if we get ENOTSUP.
