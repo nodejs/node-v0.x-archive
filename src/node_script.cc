@@ -96,8 +96,6 @@ class WrappedScript : ObjectWrap {
   static Handle<Value> CompileRunInThisContext(const Arguments& args);
   static Handle<Value> CompileRunInNewContext(const Arguments& args);
 
-  static Handle<Value> SetCloneMethod(const Arguments& args);
-
   Persistent<Script> script_;
 };
 
@@ -109,6 +107,27 @@ void CloneObject(Handle<Object> recv,
   HandleScope scope;
 
   Handle<Value> args[] = {source, target};
+
+  // Init
+  if (cloneObjectMethod.IsEmpty()) {
+    Local<Function> cloneObjectMethod_ = Local<Function>::Cast(
+      Script::Compile(String::New(
+        "(function(source, target) {\
+           Object.getOwnPropertyNames(source).forEach(function(key) {\
+           try {\
+             var desc = Object.getOwnPropertyDescriptor(source, key);\
+             if (desc.value === source) desc.value = target;\
+             Object.defineProperty(target, key, desc);\
+           } catch (e) {\
+            // Catch sealed properties errors\n\
+           }\
+         });\
+        })"
+      ), String::New("binding:script"))->Run()
+    );
+    cloneObjectMethod = Persistent<Function>::New(cloneObjectMethod_);
+  }
+
   cloneObjectMethod->Call(recv, 2, args);
 }
 
@@ -192,10 +211,6 @@ void WrappedScript::Initialize(Handle<Object> target) {
                             "runInNewContext",
                             WrappedScript::RunInNewContext);
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template,
-                            "_setCloneMethod",
-                            WrappedScript::SetCloneMethod);
-
   NODE_SET_METHOD(constructor_template,
                   "createContext",
                   WrappedScript::CreateContext);
@@ -211,10 +226,6 @@ void WrappedScript::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(constructor_template,
                   "runInNewContext",
                   WrappedScript::CompileRunInNewContext);
-
-  NODE_SET_METHOD(constructor_template,
-                  "_setCloneMethod",
-                  WrappedScript::SetCloneMethod);
 
   target->Set(String::NewSymbol("NodeScript"),
               constructor_template->GetFunction());
@@ -290,15 +301,6 @@ Handle<Value> WrappedScript::CompileRunInThisContext(const Arguments& args) {
 Handle<Value> WrappedScript::CompileRunInNewContext(const Arguments& args) {
   return
     WrappedScript::EvalMachine<compileCode, newContext, returnResult>(args);
-}
-
-Handle<Value> WrappedScript::SetCloneMethod(const Arguments& args) {
-  HandleScope scope;
-
-  Local<Function> cloneObjectMethod_ = Local<Function>::Cast(args[0]);
-  cloneObjectMethod = Persistent<Function>::New(cloneObjectMethod_);
-
-  return scope.Close(Null());
 }
 
 
