@@ -112,16 +112,16 @@ void CloneObject(Handle<Object> recv,
   if (cloneObjectMethod.IsEmpty()) {
     Local<Function> cloneObjectMethod_ = Local<Function>::Cast(
       Script::Compile(String::New(
-        "(function(source, target) {\
-           Object.getOwnPropertyNames(source).forEach(function(key) {\
-           try {\
-             var desc = Object.getOwnPropertyDescriptor(source, key);\
-             if (desc.value === source) desc.value = target;\
-             Object.defineProperty(target, key, desc);\
-           } catch (e) {\
+        "(function(source, target) {\n\
+           Object.getOwnPropertyNames(source).forEach(function(key) {\n\
+           try {\n\
+             var desc = Object.getOwnPropertyDescriptor(source, key);\n\
+             if (desc.value === source) desc.value = target;\n\
+             Object.defineProperty(target, key, desc);\n\
+           } catch (e) {\n\
             // Catch sealed properties errors\n\
-           }\
-         });\
+           }\n\
+         });\n\
         })"
       ), String::New("binding:script"))->Run()
     );
