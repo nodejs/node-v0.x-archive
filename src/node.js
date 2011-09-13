@@ -111,15 +111,15 @@
         // REPL
         var ctx = Module.requireRepl().start().context;
 
-        var startup = process.env.NODE_STARTUP;
-        if (startup) {
+        var stup = process.env.NODE_STARTUP;
+        if (stup) {
           var path = NativeModule.require('path');
           var fs = NativeModule.require('fs');
           var vm = NativeModule.require('vm');
 
-          path.exists(startup, function(exists) {
+          path.exists(stup, function(exists) {
             if (exists) {
-              fs.readFile(startup, function(err, data) {
+              fs.readFile(stup, function(err, data) {
                 if (! err) {
                   vm.runInContext(data.toString('utf8'), ctx);
                 }
