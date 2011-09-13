@@ -20,66 +20,18 @@
  */
 
 #include "uv.h"
-#include "task.h"
+#include "internal.h"
+
+#include <assert.h>
 
 
-TEST_IMPL(ref) {
-  uv_run(uv_default_loop());
-  return 0;
+int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, uv_file fd) {
+  assert(0 && "implement me");
+  return -1;
 }
 
 
-TEST_IMPL(idle_ref) {
-  uv_idle_t h;
-  uv_idle_init(uv_default_loop(), &h);
-  uv_idle_start(&h, NULL);
-  uv_unref(uv_default_loop());
-  uv_run(uv_default_loop());
-  return 0;
-}
-
-
-TEST_IMPL(async_ref) {
-  uv_async_t h;
-  uv_async_init(uv_default_loop(), &h, NULL);
-  uv_unref(uv_default_loop());
-  uv_run(uv_default_loop());
-  return 0;
-}
-
-
-TEST_IMPL(prepare_ref) {
-  uv_prepare_t h;
-  uv_prepare_init(uv_default_loop(), &h);
-  uv_prepare_start(&h, NULL);
-  uv_unref(uv_default_loop());
-  uv_run(uv_default_loop());
-  return 0;
-}
-
-
-TEST_IMPL(check_ref) {
-  uv_check_t h;
-  uv_check_init(uv_default_loop(), &h);
-  uv_check_start(&h, NULL);
-  uv_unref(uv_default_loop());
-  uv_run(uv_default_loop());
-  return 0;
-}
-
-
-static void prepare_cb(uv_prepare_t* handle, int status) {
-  ASSERT(handle != NULL);
-  ASSERT(status == 0);
-
-  uv_unref(uv_default_loop());
-}
-
-
-TEST_IMPL(unref_in_prepare_cb) {
-  uv_prepare_t h;
-  uv_prepare_init(uv_default_loop(), &h);
-  uv_prepare_start(&h, prepare_cb);
-  uv_run(uv_default_loop());
-  return 0;
+int uv_tty_set_mode(uv_tty_t* tty, int mode) {
+  assert(0 && "implement me");
+  return -1;
 }
