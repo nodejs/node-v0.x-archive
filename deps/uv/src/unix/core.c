@@ -65,17 +65,6 @@ static void uv__finish_close(uv_handle_t* handle);
 #endif
 
 
-void uv_init() {
-  default_loop_ptr = &default_loop_struct;
-#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
-  default_loop_struct.ev = ev_default_loop(EVBACKEND_KQUEUE);
-#else
-  default_loop_struct.ev = ev_default_loop(EVFLAG_AUTO);
-#endif
-  ev_set_userdata(default_loop_struct.ev, default_loop_ptr);
-}
-
-
 void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
   uv_udp_t* udp;
   uv_async_t* async;
@@ -176,6 +165,15 @@ void uv_loop_delete(uv_loop_t* loop) {
 
 
 uv_loop_t* uv_default_loop() {
+  if (!default_loop_ptr) {
+    default_loop_ptr = &default_loop_struct;
+#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
+    default_loop_struct.ev = ev_default_loop(EVBACKEND_KQUEUE);
+#else
+    default_loop_struct.ev = ev_default_loop(EVFLAG_AUTO);
+#endif
+    ev_set_userdata(default_loop_struct.ev, default_loop_ptr);
+  }
   assert(default_loop_ptr->ev == EV_DEFAULT_UC);
   return default_loop_ptr;
 }
@@ -235,6 +233,8 @@ void uv__finish_close(uv_handle_t* handle) {
     case UV_TCP:
       assert(!ev_is_active(&((uv_stream_t*)handle)->read_watcher));
       assert(!ev_is_active(&((uv_stream_t*)handle)->write_watcher));
+      assert(((uv_stream_t*)handle)->fd == -1);
+      uv__stream_destroy((uv_stream_t*)handle);
       break;
 
     case UV_UDP:
@@ -607,7 +607,7 @@ static void getaddrinfo_thread_proc(eio_req *req) {
 
 
 /* stub implementation of uv_getaddrinfo */
-int uv_getaddrinfo(uv_loop_t* loop, 
+int uv_getaddrinfo(uv_loop_t* loop,
                    uv_getaddrinfo_t* handle,
                    uv_getaddrinfo_cb cb,
                    const char* hostname,
@@ -622,7 +622,10 @@ int uv_getaddrinfo(uv_loop_t* loop,
     return -1;
   }
 
-  memset(handle, 0, sizeof(uv_getaddrinfo_t));
+  uv__req_init((uv_req_t*)handle);
+  handle->type = UV_GETADDRINFO;
+  handle->loop = loop;
+  handle->cb = cb;
 
   /* TODO don't alloc so much. */
 
@@ -633,10 +636,10 @@ int uv_getaddrinfo(uv_loop_t* loop,
 
   /* TODO security! check lengths, check return values. */
 
-  handle->loop = loop;
-  handle->cb = cb;
   handle->hostname = hostname ? strdup(hostname) : NULL;
   handle->service = service ? strdup(service) : NULL;
+  handle->res = NULL;
+  handle->retcode = 0;
 
   /* TODO check handle->hostname == NULL */
   /* TODO check handle->service == NULL */

@@ -61,6 +61,7 @@ typedef int uv_file;
   int write_index; \
   uv_buf_t* bufs; \
   int bufcnt; \
+  int error; \
   uv_buf_t bufsml[UV_REQ_BUFSML_SIZE];
 
 #define UV_SHUTDOWN_PRIVATE_FIELDS /* empty */
@@ -117,9 +118,7 @@ typedef int uv_file;
 
 
 /* UV_NAMED_PIPE */
-#define UV_PIPE_PRIVATE_TYPEDEF
 #define UV_PIPE_PRIVATE_FIELDS \
-  UV_TCP_PRIVATE_FIELDS \
   const char* pipe_fname; /* strdup'ed */
 
 
@@ -174,5 +173,7 @@ typedef int uv_file;
 
 #define UV_WORK_PRIVATE_FIELDS \
   eio_req* eio;
+
+#define UV_TTY_PRIVATE_FIELDS /* empty */
 
 #endif /* UV_UNIX_H */

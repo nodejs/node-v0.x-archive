@@ -4,6 +4,7 @@
     'target_arch': 'ia32',
     'node_use_dtrace': 'false',
     'node_use_openssl%': 'true',
+    'node_use_system_openssl%': 'false',
     'library_files': [
       'src/node.js',
       'lib/_debugger.js',
@@ -136,7 +137,10 @@
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [ 'src/node_crypto.cc' ],
-          'dependencies': [ './deps/openssl/openssl.gyp:openssl' ]
+          'conditions': [
+            [ 'node_use_system_openssl=="false"', {
+              'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
+            }]]
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
         }],
