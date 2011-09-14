@@ -13,20 +13,10 @@
     <Package InstallerVersion="200" Compressed="yes" Platform="x86" />
 
     <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" />
-
-    <CustomAction Id='SetRootDrive' Property='SD' Value='[%SystemDrive]\'/>
-
-    <InstallExecuteSequence>
-      <Custom Action="SetRootDrive" Before="CostInitialize"></Custom>
-    </InstallExecuteSequence>
-
-    <InstallUISequence>
-      <Custom Action="SetRootDrive" Before="CostInitialize"></Custom>
-    </InstallUISequence>
     
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="SD">
-        <Directory Id="NodeRoot" Name="node">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="NodeRoot" Name="nodejs">
           <Component Id="nodeexe" Guid="AEC0F08E-89B3-4C35-A286-8DB8598597F2">
             <File Id="filenodeexe" KeyPath="yes" Source="$(var.sourcedir)\node.exe" />
           </Component>
