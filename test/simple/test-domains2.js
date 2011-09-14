@@ -40,7 +40,7 @@ setTimeout(function() {
         console.error("timer 3");
         timerCallbacks++;
       }, 1);
-    }, 3);
+    }, 1);
 
     setTimeout(function() {
       timerCallbacks++;
@@ -58,21 +58,19 @@ setTimeout(function() {
 
     var t1 = setTimeout(function() {
       assert.ok(false, "should not get here");
-    }, 4);
+    }, 1);
     assert.ok(t1.domain);
     assert.equal(t1.domain, d2);
     assert.equal(t1.domain.id, require('domain').getCurrent().id);
 
     var t2 = setTimeout(function() {
       assert.ok(false, "should not get here");
-    }, 3);
+    }, 1);
     assert.equal(t2.domain, d2);
-
-    debugger;
 
     this.kill();
   });
-}, 2);
+}, 1);
 
 
 process.on('exit', function() {
