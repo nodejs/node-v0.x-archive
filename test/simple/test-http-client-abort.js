@@ -52,6 +52,7 @@ var server = http.Server(function(req, res) {
 var responses = 0;
 var N = http.Agent.defaultMaxSockets - 1;
 var requests = [];
+var clientEndEvents = 0;
 
 server.listen(common.PORT, function() {
   console.log("Server listening.");
@@ -61,6 +62,11 @@ server.listen(common.PORT, function() {
     var options = { port: common.PORT, path: '/?id=' + i };
     var req = http.get(options, function(res) {
       console.log("Client response code " + res.statusCode);
+
+      res.on('end', function() {
+        console.log('end');
+        clientEndEvents++;
+      });
 
       if (++responses == N) {
         console.log("All clients connected, destroying.");
@@ -77,4 +83,5 @@ server.listen(common.PORT, function() {
 
 process.on('exit', function() {
   assert.equal(N, clientAborts);
+  assert.equal(N, clientEndEvents);
 });
