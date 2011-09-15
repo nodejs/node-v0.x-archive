@@ -88,6 +88,9 @@ function convertData(data) {
     .replace(/<hr><\/hr>/g, "<hr />")
     .replace(/(\<h[2-6])\>([^<]+)(\<\/h[1-6]\>)/gmi, function(o, ts, c, te) {
       return ts+' id="'+formatIdString(c)+'">'+c+te;
+    })
+    .replace(/(\<h3[^>]+\>)([^<]+)(\<\/h3\>)/gmi, function(o, ts, c, te) {
+       return ts+c+' <a href="#'+formatIdString(c)+'">#</a>'+te;
     });
 
   return html;
