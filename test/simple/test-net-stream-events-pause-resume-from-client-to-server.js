@@ -26,56 +26,67 @@ var net = require('net');
 
 // These tests are to make sure that a TCP stream implements all the
 // required functions and events of the Stream class
+// testing that if the client is paused 
+// conn.write() will _eventualy_ return false
 
 var hasResume = false;
-var step = 0;
+var hasDrain = false;
+var sent = 0;
+var client;
+var conn;
 
 // next test
 setTimeout(function () {
-  assert.strictEqual(step, 3);
+  assert.strictEqual(hasResume, true);
+  assert.strictEqual(hasDrain, true);
+  assert.strictEqual(sent, 0);
   server.close();
-  nextTest();
+  // it is unclear to me why I must destroy the client
+  client.destroy();
 }, 100);
 
 // need a server
-var server = net.Server(function(conn) {
-
-  // because the client is paused conn.write should return false
-  assert.strictEqual(conn.write(new Buffer(10)), false);
-
-  // because the client paused, conn should emit pause?
-  // there may be a timeing issue here...
-  conn.on('pause', function() {
-    assert.strictEqual(step, 0);
-    assert.strictEqual(hasResume, false);
-    step += 1;
-  });
-
+var server = net.Server(function(_conn) {
+  conn = _conn;
+  var data = new Buffer(65536);
+  
   // once the client resumes, conn should emit drain
+  // because there was something in the write buffer
   conn.on('drain', function() {
-    assert.strictEqual(step, 1);
     assert.strictEqual(hasResume, true);
-    step += 1;
+    hasDrain = true;
   });
+  
+  (function write() {
+    // because the client is paused conn.write should 
+    // return false _eventualy_ 
+    var ret = conn.write(data);
+    sent += data.length;
+    if (ret === false) {
+      // good, now resume
+      hasResume = true;
+      client.resume();
+    } else {
+      // need some kind of halt
+      assert.ok(sent < 720896 * 2);
+      process.nextTick(write);
+    }
+  }());
+
 });
 
 server.listen(common.PORT, function() {
   // need a client
-  var client = net.createConnection(common.PORT);
+  client = net.createConnection(common.PORT, function () {
+     // pause client
+    client.pause();
 
-  // pause client
-  client.pause();
-
-  // should recive data after client resumes
-  client.on('data', function() {
-    assert.strictEqual(step, 2);
-    assert.strictEqual(hasResume, true);
-    step += 1;
+    // should recive data after client resumes
+    client.on('data', function(chunk) {
+      assert.strictEqual(hasResume, true);
+      sent -= chunk.length;
+      // should never recived more data then was sent
+      assert.ok(sent >= 0);
+    });
   });
-
-  // resume in a bit
-  setTimeout(function () {
-    client.resume();
-    hasResume = true;
-  },50);
 });

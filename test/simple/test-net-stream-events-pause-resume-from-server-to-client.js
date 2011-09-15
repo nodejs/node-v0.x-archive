@@ -26,56 +26,68 @@ var net = require('net');
 
 // These tests are to make sure that a TCP stream implements all the
 // required functions and events of the Stream class
+// here I am testing that if the conn is paused that the
+// client.write() will _eventualy_ return false
 
 var hasResume = false;
+var hasDrain = false;
+var sent = 0;
 var client;
-var step = 0;
+var conn;
 
 // next test
 setTimeout(function () {
-  assert.strictEqual(step, 3);
+  assert.strictEqual(hasResume, true);
+  assert.strictEqual(hasDrain, true);
+  assert.strictEqual(sent, 0);
   server.close();
-  nextTest();
+  // it is unclear to me why I must destroy the client
+  client.destroy();
 }, 100);
 
 // need a server
-var server = net.Server(function(conn) {
+var server = net.Server(function(_conn) {
+  conn = _conn;
   // pause conn
   conn.pause();
 
   // should recive data after conn resumes
-  conn.on('data', function() {
+  conn.on('data', function(chunk) {
     assert.strictEqual(hasResume, true);
-    assert.strictEqual(step, 2);
-    step += 1;
+    sent -= chunk.length;
+    // should never recived more data then was sent
+    assert.ok(sent >= 0);
   });
 
-  // resume in a bit
-  setTimeout(function () {
-    conn.resume();
-    hasResume = true;
-  },50);
-
-  // write something, I think there is also a timeing problem
-  // but this settles the mud nicely...
-  client.write(new Buffer(10));
 });
 
 server.listen(common.PORT, function() {
   // need a client
-  client = net.createConnection(common.PORT);
+  client = net.createConnection(common.PORT, function() {
+    var data = new Buffer(65536);
 
-  // because the server paused the stream the client should emit pause
-  client.on('pause', function() {
-    assert.strictEqual(hasResume, false);
-    assert.strictEqual(step, 0);
-    step += 1;
-  });
-
-  // once the server resumes the client should emit the event
-  client.on('drain', function() {
-    assert.strictEqual(hasResume, true);
-    assert.strictEqual(step, 1);
-    step += 1;
+    // once the conn resumes, client should emit drain
+    // because there was something in the write buffer
+    client.on('drain', function() {
+      // TODO this fails because there are 2 drain events
+      assert.strictEqual(hasResume, true);
+      hasDrain = true;
+    });
+  
+    (function write() {
+      // because the conn is paused client.write should 
+      // return false _eventualy_ 
+      var ret = client.write(data);
+      sent += data.length;
+      if (ret === false) {
+        // good, now resume 
+        hasResume = true;
+        conn.resume();
+      } else {
+        // need some kind of halt
+        assert.ok(sent < 720896 * 2);
+        process.nextTick(write);
+      }
+    }());
   });
 });

@@ -26,23 +26,45 @@ var net = require('net');
 
 // These tests are to make sure that a TCP Socket implements all the
 // required functions and events of the Stream class
+// testing that the server conn Socket will emit the proper 
+// Stream events 
 
 var hasResume = false;
-var step = 0;
+var hasResumed = false;
+var hasPaused = false;
+var hasData = false;
+var hasDrain = false;
+var client;
 
 // next test
 setTimeout(function () {
-  assert.strictEqual(step, 3);
+  assert.strictEqual(hasResume, true);
+  assert.strictEqual(hasResumed, true);
+  assert.strictEqual(hasPaused, true);
+  assert.strictEqual(hasData, true);
+  assert.strictEqual(hasDrain, true);
   server.close();
+  // it is unclear to me why I must destroy the client
+  client.destroy();
 }, 100);
 
 // need a server
 var server = net.Server(function(conn) {
 
-   // emit pause to push this up and down the pipe stream
-  client.on('pause', function() {
-    assert.strictEqual(step, 0);
-    step += 1;
+  conn.on('pause', function() {
+    // emit pause to push this up and down the pipe stream
+    assert.strictEqual(hasResume, false);
+    hasPaused = true;
+  }).
+  on('resume', function() {
+    // emit resume to push this up and down the pipe stream
+    assert.strictEqual(hasResume, true);
+    hasResumed = true;
+  }).
+  on('drain', function() {
+    // make sure I get a drain after resume
+    assert.strictEqual(hasResumed, true);
+    hasDrain = true;
   });
 
   // pause
@@ -51,26 +73,20 @@ var server = net.Server(function(conn) {
   // write should return false
   assert.strictEqual(conn.write(new Buffer(10)), false);
 
-  // make sure I get a drain after resume
-  conn.on('drain', function() {
-    assert.strictEqual(step, 1);
-    assert.strictEqual(hasResume, true);
-    step += 1;
-  });
-
   // resume in a bit
   setTimeout(function() {
     hasResume = true;
     conn.resume();
   },50);
 });
-server.listen(common.PORT);
 
-//need a client
-var client = net.createConnection(common.PORT).
-    // the client should not get data until I resume the server
+server.listen(common.PORT, function() {
+  //need a client
+  client = net.createConnection(common.PORT).
     on('data', function() {
+      // the client should not get data until I resume the server    
       assert.strictEqual(hasResume, true);
-      assert.strictEqual(step, 2);
-      step += 1;
+      hasData = true;
     });
+});
+
