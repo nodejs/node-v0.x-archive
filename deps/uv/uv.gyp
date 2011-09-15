@@ -113,7 +113,9 @@
             'src/win/stdio.c',
             'src/win/stream.c',
             'src/win/tcp.c',
+            'src/win/tty.c',
             'src/win/threadpool.c',
+            'src/win/threads.c',
             'src/win/timer.c',
             'src/win/udp.c',
             'src/win/util.c',
@@ -148,6 +150,7 @@
             'src/unix/udp.c',
             'src/unix/tcp.c',
             'src/unix/pipe.c',
+            'src/unix/tty.c',
             'src/unix/stream.c',
             'src/unix/cares.c',
             'src/unix/error.c',
@@ -209,7 +212,19 @@
             'libraries': [ '-lrt' ],
           },
         }],
-        # TODO add OS=='sun'
+        [ 'OS=="solaris"', {
+          'include_dirs': [ 'src/ares/config_sunos' ],
+          'sources': [ 'src/unix/sunos.c' ],
+          'defines': [
+            '__EXTENSIONS__',
+            '_XOPEN_SOURCE=500',
+            'EV_CONFIG_H="config_sunos.h"',
+            'EIO_CONFIG_H="config_sunos.h"',
+          ],
+          'direct_dependent_settings': {
+            'libraries': [ '-lrt' ],
+          },
+        }],
       ]
     },
 
@@ -245,6 +260,7 @@
         'test/test-spawn.c',
         'test/test-tcp-bind-error.c',
         'test/test-tcp-bind6-error.c',
+        'test/test-tcp-close.c',
         'test/test-tcp-writealot.c',
         'test/test-threadpool.c',
         'test/test-timer-again.c',

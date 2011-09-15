@@ -31,6 +31,7 @@ TEST_DECLARE   (tcp_bind_error_fault)
 TEST_DECLARE   (tcp_bind_error_inval)
 TEST_DECLARE   (tcp_bind_localhost_ok)
 TEST_DECLARE   (tcp_listen_without_bind)
+TEST_DECLARE   (tcp_close)
 TEST_DECLARE   (tcp_bind6_error_addrinuse)
 TEST_DECLARE   (tcp_bind6_error_addrnotavail)
 TEST_DECLARE   (tcp_bind6_error_fault)
@@ -117,6 +118,7 @@ TASK_LIST_START
   TEST_ENTRY  (tcp_bind_error_inval)
   TEST_ENTRY  (tcp_bind_localhost_ok)
   TEST_ENTRY  (tcp_listen_without_bind)
+  TEST_ENTRY  (tcp_close)
 
   TEST_ENTRY  (tcp_bind6_error_addrinuse)
   TEST_ENTRY  (tcp_bind6_error_addrnotavail)
@@ -193,7 +195,6 @@ TASK_LIST_START
   TEST_ENTRY  (fs_chown)
   TEST_ENTRY  (fs_utime)
   TEST_ENTRY  (fs_futime)
-  TEST_ENTRY  (fs_symlink)
   TEST_ENTRY  (fs_symlink)
 
   TEST_ENTRY  (threadpool_queue_work_simple)
