@@ -85,10 +85,8 @@ void uv_fs_req_cleanup(uv_fs_t* req) {
 
   switch (req->fs_type) {
     case UV_FS_READDIR:
-      assert((req->result == -1 && req->ptr == NULL)
-          || (req->result >= 0 && req->ptr != NULL));
-      free(req->ptr);
-      req->ptr = NULL;
+        assert((req->result == -1 && req->ptr == NULL)
+               || (req->result >= 0 && req->ptr != NULL));      
       break;
 
     case UV_FS_STAT:
@@ -126,18 +124,20 @@ static int uv__fs_after(eio_req* eio) {
        * callback. We must keep it until uv_fs_req_cleanup. If we get rid of
        * libeio this can be avoided.
        */
-      buflen = 0;
-      name = req->eio->ptr2;
-      for (i = 0; i < req->result; i++) {
-        namelen = strlen(name);
-        buflen += namelen + 1;
-        /* TODO check ENOMEM */
-        name += namelen;
-        assert(*name == '\0');
-        name++;
+      if (req->result >= 0) {
+        buflen = 0;
+        name = req->eio->ptr2;
+        for (i = 0; i < req->result; i++) {
+          namelen = strlen(name);
+          buflen += namelen + 1;
+          /* TODO check ENOMEM */
+          name += namelen;
+          assert(*name == '\0');
+          name++;
+        }
+        req->ptr = malloc(buflen);
+        memcpy(req->ptr, req->eio->ptr2, buflen);
       }
-      req->ptr = malloc(buflen);
-      memcpy(req->ptr, req->eio->ptr2, buflen);
       break;
 
     case UV_FS_STAT:
