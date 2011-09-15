@@ -34,232 +34,322 @@
 
 #include <platform_win32.h>
 #include <psapi.h>
+#include <iphlpapi.h>
 
 namespace node {
 
-using namespace v8;
+  using namespace v8;
 
-static char *process_title = NULL;
-double Platform::prog_start_time = 0.0;
+  static char *process_title = NULL;
+  double Platform::prog_start_time = 0.0;
 
 
-// Does the about the same as strerror(),
-// but supports all windows errror messages
-const char *winapi_strerror(const int errorno) {
-  char *errmsg = NULL;
+  // Does the about the same as strerror(),
+  // but supports all windows errror messages
+  const char *winapi_strerror(const int errorno) {
+    char *errmsg = NULL;
 
-  FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
       FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errorno,
       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
 
-  if (errmsg) {
-    // Remove trailing newlines
-    for (int i = strlen(errmsg) - 1;
+    if (errmsg) {
+      // Remove trailing newlines
+      for (int i = strlen(errmsg) - 1;
         i >= 0 && (errmsg[i] == '\n' || errmsg[i] == '\r'); i--) {
-      errmsg[i] = '\0';
+          errmsg[i] = '\0';
+      }
+
+      return errmsg;
+    } else {
+      // FormatMessage failed
+      return "Unknown error";
+    }
+  }
+
+
+  // Does the about the same as perror(), but for windows api functions
+  void winapi_perror(const char* prefix = NULL) {
+    DWORD errorno = GetLastError();
+    const char *errmsg = NULL;
+
+    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+      FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errorno,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
+
+    if (!errmsg) {
+      errmsg = "Unknown error\n";
     }
 
-    return errmsg;
-  } else {
-    // FormatMessage failed
-    return "Unknown error";
-  }
-}
+    // FormatMessage messages include a newline character
 
-
-// Does the about the same as perror(), but for windows api functions
-void winapi_perror(const char* prefix = NULL) {
-  DWORD errorno = GetLastError();
-  const char *errmsg = NULL;
-
-  FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-      FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errorno,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
-
-  if (!errmsg) {
-    errmsg = "Unknown error\n";
+    if (prefix) {
+      fprintf(stderr, "%s: %s", prefix, errmsg);
+    } else {
+      fputs(errmsg, stderr);
+    }
   }
 
-  // FormatMessage messages include a newline character
 
-  if (prefix) {
-    fprintf(stderr, "%s: %s", prefix, errmsg);
-  } else {
-    fputs(errmsg, stderr);
+  char** Platform::SetupArgs(int argc, char *argv[]) {
+    return argv;
   }
-}
 
 
-char** Platform::SetupArgs(int argc, char *argv[]) {
-  return argv;
-}
-
-
-// Max title length; the only thing MSDN tells us about the maximum length
-// of the console title is that it is smaller than 64K. However in practice
-// it is much smaller, and there is no way to figure out what the exact length
-// of the title is or can be, at least not on XP. To make it even more
-// annoying, GetConsoleTitle failes when the buffer to be read into is bigger
-// than the actual maximum length. So we make a conservative guess here;
-// just don't put the novel you're writing in the title, unless the plot
-// survives truncation.
+  // Max title length; the only thing MSDN tells us about the maximum length
+  // of the console title is that it is smaller than 64K. However in practice
+  // it is much smaller, and there is no way to figure out what the exact length
+  // of the title is or can be, at least not on XP. To make it even more
+  // annoying, GetConsoleTitle failes when the buffer to be read into is bigger
+  // than the actual maximum length. So we make a conservative guess here;
+  // just don't put the novel you're writing in the title, unless the plot
+  // survives truncation.
 #define MAX_TITLE_LENGTH 8192
 
-void Platform::SetProcessTitle(char *title) {
-  // We need to convert _title_ to UTF-16 first, because that's what windows uses internally.
-  // It would be more efficient to use the UTF-16 value that we can obtain from v8,
-  // but it's not accessible from here.
+  void Platform::SetProcessTitle(char *title) {
+    // We need to convert _title_ to UTF-16 first, because that's what windows uses internally.
+    // It would be more efficient to use the UTF-16 value that we can obtain from v8,
+    // but it's not accessible from here.
 
-  int length;
-  WCHAR *title_w;
+    int length;
+    WCHAR *title_w;
 
-  // Find out how big the buffer for the wide-char title must be
-  length = MultiByteToWideChar(CP_UTF8, 0, title, -1, NULL, 0);
-  if (!length) {
-    winapi_perror("MultiByteToWideChar");
-    return;
-  }
+    // Find out how big the buffer for the wide-char title must be
+    length = MultiByteToWideChar(CP_UTF8, 0, title, -1, NULL, 0);
+    if (!length) {
+      winapi_perror("MultiByteToWideChar");
+      return;
+    }
 
-  // Convert to wide-char string
-  title_w = new WCHAR[length];
-  length = MultiByteToWideChar(CP_UTF8, 0, title, -1, title_w, length);
-  if (!length) {
-    winapi_perror("MultiByteToWideChar");
+    // Convert to wide-char string
+    title_w = new WCHAR[length];
+    length = MultiByteToWideChar(CP_UTF8, 0, title, -1, title_w, length);
+    if (!length) {
+      winapi_perror("MultiByteToWideChar");
+      delete title_w;
+      return;
+    };
+
+    // If the title must be truncated insert a \0 terminator there
+    if (length > MAX_TITLE_LENGTH) {
+      title_w[MAX_TITLE_LENGTH - 1] = *L"\0";
+    }
+
+    if (!SetConsoleTitleW(title_w)) {
+      winapi_perror("SetConsoleTitleW");
+    }
+
+    free(process_title);
+    process_title = strdup(title);
+
     delete title_w;
-    return;
-  };
-
-  // If the title must be truncated insert a \0 terminator there
-  if (length > MAX_TITLE_LENGTH) {
-    title_w[MAX_TITLE_LENGTH - 1] = *L"\0";
   }
 
-  if (!SetConsoleTitleW(title_w)) {
-    winapi_perror("SetConsoleTitleW");
+
+  static inline char* _getProcessTitle() {
+    WCHAR title_w[MAX_TITLE_LENGTH];
+    char *title;
+    int result, length;
+
+    result = GetConsoleTitleW(title_w, sizeof(title_w) / sizeof(WCHAR));
+
+    if (result == 0) {
+      winapi_perror("GetConsoleTitleW");
+      return NULL;
+    }
+
+    // Find out what the size of the buffer is that we need
+    length = WideCharToMultiByte(CP_UTF8, 0, title_w, -1, NULL, 0, NULL, NULL);
+    if (!length) {
+      winapi_perror("WideCharToMultiByte");
+      return NULL;
+    }
+
+    title = (char *) malloc(length);
+    if (!title) {
+      perror("malloc");
+      return NULL;
+    }
+
+    // Do utf16 -> utf8 conversion here
+    if (!WideCharToMultiByte(CP_UTF8, 0, title_w, -1, title, length, NULL, NULL)) {
+      winapi_perror("WideCharToMultiByte");
+      free(title);
+      return NULL;
+    }
+
+    return title;
   }
 
-  free(process_title);
-  process_title = strdup(title);
 
-  delete title_w;
-}
+  const char* Platform::GetProcessTitle(int *len) {
+    // If the process_title was never read before nor explicitly set,
+    // we must query it with getConsoleTitleW
+    if (!process_title) {
+      process_title = _getProcessTitle();
+    }
 
-
-static inline char* _getProcessTitle() {
-  WCHAR title_w[MAX_TITLE_LENGTH];
-  char *title;
-  int result, length;
-
-  result = GetConsoleTitleW(title_w, sizeof(title_w) / sizeof(WCHAR));
-
-  if (result == 0) {
-    winapi_perror("GetConsoleTitleW");
-    return NULL;
+    if (process_title) {
+      *len = strlen(process_title);
+      return process_title;
+    } else {
+      *len = 0;
+      return NULL;
+    }
   }
 
-  // Find out what the size of the buffer is that we need
-  length = WideCharToMultiByte(CP_UTF8, 0, title_w, -1, NULL, 0, NULL, NULL);
-  if (!length) {
-    winapi_perror("WideCharToMultiByte");
-    return NULL;
+
+  int Platform::GetMemory(size_t *rss, size_t *vsize) {
+
+    HANDLE current_process = GetCurrentProcess();
+    PROCESS_MEMORY_COUNTERS pmc;
+
+    if (!GetProcessMemoryInfo( current_process, &pmc, sizeof(pmc))) {
+      winapi_perror("GetProcessMemoryInfo");
+      return -1;
+    }
+
+    *rss = pmc.WorkingSetSize;
+    *vsize = 0; // FIXME
+
+    return 0;
   }
 
-  title = (char *) malloc(length);
-  if (!title) {
-    perror("malloc");
-    return NULL;
+
+  double Platform::GetFreeMemory() {
+
+    MEMORYSTATUSEX memory_status;
+    memory_status.dwLength = sizeof(memory_status);
+
+    if (!GlobalMemoryStatusEx(&memory_status)) {
+      winapi_perror("GlobalMemoryStatusEx");
+      return -1.0;
+    }
+
+    return static_cast<double>(memory_status.ullAvailPhys);
   }
 
-  // Do utf16 -> utf8 conversion here
-  if (!WideCharToMultiByte(CP_UTF8, 0, title_w, -1, title, length, NULL, NULL)) {
-    winapi_perror("WideCharToMultiByte");
-    free(title);
-    return NULL;
+  double Platform::GetTotalMemory() {
+
+    MEMORYSTATUSEX memory_status;
+    memory_status.dwLength = sizeof(memory_status);
+
+    if (!GlobalMemoryStatusEx(&memory_status)) {
+      winapi_perror("GlobalMemoryStatusEx");
+      return -1.0;
+    }
+
+    return static_cast<double>(memory_status.ullTotalPhys);
   }
 
-  return title;
-}
 
-
-const char* Platform::GetProcessTitle(int *len) {
-  // If the process_title was never read before nor explicitly set,
-  // we must query it with getConsoleTitleW
-  if (!process_title) {
-    process_title = _getProcessTitle();
+  int Platform::GetCPUInfo(Local<Array> *cpus) {
+    return -1;
   }
 
-  if (process_title) {
-    *len = strlen(process_title);
-    return process_title;
-  } else {
-    *len = 0;
-    return NULL;
-  }
-}
 
-
-int Platform::GetMemory(size_t *rss, size_t *vsize) {
-
-  HANDLE current_process = GetCurrentProcess();
-  PROCESS_MEMORY_COUNTERS pmc;
-
-  if ( !GetProcessMemoryInfo( current_process, &pmc, sizeof(pmc)) )
-  {
-    winapi_perror("GetProcessMemoryInfo");
+  double Platform::GetUptimeImpl() {
+    return static_cast<double>(GetTickCount())/1000.0;
   }
 
-  *rss = pmc.WorkingSetSize;
-  *vsize = 0; // FIXME
-
-  return 0;
-}
-
-
-double Platform::GetFreeMemory() {
-
-  MEMORYSTATUSEX memory_status;
-  memory_status.dwLength = sizeof(memory_status);
-
-  if(!GlobalMemoryStatusEx(&memory_status))
-  {
-     winapi_perror("GlobalMemoryStatusEx");
+  int Platform::GetLoadAvg(Local<Array> *loads) {
+    return -1;
   }
 
-  return (double)memory_status.ullAvailPhys;
-}
 
-double Platform::GetTotalMemory() {
+  Handle<Value> Platform::GetInterfaceAddresses() {
 
-  MEMORYSTATUSEX memory_status;
-  memory_status.dwLength = sizeof(memory_status);
+    HandleScope scope;
+    Handle<Object> interface_addresses = Object::New();
+    ULONG buffer_length = 0;
+    PIP_ADAPTER_ADDRESSES adresses = NULL;
 
-  if(!GlobalMemoryStatusEx(&memory_status))
-  {
-    winapi_perror("GlobalMemoryStatusEx");
+    if (GetAdaptersAddresses(AF_UNSPEC, 0, NULL, adresses, &buffer_length) 
+      == ERROR_BUFFER_OVERFLOW) {
+        adresses = (IP_ADAPTER_ADDRESSES *) malloc(buffer_length);
+    }
+
+    if (adresses == NULL) {
+      perror("malloc");
+      return scope.Close(interface_addresses);
+    }
+
+    DWORD return_value = GetAdaptersAddresses(AF_UNSPEC, 0, NULL, adresses, &buffer_length);
+
+    if (return_value == NO_ERROR) {
+      PIP_ADAPTER_ADDRESSES current_address = adresses;
+
+      while (current_address) {
+
+        PIP_ADAPTER_UNICAST_ADDRESS current_unicast_address = current_address->FirstUnicastAddress;
+        Handle<Array> unicasts = Array::New();
+        int counter = 0;
+
+        while (current_unicast_address) {
+          Handle<Object> extended_info = Object::New();
+
+          if (current_unicast_address->Address.lpSockaddr->sa_family == AF_INET6) {
+
+            char dest[INET6_ADDRSTRLEN];
+
+            DWORD string_length = static_cast<DWORD>(INET6_ADDRSTRLEN);
+            if (WSAAddressToString(current_unicast_address->Address.lpSockaddr, 
+                                   sizeof(sockaddr_in6), 0, dest, &string_length) 
+                                   == SOCKET_ERROR) {
+                winapi_perror("WSAAddressToString");
+                break;
+            }
+            extended_info->Set(String::New("address"), String::New(dest)); 
+            extended_info->Set(String::New("family"), String::New("IPv6"));
+          } else if (current_unicast_address->Address.lpSockaddr->sa_family == AF_INET) {
+
+            char dest[INET_ADDRSTRLEN];
+
+            DWORD string_length = static_cast<DWORD>(INET_ADDRSTRLEN);
+            if (WSAAddressToString(current_unicast_address->Address.lpSockaddr, 
+                                   sizeof(sockaddr_in), 0, dest, &string_length)
+                                   == SOCKET_ERROR) {
+                winapi_perror("WSAAddressToString");
+                break;
+            }
+            extended_info->Set(String::New("address"), String::New(dest)); 
+            extended_info->Set(String::New("family"), String::New("IPv4"));
+          } else {
+            extended_info->Set(String::New("address"), String::Empty()); 
+            extended_info->Set(String::New("family"), String::Empty());
+          }
+
+          if (current_address->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
+            extended_info->Set(String::New("internal"), Boolean::New(true));
+          } else {
+            extended_info->Set(String::New("internal"), Boolean::New(false));
+          }
+
+          unicasts->Set(counter,extended_info);
+          counter++;
+          current_unicast_address = current_unicast_address->Next;
+        }
+
+        char friendly_name[1024];
+        int  friendly_name_length = WideCharToMultiByte(CP_UTF8, 0, current_address->FriendlyName, 
+                                                        -1, friendly_name, sizeof(friendly_name), NULL, NULL);
+
+        if (friendly_name_length == 0) {
+          winapi_perror("WideCharToMultiByte");
+          break;
+        }
+
+        interface_addresses->Set(String::New(friendly_name), unicasts);
+        current_address = current_address->Next;
+      }
+    } else {
+      winapi_perror("GetAdaptersAddresses");
+    }
+
+    free(adresses);
+
+    return scope.Close(interface_addresses);
   }
-
-  return (double)memory_status.ullTotalPhys;
-}
-
-
-int Platform::GetCPUInfo(Local<Array> *cpus) {
-  return -1;
-}
-
-
-double Platform::GetUptimeImpl() {
-  return (double)GetTickCount()/1000.0;
-}
-
-int Platform::GetLoadAvg(Local<Array> *loads) {
-  return -1;
-}
-
-
-Handle<Value> Platform::GetInterfaceAddresses() {
-  HandleScope scope;
-  return scope.Close(Object::New());
-}
 
 
 } // namespace node
