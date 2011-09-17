@@ -19,34 +19,41 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// libuv-broken
-
-
 var common = require('../common');
 var assert = require('assert');
 
-assert.ok(process.stdout.writable);
-assert.ok(process.stderr.writable);
-// Support legacy API
-assert.equal('number', typeof process.stdout.fd);
-assert.equal('number', typeof process.stderr.fd);
+var http = require('http');
+var net = require('net');
 
+var gotResponse = false;
 
-var stdout_write = global.process.stdout.write;
-var strings = [];
-global.process.stdout.write = function(string) {
-  strings.push(string);
-};
+var server = net.createServer(function(conn) {
+  var body = "Yet another node.js server.";
 
-console.log('foo');
-console.log('foo', 'bar');
-console.log('%s %s', 'foo', 'bar', 'hop');
-console.log({slashes: '\\\\'})
+  var response =
+    "HTTP/1.1 200 OK\r\n" +
+    "Connection: close\r\n" +
+    "Content-Length: " + body.length + "\r\n" +
+    "Content-Type: text/plain;\r\n" +
+    " x-unix-mode=0600;\r\n" +
+    " name=\"hello.txt\"\r\n" +
+    "\r\n" +
+    body;
 
-global.process.stdout.write = stdout_write;
-assert.equal('foo\n', strings.shift());
-assert.equal('foo bar\n', strings.shift());
-assert.equal('foo bar hop\n', strings.shift());
-assert.equal("{ slashes: '\\\\\\\\' }\n", strings.shift());
+  conn.write(response, function() {
+    conn.destroy();
+    server.close();
+  });
+});
 
-assert.equal(true, process.stderr.write("hello world"));
+server.listen(common.PORT, function() {
+  http.get({host:'127.0.0.1', port:common.PORT}, function(res) {
+    assert.equal(res.headers['content-type'],
+                 'text/plain;x-unix-mode=0600;name="hello.txt"');
+    gotResponse = true;
+  });
+});
+
+process.on('exit', function() {
+  assert.ok(gotResponse);
+});

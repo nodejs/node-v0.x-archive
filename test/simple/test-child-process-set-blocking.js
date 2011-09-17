@@ -19,34 +19,22 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// libuv-broken
-
-
 var common = require('../common');
 var assert = require('assert');
+var ch = require("child_process")
 
-assert.ok(process.stdout.writable);
-assert.ok(process.stderr.writable);
-// Support legacy API
-assert.equal('number', typeof process.stdout.fd);
-assert.equal('number', typeof process.stderr.fd);
+var SIZE = 100000
+var childGone = false;
 
+var cp = ch.spawn("python", ['-c', 'print ' + SIZE + ' * "C"'], {
+  customFds: [0, 1, 2]
+});
 
-var stdout_write = global.process.stdout.write;
-var strings = [];
-global.process.stdout.write = function(string) {
-  strings.push(string);
-};
+cp.on("exit", function (code) {
+  childGone = true;
+  assert.equal(0, code);
+});
 
-console.log('foo');
-console.log('foo', 'bar');
-console.log('%s %s', 'foo', 'bar', 'hop');
-console.log({slashes: '\\\\'})
-
-global.process.stdout.write = stdout_write;
-assert.equal('foo\n', strings.shift());
-assert.equal('foo bar\n', strings.shift());
-assert.equal('foo bar hop\n', strings.shift());
-assert.equal("{ slashes: '\\\\\\\\' }\n", strings.shift());
-
-assert.equal(true, process.stderr.write("hello world"));
+process.on('exit', function() {
+  assert.ok(childGone);
+});
