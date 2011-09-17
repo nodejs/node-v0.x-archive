@@ -17,6 +17,7 @@ https.createServer({
 
 // the error from the previous request should not affect a valid request
 function http_error() {
+    options.agent = false;
     https.get(options, function (res) {
         // normal behavior
         process.exit();
