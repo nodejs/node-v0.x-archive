@@ -3,6 +3,9 @@
 This module contains utilities for handling and transforming file
 paths.  Almost all these methods perform only string transformations.
 The file system is not consulted to check whether paths are valid.
+The behavior of the methods of this module is platform dependent, 
+they expect and returns forward slashes for Unix systems and back 
+slashes for Windows.
 
 `path.exists` and `path.existsSync` are the exceptions, and should
 logically be found in the fs module as they do access the file system.
