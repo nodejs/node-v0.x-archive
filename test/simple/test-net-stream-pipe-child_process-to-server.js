@@ -23,48 +23,61 @@
 var common = require('../common');
 var assert = require('assert');
 var net = require('net');
+var child = require('child_process');
 
 // These tests are to make sure that a TCP stream implements all the
 // required functions and events of the Stream class
-// testing that a paused server conn Socket will not recive data events
-// from client writes
+// testing that a TCP Socket can pipe a file from a client to a server
+// conn and the server conn can pipe to a file
 
-var hasResume = false;
-var hasData = false;
-var client;
+var write_file = path.join(common.tmpDir, 'write_person');
+var read_file = path.join(common.fixturesDir, 'person.jpg');
+
+var writeClosed = false;
+var readEnded = false;
+var readPaused = false;
 
 // next test
 setTimeout(function () {
-  assert.strictEqual(hasResume, true);
-  assert.strictEqual(hasData, true);
+  assert.strictEqual(writeClosed, true);
+  assert.strictEqual(readEnded, true);
+
   server.close();
-  client.end();
-}, 100);
+}, 500);
 
 // need a server
 var server = net.Server(function(conn) {
+  var writeStream = fs.createWriteStream(write_file)
+  conn.pipe(writeStream);
 
-  conn.on('data', function(chunk) {
-    // I should not get data until I resume conn
-    assert.strictEqual(hasResume, true);
-    hasData = true;
-  });
+  child_stdin = child.fork( path.join(common.fixturesDir,
+                  'child_proccess_pipe_stdin.js'));
+  conn.pipe(child_stdin);
+ });
 
-  // pause
-  conn.pause();
-
-  // resume in a bit
-  setTimeout(function() {
-    hasResume = true;
-    conn.resume();
-  },50);
-
-  // write something, but after I _know_ the conn is paused 
-  // this settles the mud nicely...
-  client.write(new Buffer(10));
-});
-
-server.listen(common.PORT, function() {
+server.listen(common.PORT, function () {
   // need a client
   client = net.createConnection(common.PORT);
+  child_stdout = child.fork( path.join(common.fixturesDir,
+                  'child_proccess_pipe_stdout.js'));
+
+  // make sure the throtling gets back to the forked process
+  child_stdout.on('message', function (msg) {
+    switch (msg) {
+      case 'pause':
+        stdout_pause = true;
+        // now start the child process and watch the world drain
+        child_stdin.send('resume');
+        break;
+      case 'resume':
+        stdout_resume = true;
+        break;
+      case 'write_false':
+        stdout_write_false = true;
+        break;
+    }
+  });
+
+  child_stdout.stdout.pipe(client);
 });
+

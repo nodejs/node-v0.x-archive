@@ -27,18 +27,17 @@ var net = require('net');
 // These tests are to make sure that a TCP stream implements all the
 // required functions and events of the Stream class
 // testing that a paused client Socket will not recive data events
-// from server writes
+// from server conn writes
 
 var hasResume = false;
 var hasData = false;
 
 // next test
 setTimeout(function () {
-  assert.strictEqual(hasResume, true);  
+  assert.strictEqual(hasResume, true);
   assert.strictEqual(hasData, true);
   server.close();
-  // it is unclear to me why I must destroy the client
-  client.destroy();
+  client.end();
 }, 100);
 
 // need a server
@@ -51,7 +50,7 @@ server.listen(common.PORT, function() {
   // need a client
   var client = net.createConnection(common.PORT).
       on('data', function(chunk) {
-      // I should not get data untill I resume the client  
+      // I should not get data untill I resume the client
       assert.strictEqual(hasResume, true);
       hasData = true;
     });

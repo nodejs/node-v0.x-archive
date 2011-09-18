@@ -20,51 +20,12 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-var common = require('../common');
-var assert = require('assert');
-var net = require('net');
+process.stdin.pause();
 
-// These tests are to make sure that a TCP stream implements all the
-// required functions and events of the Stream class
-// testing that a paused server conn Socket will not recive data events
-// from client writes
-
-var hasResume = false;
-var hasData = false;
-var client;
-
-// next test
-setTimeout(function () {
-  assert.strictEqual(hasResume, true);
-  assert.strictEqual(hasData, true);
-  server.close();
-  client.end();
-}, 100);
-
-// need a server
-var server = net.Server(function(conn) {
-
-  conn.on('data', function(chunk) {
-    // I should not get data until I resume conn
-    assert.strictEqual(hasResume, true);
-    hasData = true;
-  });
-
-  // pause
-  conn.pause();
-
-  // resume in a bit
-  setTimeout(function() {
-    hasResume = true;
-    conn.resume();
-  },50);
-
-  // write something, but after I _know_ the conn is paused 
-  // this settles the mud nicely...
-  client.write(new Buffer(10));
+process.on('message', function (msg) {
+  if (msg === 'resume') {
+    process.stdin.resume();
+  }
 });
 
-server.listen(common.PORT, function() {
-  // need a client
-  client = net.createConnection(common.PORT);
-});
+

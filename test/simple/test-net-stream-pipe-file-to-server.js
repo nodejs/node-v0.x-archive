@@ -28,46 +28,63 @@ var fs = require('fs');
 
 // These tests are to make sure that a TCP stream implements all the
 // required functions and events of the Stream class
-// testing that a TCP Socket pipe a file to a client and from a server
+// testing that a TCP Socket can pipe a file from a client to a server
+// conn and the server conn can pipe to a file
 
 var write_file = path.join(common.tmpDir, 'write_person');
 var read_file = path.join(common.fixturesDir, 'person.jpg');
 
-var writeEnded = false;
+var writeClosed = false;
 var readEnded = false;
+var readPaused = false;
 
 // next test
 setTimeout(function () {
-  assert.strictEqual(writeEnded, true);
+  assert.strictEqual(writeClosed, true);
   assert.strictEqual(readEnded, true);
-  //TODO read the file, make sure it all got there
+  //assert.strictEqual(readPaused, true); //TODO (maybe make a bigger file?)
+
+  var actual_file = fs.readFileSync(read_file);
+  var expected_file = fs.readFileSync(write_file);
+  assert.deepEqual(expected_file, actual_file);
+
   //TODO make a test that goes the other way (server to client)
-  //TODO make sure that we get a pause/drain cycle
   server.close();
-}, 1000);
+}, 500);
 
 // need a server
 var server = net.Server(function(conn) {
   var writeStream = fs.createWriteStream(write_file)
   conn.pipe(writeStream);
 
-  conn.on('close', function(){
-    // no close -> end?
-    writeStream.end();
-  })
-  writeStream.on('end', function() {
-    writeEnded = true;
+  // make sure the end from readStream gets to writeStream
+  writeStream.on('close', function() {
+    writeClosed= true;
   });
 });
 
 server.listen(common.PORT, function () {
   // need a client
   var readStream = fs.ReadStream(read_file, {bufferSize:10});
+
+  // make sure the read stream ends
   readStream.on('end', function () {
     readEnded = true;
   });
-  // Will this work?  Are there timeing problems in the real world?
-  // do I have to wait for connect?  How is that accomplished?
+
+  readStream.on('pause', function() {
+    // make sure that we get a pushback from writeStream
+    // at least once
+    readPaused = true;
+  });
+
+  // readStream will emit end, so the client connection will end
+  // it this does not happen the test will not exit becuase the
+  // client is still open
   readStream.pipe(net.createConnection(common.PORT));
+});
+
+process.addListener('exit', function() {
+  fs.unlinkSync(write_file);
 });
 

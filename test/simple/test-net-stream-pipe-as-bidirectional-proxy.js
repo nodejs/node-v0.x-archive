@@ -27,7 +27,10 @@ var net = require('net');
 // These tests are to make sure that a TCP stream implements all the
 // required functions and events of the Stream class
 // testing that a TCP Socket can proxy write/pause/resume
-// across Socket.pipe
+// across a bidirectional proxy useing Socket.pipe
+
+//TODO test error handling?
+
 
 var sent = 0;
 var client;
@@ -38,10 +41,11 @@ var data = new Buffer(65536);
 
 function write(from, to) {
   (function _write() {
-    // because 'to'' is paused from.write() will _eventualy_ 
+    // because 'to' is paused from.write() will _eventualy_
     // return false
     var ret = from.write(data);
     sent += data.length;
+    console.error(sent);
     if (ret === false) {
       // good, now resume
       to.hasResume = true;
@@ -51,7 +55,7 @@ function write(from, to) {
       assert.ok(sent < 720896 * 2);
       process.nextTick(_write);
     }
-  }()); 
+  }());
 }
 
 // next test
@@ -61,9 +65,8 @@ setTimeout(function () {
   assert.strictEqual(sent, 0);
   server.close();
   pipe.close();
-  // it is unclear to me why I must destroy the client
-  client.destroy();
-  pipeClient.destroy();
+  client.end();
+  pipeClient.end();
 }, 100);
 
 // need a server

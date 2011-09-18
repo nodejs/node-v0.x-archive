@@ -26,7 +26,7 @@ var net = require('net');
 
 // These tests are to make sure that a TCP stream implements all the
 // required functions and events of the Stream class
-// testing that if the client is paused 
+// testing that if the client is paused
 // conn.write() will _eventualy_ return false
 
 var hasResume = false;
@@ -41,22 +41,21 @@ setTimeout(function () {
   assert.strictEqual(hasDrain, true);
   assert.strictEqual(sent, 0);
   server.close();
-  // it is unclear to me why I must destroy the client
-  client.destroy();
+  client.end();
 }, 100);
 
 // need a server
 var server = net.Server(function(_conn) {
   conn = _conn;
   var data = new Buffer(65536);
-  
+
   // once the client resumes, conn should emit drain
   // because there was something in the write buffer
   conn.on('drain', function() {
     assert.strictEqual(hasResume, true);
     hasDrain = true;
   });
-  
+
   (function write() {
     // because the client is paused conn.write should 
     // return false _eventualy_ 

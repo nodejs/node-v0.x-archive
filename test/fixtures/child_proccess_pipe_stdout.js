@@ -19,52 +19,32 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+var data = new Buffer(65536);
 
-var common = require('../common');
-var assert = require('assert');
-var net = require('net');
+// let the test know when pipe has throtled me
+process.stdout.on('pause', function () {
+  process.send('pause');
+});
 
-// These tests are to make sure that a TCP stream implements all the
-// required functions and events of the Stream class
-// testing that a paused server conn Socket will not recive data events
-// from client writes
+// let the test know when pipe has resumed me
+process.stdout.on('resume', function () {
+  process.send('resume');
+});
 
-var hasResume = false;
-var hasData = false;
-var client;
-
-// next test
+// I assume that in 50ms I can get everything done,
+// now test that the ending the process will close the
+// net.Socket
 setTimeout(function () {
-  assert.strictEqual(hasResume, true);
-  assert.strictEqual(hasData, true);
-  server.close();
-  client.end();
-}, 100);
+  // is this the best way to handle stdout.end()?
+  // do I need to have a test explicitly test some cmdline proccess?
+  process.exit();
+}, 50);
 
-// need a server
-var server = net.Server(function(conn) {
+// just keep on writ'n (the test will kill me)
+(function write() {
+  if (process.stdout.write(data) === false) {
+    process.send('write_false');
+  }
+  process.nextTick(write);
+}());
 
-  conn.on('data', function(chunk) {
-    // I should not get data until I resume conn
-    assert.strictEqual(hasResume, true);
-    hasData = true;
-  });
-
-  // pause
-  conn.pause();
-
-  // resume in a bit
-  setTimeout(function() {
-    hasResume = true;
-    conn.resume();
-  },50);
-
-  // write something, but after I _know_ the conn is paused 
-  // this settles the mud nicely...
-  client.write(new Buffer(10));
-});
-
-server.listen(common.PORT, function() {
-  // need a client
-  client = net.createConnection(common.PORT);
-});
