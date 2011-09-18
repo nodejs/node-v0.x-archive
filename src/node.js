@@ -188,8 +188,8 @@
       if (l === 0) return;
 
       if (process.features.domains) {
-        var domain = NativeModule.require('domain');
-        assert(domain.getCurrent() == domain.defaultDomain);
+        var domains = NativeModule.require('domains');
+        assert(domains.getCurrent() == domains.defaultDomain);
       }
 
       var q = nextTickQueue;
@@ -551,7 +551,7 @@
     if (obj.domain) {
       domain = obj.domain
     } else {
-      domain = NativeModule.require('domain').defaultDomain;
+      domain = NativeModule.require('domains').defaultDomain;
     }
 
     domain.enter();
@@ -566,7 +566,7 @@
 
       domain.exit();
 
-    NativeModule.require('domain').pollNewDomains();
+    NativeModule.require('domains').pollNewDomains();
   }
 
   startup();

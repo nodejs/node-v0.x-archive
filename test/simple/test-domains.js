@@ -21,14 +21,14 @@
 
 var common = require('../common');
 var assert = require('assert');
-var domain = require('domain');
+var domains = require('domains');
 
 var timerCalled = false;
 var connectCallbackCalled = false;
 
 console.log("default domain");
 
-var d = domain.create({ hello: "world" }, function(a) {
+var d = domains.create({ hello: "world" }, function(a) {
   console.log("inside the domain");
   assert.deepEqual(a, { hello: "world" });
 
