@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -26,10 +26,11 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdarg.h>
-#include <limits.h>
+#include <math.h>
+#include <limits>
 
-#include "v8.h"
-
+#include "globals.h"
+#include "utils.h"
 #include "strtod.h"
 #include "bignum.h"
 #include "cached-powers.h"

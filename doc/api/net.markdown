@@ -4,10 +4,20 @@ The `net` module provides you with an asynchronous network wrapper. It contains
 methods for creating both servers and clients (called streams). You can include
 this module with `require("net");`
 
-### net.createServer(connectionListener)
+### net.createServer([options], [connectionListener])
 
 Creates a new TCP server. The `connectionListener` argument is
 automatically set as a listener for the `'connection'` event.
+
+`options` is an object with the following defaults:
+
+    { allowHalfOpen: false
+    }
+
+If `allowHalfOpen` is `true`, then the socket won't automatically send FIN
+packet when the other end of the socket sends a FIN packet. The socket becomes
+non-readable, but still writable. You should call the end() method explicitly.
+See `'end'` event for more information.
 
 ### net.createConnection(arguments...)
 
@@ -16,20 +26,23 @@ the socket is established the `'connect'` event will be emitted.
 
 The arguments for this method change the type of connection:
 
-* `net.createConnection(port, [host])`
+* `net.createConnection(port, [host], [callback])`
 
-  Creates a TCP connection to `port` on `host`. If `host` is omitted, `localhost`
-  will be assumed.
+  Creates a TCP connection to `port` on `host`. If `host` is omitted,
+  `localhost` will be assumed.
 
-* `net.createConnection(path)`
+* `net.createConnection(path, [callback])`
 
   Creates unix socket connection to `path`
+
+The `callback` parameter will be added as an listener for the `'connect'` event.
 
 ---
 
 ### net.Server
 
 This class is used to create a TCP or UNIX server.
+A server is a `net.Socket` that can listen for new incoming connections.
 
 Here is an example of a echo server which listens for connections
 on port 8124:
@@ -54,20 +67,18 @@ Use `nc` to connect to a UNIX domain socket server:
 
     nc -U /tmp/echo.sock
 
-`net.Server` is an `EventEmitter` with the following events:
-
 #### server.listen(port, [host], [callback])
 
 Begin accepting connections on the specified `port` and `host`.  If the
 `host` is omitted, the server will accept connections directed to any
-IPv4 address (`INADDR_ANY`).
+IPv4 address (`INADDR_ANY`). A port value of zero will assign a random port.
 
 This function is asynchronous. The last parameter `callback` will be called
 when the server has been bound.
 
-One issue some users run into is getting `EADDRINUSE` errors. Meaning
+One issue some users run into is getting `EADDRINUSE` errors. This means that
 another server is already running on the requested port. One way of handling this
-would be to wait a second and the try again. This can be done with
+would be to wait a second and then try again. This can be done with
 
     server.on('error', function (e) {
       if (e.code == 'EADDRINUSE') {
@@ -94,7 +105,14 @@ when the server has been bound.
 Start a server listening for connections on the given file descriptor.
 
 This file descriptor must have already had the `bind(2)` and `listen(2)` system
-calls invoked on it.
+calls invoked on it.  Additionally, it must be set non-blocking; try
+`fcntl(fd, F_SETFL, O_NONBLOCK)`.
+
+#### server.pause(msecs)
+
+Stop accepting connections for the given number of milliseconds (default is
+one second).  This could be useful for throttling new connections against
+DoS attacks or other oversubscription.
 
 #### server.close()
 
@@ -105,8 +123,9 @@ event.
 
 #### server.address()
 
-Returns the bound address of the server as seen by the operating system.
-Useful to find which port was assigned when giving getting an OS-assigned address
+Returns the bound address and port of the server as reported by the operating system.
+Useful to find which port was assigned when giving getting an OS-assigned address.
+Returns an object with two properties, e.g. `{"address":"127.0.0.1", "port":2121}`
 
 Example:
 
@@ -129,6 +148,15 @@ Set this property to reject connections when the server's connection count gets 
 
 The number of concurrent connections on the server.
 
+
+`net.Server` is an `EventEmitter` with the following events:
+
+#### Event: 'listening'
+
+`function () {}`
+
+Emitted when the server has been bound after calling `server.listen`.
+
 #### Event: 'connection'
 
 `function (socket) {}`
@@ -142,16 +170,36 @@ Emitted when a new connection is made. `socket` is an instance of
 
 Emitted when the server closes.
 
+#### Event: 'error'
+
+`function (exception) {}`
+
+Emitted when an error occurs.  The `'close'` event will be called directly
+following this event.  See example in discussion of `server.listen`.
+
 ---
 
 ### net.Socket
 
-This object is an abstraction of of a TCP or UNIX socket.  `net.Socket`
+This object is an abstraction of a TCP or UNIX socket.  `net.Socket`
 instances implement a duplex Stream interface.  They can be created by the
 user and used as a client (with `connect()`) or they can be created by Node
 and passed to the user through the `'connection'` event of a server.
 
-`net.Socket` instances are EventEmitters with the following events:
+#### new net.Socket([options])
+
+Construct a new socket object.
+
+`options` is an object with the following defaults:
+
+    { fd: null
+      type: null
+      allowHalfOpen: false
+    }
+
+`fd` allows you to specify the existing file descriptor of socket. `type`
+specified underlying protocol. It can be `'tcp4'`, `'tcp6'`, or `'unix'`.
+About `allowHalfOpen`, refer to `createServer()` and `'end'` event.
 
 #### socket.connect(port, [host], [callback])
 #### socket.connect(path, [callback])
@@ -177,7 +225,7 @@ event.
 #### socket.bufferSize
 
 `net.Socket` has the property that `socket.write()` always works. This is to
-help users get up an running quickly. The computer cannot necessarily keep up
+help users get up and running quickly. The computer cannot always keep up
 with the amount of data that is written to a socket - the network connection simply
 might be too slow. Node will internally queue up the data written to a socket and
 send it out over the wire when it is possible. (Internally it is polling on
@@ -190,7 +238,7 @@ written, but the buffer may contain strings, and the strings are lazily
 encoded, so the exact number of bytes is not known.)
 
 Users who experience large or growing `bufferSize` should attempt to
-"throttle" the data flows in their program with `pause()` and resume()`.
+"throttle" the data flows in their program with `pause()` and `resume()`.
 
 
 #### socket.setEncoding(encoding=null)
@@ -201,7 +249,7 @@ received.
 #### socket.setSecure()
 
 This function has been removed in v0.3. It used to upgrade the connection to
-SSL/TLS. See the TLS for the new API.
+SSL/TLS. See the [TLS section](tls.html#tLS_) for the new API.
 
 
 #### socket.write(data, [encoding], [callback])
@@ -225,7 +273,7 @@ event on the other end.
 
 #### socket.end([data], [encoding])
 
-Half-closes the socket. I.E., it sends a FIN packet. It is possible the
+Half-closes the socket. i.e., it sends a FIN packet. It is possible the
 server will still send some data.
 
 If `data` is specified, it is equivalent to calling `socket.write(data, encoding)`
@@ -273,19 +321,37 @@ data packet received and the first keepalive probe. Setting 0 for
 initialDelay will leave the value unchanged from the default
 (or previous) setting.
 
+#### socket.address()
+
+Returns the bound address and port of the socket as reported by the operating system.
+Returns an object with two properties, e.g. `{"address":"192.168.57.1", "port":62053}`
+
 #### socket.remoteAddress
 
 The string representation of the remote IP address. For example,
 `'74.125.127.100'` or `'2001:4860:a005::68'`.
 
-This member is only present in server-side connections.
+#### socket.remotePort
 
+The numeric representation of the remote port. For example,
+`80` or `21`.
+
+#### socket.bytesRead
+
+The amount of received bytes.
+
+#### socket.bytesWritten
+
+The amount of bytes sent.
+
+
+`net.Socket` instances are EventEmitters with the following events:
 
 #### Event: 'connect'
 
 `function () { }`
 
-Emitted when a socket connection successfully is established.
+Emitted when a socket connection is successfully established.
 See `connect()`.
 
 #### Event: 'data'
@@ -294,7 +360,7 @@ See `connect()`.
 
 Emitted when data is received.  The argument `data` will be a `Buffer` or
 `String`.  Encoding of data is set by `socket.setEncoding()`.
-(See the section on `Readable Socket` for more information.)
+(See the [Readable Stream](streams.html#readable_Stream) section for more information.)
 
 #### Event: 'end'
 
@@ -324,6 +390,8 @@ See also: `socket.setTimeout()`
 `function () { }`
 
 Emitted when the write buffer becomes empty. Can be used to throttle uploads.
+
+See also: the return values of `socket.write()`
 
 #### Event: 'error'
 

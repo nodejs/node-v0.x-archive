@@ -30,6 +30,10 @@
 #include <string>
 #include <map>
 
+#ifdef COMPRESS_STARTUP_DATA_BZ2
+#error Using compressed startup data is not supported for this sample
+#endif
+
 using namespace std;
 using namespace v8;
 
@@ -73,7 +77,6 @@ class HttpRequestProcessor {
  */
 class JsHttpRequestProcessor : public HttpRequestProcessor {
  public:
-
   // Creates a new processor that processes requests by invoking the
   // Process function of the JavaScript script given as an argument.
   explicit JsHttpRequestProcessor(Handle<String> script) : script_(script) { }
@@ -84,7 +87,6 @@ class JsHttpRequestProcessor : public HttpRequestProcessor {
   virtual bool Process(HttpRequest* req);
 
  private:
-
   // Execute the script associated with this processor and extract the
   // Process function.  Returns true if this succeeded, otherwise false.
   bool ExecuteScript(Handle<String> script);
@@ -531,7 +533,7 @@ void ParseOptions(int argc,
                   string* file) {
   for (int i = 1; i < argc; i++) {
     string arg = argv[i];
-    int index = arg.find('=', 0);
+    size_t index = arg.find('=', 0);
     if (index == string::npos) {
       *file = arg;
     } else {

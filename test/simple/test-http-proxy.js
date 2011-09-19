@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 var common = require('../common');
 var assert = require('assert');
 var http = require('http');
@@ -22,12 +43,12 @@ var backend = http.createServer(function(req, res) {
   res.end();
 });
 
-var proxy_client = http.createClient(BACKEND_PORT);
 var proxy = http.createServer(function(req, res) {
   common.debug('proxy req headers: ' + JSON.stringify(req.headers));
-  var proxy_req = proxy_client.request(url.parse(req.url).pathname);
-  proxy_req.end();
-  proxy_req.addListener('response', function(proxy_res) {
+  var proxy_req = http.get({
+    port: BACKEND_PORT,
+    path: url.parse(req.url).pathname
+  }, function(proxy_res) {
 
     common.debug('proxy res headers: ' + JSON.stringify(proxy_res.headers));
 
@@ -55,10 +76,10 @@ function startReq() {
   nlistening++;
   if (nlistening < 2) return;
 
-  var client = http.createClient(PROXY_PORT);
-  var req = client.request('/test');
-  common.debug('client req');
-  req.addListener('response', function(res) {
+  var client = http.get({
+    port: PROXY_PORT,
+    path: '/test'
+  }, function(res) {
     common.debug('got res');
     assert.equal(200, res.statusCode);
 
@@ -74,7 +95,7 @@ function startReq() {
       common.debug('closed both');
     });
   });
-  req.end();
+  common.debug('client req');
 }
 
 common.debug('listen proxy');

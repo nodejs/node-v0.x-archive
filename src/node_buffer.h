@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #ifndef NODE_BUFFER_H_
 #define NODE_BUFFER_H_
 
@@ -12,9 +33,6 @@ namespace node {
  * object in javascript. The object is not totally opaque, one can access
  * individual bytes with [] and slice it into substrings or sub-buffers
  * without copying memory.
- *
- * // return an ascii encoded string - no memory is copied
- * buffer.asciiSlice(0, 3)
  */
 
 /*
@@ -63,7 +81,7 @@ class Buffer : public ObjectWrap {
   }
 
   static inline size_t Length(Buffer *b) {
-    return Buffer::Length(b);
+    return Buffer::Length(b->handle_);
   }
 
 
@@ -96,6 +114,7 @@ class Buffer : public ObjectWrap {
   static v8::Handle<v8::Value> Ucs2Write(const v8::Arguments &args);
   static v8::Handle<v8::Value> ByteLength(const v8::Arguments &args);
   static v8::Handle<v8::Value> MakeFastBuffer(const v8::Arguments &args);
+  static v8::Handle<v8::Value> Fill(const v8::Arguments &args);
   static v8::Handle<v8::Value> Copy(const v8::Arguments &args);
 
   Buffer(v8::Handle<v8::Object> wrapper, size_t length);

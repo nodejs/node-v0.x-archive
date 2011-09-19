@@ -10,6 +10,14 @@ Returns the hostname of the operating system.
 
 Returns the operating system name.
 
+### os.platform()
+
+Returns the operating system platform.
+
+### os.arch()
+
+Returns the operating system CPU architecture.
+
 ### os.release()
 
 Returns the operating system release.
@@ -100,3 +108,20 @@ Example inspection of os.cpus:
            sys: 34920,
            idle: 1072572010,
            irq: 30 } } ]
+
+### os.getNetworkInterfaces()
+
+Get a list of network interfaces:
+
+    { lo0: 
+       [ { address: '::1', family: 'IPv6', internal: true },
+         { address: 'fe80::1', family: 'IPv6', internal: true },
+         { address: '127.0.0.1', family: 'IPv4', internal: true } ],
+      en1: 
+       [ { address: 'fe80::cabc:c8ff:feef:f996', family: 'IPv6',
+           internal: false },
+         { address: '10.0.1.123', family: 'IPv4', internal: false } ],
+      vmnet1: [ { address: '10.99.99.254', family: 'IPv4', internal: false } ],
+      vmnet8: [ { address: '10.88.88.1', family: 'IPv4', internal: false } ],
+      ppp0: [ { address: '10.2.0.231', family: 'IPv4', internal: false } ] }
+

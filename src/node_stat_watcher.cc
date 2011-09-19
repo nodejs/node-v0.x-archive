@@ -1,4 +1,24 @@
-// Copyright 2009 Ryan Dahl <ry@tinyclouds.org>
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node_stat_watcher.h>
 
 #include <assert.h>
@@ -11,20 +31,13 @@ using namespace v8;
 
 Persistent<FunctionTemplate> StatWatcher::constructor_template;
 
-static Persistent<String> change_symbol;
-static Persistent<String> stop_symbol;
-
 void StatWatcher::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(StatWatcher::New);
   constructor_template = Persistent<FunctionTemplate>::New(t);
-  constructor_template->Inherit(EventEmitter::constructor_template);
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   constructor_template->SetClassName(String::NewSymbol("StatWatcher"));
-
-  change_symbol = NODE_PSYMBOL("change");
-  stop_symbol = NODE_PSYMBOL("stop");
 
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "start", StatWatcher::Start);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "stop", StatWatcher::Stop);
@@ -41,7 +54,7 @@ void StatWatcher::Callback(EV_P_ ev_stat *watcher, int revents) {
   Handle<Value> argv[2];
   argv[0] = Handle<Value>(BuildStatsObject(&watcher->attr));
   argv[1] = Handle<Value>(BuildStatsObject(&watcher->prev));
-  handler->Emit(change_symbol, 2, argv);
+  MakeCallback(handler->handle_, "onchange", 2, argv);
 }
 
 
@@ -93,7 +106,7 @@ Handle<Value> StatWatcher::Start(const Arguments& args) {
 Handle<Value> StatWatcher::Stop(const Arguments& args) {
   HandleScope scope;
   StatWatcher *handler = ObjectWrap::Unwrap<StatWatcher>(args.Holder());
-  handler->Emit(stop_symbol, 0, NULL);
+  MakeCallback(handler->handle_, "onstop", 0, NULL);
   handler->Stop();
   return Undefined();
 }

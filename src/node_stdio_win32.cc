@@ -1,9 +1,31 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node.h>
 #include <node_stdio.h>
 
 #include <v8.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <io.h>
 
 #include <platform_win32.h>
@@ -156,21 +178,28 @@ static Handle<Value> IsATTY(const Arguments& args) {
 /* Whether stdio is currently in raw mode */
 /* -1 means that it has not been set */
 static int rawMode = -1;
-
+static DWORD naturalMode = 0;
 
 static void setRawMode(int newMode) {
-  DWORD flags;
+  DWORD flags = 0;
   BOOL result;
+
+  if(rawMode == -1) {
+    GetConsoleMode((HANDLE)_get_osfhandle(STDIN_FILENO), &naturalMode);
+  }
+
+  flags |= (naturalMode & ENABLE_QUICK_EDIT_MODE);
+  flags |= flags ? ENABLE_EXTENDED_FLAGS : 0;
 
   if (newMode != rawMode) {
     if (newMode) {
       // raw input
-      flags = ENABLE_WINDOW_INPUT;
+      flags |= ENABLE_WINDOW_INPUT;
     } else {
       // input not raw, but still processing enough messages to make the
       // tty watcher work (this mode is not the windows default)
-      flags = ENABLE_ECHO_INPUT | ENABLE_INSERT_MODE | ENABLE_LINE_INPUT |
-          ENABLE_PROCESSED_INPUT | ENABLE_WINDOW_INPUT;
+      flags |= ENABLE_ECHO_INPUT | ENABLE_INSERT_MODE | ENABLE_LINE_INPUT |
+          ENABLE_EXTENDED_FLAGS | ENABLE_PROCESSED_INPUT | ENABLE_WINDOW_INPUT;
     }
 
     result = SetConsoleMode((HANDLE)_get_osfhandle(STDIN_FILENO), flags);
@@ -394,18 +423,19 @@ static Handle<Value> ClearLine(const Arguments& args) {
 
 
 /* TTY watcher data */
-bool tty_watcher_initialized = false;
 HANDLE tty_handle;
 HANDLE tty_wait_handle;
 void *tty_error_callback;
 void *tty_keypress_callback;
 void *tty_resize_callback;
-static ev_async tty_avail_notifier;
+static bool tty_watcher_initialized = false;
+static bool tty_watcher_active = false;
+static uv_async_t tty_avail_notifier;
 
 
 static void CALLBACK tty_want_poll(void *context, BOOLEAN didTimeout) {
   assert(!didTimeout);
-  ev_async_send(EV_DEFAULT_UC_ &tty_avail_notifier);
+  uv_async_send(&tty_avail_notifier);
 }
 
 
@@ -418,10 +448,11 @@ static void tty_watcher_arm() {
   HANDLE old_wait_handle = tty_wait_handle;
   tty_wait_handle = NULL;
 
-  if (ev_is_active(&tty_avail_notifier)) {
-    if (!RegisterWaitForSingleObject(&tty_wait_handle, tty_handle, tty_want_poll, NULL,
-        INFINITE, WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE))
-      ThrowException(ErrnoException(GetLastError(), "RegisterWaitForSingleObject"));
+  assert(tty_watcher_active);
+
+  if (!RegisterWaitForSingleObject(&tty_wait_handle, tty_handle, tty_want_poll, NULL,
+      INFINITE, WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE)) {
+    ThrowException(ErrnoException(GetLastError(), "RegisterWaitForSingleObject"));
   }
 
   if (old_wait_handle != NULL) {
@@ -443,17 +474,20 @@ static void tty_watcher_disarm() {
 
 
 static void tty_watcher_start() {
-  if (!ev_is_active(&tty_avail_notifier)) {
-    ev_async_start(EV_DEFAULT_UC_ &tty_avail_notifier);
+  assert(tty_watcher_initialized);
+  if (!tty_watcher_active) {
+    tty_watcher_active = true;
+    uv_ref(uv_default_loop());
     tty_watcher_arm();
   }
 }
 
 
 static void tty_watcher_stop() {
-  if (ev_is_active(&tty_avail_notifier)) {
+  if (tty_watcher_active) {
+    tty_watcher_active = false;
+    uv_unref(uv_default_loop());
     tty_watcher_disarm();
-    ev_async_stop(EV_DEFAULT_UC_ &tty_avail_notifier);
   }
 }
 
@@ -467,9 +501,9 @@ static inline void tty_emit_error(Handle<Value> err) {
 }
 
 
-static void tty_poll(EV_P_ ev_async *watcher, int revents) {
-  assert(watcher == &tty_avail_notifier);
-  assert(revents == EV_ASYNC);
+static void tty_poll(uv_async_t* handle, int status) {
+  assert(handle == &tty_avail_notifier);
+  assert(status == 0);
 
   HandleScope scope;
   TryCatch try_catch;
@@ -489,7 +523,7 @@ static void tty_poll(EV_P_ ev_async *watcher, int revents) {
   }
 
   for (i = numev; i > 0 &&
-      ev_is_active(EV_DEFAULT_UC_ &tty_avail_notifier); i--) {
+      tty_watcher_active; i--) {
     if (!ReadConsoleInputW(tty_handle, &input, 1, &read)) {
       tty_emit_error(ErrnoException(GetLastError(), "ReadConsoleInputW"));
       break;
@@ -540,7 +574,7 @@ static void tty_poll(EV_P_ ev_async *watcher, int revents) {
         j = k.wRepeatCount;
         do {
           (*callback)->Call(global, 2, argv);
-        } while (--j > 0 && ev_is_active(EV_DEFAULT_UC_ &tty_avail_notifier));
+        } while (--j > 0 && tty_watcher_active);
         break;
 
       case WINDOW_BUFFER_SIZE_EVENT:
@@ -553,7 +587,9 @@ static void tty_poll(EV_P_ ev_async *watcher, int revents) {
   }
 
   // Rearm the watcher
-  tty_watcher_arm();
+  if (tty_watcher_active) {
+    tty_watcher_arm();
+  }
 
   // Emit fatal errors and unhandled error events
   if (try_catch.HasCaught()) {
@@ -584,8 +620,6 @@ static Handle<Value> InitTTYWatcher(const Arguments& args) {
   tty_resize_callback = args[3]->IsFunction()
       ? cb_persist(args[3])
       : NULL;
-
-  ev_async_init(EV_DEFAULT_UC_ &tty_avail_notifier, tty_poll);
 
   tty_watcher_initialized = true;
   tty_wait_handle = NULL;
@@ -630,9 +664,34 @@ static Handle<Value> StopTTYWatcher(const Arguments& args) {
   return Undefined();
 }
 
+// This exists to prevent process.stdout from keeping the event loop alive.
+// It is only ever called in src/node.js during the initalization of
+// process.stdout and will fail if called more than once. We do not want to
+// expose uv_ref and uv_unref to javascript in general.
+// This should be removed in the future!
+static bool unref_called = false;
+static Handle<Value> Unref(const Arguments& args) {
+  HandleScope scope;
+
+  assert(unref_called == false);
+
+  //uv_unref(uv_default_loop());
+  unref_called = true;
+
+  return Null();
+}
+
 
 void Stdio::Initialize(v8::Handle<v8::Object> target) {
   init_scancode_table();
+  
+  uv_async_init(uv_default_loop(), &tty_avail_notifier, tty_poll);
+  uv_unref(uv_default_loop());
+
+  /* Set stdio streams to binary mode. */
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
 
   name_symbol = NODE_PSYMBOL("name");
   shift_symbol = NODE_PSYMBOL("shift");
@@ -659,6 +718,7 @@ void Stdio::Initialize(v8::Handle<v8::Object> target) {
   NODE_SET_METHOD(target, "destroyTTYWatcher", DestroyTTYWatcher);
   NODE_SET_METHOD(target, "startTTYWatcher", StartTTYWatcher);
   NODE_SET_METHOD(target, "stopTTYWatcher", StopTTYWatcher);
+  NODE_SET_METHOD(target, "unref", Unref);
 }
 
 

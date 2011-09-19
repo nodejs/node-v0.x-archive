@@ -1,3 +1,27 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 var util = require('util'),
@@ -22,21 +46,24 @@ chargen.listen(9000, ready);
 
 // Proxy to the chargen server.
 var proxy = http.createServer(function(req, res) {
-  var c = http.createClient(9000, 'localhost');
-
   var len = parseInt(req.headers['x-len'], 10);
   assert.ok(len > 0);
 
   var sent = 0;
 
 
-  c.addListener('error', function(e) {
+  function onError(e) {
     console.log('proxy client error. sent ' + sent);
     throw e;
-  });
+  }
 
-  var proxy_req = c.request(req.method, req.url, req.headers);
-  proxy_req.addListener('response', function(proxy_res) {
+  var proxy_req = http.request({
+    host:    'localhost',
+    port:    9000,
+    method:  req.method,
+    path:    req.url,
+    headers: req.headers
+  }, function(proxy_res) {
     res.writeHead(proxy_res.statusCode, proxy_res.headers);
 
     var count = 0;
@@ -53,7 +80,7 @@ var proxy = http.createServer(function(req, res) {
     });
 
   });
-
+  proxy_req.on('error', onError);
   proxy_req.end();
 });
 proxy.listen(9001, ready);
@@ -68,9 +95,12 @@ function call_chargen(list) {
 
     var recved = 0;
 
-    var req = http.createClient(9001, 'localhost').request('/', {'x-len': len});
-
-    req.addListener('response', function(res) {
+    var req = http.request({
+      port:    9001,
+      host:    'localhost',
+      path:    '/',
+      headers: {'x-len': len}
+    }, function(res) {
 
       res.addListener('data', function(d) {
         recved += d.length;
@@ -94,7 +124,7 @@ function call_chargen(list) {
   }
 }
 
-serversRunning = 0;
+var serversRunning = 0;
 function ready() {
   if (++serversRunning < 2) return;
   call_chargen([100, 1000, 10000, 100000, 1000000]);

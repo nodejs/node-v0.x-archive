@@ -28,7 +28,7 @@
 #include "v8.h"
 
 #include "code-stubs.h"
-#include "codegen-inl.h"
+#include "codegen.h"
 #include "debug.h"
 #include "deoptimizer.h"
 #include "disasm.h"
@@ -65,24 +65,24 @@ class V8NameConverter: public disasm::NameConverter {
   Code* code() const { return code_; }
  private:
   Code* code_;
+
+  EmbeddedVector<char, 128> v8_buffer_;
 };
 
 
 const char* V8NameConverter::NameOfAddress(byte* pc) const {
-  static v8::internal::EmbeddedVector<char, 128> buffer;
-
-  const char* name = Builtins::Lookup(pc);
+  const char* name = Isolate::Current()->builtins()->Lookup(pc);
   if (name != NULL) {
-    OS::SNPrintF(buffer, "%s  (%p)", name, pc);
-    return buffer.start();
+    OS::SNPrintF(v8_buffer_, "%s  (%p)", name, pc);
+    return v8_buffer_.start();
   }
 
   if (code_ != NULL) {
     int offs = static_cast<int>(pc - code_->instruction_start());
     // print as code offset, if it seems reasonable
     if (0 <= offs && offs < code_->instruction_size()) {
-      OS::SNPrintF(buffer, "%d  (%p)", offs, pc);
-      return buffer.start();
+      OS::SNPrintF(v8_buffer_, "%d  (%p)", offs, pc);
+      return v8_buffer_.start();
     }
   }
 
@@ -97,13 +97,16 @@ const char* V8NameConverter::NameInCode(byte* addr) const {
 }
 
 
-static void DumpBuffer(FILE* f, char* buff) {
+static void DumpBuffer(FILE* f, StringBuilder* out) {
   if (f == NULL) {
-    PrintF("%s", buff);
+    PrintF("%s\n", out->Finalize());
   } else {
-    fprintf(f, "%s", buff);
+    fprintf(f, "%s\n", out->Finalize());
   }
+  out->Reset();
 }
+
+
 
 static const int kOutBufferSize = 2048 + String::kMaxShortPrintLength;
 static const int kRelocInfoPosition = 57;
@@ -115,9 +118,11 @@ static int DecodeIt(FILE* f,
   NoHandleAllocation ha;
   AssertNoAllocation no_alloc;
   ExternalReferenceEncoder ref_encoder;
+  Heap* heap = HEAP;
 
   v8::internal::EmbeddedVector<char, 128> decode_buffer;
   v8::internal::EmbeddedVector<char, kOutBufferSize> out_buffer;
+  StringBuilder out(out_buffer.start(), out_buffer.length());
   byte* pc = begin;
   disasm::Disassembler d(converter);
   RelocIterator* it = NULL;
@@ -180,16 +185,11 @@ static int DecodeIt(FILE* f,
       }
     }
 
-    StringBuilder out(out_buffer.start(), out_buffer.length());
-
     // Comments.
     for (int i = 0; i < comments.length(); i++) {
-      out.AddFormatted("                  %s\n", comments[i]);
+      out.AddFormatted("                  %s", comments[i]);
+      DumpBuffer(f, &out);
     }
-
-    // Write out comments, resets outp so that we can format the next line.
-    DumpBuffer(f, out.Finalize());
-    out.Reset();
 
     // Instruction address and instruction offset.
     out.AddFormatted("%p  %4d  ", prev_pc, prev_pc - begin);
@@ -208,7 +208,7 @@ static int DecodeIt(FILE* f,
         out.AddPadding(' ', kRelocInfoPosition - out.position());
       } else {
         // Additional reloc infos are printed on separate lines.
-        out.AddFormatted("\n");
+        DumpBuffer(f, &out);
         out.AddPadding(' ', kRelocInfoPosition);
       }
 
@@ -223,7 +223,7 @@ static int DecodeIt(FILE* f,
         HeapStringAllocator allocator;
         StringStream accumulator(&allocator);
         relocinfo.target_object()->ShortPrint(&accumulator);
-        SmartPointer<const char> obj_name = accumulator.ToCString();
+        SmartArrayPointer<const char> obj_name = accumulator.ToCString();
         out.AddFormatted("    ;; object: %s", *obj_name);
       } else if (rmode == RelocInfo::EXTERNAL_REFERENCE) {
         const char* reference_name =
@@ -247,17 +247,14 @@ static int DecodeIt(FILE* f,
             PropertyType type = code->type();
             out.AddFormatted(", %s", Code::PropertyType2String(type));
           }
-          if (code->ic_in_loop() == IN_LOOP) {
-            out.AddFormatted(", in_loop");
-          }
           if (kind == Code::CALL_IC || kind == Code::KEYED_CALL_IC) {
             out.AddFormatted(", argc = %d", code->arguments_count());
           }
         } else if (kind == Code::STUB) {
           // Reverse lookup required as the minor key cannot be retrieved
           // from the code object.
-          Object* obj = Heap::code_stubs()->SlowReverseLookup(code);
-          if (obj != Heap::undefined_value()) {
+          Object* obj = heap->code_stubs()->SlowReverseLookup(code);
+          if (obj != heap->undefined_value()) {
             ASSERT(obj->IsSmi());
             // Get the STUB key and extract major and minor key.
             uint32_t key = Smi::cast(obj)->value();
@@ -281,7 +278,11 @@ static int DecodeIt(FILE* f,
         } else {
           out.AddFormatted(" %s", Code::Kind2String(kind));
         }
-      } else if (rmode == RelocInfo::RUNTIME_ENTRY) {
+        if (rmode == RelocInfo::CODE_TARGET_WITH_ID) {
+          out.AddFormatted(" (id = %d)", static_cast<int>(relocinfo.data()));
+        }
+      } else if (rmode == RelocInfo::RUNTIME_ENTRY &&
+                 Isolate::Current()->deoptimizer_data() != NULL) {
         // A runtime entry reloinfo might be a deoptimization bailout.
         Address addr = relocinfo.target_address();
         int id = Deoptimizer::GetDeoptimizationId(addr, Deoptimizer::EAGER);
@@ -294,9 +295,18 @@ static int DecodeIt(FILE* f,
         out.AddFormatted("    ;; %s", RelocInfo::RelocModeName(rmode));
       }
     }
-    out.AddString("\n");
-    DumpBuffer(f, out.Finalize());
-    out.Reset();
+    DumpBuffer(f, &out);
+  }
+
+  // Emit comments following the last instruction (if any).
+  if (it != NULL) {
+    for ( ; !it->done(); it->next()) {
+      if (RelocInfo::IsComment(it->rinfo()->rmode())) {
+        out.AddFormatted("                  %s",
+                         reinterpret_cast<const char*>(it->rinfo()->data()));
+        DumpBuffer(f, &out);
+      }
+    }
   }
 
   delete it;

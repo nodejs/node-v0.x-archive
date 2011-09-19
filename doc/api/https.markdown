@@ -4,7 +4,15 @@ HTTPS is the HTTP protocol over TLS/SSL. In Node this is implemented as a
 separate module.
 
 ## https.Server
-## https.createServer
+
+This class is a subclass of `tls.Server` and emits events same as
+`http.Server`. See `http.Server` for more information.
+
+## https.createServer(options, [requestListener])
+
+Returns a new HTTPS web server object. The `options` is similer to
+`tls.createServer()`. The `requestListener` is a function which is
+automatically added to the `'request'` event.
 
 Example:
 
@@ -52,6 +60,57 @@ Example:
     req.on('error', function(e) {
       console.error(e);
     });
+
+The options argument has the following options
+
+- host: IP or domain of host to make request to. Defaults to `'localhost'`.
+- port: port of host to request to. Defaults to 443.
+- path: Path to request. Default `'/'`.
+- method: HTTP request method. Default `'GET'`.
+
+The following options can also be specified.
+However, a global [Agent](http.html#http.Agent) cannot be used. 
+
+- key: Private key to use for SSL. Default `null`.
+- cert: Public x509 certificate to use. Default `null`.
+- ca: An authority certificate or array of authority certificates to check
+  the remote host against.
+
+In order to specify these options, use a custom `Agent`.
+
+Example:
+
+    var options = {
+      host: 'encrypted.google.com',
+      port: 443,
+      path: '/',
+      method: 'GET',
+      key: fs.readFileSync('test/fixtures/keys/agent2-key.pem'),
+      cert: fs.readFileSync('test/fixtures/keys/agent2-cert.pem')
+    };
+    options.agent = new https.Agent(options);
+
+    var req = https.request(options, function(res) {
+      ...
+    }
+
+Or does not use an `Agent`.
+
+Example:
+
+    var options = {
+      host: 'encrypted.google.com',
+      port: 443,
+      path: '/',
+      method: 'GET',
+      key: fs.readFileSync('test/fixtures/keys/agent2-key.pem'),
+      cert: fs.readFileSync('test/fixtures/keys/agent2-cert.pem'),
+      agent: false
+    };
+
+    var req = https.request(options, function(res) {
+      ...
+    }
 
 ## https.get(options, callback)
 

@@ -26,14 +26,18 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 {
+  'includes': ['../build/common.gypi'],
+  'variables': {
+    'console%': '',
+  },
   'targets': [
     {
       'target_name': 'd8',
       'type': 'executable',
       'dependencies': [
-        'd8_js2c#host',
         '../tools/gyp/v8.gyp:v8',
       ],
+      # Generated source files need this explicitly:
       'include_dirs+': [
         '../src',
       ],
@@ -42,24 +46,51 @@
       ],
       'sources': [
         'd8.cc',
-        'd8-debug.cc',
-        '<(SHARED_INTERMEDIATE_DIR)/d8-js.cc',
       ],
       'conditions': [
-        [ 'OS=="linux" or OS=="mac" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
-          'sources': [ 'd8-posix.cc', ]
+        [ 'component!="shared_library"', {
+          'sources': [ 'd8-debug.cc', '<(SHARED_INTERMEDIATE_DIR)/d8-js.cc', ],
+          'conditions': [
+            [ 'want_separate_host_toolset==1', {
+              'dependencies': [
+                'd8_js2c#host',
+              ],
+            }, {
+              'dependencies': [
+                'd8_js2c',
+              ],
+            }],
+            [ 'console=="readline"', {
+              'libraries': [ '-lreadline', ],
+              'sources': [ 'd8-readline.cc' ],
+            }],
+            [ '(OS=="linux" or OS=="mac" or OS=="freebsd" \
+              or OS=="openbsd" or OS=="solaris")', {
+              'sources': [ 'd8-posix.cc', ]
+            }],
+            [ 'OS=="win"', {
+              'sources': [ 'd8-windows.cc', ]
+            }],
+          ],
         }],
       ],
     },
     {
       'target_name': 'd8_js2c',
       'type': 'none',
-      'toolsets': ['host'],
       'variables': {
         'js_files': [
           'd8.js',
+          'macros.py',
         ],
       },
+      'conditions': [
+        [ 'want_separate_host_toolset==1', {
+          'toolsets': ['host'],
+        }, {
+          'toolsets': ['target'],
+        }]
+      ],
       'actions': [
         {
           'action_name': 'd8_js2c',
@@ -69,13 +100,13 @@
           ],
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/d8-js.cc',
-            '<(SHARED_INTERMEDIATE_DIR)/d8-js-empty.cc',
           ],
           'action': [
             'python',
             '../tools/js2c.py',
             '<@(_outputs)',
             'D8',
+            'off',  # compress startup data
             '<@(js_files)'
           ],
         },

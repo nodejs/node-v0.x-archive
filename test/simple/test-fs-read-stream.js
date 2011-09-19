@@ -1,3 +1,27 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -21,8 +45,13 @@ file.addListener('open', function(fd) {
   callbacks.open++;
   assert.equal('number', typeof fd);
   assert.ok(file.readable);
-});
 
+  // GH-535
+  file.pause();
+  file.resume();
+  file.pause();
+  file.resume();
+});
 
 file.addListener('data', function(data) {
   assert.ok(data instanceof Buffer);
@@ -95,19 +124,19 @@ file4.addListener('end', function(data) {
   assert.equal(contentRead, 'yz');
 });
 
-try {
-  fs.createReadStream(rangeFile, {start: 10, end: 2});
-  assert.fail('Creating a ReadStream with incorrect range limits must throw.');
-} catch (e) {
-  assert.equal(e.message, 'start must be <= end');
-}
+var file5 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1});
+file5.data = '';
+file5.addListener('data', function(data) {
+  file5.data += data.toString('utf-8');
+});
+file5.addListener('end', function() {
+  assert.equal(file5.data, 'yz\n');
+});
 
-try {
-  fs.createReadStream(rangeFile, {start: 2});
-  assert.fail('Creating a ReadStream with a only one range limits must throw.');
-} catch (e) {
-  assert.equal(e.message, 'Both start and end are needed for range streaming.');
-}
+
+assert.throws(function() {
+  fs.createReadStream(rangeFile, {start: 10, end: 2});
+}, /start must be <= end/);
 
 var stream = fs.createReadStream(rangeFile, { start: 0, end: 0 });
 stream.data = '';

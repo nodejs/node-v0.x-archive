@@ -1,4 +1,24 @@
-// Copyright 2009 Ryan Dahl <ry@tinyclouds.org>
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node_child_process.h>
 #include <node.h>
 
@@ -14,6 +34,9 @@
 #if defined(__FreeBSD__ ) || defined(__OpenBSD__)
 #include <sys/wait.h>
 #endif
+
+#include <sys/socket.h> /* socketpair */
+#include <sys/un.h>
 
 # ifdef __APPLE__
 # include <crt_externs.h>
@@ -133,7 +156,7 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
   // Copy fourth argument, args[3], into a c-string array called env.
   Local<Array> env_handle = Local<Array>::Cast(args[3]);
   int envc = env_handle->Length();
-  char **env = new char*[envc+1]; // heap allocated to detect errors
+  char **env = new char*[envc + 1]; // heap allocated to detect errors
   env[envc] = NULL;
   for (int i = 0; i < envc; i++) {
     String::Utf8Value pair(env_handle->Get(Integer::New(i))->ToString());
@@ -144,7 +167,13 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
   if (args[4]->IsArray()) {
     // Set the custom file descriptor values (if any) for the child process
     Local<Array> custom_fds_handle = Local<Array>::Cast(args[4]);
+
     int custom_fds_len = custom_fds_handle->Length();
+    // Bound by 3.
+    if (custom_fds_len > 3) {
+      custom_fds_len = 3;
+    }
+
     for (int i = 0; i < custom_fds_len; i++) {
       if (custom_fds_handle->Get(i)->IsUndefined()) continue;
       Local<Integer> fd = custom_fds_handle->Get(i)->ToInteger();
@@ -186,7 +215,7 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
       String::New("setgid argument must be a number or a string")));
   }
 
-
+  int channel_fd = -1;
 
   int r = child->Spawn(argv[0],
                        argv,
@@ -198,7 +227,8 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
                        custom_uid,
                        custom_uname,
                        custom_gid,
-                       custom_gname);
+                       custom_gname,
+                       &channel_fd);
 
   if (custom_uname != NULL) free(custom_uname);
   if (custom_gname != NULL) free(custom_gname);
@@ -215,7 +245,8 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
     return ThrowException(Exception::Error(String::New("Error spawning")));
   }
 
-  Local<Array> a = Array::New(3);
+
+  Local<Array> a = Array::New(channel_fd >= 0 ? 4 : 3);
 
   assert(fds[0] >= 0);
   a->Set(0, Integer::New(fds[0])); // stdin
@@ -223,6 +254,10 @@ Handle<Value> ChildProcess::Spawn(const Arguments& args) {
   a->Set(1, Integer::New(fds[1])); // stdout
   assert(fds[2] >= 0);
   a->Set(2, Integer::New(fds[2])); // stderr
+
+  if (channel_fd >= 0) {
+    a->Set(3, Integer::New(channel_fd));
+  }
 
   return scope.Close(a);
 }
@@ -271,6 +306,8 @@ void ChildProcess::Stop() {
 // Note that args[0] must be the same as the "file" param.  This is an
 // execvp() requirement.
 //
+// TODO: The arguments are rediculously long. Needs to be put into a struct.
+//
 int ChildProcess::Spawn(const char *file,
                         char *const args[],
                         const char *cwd,
@@ -281,7 +318,8 @@ int ChildProcess::Spawn(const char *file,
                         int custom_uid,
                         char *custom_uname,
                         int custom_gid,
-                        char *custom_gname) {
+                        char *custom_gname,
+                        int* channel) {
   HandleScope scope;
   assert(pid_ == -1);
   assert(!ev_is_active(&child_watcher_));
@@ -312,11 +350,37 @@ int ChildProcess::Spawn(const char *file,
     SetCloseOnExec(stderr_pipe[1]);
   }
 
+
+  // The channel will be used by js-land "fork()" for a little JSON channel.
+  // The pointer is used to pass one end of the socket pair back to the
+  // parent.
+  // channel_fds[0] is for the parent
+  // channel_fds[1] is for the child
+  int channel_fds[2] = { -1, -1 };
+
+#define NODE_CHANNEL_FD "NODE_CHANNEL_FD"
+
+  for (int i = 0; env[i]; i++) {
+    if (!strncmp(env[i], NODE_CHANNEL_FD, sizeof NODE_CHANNEL_FD - 1)) {
+      if (socketpair(AF_UNIX, SOCK_STREAM, 0, channel_fds)) {
+        perror("socketpair()");
+        return -1;
+      }
+
+      assert(channel_fds[0] >= 0 && channel_fds[1] >= 0);
+
+      SetNonBlocking(channel_fds[0]);
+      SetNonBlocking(channel_fds[1]);
+      // Write over the FILLMEIN :D
+      sprintf(env[i], NODE_CHANNEL_FD "=%d", channel_fds[1]);
+    }
+  }
+
   // Save environ in the case that we get it clobbered
   // by the child process.
   char **save_our_env = environ;
 
-  switch (pid_ = vfork()) {
+  switch (pid_ = fork()) {
     case -1:  // Error.
       Stop();
       return -4;
@@ -326,6 +390,36 @@ int ChildProcess::Spawn(const char *file,
         perror("setsid");
         _exit(127);
       }
+
+      if (custom_fds[0] == -1) {
+        close(stdin_pipe[1]);  // close write end
+        dup2(stdin_pipe[0],  STDIN_FILENO);
+      } else {
+        ResetFlags(custom_fds[0]);
+        dup2(custom_fds[0], STDIN_FILENO);
+      }
+
+      if (custom_fds[1] == -1) {
+        close(stdout_pipe[0]);  // close read end
+        dup2(stdout_pipe[1], STDOUT_FILENO);
+      } else {
+        ResetFlags(custom_fds[1]);
+        dup2(custom_fds[1], STDOUT_FILENO);
+      }
+
+      if (custom_fds[2] == -1) {
+        close(stderr_pipe[0]);  // close read end
+        dup2(stderr_pipe[1], STDERR_FILENO);
+      } else {
+        ResetFlags(custom_fds[2]);
+        dup2(custom_fds[2], STDERR_FILENO);
+      }
+
+      if (strlen(cwd) && chdir(cwd)) {
+        perror("chdir()");
+        _exit(127);
+      }
+
 
       static char buf[PATH_MAX + 1];
 
@@ -379,34 +473,10 @@ int ChildProcess::Spawn(const char *file,
         _exit(127);
       }
 
-
-      if (custom_fds[0] == -1) {
-        close(stdin_pipe[1]);  // close write end
-        dup2(stdin_pipe[0],  STDIN_FILENO);
-      } else {
-        ResetFlags(custom_fds[0]);
-        dup2(custom_fds[0], STDIN_FILENO);
-      }
-
-      if (custom_fds[1] == -1) {
-        close(stdout_pipe[0]);  // close read end
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-      } else {
-        ResetFlags(custom_fds[1]);
-        dup2(custom_fds[1], STDOUT_FILENO);
-      }
-
-      if (custom_fds[2] == -1) {
-        close(stderr_pipe[0]);  // close read end
-        dup2(stderr_pipe[1], STDERR_FILENO);
-      } else {
-        ResetFlags(custom_fds[2]);
-        dup2(custom_fds[2], STDERR_FILENO);
-      }
-
-      if (strlen(cwd) && chdir(cwd)) {
-        perror("chdir()");
-        _exit(127);
+      // Close the parent's end of the channel.
+      if (channel_fds[0] >= 0) {
+        close(channel_fds[0]);
+        channel_fds[0] = -1;
       }
 
       environ = env;
@@ -448,6 +518,17 @@ int ChildProcess::Spawn(const char *file,
     SetNonBlocking(stderr_pipe[0]);
   } else {
     stdio_fds[2] = custom_fds[2];
+  }
+
+  // Close the child's end of the channel.
+  if (channel_fds[1] >= 0) {
+    close(channel_fds[1]);
+    channel_fds[1] = -1;
+    assert(channel_fds[0] >= 0);
+    assert(channel);
+    *channel = channel_fds[0];
+  } else {
+    *channel = -1;
   }
 
   return 0;

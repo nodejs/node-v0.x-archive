@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "node.h"
 #include "platform.h"
 
@@ -15,12 +36,25 @@
 #include <stdlib.h> // free
 #include <string.h> // strdup
 
+/* GetInterfaceAddresses */
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <errno.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+
+#if HAVE_MONOTONIC_CLOCK
+#include <time.h>
+#endif
+
 namespace node {
 
 using namespace v8;
 
 static char buf[MAXPATHLEN + 1];
 static char *process_title;
+double Platform::prog_start_time = Platform::GetUptime();
 
 
 char** Platform::SetupArgs(int argc, char *argv[]) {
@@ -30,9 +64,15 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
 
 
 void Platform::SetProcessTitle(char *title) {
+#ifdef PR_SET_NAME
   if (process_title) free(process_title);
   process_title = strdup(title);
   prctl(PR_SET_NAME, process_title);
+#else
+  Local<Value> ex = Exception::Error(
+    String::New("'process.title' is not writable on your system, sorry."));
+  ThrowException(ex); // Safe, this method is only called from the main thread.
+#endif
 }
 
 
@@ -141,13 +181,6 @@ error:
 }
 
 
-int Platform::GetExecutablePath(char* buffer, size_t* size) {
-  *size = readlink("/proc/self/exe", buffer, *size - 1);
-  if (*size <= 0) return -1;
-  buffer[*size] = '\0';
-  return 0;
-}
-
 int Platform::GetCPUInfo(Local<Array> *cpus) {
   HandleScope scope;
   Local<Object> cpuinfo;
@@ -238,14 +271,22 @@ double Platform::GetTotalMemory() {
   return pages * pagesize;
 }
 
-double Platform::GetUptime() {
+double Platform::GetUptimeImpl() {
+#if HAVE_MONOTONIC_CLOCK
+  struct timespec now;
+  if (0 == clock_gettime(CLOCK_MONOTONIC, &now)) {
+    double uptime = now.tv_sec;
+    uptime += (double)now.tv_nsec / 1000000000.0;
+    return uptime;
+  }
+  return -1;
+#else
   struct sysinfo info;
-
   if (sysinfo(&info) < 0) {
     return -1;
   }
-
   return static_cast<double>(info.uptime);
+#endif
 }
 
 int Platform::GetLoadAvg(Local<Array> *loads) {
@@ -260,5 +301,83 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 
   return 0;
 }
+
+
+bool IsInternal(struct ifaddrs* addr) {
+  return addr->ifa_flags & IFF_UP &&
+         addr->ifa_flags & IFF_RUNNING &&
+         addr->ifa_flags & IFF_LOOPBACK;
+}
+
+
+Handle<Value> Platform::GetInterfaceAddresses() {
+  HandleScope scope;
+  struct ::ifaddrs *addrs, *ent;
+  struct ::sockaddr_in *in4;
+  struct ::sockaddr_in6 *in6;
+  char ip[INET6_ADDRSTRLEN];
+  Local<Object> ret, o;
+  Local<String> name, ipaddr, family;
+  Local<Array> ifarr;
+
+  if (getifaddrs(&addrs) != 0) {
+    return ThrowException(ErrnoException(errno, "getifaddrs"));
+  }
+
+  ret = Object::New();
+
+  for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
+    bzero(&ip, sizeof (ip));
+    if (!(ent->ifa_flags & IFF_UP && ent->ifa_flags & IFF_RUNNING)) {
+      continue;
+    }
+
+    if (ent->ifa_addr == NULL) {
+      continue;
+    }
+
+    /*
+     * On Linux getifaddrs returns information related to the raw underlying
+     * devices. We're not interested in this information.
+     */
+    if (ent->ifa_addr->sa_family == PF_PACKET)
+	    continue;
+
+    name = String::New(ent->ifa_name);
+    if (ret->Has(name)) {
+      ifarr = Local<Array>::Cast(ret->Get(name));
+    } else {
+      ifarr = Array::New();
+      ret->Set(name, ifarr);
+    }
+
+    if (ent->ifa_addr->sa_family == AF_INET6) {
+      in6 = (struct sockaddr_in6 *)ent->ifa_addr;
+      inet_ntop(AF_INET6, &(in6->sin6_addr), ip, INET6_ADDRSTRLEN);
+      family = String::New("IPv6");
+    } else if (ent->ifa_addr->sa_family == AF_INET) {
+      in4 = (struct sockaddr_in *)ent->ifa_addr;
+      inet_ntop(AF_INET, &(in4->sin_addr), ip, INET6_ADDRSTRLEN);
+      family = String::New("IPv4");
+    } else {
+      (void) strncpy(ip, "<unknown sa family>", INET6_ADDRSTRLEN);
+      family = String::New("<unknown>");
+    }
+
+    o = Object::New();
+    o->Set(String::New("address"), String::New(ip));
+    o->Set(String::New("family"), family);
+    o->Set(String::New("internal"), ent->ifa_flags & IFF_LOOPBACK ?
+	True() : False());
+
+    ifarr->Set(ifarr->Length(), o);
+
+  }
+
+  freeifaddrs(addrs);
+
+  return scope.Close(ret);
+}
+
 
 }  // namespace node

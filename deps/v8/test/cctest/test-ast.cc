@@ -35,11 +35,12 @@
 using namespace v8::internal;
 
 TEST(List) {
+  v8::internal::V8::Initialize(NULL);
   List<AstNode*>* list = new List<AstNode*>(0);
   CHECK_EQ(0, list->length());
 
-  ZoneScope zone_scope(DELETE_ON_EXIT);
-  AstNode* node = new EmptyStatement();
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
+  AstNode* node = new(ZONE) EmptyStatement();
   list->Add(node);
   CHECK_EQ(1, list->length());
   CHECK_EQ(node, list->at(0));
@@ -54,15 +55,4 @@ TEST(List) {
   list->Clear();
   CHECK_EQ(0, list->length());
   delete list;
-}
-
-
-TEST(DeleteEmpty) {
-  {
-    List<int>* list = new List<int>(0);
-    delete list;
-  }
-  {
-    List<int> list(0);
-  }
 }

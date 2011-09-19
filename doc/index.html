@@ -9,8 +9,14 @@
     </style>
     <script type="text/javascript" src="sh_main.js"></script>
     <script type="text/javascript" src="sh_javascript.min.js"></script>
+    <link type="image/x-icon" rel="icon" href="favicon.ico" />
+    <link type="image/x-icon" rel="shortcut icon" href="favicon.ico" />
     <link type="text/css" rel="stylesheet" href="pipe.css" />
     <link type="text/css" rel="stylesheet" href="sh_vim-dark.css" />
+    <link rel="alternate"
+          type="application/rss+xml"
+          title="node blog"
+          href="http://feeds.feedburner.com/nodejs/123123123"/>
     <meta http-equiv="content-type" content="text/html; charset=utf-8" />
     <title>node.js</title>
   </head>
@@ -18,16 +24,24 @@
     <div id="toc">
       <ol>
         <li><a href="#download">Download</a></li>
-        <li><a href="https://github.com/joyent/node/raw/master/ChangeLog">ChangeLog</a></li>
+        <li><a href="https://github.com/joyent/node/wiki/ChangeLog">ChangeLog</a></li>
         <li><a href="#about">About</a></li>
-        <li><a href="http://nodejs.org/docs/v0.4.1/api">v0.4.1 docs</a></li>
+        <li><a href="http://nodejs.org/docs/v0.4.12/api">v0.4.12 docs</a></li>
+        <li><a href="http://nodejs.org/docs/v0.5.7/api">v0.5.7 docs</a></li>
         <br/>
-        <li><B><a href="https://github.com/joyent/node/wiki">Wiki</a></B></li>
+        <li><a href="https://github.com/joyent/node/wiki">Wiki</a></li>
+        <li><a href="http://blog.nodejs.org/">Blog</a></li>
+        <li><a href="https://github.com/joyent/node/wiki/Community">Community</a></li>
+        <li><a href="http://chat.nodejs.org/">Demo</a></li>
+        <li><a href="/logos/">Logos</a></li>
+        <li><a href="http://jobs.nodejs.org/">Jobs</a></li>
+        <ol><!-- JOBS --><!-- JOBS --></ol>
       </ol>
     </div>
     <div id="content">
 
       <!-- <h1><a href="http://nodejs.org/">Node</a></h1> -->
+      <br /><br />
       <img id="logo" src="logo.png" alt="node.js"/>
 
       <p id="introduction">
@@ -45,8 +59,8 @@ var http = require('http');
 http.createServer(function (req, res) {
   res.writeHead(200, {'Content-Type': 'text/plain'});
   res.end('Hello World\n');
-}).listen(8124, "127.0.0.1");
-console.log('Server running at http://127.0.0.1:8124/');
+}).listen(1337, "127.0.0.1");
+console.log('Server running at http://127.0.0.1:1337/');
 </pre>
 
       <p>
@@ -56,10 +70,10 @@ console.log('Server running at http://127.0.0.1:8124/');
       </p>
       <pre class="sh_none">
 % node example.js
-Server running at http://127.0.0.1:8124/</pre>
+Server running at http://127.0.0.1:1337/</pre>
 
       <p>
-        Here is an example of a simple TCP server which listens on port 8124
+        Here is an example of a simple TCP server which listens on port 1337
         and echoes whatever you send it:
       </p>
 
@@ -69,9 +83,9 @@ var net = require('net');
 var server = net.createServer(function (socket) {
   socket.write("Echo server\r\n");
   socket.pipe(socket);
-})
+});
 
-server.listen(8124, "127.0.0.1");
+server.listen(1337, "127.0.0.1");
 </pre>
 
       <p>
@@ -84,17 +98,31 @@ server.listen(8124, "127.0.0.1");
         Go to <a href="https://github.com/joyent/node/wiki">the Wiki</a> for lots more information.
       </p>
 
+      <h2 id="video">Introduction</h2>
+
+      <iframe title="YouTube video player" width="640" height="390"
+        src="http://www.youtube.com/embed/jo_B4LTHi3I" frameborder="0"
+        allowfullscreen></iframe>
+
       <h2 id="download">Download</h2>
 
       <p>
         <a href="http://github.com/joyent/node/tree/master">git repo</a>
       </p>
 
-      <p>
-        2011.02.19
-        <a href="http://nodejs.org/dist/node-v0.4.1.tar.gz">node-v0.4.1.tar.gz</a>
-        (<a href="http://nodejs.org/docs/v0.4.1/api/index.html">Documentation</a>)
-      </p>
+      <p>2011.09.15 v0.4.12 (stable)
+      <ul class="release">
+        <li><a href="http://nodejs.org/dist/node-v0.4.12.tar.gz"><code>node-v0.4.12.tar.gz</code> Source Code</a>
+        <li><a href="http://nodejs.org/docs/v0.4.12/api/index.html">Documentation</a>
+      </ul>
+
+      <p>2011.09.16 v0.5.7 (unstable)
+      <ul class="release">
+        <li><a href="http://nodejs.org/dist/v0.5.7/node-v0.5.7.tar.gz"><code>node-v0.5.7.tar.gz</code> Source code</a>
+        <li><a href="http://nodejs.org/dist/v0.5.7/node.exe"><code>node.exe</code> Windows executable</a>
+        <li><a href="http://nodejs.org/docs/v0.5.7/api/index.html">Documentation</a>
+      </ul>
+
 
       <p>Historical: <a href="http://nodejs.org/dist">versions</a>, <a href="http://nodejs.org/docs">docs</a></p>
 
@@ -166,13 +194,8 @@ server.listen(8124, "127.0.0.1");
         But what about multiple-processor concurrency? Aren't threads
         necessary to scale programs to multi-core computers?
         </i>
-        Processes are necessary to scale to multi-core computers, not
-        memory-sharing threads. The fundamentals of scalable systems are
-        fast networking and non-blocking design&mdash;the rest is message
-        passing.  In future versions, Node will be able to fork new
-        processes (using the <a
-        href="http://www.whatwg.org/specs/web-workers/current-work/"> Web
-        Workers API </a>) which fits well into the current design.
+        You can start new processes via <code>child_process.fork()</code>
+        these other processes will be scheduled in parallel.
       </p>
 
       <p>
@@ -199,6 +222,10 @@ server.listen(8124, "127.0.0.1");
 
     <div style="clear: both; font-size: 8pt">
       Copyright 2010 Joyent, Inc
+      <br/>
+      Node.js is a trademark of Joyent, Inc.
+      See the <a href="trademark-policy.pdf">trademark policy</a>
+      for more information.
     </div>
 
     <script type="text/javascript">

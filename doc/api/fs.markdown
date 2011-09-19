@@ -9,6 +9,9 @@ The arguments passed to the completion callback depend on the method, but the
 first argument is always reserved for an exception. If the operation was
 completed successfully, then the first argument will be `null` or `undefined`.
 
+When using the synchronous form any exceptions are immediately thrown.
+You can use try/catch to handle exceptions or allow them to bubble up.
+
 Here is an example of the asynchronous version:
 
     var fs = require('fs');
@@ -52,6 +55,9 @@ In busy processes, the programmer is _strongly encouraged_ to use the
 asynchronous versions of these calls. The synchronous versions will block
 the entire process until they complete--halting all connections.
 
+Relative path to filename can be used, remember however that this path will be relative
+to `process.cwd()`.
+
 ### fs.rename(path1, path2, [callback])
 
 Asynchronous rename(2). No arguments other than a possible exception are given
@@ -70,6 +76,33 @@ given to the completion callback.
 
 Synchronous ftruncate(2).
 
+### fs.chown(path, uid, gid, [callback])
+
+Asynchronous chown(2). No arguments other than a possible exception are given
+to the completion callback.
+
+### fs.chownSync(path, uid, gid)
+
+Synchronous chown(2).
+
+### fs.fchown(path, uid, gid, [callback])
+
+Asynchronous fchown(2). No arguments other than a possible exception are given
+to the completion callback.
+
+### fs.fchownSync(path, uid, gid)
+
+Synchronous fchown(2).
+
+### fs.lchown(path, uid, gid, [callback])
+
+Asynchronous lchown(2). No arguments other than a possible exception are given
+to the completion callback.
+
+### fs.lchownSync(path, uid, gid)
+
+Synchronous lchown(2).
+
 ### fs.chmod(path, mode, [callback])
 
 Asynchronous chmod(2). No arguments other than a possible exception are given
@@ -79,10 +112,28 @@ to the completion callback.
 
 Synchronous chmod(2).
 
+### fs.fchmod(fd, mode, [callback])
+
+Asynchronous fchmod(2). No arguments other than a possible exception
+are given to the completion callback.
+
+### fs.fchmodSync(path, mode)
+
+Synchronous fchmod(2).
+
+### fs.lchmod(fd, mode, [callback])
+
+Asynchronous lchmod(2). No arguments other than a possible exception
+are given to the completion callback.
+
+### fs.lchmodSync(path, mode)
+
+Synchronous lchmod(2).
+
 ### fs.stat(path, [callback])
 
 Asynchronous stat(2). The callback gets two arguments `(err, stats)` where
-`stats` is a `fs.Stats` object. It looks like this:
+`stats` is a [`fs.Stats`](#fs.Stats) object. It looks like this:
 
     { dev: 2049,
       ino: 305352,
@@ -98,19 +149,20 @@ Asynchronous stat(2). The callback gets two arguments `(err, stats)` where
       mtime: '2009-06-29T11:11:40Z',
       ctime: '2009-06-29T11:11:40Z' }
 
-See the `fs.Stats` section below for more information.
+See the [fs.Stats](#fs.Stats) section below for more information.
 
 ### fs.lstat(path, [callback])
 
 Asynchronous lstat(2). The callback gets two arguments `(err, stats)` where
-`stats` is a `fs.Stats` object. lstat() is identical to stat(), except that if
-path is a symbolic link, then the link itself is stat-ed, not the file that it
+`stats` is a `fs.Stats` object. `lstat()` is identical to `stat()`, except that if
+`path` is a symbolic link, then the link itself is stat-ed, not the file that it
 refers to.
 
 ### fs.fstat(fd, [callback])
 
 Asynchronous fstat(2). The callback gets two arguments `(err, stats)` where
-`stats` is a `fs.Stats` object.
+`stats` is a `fs.Stats` object. `fstat()` is identical to `stat()`, except that
+the file to be stat-ed is specified by the file descriptor `fd`.
 
 ### fs.statSync(path)
 
@@ -145,16 +197,16 @@ Synchronous symlink(2).
 ### fs.readlink(path, [callback])
 
 Asynchronous readlink(2). The callback gets two arguments `(err,
-resolvedPath)`.
+linkString)`.
 
 ### fs.readlinkSync(path)
 
-Synchronous readlink(2). Returns the resolved path.
+Synchronous readlink(2). Returns the symbolic link's string value.
 
 ### fs.realpath(path, [callback])
 
 Asynchronous realpath(2).  The callback gets two arguments `(err,
-resolvedPath)`.
+resolvedPath)`.  May use `process.cwd` to resolve relative paths.
 
 ### fs.realpathSync(path)
 
@@ -209,12 +261,51 @@ Synchronous close(2).
 
 ### fs.open(path, flags, [mode], [callback])
 
-Asynchronous file open. See open(2). Flags can be 'r', 'r+', 'w', 'w+', 'a',
-or 'a+'. `mode` defaults to 0666. The callback gets two arguments `(err, fd)`.
+Asynchronous file open. See open(2). `flags` can be:
+
+* `'r'` - Open file for reading.
+An exception occurs if the file does not exist.
+
+* `'r+'` - Open file for reading and writing. 
+An exception occurs if the file does not exist.
+
+* `'w'` - Open file for writing.
+The file is created (if it does not exist) or truncated (if it exists).
+
+* `'w+'` - Open file for reading and writing.
+The file is created (if it does not exist) or truncated (if it exists).
+
+* `'a'` - Open file for appending.
+The file is created if it does not exist.
+
+* `'a+'` - Open file for reading and appending.
+The file is created if it does not exist.
+
+`mode` defaults to `0666`. The callback gets two arguments `(err, fd)`.
 
 ### fs.openSync(path, flags, [mode])
 
 Synchronous open(2).
+
+### fs.utimes(path, atime, mtime, callback)
+### fs.utimesSync(path, atime, mtime)
+
+Change file timestamps.
+
+### fs.futimes(path, atime, mtime, callback)
+### fs.futimesSync(path, atime, mtime)
+
+Change file timestamps with the difference that if filename refers to a
+symbolic link, then the link is not dereferenced.
+
+### fs.fsync(fd, callback)
+
+Asynchronous fsync(2). No arguments other than a possible exception are given
+to the completion callback.
+
+### fs.fsyncSync(fd)
+
+Synchronous fsync(2).
 
 ### fs.write(fd, buffer, offset, length, position, [callback])
 
@@ -227,8 +318,12 @@ should be written. If `position` is `null`, the data will be written at the
 current position.
 See pwrite(2).
 
-The callback will be given two arguments `(err, written)` where `written`
-specifies how many _bytes_ were written.
+The callback will be given three arguments `(err, written, buffer)` where `written`
+specifies how many _bytes_ were written from `buffer`.
+
+Note that it is unsafe to use `fs.write` multiple times on the same file
+without waiting for the callback. For this scenario,
+`fs.createWriteStream` is strongly recommended.
 
 ### fs.writeSync(fd, buffer, offset, length, position)
 
@@ -237,7 +332,7 @@ written.
 
 ### fs.writeSync(fd, str, position, encoding='utf8')
 
-Synchronous version of string-based `fs.write()`. Returns the number of bytes
+Synchronous version of string-based `fs.write()`. Returns the number of _bytes_
 written.
 
 ### fs.read(fd, buffer, offset, length, position, [callback])
@@ -253,7 +348,7 @@ Read data from the file specified by `fd`.
 `position` is an integer specifying where to begin reading from in the file.
 If `position` is `null`, data will be read from the current file position.
 
-The callback is given the two arguments, `(err, bytesRead)`.
+The callback is given the three arguments, `(err, bytesRead, buffer)`.
 
 ### fs.readSync(fd, buffer, offset, length, position)
 
@@ -290,7 +385,9 @@ returns a buffer.
 
 ### fs.writeFile(filename, data, encoding='utf8', [callback])
 
-Asynchronously writes data to a file. `data` can be a string or a buffer.
+Asynchronously writes data to a file, replacing the file if it already exists.
+`data` can be a string or a buffer. The `encoding` argument is ignored if
+`data` is a buffer.
 
 Example:
 
@@ -315,7 +412,7 @@ value in milliseconds. The default is `{ persistent: true, interval: 0 }`.
 The `listener` gets two arguments the current stat object and the previous
 stat object:
 
-    fs.watchFile(f, function (curr, prev) {
+    fs.watchFile('message.text', function (curr, prev) {
       console.log('the current mtime is: ' + curr.mtime);
       console.log('the previous mtime was: ' + prev.mtime);
     });
@@ -323,7 +420,7 @@ stat object:
 These stat objects are instances of `fs.Stat`.
 
 If you want to be notified when the file was modified, not just accessed
-you need to compare `curr.mtime` and `prev.mtime.
+you need to compare `curr.mtime` and `prev.mtime`.
 
 
 ### fs.unwatchFile(filename)
@@ -347,6 +444,12 @@ Objects returned from `fs.stat()` and `fs.lstat()` are of this type.
 
 `ReadStream` is a `Readable Stream`.
 
+### Event: 'open'
+
+`function (fd) { }`
+
+ `fd` is the file descriptor used by the ReadStream.
+
 ### fs.createReadStream(path, [options])
 
 Returns a new ReadStream object (See `Readable Stream`).
@@ -362,7 +465,7 @@ Returns a new ReadStream object (See `Readable Stream`).
 
 `options` can include `start` and `end` values to read a range of bytes from
 the file instead of the entire file.  Both `start` and `end` are inclusive and
-start at 0.  When used, both the limits must be specified always.
+start at 0.
 
 An example to read the last 10 bytes of a file which is 100 bytes long:
 
@@ -379,6 +482,11 @@ An example to read the last 10 bytes of a file which is 100 bytes long:
 
  `fd` is the file descriptor used by the WriteStream.
 
+### file.bytesWritten
+
+The number of bytes written so far. Does not include data that is still queued
+for writing.
+
 ### fs.createWriteStream(path, [options])
 
 Returns a new WriteStream object (See `Writable Stream`).
@@ -388,3 +496,8 @@ Returns a new WriteStream object (See `Writable Stream`).
     { flags: 'w',
       encoding: null,
       mode: 0666 }
+
+`options` may also include a `start` option to allow writing data at
+some position past the beginning of the file.  Modifying a file rather
+than replacing it may require a `flags` mode of `r+` rather than the
+default mode `w`.

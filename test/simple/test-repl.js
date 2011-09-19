@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -6,11 +27,11 @@ common.globalCheck = false;
 var net = require('net'),
     repl = require('repl'),
     message = 'Read, Eval, Print Loop',
-    unix_socket_path = '/tmp/node-repl-sock',
     prompt_unix = 'node via Unix socket> ',
     prompt_tcp = 'node via TCP socket> ',
     prompt_multiline = '... ',
     server_tcp, server_unix, client_tcp, client_unix, timer;
+
 
 // absolute path to test/fixtures/a.js
 var moduleFilename = require('path').join(common.fixturesDir, 'a');
@@ -97,7 +118,7 @@ function error_test() {
     // invalid input to JSON.parse error is special case of syntax error,
     // should throw
     { client: client_unix, send: 'JSON.parse(\'{invalid: \\\'json\\\'}\');',
-      expect: /^SyntaxError: Unexpected token ILLEGAL/ },
+      expect: /^SyntaxError: Unexpected token i/ },
     // Named functions can be used:
     { client: client_unix, send: 'function blah() { return 1; }',
       expect: prompt_unix },
@@ -123,7 +144,6 @@ function error_test() {
 function tcp_test() {
   server_tcp = net.createServer(function(socket) {
     assert.strictEqual(server_tcp, socket.server);
-    assert.strictEqual(server_tcp.type, 'tcp4');
 
     socket.addListener('end', function() {
       socket.end();
@@ -149,7 +169,7 @@ function tcp_test() {
         { client: client_tcp, send: 'a += 1\n',
           expect: ('12346' + '\n' + prompt_tcp) },
         { client: client_tcp,
-          send: 'require(\'' + moduleFilename + '\').number\n',
+          send: 'require(' + JSON.stringify(moduleFilename) + ').number\n',
           expect: ('42' + '\n' + prompt_tcp) }
       ]);
     });
@@ -187,7 +207,6 @@ function tcp_test() {
 function unix_test() {
   server_unix = net.createServer(function(socket) {
     assert.strictEqual(server_unix, socket.server);
-    assert.strictEqual(server_unix.type, 'unix');
 
     socket.addListener('end', function() {
       socket.end();
@@ -199,7 +218,7 @@ function unix_test() {
   server_unix.addListener('listening', function() {
     var read_buffer = '';
 
-    client_unix = net.createConnection(unix_socket_path);
+    client_unix = net.createConnection(common.PIPE);
 
     client_unix.addListener('connect', function() {
       assert.equal(true, client_unix.readable);
@@ -247,7 +266,7 @@ function unix_test() {
     });
   });
 
-  server_unix.listen(unix_socket_path);
+  server_unix.listen(common.PIPE);
 }
 
 unix_test();

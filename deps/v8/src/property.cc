@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -52,6 +52,12 @@ void LookupResult::Print(FILE* out) {
       GetTransitionMap()->Print(out);
       PrintF(out, "\n");
       break;
+    case ELEMENTS_TRANSITION:
+      PrintF(out, " -type = elements transition\n");
+      PrintF(out, " -map:\n");
+      GetTransitionMap()->Print(out);
+      PrintF(out, "\n");
+      break;
     case CONSTANT_FUNCTION:
       PrintF(out, " -type = constant function\n");
       PrintF(out, " -function:\n");
@@ -67,6 +73,9 @@ void LookupResult::Print(FILE* out) {
       PrintF(out, " -type = call backs\n");
       PrintF(out, " -callback object:\n");
       GetCallbackObject()->Print(out);
+      break;
+    case HANDLER:
+      PrintF(out, " -type = lookup proxy\n");
       break;
     case INTERCEPTOR:
       PrintF(out, " -type = lookup interceptor\n");

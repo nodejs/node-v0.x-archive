@@ -28,8 +28,6 @@
 #ifndef V8_PROFILE_GENERATOR_INL_H_
 #define V8_PROFILE_GENERATOR_INL_H_
 
-#ifdef ENABLE_LOGGING_AND_PROFILING
-
 #include "profile-generator.h"
 
 namespace v8 {
@@ -80,22 +78,6 @@ ProfileNode::ProfileNode(ProfileTree* tree, CodeEntry* entry)
 }
 
 
-void CodeMap::AddCode(Address addr, CodeEntry* entry, unsigned size) {
-  CodeTree::Locator locator;
-  tree_.Insert(addr, &locator);
-  locator.set_value(CodeEntryInfo(entry, size));
-}
-
-
-void CodeMap::MoveCode(Address from, Address to) {
-  tree_.Move(from, to);
-}
-
-void CodeMap::DeleteCode(Address addr) {
-  tree_.Remove(addr);
-}
-
-
 CodeEntry* ProfileGenerator::EntryForVMState(StateTag tag) {
   switch (tag) {
     case GC:
@@ -121,36 +103,6 @@ uint64_t HeapEntry::id() {
   return id_adaptor.returned_id;
 }
 
-
-template<class Visitor>
-void HeapEntriesMap::UpdateEntries(Visitor* visitor) {
-  for (HashMap::Entry* p = entries_.Start();
-       p != NULL;
-       p = entries_.Next(p)) {
-    EntryInfo* entry_info = reinterpret_cast<EntryInfo*>(p->value);
-    entry_info->entry = visitor->GetEntry(
-        reinterpret_cast<HeapObject*>(p->key),
-        entry_info->children_count,
-        entry_info->retainers_count);
-    entry_info->children_count = 0;
-    entry_info->retainers_count = 0;
-  }
-}
-
-
-bool HeapSnapshotGenerator::ReportProgress(bool force) {
-  const int kProgressReportGranularity = 10000;
-  if (control_ != NULL
-      && (force || progress_counter_ % kProgressReportGranularity == 0)) {
-      return
-          control_->ReportProgressValue(progress_counter_, progress_total_) ==
-          v8::ActivityControl::kContinue;
-  }
-  return true;
-}
-
 } }  // namespace v8::internal
-
-#endif  // ENABLE_LOGGING_AND_PROFILING
 
 #endif  // V8_PROFILE_GENERATOR_INL_H_

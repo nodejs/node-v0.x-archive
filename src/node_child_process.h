@@ -1,4 +1,24 @@
-// Copyright 2009 Ryan Dahl <ry@tinyclouds.org>
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #ifndef NODE_CHILD_PROCESS_H_
 #define NODE_CHILD_PROCESS_H_
 
@@ -6,7 +26,11 @@
 #include <node_object_wrap.h>
 
 #include <v8.h>
-#include <ev.h>
+#include <uv.h>
+
+#ifdef __POSIX__
+# include <uv-private/ev.h>
+#endif
 
 #ifdef __MINGW32__
 # include <platform_win32.h> // HANDLE type
@@ -69,7 +93,8 @@ class ChildProcess : ObjectWrap {
             int custom_uid,
             char *custom_uname,
             int custom_gid,
-            char *custom_gname);
+            char *custom_gname,
+            int* channel);
 
   // Simple syscall wrapper. Does not disable the watcher. onexit will be
   // called still.
@@ -94,12 +119,10 @@ class ChildProcess : ObjectWrap {
 #endif // __POSIX__
 
 #ifdef __MINGW32__
-  static int do_spawn(eio_req *req);
-  static int after_spawn(eio_req *req);
   static void watch(ChildProcess *child);
   static void CALLBACK watch_wait_callback(void *data, BOOLEAN didTimeout);
   static void notify_spawn_failure(ChildProcess *child);
-  static void notify_exit(EV_P_ ev_async *ev, int revent);
+  static void notify_exit(uv_async_t* watcher, int status);
   static int do_kill(ChildProcess *child, int sig);static void close_stdio_handles(ChildProcess *child);
 
   int pid_;

@@ -38,12 +38,13 @@ const GETTER = 0;
 const SETTER = 1;
 
 # These definitions must match the index of the properties in objects.h.
-const kApiTagOffset               = 0;
-const kApiPropertyListOffset      = 1;
-const kApiSerialNumberOffset      = 2;
-const kApiConstructorOffset       = 2;
-const kApiPrototypeTemplateOffset = 5;
-const kApiParentTemplateOffset    = 6;
+const kApiTagOffset                 = 0;
+const kApiPropertyListOffset        = 1;
+const kApiSerialNumberOffset        = 2;
+const kApiConstructorOffset         = 2;
+const kApiPrototypeTemplateOffset   = 5;
+const kApiParentTemplateOffset      = 6;
+const kApiFlagOffset                = 14;
 
 const NO_HINT     = 0;
 const NUMBER_HINT = 1;
@@ -64,6 +65,7 @@ const msPerMonth       = 2592000000;
 
 # For apinatives.js
 const kUninitialized = -1;
+const kReadOnlyPrototypeBit = 3;  # For FunctionTemplateInfo, matches objects.h
 
 # Note: kDayZeroInJulianDay = ToJulianDay(1970, 0, 1).
 const kInvalidDate        = 'Invalid Date';
@@ -114,20 +116,29 @@ macro FLOOR(arg)                = $floor(arg);
 
 # Macro for ECMAScript 5 queries of the type:
 # "Type(O) is object."
-# This is the same as being either a function or an object in V8 terminology.
+# This is the same as being either a function or an object in V8 terminology
+# (including proxies).
 # In addition, an undetectable object is also included by this.
-macro IS_SPEC_OBJECT(arg) = (%_IsSpecObject(arg));
+macro IS_SPEC_OBJECT(arg)   = (%_IsSpecObject(arg));
+
+# Macro for ECMAScript 5 queries of the type:
+# "IsCallable(O)"
+# We assume here that this is the same as being either a function or a function
+# proxy. That ignores host objects with [[Call]] methods, but in most situations
+# we cannot handle those anyway.
+macro IS_SPEC_FUNCTION(arg) = (%_ClassOf(arg) === 'Function');
 
 # Inline macros. Use %IS_VAR to make sure arg is evaluated only once.
 macro NUMBER_IS_NAN(arg) = (!%_IsSmi(%IS_VAR(arg)) && !(arg == arg));
-macro NUMBER_IS_FINITE(arg) = (%_IsSmi(%IS_VAR(arg)) || arg - arg == 0);
+macro NUMBER_IS_FINITE(arg) = (%_IsSmi(%IS_VAR(arg)) || ((arg == arg) && (arg != 1/0) && (arg != -1/0)));
 macro TO_INTEGER(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : %NumberToInteger(ToNumber(arg)));
 macro TO_INTEGER_MAP_MINUS_ZERO(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : %NumberToIntegerMapMinusZero(ToNumber(arg)));
 macro TO_INT32(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : (arg >> 0));
 macro TO_UINT32(arg) = (arg >>> 0);
 macro TO_STRING_INLINE(arg) = (IS_STRING(%IS_VAR(arg)) ? arg : NonStringToString(arg));
 macro TO_NUMBER_INLINE(arg) = (IS_NUMBER(%IS_VAR(arg)) ? arg : NonNumberToNumber(arg));
-
+macro TO_OBJECT_INLINE(arg) = (IS_SPEC_OBJECT(%IS_VAR(arg)) ? arg : ToObject(arg));
+macro JSON_NUMBER_TO_STRING(arg) = ((%_IsSmi(%IS_VAR(arg)) || arg - arg == 0) ? %_NumberToString(arg) : "null");
 
 # Macros implemented in Python.
 python macro CHAR_CODE(str) = ord(str[1]);
@@ -167,7 +178,7 @@ macro CAPTURE(index) = (3 + (index));
 const CAPTURE0 = 3;
 const CAPTURE1 = 4;
 
-# PropertyDescriptor return value indices - must match 
+# PropertyDescriptor return value indices - must match
 # PropertyDescriptorIndices in runtime.cc.
 const IS_ACCESSOR_INDEX = 0;
 const VALUE_INDEX = 1;
@@ -176,3 +187,17 @@ const SETTER_INDEX = 3;
 const WRITABLE_INDEX = 4;
 const ENUMERABLE_INDEX = 5;
 const CONFIGURABLE_INDEX = 6;
+
+# For messages.js
+# Matches Script::Type from objects.h
+const TYPE_NATIVE = 0;
+const TYPE_EXTENSION = 1;
+const TYPE_NORMAL = 2;
+
+# Matches Script::CompilationType from objects.h
+const COMPILATION_TYPE_HOST = 0;
+const COMPILATION_TYPE_EVAL = 1;
+const COMPILATION_TYPE_JSON = 2;
+
+# Matches Messages::kNoLineNumberInfo from v8.h
+const kNoLineNumberInfo = 0;

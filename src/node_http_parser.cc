@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node_http_parser.h>
 
 #include <v8.h>
@@ -6,8 +27,12 @@
 
 #include <http_parser.h>
 
-#include <strings.h>  /* strcasecmp() */
 #include <string.h>  /* strdup() */
+#if !defined(_MSC_VER)
+#include <strings.h>  /* strcasecmp() */
+#else
+#define strcasecmp _stricmp
+#endif
 #include <stdlib.h>  /* free() */
 
 // This is a binding to http_parser (http://github.com/ry/http-parser)
@@ -27,10 +52,7 @@ namespace node {
 using namespace v8;
 
 static Persistent<String> on_message_begin_sym;
-static Persistent<String> on_path_sym;
-static Persistent<String> on_query_string_sym;
 static Persistent<String> on_url_sym;
-static Persistent<String> on_fragment_sym;
 static Persistent<String> on_header_field_sym;
 static Persistent<String> on_header_value_sym;
 static Persistent<String> on_headers_complete_sym;
@@ -163,10 +185,7 @@ class Parser : public ObjectWrap {
   DEFINE_HTTP_CB(on_message_begin)
   DEFINE_HTTP_CB(on_message_complete)
 
-  DEFINE_HTTP_DATA_CB(on_path)
   DEFINE_HTTP_DATA_CB(on_url)
-  DEFINE_HTTP_DATA_CB(on_fragment)
-  DEFINE_HTTP_DATA_CB(on_query_string)
   DEFINE_HTTP_DATA_CB(on_header_field)
   DEFINE_HTTP_DATA_CB(on_header_value)
   DEFINE_HTTP_DATA_CB(on_body)
@@ -366,10 +385,7 @@ void InitHttpParser(Handle<Object> target) {
   target->Set(String::NewSymbol("HTTPParser"), t->GetFunction());
 
   on_message_begin_sym    = NODE_PSYMBOL("onMessageBegin");
-  on_path_sym             = NODE_PSYMBOL("onPath");
-  on_query_string_sym     = NODE_PSYMBOL("onQueryString");
   on_url_sym              = NODE_PSYMBOL("onURL");
-  on_fragment_sym         = NODE_PSYMBOL("onFragment");
   on_header_field_sym     = NODE_PSYMBOL("onHeaderField");
   on_header_value_sym     = NODE_PSYMBOL("onHeaderValue");
   on_headers_complete_sym = NODE_PSYMBOL("onHeadersComplete");
@@ -410,10 +426,7 @@ void InitHttpParser(Handle<Object> target) {
   upgrade_sym = NODE_PSYMBOL("upgrade");
 
   settings.on_message_begin    = Parser::on_message_begin;
-  settings.on_path             = Parser::on_path;
-  settings.on_query_string     = Parser::on_query_string;
   settings.on_url              = Parser::on_url;
-  settings.on_fragment         = Parser::on_fragment;
   settings.on_header_field     = Parser::on_header_field;
   settings.on_header_value     = Parser::on_header_value;
   settings.on_headers_complete = Parser::on_headers_complete;

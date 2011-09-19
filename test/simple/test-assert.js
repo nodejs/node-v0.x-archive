@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 var common = require('../common');
 var assert = require('assert');
 var a = require('assert');
@@ -188,3 +209,54 @@ a.throws(makeBlock(thrower, TypeError), function(err) {
     return true;
   }
 });
+
+
+// GH-207. Make sure deepEqual doesn't loop forever on circular refs
+
+var b = {};
+b.b = b;
+
+var c = {};
+c.b = c;
+
+var gotError = false;
+try {
+  assert.deepEqual(b, c);
+} catch(e) {
+  gotError = true;
+}
+
+console.log('All OK');
+assert.ok(gotError);
+
+
+// #217
+function testAssertionMessage(actual, expected) {
+  try {
+    assert.equal(actual, '');
+  } catch (e) {
+    assert.equal(e.toString(),
+        ['AssertionError:', expected, '==', '""'].join(' '));
+  }
+}
+testAssertionMessage(undefined, '"undefined"');
+testAssertionMessage(null, 'null');
+testAssertionMessage(true, 'true');
+testAssertionMessage(false, 'false');
+testAssertionMessage(0, '0');
+testAssertionMessage(100, '100');
+testAssertionMessage(NaN, '"NaN"');
+testAssertionMessage(Infinity, '"Infinity"');
+testAssertionMessage(-Infinity, '"-Infinity"');
+testAssertionMessage('', '""');
+testAssertionMessage('foo', '"foo"');
+testAssertionMessage([], '[]');
+testAssertionMessage([1,2,3], '[1,2,3]');
+testAssertionMessage(/a/, '"/a/"');
+testAssertionMessage(/abc/gim, '"/abc/gim"');
+testAssertionMessage(function f() {}, '"function f() {}"');
+testAssertionMessage({}, '{}');
+testAssertionMessage({a:undefined, b:null}, '{"a":"undefined","b":null}');
+testAssertionMessage({a:NaN, b:Infinity, c:-Infinity},
+    '{"a":"NaN","b":"Infinity","c":"-Infinity"}');
+

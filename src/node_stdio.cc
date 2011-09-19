@@ -1,5 +1,25 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node_stdio.h>
-#include <node_events.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -47,7 +67,7 @@ static int EnableRawMode(int fd) {
   raw.c_oflag |= (ONLCR);
   /* control modes - set 8 bit chars */
   raw.c_cflag |= (CS8);
-  /* local modes - choing off, canonical off, no extended functions,
+  /* local modes - echoing off, canonical off, no extended functions,
    * no signal chars (^Z,^C) */
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
   /* control chars - set return condition: min number of bytes and timer.
@@ -144,13 +164,12 @@ static Handle<Value> IsATTY (const Arguments& args) {
 
 
 /* STDERR IS ALWAY SYNC ALWAYS UTF8 */
-static Handle<Value>
-WriteError (const Arguments& args)
-{
+static Handle<Value> WriteError (const Arguments& args) {
   HandleScope scope;
 
-  if (args.Length() < 1)
+  if (args.Length() < 1) {
     return Undefined();
+  }
 
   String::Utf8Value msg(args[0]->ToString());
 
@@ -168,7 +187,25 @@ WriteError (const Arguments& args)
     written += (size_t)r;
   }
 
-  return Undefined();
+  return True();
+}
+
+
+// This exists to prevent process.stdout from keeping the event loop alive.
+// It is only ever called in src/node.js during the initalization of
+// process.stdout and will fail if called more than once. We do not want to
+// expose uv_ref and uv_unref to javascript in general.
+// This should be removed in the future!
+static bool unref_called = false;
+static Handle<Value> Unref(const Arguments& args) {
+  HandleScope scope;
+
+  assert(unref_called == false);
+
+  uv_unref(uv_default_loop());
+  unref_called = true;
+
+  return Null();
 }
 
 
@@ -178,15 +215,15 @@ static Handle<Value> OpenStdin(const Arguments& args) {
   if (isatty(STDIN_FILENO)) {
     // XXX selecting on tty fds wont work in windows.
     // Must ALWAYS make a coupling on shitty platforms.
+    int r = -1;
+
     stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    if (stdin_flags == -1) {
-      // TODO DRY
-      return ThrowException(Exception::Error(String::New("fcntl error!")));
+
+    if (stdin_flags != -1) {
+      r = fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK);
     }
 
-    int r = fcntl(STDIN_FILENO, F_SETFL, stdin_flags | O_NONBLOCK);
     if (r == -1) {
-      // TODO DRY
       return ThrowException(Exception::Error(String::New("fcntl error!")));
     }
   }
@@ -295,9 +332,11 @@ void Stdio::Initialize(v8::Handle<v8::Object> target) {
   NODE_SET_METHOD(target, "isStdinBlocking", IsStdinBlocking);
   NODE_SET_METHOD(target, "setRawMode", SetRawMode);
   NODE_SET_METHOD(target, "getWindowSize", GetWindowSize);
-  NODE_SET_METHOD(target, "setWindowSize", GetWindowSize);
+  NODE_SET_METHOD(target, "setWindowSize", SetWindowSize);
   NODE_SET_METHOD(target, "isatty", IsATTY);
   NODE_SET_METHOD(target, "openpty", OpenPTY);
+
+  NODE_SET_METHOD(target, "unref", Unref);
 
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));

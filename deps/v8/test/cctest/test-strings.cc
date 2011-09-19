@@ -94,7 +94,7 @@ static void InitializeBuildingBlocks(
           buf[j] = gen() % 65536;
         }
         building_blocks[i] =
-            Factory::NewStringFromTwoByte(Vector<const uc16>(buf, len));
+            FACTORY->NewStringFromTwoByte(Vector<const uc16>(buf, len));
         for (int j = 0; j < len; j++) {
           CHECK_EQ(buf[j], building_blocks[i]->Get(j));
         }
@@ -106,19 +106,19 @@ static void InitializeBuildingBlocks(
           buf[j] = gen() % 128;
         }
         building_blocks[i] =
-            Factory::NewStringFromAscii(Vector<const char>(buf, len));
+            FACTORY->NewStringFromAscii(Vector<const char>(buf, len));
         for (int j = 0; j < len; j++) {
           CHECK_EQ(buf[j], building_blocks[i]->Get(j));
         }
         break;
       }
       case 2: {
-        uc16* buf = Zone::NewArray<uc16>(len);
+        uc16* buf = ZONE->NewArray<uc16>(len);
         for (int j = 0; j < len; j++) {
           buf[j] = gen() % 65536;
         }
         Resource* resource = new Resource(Vector<const uc16>(buf, len));
-        building_blocks[i] = Factory::NewExternalStringFromTwoByte(resource);
+        building_blocks[i] = FACTORY->NewExternalStringFromTwoByte(resource);
         for (int j = 0; j < len; j++) {
           CHECK_EQ(buf[j], building_blocks[i]->Get(j));
         }
@@ -130,7 +130,7 @@ static void InitializeBuildingBlocks(
           buf[j] = gen() % 128;
         }
         building_blocks[i] =
-            Factory::NewStringFromAscii(Vector<const char>(buf, len));
+            FACTORY->NewStringFromAscii(Vector<const char>(buf, len));
         for (int j = 0; j < len; j++) {
           CHECK_EQ(buf[j], building_blocks[i]->Get(j));
         }
@@ -145,9 +145,9 @@ static void InitializeBuildingBlocks(
 static Handle<String> ConstructLeft(
     Handle<String> building_blocks[NUMBER_OF_BUILDING_BLOCKS],
     int depth) {
-  Handle<String> answer = Factory::NewStringFromAscii(CStrVector(""));
+  Handle<String> answer = FACTORY->NewStringFromAscii(CStrVector(""));
   for (int i = 0; i < depth; i++) {
-    answer = Factory::NewConsString(
+    answer = FACTORY->NewConsString(
         answer,
         building_blocks[i % NUMBER_OF_BUILDING_BLOCKS]);
   }
@@ -158,9 +158,9 @@ static Handle<String> ConstructLeft(
 static Handle<String> ConstructRight(
     Handle<String> building_blocks[NUMBER_OF_BUILDING_BLOCKS],
     int depth) {
-  Handle<String> answer = Factory::NewStringFromAscii(CStrVector(""));
+  Handle<String> answer = FACTORY->NewStringFromAscii(CStrVector(""));
   for (int i = depth - 1; i >= 0; i--) {
-    answer = Factory::NewConsString(
+    answer = FACTORY->NewConsString(
         building_blocks[i % NUMBER_OF_BUILDING_BLOCKS],
         answer);
   }
@@ -177,7 +177,7 @@ static Handle<String> ConstructBalancedHelper(
     return building_blocks[from % NUMBER_OF_BUILDING_BLOCKS];
   }
   if (to - from == 2) {
-    return Factory::NewConsString(
+    return FACTORY->NewConsString(
         building_blocks[from % NUMBER_OF_BUILDING_BLOCKS],
         building_blocks[(from+1) % NUMBER_OF_BUILDING_BLOCKS]);
   }
@@ -185,7 +185,7 @@ static Handle<String> ConstructBalancedHelper(
     ConstructBalancedHelper(building_blocks, from, from + ((to - from) / 2));
   Handle<String> part2 =
     ConstructBalancedHelper(building_blocks, from + ((to - from) / 2), to);
-  return Factory::NewConsString(part1, part2);
+  return FACTORY->NewConsString(part1, part2);
 }
 
 
@@ -233,7 +233,7 @@ TEST(Traverse) {
   InitializeVM();
   v8::HandleScope scope;
   Handle<String> building_blocks[NUMBER_OF_BUILDING_BLOCKS];
-  ZoneScope zone(DELETE_ON_EXIT);
+  ZoneScope zone(Isolate::Current(), DELETE_ON_EXIT);
   InitializeBuildingBlocks(building_blocks);
   Handle<String> flat = ConstructBalanced(building_blocks);
   FlattenString(flat);
@@ -286,12 +286,12 @@ TEST(DeepAscii) {
     foo[i] = "foo "[i % 4];
   }
   Handle<String> string =
-      Factory::NewStringFromAscii(Vector<const char>(foo, DEEP_ASCII_DEPTH));
-  Handle<String> foo_string = Factory::NewStringFromAscii(CStrVector("foo"));
+      FACTORY->NewStringFromAscii(Vector<const char>(foo, DEEP_ASCII_DEPTH));
+  Handle<String> foo_string = FACTORY->NewStringFromAscii(CStrVector("foo"));
   for (int i = 0; i < DEEP_ASCII_DEPTH; i += 10) {
-    string = Factory::NewConsString(string, foo_string);
+    string = FACTORY->NewConsString(string, foo_string);
   }
-  Handle<String> flat_string = Factory::NewConsString(string, foo_string);
+  Handle<String> flat_string = FACTORY->NewConsString(string, foo_string);
   FlattenString(flat_string);
 
   for (int i = 0; i < 500; i++) {
@@ -348,7 +348,7 @@ TEST(Utf8Conversion) {
 
 
 TEST(ExternalShortStringAdd) {
-  ZoneScope zone(DELETE_ON_EXIT);
+  ZoneScope zone(Isolate::Current(), DELETE_ON_EXIT);
 
   InitializeVM();
   v8::HandleScope handle_scope;
@@ -365,7 +365,7 @@ TEST(ExternalShortStringAdd) {
 
   // Generate short ascii and non-ascii external strings.
   for (int i = 0; i <= kMaxLength; i++) {
-    char* ascii = Zone::NewArray<char>(i + 1);
+    char* ascii = ZONE->NewArray<char>(i + 1);
     for (int j = 0; j < i; j++) {
       ascii[j] = 'a';
     }
@@ -377,7 +377,7 @@ TEST(ExternalShortStringAdd) {
         v8::String::NewExternal(ascii_resource);
 
     ascii_external_strings->Set(v8::Integer::New(i), ascii_external_string);
-    uc16* non_ascii = Zone::NewArray<uc16>(i + 1);
+    uc16* non_ascii = ZONE->NewArray<uc16>(i + 1);
     for (int j = 0; j < i; j++) {
       non_ascii[j] = 0x1234;
     }
@@ -430,8 +430,7 @@ TEST(ExternalShortStringAdd) {
     "  return 0;"
     "};"
     "test()";
-  CHECK_EQ(0,
-           v8::Script::Compile(v8::String::New(source))->Run()->Int32Value());
+  CHECK_EQ(0, CompileRun(source)->Int32Value());
 }
 
 
@@ -439,7 +438,7 @@ TEST(CachedHashOverflow) {
   // We incorrectly allowed strings to be tagged as array indices even if their
   // values didn't fit in the hash field.
   // See http://code.google.com/p/v8/issues/detail?id=728
-  ZoneScope zone(DELETE_ON_EXIT);
+  ZoneScope zone(Isolate::Current(), DELETE_ON_EXIT);
 
   InitializeVM();
   v8::HandleScope handle_scope;
@@ -459,10 +458,10 @@ TEST(CachedHashOverflow) {
   Handle<Smi> fortytwo(Smi::FromInt(42));
   Handle<Smi> thirtyseven(Smi::FromInt(37));
   Handle<Object> results[] = {
-      Factory::undefined_value(),
+      FACTORY->undefined_value(),
       fortytwo,
-      Factory::undefined_value(),
-      Factory::undefined_value(),
+      FACTORY->undefined_value(),
+      FACTORY->undefined_value(),
       thirtyseven,
       fortytwo,
       thirtyseven  // Bug yielded 42 here.
@@ -480,4 +479,82 @@ TEST(CachedHashOverflow) {
                result->ToInt32()->Value());
     }
   }
+}
+
+
+TEST(SliceFromCons) {
+  FLAG_string_slices = true;
+  InitializeVM();
+  v8::HandleScope scope;
+  Handle<String> string =
+      FACTORY->NewStringFromAscii(CStrVector("parentparentparent"));
+  Handle<String> parent = FACTORY->NewConsString(string, string);
+  CHECK(parent->IsConsString());
+  CHECK(!parent->IsFlat());
+  Handle<String> slice = FACTORY->NewSubString(parent, 1, 25);
+  // After slicing, the original string becomes a flat cons.
+  CHECK(parent->IsFlat());
+  CHECK(slice->IsSlicedString());
+  CHECK_EQ(SlicedString::cast(*slice)->parent(),
+           ConsString::cast(*parent)->first());
+  CHECK(SlicedString::cast(*slice)->parent()->IsSeqString());
+  CHECK(slice->IsFlat());
+}
+
+
+TEST(TrivialSlice) {
+  // This tests whether a slice that contains the entire parent string
+  // actually creates a new string (it should not).
+  FLAG_string_slices = true;
+  InitializeVM();
+  HandleScope scope;
+  v8::Local<v8::Value> result;
+  Handle<String> string;
+  const char* init = "var str = 'abcdefghijklmnopqrstuvwxyz';";
+  const char* check = "str.slice(0,26)";
+  const char* crosscheck = "str.slice(1,25)";
+
+  CompileRun(init);
+
+  result = CompileRun(check);
+  CHECK(result->IsString());
+  string = v8::Utils::OpenHandle(v8::String::Cast(*result));
+  CHECK(!string->IsSlicedString());
+
+  string = FACTORY->NewSubString(string, 0, 26);
+  CHECK(!string->IsSlicedString());
+  result = CompileRun(crosscheck);
+  CHECK(result->IsString());
+  string = v8::Utils::OpenHandle(v8::String::Cast(*result));
+  CHECK(string->IsSlicedString());
+  CHECK_EQ("bcdefghijklmnopqrstuvwxy", *(string->ToCString()));
+}
+
+
+TEST(SliceFromSlice) {
+  // This tests whether a slice that contains the entire parent string
+  // actually creates a new string (it should not).
+  FLAG_string_slices = true;
+  InitializeVM();
+  HandleScope scope;
+  v8::Local<v8::Value> result;
+  Handle<String> string;
+  const char* init = "var str = 'abcdefghijklmnopqrstuvwxyz';";
+  const char* slice = "var slice = str.slice(1,-1); slice";
+  const char* slice_from_slice = "slice.slice(1,-1);";
+
+  CompileRun(init);
+  result = CompileRun(slice);
+  CHECK(result->IsString());
+  string = v8::Utils::OpenHandle(v8::String::Cast(*result));
+  CHECK(string->IsSlicedString());
+  CHECK(SlicedString::cast(*string)->parent()->IsSeqString());
+  CHECK_EQ("bcdefghijklmnopqrstuvwxy", *(string->ToCString()));
+
+  result = CompileRun(slice_from_slice);
+  CHECK(result->IsString());
+  string = v8::Utils::OpenHandle(v8::String::Cast(*result));
+  CHECK(string->IsSlicedString());
+  CHECK(SlicedString::cast(*string)->parent()->IsSeqString());
+  CHECK_EQ("cdefghijklmnopqrstuvwx", *(string->ToCString()));
 }

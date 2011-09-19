@@ -1,3 +1,27 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -39,9 +63,12 @@ while (i--) {
 }
 
 // CNAME should resolve
+var resolveCNAME = 'before';
 dns.resolve('labs.nrcmedia.nl', 'CNAME', function(err, result) {
   assert.deepEqual(result, ['nrcmedia.nl']);
+  assert.equal(resolveCNAME, 'beforeafter');
 });
+resolveCNAME += 'after';
 
 // CNAME should not resolve
 dns.resolve('nrcmedia.nl', 'CNAME', function(err, result) {
@@ -53,6 +80,7 @@ function checkDnsRecord(host, record) {
       myRecord = record;
   return function(err, stdout) {
     var expected = [];
+    var footprints = 'before';
     if (stdout.length)
       expected = stdout.substr(0, stdout.length - 1).split('\n');
 
@@ -73,6 +101,7 @@ function checkDnsRecord(host, record) {
 
             child_process.exec(reverseCmd, checkReverse(ip));
           }
+          assert.equal(footprints, 'beforeafter');
         });
         break;
       case 'MX':
@@ -85,6 +114,7 @@ function checkDnsRecord(host, record) {
             strResult.push(result[ll].priority + ' ' + result[ll].exchange);
           }
           cmpResults(expected, strResult, ttl, cname);
+          assert.equal(footprints, 'beforeafter');
         });
         break;
       case 'TXT':
@@ -97,6 +127,7 @@ function checkDnsRecord(host, record) {
             strResult.push('"' + result[ll] + '"');
           }
           cmpResults(expected, strResult, ttl, cname);
+          assert.equal(footprints, 'beforeafter');
         });
         break;
       case 'SRV':
@@ -112,9 +143,11 @@ function checkDnsRecord(host, record) {
                            result[ll].name);
           }
           cmpResults(expected, strResult, ttl, cname);
+          assert.equal(footprints, 'beforeafter');
         });
         break;
     }
+    footprints += 'after';
   }
 }
 
@@ -153,3 +186,46 @@ function cmpResults(expected, result, ttl, cname) {
                 ' was equal to expected ' + expected[ll]);
   }
 }
+
+// #1164
+var getHostByName = 'before';
+dns.getHostByName('localhost', function() {
+  assert.equal(getHostByName, 'beforeafter');
+});
+getHostByName += 'after';
+
+var getHostByAddr = 'before';
+dns.getHostByAddr('127.0.0.1', function() {
+  assert.equal(getHostByAddr, 'beforeafter');
+});
+getHostByAddr += 'after';
+
+var lookupEmpty = 'before';
+dns.lookup('', function() {
+  assert.equal(lookupEmpty, 'beforeafter');
+});
+lookupEmpty += 'after';
+
+var lookupIp = 'before';
+dns.lookup('127.0.0.1', function() {
+  assert.equal(lookupIp, 'beforeafter');
+});
+lookupIp += 'after';
+
+var lookupIp4 = 'before';
+dns.lookup('127.0.0.1', 4, function() {
+  assert.equal(lookupIp4, 'beforeafter');
+});
+lookupIp4 += 'after';
+
+var lookupIp6 = 'before';
+dns.lookup('ietf.org', 6, function() {
+  assert.equal(lookupIp6, 'beforeafter');
+});
+lookupIp6 += 'after';
+
+var lookupLocal = 'before';
+dns.lookup('localhost', function() {
+  assert.equal(lookupLocal, 'beforeafter');
+});
+lookupLocal += 'after';

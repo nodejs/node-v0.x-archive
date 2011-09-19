@@ -1,2 +1,0 @@
-
-exports.INBAR = __filename;

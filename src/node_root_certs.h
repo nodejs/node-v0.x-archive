@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #ifndef SRC_NODE_ROOT_CERTS_H_
 #define SRC_NODE_ROOT_CERTS_H_
 
@@ -2644,35 +2665,6 @@ const char* root_certs[] = {
   "RxdMosIGlgnW2/4/PEZB31jiVg88O8EckzXZOFKs7sjsLjBOlDW0JB9LeGna8gI4zJVSk/BwJVmc\n"
   "IGfE7vmLV2H0knZ9P4SNVbfo5azV8fUZVqZa+5Acr5Pr5RzUZ5ddBA6+C4OmF4O5MBKgxTMVBbkN\n"
   "+8cFduPYSo38NBejxiEovjBFMR7HeL5YYTisO+IBZQ==\n"
-  "-----END CERTIFICATE-----\n",
-
-  // "DigiNotar Root CA"
-  "-----BEGIN CERTIFICATE-----\n"
-  "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\n"
   "-----END CERTIFICATE-----\n",
 
   // "Network Solutions Certificate Authority"

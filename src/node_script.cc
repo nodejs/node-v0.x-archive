@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node.h>
 #include <node_script.h>
 #include <assert.h>
@@ -19,6 +40,7 @@ using v8::Local;
 using v8::Array;
 using v8::Persistent;
 using v8::Integer;
+using v8::Function;
 using v8::FunctionTemplate;
 
 
@@ -29,6 +51,7 @@ class WrappedContext : ObjectWrap {
 
   Persistent<Context> GetV8Context();
   static Local<Object> NewInstance();
+  static bool InstanceOf(Handle<Value> value);
 
  protected:
 
@@ -76,6 +99,38 @@ class WrappedScript : ObjectWrap {
 };
 
 
+Persistent<Function> cloneObjectMethod;
+
+void CloneObject(Handle<Object> recv,
+                 Handle<Value> source, Handle<Value> target) {
+  HandleScope scope;
+
+  Handle<Value> args[] = {source, target};
+
+  // Init
+  if (cloneObjectMethod.IsEmpty()) {
+    Local<Function> cloneObjectMethod_ = Local<Function>::Cast(
+      Script::Compile(String::New(
+        "(function(source, target) {\n\
+           Object.getOwnPropertyNames(source).forEach(function(key) {\n\
+           try {\n\
+             var desc = Object.getOwnPropertyDescriptor(source, key);\n\
+             if (desc.value === source) desc.value = target;\n\
+             Object.defineProperty(target, key, desc);\n\
+           } catch (e) {\n\
+            // Catch sealed properties errors\n\
+           }\n\
+         });\n\
+        })"
+      ), String::New("binding:script"))->Run()
+    );
+    cloneObjectMethod = Persistent<Function>::New(cloneObjectMethod_);
+  }
+
+  cloneObjectMethod->Call(recv, 2, args);
+}
+
+
 void WrappedContext::Initialize(Handle<Object> target) {
   HandleScope scope;
 
@@ -86,6 +141,11 @@ void WrappedContext::Initialize(Handle<Object> target) {
 
   target->Set(String::NewSymbol("Context"),
               constructor_template->GetFunction());
+}
+
+
+bool WrappedContext::InstanceOf(Handle<Value> value) {
+  return !value.IsEmpty() && constructor_template->HasInstance(value);
 }
 
 
@@ -129,7 +189,10 @@ void WrappedScript::Initialize(Handle<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(WrappedScript::New);
   constructor_template = Persistent<FunctionTemplate>::New(t);
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
-  constructor_template->SetClassName(String::NewSymbol("Script"));
+  // Note: We use 'NodeScript' instead of 'Script' so that we do not
+  // conflict with V8's Script class defined in v8/src/messages.js
+  // See GH-203 https://github.com/joyent/node/issues/203
+  constructor_template->SetClassName(String::NewSymbol("NodeScript"));
 
   NODE_SET_PROTOTYPE_METHOD(constructor_template,
                             "createContext",
@@ -163,7 +226,7 @@ void WrappedScript::Initialize(Handle<Object> target) {
                   "runInNewContext",
                   WrappedScript::CompileRunInNewContext);
 
-  target->Set(String::NewSymbol("Script"),
+  target->Set(String::NewSymbol("NodeScript"),
               constructor_template->GetFunction());
 }
 
@@ -195,13 +258,8 @@ Handle<Value> WrappedScript::CreateContext(const Arguments& args) {
 
   if (args.Length() > 0) {
     Local<Object> sandbox = args[0]->ToObject();
-    Local<Array> keys = sandbox->GetPropertyNames();
 
-    for (uint32_t i = 0; i < keys->Length(); i++) {
-      Handle<String> key = keys->Get(Integer::New(i))->ToString();
-      Handle<Value> value = sandbox->Get(key);
-      context->Set(key, value);
-    }
+    CloneObject(args.This(), sandbox, context);
   }
 
 
@@ -257,7 +315,9 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   }
 
   const int sandbox_index = input_flag == compileCode ? 1 : 0;
-  if (context_flag == userContext && args.Length() < (sandbox_index + 1)) {
+  if (context_flag == userContext
+    && !WrappedContext::InstanceOf(args[sandbox_index]))
+  {
     return ThrowException(Exception::TypeError(
           String::New("needs a 'context' argument.")));
   }
@@ -275,7 +335,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   }
 
   const int filename_index = sandbox_index +
-                             (context_flag == newContext ? 1 : 0);
+                             (context_flag == thisContext? 0 : 1);
   Local<String> filename = args.Length() > filename_index
                            ? args[filename_index]->ToString()
                            : String::New("evalmachine.<anonymous>");
@@ -310,14 +370,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
     // Copy everything from the passed in sandbox (either the persistent
     // context for runInContext(), or the sandbox arg to runInNewContext()).
-    keys = sandbox->GetPropertyNames();
-
-    for (i = 0; i < keys->Length(); i++) {
-      Handle<String> key = keys->Get(Integer::New(i))->ToString();
-      Handle<Value> value = sandbox->Get(key);
-      if (value == sandbox) { value = context->Global(); }
-      context->Global()->Set(key, value);
-    }
+    CloneObject(args.This(), sandbox, context->Global()->GetPrototype());
   }
 
   // Catch errors
@@ -375,13 +428,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
   if (context_flag == userContext || context_flag == newContext) {
     // success! copy changes back onto the sandbox object.
-    keys = context->Global()->GetPropertyNames();
-    for (i = 0; i < keys->Length(); i++) {
-      Handle<String> key = keys->Get(Integer::New(i))->ToString();
-      Handle<Value> value = context->Global()->Get(key);
-      if (value == context->Global()) { value = sandbox; }
-      sandbox->Set(key, value);
-    }
+    CloneObject(args.This(), context->Global()->GetPrototype(), sandbox);
   }
 
   if (context_flag == newContext) {

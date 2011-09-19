@@ -271,6 +271,13 @@ The PID of the process.
 Getter/setter to set what is displayed in 'ps'.
 
 
+### process.arch
+
+What processor architecture you're running on: `'arm'`, `'ia32'`, or `'x64'`.
+
+    console.log('This processor architecture is ' + process.arch);
+
+
 ### process.platform
 
 What platform you're running on. `'linux2'`, `'darwin'`, etc.
@@ -280,7 +287,8 @@ What platform you're running on. `'linux2'`, `'darwin'`, etc.
 
 ### process.memoryUsage()
 
-Returns an object describing the memory usage of the Node process.
+Returns an object describing the memory usage of the Node process
+measured in bytes.
 
     var util = require('util');
 
@@ -319,3 +327,7 @@ given, otherwise returns the current mask.
     console.log('Changed umask from: ' + oldmask.toString(8) +
                 ' to ' + newmask.toString(8));
 
+
+### process.uptime()
+
+Number of seconds Node has been running.

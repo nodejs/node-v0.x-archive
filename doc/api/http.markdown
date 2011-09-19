@@ -31,16 +31,18 @@ This is an `EventEmitter` with the following events:
 
 `function (request, response) { }`
 
+Emitted each time there is a request. Note that there may be multiple requests
+per connection (in the case of keep-alive connections).
  `request` is an instance of `http.ServerRequest` and `response` is
  an instance of `http.ServerResponse`
 
 ### Event: 'connection'
 
-`function (stream) { }`
+`function (socket) { }`
 
- When a new TCP stream is established. `stream` is an object of type
- `net.Stream`. Usually users will not want to access this event. The
- `stream` can also be accessed at `request.connection`.
+ When a new TCP stream is established. `socket` is an object of type
+ `net.Socket`. Usually users will not want to access this event. The
+ `socket` can also be accessed at `request.connection`.
 
 ### Event: 'close'
 
@@ -48,16 +50,9 @@ This is an `EventEmitter` with the following events:
 
  Emitted when the server closes.
 
-### Event: 'request'
-
-`function (request, response) {}`
-
-Emitted each time there is request. Note that there may be multiple requests
-per connection (in the case of keep-alive connections).
-
 ### Event: 'checkContinue'
 
-`function (request, response) {}`
+`function (request, response) { }`
 
 Emitted each time a request with an http Expect: 100-continue is received.
 If this event isn't listened for, the server will automatically respond
@@ -73,7 +68,7 @@ not be emitted.
 
 ### Event: 'upgrade'
 
-`function (request, socket, head)`
+`function (request, socket, head) { }`
 
 Emitted each time a client requests a http upgrade. If this event isn't
 listened for, then clients requesting an upgrade will have their connections
@@ -89,11 +84,11 @@ sent to the server on that socket.
 
 ### Event: 'clientError'
 
-`function (exception) {}`
+`function (exception) { }`
 
 If a client connection emits an 'error' event - it will forwarded here.
 
-### http.createServer(requestListener)
+### http.createServer([requestListener])
 
 Returns a new web server object.
 
@@ -141,15 +136,35 @@ Emitted when a piece of the message body is received.
 Example: A chunk of the body is given as the single
 argument. The transfer-encoding has been decoded.  The
 body chunk is a string.  The body encoding is set with
-`request.setBodyEncoding()`.
+`request.setEncoding()`.
 
 ### Event: 'end'
 
 `function () { }`
 
-Emitted exactly once for each message. No arguments.  After
-emitted no other events will be emitted on the request.
+Emitted exactly once for each request. After that, no more `'data'` events
+will be emitted on the request.
 
+### Event: 'close'
+
+`function (err) { }`
+
+Indicates that the underlaying connection was terminated before
+`response.end()` was called or able to flush.
+
+The `err` parameter is always present and indicates the reason for the timeout:
+
+`err.code === 'timeout'` indicates that the underlaying connection timed out.
+This may happen because all incoming connections have a default timeout of 2
+minutes.
+
+`err.code === 'aborted'` means that the client has closed the underlaying
+connection prematurely.
+
+Just like `'end'`, this event occurs only once per request, and no more `'data'`
+events will fire afterwards.
+
+Note: `'close'` can fire after `'end'`, but not vice versa.
 
 ### request.method
 
@@ -224,7 +239,7 @@ Resumes a paused request.
 
 ### request.connection
 
-The `net.Stream` object associated with the connection.
+The `net.Socket` object associated with the connection.
 
 
 With HTTPS support, use request.connection.verifyPeer() and
@@ -241,7 +256,7 @@ passed as the second parameter to the `'request'` event. It is a `Writable Strea
 ### response.writeContinue()
 
 Sends a HTTP/1.1 100 Continue message to the client, indicating that
-the request body should be sent. See the the `checkContinue` event on
+the request body should be sent. See the [checkContinue](#event_checkContinue_) event on
 `Server`.
 
 ### response.writeHead(statusCode, [reasonPhrase], [headers])
@@ -264,6 +279,13 @@ be called before `response.end()` is called.
 If you call `response.write()` or `response.end()` before calling this, the
 implicit/mutable headers will be calculated and call this function for you.
 
+Note: that Content-Length is given in bytes not characters. The above example
+works because the string `'hello world'` contains only single byte characters.
+If the body contains higher coded characters then `Buffer.byteLength()`
+should be used to determine the number of bytes in a given encoding.
+And Node does not check whether Content-Length and the length of the body
+which has been transmitted are equal or not.
+
 ### response.statusCode
 
 When using implicit headers (not calling `response.writeHead()` explicitly), this property
@@ -274,10 +296,13 @@ Example:
 
     response.statusCode = 404;
 
+After response header was sent to the client, this property indicates the
+status code which was sent out.
+
 ### response.setHeader(name, value)
 
 Sets a single header value for implicit headers.  If this header already exists
-in the to-be-sent headers, it's value will be replaced.  Use an array of strings
+in the to-be-sent headers, its value will be replaced.  Use an array of strings
 here if you need to send multiple headers with the same name.
 
 Example:
@@ -368,11 +393,17 @@ Options:
 
 - `host`: A domain name or IP address of the server to issue the request to.
 - `port`: Port of remote server.
+- `socketPath`: Unix Domain Socket (use one of host:port or socketPath)
 - `method`: A string specifying the HTTP request method. Possible values:
   `'GET'` (default), `'POST'`, `'PUT'`, and `'DELETE'`.
 - `path`: Request path. Should include query string and fragments if any.
    E.G. `'/index.html?page=12'`
 - `headers`: An object containing request headers.
+- `agent`: Controls `Agent` behavior. When an Agent is used request will default to 
+   Connection:keep-alive. Possible values:
+ - `undefined` (default): use default `Agent` for this host and port.
+ - `Agent` object: explicitly use the passed in `Agent`.
+ - `false`: opts out of connection pooling with an Agent, defaults request to Connection:close.
 
 `http.request()` returns an instance of the `http.ClientRequest`
 class. The `ClientRequest` instance is a writable stream. If one needs to
@@ -394,6 +425,10 @@ Example:
       res.on('data', function (chunk) {
         console.log('BODY: ' + chunk);
       });
+    });
+
+    req.on('error', function(e) {
+      console.log('problem with request: ' + e.message);
     });
 
     // write data to request body
@@ -443,49 +478,60 @@ Example:
 
 
 ## http.Agent
-## http.getAgent(host, port)
 
-`http.request()` uses a special `Agent` for managing multiple connections to
-an HTTP server. Normally `Agent` instances should not be exposed to user
-code, however in certain situations it's useful to check the status of the
-agent. The `http.getAgent()` function allows you to access the agents.
+In node 0.5.3+ there is a new implementation of the HTTP Agent which is used 
+for pooling sockets used in HTTP client requests.
 
-### Event: 'upgrade'
+Previously, a single agent instance help the pool for single host+port. The 
+current implementation now holds sockets for any number of hosts.
 
-`function (request, socket, head)`
+The current HTTP Agent also defaults client requests to using 
+Connection:keep-alive. If no pending HTTP requests are waiting on a socket 
+to become free the socket is closed. This means that node's pool has the 
+benefit of keep-alive when under load but still does not require developers 
+to manually close the HTTP clients using keep-alive.
 
-Emitted each time a server responds to a request with an upgrade. If this event
-isn't being listened for, clients receiving an upgrade header will have their
-connections closed.
+Sockets are removed from the agent's pool when the socket emits either a 
+"close" event or a special "agentRemove" event. This means that if you intend 
+to keep one HTTP request open for a long time and don't want it to stay in the 
+pool you can do something along the lines of:
 
-See the description of the `upgrade` event for `http.Server` for further details.
+    http.get(options, function(res) {
+      // Do stuff
+    }).on("socket", function (socket) {
+      socket.emit("agentRemove");
+    });
+  
+Alternatively, you could just opt out of pooling entirely using `agent:false`:
 
-### Event: 'continue'
+    http.get({host:'localhost', port:80, path:'/', agent:false}, function (res) {
+      // Do stuff
+    })
 
-`function ()`
+## http.globalAgent
 
-Emitted when the server sends a '100 Continue' HTTP response, usually because
-the request contained 'Expect: 100-continue'. This is an instruction that
-the client should send the request body.
+Global instance of Agent which is used as the default for all http client requests.
 
 ### agent.maxSockets
 
-By default set to 5. Determines how many concurrent sockets the agent can have open.
+By default set to 5. Determines how many concurrent sockets the agent can have 
+open per host.
 
 ### agent.sockets
 
-An array of sockets currently in use by the Agent. Do not modify.
+An object which contains arrays of sockets currently in use by the Agent. Do not 
+modify.
 
-### agent.queue
+### agent.requests
 
-A queue of requests waiting to be sent to sockets.
-
+An object which contains queues of requests that have not yet been assigned to 
+sockets. Do not modify.
 
 
 ## http.ClientRequest
 
 This object is created internally and returned from `http.request()`.  It
-represents an _in-progress_ request whose header has already been queued.  The 
+represents an _in-progress_ request whose header has already been queued.  The
 header is still mutable using the `setHeader(name, value)`, `getHeader(name)`,
 `removeHeader(name)` API.  The actual header will be sent along with the first
 data chunk or when closing the connection.
@@ -520,6 +566,8 @@ event, the entire body will be caught.
     });
 
 This is a `Writable Stream`.
+Note: Node does not check whether Content-Length and the length of the body
+which has been transmitted are equal or not.
 
 This is an `EventEmitter` with the following events:
 
@@ -530,6 +578,77 @@ This is an `EventEmitter` with the following events:
 Emitted when a response is received to this request. This event is emitted only once. The
 `response` argument will be an instance of `http.ClientResponse`.
 
+Options:
+
+- `host`: A domain name or IP address of the server to issue the request to.
+- `port`: Port of remote server.
+- `socketPath`: Unix Domain Socket (use one of host:port or socketPath)
+
+### Event: 'socket'
+
+`function (socket) { }`
+
+Emitted after a socket is assigned to this request.
+
+### Event: 'upgrade'
+
+`function (response, socket, head) { }`
+
+Emitted each time a server responds to a request with an upgrade. If this
+event isn't being listened for, clients receiving an upgrade header will have
+their connections closed.
+
+A client server pair that show you how to listen for the `upgrade` event using `http.getAgent`:
+
+    var http = require('http');
+    var net = require('net');
+
+    // Create an HTTP server
+    var srv = http.createServer(function (req, res) {
+      res.writeHead(200, {'Content-Type': 'text/plain'});
+      res.end('okay');
+    });
+    srv.on('upgrade', function(req, socket, upgradeHead) {
+      socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
+                   'Upgrade: WebSocket\r\n' +
+                   'Connection: Upgrade\r\n' +
+                   '\r\n\r\n');
+
+      socket.ondata = function(data, start, end) {
+        socket.write(data.toString('utf8', start, end), 'utf8'); // echo back
+      };
+    });
+
+    // now that server is running
+    srv.listen(1337, '127.0.0.1', function() {
+
+      // make a request
+      var options = {
+        port: 1337,
+        host: '127.0.0.1',
+        headers: {
+          'Connection': 'Upgrade',
+          'Upgrade': 'websocket'
+        }
+      };
+
+      var req = http.request(options);
+      req.end();
+
+      req.on('upgrade', function(res, socket, upgradeHead) {
+        console.log('got upgraded!');
+        socket.end();
+        process.exit(0);
+      });
+    });
+
+### Event: 'continue'
+
+`function ()`
+
+Emitted when the server sends a '100 Continue' HTTP response, usually because
+the request contained 'Expect: 100-continue'. This is an instruction that
+the client should send the request body.
 
 ### request.write(chunk, encoding='utf8')
 
@@ -559,6 +678,20 @@ followed by `request.end()`.
 
 Aborts a request.  (New since v0.3.8.)
 
+### request.setTimeout(timeout, [callback])
+
+Once a socket is assigned to this request and is connected 
+socket.setTimeout(timeout, [callback]) will be called.
+
+### request.setNoDelay(noDelay=true)
+
+Once a socket is assigned to this request and is connected 
+socket.setNoDelay(noDelay) will be called.
+
+### request.setSocketKeepAlive(enable=false, [initialDelay])
+
+Once a socket is assigned to this request and is connected 
+socket.setKeepAlive(enable, [initialDelay]) will be called.
 
 ## http.ClientResponse
 
@@ -569,17 +702,26 @@ The response implements the `Readable Stream` interface.
 
 ### Event: 'data'
 
-`function (chunk) {}`
+`function (chunk) { }`
 
 Emitted when a piece of the message body is received.
 
 
 ### Event: 'end'
 
-`function () {}`
+`function () { }`
 
 Emitted exactly once for each message. No arguments. After
 emitted no other events will be emitted on the response.
+
+### Event: 'close'
+
+`function (err) { }`
+
+Indicates that the underlaying connection was terminated before
+`end` event was emitted.
+See [http.ServerRequest](#http.ServerRequest)'s `'close'` event for more
+information.
 
 ### response.statusCode
 

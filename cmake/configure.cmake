@@ -2,7 +2,8 @@
 # configure node for building
 #
 include(CheckFunctionExists)
-
+include(CheckLibraryExists)
+include(CheckSymbolExists)
 
 if(NOT "v${CMAKE_BUILD_TYPE}" MATCHES vDebug)
   set(CMAKE_BUILD_TYPE "Release")
@@ -33,10 +34,13 @@ if(${node_arch} MATCHES unknown)
   set(node_arch x86)
 endif()
 
+set(NODE_INCLUDE_PREFIX ${CMAKE_INSTALL_PREFIX})
+
 # Copy tools directory for out-of-source build
 string(COMPARE EQUAL $(PROJECT_BINARY_DIR) ${PROJECT_SOURCE_DIR} in_source_build)
-if(NOT ${in_source_build})
+if(NOT in_source_build)
   execute_process(COMMAND cmake -E copy_directory ${PROJECT_SOURCE_DIR}/tools ${PROJECT_BINARY_DIR}/tools)
+  configure_file(${PROJECT_SOURCE_DIR}/deps/v8/tools/jsmin.py ${PROJECT_BINARY_DIR}/tools COPYONLY)
 endif()
 
 # Set some compiler/linker flags..
@@ -61,6 +65,8 @@ endif()
 
 if(${node_platform} MATCHES darwin)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -framework Carbon")
+  # explicitly set this so that we don't check again when building libeio
+  set(HAVE_FDATASYNC 0)
 else()
   # OSX fdatasync() check wrong: http://public.kitware.com/Bug/view.php?id=10044
   check_function_exists(fdatasync HAVE_FDATASYNC)
@@ -70,6 +76,20 @@ if(HAVE_FDATASYNC)
   add_definitions(-DHAVE_FDATASYNC=1)
 else()
   add_definitions(-DHAVE_FDATASYNC=0)
+endif()
+
+# check first without rt and then with rt
+check_function_exists(clock_gettime HAVE_CLOCK_GETTIME)
+check_library_exists(rt clock_gettime "" HAVE_CLOCK_GETTIME_RT)
+
+if(HAVE_CLOCK_GETTIME OR HAVE_CLOCK_GETTIME_RT)
+  check_symbol_exists(CLOCK_MONOTONIC "time.h" HAVE_MONOTONIC_CLOCK)
+endif()
+
+if(HAVE_MONOTONIC_CLOCK)
+  add_definitions(-DHAVE_MONOTONIC_CLOCK=1)
+else()
+  add_definitions(-DHAVE_MONOTONIC_CLOCK=0)
 endif()
 
 if(DTRACE)
@@ -85,6 +105,7 @@ endif()
 
 add_definitions(
   -DPLATFORM="${node_platform}"
+  -DARCH="${node_arch}"
   -DX_STACKSIZE=65536
   -D_LARGEFILE_SOURCE
   -D_FILE_OFFSET_BITS=64

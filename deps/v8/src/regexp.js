@@ -50,24 +50,29 @@ function DoConstructRegExp(object, pattern, flags) {
   var global = false;
   var ignoreCase = false;
   var multiline = false;
-
   for (var i = 0; i < flags.length; i++) {
     var c = %_CallFunction(flags, i, StringCharAt);
     switch (c) {
       case 'g':
-        // Allow duplicate flags to be consistent with JSC and others.
+        if (global) {
+          throw MakeSyntaxError("invalid_regexp_flags", [flags]);
+        }
         global = true;
         break;
       case 'i':
+        if (ignoreCase) {
+          throw MakeSyntaxError("invalid_regexp_flags", [flags]);
+        }
         ignoreCase = true;
         break;
       case 'm':
+        if (multiline) {
+          throw MakeSyntaxError("invalid_regexp_flags", [flags]);
+        }
         multiline = true;
         break;
       default:
-        // Ignore flags that have no meaning to be consistent with
-        // JSC.
-        break;
+        throw MakeSyntaxError("invalid_regexp_flags", [flags]);
     }
   }
 
@@ -235,7 +240,7 @@ function RegExpTest(string) {
   // Conversion is required by the ES5 specification (RegExp.prototype.exec
   // algorithm, step 5) even if the value is discarded for non-global RegExps.
   var i = TO_INTEGER(lastIndex);
-  
+
   if (this.global) {
     if (i < 0 || i > string.length) {
       this.lastIndex = 0;
@@ -250,11 +255,11 @@ function RegExpTest(string) {
     }
     lastMatchInfoOverride = null;
     this.lastIndex = lastMatchInfo[CAPTURE1];
-    return true;    
+    return true;
   } else {
     // Non-global regexp.
-    // Remove irrelevant preceeding '.*' in a non-global test regexp. 
-    // The expression checks whether this.source starts with '.*' and 
+    // Remove irrelevant preceeding '.*' in a non-global test regexp.
+    // The expression checks whether this.source starts with '.*' and
     // that the third char is not a '?'.
     if (%_StringCharCodeAt(this.source, 0) == 46 &&  // '.'
         %_StringCharCodeAt(this.source, 1) == 42 &&  // '*'
@@ -262,14 +267,14 @@ function RegExpTest(string) {
       if (!%_ObjectEquals(regexp_key, this)) {
         regexp_key = this;
         regexp_val = new $RegExp(SubString(this.source, 2, this.source.length),
-                                 (!this.ignoreCase 
+                                 (!this.ignoreCase
                                   ? !this.multiline ? "" : "m"
                                   : !this.multiline ? "i" : "im"));
       }
       if (%_RegExpExec(regexp_val, string, 0, lastMatchInfo) === null) {
         return false;
       }
-    }    
+    }
     %_Log('regexp', 'regexp-exec,%0r,%1S,%2i', [this, string, lastIndex]);
     // matchIndices is either null or the lastMatchInfo array.
     var matchIndices = %_RegExpExec(this, string, 0, lastMatchInfo);
@@ -384,13 +389,13 @@ function RegExpMakeCaptureGetter(n) {
 // pairs for the match and all the captured substrings), the invariant is
 // that there are at least two capture indeces.  The array also contains
 // the subject string for the last successful match.
-var lastMatchInfo = [
+var lastMatchInfo = new InternalArray(
     2,                 // REGEXP_NUMBER_OF_CAPTURES
     "",                // Last subject.
     void 0,            // Last input - settable with RegExpSetInput.
     0,                 // REGEXP_FIRST_CAPTURE + 0
-    0,                 // REGEXP_FIRST_CAPTURE + 1
-];
+    0                  // REGEXP_FIRST_CAPTURE + 1
+);
 
 // Override last match info with an array of actual substrings.
 // Used internally by replace regexp with function.
@@ -400,7 +405,8 @@ var lastMatchInfoOverride = null;
 
 // -------------------------------------------------------------------
 
-function SetupRegExp() {
+function SetUpRegExp() {
+  %CheckIsBootstrapping();
   %FunctionSetInstanceClassName($RegExp, 'RegExp');
   %FunctionSetPrototype($RegExp, new $Object());
   %SetProperty($RegExp.prototype, 'constructor', $RegExp, DONT_ENUM);
@@ -479,5 +485,4 @@ function SetupRegExp() {
   }
 }
 
-
-SetupRegExp();
+SetUpRegExp();

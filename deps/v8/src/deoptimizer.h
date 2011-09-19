@@ -30,6 +30,7 @@
 
 #include "v8.h"
 
+#include "allocation.h"
 #include "macro-assembler.h"
 #include "zone-inl.h"
 
@@ -40,40 +41,19 @@ namespace internal {
 class FrameDescription;
 class TranslationIterator;
 class DeoptimizingCodeListNode;
+class DeoptimizedFrameInfo;
 
-
-class ValueDescription BASE_EMBEDDED {
+class HeapNumberMaterializationDescriptor BASE_EMBEDDED {
  public:
-  explicit ValueDescription(int index) : stack_index_(index) { }
-  int stack_index() const { return stack_index_; }
+  HeapNumberMaterializationDescriptor(Address slot_address, double val)
+      : slot_address_(slot_address), val_(val) { }
+
+  Address slot_address() const { return slot_address_; }
+  double value() const { return val_; }
 
  private:
-  // Offset relative to the top of the stack.
-  int stack_index_;
-};
-
-
-class ValueDescriptionInteger32: public ValueDescription {
- public:
-  ValueDescriptionInteger32(int index, int32_t value)
-      : ValueDescription(index), int32_value_(value) { }
-  int32_t int32_value() const { return int32_value_; }
-
- private:
-  // Raw value.
-  int32_t int32_value_;
-};
-
-
-class ValueDescriptionDouble: public ValueDescription {
- public:
-  ValueDescriptionDouble(int index, double value)
-      : ValueDescription(index), double_value_(value) { }
-  double double_value() const { return double_value_; }
-
- private:
-  // Raw value.
-  double double_value_;
+  Address slot_address_;
+  double val_;
 };
 
 
@@ -93,12 +73,48 @@ class OptimizedFunctionVisitor BASE_EMBEDDED {
 };
 
 
+class Deoptimizer;
+
+
+class DeoptimizerData {
+ public:
+  DeoptimizerData();
+  ~DeoptimizerData();
+
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  void Iterate(ObjectVisitor* v);
+#endif
+
+ private:
+  LargeObjectChunk* eager_deoptimization_entry_code_;
+  LargeObjectChunk* lazy_deoptimization_entry_code_;
+  Deoptimizer* current_;
+
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  DeoptimizedFrameInfo* deoptimized_frame_info_;
+#endif
+
+  // List of deoptimized code which still have references from active stack
+  // frames. These code objects are needed by the deoptimizer when deoptimizing
+  // a frame for which the code object for the function function has been
+  // changed from the code present when deoptimizing was done.
+  DeoptimizingCodeListNode* deoptimizing_code_list_;
+
+  friend class Deoptimizer;
+
+  DISALLOW_COPY_AND_ASSIGN(DeoptimizerData);
+};
+
+
 class Deoptimizer : public Malloced {
  public:
   enum BailoutType {
     EAGER,
     LAZY,
-    OSR
+    OSR,
+    // This last bailout type is not really a bailout, but used by the
+    // debugger to deoptimize stack frames to allow inspection.
+    DEBUGGER
   };
 
   int output_count() const { return output_count_; }
@@ -107,8 +123,26 @@ class Deoptimizer : public Malloced {
                           BailoutType type,
                           unsigned bailout_id,
                           Address from,
-                          int fp_to_sp_delta);
-  static Deoptimizer* Grab();
+                          int fp_to_sp_delta,
+                          Isolate* isolate);
+  static Deoptimizer* Grab(Isolate* isolate);
+
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  // The returned object with information on the optimized frame needs to be
+  // freed before another one can be generated.
+  static DeoptimizedFrameInfo* DebuggerInspectableFrame(JavaScriptFrame* frame,
+                                                        int frame_index,
+                                                        Isolate* isolate);
+  static void DeleteDebuggerInspectableFrame(DeoptimizedFrameInfo* info,
+                                             Isolate* isolate);
+#endif
+
+  // Makes sure that there is enough room in the relocation
+  // information of a code object to perform lazy deoptimization
+  // patching. If there is not enough room a new relocation
+  // information object is allocated and comments are added until it
+  // is big enough.
+  static void EnsureRelocSpaceForLazyDeoptimization(Handle<Code> code);
 
   // Deoptimize the function now. Its current optimized code will never be run
   // again and any activations of the optimized code will get deoptimized when
@@ -157,7 +191,11 @@ class Deoptimizer : public Malloced {
 
   ~Deoptimizer();
 
-  void InsertHeapNumberValues(int index, JavaScriptFrame* frame);
+  void MaterializeHeapNumbers();
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  void MaterializeHeapNumbersForDebuggerInspectableFrame(
+      Address top, uint32_t size, DeoptimizedFrameInfo* info);
+#endif
 
   static void ComputeOutputFrames(Deoptimizer* deoptimizer);
 
@@ -167,9 +205,6 @@ class Deoptimizer : public Malloced {
                            unsigned node_id,
                            SharedFunctionInfo* shared);
 
-  static void Setup();
-  static void TearDown();
-
   // Code generation support.
   static int input_offset() { return OFFSET_OF(Deoptimizer, input_); }
   static int output_count_offset() {
@@ -177,7 +212,7 @@ class Deoptimizer : public Malloced {
   }
   static int output_offset() { return OFFSET_OF(Deoptimizer, output_); }
 
-  static int GetDeoptimizedCodeCount();
+  static int GetDeoptimizedCodeCount(Isolate* isolate);
 
   static const int kNotDeoptimizationEntry = -1;
 
@@ -218,11 +253,13 @@ class Deoptimizer : public Malloced {
  private:
   static const int kNumberOfEntries = 4096;
 
-  Deoptimizer(JSFunction* function,
+  Deoptimizer(Isolate* isolate,
+              JSFunction* function,
               BailoutType type,
               unsigned bailout_id,
               Address from,
-              int fp_to_sp_delta);
+              int fp_to_sp_delta,
+              Code* optimized_code);
   void DeleteFrameDescriptions();
 
   void DoComputeOutputFrames();
@@ -246,13 +283,7 @@ class Deoptimizer : public Malloced {
 
   Object* ComputeLiteral(int index) const;
 
-  void InsertHeapNumberValue(JavaScriptFrame* frame,
-                             int stack_index,
-                             double val,
-                             int extra_slot_count);
-
-  void AddInteger32Value(int frame_index, int slot_index, int32_t value);
-  void AddDoubleValue(int frame_index, int slot_index, double value);
+  void AddDoubleValue(intptr_t slot_address, double value);
 
   static LargeObjectChunk* CreateCode(BailoutType type);
   static void GenerateDeoptimizationEntries(
@@ -264,16 +295,12 @@ class Deoptimizer : public Malloced {
   static Code* FindDeoptimizingCodeFromAddress(Address addr);
   static void RemoveDeoptimizingCode(Code* code);
 
-  static LargeObjectChunk* eager_deoptimization_entry_code_;
-  static LargeObjectChunk* lazy_deoptimization_entry_code_;
-  static Deoptimizer* current_;
+  // Fill the input from from a JavaScript frame. This is used when
+  // the debugger needs to inspect an optimized frame. For normal
+  // deoptimizations the input frame is filled in generated code.
+  void FillInputFrame(Address tos, JavaScriptFrame* frame);
 
-  // List of deoptimized code which still have references from active stack
-  // frames. These code objects are needed by the deoptimizer when deoptimizing
-  // a frame for which the code object for the function function has been
-  // changed from the code present when deoptimizing was done.
-  static DeoptimizingCodeListNode* deoptimizing_code_list_;
-
+  Isolate* isolate_;
   JSFunction* function_;
   Code* optimized_code_;
   unsigned bailout_id_;
@@ -288,13 +315,13 @@ class Deoptimizer : public Malloced {
   // Array of output frame descriptions.
   FrameDescription** output_;
 
-  List<ValueDescriptionInteger32>* integer32_values_;
-  List<ValueDescriptionDouble>* double_values_;
+  List<HeapNumberMaterializationDescriptor> deferred_heap_numbers_;
 
-  static int table_entry_size_;
+  static const int table_entry_size_;
 
   friend class FrameDescription;
   friend class DeoptimizingCodeListNode;
+  friend class DeoptimizedFrameInfo;
 };
 
 
@@ -304,14 +331,23 @@ class FrameDescription {
                    JSFunction* function);
 
   void* operator new(size_t size, uint32_t frame_size) {
-    return malloc(size + frame_size);
+    // Subtracts kPointerSize, as the member frame_content_ already supplies
+    // the first element of the area to store the frame.
+    return malloc(size + frame_size - kPointerSize);
+  }
+
+  void operator delete(void* pointer, uint32_t frame_size) {
+    free(pointer);
   }
 
   void operator delete(void* description) {
     free(description);
   }
 
-  intptr_t GetFrameSize() const { return frame_size_; }
+  uint32_t GetFrameSize() const {
+    ASSERT(static_cast<uint32_t>(frame_size_) == frame_size_);
+    return static_cast<uint32_t>(frame_size_);
+  }
 
   JSFunction* GetFunction() const { return function_; }
 
@@ -363,6 +399,23 @@ class FrameDescription {
 
   void SetContinuation(intptr_t pc) { continuation_ = pc; }
 
+#ifdef DEBUG
+  Code::Kind GetKind() const { return kind_; }
+  void SetKind(Code::Kind kind) { kind_ = kind; }
+#endif
+
+  // Get the incoming arguments count.
+  int ComputeParametersCount();
+
+  // Get a parameter value for an unoptimized frame.
+  Object* GetParameter(Deoptimizer* deoptimizer, int index);
+
+  // Get the expression stack height for a unoptimized frame.
+  unsigned GetExpressionCount(Deoptimizer* deoptimizer);
+
+  // Get the expression stack value for an unoptimized frame.
+  Object* GetExpression(Deoptimizer* deoptimizer, int index);
+
   static int registers_offset() {
     return OFFSET_OF(FrameDescription, registers_);
   }
@@ -388,12 +441,15 @@ class FrameDescription {
   }
 
   static int frame_content_offset() {
-    return sizeof(FrameDescription);
+    return OFFSET_OF(FrameDescription, frame_content_);
   }
 
  private:
   static const uint32_t kZapUint32 = 0xbeeddead;
 
+  // Frame_size_ must hold a uint32_t value.  It is only a uintptr_t to
+  // keep the variable-size array frame_content_ of type intptr_t at
+  // the end of the structure aligned.
   uintptr_t frame_size_;  // Number of bytes.
   JSFunction* function_;
   intptr_t registers_[Register::kNumRegisters];
@@ -402,10 +458,17 @@ class FrameDescription {
   intptr_t pc_;
   intptr_t fp_;
   Smi* state_;
+#ifdef DEBUG
+  Code::Kind kind_;
+#endif
 
   // Continuation is the PC where the execution continues after
   // deoptimizing.
   intptr_t continuation_;
+
+  // This must be at the end of the object as the object is allocated larger
+  // than it's definition indicate to extend this array.
+  intptr_t frame_content_[1];
 
   intptr_t* GetFrameSlotPointer(unsigned offset) {
     ASSERT(offset < frame_size_);
@@ -438,9 +501,7 @@ class TranslationIterator BASE_EMBEDDED {
 
   int32_t Next();
 
-  bool HasNext() const { return index_ >= 0; }
-
-  void Done() { index_ = -1; }
+  bool HasNext() const { return index_ < buffer_->length(); }
 
   void Skip(int n) {
     for (int i = 0; i < n; i++) Next();
@@ -494,7 +555,7 @@ class Translation BASE_EMBEDDED {
 
   static int NumberOfOperandsFor(Opcode opcode);
 
-#ifdef OBJECT_PRINT
+#if defined(OBJECT_PRINT) || defined(ENABLE_DISASSEMBLER)
   static const char* StringFor(Opcode opcode);
 #endif
 
@@ -523,6 +584,142 @@ class DeoptimizingCodeListNode : public Malloced {
   DeoptimizingCodeListNode* next_;
 };
 
+
+class SlotRef BASE_EMBEDDED {
+ public:
+  enum SlotRepresentation {
+    UNKNOWN,
+    TAGGED,
+    INT32,
+    DOUBLE,
+    LITERAL
+  };
+
+  SlotRef()
+      : addr_(NULL), representation_(UNKNOWN) { }
+
+  SlotRef(Address addr, SlotRepresentation representation)
+      : addr_(addr), representation_(representation) { }
+
+  explicit SlotRef(Object* literal)
+      : literal_(literal), representation_(LITERAL) { }
+
+  Handle<Object> GetValue() {
+    switch (representation_) {
+      case TAGGED:
+        return Handle<Object>(Memory::Object_at(addr_));
+
+      case INT32: {
+        int value = Memory::int32_at(addr_);
+        if (Smi::IsValid(value)) {
+          return Handle<Object>(Smi::FromInt(value));
+        } else {
+          return Isolate::Current()->factory()->NewNumberFromInt(value);
+        }
+      }
+
+      case DOUBLE: {
+        double value = Memory::double_at(addr_);
+        return Isolate::Current()->factory()->NewNumber(value);
+      }
+
+      case LITERAL:
+        return literal_;
+
+      default:
+        UNREACHABLE();
+        return Handle<Object>::null();
+    }
+  }
+
+  static void ComputeSlotMappingForArguments(JavaScriptFrame* frame,
+                                             int inlined_frame_index,
+                                             Vector<SlotRef>* args_slots);
+
+ private:
+  Address addr_;
+  Handle<Object> literal_;
+  SlotRepresentation representation_;
+
+  static Address SlotAddress(JavaScriptFrame* frame, int slot_index) {
+    if (slot_index >= 0) {
+      const int offset = JavaScriptFrameConstants::kLocal0Offset;
+      return frame->fp() + offset - (slot_index * kPointerSize);
+    } else {
+      const int offset = JavaScriptFrameConstants::kLastParameterOffset;
+      return frame->fp() + offset - ((slot_index + 1) * kPointerSize);
+    }
+  }
+
+  static SlotRef ComputeSlotForNextArgument(TranslationIterator* iterator,
+                                            DeoptimizationInputData* data,
+                                            JavaScriptFrame* frame);
+};
+
+
+#ifdef ENABLE_DEBUGGER_SUPPORT
+// Class used to represent an unoptimized frame when the debugger
+// needs to inspect a frame that is part of an optimized frame. The
+// internally used FrameDescription objects are not GC safe so for use
+// by the debugger frame information is copied to an object of this type.
+class DeoptimizedFrameInfo : public Malloced {
+ public:
+  DeoptimizedFrameInfo(Deoptimizer* deoptimizer, int frame_index);
+  virtual ~DeoptimizedFrameInfo();
+
+  // GC support.
+  void Iterate(ObjectVisitor* v);
+
+  // Return the number of incoming arguments.
+  int parameters_count() { return parameters_count_; }
+
+  // Return the height of the expression stack.
+  int expression_count() { return expression_count_; }
+
+  // Get the frame function.
+  JSFunction* GetFunction() {
+    return function_;
+  }
+
+  // Get an incoming argument.
+  Object* GetParameter(int index) {
+    ASSERT(0 <= index && index < parameters_count());
+    return parameters_[index];
+  }
+
+  // Get an expression from the expression stack.
+  Object* GetExpression(int index) {
+    ASSERT(0 <= index && index < expression_count());
+    return expression_stack_[index];
+  }
+
+ private:
+  // Set the frame function.
+  void SetFunction(JSFunction* function) {
+    function_ = function;
+  }
+
+  // Set an incoming argument.
+  void SetParameter(int index, Object* obj) {
+    ASSERT(0 <= index && index < parameters_count());
+    parameters_[index] = obj;
+  }
+
+  // Set an expression on the expression stack.
+  void SetExpression(int index, Object* obj) {
+    ASSERT(0 <= index && index < expression_count());
+    expression_stack_[index] = obj;
+  }
+
+  JSFunction* function_;
+  int parameters_count_;
+  int expression_count_;
+  Object** parameters_;
+  Object** expression_stack_;
+
+  friend class Deoptimizer;
+};
+#endif
 
 } }  // namespace v8::internal
 

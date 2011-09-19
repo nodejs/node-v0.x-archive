@@ -1,6 +1,7 @@
 
 @include synopsis
 @include globals
+@include stdio
 @include timers
 @include modules
 @include addons
@@ -17,15 +18,15 @@
 @include fs
 @include path
 @include net
-@include dns
 @include dgram
+@include dns
 @include http
 @include https
 @include url
 @include querystring
 @include readline
 @include repl
-@include script
+@include vm
 @include child_processes
 @include assert
 @include tty

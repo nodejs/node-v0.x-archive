@@ -1,4 +1,26 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include <node_dtrace.h>
+#include <string.h>
 
 #ifdef HAVE_DTRACE
 #include "node_provider.h"
@@ -159,7 +181,7 @@ Handle<Value> DTRACE_NET_SOCKET_WRITE(const Arguments& args) {
 }
 
 Handle<Value> DTRACE_HTTP_SERVER_REQUEST(const Arguments& args) {
-  node_dtrace_http_request_t req;
+  node_dtrace_http_server_request_t req;
 
   if (!NODE_HTTP_SERVER_REQUEST_ENABLED())
     return Undefined();
@@ -167,9 +189,24 @@ Handle<Value> DTRACE_HTTP_SERVER_REQUEST(const Arguments& args) {
   HandleScope scope;
 
   Local<Object> arg0 = Local<Object>::Cast(args[0]);
+  Local<Object> headers;
 
+  memset(&req, 0, sizeof(req));
+  req._un.version = 1;
   SLURP_STRING(arg0, url, &req.url);
   SLURP_STRING(arg0, method, &req.method);
+
+  SLURP_OBJECT(arg0, headers, &headers);
+
+  if (!(headers)->IsObject())
+    return (ThrowException(Exception::Error(String::New("expected "
+      "object for request to contain string member headers"))));
+
+  Local<Value> strfwdfor = headers->Get(String::New("x-forwarded-for"));
+  String::Utf8Value fwdfor(strfwdfor->ToString());
+
+  if (!strfwdfor->IsString() || (req.forwardedFor = *fwdfor) == NULL)
+    req.forwardedFor = const_cast<char*>("");
 
   SLURP_CONNECTION(args[1], conn);
 
@@ -190,7 +227,7 @@ Handle<Value> DTRACE_HTTP_SERVER_RESPONSE(const Arguments& args) {
 }
 
 Handle<Value> DTRACE_HTTP_CLIENT_REQUEST(const Arguments& args) {
-  node_dtrace_http_request_t req;
+  node_dtrace_http_client_request_t req;
   char *header;
 
   if (!NODE_HTTP_CLIENT_REQUEST_ENABLED())

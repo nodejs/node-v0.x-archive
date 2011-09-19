@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "node.h"
 #include "platform.h"
 
@@ -18,7 +39,7 @@ using namespace v8;
 
 static char buf[MAXPATHLEN + 1];
 static char *process_title = NULL;
-
+double Platform::prog_start_time = Platform::GetUptime();
 
 // Does the about the same as perror(), but for windows api functions
 static void _winapi_perror(const char* prefix = NULL) {
@@ -43,14 +64,20 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
 }
 
 
+// Max title length; the only thing MSDN tells us about the maximum length
+// of the console title is that it is smaller than 64K. However in practice
+// it is much smaller, and there is no way to figure out what the exact length
+// of the title is or can be, at least not on XP. To make it even more
+// annoying, GetConsoleTitle failes when the buffer to be read into is bigger
+// than the actual maximum length. So we make a conservative guess here;
+// just don't put the novel you're writing in the title, unless the plot
+// survives truncation.
+#define MAX_TITLE_LENGTH 8192
+
 void Platform::SetProcessTitle(char *title) {
   // We need to convert _title_ to UTF-16 first, because that's what windows uses internally.
   // It would be more efficient to use the UTF-16 value that we can obtain from v8,
   // but it's not accessible from here.
-
-  // Max title length; according to the specs it should be 64K but in practice it's a little over 30000,
-  // but who needs titles that long anyway?
-  const int MAX_TITLE_LENGTH = 30001;
 
   int length;
   WCHAR *title_w;
@@ -88,59 +115,36 @@ void Platform::SetProcessTitle(char *title) {
 
 
 static inline char* _getProcessTitle() {
-  WCHAR *title_w;
+  WCHAR title_w[MAX_TITLE_LENGTH];
   char *title;
-  int length, length_w;
+  int result, length;
 
-  length_w = GetConsoleTitleW((WCHAR*)L"\0", sizeof(WCHAR));
+  result = GetConsoleTitleW(title_w, sizeof(title_w) / sizeof(WCHAR));
 
-  // If length is zero, there may be an error or the title may be empty
-  if (!length_w) {
-    if (GetLastError()) {
-      _winapi_perror("GetConsoleTitleW");
-      return NULL;
-    } else {
-      // The title is empty, so return empty string
-      process_title = strdup("\0");
-      return process_title;
-    }
-  }
-
-  // Room for \0 terminator
-  length_w++;
-
-  title_w = new WCHAR[length_w];
-
-  if (!GetConsoleTitleW(title_w, length_w * sizeof(WCHAR))) {
+  if (result == 0) {
     _winapi_perror("GetConsoleTitleW");
-    delete title_w;
     return NULL;
   }
 
   // Find out what the size of the buffer is that we need
-  length = WideCharToMultiByte(CP_UTF8, 0, title_w, length_w, NULL, 0, NULL, NULL);
+  length = WideCharToMultiByte(CP_UTF8, 0, title_w, -1, NULL, 0, NULL, NULL);
   if (!length) {
     _winapi_perror("WideCharToMultiByte");
-    delete title_w;
     return NULL;
   }
 
   title = (char *) malloc(length);
   if (!title) {
     perror("malloc");
-    delete title_w;
     return NULL;
   }
 
   // Do utf16 -> utf8 conversion here
   if (!WideCharToMultiByte(CP_UTF8, 0, title_w, -1, title, length, NULL, NULL)) {
     _winapi_perror("WideCharToMultiByte");
-    delete title_w;
     free(title);
     return NULL;
   }
-
-  delete title_w;
 
   return title;
 }
@@ -243,13 +247,6 @@ error:
 }
 
 
-int Platform::GetExecutablePath(char* buffer, size_t* size) {
-  *size = readlink("/proc/self/exe", buffer, *size - 1);
-  if (*size <= 0) return -1;
-  buffer[*size] = '\0';
-  return 0;
-}
-
 int Platform::GetCPUInfo(Local<Array> *cpus) {
   HandleScope scope;
   Local<Object> cpuinfo;
@@ -338,7 +335,7 @@ double Platform::GetTotalMemory() {
   return pages * pagesize;
 }
 
-double Platform::GetUptime() {
+double Platform::GetUptimeImpl() {
   double amount;
   char line[512];
   FILE *fpUptime = fopen("/proc/uptime", "r");
@@ -356,6 +353,12 @@ double Platform::GetUptime() {
 int Platform::GetLoadAvg(Local<Array> *loads) {
   // Unsupported as of cygwin 1.7.7
   return -1;
+}
+
+
+Handle<Value> Platform::GetInterfaceAddresses() {
+  HandleScope scope;
+  return scope.Close(Object::New());
 }
 
 

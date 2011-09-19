@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -27,7 +48,14 @@ var qsTestCases = [
      'undef': ''}],
   [' foo = bar ', '%20foo%20=%20bar%20', {' foo ': ' bar '}],
   ['foo=%zx', 'foo=%25zx', {'foo': '%zx'}],
-  ['foo=%EF%BF%BD', 'foo=%EF%BF%BD', {'foo': '\ufffd' }]
+  ['foo=%EF%BF%BD', 'foo=%EF%BF%BD', {'foo': '\ufffd' }],
+  // See: https://github.com/joyent/node/issues/1707
+  [ 'hasOwnProperty=x&toString=foo&valueOf=bar&__defineGetter__=baz',
+    'hasOwnProperty=x&toString=foo&valueOf=bar&__defineGetter__=baz',
+    { hasOwnProperty: 'x',
+      toString: 'foo',
+      valueOf: 'bar',
+      __defineGetter__: 'baz' } ]
 ];
 
 // [ wonkyQS, canonicalQS, obj ]
