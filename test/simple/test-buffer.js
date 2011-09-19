@@ -689,3 +689,27 @@ buf.write('123456', 'base64');
 assert.equal(Buffer._charsWritten, 6);
 buf.write('00010203040506070809', 'hex');
 assert.equal(Buffer._charsWritten, 18);
+
+// request size too large (0x3fffffff)
+var kMaxLength = 0x3fffffff;
+var bigbuffa;
+caught_error = null;
+
+try {
+  bigbuffa = new Buffer(kMaxLength+1);
+} catch (err) {
+  caught_error = err;
+}
+assert.strictEqual(caught_error.message, 'Invalid array length');
+
+// request size large but not too large
+caught_error = null;
+
+try {
+  // XXX Can't handle non-integral values?
+//bigbuffa = new Buffer(kMaxLength/2);
+  bigbuffa = new Buffer(Math.floor(kMaxLength/2));
+} catch (err) {
+  caught_error = err;
+}
+assert.strictEqual(caught_error, null);
