@@ -36,7 +36,7 @@ size_t uv_loop_capcity_;
 size_t uv_loop_count_;
 
 
-static void uv_signal_doasync(uv_loop_t* loop, int type);
+static void uv_signal_async(uv_loop_t* loop, int type);
 
 
 
@@ -48,7 +48,7 @@ void uv_signal_ctrlHandler(int type )
 
     for(index = 0; index < uv_loop_count_; ++ index)
 	{
-		uv_signal_doasync(uv_loops_[index], type);
+		uv_signal_async(uv_loops_[index], type);
 	}
 
     LeaveCriticalSection(&uv_signal_data_guard_);
@@ -175,10 +175,11 @@ void uv_signal_endgame(uv_loop_t* loop, uv_signal_t* handle) {
 }
 
 
-int uv_signal_start(uv_signal_t* handle, uv_signal_cb signal_cb) {
+int uv_signal_start(uv_signal_t* handle, uv_signal_cb signal_cb, int signum) {
   uv_loop_t* loop = handle->loop;
 
   handle->signal_cb = signal_cb;
+  handle->signum = signum;
   handle->flags |= UV_HANDLE_ACTIVE;
 
   DLINK_InsertNext(&loop->signal_handles, handle);
@@ -204,7 +205,7 @@ int uv_signal_stop(uv_signal_t* handle) {
 
 struct signal_async_s {
 	struct uv_async_s async;
-	DWORD fdwCtrlType;
+	int signum;
 };
 
 void uv_signal_handler(struct uv_async_s* async, int signal) {
@@ -213,15 +214,17 @@ void uv_signal_handler(struct uv_async_s* async, int signal) {
 	uv_signal_t*  head = &(async->loop->signal_handles);
 	uv_signal_t* handle = head;
 	while(head != (handle = handle->_next)) {
-		handle->signal_cb(handle, s->fdwCtrlType);
+		if(handle->signum == async->signum) {
+		    handle->signal_cb(handle, s->fdwCtrlType);
+	    }
 	}
 }
 
 
-static void uv_signal_doasync(uv_loop_t* loop, int type) 
+static void uv_signal_async(uv_loop_t* loop, int type) 
 {
    struct signal_async_s* async = (struct signal_async_s*)malloc(sizeof(struct signal_async_s));
    uv_async_init(loop, &async->async, &uv_signal_handler);
-   async->fdwCtrlType = type;
+   async->signum = type;
    uv_async_send(&async->async);
 }

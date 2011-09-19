@@ -722,7 +722,7 @@ int uv_async_send(uv_async_t* async);
 /*
  * uv_signal_t is a subclass of uv_handle_t.
  *
- * Wraps libev's ev_timer watcher. Used to get woken up at a specified time
+ * Wraps libev's ev_signal watcher. Used to get woken up at a specified time
  * in the future.
  */
 struct uv_signal_s {
@@ -730,11 +730,11 @@ struct uv_signal_s {
   UV_SIGNAL_PRIVATE_FIELDS
 };
 
-int uv_signal_init(uv_loop_t*, uv_signal_t* timer);
+int uv_signal_init(uv_loop_t*, uv_signal_t* handle);
 
-int uv_signal_start(uv_signal_t* timer, uv_signal_cb cb);
+int uv_signal_start(uv_signal_t* handle, uv_signal_cb cb, int signum);
 
-int uv_signal_stop(uv_signal_t* timer);
+int uv_signal_stop(uv_signal_t* handle);
 
 /*
  * uv_timer_t is a subclass of uv_handle_t.

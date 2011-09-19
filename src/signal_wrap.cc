@@ -105,7 +105,7 @@ class SignalWrap : public HandleWrap {
     UNWRAP
 
 
-    int r = uv_signal_start(&wrap->handle_, OnSignal);
+    int r = uv_signal_start(&wrap->handle_, OnSignal, sig_);
 
     // Error starting the timer.
     if (r) SetErrno(uv_last_error(uv_default_loop()).code);
@@ -136,8 +136,8 @@ class SignalWrap : public HandleWrap {
     SignalWrap* wrap = static_cast<SignalWrap*>(handle->data);
     assert(wrap);
 	
-	if(wrap->sig_ == type)
-		return ;
+	  if(wrap->sig_ == type)
+		  return ;
 
     wrap->StateChange();
 

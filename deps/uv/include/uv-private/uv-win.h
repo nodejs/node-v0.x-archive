@@ -185,6 +185,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
 #define UV_SIGNAL_PRIVATE_FIELDS          \
   struct uv_signal_s* _prev;              \
   struct uv_signal_s* _next;              \
+  int signum;                             \
   uv_signal_cb signal_cb;
 
 #define UV_TIMER_PRIVATE_FIELDS           \
