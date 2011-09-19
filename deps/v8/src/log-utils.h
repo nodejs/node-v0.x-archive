@@ -59,7 +59,7 @@ class Log {
 
   // This mode is only used in tests, as temporary files are automatically
   // deleted on close and thus can't be accessed afterwards.
-  static const char* kLogToTemporaryFile;
+  static const char* const kLogToTemporaryFile;
 
  private:
   explicit Log(Logger* logger);
@@ -141,7 +141,6 @@ class LogMessageBuilder BASE_EMBEDDED {
   void WriteToLogFile();
 
  private:
-
   Log* log_;
   ScopedLock sl;
   int pos_;

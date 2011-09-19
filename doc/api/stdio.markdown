@@ -1,6 +1,8 @@
 ## console
 
-Browser-like object for printing to stdout and stderr.
+For printing to stdout and stderr.  Similar to the console object functions
+provided by most web browsers, here the output is sent to stdout or stderr.
+
 
 ### console.log()
 
@@ -11,6 +13,7 @@ Prints to stdout with newline. This function can take multiple arguments in a
 
 If formating elements are not found in the first string then `util.inspect`
 is used on each argument.
+See [util.format()](util.html#util.format) for more infomation.
 
 ### console.info()
 

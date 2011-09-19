@@ -39,14 +39,12 @@ TEST_IMPL(tcp_bind6_error_addrinuse) {
   uv_tcp_t server1, server2;
   int r;
 
-  uv_init();
-
-  r = uv_tcp_init(&server1);
+  r = uv_tcp_init(uv_default_loop(), &server1);
   ASSERT(r == 0);
   r = uv_tcp_bind6(&server1, addr);
   ASSERT(r == 0);
 
-  r = uv_tcp_init(&server2);
+  r = uv_tcp_init(uv_default_loop(), &server2);
   ASSERT(r == 0);
   r = uv_tcp_bind6(&server2, addr);
   ASSERT(r == 0);
@@ -56,12 +54,12 @@ TEST_IMPL(tcp_bind6_error_addrinuse) {
   r = uv_listen((uv_stream_t*)&server2, 128, NULL);
   ASSERT(r == -1);
 
-  ASSERT(uv_last_error().code == UV_EADDRINUSE);
+  ASSERT(uv_last_error(uv_default_loop()).code == UV_EADDRINUSE);
 
   uv_close((uv_handle_t*)&server1, close_cb);
   uv_close((uv_handle_t*)&server2, close_cb);
 
-  uv_run();
+  uv_run(uv_default_loop());
 
   ASSERT(close_cb_called == 2);
 
@@ -74,17 +72,15 @@ TEST_IMPL(tcp_bind6_error_addrnotavail) {
   uv_tcp_t server;
   int r;
 
-  uv_init();
-
-  r = uv_tcp_init(&server);
+  r = uv_tcp_init(uv_default_loop(), &server);
   ASSERT(r == 0);
   r = uv_tcp_bind6(&server, addr);
   ASSERT(r == -1);
-  ASSERT(uv_last_error().code == UV_EADDRNOTAVAIL);
+  ASSERT(uv_last_error(uv_default_loop()).code == UV_EADDRNOTAVAIL);
 
   uv_close((uv_handle_t*)&server, close_cb);
 
-  uv_run();
+  uv_run(uv_default_loop());
 
   ASSERT(close_cb_called == 1);
 
@@ -100,18 +96,16 @@ TEST_IMPL(tcp_bind6_error_fault) {
 
   garbage_addr = (struct sockaddr_in6*) &garbage;
 
-  uv_init();
-
-  r = uv_tcp_init(&server);
+  r = uv_tcp_init(uv_default_loop(), &server);
   ASSERT(r == 0);
   r = uv_tcp_bind6(&server, *garbage_addr);
   ASSERT(r == -1);
 
-  ASSERT(uv_last_error().code == UV_EFAULT);
+  ASSERT(uv_last_error(uv_default_loop()).code == UV_EFAULT);
 
   uv_close((uv_handle_t*)&server, close_cb);
 
-  uv_run();
+  uv_run(uv_default_loop());
 
   ASSERT(close_cb_called == 1);
 
@@ -126,20 +120,18 @@ TEST_IMPL(tcp_bind6_error_inval) {
   uv_tcp_t server;
   int r;
 
-  uv_init();
-
-  r = uv_tcp_init(&server);
+  r = uv_tcp_init(uv_default_loop(), &server);
   ASSERT(r == 0);
   r = uv_tcp_bind6(&server, addr1);
   ASSERT(r == 0);
   r = uv_tcp_bind6(&server, addr2);
   ASSERT(r == -1);
 
-  ASSERT(uv_last_error().code == UV_EINVAL);
+  ASSERT(uv_last_error(uv_default_loop()).code == UV_EINVAL);
 
   uv_close((uv_handle_t*)&server, close_cb);
 
-  uv_run();
+  uv_run(uv_default_loop());
 
   ASSERT(close_cb_called == 1);
 
@@ -153,9 +145,7 @@ TEST_IMPL(tcp_bind6_localhost_ok) {
   uv_tcp_t server;
   int r;
 
-  uv_init();
-
-  r = uv_tcp_init(&server);
+  r = uv_tcp_init(uv_default_loop(), &server);
   ASSERT(r == 0);
   r = uv_tcp_bind6(&server, addr);
   ASSERT(r == 0);

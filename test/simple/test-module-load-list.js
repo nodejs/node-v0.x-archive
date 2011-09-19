@@ -28,9 +28,8 @@ function assertEqual(x, y) {
 }
 
 function checkExpected() {
-  assertEqual(expected.length, process.moduleLoadList.length);
-
-  for (var i = 0; i < expected.length; i++) {
+  var toCompare = Math.max(expected.length, process.moduleLoadList.length);
+  for (var i = 0; i < toCompare; i++) {
     assertEqual(expected[i], process.moduleLoadList[i]);
   }
 }
@@ -56,9 +55,11 @@ checkExpected();
 
 
 // Now do the test again after we console.log something.
-console.log("load console.log");
+console.log("load console.log. process.stdout._type is " +
+    process.stdout._type);
 
 if (!process.features.uv)  {
+  // legacy
   expected = expected.concat([
     'NativeModule console',
     'NativeModule net_legacy',
@@ -69,23 +70,48 @@ if (!process.features.uv)  {
     'NativeModule freelist',
     'Binding io_watcher',
     'NativeModule tty',
-    'NativeModule tty_posix', // FIXME branch on win32 here.
+    'NativeModule tty_posix',
+    'NativeModule readline'
   ]);
 } else {
-  expected = expected.concat([
-    'NativeModule console',
-    'NativeModule net_legacy',
-    'NativeModule timers_uv',
-    'Binding timer_wrap',
-    'NativeModule _linklist',
-    'Binding net',
-    'NativeModule freelist',
-    'Binding io_watcher',
-    'NativeModule tty',
-    'NativeModule tty_posix' 
-  ]);
+  switch (process.stdout._type) {
+    case 'fs':
+      expected = expected.concat([
+        'NativeModule console',
+      ]);
+      break;
+
+    case 'tty':
+      expected = expected.concat([
+        'NativeModule console',
+        'NativeModule tty',
+        'NativeModule tty_posix',
+        'NativeModule net_uv',
+        'NativeModule timers_uv',
+        'Binding timer_wrap',
+        'NativeModule _linklist',
+        'Binding pipe_wrap',
+      ]);
+      break;
+
+    case 'pipe':
+      expected = expected.concat([
+        'NativeModule console',
+        'NativeModule net_uv',
+        'NativeModule timers_uv',
+        'Binding timer_wrap',
+        'NativeModule _linklist',
+        'Binding pipe_wrap',
+      ]);
+      break;
+
+    default:
+      assert.ok(0, "prcoess.stdout._type is bad");
+  }
 }
+
+console.error("process.moduleLoadList", process.moduleLoadList)
+console.error("expected", expected)
 
 checkExpected();
 
-console.log(process.moduleLoadList);

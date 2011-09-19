@@ -31,7 +31,7 @@ This is an `EventEmitter` with the following events:
 
 `function (request, response) { }`
 
-Emitted each time there is request. Note that there may be multiple requests
+Emitted each time there is a request. Note that there may be multiple requests
 per connection (in the case of keep-alive connections).
  `request` is an instance of `http.ServerRequest` and `response` is
  an instance of `http.ServerResponse`
@@ -42,7 +42,7 @@ per connection (in the case of keep-alive connections).
 
  When a new TCP stream is established. `socket` is an object of type
  `net.Socket`. Usually users will not want to access this event. The
- `stream` can also be accessed at `request.connection`.
+ `socket` can also be accessed at `request.connection`.
 
 ### Event: 'close'
 
@@ -283,6 +283,8 @@ Note: that Content-Length is given in bytes not characters. The above example
 works because the string `'hello world'` contains only single byte characters.
 If the body contains higher coded characters then `Buffer.byteLength()`
 should be used to determine the number of bytes in a given encoding.
+And Node does not check whether Content-Length and the length of the body
+which has been transmitted are equal or not.
 
 ### response.statusCode
 
@@ -294,10 +296,13 @@ Example:
 
     response.statusCode = 404;
 
+After response header was sent to the client, this property indicates the
+status code which was sent out.
+
 ### response.setHeader(name, value)
 
 Sets a single header value for implicit headers.  If this header already exists
-in the to-be-sent headers, it's value will be replaced.  Use an array of strings
+in the to-be-sent headers, its value will be replaced.  Use an array of strings
 here if you need to send multiple headers with the same name.
 
 Example:
@@ -394,7 +399,8 @@ Options:
 - `path`: Request path. Should include query string and fragments if any.
    E.G. `'/index.html?page=12'`
 - `headers`: An object containing request headers.
-- `agent`: Controls `Agent` behavior. When an Agent is used request will default to Connection:keep-alive. Possible values:
+- `agent`: Controls `Agent` behavior. When an Agent is used request will default to 
+   Connection:keep-alive. Possible values:
  - `undefined` (default): use default `Agent` for this host and port.
  - `Agent` object: explicitly use the passed in `Agent`.
  - `false`: opts out of connection pooling with an Agent, defaults request to Connection:close.
@@ -473,21 +479,53 @@ Example:
 
 ## http.Agent
 
+In node 0.5.3+ there is a new implementation of the HTTP Agent which is used 
+for pooling sockets used in HTTP client requests.
+
+Previously, a single agent instance help the pool for single host+port. The 
+current implementation now holds sockets for any number of hosts.
+
+The current HTTP Agent also defaults client requests to using 
+Connection:keep-alive. If no pending HTTP requests are waiting on a socket 
+to become free the socket is closed. This means that node's pool has the 
+benefit of keep-alive when under load but still does not require developers 
+to manually close the HTTP clients using keep-alive.
+
+Sockets are removed from the agent's pool when the socket emits either a 
+"close" event or a special "agentRemove" event. This means that if you intend 
+to keep one HTTP request open for a long time and don't want it to stay in the 
+pool you can do something along the lines of:
+
+    http.get(options, function(res) {
+      // Do stuff
+    }).on("socket", function (socket) {
+      socket.emit("agentRemove");
+    });
+  
+Alternatively, you could just opt out of pooling entirely using `agent:false`:
+
+    http.get({host:'localhost', port:80, path:'/', agent:false}, function (res) {
+      // Do stuff
+    })
+
 ## http.globalAgent
 
 Global instance of Agent which is used as the default for all http client requests.
 
 ### agent.maxSockets
 
-By default set to 5. Determines how many concurrent sockets the agent can have open per host.
+By default set to 5. Determines how many concurrent sockets the agent can have 
+open per host.
 
 ### agent.sockets
 
-An object which contains arrays of sockets currently in use by the Agent. Do not modify.
+An object which contains arrays of sockets currently in use by the Agent. Do not 
+modify.
 
 ### agent.requests
 
-An object which contains queues of requests that have not yet been assigned to sockets. Do not modify.
+An object which contains queues of requests that have not yet been assigned to 
+sockets. Do not modify.
 
 
 ## http.ClientRequest
@@ -528,6 +566,8 @@ event, the entire body will be caught.
     });
 
 This is a `Writable Stream`.
+Note: Node does not check whether Content-Length and the length of the body
+which has been transmitted are equal or not.
 
 This is an `EventEmitter` with the following events:
 
@@ -638,6 +678,20 @@ followed by `request.end()`.
 
 Aborts a request.  (New since v0.3.8.)
 
+### request.setTimeout(timeout, [callback])
+
+Once a socket is assigned to this request and is connected 
+socket.setTimeout(timeout, [callback]) will be called.
+
+### request.setNoDelay(noDelay=true)
+
+Once a socket is assigned to this request and is connected 
+socket.setNoDelay(noDelay) will be called.
+
+### request.setSocketKeepAlive(enable=false, [initialDelay])
+
+Once a socket is assigned to this request and is connected 
+socket.setKeepAlive(enable, [initialDelay]) will be called.
 
 ## http.ClientResponse
 

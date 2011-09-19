@@ -146,6 +146,7 @@ var knownProblems = {
   "NewStrictArgumentsFast": true,
   "PushWithContext": true,
   "PushCatchContext": true,
+  "PushBlockContext": true,
   "LazyCompile": true,
   "LazyRecompile": true,
   "NotifyDeoptimized": true,
@@ -161,6 +162,9 @@ var knownProblems = {
 
   "PromoteScheduledException": true,
   "DeleteHandleScopeExtensions": true,
+
+  // Requires integer arguments to be non-negative.
+  "Apply": true,
 
   // That can only be invoked on Array.prototype.
   "FinishArrayPrototypeSetup": true,

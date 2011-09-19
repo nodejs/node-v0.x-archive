@@ -1,17 +1,18 @@
 *.a
 *.exe
+*.idb
 *.lib
 *.log
 *.map
 *.mk
 *.ncb
+*.pdb
 *.pyc
 *.scons*
+*.so
 *.suo
 *.user
 *.xcodeproj
-*.idb
-*.pdb
 #*#
 *~
 .cpplint-cache
@@ -21,6 +22,7 @@ shell
 shell_g
 /build/gyp
 /obj/
+/out/
 /test/es5conform/data/
 /test/mozilla/data/
 /test/sputnik/sputniktests/
@@ -31,5 +33,4 @@ shell_g
 /tools/visual_studio/Release
 /xcodebuild/
 TAGS
-Makefile
 *.Makefile

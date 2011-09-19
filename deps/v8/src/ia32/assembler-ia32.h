@@ -465,6 +465,7 @@ class CpuFeatures : public AllStatic {
   // Enable a specified feature within a scope.
   class Scope BASE_EMBEDDED {
 #ifdef DEBUG
+
    public:
     explicit Scope(CpuFeature f) {
       uint64_t mask = static_cast<uint64_t>(1) << f;
@@ -484,10 +485,12 @@ class CpuFeatures : public AllStatic {
         isolate_->set_enabled_cpu_features(old_enabled_);
       }
     }
+
    private:
     Isolate* isolate_;
     uint64_t old_enabled_;
 #else
+
    public:
     explicit Scope(CpuFeature f) {}
 #endif
@@ -941,6 +944,16 @@ class Assembler : public AssemblerBase {
   void andpd(XMMRegister dst, XMMRegister src);
 
   void ucomisd(XMMRegister dst, XMMRegister src);
+
+  enum RoundingMode {
+    kRoundToNearest = 0x0,
+    kRoundDown      = 0x1,
+    kRoundUp        = 0x2,
+    kRoundToZero    = 0x3
+  };
+
+  void roundsd(XMMRegister dst, XMMRegister src, RoundingMode mode);
+
   void movmskpd(Register dst, XMMRegister src);
 
   void cmpltsd(XMMRegister dst, XMMRegister src);

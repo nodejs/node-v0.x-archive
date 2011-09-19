@@ -92,8 +92,7 @@ class LCodeGen;
   V(DivI)                                       \
   V(DoubleToI)                                  \
   V(ElementsKind)                               \
-  V(ExternalArrayLength)                        \
-  V(FixedArrayLength)                           \
+  V(FixedArrayBaseLength)                       \
   V(FunctionLiteral)                            \
   V(GetCachedArrayIndex)                        \
   V(GlobalObject)                               \
@@ -915,25 +914,15 @@ class LJSArrayLength: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LExternalArrayLength: public LTemplateInstruction<1, 1, 0> {
+class LFixedArrayBaseLength: public LTemplateInstruction<1, 1, 0> {
  public:
-  explicit LExternalArrayLength(LOperand* value) {
+  explicit LFixedArrayBaseLength(LOperand* value) {
     inputs_[0] = value;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(ExternalArrayLength, "external-array-length")
-  DECLARE_HYDROGEN_ACCESSOR(ExternalArrayLength)
-};
-
-
-class LFixedArrayLength: public LTemplateInstruction<1, 1, 0> {
- public:
-  explicit LFixedArrayLength(LOperand* value) {
-    inputs_[0] = value;
-  }
-
-  DECLARE_CONCRETE_INSTRUCTION(FixedArrayLength, "fixed-array-length")
-  DECLARE_HYDROGEN_ACCESSOR(FixedArrayLength)
+  DECLARE_CONCRETE_INSTRUCTION(FixedArrayBaseLength,
+                               "fixed-array-base-length")
+  DECLARE_HYDROGEN_ACCESSOR(FixedArrayBaseLength)
 };
 
 
@@ -1169,7 +1158,7 @@ class LLoadKeyedSpecializedArrayElement: public LTemplateInstruction<1, 2, 0> {
 
   LOperand* external_pointer() { return inputs_[0]; }
   LOperand* key() { return inputs_[1]; }
-  JSObject::ElementsKind elements_kind() const {
+  ElementsKind elements_kind() const {
     return hydrogen()->elements_kind();
   }
 };
@@ -1673,7 +1662,7 @@ class LStoreKeyedSpecializedArrayElement: public LTemplateInstruction<0, 3, 0> {
   LOperand* external_pointer() { return inputs_[0]; }
   LOperand* key() { return inputs_[1]; }
   LOperand* value() { return inputs_[2]; }
-  JSObject::ElementsKind elements_kind() const {
+  ElementsKind elements_kind() const {
     return hydrogen()->elements_kind();
   }
 };

@@ -39,17 +39,20 @@ int uv_is_active(uv_handle_t* handle) {
 }
 
 
-/* TODO: integrate this with uv_close. */
-static void uv_close_error(uv_handle_t* handle, uv_err_t e) {
+void uv_close(uv_handle_t* handle, uv_close_cb cb) {
   uv_tcp_t* tcp;
   uv_pipe_t* pipe;
+  uv_udp_t* udp;
+  uv_process_t* process;
+
+  uv_loop_t* loop = handle->loop;
 
   if (handle->flags & UV_HANDLE_CLOSING) {
     return;
   }
 
-  handle->error = e;
   handle->flags |= UV_HANDLE_CLOSING;
+  handle->close_cb = cb;
 
   /* Handle-specific close actions */
   switch (handle->type) {
@@ -64,7 +67,7 @@ static void uv_close_error(uv_handle_t* handle, uv_err_t e) {
       tcp->flags &= ~(UV_HANDLE_READING | UV_HANDLE_LISTENING);
       closesocket(tcp->socket);
       if (tcp->reqs_pending == 0) {
-        uv_want_endgame(handle);
+        uv_want_endgame(loop, handle);
       }
       return;
 
@@ -73,34 +76,48 @@ static void uv_close_error(uv_handle_t* handle, uv_err_t e) {
       pipe->flags &= ~(UV_HANDLE_READING | UV_HANDLE_LISTENING);
       close_pipe(pipe, NULL, NULL);
       if (pipe->reqs_pending == 0) {
-        uv_want_endgame(handle);
+        uv_want_endgame(loop, handle);
+      }
+      return;
+
+    case UV_UDP:
+      udp = (uv_udp_t*) handle;
+      uv_udp_recv_stop(udp);
+      closesocket(udp->socket);
+      if (udp->reqs_pending == 0) {
+        uv_want_endgame(loop, handle);
       }
       return;
 
     case UV_TIMER:
       uv_timer_stop((uv_timer_t*)handle);
-      uv_want_endgame(handle);
+      uv_want_endgame(loop, handle);
       return;
 
     case UV_PREPARE:
       uv_prepare_stop((uv_prepare_t*)handle);
-      uv_want_endgame(handle);
+      uv_want_endgame(loop, handle);
       return;
 
     case UV_CHECK:
       uv_check_stop((uv_check_t*)handle);
-      uv_want_endgame(handle);
+      uv_want_endgame(loop, handle);
       return;
 
     case UV_IDLE:
       uv_idle_stop((uv_idle_t*)handle);
-      uv_want_endgame(handle);
+      uv_want_endgame(loop, handle);
       return;
 
     case UV_ASYNC:
       if (!((uv_async_t*)handle)->async_sent) {
-        uv_want_endgame(handle);
+        uv_want_endgame(loop, handle);
       }
+      return;
+
+    case UV_PROCESS:
+      process = (uv_process_t*)handle;
+      uv_process_close(loop, process);
       return;
 
     default:
@@ -110,52 +127,54 @@ static void uv_close_error(uv_handle_t* handle, uv_err_t e) {
 }
 
 
-void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
-  handle->close_cb = close_cb;
-  uv_close_error(handle, uv_ok_);
-}
-
-
-void uv_want_endgame(uv_handle_t* handle) {
+void uv_want_endgame(uv_loop_t* loop, uv_handle_t* handle) {
   if (!(handle->flags & UV_HANDLE_ENDGAME_QUEUED)) {
     handle->flags |= UV_HANDLE_ENDGAME_QUEUED;
 
-    handle->endgame_next = LOOP->endgame_handles;
-    LOOP->endgame_handles = handle;
+    handle->endgame_next = loop->endgame_handles;
+    loop->endgame_handles = handle;
   }
 }
 
 
-void uv_process_endgames() {
+void uv_process_endgames(uv_loop_t* loop) {
   uv_handle_t* handle;
 
-  while (LOOP->endgame_handles) {
-    handle = LOOP->endgame_handles;
-    LOOP->endgame_handles = handle->endgame_next;
+  while (loop->endgame_handles) {
+    handle = loop->endgame_handles;
+    loop->endgame_handles = handle->endgame_next;
 
     handle->flags &= ~UV_HANDLE_ENDGAME_QUEUED;
 
     switch (handle->type) {
       case UV_TCP:
-        uv_tcp_endgame((uv_tcp_t*)handle);
+        uv_tcp_endgame(loop, (uv_tcp_t*) handle);
         break;
 
       case UV_NAMED_PIPE:
-        uv_pipe_endgame((uv_pipe_t*)handle);
+        uv_pipe_endgame(loop, (uv_pipe_t*) handle);
+        break;
+
+      case UV_UDP:
+        uv_udp_endgame(loop, (uv_udp_t*) handle);
         break;
 
       case UV_TIMER:
-        uv_timer_endgame((uv_timer_t*)handle);
+        uv_timer_endgame(loop, (uv_timer_t*) handle);
         break;
 
       case UV_PREPARE:
       case UV_CHECK:
       case UV_IDLE:
-        uv_loop_watcher_endgame(handle);
+        uv_loop_watcher_endgame(loop, handle);
         break;
 
       case UV_ASYNC:
-        uv_async_endgame((uv_async_t*)handle);
+        uv_async_endgame(loop, (uv_async_t*) handle);
+        break;
+
+      case UV_PROCESS:
+        uv_process_endgame(loop, (uv_process_t*) handle);
         break;
 
       default:

@@ -46,7 +46,9 @@ namespace internal {
 // invalidate the cache whenever a prototype map is changed.  The stub
 // validates the map chain as in the mono-morphic case.
 
+class SmallMapList;
 class StubCache;
+
 
 class SCTableReference {
  public:
@@ -192,7 +194,6 @@ class StubCache {
 
   MUST_USE_RESULT MaybeObject* ComputeCallField(
       int argc,
-      InLoopFlag in_loop,
       Code::Kind,
       Code::ExtraICState extra_ic_state,
       String* name,
@@ -202,7 +203,6 @@ class StubCache {
 
   MUST_USE_RESULT MaybeObject* ComputeCallConstant(
       int argc,
-      InLoopFlag in_loop,
       Code::Kind,
       Code::ExtraICState extra_ic_state,
       String* name,
@@ -212,7 +212,6 @@ class StubCache {
 
   MUST_USE_RESULT MaybeObject* ComputeCallNormal(
       int argc,
-      InLoopFlag in_loop,
       Code::Kind,
       Code::ExtraICState extra_ic_state,
       String* name,
@@ -228,7 +227,6 @@ class StubCache {
 
   MUST_USE_RESULT MaybeObject* ComputeCallGlobal(
       int argc,
-      InLoopFlag in_loop,
       Code::Kind,
       Code::ExtraICState extra_ic_state,
       String* name,
@@ -240,33 +238,27 @@ class StubCache {
   // ---
 
   MUST_USE_RESULT MaybeObject* ComputeCallInitialize(int argc,
-                                                     InLoopFlag in_loop,
                                                      RelocInfo::Mode mode,
                                                      Code::Kind kind);
 
   Handle<Code> ComputeCallInitialize(int argc,
-                                     InLoopFlag in_loop,
                                      RelocInfo::Mode mode);
 
-  Handle<Code> ComputeKeyedCallInitialize(int argc, InLoopFlag in_loop);
+  Handle<Code> ComputeKeyedCallInitialize(int argc);
 
   MUST_USE_RESULT MaybeObject* ComputeCallPreMonomorphic(
       int argc,
-      InLoopFlag in_loop,
       Code::Kind kind,
       Code::ExtraICState extra_ic_state);
 
   MUST_USE_RESULT MaybeObject* ComputeCallNormal(int argc,
-                                                 InLoopFlag in_loop,
                                                  Code::Kind kind,
                                                  Code::ExtraICState state);
 
   MUST_USE_RESULT MaybeObject* ComputeCallArguments(int argc,
-                                                    InLoopFlag in_loop,
                                                     Code::Kind kind);
 
   MUST_USE_RESULT MaybeObject* ComputeCallMegamorphic(int argc,
-                                                      InLoopFlag in_loop,
                                                       Code::Kind kind,
                                                       Code::ExtraICState state);
 
@@ -276,7 +268,6 @@ class StubCache {
 
   // Finds the Code object stored in the Heap::non_monomorphic_cache().
   MUST_USE_RESULT Code* FindCallInitialize(int argc,
-                                           InLoopFlag in_loop,
                                            RelocInfo::Mode mode,
                                            Code::Kind kind);
 
@@ -294,7 +285,7 @@ class StubCache {
   void Clear();
 
   // Collect all maps that match the name and flags.
-  void CollectMatchingMaps(ZoneMapList* types,
+  void CollectMatchingMaps(SmallMapList* types,
                            String* name,
                            Code::Flags flags);
 
@@ -355,7 +346,7 @@ class StubCache {
     // shift are equal.  Shifting down the length field to get the
     // hash code would effectively throw away two bits of the hash
     // code.
-    ASSERT(kHeapObjectTagSize == String::kHashShift);
+    STATIC_ASSERT(kHeapObjectTagSize == String::kHashShift);
     // Compute the hash of the name (use entire hash field).
     ASSERT(name->HasHashCode());
     uint32_t field = name->hash_field();
@@ -377,11 +368,7 @@ class StubCache {
     // Use the seed from the primary cache in the secondary cache.
     uint32_t string_low32bits =
         static_cast<uint32_t>(reinterpret_cast<uintptr_t>(name));
-    // We always set the in_loop bit to zero when generating the lookup code
-    // so do it here too so the hash codes match.
-    uint32_t iflags =
-        (static_cast<uint32_t>(flags) & ~Code::kFlagsICInLoopMask);
-    uint32_t key = seed - string_low32bits + iflags;
+    uint32_t key = seed - string_low32bits + flags;
     return key & ((kSecondaryTableSize - 1) << kHeapObjectTagSize);
   }
 
@@ -658,7 +645,7 @@ class KeyedLoadStubCompiler: public StubCompiler {
       CodeList* handler_ics);
 
   static void GenerateLoadExternalArray(MacroAssembler* masm,
-                                        JSObject::ElementsKind elements_kind);
+                                        ElementsKind elements_kind);
 
   static void GenerateLoadFastElement(MacroAssembler* masm);
 
@@ -723,7 +710,7 @@ class KeyedStoreStubCompiler: public StubCompiler {
                                              bool is_js_array);
 
   static void GenerateStoreExternalArray(MacroAssembler* masm,
-                                         JSObject::ElementsKind elements_kind);
+                                         ElementsKind elements_kind);
 
   static void GenerateStoreDictionaryElement(MacroAssembler* masm);
 
@@ -753,7 +740,6 @@ class CallOptimization;
 class CallStubCompiler: public StubCompiler {
  public:
   CallStubCompiler(int argc,
-                   InLoopFlag in_loop,
                    Code::Kind kind,
                    Code::ExtraICState extra_ic_state,
                    InlineCacheHolderFlag cache_holder);
@@ -813,7 +799,6 @@ class CallStubCompiler: public StubCompiler {
       String* name);
 
   const ParameterCount arguments_;
-  const InLoopFlag in_loop_;
   const Code::Kind kind_;
   const Code::ExtraICState extra_ic_state_;
   const InlineCacheHolderFlag cache_holder_;

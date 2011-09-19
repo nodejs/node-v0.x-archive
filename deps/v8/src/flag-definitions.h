@@ -97,10 +97,14 @@ private:
 #define FLAG FLAG_FULL
 
 // Flags for experimental language features.
+DEFINE_bool(harmony_typeof, false, "enable harmony semantics for typeof")
 DEFINE_bool(harmony_proxies, false, "enable harmony proxies")
+DEFINE_bool(harmony_weakmaps, false, "enable harmony weak maps")
+DEFINE_bool(harmony_block_scoping, false, "enable harmony block scoping")
 
 // Flags for experimental implementation features.
-DEFINE_bool(unbox_double_arrays, false, "automatically unbox arrays of doubles")
+DEFINE_bool(unbox_double_arrays, true, "automatically unbox arrays of doubles")
+DEFINE_bool(string_slices, false, "use string slices")
 
 // Flags for Crankshaft.
 #ifdef V8_TARGET_ARCH_MIPS
@@ -400,6 +404,7 @@ DEFINE_bool(print_json_ast, false, "print source AST as JSON")
 DEFINE_bool(print_builtin_json_ast, false,
             "print source AST for builtins as JSON")
 DEFINE_string(stop_at, "", "function name where to insert a breakpoint")
+DEFINE_bool(verify_stack_height, false, "verify stack height tracing on ia32")
 
 // compiler.cc
 DEFINE_bool(print_builtin_scopes, false, "print scopes for builtins")

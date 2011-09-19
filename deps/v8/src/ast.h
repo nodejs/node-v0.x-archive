@@ -33,6 +33,7 @@
 #include "factory.h"
 #include "jsregexp.h"
 #include "runtime.h"
+#include "small-pointer-list.h"
 #include "token.h"
 #include "variables.h"
 
@@ -60,8 +61,7 @@ namespace internal {
   V(ContinueStatement)                          \
   V(BreakStatement)                             \
   V(ReturnStatement)                            \
-  V(EnterWithContextStatement)                  \
-  V(ExitContextStatement)                       \
+  V(WithStatement)                              \
   V(SwitchStatement)                            \
   V(DoWhileStatement)                           \
   V(WhileStatement)                             \
@@ -133,6 +133,10 @@ class AstNode: public ZoneObject {
 
   static const int kNoNumber = -1;
   static const int kFunctionEntryId = 2;  // Using 0 could disguise errors.
+  // This AST id identifies the point after the declarations have been
+  // visited. We need it to capture the environment effects of declarations
+  // that emit code (function declarations).
+  static const int kDeclarationsId = 3;
 
   // Override ZoneObject's new to count allocated AST nodes.
   void* operator new(size_t size, Zone* zone) {
@@ -160,7 +164,6 @@ class AstNode: public ZoneObject {
   virtual BreakableStatement* AsBreakableStatement() { return NULL; }
   virtual IterationStatement* AsIterationStatement() { return NULL; }
   virtual MaterializedLiteral* AsMaterializedLiteral() { return NULL; }
-  virtual Slot* AsSlot() { return NULL; }
 
   // True if the node is simple enough for us to inline calls containing it.
   virtual bool IsInlineable() const = 0;
@@ -204,6 +207,36 @@ class Statement: public AstNode {
 
  private:
   int statement_pos_;
+};
+
+
+class SmallMapList {
+ public:
+  SmallMapList() {}
+  explicit SmallMapList(int capacity) : list_(capacity) {}
+
+  void Reserve(int capacity) { list_.Reserve(capacity); }
+  void Clear() { list_.Clear(); }
+
+  bool is_empty() const { return list_.is_empty(); }
+  int length() const { return list_.length(); }
+
+  void Add(Handle<Map> handle) {
+    list_.Add(handle.location());
+  }
+
+  Handle<Map> at(int i) const {
+    return Handle<Map>(list_.at(i));
+  }
+
+  Handle<Map> first() const { return at(0); }
+  Handle<Map> last() const { return at(length() - 1); }
+
+ private:
+  // The list stores pointers to Map*, that is Map**, so it's GC safe.
+  SmallPointerList<Map*> list_;
+
+  DISALLOW_COPY_AND_ASSIGN(SmallMapList);
 };
 
 
@@ -265,13 +298,15 @@ class Expression: public AstNode {
     UNREACHABLE();
     return false;
   }
-  virtual ZoneMapList* GetReceiverTypes() {
+  virtual SmallMapList* GetReceiverTypes() {
     UNREACHABLE();
     return NULL;
   }
-  virtual Handle<Map> GetMonomorphicReceiverType() {
-    UNREACHABLE();
-    return Handle<Map>();
+  Handle<Map> GetMonomorphicReceiverType() {
+    ASSERT(IsMonomorphic());
+    SmallMapList* types = GetReceiverTypes();
+    ASSERT(types != NULL && types->length() == 1);
+    return types->at(0);
   }
 
   unsigned id() const { return id_; }
@@ -280,20 +315,6 @@ class Expression: public AstNode {
  private:
   unsigned id_;
   unsigned test_id_;
-};
-
-
-/**
- * A sentinel used during pre parsing that represents some expression
- * that is a valid left hand side without having to actually build
- * the expression.
- */
-class ValidLeftHandSideSentinel: public Expression {
- public:
-  explicit ValidLeftHandSideSentinel(Isolate* isolate) : Expression(isolate) {}
-  virtual bool IsValidLeftHandSide() { return true; }
-  virtual void Accept(AstVisitor* v) { UNREACHABLE(); }
-  virtual bool IsInlineable() const;
 };
 
 
@@ -359,21 +380,31 @@ class Block: public BreakableStatement {
   ZoneList<Statement*>* statements() { return &statements_; }
   bool is_initializer_block() const { return is_initializer_block_; }
 
+  Scope* block_scope() const { return block_scope_; }
+  void set_block_scope(Scope* block_scope) { block_scope_ = block_scope; }
+
  private:
   ZoneList<Statement*> statements_;
   bool is_initializer_block_;
+  Scope* block_scope_;
 };
 
 
 class Declaration: public AstNode {
  public:
-  Declaration(VariableProxy* proxy, Variable::Mode mode, FunctionLiteral* fun)
+  Declaration(VariableProxy* proxy,
+              Variable::Mode mode,
+              FunctionLiteral* fun,
+              Scope* scope)
       : proxy_(proxy),
         mode_(mode),
-        fun_(fun) {
-    ASSERT(mode == Variable::VAR || mode == Variable::CONST);
+        fun_(fun),
+        scope_(scope) {
+    ASSERT(mode == Variable::VAR ||
+           mode == Variable::CONST ||
+           mode == Variable::LET);
     // At the moment there are no "const functions"'s in JavaScript...
-    ASSERT(fun == NULL || mode == Variable::VAR);
+    ASSERT(fun == NULL || mode == Variable::VAR || mode == Variable::LET);
   }
 
   DECLARE_NODE_TYPE(Declaration)
@@ -382,11 +413,15 @@ class Declaration: public AstNode {
   Variable::Mode mode() const { return mode_; }
   FunctionLiteral* fun() const { return fun_; }  // may be NULL
   virtual bool IsInlineable() const;
+  Scope* scope() const { return scope_; }
 
  private:
   VariableProxy* proxy_;
   Variable::Mode mode_;
   FunctionLiteral* fun_;
+
+  // Nested scope from which the declaration originated.
+  Scope* scope_;
 };
 
 
@@ -627,27 +662,21 @@ class ReturnStatement: public Statement {
 };
 
 
-class EnterWithContextStatement: public Statement {
+class WithStatement: public Statement {
  public:
-  explicit EnterWithContextStatement(Expression* expression)
-      : expression_(expression) { }
+  WithStatement(Expression* expression, Statement* statement)
+      : expression_(expression), statement_(statement) { }
 
-  DECLARE_NODE_TYPE(EnterWithContextStatement)
+  DECLARE_NODE_TYPE(WithStatement)
 
   Expression* expression() const { return expression_; }
+  Statement* statement() const { return statement_; }
 
   virtual bool IsInlineable() const;
 
  private:
   Expression* expression_;
-};
-
-
-class ExitContextStatement: public Statement {
- public:
-  virtual bool IsInlineable() const;
-
-  DECLARE_NODE_TYPE(ExitContextStatement)
+  Statement* statement_;
 };
 
 
@@ -1073,9 +1102,6 @@ class VariableProxy: public Expression {
 
   DECLARE_NODE_TYPE(VariableProxy)
 
-  // Type testing & conversion
-  Variable* AsVariable() { return (this == NULL) ? NULL : var_; }
-
   virtual bool IsValidLeftHandSide() {
     return var_ == NULL ? true : var_->IsValidLeftHandSide();
   }
@@ -1092,10 +1118,7 @@ class VariableProxy: public Expression {
     return !is_this() && name().is_identical_to(n);
   }
 
-  bool IsArguments() {
-    Variable* variable = AsVariable();
-    return (variable == NULL) ? false : variable->is_arguments();
-  }
+  bool IsArguments() { return var_ != NULL && var_->is_arguments(); }
 
   Handle<String> name() const { return name_; }
   Variable* var() const { return var_; }
@@ -1121,91 +1144,21 @@ class VariableProxy: public Expression {
                 bool is_this,
                 bool inside_with,
                 int position = RelocInfo::kNoPosition);
-  VariableProxy(Isolate* isolate, bool is_this);
 
   friend class Scope;
 };
 
 
-class VariableProxySentinel: public VariableProxy {
- public:
-  virtual bool IsValidLeftHandSide() { return !is_this(); }
-
- private:
-  VariableProxySentinel(Isolate* isolate, bool is_this)
-      : VariableProxy(isolate, is_this) { }
-
-  friend class AstSentinels;
-};
-
-
-class Slot: public Expression {
- public:
-  enum Type {
-    // A slot in the parameter section on the stack. index() is
-    // the parameter index, counting left-to-right, starting at 0.
-    PARAMETER,
-
-    // A slot in the local section on the stack. index() is
-    // the variable index in the stack frame, starting at 0.
-    LOCAL,
-
-    // An indexed slot in a heap context. index() is the
-    // variable index in the context object on the heap,
-    // starting at 0. var()->scope() is the corresponding
-    // scope.
-    CONTEXT,
-
-    // A named slot in a heap context. var()->name() is the
-    // variable name in the context object on the heap,
-    // with lookup starting at the current context. index()
-    // is invalid.
-    LOOKUP
-  };
-
-  Slot(Isolate* isolate, Variable* var, Type type, int index)
-      : Expression(isolate), var_(var), type_(type), index_(index) {
-    ASSERT(var != NULL);
-  }
-
-  virtual void Accept(AstVisitor* v);
-
-  virtual Slot* AsSlot() { return this; }
-
-  bool IsStackAllocated() { return type_ == PARAMETER || type_ == LOCAL; }
-
-  // Accessors
-  Variable* var() const { return var_; }
-  Type type() const { return type_; }
-  int index() const { return index_; }
-  bool is_arguments() const { return var_->is_arguments(); }
-  virtual bool IsInlineable() const;
-
- private:
-  Variable* var_;
-  Type type_;
-  int index_;
-};
-
-
 class Property: public Expression {
  public:
-  // Synthetic properties are property lookups introduced by the system,
-  // to objects that aren't visible to the user. Function calls to synthetic
-  // properties should use the global object as receiver, not the base object
-  // of the resolved Reference.
-  enum Type { NORMAL, SYNTHETIC };
   Property(Isolate* isolate,
            Expression* obj,
            Expression* key,
-           int pos,
-           Type type = NORMAL)
+           int pos)
       : Expression(isolate),
         obj_(obj),
         key_(key),
         pos_(pos),
-        type_(type),
-        receiver_types_(NULL),
         is_monomorphic_(false),
         is_array_length_(false),
         is_string_length_(false),
@@ -1220,7 +1173,6 @@ class Property: public Expression {
   Expression* obj() const { return obj_; }
   Expression* key() const { return key_; }
   virtual int position() const { return pos_; }
-  bool is_synthetic() const { return type_ == SYNTHETIC; }
 
   bool IsStringLength() const { return is_string_length_; }
   bool IsStringAccess() const { return is_string_access_; }
@@ -1229,25 +1181,20 @@ class Property: public Expression {
   // Type feedback information.
   void RecordTypeFeedback(TypeFeedbackOracle* oracle);
   virtual bool IsMonomorphic() { return is_monomorphic_; }
-  virtual ZoneMapList* GetReceiverTypes() { return receiver_types_; }
+  virtual SmallMapList* GetReceiverTypes() { return &receiver_types_; }
   virtual bool IsArrayLength() { return is_array_length_; }
-  virtual Handle<Map> GetMonomorphicReceiverType() {
-    return monomorphic_receiver_type_;
-  }
 
  private:
   Expression* obj_;
   Expression* key_;
   int pos_;
-  Type type_;
 
-  ZoneMapList* receiver_types_;
+  SmallMapList receiver_types_;
   bool is_monomorphic_ : 1;
   bool is_array_length_ : 1;
   bool is_string_length_ : 1;
   bool is_string_access_ : 1;
   bool is_function_prototype_ : 1;
-  Handle<Map> monomorphic_receiver_type_;
 };
 
 
@@ -1263,7 +1210,6 @@ class Call: public Expression {
         pos_(pos),
         is_monomorphic_(false),
         check_type_(RECEIVER_MAP_CHECK),
-        receiver_types_(NULL),
         return_id_(GetNextId(isolate)) {
   }
 
@@ -1277,7 +1223,7 @@ class Call: public Expression {
 
   void RecordTypeFeedback(TypeFeedbackOracle* oracle,
                           CallKind call_kind);
-  virtual ZoneMapList* GetReceiverTypes() { return receiver_types_; }
+  virtual SmallMapList* GetReceiverTypes() { return &receiver_types_; }
   virtual bool IsMonomorphic() { return is_monomorphic_; }
   CheckType check_type() const { return check_type_; }
   Handle<JSFunction> target() { return target_; }
@@ -1302,42 +1248,12 @@ class Call: public Expression {
 
   bool is_monomorphic_;
   CheckType check_type_;
-  ZoneMapList* receiver_types_;
+  SmallMapList receiver_types_;
   Handle<JSFunction> target_;
   Handle<JSObject> holder_;
   Handle<JSGlobalPropertyCell> cell_;
 
   int return_id_;
-};
-
-
-class AstSentinels {
- public:
-  ~AstSentinels() { }
-
-  // Returns a property singleton property access on 'this'.  Used
-  // during preparsing.
-  Property* this_property() { return &this_property_; }
-  VariableProxySentinel* this_proxy() { return &this_proxy_; }
-  VariableProxySentinel* identifier_proxy() { return &identifier_proxy_; }
-  ValidLeftHandSideSentinel* valid_left_hand_side_sentinel() {
-    return &valid_left_hand_side_sentinel_;
-  }
-  Call* call_sentinel() { return &call_sentinel_; }
-  EmptyStatement* empty_statement() { return &empty_statement_; }
-
- private:
-  AstSentinels();
-  VariableProxySentinel this_proxy_;
-  VariableProxySentinel identifier_proxy_;
-  ValidLeftHandSideSentinel valid_left_hand_side_sentinel_;
-  Property this_property_;
-  Call call_sentinel_;
-  EmptyStatement empty_statement_;
-
-  friend class Isolate;
-
-  DISALLOW_COPY_AND_ASSIGN(AstSentinels);
 };
 
 
@@ -1477,8 +1393,7 @@ class CountOperation: public Expression {
         expression_(expr),
         pos_(pos),
         assignment_id_(GetNextId(isolate)),
-        count_id_(GetNextId(isolate)),
-        receiver_types_(NULL) { }
+        count_id_(GetNextId(isolate)) {}
 
   DECLARE_NODE_TYPE(CountOperation)
 
@@ -1499,10 +1414,7 @@ class CountOperation: public Expression {
 
   void RecordTypeFeedback(TypeFeedbackOracle* oracle);
   virtual bool IsMonomorphic() { return is_monomorphic_; }
-  virtual Handle<Map> GetMonomorphicReceiverType() {
-    return monomorphic_receiver_type_;
-  }
-  virtual ZoneMapList* GetReceiverTypes() { return receiver_types_; }
+  virtual SmallMapList* GetReceiverTypes() { return &receiver_types_; }
 
   // Bailout support.
   int AssignmentId() const { return assignment_id_; }
@@ -1516,8 +1428,7 @@ class CountOperation: public Expression {
   int pos_;
   int assignment_id_;
   int count_id_;
-  Handle<Map> monomorphic_receiver_type_;
-  ZoneMapList* receiver_types_;
+  SmallMapList receiver_types_;
 };
 
 
@@ -1665,10 +1576,7 @@ class Assignment: public Expression {
   // Type feedback information.
   void RecordTypeFeedback(TypeFeedbackOracle* oracle);
   virtual bool IsMonomorphic() { return is_monomorphic_; }
-  virtual ZoneMapList* GetReceiverTypes() { return receiver_types_; }
-  virtual Handle<Map> GetMonomorphicReceiverType() {
-    return monomorphic_receiver_type_;
-  }
+  virtual SmallMapList* GetReceiverTypes() { return &receiver_types_; }
 
   // Bailout support.
   int CompoundLoadId() const { return compound_load_id_; }
@@ -1687,8 +1595,7 @@ class Assignment: public Expression {
   bool block_end_;
 
   bool is_monomorphic_;
-  ZoneMapList* receiver_types_;
-  Handle<Map> monomorphic_receiver_type_;
+  SmallMapList receiver_types_;
 };
 
 
@@ -1711,6 +1618,12 @@ class Throw: public Expression {
 
 class FunctionLiteral: public Expression {
  public:
+  enum Type {
+    ANONYMOUS_EXPRESSION,
+    NAMED_EXPRESSION,
+    DECLARATION
+  };
+
   FunctionLiteral(Isolate* isolate,
                   Handle<String> name,
                   Scope* scope,
@@ -1722,7 +1635,7 @@ class FunctionLiteral: public Expression {
                   int num_parameters,
                   int start_position,
                   int end_position,
-                  bool is_expression,
+                  Type type,
                   bool has_duplicate_parameters)
       : Expression(isolate),
         name_(name),
@@ -1738,7 +1651,8 @@ class FunctionLiteral: public Expression {
         end_position_(end_position),
         function_token_position_(RelocInfo::kNoPosition),
         inferred_name_(HEAP->empty_string()),
-        is_expression_(is_expression),
+        is_expression_(type != DECLARATION),
+        is_anonymous_(type == ANONYMOUS_EXPRESSION),
         pretenure_(false),
         has_duplicate_parameters_(has_duplicate_parameters) {
   }
@@ -1753,6 +1667,7 @@ class FunctionLiteral: public Expression {
   int start_position() const { return start_position_; }
   int end_position() const { return end_position_; }
   bool is_expression() const { return is_expression_; }
+  bool is_anonymous() const { return is_anonymous_; }
   bool strict_mode() const;
 
   int materialized_literal_count() { return materialized_literal_count_; }
@@ -1797,6 +1712,7 @@ class FunctionLiteral: public Expression {
   int function_token_position_;
   Handle<String> inferred_name_;
   bool is_expression_;
+  bool is_anonymous_;
   bool pretenure_;
   bool has_duplicate_parameters_;
 };
@@ -1859,7 +1775,7 @@ class RegExpTree: public ZoneObject {
   // expression.
   virtual Interval CaptureRegisters() { return Interval::Empty(); }
   virtual void AppendToText(RegExpText* text);
-  SmartPointer<const char> ToString();
+  SmartArrayPointer<const char> ToString();
 #define MAKE_ASTYPE(Name)                                                  \
   virtual RegExp##Name* As##Name();                                        \
   virtual bool Is##Name();
@@ -2212,9 +2128,6 @@ class AstVisitor BASE_EMBEDDED {
   // bails out without visiting more nodes.
   void SetStackOverflow() { stack_overflow_ = true; }
   void ClearStackOverflow() { stack_overflow_ = false; }
-
-  // Nodes not appearing in the AST, including slots.
-  virtual void VisitSlot(Slot* node) { UNREACHABLE(); }
 
   // Individual AST nodes.
 #define DEF_VISIT(type)                         \

@@ -30,6 +30,60 @@ Variables
 local to the module will be private. In this example the variable `PI` is
 private to `circle.js`.
 
+### Cycles
+
+When there are circular `require()` calls, a module might not be
+done being executed when it is returned.
+
+Consider this situation:
+
+`a.js`:
+
+    console.log('a starting');
+    exports.done = false;
+    var b = require('./b.js');
+    console.log('in a, b.done = %j', b.done);
+    exports.done = true;
+    console.log('a done');
+
+`b.js`:
+
+    console.log('b starting');
+    exports.done = false;
+    var a = require('./a.js');
+    console.log('in b, a.done = %j', a.done);
+    exports.done = true;
+    console.log('b done');
+
+`main.js`:
+
+    console.log('main starting');
+    var a = require('./a.js');
+    var b = require('./b.js');
+    console.log('in main, a.done=%j, b.done=%j', a.done, b.done);
+
+When `main.js` loads `a.js`, then `a.js` in turn loads `b.js`.  At that
+point, `b.js` tries to load `a.js`.  In order to prevent an infinite
+loop an **unfinished copy** of the `a.js` exports object is returned to the
+`b.js` module.  `b.js` then finishes loading, and its exports object is
+provided to the `a.js` module.
+
+By the time `main.js` has loaded both modules, they're both finished.
+The output of this program would thus be:
+
+    $ node main.js
+    main starting
+    a starting
+    b starting
+    in b, a.done = false
+    b done
+    in a, b.done = true
+    a done
+    in main, a.done=true, b.done=true
+
+If you have cyclic module dependencies in your program, make sure to
+plan accordingly.
+
 ### Core Modules
 
 Node has several modules compiled into the binary.  These modules are
@@ -265,38 +319,6 @@ For a file `foo.js`, this will be `true` if run via `node foo.js`, but
 Because `module` provides a `filename` property (normally equivalent to
 `__filename`), the entry point of the current application can be obtained
 by checking `require.main.filename`.
-
-## AMD Compatibility
-
-Node's modules have access to a function named `define`, which may be
-used to specify the module's return value.  This is not necessary in node
-programs, but is present in the node API in order to provide
-compatibility with module loaders that use the Asynchronous Module
-Definition pattern.
-
-The example module above could be structured like so:
-
-    define(function (require, exports, module) {
-      var PI = Math.PI;
-
-      exports.area = function (r) {
-        return PI * r * r;
-      };
-
-      exports.circumference = function (r) {
-        return 2 * PI * r;
-      };
-    });
-
-* Only the last argument to `define()` matters.  Other module loaders
-  sometimes use a `define(id, [deps], cb)` pattern, but since this is
-  not relevant in node programs, the other arguments are ignored.
-* If the `define` callback returns a value other than `undefined`, then
-  that value is assigned to `module.exports`.
-* **Important**: Despite being called "AMD", the node module loader **is
-  in fact synchronous**, and using `define()` does not change this fact.
-  Node executes the callback immediately, so please plan your programs
-  accordingly.
 
 ## Addenda: Package Manager Tips
 

@@ -26,6 +26,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 {
+  'includes': ['../build/common.gypi'],
   'variables': {
     'console%': '',
   },
@@ -36,6 +37,7 @@
       'dependencies': [
         '../tools/gyp/v8.gyp:v8',
       ],
+      # Generated source files need this explicitly:
       'include_dirs+': [
         '../src',
       ],
@@ -47,9 +49,17 @@
       ],
       'conditions': [
         [ 'component!="shared_library"', {
-          'dependencies': [ 'd8_js2c#host', ], 
           'sources': [ 'd8-debug.cc', '<(SHARED_INTERMEDIATE_DIR)/d8-js.cc', ],
           'conditions': [
+            [ 'want_separate_host_toolset==1', {
+              'dependencies': [
+                'd8_js2c#host',
+              ],
+            }, {
+              'dependencies': [
+                'd8_js2c',
+              ],
+            }],
             [ 'console=="readline"', {
               'libraries': [ '-lreadline', ],
               'sources': [ 'd8-readline.cc' ],
@@ -68,13 +78,19 @@
     {
       'target_name': 'd8_js2c',
       'type': 'none',
-      'toolsets': ['host'],
       'variables': {
         'js_files': [
           'd8.js',
           'macros.py',
         ],
       },
+      'conditions': [
+        [ 'want_separate_host_toolset==1', {
+          'toolsets': ['host'],
+        }, {
+          'toolsets': ['target'],
+        }]
+      ],
       'actions': [
         {
           'action_name': 'd8_js2c',
@@ -90,6 +106,7 @@
             '../tools/js2c.py',
             '<@(_outputs)',
             'D8',
+            'off',  # compress startup data
             '<@(js_files)'
           ],
         },

@@ -61,7 +61,7 @@ void CodeStub::GenerateCode(MacroAssembler* masm) {
 }
 
 
-SmartPointer<const char> CodeStub::GetName() {
+SmartArrayPointer<const char> CodeStub::GetName() {
   char buffer[100];
   NoAllocationStringAllocator allocator(buffer,
                                         static_cast<unsigned>(sizeof(buffer)));
@@ -75,7 +75,7 @@ void CodeStub::RecordCodeGeneration(Code* code, MacroAssembler* masm) {
   code->set_major_key(MajorKey());
 
   Isolate* isolate = masm->isolate();
-  SmartPointer<const char> name = GetName();
+  SmartArrayPointer<const char> name = GetName();
   PROFILE(isolate, CodeCreateEvent(Logger::STUB_TAG, code, *name));
   GDBJIT(AddCode(GDBJITInterface::STUB, *name, code));
   Counters* counters = isolate->counters();
@@ -114,7 +114,6 @@ Handle<Code> CodeStub::GetCode() {
     // Copy the generated code into a heap object.
     Code::Flags flags = Code::ComputeFlags(
         static_cast<Code::Kind>(GetCodeKind()),
-        InLoop(),
         GetICState());
     Handle<Code> new_object = factory->NewCode(
         desc, flags, masm.CodeObject(), NeedsImmovableCode());
@@ -152,7 +151,6 @@ MaybeObject* CodeStub::TryGetCode() {
     // Try to copy the generated code into a heap object.
     Code::Flags flags = Code::ComputeFlags(
         static_cast<Code::Kind>(GetCodeKind()),
-        InLoop(),
         GetICState());
     Object* new_object;
     { MaybeObject* maybe_new_object =
@@ -246,27 +244,27 @@ void InstanceofStub::PrintName(StringStream* stream) {
 
 void KeyedLoadElementStub::Generate(MacroAssembler* masm) {
   switch (elements_kind_) {
-    case JSObject::FAST_ELEMENTS:
+    case FAST_ELEMENTS:
       KeyedLoadStubCompiler::GenerateLoadFastElement(masm);
       break;
-    case JSObject::FAST_DOUBLE_ELEMENTS:
+    case FAST_DOUBLE_ELEMENTS:
       KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(masm);
       break;
-    case JSObject::EXTERNAL_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_SHORT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-    case JSObject::EXTERNAL_INT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
-    case JSObject::EXTERNAL_FLOAT_ELEMENTS:
-    case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
-    case JSObject::EXTERNAL_PIXEL_ELEMENTS:
+    case EXTERNAL_BYTE_ELEMENTS:
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+    case EXTERNAL_SHORT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+    case EXTERNAL_INT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
+    case EXTERNAL_FLOAT_ELEMENTS:
+    case EXTERNAL_DOUBLE_ELEMENTS:
+    case EXTERNAL_PIXEL_ELEMENTS:
       KeyedLoadStubCompiler::GenerateLoadExternalArray(masm, elements_kind_);
       break;
-    case JSObject::DICTIONARY_ELEMENTS:
+    case DICTIONARY_ELEMENTS:
       KeyedLoadStubCompiler::GenerateLoadDictionaryElement(masm);
       break;
-    case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+    case NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
       break;
   }
@@ -275,28 +273,28 @@ void KeyedLoadElementStub::Generate(MacroAssembler* masm) {
 
 void KeyedStoreElementStub::Generate(MacroAssembler* masm) {
   switch (elements_kind_) {
-    case JSObject::FAST_ELEMENTS:
+    case FAST_ELEMENTS:
       KeyedStoreStubCompiler::GenerateStoreFastElement(masm, is_js_array_);
       break;
-    case JSObject::FAST_DOUBLE_ELEMENTS:
+    case FAST_DOUBLE_ELEMENTS:
       KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(masm,
                                                              is_js_array_);
       break;
-    case JSObject::EXTERNAL_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_SHORT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-    case JSObject::EXTERNAL_INT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
-    case JSObject::EXTERNAL_FLOAT_ELEMENTS:
-    case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
-    case JSObject::EXTERNAL_PIXEL_ELEMENTS:
+    case EXTERNAL_BYTE_ELEMENTS:
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+    case EXTERNAL_SHORT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+    case EXTERNAL_INT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
+    case EXTERNAL_FLOAT_ELEMENTS:
+    case EXTERNAL_DOUBLE_ELEMENTS:
+    case EXTERNAL_PIXEL_ELEMENTS:
       KeyedStoreStubCompiler::GenerateStoreExternalArray(masm, elements_kind_);
       break;
-    case JSObject::DICTIONARY_ELEMENTS:
+    case DICTIONARY_ELEMENTS:
       KeyedStoreStubCompiler::GenerateStoreDictionaryElement(masm);
       break;
-    case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+    case NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
       break;
   }
@@ -316,17 +314,92 @@ void ArgumentsAccessStub::PrintName(StringStream* stream) {
 
 
 void CallFunctionStub::PrintName(StringStream* stream) {
-  const char* in_loop_name = NULL;  // Make g++ happy.
-  switch (in_loop_) {
-    case NOT_IN_LOOP: in_loop_name = ""; break;
-    case IN_LOOP: in_loop_name = "_InLoop"; break;
-  }
   const char* flags_name = NULL;  // Make g++ happy.
   switch (flags_) {
     case NO_CALL_FUNCTION_FLAGS: flags_name = ""; break;
     case RECEIVER_MIGHT_BE_IMPLICIT: flags_name = "_Implicit"; break;
   }
-  stream->Add("CallFunctionStub_Args%d%s%s", argc_, in_loop_name, flags_name);
+  stream->Add("CallFunctionStub_Args%d%s", argc_, flags_name);
 }
+
+
+void ToBooleanStub::PrintName(StringStream* stream) {
+  stream->Add("ToBooleanStub_");
+  types_.Print(stream);
+}
+
+
+void ToBooleanStub::Types::Print(StringStream* stream) const {
+  if (IsEmpty()) stream->Add("None");
+  if (Contains(UNDEFINED)) stream->Add("Undefined");
+  if (Contains(BOOLEAN)) stream->Add("Bool");
+  if (Contains(NULL_TYPE)) stream->Add("Null");
+  if (Contains(SMI)) stream->Add("Smi");
+  if (Contains(SPEC_OBJECT)) stream->Add("SpecObject");
+  if (Contains(STRING)) stream->Add("String");
+  if (Contains(HEAP_NUMBER)) stream->Add("HeapNumber");
+}
+
+
+void ToBooleanStub::Types::TraceTransition(Types to) const {
+  if (!FLAG_trace_ic) return;
+  char buffer[100];
+  NoAllocationStringAllocator allocator(buffer,
+                                        static_cast<unsigned>(sizeof(buffer)));
+  StringStream stream(&allocator);
+  stream.Add("[ToBooleanIC (");
+  Print(&stream);
+  stream.Add("->");
+  to.Print(&stream);
+  stream.Add(")]\n");
+  stream.OutputToStdOut();
+}
+
+
+bool ToBooleanStub::Types::Record(Handle<Object> object) {
+  if (object->IsUndefined()) {
+    Add(UNDEFINED);
+    return false;
+  } else if (object->IsBoolean()) {
+    Add(BOOLEAN);
+    return object->IsTrue();
+  } else if (object->IsNull()) {
+    Add(NULL_TYPE);
+    return false;
+  } else if (object->IsSmi()) {
+    Add(SMI);
+    return Smi::cast(*object)->value() != 0;
+  } else if (object->IsSpecObject()) {
+    Add(SPEC_OBJECT);
+    return !object->IsUndetectableObject();
+  } else if (object->IsString()) {
+    Add(STRING);
+    return !object->IsUndetectableObject() &&
+        String::cast(*object)->length() != 0;
+  } else if (object->IsHeapNumber()) {
+    ASSERT(!object->IsUndetectableObject());
+    Add(HEAP_NUMBER);
+    double value = HeapNumber::cast(*object)->value();
+    return value != 0 && !isnan(value);
+  } else {
+    // We should never see an internal object at runtime here!
+    UNREACHABLE();
+    return true;
+  }
+}
+
+
+bool ToBooleanStub::Types::NeedsMap() const {
+  return Contains(ToBooleanStub::SPEC_OBJECT)
+      || Contains(ToBooleanStub::STRING)
+      || Contains(ToBooleanStub::HEAP_NUMBER);
+}
+
+
+bool ToBooleanStub::Types::CanBeUndetectable() const {
+  return Contains(ToBooleanStub::SPEC_OBJECT)
+      || Contains(ToBooleanStub::STRING);
+}
+
 
 } }  // namespace v8::internal

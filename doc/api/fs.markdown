@@ -9,6 +9,9 @@ The arguments passed to the completion callback depend on the method, but the
 first argument is always reserved for an exception. If the operation was
 completed successfully, then the first argument will be `null` or `undefined`.
 
+When using the synchronous form any exceptions are immediately thrown.
+You can use try/catch to handle exceptions or allow them to bubble up.
+
 Here is an example of the asynchronous version:
 
     var fs = require('fs');
@@ -73,30 +76,30 @@ given to the completion callback.
 
 Synchronous ftruncate(2).
 
-### fs.chown(path, mode, [callback])
+### fs.chown(path, uid, gid, [callback])
 
-Asycnronous chown(2). No arguments other than a possible exception are given
+Asynchronous chown(2). No arguments other than a possible exception are given
 to the completion callback.
 
-### fs.chownSync(path, mode)
+### fs.chownSync(path, uid, gid)
 
 Synchronous chown(2).
 
-### fs.fchown(path, mode, [callback])
+### fs.fchown(path, uid, gid, [callback])
 
-Asycnronous fchown(2). No arguments other than a possible exception are given
+Asynchronous fchown(2). No arguments other than a possible exception are given
 to the completion callback.
 
-### fs.fchownSync(path, mode)
+### fs.fchownSync(path, uid, gid)
 
 Synchronous fchown(2).
 
-### fs.lchown(path, mode, [callback])
+### fs.lchown(path, uid, gid, [callback])
 
-Asycnronous lchown(2). No arguments other than a possible exception are given
+Asynchronous lchown(2). No arguments other than a possible exception are given
 to the completion callback.
 
-### fs.lchownSync(path, mode)
+### fs.lchownSync(path, uid, gid)
 
 Synchronous lchown(2).
 
@@ -194,16 +197,16 @@ Synchronous symlink(2).
 ### fs.readlink(path, [callback])
 
 Asynchronous readlink(2). The callback gets two arguments `(err,
-resolvedPath)`.
+linkString)`.
 
 ### fs.readlinkSync(path)
 
-Synchronous readlink(2). Returns the resolved path.
+Synchronous readlink(2). Returns the symbolic link's string value.
 
 ### fs.realpath(path, [callback])
 
 Asynchronous realpath(2).  The callback gets two arguments `(err,
-resolvedPath)`.
+resolvedPath)`.  May use `process.cwd` to resolve relative paths.
 
 ### fs.realpathSync(path)
 
@@ -316,7 +319,7 @@ current position.
 See pwrite(2).
 
 The callback will be given three arguments `(err, written, buffer)` where `written`
-specifies how many _bytes_ were written into `buffer`.
+specifies how many _bytes_ were written from `buffer`.
 
 Note that it is unsafe to use `fs.write` multiple times on the same file
 without waiting for the callback. For this scenario,
@@ -329,7 +332,7 @@ written.
 
 ### fs.writeSync(fd, str, position, encoding='utf8')
 
-Synchronous version of string-based `fs.write()`. Returns the number of bytes
+Synchronous version of string-based `fs.write()`. Returns the number of _bytes_
 written.
 
 ### fs.read(fd, buffer, offset, length, position, [callback])
@@ -409,7 +412,7 @@ value in milliseconds. The default is `{ persistent: true, interval: 0 }`.
 The `listener` gets two arguments the current stat object and the previous
 stat object:
 
-    fs.watchFile(f, function (curr, prev) {
+    fs.watchFile('message.text', function (curr, prev) {
       console.log('the current mtime is: ' + curr.mtime);
       console.log('the previous mtime was: ' + prev.mtime);
     });
@@ -417,7 +420,7 @@ stat object:
 These stat objects are instances of `fs.Stat`.
 
 If you want to be notified when the file was modified, not just accessed
-you need to compare `curr.mtime` and `prev.mtime.
+you need to compare `curr.mtime` and `prev.mtime`.
 
 
 ### fs.unwatchFile(filename)
@@ -493,3 +496,8 @@ Returns a new WriteStream object (See `Writable Stream`).
     { flags: 'w',
       encoding: null,
       mode: 0666 }
+
+`options` may also include a `start` option to allow writing data at
+some position past the beginning of the file.  Modifying a file rather
+than replacing it may require a `flags` mode of `r+` rather than the
+default mode `w`.

@@ -273,7 +273,7 @@ static void GenerateStringCheck(MacroAssembler* masm,
   // Check that the object is a string.
   __ mov(scratch, FieldOperand(receiver, HeapObject::kMapOffset));
   __ movzx_b(scratch, FieldOperand(scratch, Map::kInstanceTypeOffset));
-  ASSERT(kNotStringTag != 0);
+  STATIC_ASSERT(kNotStringTag != 0);
   __ test(scratch, Immediate(kNotStringTag));
   __ j(not_zero, non_string_object);
 }
@@ -2679,7 +2679,7 @@ MaybeObject* KeyedStoreStubCompiler::CompileStoreElement(Map* receiver_map) {
   //  -- esp[0] : return address
   // -----------------------------------
   Code* stub;
-  JSObject::ElementsKind elements_kind = receiver_map->elements_kind();
+  ElementsKind elements_kind = receiver_map->elements_kind();
   bool is_jsarray = receiver_map->instance_type() == JS_ARRAY_TYPE;
   MaybeObject* maybe_stub =
       KeyedStoreElementStub(is_jsarray, elements_kind).TryGetCode();
@@ -3140,7 +3140,7 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadElement(Map* receiver_map) {
   //  -- esp[0] : return address
   // -----------------------------------
   Code* stub;
-  JSObject::ElementsKind elements_kind = receiver_map->elements_kind();
+  ElementsKind elements_kind = receiver_map->elements_kind();
   MaybeObject* maybe_stub = KeyedLoadElementStub(elements_kind).TryGetCode();
   if (!maybe_stub->To(&stub)) return maybe_stub;
   __ DispatchMap(edx,
@@ -3385,7 +3385,7 @@ void KeyedLoadStubCompiler::GenerateLoadDictionaryElement(
 
 void KeyedLoadStubCompiler::GenerateLoadExternalArray(
     MacroAssembler* masm,
-    JSObject::ElementsKind elements_kind) {
+    ElementsKind elements_kind) {
   // ----------- S t a t e -------------
   //  -- eax    : key
   //  -- edx    : receiver
@@ -3400,37 +3400,37 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
   __ JumpIfNotSmi(eax, &miss_force_generic);
 
   // Check that the index is in range.
-  __ mov(ecx, eax);
-  __ SmiUntag(ecx);  // Untag the index.
   __ mov(ebx, FieldOperand(edx, JSObject::kElementsOffset));
-  __ cmp(ecx, FieldOperand(ebx, ExternalArray::kLengthOffset));
+  __ cmp(eax, FieldOperand(ebx, ExternalArray::kLengthOffset));
   // Unsigned comparison catches both negative and too-large values.
   __ j(above_equal, &miss_force_generic);
   __ mov(ebx, FieldOperand(ebx, ExternalArray::kExternalPointerOffset));
   // ebx: base pointer of external storage
   switch (elements_kind) {
-    case JSObject::EXTERNAL_BYTE_ELEMENTS:
-      __ movsx_b(eax, Operand(ebx, ecx, times_1, 0));
+    case EXTERNAL_BYTE_ELEMENTS:
+      __ SmiUntag(eax);  // Untag the index.
+      __ movsx_b(eax, Operand(ebx, eax, times_1, 0));
       break;
-    case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_PIXEL_ELEMENTS:
-      __ movzx_b(eax, Operand(ebx, ecx, times_1, 0));
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+    case EXTERNAL_PIXEL_ELEMENTS:
+      __ SmiUntag(eax);  // Untag the index.
+      __ movzx_b(eax, Operand(ebx, eax, times_1, 0));
       break;
-    case JSObject::EXTERNAL_SHORT_ELEMENTS:
-      __ movsx_w(eax, Operand(ebx, ecx, times_2, 0));
+    case EXTERNAL_SHORT_ELEMENTS:
+      __ movsx_w(eax, Operand(ebx, eax, times_1, 0));
       break;
-    case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-      __ movzx_w(eax, Operand(ebx, ecx, times_2, 0));
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+      __ movzx_w(eax, Operand(ebx, eax, times_1, 0));
       break;
-    case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
-    case JSObject::EXTERNAL_INT_ELEMENTS:
-      __ mov(ecx, Operand(ebx, ecx, times_4, 0));
+    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
+    case EXTERNAL_INT_ELEMENTS:
+      __ mov(ecx, Operand(ebx, eax, times_2, 0));
       break;
-    case JSObject::EXTERNAL_FLOAT_ELEMENTS:
-      __ fld_s(Operand(ebx, ecx, times_4, 0));
+    case EXTERNAL_FLOAT_ELEMENTS:
+      __ fld_s(Operand(ebx, eax, times_2, 0));
       break;
-    case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
-      __ fld_d(Operand(ebx, ecx, times_8, 0));
+    case EXTERNAL_DOUBLE_ELEMENTS:
+      __ fld_d(Operand(ebx, eax, times_4, 0));
       break;
     default:
       UNREACHABLE();
@@ -3442,17 +3442,17 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
   // For floating-point array type:
   // FP(0): value
 
-  if (elements_kind == JSObject::EXTERNAL_INT_ELEMENTS ||
-      elements_kind == JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS) {
+  if (elements_kind == EXTERNAL_INT_ELEMENTS ||
+      elements_kind == EXTERNAL_UNSIGNED_INT_ELEMENTS) {
     // For the Int and UnsignedInt array types, we need to see whether
     // the value can be represented in a Smi. If not, we need to convert
     // it to a HeapNumber.
     Label box_int;
-    if (elements_kind == JSObject::EXTERNAL_INT_ELEMENTS) {
+    if (elements_kind == EXTERNAL_INT_ELEMENTS) {
       __ cmp(ecx, 0xC0000000);
       __ j(sign, &box_int);
     } else {
-      ASSERT_EQ(JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS, elements_kind);
+      ASSERT_EQ(EXTERNAL_UNSIGNED_INT_ELEMENTS, elements_kind);
       // The test is different for unsigned int values. Since we need
       // the value to be in the range of a positive smi, we can't
       // handle either of the top two bits being set in the value.
@@ -3468,12 +3468,12 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
 
     // Allocate a HeapNumber for the int and perform int-to-double
     // conversion.
-    if (elements_kind == JSObject::EXTERNAL_INT_ELEMENTS) {
+    if (elements_kind == EXTERNAL_INT_ELEMENTS) {
       __ push(ecx);
       __ fild_s(Operand(esp, 0));
       __ pop(ecx);
     } else {
-      ASSERT_EQ(JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS, elements_kind);
+      ASSERT_EQ(EXTERNAL_UNSIGNED_INT_ELEMENTS, elements_kind);
       // Need to zero-extend the value.
       // There's no fild variant for unsigned values, so zero-extend
       // to a 64-bit int manually.
@@ -3489,8 +3489,8 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
     __ mov(eax, ecx);
     __ fstp_d(FieldOperand(eax, HeapNumber::kValueOffset));
     __ ret(0);
-  } else if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
-             elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
+  } else if (elements_kind == EXTERNAL_FLOAT_ELEMENTS ||
+             elements_kind == EXTERNAL_DOUBLE_ELEMENTS) {
     // For the floating-point array type, we need to always allocate a
     // HeapNumber.
     __ AllocateHeapNumber(ecx, ebx, edi, &failed_allocation);
@@ -3540,7 +3540,7 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
 
 void KeyedStoreStubCompiler::GenerateStoreExternalArray(
     MacroAssembler* masm,
-    JSObject::ElementsKind elements_kind) {
+    ElementsKind elements_kind) {
   // ----------- S t a t e -------------
   //  -- eax    : key
   //  -- edx    : receiver
@@ -3556,9 +3556,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
 
   // Check that the index is in range.
   __ mov(edi, FieldOperand(edx, JSObject::kElementsOffset));
-  __ mov(ebx, ecx);
-  __ SmiUntag(ebx);
-  __ cmp(ebx, FieldOperand(edi, ExternalArray::kLengthOffset));
+  __ cmp(ecx, FieldOperand(edi, ExternalArray::kLengthOffset));
   // Unsigned comparison catches both negative and too-large values.
   __ j(above_equal, &slow);
 
@@ -3568,52 +3566,46 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
   // edx: receiver
   // ecx: key
   // edi: elements array
-  // ebx: untagged index
-  if (elements_kind == JSObject::EXTERNAL_PIXEL_ELEMENTS) {
+  if (elements_kind == EXTERNAL_PIXEL_ELEMENTS) {
     __ JumpIfNotSmi(eax, &slow);
   } else {
     __ JumpIfNotSmi(eax, &check_heap_number);
   }
 
   // smi case
-  __ mov(ecx, eax);  // Preserve the value in eax.  Key is no longer needed.
-  __ SmiUntag(ecx);
+  __ mov(ebx, eax);  // Preserve the value in eax as the return value.
+  __ SmiUntag(ebx);
   __ mov(edi, FieldOperand(edi, ExternalArray::kExternalPointerOffset));
-  // ecx: base pointer of external storage
+  // edi: base pointer of external storage
   switch (elements_kind) {
-    case JSObject::EXTERNAL_PIXEL_ELEMENTS:
-      {  // Clamp the value to [0..255].
-        Label done;
-        __ test(ecx, Immediate(0xFFFFFF00));
-        __ j(zero, &done, Label::kNear);
-        __ setcc(negative, ecx);  // 1 if negative, 0 if positive.
-        __ dec_b(ecx);  // 0 if negative, 255 if positive.
-        __ bind(&done);
-      }
-      __ mov_b(Operand(edi, ebx, times_1, 0), ecx);
+    case EXTERNAL_PIXEL_ELEMENTS:
+      __ ClampUint8(ebx);
+      __ SmiUntag(ecx);
+      __ mov_b(Operand(edi, ecx, times_1, 0), ebx);
       break;
-    case JSObject::EXTERNAL_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-      __ mov_b(Operand(edi, ebx, times_1, 0), ecx);
+    case EXTERNAL_BYTE_ELEMENTS:
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+      __ SmiUntag(ecx);
+      __ mov_b(Operand(edi, ecx, times_1, 0), ebx);
       break;
-    case JSObject::EXTERNAL_SHORT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-      __ mov_w(Operand(edi, ebx, times_2, 0), ecx);
+    case EXTERNAL_SHORT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+      __ mov_w(Operand(edi, ecx, times_1, 0), ebx);
       break;
-    case JSObject::EXTERNAL_INT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
-      __ mov(Operand(edi, ebx, times_4, 0), ecx);
+    case EXTERNAL_INT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
+      __ mov(Operand(edi, ecx, times_2, 0), ebx);
       break;
-    case JSObject::EXTERNAL_FLOAT_ELEMENTS:
-    case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
+    case EXTERNAL_FLOAT_ELEMENTS:
+    case EXTERNAL_DOUBLE_ELEMENTS:
       // Need to perform int-to-float conversion.
-      __ push(ecx);
+      __ push(ebx);
       __ fild_s(Operand(esp, 0));
-      __ pop(ecx);
-      if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS) {
-        __ fstp_s(Operand(edi, ebx, times_4, 0));
-      } else {  // elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS.
-        __ fstp_d(Operand(edi, ebx, times_8, 0));
+      __ pop(ebx);
+      if (elements_kind == EXTERNAL_FLOAT_ELEMENTS) {
+        __ fstp_s(Operand(edi, ecx, times_2, 0));
+      } else {  // elements_kind == EXTERNAL_DOUBLE_ELEMENTS.
+        __ fstp_d(Operand(edi, ecx, times_4, 0));
       }
       break;
     default:
@@ -3623,13 +3615,12 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
   __ ret(0);  // Return the original value.
 
   // TODO(danno): handle heap number -> pixel array conversion
-  if (elements_kind != JSObject::EXTERNAL_PIXEL_ELEMENTS) {
+  if (elements_kind != EXTERNAL_PIXEL_ELEMENTS) {
     __ bind(&check_heap_number);
     // eax: value
     // edx: receiver
     // ecx: key
     // edi: elements array
-    // ebx: untagged index
     __ cmp(FieldOperand(eax, HeapObject::kMapOffset),
            Immediate(masm->isolate()->factory()->heap_number_map()));
     __ j(not_equal, &slow);
@@ -3638,15 +3629,14 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
     // +/-Infinity into integer arrays basically undefined. For more
     // reproducible behavior, convert these to zero.
     __ mov(edi, FieldOperand(edi, ExternalArray::kExternalPointerOffset));
-    // ebx: untagged index
     // edi: base pointer of external storage
-    if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS) {
+    if (elements_kind == EXTERNAL_FLOAT_ELEMENTS) {
       __ fld_d(FieldOperand(eax, HeapNumber::kValueOffset));
-      __ fstp_s(Operand(edi, ebx, times_4, 0));
+      __ fstp_s(Operand(edi, ecx, times_2, 0));
       __ ret(0);
-    } else if (elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
+    } else if (elements_kind == EXTERNAL_DOUBLE_ELEMENTS) {
       __ fld_d(FieldOperand(eax, HeapNumber::kValueOffset));
-      __ fstp_d(Operand(edi, ebx, times_8, 0));
+      __ fstp_d(Operand(edi, ecx, times_4, 0));
       __ ret(0);
     } else {
       // Perform float-to-int conversion with truncation (round-to-zero)
@@ -3657,31 +3647,24 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
       // (code-stubs-ia32.cc) is roughly what is needed here though the
       // conversion failure case does not need to be handled.
       if (CpuFeatures::IsSupported(SSE2)) {
-        if (elements_kind != JSObject::EXTERNAL_INT_ELEMENTS &&
-            elements_kind != JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS) {
+        if (elements_kind != EXTERNAL_INT_ELEMENTS &&
+            elements_kind != EXTERNAL_UNSIGNED_INT_ELEMENTS) {
           ASSERT(CpuFeatures::IsSupported(SSE2));
           CpuFeatures::Scope scope(SSE2);
-          __ cvttsd2si(ecx, FieldOperand(eax, HeapNumber::kValueOffset));
+          __ cvttsd2si(ebx, FieldOperand(eax, HeapNumber::kValueOffset));
           // ecx: untagged integer value
           switch (elements_kind) {
-            case JSObject::EXTERNAL_PIXEL_ELEMENTS:
-              {  // Clamp the value to [0..255].
-                Label done;
-                __ test(ecx, Immediate(0xFFFFFF00));
-                __ j(zero, &done, Label::kNear);
-                __ setcc(negative, ecx);  // 1 if negative, 0 if positive.
-                __ dec_b(ecx);  // 0 if negative, 255 if positive.
-                __ bind(&done);
-              }
-              __ mov_b(Operand(edi, ebx, times_1, 0), ecx);
+            case EXTERNAL_PIXEL_ELEMENTS:
+              __ ClampUint8(ebx);
+              // Fall through.
+            case EXTERNAL_BYTE_ELEMENTS:
+            case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+              __ SmiUntag(ecx);
+              __ mov_b(Operand(edi, ecx, times_1, 0), ebx);
               break;
-            case JSObject::EXTERNAL_BYTE_ELEMENTS:
-            case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-              __ mov_b(Operand(edi, ebx, times_1, 0), ecx);
-              break;
-            case JSObject::EXTERNAL_SHORT_ELEMENTS:
-            case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-              __ mov_w(Operand(edi, ebx, times_2, 0), ecx);
+            case EXTERNAL_SHORT_ELEMENTS:
+            case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+              __ mov_w(Operand(edi, ecx, times_1, 0), ebx);
               break;
             default:
               UNREACHABLE();
@@ -3698,7 +3681,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
             __ fld_d(FieldOperand(eax, HeapNumber::kValueOffset));
             __ sub(Operand(esp), Immediate(2 * kPointerSize));
             __ fisttp_d(Operand(esp, 0));
-            __ pop(ecx);
+            __ pop(ebx);
             __ add(Operand(esp), Immediate(kPointerSize));
           } else {
             ASSERT(CpuFeatures::IsSupported(SSE2));
@@ -3709,15 +3692,15 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
             // Note: we could do better for signed int arrays.
             __ movd(xmm0, FieldOperand(eax, HeapNumber::kValueOffset));
             // We will need the key if we have to make the slow runtime call.
-            __ push(ecx);
-            __ LoadPowerOf2(xmm1, ecx, 31);
-            __ pop(ecx);
+            __ push(ebx);
+            __ LoadPowerOf2(xmm1, ebx, 31);
+            __ pop(ebx);
             __ ucomisd(xmm1, xmm0);
             __ j(above_equal, &slow);
-            __ cvttsd2si(ecx, Operand(xmm0));
+            __ cvttsd2si(ebx, Operand(xmm0));
           }
-          // ecx: untagged integer value
-          __ mov(Operand(edi, ebx, times_4, 0), ecx);
+          // ebx: untagged integer value
+          __ mov(Operand(edi, ecx, times_2, 0), ebx);
         }
         __ ret(0);  // Return original value.
       }
@@ -3981,10 +3964,12 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
 
   __ bind(&smi_value);
   // Value is a smi. convert to a double and store.
-  __ SmiUntag(eax);
-  __ push(eax);
+  // Preserve original value.
+  __ mov(edx, eax);
+  __ SmiUntag(edx);
+  __ push(edx);
   __ fild_s(Operand(esp, 0));
-  __ pop(eax);
+  __ pop(edx);
   __ fstp_d(FieldOperand(edi, ecx, times_4, FixedDoubleArray::kHeaderSize));
   __ ret(0);
 

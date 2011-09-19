@@ -94,6 +94,11 @@ bool Locker::IsLocked(v8::Isolate* isolate) {
 }
 
 
+bool Locker::IsActive() {
+  return active_;
+}
+
+
 Locker::~Locker() {
   ASSERT(isolate_->thread_manager()->IsLockedByCurrentThread());
   if (has_lock_) {
@@ -300,7 +305,9 @@ ThreadManager::ThreadManager()
 
 
 ThreadManager::~ThreadManager() {
-  // TODO(isolates): Destroy mutexes.
+  delete mutex_;
+  delete free_anchor_;
+  delete in_use_anchor_;
 }
 
 

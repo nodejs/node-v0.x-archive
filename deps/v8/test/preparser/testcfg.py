@@ -27,7 +27,7 @@
 
 import test
 import os
-from os.path import join, dirname, exists
+from os.path import join, dirname, exists, isfile
 import platform
 import utils
 import re
@@ -98,7 +98,6 @@ class PreparserTestConfiguration(test.TestConfiguration):
   def ParsePythonTestTemplates(self, result, filename,
                                executable, current_path, mode):
     pathname = join(self.root, filename + ".pyt")
-    source = open(pathname).read();
     def Test(name, source, expectation):
       throws = None
       if (expectation is not None):
@@ -118,14 +117,18 @@ class PreparserTestConfiguration(test.TestConfiguration):
           testsource = testsource.replace("$"+key, replacement[key]);
         Test(testname, testsource, expectation)
       return MkTest
-    eval(compile(source, pathname, "exec"),
-         {"Test": Test, "Template": Template}, {})
+    execfile(pathname, {"Test": Test, "Template": Template})
 
   def ListTests(self, current_path, path, mode, variant_flags):
-    executable = join('obj', 'preparser', mode, 'preparser')
+    executable = 'preparser'
     if utils.IsWindows():
       executable += '.exe'
     executable = join(self.context.buildspace, executable)
+    if not isfile(executable):
+      executable = join('obj', 'preparser', mode, 'preparser')
+      if utils.IsWindows():
+        executable += '.exe'
+      executable = join(self.context.buildspace, executable)
     expectations = self.GetExpectations()
     result = []
     # Find all .js files in tests/preparser directory.
@@ -143,7 +146,7 @@ class PreparserTestConfiguration(test.TestConfiguration):
     filenames.sort()
     for file in filenames:
       # Each file as a python source file to be executed in a specially
-      # perparsed environment (defining the Template and Test functions)
+      # created environment (defining the Template and Test functions)
       self.ParsePythonTestTemplates(result, file,
                                     executable, current_path, mode)
     return result

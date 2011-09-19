@@ -25,6 +25,11 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifdef _MSC_VER
+#define V8_WIN32_LEAN_AND_MEAN
+#include "win32-headers.h"
+#endif
+
 #include "../include/v8-preparser.h"
 
 #include "globals.h"
@@ -32,7 +37,7 @@
 #include "allocation.h"
 #include "utils.h"
 #include "list.h"
-#include "scanner-base.h"
+#include "hashmap.h"
 #include "preparse-data-format.h"
 #include "preparse-data.h"
 #include "preparser.h"

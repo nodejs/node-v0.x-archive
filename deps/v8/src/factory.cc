@@ -34,6 +34,7 @@
 #include "macro-assembler.h"
 #include "objects.h"
 #include "objects-visiting.h"
+#include "scopeinfo.h"
 
 namespace v8 {
 namespace internal {
@@ -81,6 +82,14 @@ Handle<NumberDictionary> Factory::NewNumberDictionary(int at_least_space_for) {
   CALL_HEAP_FUNCTION(isolate(),
                      NumberDictionary::Allocate(at_least_space_for),
                      NumberDictionary);
+}
+
+
+Handle<ObjectHashTable> Factory::NewObjectHashTable(int at_least_space_for) {
+  ASSERT(0 <= at_least_space_for);
+  CALL_HEAP_FUNCTION(isolate(),
+                     ObjectHashTable::Allocate(at_least_space_for),
+                     ObjectHashTable);
 }
 
 
@@ -283,6 +292,19 @@ Handle<Context> Factory::NewWithContext(Handle<JSFunction> function,
 }
 
 
+Handle<Context> Factory::NewBlockContext(
+    Handle<JSFunction> function,
+    Handle<Context> previous,
+    Handle<SerializedScopeInfo> scope_info) {
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateBlockContext(*function,
+                                              *previous,
+                                              *scope_info),
+      Context);
+}
+
+
 Handle<Struct> Factory::NewStruct(InstanceType type) {
   CALL_HEAP_FUNCTION(
       isolate(),
@@ -443,13 +465,13 @@ Handle<Map> Factory::GetSlowElementsMap(Handle<Map> src) {
 }
 
 
-Handle<Map> Factory::GetExternalArrayElementsMap(
+Handle<Map> Factory::GetElementsTransitionMap(
     Handle<Map> src,
-    ExternalArrayType array_type,
+    ElementsKind elements_kind,
     bool safe_to_add_transition) {
   CALL_HEAP_FUNCTION(isolate(),
-                     src->GetExternalArrayElementsMap(array_type,
-                                                      safe_to_add_transition),
+                     src->GetElementsTransitionMap(elements_kind,
+                                                   safe_to_add_transition),
                      Map);
 }
 
@@ -726,6 +748,14 @@ Handle<JSFunction> Factory::NewFunctionWithoutPrototype(Handle<String> name,
 }
 
 
+Handle<SerializedScopeInfo> Factory::NewSerializedScopeInfo(int length) {
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateSerializedScopeInfo(length),
+      SerializedScopeInfo);
+}
+
+
 Handle<Code> Factory::NewCode(const CodeDesc& desc,
                               Code::Flags flags,
                               Handle<Object> self_ref,
@@ -892,10 +922,19 @@ Handle<JSProxy> Factory::NewJSProxy(Handle<Object> handler,
 }
 
 
-void Factory::BecomeJSObject(Handle<JSProxy> object) {
+void Factory::BecomeJSObject(Handle<JSReceiver> object) {
   CALL_HEAP_FUNCTION_VOID(
       isolate(),
-      isolate()->heap()->ReinitializeJSProxyAsJSObject(*object));
+      isolate()->heap()->ReinitializeJSReceiver(
+          *object, JS_OBJECT_TYPE, JSObject::kHeaderSize));
+}
+
+
+void Factory::BecomeJSFunction(Handle<JSReceiver> object) {
+  CALL_HEAP_FUNCTION_VOID(
+      isolate(),
+      isolate()->heap()->ReinitializeJSReceiver(
+          *object, JS_FUNCTION_TYPE, JSFunction::kSize));
 }
 
 

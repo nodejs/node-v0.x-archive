@@ -45,15 +45,13 @@ namespace internal {
 
 
 static unsigned GetPropertyId(Property* property) {
-  if (property->is_synthetic()) return AstNode::kNoNumber;
   return property->id();
 }
 
 
 class JumpPatchSite BASE_EMBEDDED {
  public:
-  explicit JumpPatchSite(MacroAssembler* masm)
-      : masm_(masm) {
+  explicit JumpPatchSite(MacroAssembler* masm) : masm_(masm) {
 #ifdef DEBUG
     info_emitted_ = false;
 #endif
@@ -188,14 +186,14 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
     // Copy any necessary parameters into the context.
     int num_parameters = info->scope()->num_parameters();
     for (int i = 0; i < num_parameters; i++) {
-      Slot* slot = scope()->parameter(i)->AsSlot();
-      if (slot != NULL && slot->type() == Slot::CONTEXT) {
+      Variable* var = scope()->parameter(i);
+      if (var->IsContextSlot()) {
         int parameter_offset = StandardFrameConstants::kCallerSPOffset +
             (num_parameters - 1 - i) * kPointerSize;
         // Load parameter from stack.
         __ movq(rax, Operand(rbp, parameter_offset));
         // Store it in the context.
-        int context_offset = Context::SlotOffset(slot->index());
+        int context_offset = Context::SlotOffset(var->index());
         __ movq(Operand(rsi, context_offset), rax);
         // Update the write barrier. This clobbers all involved
         // registers, so we have use a third register to avoid
@@ -233,7 +231,7 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
                          : ArgumentsAccessStub::NEW_NON_STRICT_SLOW);
     __ CallStub(&stub);
 
-    Move(arguments->AsSlot(), rax, rbx, rdx);
+    SetVar(arguments, rax, rbx, rdx);
   }
 
   if (FLAG_trace) {
@@ -245,18 +243,21 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
   if (scope()->HasIllegalRedeclaration()) {
     Comment cmnt(masm_, "[ Declarations");
     scope()->VisitIllegalRedeclaration(this);
+
   } else {
+    PrepareForBailoutForId(AstNode::kFunctionEntryId, NO_REGISTERS);
     { Comment cmnt(masm_, "[ Declarations");
       // For named function expressions, declare the function name as a
       // constant.
       if (scope()->is_function_scope() && scope()->function() != NULL) {
-        EmitDeclaration(scope()->function(), Variable::CONST, NULL);
+        int ignored = 0;
+        EmitDeclaration(scope()->function(), Variable::CONST, NULL, &ignored);
       }
       VisitDeclarations(scope()->declarations());
     }
 
     { Comment cmnt(masm_, "[ Stack check");
-      PrepareForBailoutForId(AstNode::kFunctionEntryId, NO_REGISTERS);
+      PrepareForBailoutForId(AstNode::kDeclarationsId, NO_REGISTERS);
       Label ok;
       __ CompareRoot(rsp, Heap::kStackLimitRootIndex);
       __ j(above_equal, &ok, Label::kNear);
@@ -356,24 +357,26 @@ void FullCodeGenerator::EmitReturnSequence() {
 }
 
 
-void FullCodeGenerator::EffectContext::Plug(Slot* slot) const {
+void FullCodeGenerator::EffectContext::Plug(Variable* var) const {
+  ASSERT(var->IsStackAllocated() || var->IsContextSlot());
 }
 
 
-void FullCodeGenerator::AccumulatorValueContext::Plug(Slot* slot) const {
-  MemOperand slot_operand = codegen()->EmitSlotSearch(slot, result_register());
-  __ movq(result_register(), slot_operand);
+void FullCodeGenerator::AccumulatorValueContext::Plug(Variable* var) const {
+  ASSERT(var->IsStackAllocated() || var->IsContextSlot());
+  codegen()->GetVar(result_register(), var);
 }
 
 
-void FullCodeGenerator::StackValueContext::Plug(Slot* slot) const {
-  MemOperand slot_operand = codegen()->EmitSlotSearch(slot, result_register());
-  __ push(slot_operand);
+void FullCodeGenerator::StackValueContext::Plug(Variable* var) const {
+  ASSERT(var->IsStackAllocated() || var->IsContextSlot());
+  MemOperand operand = codegen()->VarOperand(var, result_register());
+  __ push(operand);
 }
 
 
-void FullCodeGenerator::TestContext::Plug(Slot* slot) const {
-  codegen()->Move(result_register(), slot);
+void FullCodeGenerator::TestContext::Plug(Variable* var) const {
+  codegen()->GetVar(result_register(), var);
   codegen()->PrepareForBailoutBeforeSplit(TOS_REG, false, NULL, NULL);
   codegen()->DoTest(this);
 }
@@ -592,43 +595,53 @@ void FullCodeGenerator::Split(Condition cc,
 }
 
 
-MemOperand FullCodeGenerator::EmitSlotSearch(Slot* slot, Register scratch) {
-  switch (slot->type()) {
-    case Slot::PARAMETER:
-    case Slot::LOCAL:
-      return Operand(rbp, SlotOffset(slot));
-    case Slot::CONTEXT: {
-      int context_chain_length =
-          scope()->ContextChainLength(slot->var()->scope());
-      __ LoadContext(scratch, context_chain_length);
-      return ContextOperand(scratch, slot->index());
-    }
-    case Slot::LOOKUP:
-      UNREACHABLE();
+MemOperand FullCodeGenerator::StackOperand(Variable* var) {
+  ASSERT(var->IsStackAllocated());
+  // Offset is negative because higher indexes are at lower addresses.
+  int offset = -var->index() * kPointerSize;
+  // Adjust by a (parameter or local) base offset.
+  if (var->IsParameter()) {
+    offset += (info_->scope()->num_parameters() + 1) * kPointerSize;
+  } else {
+    offset += JavaScriptFrameConstants::kLocal0Offset;
   }
-  UNREACHABLE();
-  return Operand(rax, 0);
+  return Operand(rbp, offset);
 }
 
 
-void FullCodeGenerator::Move(Register destination, Slot* source) {
-  MemOperand location = EmitSlotSearch(source, destination);
-  __ movq(destination, location);
+MemOperand FullCodeGenerator::VarOperand(Variable* var, Register scratch) {
+  ASSERT(var->IsContextSlot() || var->IsStackAllocated());
+  if (var->IsContextSlot()) {
+    int context_chain_length = scope()->ContextChainLength(var->scope());
+    __ LoadContext(scratch, context_chain_length);
+    return ContextOperand(scratch, var->index());
+  } else {
+    return StackOperand(var);
+  }
 }
 
 
-void FullCodeGenerator::Move(Slot* dst,
-                             Register src,
-                             Register scratch1,
-                             Register scratch2) {
-  ASSERT(dst->type() != Slot::LOOKUP);  // Not yet implemented.
-  ASSERT(!scratch1.is(src) && !scratch2.is(src));
-  MemOperand location = EmitSlotSearch(dst, scratch1);
+void FullCodeGenerator::GetVar(Register dest, Variable* var) {
+  ASSERT(var->IsContextSlot() || var->IsStackAllocated());
+  MemOperand location = VarOperand(var, dest);
+  __ movq(dest, location);
+}
+
+
+void FullCodeGenerator::SetVar(Variable* var,
+                               Register src,
+                               Register scratch0,
+                               Register scratch1) {
+  ASSERT(var->IsContextSlot() || var->IsStackAllocated());
+  ASSERT(!scratch0.is(src));
+  ASSERT(!scratch0.is(scratch1));
+  ASSERT(!scratch1.is(src));
+  MemOperand location = VarOperand(var, scratch0);
   __ movq(location, src);
   // Emit the write barrier code if the location is in the heap.
-  if (dst->type() == Slot::CONTEXT) {
-    int offset = FixedArray::kHeaderSize + dst->index() * kPointerSize;
-    __ RecordWrite(scratch1, offset, src, scratch2);
+  if (var->IsContextSlot()) {
+    int offset = Context::SlotOffset(var->index());
+    __ RecordWrite(scratch0, offset, src, scratch1);
   }
 }
 
@@ -659,118 +672,98 @@ void FullCodeGenerator::PrepareForBailoutBeforeSplit(State state,
 }
 
 
-void FullCodeGenerator::EmitDeclaration(Variable* variable,
+void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
                                         Variable::Mode mode,
-                                        FunctionLiteral* function) {
-  Comment cmnt(masm_, "[ Declaration");
-  ASSERT(variable != NULL);  // Must have been resolved.
-  Slot* slot = variable->AsSlot();
-  Property* prop = variable->AsProperty();
+                                        FunctionLiteral* function,
+                                        int* global_count) {
+  // If it was not possible to allocate the variable at compile time, we
+  // need to "declare" it at runtime to make sure it actually exists in the
+  // local context.
+  Variable* variable = proxy->var();
+  switch (variable->location()) {
+    case Variable::UNALLOCATED:
+      ++(*global_count);
+      break;
 
-  if (slot != NULL) {
-    switch (slot->type()) {
-      case Slot::PARAMETER:
-      case Slot::LOCAL:
-        if (mode == Variable::CONST) {
-          __ LoadRoot(kScratchRegister, Heap::kTheHoleValueRootIndex);
-          __ movq(Operand(rbp, SlotOffset(slot)), kScratchRegister);
-        } else if (function != NULL) {
-          VisitForAccumulatorValue(function);
-          __ movq(Operand(rbp, SlotOffset(slot)), result_register());
-        }
-        break;
-
-      case Slot::CONTEXT:
-        // We bypass the general EmitSlotSearch because we know more about
-        // this specific context.
-
-        // The variable in the decl always resides in the current function
-        // context.
-        ASSERT_EQ(0, scope()->ContextChainLength(variable->scope()));
-        if (FLAG_debug_code) {
-          // Check that we're not inside a with or catch context.
-          __ movq(rbx, FieldOperand(rsi, HeapObject::kMapOffset));
-          __ CompareRoot(rbx, Heap::kWithContextMapRootIndex);
-          __ Check(not_equal, "Declaration in with context.");
-          __ CompareRoot(rbx, Heap::kCatchContextMapRootIndex);
-          __ Check(not_equal, "Declaration in catch context.");
-        }
-        if (mode == Variable::CONST) {
-          __ LoadRoot(kScratchRegister, Heap::kTheHoleValueRootIndex);
-          __ movq(ContextOperand(rsi, slot->index()), kScratchRegister);
-          // No write barrier since the hole value is in old space.
-        } else if (function != NULL) {
-          VisitForAccumulatorValue(function);
-          __ movq(ContextOperand(rsi, slot->index()), result_register());
-          int offset = Context::SlotOffset(slot->index());
-          __ movq(rbx, rsi);
-          __ RecordWrite(rbx, offset, result_register(), rcx);
-        }
-        break;
-
-      case Slot::LOOKUP: {
-        __ push(rsi);
-        __ Push(variable->name());
-        // Declaration nodes are always introduced in one of two modes.
-        ASSERT(mode == Variable::VAR || mode == Variable::CONST);
-        PropertyAttributes attr = (mode == Variable::VAR) ? NONE : READ_ONLY;
-        __ Push(Smi::FromInt(attr));
-        // Push initial value, if any.
-        // Note: For variables we must not push an initial value (such as
-        // 'undefined') because we may have a (legal) redeclaration and we
-        // must not destroy the current value.
-        if (mode == Variable::CONST) {
-          __ PushRoot(Heap::kTheHoleValueRootIndex);
-        } else if (function != NULL) {
-          VisitForStackValue(function);
-        } else {
-          __ Push(Smi::FromInt(0));  // no initial value!
-        }
-        __ CallRuntime(Runtime::kDeclareContextSlot, 4);
-        break;
+    case Variable::PARAMETER:
+    case Variable::LOCAL:
+      if (function != NULL) {
+        Comment cmnt(masm_, "[ Declaration");
+        VisitForAccumulatorValue(function);
+        __ movq(StackOperand(variable), result_register());
+      } else if (mode == Variable::CONST || mode == Variable::LET) {
+        Comment cmnt(masm_, "[ Declaration");
+        __ LoadRoot(kScratchRegister, Heap::kTheHoleValueRootIndex);
+        __ movq(StackOperand(variable), kScratchRegister);
       }
-    }
+      break;
 
-  } else if (prop != NULL) {
-    // A const declaration aliasing a parameter is an illegal redeclaration.
-    ASSERT(mode != Variable::CONST);
-    if (function != NULL) {
-      // We are declaring a function that rewrites to a property.
-      // Use (keyed) IC to set the initial value.  We cannot visit the
-      // rewrite because it's shared and we risk recording duplicate AST
-      // IDs for bailouts from optimized code.
-      ASSERT(prop->obj()->AsVariableProxy() != NULL);
-      { AccumulatorValueContext for_object(this);
-        EmitVariableLoad(prop->obj()->AsVariableProxy());
+    case Variable::CONTEXT:
+      // The variable in the decl always resides in the current function
+      // context.
+      ASSERT_EQ(0, scope()->ContextChainLength(variable->scope()));
+      if (FLAG_debug_code) {
+        // Check that we're not inside a with or catch context.
+        __ movq(rbx, FieldOperand(rsi, HeapObject::kMapOffset));
+        __ CompareRoot(rbx, Heap::kWithContextMapRootIndex);
+        __ Check(not_equal, "Declaration in with context.");
+        __ CompareRoot(rbx, Heap::kCatchContextMapRootIndex);
+        __ Check(not_equal, "Declaration in catch context.");
       }
-      __ push(rax);
-      VisitForAccumulatorValue(function);
-      __ pop(rdx);
-      ASSERT(prop->key()->AsLiteral() != NULL &&
-             prop->key()->AsLiteral()->handle()->IsSmi());
-      __ Move(rcx, prop->key()->AsLiteral()->handle());
+      if (function != NULL) {
+        Comment cmnt(masm_, "[ Declaration");
+        VisitForAccumulatorValue(function);
+        __ movq(ContextOperand(rsi, variable->index()), result_register());
+        int offset = Context::SlotOffset(variable->index());
+        __ movq(rbx, rsi);
+        __ RecordWrite(rbx, offset, result_register(), rcx);
+        PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
+      } else if (mode == Variable::CONST || mode == Variable::LET) {
+        Comment cmnt(masm_, "[ Declaration");
+        __ LoadRoot(kScratchRegister, Heap::kTheHoleValueRootIndex);
+        __ movq(ContextOperand(rsi, variable->index()), kScratchRegister);
+        // No write barrier since the hole value is in old space.
+        PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
+      }
+      break;
 
-      Handle<Code> ic = is_strict_mode()
-          ? isolate()->builtins()->KeyedStoreIC_Initialize_Strict()
-          : isolate()->builtins()->KeyedStoreIC_Initialize();
-      __ call(ic);
+    case Variable::LOOKUP: {
+      Comment cmnt(masm_, "[ Declaration");
+      __ push(rsi);
+      __ Push(variable->name());
+      // Declaration nodes are always introduced in one of three modes.
+      ASSERT(mode == Variable::VAR ||
+             mode == Variable::CONST ||
+             mode == Variable::LET);
+      PropertyAttributes attr = (mode == Variable::CONST) ? READ_ONLY : NONE;
+      __ Push(Smi::FromInt(attr));
+      // Push initial value, if any.
+      // Note: For variables we must not push an initial value (such as
+      // 'undefined') because we may have a (legal) redeclaration and we
+      // must not destroy the current value.
+      if (function != NULL) {
+        VisitForStackValue(function);
+      } else if (mode == Variable::CONST || mode == Variable::LET) {
+        __ PushRoot(Heap::kTheHoleValueRootIndex);
+      } else {
+        __ Push(Smi::FromInt(0));  // Indicates no initial value.
+      }
+      __ CallRuntime(Runtime::kDeclareContextSlot, 4);
+      break;
     }
   }
 }
 
 
-void FullCodeGenerator::VisitDeclaration(Declaration* decl) {
-  EmitDeclaration(decl->proxy()->var(), decl->mode(), decl->fun());
-}
+void FullCodeGenerator::VisitDeclaration(Declaration* decl) { }
 
 
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   // Call the runtime to declare the globals.
   __ push(rsi);  // The context is the first argument.
   __ Push(pairs);
-  __ Push(Smi::FromInt(is_eval() ? 1 : 0));
-  __ Push(Smi::FromInt(strict_mode_flag()));
-  __ CallRuntime(Runtime::kDeclareGlobals, 4);
+  __ Push(Smi::FromInt(DeclareGlobalsFlags()));
+  __ CallRuntime(Runtime::kDeclareGlobals, 3);
   // Return value is ignored.
 }
 
@@ -840,7 +833,7 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
   __ bind(&next_test);
   __ Drop(1);  // Switch value is no longer needed.
   if (default_clause == NULL) {
-    __ jmp(nested_statement.break_target());
+    __ jmp(nested_statement.break_label());
   } else {
     __ jmp(default_clause->body_target());
   }
@@ -854,7 +847,7 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
     VisitStatements(clause->statements());
   }
 
-  __ bind(nested_statement.break_target());
+  __ bind(nested_statement.break_label());
   PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
 }
 
@@ -980,7 +973,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ bind(&loop);
   __ movq(rax, Operand(rsp, 0 * kPointerSize));  // Get the current index.
   __ cmpq(rax, Operand(rsp, 1 * kPointerSize));  // Compare to the array length.
-  __ j(above_equal, loop_statement.break_target());
+  __ j(above_equal, loop_statement.break_label());
 
   // Get the current entry of the array into register rbx.
   __ movq(rbx, Operand(rsp, 2 * kPointerSize));
@@ -1008,7 +1001,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ push(rbx);  // Current entry.
   __ InvokeBuiltin(Builtins::FILTER_KEY, CALL_FUNCTION);
   __ Cmp(rax, Smi::FromInt(0));
-  __ j(equal, loop_statement.continue_target());
+  __ j(equal, loop_statement.continue_label());
   __ movq(rbx, rax);
 
   // Update the 'each' property or variable from the possibly filtered
@@ -1025,14 +1018,14 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
 
   // Generate code for going to the next element by incrementing the
   // index (smi) stored on top of the stack.
-  __ bind(loop_statement.continue_target());
+  __ bind(loop_statement.continue_label());
   __ SmiAddConstant(Operand(rsp, 0 * kPointerSize), Smi::FromInt(1));
 
   EmitStackCheck(stmt);
   __ jmp(&loop);
 
   // Remove the pointers stored on the stack.
-  __ bind(loop_statement.break_target());
+  __ bind(loop_statement.break_label());
   __ addq(rsp, Immediate(5 * kPointerSize));
 
   // Exit and decrement the loop depth.
@@ -1075,10 +1068,9 @@ void FullCodeGenerator::VisitVariableProxy(VariableProxy* expr) {
 }
 
 
-void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
-    Slot* slot,
-    TypeofState typeof_state,
-    Label* slow) {
+void FullCodeGenerator::EmitLoadGlobalCheckExtensions(Variable* var,
+                                                      TypeofState typeof_state,
+                                                      Label* slow) {
   Register context = rsi;
   Register temp = rdx;
 
@@ -1128,7 +1120,7 @@ void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
   // All extension objects were empty and it is safe to use a global
   // load IC call.
   __ movq(rax, GlobalObjectOperand());
-  __ Move(rcx, slot->var()->name());
+  __ Move(rcx, var->name());
   Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
   RelocInfo::Mode mode = (typeof_state == INSIDE_TYPEOF)
       ? RelocInfo::CODE_TARGET
@@ -1137,14 +1129,13 @@ void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
 }
 
 
-MemOperand FullCodeGenerator::ContextSlotOperandCheckExtensions(
-    Slot* slot,
-    Label* slow) {
-  ASSERT(slot->type() == Slot::CONTEXT);
+MemOperand FullCodeGenerator::ContextSlotOperandCheckExtensions(Variable* var,
+                                                                Label* slow) {
+  ASSERT(var->IsContextSlot());
   Register context = rsi;
   Register temp = rbx;
 
-  for (Scope* s = scope(); s != slot->var()->scope(); s = s->outer_scope()) {
+  for (Scope* s = scope(); s != var->scope(); s = s->outer_scope()) {
     if (s->num_heap_slots() > 0) {
       if (s->calls_eval()) {
         // Check that extension is NULL.
@@ -1164,60 +1155,31 @@ MemOperand FullCodeGenerator::ContextSlotOperandCheckExtensions(
   // This function is used only for loads, not stores, so it's safe to
   // return an rsi-based operand (the write barrier cannot be allowed to
   // destroy the rsi register).
-  return ContextOperand(context, slot->index());
+  return ContextOperand(context, var->index());
 }
 
 
-void FullCodeGenerator::EmitDynamicLoadFromSlotFastCase(
-    Slot* slot,
-    TypeofState typeof_state,
-    Label* slow,
-    Label* done) {
+void FullCodeGenerator::EmitDynamicLookupFastCase(Variable* var,
+                                                  TypeofState typeof_state,
+                                                  Label* slow,
+                                                  Label* done) {
   // Generate fast-case code for variables that might be shadowed by
   // eval-introduced variables.  Eval is used a lot without
   // introducing variables.  In those cases, we do not want to
   // perform a runtime call for all variables in the scope
   // containing the eval.
-  if (slot->var()->mode() == Variable::DYNAMIC_GLOBAL) {
-    EmitLoadGlobalSlotCheckExtensions(slot, typeof_state, slow);
+  if (var->mode() == Variable::DYNAMIC_GLOBAL) {
+    EmitLoadGlobalCheckExtensions(var, typeof_state, slow);
     __ jmp(done);
-  } else if (slot->var()->mode() == Variable::DYNAMIC_LOCAL) {
-    Slot* potential_slot = slot->var()->local_if_not_shadowed()->AsSlot();
-    Expression* rewrite = slot->var()->local_if_not_shadowed()->rewrite();
-    if (potential_slot != NULL) {
-      // Generate fast case for locals that rewrite to slots.
-      __ movq(rax,
-              ContextSlotOperandCheckExtensions(potential_slot, slow));
-      if (potential_slot->var()->mode() == Variable::CONST) {
-        __ CompareRoot(rax, Heap::kTheHoleValueRootIndex);
-        __ j(not_equal, done);
-        __ LoadRoot(rax, Heap::kUndefinedValueRootIndex);
-      }
-      __ jmp(done);
-    } else if (rewrite != NULL) {
-      // Generate fast case for calls of an argument function.
-      Property* property = rewrite->AsProperty();
-      if (property != NULL) {
-        VariableProxy* obj_proxy = property->obj()->AsVariableProxy();
-        Literal* key_literal = property->key()->AsLiteral();
-        if (obj_proxy != NULL &&
-            key_literal != NULL &&
-            obj_proxy->IsArguments() &&
-            key_literal->handle()->IsSmi()) {
-          // Load arguments object if there are no eval-introduced
-          // variables. Then load the argument from the arguments
-          // object using keyed load.
-          __ movq(rdx,
-                  ContextSlotOperandCheckExtensions(obj_proxy->var()->AsSlot(),
-                                                    slow));
-          __ Move(rax, key_literal->handle());
-          Handle<Code> ic =
-              isolate()->builtins()->KeyedLoadIC_Initialize();
-          __ call(ic, RelocInfo::CODE_TARGET, GetPropertyId(property));
-          __ jmp(done);
-        }
-      }
+  } else if (var->mode() == Variable::DYNAMIC_LOCAL) {
+    Variable* local = var->local_if_not_shadowed();
+    __ movq(rax, ContextSlotOperandCheckExtensions(local, slow));
+    if (local->mode() == Variable::CONST) {
+      __ CompareRoot(rax, Heap::kTheHoleValueRootIndex);
+      __ j(not_equal, done);
+      __ LoadRoot(rax, Heap::kUndefinedValueRootIndex);
     }
+    __ jmp(done);
   }
 }
 
@@ -1227,54 +1189,58 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
   SetSourcePosition(proxy->position());
   Variable* var = proxy->var();
 
-  // Three cases: non-this global variables, lookup slots, and all other
-  // types of slots.
-  Slot* slot = var->AsSlot();
-  ASSERT((var->is_global() && !var->is_this()) == (slot == NULL));
+  // Three cases: global variables, lookup variables, and all other types of
+  // variables.
+  switch (var->location()) {
+    case Variable::UNALLOCATED: {
+      Comment cmnt(masm_, "Global variable");
+      // Use inline caching. Variable name is passed in rcx and the global
+      // object on the stack.
+      __ Move(rcx, var->name());
+      __ movq(rax, GlobalObjectOperand());
+      Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
+      __ call(ic, RelocInfo::CODE_TARGET_CONTEXT);
+      context()->Plug(rax);
+      break;
+    }
 
-  if (slot == NULL) {
-    Comment cmnt(masm_, "Global variable");
-    // Use inline caching. Variable name is passed in rcx and the global
-    // object on the stack.
-    __ Move(rcx, var->name());
-    __ movq(rax, GlobalObjectOperand());
-    Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
-    __ call(ic, RelocInfo::CODE_TARGET_CONTEXT);
-    context()->Plug(rax);
+    case Variable::PARAMETER:
+    case Variable::LOCAL:
+    case Variable::CONTEXT: {
+      Comment cmnt(masm_, var->IsContextSlot() ? "Context slot" : "Stack slot");
+      if (var->mode() != Variable::LET && var->mode() != Variable::CONST) {
+        context()->Plug(var);
+      } else {
+        // Let and const need a read barrier.
+        Label done;
+        GetVar(rax, var);
+        __ CompareRoot(rax, Heap::kTheHoleValueRootIndex);
+        __ j(not_equal, &done, Label::kNear);
+        if (var->mode() == Variable::LET) {
+          __ Push(var->name());
+          __ CallRuntime(Runtime::kThrowReferenceError, 1);
+        } else {  // Variable::CONST
+          __ LoadRoot(rax, Heap::kUndefinedValueRootIndex);
+        }
+        __ bind(&done);
+        context()->Plug(rax);
+      }
+      break;
+    }
 
-  } else if (slot != NULL && slot->type() == Slot::LOOKUP) {
-    Label done, slow;
-
-    // Generate code for loading from variables potentially shadowed
-    // by eval-introduced variables.
-    EmitDynamicLoadFromSlotFastCase(slot, NOT_INSIDE_TYPEOF, &slow, &done);
-
-    __ bind(&slow);
-    Comment cmnt(masm_, "Lookup slot");
-    __ push(rsi);  // Context.
-    __ Push(var->name());
-    __ CallRuntime(Runtime::kLoadContextSlot, 2);
-    __ bind(&done);
-
-    context()->Plug(rax);
-
-  } else {
-    Comment cmnt(masm_, (slot->type() == Slot::CONTEXT)
-                            ? "Context slot"
-                            : "Stack slot");
-    if (var->mode() == Variable::CONST) {
-      // Constants may be the hole value if they have not been initialized.
-      // Unhole them.
-      Label done;
-      MemOperand slot_operand = EmitSlotSearch(slot, rax);
-      __ movq(rax, slot_operand);
-      __ CompareRoot(rax, Heap::kTheHoleValueRootIndex);
-      __ j(not_equal, &done, Label::kNear);
-      __ LoadRoot(rax, Heap::kUndefinedValueRootIndex);
+    case Variable::LOOKUP: {
+      Label done, slow;
+      // Generate code for loading from variables potentially shadowed
+      // by eval-introduced variables.
+      EmitDynamicLookupFastCase(var, NOT_INSIDE_TYPEOF, &slow, &done);
+      __ bind(&slow);
+      Comment cmnt(masm_, "Lookup slot");
+      __ push(rsi);  // Context.
+      __ Push(var->name());
+      __ CallRuntime(Runtime::kLoadContextSlot, 2);
       __ bind(&done);
       context()->Plug(rax);
-    } else {
-      context()->Plug(slot);
+      break;
     }
   }
 }
@@ -1294,7 +1260,7 @@ void FullCodeGenerator::VisitRegExpLiteral(RegExpLiteral* expr) {
       FixedArray::kHeaderSize + expr->literal_index() * kPointerSize;
   __ movq(rbx, FieldOperand(rcx, literal_offset));
   __ CompareRoot(rbx, Heap::kUndefinedValueRootIndex);
-  __ j(not_equal, &materialized);
+  __ j(not_equal, &materialized, Label::kNear);
 
   // Create regexp literal using runtime function
   // Result will be in rax.
@@ -1759,82 +1725,88 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
 
 void FullCodeGenerator::EmitVariableAssignment(Variable* var,
                                                Token::Value op) {
-  ASSERT(var != NULL);
-  ASSERT(var->is_global() || var->AsSlot() != NULL);
-
-  if (var->is_global()) {
-    ASSERT(!var->is_this());
-    // Assignment to a global variable.  Use inline caching for the
-    // assignment.  Right-hand-side value is passed in rax, variable name in
-    // rcx, and the global object on the stack.
+  if (var->IsUnallocated()) {
+    // Global var, const, or let.
     __ Move(rcx, var->name());
     __ movq(rdx, GlobalObjectOperand());
     Handle<Code> ic = is_strict_mode()
         ? isolate()->builtins()->StoreIC_Initialize_Strict()
         : isolate()->builtins()->StoreIC_Initialize();
     __ call(ic, RelocInfo::CODE_TARGET_CONTEXT);
-
   } else if (op == Token::INIT_CONST) {
-    // Like var declarations, const declarations are hoisted to function
-    // scope.  However, unlike var initializers, const initializers are able
-    // to drill a hole to that function context, even from inside a 'with'
-    // context.  We thus bypass the normal static scope lookup.
-    Slot* slot = var->AsSlot();
-    Label skip;
-    switch (slot->type()) {
-      case Slot::PARAMETER:
-        // No const parameters.
-        UNREACHABLE();
-        break;
-      case Slot::LOCAL:
-        __ movq(rdx, Operand(rbp, SlotOffset(slot)));
-        __ CompareRoot(rdx, Heap::kTheHoleValueRootIndex);
-        __ j(not_equal, &skip);
-        __ movq(Operand(rbp, SlotOffset(slot)), rax);
-        break;
-      case Slot::CONTEXT:
-      case Slot::LOOKUP:
-        __ push(rax);
-        __ push(rsi);
-        __ Push(var->name());
-        __ CallRuntime(Runtime::kInitializeConstContextSlot, 3);
-        break;
+    // Const initializers need a write barrier.
+    ASSERT(!var->IsParameter());  // No const parameters.
+    if (var->IsStackLocal()) {
+      Label skip;
+      __ movq(rdx, StackOperand(var));
+      __ CompareRoot(rdx, Heap::kTheHoleValueRootIndex);
+      __ j(not_equal, &skip);
+      __ movq(StackOperand(var), rax);
+      __ bind(&skip);
+    } else {
+      ASSERT(var->IsContextSlot() || var->IsLookupSlot());
+      // Like var declarations, const declarations are hoisted to function
+      // scope.  However, unlike var initializers, const initializers are
+      // able to drill a hole to that function context, even from inside a
+      // 'with' context.  We thus bypass the normal static scope lookup for
+      // var->IsContextSlot().
+      __ push(rax);
+      __ push(rsi);
+      __ Push(var->name());
+      __ CallRuntime(Runtime::kInitializeConstContextSlot, 3);
     }
-    __ bind(&skip);
+
+  } else if (var->mode() == Variable::LET && op != Token::INIT_LET) {
+    // Non-initializing assignment to let variable needs a write barrier.
+    if (var->IsLookupSlot()) {
+      __ push(rax);  // Value.
+      __ push(rsi);  // Context.
+      __ Push(var->name());
+      __ Push(Smi::FromInt(strict_mode_flag()));
+      __ CallRuntime(Runtime::kStoreContextSlot, 4);
+    } else {
+      ASSERT(var->IsStackAllocated() || var->IsContextSlot());
+      Label assign;
+      MemOperand location = VarOperand(var, rcx);
+      __ movq(rdx, location);
+      __ CompareRoot(rdx, Heap::kTheHoleValueRootIndex);
+      __ j(not_equal, &assign, Label::kNear);
+      __ Push(var->name());
+      __ CallRuntime(Runtime::kThrowReferenceError, 1);
+      __ bind(&assign);
+      __ movq(location, rax);
+      if (var->IsContextSlot()) {
+        __ movq(rdx, rax);
+        __ RecordWrite(rcx, Context::SlotOffset(var->index()), rdx, rbx);
+      }
+    }
 
   } else if (var->mode() != Variable::CONST) {
-    // Perform the assignment for non-const variables.  Const assignments
-    // are simply skipped.
-    Slot* slot = var->AsSlot();
-    switch (slot->type()) {
-      case Slot::PARAMETER:
-      case Slot::LOCAL:
-        // Perform the assignment.
-        __ movq(Operand(rbp, SlotOffset(slot)), rax);
-        break;
-
-      case Slot::CONTEXT: {
-        MemOperand target = EmitSlotSearch(slot, rcx);
-        // Perform the assignment and issue the write barrier.
-        __ movq(target, rax);
-        // The value of the assignment is in rax.  RecordWrite clobbers its
-        // register arguments.
-        __ movq(rdx, rax);
-        int offset = Context::SlotOffset(slot->index());
-        __ RecordWrite(rcx, offset, rdx, rbx);
-        break;
+    // Assignment to var or initializing assignment to let.
+    if (var->IsStackAllocated() || var->IsContextSlot()) {
+      MemOperand location = VarOperand(var, rcx);
+      if (FLAG_debug_code && op == Token::INIT_LET) {
+        // Check for an uninitialized let binding.
+        __ movq(rdx, location);
+        __ CompareRoot(rdx, Heap::kTheHoleValueRootIndex);
+        __ Check(equal, "Let binding re-initialization.");
       }
-
-      case Slot::LOOKUP:
-        // Call the runtime for the assignment.
-        __ push(rax);  // Value.
-        __ push(rsi);  // Context.
-        __ Push(var->name());
-        __ Push(Smi::FromInt(strict_mode_flag()));
-        __ CallRuntime(Runtime::kStoreContextSlot, 4);
-        break;
+      // Perform the assignment.
+      __ movq(location, rax);
+      if (var->IsContextSlot()) {
+        __ movq(rdx, rax);
+        __ RecordWrite(rcx, Context::SlotOffset(var->index()), rdx, rbx);
+      }
+    } else {
+      ASSERT(var->IsLookupSlot());
+      __ push(rax);  // Value.
+      __ push(rsi);  // Context.
+      __ Push(var->name());
+      __ Push(Smi::FromInt(strict_mode_flag()));
+      __ CallRuntime(Runtime::kStoreContextSlot, 4);
     }
   }
+  // Non-initializing assignments to consts are ignored.
 }
 
 
@@ -1954,9 +1926,8 @@ void FullCodeGenerator::EmitCallWithIC(Call* expr,
   // Record source position for debugger.
   SetSourcePosition(expr->position());
   // Call the IC initialization code.
-  InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   Handle<Code> ic =
-      ISOLATE->stub_cache()->ComputeCallInitialize(arg_count, in_loop, mode);
+      isolate()->stub_cache()->ComputeCallInitialize(arg_count, mode);
   __ call(ic, mode, expr->id());
   RecordJSReturnSite(expr);
   // Restore context register.
@@ -1987,9 +1958,8 @@ void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
   // Record source position for debugger.
   SetSourcePosition(expr->position());
   // Call the IC initialization code.
-  InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   Handle<Code> ic =
-      ISOLATE->stub_cache()->ComputeKeyedCallInitialize(arg_count, in_loop);
+      isolate()->stub_cache()->ComputeKeyedCallInitialize(arg_count);
   __ movq(rcx, Operand(rsp, (arg_count + 1) * kPointerSize));  // Key.
   __ call(ic, RelocInfo::CODE_TARGET, expr->id());
   RecordJSReturnSite(expr);
@@ -2010,8 +1980,7 @@ void FullCodeGenerator::EmitCallWithStub(Call* expr, CallFunctionFlags flags) {
   }
   // Record source position for debugger.
   SetSourcePosition(expr->position());
-  InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
-  CallFunctionStub stub(arg_count, in_loop, flags);
+  CallFunctionStub stub(arg_count, flags);
   __ CallStub(&stub);
   RecordJSReturnSite(expr);
   // Restore context register.
@@ -2033,8 +2002,13 @@ void FullCodeGenerator::EmitResolvePossiblyDirectEval(ResolveEvalFlag flag,
   // Push the receiver of the enclosing function and do runtime call.
   __ push(Operand(rbp, (2 + info_->scope()->num_parameters()) * kPointerSize));
 
-  // Push the strict mode flag.
-  __ Push(Smi::FromInt(strict_mode_flag()));
+  // Push the strict mode flag. In harmony mode every eval call
+  // is a strict mode eval call.
+  StrictModeFlag strict_mode = strict_mode_flag();
+  if (FLAG_harmony_block_scoping) {
+    strict_mode = kStrictMode;
+  }
+  __ Push(Smi::FromInt(strict_mode));
 
   __ CallRuntime(flag == SKIP_CONTEXT_LOOKUP
                  ? Runtime::kResolvePossiblyDirectEvalNoLookup
@@ -2050,18 +2024,18 @@ void FullCodeGenerator::VisitCall(Call* expr) {
 #endif
 
   Comment cmnt(masm_, "[ Call");
-  Expression* fun = expr->expression();
-  Variable* var = fun->AsVariableProxy()->AsVariable();
+  Expression* callee = expr->expression();
+  VariableProxy* proxy = callee->AsVariableProxy();
+  Property* property = callee->AsProperty();
 
-  if (var != NULL && var->is_possibly_eval()) {
+  if (proxy != NULL && proxy->var()->is_possibly_eval()) {
     // In a call to eval, we first call %ResolvePossiblyDirectEval to
-    // resolve the function we need to call and the receiver of the
-    // call.  Then we call the resolved function using the given
-    // arguments.
+    // resolve the function we need to call and the receiver of the call.
+    // Then we call the resolved function using the given arguments.
     ZoneList<Expression*>* args = expr->arguments();
     int arg_count = args->length();
     { PreservePositionScope pos_scope(masm()->positions_recorder());
-      VisitForStackValue(fun);
+      VisitForStackValue(callee);
       __ PushRoot(Heap::kUndefinedValueRootIndex);  // Reserved receiver slot.
 
       // Push the arguments.
@@ -2070,15 +2044,14 @@ void FullCodeGenerator::VisitCall(Call* expr) {
       }
 
       // If we know that eval can only be shadowed by eval-introduced
-      // variables we attempt to load the global eval function directly
-      // in generated code. If we succeed, there is no need to perform a
+      // variables we attempt to load the global eval function directly in
+      // generated code. If we succeed, there is no need to perform a
       // context lookup in the runtime system.
       Label done;
-      if (var->AsSlot() != NULL && var->mode() == Variable::DYNAMIC_GLOBAL) {
+      Variable* var = proxy->var();
+      if (!var->IsUnallocated() && var->mode() == Variable::DYNAMIC_GLOBAL) {
         Label slow;
-        EmitLoadGlobalSlotCheckExtensions(var->AsSlot(),
-                                          NOT_INSIDE_TYPEOF,
-                                          &slow);
+        EmitLoadGlobalCheckExtensions(var, NOT_INSIDE_TYPEOF, &slow);
         // Push the function and resolve eval.
         __ push(rax);
         EmitResolvePossiblyDirectEval(SKIP_CONTEXT_LOOKUP, arg_count);
@@ -2086,13 +2059,11 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         __ bind(&slow);
       }
 
-      // Push copy of the function (found below the arguments) and
-      // resolve eval.
+      // Push a copy of the function (found below the arguments) and resolve
+      // eval.
       __ push(Operand(rsp, (arg_count + 1) * kPointerSize));
       EmitResolvePossiblyDirectEval(PERFORM_CONTEXT_LOOKUP, arg_count);
-      if (done.is_linked()) {
-        __ bind(&done);
-      }
+      __ bind(&done);
 
       // The runtime call returns a pair of values in rax (function) and
       // rdx (receiver). Touch up the stack with the right values.
@@ -2101,108 +2072,68 @@ void FullCodeGenerator::VisitCall(Call* expr) {
     }
     // Record source position for debugger.
     SetSourcePosition(expr->position());
-    InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
-    CallFunctionStub stub(arg_count, in_loop, RECEIVER_MIGHT_BE_IMPLICIT);
+    CallFunctionStub stub(arg_count, RECEIVER_MIGHT_BE_IMPLICIT);
     __ CallStub(&stub);
     RecordJSReturnSite(expr);
     // Restore context register.
     __ movq(rsi, Operand(rbp, StandardFrameConstants::kContextOffset));
     context()->DropAndPlug(1, rax);
-  } else if (var != NULL && !var->is_this() && var->is_global()) {
-    // Call to a global variable.
-    // Push global object as receiver for the call IC lookup.
+  } else if (proxy != NULL && proxy->var()->IsUnallocated()) {
+    // Call to a global variable.  Push global object as receiver for the
+    // call IC lookup.
     __ push(GlobalObjectOperand());
-    EmitCallWithIC(expr, var->name(), RelocInfo::CODE_TARGET_CONTEXT);
-  } else if (var != NULL && var->AsSlot() != NULL &&
-             var->AsSlot()->type() == Slot::LOOKUP) {
+    EmitCallWithIC(expr, proxy->name(), RelocInfo::CODE_TARGET_CONTEXT);
+  } else if (proxy != NULL && proxy->var()->IsLookupSlot()) {
     // Call to a lookup slot (dynamically introduced variable).
     Label slow, done;
 
     { PreservePositionScope scope(masm()->positions_recorder());
-      // Generate code for loading from variables potentially shadowed
-      // by eval-introduced variables.
-      EmitDynamicLoadFromSlotFastCase(var->AsSlot(),
-                                      NOT_INSIDE_TYPEOF,
-                                      &slow,
-                                      &done);
-
-      __ bind(&slow);
+      // Generate code for loading from variables potentially shadowed by
+      // eval-introduced variables.
+      EmitDynamicLookupFastCase(proxy->var(), NOT_INSIDE_TYPEOF, &slow, &done);
     }
-    // Call the runtime to find the function to call (returned in rax)
-    // and the object holding it (returned in rdx).
+    __ bind(&slow);
+    // Call the runtime to find the function to call (returned in rax) and
+    // the object holding it (returned in rdx).
     __ push(context_register());
-    __ Push(var->name());
+    __ Push(proxy->name());
     __ CallRuntime(Runtime::kLoadContextSlot, 2);
     __ push(rax);  // Function.
     __ push(rdx);  // Receiver.
 
-    // If fast case code has been generated, emit code to push the
-    // function and receiver and have the slow path jump around this
-    // code.
+    // If fast case code has been generated, emit code to push the function
+    // and receiver and have the slow path jump around this code.
     if (done.is_linked()) {
       Label call;
       __ jmp(&call, Label::kNear);
       __ bind(&done);
       // Push function.
       __ push(rax);
-      // The receiver is implicitly the global receiver. Indicate this
-      // by passing the hole to the call function stub.
+      // The receiver is implicitly the global receiver. Indicate this by
+      // passing the hole to the call function stub.
       __ PushRoot(Heap::kTheHoleValueRootIndex);
       __ bind(&call);
     }
 
-    // The receiver is either the global receiver or an object found
-    // by LoadContextSlot. That object could be the hole if the
-    // receiver is implicitly the global object.
+    // The receiver is either the global receiver or an object found by
+    // LoadContextSlot. That object could be the hole if the receiver is
+    // implicitly the global object.
     EmitCallWithStub(expr, RECEIVER_MIGHT_BE_IMPLICIT);
-  } else if (fun->AsProperty() != NULL) {
-    // Call to an object property.
-    Property* prop = fun->AsProperty();
-    Literal* key = prop->key()->AsLiteral();
-    if (key != NULL && key->handle()->IsSymbol()) {
-      // Call to a named property, use call IC.
-      { PreservePositionScope scope(masm()->positions_recorder());
-        VisitForStackValue(prop->obj());
-      }
-      EmitCallWithIC(expr, key->handle(), RelocInfo::CODE_TARGET);
+  } else if (property != NULL) {
+    { PreservePositionScope scope(masm()->positions_recorder());
+      VisitForStackValue(property->obj());
+    }
+    if (property->key()->IsPropertyName()) {
+      EmitCallWithIC(expr,
+                     property->key()->AsLiteral()->handle(),
+                     RelocInfo::CODE_TARGET);
     } else {
-      // Call to a keyed property.
-      // For a synthetic property use keyed load IC followed by function call,
-      // for a regular property use EmitKeyedCallWithIC.
-      if (prop->is_synthetic()) {
-        // Do not visit the object and key subexpressions (they are shared
-        // by all occurrences of the same rewritten parameter).
-        ASSERT(prop->obj()->AsVariableProxy() != NULL);
-        ASSERT(prop->obj()->AsVariableProxy()->var()->AsSlot() != NULL);
-        Slot* slot = prop->obj()->AsVariableProxy()->var()->AsSlot();
-        MemOperand operand = EmitSlotSearch(slot, rdx);
-        __ movq(rdx, operand);
-
-        ASSERT(prop->key()->AsLiteral() != NULL);
-        ASSERT(prop->key()->AsLiteral()->handle()->IsSmi());
-        __ Move(rax, prop->key()->AsLiteral()->handle());
-
-        // Record source code position for IC call.
-        SetSourcePosition(prop->position());
-
-        Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Initialize();
-        __ call(ic, RelocInfo::CODE_TARGET, GetPropertyId(prop));
-        // Push result (function).
-        __ push(rax);
-        // Push Global receiver.
-        __ movq(rcx, GlobalObjectOperand());
-        __ push(FieldOperand(rcx, GlobalObject::kGlobalReceiverOffset));
-        EmitCallWithStub(expr, NO_CALL_FUNCTION_FLAGS);
-      } else {
-        { PreservePositionScope scope(masm()->positions_recorder());
-          VisitForStackValue(prop->obj());
-        }
-        EmitKeyedCallWithIC(expr, prop->key());
-      }
+      EmitKeyedCallWithIC(expr, property->key());
     }
   } else {
+    // Call to an arbitrary expression not handled specially above.
     { PreservePositionScope scope(masm()->positions_recorder());
-      VisitForStackValue(fun);
+      VisitForStackValue(callee);
     }
     // Load global receiver object.
     __ movq(rbx, GlobalObjectOperand());
@@ -3130,7 +3061,7 @@ void FullCodeGenerator::EmitGetFromCache(ZoneList<Expression*>* args) {
 
   Label done, not_found;
   // tmp now holds finger offset as a smi.
-  ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
+  STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
   __ movq(tmp, FieldOperand(cache, JSFunctionResultCache::kFingerOffset));
   SmiIndex index =
       __ SmiToIndex(kScratchRegister, tmp, kPointerSizeLog2);
@@ -3516,39 +3447,6 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
 }
 
 
-void FullCodeGenerator::EmitIsNativeOrStrictMode(ZoneList<Expression*>* args) {
-  ASSERT(args->length() == 1);
-
-  // Load the function into rax.
-  VisitForAccumulatorValue(args->at(0));
-
-  // Prepare for the test.
-  Label materialize_true, materialize_false;
-  Label* if_true = NULL;
-  Label* if_false = NULL;
-  Label* fall_through = NULL;
-  context()->PrepareTest(&materialize_true, &materialize_false,
-                         &if_true, &if_false, &fall_through);
-
-  // Test for strict mode function.
-  __ movq(rdx, FieldOperand(rax, JSFunction::kSharedFunctionInfoOffset));
-  __ testb(FieldOperand(rdx, SharedFunctionInfo::kStrictModeByteOffset),
-           Immediate(1 << SharedFunctionInfo::kStrictModeBitWithinByte));
-  __ j(not_equal, if_true);
-
-  // Test for native function.
-  __ testb(FieldOperand(rdx, SharedFunctionInfo::kNativeByteOffset),
-           Immediate(1 << SharedFunctionInfo::kNativeBitWithinByte));
-  __ j(not_equal, if_true);
-
-  // Not native or strict-mode function.
-  __ jmp(if_false);
-
-  PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
-  context()->Plug(if_true, if_false);
-}
-
-
 void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
   Handle<String> name = expr->name();
   if (name->length() > 0 && name->Get(0) == '_') {
@@ -3575,10 +3473,9 @@ void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
   if (expr->is_jsruntime()) {
     // Call the JS runtime function using a call IC.
     __ Move(rcx, expr->name());
-    InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
     RelocInfo::Mode mode = RelocInfo::CODE_TARGET;
     Handle<Code> ic =
-        ISOLATE->stub_cache()->ComputeCallInitialize(arg_count, in_loop, mode);
+        isolate()->stub_cache()->ComputeCallInitialize(arg_count, mode);
     __ call(ic, mode, expr->id());
     // Restore context register.
     __ movq(rsi, Operand(rbp, StandardFrameConstants::kContextOffset));
@@ -3593,36 +3490,31 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
   switch (expr->op()) {
     case Token::DELETE: {
       Comment cmnt(masm_, "[ UnaryOperation (DELETE)");
-      Property* prop = expr->expression()->AsProperty();
-      Variable* var = expr->expression()->AsVariableProxy()->AsVariable();
+      Property* property = expr->expression()->AsProperty();
+      VariableProxy* proxy = expr->expression()->AsVariableProxy();
 
-      if (prop != NULL) {
-        if (prop->is_synthetic()) {
-          // Result of deleting parameters is false, even when they rewrite
-          // to accesses on the arguments object.
-          context()->Plug(false);
-        } else {
-          VisitForStackValue(prop->obj());
-          VisitForStackValue(prop->key());
-          __ Push(Smi::FromInt(strict_mode_flag()));
-          __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
-          context()->Plug(rax);
-        }
-      } else if (var != NULL) {
+      if (property != NULL) {
+        VisitForStackValue(property->obj());
+        VisitForStackValue(property->key());
+        __ Push(Smi::FromInt(strict_mode_flag()));
+        __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
+        context()->Plug(rax);
+      } else if (proxy != NULL) {
+        Variable* var = proxy->var();
         // Delete of an unqualified identifier is disallowed in strict mode
-        // but "delete this" is.
+        // but "delete this" is allowed.
         ASSERT(strict_mode_flag() == kNonStrictMode || var->is_this());
-        if (var->is_global()) {
+        if (var->IsUnallocated()) {
           __ push(GlobalObjectOperand());
           __ Push(var->name());
           __ Push(Smi::FromInt(kNonStrictMode));
           __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
           context()->Plug(rax);
-        } else if (var->AsSlot() != NULL &&
-                   var->AsSlot()->type() != Slot::LOOKUP) {
-          // Result of deleting non-global, non-dynamic variables is false.
-          // The subexpression does not have side effects.
-          context()->Plug(false);
+        } else if (var->IsStackAllocated() || var->IsContextSlot()) {
+          // Result of deleting non-global variables is false.  'this' is
+          // not really a variable, though we implement it as one.  The
+          // subexpression does not have side effects.
+          context()->Plug(var->is_this());
         } else {
           // Non-global variable.  Call the runtime to try to delete from the
           // context where the variable was introduced.
@@ -3908,7 +3800,7 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr) {
   ASSERT(!context()->IsEffect());
   ASSERT(!context()->IsTest());
 
-  if (proxy != NULL && !proxy->var()->is_this() && proxy->var()->is_global()) {
+  if (proxy != NULL && proxy->var()->IsUnallocated()) {
     Comment cmnt(masm_, "Global variable");
     __ Move(rcx, proxy->name());
     __ movq(rax, GlobalObjectOperand());
@@ -3918,15 +3810,12 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr) {
     __ call(ic);
     PrepareForBailout(expr, TOS_REG);
     context()->Plug(rax);
-  } else if (proxy != NULL &&
-             proxy->var()->AsSlot() != NULL &&
-             proxy->var()->AsSlot()->type() == Slot::LOOKUP) {
+  } else if (proxy != NULL && proxy->var()->IsLookupSlot()) {
     Label done, slow;
 
     // Generate code for loading from variables potentially shadowed
     // by eval-introduced variables.
-    Slot* slot = proxy->var()->AsSlot();
-    EmitDynamicLoadFromSlotFastCase(slot, INSIDE_TYPEOF, &slow, &done);
+    EmitDynamicLookupFastCase(proxy->var(), INSIDE_TYPEOF, &slow, &done);
 
     __ bind(&slow);
     __ push(rsi);
@@ -3971,6 +3860,10 @@ void FullCodeGenerator::EmitLiteralCompareTypeof(Expression* expr,
     __ j(equal, if_true);
     __ CompareRoot(rax, Heap::kFalseValueRootIndex);
     Split(equal, if_true, if_false, fall_through);
+  } else if (FLAG_harmony_typeof &&
+             check->Equals(isolate()->heap()->null_symbol())) {
+    __ CompareRoot(rax, Heap::kNullValueRootIndex);
+    Split(equal, if_true, if_false, fall_through);
   } else if (check->Equals(isolate()->heap()->undefined_symbol())) {
     __ CompareRoot(rax, Heap::kUndefinedValueRootIndex);
     __ j(equal, if_true);
@@ -3987,8 +3880,10 @@ void FullCodeGenerator::EmitLiteralCompareTypeof(Expression* expr,
     Split(above_equal, if_true, if_false, fall_through);
   } else if (check->Equals(isolate()->heap()->object_symbol())) {
     __ JumpIfSmi(rax, if_false);
-    __ CompareRoot(rax, Heap::kNullValueRootIndex);
-    __ j(equal, if_true);
+    if (!FLAG_harmony_typeof) {
+      __ CompareRoot(rax, Heap::kNullValueRootIndex);
+      __ j(equal, if_true);
+    }
     __ CmpObjectType(rax, FIRST_NONCALLABLE_SPEC_OBJECT_TYPE, rdx);
     __ j(below, if_false);
     __ CmpInstanceType(rdx, LAST_NONCALLABLE_SPEC_OBJECT_TYPE);
@@ -4232,6 +4127,33 @@ void FullCodeGenerator::ExitFinallyBlock() {
 
 #undef __
 
+#define __ ACCESS_MASM(masm())
+
+FullCodeGenerator::NestedStatement* FullCodeGenerator::TryFinally::Exit(
+    int* stack_depth,
+    int* context_length) {
+  // The macros used here must preserve the result register.
+
+  // Because the handler block contains the context of the finally
+  // code, we can restore it directly from there for the finally code
+  // rather than iteratively unwinding contexts via their previous
+  // links.
+  __ Drop(*stack_depth);  // Down to the handler block.
+  if (*context_length > 0) {
+    // Restore the context to its dedicated register and the stack.
+    __ movq(rsi, Operand(rsp, StackHandlerConstants::kContextOffset));
+    __ movq(Operand(rbp, StandardFrameConstants::kContextOffset), rsi);
+  }
+  __ PopTryHandler();
+  __ call(finally_entry_);
+
+  *stack_depth = 0;
+  *context_length = 0;
+  return previous_;
+}
+
+
+#undef __
 
 } }  // namespace v8::internal
 

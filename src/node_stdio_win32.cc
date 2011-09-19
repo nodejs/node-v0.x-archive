@@ -25,6 +25,7 @@
 #include <v8.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <io.h>
 
 #include <platform_win32.h>
@@ -177,21 +178,28 @@ static Handle<Value> IsATTY(const Arguments& args) {
 /* Whether stdio is currently in raw mode */
 /* -1 means that it has not been set */
 static int rawMode = -1;
-
+static DWORD naturalMode = 0;
 
 static void setRawMode(int newMode) {
-  DWORD flags;
+  DWORD flags = 0;
   BOOL result;
+
+  if(rawMode == -1) {
+    GetConsoleMode((HANDLE)_get_osfhandle(STDIN_FILENO), &naturalMode);
+  }
+
+  flags |= (naturalMode & ENABLE_QUICK_EDIT_MODE);
+  flags |= flags ? ENABLE_EXTENDED_FLAGS : 0;
 
   if (newMode != rawMode) {
     if (newMode) {
       // raw input
-      flags = ENABLE_WINDOW_INPUT;
+      flags |= ENABLE_WINDOW_INPUT;
     } else {
       // input not raw, but still processing enough messages to make the
       // tty watcher work (this mode is not the windows default)
-      flags = ENABLE_ECHO_INPUT | ENABLE_INSERT_MODE | ENABLE_LINE_INPUT |
-          ENABLE_PROCESSED_INPUT | ENABLE_WINDOW_INPUT;
+      flags |= ENABLE_ECHO_INPUT | ENABLE_INSERT_MODE | ENABLE_LINE_INPUT |
+          ENABLE_EXTENDED_FLAGS | ENABLE_PROCESSED_INPUT | ENABLE_WINDOW_INPUT;
     }
 
     result = SetConsoleMode((HANDLE)_get_osfhandle(STDIN_FILENO), flags);
@@ -469,7 +477,7 @@ static void tty_watcher_start() {
   assert(tty_watcher_initialized);
   if (!tty_watcher_active) {
     tty_watcher_active = true;
-    uv_ref();
+    uv_ref(uv_default_loop());
     tty_watcher_arm();
   }
 }
@@ -478,7 +486,7 @@ static void tty_watcher_start() {
 static void tty_watcher_stop() {
   if (tty_watcher_active) {
     tty_watcher_active = false;
-    uv_unref();
+    uv_unref(uv_default_loop());
     tty_watcher_disarm();
   }
 }
@@ -656,12 +664,34 @@ static Handle<Value> StopTTYWatcher(const Arguments& args) {
   return Undefined();
 }
 
+// This exists to prevent process.stdout from keeping the event loop alive.
+// It is only ever called in src/node.js during the initalization of
+// process.stdout and will fail if called more than once. We do not want to
+// expose uv_ref and uv_unref to javascript in general.
+// This should be removed in the future!
+static bool unref_called = false;
+static Handle<Value> Unref(const Arguments& args) {
+  HandleScope scope;
+
+  assert(unref_called == false);
+
+  //uv_unref(uv_default_loop());
+  unref_called = true;
+
+  return Null();
+}
+
 
 void Stdio::Initialize(v8::Handle<v8::Object> target) {
   init_scancode_table();
   
-  uv_async_init(&tty_avail_notifier, tty_poll);
-  uv_unref();
+  uv_async_init(uv_default_loop(), &tty_avail_notifier, tty_poll);
+  uv_unref(uv_default_loop());
+
+  /* Set stdio streams to binary mode. */
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
 
   name_symbol = NODE_PSYMBOL("name");
   shift_symbol = NODE_PSYMBOL("shift");
@@ -688,6 +718,7 @@ void Stdio::Initialize(v8::Handle<v8::Object> target) {
   NODE_SET_METHOD(target, "destroyTTYWatcher", DestroyTTYWatcher);
   NODE_SET_METHOD(target, "startTTYWatcher", StartTTYWatcher);
   NODE_SET_METHOD(target, "stopTTYWatcher", StopTTYWatcher);
+  NODE_SET_METHOD(target, "unref", Unref);
 }
 
 

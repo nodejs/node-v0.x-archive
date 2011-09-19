@@ -51,14 +51,19 @@ static void getaddrinfo_cuncurrent_cb(uv_getaddrinfo_t* handle,
                                       int status,
                                       struct addrinfo* res) {
   int i;
+  int* data = (int*)handle->data;
 
   for (i = 0; i < CONCURRENT_COUNT; i++) {
     if (&getaddrinfo_handles[i] == handle) {
+      ASSERT(i == *data);
+
       callback_counts[i]++;
       break;
     }
   }
   ASSERT (i < CONCURRENT_COUNT);
+
+  free(data);
 
   getaddrinfo_cbs++;
 }
@@ -67,16 +72,15 @@ static void getaddrinfo_cuncurrent_cb(uv_getaddrinfo_t* handle,
 TEST_IMPL(getaddrinfo_basic) {
   int r;
 
-  uv_init();
-
-  r = uv_getaddrinfo(&getaddrinfo_handle,
+  r = uv_getaddrinfo(uv_default_loop(),
+                     &getaddrinfo_handle,
                      &getaddrinfo_basic_cb,
                      name,
                      NULL,
                      NULL);
   ASSERT(r == 0);
 
-  uv_run();
+  uv_run(uv_default_loop());
 
   ASSERT(getaddrinfo_cbs == 1);
 
@@ -86,21 +90,25 @@ TEST_IMPL(getaddrinfo_basic) {
 
 TEST_IMPL(getaddrinfo_concurrent) {
   int i, r;
-
-  uv_init();
+  int* data;
 
   for (i = 0; i < CONCURRENT_COUNT; i++) {
     callback_counts[i] = 0;
 
-    r = uv_getaddrinfo(&getaddrinfo_handles[i],
-                   &getaddrinfo_cuncurrent_cb,
-                   name,
-                   NULL,
-                   NULL);
+    data = (int*)malloc(sizeof(int));
+    *data = i;
+    getaddrinfo_handles[i].data = data;
+
+    r = uv_getaddrinfo(uv_default_loop(),
+                       &getaddrinfo_handles[i],
+                       &getaddrinfo_cuncurrent_cb,
+                       name,
+                       NULL,
+                       NULL);
     ASSERT(r == 0);
   }
 
-  uv_run();
+  uv_run(uv_default_loop());
 
   for (i = 0; i < CONCURRENT_COUNT; i++) {
     ASSERT(callback_counts[i] == 1);

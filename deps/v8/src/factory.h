@@ -58,6 +58,8 @@ class Factory {
 
   Handle<StringDictionary> NewStringDictionary(int at_least_space_for);
 
+  Handle<ObjectHashTable> NewObjectHashTable(int at_least_space_for);
+
   Handle<DescriptorArray> NewDescriptorArray(int number_of_descriptors);
   Handle<DeoptimizationInputData> NewDeoptimizationInputData(
       int deopt_entry_count,
@@ -165,6 +167,11 @@ class Factory {
                                  Handle<Context> previous,
                                  Handle<JSObject> extension);
 
+  // Create a 'block' context.
+  Handle<Context> NewBlockContext(Handle<JSFunction> function,
+                                  Handle<Context> previous,
+                                  Handle<SerializedScopeInfo> scope_info);
+
   // Return the Symbol matching the passed in string.
   Handle<String> SymbolFromString(Handle<String> value);
 
@@ -212,9 +219,9 @@ class Factory {
 
   Handle<Map> GetSlowElementsMap(Handle<Map> map);
 
-  Handle<Map> GetExternalArrayElementsMap(Handle<Map> map,
-                                          ExternalArrayType array_type,
-                                          bool safe_to_add_transition);
+  Handle<Map> GetElementsTransitionMap(Handle<Map> map,
+                                       ElementsKind elements_kind,
+                                       bool safe_to_add_transition);
 
   Handle<FixedArray> CopyFixedArray(Handle<FixedArray> array);
 
@@ -253,8 +260,9 @@ class Factory {
 
   Handle<JSProxy> NewJSProxy(Handle<Object> handler, Handle<Object> prototype);
 
-  // Change the type of the argument into a regular JS object and reinitialize.
-  void BecomeJSObject(Handle<JSProxy> object);
+  // Change the type of the argument into a JS object/function and reinitialize.
+  void BecomeJSObject(Handle<JSReceiver> object);
+  void BecomeJSFunction(Handle<JSReceiver> object);
 
   Handle<JSFunction> NewFunction(Handle<String> name,
                                  Handle<Object> prototype);
@@ -274,6 +282,8 @@ class Factory {
       Handle<SharedFunctionInfo> function_info,
       Handle<Context> context,
       PretenureFlag pretenure = TENURED);
+
+  Handle<SerializedScopeInfo> NewSerializedScopeInfo(int length);
 
   Handle<Code> NewCode(const CodeDesc& desc,
                        Code::Flags flags,

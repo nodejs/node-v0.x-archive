@@ -549,7 +549,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
     // | s |   exp   |              mantissa               |
 
     // Check for zero.
-    __ cmp(int_scratch, Operand(0));
+    __ cmp(int_scratch, Operand::Zero());
     __ mov(dst2, int_scratch);
     __ mov(dst1, int_scratch);
     __ b(eq, &done);
@@ -557,7 +557,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
     // Preload the sign of the value.
     __ and_(dst2, int_scratch, Operand(HeapNumber::kSignMask), SetCC);
     // Get the absolute value of the object (as an unsigned integer).
-    __ rsb(int_scratch, int_scratch, Operand(0), SetCC, mi);
+    __ rsb(int_scratch, int_scratch, Operand::Zero(), SetCC, mi);
 
     // Get mantisssa[51:20].
 
@@ -589,7 +589,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
     __ mov(scratch2, Operand(int_scratch, LSL, scratch2));
     __ orr(dst2, dst2, scratch2);
     // Set dst1 to 0.
-    __ mov(dst1, Operand(0));
+    __ mov(dst1, Operand::Zero());
   }
   __ bind(&done);
 }
@@ -657,7 +657,7 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
     // Check for 0 and -0.
     __ bic(scratch1, dst1, Operand(HeapNumber::kSignMask));
     __ orr(scratch1, scratch1, Operand(dst2));
-    __ cmp(scratch1, Operand(0));
+    __ cmp(scratch1, Operand::Zero());
     __ b(eq, &done);
 
     // Check that the value can be exactly represented by a 32-bit integer.
@@ -730,7 +730,7 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
     // Check for 0 and -0.
     __ bic(dst, scratch1, Operand(HeapNumber::kSignMask));
     __ orr(dst, scratch2, Operand(dst));
-    __ cmp(dst, Operand(0));
+    __ cmp(dst, Operand::Zero());
     __ b(eq, &done);
 
     DoubleIs32BitInteger(masm, scratch1, scratch2, dst, scratch3, not_int32);
@@ -747,7 +747,7 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
     // Set the sign.
     __ ldr(scratch1, FieldMemOperand(object, HeapNumber::kExponentOffset));
     __ tst(scratch1, Operand(HeapNumber::kSignMask));
-    __ rsb(dst, dst, Operand(0), LeaveCC, mi);
+    __ rsb(dst, dst, Operand::Zero(), LeaveCC, mi);
   }
 
   __ bind(&done);
@@ -1603,83 +1603,113 @@ void CompareStub::Generate(MacroAssembler* masm) {
 }
 
 
-// The stub returns zero for false, and a non-zero value for true.
+// The stub expects its argument in the tos_ register and returns its result in
+// it, too: zero for false, and a non-zero value for true.
 void ToBooleanStub::Generate(MacroAssembler* masm) {
   // This stub uses VFP3 instructions.
   CpuFeatures::Scope scope(VFP3);
 
-  Label false_result, true_result, not_string;
+  Label patch;
   const Register map = r9.is(tos_) ? r7 : r9;
 
-  // undefined -> false
-  __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
-  __ cmp(tos_, ip);
-  __ b(eq, &false_result);
+  // undefined -> false.
+  CheckOddball(masm, UNDEFINED, Heap::kUndefinedValueRootIndex, false);
 
-  // Boolean -> its value
-  __ LoadRoot(ip, Heap::kFalseValueRootIndex);
-  __ cmp(tos_, ip);
-  __ b(eq, &false_result);
-  __ LoadRoot(ip, Heap::kTrueValueRootIndex);
-  __ cmp(tos_, ip);
-  // "tos_" is a register and contains a non-zero value.  Hence we implicitly
-  // return true if the equal condition is satisfied.
-  __ Ret(eq);
+  // Boolean -> its value.
+  CheckOddball(masm, BOOLEAN, Heap::kFalseValueRootIndex, false);
+  CheckOddball(masm, BOOLEAN, Heap::kTrueValueRootIndex, true);
 
-  // Smis: 0 -> false, all other -> true
-  __ tst(tos_, tos_);
-  __ b(eq, &false_result);
-  __ tst(tos_, Operand(kSmiTagMask));
-  // "tos_" is a register and contains a non-zero value.  Hence we implicitly
-  // return true if the not equal condition is satisfied.
-  __ Ret(eq);
+  // 'null' -> false.
+  CheckOddball(masm, NULL_TYPE, Heap::kNullValueRootIndex, false);
 
-  // 'null' -> false
-  __ LoadRoot(ip, Heap::kNullValueRootIndex);
-  __ cmp(tos_, ip);
-  __ b(eq, &false_result);
+  if (types_.Contains(SMI)) {
+    // Smis: 0 -> false, all other -> true
+    __ tst(tos_, Operand(kSmiTagMask));
+    // tos_ contains the correct return value already
+    __ Ret(eq);
+  } else if (types_.NeedsMap()) {
+    // If we need a map later and have a Smi -> patch.
+    __ JumpIfSmi(tos_, &patch);
+  }
 
-  // Get the map of the heap object.
-  __ ldr(map, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  if (types_.NeedsMap()) {
+    __ ldr(map, FieldMemOperand(tos_, HeapObject::kMapOffset));
 
-  // Undetectable -> false.
-  __ ldrb(ip, FieldMemOperand(map, Map::kBitFieldOffset));
-  __ tst(ip, Operand(1 << Map::kIsUndetectable));
-  __ b(&false_result, ne);
+    if (types_.CanBeUndetectable()) {
+      __ ldrb(ip, FieldMemOperand(map, Map::kBitFieldOffset));
+      __ tst(ip, Operand(1 << Map::kIsUndetectable));
+      // Undetectable -> false.
+      __ mov(tos_, Operand(0, RelocInfo::NONE), LeaveCC, ne);
+      __ Ret(ne);
+    }
+  }
 
-  // JavaScript object -> true.
-  __ CompareInstanceType(map, ip, FIRST_SPEC_OBJECT_TYPE);
-  // "tos_" is a register and contains a non-zero value. Hence we implicitly
-  // return true if the greater than condition is satisfied.
-  __ Ret(ge);
+  if (types_.Contains(SPEC_OBJECT)) {
+    // Spec object -> true.
+    __ CompareInstanceType(map, ip, FIRST_SPEC_OBJECT_TYPE);
+    // tos_ contains the correct non-zero return value already.
+    __ Ret(ge);
+  }
 
-  // String value -> false iff empty.
+  if (types_.Contains(STRING)) {
+    // String value -> false iff empty.
   __ CompareInstanceType(map, ip, FIRST_NONSTRING_TYPE);
-  __ b(&not_string, ge);
-  __ ldr(tos_, FieldMemOperand(tos_, String::kLengthOffset));
-  // Return string length as boolean value, i.e. return false iff length is 0.
-  __ Ret();
+  __ ldr(tos_, FieldMemOperand(tos_, String::kLengthOffset), lt);
+  __ Ret(lt);  // the string length is OK as the return value
+  }
 
-  __ bind(&not_string);
-  // HeapNumber -> false iff +0, -0, or NaN.
-  __ CompareRoot(map, Heap::kHeapNumberMapRootIndex);
-  __ b(&true_result, ne);
-  __ vldr(d1, FieldMemOperand(tos_, HeapNumber::kValueOffset));
-  __ VFPCompareAndSetFlags(d1, 0.0);
-  // "tos_" is a register, and contains a non zero value by default.
-  // Hence we only need to overwrite "tos_" with zero to return false for
-  // FP_ZERO or FP_NAN cases. Otherwise, by default it returns true.
-  __ mov(tos_, Operand(0, RelocInfo::NONE), LeaveCC, eq);  // for FP_ZERO
-  __ mov(tos_, Operand(0, RelocInfo::NONE), LeaveCC, vs);  // for FP_NAN
-  __ Ret();
+  if (types_.Contains(HEAP_NUMBER)) {
+    // Heap number -> false iff +0, -0, or NaN.
+    Label not_heap_number;
+    __ CompareRoot(map, Heap::kHeapNumberMapRootIndex);
+    __ b(ne, &not_heap_number);
+    __ vldr(d1, FieldMemOperand(tos_, HeapNumber::kValueOffset));
+    __ VFPCompareAndSetFlags(d1, 0.0);
+    // "tos_" is a register, and contains a non zero value by default.
+    // Hence we only need to overwrite "tos_" with zero to return false for
+    // FP_ZERO or FP_NAN cases. Otherwise, by default it returns true.
+    __ mov(tos_, Operand(0, RelocInfo::NONE), LeaveCC, eq);  // for FP_ZERO
+    __ mov(tos_, Operand(0, RelocInfo::NONE), LeaveCC, vs);  // for FP_NAN
+    __ Ret();
+    __ bind(&not_heap_number);
+  }
 
-  // Return 1/0 for true/false in tos_.
-  __ bind(&true_result);
-  __ mov(tos_, Operand(1, RelocInfo::NONE));
-  __ Ret();
-  __ bind(&false_result);
-  __ mov(tos_, Operand(0, RelocInfo::NONE));
-  __ Ret();
+  __ bind(&patch);
+  GenerateTypeTransition(masm);
+}
+
+
+void ToBooleanStub::CheckOddball(MacroAssembler* masm,
+                                 Type type,
+                                 Heap::RootListIndex value,
+                                 bool result) {
+  if (types_.Contains(type)) {
+    // If we see an expected oddball, return its ToBoolean value tos_.
+    __ LoadRoot(ip, value);
+    __ cmp(tos_, ip);
+    // The value of a root is never NULL, so we can avoid loading a non-null
+    // value into tos_ when we want to return 'true'.
+    if (!result) {
+      __ mov(tos_, Operand(0, RelocInfo::NONE), LeaveCC, eq);
+    }
+    __ Ret(eq);
+  }
+}
+
+
+void ToBooleanStub::GenerateTypeTransition(MacroAssembler* masm) {
+  if (!tos_.is(r3)) {
+    __ mov(r3, Operand(tos_));
+  }
+  __ mov(r2, Operand(Smi::FromInt(tos_.code())));
+  __ mov(r1, Operand(Smi::FromInt(types_.ToByte())));
+  __ Push(r3, r2, r1);
+  // Patch the caller to an appropriate specialized stub and return the
+  // operation result to the caller of the stub.
+  __ TailCallExternalReference(
+      ExternalReference(IC_Utility(IC::kToBoolean_Patch), masm->isolate()),
+      3,
+      1);
 }
 
 
@@ -2394,7 +2424,6 @@ void BinaryOpStub::GenerateSmiCode(
   Register left = r1;
   Register right = r0;
   Register scratch1 = r7;
-  Register scratch2 = r9;
 
   // Perform combined smi check on both operands.
   __ orr(scratch1, left, Operand(right));
@@ -2588,7 +2617,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
           __ b(mi, &return_heap_number);
           // Check for minus zero. Return heap number for minus zero.
           Label not_zero;
-          __ cmp(scratch1, Operand(0));
+          __ cmp(scratch1, Operand::Zero());
           __ b(ne, &not_zero);
           __ vmov(scratch2, d5.high());
           __ tst(scratch2, Operand(HeapNumber::kSignMask));
@@ -3080,7 +3109,6 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
 
     Label no_update;
     Label skip_cache;
-    const Register heap_number_map = r5;
 
     // Call C function to calculate the result and update the cache.
     // Register r0 holds precalculated cache entry address; preserve
@@ -3404,7 +3432,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Retrieve the pending exception and clear the variable.
   __ mov(ip, Operand(ExternalReference::the_hole_value_location(isolate)));
   __ ldr(r3, MemOperand(ip));
-  __ mov(ip, Operand(ExternalReference(Isolate::k_pending_exception_address,
+  __ mov(ip, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                        isolate)));
   __ ldr(r0, MemOperand(ip));
   __ str(r3, MemOperand(ip));
@@ -3539,7 +3567,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ mov(r7, Operand(Smi::FromInt(marker)));
   __ mov(r6, Operand(Smi::FromInt(marker)));
   __ mov(r5,
-         Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate)));
+         Operand(ExternalReference(Isolate::kCEntryFPAddress, isolate)));
   __ ldr(r5, MemOperand(r5));
   __ Push(r8, r7, r6, r5);
 
@@ -3548,10 +3576,10 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // If this is the outermost JS call, set js_entry_sp value.
   Label non_outermost_js;
-  ExternalReference js_entry_sp(Isolate::k_js_entry_sp_address, isolate);
+  ExternalReference js_entry_sp(Isolate::kJSEntrySPAddress, isolate);
   __ mov(r5, Operand(ExternalReference(js_entry_sp)));
   __ ldr(r6, MemOperand(r5));
-  __ cmp(r6, Operand(0));
+  __ cmp(r6, Operand::Zero());
   __ b(ne, &non_outermost_js);
   __ str(fp, MemOperand(r5));
   __ mov(ip, Operand(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
@@ -3569,7 +3597,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // exception field in the JSEnv and return a failure sentinel.
   // Coming in here the fp will be invalid because the PushTryHandler below
   // sets it to 0 to signal the existence of the JSEntry frame.
-  __ mov(ip, Operand(ExternalReference(Isolate::k_pending_exception_address,
+  __ mov(ip, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                        isolate)));
   __ str(r0, MemOperand(ip));
   __ mov(r0, Operand(reinterpret_cast<int32_t>(Failure::Exception())));
@@ -3587,7 +3615,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Clear any pending exceptions.
   __ mov(ip, Operand(ExternalReference::the_hole_value_location(isolate)));
   __ ldr(r5, MemOperand(ip));
-  __ mov(ip, Operand(ExternalReference(Isolate::k_pending_exception_address,
+  __ mov(ip, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                        isolate)));
   __ str(r5, MemOperand(ip));
 
@@ -3626,7 +3654,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ pop(r5);
   __ cmp(r5, Operand(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
   __ b(ne, &non_outermost_js_2);
-  __ mov(r6, Operand(0));
+  __ mov(r6, Operand::Zero());
   __ mov(r5, Operand(ExternalReference(js_entry_sp)));
   __ str(r6, MemOperand(r5));
   __ bind(&non_outermost_js_2);
@@ -3634,7 +3662,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Restore the top frame descriptors from the stack.
   __ pop(r3);
   __ mov(ip,
-         Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate)));
+         Operand(ExternalReference(Isolate::kCEntryFPAddress, isolate)));
   __ str(r3, MemOperand(ip));
 
   // Reset the stack to the callee saved registers.
@@ -3827,7 +3855,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
     __ Push(r0, r1);
     __ InvokeBuiltin(Builtins::INSTANCE_OF, CALL_FUNCTION);
     __ LeaveInternalFrame();
-    __ cmp(r0, Operand(0));
+    __ cmp(r0, Operand::Zero());
     __ LoadRoot(r0, Heap::kTrueValueRootIndex, eq);
     __ LoadRoot(r0, Heap::kFalseValueRootIndex, ne);
     __ Ret(HasArgsInRegisters() ? 0 : 2);
@@ -3961,7 +3989,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
       FixedArray::kHeaderSize + 2 * kPointerSize;
   // If there are no mapped parameters, we do not need the parameter_map.
   __ cmp(r1, Operand(Smi::FromInt(0)));
-  __ mov(r9, Operand(0), LeaveCC, eq);
+  __ mov(r9, Operand::Zero(), LeaveCC, eq);
   __ mov(r9, Operand(r1, LSL, 1), LeaveCC, ne);
   __ add(r9, r9, Operand(kParameterMapHeaderSize), LeaveCC, ne);
 
@@ -3985,7 +4013,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
 
   __ ldr(r4, MemOperand(r8, Context::SlotOffset(Context::GLOBAL_INDEX)));
   __ ldr(r4, FieldMemOperand(r4, GlobalObject::kGlobalContextOffset));
-  __ cmp(r1, Operand(0));
+  __ cmp(r1, Operand::Zero());
   __ ldr(r4, MemOperand(r4, kNormalOffset), eq);
   __ ldr(r4, MemOperand(r4, kAliasedOffset), ne);
 
@@ -4339,6 +4367,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ cmp(r2, Operand(r0, ASR, kSmiTagSize));
   __ b(gt, &runtime);
 
+  // Reset offset for possibly sliced string.
+  __ mov(r9, Operand(0));
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
   // Check the representation and encoding of the subject string.
@@ -4346,33 +4376,45 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ ldr(r0, FieldMemOperand(subject, HeapObject::kMapOffset));
   __ ldrb(r0, FieldMemOperand(r0, Map::kInstanceTypeOffset));
   // First check for flat string.
-  __ tst(r0, Operand(kIsNotStringMask | kStringRepresentationMask));
+  __ and_(r1, r0, Operand(kIsNotStringMask | kStringRepresentationMask), SetCC);
   STATIC_ASSERT((kStringTag | kSeqStringTag) == 0);
   __ b(eq, &seq_string);
 
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
-  // Check for flat cons string.
+  // Check for flat cons string or sliced string.
   // A flat cons string is a cons string where the second part is the empty
   // string. In that case the subject string is just the first part of the cons
   // string. Also in this case the first part of the cons string is known to be
   // a sequential string or an external string.
-  STATIC_ASSERT(kExternalStringTag !=0);
-  STATIC_ASSERT((kConsStringTag & kExternalStringTag) == 0);
-  __ tst(r0, Operand(kIsNotStringMask | kExternalStringTag));
-  __ b(ne, &runtime);
+  // In the case of a sliced string its offset has to be taken into account.
+  Label cons_string, check_encoding;
+  STATIC_ASSERT(kConsStringTag < kExternalStringTag);
+  STATIC_ASSERT(kSlicedStringTag > kExternalStringTag);
+  __ cmp(r1, Operand(kExternalStringTag));
+  __ b(lt, &cons_string);
+  __ b(eq, &runtime);
+
+  // String is sliced.
+  __ ldr(r9, FieldMemOperand(subject, SlicedString::kOffsetOffset));
+  __ mov(r9, Operand(r9, ASR, kSmiTagSize));
+  __ ldr(subject, FieldMemOperand(subject, SlicedString::kParentOffset));
+  // r9: offset of sliced string, smi-tagged.
+  __ jmp(&check_encoding);
+  // String is a cons string, check whether it is flat.
+  __ bind(&cons_string);
   __ ldr(r0, FieldMemOperand(subject, ConsString::kSecondOffset));
   __ LoadRoot(r1, Heap::kEmptyStringRootIndex);
   __ cmp(r0, r1);
   __ b(ne, &runtime);
   __ ldr(subject, FieldMemOperand(subject, ConsString::kFirstOffset));
+  // Is first part of cons or parent of slice a flat string?
+  __ bind(&check_encoding);
   __ ldr(r0, FieldMemOperand(subject, HeapObject::kMapOffset));
   __ ldrb(r0, FieldMemOperand(r0, Map::kInstanceTypeOffset));
-  // Is first part a flat string?
   STATIC_ASSERT(kSeqStringTag == 0);
   __ tst(r0, Operand(kStringRepresentationMask));
   __ b(ne, &runtime);
-
   __ bind(&seq_string);
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
@@ -4438,15 +4480,24 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // For arguments 4 and 3 get string length, calculate start of string data and
   // calculate the shift of the index (0 for ASCII and 1 for two byte).
-  __ ldr(r0, FieldMemOperand(subject, String::kLengthOffset));
-  __ mov(r0, Operand(r0, ASR, kSmiTagSize));
   STATIC_ASSERT(SeqAsciiString::kHeaderSize == SeqTwoByteString::kHeaderSize);
-  __ add(r9, subject, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ add(r8, subject, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
   __ eor(r3, r3, Operand(1));
-  // Argument 4 (r3): End of string data
-  // Argument 3 (r2): Start of string data
+  // Load the length from the original subject string from the previous stack
+  // frame. Therefore we have to use fp, which points exactly to two pointer
+  // sizes below the previous sp. (Because creating a new stack frame pushes
+  // the previous fp onto the stack and moves up sp by 2 * kPointerSize.)
+  __ ldr(subject, MemOperand(fp, kSubjectOffset + 2 * kPointerSize));
+  // If slice offset is not 0, load the length from the original sliced string.
+  // Argument 4, r3: End of string data
+  // Argument 3, r2: Start of string data
+  // Prepare start and end index of the input.
+  __ add(r9, r8, Operand(r9, LSL, r3));
   __ add(r2, r9, Operand(r1, LSL, r3));
-  __ add(r3, r9, Operand(r0, LSL, r3));
+
+  __ ldr(r8, FieldMemOperand(subject, String::kLengthOffset));
+  __ mov(r8, Operand(r8, ASR, kSmiTagSize));
+  __ add(r3, r9, Operand(r8, LSL, r3));
 
   // Argument 2 (r1): Previous index.
   // Already there
@@ -4483,7 +4534,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // TODO(592): Rerunning the RegExp to get the stack overflow exception.
   __ mov(r1, Operand(ExternalReference::the_hole_value_location(isolate)));
   __ ldr(r1, MemOperand(r1, 0));
-  __ mov(r2, Operand(ExternalReference(Isolate::k_pending_exception_address,
+  __ mov(r2, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                        isolate)));
   __ ldr(r0, MemOperand(r2, 0));
   __ cmp(r0, r1);
@@ -4492,8 +4543,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ str(r1, MemOperand(r2, 0));  // Clear pending exception.
 
   // Check if the exception is a termination. If so, throw as uncatchable.
-  __ LoadRoot(ip, Heap::kTerminationExceptionRootIndex);
-  __ cmp(r0, ip);
+  __ CompareRoot(r0, Heap::kTerminationExceptionRootIndex);
+
   Label termination_exception;
   __ b(eq, &termination_exception);
 
@@ -4662,7 +4713,7 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
 
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
-  Label slow;
+  Label slow, non_function;
 
   // The receiver might implicitly be the global object. This is
   // indicated by passing the hole as the receiver to the call
@@ -4688,7 +4739,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
   // Check that the function is really a JavaScript function.
   // r1: pushed function (to be verified)
-  __ JumpIfSmi(r1, &slow);
+  __ JumpIfSmi(r1, &non_function);
   // Get the map of the function object.
   __ CompareObjectType(r1, r2, r2, JS_FUNCTION_TYPE);
   __ b(ne, &slow);
@@ -4716,8 +4767,23 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
   // Slow-case: Non-function called.
   __ bind(&slow);
+  // Check for function proxy.
+  __ cmp(r2, Operand(JS_FUNCTION_PROXY_TYPE));
+  __ b(ne, &non_function);
+  __ push(r1);  // put proxy as additional argument
+  __ mov(r0, Operand(argc_ + 1, RelocInfo::NONE));
+  __ mov(r2, Operand(0, RelocInfo::NONE));
+  __ GetBuiltinEntry(r3, Builtins::CALL_FUNCTION_PROXY);
+  __ SetCallKind(r5, CALL_AS_FUNCTION);
+  {
+    Handle<Code> adaptor =
+      masm->isolate()->builtins()->ArgumentsAdaptorTrampoline();
+    __ Jump(adaptor, RelocInfo::CODE_TARGET);
+  }
+
   // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
   // of the original receiver from the call site).
+  __ bind(&non_function);
   __ str(r1, MemOperand(sp, argc_ * kPointerSize));
   __ mov(r0, Operand(argc_));  // Setup the number of arguments.
   __ mov(r2, Operand(0, RelocInfo::NONE));
@@ -4775,6 +4841,7 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   Label flat_string;
   Label ascii_string;
   Label got_char_code;
+  Label sliced_string;
 
   // If the receiver is a smi trigger the non-string case.
   __ JumpIfSmi(object_, receiver_not_string_);
@@ -4804,7 +4871,11 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   __ b(eq, &flat_string);
 
   // Handle non-flat strings.
-  __ tst(result_, Operand(kIsConsStringMask));
+  __ and_(result_, result_, Operand(kStringRepresentationMask));
+  STATIC_ASSERT(kConsStringTag < kExternalStringTag);
+  STATIC_ASSERT(kSlicedStringTag > kExternalStringTag);
+  __ cmp(result_, Operand(kExternalStringTag));
+  __ b(gt, &sliced_string);
   __ b(eq, &call_runtime_);
 
   // ConsString.
@@ -4812,22 +4883,34 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   // this is really a flat string in a cons string). If that is not
   // the case we would rather go to the runtime system now to flatten
   // the string.
+  Label assure_seq_string;
   __ ldr(result_, FieldMemOperand(object_, ConsString::kSecondOffset));
   __ LoadRoot(ip, Heap::kEmptyStringRootIndex);
   __ cmp(result_, Operand(ip));
   __ b(ne, &call_runtime_);
   // Get the first of the two strings and load its instance type.
   __ ldr(object_, FieldMemOperand(object_, ConsString::kFirstOffset));
+  __ jmp(&assure_seq_string);
+
+  // SlicedString, unpack and add offset.
+  __ bind(&sliced_string);
+  __ ldr(result_, FieldMemOperand(object_, SlicedString::kOffsetOffset));
+  __ add(scratch_, scratch_, result_);
+  __ ldr(object_, FieldMemOperand(object_, SlicedString::kParentOffset));
+
+  // Assure that we are dealing with a sequential string. Go to runtime if not.
+  __ bind(&assure_seq_string);
   __ ldr(result_, FieldMemOperand(object_, HeapObject::kMapOffset));
   __ ldrb(result_, FieldMemOperand(result_, Map::kInstanceTypeOffset));
-  // If the first cons component is also non-flat, then go to runtime.
+  // Check that parent is not an external string. Go to runtime otherwise.
   STATIC_ASSERT(kSeqStringTag == 0);
   __ tst(result_, Operand(kStringRepresentationMask));
   __ b(ne, &call_runtime_);
 
   // Check for 1-byte or 2-byte string.
   __ bind(&flat_string);
-  STATIC_ASSERT(kAsciiStringTag != 0);
+  STATIC_ASSERT((kStringEncodingMask & kAsciiStringTag) != 0);
+  STATIC_ASSERT((kStringEncodingMask & kTwoByteStringTag) == 0);
   __ tst(result_, Operand(kStringEncodingMask));
   __ b(ne, &ascii_string);
 
@@ -5400,10 +5483,12 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // Check bounds and smi-ness.
   Register to = r6;
   Register from = r7;
+
   __ Ldrd(to, from, MemOperand(sp, kToOffset));
   STATIC_ASSERT(kFromOffset == kToOffset + 4);
   STATIC_ASSERT(kSmiTag == 0);
   STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
+
   // I.e., arithmetic shift right by one un-smi-tags.
   __ mov(r2, Operand(to, ASR, 1), SetCC);
   __ mov(r3, Operand(from, ASR, 1), SetCC, cc);
@@ -5412,69 +5497,83 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ b(mi, &runtime);  // From is negative.
 
   // Both to and from are smis.
-
   __ sub(r2, r2, Operand(r3), SetCC);
   __ b(mi, &runtime);  // Fail if from > to.
   // Special handling of sub-strings of length 1 and 2. One character strings
   // are handled in the runtime system (looked up in the single character
-  // cache). Two character strings are looked for in the symbol cache.
+  // cache). Two character strings are looked for in the symbol cache in
+  // generated code.
   __ cmp(r2, Operand(2));
   __ b(lt, &runtime);
 
-  // r2: length
-  // r3: from index (untaged smi)
+  // r2: result string length
+  // r3: from index (untagged smi)
   // r6 (a.k.a. to): to (smi)
   // r7 (a.k.a. from): from offset (smi)
-
   // Make sure first argument is a sequential (or flat) string.
-  __ ldr(r5, MemOperand(sp, kStringOffset));
+  __ ldr(r0, MemOperand(sp, kStringOffset));
   STATIC_ASSERT(kSmiTag == 0);
-  __ JumpIfSmi(r5, &runtime);
-  Condition is_string = masm->IsObjectStringType(r5, r1);
+  __ JumpIfSmi(r0, &runtime);
+  Condition is_string = masm->IsObjectStringType(r0, r1);
   __ b(NegateCondition(is_string), &runtime);
 
+  // Short-cut for the case of trivial substring.
+  Label return_r0;
+  // r0: original string
+  // r2: result string length
+  __ ldr(r4, FieldMemOperand(r0, String::kLengthOffset));
+  __ cmp(r2, Operand(r4, ASR, 1));
+  __ b(eq, &return_r0);
+
+  Label create_slice;
+  if (FLAG_string_slices) {
+    __ cmp(r2, Operand(SlicedString::kMinLength));
+    __ b(ge, &create_slice);
+  }
+
+  // r0: original string
   // r1: instance type
-  // r2: length
+  // r2: result string length
   // r3: from index (untagged smi)
-  // r5: string
   // r6 (a.k.a. to): to (smi)
   // r7 (a.k.a. from): from offset (smi)
   Label seq_string;
   __ and_(r4, r1, Operand(kStringRepresentationMask));
   STATIC_ASSERT(kSeqStringTag < kConsStringTag);
   STATIC_ASSERT(kConsStringTag < kExternalStringTag);
+  STATIC_ASSERT(kConsStringTag < kSlicedStringTag);
   __ cmp(r4, Operand(kConsStringTag));
-  __ b(gt, &runtime);  // External strings go to runtime.
+  __ b(gt, &runtime);  // Slices and external strings go to runtime.
   __ b(lt, &seq_string);  // Sequential strings are handled directly.
 
   // Cons string. Try to recurse (once) on the first substring.
   // (This adds a little more generality than necessary to handle flattened
   // cons strings, but not much).
-  __ ldr(r5, FieldMemOperand(r5, ConsString::kFirstOffset));
-  __ ldr(r4, FieldMemOperand(r5, HeapObject::kMapOffset));
+  __ ldr(r0, FieldMemOperand(r0, ConsString::kFirstOffset));
+  __ ldr(r4, FieldMemOperand(r0, HeapObject::kMapOffset));
   __ ldrb(r1, FieldMemOperand(r4, Map::kInstanceTypeOffset));
   __ tst(r1, Operand(kStringRepresentationMask));
   STATIC_ASSERT(kSeqStringTag == 0);
-  __ b(ne, &runtime);  // Cons and External strings go to runtime.
+  __ b(ne, &runtime);  // Cons, slices and external strings go to runtime.
 
   // Definitly a sequential string.
   __ bind(&seq_string);
 
-  // r1: instance type.
-  // r2: length
-  // r3: from index (untaged smi)
-  // r5: string
+  // r0: original string
+  // r1: instance type
+  // r2: result string length
+  // r3: from index (untagged smi)
   // r6 (a.k.a. to): to (smi)
   // r7 (a.k.a. from): from offset (smi)
-  __ ldr(r4, FieldMemOperand(r5, String::kLengthOffset));
+  __ ldr(r4, FieldMemOperand(r0, String::kLengthOffset));
   __ cmp(r4, Operand(to));
   __ b(lt, &runtime);  // Fail if to > length.
   to = no_reg;
 
-  // r1: instance type.
-  // r2: result string length.
-  // r3: from index (untaged smi)
-  // r5: string.
+  // r0: original string or left hand side of the original cons string.
+  // r1: instance type
+  // r2: result string length
+  // r3: from index (untagged smi)
   // r7 (a.k.a. from): from offset (smi)
   // Check for flat ASCII string.
   Label non_ascii_flat;
@@ -5488,82 +5587,146 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // Sub string of length 2 requested.
   // Get the two characters forming the sub string.
-  __ add(r5, r5, Operand(r3));
-  __ ldrb(r3, FieldMemOperand(r5, SeqAsciiString::kHeaderSize));
-  __ ldrb(r4, FieldMemOperand(r5, SeqAsciiString::kHeaderSize + 1));
+  __ add(r0, r0, Operand(r3));
+  __ ldrb(r3, FieldMemOperand(r0, SeqAsciiString::kHeaderSize));
+  __ ldrb(r4, FieldMemOperand(r0, SeqAsciiString::kHeaderSize + 1));
 
   // Try to lookup two character string in symbol table.
   Label make_two_character_string;
   StringHelper::GenerateTwoCharacterSymbolTableProbe(
       masm, r3, r4, r1, r5, r6, r7, r9, &make_two_character_string);
   Counters* counters = masm->isolate()->counters();
-  __ IncrementCounter(counters->sub_string_native(), 1, r3, r4);
-  __ add(sp, sp, Operand(3 * kPointerSize));
-  __ Ret();
+  __ jmp(&return_r0);
 
   // r2: result string length.
   // r3: two characters combined into halfword in little endian byte order.
   __ bind(&make_two_character_string);
   __ AllocateAsciiString(r0, r2, r4, r5, r9, &runtime);
   __ strh(r3, FieldMemOperand(r0, SeqAsciiString::kHeaderSize));
-  __ IncrementCounter(counters->sub_string_native(), 1, r3, r4);
-  __ add(sp, sp, Operand(3 * kPointerSize));
-  __ Ret();
+  __ jmp(&return_r0);
 
   __ bind(&result_longer_than_two);
+
+  // Locate 'from' character of string.
+  __ add(r5, r0, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ add(r5, r5, Operand(from, ASR, 1));
 
   // Allocate the result.
   __ AllocateAsciiString(r0, r2, r3, r4, r1, &runtime);
 
-  // r0: result string.
-  // r2: result string length.
-  // r5: string.
+  // r0: result string
+  // r2: result string length
+  // r5: first character of substring to copy
   // r7 (a.k.a. from): from offset (smi)
   // Locate first character of result.
   __ add(r1, r0, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
-  // Locate 'from' character of string.
-  __ add(r5, r5, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
-  __ add(r5, r5, Operand(from, ASR, 1));
 
-  // r0: result string.
-  // r1: first character of result string.
-  // r2: result string length.
-  // r5: first character of sub string to copy.
+  // r0: result string
+  // r1: first character of result string
+  // r2: result string length
+  // r5: first character of substring to copy
   STATIC_ASSERT((SeqAsciiString::kHeaderSize & kObjectAlignmentMask) == 0);
   StringHelper::GenerateCopyCharactersLong(masm, r1, r5, r2, r3, r4, r6, r7, r9,
                                            COPY_ASCII | DEST_ALWAYS_ALIGNED);
-  __ IncrementCounter(counters->sub_string_native(), 1, r3, r4);
-  __ add(sp, sp, Operand(3 * kPointerSize));
-  __ Ret();
+  __ jmp(&return_r0);
 
   __ bind(&non_ascii_flat);
-  // r2: result string length.
-  // r5: string.
+  // r0: original string
+  // r2: result string length
   // r7 (a.k.a. from): from offset (smi)
   // Check for flat two byte string.
+
+  // Locate 'from' character of string.
+  __ add(r5, r0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+  // As "from" is a smi it is 2 times the value which matches the size of a two
+  // byte character.
+  STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
+  __ add(r5, r5, Operand(from));
 
   // Allocate the result.
   __ AllocateTwoByteString(r0, r2, r1, r3, r4, &runtime);
 
-  // r0: result string.
-  // r2: result string length.
-  // r5: string.
+  // r0: result string
+  // r2: result string length
+  // r5: first character of substring to copy
   // Locate first character of result.
   __ add(r1, r0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
-  // Locate 'from' character of string.
-  __ add(r5, r5, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
-  // As "from" is a smi it is 2 times the value which matches the size of a two
-  // byte character.
-  __ add(r5, r5, Operand(from));
+
   from = no_reg;
 
   // r0: result string.
   // r1: first character of result.
   // r2: result length.
-  // r5: first character of string to copy.
+  // r5: first character of substring to copy.
   STATIC_ASSERT((SeqTwoByteString::kHeaderSize & kObjectAlignmentMask) == 0);
   StringHelper::GenerateCopyCharactersLong(
       masm, r1, r5, r2, r3, r4, r6, r7, r9, DEST_ALWAYS_ALIGNED);
+  __ jmp(&return_r0);
+
+  if (FLAG_string_slices) {
+    __ bind(&create_slice);
+    // r0: original string
+    // r1: instance type
+    // r2: length
+    // r3: from index (untagged smi)
+    // r6 (a.k.a. to): to (smi)
+    // r7 (a.k.a. from): from offset (smi)
+    Label allocate_slice, sliced_string, seq_string;
+    STATIC_ASSERT(kSeqStringTag == 0);
+    __ tst(r1, Operand(kStringRepresentationMask));
+    __ b(eq, &seq_string);
+    STATIC_ASSERT(kIsIndirectStringMask == (kSlicedStringTag & kConsStringTag));
+    STATIC_ASSERT(kIsIndirectStringMask != 0);
+    __ tst(r1, Operand(kIsIndirectStringMask));
+    // External string.  Jump to runtime.
+    __ b(eq, &runtime);
+
+    __ tst(r1, Operand(kSlicedNotConsMask));
+    __ b(ne, &sliced_string);
+    // Cons string.  Check whether it is flat, then fetch first part.
+    __ ldr(r5, FieldMemOperand(r0, ConsString::kSecondOffset));
+    __ LoadRoot(r9, Heap::kEmptyStringRootIndex);
+    __ cmp(r5, r9);
+    __ b(ne, &runtime);
+    __ ldr(r5, FieldMemOperand(r0, ConsString::kFirstOffset));
+    __ jmp(&allocate_slice);
+
+    __ bind(&sliced_string);
+    // Sliced string.  Fetch parent and correct start index by offset.
+    __ ldr(r5, FieldMemOperand(r0, SlicedString::kOffsetOffset));
+    __ add(r7, r7, r5);
+    __ ldr(r5, FieldMemOperand(r0, SlicedString::kParentOffset));
+    __ jmp(&allocate_slice);
+
+    __ bind(&seq_string);
+    // Sequential string.  Just move string to the right register.
+    __ mov(r5, r0);
+
+    __ bind(&allocate_slice);
+    // r1: instance type of original string
+    // r2: length
+    // r5: underlying subject string
+    // r7 (a.k.a. from): from offset (smi)
+    // Allocate new sliced string.  At this point we do not reload the instance
+    // type including the string encoding because we simply rely on the info
+    // provided by the original string.  It does not matter if the original
+    // string's encoding is wrong because we always have to recheck encoding of
+    // the newly created string's parent anyways due to externalized strings.
+    Label two_byte_slice, set_slice_header;
+    STATIC_ASSERT((kStringEncodingMask & kAsciiStringTag) != 0);
+    STATIC_ASSERT((kStringEncodingMask & kTwoByteStringTag) == 0);
+    __ tst(r1, Operand(kStringEncodingMask));
+    __ b(eq, &two_byte_slice);
+    __ AllocateAsciiSlicedString(r0, r2, r3, r4, &runtime);
+    __ jmp(&set_slice_header);
+    __ bind(&two_byte_slice);
+    __ AllocateTwoByteSlicedString(r0, r2, r3, r4, &runtime);
+    __ bind(&set_slice_header);
+    __ str(r7, FieldMemOperand(r0, SlicedString::kOffsetOffset));
+    __ str(r5, FieldMemOperand(r0, SlicedString::kParentOffset));
+  }
+
+  __ bind(&return_r0);
   __ IncrementCounter(counters->sub_string_native(), 1, r3, r4);
   __ add(sp, sp, Operand(3 * kPointerSize));
   __ Ret();
@@ -5667,7 +5830,7 @@ void StringCompareStub::GenerateAsciiCharsCompareLoop(
          Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
   __ add(left, left, Operand(scratch1));
   __ add(right, right, Operand(scratch1));
-  __ rsb(length, length, Operand(0));
+  __ rsb(length, length, Operand::Zero());
   Register index = length;  // index = -length;
 
   // Compare loop.
@@ -6285,12 +6448,8 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
 
 void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
                                     ExternalReference function) {
-  __ mov(lr, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
-                     RelocInfo::CODE_TARGET));
   __ mov(r2, Operand(function));
-  // Push return address (accessible to GC through exit frame pc).
-  __ str(pc, MemOperand(sp, 0));
-  __ Jump(r2);  // Call the api function.
+  GenerateCall(masm, r2);
 }
 
 
@@ -6299,8 +6458,14 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   __ mov(lr, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
                      RelocInfo::CODE_TARGET));
   // Push return address (accessible to GC through exit frame pc).
-  __ str(pc, MemOperand(sp, 0));
+  // Note that using pc with str is deprecated.
+  Label start;
+  __ bind(&start);
+  __ add(ip, pc, Operand(Assembler::kInstrSize));
+  __ str(ip, MemOperand(sp, 0));
   __ Jump(target);  // Call the C++ function.
+  ASSERT_EQ(Assembler::kInstrSize + Assembler::kPcLoadDelta,
+            masm->SizeOfCodeGeneratedSince(&start));
 }
 
 
@@ -6523,7 +6688,7 @@ void StringDictionaryLookupStub::Generate(MacroAssembler* masm) {
   // treated as a lookup success. For positive lookup probing failure
   // should be treated as lookup failure.
   if (mode_ == POSITIVE_LOOKUP) {
-    __ mov(result, Operand(0));
+    __ mov(result, Operand::Zero());
     __ Ret();
   }
 
@@ -6532,7 +6697,7 @@ void StringDictionaryLookupStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&not_in_dictionary);
-  __ mov(result, Operand(0));
+  __ mov(result, Operand::Zero());
   __ Ret();
 }
 

@@ -492,6 +492,28 @@ const CodeMap::CodeTreeConfig::Value CodeMap::CodeTreeConfig::kNoValue =
     CodeMap::CodeEntryInfo(NULL, 0);
 
 
+void CodeMap::AddCode(Address addr, CodeEntry* entry, unsigned size) {
+  DeleteAllCoveredCode(addr, addr + size);
+  CodeTree::Locator locator;
+  tree_.Insert(addr, &locator);
+  locator.set_value(CodeEntryInfo(entry, size));
+}
+
+
+void CodeMap::DeleteAllCoveredCode(Address start, Address end) {
+  List<Address> to_delete;
+  Address addr = end - 1;
+  while (addr >= start) {
+    CodeTree::Locator locator;
+    if (!tree_.FindGreatestLessThan(addr, &locator)) break;
+    Address start2 = locator.key(), end2 = start2 + locator.value().size;
+    if (start2 < end && start < end2) to_delete.Add(start2);
+    addr = start2 - 1;
+  }
+  for (int i = 0; i < to_delete.length(); ++i) tree_.Remove(to_delete[i]);
+}
+
+
 CodeEntry* CodeMap::FindEntry(Address addr) {
   CodeTree::Locator locator;
   if (tree_.FindGreatestLessThan(addr, &locator)) {
@@ -517,6 +539,16 @@ int CodeMap::GetSharedId(Address addr) {
     locator.set_value(CodeEntryInfo(kSharedFunctionCodeEntry, id));
     return id;
   }
+}
+
+
+void CodeMap::MoveCode(Address from, Address to) {
+  if (from == to) return;
+  CodeTree::Locator locator;
+  if (!tree_.Find(from, &locator)) return;
+  CodeEntryInfo entry = locator.value();
+  tree_.Remove(from);
+  AddCode(to, entry.entry, entry.size);
 }
 
 
@@ -1195,12 +1227,9 @@ void HeapSnapshot::AllocateEntries(int entries_count,
                                    int children_count,
                                    int retainers_count) {
   ASSERT(raw_entries_ == NULL);
-  raw_entries_ = NewArray<char>(
-      HeapEntry::EntriesSize(entries_count, children_count, retainers_count));
-#ifdef DEBUG
   raw_entries_size_ =
       HeapEntry::EntriesSize(entries_count, children_count, retainers_count);
-#endif
+  raw_entries_ = NewArray<char>(raw_entries_size_);
 }
 
 
@@ -1663,7 +1692,7 @@ HeapEntry* V8HeapExplorer::AddEntry(HeapObject* object,
   } else if (object->IsJSGlobalObject()) {
     const char* tag = objects_tags_.GetTag(object);
     const char* name = collection_->names()->GetName(
-        GetConstructorNameForHeapProfile(JSObject::cast(object)));
+        GetConstructorName(JSObject::cast(object)));
     if (tag != NULL) {
       name = collection_->names()->GetFormatted("%s / %s", name, tag);
     }
@@ -1691,8 +1720,7 @@ HeapEntry* V8HeapExplorer::AddEntry(HeapObject* object,
     return AddEntry(object,
                     HeapEntry::kObject,
                     collection_->names()->GetName(
-                        GetConstructorNameForHeapProfile(
-                            JSObject::cast(object))),
+                        GetConstructorName(JSObject::cast(object))),
                     children_count,
                     retainers_count);
   } else if (object->IsString()) {
@@ -2098,6 +2126,31 @@ void V8HeapExplorer::ExtractInternalReferences(JSObject* js_obj,
     SetInternalReference(
         js_obj, entry, i, o, js_obj->GetInternalFieldOffset(i));
   }
+}
+
+
+String* V8HeapExplorer::GetConstructorName(JSObject* object) {
+  if (object->IsJSFunction()) return HEAP->closure_symbol();
+  String* constructor_name = object->constructor_name();
+  if (constructor_name == HEAP->Object_symbol()) {
+    // Look up an immediate "constructor" property, if it is a function,
+    // return its name. This is for instances of binding objects, which
+    // have prototype constructor type "Object".
+    Object* constructor_prop = NULL;
+    LookupResult result;
+    object->LocalLookupRealNamedProperty(HEAP->constructor_symbol(), &result);
+    if (result.IsProperty()) {
+      constructor_prop = result.GetLazyValue();
+    }
+    if (constructor_prop->IsJSFunction()) {
+      Object* maybe_name = JSFunction::cast(constructor_prop)->shared()->name();
+      if (maybe_name->IsString()) {
+        String* name = String::cast(maybe_name);
+        if (name->length() > 0) return name;
+      }
+    }
+  }
+  return object->constructor_name();
 }
 
 
@@ -2960,10 +3013,19 @@ class OutputStreamWriter {
   bool aborted_;
 };
 
+const int HeapSnapshotJSONSerializer::kMaxSerializableSnapshotRawSize =
+    256 * MB;
+
 void HeapSnapshotJSONSerializer::Serialize(v8::OutputStream* stream) {
   ASSERT(writer_ == NULL);
   writer_ = new OutputStreamWriter(stream);
 
+  HeapSnapshot* original_snapshot = NULL;
+  if (snapshot_->raw_entries_size() >= kMaxSerializableSnapshotRawSize) {
+    // The snapshot is too big. Serialize a fake snapshot.
+    original_snapshot = snapshot_;
+    snapshot_ = CreateFakeSnapshot();
+  }
   // Since nodes graph is cyclic, we need the first pass to enumerate
   // them. Strings can be serialized in one pass.
   EnumerateNodes();
@@ -2971,6 +3033,26 @@ void HeapSnapshotJSONSerializer::Serialize(v8::OutputStream* stream) {
 
   delete writer_;
   writer_ = NULL;
+
+  if (original_snapshot != NULL) {
+    delete snapshot_;
+    snapshot_ = original_snapshot;
+  }
+}
+
+
+HeapSnapshot* HeapSnapshotJSONSerializer::CreateFakeSnapshot() {
+  HeapSnapshot* result = new HeapSnapshot(snapshot_->collection(),
+                                          HeapSnapshot::kFull,
+                                          snapshot_->title(),
+                                          snapshot_->uid());
+  result->AllocateEntries(2, 1, 0);
+  HeapEntry* root = result->AddRootEntry(1);
+  HeapEntry* message = result->AddEntry(
+      HeapEntry::kString, "The snapshot is too big", 0, 4, 0, 0);
+  root->SetUnidirElementReference(0, 1, message);
+  result->SetDominatorsToSelf();
+  return result;
 }
 
 
@@ -3248,12 +3330,6 @@ void HeapSnapshotJSONSerializer::SortHashMap(
   for (HashMap::Entry* p = map->Start(); p != NULL; p = map->Next(p))
     sorted_entries->Add(p);
   sorted_entries->Sort(SortUsingEntryValue);
-}
-
-
-String* GetConstructorNameForHeapProfile(JSObject* object) {
-  if (object->IsJSFunction()) return HEAP->closure_symbol();
-  return object->constructor_name();
 }
 
 } }  // namespace v8::internal

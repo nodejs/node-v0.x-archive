@@ -65,7 +65,7 @@ namespace internal {
   F(ToSlowProperties, 1, 1) \
   F(FinishArrayPrototypeSetup, 1, 1) \
   F(SpecialArrayFunctions, 1, 1) \
-  F(GetGlobalReceiver, 0, 1) \
+  F(GetDefaultReceiver, 1, 1) \
   \
   F(GetPrototype, 1, 1) \
   F(IsInPrototypeChain, 2, 1) \
@@ -79,6 +79,8 @@ namespace internal {
   F(PreventExtensions, 1, 1)\
   \
   /* Utilities */ \
+  F(CheckIsBootstrapping, 0, 1) \
+  F(Apply, 5, 1) \
   F(GetFunctionDelegate, 1, 1) \
   F(GetConstructorDelegate, 1, 1) \
   F(NewArgumentsFast, 3, 1) \
@@ -209,9 +211,13 @@ namespace internal {
   /* Reflection */ \
   F(FunctionSetInstanceClassName, 2, 1) \
   F(FunctionSetLength, 2, 1) \
+  F(BoundFunctionSetLength, 2, 1)    \
   F(FunctionSetPrototype, 2, 1) \
+  F(FunctionSetReadOnlyPrototype, 1, 1) \
   F(FunctionGetName, 1, 1) \
   F(FunctionSetName, 2, 1) \
+  F(FunctionNameShouldPrintAsAnonymous, 1, 1) \
+  F(FunctionMarkNameShouldPrintAsAnonymous, 1, 1) \
   F(FunctionSetBound, 1, 1) \
   F(FunctionRemovePrototype, 1, 1) \
   F(FunctionGetSourceCode, 1, 1) \
@@ -282,9 +288,18 @@ namespace internal {
   \
   /* Harmony proxies */ \
   F(CreateJSProxy, 2, 1) \
+  F(CreateJSFunctionProxy, 4, 1) \
   F(IsJSProxy, 1, 1) \
+  F(IsJSFunctionProxy, 1, 1) \
   F(GetHandler, 1, 1) \
+  F(GetCallTrap, 1, 1) \
+  F(GetConstructTrap, 1, 1) \
   F(Fix, 1, 1) \
+  \
+  /* Harmony weakmaps */ \
+  F(WeakMapInitialize, 1, 1) \
+  F(WeakMapGet, 2, 1) \
+  F(WeakMapSet, 3, 1) \
   \
   /* Statements */ \
   F(NewClosure, 3, 1) \
@@ -301,13 +316,14 @@ namespace internal {
   F(NewFunctionContext, 1, 1) \
   F(PushWithContext, 2, 1) \
   F(PushCatchContext, 3, 1) \
+  F(PushBlockContext, 2, 1) \
   F(DeleteContextSlot, 2, 1) \
   F(LoadContextSlot, 2, 2) \
   F(LoadContextSlotNoReferenceError, 2, 2) \
   F(StoreContextSlot, 4, 1) \
   \
   /* Declarations and initialization */ \
-  F(DeclareGlobals, 4, 1) \
+  F(DeclareGlobals, 3, 1) \
   F(DeclareContextSlot, 4, 1) \
   F(InitializeVarGlobal, -1 /* 2 or 3 */, 1) \
   F(InitializeConstGlobal, 2, 1) \
@@ -481,8 +497,7 @@ namespace internal {
   F(IsRegExpEquivalent, 2, 1)                                                \
   F(HasCachedArrayIndex, 1, 1)                                               \
   F(GetCachedArrayIndex, 1, 1)                                               \
-  F(FastAsciiArrayJoin, 2, 1)                                                \
-  F(IsNativeOrStrictMode, 1, 1)
+  F(FastAsciiArrayJoin, 2, 1)
 
 
 // ----------------------------------------------------------------------------
@@ -652,6 +667,16 @@ class Runtime : public AllStatic {
 
   // Helper functions used stubs.
   static void PerformGC(Object* result);
+};
+
+
+//---------------------------------------------------------------------------
+// Constants used by interface to runtime functions.
+
+enum kDeclareGlobalsFlags {
+  kDeclareGlobalsEvalFlag = 1 << 0,
+  kDeclareGlobalsStrictModeFlag = 1 << 1,
+  kDeclareGlobalsNativeFlag = 1 << 2
 };
 
 } }  // namespace v8::internal

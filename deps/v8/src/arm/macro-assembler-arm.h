@@ -92,14 +92,16 @@ class MacroAssembler: public Assembler {
   void Jump(Register target, Condition cond = al);
   void Jump(Address target, RelocInfo::Mode rmode, Condition cond = al);
   void Jump(Handle<Code> code, RelocInfo::Mode rmode, Condition cond = al);
-  int CallSize(Register target, Condition cond = al);
+  static int CallSize(Register target, Condition cond = al);
   void Call(Register target, Condition cond = al);
-  int CallSize(Address target, RelocInfo::Mode rmode, Condition cond = al);
+  static int CallSize(Address target,
+                      RelocInfo::Mode rmode,
+                      Condition cond = al);
   void Call(Address target, RelocInfo::Mode rmode, Condition cond = al);
-  int CallSize(Handle<Code> code,
-               RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
-               unsigned ast_id = kNoASTId,
-               Condition cond = al);
+  static int CallSize(Handle<Code> code,
+                      RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
+                      unsigned ast_id = kNoASTId,
+                      Condition cond = al);
   void Call(Handle<Code> code,
             RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
             unsigned ast_id = kNoASTId,
@@ -530,6 +532,16 @@ class MacroAssembler: public Assembler {
                                Register scratch1,
                                Register scratch2,
                                Label* gc_required);
+  void AllocateTwoByteSlicedString(Register result,
+                                   Register length,
+                                   Register scratch1,
+                                   Register scratch2,
+                                   Label* gc_required);
+  void AllocateAsciiSlicedString(Register result,
+                                 Register length,
+                                 Register scratch1,
+                                 Register scratch2,
+                                 Label* gc_required);
 
   // Allocates a heap number or jumps to the gc_required label if the young
   // space is full and a scavenge is needed. All registers are clobbered also
@@ -584,9 +596,7 @@ class MacroAssembler: public Assembler {
 
   // Compare instance type in a map.  map contains a valid map object whose
   // object type should be compared with the given type.  This both
-  // sets the flags and leaves the object type in the type_reg register.  It
-  // leaves the heap object in the heap_object register unless the heap_object
-  // register is the same register as type_reg.
+  // sets the flags and leaves the object type in the type_reg register.
   void CompareInstanceType(Register map,
                            Register type_reg,
                            InstanceType type);

@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -78,7 +81,10 @@ function mkListener() {
 
     if (receivedMessages.length == sendMessages.length) {
       listenSocket.dropMembership(LOCAL_BROADCAST_HOST);
-      listenSocket.close();
+      process.nextTick(function() { // TODO should be changed to below.
+      // listenSocket.dropMembership(LOCAL_BROADCAST_HOST, function() {
+        listenSocket.close();
+      });
     }
   });
 

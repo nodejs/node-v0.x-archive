@@ -35,7 +35,7 @@
 namespace v8 {
 namespace internal {
 
-int Deoptimizer::table_entry_size_ = 16;
+const int Deoptimizer::table_entry_size_ = 16;
 
 
 int Deoptimizer::patch_size() {
@@ -65,8 +65,6 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 
   // For each return after a safepoint insert an absolute call to the
   // corresponding deoptimization entry.
-  ASSERT(patch_size() % Assembler::kInstrSize == 0);
-  int call_size_in_words = patch_size() / Assembler::kInstrSize;
   unsigned last_pc_offset = 0;
   SafepointTable table(function->code());
   for (unsigned i = 0; i < table.length(); i++) {
@@ -87,13 +85,18 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 #endif
     last_pc_offset = pc_offset;
     if (deoptimization_index != Safepoint::kNoDeoptimizationIndex) {
-      last_pc_offset += gap_code_size;
-      CodePatcher patcher(code->instruction_start() + last_pc_offset,
-                          call_size_in_words);
       Address deoptimization_entry = Deoptimizer::GetDeoptimizationEntry(
           deoptimization_index, Deoptimizer::LAZY);
+      last_pc_offset += gap_code_size;
+      int call_size_in_bytes = MacroAssembler::CallSize(deoptimization_entry,
+                                                        RelocInfo::NONE);
+      int call_size_in_words = call_size_in_bytes / Assembler::kInstrSize;
+      ASSERT(call_size_in_bytes % Assembler::kInstrSize == 0);
+      ASSERT(call_size_in_bytes <= patch_size());
+      CodePatcher patcher(code->instruction_start() + last_pc_offset,
+                          call_size_in_words);
       patcher.masm()->Call(deoptimization_entry, RelocInfo::NONE);
-      last_pc_offset += patch_size();
+      last_pc_offset += call_size_in_bytes;
     }
   }
 
@@ -530,8 +533,6 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
     output_frame->SetContinuation(
         reinterpret_cast<uint32_t>(continuation->entry()));
   }
-
-  if (output_count_ - 1 == frame_index) iterator->Done();
 }
 
 
@@ -592,6 +593,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ vstm(db_w, sp, first, last);
 
   // Push all 16 registers (needed to populate FrameDescription::registers_).
+  // TODO(1588) Note that using pc with stm is deprecated, so we should perhaps
+  // handle this a bit differently.
   __ stm(db_w, sp, restored_regs  | sp.bit() | lr.bit() | pc.bit());
 
   const int kSavedRegistersAreaSize =

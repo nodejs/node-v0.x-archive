@@ -41,7 +41,6 @@ namespace internal {
 //
 //   T: Non-keyword tokens
 //   K: Keyword tokens
-//   F: Future (reserved) keyword tokens
 
 // IGNORE_TOKEN is a convenience macro that can be supplied as
 // an argument (at any position) for a TOKEN_LIST call. It does
@@ -49,7 +48,7 @@ namespace internal {
 
 #define IGNORE_TOKEN(name, string, precedence)
 
-#define TOKEN_LIST(T, K, F)                                             \
+#define TOKEN_LIST(T, K)                                                \
   /* End of source indicator. */                                        \
   T(EOS, "EOS", 0)                                                      \
                                                                         \
@@ -72,6 +71,7 @@ namespace internal {
   /* this block of enum values being contiguous and sorted in the */    \
   /* same order! */                                                     \
   T(INIT_VAR, "=init_var", 2)  /* AST-use only. */                      \
+  T(INIT_LET, "=init_let", 2)  /* AST-use only. */                      \
   T(INIT_CONST, "=init_const", 2)  /* AST-use only. */                  \
   T(ASSIGN, "=", 2)                                                     \
   T(ASSIGN_BIT_OR, "|=", 2)                                             \
@@ -169,6 +169,7 @@ namespace internal {
   T(FUTURE_RESERVED_WORD, NULL, 0)                                      \
   T(FUTURE_STRICT_RESERVED_WORD, NULL, 0)                               \
   K(CONST, "const", 0)                                                  \
+  K(LET, "let", 0)                                                      \
                                                                         \
   /* Illegal token - not able to scan. */                               \
   T(ILLEGAL, "ILLEGAL", 0)                                              \
@@ -182,7 +183,7 @@ class Token {
   // All token values.
 #define T(name, string, precedence) name,
   enum Value {
-    TOKEN_LIST(T, T, IGNORE_TOKEN)
+    TOKEN_LIST(T, T)
     NUM_TOKENS
   };
 #undef T

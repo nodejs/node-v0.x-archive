@@ -1,6 +1,6 @@
 WAF=python tools/waf-light
 
-web_root = ryan@nodejs.org:~/web/nodejs.org/
+web_root = node@nodejs.org:~/web/nodejs.org/
 
 #
 # Because we recursively call make from waf we need to make sure that we are
@@ -11,8 +11,8 @@ web_root = ryan@nodejs.org:~/web/nodejs.org/
 export NODE_MAKE := $(MAKE)
 
 all: program
-	@-ls -lh build/default/node
-	@-ls -lh build/debug/node_g || echo ""
+	@-[ -f out/Release/node ] && ls -lh out/Release/node
+	@-[ -f out/Debug/node ] && ls -lh out/Debug/node
 
 all-progress:
 	@$(WAF) -p build
@@ -35,11 +35,17 @@ uninstall:
 test: all
 	python tools/test.py --mode=release simple message
 
+test-http1: all
+	python tools/test.py --mode=release --use-http1 simple message
+
 test-valgrind: all
 	python tools/test.py --mode=release --valgrind simple message
 
 test-all: all
 	python tools/test.py --mode=debug,release
+
+test-all-http1: all
+	python tools/test.py --mode=debug,release --use-http1
 
 test-all-valgrind: all
 	python tools/test.py --mode=debug,release --valgrind
@@ -67,6 +73,8 @@ UVTEST += simple/test-buffer
 UVTEST += simple/test-c-ares
 UVTEST += simple/test-chdir
 UVTEST += simple/test-delayed-require
+UVTEST += simple/test-dgram-pingpong
+UVTEST += simple/test-dgram-udp4
 UVTEST += simple/test-eio-race2
 UVTEST += simple/test-eio-race4
 UVTEST += simple/test-event-emitter-add-listeners
@@ -110,8 +118,10 @@ UVTEST += simple/test-http-client-race-2
 UVTEST += simple/test-http-client-upload
 UVTEST += simple/test-http-client-upload-buf
 UVTEST += simple/test-http-contentLength0
+UVTEST += simple/test-http-curl-chunk-problem
 UVTEST += simple/test-http-default-encoding
 UVTEST += simple/test-http-dns-fail
+UVTEST += simple/test-http-dns-error
 UVTEST += simple/test-http-eof-on-connect
 UVTEST += simple/test-http-exceptions
 UVTEST += simple/test-http-expect-continue
@@ -169,6 +179,8 @@ UVTEST += simple/test-next-tick-starvation
 UVTEST += simple/test-module-load-list
 UVTEST += simple/test-path
 UVTEST += simple/test-pipe-stream
+UVTEST += simple/test-pipe-file-to-http
+UVTEST += simple/test-process-env
 UVTEST += simple/test-pump-file2tcp
 UVTEST += simple/test-pump-file2tcp-noexist
 UVTEST += simple/test-punycode
@@ -178,9 +190,12 @@ UVTEST += simple/test-readdouble
 UVTEST += simple/test-readfloat
 UVTEST += simple/test-readint
 UVTEST += simple/test-readuint
+UVTEST += simple/test-regress-GH-746
 UVTEST += simple/test-regress-GH-819
 UVTEST += simple/test-regress-GH-897
+UVTEST += simple/test-regress-GH-1531
 UVTEST += simple/test-regression-object-prototype
+UVTEST += simple/test-repl
 UVTEST += simple/test-require-cache
 UVTEST += simple/test-require-cache-without-stat
 UVTEST += simple/test-require-exceptions
@@ -202,6 +217,7 @@ UVTEST += simple/test-tcp-wrap-connect
 UVTEST += simple/test-tcp-wrap-listen
 UVTEST += simple/test-timers-linked-list
 UVTEST += simple/test-tty-stdout-end
+UVTEST += simple/test-umask
 UVTEST += simple/test-url
 UVTEST += simple/test-utf8-scripts
 UVTEST += simple/test-vm-create-context-circular-reference
@@ -229,63 +245,73 @@ UVTEST += simple/test-tls-junk-closes-server
 UVTEST += simple/test-tls-npn-server-client
 UVTEST += simple/test-tls-request-timeout
 #UVTEST += simple/test-tls-securepair-client # broken
-#UVTEST += simple/test-tls-securepair-server # broken
+UVTEST += simple/test-tls-securepair-server 
 #UVTEST += simple/test-tls-server-verify # broken
 UVTEST += simple/test-tls-set-encoding
 
+# child_process
+UVTEST += simple/test-child-process-exit-code
+UVTEST += simple/test-child-process-buffering
+UVTEST += simple/test-child-process-exec-cwd
+UVTEST += simple/test-child-process-cwd
+UVTEST += simple/test-child-process-env
+UVTEST += simple/test-child-process-stdin
+UVTEST += simple/test-child-process-ipc
+UVTEST += simple/test-child-process-deprecated-api
+
 
 test-uv: all
-	NODE_USE_UV=1 python tools/test.py $(UVTEST)
+	NODE_USE_UV=1 python tools/test.py --libuv simple
 
 test-uv-debug: all
-	NODE_USE_UV=1 python tools/test.py --mode=debug $(UVTEST)
+	NODE_USE_UV=1 python tools/test.py --mode=debug simple
 
 
-build/default/node: all
+out/Release/node: all
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
-apidocs = $(addprefix build/,$(apidoc_sources:.markdown=.html))
+apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html))
 
-apidoc_dirs = build/doc build/doc/api/ build/doc/api/assets
+apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets
 
-apiassets = $(subst api_assets,api/assets,$(addprefix build/,$(wildcard doc/api_assets/*)))
+apiassets = $(subst api_assets,api/assets,$(addprefix out/,$(wildcard doc/api_assets/*)))
 
 website_files = \
-	build/doc/index.html    \
-	build/doc/v0.4_announcement.html   \
-	build/doc/cla.html      \
-	build/doc/sh_main.js    \
-	build/doc/sh_javascript.min.js \
-	build/doc/sh_vim-dark.css \
-	build/doc/logo.png      \
-	build/doc/sponsored.png \
-  build/doc/favicon.ico   \
-	build/doc/pipe.css
+	out/doc/index.html    \
+	out/doc/v0.4_announcement.html   \
+	out/doc/cla.html      \
+	out/doc/sh_main.js    \
+	out/doc/sh_javascript.min.js \
+	out/doc/sh_vim-dark.css \
+	out/doc/logo.png      \
+	out/doc/sponsored.png \
+  out/doc/favicon.ico   \
+	out/doc/pipe.css
 
-doc: build/default/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
+doc: out/Release/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
 
 $(apidoc_dirs):
 	mkdir -p $@
 
-build/doc/api/assets/%: doc/api_assets/% build/doc/api/assets/
+out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
 
-build/doc/%: doc/%
+out/doc/%: doc/%
 	cp $< $@
 
-build/doc/api/%.html: doc/api/%.markdown build/default/node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
-	build/default/node tools/doctool/doctool.js doc/template.html $< > $@
+out/doc/api/%.html: doc/api/%.markdown out/Release/node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
+	out/Release/node tools/doctool/doctool.js doc/template.html $< > $@
 
-build/doc/%:
+out/doc/%:
 
 website-upload: doc
-	scp -r build/doc/* $(web_root)
+	scp -r out/doc/* $(web_root)
 
-docopen: build/doc/api/all.html
-	-google-chrome build/doc/api/all.html
+docopen: out/doc/api/all.html
+	-google-chrome out/doc/api/all.html
 
 docclean:
-	-rm -rf build/doc
+	-rm -rf out/doc
 
 clean:
 	$(WAF) clean
@@ -293,7 +319,7 @@ clean:
 
 distclean: docclean
 	-find tools -name "*.pyc" | xargs rm -f
-	-rm -rf build/ node node_g
+	-rm -rf out/ node node_g
 
 check:
 	@tools/waf-light check
@@ -306,7 +332,7 @@ dist: doc
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
-	cp -r build/doc/api $(TARNAME)/doc/api
+	cp -r out/doc/api $(TARNAME)/doc/api
 	rm -rf $(TARNAME)/deps/v8/test # too big
 	rm -rf $(TARNAME)/doc/logos # too big
 	tar -cf $(TARNAME).tar $(TARNAME)

@@ -25,19 +25,29 @@
 // A dependency include (libeio\xthread.h) defines _WIN32_WINNT to another value
 // This should be defined in make system.
 // See issue https://github.com/joyent/node/issues/1236
-#ifdef __MINGW32__
+#if defined(__MINGW32__) || defined(_MSC_VER)
 #ifndef _WIN32_WINNT
 # define _WIN32_WINNT   0x0501
 #endif
+
+#define NOMINMAX
+
+#endif
+
+#if defined(_MSC_VER)
+#define PATH_MAX MAX_PATH
 #endif
 
 #include <uv.h>
-#include <eio.h>
 #include <v8.h>
 #include <sys/types.h> /* struct stat */
 #include <sys/stat.h>
 
 #include <node_object_wrap.h>
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
+#endif
 
 #ifndef NODE_STRINGIFY
 #define NODE_STRINGIFY(n) NODE_STRINGIFY_HELPER(n)

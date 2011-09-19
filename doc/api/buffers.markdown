@@ -128,7 +128,7 @@ buffer object.  It does not change when the contents of the buffer are changed.
 
 ### buffer.copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
 
-Does a memcpy() between buffers.
+Does copy between buffers. The source and target regions can be overlapped.
 
 Example: build two Buffers, then copy `buf1` from byte 16 through byte 19
 into `buf2`, starting at the 8th byte in `buf2`.
@@ -155,8 +155,8 @@ indexes.
 
 **Modifying the new buffer slice will modify memory in the original buffer!**
 
-Example: build a Buffer with the ASCII alphabet, take a slice, then modify one byte
-from the original Buffer.
+Example: build a Buffer with the ASCII alphabet, take a slice, then modify one
+byte from the original Buffer.
 
     var buf1 = new Buffer(26);
 
@@ -172,11 +172,12 @@ from the original Buffer.
     // abc
     // !bc
 
-### buffer.readUInt8(offset, endian)
+### buffer.readUInt8(offset, noAssert=false)
 
-Reads an unsigned 8 bit integer from the buffer at the specified offset. Endian
-must be either 'big' or 'little' and specifies what endian ordering to read the
-bytes from the buffer in.
+Reads an unsigned 8 bit integer from the buffer at the specified offset.
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
 
 Example:
 
@@ -188,24 +189,22 @@ Example:
     buf[3] = 0x42;
 
     for (ii = 0; ii < buf.length; ii++) {
-      console.log(buf.readUInt8(ii, 'big'));
-      console.log(buf.readUInt8(ii, 'little'));
+      console.log(buf.readUInt8(ii);
     }
 
     // 0x3
-    // 0x3
-    // 0x4
     // 0x4
     // 0x23
-    // 0x23
-    // 0x42
     // 0x42
 
-### buffer.readUInt16(offset, endian)
+### buffer.readUInt16LE(offset, noAssert=false)
+### buffer.readUInt16BE(offset, noAssert=false)
 
-Reads an unsigned 16 bit integer from the buffer at the specified offset. Endian
-must be either 'big' or 'little' and specifies what endian ordering to read the
-bytes from the buffer in.
+Reads an unsigned 16 bit integer from the buffer at the specified offset with
+specified endian format.
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
 
 Example:
 
@@ -216,12 +215,12 @@ Example:
     buf[2] = 0x23;
     buf[3] = 0x42;
 
-    console.log(buf.readUInt16(0, 'big'));
-    console.log(buf.readUInt16(0, 'little'));
-    console.log(buf.readUInt16(1, 'big'));
-    console.log(buf.readUInt16(1, 'little'));
-    console.log(buf.readUInt16(2, 'big'));
-    console.log(buf.readUInt16(2, 'little'));
+    console.log(buf.readUInt16BE(0));
+    console.log(buf.readUInt16LE(0));
+    console.log(buf.readUInt16BE(1));
+    console.log(buf.readUInt16LE(1));
+    console.log(buf.readUInt16BE(2));
+    console.log(buf.readUInt16LE(2));
 
     // 0x0304
     // 0x0403
@@ -230,11 +229,14 @@ Example:
     // 0x2342
     // 0x4223
 
-### buffer.readUInt32(offset, endian)
+### buffer.readUInt32LE(offset, noAssert=false)
+### buffer.readUInt32BE(offset, noAssert=false)
 
-Reads an unsigned 32 bit integer from the buffer at the specified offset. Endian
-must be either 'big' or 'little' and specifies what endian ordering to read the
-bytes from the buffer in.
+Reads an unsigned 32 bit integer from the buffer at the specified offset with
+specified endian format.
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
 
 Example:
 
@@ -245,44 +247,54 @@ Example:
     buf[2] = 0x23;
     buf[3] = 0x42;
 
-    console.log(buf.readUInt32(0, 'big'));
-    console.log(buf.readUInt32(0, 'little'));
+    console.log(buf.readUInt32BE(0));
+    console.log(buf.readUInt32LE(0));
 
     // 0x03042342
     // 0x42230403
 
-### buffer.readInt8(offset, endian)
+### buffer.readInt8(offset, noAssert=false)
 
-Reads a signed 8 bit integer from the buffer at the specified offset. Endian
-must be either 'big' or 'little' and specifies what endian ordering to read the
-bytes from the buffer in.
+Reads a signed 8 bit integer from the buffer at the specified offset.
 
-Works as `buffer.readUInt8`, except buffer contents are treated as twos
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
+
+Works as `buffer.readUInt8`, except buffer contents are treated as two's
 complement signed values.
 
-### buffer.readInt16(offset, endian)
+### buffer.readInt16LE(offset, noAssert=false)
+### buffer.readInt16BE(offset, noAssert=false)
 
-Reads a signed 16 bit integer from the buffer at the specified offset. Endian
-must be either 'big' or 'little' and specifies what endian ordering to read the
-bytes from the buffer in.
+Reads a signed 16 bit integer from the buffer at the specified offset with
+specified endian format.
 
-Works as `buffer.readUInt16`, except buffer contents are treated as twos
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
+
+Works as `buffer.readUInt16*`, except buffer contents are treated as two's
 complement signed values.
 
-### buffer.readInt32(offset, endian)
+### buffer.readInt32LE(offset, noAssert=false)
+### buffer.readInt32BE(offset, noAssert=false)
 
-Reads a signed 32 bit integer from the buffer at the specified offset. Endian
-must be either 'big' or 'little' and specifies what endian ordering to read the
-bytes from the buffer in.
+Reads a signed 32 bit integer from the buffer at the specified offset with
+specified endian format.
 
-Works as `buffer.readUInt32`, except buffer contents are treated as twos
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
+
+Works as `buffer.readUInt32*`, except buffer contents are treated as two's
 complement signed values.
 
-### buffer.readFloat(offset, endian)
+### buffer.readFloatLE(offset, noAssert=false)
+### buffer.readFloatBE(offset, noAssert=false)
 
-Reads a 32 bit float from the buffer at the specified offset. Endian must be
-either 'big' or 'little' and specifies what endian ordering to read the bytes
-from the buffer in.
+Reads a 32 bit float from the buffer at the specified offset with specified
+endian format.
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
 
 Example:
 
@@ -293,15 +305,18 @@ Example:
     buf[2] = 0x80;
     buf[3] = 0x3f;
 
-    console.log(buf.readFloat(0, 'little'));
+    console.log(buf.readFloatLE(0));
 
     // 0x01
 
-### buffer.readDouble(offset, endian)
+### buffer.readDoubleLE(offset, noAssert=false)
+### buffer.readDoubleBE(offset, noAssert=false)
 
-Reads a 64 bit double from the buffer at the specified offset. Endian must be
-either 'big' or 'little' and specifies what endian ordering to read the bytes
-from the buffer in.
+Reads a 64 bit double from the buffer at the specified offset with specified
+endian format.
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer.
 
 Example:
 
@@ -316,137 +331,174 @@ Example:
     buf[6] = 0xd5;
     buf[7] = 0x3f;
 
-    console.log(buf.readDouble(0, 'little'));
+    console.log(buf.readDoubleLE(0));
 
     // 0.3333333333333333
 
-### buffer.writeUInt8(value, offset, endian)
+### buffer.writeUInt8(value, offset, noAssert=false)
 
-Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid 8 bit unsigned integer.
+Writes `value` to the buffer at the specified offset. Note, `value` must be a
+valid unsigned 8 bit integer.
 
-Example:
-
-    var buf = new Buffer(4);
-    buf.writeUInt8(0x3, 0, 'big');
-    buf.writeUInt8(0x4, 1, 'big');
-    buf.writeUInt8(0x23, 2, 'big');
-    buf.writeUInt8(0x42, 3, 'big');
-
-    console.log(buf);
-
-    buf.writeUInt8(0x3, 0, 'little');
-    buf.writeUInt8(0x4, 1, 'little');
-    buf.writeUInt8(0x23, 2, 'little');
-    buf.writeUInt8(0x42, 3, 'little');
-
-    console.log(buf);
-
-    // <Buffer 03 04 23 42>
-    // <Buffer 03 04 23 42>
-
-### buffer.writeUInt16(value, offset, endian)
-
-Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid 16 bit unsigned integer.
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
 
 Example:
 
     var buf = new Buffer(4);
-    buf.writeUInt16(0xdead, 0, 'big');
-    buf.writeUInt16(0xbeef, 2, 'big');
+    buf.writeUInt8(0x3, 0);
+    buf.writeUInt8(0x4, 1);
+    buf.writeUInt8(0x23, 2);
+    buf.writeUInt8(0x42, 3);
 
     console.log(buf);
 
-    buf.writeUInt16(0xdead, 0, 'little');
-    buf.writeUInt16(0xbeef, 2, 'little');
+    // <Buffer 03 04 23 42>
+
+### buffer.writeUInt16LE(value, offset, noAssert=false)
+### buffer.writeUInt16BE(value, offset, noAssert=false)
+
+Writes `value` to the buffer at the specified offset with specified endian
+format. Note, `value` must be a valid unsigned 16 bit integer.
+
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
+
+Example:
+
+    var buf = new Buffer(4);
+    buf.writeUInt16BE(0xdead, 0);
+    buf.writeUInt16BE(0xbeef, 2);
+
+    console.log(buf);
+
+    buf.writeUInt16LE(0xdead, 0);
+    buf.writeUInt16LE(0xbeef, 2);
 
     console.log(buf);
 
     // <Buffer de ad be ef>
     // <Buffer ad de ef be>
 
-### buffer.writeUInt32(value, offset, endian)
+### buffer.writeUInt32LE(value, offset, noAssert=false)
+### buffer.writeUInt32BE(value, offset, noAssert=false)
 
 Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid 32 bit unsigned integer.
+format. Note, `value` must be a valid unsigned 32 bit integer.
+
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
 
 Example:
 
     var buf = new Buffer(4);
-    buf.writeUInt32(0xfeedface, 0, 'big');
+    buf.writeUInt32BE(0xfeedface, 0);
 
     console.log(buf);
 
-    buf.writeUInt32(0xfeedface, 0, 'little');
+    buf.writeUInt32LE(0xfeedface, 0);
 
     console.log(buf);
 
     // <Buffer fe ed fa ce>
     // <Buffer ce fa ed fe>
 
-### buffer.writeInt8(value, offset, endian)
+### buffer.writeInt8(value, offset, noAssert=false)
 
-Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid 16 bit signed integer.
+Writes `value` to the buffer at the specified offset. Note, `value` must be a
+valid signed 8 bit integer.
+
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
 
 Works as `buffer.writeUInt8`, except value is written out as a two's complement
 signed integer into `buffer`.
 
-### buffer.writeInt16(value, offset, endian)
+### buffer.writeInt16LE(value, offset, noAssert=false)
+### buffer.writeInt16BE(value, offset, noAssert=false)
 
 Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid 16 bit unsigned integer.
+format. Note, `value` must be a valid signed 16 bit integer.
 
-Works as `buffer.writeUInt16`, except value is written out as a two's complement
-signed integer into `buffer`.
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
 
-### buffer.writeInt32(value, offset, endian)
+Works as `buffer.writeUInt16*`, except value is written out as a two's
+complement signed integer into `buffer`.
+
+### buffer.writeInt32LE(value, offset, noAssert=false)
+### buffer.writeInt32BE(value, offset, noAssert=false)
 
 Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid 16 bit signed integer.
+format. Note, `value` must be a valid signed 32 bit integer.
 
-Works as `buffer.writeUInt832, except value is written out as a two's complement
-signed integer into `buffer`.
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
 
-### buffer.writeFloat(value, offset, endian)
+Works as `buffer.writeUInt32*`, except value is written out as a two's
+complement signed integer into `buffer`.
+
+### buffer.writeFloatLE(value, offset, noAssert=false)
+### buffer.writeFloatBE(value, offset, noAssert=false)
 
 Writes `value` to the buffer at the specified offset with specified endian
 format. Note, `value` must be a valid 32 bit float.
 
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
+
 Example:
 
     var buf = new Buffer(4);
-    buf.writeFloat(0xcafebabe, 0, 'big');
+    buf.writeFloatBE(0xcafebabe, 0);
 
     console.log(buf);
 
-    buf.writeFloat(0xcafebabe, 0, 'little');
+    buf.writeFloatLE(0xcafebabe, 0);
 
     console.log(buf);
 
     // <Buffer 4f 4a fe bb>
     // <Buffer bb fe 4a 4f>
 
-### buffer.writeDouble(value, offset, endian)
+### buffer.writeDoubleLE(value, offset, noAssert=false)
+### buffer.writeDoubleBE(value, offset, noAssert=false)
 
 Writes `value` to the buffer at the specified offset with specified endian
 format. Note, `value` must be a valid 64 bit double.
 
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness.
+
 Example:
 
     var buf = new Buffer(8);
-    buf.writeFloat(0xdeadbeefcafebabe, 0, 'big');
+    buf.writeDoubleBE(0xdeadbeefcafebabe, 0);
 
     console.log(buf);
 
-    buf.writeFloat(0xdeadbeefcafebabe, 0, 'little');
+    buf.writeDoubleLE(0xdeadbeefcafebabe, 0);
 
     console.log(buf);
 
     // <Buffer 43 eb d5 b7 dd f9 5f d7>
     // <Buffer d7 5f f9 dd b7 d5 eb 43>
-
 
 ### buffer.fill(value, offset=0, length=-1)
 
@@ -456,3 +508,7 @@ given it will fill the entire buffer.
     var b = new Buffer(50);
     b.fill("h");
 
+### INSPECT_MAX_BYTES
+
+How many bytes will be returned when `buffer.inspect()` is called. This can
+be overriden by user modules.

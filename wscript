@@ -38,7 +38,7 @@ sys.path.append(sys.argv[0] + '/tools');
 import js2c
 
 srcdir = '.'
-blddir = 'build'
+blddir = 'out'
 supported_archs = ('arm', 'ia32', 'x64') # 'mips' supported by v8, but not node
 
 jobs=1
@@ -62,34 +62,34 @@ def set_options(opt):
   opt.tool_options('compiler_cc')
   opt.tool_options('misc')
   opt.add_option( '--libdir'
-		, action='store'
-		, type='string'
-		, default=False
-		, help='Install into this libdir [Default: ${PREFIX}/lib]'
-		)
+                , action='store'
+                , type='string'
+                , default=False
+                , help='Install into this libdir [Release: ${PREFIX}/lib]'
+                )
   opt.add_option( '--debug'
                 , action='store_true'
                 , default=False
-                , help='Build debug variant [Default: False]'
+                , help='Build debug variant [Release: False]'
                 , dest='debug'
                 )
   opt.add_option( '--profile'
                 , action='store_true'
                 , default=False
-                , help='Enable profiling [Default: False]'
+                , help='Enable profiling [Release: False]'
                 , dest='profile'
                 )
   opt.add_option( '--efence'
                 , action='store_true'
                 , default=False
-                , help='Build with -lefence for debugging [Default: False]'
+                , help='Build with -lefence for debugging [Release: False]'
                 , dest='efence'
                 )
 
   opt.add_option( '--without-snapshot'
                 , action='store_true'
                 , default=False
-                , help='Build without snapshotting V8 libraries. You might want to set this for cross-compiling. [Default: False]'
+                , help='Build without snapshotting V8 libraries. You might want to set this for cross-compiling. [Release: False]'
                 , dest='without_snapshot'
                 )
 
@@ -158,7 +158,29 @@ def set_options(opt):
                 )
 
 
-  opt.add_option('--shared-cares'
+  opt.add_option( '--shared-zlib'
+                , action='store_true'
+                , default=False
+                , help='Link to a shared zlib DLL instead of static linking'
+                , dest='shared_zlib'
+                )
+
+  opt.add_option( '--shared-zlib-includes'
+                , action='store'
+                , default=False
+                , help='Directory containing zlib header files'
+                , dest='shared_zlib_includes'
+                )
+
+  opt.add_option( '--shared-zlib-libpath'
+                , action='store'
+                , default=False
+                , help='A directory to search for the shared zlib DLL'
+                , dest='shared_zlib_libpath'
+                )
+
+
+  opt.add_option( '--shared-cares'
                 , action='store_true'
                 , default=False
                 , help='Link to a shared C-Ares DLL instead of static linking'
@@ -219,7 +241,7 @@ def get_node_version():
   return "%s.%s.%s%s" % ( node_major_version,
                            node_minor_version,
                            node_patch_version,
-                           "-pre" if node_is_release == "0" else ""
+                           node_is_release == "0" and "-pre" or ""
                          )
 
 
@@ -246,6 +268,7 @@ def configure(conf):
 
   conf.env["USE_SHARED_V8"] = o.shared_v8 or o.shared_v8_includes or o.shared_v8_libpath or o.shared_v8_libname
   conf.env["USE_SHARED_CARES"] = o.shared_cares or o.shared_cares_includes or o.shared_cares_libpath
+  conf.env["USE_SHARED_ZLIB"] = o.shared_zlib or o.shared_zlib_includes or o.shared_zlib_libpath
 
   conf.env["USE_GDBJIT"] = o.use_gdbjit
 
@@ -491,25 +514,23 @@ def configure(conf):
     conf.env.append_value('LINKFLAGS', '-pg')
 
   if sys.platform.startswith("win32"):
-    conf.env.append_value('LIB', 'ws2_32')
+    conf.env.append_value('LIB', 'psapi')
     conf.env.append_value('LIB', 'winmm')
+    # This enforces ws2_32 to be linked after crypto, otherwise the linker
+    # will run into undefined references from libcrypto.a
+    if not Options.options.use_openssl:
+      conf.env.append_value('LIB', 'ws2_32')
 
   conf.env.append_value('CPPFLAGS', '-Wno-unused-parameter');
   conf.env.append_value('CPPFLAGS', '-D_FORTIFY_SOURCE=2');
 
   # Split off debug variant before adding variant specific defines
   debug_env = conf.env.copy()
-  conf.set_env_name('debug', debug_env)
-
-  if (sys.platform.startswith("win32")):
-    # Static pthread
-    conf.env.append_value('LINKFLAGS', '../deps/pthread-win32/libpthreadGC2.a')
-    debug_env.append_value('LINKFLAGS', '../deps/pthread-win32/libpthreadGC2d.a')
-    conf.env.append_value('CPPFLAGS', "-DPTW32_STATIC_LIB")
+  conf.set_env_name('Debug', debug_env)
 
   # Configure debug variant
-  conf.setenv('debug')
-  debug_env.set_variant('debug')
+  conf.setenv('Debug')
+  debug_env.set_variant('Debug')
   debug_env.append_value('CPPFLAGS', '-DDEBUG')
   debug_compile_flags = ['-g', '-O0', '-Wall', '-Wextra']
   debug_env.append_value('CCFLAGS', debug_compile_flags)
@@ -517,7 +538,7 @@ def configure(conf):
   conf.write_config_header("config.h")
 
   # Configure default variant
-  conf.setenv('default')
+  conf.setenv('Release')
   default_compile_flags = ['-g', '-O3']
   conf.env.append_value('CCFLAGS', default_compile_flags)
   conf.env.append_value('CXXFLAGS', default_compile_flags)
@@ -542,7 +563,7 @@ def v8_cmd(bld, variant):
 
   toolchain = "gcc"
 
-  if variant == "default":
+  if variant == "Release":
     mode = "release"
   else:
     mode = "debug"
@@ -581,7 +602,7 @@ def build_v8(bld):
                     + bld.path.ant_glob('v8/include/*')
                     + bld.path.ant_glob('v8/src/*'),
     target        = bld.env["staticlib_PATTERN"] % "v8",
-    rule          = v8_cmd(bld, "default"),
+    rule          = v8_cmd(bld, "Release"),
     before        = "cxx",
     install_path  = None)
 
@@ -591,18 +612,18 @@ def build_v8(bld):
 
   v8.uselib = "EXECINFO"
   bld.env["CPPPATH_V8"] = "deps/v8/include"
-  t = join(bld.srcnode.abspath(bld.env_of_name("default")), v8.target)
-  bld.env_of_name('default').append_value("LINKFLAGS_V8", t)
+  t = join(bld.srcnode.abspath(bld.env_of_name("Release")), v8.target)
+  bld.env_of_name('Release').append_value("LINKFLAGS_V8", t)
 
   ### v8 debug
   if bld.env["USE_DEBUG"]:
-    v8_debug = v8.clone("debug")
-    v8_debug.rule   = v8_cmd(bld, "debug")
+    v8_debug = v8.clone("Debug")
+    v8_debug.rule   = v8_cmd(bld, "Debug")
     v8_debug.target = bld.env["staticlib_PATTERN"] % "v8_g"
     v8_debug.uselib = "EXECINFO"
     bld.env["CPPPATH_V8_G"] = "deps/v8/include"
-    t = join(bld.srcnode.abspath(bld.env_of_name("debug")), v8_debug.target)
-    bld.env_of_name('debug').append_value("LINKFLAGS_V8_G", t)
+    t = join(bld.srcnode.abspath(bld.env_of_name("Debug")), v8_debug.target)
+    bld.env_of_name('Debug').append_value("LINKFLAGS_V8_G", t)
 
   bld.install_files('${PREFIX}/include/node/', 'deps/v8/include/*.h')
 
@@ -635,28 +656,26 @@ def build_uv(bld):
     source = 'deps/uv/include/uv.h',
     target = 'deps/uv/uv.a',
     before = "cxx",
-    rule = uv_cmd(bld, 'default')
+    rule = uv_cmd(bld, 'Release')
   )
 
   uv.env.env = dict(os.environ)
   uv.env.env['CC'] = sh_escape(bld.env['CC'][0])
   uv.env.env['CXX'] = sh_escape(bld.env['CXX'][0])
-  uv.env.env['CPPFLAGS'] = "-DPTW32_STATIC_LIB"
 
-  t = join(bld.srcnode.abspath(bld.env_of_name("default")), uv.target)
-  bld.env_of_name('default').append_value("LINKFLAGS_UV", t)
+  t = join(bld.srcnode.abspath(bld.env_of_name("Release")), uv.target)
+  bld.env_of_name('Release').append_value("LINKFLAGS_UV", t)
 
   if bld.env["USE_DEBUG"]:
-    uv_debug = uv.clone("debug")
-    uv_debug.rule = uv_cmd(bld, 'debug')
+    uv_debug = uv.clone("Debug")
+    uv_debug.rule = uv_cmd(bld, 'Debug')
     uv_debug.env.env = dict(os.environ)
-    uv_debug.env.env['CPPFLAGS'] = "-DPTW32_STATIC_LIB"
 
-    t = join(bld.srcnode.abspath(bld.env_of_name("debug")), uv_debug.target)
-    bld.env_of_name('debug').append_value("LINKFLAGS_UV", t)
+    t = join(bld.srcnode.abspath(bld.env_of_name("Debug")), uv_debug.target)
+    bld.env_of_name('Debug').append_value("LINKFLAGS_UV", t)
 
   bld.install_files('${PREFIX}/include/node/', 'deps/uv/include/*.h')
-
+  bld.install_files('${PREFIX}/include/node/uv-private', 'deps/uv/include/uv-private/*.h')
   bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/src/ev/*.h')
   bld.install_files('${PREFIX}/include/node/c-ares', """
     deps/uv/include/ares.h
@@ -695,7 +714,7 @@ def build(bld):
   http_parser.target = "http_parser"
   http_parser.install_path = None
   if bld.env["USE_DEBUG"]:
-    http_parser.clone("debug")
+    http_parser.clone("Debug")
   if product_type_is_lib:
     http_parser.ccflags = '-fPIC'
 
@@ -706,12 +725,12 @@ def build(bld):
     f.close
 
   macros_loc_debug   = join(
-     bld.srcnode.abspath(bld.env_of_name("debug")),
+     bld.srcnode.abspath(bld.env_of_name("Debug")),
      "macros.py"
   )
 
   macros_loc_default = join(
-    bld.srcnode.abspath(bld.env_of_name("default")),
+    bld.srcnode.abspath(bld.env_of_name("Release")),
     "macros.py"
   )
 
@@ -768,7 +787,7 @@ def build(bld):
   # error that was had into the git commit meessage. git-blame to find out
   # where.)
   if bld.env["USE_DEBUG"]:
-    native_cc_debug = native_cc.clone("debug")
+    native_cc_debug = native_cc.clone("Debug")
     native_cc_debug.rule = javascript_in_c_debug
 
   native_cc.rule = javascript_in_c_debug
@@ -783,7 +802,7 @@ def build(bld):
     )
 
     if bld.env["USE_DEBUG"]:
-      dtrace_g = dtrace.clone("debug")
+      dtrace_g = dtrace.clone("Debug")
 
     bld.install_files('${LIBDIR}/dtrace', 'src/node.d')
 
@@ -820,8 +839,8 @@ def build(bld):
         rule = dtrace_postprocess
       )
 
-      t = join(bld.srcnode.abspath(bld.env_of_name("default")), dtracepost.target)
-      bld.env_of_name('default').append_value('LINKFLAGS', t)
+      t = join(bld.srcnode.abspath(bld.env_of_name("Release")), dtracepost.target)
+      bld.env_of_name('Release').append_value('LINKFLAGS', t)
 
       #
       # Note that for the same (mysterious) issue outlined above with respect
@@ -832,17 +851,17 @@ def build(bld):
       # LINKFLAGS_V8_G.
       #
       if bld.env["USE_DEBUG"]:
-        dtracepost_g = dtracepost.clone("debug")
+        dtracepost_g = dtracepost.clone("Debug")
         dtracepost_g.rule = dtrace_postprocess
-        t = join(bld.srcnode.abspath(bld.env_of_name("debug")), dtracepost.target)
-        bld.env_of_name("debug").append_value('LINKFLAGS_V8_G', t)
+        t = join(bld.srcnode.abspath(bld.env_of_name("Debug")), dtracepost.target)
+        bld.env_of_name("Debug").append_value('LINKFLAGS_V8_G', t)
 
 
   ### node lib
   node = bld.new_task_gen("cxx", product_type)
   node.name         = "node"
   node.target       = "node"
-  node.uselib = 'RT OPENSSL CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
+  node.uselib = 'RT OPENSSL ZLIB CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
   node.add_objects = 'http_parser'
   if product_type_is_lib:
     node.install_path = '${LIBDIR}'
@@ -861,18 +880,21 @@ def build(bld):
     src/node_os.cc
     src/node_dtrace.cc
     src/node_string.cc
+    src/node_zlib.cc
     src/timer_wrap.cc
     src/handle_wrap.cc
     src/stream_wrap.cc
     src/tcp_wrap.cc
+    src/udp_wrap.cc
     src/pipe_wrap.cc
     src/cares_wrap.cc
     src/stdio_wrap.cc
+    src/process_wrap.cc
+    src/v8_typed_array.cc
   """
 
   if sys.platform.startswith("win32"):
     node.source += " src/node_stdio_win32.cc "
-    node.source += " src/node_child_process_win32.cc "
   else:
     node.source += " src/node_cares.cc "
     node.source += " src/node_net.cc "
@@ -899,11 +921,14 @@ def build(bld):
 
   if not bld.env["USE_SHARED_V8"]: node.includes += ' deps/v8/include '
 
+  if os.environ.has_key('RPATH'):
+    node.rpath = os.environ['RPATH']
+
   if sys.platform.startswith('cygwin'):
     bld.env.append_value('LINKFLAGS', '-Wl,--export-all-symbols')
     bld.env.append_value('LINKFLAGS', '-Wl,--out-implib,default/libnode.dll.a')
     bld.env.append_value('LINKFLAGS', '-Wl,--output-def,default/libnode.def')
-    bld.install_files('${LIBDIR}', "build/default/libnode.*")
+    bld.install_files('${LIBDIR}', "out/Release/libnode.*")
 
   if (sys.platform.startswith("win32")):
     # Static libgcc
@@ -928,11 +953,12 @@ def build(bld):
   node_conf.install_path = '${PREFIX}/include/node'
 
   if bld.env["USE_DEBUG"]:
-    node_g = node.clone("debug")
-    node_g.target = "node_g"
+    node_g = node.clone("Debug")
+    node_g.target = "node"
     node_g.uselib += ' V8_G UV '
+    node_g.install_path = None
 
-    node_conf_g = node_conf.clone("debug")
+    node_conf_g = node_conf.clone("Debug")
     node_conf_g.dict = subflags(node_g)
     node_conf_g.install_path = None
 
@@ -970,15 +996,15 @@ def shutdown():
 
   elif not Options.commands['clean']:
     if sys.platform.startswith("win32"):
-      if os.path.exists('build/default/node.exe'):
-        os.system('cp build/default/node.exe .')
-      if os.path.exists('build/debug/node_g.exe'):
-        os.system('cp build/debug/node_g.exe .')
+      if os.path.exists('out/Release/node.exe'):
+        os.system('cp out/Release/node.exe .')
+      if os.path.exists('out/Debug/node.exe'):
+        os.system('cp out/Debug/node.exe node_g.exe')
     else:
-      if os.path.exists('build/default/node') and not os.path.exists('node'):
-        os.symlink('build/default/node', 'node')
-      if os.path.exists('build/debug/node_g') and not os.path.exists('node_g'):
-        os.symlink('build/debug/node_g', 'node_g')
+      if os.path.exists('out/Release/node') and not os.path.exists('node'):
+        os.symlink('out/Release/node', 'node')
+      if os.path.exists('out/Debug/node') and not os.path.exists('node_g'):
+        os.symlink('out/Debug/node', 'node_g')
   else:
     if sys.platform.startswith("win32"):
       if os.path.exists('node.exe'): os.unlink('node.exe')

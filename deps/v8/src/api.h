@@ -404,8 +404,11 @@ class HandleScopeImplementer {
         entered_contexts_(0),
         saved_contexts_(0),
         spare_(NULL),
-        ignore_out_of_memory_(false),
         call_depth_(0) { }
+
+  ~HandleScopeImplementer() {
+    DeleteArray(spare_);
+  }
 
   // Threading support for handle data.
   static int ArchiveSpacePerThread();
@@ -437,10 +440,6 @@ class HandleScopeImplementer {
   inline bool HasSavedContexts();
 
   inline List<internal::Object**>* blocks() { return &blocks_; }
-  inline bool ignore_out_of_memory() { return ignore_out_of_memory_; }
-  inline void set_ignore_out_of_memory(bool value) {
-    ignore_out_of_memory_ = value;
-  }
 
  private:
   void ResetAfterArchive() {
@@ -448,7 +447,6 @@ class HandleScopeImplementer {
     entered_contexts_.Initialize(0);
     saved_contexts_.Initialize(0);
     spare_ = NULL;
-    ignore_out_of_memory_ = false;
     call_depth_ = 0;
   }
 
@@ -473,7 +471,6 @@ class HandleScopeImplementer {
   // Used as a stack to keep track of saved contexts.
   List<Context*> saved_contexts_;
   Object** spare_;
-  bool ignore_out_of_memory_;
   int call_depth_;
   // This is only used for threading support.
   v8::ImplementationUtilities::HandleScopeData handle_scope_data_;

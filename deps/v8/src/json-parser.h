@@ -166,7 +166,8 @@ class JsonParser BASE_EMBEDDED {
 template <bool seq_ascii>
 Handle<Object> JsonParser<seq_ascii>::ParseJson(Handle<String> source) {
   isolate_ = source->map()->isolate();
-  source_ = Handle<String>(source->TryFlattenGetString());
+  FlattenString(source);
+  source_ = source;
   source_length_ = source_->length();
 
   // Optimized fast case where we only have ASCII characters.
@@ -457,12 +458,12 @@ Handle<String> JsonParser<seq_ascii>::SlowScanJsonString(
   String::WriteToFlat(*prefix, dest, start, end);
 
   while (c0_ != '"') {
+    // Check for control character (0x00-0x1f) or unterminated string (<0).
+    if (c0_ < 0x20) return Handle<String>::null();
     if (count >= length) {
       // We need to create a longer sequential string for the result.
       return SlowScanJsonString<StringType, SinkChar>(seq_str, 0, count);
     }
-    // Check for control character (0x00-0x1f) or unterminated string (<0).
-    if (c0_ < 0x20) return Handle<String>::null();
     if (c0_ != '\\') {
       // If the sink can contain UC16 characters, or source_ contains only
       // ASCII characters, there's no need to test whether we can store the

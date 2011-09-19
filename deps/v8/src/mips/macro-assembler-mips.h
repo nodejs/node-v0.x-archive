@@ -362,6 +362,16 @@ class MacroAssembler: public Assembler {
                                Register scratch1,
                                Register scratch2,
                                Label* gc_required);
+  void AllocateTwoByteSlicedString(Register result,
+                                   Register length,
+                                   Register scratch1,
+                                   Register scratch2,
+                                   Label* gc_required);
+  void AllocateAsciiSlicedString(Register result,
+                                 Register length,
+                                 Register scratch1,
+                                 Register scratch2,
+                                 Label* gc_required);
 
   // Allocates a heap number or jumps to the gc_required label if the young
   // space is full and a scavenge is needed. All registers are clobbered also
@@ -442,6 +452,9 @@ class MacroAssembler: public Assembler {
   void MultiPush(RegList regs);
   void MultiPushReversed(RegList regs);
 
+  void MultiPushFPU(RegList regs);
+  void MultiPushReversedFPU(RegList regs);
+
   // Lower case push() for compatibility with arch-independent code.
   void push(Register src) {
     Addu(sp, sp, Operand(-kPointerSize));
@@ -487,6 +500,9 @@ class MacroAssembler: public Assembler {
   void MultiPop(RegList regs);
   void MultiPopReversed(RegList regs);
 
+  void MultiPopFPU(RegList regs);
+  void MultiPopReversedFPU(RegList regs);
+
   // Lower case pop() for compatibility with arch-independent code.
   void pop(Register dst) {
     lw(dst, MemOperand(sp, 0));
@@ -524,12 +540,12 @@ class MacroAssembler: public Assembler {
   void Ext(Register rt, Register rs, uint16_t pos, uint16_t size);
 
   // Convert unsigned word to double.
-  void Cvt_d_uw(FPURegister fd, FPURegister fs);
-  void Cvt_d_uw(FPURegister fd, Register rs);
+  void Cvt_d_uw(FPURegister fd, FPURegister fs, FPURegister scratch);
+  void Cvt_d_uw(FPURegister fd, Register rs, FPURegister scratch);
 
   // Convert double to unsigned word.
-  void Trunc_uw_d(FPURegister fd, FPURegister fs);
-  void Trunc_uw_d(FPURegister fd, Register rs);
+  void Trunc_uw_d(FPURegister fd, FPURegister fs, FPURegister scratch);
+  void Trunc_uw_d(FPURegister fd, Register rs, FPURegister scratch);
 
   // Convert the HeapNumber pointed to by source to a 32bits signed integer
   // dest. If the HeapNumber does not fit into a 32bits signed integer branch
@@ -1197,10 +1213,9 @@ static inline MemOperand FieldMemOperand(Register object, int offset) {
 // Generate a MemOperand for storing arguments 5..N on the stack
 // when calling CallCFunction().
 static inline MemOperand CFunctionArgumentOperand(int index) {
-  ASSERT(index > StandardFrameConstants::kCArgSlotCount);
+  ASSERT(index > kCArgSlotCount);
   // Argument 5 takes the slot just past the four Arg-slots.
-  int offset =
-      (index - 5) * kPointerSize + StandardFrameConstants::kCArgsSlotsSize;
+  int offset = (index - 5) * kPointerSize + kCArgsSlotsSize;
   return MemOperand(sp, offset);
 }
 

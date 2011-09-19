@@ -29,19 +29,35 @@
 #include <locale.h>
 #include <signal.h>
 #include <stdio.h>
+#if defined(_MSC_VER)
+#define snprintf _snprintf
+#endif
 #include <stdlib.h>
-#include <strings.h>
 #include <string.h>
+#if !defined(_MSC_VER)
+#include <strings.h>
+#else
+#define strcasecmp _stricmp
+#endif
 #include <limits.h> /* PATH_MAX */
 #include <assert.h>
-#include <unistd.h>
+#if !defined(_MSC_VER)
+#include <unistd.h> /* setuid, getuid */
+#else
+#include <direct.h>
+#define chdir _chdir
+#define getcwd _getcwd
+#include <process.h>
+#define getpid _getpid
+#include <io.h>
+#define umask _umask
+typedef int mode_t;
+#endif
 #include <errno.h>
 #include <sys/types.h>
-#include <unistd.h> /* setuid, getuid */
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) || defined(_MSC_VER)
 # include <platform_win32.h> /* winapi_perror() */
-# include <platform_win32_winsock.h> /* wsa_init() */
 # ifdef PTW32_STATIC_LIB
 extern "C" {
   BOOL __cdecl pthread_win32_process_attach_np (void);
@@ -70,25 +86,26 @@ extern "C" {
 # include <node_stat_watcher.h>
 # include <node_timer.h>
 #endif
+#if !defined(_MSC_VER)
 #include <node_child_process.h>
+#endif
 #include <node_constants.h>
 #include <node_stdio.h>
 #include <node_javascript.h>
 #include <node_version.h>
 #include <node_string.h>
-#ifdef HAVE_OPENSSL
+#if HAVE_OPENSSL
 # include <node_crypto.h>
 #endif
 #include <node_script.h>
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
+#include <v8_typed_array.h>
 
 using namespace v8;
 
 # ifdef __APPLE__
 # include <crt_externs.h>
 # define environ (*_NSGetEnviron())
-# else
+# elif !defined(_MSC_VER)
 extern char **environ;
 # endif
 
@@ -152,23 +169,23 @@ static uv_idle_t tick_spinner;
 static bool need_tick_cb;
 static Persistent<String> tick_callback_sym;
 
-static uv_async_t eio_want_poll_notifier;
-static uv_async_t eio_done_poll_notifier;
-static uv_idle_t eio_poller;
 
-
-// XXX use_uv defaults to false on POSIX platforms and to true on Windows
-// platforms. This can be set with "--use-uv" command-line flag. We intend
-// to remove the legacy backend once the libuv backend is passing all of the
-// tests.
-#ifdef __POSIX__
-static bool use_uv = false;
-#else
 static bool use_uv = true;
-#endif
 
 // disabled by default for now
-static bool use_http2 = false;
+static bool use_http1 = false;
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+static bool use_npn = true;
+#else
+static bool use_npn = false;
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+static bool use_sni = true;
+#else
+static bool use_sni = false;
+#endif
 
 // Buffer for getpwnam_r(), getgrpam_r() and other misc callers; keep this
 // scoped at file-level rather than method-level to avoid excess stack usage.
@@ -222,7 +239,7 @@ static void Idle(uv_idle_t* watcher, int status) {
 static void Check(uv_check_t* watcher, int status) {
   assert(watcher == &gc_check);
 
-  tick_times[tick_time_head] = uv_now();
+  tick_times[tick_time_head] = uv_now(uv_default_loop());
   tick_time_head = (tick_time_head + 1) % RPM_SAMPLES;
 
   StartGCTimer();
@@ -252,7 +269,7 @@ static void Tick(void) {
   need_tick_cb = false;
   if (uv_is_active((uv_handle_t*) &tick_spinner)) {
     uv_idle_stop(&tick_spinner);
-    uv_unref();
+    uv_unref(uv_default_loop());
   }
 
   HandleScope scope;
@@ -294,7 +311,7 @@ static Handle<Value> NeedTickCallback(const Arguments& args) {
   // tick_spinner to keep the event loop alive long enough to handle it.
   if (!uv_is_active((uv_handle_t*) &tick_spinner)) {
     uv_idle_start(&tick_spinner, Spin);
-    uv_ref();
+    uv_ref(uv_default_loop());
   }
   return Undefined();
 }
@@ -312,62 +329,6 @@ static void CheckTick(uv_check_t* handle, int status) {
   assert(status == 0);
   Tick();
 }
-
-
-static void DoPoll(uv_idle_t* watcher, int status) {
-  assert(watcher == &eio_poller);
-
-  //printf("eio_poller\n");
-
-  if (eio_poll() != -1 && uv_is_active((uv_handle_t*) &eio_poller)) {
-    //printf("eio_poller stop\n");
-    uv_idle_stop(&eio_poller);
-    uv_unref();
-  }
-}
-
-
-// Called from the main thread.
-static void WantPollNotifier(uv_async_t* watcher, int status) {
-  assert(watcher == &eio_want_poll_notifier);
-
-  //printf("want poll notifier\n");
-
-  if (eio_poll() == -1 && !uv_is_active((uv_handle_t*) &eio_poller)) {
-    //printf("eio_poller start\n");
-    uv_idle_start(&eio_poller, node::DoPoll);
-    uv_ref();
-  }
-}
-
-
-static void DonePollNotifier(uv_async_t* watcher, int revents) {
-  assert(watcher == &eio_done_poll_notifier);
-
-  //printf("done poll notifier\n");
-
-  if (eio_poll() != -1 && uv_is_active((uv_handle_t*) &eio_poller)) {
-    //printf("eio_poller stop\n");
-    uv_idle_stop(&eio_poller);
-    uv_unref();
-  }
-}
-
-
-// EIOWantPoll() is called from the EIO thread pool each time an EIO
-// request (that is, one of the node.fs.* functions) has completed.
-static void EIOWantPoll(void) {
-  // Signal the main thread that eio_poll need to be processed.
-  uv_async_send(&eio_want_poll_notifier);
-}
-
-
-static void EIODonePoll(void) {
-  // Signal the main thread that we should stop calling eio_poll().
-  // from the idle watcher.
-  uv_async_send(&eio_done_poll_notifier);
-}
-
 
 static inline const char *errno_string(int errorno) {
 #define ERRNO_CASE(e)  case e: return #e;
@@ -1332,7 +1293,7 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     //
     // When reporting errors on the first line of a script, this wrapper
     // function is leaked to the user. This HACK is to remove it. The length
-    // of the wrapper is 70. That wrapper is defined in src/node.js
+    // of the wrapper is 62. That wrapper is defined in src/node.js
     //
     // If that wrapper is ever changed, then this number also has to be
     // updated. Or - someone could clean this up so that the two peices
@@ -1340,7 +1301,7 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     //
     // Even better would be to get support into V8 for wrappers that
     // shouldn't be reported to users.
-    int offset = linenum == 1 ? 70 : 0;
+    int offset = linenum == 1 ? 62 : 0;
 
     fprintf(stderr, "%s\n", sourceline_string + offset);
     // Print wavy underline (GetUnderline is deprecated).
@@ -1444,14 +1405,11 @@ static Handle<Value> Cwd(const Arguments& args) {
   return scope.Close(cwd);
 }
 
-
-#ifdef __POSIX__
-
-static Handle<Value> Umask(const Arguments& args){
+static Handle<Value> Umask(const Arguments& args) {
   HandleScope scope;
   unsigned int old;
 
-  if(args.Length() < 1 || args[0]->IsUndefined()) {
+  if (args.Length() < 1 || args[0]->IsUndefined()) {
     old = umask(0);
     umask((mode_t)old);
 
@@ -1485,12 +1443,15 @@ static Handle<Value> Umask(const Arguments& args){
 }
 
 
+#ifdef __POSIX__
+
 static Handle<Value> GetUid(const Arguments& args) {
   HandleScope scope;
   assert(args.Length() == 0);
   int uid = getuid();
   return scope.Close(Integer::New(uid));
 }
+
 
 static Handle<Value> GetGid(const Arguments& args) {
   HandleScope scope;
@@ -1539,6 +1500,7 @@ static Handle<Value> SetGid(const Arguments& args) {
   return Undefined();
 }
 
+
 static Handle<Value> SetUid(const Arguments& args) {
   HandleScope scope;
 
@@ -1578,6 +1540,7 @@ static Handle<Value> SetUid(const Arguments& args) {
   return Undefined();
 }
 
+
 #endif // __POSIX__
 
 
@@ -1602,7 +1565,7 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
     }
   }
 
-  double d = uv_now() - TICK_TIME(3);
+  double d = uv_now(uv_default_loop()) - TICK_TIME(3);
 
   //printfb("timer d = %f\n", d);
 
@@ -1685,6 +1648,7 @@ typedef void (*extInit)(Handle<Object> exports);
 // DLOpen is node.dlopen(). Used to load 'module.node' dynamically shared
 // objects.
 Handle<Value> DLOpen(const v8::Arguments& args) {
+  node_module_struct compat_mod;
   HandleScope scope;
 
   if (args.Length() < 2) return Undefined();
@@ -1727,10 +1691,13 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   // Get the init() function from the dynamically shared object.
   node_module_struct *mod = static_cast<node_module_struct *>(dlsym(handle, symstr));
   free(symstr);
+  symstr = NULL;
+
   // Error out if not found.
   if (mod == NULL) {
     /* Start Compatibility hack: Remove once everyone is using NODE_MODULE macro */
-    node_module_struct compat_mod;
+    memset(&compat_mod, 0, sizeof compat_mod);
+
     mod = &compat_mod;
     mod->version = NODE_MODULE_VERSION;
 
@@ -2102,13 +2069,23 @@ static Handle<Value> EnvGetterWarn(Local<String> property,
 static Handle<Value> EnvSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
+  HandleScope scope;
   String::Utf8Value key(property);
   String::Utf8Value val(value);
+
 #ifdef __POSIX__
   setenv(*key, *val, 1);
 #else  // __WIN32__
-  NO_IMPL_MSG(setenv)
+  int n = key.length() + val.length() + 2;
+  char* pair = new char[n];
+  snprintf(pair, n, "%s=%s", *key, *val);
+  int r = _putenv(pair);
+  if (r) {
+    fprintf(stderr, "error putenv: '%s'\n", pair);
+  }
+  delete [] pair;
 #endif
+
   return value;
 }
 
@@ -2126,15 +2103,26 @@ static Handle<Integer> EnvQuery(Local<String> property,
 
 static Handle<Boolean> EnvDeleter(Local<String> property,
                                   const AccessorInfo& info) {
+  HandleScope scope;
+
   String::Utf8Value key(property);
+
   if (getenv(*key)) {
 #ifdef __POSIX__
     unsetenv(*key);	// prototyped as `void unsetenv(const char*)` on some platforms
 #else
-    NO_IMPL_MSG(unsetenv)
+    int n = key.length() + 2;
+    char* pair = new char[n];
+    snprintf(pair, n, "%s=", *key);
+    int r = _putenv(pair);
+    if (r) {
+      fprintf(stderr, "error unsetenv: '%s'\n", pair);
+    }
+    delete [] pair;
 #endif
     return True();
   }
+
   return False();
 }
 
@@ -2162,9 +2150,19 @@ static Handle<Object> GetFeatures() {
   HandleScope scope;
 
   Local<Object> obj = Object::New();
+  obj->Set(String::NewSymbol("debug"),
+#if defined(DEBUG) && DEBUG
+    True()
+#else
+    False()
+#endif
+  );
+
   obj->Set(String::NewSymbol("uv"), Boolean::New(use_uv));
-  obj->Set(String::NewSymbol("http2"), Boolean::New(use_http2));
+  obj->Set(String::NewSymbol("http1"), Boolean::New(use_http1));
   obj->Set(String::NewSymbol("ipv6"), True()); // TODO ping libuv
+  obj->Set(String::NewSymbol("tls_npn"), Boolean::New(use_npn));
+  obj->Set(String::NewSymbol("tls_sni"), Boolean::New(use_sni));
   obj->Set(String::NewSymbol("tls"),
       Boolean::New(get_builtin_module("crypto") != NULL));
 
@@ -2189,8 +2187,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   // process.version
   process->Set(String::NewSymbol("version"), String::New(NODE_VERSION));
 
+#ifdef NODE_PREFIX
   // process.installPrefix
   process->Set(String::NewSymbol("installPrefix"), String::New(NODE_PREFIX));
+#endif
 
   // process.moduleLoadList
   module_load_list = Persistent<Array>::New(Array::New());
@@ -2205,7 +2205,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   versions->Set(String::NewSymbol("ares"), String::New(ARES_VERSION_STR));
   snprintf(buf, 20, "%d.%d", UV_VERSION_MAJOR, UV_VERSION_MINOR);
   versions->Set(String::NewSymbol("uv"), String::New(buf));
-#ifdef HAVE_OPENSSL
+#if HAVE_OPENSSL
   // Stupid code to slice out the version string.
   int c, l = strlen(OPENSSL_VERSION_TEXT);
   for (i = 0; i < l; i++) {
@@ -2273,13 +2273,14 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   }
 
   size_t size = 2*PATH_MAX;
-  char execPath[size];
+  char* execPath = new char[size];
   if (uv_exepath(execPath, &size) != 0) {
     // as a last ditch effort, fallback on argv[0] ?
     process->Set(String::NewSymbol("execPath"), String::New(argv[0]));
   } else {
     process->Set(String::NewSymbol("execPath"), String::New(execPath, size));
   }
+  delete [] execPath;
 
 
   // define various internal methods
@@ -2289,6 +2290,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "chdir", Chdir);
   NODE_SET_METHOD(process, "cwd", Cwd);
 
+  NODE_SET_METHOD(process, "umask", Umask);
+
 #ifdef __POSIX__
   NODE_SET_METHOD(process, "getuid", GetUid);
   NODE_SET_METHOD(process, "setuid", SetUid);
@@ -2296,7 +2299,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "setgid", SetGid);
   NODE_SET_METHOD(process, "getgid", GetGid);
 
-  NODE_SET_METHOD(process, "umask", Umask);
   NODE_SET_METHOD(process, "dlopen", DLOpen);
   NODE_SET_METHOD(process, "_kill", Kill);
 #endif // __POSIX__
@@ -2407,8 +2409,8 @@ static void PrintHelp() {
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
-         "  --use-uv             use the libuv backend\n"
-         "  --use-http2          use the new and improved http library\n"
+         "  --use-legacy         use the legacy backend (default: libuv)\n"
+         "  --use-http1          use the legacy http library\n"
          "\n"
          "Enviromental variables:\n"
          "NODE_PATH              ':'-separated list of directories\n"
@@ -2430,18 +2432,22 @@ static void ParseArgs(int argc, char **argv) {
     if (strstr(arg, "--debug") == arg) {
       ParseDebugOpt(arg);
       argv[i] = const_cast<char*>("");
-    } else if (!strcmp(arg, "--use-uv")) {
-      use_uv = true;
+    } else if (!strcmp(arg, "--use-legacy")) {
+      use_uv = false;
       argv[i] = const_cast<char*>("");
-    } else if (!strcmp(arg, "--use-http2")) {
-      use_http2 = true;
+    } else if (!strcmp(arg, "--use-http1")) {
+      use_http1 = true;
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
       exit(0);
     } else if (strcmp(arg, "--vars") == 0) {
+#ifdef NODE_PREFIX
       printf("NODE_PREFIX: %s\n", NODE_PREFIX);
+#endif
+#ifdef NODE_CFLAGS
       printf("NODE_CFLAGS: %s\n", NODE_CFLAGS);
+#endif
       exit(0);
     } else if (strstr(arg, "--max-stack-size=") == arg) {
       const char *p = 0;
@@ -2566,48 +2572,26 @@ char** Init(int argc, char *argv[]) {
   RegisterSignalHandler(SIGTERM, SignalExit);
 #endif // __POSIX__
 
-#ifdef __MINGW32__
-  // Initialize winsock and soem related caches
-  wsa_init();
-#endif // __MINGW32__
-
-  uv_prepare_init(&node::prepare_tick_watcher);
+  uv_prepare_init(uv_default_loop(), &node::prepare_tick_watcher);
   uv_prepare_start(&node::prepare_tick_watcher, PrepareTick);
-  uv_unref();
+  uv_unref(uv_default_loop());
 
-  uv_check_init(&node::check_tick_watcher);
+  uv_check_init(uv_default_loop(), &node::check_tick_watcher);
   uv_check_start(&node::check_tick_watcher, node::CheckTick);
-  uv_unref();
+  uv_unref(uv_default_loop());
 
-  uv_idle_init(&node::tick_spinner);
-  uv_unref();
+  uv_idle_init(uv_default_loop(), &node::tick_spinner);
+  uv_unref(uv_default_loop());
 
-  uv_check_init(&node::gc_check);
+  uv_check_init(uv_default_loop(), &node::gc_check);
   uv_check_start(&node::gc_check, node::Check);
-  uv_unref();
+  uv_unref(uv_default_loop());
 
-  uv_idle_init(&node::gc_idle);
-  uv_unref();
+  uv_idle_init(uv_default_loop(), &node::gc_idle);
+  uv_unref(uv_default_loop());
 
-  uv_timer_init(&node::gc_timer);
-  uv_unref();
-
-  // Setup the EIO thread pool. It requires 3, yes 3, watchers.
-  {
-    uv_idle_init(&node::eio_poller);
-    uv_idle_start(&eio_poller, node::DoPoll);
-
-    uv_async_init(&node::eio_want_poll_notifier, node::WantPollNotifier);
-    uv_unref();
-
-    uv_async_init(&node::eio_done_poll_notifier, node::DonePollNotifier);
-    uv_unref();
-
-    eio_init(node::EIOWantPoll, node::EIODonePoll);
-    // Don't handle more than 10 reqs on each eio_poll(). This is to avoid
-    // race conditions. See test/simple/test-eio-race.js
-    eio_set_max_poll_reqs(10);
-  }
+  uv_timer_init(uv_default_loop(), &node::gc_timer);
+  uv_unref(uv_default_loop());
 
   V8::SetFatalErrorHandler(node::OnFatalError);
 
@@ -2619,9 +2603,10 @@ char** Init(int argc, char *argv[]) {
   // main thread to execute a random bit of javascript - which will give V8
   // control so it can handle whatever new message had been received on the
   // debug thread.
-  uv_async_init(&node::debug_watcher, node::DebugMessageCallback);
+  uv_async_init(uv_default_loop(), &node::debug_watcher,
+      node::DebugMessageCallback);
   // unref it so that we exit the event loop despite it being active.
-  uv_unref();
+  uv_unref(uv_default_loop());
 
 
   // If the --debug flag was specified then initialize the debug thread.
@@ -2653,11 +2638,9 @@ void EmitExit(v8::Handle<v8::Object> process) {
 
 int Start(int argc, char *argv[]) {
 
-#if defined __MINGW32__ && defined PTW32_STATIC_LIB
+#if (defined(__MINGW32__) || defined(_MSC_VER)) && defined(PTW32_STATIC_LIB)
   pthread_win32_process_attach_np();
 #endif
-
-  uv_init();
 
   // This needs to run *before* V8::Initialize()
   argv = Init(argc, argv);
@@ -2670,6 +2653,7 @@ int Start(int argc, char *argv[]) {
   v8::Context::Scope context_scope(context);
 
   Handle<Object> process = SetupProcessObject(argc, argv);
+  v8_typed_array::AttachBindings(context->Global());
 
   // Create all the objects, load modules, do everything.
   // so your next reading stop should be node::Load()!
@@ -2680,7 +2664,7 @@ int Start(int argc, char *argv[]) {
   // there are no watchers on the loop (except for the ones that were
   // uv_unref'd) then this function exits. As long as there are active
   // watchers, it blocks.
-  uv_run();
+  uv_run(uv_default_loop());
 
   EmitExit(process);
 
@@ -2690,7 +2674,7 @@ int Start(int argc, char *argv[]) {
   V8::Dispose();
 #endif  // NDEBUG
 
-#if defined __MINGW32__ && defined PTW32_STATIC_LIB
+#if (defined(__MINGW32__) || defined(_MSC_VER)) && defined(PTW32_STATIC_LIB)
   pthread_win32_process_detach_np();
 #endif
 

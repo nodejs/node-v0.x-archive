@@ -99,10 +99,10 @@ static int make_code(TypeCode type, int id) {
 
 
 TEST(ExternalReferenceEncoder) {
-  OS::Setup();
   Isolate* isolate = i::Isolate::Current();
   isolate->stats_table()->SetCounterFunction(counter_function);
-  HEAP->Setup(false);
+  v8::V8::Initialize();
+
   ExternalReferenceEncoder encoder;
   CHECK_EQ(make_code(BUILTIN, Builtins::kArrayCode),
            Encode(encoder, Builtins::kArrayCode));
@@ -139,10 +139,10 @@ TEST(ExternalReferenceEncoder) {
 
 
 TEST(ExternalReferenceDecoder) {
-  OS::Setup();
   Isolate* isolate = i::Isolate::Current();
   isolate->stats_table()->SetCounterFunction(counter_function);
-  HEAP->Setup(false);
+  v8::V8::Initialize();
+
   ExternalReferenceDecoder decoder;
   CHECK_EQ(AddressOf(Builtins::kArrayCode),
            decoder.Decode(make_code(BUILTIN, Builtins::kArrayCode)));
@@ -459,7 +459,9 @@ DEPENDENT_TEST(PartialDeserialization, PartialSerialization) {
       CHECK(root->IsString());
     }
     v8::HandleScope handle_scope;
-    Handle<Object>root_handle(root);
+    Handle<Object> root_handle(root);
+
+    ReserveSpaceForPartialSnapshot(file_name);
 
     Object* root2;
     {
@@ -542,7 +544,9 @@ DEPENDENT_TEST(ContextDeserialization, ContextSerialization) {
       CHECK(root->IsContext());
     }
     v8::HandleScope handle_scope;
-    Handle<Object>root_handle(root);
+    Handle<Object> root_handle(root);
+
+    ReserveSpaceForPartialSnapshot(file_name);
 
     Object* root2;
     {

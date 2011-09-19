@@ -93,7 +93,8 @@ class Scope: public ZoneObject {
     EVAL_SCOPE,      // The top-level scope for an eval source.
     FUNCTION_SCOPE,  // The top-level scope for a function.
     GLOBAL_SCOPE,    // The top-level scope for a program or a top-level eval.
-    CATCH_SCOPE      // The scope introduced by catch.
+    CATCH_SCOPE,     // The scope introduced by catch.
+    BLOCK_SCOPE      // The scope introduced by a new block.
   };
 
   Scope(Scope* outer_scope, Type type);
@@ -110,6 +111,11 @@ class Scope: public ZoneObject {
   void SetScopeName(Handle<String> scope_name) { scope_name_ = scope_name; }
 
   void Initialize(bool inside_with);
+
+  // Checks if the block scope is redundant, i.e. it does not contain any
+  // block scoped declarations. In that case it is removed from the scope
+  // tree and its children are reparented.
+  Scope* FinalizeBlockScope();
 
   // ---------------------------------------------------------------------------
   // Declarations
@@ -129,7 +135,7 @@ class Scope: public ZoneObject {
   // Declare a parameter in this scope.  When there are duplicated
   // parameters the rightmost one 'wins'.  However, the implementation
   // expects all parameters to be declared and from left to right.
-  void DeclareParameter(Handle<String> name);
+  void DeclareParameter(Handle<String> name, Variable::Mode mode);
 
   // Declare a local variable in this scope. If the variable has been
   // declared before, the previously declared variable is returned.
@@ -181,6 +187,10 @@ class Scope: public ZoneObject {
   // Check if the scope has (at least) one illegal redeclaration.
   bool HasIllegalRedeclaration() const { return illegal_redecl_ != NULL; }
 
+  // For harmony block scoping mode: Check if the scope has conflicting var
+  // declarations, i.e. a var declaration that has been hoisted from a nested
+  // scope over a let binding of the same name.
+  Declaration* CheckConflictingVarDeclarations();
 
   // ---------------------------------------------------------------------------
   // Scope-specific info.
@@ -204,6 +214,7 @@ class Scope: public ZoneObject {
   bool is_function_scope() const { return type_ == FUNCTION_SCOPE; }
   bool is_global_scope() const { return type_ == GLOBAL_SCOPE; }
   bool is_catch_scope() const { return type_ == CATCH_SCOPE; }
+  bool is_block_scope() const { return type_ == BLOCK_SCOPE; }
   bool is_strict_mode() const { return strict_mode_; }
   bool is_strict_mode_eval_scope() const {
     return is_eval_scope() && is_strict_mode();
@@ -233,7 +244,7 @@ class Scope: public ZoneObject {
   // The variable holding the function literal for named function
   // literals, or NULL.
   // Only valid for function scopes.
-  Variable* function() const {
+  VariableProxy* function() const {
     ASSERT(is_function_scope());
     return function_;
   }
@@ -294,6 +305,8 @@ class Scope: public ZoneObject {
   // where var declarations will be hoisted to in the implementation.
   Scope* DeclarationScope();
 
+  Handle<SerializedScopeInfo> GetSerializedScopeInfo();
+
   // ---------------------------------------------------------------------------
   // Strict mode support.
   bool IsDeclared(Handle<String> name) {
@@ -350,18 +363,24 @@ class Scope: public ZoneObject {
   // Convenience variable.
   Variable* receiver_;
   // Function variable, if any; function scopes only.
-  Variable* function_;
+  VariableProxy* function_;
   // Convenience variable; function scopes only.
   Variable* arguments_;
 
   // Illegal redeclaration.
   Expression* illegal_redecl_;
 
-  // Scope-specific information.
-  bool scope_inside_with_;  // this scope is inside a 'with' of some outer scope
-  bool scope_contains_with_;  // this scope contains a 'with' statement
-  bool scope_calls_eval_;  // this scope contains an 'eval' call
-  bool strict_mode_;  // this scope is a strict mode scope
+  // Scope-specific information computed during parsing.
+  //
+  // This scope is inside a 'with' of some outer scope.
+  bool scope_inside_with_;
+  // This scope contains a 'with' statement.
+  bool scope_contains_with_;
+  // This scope or a nested catch scope or with scope contain an 'eval' call. At
+  // the 'eval' call site this scope is the declaration scope.
+  bool scope_calls_eval_;
+  // This scope is a strict mode scope.
+  bool strict_mode_;
 
   // Computed via PropagateScopeInfo.
   bool outer_scope_calls_eval_;
@@ -391,7 +410,7 @@ class Scope: public ZoneObject {
 
   // Variable resolution.
   Variable* LookupRecursive(Handle<String> name,
-                            bool inner_lookup,
+                            bool from_inner_function,
                             Variable** invalidated_local);
   void ResolveVariable(Scope* global_scope,
                        Handle<Context> context,
@@ -419,15 +438,11 @@ class Scope: public ZoneObject {
   void AllocateVariablesRecursively();
 
  private:
-  // Construct a function scope based on the scope info.
-  Scope(Scope* inner_scope, Handle<SerializedScopeInfo> scope_info);
+  // Construct a function or block scope based on the scope info.
+  Scope(Scope* inner_scope, Type type, Handle<SerializedScopeInfo> scope_info);
 
   // Construct a catch scope with a binding for the name.
   Scope(Scope* inner_scope, Handle<String> catch_variable_name);
-
-  inline Slot* NewSlot(Variable* var, Slot::Type type, int index) {
-    return new(isolate_->zone()) Slot(isolate_, var, type, index);
-  }
 
   void AddInnerScope(Scope* inner_scope) {
     if (inner_scope != NULL) {

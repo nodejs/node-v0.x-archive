@@ -311,13 +311,13 @@ void LCallKeyed::PrintDataTo(StringStream* stream) {
 
 
 void LCallNamed::PrintDataTo(StringStream* stream) {
-  SmartPointer<char> name_string = name()->ToCString();
+  SmartArrayPointer<char> name_string = name()->ToCString();
   stream->Add("%s #%d / ", *name_string, arity());
 }
 
 
 void LCallGlobal::PrintDataTo(StringStream* stream) {
-  SmartPointer<char> name_string = name()->ToCString();
+  SmartArrayPointer<char> name_string = name()->ToCString();
   stream->Add("%s #%d / ", *name_string, arity());
 }
 
@@ -546,7 +546,8 @@ LChunk* LChunkBuilder::Build() {
 
 void LChunkBuilder::Abort(const char* format, ...) {
   if (FLAG_trace_bailout) {
-    SmartPointer<char> name(info()->shared_info()->DebugName()->ToCString());
+    SmartArrayPointer<char> name(
+        info()->shared_info()->DebugName()->ToCString());
     PrintF("Aborting LChunk building in @\"%s\": ", *name);
     va_list arguments;
     va_start(arguments, format);
@@ -1039,7 +1040,7 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
         : instr->SecondSuccessor();
     return new LGoto(successor->block_id());
   }
-  return new LBranch(UseRegisterAtStart(v));
+  return AssignEnvironment(new LBranch(UseRegister(v)));
 }
 
 
@@ -1399,7 +1400,6 @@ LInstruction* LChunkBuilder::DoPower(HPower* instr) {
 
 LInstruction* LChunkBuilder::DoCompareGeneric(HCompareGeneric* instr) {
   Token::Value op = instr->token();
-  Representation r = instr->GetInputRepresentation();
   ASSERT(instr->left()->representation().IsTagged());
   ASSERT(instr->right()->representation().IsTagged());
   bool reversed = (op == Token::GT || op == Token::LTE);
@@ -1509,16 +1509,10 @@ LInstruction* LChunkBuilder::DoJSArrayLength(HJSArrayLength* instr) {
 }
 
 
-LInstruction* LChunkBuilder::DoExternalArrayLength(
-    HExternalArrayLength* instr) {
+LInstruction* LChunkBuilder::DoFixedArrayBaseLength(
+    HFixedArrayBaseLength* instr) {
   LOperand* array = UseRegisterAtStart(instr->value());
-  return DefineAsRegister(new LExternalArrayLength(array));
-}
-
-
-LInstruction* LChunkBuilder::DoFixedArrayLength(HFixedArrayLength* instr) {
-  LOperand* array = UseRegisterAtStart(instr->value());
-  return DefineAsRegister(new LFixedArrayLength(array));
+  return DefineAsRegister(new LFixedArrayBaseLength(array));
 }
 
 
@@ -1867,15 +1861,15 @@ LInstruction* LChunkBuilder::DoLoadKeyedFastDoubleElement(
 
 LInstruction* LChunkBuilder::DoLoadKeyedSpecializedArrayElement(
     HLoadKeyedSpecializedArrayElement* instr) {
-  JSObject::ElementsKind elements_kind = instr->elements_kind();
+  ElementsKind elements_kind = instr->elements_kind();
   Representation representation(instr->representation());
   ASSERT(
       (representation.IsInteger32() &&
-       (elements_kind != JSObject::EXTERNAL_FLOAT_ELEMENTS) &&
-       (elements_kind != JSObject::EXTERNAL_DOUBLE_ELEMENTS)) ||
+       (elements_kind != EXTERNAL_FLOAT_ELEMENTS) &&
+       (elements_kind != EXTERNAL_DOUBLE_ELEMENTS)) ||
       (representation.IsDouble() &&
-       ((elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS) ||
-       (elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS))));
+       ((elements_kind == EXTERNAL_FLOAT_ELEMENTS) ||
+       (elements_kind == EXTERNAL_DOUBLE_ELEMENTS))));
   ASSERT(instr->key()->representation().IsInteger32());
   LOperand* external_pointer = UseRegister(instr->external_pointer());
   LOperand* key = UseRegisterOrConstant(instr->key());
@@ -1884,7 +1878,7 @@ LInstruction* LChunkBuilder::DoLoadKeyedSpecializedArrayElement(
   LInstruction* load_instr = DefineAsRegister(result);
   // An unsigned int array load might overflow and cause a deopt, make sure it
   // has an environment.
-  return (elements_kind == JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS) ?
+  return (elements_kind == EXTERNAL_UNSIGNED_INT_ELEMENTS) ?
       AssignEnvironment(load_instr) : load_instr;
 }
 
@@ -1935,21 +1929,21 @@ LInstruction* LChunkBuilder::DoStoreKeyedFastDoubleElement(
 LInstruction* LChunkBuilder::DoStoreKeyedSpecializedArrayElement(
     HStoreKeyedSpecializedArrayElement* instr) {
   Representation representation(instr->value()->representation());
-  JSObject::ElementsKind elements_kind = instr->elements_kind();
+  ElementsKind elements_kind = instr->elements_kind();
   ASSERT(
       (representation.IsInteger32() &&
-       (elements_kind != JSObject::EXTERNAL_FLOAT_ELEMENTS) &&
-       (elements_kind != JSObject::EXTERNAL_DOUBLE_ELEMENTS)) ||
+       (elements_kind != EXTERNAL_FLOAT_ELEMENTS) &&
+       (elements_kind != EXTERNAL_DOUBLE_ELEMENTS)) ||
       (representation.IsDouble() &&
-       ((elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS) ||
-       (elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS))));
+       ((elements_kind == EXTERNAL_FLOAT_ELEMENTS) ||
+       (elements_kind == EXTERNAL_DOUBLE_ELEMENTS))));
   ASSERT(instr->external_pointer()->representation().IsExternal());
   ASSERT(instr->key()->representation().IsInteger32());
 
   LOperand* external_pointer = UseRegister(instr->external_pointer());
   bool val_is_temp_register =
-      elements_kind == JSObject::EXTERNAL_PIXEL_ELEMENTS ||
-      elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS;
+      elements_kind == EXTERNAL_PIXEL_ELEMENTS ||
+      elements_kind == EXTERNAL_FLOAT_ELEMENTS;
   LOperand* val = val_is_temp_register
       ? UseTempRegister(instr->value())
       : UseRegister(instr->value());
@@ -2006,8 +2000,8 @@ LInstruction* LChunkBuilder::DoStringAdd(HStringAdd* instr) {
 
 
 LInstruction* LChunkBuilder::DoStringCharCodeAt(HStringCharCodeAt* instr) {
-  LOperand* string = UseRegister(instr->string());
-  LOperand* index = UseRegisterOrConstant(instr->index());
+  LOperand* string = UseTempRegister(instr->string());
+  LOperand* index = UseTempRegister(instr->index());
   LStringCharCodeAt* result = new LStringCharCodeAt(string, index);
   return AssignEnvironment(AssignPointerMap(DefineAsRegister(result)));
 }

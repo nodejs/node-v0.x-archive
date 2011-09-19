@@ -28,8 +28,18 @@
 #ifndef V8_PREPARSER_H
 #define V8_PREPARSER_H
 
+#include "token.h"
+#include "scanner.h"
+
 namespace v8 {
+
+namespace internal {
+class UnicodeCache;
+}
+
 namespace preparser {
+
+typedef uint8_t byte;
 
 // Preparsing checks a JavaScript program and emits preparse-data that helps
 // a later parsing to be faster.
@@ -46,6 +56,53 @@ namespace preparser {
 
 namespace i = v8::internal;
 
+class DuplicateFinder {
+ public:
+  explicit DuplicateFinder(i::UnicodeCache* constants)
+      : unicode_constants_(constants),
+        backing_store_(16),
+        map_(&Match) { }
+
+  int AddAsciiSymbol(i::Vector<const char> key, int value);
+  int AddUC16Symbol(i::Vector<const uint16_t> key, int value);
+  // Add a a number literal by converting it (if necessary)
+  // to the string that ToString(ToNumber(literal)) would generate.
+  // and then adding that string with AddAsciiSymbol.
+  // This string is the actual value used as key in an object literal,
+  // and the one that must be different from the other keys.
+  int AddNumber(i::Vector<const char> key, int value);
+
+ private:
+  int AddSymbol(i::Vector<const byte> key, bool is_ascii, int value);
+  // Backs up the key and its length in the backing store.
+  // The backup is stored with a base 127 encoding of the
+  // length (plus a bit saying whether the string is ASCII),
+  // followed by the bytes of the key.
+  byte* BackupKey(i::Vector<const byte> key, bool is_ascii);
+
+  // Compare two encoded keys (both pointing into the backing store)
+  // for having the same base-127 encoded lengths and ASCII-ness,
+  // and then having the same 'length' bytes following.
+  static bool Match(void* first, void* second);
+  // Creates a hash from a sequence of bytes.
+  static uint32_t Hash(i::Vector<const byte> key, bool is_ascii);
+  // Checks whether a string containing a JS number is its canonical
+  // form.
+  static bool IsNumberCanonical(i::Vector<const char> key);
+
+  // Size of buffer. Sufficient for using it to call DoubleToCString in
+  // from conversions.h.
+  static const int kBufferSize = 100;
+
+  i::UnicodeCache* unicode_constants_;
+  // Backing store used to store strings used as hashmap keys.
+  i::SequenceCollector<unsigned char> backing_store_;
+  i::HashMap map_;
+  // Buffer used for string->number->canonical string conversions.
+  char number_buffer_[kBufferSize];
+};
+
+
 class PreParser {
  public:
   enum PreParseResult {
@@ -53,7 +110,7 @@ class PreParser {
     kPreParseSuccess
   };
 
-  ~PreParser() { }
+  ~PreParser() {}
 
   // Pre-parse the program from the character stream; returns true on
   // success (even if parsing failed, the pre-parse data successfully
@@ -67,6 +124,45 @@ class PreParser {
   }
 
  private:
+  // Used to detect duplicates in object literals. Each of the values
+  // kGetterProperty, kSetterProperty and kValueProperty represents
+  // a type of object literal property. When parsing a property, its
+  // type value is stored in the DuplicateFinder for the property name.
+  // Values are chosen so that having intersection bits means the there is
+  // an incompatibility.
+  // I.e., you can add a getter to a property that already has a setter, since
+  // kGetterProperty and kSetterProperty doesn't intersect, but not if it
+  // already has a getter or a value. Adding the getter to an existing
+  // setter will store the value (kGetterProperty | kSetterProperty), which
+  // is incompatible with adding any further properties.
+  enum PropertyType {
+    kNone = 0,
+    // Bit patterns representing different object literal property types.
+    kGetterProperty = 1,
+    kSetterProperty = 2,
+    kValueProperty = 7,
+    // Helper constants.
+    kValueFlag = 4
+  };
+
+  // Checks the type of conflict based on values coming from PropertyType.
+  bool HasConflict(int type1, int type2) { return (type1 & type2) != 0; }
+  bool IsDataDataConflict(int type1, int type2) {
+    return ((type1 & type2) & kValueFlag) != 0;
+  }
+  bool IsDataAccessorConflict(int type1, int type2) {
+    return ((type1 ^ type2) & kValueFlag) != 0;
+  }
+  bool IsAccessorAccessorConflict(int type1, int type2) {
+    return ((type1 | type2) & kValueFlag) == 0;
+  }
+
+
+  void CheckDuplicate(DuplicateFinder* finder,
+                      i::Token::Value property,
+                      int type,
+                      bool* ok);
+
   // These types form an algebra over syntactic categories that is just
   // rich enough to let us recognize and propagate the constructs that
   // are either being counted in the preparser data, or is important
@@ -75,6 +171,12 @@ class PreParser {
   enum ScopeType {
     kTopLevelScope,
     kFunctionScope
+  };
+
+  enum VariableDeclarationContext {
+    kSourceElement,
+    kStatement,
+    kForStatement
   };
 
   class Expression;
@@ -344,7 +446,8 @@ class PreParser {
         strict_mode_violation_type_(NULL),
         stack_overflow_(false),
         allow_lazy_(true),
-        parenthesized_function_(false) { }
+        parenthesized_function_(false),
+        harmony_block_scoping_(scanner->HarmonyBlockScoping()) { }
 
   // Preparse the program. Only called in PreParseProgram after creating
   // the instance.
@@ -364,6 +467,11 @@ class PreParser {
 
   // Report syntax error
   void ReportUnexpectedToken(i::Token::Value token);
+  void ReportMessageAt(i::Scanner::Location location,
+                       const char* type,
+                       const char* name_opt) {
+    log_->LogMessage(location.beg_pos, location.end_pos, type, name_opt);
+  }
   void ReportMessageAt(int start_pos,
                        int end_pos,
                        const char* type,
@@ -377,12 +485,16 @@ class PreParser {
   // which is set to false if parsing failed; it is unchanged otherwise.
   // By making the 'exception handling' explicit, we are forced to check
   // for failure at the call sites.
+  Statement ParseSourceElement(bool* ok);
   SourceElements ParseSourceElements(int end_token, bool* ok);
   Statement ParseStatement(bool* ok);
   Statement ParseFunctionDeclaration(bool* ok);
   Statement ParseBlock(bool* ok);
-  Statement ParseVariableStatement(bool* ok);
-  Statement ParseVariableDeclarations(bool accept_IN, int* num_decl, bool* ok);
+  Statement ParseVariableStatement(VariableDeclarationContext var_context,
+                                   bool* ok);
+  Statement ParseVariableDeclarations(VariableDeclarationContext var_context,
+                                      int* num_decl,
+                                      bool* ok);
   Statement ParseExpressionOrLabelledStatement(bool* ok);
   Statement ParseIfStatement(bool* ok);
   Statement ParseContinueStatement(bool* ok);
@@ -496,6 +608,7 @@ class PreParser {
   bool stack_overflow_;
   bool allow_lazy_;
   bool parenthesized_function_;
+  bool harmony_block_scoping_;
 };
 } }  // v8::preparser
 

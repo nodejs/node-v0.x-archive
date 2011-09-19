@@ -97,13 +97,16 @@ const char* V8NameConverter::NameInCode(byte* addr) const {
 }
 
 
-static void DumpBuffer(FILE* f, char* buff) {
+static void DumpBuffer(FILE* f, StringBuilder* out) {
   if (f == NULL) {
-    PrintF("%s", buff);
+    PrintF("%s\n", out->Finalize());
   } else {
-    fprintf(f, "%s", buff);
+    fprintf(f, "%s\n", out->Finalize());
   }
+  out->Reset();
 }
+
+
 
 static const int kOutBufferSize = 2048 + String::kMaxShortPrintLength;
 static const int kRelocInfoPosition = 57;
@@ -119,6 +122,7 @@ static int DecodeIt(FILE* f,
 
   v8::internal::EmbeddedVector<char, 128> decode_buffer;
   v8::internal::EmbeddedVector<char, kOutBufferSize> out_buffer;
+  StringBuilder out(out_buffer.start(), out_buffer.length());
   byte* pc = begin;
   disasm::Disassembler d(converter);
   RelocIterator* it = NULL;
@@ -181,16 +185,11 @@ static int DecodeIt(FILE* f,
       }
     }
 
-    StringBuilder out(out_buffer.start(), out_buffer.length());
-
     // Comments.
     for (int i = 0; i < comments.length(); i++) {
-      out.AddFormatted("                  %s\n", comments[i]);
+      out.AddFormatted("                  %s", comments[i]);
+      DumpBuffer(f, &out);
     }
-
-    // Write out comments, resets outp so that we can format the next line.
-    DumpBuffer(f, out.Finalize());
-    out.Reset();
 
     // Instruction address and instruction offset.
     out.AddFormatted("%p  %4d  ", prev_pc, prev_pc - begin);
@@ -209,7 +208,7 @@ static int DecodeIt(FILE* f,
         out.AddPadding(' ', kRelocInfoPosition - out.position());
       } else {
         // Additional reloc infos are printed on separate lines.
-        out.AddFormatted("\n");
+        DumpBuffer(f, &out);
         out.AddPadding(' ', kRelocInfoPosition);
       }
 
@@ -224,7 +223,7 @@ static int DecodeIt(FILE* f,
         HeapStringAllocator allocator;
         StringStream accumulator(&allocator);
         relocinfo.target_object()->ShortPrint(&accumulator);
-        SmartPointer<const char> obj_name = accumulator.ToCString();
+        SmartArrayPointer<const char> obj_name = accumulator.ToCString();
         out.AddFormatted("    ;; object: %s", *obj_name);
       } else if (rmode == RelocInfo::EXTERNAL_REFERENCE) {
         const char* reference_name =
@@ -247,9 +246,6 @@ static int DecodeIt(FILE* f,
           if (ic_state == MONOMORPHIC) {
             PropertyType type = code->type();
             out.AddFormatted(", %s", Code::PropertyType2String(type));
-          }
-          if (code->ic_in_loop() == IN_LOOP) {
-            out.AddFormatted(", in_loop");
           }
           if (kind == Code::CALL_IC || kind == Code::KEYED_CALL_IC) {
             out.AddFormatted(", argc = %d", code->arguments_count());
@@ -299,9 +295,18 @@ static int DecodeIt(FILE* f,
         out.AddFormatted("    ;; %s", RelocInfo::RelocModeName(rmode));
       }
     }
-    out.AddString("\n");
-    DumpBuffer(f, out.Finalize());
-    out.Reset();
+    DumpBuffer(f, &out);
+  }
+
+  // Emit comments following the last instruction (if any).
+  if (it != NULL) {
+    for ( ; !it->done(); it->next()) {
+      if (RelocInfo::IsComment(it->rinfo()->rmode())) {
+        out.AddFormatted("                  %s",
+                         reinterpret_cast<const char*>(it->rinfo()->data()));
+        DumpBuffer(f, &out);
+      }
+    }
   }
 
   delete it;

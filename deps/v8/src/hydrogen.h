@@ -102,6 +102,7 @@ class HBasicBlock: public ZoneObject {
   void RemovePhi(HPhi* phi);
   void AddInstruction(HInstruction* instr);
   bool Dominates(HBasicBlock* other) const;
+  int LoopNestingDepth() const;
 
   void SetInitialEnvironment(HEnvironment* env);
   void ClearEnvironment() { last_environment_ = NULL; }
@@ -238,10 +239,14 @@ class HGraph: public ZoneObject {
   void OrderBlocks();
   void AssignDominators();
   void ReplaceCheckedValues();
-  void MarkAsDeoptimizingRecursively(HBasicBlock* block);
+  void PropagateDeoptimizingMark();
 
   // Returns false if there are phi-uses of the arguments-object
   // which are not supported by the optimizing compiler.
+  bool CheckPhis();
+
+  // Returns false if there are phi-uses of hole values comming
+  // from uninitialized consts.
   bool CollectPhis();
 
   Handle<Code> Compile(CompilationInfo* info);
@@ -293,6 +298,7 @@ class HGraph: public ZoneObject {
   HConstant* GetConstant(SetOncePointer<HConstant>* pointer,
                          Object* value);
 
+  void MarkAsDeoptimizingRecursively(HBasicBlock* block);
   void InsertTypeConversions(HInstruction* instr);
   void PropagateMinusZeroChecks(HValue* value, BitVector* visited);
   void RecursivelyMarkPhiDeoptimizeOnUndefined(HPhi* phi);
@@ -450,12 +456,11 @@ class HEnvironment: public ZoneObject {
   // by 1 (receiver is parameter index -1 but environment index 0).
   // Stack-allocated local indices are shifted by the number of parameters.
   int IndexFor(Variable* variable) const {
-    Slot* slot = variable->AsSlot();
-    ASSERT(slot != NULL && slot->IsStackAllocated());
-    int shift = (slot->type() == Slot::PARAMETER)
+    ASSERT(variable->IsStackAllocated());
+    int shift = variable->IsParameter()
         ? 1
         : parameter_count_ + specials_count_;
-    return slot->index() + shift;
+    return variable->index() + shift;
   }
 
   Handle<JSFunction> closure_;
@@ -719,6 +724,8 @@ class HGraphBuilder: public AstVisitor {
                           HBasicBlock* second,
                           int join_id);
 
+  TypeFeedbackOracle* oracle() const { return function_state()->oracle(); }
+
  private:
   // Type of a member function that generates inline code for a native function.
   typedef void (HGraphBuilder::*InlineFunctionGenerator)(CallRuntime* call);
@@ -747,7 +754,6 @@ class HGraphBuilder: public AstVisitor {
   CompilationInfo* info() const {
     return function_state()->compilation_info();
   }
-  TypeFeedbackOracle* oracle() const { return function_state()->oracle(); }
 
   AstContext* call_context() const {
     return function_state()->call_context();
@@ -772,6 +778,10 @@ class HGraphBuilder: public AstVisitor {
   INLINE_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_DECLARATION)
   INLINE_RUNTIME_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_DECLARATION)
 #undef INLINE_FUNCTION_GENERATOR_DECLARATION
+
+  void HandleDeclaration(VariableProxy* proxy,
+                         Variable::Mode mode,
+                         FunctionLiteral* function);
 
   void VisitDelete(UnaryOperation* expr);
   void VisitVoid(UnaryOperation* expr);
@@ -845,7 +855,6 @@ class HGraphBuilder: public AstVisitor {
                            TypeInfo info,
                            HValue* value,
                            Representation rep);
-  void AssumeRepresentation(HValue* value, Representation rep);
   static Representation ToRepresentation(TypeInfo info);
 
   void SetupScope(Scope* scope);
@@ -868,7 +877,10 @@ class HGraphBuilder: public AstVisitor {
                                             bool is_store);
 
   bool TryArgumentsAccess(Property* expr);
+
+  // Try to optimize fun.apply(receiver, arguments) pattern.
   bool TryCallApply(Call* expr);
+
   bool TryInline(Call* expr);
   bool TryInlineBuiltinFunction(Call* expr,
                                 HValue* receiver,
@@ -892,11 +904,11 @@ class HGraphBuilder: public AstVisitor {
   void HandlePolymorphicStoreNamedField(Assignment* expr,
                                         HValue* object,
                                         HValue* value,
-                                        ZoneMapList* types,
+                                        SmallMapList* types,
                                         Handle<String> name);
   void HandlePolymorphicCallNamed(Call* expr,
                                   HValue* receiver,
-                                  ZoneMapList* types,
+                                  SmallMapList* types,
                                   Handle<String> name);
   void HandleLiteralCompareTypeof(CompareOperation* compare_expr,
                                   Expression* expr,
@@ -924,7 +936,7 @@ class HGraphBuilder: public AstVisitor {
       HValue* external_elements,
       HValue* checked_key,
       HValue* val,
-      JSObject::ElementsKind elements_kind,
+      ElementsKind elements_kind,
       bool is_store);
 
   HInstruction* BuildMonomorphicElementAccess(HValue* object,

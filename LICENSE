@@ -46,11 +46,10 @@ The externally maintained libraries used by Node are:
     Greg Hudson, Daniel Stenberg and others, and released under the MIT
     license.
 
-  - Node, optionally, dynamically links to OpenSSL, cryptographic software
-    written by Eric Young (eay@cryptsoft.com) to provide SSL/TLS encryption.
-    OpenSSL is copyright The OpenSSL Project and released under the OpenSSL
-    license. OpenSSL is not included in the Node distribution.
-    See http://openssl.org/ for more information.
+  - Node, optionally, links to OpenSSL, it is located at deps/openssl.
+    OpenSSL is cryptographic software written by Eric Young
+    (eay@cryptsoft.com) to provide SSL/TLS encryption. OpenSSL is copyright
+    The OpenSSL Project and released under the OpenSSL license.
 
   - tools/doctool/markdown.js is copyright 2009-2010 Dominic Baggott and Ash
     Berli and released under the MIT license.
@@ -72,10 +71,9 @@ The externally maintained libraries used by Node are:
 
   - lib/punycode.js is copyright 2011 Ben Noordhuis and released under the MIT license.
 
-  - deps/pthread-win32/libpthreadGC2.a and
-    deps/pthread-win32/libpthreadGC2d.a is a POSIX threads library for
-    Microsoft Windows and is used for the Windows build and statically
-    linked into the Node executable. This software is freely available at
-    http://sourceware.org/pthreads-win32/ It is Copyright 1998 John E.
-    Bossom and 1999,2006 Pthreads-win32 contributors and licensed under the
-    LGPL. See deps/pthread-win32/COPYING.LIB for more details.
+  - tools/gyp GYP is a meta-build system copyright 2009 Google Inc and
+    licensed under the three clause BSD license. See tools/gyp/LICENSE.
+
+  - deps/zlib copyright 1995-2010 Jean-loup Gailly and Mark Adler
+    licensed under a permissive free software license. See
+    deps/zlib/LICENSE.

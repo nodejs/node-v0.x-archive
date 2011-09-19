@@ -41,6 +41,7 @@ const char* Variable::Mode2String(Mode mode) {
   switch (mode) {
     case VAR: return "VAR";
     case CONST: return "CONST";
+    case LET: return "LET";
     case DYNAMIC: return "DYNAMIC";
     case DYNAMIC_GLOBAL: return "DYNAMIC_GLOBAL";
     case DYNAMIC_LOCAL: return "DYNAMIC_LOCAL";
@@ -49,34 +50,6 @@ const char* Variable::Mode2String(Mode mode) {
   }
   UNREACHABLE();
   return NULL;
-}
-
-
-Property* Variable::AsProperty() const {
-  return rewrite_ == NULL ? NULL : rewrite_->AsProperty();
-}
-
-
-Slot* Variable::AsSlot() const { return rewrite_; }
-
-
-bool Variable::IsStackAllocated() const {
-  return rewrite_ != NULL && rewrite_->IsStackAllocated();
-}
-
-
-bool Variable::IsParameter() const {
-  return rewrite_ != NULL && rewrite_->type() == Slot::PARAMETER;
-}
-
-
-bool Variable::IsStackLocal() const {
-  return rewrite_ != NULL && rewrite_->type() == Slot::LOCAL;
-}
-
-
-bool Variable::IsContextSlot() const {
-  return rewrite_ != NULL && rewrite_->type() == Slot::CONTEXT;
 }
 
 
@@ -89,8 +62,9 @@ Variable::Variable(Scope* scope,
     name_(name),
     mode_(mode),
     kind_(kind),
+    location_(UNALLOCATED),
+    index_(-1),
     local_if_not_shadowed_(NULL),
-    rewrite_(NULL),
     is_valid_LHS_(is_valid_LHS),
     is_accessed_from_inner_scope_(false),
     is_used_(false) {

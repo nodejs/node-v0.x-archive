@@ -87,13 +87,15 @@ void Context::set_global_proxy(JSObject* object) {
 Handle<Object> Context::Lookup(Handle<String> name,
                                ContextLookupFlags flags,
                                int* index_,
-                               PropertyAttributes* attributes) {
+                               PropertyAttributes* attributes,
+                               BindingFlags* binding_flags) {
   Isolate* isolate = GetIsolate();
   Handle<Context> context(this, isolate);
 
   bool follow_context_chain = (flags & FOLLOW_CONTEXT_CHAIN) != 0;
   *index_ = -1;
   *attributes = ABSENT;
+  *binding_flags = MISSING_BINDING;
 
   if (FLAG_trace_contexts) {
     PrintF("Context::Lookup(");
@@ -109,7 +111,7 @@ Handle<Object> Context::Lookup(Handle<String> name,
     }
 
     // Check extension/with/global object.
-    if (context->has_extension()) {
+    if (!context->IsBlockContext() && context->has_extension()) {
       if (context->IsCatchContext()) {
         // Catch contexts have the variable name in the extension slot.
         if (name->Equals(String::cast(context->extension()))) {
@@ -118,9 +120,13 @@ Handle<Object> Context::Lookup(Handle<String> name,
           }
           *index_ = Context::THROWN_OBJECT_INDEX;
           *attributes = NONE;
+          *binding_flags = MUTABLE_IS_INITIALIZED;
           return context;
         }
       } else {
+        ASSERT(context->IsGlobalContext() ||
+               context->IsFunctionContext() ||
+               context->IsWithContext());
         // Global, function, and with contexts may have an object in the
         // extension slot.
         Handle<JSObject> extension(JSObject::cast(context->extension()),
@@ -145,11 +151,20 @@ Handle<Object> Context::Lookup(Handle<String> name,
       }
     }
 
-    // Only functions can have locals, parameters, and a function name.
-    if (context->IsFunctionContext()) {
+    // Check serialized scope information of functions and blocks. Only
+    // functions can have parameters, and a function name.
+    if (context->IsFunctionContext() || context->IsBlockContext()) {
       // We may have context-local slots.  Check locals in the context.
-      Handle<SerializedScopeInfo> scope_info(
-          context->closure()->shared()->scope_info(), isolate);
+      Handle<SerializedScopeInfo> scope_info;
+      if (context->IsFunctionContext()) {
+        scope_info = Handle<SerializedScopeInfo>(
+            context->closure()->shared()->scope_info(), isolate);
+      } else {
+        ASSERT(context->IsBlockContext());
+        scope_info = Handle<SerializedScopeInfo>(
+            SerializedScopeInfo::cast(context->extension()), isolate);
+      }
+
       Variable::Mode mode;
       int index = scope_info->ContextSlotIndex(*name, &mode);
       ASSERT(index < 0 || index >= MIN_CONTEXT_SLOTS);
@@ -169,9 +184,15 @@ Handle<Object> Context::Lookup(Handle<String> name,
           case Variable::INTERNAL:  // Fall through.
           case Variable::VAR:
             *attributes = NONE;
+            *binding_flags = MUTABLE_IS_INITIALIZED;
+            break;
+          case Variable::LET:
+            *attributes = NONE;
+            *binding_flags = MUTABLE_CHECK_INITIALIZED;
             break;
           case Variable::CONST:
             *attributes = READ_ONLY;
+            *binding_flags = IMMUTABLE_CHECK_INITIALIZED;
             break;
           case Variable::DYNAMIC:
           case Variable::DYNAMIC_GLOBAL:
@@ -194,6 +215,7 @@ Handle<Object> Context::Lookup(Handle<String> name,
           }
           *index_ = index;
           *attributes = READ_ONLY;
+          *binding_flags = IMMUTABLE_IS_INITIALIZED;
           return context;
         }
       }

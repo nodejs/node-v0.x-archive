@@ -67,22 +67,26 @@ void uv_fatal_error(const int errorno, const char* syscall) {
 }
 
 
-uv_err_t uv_last_error() {
-  return LOOP->last_error;
+uv_err_t uv_last_error(uv_loop_t* loop) {
+  return loop->last_error;
 }
 
 
+/* TODO: thread safety */
+static char* last_err_str_ = NULL;
+
 char* uv_strerror(uv_err_t err) {
-  if (LOOP->err_str != NULL) {
-    LocalFree(LOOP->err_str);
+  if (last_err_str_ != NULL) {
+    LocalFree(last_err_str_);
   }
 
   FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
       FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err.sys_errno_,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&LOOP->err_str, 0, NULL);
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR) &last_err_str_, 0,
+      NULL);
 
-  if (LOOP->err_str) {
-    return LOOP->err_str;
+  if (last_err_str_) {
+    return last_err_str_;
   } else {
     return "Unknown error";
   }
@@ -92,21 +96,33 @@ char* uv_strerror(uv_err_t err) {
 uv_err_code uv_translate_sys_error(int sys_errno) {
   switch (sys_errno) {
     case ERROR_SUCCESS:                     return UV_OK;
+    case ERROR_FILE_NOT_FOUND:              return UV_ENOENT;
+    case ERROR_PATH_NOT_FOUND:              return UV_ENOENT;
     case ERROR_NOACCESS:                    return UV_EACCESS;
     case WSAEACCES:                         return UV_EACCESS;
     case ERROR_ADDRESS_ALREADY_ASSOCIATED:  return UV_EADDRINUSE;
     case WSAEADDRINUSE:                     return UV_EADDRINUSE;
     case WSAEADDRNOTAVAIL:                  return UV_EADDRNOTAVAIL;
+    case WSAEAFNOSUPPORT:                   return UV_EAFNOSUPPORT;
     case WSAEWOULDBLOCK:                    return UV_EAGAIN;
     case WSAEALREADY:                       return UV_EALREADY;
+    case ERROR_CONNECTION_ABORTED:          return UV_ECONNABORTED;
+    case WSAECONNABORTED:                   return UV_ECONNABORTED;
     case ERROR_CONNECTION_REFUSED:          return UV_ECONNREFUSED;
     case WSAECONNREFUSED:                   return UV_ECONNREFUSED;
     case WSAEFAULT:                         return UV_EFAULT;
+    case ERROR_HOST_UNREACHABLE:            return UV_EHOSTUNREACH;
+    case WSAEHOSTUNREACH:                   return UV_EHOSTUNREACH;
     case ERROR_INVALID_DATA:                return UV_EINVAL;
     case WSAEINVAL:                         return UV_EINVAL;
     case ERROR_TOO_MANY_OPEN_FILES:         return UV_EMFILE;
     case WSAEMFILE:                         return UV_EMFILE;
+    case WSAEMSGSIZE:                       return UV_EMSGSIZE;
+    case ERROR_NETWORK_UNREACHABLE:         return UV_ENETUNREACH;
+    case WSAENETUNREACH:                    return UV_ENETUNREACH;
     case ERROR_OUTOFMEMORY:                 return UV_ENOMEM;
+    case ERROR_NOT_CONNECTED:               return UV_ENOTCONN;
+    case WSAENOTCONN:                       return UV_ENOTCONN;
     case ERROR_NOT_SUPPORTED:               return UV_ENOTSUP;
     case ERROR_INSUFFICIENT_BUFFER:         return UV_EINVAL;
     case ERROR_INVALID_FLAGS:               return UV_EBADF;
@@ -115,6 +131,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_BROKEN_PIPE:                 return UV_EOF;
     case ERROR_PIPE_BUSY:                   return UV_EBUSY;
     case ERROR_SEM_TIMEOUT:                 return UV_ETIMEDOUT;
+    case ERROR_ALREADY_EXISTS:              return UV_EEXIST;
     default:                                return UV_UNKNOWN;
   }
 }
@@ -128,13 +145,13 @@ uv_err_t uv_new_sys_error(int sys_errno) {
 }
 
 
-void uv_set_sys_error(int sys_errno) {
-  LOOP->last_error.code = uv_translate_sys_error(sys_errno);
-  LOOP->last_error.sys_errno_ = sys_errno;
+void uv_set_sys_error(uv_loop_t* loop, int sys_errno) {
+  loop->last_error.code = uv_translate_sys_error(sys_errno);
+  loop->last_error.sys_errno_ = sys_errno;
 }
 
 
-void uv_set_error(uv_err_code code, int sys_errno) {
-  LOOP->last_error.code = code;
-  LOOP->last_error.sys_errno_ = sys_errno;
+void uv_set_error(uv_loop_t* loop, uv_err_code code, int sys_errno) {
+  loop->last_error.code = code;
+  loop->last_error.sys_errno_ = sys_errno;
 }

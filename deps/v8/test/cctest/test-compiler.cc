@@ -26,7 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdlib.h>
-#include <wchar.h>  // wint_t
+#include <wchar.h>
 
 #include "v8.h"
 
@@ -75,7 +75,7 @@ v8::Handle<v8::Value> PrintExtension::Print(const v8::Arguments& args) {
     uint16_t* string = NewArray<uint16_t>(length + 1);
     string_obj->Write(string);
     for (int j = 0; j < length; j++)
-      printf("%lc", static_cast<wint_t>(string[j]));
+      printf("%lc", static_cast<wchar_t>(string[j]));
     DeleteArray(string);
   }
   printf("\n");
@@ -377,7 +377,7 @@ static void CheckCodeForUnsafeLiteral(Handle<JSFunction> f) {
     while (pc < end) {
       int num_const = d.ConstantPoolSizeAt(pc);
       if (num_const >= 0) {
-        pc += num_const * kPointerSize;
+        pc += (num_const + 1) * kPointerSize;
       } else {
         pc += d.InstructionDecode(decode_buffer, pc);
         CHECK(strstr(decode_buffer.start(), "mov eax,0x178c29c") == NULL);

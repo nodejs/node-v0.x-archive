@@ -81,6 +81,19 @@ assertEquals(2.5, get(array, 0));
 assertEquals(3.5, get(array, 1));
 }
 
+// Test non-number parameters.
+var array_with_length_from_non_number = new Int32Array("2");
+assertEquals(2, array_with_length_from_non_number.length);
+array_with_length_from_non_number = new Int32Array(undefined);
+assertEquals(0, array_with_length_from_non_number.length);
+var foo = { valueOf: function() { return 3; } };
+array_with_length_from_non_number = new Int32Array(foo);
+assertEquals(3, array_with_length_from_non_number.length);
+foo = { toString: function() { return "4"; } };
+array_with_length_from_non_number = new Int32Array(foo);
+assertEquals(4, array_with_length_from_non_number.length);
+
+
 // Test loads and stores.
 types = [Array, Int8Array, Uint8Array, Int16Array, Uint16Array, Int32Array,
          Uint32Array, PixelArray, Float32Array, Float64Array];
@@ -190,9 +203,19 @@ function run_test(test_func, array, expected_result) {
   gc();  // Makes V8 forget about type information for test_func.
 }
 
+function run_bounds_test(test_func, array, expected_result) {
+  assertEquals(undefined, a[kElementCount]);
+  a[kElementCount] = 456;
+  assertEquals(undefined, a[kElementCount]);
+  assertEquals(undefined, a[kElementCount+1]);
+  a[kElementCount+1] = 456;
+  assertEquals(undefined, a[kElementCount+1]);
+}
+
 for (var t = 0; t < types.length; t++) {
   var type = types[t];
   var a = new type(kElementCount);
+
   for (var i = 0; i < kElementCount; i++) {
     a[i] = i;
   }
@@ -220,6 +243,16 @@ for (var t = 0; t < types.length; t++) {
     assertTrue(delete a.length);
     a.length = 2;
     assertEquals(2, a.length);
+
+    // Make sure bounds checks are handled correctly for external arrays.
+    run_bounds_test(a);
+    run_bounds_test(a);
+    run_bounds_test(a);
+    %OptimizeFunctionOnNextCall(run_bounds_test);
+    run_bounds_test(a);
+    %DeoptimizeFunction(run_bounds_test);
+    gc();  // Makes V8 forget about type information for test_func.
+
   }
 
   function array_load_set_smi_check(a) {

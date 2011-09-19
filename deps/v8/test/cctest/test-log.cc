@@ -23,9 +23,8 @@ using v8::internal::EmbeddedVector;
 using v8::internal::Logger;
 using v8::internal::StrLength;
 
-namespace i = v8::internal;
-
 namespace {
+
 
 class ScopedLoggerInitializer {
  public:
@@ -472,8 +471,9 @@ TEST(IsLoggingPreserved) {
 
 typedef i::NativesCollection<i::TEST> TestSources;
 
-// Test that logging of code create / move / delete events
-// is equivalent to traversal of a resulting heap.
+
+// Test that logging of code create / move events is equivalent to traversal of
+// a resulting heap.
 TEST(EquivalenceOfLoggingAndTraversal) {
   // This test needs to be run on a "clean" V8 to ensure that snapshot log
   // is loaded. This is always true when running using tools/test.py because

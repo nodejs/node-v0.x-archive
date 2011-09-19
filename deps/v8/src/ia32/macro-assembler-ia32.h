@@ -209,6 +209,9 @@ class MacroAssembler: public Assembler {
   void SafeSet(Register dst, const Immediate& x);
   void SafePush(const Immediate& x);
 
+  // Compare a register against a known root, e.g. undefined, null, true, ...
+  void CompareRoot(Register with, Heap::RootListIndex index);
+
   // Compare object type for heap object.
   // Incoming register is heap_object and outgoing register is map.
   void CmpObjectType(Register heap_object, InstanceType type, Register map);
@@ -272,8 +275,8 @@ class MacroAssembler: public Assembler {
 
   // Smi tagging support.
   void SmiTag(Register reg) {
-    ASSERT(kSmiTag == 0);
-    ASSERT(kSmiTagSize == 1);
+    STATIC_ASSERT(kSmiTag == 0);
+    STATIC_ASSERT(kSmiTagSize == 1);
     add(reg, Operand(reg));
   }
   void SmiUntag(Register reg) {
@@ -282,9 +285,9 @@ class MacroAssembler: public Assembler {
 
   // Modifies the register even if it does not contain a Smi!
   void SmiUntag(Register reg, Label* is_smi) {
-    ASSERT(kSmiTagSize == 1);
+    STATIC_ASSERT(kSmiTagSize == 1);
     sar(reg, kSmiTagSize);
-    ASSERT(kSmiTag == 0);
+    STATIC_ASSERT(kSmiTag == 0);
     j(not_carry, is_smi);
   }
 
@@ -434,7 +437,7 @@ class MacroAssembler: public Assembler {
 
   // Allocate a raw cons string object. Only the map field of the result is
   // initialized.
-  void AllocateConsString(Register result,
+  void AllocateTwoByteConsString(Register result,
                           Register scratch1,
                           Register scratch2,
                           Label* gc_required);
@@ -442,6 +445,17 @@ class MacroAssembler: public Assembler {
                                Register scratch1,
                                Register scratch2,
                                Label* gc_required);
+
+  // Allocate a raw sliced string object. Only the map field of the result is
+  // initialized.
+  void AllocateTwoByteSlicedString(Register result,
+                            Register scratch1,
+                            Register scratch2,
+                            Label* gc_required);
+  void AllocateAsciiSlicedString(Register result,
+                                 Register scratch1,
+                                 Register scratch2,
+                                 Label* gc_required);
 
   // Copy memory, byte-by-byte, from source to destination.  Not optimized for
   // long or aligned copies.

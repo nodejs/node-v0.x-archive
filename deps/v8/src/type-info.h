@@ -203,14 +203,16 @@ enum StringStubFeedback {
 
 // Forward declarations.
 class Assignment;
-class UnaryOperation;
 class BinaryOperation;
 class Call;
-class CompareOperation;
-class CountOperation;
-class CompilationInfo;
-class Property;
 class CaseClause;
+class CompareOperation;
+class CompilationInfo;
+class CountOperation;
+class Property;
+class SmallMapList;
+class UnaryOperation;
+
 
 class TypeFeedbackOracle BASE_EMBEDDED {
  public:
@@ -225,18 +227,28 @@ class TypeFeedbackOracle BASE_EMBEDDED {
   Handle<Map> LoadMonomorphicReceiverType(Property* expr);
   Handle<Map> StoreMonomorphicReceiverType(Expression* expr);
 
-  ZoneMapList* LoadReceiverTypes(Property* expr, Handle<String> name);
-  ZoneMapList* StoreReceiverTypes(Assignment* expr, Handle<String> name);
-  ZoneMapList* CallReceiverTypes(Call* expr,
-                                 Handle<String> name,
-                                 CallKind call_kind);
+  void LoadReceiverTypes(Property* expr,
+                         Handle<String> name,
+                         SmallMapList* types);
+  void StoreReceiverTypes(Assignment* expr,
+                          Handle<String> name,
+                          SmallMapList* types);
+  void CallReceiverTypes(Call* expr,
+                         Handle<String> name,
+                         CallKind call_kind,
+                         SmallMapList* types);
   void CollectKeyedReceiverTypes(unsigned ast_id,
-                                 ZoneMapList* types);
+                                 SmallMapList* types);
 
   CheckType GetCallCheckType(Call* expr);
   Handle<JSObject> GetPrototypeForPrimitiveCheck(CheckType check);
 
   bool LoadIsBuiltin(Property* expr, Builtins::Name id);
+
+  // TODO(1571) We can't use ToBooleanStub::Types as the return value because
+  // of various cylces in our headers. Death to tons of implementations in
+  // headers!! :-P
+  byte ToBooleanTypes(unsigned ast_id);
 
   // Get type information for arithmetic operations and compares.
   TypeInfo UnaryType(UnaryOperation* expr);
@@ -247,9 +259,10 @@ class TypeFeedbackOracle BASE_EMBEDDED {
   TypeInfo IncrementType(CountOperation* expr);
 
  private:
-  ZoneMapList* CollectReceiverTypes(unsigned ast_id,
-                                    Handle<String> name,
-                                    Code::Flags flags);
+  void CollectReceiverTypes(unsigned ast_id,
+                            Handle<String> name,
+                            Code::Flags flags,
+                            SmallMapList* types);
 
   void SetInfo(unsigned ast_id, Object* target);
 

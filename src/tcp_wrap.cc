@@ -5,7 +5,7 @@
 #include <stream_wrap.h>
 
 // Temporary hack: libuv should provide uv_inet_pton and uv_inet_ntop.
-#ifdef __MINGW32__
+#if defined(__MINGW32__) || defined(_MSC_VER)
   extern "C" {
 #   include <inet_net_pton.h>
 #   include <inet_ntop.h>
@@ -82,6 +82,7 @@ class TCPWrap : public StreamWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "bind6", Bind6);
     NODE_SET_PROTOTYPE_METHOD(t, "connect6", Connect6);
     NODE_SET_PROTOTYPE_METHOD(t, "getsockname", GetSockName);
+    NODE_SET_PROTOTYPE_METHOD(t, "getpeername", GetPeerName);
 
     tcpConstructor = Persistent<Function>::New(t->GetFunction());
 
@@ -108,7 +109,7 @@ class TCPWrap : public StreamWrap {
 
   TCPWrap(Handle<Object> object) : StreamWrap(object,
                                               (uv_stream_t*) &handle_) {
-    int r = uv_tcp_init(&handle_);
+    int r = uv_tcp_init(uv_default_loop(), &handle_);
     assert(r == 0); // How do we proxy this error up to javascript?
                     // Suggestion: uv_tcp_init() returns void.
     UpdateWriteQueueSize();
@@ -120,21 +121,23 @@ class TCPWrap : public StreamWrap {
 
   static Handle<Value> GetSockName(const Arguments& args) {
     HandleScope scope;
-    struct sockaddr address;
+    struct sockaddr_storage address;
     int family;
     int port;
     char ip[INET6_ADDRSTRLEN];
 
     UNWRAP
 
-    int namelen = sizeof(address);
-    int r = uv_getsockname(&wrap->handle_, &address, &namelen);
+    int addrlen = sizeof(address);
+    int r = uv_tcp_getsockname(&wrap->handle_,
+                               reinterpret_cast<sockaddr*>(&address),
+                               &addrlen);
 
     Local<Object> sockname = Object::New();
     if (r != 0) {
-      SetErrno(uv_last_error().code);
+      SetErrno(uv_last_error(uv_default_loop()).code);
     } else {
-      family = address.sa_family;
+      family = address.ss_family;
       if (family == AF_INET) {
         struct sockaddr_in* addrin = (struct sockaddr_in*)&address;
         uv_inet_ntop(AF_INET, &(addrin->sin_addr), ip, INET6_ADDRSTRLEN);
@@ -151,7 +154,44 @@ class TCPWrap : public StreamWrap {
     }
 
     return scope.Close(sockname);
+  }
 
+
+  static Handle<Value> GetPeerName(const Arguments& args) {
+    HandleScope scope;
+    struct sockaddr_storage address;
+    int family;
+    int port;
+    char ip[INET6_ADDRSTRLEN];
+
+    UNWRAP
+
+    int addrlen = sizeof(address);
+    int r = uv_tcp_getpeername(&wrap->handle_,
+                               reinterpret_cast<sockaddr*>(&address),
+                               &addrlen);
+
+    Local<Object> sockname = Object::New();
+    if (r != 0) {
+      SetErrno(uv_last_error(uv_default_loop()).code);
+    } else {
+      family = address.ss_family;
+      if (family == AF_INET) {
+        struct sockaddr_in* addrin = (struct sockaddr_in*)&address;
+        uv_inet_ntop(AF_INET, &(addrin->sin_addr), ip, INET6_ADDRSTRLEN);
+        port = ntohs(addrin->sin_port);
+      } else if (family == AF_INET6) {
+        struct sockaddr_in6* addrin6 = (struct sockaddr_in6*)&address;
+        uv_inet_ntop(AF_INET6, &(addrin6->sin6_addr), ip, INET6_ADDRSTRLEN);
+        port = ntohs(addrin6->sin6_port);
+      }
+
+      sockname->Set(port_symbol, Integer::New(port));
+      sockname->Set(family_symbol, Integer::New(family));
+      sockname->Set(address_symbol, String::New(ip));
+    }
+
+    return scope.Close(sockname);
   }
 
 
@@ -167,7 +207,7 @@ class TCPWrap : public StreamWrap {
     int r = uv_tcp_bind(&wrap->handle_, address);
 
     // Error starting the tcp.
-    if (r) SetErrno(uv_last_error().code);
+    if (r) SetErrno(uv_last_error(uv_default_loop()).code);
 
     return scope.Close(Integer::New(r));
   }
@@ -184,7 +224,7 @@ class TCPWrap : public StreamWrap {
     int r = uv_tcp_bind6(&wrap->handle_, address);
 
     // Error starting the tcp.
-    if (r) SetErrno(uv_last_error().code);
+    if (r) SetErrno(uv_last_error(uv_default_loop()).code);
 
     return scope.Close(Integer::New(r));
   }
@@ -199,7 +239,7 @@ class TCPWrap : public StreamWrap {
     int r = uv_listen((uv_stream_t*)&wrap->handle_, backlog, OnConnection);
 
     // Error starting the tcp.
-    if (r) SetErrno(uv_last_error().code);
+    if (r) SetErrno(uv_last_error(uv_default_loop()).code);
 
     return scope.Close(Integer::New(r));
   }
@@ -214,27 +254,29 @@ class TCPWrap : public StreamWrap {
     // uv_close() on the handle.
     assert(wrap->object_.IsEmpty() == false);
 
-    if (status != 0) {
-      // TODO Handle server error (set errno and call onconnection with NULL)
-      assert(0);
-      return;
+    Handle<Value> argv[1];
+
+    if (status == 0) {
+      // Instantiate the client javascript object and handle.
+      Local<Object> client_obj = tcpConstructor->NewInstance();
+
+      // Unwrap the client javascript object.
+      assert(client_obj->InternalFieldCount() > 0);
+      TCPWrap* client_wrap =
+          static_cast<TCPWrap*>(client_obj->GetPointerFromInternalField(0));
+
+      int r = uv_accept(handle, (uv_stream_t*)&client_wrap->handle_);
+
+      // uv_accept should always work.
+      assert(r == 0);
+
+      // Successful accept. Call the onconnection callback in JavaScript land.
+      argv[0] = client_obj;
+    } else {
+      SetErrno(uv_last_error(uv_default_loop()).code);
+      argv[0] = v8::Null();
     }
 
-    // Instanciate the client javascript object and handle.
-    Local<Object> client_obj = tcpConstructor->NewInstance();
-
-    // Unwrap the client javascript object.
-    assert(client_obj->InternalFieldCount() > 0);
-    TCPWrap* client_wrap =
-        static_cast<TCPWrap*>(client_obj->GetPointerFromInternalField(0));
-
-    int r = uv_accept(handle, (uv_stream_t*)&client_wrap->handle_);
-
-    // uv_accept should always work.
-    assert(r == 0);
-
-    // Successful accept. Call the onconnection callback in JavaScript land.
-    Local<Value> argv[1] = { client_obj };
     MakeCallback(wrap->object_, "onconnection", 1, argv);
   }
 
@@ -249,7 +291,7 @@ class TCPWrap : public StreamWrap {
     assert(wrap->object_.IsEmpty() == false);
 
     if (status) {
-      SetErrno(uv_last_error().code);
+      SetErrno(uv_last_error(uv_default_loop()).code);
     }
 
     Local<Value> argv[3] = {
@@ -284,7 +326,7 @@ class TCPWrap : public StreamWrap {
     req_wrap->Dispatched();
 
     if (r) {
-      SetErrno(uv_last_error().code);
+      SetErrno(uv_last_error(uv_default_loop()).code);
       delete req_wrap;
       return scope.Close(v8::Null());
     } else {
@@ -310,7 +352,7 @@ class TCPWrap : public StreamWrap {
     req_wrap->Dispatched();
 
     if (r) {
-      SetErrno(uv_last_error().code);
+      SetErrno(uv_last_error(uv_default_loop()).code);
       delete req_wrap;
       return scope.Close(v8::Null());
     } else {

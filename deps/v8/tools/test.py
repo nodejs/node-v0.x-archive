@@ -1164,6 +1164,7 @@ def ReadConfigurationInto(path, sections, defs):
 
 
 ARCH_GUESS = utils.GuessArchitecture()
+TIMEOUT_DEFAULT = 60;
 
 
 def BuildOptions():
@@ -1181,12 +1182,14 @@ def BuildOptions():
       default=False, action="store_true")
   result.add_option("--build-only", help="Only build requirements, don't run the tests",
       default=False, action="store_true")
+  result.add_option("--build-system", help="Build system in use (scons or gyp)",
+      default='scons')
   result.add_option("--report", help="Print a summary of the tests to be run",
       default=False, action="store_true")
   result.add_option("-s", "--suite", help="A test suite",
       default=[], action="append")
   result.add_option("-t", "--timeout", help="Timeout in seconds",
-      default=60, type="int")
+      default=-1, type="int")
   result.add_option("--arch", help='The architecture to run tests for',
       default='none')
   result.add_option("--snapshot", help="Run the tests with snapshot turned on",
@@ -1208,7 +1211,7 @@ def BuildOptions():
         dest="suppress_dialogs", default=True, action="store_true")
   result.add_option("--no-suppress-dialogs", help="Display Windows dialogs for crashing tests",
         dest="suppress_dialogs", action="store_false")
-  result.add_option("--shell", help="Path to V8 shell", default="shell")
+  result.add_option("--shell", help="Path to V8 shell", default="d8")
   result.add_option("--isolates", help="Whether to test isolates", default=False, action="store_true")
   result.add_option("--store-unexpected-output",
       help="Store the temporary JS files from tests that fails",
@@ -1260,6 +1263,12 @@ def ProcessOptions(options):
     if options.arch == 'none':
       options.arch = ARCH_GUESS
     options.scons_flags.append("arch=" + options.arch)
+  # Simulators are slow, therefore allow a longer default timeout.
+  if options.timeout == -1:
+    if options.arch == 'arm' or options.arch == 'mips':
+      options.timeout = 2 * TIMEOUT_DEFAULT;
+    else:
+      options.timeout = TIMEOUT_DEFAULT;
   if options.snapshot:
     options.scons_flags.append("snapshot=on")
   global VARIANT_FLAGS
@@ -1271,21 +1280,30 @@ def ProcessOptions(options):
     if options.special_command:
       options.special_command += " --crankshaft"
     else:
-      options.special_command = "@--crankshaft"
-  if options.shell == "d8":
+      options.special_command = "@ --crankshaft"
+  if options.shell.endswith("d8"):
     if options.special_command:
       options.special_command += " --test"
     else:
-      options.special_command = "@--test"
+      options.special_command = "@ --test"
   if options.noprof:
     options.scons_flags.append("prof=off")
     options.scons_flags.append("profilingsupport=off")
+  if options.build_system == 'gyp':
+    if options.build_only:
+      print "--build-only not supported for gyp, please build manually."
+      options.build_only = False
   return True
+
+
+def DoSkip(case):
+  return (SKIP in case.outcomes) or (SLOW in case.outcomes)
 
 
 REPORT_TEMPLATE = """\
 Total: %(total)i tests
  * %(skipped)4d tests will be skipped
+ * %(timeout)4d tests are expected to timeout sometimes
  * %(nocrash)4d tests are expected to be flaky but not crash
  * %(pass)4d tests are expected to pass
  * %(fail_ok)4d tests are expected to fail that we won't fix
@@ -1297,10 +1315,11 @@ def PrintReport(cases):
     return (PASS in o) and (FAIL in o) and (not CRASH in o) and (not OKAY in o)
   def IsFailOk(o):
     return (len(o) == 2) and (FAIL in o) and (OKAY in o)
-  unskipped = [c for c in cases if not SKIP in c.outcomes]
+  unskipped = [c for c in cases if not DoSkip(c)]
   print REPORT_TEMPLATE % {
     'total': len(cases),
     'skipped': len(cases) - len(unskipped),
+    'timeout': len([t for t in unskipped if TIMEOUT in t.outcomes]),
     'nocrash': len([t for t in unskipped if IsFlaky(t.outcomes)]),
     'pass': len([t for t in unskipped if list(t.outcomes) == [PASS]]),
     'fail_ok': len([t for t in unskipped if IsFailOk(t.outcomes)]),
@@ -1399,6 +1418,9 @@ def Main():
     run_valgrind = join(workspace, "tools", "run-valgrind.py")
     options.special_command = "python -u " + run_valgrind + " @"
 
+  if options.build_system == 'gyp':
+    SUFFIX['debug'] = ''
+
   shell = abspath(options.shell)
   buildspace = dirname(shell)
 
@@ -1472,15 +1494,14 @@ def Main():
     for rule in globally_unused_rules:
       print "Rule for '%s' was not used." % '/'.join([str(s) for s in rule.path])
 
+  if not options.isolates:
+    all_cases = [c for c in all_cases if not c.TestsIsolates()]
+
   if options.report:
     PrintReport(all_cases)
 
   result = None
-  def DoSkip(case):
-    return SKIP in case.outcomes or SLOW in case.outcomes
   cases_to_run = [ c for c in all_cases if not DoSkip(c) ]
-  if not options.isolates:
-    cases_to_run = [c for c in cases_to_run if not c.TestsIsolates()]
   if len(cases_to_run) == 0:
     print "No tests to run."
     return 0

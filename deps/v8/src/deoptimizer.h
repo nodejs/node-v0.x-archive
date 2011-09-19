@@ -317,7 +317,7 @@ class Deoptimizer : public Malloced {
 
   List<HeapNumberMaterializationDescriptor> deferred_heap_numbers_;
 
-  static int table_entry_size_;
+  static const int table_entry_size_;
 
   friend class FrameDescription;
   friend class DeoptimizingCodeListNode;
@@ -334,6 +334,10 @@ class FrameDescription {
     // Subtracts kPointerSize, as the member frame_content_ already supplies
     // the first element of the area to store the frame.
     return malloc(size + frame_size - kPointerSize);
+  }
+
+  void operator delete(void* pointer, uint32_t frame_size) {
+    free(pointer);
   }
 
   void operator delete(void* description) {
@@ -497,9 +501,7 @@ class TranslationIterator BASE_EMBEDDED {
 
   int32_t Next();
 
-  bool HasNext() const { return index_ >= 0; }
-
-  void Done() { index_ = -1; }
+  bool HasNext() const { return index_ < buffer_->length(); }
 
   void Skip(int n) {
     for (int i = 0; i < n; i++) Next();

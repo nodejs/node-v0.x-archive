@@ -32,6 +32,7 @@ sys.path.append(join(root_dir, 'tools'))
 import js2c
 Import('context')
 Import('tools')
+Import('d8_env')
 
 
 SOURCES = {
@@ -65,6 +66,7 @@ SOURCES = {
     disassembler.cc
     diy-fp.cc
     dtoa.cc
+    elements.cc
     execution.cc
     factory.cc
     flags.cc
@@ -109,8 +111,8 @@ SOURCES = {
     runtime.cc
     runtime-profiler.cc
     safepoint-table.cc
-    scanner-base.cc
     scanner.cc
+    scanner-character-streams.cc
     scopeinfo.cc
     scopes.cc
     serialize.cc
@@ -220,7 +222,7 @@ SOURCES = {
   'os:solaris': ['platform-solaris.cc', 'platform-posix.cc'],
   'os:cygwin':  ['platform-cygwin.cc', 'platform-posix.cc'],
   'os:nullos':  ['platform-nullos.cc'],
-  'os:win32':   ['platform-win32.cc'],
+  'os:win32':   ['platform-win32.cc', 'win32-math.cc'],
   'mode:release': [],
   'mode:debug': [
     'objects-debug.cc', 'prettyprinter.cc', 'regexp-macro-assembler-tracer.cc'
@@ -231,15 +233,25 @@ SOURCES = {
 PREPARSER_SOURCES = {
   'all': Split("""
     allocation.cc
+    bignum.cc
+    bignum-dtoa.cc
+    cached-powers.cc
+    conversions.cc
+    diy-fp.cc
+    dtoa.cc
+    fast-dtoa.cc
+    fixed-dtoa.cc
     hashmap.cc
     preparse-data.cc
     preparser.cc
     preparser-api.cc
-    scanner-base.cc
+    scanner.cc
+    strtod.cc
     token.cc
     unicode.cc
     utils.cc
-    """)
+    """),
+  'os:win32': ['win32-math.cc']
 }
 
 
@@ -307,6 +319,7 @@ debug-debugger.js
 
 EXPERIMENTAL_LIBRARY_FILES = '''
 proxy.js
+weakmap.js
 '''.split()
 
 
@@ -338,7 +351,7 @@ def ConfigureObjectFiles():
   else:
     d8_files = context.GetRelevantSources(D8_FULL_FILES)
     d8_objs = [d8_js_obj]
-  d8_objs.append(context.ConfigureObject(env, [d8_files]))
+  d8_objs.append(context.ConfigureObject(d8_env, [d8_files]))
 
   # Combine the JavaScript library files into a single C++ file and
   # compile it.

@@ -27,6 +27,11 @@
 #include <node_root_certs.h>
 
 #include <string.h>
+#ifdef _MSC_VER
+#define snprintf _snprintf
+#define strcasecmp _stricmp
+#endif
+
 #include <stdlib.h>
 
 #include <errno.h>
@@ -45,6 +50,11 @@
 static const char *PUBLIC_KEY_PFX =  "-----BEGIN PUBLIC KEY-----";
 static const int PUBLIC_KEY_PFX_LEN = strlen(PUBLIC_KEY_PFX);
 
+static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
+                                 | ASN1_STRFLGS_ESC_MSB
+                                 | XN_FLAG_SEP_MULTILINE
+                                 | XN_FLAG_FN_SN;
+
 namespace node {
 namespace crypto {
 
@@ -53,6 +63,9 @@ using namespace v8;
 static Persistent<String> errno_symbol;
 static Persistent<String> syscall_symbol;
 static Persistent<String> subject_symbol;
+static Persistent<String> subjectaltname_symbol;
+static Persistent<String> modulus_symbol;
+static Persistent<String> exponent_symbol;
 static Persistent<String> issuer_symbol;
 static Persistent<String> valid_from_symbol;
 static Persistent<String> valid_to_symbol;
@@ -61,11 +74,14 @@ static Persistent<String> name_symbol;
 static Persistent<String> version_symbol;
 static Persistent<String> ext_key_usage_symbol;
 
+static Persistent<FunctionTemplate> secure_context_constructor;
 
 void SecureContext::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(SecureContext::New);
+  secure_context_constructor = Persistent<FunctionTemplate>::New(t);
+
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("SecureContext"));
 
@@ -317,7 +333,7 @@ Handle<Value> SecureContext::SetCert(const Arguments& args) {
           String::New("SSL_CTX_use_certificate_chain")));
     }
     char string[120];
-    ERR_error_string(err, string);
+    ERR_error_string_n(err, string, sizeof string);
     return ThrowException(Exception::Error(String::New(string)));
   }
 
@@ -520,11 +536,22 @@ int Connection::HandleSSLError(const char* func, int rv) {
     static char ssl_error_buf[512];
     ERR_error_string_n(err, ssl_error_buf, sizeof(ssl_error_buf));
 
+    // XXX We need to drain the error queue for this thread or else OpenSSL
+    // has the possibility of blocking connections? This problem is not well
+    // understood. And we should be somehow propigating these errors up
+    // into JavaScript. There is no test which demonstrates this problem.
+    // https://github.com/joyent/node/issues/1719
+    while ((err = ERR_get_error()) != 0) {
+      ERR_error_string_n(err, ssl_error_buf, sizeof(ssl_error_buf));
+      fprintf(stderr, "(node SSL) %s\n", ssl_error_buf);
+    }
+
     HandleScope scope;
     Local<Value> e = Exception::Error(String::New(ssl_error_buf));
     handle_->Set(String::New("error"), e);
 
-    DEBUG_PRINT("[%p] SSL: %s failed: (%d:%d) %s\n", ssl_, func, err, rv, ssl_error_buf);
+    DEBUG_PRINT("[%p] SSL: %s failed: (%d:%d) %s\n", ssl_, func, err, rv,
+        ssl_error_buf);
 
     return rv;
   }
@@ -572,6 +599,9 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "clearPending", Connection::ClearPending);
   NODE_SET_PROTOTYPE_METHOD(t, "encPending", Connection::EncPending);
   NODE_SET_PROTOTYPE_METHOD(t, "getPeerCertificate", Connection::GetPeerCertificate);
+  NODE_SET_PROTOTYPE_METHOD(t, "getSession", Connection::GetSession);
+  NODE_SET_PROTOTYPE_METHOD(t, "setSession", Connection::SetSession);
+  NODE_SET_PROTOTYPE_METHOD(t, "isSessionReused", Connection::IsSessionReused);
   NODE_SET_PROTOTYPE_METHOD(t, "isInitFinished", Connection::IsInitFinished);
   NODE_SET_PROTOTYPE_METHOD(t, "verifyError", Connection::VerifyError);
   NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", Connection::GetCurrentCipher);
@@ -583,6 +613,12 @@ void Connection::Initialize(Handle<Object> target) {
 #ifdef OPENSSL_NPN_NEGOTIATED
   NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", Connection::GetNegotiatedProto);
   NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", Connection::SetNPNProtocols);
+#endif
+
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  NODE_SET_PROTOTYPE_METHOD(t, "getServername", Connection::GetServername);
+  NODE_SET_PROTOTYPE_METHOD(t, "setSNICallback",  Connection::SetSNICallback);
 #endif
 
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
@@ -704,6 +740,56 @@ int Connection::SelectNextProtoCallback_(SSL *s,
 }                                  
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
+  HandleScope scope;
+
+  Connection *p = static_cast<Connection*> SSL_get_app_data(s);
+
+  const char* servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+
+  if (servername) {
+    if (!p->servername_.IsEmpty()) {
+      p->servername_.Dispose();
+    }
+    p->servername_ = Persistent<String>::New(String::New(servername));
+
+    // Call sniCallback_ and use it's return value as context
+    if (!p->sniCallback_.IsEmpty()) {
+      if (!p->sniContext_.IsEmpty()) {
+        p->sniContext_.Dispose();
+      }
+
+      // Get callback init args
+      Local<Value> argv[1] = {*p->servername_};
+      Local<Function> callback = *p->sniCallback_;
+
+      TryCatch try_catch;
+
+      // Call it
+      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(),
+                                        1,
+                                        argv);
+
+      if (try_catch.HasCaught()) {
+        FatalException(try_catch);
+      }
+
+      // If ret is SecureContext
+      if (secure_context_constructor->HasInstance(ret)) {
+        p->sniContext_ = Persistent<Value>::New(ret);
+        SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(
+                                Local<Object>::Cast(ret));
+        SSL_set_SSL_CTX(s, sc->ctx_);
+      } else {
+        return SSL_TLSEXT_ERR_NOACK;
+      }
+    }
+  }
+
+  return SSL_TLSEXT_ERR_OK;
+}
+#endif
 
 Handle<Value> Connection::New(const Arguments& args) {
   HandleScope scope;
@@ -724,8 +810,9 @@ Handle<Value> Connection::New(const Arguments& args) {
   p->bio_read_ = BIO_new(BIO_s_mem());
   p->bio_write_ = BIO_new(BIO_s_mem());
 
-#ifdef OPENSSL_NPN_NEGOTIATED
   SSL_set_app_data(p->ssl_, p);
+
+#ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
     SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
@@ -737,6 +824,15 @@ Handle<Value> Connection::New(const Arguments& args) {
     SSL_CTX_set_next_proto_select_cb(sc->ctx_,
                                      SelectNextProtoCallback_,
                                      NULL);
+  }
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  if (is_server) {
+    SSL_CTX_set_tlsext_servername_callback(sc->ctx_, SelectSNIContextCallback_);
+  } else {
+    String::Utf8Value servername(args[2]->ToString());
+    SSL_set_tlsext_host_name(p->ssl_, *servername);
   }
 #endif
 
@@ -992,27 +1088,63 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
   Local<Object> info = Object::New();
   X509* peer_cert = SSL_get_peer_certificate(ss->ssl_);
   if (peer_cert != NULL) {
-    char* subject = X509_NAME_oneline(X509_get_subject_name(peer_cert), 0, 0);
-    if (subject != NULL) {
-      info->Set(subject_symbol, String::New(subject));
-      OPENSSL_free(subject);
-    }
-    char* issuer = X509_NAME_oneline(X509_get_issuer_name(peer_cert), 0, 0);
-    if (subject != NULL) {
-      info->Set(issuer_symbol, String::New(issuer));
-      OPENSSL_free(issuer);
-    }
-    char buf[256];
     BIO* bio = BIO_new(BIO_s_mem());
+    BUF_MEM* mem;
+    if (X509_NAME_print_ex(bio, X509_get_subject_name(peer_cert), 0,
+                           X509_NAME_FLAGS) > 0) {
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(subject_symbol, String::New(mem->data, mem->length));
+    }
+    (void) BIO_reset(bio);
+
+    if (X509_NAME_print_ex(bio, X509_get_issuer_name(peer_cert), 0,
+                           X509_NAME_FLAGS) > 0) {
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(issuer_symbol, String::New(mem->data, mem->length));
+    }
+    (void) BIO_reset(bio);
+
+    int index = X509_get_ext_by_NID(peer_cert, NID_subject_alt_name, -1);
+    if (index >= 0) {
+      X509_EXTENSION* ext;
+      int rv;
+
+      ext = X509_get_ext(peer_cert, index);
+      assert(ext != NULL);
+
+      rv = X509V3_EXT_print(bio, ext, 0, 0);
+      assert(rv == 1);
+
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(subjectaltname_symbol, String::New(mem->data, mem->length));
+
+      (void) BIO_reset(bio);
+    }
+
+    EVP_PKEY *pkey = NULL;
+    RSA *rsa = NULL;
+    if( NULL != (pkey = X509_get_pubkey(peer_cert))
+        && NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
+        BN_print(bio, rsa->n);
+        BIO_get_mem_ptr(bio, &mem);
+        info->Set(modulus_symbol, String::New(mem->data, mem->length) );
+        (void) BIO_reset(bio);
+
+        BN_print(bio, rsa->e);
+        BIO_get_mem_ptr(bio, &mem);
+        info->Set(exponent_symbol, String::New(mem->data, mem->length) );
+        (void) BIO_reset(bio);
+    }
+
     ASN1_TIME_print(bio, X509_get_notBefore(peer_cert));
-    memset(buf, 0, sizeof(buf));
-    BIO_read(bio, buf, sizeof(buf) - 1);
-    info->Set(valid_from_symbol, String::New(buf));
+    BIO_get_mem_ptr(bio, &mem);
+    info->Set(valid_from_symbol, String::New(mem->data, mem->length));
+    (void) BIO_reset(bio);
+
     ASN1_TIME_print(bio, X509_get_notAfter(peer_cert));
-    memset(buf, 0, sizeof(buf));
-    BIO_read(bio, buf, sizeof(buf) - 1);
+    BIO_get_mem_ptr(bio, &mem);
+    info->Set(valid_to_symbol, String::New(mem->data, mem->length));
     BIO_free(bio);
-    info->Set(valid_to_symbol, String::New(buf));
 
     unsigned int md_size, i;
     unsigned char md[EVP_MAX_MD_SIZE];
@@ -1040,6 +1172,7 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
         peer_cert, NID_ext_key_usage, NULL, NULL);
     if (eku != NULL) {
       Local<Array> ext_key_usage = Array::New();
+      char buf[256];
 
       for (int i = 0; i < sk_ASN1_OBJECT_num(eku); i++) {
         memset(buf, 0, sizeof(buf));
@@ -1055,6 +1188,83 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
   }
   return scope.Close(info);
 }
+
+Handle<Value> Connection::GetSession(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->ssl_ == NULL) return Undefined();
+
+  SSL_SESSION* sess = SSL_get_session(ss->ssl_);
+  if (!sess) return Undefined();
+
+  int slen = i2d_SSL_SESSION(sess, NULL);
+  assert(slen > 0);
+
+  if (slen > 0) {
+    unsigned char* sbuf = new unsigned char[slen];
+    unsigned char* p = sbuf;
+    i2d_SSL_SESSION(sess, &p);
+    Local<Value> s = Encode(sbuf, slen, BINARY);
+    delete[] sbuf;
+    return scope.Close(s);
+  }
+
+  return Null();
+}
+
+Handle<Value> Connection::SetSession(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (args.Length() < 1 || !args[0]->IsString()) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+
+  ASSERT_IS_STRING_OR_BUFFER(args[0]);
+  ssize_t slen = DecodeBytes(args[0], BINARY);
+
+  if (slen < 0) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+
+  char* sbuf = new char[slen];
+
+  ssize_t wlen = DecodeWrite(sbuf, slen, args[0], BINARY);
+  assert(wlen == slen);
+
+  const unsigned char* p = (unsigned char*) sbuf;
+  SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, wlen);
+
+  delete [] sbuf;
+
+  if (!sess)
+    return Undefined();
+
+  int r = SSL_set_session(ss->ssl_, sess);
+  SSL_SESSION_free(sess);
+
+  if (!r) {
+    Local<String> eStr = String::New("SSL_set_session error");
+    return ThrowException(Exception::Error(eStr));
+  }
+
+  return True();
+}
+
+Handle<Value> Connection::IsSessionReused(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->ssl_ == NULL) return False();
+  return SSL_session_reused(ss->ssl_) ? True() : False();
+}
+
 
 Handle<Value> Connection::Start(const Arguments& args) {
   HandleScope scope;
@@ -1101,7 +1311,7 @@ Handle<Value> Connection::ReceivedShutdown(const Arguments& args) {
   if (ss->ssl_ == NULL) return False();
   int r = SSL_get_shutdown(ss->ssl_);
 
-  if (r | SSL_RECEIVED_SHUTDOWN) return True();
+  if (r & SSL_RECEIVED_SHUTDOWN) return True();
 
   return False();
 }
@@ -1333,6 +1543,39 @@ Handle<Value> Connection::SetNPNProtocols(const Arguments& args) {
 };
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+Handle<Value> Connection::GetServername(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->is_server_ && !ss->servername_.IsEmpty()) {
+    return ss->servername_;
+  } else {
+    return False();
+  }
+}
+
+Handle<Value> Connection::SetSNICallback(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (args.Length() < 1 || !args[0]->IsFunction()) {
+    return ThrowException(Exception::Error(String::New(
+           "Must give a Function as first argument")));
+  }
+
+  // Release old handle
+  if (!ss->sniCallback_.IsEmpty()) {
+    ss->sniCallback_.Dispose();
+  }
+  ss->sniCallback_ = Persistent<Function>::New(
+                            Local<Function>::Cast(args[0]));
+
+  return True();
+}
+#endif
 
 static void HexEncode(unsigned char *md_value,
                       int md_len,
@@ -3650,6 +3893,122 @@ class DiffieHellman : public ObjectWrap {
   DH* dh;
 };
 
+struct pbkdf2_req {
+  int err;
+  char* pass;
+  size_t passlen;
+  char* salt;
+  size_t saltlen;
+  size_t iter;
+  char* key;
+  size_t keylen;
+  Persistent<Function> callback;
+};
+
+void
+EIO_PBKDF2(uv_work_t* req) {
+  pbkdf2_req* request = (pbkdf2_req*)req->data;
+  request->err = PKCS5_PBKDF2_HMAC_SHA1(
+    request->pass,
+    request->passlen,
+    (unsigned char*)request->salt,
+    request->saltlen,
+    request->iter,
+    request->keylen,
+    (unsigned char*)request->key);
+  memset(request->pass, 0, request->passlen);
+  memset(request->salt, 0, request->saltlen);
+}
+
+void
+EIO_PBKDF2After(uv_work_t* req) {
+  HandleScope scope;
+
+  pbkdf2_req* request = (pbkdf2_req*)req->data;
+  delete req;
+
+  Handle<Value> argv[2];
+  if (request->err) {
+    argv[0] = Undefined();
+    argv[1] = Encode(request->key, request->keylen, BINARY);
+    memset(request->key, 0, request->keylen);
+  } else {
+    argv[0] = Exception::Error(String::New("PBKDF2 error"));
+    argv[1] = Undefined();
+  }
+
+  TryCatch try_catch;
+
+  request->callback->Call(Context::GetCurrent()->Global(), 2, argv);
+
+  if (try_catch.HasCaught())
+    FatalException(try_catch);
+
+  delete[] request->pass;
+  delete[] request->salt;
+  delete[] request->key;
+  request->callback.Dispose();
+
+  delete request;
+}
+
+Handle<Value>
+PBKDF2(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() != 5)
+    return ThrowException(Exception::TypeError(String::New("Bad parameter")));
+
+  ASSERT_IS_STRING_OR_BUFFER(args[0]);
+  ssize_t passlen = DecodeBytes(args[0], BINARY);
+  if (passlen < 0)
+    return ThrowException(Exception::TypeError(String::New("Bad password")));
+  char* pass = new char[passlen];
+  ssize_t pass_written = DecodeWrite(pass, passlen, args[0], BINARY);
+  assert(pass_written == passlen);
+
+  ASSERT_IS_STRING_OR_BUFFER(args[1]);
+  ssize_t saltlen = DecodeBytes(args[1], BINARY);
+  if (saltlen < 0)
+    return ThrowException(Exception::TypeError(String::New("Bad salt")));
+  char* salt = new char[saltlen];
+  ssize_t salt_written = DecodeWrite(salt, saltlen, args[1], BINARY);
+  assert(salt_written == saltlen);
+
+  if (!args[2]->IsNumber())
+    return ThrowException(Exception::TypeError(String::New("Iterations not a number")));
+  ssize_t iter = args[2]->Int32Value();
+  if (iter < 0)
+    return ThrowException(Exception::TypeError(String::New("Bad iterations")));
+
+  if (!args[3]->IsNumber())
+    return ThrowException(Exception::TypeError(String::New("Key length not a number")));
+  ssize_t keylen = args[3]->Int32Value();
+  if (keylen < 0)
+    return ThrowException(Exception::TypeError(String::New("Bad key length")));
+  char* key = new char[keylen];
+
+  if (!args[4]->IsFunction())
+    return ThrowException(Exception::TypeError(String::New("Callback not a function")));
+  Local<Function> callback = Local<Function>::Cast(args[4]);
+
+  pbkdf2_req* request = new pbkdf2_req;
+  request->err = 0;
+  request->pass = pass;
+  request->passlen = passlen;
+  request->salt = salt;
+  request->saltlen = saltlen;
+  request->iter = iter;
+  request->key = key;
+  request->keylen = keylen;
+  request->callback = Persistent<Function>::New(callback);
+
+  uv_work_t* req = new uv_work_t();
+  req->data = request;
+  uv_queue_work(uv_default_loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
+
+  return Undefined();
+}
 
 void InitCrypto(Handle<Object> target) {
   HandleScope scope;
@@ -3683,10 +4042,15 @@ void InitCrypto(Handle<Object> target) {
   Sign::Initialize(target);
   Verify::Initialize(target);
 
+  NODE_SET_METHOD(target, "PBKDF2", PBKDF2);
+
   subject_symbol    = NODE_PSYMBOL("subject");
   issuer_symbol     = NODE_PSYMBOL("issuer");
   valid_from_symbol = NODE_PSYMBOL("valid_from");
   valid_to_symbol   = NODE_PSYMBOL("valid_to");
+  subjectaltname_symbol = NODE_PSYMBOL("subjectaltname");
+  modulus_symbol        = NODE_PSYMBOL("modulus");
+  exponent_symbol       = NODE_PSYMBOL("exponent");
   fingerprint_symbol   = NODE_PSYMBOL("fingerprint");
   name_symbol       = NODE_PSYMBOL("name");
   version_symbol    = NODE_PSYMBOL("version");

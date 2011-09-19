@@ -45,7 +45,7 @@ static int bytes_received = 0;
 static int bytes_received_done = 0;
 
 
-static uv_buf_t alloc_cb(uv_stream_t* tcp, size_t size) {
+static uv_buf_t alloc_cb(uv_handle_t* handle, size_t size) {
   uv_buf_t buf;
   buf.base = (char*)malloc(size);
   buf.len = size;
@@ -87,7 +87,7 @@ static void read_cb(uv_stream_t* tcp, ssize_t nread, uv_buf_t buf) {
   ASSERT(tcp != NULL);
 
   if (nread < 0) {
-    ASSERT(uv_last_error().code == UV_EOF);
+    ASSERT(uv_last_error(uv_default_loop()).code == UV_EOF);
     printf("GOT EOF\n");
 
     if (buf.base) {
@@ -108,7 +108,7 @@ static void write_cb(uv_write_t* req, int status) {
   ASSERT(req != NULL);
 
   if (status) {
-    uv_err_t err = uv_last_error();
+    uv_err_t err = uv_last_error(uv_default_loop());
     fprintf(stderr, "uv_write error: %s\n", uv_strerror(err));
     ASSERT(0);
   }
@@ -176,15 +176,13 @@ TEST_IMPL(tcp_writealot) {
 
   ASSERT(send_buffer != NULL);
 
-  uv_init();
-
-  r = uv_tcp_init(client);
+  r = uv_tcp_init(uv_default_loop(), client);
   ASSERT(r == 0);
 
   r = uv_tcp_connect(connect_req, client, addr, connect_cb);
   ASSERT(r == 0);
 
-  uv_run();
+  uv_run(uv_default_loop());
 
   ASSERT(shutdown_cb_called == 1);
   ASSERT(connect_cb_called == 1);

@@ -157,6 +157,7 @@ class DebugLocalContext {
         Handle<Object>(debug->debug_context()->global_proxy()), DONT_ENUM,
         ::v8::internal::kNonStrictMode);
   }
+
  private:
   v8::Persistent<v8::Context> context_;
 };
@@ -2174,7 +2175,7 @@ TEST(ScriptBreakPointLine) {
   f = v8::Local<v8::Function>::Cast(env->Global()->Get(v8::String::New("f")));
   g = v8::Local<v8::Function>::Cast(env->Global()->Get(v8::String::New("g")));
 
-  // Chesk that a break point was hit when the script was run.
+  // Check that a break point was hit when the script was run.
   CHECK_EQ(1, break_point_hit_count);
   CHECK_EQ(0, StrLength(last_function_hit));
 
@@ -5844,6 +5845,7 @@ TEST(DebuggerDebugMessageDispatch) {
 
 
 TEST(DebuggerAgent) {
+  v8::V8::Initialize();
   i::Debugger* debugger = i::Isolate::Current()->debugger();
   // Make sure these ports is not used by other tests to allow tests to run in
   // parallel.
@@ -5915,7 +5917,7 @@ class DebuggerAgentProtocolServerThread : public i::Thread {
 
  private:
   int port_;
-  i::SmartPointer<char> body_;
+  i::SmartArrayPointer<char> body_;
   i::Socket* server_;  // Server socket used for bind/accept.
   i::Socket* client_;  // Single client connection used by the test.
   i::Semaphore* listening_;  // Signalled when the server is in listen mode.

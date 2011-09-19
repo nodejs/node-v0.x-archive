@@ -1,8 +1,201 @@
+2011-09-15: Version 3.6.4
+
+        Fixed d8's broken readline history.
+
+        Removed the need for code delete events in CPU profiler (Issue 1466).
+
+        Fixed debugger stepping next with trycatch recursion (Issue 1639).
+
+        Fixing parallel execution in d8 (with -p) and some memory leaks.
+
+        Support for precise stepping in functions compiled before debugging was
+        started (step 1).
+
+
+2011-09-13: Version 3.6.3
+
+        Implemented better support of typed arrays in the d8 shell.
+
+        Bug fixes and performance improvements on all platforms.
+
+
+2011-09-08: Version 3.6.2
+
+        Added "dependencies" target to top-level Makefile.
+
+        Added ability to turn profiler on/off in d8.
+
+        Added "soname_version" parameter to common.gypi, v8.gyp, and Makefile.
+
+        Fixed several crash bugs.
+
+
+2011-09-07: Version 3.6.1
+
+        Fixed a bug in abrupt exit from with or catch inside finally.
+
+        Fixed possible crash in FixedDoubleArray::Initialize() (Chromium
+        issue 95113).
+
+        Fixed a bug in Page::GetRegionMaskForSpan (Chromium issue 94425).
+
+        Fixed a few clang warnings (which -Werror treated as errors).
+
+        Performance improvements on all platforms.
+
+
+2011-09-05: Version 3.6.0
+
+        Fixed a bug when optimizing named function expression (issue 1647).
+
+        Fixed a bug when optimizing f.call.apply (issue 1650).
+
+        Made arguments and caller always be null on native functions
+        (issues 1548 and 1643).
+
+        Fixed issue 1648 (cross-compiling x64 targeting ia32).
+
+        Fixed issue 371 (d8 printing of strings containing \0).
+
+        Fixed order of evaluation in arguments to parseInt (issue 1649).
+
+        Fixed a problem with large heap snapshots in Chrome DevTools
+        (issue 1658, chromium issue 89268).
+
+        Upped default maximum heap size from 512M to 700M.
+
+
+2011-08-31: Version 3.5.10
+
+        Added dependency of v8_base on WinSocket2 Windows library in
+        the GYP-build.
+
+        Various bugfixes.
+
+
+2011-08-29: Version 3.5.9
+
+        Made FromPropertyDescriptor not trigger inherited setters.
+
+        Fixed .gyp files to work on the ARM simulator.
+
+        Fixed shared library build warnings for MSVS.
+
+
+2011-08-24: Version 3.5.8
+
+        Added V8EXPORT attributes for v8::Array::CheckCast and
+        v8::Number::CheckCast.
+
+        Made a slight API change enabling opting out from null termination
+        in String::Write*().
+
+        Fixed arm build for gcc-4.6.
+
+
+2011-08-22: Version 3.5.7
+
+        Make scanner handle invalid unicode escapes in identifiers correctly.
+
+        Make regexp flag parsing stricter.
+
+        Fix several memory leaks.
+
+
+2011-08-17: Version 3.5.6
+
+        Fixed issue that could cause crashes when running with --heap-stats.
+
+        Fixed compilation on Linux 2.6.9 and older.
+
+        Fixed live-object-list to work with isolates.
+
+        Fixed memory leaks in zones and isolates.
+
+        Fixed a performance regression for TypedArrays on x64.
+
+        Stability improvements on all platforms.
+
+
+2011-08-15: Version 3.5.5
+
+        Fixed bugs involving negative zero and the optimizing compiler.
+
+        Fixed optimized version of Function.apply(x, arguments). (issue 1592)
+
+        Eliminated uses of deprecated ARM instructions.
+
+        Sped up Math.floor by using SSE 4.1 roundsd instruction on ia32.
+
+        Removed restriction on the size of disassembled code that is printed.
+
+
+2011-08-10: Version 3.5.4
+
+        Added a preliminary implementation of ES Harmony weak maps.  Weak
+        maps can be enabled by the flag --harmony-weakmaps.
+
+        Introduced a toplevel Makefile to support GYP-based building.  GYP
+        can be obtained from http://gyp.googlecode.com.
+
+        Fixed a bug in the length property of functions created by
+        Function.prototype.bind.
+
+        Reduced malloc heap allocation on process startup.
+
+        Several important code generation bug fixes.
+
+        Performance improvements on all platforms.
+
+
+2011-08-03: Version 3.5.3
+
+        MIPS: Port of fix to ClassOf check from ARM.
+        Patch from Paul Lind <plind44@gmail.com>.
+
+        Stopped using mprotect on Cygwin.
+        Avoided uninitialized member warning on gcc 4.3.4
+        Both patches by Bert Belder.
+
+        Bug fixes and performance improvements on all platforms.
+
+
+2011-08-01: Version 3.5.2
+
+        Performance improvements on all platforms.
+
+
+2011-07-28: Version 3.5.1
+
+        Fixed setting the readonly flag on the prototype property using the
+        API call FunctionTemplate::SetPrototypeAttributes (issue 1539).
+
+        Changed the tools/test.py script to use d8 instead of shell for
+        testing.
+
+        Fixed crash in ToBooleanStub when GC happens during invocation.
+
+        Enabled automatic unboxing of double arrays.
+
+        Performance improvements on all platforms.
+
+
+2011-07-25: Version 3.5.0
+
+        Implemented Object.prototype.{hasOwnProperty, propertyIsEnumerable} for
+        proxies.
+
+        Removed logging to memory support.
+
+        Bugfixes and performance work.
+
+
 2011-07-20: Version 3.4.14
 
         Fix the debugger for strict-mode functions. (Chromium issue 89236)
 
-        Add GetPropertyAttribute method for Object in the API. (Patch by Peter Varga)
+        Add GetPropertyAttribute method for Object in the API. (Patch by 
+        Peter Varga)
 
         Fix -Wunused-but-set-variable for gcc-4.6 on x64. (Issue 1291)
 

@@ -199,6 +199,7 @@ class Genesis BASE_EMBEDDED {
   // New context initialization.  Used for creating a context from scratch.
   void InitializeGlobal(Handle<GlobalObject> inner_global,
                         Handle<JSFunction> empty_function);
+  void InitializeExperimentalGlobal();
   // Installs the contents of the native .js files on the global objects.
   // Used for creating a context from scratch.
   void InstallNativeFunctions();
@@ -349,7 +350,14 @@ static Handle<JSFunction> InstallFunction(Handle<JSObject> target,
                                       prototype,
                                       call_code,
                                       is_ecma_native);
-  SetLocalPropertyNoThrow(target, symbol, function, DONT_ENUM);
+  PropertyAttributes attributes;
+  if (target->IsJSBuiltinsObject()) {
+    attributes =
+        static_cast<PropertyAttributes>(DONT_ENUM | DONT_DELETE | READ_ONLY);
+  } else {
+    attributes = DONT_ENUM;
+  }
+  SetLocalPropertyNoThrow(target, symbol, function, attributes);
   if (is_ecma_native) {
     function->shared()->set_instance_class_name(*symbol);
   }
@@ -1059,7 +1067,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
     Handle<Map> new_map = factory->CopyMapDropTransitions(old_map);
     new_map->set_pre_allocated_property_fields(2);
     Handle<JSObject> result = factory->NewJSObjectFromMap(new_map);
-    new_map->set_elements_kind(JSObject::NON_STRICT_ARGUMENTS_ELEMENTS);
+    new_map->set_elements_kind(NON_STRICT_ARGUMENTS_ELEMENTS);
     // Set up a well-formed parameter map to make assertions happy.
     Handle<FixedArray> elements = factory->NewFixedArray(2);
     elements->set_map(heap->non_strict_arguments_elements_map());
@@ -1159,7 +1167,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 
 
   {
-    // Setup the call-as-function delegate.
+    // Set up the call-as-function delegate.
     Handle<Code> code =
         Handle<Code>(isolate->builtins()->builtin(
             Builtins::kHandleApiCallAsFunction));
@@ -1171,7 +1179,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
   }
 
   {
-    // Setup the call-as-constructor delegate.
+    // Set up the call-as-constructor delegate.
     Handle<Code> code =
         Handle<Code>(isolate->builtins()->builtin(
             Builtins::kHandleApiCallAsConstructor));
@@ -1187,6 +1195,20 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 
   // Initialize the data slot.
   global_context()->set_data(heap->undefined_value());
+}
+
+
+void Genesis::InitializeExperimentalGlobal() {
+  Handle<JSObject> global = Handle<JSObject>(global_context()->global());
+
+  // TODO(mstarzinger): Move this into Genesis::InitializeGlobal once we no
+  // longer need to live behind a flag, so WeakMap gets added to the snapshot.
+  if (FLAG_harmony_weakmaps) {  // -- W e a k M a p
+    Handle<JSObject> prototype =
+        factory()->NewJSObject(isolate()->object_function(), TENURED);
+    InstallFunction(global, "WeakMap", JS_WEAK_MAP_TYPE, JSWeakMap::kSize,
+                    prototype, Builtins::kIllegal, true);
+  }
 }
 
 
@@ -1571,8 +1593,6 @@ bool Genesis::InstallNatives() {
   global_context()->set_string_function_prototype_map(
       HeapObject::cast(string_function->initial_map()->prototype())->map());
 
-  InstallBuiltinFunctionIds();
-
   // Install Function.prototype.call and apply.
   { Handle<String> key = factory()->function_class_symbol();
     Handle<JSFunction> function =
@@ -1605,6 +1625,8 @@ bool Genesis::InstallNatives() {
     call->shared()->set_length(1);
     apply->shared()->set_length(2);
   }
+
+  InstallBuiltinFunctionIds();
 
   // Create a constructor for RegExp results (a variant of Array that
   // predefines the two properties index and match).
@@ -1662,7 +1684,6 @@ bool Genesis::InstallNatives() {
     global_context()->set_regexp_result_map(*initial_map);
   }
 
-
 #ifdef DEBUG
   builtins->Verify();
 #endif
@@ -1678,6 +1699,11 @@ bool Genesis::InstallExperimentalNatives() {
     if (FLAG_harmony_proxies &&
         strcmp(ExperimentalNatives::GetScriptName(i).start(),
                "native proxy.js") == 0) {
+      if (!CompileExperimentalBuiltin(isolate(), i)) return false;
+    }
+    if (FLAG_harmony_weakmaps &&
+        strcmp(ExperimentalNatives::GetScriptName(i).start(),
+               "native weakmap.js") == 0) {
       if (!CompileExperimentalBuiltin(isolate(), i)) return false;
     }
   }
@@ -2036,7 +2062,7 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
           break;
         }
         case MAP_TRANSITION:
-        case EXTERNAL_ARRAY_TRANSITION:
+        case ELEMENTS_TRANSITION:
         case CONSTANT_TRANSITION:
         case NULL_DESCRIPTOR:
           // Ignore non-properties.
@@ -2169,7 +2195,8 @@ Genesis::Genesis(Isolate* isolate,
     isolate->counters()->contexts_created_from_scratch()->Increment();
   }
 
-  // Install experimental natives.
+  // Initialize experimental globals and install experimental natives.
+  InitializeExperimentalGlobal();
   if (!InstallExperimentalNatives()) return;
 
   result_ = global_context_;

@@ -72,8 +72,6 @@ using ::v8::Undefined;
 using ::v8::V8;
 using ::v8::Value;
 
-namespace i = ::i;
-
 
 static void ExpectString(const char* code, const char* expected) {
   Local<Value> result = CompileRun(code);
@@ -331,16 +329,14 @@ static uint16_t* AsciiToTwoByteString(const char* source) {
 
 class TestResource: public String::ExternalStringResource {
  public:
-  static int dispose_count;
-
-  explicit TestResource(uint16_t* data)
-      : data_(data), length_(0) {
+  explicit TestResource(uint16_t* data, int* counter = NULL)
+    : data_(data), length_(0), counter_(counter) {
     while (data[length_]) ++length_;
   }
 
   ~TestResource() {
     i::DeleteArray(data_);
-    ++dispose_count;
+    if (counter_ != NULL) ++*counter_;
   }
 
   const uint16_t* data() const {
@@ -353,23 +349,18 @@ class TestResource: public String::ExternalStringResource {
  private:
   uint16_t* data_;
   size_t length_;
+  int* counter_;
 };
-
-
-int TestResource::dispose_count = 0;
 
 
 class TestAsciiResource: public String::ExternalAsciiStringResource {
  public:
-  static int dispose_count;
-
-  explicit TestAsciiResource(const char* data)
-      : data_(data),
-        length_(strlen(data)) { }
+  explicit TestAsciiResource(const char* data, int* counter = NULL)
+    : data_(data), length_(strlen(data)), counter_(counter) { }
 
   ~TestAsciiResource() {
     i::DeleteArray(data_);
-    ++dispose_count;
+    if (counter_ != NULL) ++*counter_;
   }
 
   const char* data() const {
@@ -382,20 +373,18 @@ class TestAsciiResource: public String::ExternalAsciiStringResource {
  private:
   const char* data_;
   size_t length_;
+  int* counter_;
 };
 
 
-int TestAsciiResource::dispose_count = 0;
-
-
 THREADED_TEST(ScriptUsingStringResource) {
-  TestResource::dispose_count = 0;
+  int dispose_count = 0;
   const char* c_source = "1 + 2 * 3";
   uint16_t* two_byte_source = AsciiToTwoByteString(c_source);
   {
     v8::HandleScope scope;
     LocalContext env;
-    TestResource* resource = new TestResource(two_byte_source);
+    TestResource* resource = new TestResource(two_byte_source, &dispose_count);
     Local<String> source = String::NewExternal(resource);
     Local<Script> script = Script::Compile(source);
     Local<Value> value = script->Run();
@@ -405,37 +394,38 @@ THREADED_TEST(ScriptUsingStringResource) {
     CHECK_EQ(resource,
              static_cast<TestResource*>(source->GetExternalStringResource()));
     HEAP->CollectAllGarbage(false);
-    CHECK_EQ(0, TestResource::dispose_count);
+    CHECK_EQ(0, dispose_count);
   }
   v8::internal::Isolate::Current()->compilation_cache()->Clear();
   HEAP->CollectAllGarbage(false);
-  CHECK_EQ(1, TestResource::dispose_count);
+  CHECK_EQ(1, dispose_count);
 }
 
 
 THREADED_TEST(ScriptUsingAsciiStringResource) {
-  TestAsciiResource::dispose_count = 0;
+  int dispose_count = 0;
   const char* c_source = "1 + 2 * 3";
   {
     v8::HandleScope scope;
     LocalContext env;
     Local<String> source =
-        String::NewExternal(new TestAsciiResource(i::StrDup(c_source)));
+        String::NewExternal(new TestAsciiResource(i::StrDup(c_source),
+                                                  &dispose_count));
     Local<Script> script = Script::Compile(source);
     Local<Value> value = script->Run();
     CHECK(value->IsNumber());
     CHECK_EQ(7, value->Int32Value());
     HEAP->CollectAllGarbage(false);
-    CHECK_EQ(0, TestAsciiResource::dispose_count);
+    CHECK_EQ(0, dispose_count);
   }
   i::Isolate::Current()->compilation_cache()->Clear();
   HEAP->CollectAllGarbage(false);
-  CHECK_EQ(1, TestAsciiResource::dispose_count);
+  CHECK_EQ(1, dispose_count);
 }
 
 
 THREADED_TEST(ScriptMakingExternalString) {
-  TestResource::dispose_count = 0;
+  int dispose_count = 0;
   uint16_t* two_byte_source = AsciiToTwoByteString("1 + 2 * 3");
   {
     v8::HandleScope scope;
@@ -444,23 +434,24 @@ THREADED_TEST(ScriptMakingExternalString) {
     // Trigger GCs so that the newly allocated string moves to old gen.
     HEAP->CollectGarbage(i::NEW_SPACE);  // in survivor space now
     HEAP->CollectGarbage(i::NEW_SPACE);  // in old gen now
-    bool success = source->MakeExternal(new TestResource(two_byte_source));
+    bool success = source->MakeExternal(new TestResource(two_byte_source,
+                                                         &dispose_count));
     CHECK(success);
     Local<Script> script = Script::Compile(source);
     Local<Value> value = script->Run();
     CHECK(value->IsNumber());
     CHECK_EQ(7, value->Int32Value());
     HEAP->CollectAllGarbage(false);
-    CHECK_EQ(0, TestResource::dispose_count);
+    CHECK_EQ(0, dispose_count);
   }
   i::Isolate::Current()->compilation_cache()->Clear();
   HEAP->CollectAllGarbage(false);
-  CHECK_EQ(1, TestResource::dispose_count);
+  CHECK_EQ(1, dispose_count);
 }
 
 
 THREADED_TEST(ScriptMakingExternalAsciiString) {
-  TestAsciiResource::dispose_count = 0;
+  int dispose_count = 0;
   const char* c_source = "1 + 2 * 3";
   {
     v8::HandleScope scope;
@@ -470,18 +461,18 @@ THREADED_TEST(ScriptMakingExternalAsciiString) {
     HEAP->CollectGarbage(i::NEW_SPACE);  // in survivor space now
     HEAP->CollectGarbage(i::NEW_SPACE);  // in old gen now
     bool success = source->MakeExternal(
-        new TestAsciiResource(i::StrDup(c_source)));
+        new TestAsciiResource(i::StrDup(c_source), &dispose_count));
     CHECK(success);
     Local<Script> script = Script::Compile(source);
     Local<Value> value = script->Run();
     CHECK(value->IsNumber());
     CHECK_EQ(7, value->Int32Value());
     HEAP->CollectAllGarbage(false);
-    CHECK_EQ(0, TestAsciiResource::dispose_count);
+    CHECK_EQ(0, dispose_count);
   }
   i::Isolate::Current()->compilation_cache()->Clear();
   HEAP->CollectAllGarbage(false);
-  CHECK_EQ(1, TestAsciiResource::dispose_count);
+  CHECK_EQ(1, dispose_count);
 }
 
 
@@ -605,49 +596,52 @@ THREADED_TEST(UsingExternalAsciiString) {
 
 
 THREADED_TEST(ScavengeExternalString) {
-  TestResource::dispose_count = 0;
+  int dispose_count = 0;
   bool in_new_space = false;
   {
     v8::HandleScope scope;
     uint16_t* two_byte_string = AsciiToTwoByteString("test string");
     Local<String> string =
-        String::NewExternal(new TestResource(two_byte_string));
+      String::NewExternal(new TestResource(two_byte_string,
+                                           &dispose_count));
     i::Handle<i::String> istring = v8::Utils::OpenHandle(*string);
     HEAP->CollectGarbage(i::NEW_SPACE);
     in_new_space = HEAP->InNewSpace(*istring);
     CHECK(in_new_space || HEAP->old_data_space()->Contains(*istring));
-    CHECK_EQ(0, TestResource::dispose_count);
+    CHECK_EQ(0, dispose_count);
   }
   HEAP->CollectGarbage(in_new_space ? i::NEW_SPACE : i::OLD_DATA_SPACE);
-  CHECK_EQ(1, TestResource::dispose_count);
+  CHECK_EQ(1, dispose_count);
 }
 
 
 THREADED_TEST(ScavengeExternalAsciiString) {
-  TestAsciiResource::dispose_count = 0;
+  int dispose_count = 0;
   bool in_new_space = false;
   {
     v8::HandleScope scope;
     const char* one_byte_string = "test string";
     Local<String> string = String::NewExternal(
-        new TestAsciiResource(i::StrDup(one_byte_string)));
+        new TestAsciiResource(i::StrDup(one_byte_string), &dispose_count));
     i::Handle<i::String> istring = v8::Utils::OpenHandle(*string);
     HEAP->CollectGarbage(i::NEW_SPACE);
     in_new_space = HEAP->InNewSpace(*istring);
     CHECK(in_new_space || HEAP->old_data_space()->Contains(*istring));
-    CHECK_EQ(0, TestAsciiResource::dispose_count);
+    CHECK_EQ(0, dispose_count);
   }
   HEAP->CollectGarbage(in_new_space ? i::NEW_SPACE : i::OLD_DATA_SPACE);
-  CHECK_EQ(1, TestAsciiResource::dispose_count);
+  CHECK_EQ(1, dispose_count);
 }
 
 
 class TestAsciiResourceWithDisposeControl: public TestAsciiResource {
  public:
+  // Only used by non-threaded tests, so it can use static fields.
   static int dispose_calls;
+  static int dispose_count;
 
   TestAsciiResourceWithDisposeControl(const char* data, bool dispose)
-      : TestAsciiResource(data),
+      : TestAsciiResource(data, &dispose_count),
         dispose_(dispose) { }
 
   void Dispose() {
@@ -659,6 +653,7 @@ class TestAsciiResourceWithDisposeControl: public TestAsciiResource {
 };
 
 
+int TestAsciiResourceWithDisposeControl::dispose_count = 0;
 int TestAsciiResourceWithDisposeControl::dispose_calls = 0;
 
 
@@ -666,7 +661,7 @@ TEST(ExternalStringWithDisposeHandling) {
   const char* c_source = "1 + 2 * 3";
 
   // Use a stack allocated external string resource allocated object.
-  TestAsciiResource::dispose_count = 0;
+  TestAsciiResourceWithDisposeControl::dispose_count = 0;
   TestAsciiResourceWithDisposeControl::dispose_calls = 0;
   TestAsciiResourceWithDisposeControl res_stack(i::StrDup(c_source), false);
   {
@@ -678,15 +673,15 @@ TEST(ExternalStringWithDisposeHandling) {
     CHECK(value->IsNumber());
     CHECK_EQ(7, value->Int32Value());
     HEAP->CollectAllGarbage(false);
-    CHECK_EQ(0, TestAsciiResource::dispose_count);
+    CHECK_EQ(0, TestAsciiResourceWithDisposeControl::dispose_count);
   }
   i::Isolate::Current()->compilation_cache()->Clear();
   HEAP->CollectAllGarbage(false);
   CHECK_EQ(1, TestAsciiResourceWithDisposeControl::dispose_calls);
-  CHECK_EQ(0, TestAsciiResource::dispose_count);
+  CHECK_EQ(0, TestAsciiResourceWithDisposeControl::dispose_count);
 
   // Use a heap allocated external string resource allocated object.
-  TestAsciiResource::dispose_count = 0;
+  TestAsciiResourceWithDisposeControl::dispose_count = 0;
   TestAsciiResourceWithDisposeControl::dispose_calls = 0;
   TestAsciiResource* res_heap =
       new TestAsciiResourceWithDisposeControl(i::StrDup(c_source), true);
@@ -699,12 +694,12 @@ TEST(ExternalStringWithDisposeHandling) {
     CHECK(value->IsNumber());
     CHECK_EQ(7, value->Int32Value());
     HEAP->CollectAllGarbage(false);
-    CHECK_EQ(0, TestAsciiResource::dispose_count);
+    CHECK_EQ(0, TestAsciiResourceWithDisposeControl::dispose_count);
   }
   i::Isolate::Current()->compilation_cache()->Clear();
   HEAP->CollectAllGarbage(false);
   CHECK_EQ(1, TestAsciiResourceWithDisposeControl::dispose_calls);
-  CHECK_EQ(1, TestAsciiResource::dispose_count);
+  CHECK_EQ(1, TestAsciiResourceWithDisposeControl::dispose_count);
 }
 
 
@@ -828,7 +823,7 @@ static void* expected_ptr;
 static v8::Handle<v8::Value> callback(const v8::Arguments& args) {
   void* ptr = v8::External::Unwrap(args.Data());
   CHECK_EQ(expected_ptr, ptr);
-  return v8::Boolean::New(true);
+  return v8::True();
 }
 
 
@@ -2614,7 +2609,7 @@ v8::Handle<Value> ThrowFromC(const v8::Arguments& args) {
 
 
 v8::Handle<Value> CCatcher(const v8::Arguments& args) {
-  if (args.Length() < 1) return v8::Boolean::New(false);
+  if (args.Length() < 1) return v8::False();
   v8::HandleScope scope;
   v8::TryCatch try_catch;
   Local<Value> result = v8::Script::Compile(args[0]->ToString())->Run();
@@ -3560,6 +3555,114 @@ THREADED_TEST(IndexedInterceptorWithIndexedAccessor) {
 }
 
 
+static v8::Handle<Value> UnboxedDoubleIndexedPropertyGetter(
+    uint32_t index,
+    const AccessorInfo& info) {
+  ApiTestFuzzer::Fuzz();
+  if (index < 25) {
+    return v8::Handle<Value>(v8_num(index));
+  }
+  return v8::Handle<Value>();
+}
+
+
+static v8::Handle<Value> UnboxedDoubleIndexedPropertySetter(
+    uint32_t index,
+    Local<Value> value,
+    const AccessorInfo& info) {
+  ApiTestFuzzer::Fuzz();
+  if (index < 25) {
+    return v8::Handle<Value>(v8_num(index));
+  }
+  return v8::Handle<Value>();
+}
+
+
+Handle<v8::Array> UnboxedDoubleIndexedPropertyEnumerator(
+    const AccessorInfo& info) {
+  // Force the list of returned keys to be stored in a FastDoubleArray.
+  Local<Script> indexed_property_names_script = Script::Compile(v8_str(
+      "keys = new Array(); keys[125000] = 1;"
+      "for(i = 0; i < 80000; i++) { keys[i] = i; };"
+      "keys.length = 25; keys;"));
+  Local<Value> result = indexed_property_names_script->Run();
+  return Local<v8::Array>(::v8::Array::Cast(*result));
+}
+
+
+// Make sure that the the interceptor code in the runtime properly handles
+// merging property name lists for double-array-backed arrays.
+THREADED_TEST(IndexedInterceptorUnboxedDoubleWithIndexedAccessor) {
+  v8::HandleScope scope;
+  Local<ObjectTemplate> templ = ObjectTemplate::New();
+  templ->SetIndexedPropertyHandler(UnboxedDoubleIndexedPropertyGetter,
+                                   UnboxedDoubleIndexedPropertySetter,
+                                   0,
+                                   0,
+                                   UnboxedDoubleIndexedPropertyEnumerator);
+  LocalContext context;
+  context->Global()->Set(v8_str("obj"), templ->NewInstance());
+  // When obj is created, force it to be Stored in a FastDoubleArray.
+  Local<Script> create_unboxed_double_script = Script::Compile(v8_str(
+      "obj[125000] = 1; for(i = 0; i < 80000; i+=2) { obj[i] = i; } "
+      "key_count = 0; "
+      "for (x in obj) {key_count++;};"
+      "obj;"));
+  Local<Value> result = create_unboxed_double_script->Run();
+  CHECK(result->ToObject()->HasRealIndexedProperty(2000));
+  Local<Script> key_count_check = Script::Compile(v8_str(
+      "key_count;"));
+  result = key_count_check->Run();
+  CHECK_EQ(v8_num(40013), result);
+}
+
+
+Handle<v8::Array> NonStrictArgsIndexedPropertyEnumerator(
+    const AccessorInfo& info) {
+  // Force the list of returned keys to be stored in a Arguments object.
+  Local<Script> indexed_property_names_script = Script::Compile(v8_str(
+      "function f(w,x) {"
+      " return arguments;"
+      "}"
+      "keys = f(0, 1, 2, 3);"
+      "keys;"));
+  Local<Value> result = indexed_property_names_script->Run();
+  return Local<v8::Array>(static_cast<v8::Array*>(::v8::Object::Cast(*result)));
+}
+
+
+static v8::Handle<Value> NonStrictIndexedPropertyGetter(
+    uint32_t index,
+    const AccessorInfo& info) {
+  ApiTestFuzzer::Fuzz();
+  if (index < 4) {
+    return v8::Handle<Value>(v8_num(index));
+  }
+  return v8::Handle<Value>();
+}
+
+
+// Make sure that the the interceptor code in the runtime properly handles
+// merging property name lists for non-string arguments arrays.
+THREADED_TEST(IndexedInterceptorNonStrictArgsWithIndexedAccessor) {
+  v8::HandleScope scope;
+  Local<ObjectTemplate> templ = ObjectTemplate::New();
+  templ->SetIndexedPropertyHandler(NonStrictIndexedPropertyGetter,
+                                   0,
+                                   0,
+                                   0,
+                                   NonStrictArgsIndexedPropertyEnumerator);
+  LocalContext context;
+  context->Global()->Set(v8_str("obj"), templ->NewInstance());
+  Local<Script> create_args_script =
+      Script::Compile(v8_str(
+          "var key_count = 0;"
+          "for (x in obj) {key_count++;} key_count;"));
+  Local<Value> result = create_args_script->Run();
+  CHECK_EQ(v8_num(4), result);
+}
+
+
 static v8::Handle<Value> IdentityIndexedPropertyGetter(
     uint32_t index,
     const AccessorInfo& info) {
@@ -4123,7 +4226,7 @@ template <typename T> static void USE(T) { }
 
 
 // This test is not intended to be run, just type checked.
-static void PersistentHandles() {
+static inline void PersistentHandles() {
   USE(PersistentHandles);
   Local<String> str = v8_str("foo");
   v8::Persistent<String> p_str = v8::Persistent<String>::New(str);
@@ -5193,6 +5296,40 @@ THREADED_TEST(StringWrite) {
   CHECK_EQ(0, strncmp("d\1", buf, 2));
   uint16_t answer7[] = {'d', 0x101};
   CHECK_EQ(0, StrNCmp16(answer7, wbuf, 2));
+
+  memset(wbuf, 0x1, sizeof(wbuf));
+  wbuf[5] = 'X';
+  len = str->Write(wbuf, 0, 6, String::NO_NULL_TERMINATION);
+  CHECK_EQ(5, len);
+  CHECK_EQ('X', wbuf[5]);
+  uint16_t answer8a[] = {'a', 'b', 'c', 'd', 'e'};
+  uint16_t answer8b[] = {'a', 'b', 'c', 'd', 'e', '\0'};
+  CHECK_EQ(0, StrNCmp16(answer8a, wbuf, 5));
+  CHECK_NE(0, StrCmp16(answer8b, wbuf));
+  wbuf[5] = '\0';
+  CHECK_EQ(0, StrCmp16(answer8b, wbuf));
+
+  memset(buf, 0x1, sizeof(buf));
+  buf[5] = 'X';
+  len = str->WriteAscii(buf, 0, 6, String::NO_NULL_TERMINATION);
+  CHECK_EQ(5, len);
+  CHECK_EQ('X', buf[5]);
+  CHECK_EQ(0, strncmp("abcde", buf, 5));
+  CHECK_NE(0, strcmp("abcde", buf));
+  buf[5] = '\0';
+  CHECK_EQ(0, strcmp("abcde", buf));
+
+  memset(utf8buf, 0x1, sizeof(utf8buf));
+  utf8buf[8] = 'X';
+  len = str2->WriteUtf8(utf8buf, sizeof(utf8buf), &charlen,
+                        String::NO_NULL_TERMINATION);
+  CHECK_EQ(8, len);
+  CHECK_EQ('X', utf8buf[8]);
+  CHECK_EQ(5, charlen);
+  CHECK_EQ(0, strncmp(utf8buf, "abc\303\260\342\230\203", 8));
+  CHECK_NE(0, strcmp(utf8buf, "abc\303\260\342\230\203"));
+  utf8buf[8] = '\0';
+  CHECK_EQ(0, strcmp(utf8buf, "abc\303\260\342\230\203"));
 }
 
 
@@ -6993,53 +7130,34 @@ THREADED_TEST(SetPrototype) {
 }
 
 
-THREADED_TEST(SetPrototypeProperties) {
+THREADED_TEST(FunctionReadOnlyPrototype) {
   v8::HandleScope handle_scope;
   LocalContext context;
 
   Local<v8::FunctionTemplate> t1 = v8::FunctionTemplate::New();
-  t1->SetPrototypeAttributes(v8::DontDelete);
+  t1->PrototypeTemplate()->Set(v8_str("x"), v8::Integer::New(42));
+  t1->ReadOnlyPrototype();
   context->Global()->Set(v8_str("func1"), t1->GetFunction());
+  // Configured value of ReadOnly flag.
   CHECK(CompileRun(
       "(function() {"
       "  descriptor = Object.getOwnPropertyDescriptor(func1, 'prototype');"
-      "  return (descriptor['writable'] == true) &&"
-      "         (descriptor['enumerable'] == true) &&"
-      "         (descriptor['configurable'] == false);"
+      "  return (descriptor['writable'] == false);"
       "})()")->BooleanValue());
+  CHECK_EQ(42, CompileRun("func1.prototype.x")->Int32Value());
+  CHECK_EQ(42,
+           CompileRun("func1.prototype = {}; func1.prototype.x")->Int32Value());
 
   Local<v8::FunctionTemplate> t2 = v8::FunctionTemplate::New();
-  t2->SetPrototypeAttributes(v8::DontEnum);
+  t2->PrototypeTemplate()->Set(v8_str("x"), v8::Integer::New(42));
   context->Global()->Set(v8_str("func2"), t2->GetFunction());
+  // Default value of ReadOnly flag.
   CHECK(CompileRun(
       "(function() {"
       "  descriptor = Object.getOwnPropertyDescriptor(func2, 'prototype');"
-      "  return (descriptor['writable'] == true) &&"
-      "         (descriptor['enumerable'] == false) &&"
-      "         (descriptor['configurable'] == true);"
+      "  return (descriptor['writable'] == true);"
       "})()")->BooleanValue());
-
-  Local<v8::FunctionTemplate> t3 = v8::FunctionTemplate::New();
-  t3->SetPrototypeAttributes(v8::ReadOnly);
-  context->Global()->Set(v8_str("func3"), t3->GetFunction());
-  CHECK(CompileRun(
-      "(function() {"
-      "  descriptor = Object.getOwnPropertyDescriptor(func3, 'prototype');"
-      "  return (descriptor['writable'] == false) &&"
-      "         (descriptor['enumerable'] == true) &&"
-      "         (descriptor['configurable'] == true);"
-      "})()")->BooleanValue());
-
-  Local<v8::FunctionTemplate> t4 = v8::FunctionTemplate::New();
-  t4->SetPrototypeAttributes(v8::ReadOnly | v8::DontEnum | v8::DontDelete);
-  context->Global()->Set(v8_str("func4"), t4->GetFunction());
-  CHECK(CompileRun(
-      "(function() {"
-      "  descriptor = Object.getOwnPropertyDescriptor(func4, 'prototype');"
-      "  return (descriptor['writable'] == false) &&"
-      "         (descriptor['enumerable'] == false) &&"
-      "         (descriptor['configurable'] == false);"
-      "})()")->BooleanValue());
+  CHECK_EQ(42, CompileRun("func2.prototype.x")->Int32Value());
 }
 
 
@@ -7178,7 +7296,7 @@ THREADED_TEST(ConstructorForObject) {
     CHECK(value->IsBoolean());
     CHECK_EQ(true, value->BooleanValue());
 
-    Handle<Value> args3[] = { v8::Boolean::New(true) };
+    Handle<Value> args3[] = { v8::True() };
     Local<Value> value_obj3 = instance->CallAsConstructor(1, args3);
     CHECK(value_obj3->IsObject());
     Local<Object> object3 = Local<Object>::Cast(value_obj3);
@@ -9449,10 +9567,7 @@ THREADED_TEST(Overriding) {
 
 static v8::Handle<Value> IsConstructHandler(const v8::Arguments& args) {
   ApiTestFuzzer::Fuzz();
-  if (args.IsConstructCall()) {
-    return v8::Boolean::New(true);
-  }
-  return v8::Boolean::New(false);
+  return v8::Boolean::New(args.IsConstructCall());
 }
 
 
@@ -10620,17 +10735,16 @@ TEST(PreCompileInvalidPreparseDataError) {
            *exception_value);
 
   try_catch.Reset();
+
   // Overwrite function bar's start position with 200.  The function entry
-  // will not be found when searching for it by position.
+  // will not be found when searching for it by position and we should fall
+  // back on eager compilation.
   sd = v8::ScriptData::PreCompile(script, i::StrLength(script));
   sd_data = reinterpret_cast<unsigned*>(const_cast<char*>(sd->Data()));
   sd_data[kHeaderSize + 1 * kFunctionEntrySize + kFunctionEntryStartOffset] =
       200;
   compiled_script = Script::New(source, NULL, sd);
-  CHECK(try_catch.HasCaught());
-  String::AsciiValue second_exception_value(try_catch.Message()->Get());
-  CHECK_EQ("Uncaught SyntaxError: Invalid preparser data for function bar",
-           *second_exception_value);
+  CHECK(!try_catch.HasCaught());
 
   delete sd;
 }
@@ -11619,7 +11733,7 @@ THREADED_TEST(PixelArray) {
   }
   HEAP->CollectAllGarbage(false);  // Force GC to trigger verification.
   for (int i = 0; i < kElementCount; i++) {
-    CHECK_EQ(i % 256, pixels->get(i));
+    CHECK_EQ(i % 256, pixels->get_scalar(i));
     CHECK_EQ(i % 256, pixel_data[i]);
   }
 
@@ -11679,14 +11793,21 @@ THREADED_TEST(PixelArray) {
   CHECK_EQ(28, result->Int32Value());
 
   i::Handle<i::Smi> value(i::Smi::FromInt(2));
-  i::SetElement(jsobj, 1, value, i::kNonStrictMode);
+  i::Handle<i::Object> no_failure;
+  no_failure = i::SetElement(jsobj, 1, value, i::kNonStrictMode);
+  ASSERT(!no_failure.is_null());
+  i::USE(no_failure);
   CHECK_EQ(2, i::Smi::cast(jsobj->GetElement(1)->ToObjectChecked())->value());
   *value.location() = i::Smi::FromInt(256);
-  i::SetElement(jsobj, 1, value, i::kNonStrictMode);
+  no_failure = i::SetElement(jsobj, 1, value, i::kNonStrictMode);
+  ASSERT(!no_failure.is_null());
+  i::USE(no_failure);
   CHECK_EQ(255,
            i::Smi::cast(jsobj->GetElement(1)->ToObjectChecked())->value());
   *value.location() = i::Smi::FromInt(-1);
-  i::SetElement(jsobj, 1, value, i::kNonStrictMode);
+  no_failure = i::SetElement(jsobj, 1, value, i::kNonStrictMode);
+  ASSERT(!no_failure.is_null());
+  i::USE(no_failure);
   CHECK_EQ(0, i::Smi::cast(jsobj->GetElement(1)->ToObjectChecked())->value());
 
   result = CompileRun("for (var i = 0; i < 8; i++) {"
@@ -12092,7 +12213,8 @@ static void ExternalArrayTestHelper(v8::ExternalArrayType array_type,
   }
   HEAP->CollectAllGarbage(false);  // Force GC to trigger verification.
   for (int i = 0; i < kElementCount; i++) {
-    CHECK_EQ(static_cast<int64_t>(i), static_cast<int64_t>(array->get(i)));
+    CHECK_EQ(static_cast<int64_t>(i),
+             static_cast<int64_t>(array->get_scalar(i)));
     CHECK_EQ(static_cast<int64_t>(i), static_cast<int64_t>(array_data[i]));
   }
 
@@ -13609,6 +13731,9 @@ THREADED_TEST(TwoByteStringInAsciiCons) {
       "str2;";
   Local<Value> result = CompileRun(init_code);
 
+  Local<Value> indexof = CompileRun("str2.indexOf('els')");
+  Local<Value> lastindexof = CompileRun("str2.lastIndexOf('dab')");
+
   CHECK(result->IsString());
   i::Handle<i::String> string = v8::Utils::OpenHandle(String::Cast(*result));
   int length = string->length();
@@ -13673,6 +13798,10 @@ THREADED_TEST(TwoByteStringInAsciiCons) {
   ExpectString("str2.substring(2, 20);", "elspendabelabelspe");
 
   ExpectString("str2.charAt(2);", "e");
+
+  ExpectObject("str2.indexOf('els');", indexof);
+
+  ExpectObject("str2.lastIndexOf('dab');", lastindexof);
 
   reresult = CompileRun("str2.charCodeAt(2);");
   CHECK_EQ(static_cast<int32_t>('e'), reresult->Int32Value());
@@ -14327,34 +14456,34 @@ TEST(RegExp) {
   v8::Handle<v8::RegExp> re = v8::RegExp::New(v8_str("foo"), v8::RegExp::kNone);
   CHECK(re->IsRegExp());
   CHECK(re->GetSource()->Equals(v8_str("foo")));
-  CHECK_EQ(re->GetFlags(), v8::RegExp::kNone);
+  CHECK_EQ(v8::RegExp::kNone, re->GetFlags());
 
   re = v8::RegExp::New(v8_str("bar"),
                        static_cast<v8::RegExp::Flags>(v8::RegExp::kIgnoreCase |
                                                       v8::RegExp::kGlobal));
   CHECK(re->IsRegExp());
   CHECK(re->GetSource()->Equals(v8_str("bar")));
-  CHECK_EQ(static_cast<int>(re->GetFlags()),
-           v8::RegExp::kIgnoreCase | v8::RegExp::kGlobal);
+  CHECK_EQ(v8::RegExp::kIgnoreCase | v8::RegExp::kGlobal,
+           static_cast<int>(re->GetFlags()));
 
   re = v8::RegExp::New(v8_str("baz"),
                        static_cast<v8::RegExp::Flags>(v8::RegExp::kIgnoreCase |
                                                       v8::RegExp::kMultiline));
   CHECK(re->IsRegExp());
   CHECK(re->GetSource()->Equals(v8_str("baz")));
-  CHECK_EQ(static_cast<int>(re->GetFlags()),
-           v8::RegExp::kIgnoreCase | v8::RegExp::kMultiline);
+  CHECK_EQ(v8::RegExp::kIgnoreCase | v8::RegExp::kMultiline,
+           static_cast<int>(re->GetFlags()));
 
   re = CompileRun("/quux/").As<v8::RegExp>();
   CHECK(re->IsRegExp());
   CHECK(re->GetSource()->Equals(v8_str("quux")));
-  CHECK_EQ(re->GetFlags(), v8::RegExp::kNone);
+  CHECK_EQ(v8::RegExp::kNone, re->GetFlags());
 
   re = CompileRun("/quux/gm").As<v8::RegExp>();
   CHECK(re->IsRegExp());
   CHECK(re->GetSource()->Equals(v8_str("quux")));
-  CHECK_EQ(static_cast<int>(re->GetFlags()),
-           v8::RegExp::kGlobal | v8::RegExp::kMultiline);
+  CHECK_EQ(v8::RegExp::kGlobal | v8::RegExp::kMultiline,
+           static_cast<int>(re->GetFlags()));
 
   // Override the RegExp constructor and check the API constructor
   // still works.
@@ -14363,15 +14492,15 @@ TEST(RegExp) {
   re = v8::RegExp::New(v8_str("foobar"), v8::RegExp::kNone);
   CHECK(re->IsRegExp());
   CHECK(re->GetSource()->Equals(v8_str("foobar")));
-  CHECK_EQ(re->GetFlags(), v8::RegExp::kNone);
+  CHECK_EQ(v8::RegExp::kNone, re->GetFlags());
 
   re = v8::RegExp::New(v8_str("foobarbaz"),
                        static_cast<v8::RegExp::Flags>(v8::RegExp::kIgnoreCase |
                                                       v8::RegExp::kMultiline));
   CHECK(re->IsRegExp());
   CHECK(re->GetSource()->Equals(v8_str("foobarbaz")));
-  CHECK_EQ(static_cast<int>(re->GetFlags()),
-           v8::RegExp::kIgnoreCase | v8::RegExp::kMultiline);
+  CHECK_EQ(v8::RegExp::kIgnoreCase | v8::RegExp::kMultiline,
+           static_cast<int>(re->GetFlags()));
 
   context->Global()->Set(v8_str("re"), re);
   ExpectTrue("re.test('FoobarbaZ')");
@@ -14549,6 +14678,24 @@ THREADED_TEST(CreationContext) {
   context1.Dispose();
   context2.Dispose();
   context3.Dispose();
+}
+
+
+THREADED_TEST(CreationContextOfJsFunction) {
+  HandleScope handle_scope;
+  Persistent<Context> context = Context::New();
+  InstallContextId(context, 1);
+
+  Local<Object> function;
+  {
+    Context::Scope scope(context);
+    function = CompileRun("function foo() {}; foo").As<Object>();
+  }
+
+  CHECK(function->CreationContext() == context);
+  CheckContextId(function, 1);
+
+  context.Dispose();
 }
 
 
@@ -14793,4 +14940,217 @@ THREADED_TEST(Regress1516) {
       CHECK_GT(elements, map_cache->NumberOfElements());
     }
   }
+}
+
+
+static bool BlockProtoNamedSecurityTestCallback(Local<v8::Object> global,
+                                                Local<Value> name,
+                                                v8::AccessType type,
+                                                Local<Value> data) {
+  // Only block read access to __proto__.
+  if (type == v8::ACCESS_GET &&
+      name->IsString() &&
+      name->ToString()->Length() == 9 &&
+      name->ToString()->Utf8Length() == 9) {
+    char buffer[10];
+    CHECK_EQ(10, name->ToString()->WriteUtf8(buffer));
+    return strncmp(buffer, "__proto__", 9) != 0;
+  }
+
+  return true;
+}
+
+
+THREADED_TEST(Regress93759) {
+  HandleScope scope;
+
+  // Template for object with security check.
+  Local<ObjectTemplate> no_proto_template = v8::ObjectTemplate::New();
+  // We don't do indexing, so any callback can be used for that.
+  no_proto_template->SetAccessCheckCallbacks(
+      BlockProtoNamedSecurityTestCallback,
+      IndexedSecurityTestCallback);
+
+  // Templates for objects with hidden prototypes and possibly security check.
+  Local<FunctionTemplate> hidden_proto_template = v8::FunctionTemplate::New();
+  hidden_proto_template->SetHiddenPrototype(true);
+
+  Local<FunctionTemplate> protected_hidden_proto_template =
+      v8::FunctionTemplate::New();
+  protected_hidden_proto_template->InstanceTemplate()->SetAccessCheckCallbacks(
+      BlockProtoNamedSecurityTestCallback,
+      IndexedSecurityTestCallback);
+  protected_hidden_proto_template->SetHiddenPrototype(true);
+
+  // Context for "foreign" objects used in test.
+  Persistent<Context> context = v8::Context::New();
+  context->Enter();
+
+  // Plain object, no security check.
+  Local<Object> simple_object = Object::New();
+
+  // Object with explicit security check.
+  Local<Object> protected_object =
+      no_proto_template->NewInstance();
+
+  // JSGlobalProxy object, always have security check.
+  Local<Object> proxy_object =
+      context->Global();
+
+  // Global object, the  prototype of proxy_object. No security checks.
+  Local<Object> global_object =
+      proxy_object->GetPrototype()->ToObject();
+
+  // Hidden prototype without security check.
+  Local<Object> hidden_prototype =
+      hidden_proto_template->GetFunction()->NewInstance();
+  Local<Object> object_with_hidden =
+    Object::New();
+  object_with_hidden->SetPrototype(hidden_prototype);
+
+  // Hidden prototype with security check on the hidden prototype.
+  Local<Object> protected_hidden_prototype =
+      protected_hidden_proto_template->GetFunction()->NewInstance();
+  Local<Object> object_with_protected_hidden =
+    Object::New();
+  object_with_protected_hidden->SetPrototype(protected_hidden_prototype);
+
+  context->Exit();
+
+  // Template for object for second context. Values to test are put on it as
+  // properties.
+  Local<ObjectTemplate> global_template = ObjectTemplate::New();
+  global_template->Set(v8_str("simple"), simple_object);
+  global_template->Set(v8_str("protected"), protected_object);
+  global_template->Set(v8_str("global"), global_object);
+  global_template->Set(v8_str("proxy"), proxy_object);
+  global_template->Set(v8_str("hidden"), object_with_hidden);
+  global_template->Set(v8_str("phidden"), object_with_protected_hidden);
+
+  LocalContext context2(NULL, global_template);
+
+  Local<Value> result1 = CompileRun("Object.getPrototypeOf(simple)");
+  CHECK(result1->Equals(simple_object->GetPrototype()));
+
+  Local<Value> result2 = CompileRun("Object.getPrototypeOf(protected)");
+  CHECK(result2->Equals(Undefined()));
+
+  Local<Value> result3 = CompileRun("Object.getPrototypeOf(global)");
+  CHECK(result3->Equals(global_object->GetPrototype()));
+
+  Local<Value> result4 = CompileRun("Object.getPrototypeOf(proxy)");
+  CHECK(result4->Equals(Undefined()));
+
+  Local<Value> result5 = CompileRun("Object.getPrototypeOf(hidden)");
+  CHECK(result5->Equals(
+      object_with_hidden->GetPrototype()->ToObject()->GetPrototype()));
+
+  Local<Value> result6 = CompileRun("Object.getPrototypeOf(phidden)");
+  CHECK(result6->Equals(Undefined()));
+
+  context.Dispose();
+}
+
+
+static void TestReceiver(Local<Value> expected_result,
+                         Local<Value> expected_receiver,
+                         const char* code) {
+  Local<Value> result = CompileRun(code);
+  CHECK(result->IsObject());
+  CHECK(expected_receiver->Equals(result->ToObject()->Get(1)));
+  CHECK(expected_result->Equals(result->ToObject()->Get(0)));
+}
+
+
+THREADED_TEST(ForeignFunctionReceiver) {
+  HandleScope scope;
+
+  // Create two contexts with different "id" properties ('i' and 'o').
+  // Call a function both from its own context and from a the foreign
+  // context, and see what "this" is bound to (returning both "this"
+  // and "this.id" for comparison).
+
+  Persistent<Context> foreign_context = v8::Context::New();
+  foreign_context->Enter();
+  Local<Value> foreign_function =
+    CompileRun("function func() { return { 0: this.id, "
+               "                           1: this, "
+               "                           toString: function() { "
+               "                               return this[0];"
+               "                           }"
+               "                         };"
+               "}"
+               "var id = 'i';"
+               "func;");
+  CHECK(foreign_function->IsFunction());
+  foreign_context->Exit();
+
+  LocalContext context;
+
+  Local<String> password = v8_str("Password");
+  // Don't get hit by security checks when accessing foreign_context's
+  // global receiver (aka. global proxy).
+  context->SetSecurityToken(password);
+  foreign_context->SetSecurityToken(password);
+
+  Local<String> i = v8_str("i");
+  Local<String> o = v8_str("o");
+  Local<String> id = v8_str("id");
+
+  CompileRun("function ownfunc() { return { 0: this.id, "
+             "                              1: this, "
+             "                              toString: function() { "
+             "                                  return this[0];"
+             "                              }"
+             "                             };"
+             "}"
+             "var id = 'o';"
+             "ownfunc");
+  context->Global()->Set(v8_str("func"), foreign_function);
+
+  // Sanity check the contexts.
+  CHECK(i->Equals(foreign_context->Global()->Get(id)));
+  CHECK(o->Equals(context->Global()->Get(id)));
+
+  // Checking local function's receiver.
+  // Calling function using its call/apply methods.
+  TestReceiver(o, context->Global(), "ownfunc.call()");
+  TestReceiver(o, context->Global(), "ownfunc.apply()");
+  // Making calls through built-in functions.
+  TestReceiver(o, context->Global(), "[1].map(ownfunc)[0]");
+  CHECK(o->Equals(CompileRun("'abcbd'.replace(/b/,ownfunc)[1]")));
+  CHECK(o->Equals(CompileRun("'abcbd'.replace(/b/g,ownfunc)[1]")));
+  CHECK(o->Equals(CompileRun("'abcbd'.replace(/b/g,ownfunc)[3]")));
+  // Calling with environment record as base.
+  TestReceiver(o, context->Global(), "ownfunc()");
+  // Calling with no base.
+  TestReceiver(o, context->Global(), "(1,ownfunc)()");
+
+  // Checking foreign function return value.
+  // Calling function using its call/apply methods.
+  TestReceiver(i, foreign_context->Global(), "func.call()");
+  TestReceiver(i, foreign_context->Global(), "func.apply()");
+  // Calling function using another context's call/apply methods.
+  TestReceiver(i, foreign_context->Global(),
+               "Function.prototype.call.call(func)");
+  TestReceiver(i, foreign_context->Global(),
+               "Function.prototype.call.apply(func)");
+  TestReceiver(i, foreign_context->Global(),
+               "Function.prototype.apply.call(func)");
+  TestReceiver(i, foreign_context->Global(),
+               "Function.prototype.apply.apply(func)");
+  // Making calls through built-in functions.
+  TestReceiver(i, foreign_context->Global(), "[1].map(func)[0]");
+  // ToString(func()) is func()[0], i.e., the returned this.id.
+  CHECK(i->Equals(CompileRun("'abcbd'.replace(/b/,func)[1]")));
+  CHECK(i->Equals(CompileRun("'abcbd'.replace(/b/g,func)[1]")));
+  CHECK(i->Equals(CompileRun("'abcbd'.replace(/b/g,func)[3]")));
+
+  // TODO(1547): Make the following also return "i".
+  // Calling with environment record as base.
+  TestReceiver(o, context->Global(), "func()");
+  // Calling with no base.
+  TestReceiver(o, context->Global(), "(1,func)()");
+
+  foreign_context.Dispose();
 }

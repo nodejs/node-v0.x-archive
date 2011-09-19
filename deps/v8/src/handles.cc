@@ -422,43 +422,18 @@ Handle<Object> PreventExtensions(Handle<JSObject> object) {
 
 
 Handle<Object> GetHiddenProperties(Handle<JSObject> obj,
-                                   bool create_if_needed) {
-  Isolate* isolate = obj->GetIsolate();
-  Object* holder = obj->BypassGlobalProxy();
-  if (holder->IsUndefined()) return isolate->factory()->undefined_value();
-  obj = Handle<JSObject>(JSObject::cast(holder), isolate);
+                                   JSObject::HiddenPropertiesFlag flag) {
+  CALL_HEAP_FUNCTION(obj->GetIsolate(),
+                     obj->GetHiddenProperties(flag),
+                     Object);
+}
 
-  if (obj->HasFastProperties()) {
-    // If the object has fast properties, check whether the first slot
-    // in the descriptor array matches the hidden symbol. Since the
-    // hidden symbols hash code is zero (and no other string has hash
-    // code zero) it will always occupy the first entry if present.
-    DescriptorArray* descriptors = obj->map()->instance_descriptors();
-    if ((descriptors->number_of_descriptors() > 0) &&
-        (descriptors->GetKey(0) == isolate->heap()->hidden_symbol()) &&
-        descriptors->IsProperty(0)) {
-      ASSERT(descriptors->GetType(0) == FIELD);
-      return Handle<Object>(obj->FastPropertyAt(descriptors->GetFieldIndex(0)),
-                            isolate);
-    }
-  }
 
-  // Only attempt to find the hidden properties in the local object and not
-  // in the prototype chain.  Note that HasLocalProperty() can cause a GC in
-  // the general case in the presence of interceptors.
-  if (!obj->HasHiddenPropertiesObject()) {
-    // Hidden properties object not found. Allocate a new hidden properties
-    // object if requested. Otherwise return the undefined value.
-    if (create_if_needed) {
-      Handle<Object> hidden_obj =
-          isolate->factory()->NewJSObject(isolate->object_function());
-      CALL_HEAP_FUNCTION(isolate,
-                         obj->SetHiddenPropertiesObject(*hidden_obj), Object);
-    } else {
-      return isolate->factory()->undefined_value();
-    }
-  }
-  return Handle<Object>(obj->GetHiddenPropertiesObject(), isolate);
+int GetIdentityHash(Handle<JSObject> obj) {
+  CALL_AND_RETRY(obj->GetIsolate(),
+                 obj->GetIdentityHash(JSObject::ALLOW_CREATION),
+                 return Smi::cast(__object__)->value(),
+                 return 0);
 }
 
 
@@ -642,15 +617,17 @@ Handle<FixedArray> CalculateLineEnds(Handle<String> src,
   {
     AssertNoAllocation no_heap_allocation;  // ensure vectors stay valid.
     // Dispatch on type of strings.
-    if (src->IsAsciiRepresentation()) {
+    String::FlatContent content = src->GetFlatContent();
+    ASSERT(content.IsFlat());
+    if (content.IsAscii()) {
       CalculateLineEnds(isolate,
                         &line_ends,
-                        src->ToAsciiVector(),
+                        content.ToAsciiVector(),
                         with_last_line);
     } else {
       CalculateLineEnds(isolate,
                         &line_ends,
-                        src->ToUC16Vector(),
+                        content.ToUC16Vector(),
                         with_last_line);
     }
   }
@@ -908,6 +885,15 @@ Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
 }
 
 
+Handle<ObjectHashTable> PutIntoObjectHashTable(Handle<ObjectHashTable> table,
+                                               Handle<JSObject> key,
+                                               Handle<Object> value) {
+  CALL_HEAP_FUNCTION(table->GetIsolate(),
+                     table->Put(*key, *value),
+                     ObjectHashTable);
+}
+
+
 bool EnsureCompiled(Handle<SharedFunctionInfo> shared,
                     ClearExceptionFlag flag) {
   return shared->is_compiled() || CompileLazyShared(shared, flag);
@@ -935,32 +921,17 @@ bool CompileLazyShared(Handle<SharedFunctionInfo> shared,
 }
 
 
-static bool CompileLazyFunction(Handle<JSFunction> function,
-                                ClearExceptionFlag flag,
-                                InLoopFlag in_loop_flag) {
+bool CompileLazy(Handle<JSFunction> function, ClearExceptionFlag flag) {
   bool result = true;
   if (function->shared()->is_compiled()) {
     function->ReplaceCode(function->shared()->code());
     function->shared()->set_code_age(0);
   } else {
     CompilationInfo info(function);
-    if (in_loop_flag == IN_LOOP) info.MarkAsInLoop();
     result = CompileLazyHelper(&info, flag);
     ASSERT(!result || function->is_compiled());
   }
   return result;
-}
-
-
-bool CompileLazy(Handle<JSFunction> function,
-                 ClearExceptionFlag flag) {
-  return CompileLazyFunction(function, flag, NOT_IN_LOOP);
-}
-
-
-bool CompileLazyInLoop(Handle<JSFunction> function,
-                       ClearExceptionFlag flag) {
-  return CompileLazyFunction(function, flag, IN_LOOP);
 }
 
 

@@ -425,7 +425,7 @@ void HValue::PrintRangeTo(StringStream* stream) {
 
 
 void HValue::PrintChangesTo(StringStream* stream) {
-  int changes_flags = (flags() & HValue::ChangesFlagsMask());
+  int changes_flags = ChangesFlags();
   if (changes_flags == 0) return;
   stream->Add(" changes[");
   if (changes_flags == AllSideEffects()) {
@@ -512,9 +512,7 @@ void HInstruction::PrintTo(StringStream* stream) {
 
 
 void HInstruction::PrintMnemonicTo(StringStream* stream) {
-  stream->Add("%s", Mnemonic());
-  if (HasSideEffects()) stream->Add("*");
-  stream->Add(" ");
+  stream->Add("%s ", Mnemonic());
 }
 
 
@@ -632,6 +630,13 @@ void HBinaryCall::PrintDataTo(StringStream* stream) {
   second()->PrintNameTo(stream);
   stream->Add(" ");
   stream->Add("#%d", argument_count());
+}
+
+
+void HBoundsCheck::PrintDataTo(StringStream* stream) {
+  index()->PrintNameTo(stream);
+  stream->Add(" ");
+  length()->PrintNameTo(stream);
 }
 
 
@@ -771,7 +776,7 @@ void HHasInstanceTypeAndBranch::PrintDataTo(StringStream* stream) {
 void HTypeofIsAndBranch::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
   stream->Add(" == ");
-  stream->Add(type_literal_->ToAsciiVector());
+  stream->Add(type_literal_->GetFlatContent().ToAsciiVector());
 }
 
 
@@ -781,6 +786,13 @@ void HChange::PrintDataTo(StringStream* stream) {
 
   if (CanTruncateToInt32()) stream->Add(" truncating-int32");
   if (CheckFlag(kBailoutOnMinusZero)) stream->Add(" -0?");
+}
+
+
+void HJSArrayLength::PrintDataTo(StringStream* stream) {
+  value()->PrintNameTo(stream);
+  stream->Add(" ");
+  typecheck()->PrintNameTo(stream);
 }
 
 
@@ -862,19 +874,25 @@ void HInstanceOf::PrintDataTo(StringStream* stream) {
 
 
 Range* HValue::InferRange() {
-  if (representation().IsTagged()) {
-    // Tagged values are always in int32 range when converted to integer,
-    // but they can contain -0.
-    Range* result = new Range();
-    result->set_can_be_minus_zero(true);
-    return result;
-  } else if (representation().IsNone()) {
-    return NULL;
-  } else {
-    // Untagged integer32 cannot be -0 and we don't compute ranges for
-    // untagged doubles.
-    return new Range();
+  // Untagged integer32 cannot be -0, all other representations can.
+  Range* result = new Range();
+  result->set_can_be_minus_zero(!representation().IsInteger32());
+  return result;
+}
+
+
+Range* HChange::InferRange() {
+  Range* input_range = value()->range();
+  if (from().IsInteger32() &&
+      to().IsTagged() &&
+      input_range != NULL && input_range->IsInSmiRange()) {
+    set_type(HType::Smi());
   }
+  Range* result = (input_range != NULL)
+      ? input_range->Copy()
+      : HValue::InferRange();
+  if (to().IsInteger32()) result->set_can_be_minus_zero(false);
+  return result;
 }
 
 
@@ -1007,11 +1025,14 @@ void HPhi::PrintTo(StringStream* stream) {
     value->PrintNameTo(stream);
     stream->Add(" ");
   }
-  stream->Add(" uses%d_%di_%dd_%dt]",
+  stream->Add(" uses%d_%di_%dd_%dt",
               UseCount(),
               int32_non_phi_uses() + int32_indirect_uses(),
               double_non_phi_uses() + double_indirect_uses(),
               tagged_non_phi_uses() + tagged_indirect_uses());
+  stream->Add("%s%s]",
+              is_live() ? "_live" : "",
+              IsConvertibleToInteger() ? "" : "_ncti");
 }
 
 
@@ -1112,7 +1133,7 @@ void HDeoptimize::PrintDataTo(StringStream* stream) {
 
 
 void HEnterInlined::PrintDataTo(StringStream* stream) {
-  SmartPointer<char> name = function()->debug_name()->ToCString();
+  SmartArrayPointer<char> name = function()->debug_name()->ToCString();
   stream->Add("%s, id=%d", *name, function()->id());
 }
 
@@ -1223,7 +1244,33 @@ Range* HSar::InferRange() {
           ? left()->range()->Copy()
           : new Range();
       result->Sar(c->Integer32Value());
+      result->set_can_be_minus_zero(false);
       return result;
+    }
+  }
+  return HValue::InferRange();
+}
+
+
+Range* HShr::InferRange() {
+  if (right()->IsConstant()) {
+    HConstant* c = HConstant::cast(right());
+    if (c->HasInteger32Value()) {
+      int shift_count = c->Integer32Value() & 0x1f;
+      if (left()->range()->CanBeNegative()) {
+        // Only compute bounds if the result always fits into an int32.
+        return (shift_count >= 1)
+            ? new Range(0, static_cast<uint32_t>(0xffffffff) >> shift_count)
+            : new Range();
+      } else {
+        // For positive inputs we can use the >> operator.
+        Range* result = (left()->range() != NULL)
+            ? left()->range()->Copy()
+            : new Range();
+        result->Sar(c->Integer32Value());
+        result->set_can_be_minus_zero(false);
+        return result;
+      }
     }
   }
   return HValue::InferRange();
@@ -1238,6 +1285,7 @@ Range* HShl::InferRange() {
           ? left()->range()->Copy()
           : new Range();
       result->Shl(c->Integer32Value());
+      result->set_can_be_minus_zero(false);
       return result;
     }
   }
@@ -1259,6 +1307,12 @@ void HCompareIDAndBranch::PrintDataTo(StringStream* stream) {
   left()->PrintNameTo(stream);
   stream->Add(" ");
   right()->PrintNameTo(stream);
+  HControlInstruction::PrintDataTo(stream);
+}
+
+
+void HGoto::PrintDataTo(StringStream* stream) {
+  stream->Add("B%d", SuccessorAt(0)->block_id());
 }
 
 
@@ -1285,7 +1339,7 @@ void HLoadNamedField::PrintDataTo(StringStream* stream) {
 
 HLoadNamedFieldPolymorphic::HLoadNamedFieldPolymorphic(HValue* context,
                                                        HValue* object,
-                                                       ZoneMapList* types,
+                                                       SmallMapList* types,
                                                        Handle<String> name)
     : types_(Min(types->length(), kMaxLoadPolymorphism)),
       name_(name),
@@ -1349,6 +1403,20 @@ bool HLoadNamedFieldPolymorphic::DataEquals(HValue* value) {
 }
 
 
+void HLoadNamedFieldPolymorphic::PrintDataTo(StringStream* stream) {
+  object()->PrintNameTo(stream);
+  stream->Add(" .");
+  stream->Add(*String::cast(*name())->ToCString());
+}
+
+
+void HLoadNamedGeneric::PrintDataTo(StringStream* stream) {
+  object()->PrintNameTo(stream);
+  stream->Add(" .");
+  stream->Add(*String::cast(*name())->ToCString());
+}
+
+
 void HLoadKeyedFastElement::PrintDataTo(StringStream* stream) {
   object()->PrintNameTo(stream);
   stream->Add("[");
@@ -1392,37 +1460,37 @@ void HLoadKeyedSpecializedArrayElement::PrintDataTo(
   external_pointer()->PrintNameTo(stream);
   stream->Add(".");
   switch (elements_kind()) {
-    case JSObject::EXTERNAL_BYTE_ELEMENTS:
+    case EXTERNAL_BYTE_ELEMENTS:
       stream->Add("byte");
       break;
-    case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
       stream->Add("u_byte");
       break;
-    case JSObject::EXTERNAL_SHORT_ELEMENTS:
+    case EXTERNAL_SHORT_ELEMENTS:
       stream->Add("short");
       break;
-    case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
       stream->Add("u_short");
       break;
-    case JSObject::EXTERNAL_INT_ELEMENTS:
+    case EXTERNAL_INT_ELEMENTS:
       stream->Add("int");
       break;
-    case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
       stream->Add("u_int");
       break;
-    case JSObject::EXTERNAL_FLOAT_ELEMENTS:
+    case EXTERNAL_FLOAT_ELEMENTS:
       stream->Add("float");
       break;
-    case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
+    case EXTERNAL_DOUBLE_ELEMENTS:
       stream->Add("double");
       break;
-    case JSObject::EXTERNAL_PIXEL_ELEMENTS:
+    case EXTERNAL_PIXEL_ELEMENTS:
       stream->Add("pixel");
       break;
-    case JSObject::FAST_ELEMENTS:
-    case JSObject::FAST_DOUBLE_ELEMENTS:
-    case JSObject::DICTIONARY_ELEMENTS:
-    case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+    case FAST_ELEMENTS:
+    case FAST_DOUBLE_ELEMENTS:
+    case DICTIONARY_ELEMENTS:
+    case NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
       break;
   }
@@ -1487,37 +1555,37 @@ void HStoreKeyedSpecializedArrayElement::PrintDataTo(
   external_pointer()->PrintNameTo(stream);
   stream->Add(".");
   switch (elements_kind()) {
-    case JSObject::EXTERNAL_BYTE_ELEMENTS:
+    case EXTERNAL_BYTE_ELEMENTS:
       stream->Add("byte");
       break;
-    case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
       stream->Add("u_byte");
       break;
-    case JSObject::EXTERNAL_SHORT_ELEMENTS:
+    case EXTERNAL_SHORT_ELEMENTS:
       stream->Add("short");
       break;
-    case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
       stream->Add("u_short");
       break;
-    case JSObject::EXTERNAL_INT_ELEMENTS:
+    case EXTERNAL_INT_ELEMENTS:
       stream->Add("int");
       break;
-    case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
+    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
       stream->Add("u_int");
       break;
-    case JSObject::EXTERNAL_FLOAT_ELEMENTS:
+    case EXTERNAL_FLOAT_ELEMENTS:
       stream->Add("float");
       break;
-    case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
+    case EXTERNAL_DOUBLE_ELEMENTS:
       stream->Add("double");
       break;
-    case JSObject::EXTERNAL_PIXEL_ELEMENTS:
+    case EXTERNAL_PIXEL_ELEMENTS:
       stream->Add("pixel");
       break;
-    case JSObject::FAST_ELEMENTS:
-    case JSObject::FAST_DOUBLE_ELEMENTS:
-    case JSObject::DICTIONARY_ELEMENTS:
-    case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+    case FAST_ELEMENTS:
+    case FAST_DOUBLE_ELEMENTS:
+    case DICTIONARY_ELEMENTS:
+    case NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
       break;
   }
@@ -1798,11 +1866,6 @@ void HSimulate::Verify() {
 }
 
 
-void HBoundsCheck::Verify() {
-  HInstruction::Verify();
-}
-
-
 void HCheckSmi::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
@@ -1810,18 +1873,6 @@ void HCheckSmi::Verify() {
 
 
 void HCheckNonSmi::Verify() {
-  HInstruction::Verify();
-  ASSERT(HasNoUses());
-}
-
-
-void HCheckInstanceType::Verify() {
-  HInstruction::Verify();
-  ASSERT(HasNoUses());
-}
-
-
-void HCheckMap::Verify() {
   HInstruction::Verify();
   ASSERT(HasNoUses());
 }

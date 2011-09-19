@@ -30,10 +30,9 @@
 
 #include "allocation.h"
 #include "ast.h"
-#include "scanner.h"
-#include "scopes.h"
 #include "preparse-data-format.h"
 #include "preparse-data.h"
+#include "scopes.h"
 
 namespace v8 {
 namespace internal {
@@ -164,12 +163,14 @@ class ParserApi {
 
   // Generic preparser generating full preparse data.
   static ScriptDataImpl* PreParse(UC16CharacterStream* source,
-                                  v8::Extension* extension);
+                                  v8::Extension* extension,
+                                  bool harmony_block_scoping);
 
   // Preparser that only does preprocessing that makes sense if only used
   // immediately after.
   static ScriptDataImpl* PartialPreParse(UC16CharacterStream* source,
-                                         v8::Extension* extension);
+                                         v8::Extension* extension,
+                                         bool harmony_block_scoping);
 };
 
 // ----------------------------------------------------------------------------
@@ -435,6 +436,7 @@ class Parser {
   void ReportMessageAt(Scanner::Location loc,
                        const char* message,
                        Vector<Handle<String> > args);
+  void SetHarmonyBlockScoping(bool block_scoping);
 
  private:
   // Limit on number of function parameters is chosen arbitrarily.
@@ -449,6 +451,12 @@ class Parser {
   enum Mode {
     PARSE_LAZILY,
     PARSE_EAGERLY
+  };
+
+  enum VariableDeclarationContext {
+    kSourceElement,
+    kStatement,
+    kForStatement
   };
 
   Isolate* isolate() { return isolate_; }
@@ -479,12 +487,15 @@ class Parser {
   // for failure at the call sites.
   void* ParseSourceElements(ZoneList<Statement*>* processor,
                             int end_token, bool* ok);
+  Statement* ParseSourceElement(ZoneStringList* labels, bool* ok);
   Statement* ParseStatement(ZoneStringList* labels, bool* ok);
   Statement* ParseFunctionDeclaration(bool* ok);
   Statement* ParseNativeDeclaration(bool* ok);
   Block* ParseBlock(ZoneStringList* labels, bool* ok);
-  Block* ParseVariableStatement(bool* ok);
-  Block* ParseVariableDeclarations(bool accept_IN,
+  Block* ParseScopedBlock(ZoneStringList* labels, bool* ok);
+  Block* ParseVariableStatement(VariableDeclarationContext var_context,
+                                bool* ok);
+  Block* ParseVariableDeclarations(VariableDeclarationContext var_context,
                                    Handle<String>* out,
                                    bool* ok);
   Statement* ParseExpressionOrLabelledStatement(ZoneStringList* labels,
@@ -493,7 +504,6 @@ class Parser {
   Statement* ParseContinueStatement(bool* ok);
   Statement* ParseBreakStatement(ZoneStringList* labels, bool* ok);
   Statement* ParseReturnStatement(bool* ok);
-  Block* WithHelper(Expression* obj, ZoneStringList* labels, bool* ok);
   Statement* ParseWithStatement(ZoneStringList* labels, bool* ok);
   CaseClause* ParseCaseClause(bool* default_seen_ptr, bool* ok);
   SwitchStatement* ParseSwitchStatement(ZoneStringList* labels, bool* ok);
@@ -552,17 +562,11 @@ class Parser {
   // in the object literal boilerplate.
   Handle<Object> GetBoilerplateValue(Expression* expression);
 
-  enum FunctionLiteralType {
-    EXPRESSION,
-    DECLARATION,
-    NESTED
-  };
-
   ZoneList<Expression*>* ParseArguments(bool* ok);
   FunctionLiteral* ParseFunctionLiteral(Handle<String> var_name,
                                         bool name_is_reserved,
                                         int function_token_position,
-                                        FunctionLiteralType type,
+                                        FunctionLiteral::Type type,
                                         bool* ok);
 
 
@@ -639,6 +643,17 @@ class Parser {
 
   // Strict mode octal literal validation.
   void CheckOctalLiteral(int beg_pos, int end_pos, bool* ok);
+
+  // For harmony block scoping mode: Check if the scope has conflicting var/let
+  // declarations from different scopes. It covers for example
+  //
+  // function f() { { { var x; } let x; } }
+  // function g() { { var x; let x; } }
+  //
+  // The var declarations are hoisted to the function scope, but originate from
+  // a scope where the name has also been let bound or the var declaration is
+  // hoisted over such a scope.
+  void CheckConflictingVarDeclarations(Scope* scope, bool* ok);
 
   // Parser support
   VariableProxy* Declare(Handle<String> name, Variable::Mode mode,
@@ -721,6 +736,7 @@ class Parser {
   // Heuristically that means that the function will be called immediately,
   // so never lazily compile it.
   bool parenthesized_function_;
+  bool harmony_block_scoping_;
 
   friend class LexicalScope;
 };

@@ -41,6 +41,7 @@
 #include "parser.h"
 #include "rewriter.h"
 #include "runtime-profiler.h"
+#include "scanner-character-streams.h"
 #include "scopeinfo.h"
 #include "scopes.h"
 #include "vm-state-inl.h"
@@ -478,15 +479,21 @@ Handle<SharedFunctionInfo> Compiler::Compile(Handle<String> source,
     // that would be compiled lazily anyway, so we skip the preparse step
     // in that case too.
     ScriptDataImpl* pre_data = input_pre_data;
+    bool harmony_block_scoping = natives != NATIVES_CODE &&
+                                 FLAG_harmony_block_scoping;
     if (pre_data == NULL
         && source_length >= FLAG_min_preparse_length) {
       if (source->IsExternalTwoByteString()) {
         ExternalTwoByteStringUC16CharacterStream stream(
             Handle<ExternalTwoByteString>::cast(source), 0, source->length());
-        pre_data = ParserApi::PartialPreParse(&stream, extension);
+        pre_data = ParserApi::PartialPreParse(&stream,
+                                              extension,
+                                              harmony_block_scoping);
       } else {
         GenericStringUC16CharacterStream stream(source, 0, source->length());
-        pre_data = ParserApi::PartialPreParse(&stream, extension);
+        pre_data = ParserApi::PartialPreParse(&stream,
+                                              extension,
+                                              harmony_block_scoping);
       }
     }
 
@@ -736,6 +743,7 @@ void Compiler::SetFunctionInfo(Handle<SharedFunctionInfo> function_info,
   function_info->set_start_position(lit->start_position());
   function_info->set_end_position(lit->end_position());
   function_info->set_is_expression(lit->is_expression());
+  function_info->set_is_anonymous(lit->is_anonymous());
   function_info->set_is_toplevel(is_toplevel);
   function_info->set_inferred_name(*lit->inferred_name());
   function_info->SetThisPropertyAssignmentsInfo(

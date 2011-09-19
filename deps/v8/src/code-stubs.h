@@ -168,10 +168,6 @@ class CodeStub BASE_EMBEDDED {
   virtual Major MajorKey() = 0;
   virtual int MinorKey() = 0;
 
-  // The CallFunctionStub needs to override this so it can encode whether a
-  // lazily generated function should be fully optimized or not.
-  virtual InLoopFlag InLoop() { return NOT_IN_LOOP; }
-
   // BinaryOpStub needs to override this.
   virtual int GetCodeKind();
 
@@ -181,7 +177,7 @@ class CodeStub BASE_EMBEDDED {
   }
 
   // Returns a name for logging/debugging purposes.
-  SmartPointer<const char> GetName();
+  SmartArrayPointer<const char> GetName();
   virtual void PrintName(StringStream* stream) {
     stream->Add("%s", MajorName(MajorKey(), false));
   }
@@ -646,8 +642,8 @@ class RegExpConstructResultStub: public CodeStub {
 
 class CallFunctionStub: public CodeStub {
  public:
-  CallFunctionStub(int argc, InLoopFlag in_loop, CallFunctionFlags flags)
-      : argc_(argc), in_loop_(in_loop), flags_(flags) { }
+  CallFunctionStub(int argc, CallFunctionFlags flags)
+      : argc_(argc), flags_(flags) { }
 
   void Generate(MacroAssembler* masm);
 
@@ -657,25 +653,19 @@ class CallFunctionStub: public CodeStub {
 
  private:
   int argc_;
-  InLoopFlag in_loop_;
   CallFunctionFlags flags_;
 
   virtual void PrintName(StringStream* stream);
 
   // Minor key encoding in 32 bits with Bitfield <Type, shift, size>.
-  class InLoopBits: public BitField<InLoopFlag, 0, 1> {};
-  class FlagBits: public BitField<CallFunctionFlags, 1, 1> {};
-  class ArgcBits: public BitField<int, 2, 32 - 2> {};
+  class FlagBits: public BitField<CallFunctionFlags, 0, 1> {};
+  class ArgcBits: public BitField<unsigned, 1, 32 - 1> {};
 
   Major MajorKey() { return CallFunction; }
   int MinorKey() {
     // Encode the parameters in a unique 32 bit value.
-    return InLoopBits::encode(in_loop_)
-           | FlagBits::encode(flags_)
-           | ArgcBits::encode(argc_);
+    return FlagBits::encode(flags_) | ArgcBits::encode(argc_);
   }
-
-  InLoopFlag InLoop() { return in_loop_; }
 
   bool ReceiverMightBeImplicit() {
     return (flags_ & RECEIVER_MIGHT_BE_IMPLICIT) != 0;
@@ -860,7 +850,7 @@ class AllowStubCallsScope {
 
 class KeyedLoadElementStub : public CodeStub {
  public:
-  explicit KeyedLoadElementStub(JSObject::ElementsKind elements_kind)
+  explicit KeyedLoadElementStub(ElementsKind elements_kind)
       : elements_kind_(elements_kind)
   { }
 
@@ -870,7 +860,7 @@ class KeyedLoadElementStub : public CodeStub {
   void Generate(MacroAssembler* masm);
 
  private:
-  JSObject::ElementsKind elements_kind_;
+  ElementsKind elements_kind_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyedLoadElementStub);
 };
@@ -879,20 +869,20 @@ class KeyedLoadElementStub : public CodeStub {
 class KeyedStoreElementStub : public CodeStub {
  public:
   KeyedStoreElementStub(bool is_js_array,
-                        JSObject::ElementsKind elements_kind)
+                        ElementsKind elements_kind)
     : is_js_array_(is_js_array),
     elements_kind_(elements_kind) { }
 
   Major MajorKey() { return KeyedStoreElement; }
   int MinorKey() {
-    return (is_js_array_ ? 0 : JSObject::kElementsKindCount) + elements_kind_;
+    return (is_js_array_ ? 0 : kElementsKindCount) + elements_kind_;
   }
 
   void Generate(MacroAssembler* masm);
 
  private:
   bool is_js_array_;
-  JSObject::ElementsKind elements_kind_;
+  ElementsKind elements_kind_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyedStoreElementStub);
 };
@@ -900,14 +890,66 @@ class KeyedStoreElementStub : public CodeStub {
 
 class ToBooleanStub: public CodeStub {
  public:
-  explicit ToBooleanStub(Register tos) : tos_(tos) { }
+  enum Type {
+    UNDEFINED,
+    BOOLEAN,
+    NULL_TYPE,
+    SMI,
+    SPEC_OBJECT,
+    STRING,
+    HEAP_NUMBER,
+    NUMBER_OF_TYPES
+  };
+
+  // At most 8 different types can be distinguished, because the Code object
+  // only has room for a single byte to hold a set of these types. :-P
+  STATIC_ASSERT(NUMBER_OF_TYPES <= 8);
+
+  class Types {
+   public:
+    Types() {}
+    explicit Types(byte bits) : set_(bits) {}
+
+    bool IsEmpty() const { return set_.IsEmpty(); }
+    bool Contains(Type type) const { return set_.Contains(type); }
+    void Add(Type type) { set_.Add(type); }
+    byte ToByte() const { return set_.ToIntegral(); }
+    void Print(StringStream* stream) const;
+    void TraceTransition(Types to) const;
+    bool Record(Handle<Object> object);
+    bool NeedsMap() const;
+    bool CanBeUndetectable() const;
+
+   private:
+    EnumSet<Type, byte> set_;
+  };
+
+  static Types no_types() { return Types(); }
+  static Types all_types() { return Types((1 << NUMBER_OF_TYPES) - 1); }
+
+  explicit ToBooleanStub(Register tos, Types types = Types())
+      : tos_(tos), types_(types) { }
 
   void Generate(MacroAssembler* masm);
+  virtual int GetCodeKind() { return Code::TO_BOOLEAN_IC; }
+  virtual void PrintName(StringStream* stream);
 
  private:
-  Register tos_;
   Major MajorKey() { return ToBoolean; }
-  int MinorKey() { return tos_.code(); }
+  int MinorKey() { return (tos_.code() << NUMBER_OF_TYPES) | types_.ToByte(); }
+
+  virtual void FinishCode(Code* code) {
+    code->set_to_boolean_state(types_.ToByte());
+  }
+
+  void CheckOddball(MacroAssembler* masm,
+                    Type type,
+                    Heap::RootListIndex value,
+                    bool result);
+  void GenerateTypeTransition(MacroAssembler* masm);
+
+  Register tos_;
+  Types types_;
 };
 
 } }  // namespace v8::internal

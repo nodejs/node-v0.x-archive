@@ -30,14 +30,15 @@
 
 #include "v8.h"
 
-#include "string-stream.h"
-#include "cctest.h"
-#include "zone-inl.h"
-#include "parser.h"
 #include "ast.h"
+#include "char-predicates-inl.h"
+#include "cctest.h"
 #include "jsregexp.h"
+#include "parser.h"
 #include "regexp-macro-assembler.h"
 #include "regexp-macro-assembler-irregexp.h"
+#include "string-stream.h"
+#include "zone-inl.h"
 #ifdef V8_INTERPRETED_REGEXP
 #include "interpreter-irregexp.h"
 #else  // V8_INTERPRETED_REGEXP
@@ -78,7 +79,7 @@ static bool CheckParse(const char* input) {
 }
 
 
-static SmartPointer<const char> Parse(const char* input) {
+static SmartArrayPointer<const char> Parse(const char* input) {
   V8::Initialize(NULL);
   v8::HandleScope scope;
   ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
@@ -87,7 +88,7 @@ static SmartPointer<const char> Parse(const char* input) {
   CHECK(v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
   CHECK(result.tree != NULL);
   CHECK(result.error.is_null());
-  SmartPointer<const char> output = result.tree->ToString();
+  SmartArrayPointer<const char> output = result.tree->ToString();
   return output;
 }
 
@@ -390,7 +391,7 @@ static void ExpectError(const char* input,
   CHECK(!v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
   CHECK(result.tree == NULL);
   CHECK(!result.error.is_null());
-  SmartPointer<char> str = result.error->ToCString(ALLOW_NULLS);
+  SmartArrayPointer<char> str = result.error->ToCString(ALLOW_NULLS);
   CHECK_EQ(expected, *str);
 }
 
@@ -422,7 +423,7 @@ TEST(Errors) {
   for (int i = 0; i <= kMaxCaptures; i++) {
     accumulator.Add("()");
   }
-  SmartPointer<const char> many_captures(accumulator.ToCString());
+  SmartArrayPointer<const char> many_captures(accumulator.ToCString());
   ExpectError(*many_captures, kTooManyCaptures);
 }
 
