@@ -21,7 +21,7 @@
 
 var common = require('../common');
 var assert = require('assert');
-var domain = require('domain');
+var domains = require('domains');
 
 var timerCallbacks = 0;
 
@@ -29,7 +29,7 @@ setTimeout(function() {
   console.error("timer 1");
   timerCallbacks++;
 
-  var d1 = domain.create(null, function() {
+  var d1 = domains.create(null, function() {
     console.error("d1 created");
 
     setTimeout(function() {
@@ -53,7 +53,7 @@ setTimeout(function() {
   timerCallbacks++;
   console.error("timer 4");
 
-  var d2 = domain.create(null, function() {
+  var d2 = domains.create(null, function() {
     console.error("d2 created");
 
     var t1 = setTimeout(function() {
@@ -61,13 +61,14 @@ setTimeout(function() {
     }, 1);
     assert.ok(t1.domain);
     assert.equal(t1.domain, d2);
-    assert.equal(t1.domain.id, require('domain').getCurrent().id);
+    assert.equal(t1.domain.id, require('domains').getCurrent().id);
 
     var t2 = setTimeout(function() {
       assert.ok(false, "should not get here");
     }, 1);
     assert.equal(t2.domain, d2);
 
+    // Both t1 and t2 will be canceled by the following kill.
     this.kill();
   });
 }, 1);
