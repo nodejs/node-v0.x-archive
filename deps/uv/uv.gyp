@@ -95,6 +95,7 @@
           ],
           'sources': [
             'include/uv-private/tree.h',
+            'include/uv-private/linklist.h',
             'include/uv-private/uv-win.h',
             'src/ares/config_win32/ares_config.h',
             'src/ares/windows_port.c',
@@ -123,6 +124,7 @@
             'src/win/winapi.h',
             'src/win/winsock.c',
             'src/win/winsock.h',
+            'src/win/signal.c',
           ],
           'link_settings': {
             'libraries': [

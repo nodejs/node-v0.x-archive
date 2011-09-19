@@ -159,6 +159,7 @@
           'sources': [
             'src/platform_win32.cc',
             'src/node_stdio_win32.cc',
+            'src/signal_wrap.cc',
             # headers to make for a more pleasant IDE experience
             'src/platform_win32.h',
           ],
