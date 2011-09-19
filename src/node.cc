@@ -887,13 +887,8 @@ void MakeCallback(Handle<Object> object,
       dispatch_argv[2 + i] = argv[i];
     }
 
-    TryCatch try_catch;
-
+    // Do not try-catch here - we'll catch any problems in process.dispatch.
     process_dispatch->Call(process, 2 + argc, dispatch_argv);
-
-    if (try_catch.HasCaught()) {
-      FatalException(try_catch);
-    }
 
   } else {
     // Legacy dispatch
