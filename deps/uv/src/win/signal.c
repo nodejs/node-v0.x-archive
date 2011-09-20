@@ -40,18 +40,21 @@ static void uv_signal_async(uv_loop_t* loop, int type);
 
 
 
-void uv_signal_ctrlHandler(int type ) 
+void uv_signal_ctrlHandler(int sigact) 
 {
 	size_t index;
+    signal(sigact, &uv_signal_ctrlHandler);
 
 	EnterCriticalSection(&uv_signal_data_guard_);
 
     for(index = 0; index < uv_loop_count_; ++ index)
 	{
-		uv_signal_async(uv_loops_[index], type);
+		uv_signal_async(uv_loops_[index], sigact);
 	}
 
     LeaveCriticalSection(&uv_signal_data_guard_);
+
+	
 } 
 
 BOOL WINAPI uv_signal_consoleHandler(DWORD fdwCtrlType ) 
@@ -81,6 +84,7 @@ void uv_signal_system_init(void)
 	uv_loops_ = (uv_loop_t**)malloc(sizeof(uv_loop_t*)*uv_loop_capcity_);
 	uv_loop_count_ = 0;
 
+	InitializeCriticalSection(&uv_signal_data_guard_);
 	
 	//SetConsoleCtrlHandler(&uv_signal_consoleHandler, TRUE);
     signal(SIGINT, &uv_signal_ctrlHandler);
@@ -144,16 +148,19 @@ end:
 }
 
 
-int uv_signal_init(uv_loop_t* loop, uv_signal_t* handle) {
+int uv_signal_init(uv_loop_t* loop, uv_signal_t* handle, uv_signal_cb signal_cb, int signum) {
   loop->counters.handle_init++;
   loop->counters.timer_init++;
 
   handle->type = UV_SIGNAL;
   handle->loop = loop;
   handle->flags = 0;
-  handle->signal_cb = NULL;
   handle->_next = NULL;
   handle->_prev = NULL;
+
+  
+  handle->signal_cb = signal_cb;
+  handle->signum = signum;
 
   uv_ref(loop);
 
@@ -175,11 +182,9 @@ void uv_signal_endgame(uv_loop_t* loop, uv_signal_t* handle) {
 }
 
 
-int uv_signal_start(uv_signal_t* handle, uv_signal_cb signal_cb, int signum) {
+int uv_signal_start(uv_signal_t* handle) {
   uv_loop_t* loop = handle->loop;
 
-  handle->signal_cb = signal_cb;
-  handle->signum = signum;
   handle->flags |= UV_HANDLE_ACTIVE;
 
   DLINK_InsertNext(&loop->signal_handles, handle);
@@ -203,28 +208,37 @@ int uv_signal_stop(uv_signal_t* handle) {
 }
 
 
-struct signal_async_s {
+typedef struct signal_data_s {
 	struct uv_async_s async;
 	int signum;
-};
+} signal_data_t;
 
-void uv_signal_handler(struct uv_async_s* async, int signal) {
-	struct signal_async_s*  s = (struct signal_async_s*)(((char*)async)-offsetof(struct signal_async_s, async));
+
+static void on_async_close(uv_handle_t* handle) {
+	signal_data_t* data = (signal_data_t*)((uv_async_t*)handle)->data;
+	free(data);
+}
+
+void uv_signal_handler(uv_async_t* async, int signal) {
+	signal_data_t* data = (signal_data_t*)async->data;
 
 	uv_signal_t*  head = &(async->loop->signal_handles);
 	uv_signal_t* handle = head;
 	while(head != (handle = handle->_next)) {
-		if(handle->signum == async->signum) {
-		    handle->signal_cb(handle, s->fdwCtrlType);
+		if(handle->signum == data->signum) {
+		    handle->signal_cb(handle, data->signum);
 	    }
 	}
+
+    uv_close((uv_handle_t*)async, on_async_close);
 }
 
 
 static void uv_signal_async(uv_loop_t* loop, int type) 
 {
-   struct signal_async_s* async = (struct signal_async_s*)malloc(sizeof(struct signal_async_s));
+   signal_data_t* async = (signal_data_t*)malloc(sizeof(signal_data_t));
    uv_async_init(loop, &async->async, &uv_signal_handler);
    async->signum = type;
+   async->async.data = async;
    uv_async_send(&async->async);
 }

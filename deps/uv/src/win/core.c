@@ -81,6 +81,7 @@ static void uv_loop_init(uv_loop_t* loop) {
   loop->ares_chan = NULL;
 
   loop->last_error = uv_ok_;
+
 }
 
 

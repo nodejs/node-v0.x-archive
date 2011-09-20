@@ -70,10 +70,9 @@ class SignalWrap : public HandleWrap {
   }
 
   SignalWrap(Handle<Object> object, int sig)
-      : HandleWrap(object, (uv_handle_t*) &handle_)
-      , sig_(sig){
+      : HandleWrap(object, (uv_handle_t*) &handle_){
     active_ = false;
-    int r = uv_signal_init(uv_default_loop(), &handle_);
+    int r = uv_signal_init(uv_default_loop(), &handle_, OnSignal, sig);
     handle_.data = this;
 
     uv_unref(uv_default_loop());
@@ -105,7 +104,7 @@ class SignalWrap : public HandleWrap {
     UNWRAP
 
 
-    int r = uv_signal_start(&wrap->handle_, OnSignal, sig_);
+    int r = uv_signal_start(&wrap->handle_);
 
     // Error starting the timer.
     if (r) SetErrno(uv_last_error(uv_default_loop()).code);
@@ -136,8 +135,6 @@ class SignalWrap : public HandleWrap {
     SignalWrap* wrap = static_cast<SignalWrap*>(handle->data);
     assert(wrap);
 	
-	  if(wrap->sig_ == type)
-		  return ;
 
     wrap->StateChange();
 
@@ -150,9 +147,6 @@ class SignalWrap : public HandleWrap {
   // on uv_ref is called. When the timer is turned off uv_unref is
   // called. Used to mirror libev semantics.
   bool active_;
-
-  // this member is signal type;
-  int sig_;
 };
 
 

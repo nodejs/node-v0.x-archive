@@ -730,9 +730,13 @@ struct uv_signal_s {
   UV_SIGNAL_PRIVATE_FIELDS
 };
 
-int uv_signal_init(uv_loop_t*, uv_signal_t* handle);
 
-int uv_signal_start(uv_signal_t* handle, uv_signal_cb cb, int signum);
+void uv_signal_registerHandler(uv_loop_t* loop);
+void uv_signal_unregisterHandler(uv_loop_t* loop);
+
+int uv_signal_init(uv_loop_t*, uv_signal_t* handle, uv_signal_cb cb, int signum);
+
+int uv_signal_start(uv_signal_t* handle);
 
 int uv_signal_stop(uv_signal_t* handle);
 
