@@ -208,37 +208,48 @@ static Handle<Value> Socket(const Arguments& args) {
 
   if (args[0]->IsString()) {
     String::Utf8Value t(args[0]->ToString());
-    // FIXME optimize this cascade.
-    if (0 == strcasecmp(*t, "TCP")) {
-      domain = PF_INET;
-      type = SOCK_STREAM;
-    } else if (0 == strcasecmp(*t, "TCP4")) {
-      domain = PF_INET;
-      type = SOCK_STREAM;
-    } else if (0 == strcasecmp(*t, "TCP6")) {
-      domain = PF_INET6;
-      type = SOCK_STREAM;
-    } else if (0 == strcasecmp(*t, "UNIX")) {
-      domain = PF_UNIX;
-      type = SOCK_STREAM;
-    } else if (0 == strcasecmp(*t, "UNIX_DGRAM")) {
-      domain = PF_UNIX;
-      type = SOCK_DGRAM;
-    } else if (0 == strcasecmp(*t, "UDP")) {
-      domain = PF_INET;
-      type = SOCK_DGRAM;
-#ifdef SO_REUSEPORT
-      set_reuseport = true;
-#endif
-    } else if (0 == strcasecmp(*t, "UDP4")) {
-      domain = PF_INET;
-      type = SOCK_DGRAM;
-#ifdef SO_REUSEPORT
-      set_reuseport = true;
-#endif
-    } else if (0 == strcasecmp(*t, "UDP6")) {
-      domain = PF_INET6;
-      type = SOCK_DGRAM;
+    // TCP?
+    if (0 == strncasecmp(*t, "TCP", 3)) {
+      if (0 == strcasecmp(*t, "TCP")) {
+        domain = PF_INET;
+        type = SOCK_STREAM;
+      } else if (0 == strcasecmp(*t, "TCP4")) {
+        domain = PF_INET;
+        type = SOCK_STREAM;
+      } else if (0 == strcasecmp(*t, "TCP6")) {
+        domain = PF_INET6;
+        type = SOCK_STREAM;
+      } else {
+        return ThrowException(Exception::Error(
+              String::New("Unknown socket type.")));
+      }
+    // UNIX socket?
+    } else if (0 == strncasecmp(*t, "UNIX", 4)) {
+      if (0 == strcasecmp(*t, "UNIX")) {
+        domain = PF_UNIX;
+        type = SOCK_STREAM;
+      } else if (0 == strcasecmp(*t, "UNIX_DGRAM")) {
+        domain = PF_UNIX;
+        type = SOCK_DGRAM;
+      } else {
+        return ThrowException(Exception::Error(
+              String::New("Unknown socket type.")));
+      }
+    // UDP?
+    } else if (0 == strncasecmp(*t, "UDP", 3)) {
+      if (0 == strcasecmp(*t, "UDP")) {
+        domain = PF_INET;
+        type = SOCK_DGRAM;
+      } else if (0 == strcasecmp(*t, "UDP4")) {
+        domain = PF_INET;
+        type = SOCK_DGRAM;
+      } else if (0 == strcasecmp(*t, "UDP6")) {
+        domain = PF_INET6;
+        type = SOCK_DGRAM;
+      } else {
+        return ThrowException(Exception::Error(
+              String::New("Unknown socket type.")));
+      }
 #ifdef SO_REUSEPORT
       set_reuseport = true;
 #endif
