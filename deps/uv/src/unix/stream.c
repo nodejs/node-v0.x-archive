@@ -529,8 +529,8 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
 void uv__stream_io(EV_P_ ev_io* watcher, int revents) {
   uv_stream_t* stream = watcher->data;
 
-  assert(stream->type == UV_TCP ||
-         stream->type == UV_NAMED_PIPE);
+  assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE ||
+      stream->type == UV_TTY);
   assert(watcher == &stream->read_watcher ||
          watcher == &stream->write_watcher);
   assert(!(stream->flags & UV_CLOSING));
@@ -679,8 +679,9 @@ int uv_write(uv_write_t* req, uv_stream_t* stream, uv_buf_t bufs[], int bufcnt,
     uv_write_cb cb) {
   int empty_queue;
 
-  assert((stream->type == UV_TCP || stream->type == UV_NAMED_PIPE)
-      && "uv_write (unix) does not yet support other types of streams");
+  assert((stream->type == UV_TCP || stream->type == UV_NAMED_PIPE ||
+      stream->type == UV_TTY) &&
+      "uv_write (unix) does not yet support other types of streams");
 
   if (stream->fd < 0) {
     uv_err_new(stream->loop, EBADF);
@@ -737,7 +738,8 @@ int uv_write(uv_write_t* req, uv_stream_t* stream, uv_buf_t bufs[], int bufcnt,
 
 
 int uv_read_start(uv_stream_t* stream, uv_alloc_cb alloc_cb, uv_read_cb read_cb) {
-  assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE);
+  assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE ||
+      stream->type == UV_TTY);
 
   if (stream->flags & UV_CLOSING) {
     uv_err_new(stream->loop, EINVAL);
