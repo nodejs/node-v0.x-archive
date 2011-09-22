@@ -112,8 +112,26 @@
       var Module = NativeModule.require('module');
 
       if (NativeModule.require('tty').isatty(fd)) {
+
         // REPL
-        Module.requireRepl().start();
+        var ctx = Module.requireRepl().start().context;
+
+        var stup = process.env.NODE_STARTUP;
+        if (stup) {
+          var path = NativeModule.require('path');
+          var fs = NativeModule.require('fs');
+          var vm = NativeModule.require('vm');
+
+          path.exists(stup, function(exists) {
+            if (exists) {
+              fs.readFile(stup, function(err, data) {
+                if (! err) {
+                  vm.runInContext(data.toString('utf8'), ctx);
+                }
+              });
+            }
+          });
+        }
 
       } else {
         // Read all of stdin - execute it.
