@@ -26,11 +26,16 @@ the socket is established the `'connect'` event will be emitted.
 
 The arguments for this method change the type of connection:
 
-* `net.createConnection(port, [host], [callback])`
+* `net.createConnection(port, [host] || [options], [callback])`
 
   Creates a TCP connection to `port` on `host`. If `host` is omitted,
   `localhost` will be assumed.
-
+  
+  The `options` argument has the following options
+  
+  + host: IP or domain of host to make request to. Default `localhost`.
+  + localAddress: the local interface to bind to for network connections.
+  
 * `net.createConnection(path, [callback])`
 
   Creates unix socket connection to `path`
@@ -201,12 +206,20 @@ Construct a new socket object.
 specified underlying protocol. It can be `'tcp4'`, `'tcp6'`, or `'unix'`.
 About `allowHalfOpen`, refer to `createServer()` and `'end'` event.
 
-#### socket.connect(port, [host], [callback])
+#### socket.connect(port, [host] || [options], [callback])
 #### socket.connect(path, [callback])
 
 Opens the connection for a given socket. If `port` and `host` are given,
 then the socket will be opened as a TCP socket, if `host` is omitted,
-`localhost` will be assumed. If a `path` is given, the socket will be
+`localhost` will be assumed. If second argument is an object then it 
+specifies `options`.
+
+The `options` argument has the following options
+
+- host: IP or domain of host to make request to. Default `localhost`.
+- localAddress: the local interface to bind to for network connections.
+
+If a `path` is given, the socket will be
 opened as a unix socket to that path.
 
 Normally this method is not needed, as `net.createConnection` opens the
