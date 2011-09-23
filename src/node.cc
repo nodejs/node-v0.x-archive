@@ -2178,11 +2178,19 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 }
 
 
+#if defined(__MINGW32__) || defined(_MSC_VER)
+static void OnExit() {
+  node::Stdio::Flush();
+  node::Stdio::DisableRawMode(STDIN_FILENO);
+  EmitExit(process, -1);
+}
+#else
 static void OnExit(int code, void* args) {
   node::Stdio::Flush();
   node::Stdio::DisableRawMode(STDIN_FILENO);
   EmitExit(process, code);
 }
+#endif
 
 
 static void SignalExit(int signal) {
@@ -2199,7 +2207,11 @@ void Load(Handle<Object> process) {
 
   // The node.js file returns a function 'f'
 
+#if defined(__MINGW32__) || defined(_MSC_VER)
+  atexit(OnExit);
+#else
   on_exit(OnExit, NULL);
+#endif
 
   TryCatch try_catch;
 
@@ -2489,6 +2501,9 @@ char** Init(int argc, char *argv[]) {
 
 
 void EmitExit(v8::Handle<v8::Object> process, int code) {
+  if (v8::V8::IsDead()) return;
+
+  HandleScope scope;
   // process.emit('exit')
   Local<Value> emit_v = process->Get(String::New("emit"));
   assert(emit_v->IsFunction());
