@@ -223,32 +223,43 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
 
-      var binding = process.binding('stdio'),
-          fd = binding.stdoutFD;
+      var tty_wrap = process.binding('tty_wrap');
+      var binding = process.binding('stdio');
+      var fd = 1;
 
       // Note stdout._type is used for test-module-load-list.js
 
-      if (binding.isatty(fd)) {
-        binding.unref();
-        var tty = NativeModule.require('tty');
-        stdout = new tty.WriteStream(fd);
-        stdout._type = "tty";
-      } else if (binding.isStdoutBlocking()) {
-        var fs = NativeModule.require('fs');
-        stdout = new fs.WriteStream(null, {fd: fd});
-        stdout._type = "fs";
-      } else {
-        binding.unref();
+      switch (tty_wrap.guessHandleType(fd)) {
+        case 'TTY':
+          binding.unref();
+          var tty = NativeModule.require('tty');
+          stdout = new tty.WriteStream(fd);
+          stdout._type = "tty";
+          break;
 
-        var net = NativeModule.require('net');
-        stdout = new net.Stream(fd);
+        case 'FILE':
+          var fs = NativeModule.require('fs');
+          stdout = new fs.WriteStream(null, {fd: fd});
+          stdout._type = "fs";
+          break;
 
-        // FIXME Should probably have an option in net.Stream to create a
-        // stream from an existing fd which is writable only. But for now
-        // we'll just add this hack and set the `readable` member to false.
-        // Test: ./node test/fixtures/echo.js < /etc/passwd
-        stdout.readable = false;
-        stdout._type = "pipe";
+        case 'PIPE':
+          binding.unref();
+
+          var net = NativeModule.require('net');
+          stdout = new net.Stream(fd);
+
+          // FIXME Should probably have an option in net.Stream to create a
+          // stream from an existing fd which is writable only. But for now
+          // we'll just add this hack and set the `readable` member to false.
+          // Test: ./node test/fixtures/echo.js < /etc/passwd
+          stdout.readable = false;
+          stdout._type = "pipe";
+          break;
+
+        default:
+          // Probably an error on in uv_guess_handle()
+          throw new Error("Implement me. Unknown stdout file type!");
       }
 
       // For supporting legacy API we put the FD here.
@@ -269,19 +280,30 @@
     process.__defineGetter__('stdin', function() {
       if (stdin) return stdin;
 
-      var binding = process.binding('stdio'),
-          fd = binding.openStdin();
+      var tty_wrap = process.binding('tty_wrap');
+      var binding = process.binding('stdio');
+      var fd = 0;
 
-      if (binding.isatty(fd)) {
-        var tty = NativeModule.require('tty');
-        stdin = new tty.ReadStream(fd);
-      } else if (binding.isStdinBlocking()) {
-        var fs = NativeModule.require('fs');
-        stdin = new fs.ReadStream(null, {fd: fd});
-      } else {
-        var net = NativeModule.require('net');
-        stdin = new net.Stream(fd);
-        stdin.readable = true;
+      switch (tty_wrap.guessHandleType(fd)) {
+        case 'TTY':
+          var tty = NativeModule.require('tty');
+          stdin = new tty.ReadStream(fd);
+          break;
+
+        case 'FILE':
+          var fs = NativeModule.require('fs');
+          stdin = new fs.ReadStream(null, {fd: fd});
+          break;
+
+        case 'PIPE':
+          var net = NativeModule.require('net');
+          stdin = new net.Stream(fd);
+          stdin.readable = true;
+          break;
+
+        default:
+          // Probably an error on in uv_guess_handle()
+          throw new Error("Implement me. Unknown stdin file type!");
       }
 
       // For supporting legacy API we put the FD here.
