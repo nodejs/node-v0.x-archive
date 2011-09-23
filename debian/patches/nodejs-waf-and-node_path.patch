@@ -1,0 +1,14 @@
+diff -urN node-v0.4.1.orig/tools/node-waf node-v0.4.1/tools/node-waf
+--- node-v0.4.1.orig/tools/node-waf	2011-02-19 18:45:34.000000000 -0800
++++ node-v0.4.1/tools/node-waf	2011-02-19 23:58:19.658065999 -0800
+@@ -4,8 +4,8 @@
+ 
+ join = os.path.join
+ bindir = os.path.dirname(os.path.realpath(__file__))
+-prefix = join(bindir, "..")
+-wafdir = join(prefix, "lib", "node")
++prefix = join('/usr')
++wafdir = join(prefix, "share", "nodejs")
+ 
+ w = join(wafdir, 'wafadmin')
+ t = join(w, 'Tools')

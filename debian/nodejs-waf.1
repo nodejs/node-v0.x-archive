@@ -1,0 +1,36 @@
+.TH nodejs-waf 1 "8 March 2010"
+.
+.SH NAME
+.
+nodejs-waf - WAF helper for building nodejs modules
+.
+.SH SYNOPSIS
+.B nodejs-waf [\fICOMMAND\fR]
+.
+.SH DESCRIPTION
+.PP
+Helper for the waf build system that is included in nodejs-dev package.
+.P
+Typical usage is :
+\fInodejs-waf\fP \fBconfigure\fR \fBbuild\fR
+.
+.SH COMMANDS
+.TP
+\fBclean\fR
+.TP
+\fBconfigure\fR
+.TP
+\fBbuild\fR
+.TP
+\fBdistclean\fR
+Removes all files created by \fInodejs-waf\fP.
+.TP
+\fBinstall\fR
+Install to /usr/lib/nodejs/modules (need root privileges).
+.TP
+\fBuninstall\fR
+Uninstall module from /usr/lib/nodejs/modules (need root privileges).
+.
+.SH "SEE ALSO"
+.
+.BR nodejs(1)

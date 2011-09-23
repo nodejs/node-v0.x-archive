@@ -1,0 +1,13 @@
+--- a/wscript	2010-10-08 22:47:00.987354013 -0700
++++ b/wscript	2010-10-08 22:48:05.175353857 -0700
+@@ -561,8 +561,8 @@
+ 
+   # Only install the man page if it exists.
+   # Do 'make doc install' to build and install it.
+-  if os.path.exists('doc/node.1'):
+-    bld.install_files('${PREFIX}/share/man/man1/', 'doc/node.1')
++  if os.path.exists('doc/nodejs.1'):
++    bld.install_files('${PREFIX}/share/man/man1/', 'doc/nodejs.1')
+ 
+   bld.install_files('${PREFIX}/bin/', 'bin/*', chmod=0755)
+   bld.install_files('${PREFIX}/lib/node/wafadmin', 'tools/wafadmin/*.py')

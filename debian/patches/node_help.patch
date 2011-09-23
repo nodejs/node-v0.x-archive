@@ -1,0 +1,6 @@
+2102,2103c2102,2103
+<   printf("Usage: node [options] script.js [arguments] \n"
+<          "       node debug script.js [arguments] \n"
+---
+>   printf("Usage: nodejs [options] script.js [arguments] \n"
+>          "       nodejs debug script.js [arguments] \n"
