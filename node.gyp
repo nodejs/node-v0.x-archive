@@ -49,6 +49,7 @@
       'lib/url.js',
       'lib/util.js',
       'lib/vm.js',
+      'lib/zlib.js',
     ],
   },
 
@@ -61,6 +62,7 @@
         'deps/http_parser/http_parser.gyp:http_parser',
         'deps/v8/tools/gyp/v8-node.gyp:v8',
         'deps/uv/uv.gyp:uv',
+        'deps/zlib/zlib.gyp:zlib',
         'node_js2c#host',
       ],
 
@@ -71,6 +73,7 @@
       ],
 
       'sources': [
+        'src/fs_event_wrap.cc',
         'src/cares_wrap.cc',
         'src/handle_wrap.cc',
         'src/node.cc',
@@ -85,11 +88,13 @@
         'src/node_os.cc',
         'src/node_script.cc',
         'src/node_string.cc',
+        'src/node_zlib.cc',
         'src/pipe_wrap.cc',
         'src/stdio_wrap.cc',
         'src/stream_wrap.cc',
         'src/tcp_wrap.cc',
         'src/timer_wrap.cc',
+        'src/tty_wrap.cc',
         'src/process_wrap.cc',
         'src/v8_typed_array.cc',
         'src/udp_wrap.cc',
@@ -187,7 +192,14 @@
             '-ldl',
             '-lutil' # needed for openpty
           ],
-        }]
+        }],
+        [ 'OS=="freebsd"', {
+          'sources': [ 'src/platform_freebsd.cc' ],
+          'libraries': [
+            '-lutil',
+            '-lkvm',
+          ],
+        }],
       ],
       'msvs-settings': {
         'VCLinkerTool': {

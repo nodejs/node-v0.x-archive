@@ -79,6 +79,7 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
       uv_pipe_cleanup((uv_pipe_t*)handle);
       /* Fall through. */
 
+    case UV_TTY:
     case UV_TCP:
       stream = (uv_stream_t*)handle;
 
@@ -134,6 +135,10 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
     case UV_PROCESS:
       process = (uv_process_t*)handle;
       ev_child_stop(process->loop->ev, &process->child_watcher);
+      break;
+
+    case UV_FS_EVENT:
+      uv__fs_event_destroy((uv_fs_event_t*)handle);
       break;
 
     default:
@@ -231,6 +236,7 @@ void uv__finish_close(uv_handle_t* handle) {
 
     case UV_NAMED_PIPE:
     case UV_TCP:
+    case UV_TTY:
       assert(!ev_is_active(&((uv_stream_t*)handle)->read_watcher));
       assert(!ev_is_active(&((uv_stream_t*)handle)->write_watcher));
       assert(((uv_stream_t*)handle)->fd == -1);
@@ -246,6 +252,9 @@ void uv__finish_close(uv_handle_t* handle) {
 
     case UV_PROCESS:
       assert(!ev_is_active(&((uv_process_t*)handle)->child_watcher));
+      break;
+
+    case UV_FS_EVENT:
       break;
 
     default:
@@ -575,6 +584,8 @@ int64_t uv_timer_get_repeat(uv_timer_t* timer) {
 
 static int uv_getaddrinfo_done(eio_req* req) {
   uv_getaddrinfo_t* handle = req->data;
+  struct addrinfo *res = handle->res;
+  handle->res = NULL;
 
   uv_unref(handle->loop);
 
@@ -587,10 +598,7 @@ static int uv_getaddrinfo_done(eio_req* req) {
     uv_err_new(handle->loop, handle->retcode);
   }
 
-  handle->cb(handle, handle->retcode, handle->res);
-
-  freeaddrinfo(handle->res);
-  handle->res = NULL;
+  handle->cb(handle, handle->retcode, res);
 
   return 0;
 }
@@ -633,6 +641,9 @@ int uv_getaddrinfo(uv_loop_t* loop,
     handle->hints = malloc(sizeof(struct addrinfo));
     memcpy(&handle->hints, hints, sizeof(struct addrinfo));
   }
+  else {
+    handle->hints = NULL;
+  }
 
   /* TODO security! check lengths, check return values. */
 
@@ -652,6 +663,11 @@ int uv_getaddrinfo(uv_loop_t* loop,
   assert(req->data == handle);
 
   return 0;
+}
+
+
+void uv_freeaddrinfo(struct addrinfo* ai) {
+  freeaddrinfo(ai);
 }
 
 

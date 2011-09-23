@@ -129,8 +129,8 @@ void uv__stream_destroy(uv_stream_t* stream) {
 
     req = ngx_queue_data(q, uv_write_t, queue);
     if (req->cb) {
-      uv_err_new_artificial(req->handle->loop, UV_OK);
-      req->cb(req, 0);
+      uv_err_new_artificial(stream->loop, req->error);
+      req->cb(req, req->error ? -1 : 0);
     }
   }
 }
@@ -287,6 +287,17 @@ static void uv__drain(uv_stream_t* stream) {
 }
 
 
+static size_t uv__write_req_size(uv_write_t* req) {
+  size_t size;
+
+  size = uv__buf_count(req->bufs + req->write_index,
+                       req->bufcnt - req->write_index);
+  assert(req->handle->write_queue_size >= size);
+
+  return size;
+}
+
+
 static void uv__write_req_finish(uv_write_t* req) {
   uv_stream_t* stream = req->handle;
 
@@ -351,6 +362,7 @@ static void uv__write(uv_stream_t* stream) {
     if (errno != EAGAIN) {
       /* Error */
       req->error = errno;
+      stream->write_queue_size -= uv__write_req_size(req);
       uv__write_req_finish(req);
       return;
     }
@@ -517,8 +529,8 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
 void uv__stream_io(EV_P_ ev_io* watcher, int revents) {
   uv_stream_t* stream = watcher->data;
 
-  assert(stream->type == UV_TCP ||
-         stream->type == UV_NAMED_PIPE);
+  assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE ||
+      stream->type == UV_TTY);
   assert(watcher == &stream->read_watcher ||
          watcher == &stream->write_watcher);
   assert(!(stream->flags & UV_CLOSING));
@@ -667,8 +679,9 @@ int uv_write(uv_write_t* req, uv_stream_t* stream, uv_buf_t bufs[], int bufcnt,
     uv_write_cb cb) {
   int empty_queue;
 
-  assert((stream->type == UV_TCP || stream->type == UV_NAMED_PIPE)
-      && "uv_write (unix) does not yet support other types of streams");
+  assert((stream->type == UV_TCP || stream->type == UV_NAMED_PIPE ||
+      stream->type == UV_TTY) &&
+      "uv_write (unix) does not yet support other types of streams");
 
   if (stream->fd < 0) {
     uv_err_new(stream->loop, EBADF);
@@ -725,7 +738,8 @@ int uv_write(uv_write_t* req, uv_stream_t* stream, uv_buf_t bufs[], int bufcnt,
 
 
 int uv_read_start(uv_stream_t* stream, uv_alloc_cb alloc_cb, uv_read_cb read_cb) {
-  assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE);
+  assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE ||
+      stream->type == UV_TTY);
 
   if (stream->flags & UV_CLOSING) {
     uv_err_new(stream->loop, EINVAL);

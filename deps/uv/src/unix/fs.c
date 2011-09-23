@@ -55,8 +55,8 @@
     req->result = func(args); \
     if (req->result) { \
       uv_err_new(loop, errno); \
-      return -1; \
     }  \
+    return req->result; \
   } \
   return 0;
 
@@ -116,6 +116,9 @@ static int uv__fs_after(eio_req* eio) {
 
   switch (req->fs_type) {
     case UV_FS_READDIR:
+      if (req->eio->result == -1)
+        break; /* opendir() or readdir() operation failed. */
+
       /*
        * XXX This is pretty bad.
        * We alloc and copy the large null terminated string list from libeio.
@@ -123,8 +126,6 @@ static int uv__fs_after(eio_req* eio) {
        * callback. We must keep it until uv_fs_req_cleanup. If we get rid of
        * libeio this can be avoided.
        */
-      if (req->eio->ptr2 == NULL)
-        break;
       buflen = 0;
       name = req->eio->ptr2;
       for (i = 0; i < req->result; i++) {
@@ -203,6 +204,8 @@ int uv_fs_open(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
     }
 
     uv__cloexec(req->result, 1);
+
+    return req->result;
   }
 
   return 0;
@@ -234,6 +237,8 @@ int uv_fs_read(uv_loop_t* loop, uv_fs_t* req, uv_file fd, void* buf,
       uv_err_new(loop, errno);
       return -1;
     }
+
+    return req->result;
   }
 
   return 0;
@@ -269,6 +274,8 @@ int uv_fs_write(uv_loop_t* loop, uv_fs_t* req, uv_file file, void* buf,
       uv_err_new(loop, errno);
       return -1;
     }
+
+    return req->result;
   }
 
   return 0;
@@ -341,6 +348,8 @@ int uv_fs_readdir(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
       req->result = -1;
       return -1;
     }
+
+    return req->result;
   }
 
   return 0;
@@ -387,6 +396,7 @@ int uv_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
     }
 
     req->ptr = &req->statbuf;
+    return req->result;
   }
 
   return 0;
@@ -416,6 +426,7 @@ int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
     }
 
     req->ptr = &req->statbuf;
+    return req->result;
   }
 
   return 0;
@@ -436,7 +447,12 @@ int uv_fs_fsync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
 
 int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
   char* path = NULL;
+#ifdef __FreeBSD__
+  /* freebsd doesn't have fdatasync, do a full fsync instead. */
+  WRAP_EIO(UV_FS_FDATASYNC, eio_fdatasync, fsync, ARGS1(file))
+#else
   WRAP_EIO(UV_FS_FDATASYNC, eio_fdatasync, fdatasync, ARGS1(file))
+#endif
 }
 
 
@@ -493,11 +509,11 @@ static int _futime(const uv_file file, double atime, double mtime) {
 
 int uv_fs_futime(uv_loop_t* loop, uv_fs_t* req, uv_file file, double atime,
     double mtime, uv_fs_cb cb) {
+#if defined(HAVE_FUTIMES)
   const char* path = NULL;
 
   uv_fs_req_init(loop, req, UV_FS_FUTIME, path, cb);
 
-#if defined(HAVE_FUTIMES)
   WRAP_EIO(UV_FS_FUTIME, eio_futime, _futime, ARGS3(file, atime, mtime))
 #else
   uv_err_new(loop, ENOSYS);
@@ -546,6 +562,7 @@ int uv_fs_lstat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
     }
 
     req->ptr = &req->statbuf;
+    return req->result;
   }
 
   return 0;
@@ -611,7 +628,7 @@ int uv_fs_readlink(uv_loop_t* loop, uv_fs_t* req, const char* path,
       req->ptr = buf;
     }
 
-    return 0;
+    return req->result;
   }
 
   assert(0 && "unreachable");

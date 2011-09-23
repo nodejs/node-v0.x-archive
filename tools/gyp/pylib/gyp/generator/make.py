@@ -64,6 +64,8 @@ def GetFlavor(params):
   flavors = {
     'darwin': 'mac',
     'sunos5': 'solaris',
+    'freebsd7': 'freebsd',
+    'freebsd8': 'freebsd',
   }
   flavor = flavors.get(sys.platform, 'linux')
   return params.get('flavor', flavor)
@@ -186,6 +188,31 @@ quiet_cmd_solink_module = SOLINK_MODULE($(TOOLSET)) $@
 cmd_solink_module = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(filter-out FORCE_DO_CMD, $^) $(LIBS)
 """
 
+LINK_COMMANDS_ANDROID = """\
+quiet_cmd_alink = AR($(TOOLSET)) $@
+cmd_alink = rm -f $@ && $(AR.$(TOOLSET)) $(ARFLAGS.$(TOOLSET)) $@ $(filter %.o,$^)
+
+# Due to circular dependencies between libraries :(, we wrap the
+# special "figure out circular dependencies" flags around the entire
+# input list during linking.
+quiet_cmd_link = LINK($(TOOLSET)) $@
+quiet_cmd_link_host = LINK($(TOOLSET)) $@
+cmd_link = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ -Wl,--start-group $(LD_INPUTS) -Wl,--end-group $(LIBS)
+cmd_link_host = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(LD_INPUTS) $(LIBS)
+
+# Other shared-object link notes:
+# - Set SONAME to the library filename so our binaries don't reference
+# the local, absolute paths used on the link command-line.
+quiet_cmd_solink = SOLINK($(TOOLSET)) $@
+cmd_solink = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -Wl,-soname=$(@F) -o $@ -Wl,--whole-archive $(LD_INPUTS) -Wl,--no-whole-archive $(LIBS)
+
+quiet_cmd_solink_module = SOLINK_MODULE($(TOOLSET)) $@
+cmd_solink_module = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -Wl,-soname=$(@F) -o $@ -Wl,--start-group $(filter-out FORCE_DO_CMD, $^) -Wl,--end-group $(LIBS)
+quiet_cmd_solink_module_host = SOLINK_MODULE($(TOOLSET)) $@
+cmd_solink_module_host = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -Wl,-soname=$(@F) -o $@ $(filter-out FORCE_DO_CMD, $^) $(LIBS)
+"""
+
+
 # Header of toplevel Makefile.
 # This should go into the build tree, but it's easier to keep it here for now.
 SHARED_HEADER = ("""\
@@ -228,16 +255,16 @@ abs_obj := $(abspath $(obj))
 # generated dependency rule Makefiles in one pass.
 all_deps :=
 
-# C++ apps need to be linked with g++.  Not sure what's appropriate.
+# C++ apps need to be linked with g++.
 #
-# Note, the flock is used to seralize linking. Linking is a memory-intensive
+# Note: flock is used to seralize linking. Linking is a memory-intensive
 # process so running parallel links can often lead to thrashing.  To disable
-# the serialization, override FLOCK via an envrionment variable as follows:
+# the serialization, override LINK via an envrionment variable as follows:
 #
-#   export FLOCK=
+#   export LINK=g++
 #
 # This will allow make to invoke N linker processes as specified in -jN.
-FLOCK ?= %(flock)s $(builddir)/linker.lock
+LINK ?= %(flock)s $(builddir)/linker.lock $(CXX)
 
 %(make_global_settings)s
 
@@ -1023,24 +1050,29 @@ class MacPrefixHeader(object):
     # This doesn't support per-configuration prefix headers. Good enough
     # for now.
     self.header = None
+    self.compile_headers = False
     if path_provider.flavor == 'mac':
       self.header = path_provider.xcode_settings.GetPerTargetSetting(
           'GCC_PREFIX_HEADER')
+      self.compile_headers = path_provider.xcode_settings.GetPerTargetSetting(
+          'GCC_PRECOMPILE_PREFIX_HEADER', default='NO') != 'NO'
     self.compiled_headers = {}
     if self.header:
       self.header = path_provider.Absolutify(self.header)
-      for lang in ['c', 'cc', 'm', 'mm']:
-        self.compiled_headers[lang] = path_provider.Pchify(self.header, lang)
+      if self.compile_headers:
+        for lang in ['c', 'cc', 'm', 'mm']:
+          self.compiled_headers[lang] = path_provider.Pchify(self.header, lang)
 
   def _Gch(self, lang):
     """Returns the actual file name of the prefix header for language |lang|."""
+    assert self.compile_headers
     return self.compiled_headers[lang] + '.gch'
 
   def WriteObjDependencies(self, compilable, objs, writer):
     """Writes dependencies from the object files in |objs| to the corresponding
     precompiled header file. |compilable[i]| has to be the source file belonging
     to |objs[i]|."""
-    if not self.header:
+    if not self.header or not self.compile_headers:
       return
 
     writer.WriteLn('# Dependencies from obj files to their precompiled headers')
@@ -1058,13 +1090,16 @@ class MacPrefixHeader(object):
 
   def GetInclude(self, lang):
     """Gets the cflags to include the prefix header for language |lang|."""
-    if lang not in self.compiled_headers:
+    if self.compile_headers and lang in self.compiled_headers:
+      return '-include %s ' % self.compiled_headers[lang]
+    elif self.header:
+      return '-include %s ' % self.header
+    else:
       return ''
-    return '-include %s ' % self.compiled_headers[lang]
 
   def WritePchTargets(self, writer):
     """Writes make rules to compile the prefix headers."""
-    if not self.header:
+    if not self.header or not self.compile_headers:
       return
 
     writer.WriteLn(self._Gch('c') + ": GYP_PCH_CFLAGS := "
@@ -1919,8 +1954,13 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     if self.type == 'executable':
       self.WriteLn(
           '%s: LD_INPUTS := %s' % (self.output_binary, ' '.join(link_deps)))
-      self.WriteDoCmd([self.output_binary], link_deps, 'link', part_of_all,
-                      postbuilds=postbuilds)
+      if self.toolset == 'host' and self.flavor == 'android':
+        self.WriteDoCmd([self.output_binary], link_deps, 'link_host',
+                        part_of_all, postbuilds=postbuilds)
+      else:
+        self.WriteDoCmd([self.output_binary], link_deps, 'link', part_of_all,
+                        postbuilds=postbuilds)
+
     elif self.type == 'static_library':
       for link_dep in link_deps:
         assert ' ' not in link_dep, (
@@ -1936,9 +1976,13 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       for link_dep in link_deps:
         assert ' ' not in link_dep, (
             "Spaces in module input filenames not supported (%s)"  % link_dep)
-      self.WriteDoCmd(
-          [self.output_binary], link_deps, 'solink_module', part_of_all,
-          postbuilds=postbuilds)
+      if self.toolset == 'host' and self.flavor == 'android':
+        self.WriteDoCmd([self.output_binary], link_deps, 'solink_module_host',
+                        part_of_all, postbuilds=postbuilds)
+      else:
+        self.WriteDoCmd(
+            [self.output_binary], link_deps, 'solink_module', part_of_all,
+            postbuilds=postbuilds)
     elif self.type == 'none':
       # Write a stamp line.
       self.WriteDoCmd([self.output_binary], deps, 'touch', part_of_all,
@@ -2490,7 +2534,15 @@ def GenerateOutput(target_list, target_dicts, data, params):
         'flock_index': 2,
         'extra_commands': SHARED_HEADER_SUN_COMMANDS,
     })
+  elif flavor == 'freebsd':
+    header_params.update({
+        'flock': 'lockf',
+    })
 
+  if flavor == 'android':
+    header_params.update({
+        'link_commands': LINK_COMMANDS_ANDROID,
+    })
   header_params.update(RunSystemTests(flavor))
 
   build_file, _, _ = gyp.common.ParseQualifiedTarget(target_list[0])
@@ -2527,7 +2579,7 @@ def GenerateOutput(target_list, target_dicts, data, params):
     root_makefile.write('TOOLSET := %s\n' % toolset)
     WriteRootHeaderSuffixRules(root_makefile)
 
-  # Put mac_tool next to the root Makefile.
+  # Put platform tool next to the root Makefile.
   dest_path = os.path.dirname(makefile_path)
   CopyTool(flavor, dest_path)
 
