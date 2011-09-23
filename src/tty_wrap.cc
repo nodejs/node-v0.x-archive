@@ -69,27 +69,25 @@ class TTYWrap : StreamWrap {
 
     switch (t) {
       case UV_TTY:
-        return String::New("TTY");
+        return scope.Close(String::New("TTY"));
 
       case UV_NAMED_PIPE:
-        return String::New("PIPE");
+        return scope.Close(String::New("PIPE"));
 
       case UV_FILE:
-        return String::New("FILE");
+        return scope.Close(String::New("FILE"));
 
       default:
         assert(0);
         return v8::Undefined();
     }
-    return uv_is_tty(fd) ? v8::True() : v8::False();
-
   }
 
   static Handle<Value> IsTTY(const Arguments& args) {
     HandleScope scope;
     int fd = args[0]->Int32Value();
     assert(fd >= 0);
-    return uv_is_tty(fd) ? v8::True() : v8::False();
+    return uv_guess_handle(fd) == UV_TTY ? v8::True() : v8::False();
   }
 
   static Handle<Value> GetWindowSize(const Arguments& args) {
