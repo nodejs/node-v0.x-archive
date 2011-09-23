@@ -137,6 +137,10 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
       ev_child_stop(process->loop->ev, &process->child_watcher);
       break;
 
+    case UV_FS_EVENT:
+      uv__fs_event_destroy((uv_fs_event_t*)handle);
+      break;
+
     default:
       assert(0);
   }
@@ -248,6 +252,9 @@ void uv__finish_close(uv_handle_t* handle) {
 
     case UV_PROCESS:
       assert(!ev_is_active(&((uv_process_t*)handle)->child_watcher));
+      break;
+
+    case UV_FS_EVENT:
       break;
 
     default:
@@ -593,8 +600,6 @@ static int uv_getaddrinfo_done(eio_req* req) {
 
   handle->cb(handle, handle->retcode, res);
 
-  freeaddrinfo(res);
-
   return 0;
 }
 
@@ -658,6 +663,11 @@ int uv_getaddrinfo(uv_loop_t* loop,
   assert(req->data == handle);
 
   return 0;
+}
+
+
+void uv_freeaddrinfo(struct addrinfo* ai) {
+  freeaddrinfo(ai);
 }
 
 
