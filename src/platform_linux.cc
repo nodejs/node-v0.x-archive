@@ -31,8 +31,6 @@
 #include <stdio.h> // sscanf, snprintf
 
 /* SetProcessTitle */
-#include <sys/prctl.h>
-#include <linux/prctl.h>
 #include <stdlib.h> // free
 #include <string.h> // strdup
 
@@ -48,31 +46,50 @@
 #include <time.h>
 #endif
 
+extern char **environ;
+
 namespace node {
 
 using namespace v8;
 
 static char buf[MAXPATHLEN + 1];
 static char *process_title;
+static unsigned int process_title_size;
 double Platform::prog_start_time = Platform::GetUptime();
 
-
 char** Platform::SetupArgs(int argc, char *argv[]) {
-  process_title = strdup(argv[0]);
+  int env_len = -1;
+  if (environ) {
+    while (environ[++env_len]);
+  }
+
+  if (env_len > 0) {
+    process_title_size = environ[env_len - 1] + strlen(environ[env_len - 1]) - argv[0];
+  } else {
+    process_title_size = argv[argc - 1] + strlen(argv[argc - 1]) - argv[0];
+  }
+
+  if (environ) {
+    char **new_environ = (char **)malloc(env_len * sizeof(char *));
+
+	unsigned int i = -1;
+	while (environ[++i]) {
+      new_environ[i] = strdup(environ[i]);
+    }
+
+	new_environ[env_len - 1] = '\0';
+
+	environ = new_environ;
+  }
+
+  process_title = argv[0];
   return argv;
 }
 
 
 void Platform::SetProcessTitle(char *title) {
-#ifdef PR_SET_NAME
-  if (process_title) free(process_title);
-  process_title = strdup(title);
-  prctl(PR_SET_NAME, process_title);
-#else
-  Local<Value> ex = Exception::Error(
-    String::New("'process.title' is not writable on your system, sorry."));
-  ThrowException(ex); // Safe, this method is only called from the main thread.
-#endif
+  memset(process_title, '\0', process_title_size);
+  snprintf(process_title, process_title_size - 1, title);
 }
 
 
