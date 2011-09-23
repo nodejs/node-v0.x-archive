@@ -220,6 +220,17 @@ bool HBasicBlock::Dominates(HBasicBlock* other) const {
 }
 
 
+int HBasicBlock::LoopNestingDepth() const {
+  const HBasicBlock* current = this;
+  int result  = (current->IsLoopHeader()) ? 1 : 0;
+  while (current->parent_loop_header() != NULL) {
+    current = current->parent_loop_header();
+    result++;
+  }
+  return result;
+}
+
+
 void HBasicBlock::PostProcessLoopHeader(IterationStatement* stmt) {
   ASSERT(IsLoopHeader());
 
@@ -638,8 +649,7 @@ Handle<Code> HGraph::Compile(CompilationInfo* info) {
       PrintF("Crankshaft Compiler - ");
     }
     CodeGenerator::MakeCodePrologue(info);
-    Code::Flags flags =
-        Code::ComputeFlags(Code::OPTIMIZED_FUNCTION, NOT_IN_LOOP);
+    Code::Flags flags = Code::ComputeFlags(Code::OPTIMIZED_FUNCTION);
     Handle<Code> code =
         CodeGenerator::MakeCodeEpilogue(&assembler, flags, info);
     generator.FinishCode(code);
@@ -1382,7 +1392,7 @@ void HGlobalValueNumberer::ComputeBlockSideEffects() {
     int id = block->block_id();
     int side_effects = 0;
     while (instr != NULL) {
-      side_effects |= (instr->flags() & HValue::ChangesFlagsMask());
+      side_effects |= instr->ChangesFlags();
       instr = instr->next();
     }
     block_side_effects_[id] |= side_effects;
@@ -1499,7 +1509,7 @@ void HGlobalValueNumberer::AnalyzeBlock(HBasicBlock* block, HValueMap* map) {
   HInstruction* instr = block->first();
   while (instr != NULL) {
     HInstruction* next = instr->next();
-    int flags = (instr->flags() & HValue::ChangesFlagsMask());
+    int flags = instr->ChangesFlags();
     if (flags != 0) {
       ASSERT(!instr->CheckFlag(HValue::kUseGVN));
       // Clear all instructions in the map that are affected by side effects.
@@ -1638,18 +1648,20 @@ Representation HInferRepresentation::TryChange(HValue* value) {
   int non_tagged_count = double_count + int32_count;
 
   // If a non-loop phi has tagged uses, don't convert it to untagged.
-  if (value->IsPhi() && !value->block()->IsLoopHeader()) {
-    if (tagged_count > 0) return Representation::None();
+  if (value->IsPhi() && !value->block()->IsLoopHeader() && tagged_count > 0) {
+    return Representation::None();
   }
 
-  if (non_tagged_count >= tagged_count) {
-    if (int32_count > 0) {
-      if (!value->IsPhi() || value->IsConvertibleToInteger()) {
-        return Representation::Integer32();
-      }
-    }
-    if (double_count > 0) return Representation::Double();
+  // Prefer unboxing over boxing, the latter is more expensive.
+  if (tagged_count > non_tagged_count) Representation::None();
+
+  // Prefer Integer32 over Double, if possible.
+  if (int32_count > 0 && value->IsConvertibleToInteger()) {
+    return Representation::Integer32();
   }
+
+  if (double_count > 0) return Representation::Double();
+
   return Representation::None();
 }
 
@@ -1675,7 +1687,9 @@ void HInferRepresentation::Analyze() {
   bool change = true;
   while (change) {
     change = false;
-    for (int i = 0; i < phi_count; ++i) {
+    // We normally have far more "forward edges" than "backward edges",
+    // so we terminate faster when we walk backwards.
+    for (int i = phi_count - 1; i >= 0; --i) {
       HPhi* phi = phi_list->at(i);
       for (HUseIterator it(phi->uses()); !it.Done(); it.Advance()) {
         HValue* use = it.value();
@@ -1688,40 +1702,25 @@ void HInferRepresentation::Analyze() {
     }
   }
 
-  // (3) Sum up the non-phi use counts of all connected phis.  Don't include
-  // the non-phi uses of the phi itself.
+  // (3) Use the phi reachability information from step 2 to
+  //     (a) sum up the non-phi use counts of all connected phis.
+  //     (b) push information about values which can't be converted to integer
+  //         without deoptimization through the phi use-def chains, avoiding
+  //         unnecessary deoptimizations later.
   for (int i = 0; i < phi_count; ++i) {
     HPhi* phi = phi_list->at(i);
+    bool cti = phi->AllOperandsConvertibleToInteger();
     for (BitVector::Iterator it(connected_phis.at(i));
          !it.Done();
          it.Advance()) {
       int index = it.Current();
-      if (index != i) {
-        HPhi* it_use = phi_list->at(it.Current());
-        phi->AddNonPhiUsesFrom(it_use);
-      }
+      HPhi* it_use = phi_list->at(it.Current());
+      if (index != i) phi->AddNonPhiUsesFrom(it_use);  // Don't count twice!
+      if (!cti) it_use->set_is_convertible_to_integer(false);
     }
   }
 
-  // (4) Compute phis that definitely can't be converted to integer
-  // without deoptimization and mark them to avoid unnecessary deoptimization.
-  change = true;
-  while (change) {
-    change = false;
-    for (int i = 0; i < phi_count; ++i) {
-      HPhi* phi = phi_list->at(i);
-      for (int j = 0; j < phi->OperandCount(); ++j) {
-        if (phi->IsConvertibleToInteger() &&
-            !phi->OperandAt(j)->IsConvertibleToInteger()) {
-          phi->set_is_convertible_to_integer(false);
-          change = true;
-          break;
-        }
-      }
-    }
-  }
-
-
+  // Initialize work list
   for (int i = 0; i < graph_->blocks()->length(); ++i) {
     HBasicBlock* block = graph_->blocks()->at(i);
     const ZoneList<HPhi*>* phis = block->phis();
@@ -1736,6 +1735,7 @@ void HInferRepresentation::Analyze() {
     }
   }
 
+  // Do a fixed point iteration, trying to improve representations
   while (!worklist_.is_empty()) {
     HValue* current = worklist_.RemoveLast();
     in_worklist_.Remove(current->id());
@@ -2201,7 +2201,8 @@ void TestContext::BuildBranch(HValue* value) {
 
 void HGraphBuilder::Bailout(const char* reason) {
   if (FLAG_trace_bailout) {
-    SmartPointer<char> name(info()->shared_info()->DebugName()->ToCString());
+    SmartArrayPointer<char> name(
+        info()->shared_info()->DebugName()->ToCString());
     PrintF("Bailout in HGraphBuilder: @\"%s\": %s\n", *name, reason);
   }
   SetStackOverflow();
@@ -2273,10 +2274,6 @@ HGraph* HGraphBuilder::CreateGraph() {
       return NULL;
     }
     SetupScope(scope);
-    VisitDeclarations(scope->declarations());
-    HValue* context = environment()->LookupContext();
-    AddInstruction(
-        new(zone()) HStackCheck(context, HStackCheck::kFunctionEntry));
 
     // Add an edge to the body entry.  This is warty: the graph's start
     // environment will be used by the Lithium translation as the initial
@@ -2298,6 +2295,19 @@ HGraph* HGraphBuilder::CreateGraph() {
     current_block()->Goto(body_entry);
     body_entry->SetJoinId(AstNode::kFunctionEntryId);
     set_current_block(body_entry);
+
+    // Handle implicit declaration of the function name in named function
+    // expressions before other declarations.
+    if (scope->is_function_scope() && scope->function() != NULL) {
+      HandleDeclaration(scope->function(), Variable::CONST, NULL);
+    }
+    VisitDeclarations(scope->declarations());
+    AddSimulate(AstNode::kDeclarationsId);
+
+    HValue* context = environment()->LookupContext();
+    AddInstruction(
+        new(zone()) HStackCheck(context, HStackCheck::kFunctionEntry));
+
     VisitStatements(info()->function()->body());
     if (HasStackOverflow()) return NULL;
 
@@ -2640,14 +2650,6 @@ void HGraphBuilder::VisitWithStatement(WithStatement* stmt) {
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
   return Bailout("WithStatement");
-}
-
-
-void HGraphBuilder::VisitExitContextStatement(ExitContextStatement* stmt) {
-  ASSERT(!HasStackOverflow());
-  ASSERT(current_block() != NULL);
-  ASSERT(current_block()->HasPredecessor());
-  return Bailout("ExitContextStatement");
 }
 
 
@@ -3119,54 +3121,63 @@ void HGraphBuilder::VisitVariableProxy(VariableProxy* expr) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
-  Variable* variable = expr->AsVariable();
-  if (variable == NULL) {
-    return Bailout("reference to rewritten variable");
-  } else if (variable->IsStackAllocated()) {
-    HValue* value = environment()->Lookup(variable);
-    if (variable->mode() == Variable::CONST &&
-        value == graph()->GetConstantHole()) {
-      return Bailout("reference to uninitialized const variable");
-    }
-    return ast_context()->ReturnValue(value);
-  } else if (variable->IsContextSlot()) {
-    if (variable->mode() == Variable::CONST) {
-      return Bailout("reference to const context slot");
-    }
-    HValue* context = BuildContextChainWalk(variable);
-    int index = variable->AsSlot()->index();
-    HLoadContextSlot* instr = new(zone()) HLoadContextSlot(context, index);
-    return ast_context()->ReturnInstruction(instr, expr->id());
-  } else if (variable->is_global()) {
-    LookupResult lookup;
-    GlobalPropertyAccess type = LookupGlobalProperty(variable, &lookup, false);
+  Variable* variable = expr->var();
+  if (variable->mode() == Variable::LET) {
+    return Bailout("reference to let variable");
+  }
+  switch (variable->location()) {
+    case Variable::UNALLOCATED: {
+      LookupResult lookup;
+      GlobalPropertyAccess type =
+          LookupGlobalProperty(variable, &lookup, false);
 
-    if (type == kUseCell &&
-        info()->global_object()->IsAccessCheckNeeded()) {
-      type = kUseGeneric;
+      if (type == kUseCell &&
+          info()->global_object()->IsAccessCheckNeeded()) {
+        type = kUseGeneric;
+      }
+
+      if (type == kUseCell) {
+        Handle<GlobalObject> global(info()->global_object());
+        Handle<JSGlobalPropertyCell> cell(global->GetPropertyCell(&lookup));
+        bool check_hole = !lookup.IsDontDelete() || lookup.IsReadOnly();
+        HLoadGlobalCell* instr = new(zone()) HLoadGlobalCell(cell, check_hole);
+        return ast_context()->ReturnInstruction(instr, expr->id());
+      } else {
+        HValue* context = environment()->LookupContext();
+        HGlobalObject* global_object = new(zone()) HGlobalObject(context);
+        AddInstruction(global_object);
+        HLoadGlobalGeneric* instr =
+            new(zone()) HLoadGlobalGeneric(context,
+                                           global_object,
+                                           variable->name(),
+                                           ast_context()->is_for_typeof());
+        instr->set_position(expr->position());
+        return ast_context()->ReturnInstruction(instr, expr->id());
+      }
     }
 
-    if (type == kUseCell) {
-      Handle<GlobalObject> global(info()->global_object());
-      Handle<JSGlobalPropertyCell> cell(global->GetPropertyCell(&lookup));
-      bool check_hole = !lookup.IsDontDelete() || lookup.IsReadOnly();
-      HLoadGlobalCell* instr = new(zone()) HLoadGlobalCell(cell, check_hole);
-      return ast_context()->ReturnInstruction(instr, expr->id());
-    } else {
-      HValue* context = environment()->LookupContext();
-      HGlobalObject* global_object = new(zone()) HGlobalObject(context);
-      AddInstruction(global_object);
-      HLoadGlobalGeneric* instr =
-          new(zone()) HLoadGlobalGeneric(context,
-                                         global_object,
-                                         variable->name(),
-                                         ast_context()->is_for_typeof());
-      instr->set_position(expr->position());
-      ASSERT(instr->HasSideEffects());
+    case Variable::PARAMETER:
+    case Variable::LOCAL: {
+      HValue* value = environment()->Lookup(variable);
+      if (variable->mode() == Variable::CONST &&
+          value == graph()->GetConstantHole()) {
+        return Bailout("reference to uninitialized const variable");
+      }
+      return ast_context()->ReturnValue(value);
+    }
+
+    case Variable::CONTEXT: {
+      if (variable->mode() == Variable::CONST) {
+        return Bailout("reference to const context slot");
+      }
+      HValue* context = BuildContextChainWalk(variable);
+      HLoadContextSlot* instr =
+          new(zone()) HLoadContextSlot(context, variable->index());
       return ast_context()->ReturnInstruction(instr, expr->id());
     }
-  } else {
-    return Bailout("reference to a variable which requires dynamic lookup");
+
+    case Variable::LOOKUP:
+      return Bailout("reference to a variable which requires dynamic lookup");
   }
 }
 
@@ -3578,51 +3589,61 @@ void HGraphBuilder::HandleGlobalVariableAssignment(Variable* var,
 void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
   Expression* target = expr->target();
   VariableProxy* proxy = target->AsVariableProxy();
-  Variable* var = proxy->AsVariable();
   Property* prop = target->AsProperty();
-  ASSERT(var == NULL || prop == NULL);
+  ASSERT(proxy == NULL || prop == NULL);
 
   // We have a second position recorded in the FullCodeGenerator to have
   // type feedback for the binary operation.
   BinaryOperation* operation = expr->binary_operation();
 
-  if (var != NULL) {
-    if (var->mode() == Variable::CONST)  {
-      return Bailout("unsupported const compound assignment");
+  if (proxy != NULL) {
+    Variable* var = proxy->var();
+    if (var->mode() == Variable::CONST || var->mode() == Variable::LET)  {
+      return Bailout("unsupported let or const compound assignment");
     }
 
     CHECK_ALIVE(VisitForValue(operation));
 
-    if (var->is_global()) {
-      HandleGlobalVariableAssignment(var,
-                                     Top(),
-                                     expr->position(),
-                                     expr->AssignmentId());
-    } else if (var->IsStackAllocated()) {
-      Bind(var, Top());
-    } else if (var->IsContextSlot()) {
-      // Bail out if we try to mutate a parameter value in a function using
-      // the arguments object.  We do not (yet) correctly handle the
-      // arguments property of the function.
-      if (info()->scope()->arguments() != NULL) {
-        // Parameters will rewrite to context slots.  We have no direct way
-        // to detect that the variable is a parameter.
-        int count = info()->scope()->num_parameters();
-        for (int i = 0; i < count; ++i) {
-          if (var == info()->scope()->parameter(i)) {
-            Bailout("assignment to parameter, function uses arguments object");
+    switch (var->location()) {
+      case Variable::UNALLOCATED:
+        HandleGlobalVariableAssignment(var,
+                                       Top(),
+                                       expr->position(),
+                                       expr->AssignmentId());
+        break;
+
+      case Variable::PARAMETER:
+      case Variable::LOCAL:
+        Bind(var, Top());
+        break;
+
+      case Variable::CONTEXT: {
+        // Bail out if we try to mutate a parameter value in a function
+        // using the arguments object.  We do not (yet) correctly handle the
+        // arguments property of the function.
+        if (info()->scope()->arguments() != NULL) {
+          // Parameters will be allocated to context slots.  We have no
+          // direct way to detect that the variable is a parameter so we do
+          // a linear search of the parameter variables.
+          int count = info()->scope()->num_parameters();
+          for (int i = 0; i < count; ++i) {
+            if (var == info()->scope()->parameter(i)) {
+              Bailout(
+                  "assignment to parameter, function uses arguments object");
+            }
           }
         }
+
+        HValue* context = BuildContextChainWalk(var);
+        HStoreContextSlot* instr =
+            new(zone()) HStoreContextSlot(context, var->index(), Top());
+        AddInstruction(instr);
+        if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
+        break;
       }
 
-      HValue* context = BuildContextChainWalk(var);
-      int index = var->AsSlot()->index();
-      HStoreContextSlot* instr =
-          new(zone()) HStoreContextSlot(context, index, Top());
-      AddInstruction(instr);
-      if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
-    } else {
-      return Bailout("compound assignment to lookup slot");
+      case Variable::LOOKUP:
+        return Bailout("compound assignment to lookup slot");
     }
     return ast_context()->ReturnValue(Pop());
 
@@ -3710,16 +3731,18 @@ void HGraphBuilder::VisitAssignment(Assignment* expr) {
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
   VariableProxy* proxy = expr->target()->AsVariableProxy();
-  Variable* var = proxy->AsVariable();
   Property* prop = expr->target()->AsProperty();
-  ASSERT(var == NULL || prop == NULL);
+  ASSERT(proxy == NULL || prop == NULL);
 
   if (expr->is_compound()) {
     HandleCompoundAssignment(expr);
     return;
   }
 
-  if (var != NULL) {
+  if (prop != NULL) {
+    HandlePropertyAssignment(expr);
+  } else if (proxy != NULL) {
+    Variable* var = proxy->var();
     if (var->mode() == Variable::CONST) {
       if (expr->op() != Token::INIT_CONST) {
         return Bailout("non-initializer assignment to const");
@@ -3731,59 +3754,61 @@ void HGraphBuilder::VisitAssignment(Assignment* expr) {
       // variables (e.g. initialization inside a loop).
       HValue* old_value = environment()->Lookup(var);
       AddInstruction(new HUseConst(old_value));
+    } else if (var->mode() == Variable::LET) {
+      return Bailout("unsupported assignment to let");
     }
 
     if (proxy->IsArguments()) return Bailout("assignment to arguments");
 
     // Handle the assignment.
-    if (var->IsStackAllocated()) {
-      // We do not allow the arguments object to occur in a context where it
-      // may escape, but assignments to stack-allocated locals are
-      // permitted.
-      CHECK_ALIVE(VisitForValue(expr->value(), ARGUMENTS_ALLOWED));
-      HValue* value = Pop();
-      Bind(var, value);
-      return ast_context()->ReturnValue(value);
+    switch (var->location()) {
+      case Variable::UNALLOCATED:
+        CHECK_ALIVE(VisitForValue(expr->value()));
+        HandleGlobalVariableAssignment(var,
+                                       Top(),
+                                       expr->position(),
+                                       expr->AssignmentId());
+        return ast_context()->ReturnValue(Pop());
 
-    } else if (var->IsContextSlot()) {
-      ASSERT(var->mode() != Variable::CONST);
-      // Bail out if we try to mutate a parameter value in a function using
-      // the arguments object.  We do not (yet) correctly handle the
-      // arguments property of the function.
-      if (info()->scope()->arguments() != NULL) {
-        // Parameters will rewrite to context slots.  We have no direct way
-        // to detect that the variable is a parameter.
-        int count = info()->scope()->num_parameters();
-        for (int i = 0; i < count; ++i) {
-          if (var == info()->scope()->parameter(i)) {
-            Bailout("assignment to parameter, function uses arguments object");
-          }
-        }
+      case Variable::PARAMETER:
+      case Variable::LOCAL: {
+        // We do not allow the arguments object to occur in a context where it
+        // may escape, but assignments to stack-allocated locals are
+        // permitted.
+        CHECK_ALIVE(VisitForValue(expr->value(), ARGUMENTS_ALLOWED));
+        HValue* value = Pop();
+        Bind(var, value);
+        return ast_context()->ReturnValue(value);
       }
 
-      CHECK_ALIVE(VisitForValue(expr->value()));
-      HValue* context = BuildContextChainWalk(var);
-      int index = var->AsSlot()->index();
-      HStoreContextSlot* instr =
-          new(zone()) HStoreContextSlot(context, index, Top());
-      AddInstruction(instr);
-      if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
-      return ast_context()->ReturnValue(Pop());
+      case Variable::CONTEXT: {
+        ASSERT(var->mode() != Variable::CONST);
+        // Bail out if we try to mutate a parameter value in a function using
+        // the arguments object.  We do not (yet) correctly handle the
+        // arguments property of the function.
+        if (info()->scope()->arguments() != NULL) {
+          // Parameters will rewrite to context slots.  We have no direct way
+          // to detect that the variable is a parameter.
+          int count = info()->scope()->num_parameters();
+          for (int i = 0; i < count; ++i) {
+            if (var == info()->scope()->parameter(i)) {
+              return Bailout("assignment to parameter in arguments object");
+            }
+          }
+        }
 
-    } else if (var->is_global()) {
-      CHECK_ALIVE(VisitForValue(expr->value()));
-      HandleGlobalVariableAssignment(var,
-                                     Top(),
-                                     expr->position(),
-                                     expr->AssignmentId());
-      return ast_context()->ReturnValue(Pop());
+        CHECK_ALIVE(VisitForValue(expr->value()));
+        HValue* context = BuildContextChainWalk(var);
+        HStoreContextSlot* instr =
+            new(zone()) HStoreContextSlot(context, var->index(), Top());
+        AddInstruction(instr);
+        if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
+        return ast_context()->ReturnValue(Pop());
+      }
 
-    } else {
-      return Bailout("assignment to LOOKUP or const CONTEXT variable");
+      case Variable::LOOKUP:
+        return Bailout("assignment to LOOKUP variable");
     }
-
-  } else if (prop != NULL) {
-    HandlePropertyAssignment(expr);
   } else {
     return Bailout("invalid left-hand side in assignment");
   }
@@ -3878,35 +3903,35 @@ HInstruction* HGraphBuilder::BuildExternalArrayElementAccess(
     HValue* external_elements,
     HValue* checked_key,
     HValue* val,
-    JSObject::ElementsKind elements_kind,
+    ElementsKind elements_kind,
     bool is_store) {
   if (is_store) {
     ASSERT(val != NULL);
     switch (elements_kind) {
-      case JSObject::EXTERNAL_PIXEL_ELEMENTS: {
+      case EXTERNAL_PIXEL_ELEMENTS: {
         HClampToUint8* clamp = new(zone()) HClampToUint8(val);
         AddInstruction(clamp);
         val = clamp;
         break;
       }
-      case JSObject::EXTERNAL_BYTE_ELEMENTS:
-      case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-      case JSObject::EXTERNAL_SHORT_ELEMENTS:
-      case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-      case JSObject::EXTERNAL_INT_ELEMENTS:
-      case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS: {
+      case EXTERNAL_BYTE_ELEMENTS:
+      case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+      case EXTERNAL_SHORT_ELEMENTS:
+      case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+      case EXTERNAL_INT_ELEMENTS:
+      case EXTERNAL_UNSIGNED_INT_ELEMENTS: {
         HToInt32* floor_val = new(zone()) HToInt32(val);
         AddInstruction(floor_val);
         val = floor_val;
         break;
       }
-      case JSObject::EXTERNAL_FLOAT_ELEMENTS:
-      case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
+      case EXTERNAL_FLOAT_ELEMENTS:
+      case EXTERNAL_DOUBLE_ELEMENTS:
         break;
-      case JSObject::FAST_ELEMENTS:
-      case JSObject::FAST_DOUBLE_ELEMENTS:
-      case JSObject::DICTIONARY_ELEMENTS:
-      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+      case FAST_ELEMENTS:
+      case FAST_DOUBLE_ELEMENTS:
+      case DICTIONARY_ELEMENTS:
+      case NON_STRICT_ARGUMENTS_ELEMENTS:
         UNREACHABLE();
         break;
     }
@@ -3990,7 +4015,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
   SmallMapList* maps = prop->GetReceiverTypes();
   bool todo_external_array = false;
 
-  static const int kNumElementTypes = JSObject::kElementsKindCount;
+  static const int kNumElementTypes = kElementsKindCount;
   bool type_todo[kNumElementTypes];
   for (int i = 0; i < kNumElementTypes; ++i) {
     type_todo[i] = false;
@@ -4000,7 +4025,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
     ASSERT(maps->at(i)->IsMap());
     type_todo[maps->at(i)->elements_kind()] = true;
     if (maps->at(i)->elements_kind()
-        >= JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND) {
+        >= FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND) {
       todo_external_array = true;
     }
   }
@@ -4015,16 +4040,16 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
   HInstruction* checked_key = NULL;
 
   // FAST_ELEMENTS is assumed to be the first case.
-  STATIC_ASSERT(JSObject::FAST_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_ELEMENTS == 0);
 
-  for (JSObject::ElementsKind elements_kind = JSObject::FAST_ELEMENTS;
-       elements_kind <= JSObject::LAST_ELEMENTS_KIND;
-       elements_kind = JSObject::ElementsKind(elements_kind + 1)) {
+  for (ElementsKind elements_kind = FAST_ELEMENTS;
+       elements_kind <= LAST_ELEMENTS_KIND;
+       elements_kind = ElementsKind(elements_kind + 1)) {
     // After having handled FAST_ELEMENTS and DICTIONARY_ELEMENTS, we
     // need to add some code that's executed for all external array cases.
-    STATIC_ASSERT(JSObject::LAST_EXTERNAL_ARRAY_ELEMENTS_KIND ==
-                  JSObject::LAST_ELEMENTS_KIND);
-    if (elements_kind == JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND
+    STATIC_ASSERT(LAST_EXTERNAL_ARRAY_ELEMENTS_KIND ==
+                  LAST_ELEMENTS_KIND);
+    if (elements_kind == FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND
         && todo_external_array) {
       HInstruction* length =
           AddInstruction(new(zone()) HFixedArrayBaseLength(elements));
@@ -4043,11 +4068,11 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
 
       set_current_block(if_true);
       HInstruction* access;
-      if (elements_kind == JSObject::FAST_ELEMENTS ||
-          elements_kind == JSObject::FAST_DOUBLE_ELEMENTS) {
+      if (elements_kind == FAST_ELEMENTS ||
+          elements_kind == FAST_DOUBLE_ELEMENTS) {
         bool fast_double_elements =
-            elements_kind == JSObject::FAST_DOUBLE_ELEMENTS;
-        if (is_store && elements_kind == JSObject::FAST_ELEMENTS) {
+            elements_kind == FAST_DOUBLE_ELEMENTS;
+        if (is_store && elements_kind == FAST_ELEMENTS) {
           AddInstruction(new(zone()) HCheckMap(
               elements, isolate()->factory()->fixed_array_map(),
               elements_kind_branch));
@@ -4112,7 +4137,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
                 new(zone()) HLoadKeyedFastElement(elements, checked_key));
           }
         }
-      } else if (elements_kind == JSObject::DICTIONARY_ELEMENTS) {
+      } else if (elements_kind == DICTIONARY_ELEMENTS) {
         if (is_store) {
           access = AddInstruction(BuildStoreKeyedGeneric(object, key, val));
         } else {
@@ -4407,8 +4432,10 @@ void HGraphBuilder::TraceInline(Handle<JSFunction> target,
                                 Handle<JSFunction> caller,
                                 const char* reason) {
   if (FLAG_trace_inlining) {
-    SmartPointer<char> target_name = target->shared()->DebugName()->ToCString();
-    SmartPointer<char> caller_name = caller->shared()->DebugName()->ToCString();
+    SmartArrayPointer<char> target_name =
+        target->shared()->DebugName()->ToCString();
+    SmartArrayPointer<char> caller_name =
+        caller->shared()->DebugName()->ToCString();
     if (reason == NULL) {
       PrintF("Inlined %s called from %s.\n", *target_name, *caller_name);
     } else {
@@ -4795,13 +4822,15 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   // Found pattern f.apply(receiver, arguments).
   VisitForValue(prop->obj());
   if (HasStackOverflow() || current_block() == NULL) return true;
-  HValue* function = Pop();
+  HValue* function = Top();
+  AddCheckConstantFunction(expr, function, function_map, true);
+  Drop(1);
+
   VisitForValue(args->at(0));
   if (HasStackOverflow() || current_block() == NULL) return true;
   HValue* receiver = Pop();
   HInstruction* elements = AddInstruction(new(zone()) HArgumentsElements);
   HInstruction* length = AddInstruction(new(zone()) HArgumentsLength(elements));
-  AddCheckConstantFunction(expr, function, function_map, true);
   HInstruction* result =
       new(zone()) HApplyArguments(function, receiver, length, elements);
   result->set_position(expr->position());
@@ -4893,10 +4922,12 @@ void HGraphBuilder::VisitCall(Call* expr) {
     }
 
   } else {
-    Variable* var = expr->expression()->AsVariableProxy()->AsVariable();
-    bool global_call = (var != NULL) && var->is_global() && !var->is_this();
+    VariableProxy* proxy = expr->expression()->AsVariableProxy();
+    // FIXME.
+    bool global_call = proxy != NULL && proxy->var()->IsUnallocated();
 
     if (global_call) {
+      Variable* var = proxy->var();
       bool known_global_function = false;
       // If there is a global property cell for the name at compile time and
       // access check is not enabled we assume that the function will not change
@@ -5060,20 +5091,8 @@ void HGraphBuilder::VisitUnaryOperation(UnaryOperation* expr) {
 
 void HGraphBuilder::VisitDelete(UnaryOperation* expr) {
   Property* prop = expr->expression()->AsProperty();
-  Variable* var = expr->expression()->AsVariableProxy()->AsVariable();
-  if (prop == NULL && var == NULL) {
-    // Result of deleting non-property, non-variable reference is true.
-    // Evaluate the subexpression for side effects.
-    CHECK_ALIVE(VisitForEffect(expr->expression()));
-    return ast_context()->ReturnValue(graph()->GetConstantTrue());
-  } else if (var != NULL &&
-             !var->is_global() &&
-             var->AsSlot() != NULL &&
-             var->AsSlot()->type() != Slot::LOOKUP) {
-    // Result of deleting non-global, non-dynamic variables is false.
-    // The subexpression does not have side effects.
-    return ast_context()->ReturnValue(graph()->GetConstantFalse());
-  } else if (prop != NULL) {
+  VariableProxy* proxy = expr->expression()->AsVariableProxy();
+  if (prop != NULL) {
     CHECK_ALIVE(VisitForValue(prop->obj()));
     CHECK_ALIVE(VisitForValue(prop->key()));
     HValue* key = Pop();
@@ -5081,10 +5100,26 @@ void HGraphBuilder::VisitDelete(UnaryOperation* expr) {
     HValue* context = environment()->LookupContext();
     HDeleteProperty* instr = new(zone()) HDeleteProperty(context, obj, key);
     return ast_context()->ReturnInstruction(instr, expr->id());
-  } else if (var->is_global()) {
-    Bailout("delete with global variable");
+  } else if (proxy != NULL) {
+    Variable* var = proxy->var();
+    if (var->IsUnallocated()) {
+      Bailout("delete with global variable");
+    } else if (var->IsStackAllocated() || var->IsContextSlot()) {
+      // Result of deleting non-global variables is false.  'this' is not
+      // really a variable, though we implement it as one.  The
+      // subexpression does not have side effects.
+      HValue* value = var->is_this()
+          ? graph()->GetConstantTrue()
+          : graph()->GetConstantFalse();
+      return ast_context()->ReturnValue(value);
+    } else {
+      Bailout("delete with non-global variable");
+    }
   } else {
-    Bailout("delete with non-global variable");
+    // Result of deleting non-property, non-variable reference is true.
+    // Evaluate the subexpression for side effects.
+    CHECK_ALIVE(VisitForEffect(expr->expression()));
+    return ast_context()->ReturnValue(graph()->GetConstantTrue());
   }
 }
 
@@ -5231,9 +5266,8 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
   ASSERT(current_block()->HasPredecessor());
   Expression* target = expr->expression();
   VariableProxy* proxy = target->AsVariableProxy();
-  Variable* var = proxy->AsVariable();
   Property* prop = target->AsProperty();
-  if (var == NULL && prop == NULL) {
+  if (proxy == NULL && prop == NULL) {
     return Bailout("invalid lhs in count operation");
   }
 
@@ -5245,7 +5279,8 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
   HValue* input = NULL;  // ToNumber(original_input).
   HValue* after = NULL;  // The result after incrementing or decrementing.
 
-  if (var != NULL) {
+  if (proxy != NULL) {
+    Variable* var = proxy->var();
     if (var->mode() == Variable::CONST)  {
       return Bailout("unsupported count operation with const");
     }
@@ -5257,36 +5292,45 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
     input = returns_original_input ? Top() : Pop();
     Push(after);
 
-    if (var->is_global()) {
-      HandleGlobalVariableAssignment(var,
-                                     after,
-                                     expr->position(),
-                                     expr->AssignmentId());
-    } else if (var->IsStackAllocated()) {
-      Bind(var, after);
-    } else if (var->IsContextSlot()) {
-      // Bail out if we try to mutate a parameter value in a function using
-      // the arguments object.  We do not (yet) correctly handle the
-      // arguments property of the function.
-      if (info()->scope()->arguments() != NULL) {
-        // Parameters will rewrite to context slots.  We have no direct way
-        // to detect that the variable is a parameter.
-        int count = info()->scope()->num_parameters();
-        for (int i = 0; i < count; ++i) {
-          if (var == info()->scope()->parameter(i)) {
-            Bailout("assignment to parameter, function uses arguments object");
+    switch (var->location()) {
+      case Variable::UNALLOCATED:
+        HandleGlobalVariableAssignment(var,
+                                       after,
+                                       expr->position(),
+                                       expr->AssignmentId());
+        break;
+
+      case Variable::PARAMETER:
+      case Variable::LOCAL:
+        Bind(var, after);
+        break;
+
+      case Variable::CONTEXT: {
+        // Bail out if we try to mutate a parameter value in a function
+        // using the arguments object.  We do not (yet) correctly handle the
+        // arguments property of the function.
+        if (info()->scope()->arguments() != NULL) {
+          // Parameters will rewrite to context slots.  We have no direct
+          // way to detect that the variable is a parameter so we use a
+          // linear search of the parameter list.
+          int count = info()->scope()->num_parameters();
+          for (int i = 0; i < count; ++i) {
+            if (var == info()->scope()->parameter(i)) {
+              return Bailout("assignment to parameter in arguments object");
+            }
           }
         }
+
+        HValue* context = BuildContextChainWalk(var);
+        HStoreContextSlot* instr =
+            new(zone()) HStoreContextSlot(context, var->index(), after);
+        AddInstruction(instr);
+        if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
+        break;
       }
 
-      HValue* context = BuildContextChainWalk(var);
-      int index = var->AsSlot()->index();
-      HStoreContextSlot* instr =
-          new(zone()) HStoreContextSlot(context, index, after);
-      AddInstruction(instr);
-      if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
-    } else {
-      return Bailout("lookup variable in count operation");
+      case Variable::LOOKUP:
+        return Bailout("lookup variable in count operation");
     }
 
   } else {
@@ -5698,12 +5742,12 @@ void HGraphBuilder::VisitCompareOperation(CompareOperation* expr) {
     // residing in new space. If it is we assume that the function will stay the
     // same.
     Handle<JSFunction> target = Handle<JSFunction>::null();
-    Variable* var = expr->right()->AsVariableProxy()->AsVariable();
-    bool global_function = (var != NULL) && var->is_global() && !var->is_this();
+    VariableProxy* proxy = expr->right()->AsVariableProxy();
+    bool global_function = (proxy != NULL) && proxy->var()->IsUnallocated();
     if (global_function &&
         info()->has_global_object() &&
         !info()->global_object()->IsAccessCheckNeeded()) {
-      Handle<String> name = var->name();
+      Handle<String> name = proxy->name();
       Handle<GlobalObject> global(info()->global_object());
       LookupResult lookup;
       global->Lookup(*name, &lookup);
@@ -5802,15 +5846,42 @@ void HGraphBuilder::VisitThisFunction(ThisFunction* expr) {
 
 
 void HGraphBuilder::VisitDeclaration(Declaration* decl) {
-  // We support only declarations that do not require code generation.
-  Variable* var = decl->proxy()->var();
-  if (!var->IsStackAllocated() || decl->fun() != NULL) {
-    return Bailout("unsupported declaration");
-  }
+  HandleDeclaration(decl->proxy(), decl->mode(), decl->fun());
+}
 
-  if (decl->mode() == Variable::CONST) {
-    ASSERT(var->IsStackAllocated());
-    environment()->Bind(var, graph()->GetConstantHole());
+
+void HGraphBuilder::HandleDeclaration(VariableProxy* proxy,
+                                      Variable::Mode mode,
+                                      FunctionLiteral* function) {
+  if (mode == Variable::LET) return Bailout("unsupported let declaration");
+  Variable* var = proxy->var();
+  switch (var->location()) {
+    case Variable::UNALLOCATED:
+      return Bailout("unsupported global declaration");
+    case Variable::PARAMETER:
+    case Variable::LOCAL:
+    case Variable::CONTEXT:
+      if (mode == Variable::CONST || function != NULL) {
+        HValue* value = NULL;
+        if (mode == Variable::CONST) {
+          value = graph()->GetConstantHole();
+        } else {
+          VisitForValue(function);
+          value = Pop();
+        }
+        if (var->IsContextSlot()) {
+          HValue* context = environment()->LookupContext();
+          HStoreContextSlot* store =
+              new HStoreContextSlot(context, var->index(), value);
+          AddInstruction(store);
+          if (store->HasSideEffects()) AddSimulate(proxy->id());
+        } else {
+          environment()->Bind(var, value);
+        }
+      }
+      break;
+    case Variable::LOOKUP:
+      return Bailout("unsupported lookup slot in declaration");
   }
 }
 
@@ -5843,7 +5914,9 @@ void HGraphBuilder::GenerateIsFunction(CallRuntime* call) {
   CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
   HValue* value = Pop();
   HHasInstanceTypeAndBranch* result =
-      new(zone()) HHasInstanceTypeAndBranch(value, JS_FUNCTION_TYPE);
+      new(zone()) HHasInstanceTypeAndBranch(value,
+                                            JS_FUNCTION_TYPE,
+                                            JS_FUNCTION_PROXY_TYPE);
   return ast_context()->ReturnControl(result, call->id());
 }
 
@@ -6496,6 +6569,8 @@ void HTracer::Trace(const char* name, HGraph* graph, LChunk* chunk) {
     if (current->dominator() != NULL) {
       PrintBlockProperty("dominator", current->dominator()->block_id());
     }
+
+    PrintIntProperty("loop_depth", current->LoopNestingDepth());
 
     if (chunk != NULL) {
       int first_index = current->first_instruction_index();

@@ -272,7 +272,8 @@ static void on_connection(uv_stream_t* server, int status) {
   handle->state.prevbuf_pos = 0;
   handle->state.prevbuf_rem = 0;
 
-  uv_tcp_init(loop, (uv_tcp_t*)handle);
+  r = uv_tcp_init(loop, (uv_tcp_t*)handle);
+  ASSERT(r == 0);
 
   r = uv_accept(server, (uv_stream_t*)handle);
   ASSERT(r == 0);
@@ -317,7 +318,6 @@ static int dns_start(int port) {
 
 
 HELPER_IMPL(dns_server) {
-  uv_init();
   loop = uv_default_loop();
 
   if (dns_start(TEST_PORT_2))

@@ -19,12 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
-#include <node_file.h>
-#include <node_buffer.h>
+#include "node.h"
+#include "node_file.h"
+#include "node_buffer.h"
 #ifdef __POSIX__
-# include <node_stat_watcher.h>
+# include "node_stat_watcher.h"
 #endif
+#include "req_wrap.h"
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -48,18 +49,18 @@ using namespace v8;
 #define THROW_BAD_ARGS \
   ThrowException(Exception::TypeError(String::New("Bad argument")))
 
+typedef class ReqWrap<uv_fs_t> FSReqWrap;
+
 static Persistent<String> encoding_symbol;
 static Persistent<String> errno_symbol;
 static Persistent<String> buf_symbol;
+static Persistent<String> oncomplete_sym;
 
-static inline bool SetCloseOnExec(int fd) {
-#ifdef __POSIX__
-  return (fcntl(fd, F_SETFD, FD_CLOEXEC) != -1);
-#else // __MINGW32__
-  return SetHandleInformation(reinterpret_cast<HANDLE>(_get_osfhandle(fd)),
-                              HANDLE_FLAG_INHERIT, 0) != 0;
-#endif
-}
+Local<Value> FSError(int errorno,
+                     const char *syscall = NULL,
+                     const char *msg     = NULL,
+                     const char *path    = NULL);
+
 
 #ifdef _LARGEFILE_SOURCE
 static inline int IsInt64(double x) {
@@ -71,8 +72,11 @@ static inline int IsInt64(double x) {
 static void After(uv_fs_t *req) {
   HandleScope scope;
 
-  Persistent<Function> *callback = cb_unwrap(req->data);
-
+  FSReqWrap* req_wrap = (FSReqWrap*) req->data;
+  assert(&req_wrap->req_ == req);
+  Local<Value> callback_v = req_wrap->object_->Get(oncomplete_sym);
+  assert(callback_v->IsFunction());
+  Local<Function> callback = Local<Function>::Cast(callback_v);
 
   // there is always at least one argument. "error"
   int argc = 1;
@@ -85,12 +89,15 @@ static void After(uv_fs_t *req) {
   // for a success, which is possible.
   if (req->result == -1) {
     // If the request doesn't have a path parameter set.
-    
-    // XXX if (!req->arg0) {
-      argv[0] = ErrnoException(req->errorno);
-    // XXX } else {
-    // XXX   argv[0] = ErrnoException(req->errorno, NULL, "", static_cast<const char*>(req->arg0));
-    // XXX}
+
+    if (!req->path) {
+      argv[0] = FSError(req->errorno);
+    } else {
+      argv[0] = FSError(req->errorno,
+                        NULL,
+                        NULL,
+                        static_cast<const char*>(req->path));
+    }
   } else {
     // error value is empty or null for non-error.
     argv[0] = Local<Value>::New(Null());
@@ -124,7 +131,6 @@ static void After(uv_fs_t *req) {
         break;
 
       case UV_FS_OPEN:
-        SetCloseOnExec(req->result);
         /* pass thru */
       case UV_FS_SENDFILE:
         argv[1] = Integer::New(req->result);
@@ -144,7 +150,7 @@ static void After(uv_fs_t *req) {
         break;
 
       case UV_FS_READLINK:
-        argv[1] = String::New(static_cast<char*>(req->ptr), req->result);
+        argv[1] = String::New(static_cast<char*>(req->ptr));
         break;
 
       case UV_FS_READ:
@@ -162,10 +168,13 @@ static void After(uv_fs_t *req) {
           for (int i = 0; i < nnames; i++) {
             Local<String> name = String::New(namebuf);
             names->Set(Integer::New(i), name);
+#ifndef NDEBUG
             namebuf += strlen(namebuf);
             assert(*namebuf == '\0');
             namebuf += 1;
+#else
             namebuf += strlen(namebuf) + 1;
+#endif
           }
 
           argv[1] = names;
@@ -179,19 +188,18 @@ static void After(uv_fs_t *req) {
 
   TryCatch try_catch;
 
-  (*callback)->Call(v8::Context::GetCurrent()->Global(), argc, argv);
+  callback->Call(req_wrap->object_, argc, argv);
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
 
-  // Dispose of the persistent handle
-  cb_destroy(callback);
-
-  uv_fs_req_cleanup(req);
-  delete req;
+  uv_fs_req_cleanup(&req_wrap->req_);
+  delete req_wrap;
 }
 
+// This struct is only used on sync fs calls.
+// For async calls FSReqWrap is used.
 struct fs_req_wrap {
   fs_req_wrap() {}
   ~fs_req_wrap() { uv_fs_req_cleanup(&req); }
@@ -201,22 +209,89 @@ struct fs_req_wrap {
   uv_fs_t req;
 };
 
+
+const char* errno_string(int errorno) {
+  uv_err_t err;
+  memset(&err, 0, sizeof err);
+  err.code = (uv_err_code)errorno;
+  return uv_err_name(err);
+}
+
+
+const char* errno_message(int errorno) {
+  uv_err_t err;
+  memset(&err, 0, sizeof err);
+  err.code = (uv_err_code)errorno;
+  return uv_strerror(err);
+}
+
+
+// hack alert! copy of ErrnoException in node.cc, tuned for uv errors
+Local<Value> FSError(int errorno,
+                     const char *syscall,
+                     const char *msg,
+                     const char *path) {
+  static Persistent<String> syscall_symbol;
+  static Persistent<String> errpath_symbol;
+  static Persistent<String> code_symbol;
+
+  if (syscall_symbol.IsEmpty()) {
+    syscall_symbol = NODE_PSYMBOL("syscall");
+    errno_symbol = NODE_PSYMBOL("errno");
+    errpath_symbol = NODE_PSYMBOL("path");
+    code_symbol = NODE_PSYMBOL("code");
+  }
+
+  if (!msg || !msg[0])
+    msg = errno_message(errorno);
+
+  Local<String> estring = String::NewSymbol(errno_string(errorno));
+  Local<String> message = String::NewSymbol(msg);
+  Local<String> cons1 = String::Concat(estring, String::NewSymbol(", "));
+  Local<String> cons2 = String::Concat(cons1, message);
+
+  Local<Value> e;
+
+  if (path) {
+    Local<String> cons3 = String::Concat(cons2, String::NewSymbol(" '"));
+    Local<String> cons4 = String::Concat(cons3, String::New(path));
+    Local<String> cons5 = String::Concat(cons4, String::NewSymbol("'"));
+    e = Exception::Error(cons5);
+  } else {
+    e = Exception::Error(cons2);
+  }
+
+  Local<Object> obj = e->ToObject();
+
+  // TODO errno should probably go
+  obj->Set(errno_symbol, Integer::New(errorno));
+  obj->Set(code_symbol, estring);
+  if (path) obj->Set(errpath_symbol, String::New(path));
+  if (syscall) obj->Set(syscall_symbol, String::NewSymbol(syscall));
+  return e;
+}
+
+
 #define ASYNC_CALL(func, callback, ...)                           \
-  uv_fs_t* req = new uv_fs_t();                                   \
-  int r = uv_fs_##func(uv_default_loop(), req, __VA_ARGS__, After); \
+  FSReqWrap* req_wrap = new FSReqWrap();                          \
+  int r = uv_fs_##func(uv_default_loop(), &req_wrap->req_,        \
+      __VA_ARGS__, After);                                        \
   assert(r == 0);                                                 \
-  req->data = cb_persist(callback);                               \
-  return Undefined();
+  req_wrap->object_->Set(oncomplete_sym, callback);               \
+  req_wrap->Dispatched();                                         \
+  return scope.Close(req_wrap->object_);
 
 #define SYNC_CALL(func, path, ...)                                \
   fs_req_wrap req_wrap;                                           \
-  uv_fs_##func(uv_default_loop(), &req_wrap.req, __VA_ARGS__, NULL); \
-  if (req_wrap.req.result == -1) {                                \
-    return ThrowException(                                        \
-      ErrnoException(req_wrap.req.errorno, #func, "", path));     \
+  int result = uv_fs_##func(uv_default_loop(), &req_wrap.req, __VA_ARGS__, NULL); \
+  if (result < 0) {                                               \
+    int code = uv_last_error(uv_default_loop()).code;             \
+    return ThrowException(FSError(code, #func, "", path));        \
   }
 
 #define SYNC_REQ req_wrap.req
+
+#define SYNC_RESULT result
 
 
 static Handle<Value> Close(const Arguments& args) {
@@ -331,12 +406,11 @@ static Handle<Value> Stat(const Arguments& args) {
   if (args[1]->IsFunction()) {
     ASYNC_CALL(stat, args[1], *path)
   } else {
-    SYNC_CALL(stat, 0, *path)
+    SYNC_CALL(stat, *path, *path)
     return scope.Close(BuildStatsObject((NODE_STAT_STRUCT*)SYNC_REQ.ptr));
   }
 }
 
-#ifdef __POSIX__
 static Handle<Value> LStat(const Arguments& args) {
   HandleScope scope;
 
@@ -353,7 +427,6 @@ static Handle<Value> LStat(const Arguments& args) {
     return scope.Close(BuildStatsObject((NODE_STAT_STRUCT*)SYNC_REQ.ptr));
   }
 }
-#endif // __POSIX__
 
 static Handle<Value> FStat(const Arguments& args) {
   HandleScope scope;
@@ -372,7 +445,6 @@ static Handle<Value> FStat(const Arguments& args) {
   }
 }
 
-#ifdef __POSIX__
 static Handle<Value> Symlink(const Arguments& args) {
   HandleScope scope;
 
@@ -382,17 +454,23 @@ static Handle<Value> Symlink(const Arguments& args) {
 
   String::Utf8Value dest(args[0]->ToString());
   String::Utf8Value path(args[1]->ToString());
+  int flags = 0;
 
-  if (args[2]->IsFunction()) {
-    ASYNC_CALL(symlink, args[2], *dest, *path)
+  if (args[2]->IsString()) {
+    String::Utf8Value mode(args[2]->ToString());
+    if (memcmp(*mode, "dir\0", 4) == 0) {
+      flags |= UV_FS_SYMLINK_DIR;
+    }
+  }
+
+  if (args[3]->IsFunction()) {
+    ASYNC_CALL(symlink, args[3], *dest, *path, flags)
   } else {
-    SYNC_CALL(symlink, *path, *dest, *path)
+    SYNC_CALL(symlink, *path, *dest, *path, flags)
     return Undefined();
   }
 }
-#endif // __POSIX__
 
-#ifdef __POSIX__
 static Handle<Value> Link(const Arguments& args) {
   HandleScope scope;
 
@@ -410,9 +488,7 @@ static Handle<Value> Link(const Arguments& args) {
     return Undefined();
   }
 }
-#endif // __POSIX__
 
-#ifdef __POSIX__
 static Handle<Value> ReadLink(const Arguments& args) {
   HandleScope scope;
 
@@ -426,10 +502,9 @@ static Handle<Value> ReadLink(const Arguments& args) {
     ASYNC_CALL(readlink, args[1], *path)
   } else {
     SYNC_CALL(readlink, *path, *path)
-    return scope.Close(String::New((char*)SYNC_REQ.ptr, SYNC_REQ.result));
+    return scope.Close(String::New((char*)SYNC_REQ.ptr));
   }
 }
-#endif // __POSIX__
 
 static Handle<Value> Rename(const Arguments& args) {
   HandleScope scope;
@@ -589,7 +664,7 @@ static Handle<Value> SendFile(const Arguments& args) {
     ASYNC_CALL(sendfile, args[4], out_fd, in_fd, in_offset, length)
   } else {
     SYNC_CALL(sendfile, 0, out_fd, in_fd, in_offset, length)
-    return scope.Close(Integer::New(SYNC_REQ.result));
+    return scope.Close(Integer::New(SYNC_RESULT));
   }
 }
 
@@ -645,8 +720,7 @@ static Handle<Value> Open(const Arguments& args) {
     ASYNC_CALL(open, args[3], *path, flags, mode)
   } else {
     SYNC_CALL(open, *path, *path, flags, mode)
-    int fd = SYNC_REQ.result;
-    SetCloseOnExec(fd);
+    int fd = SYNC_RESULT;
     return scope.Close(Integer::New(fd));
   }
 }
@@ -714,7 +788,7 @@ static Handle<Value> Write(const Arguments& args) {
     ASYNC_CALL(write, cb, fd, buf, len, pos)
   } else {
     SYNC_CALL(write, 0, fd, buf, len, pos)
-    return scope.Close(Integer::New(SYNC_REQ.result));
+    return scope.Close(Integer::New(SYNC_RESULT));
   }
 }
 
@@ -777,7 +851,7 @@ static Handle<Value> Read(const Arguments& args) {
     ASYNC_CALL(read, cb, fd, buf, len, pos);
   } else {
     SYNC_CALL(read, 0, fd, buf, len, pos)
-    Local<Integer> bytesRead = Integer::New(SYNC_REQ.result);
+    Local<Integer> bytesRead = Integer::New(SYNC_RESULT);
     return scope.Close(bytesRead);
   }
 }
@@ -804,7 +878,6 @@ static Handle<Value> Chmod(const Arguments& args) {
 }
 
 
-#ifdef __POSIX__
 /* fs.fchmod(fd, mode);
  * Wrapper for fchmod(1) / EIO_FCHMOD
  */
@@ -815,7 +888,7 @@ static Handle<Value> FChmod(const Arguments& args) {
     return THROW_BAD_ARGS;
   }
   int fd = args[0]->Int32Value();
-  mode_t mode = static_cast<mode_t>(args[1]->Int32Value());
+  int mode = static_cast<int>(args[1]->Int32Value());
 
   if(args[2]->IsFunction()) {
     ASYNC_CALL(fchmod, args[2], fd, mode);
@@ -824,10 +897,8 @@ static Handle<Value> FChmod(const Arguments& args) {
     return Undefined();
   }
 }
-#endif // __POSIX__
 
 
-#ifdef __POSIX__
 /* fs.chown(path, uid, gid);
  * Wrapper for chown(1) / EIO_CHOWN
  */
@@ -843,8 +914,8 @@ static Handle<Value> Chown(const Arguments& args) {
   }
 
   String::Utf8Value path(args[0]->ToString());
-  uid_t uid = static_cast<uid_t>(args[1]->Int32Value());
-  gid_t gid = static_cast<gid_t>(args[2]->Int32Value());
+  int uid = static_cast<int>(args[1]->Int32Value());
+  int gid = static_cast<int>(args[2]->Int32Value());
 
   if (args[3]->IsFunction()) {
     ASYNC_CALL(chown, args[3], *path, uid, gid);
@@ -853,10 +924,8 @@ static Handle<Value> Chown(const Arguments& args) {
     return Undefined();
   }
 }
-#endif // __POSIX__
 
 
-#ifdef __POSIX__
 /* fs.fchown(fd, uid, gid);
  * Wrapper for fchown(1) / EIO_FCHOWN
  */
@@ -872,8 +941,8 @@ static Handle<Value> FChown(const Arguments& args) {
   }
 
   int fd = args[0]->Int32Value();
-  uid_t uid = static_cast<uid_t>(args[1]->Int32Value());
-  gid_t gid = static_cast<gid_t>(args[2]->Int32Value());
+  int uid = static_cast<int>(args[1]->Int32Value());
+  int gid = static_cast<int>(args[2]->Int32Value());
 
   if (args[3]->IsFunction()) {
     ASYNC_CALL(fchown, args[3], fd, uid, gid);
@@ -882,7 +951,7 @@ static Handle<Value> FChown(const Arguments& args) {
     return Undefined();
   }
 }
-#endif // __POSIX__
+
 
 static Handle<Value> UTimes(const Arguments& args) {
   HandleScope scope;
@@ -946,20 +1015,15 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "sendfile", SendFile);
   NODE_SET_METHOD(target, "readdir", ReadDir);
   NODE_SET_METHOD(target, "stat", Stat);
-#ifdef __POSIX__
   NODE_SET_METHOD(target, "lstat", LStat);
-#endif // __POSIX__
   NODE_SET_METHOD(target, "fstat", FStat);
-#ifdef __POSIX__
   NODE_SET_METHOD(target, "link", Link);
   NODE_SET_METHOD(target, "symlink", Symlink);
   NODE_SET_METHOD(target, "readlink", ReadLink);
-#endif // __POSIX__
   NODE_SET_METHOD(target, "unlink", Unlink);
   NODE_SET_METHOD(target, "write", Write);
 
   NODE_SET_METHOD(target, "chmod", Chmod);
-#ifdef __POSIX__
   NODE_SET_METHOD(target, "fchmod", FChmod);
   //NODE_SET_METHOD(target, "lchmod", LChmod);
 
@@ -967,7 +1031,6 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "fchown", FChown);
   //NODE_SET_METHOD(target, "lchown", LChown);
 
-#endif // __POSIX__
   NODE_SET_METHOD(target, "utimes", UTimes);
   NODE_SET_METHOD(target, "futimes", FUTimes);
 
@@ -984,6 +1047,8 @@ void InitFs(Handle<Object> target) {
   target->Set(String::NewSymbol("Stats"),
                stats_constructor_template->GetFunction());
   File::Initialize(target);
+
+  oncomplete_sym = NODE_PSYMBOL("oncomplete");
 
 #ifdef __POSIX__
   StatWatcher::Initialize(target);

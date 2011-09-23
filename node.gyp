@@ -3,7 +3,54 @@
     'v8_use_snapshot': 'true',
     'target_arch': 'ia32',
     'node_use_dtrace': 'false',
-    'node_use_openssl%': 'true'
+    'node_use_openssl%': 'true',
+    'node_use_system_openssl%': 'false',
+    'library_files': [
+      'src/node.js',
+      'lib/_debugger.js',
+      'lib/_linklist.js',
+      'lib/assert.js',
+      'lib/buffer.js',
+      'lib/buffer_ieee754.js',
+      'lib/child_process_legacy.js',
+      'lib/child_process_uv.js',
+      'lib/console.js',
+      'lib/constants.js',
+      'lib/crypto.js',
+      'lib/dgram_legacy.js',
+      'lib/dgram_uv.js',
+      'lib/dns_legacy.js',
+      'lib/dns_uv.js',
+      'lib/events.js',
+      'lib/freelist.js',
+      'lib/fs.js',
+      'lib/http.js',
+      'lib/http2.js',
+      'lib/https.js',
+      'lib/https2.js',
+      'lib/module.js',
+      'lib/net_legacy.js',
+      'lib/net_uv.js',
+      'lib/os.js',
+      'lib/path.js',
+      'lib/punycode.js',
+      'lib/querystring.js',
+      'lib/readline.js',
+      'lib/repl.js',
+      'lib/stream.js',
+      'lib/string_decoder.js',
+      'lib/sys.js',
+      'lib/timers_legacy.js',
+      'lib/timers_uv.js',
+      'lib/tls.js',
+      'lib/tty.js',
+      'lib/tty_posix.js',
+      'lib/tty_win32.js',
+      'lib/url.js',
+      'lib/util.js',
+      'lib/vm.js',
+      'lib/zlib.js',
+    ],
   },
 
   'targets': [
@@ -15,6 +62,7 @@
         'deps/http_parser/http_parser.gyp:http_parser',
         'deps/v8/tools/gyp/v8-node.gyp:v8',
         'deps/uv/uv.gyp:uv',
+        'deps/zlib/zlib.gyp:zlib',
         'node_js2c#host',
       ],
 
@@ -25,6 +73,7 @@
       ],
 
       'sources': [
+        'src/fs_event_wrap.cc',
         'src/cares_wrap.cc',
         'src/handle_wrap.cc',
         'src/node.cc',
@@ -39,11 +88,13 @@
         'src/node_os.cc',
         'src/node_script.cc',
         'src/node_string.cc',
+        'src/node_zlib.cc',
         'src/pipe_wrap.cc',
         'src/stdio_wrap.cc',
         'src/stream_wrap.cc',
         'src/tcp_wrap.cc',
         'src/timer_wrap.cc',
+        'src/tty_wrap.cc',
         'src/process_wrap.cc',
         'src/v8_typed_array.cc',
         'src/udp_wrap.cc',
@@ -76,6 +127,8 @@
         'deps/v8/include/v8.h',
         'deps/v8/include/v8-debug.h',
         '<(SHARED_INTERMEDIATE_DIR)/node_natives.h',
+        # javascript files to make for an even more pleasant IDE experience
+        '<@(library_files)',
       ],
 
       'defines': [
@@ -89,7 +142,10 @@
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [ 'src/node_crypto.cc' ],
-          'dependencies': [ './deps/openssl/openssl.gyp:openssl' ]
+          'conditions': [
+            [ 'node_use_system_openssl=="false"', {
+              'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
+            }]]
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
         }],
@@ -112,6 +168,7 @@
             # we need to use node's preferred "win32" rather than gyp's preferred "win"
             'PLATFORM="win32"',
           ],
+          'libraries': [ '-lpsapi.lib' ]
         },{ # POSIX
           'defines': [ '__POSIX__' ],
           'sources': [
@@ -135,7 +192,14 @@
             '-ldl',
             '-lutil' # needed for openpty
           ],
-        }]
+        }],
+        [ 'OS=="freebsd"', {
+          'sources': [ 'src/platform_freebsd.cc' ],
+          'libraries': [
+            '-lutil',
+            '-lkvm',
+          ],
+        }],
       ],
       'msvs-settings': {
         'VCLinkerTool': {
@@ -149,51 +213,6 @@
       'type': 'none',
       'toolsets': ['host'],
       'variables': {
-        'library_files': [
-          'src/node.js',
-          'lib/_debugger.js',
-          'lib/_linklist.js',
-          'lib/assert.js',
-          'lib/buffer.js',
-          'lib/buffer_ieee754.js',
-          'lib/child_process_legacy.js',
-          'lib/child_process_uv.js',
-          'lib/console.js',
-          'lib/constants.js',
-          'lib/crypto.js',
-          'lib/dgram_legacy.js',
-          'lib/dgram_uv.js',
-          'lib/dns_legacy.js',
-          'lib/dns_uv.js',
-          'lib/events.js',
-          'lib/freelist.js',
-          'lib/fs.js',
-          'lib/http.js',
-          'lib/http2.js',
-          'lib/https.js',
-          'lib/https2.js',
-          'lib/module.js',
-          'lib/net_legacy.js',
-          'lib/net_uv.js',
-          'lib/os.js',
-          'lib/path.js',
-          'lib/punycode.js',
-          'lib/querystring.js',
-          'lib/readline.js',
-          'lib/repl.js',
-          'lib/stream.js',
-          'lib/string_decoder.js',
-          'lib/sys.js',
-          'lib/timers_legacy.js',
-          'lib/timers_uv.js',
-          'lib/tls.js',
-          'lib/tty.js',
-          'lib/tty_posix.js',
-          'lib/tty_win32.js',
-          'lib/url.js',
-          'lib/util.js',
-          'lib/vm.js',
-        ],
       },
 
       'actions': [

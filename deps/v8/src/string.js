@@ -223,7 +223,7 @@ function StringReplace(search, replace) {
   // Delegate to one of the regular expression variants if necessary.
   if (IS_REGEXP(search)) {
     %_Log('regexp', 'regexp-replace,%0r,%1S', [search, subject]);
-    if (IS_FUNCTION(replace)) {
+    if (IS_SPEC_FUNCTION(replace)) {
       if (search.global) {
         return StringReplaceGlobalRegExpWithFunction(subject, search, replace);
       } else {
@@ -250,7 +250,7 @@ function StringReplace(search, replace) {
   builder.addSpecialSlice(0, start);
 
   // Compute the string to replace with.
-  if (IS_FUNCTION(replace)) {
+  if (IS_SPEC_FUNCTION(replace)) {
     var receiver = %GetDefaultReceiver(replace);
     builder.add(%_CallFunction(receiver,
                                search,
@@ -440,13 +440,14 @@ function StringReplaceGlobalRegExpWithFunction(subject, regexp, replace) {
       i++;
     }
   } else {
+    var receiver = %GetDefaultReceiver(replace);
     while (i < len) {
       var elem = res[i];
       if (!%_IsSmi(elem)) {
         // elem must be an Array.
         // Use the apply argument as backing for global RegExp properties.
         lastMatchInfoOverride = elem;
-        var func_result = replace.apply(null, elem);
+        var func_result = %Apply(replace, receiver, elem, 0, elem.length);
         res[i] = TO_STRING_INLINE(func_result);
       }
       i++;
@@ -472,11 +473,11 @@ function StringReplaceNonGlobalRegExpWithFunction(subject, regexp, replace) {
   // The number of captures plus one for the match.
   var m = NUMBER_OF_CAPTURES(matchInfo) >> 1;
   var replacement;
+  var receiver = %GetDefaultReceiver(replace);
   if (m == 1) {
     // No captures, only the match, which is always valid.
     var s = SubString(subject, index, endOfMatch);
     // Don't call directly to avoid exposing the built-in global object.
-    var receiver = %GetDefaultReceiver(replace);
     replacement =
         %_CallFunction(receiver, s, index, subject, replace);
   } else {
@@ -487,7 +488,7 @@ function StringReplaceNonGlobalRegExpWithFunction(subject, regexp, replace) {
     parameters[j] = index;
     parameters[j + 1] = subject;
 
-    replacement = replace.apply(null, parameters);
+    replacement = %Apply(replace, receiver, parameters, 0, j + 2);
   }
 
   result.add(replacement);  // The add method converts to string if necessary.
@@ -911,50 +912,47 @@ function ReplaceResultBuilder(str) {
   this.special_string = str;
 }
 
-ReplaceResultBuilder.prototype.__proto__ = null;
-
-
-ReplaceResultBuilder.prototype.add = function(str) {
-  str = TO_STRING_INLINE(str);
-  if (str.length > 0) this.elements.push(str);
-}
-
-
-ReplaceResultBuilder.prototype.addSpecialSlice = function(start, end) {
-  var len = end - start;
-  if (start < 0 || len <= 0) return;
-  if (start < 0x80000 && len < 0x800) {
-    this.elements.push((start << 11) | len);
-  } else {
-    // 0 < len <= String::kMaxLength and Smi::kMaxValue >= String::kMaxLength,
-    // so -len is a smi.
+SetUpLockedPrototype(ReplaceResultBuilder,
+  $Array("elements", "special_string"), $Array(
+  "add", function(str) {
+    str = TO_STRING_INLINE(str);
+    if (str.length > 0) this.elements.push(str);
+  },
+  "addSpecialSlice", function(start, end) {
+    var len = end - start;
+    if (start < 0 || len <= 0) return;
+    if (start < 0x80000 && len < 0x800) {
+      this.elements.push((start << 11) | len);
+    } else {
+      // 0 < len <= String::kMaxLength and Smi::kMaxValue >= String::kMaxLength,
+      // so -len is a smi.
+      var elements = this.elements;
+      elements.push(-len);
+      elements.push(start);
+    }
+  },
+  "generate", function() {
     var elements = this.elements;
-    elements.push(-len);
-    elements.push(start);
+    return %StringBuilderConcat(elements, elements.length, this.special_string);
   }
-}
-
-
-ReplaceResultBuilder.prototype.generate = function() {
-  var elements = this.elements;
-  return %StringBuilderConcat(elements, elements.length, this.special_string);
-}
+));
 
 
 // -------------------------------------------------------------------
 
-function SetupString() {
-  // Setup the constructor property on the String prototype object.
+function SetUpString() {
+  %CheckIsBootstrapping();
+  // Set up the constructor property on the String prototype object.
   %SetProperty($String.prototype, "constructor", $String, DONT_ENUM);
 
 
-  // Setup the non-enumerable functions on the String object.
+  // Set up the non-enumerable functions on the String object.
   InstallFunctions($String, DONT_ENUM, $Array(
     "fromCharCode", StringFromCharCode
   ));
 
 
-  // Setup the non-enumerable functions on the String prototype object.
+  // Set up the non-enumerable functions on the String prototype object.
   InstallFunctionsOnHiddenPrototype($String.prototype, DONT_ENUM, $Array(
     "valueOf", StringValueOf,
     "toString", StringToString,
@@ -994,5 +992,4 @@ function SetupString() {
   ));
 }
 
-
-SetupString();
+SetUpString();

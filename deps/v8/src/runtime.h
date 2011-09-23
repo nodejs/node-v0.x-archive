@@ -79,6 +79,8 @@ namespace internal {
   F(PreventExtensions, 1, 1)\
   \
   /* Utilities */ \
+  F(CheckIsBootstrapping, 0, 1) \
+  F(Apply, 5, 1) \
   F(GetFunctionDelegate, 1, 1) \
   F(GetConstructorDelegate, 1, 1) \
   F(NewArgumentsFast, 3, 1) \
@@ -286,8 +288,12 @@ namespace internal {
   \
   /* Harmony proxies */ \
   F(CreateJSProxy, 2, 1) \
+  F(CreateJSFunctionProxy, 4, 1) \
   F(IsJSProxy, 1, 1) \
+  F(IsJSFunctionProxy, 1, 1) \
   F(GetHandler, 1, 1) \
+  F(GetCallTrap, 1, 1) \
+  F(GetConstructTrap, 1, 1) \
   F(Fix, 1, 1) \
   \
   /* Harmony weakmaps */ \
@@ -317,7 +323,7 @@ namespace internal {
   F(StoreContextSlot, 4, 1) \
   \
   /* Declarations and initialization */ \
-  F(DeclareGlobals, 4, 1) \
+  F(DeclareGlobals, 3, 1) \
   F(DeclareContextSlot, 4, 1) \
   F(InitializeVarGlobal, -1 /* 2 or 3 */, 1) \
   F(InitializeConstGlobal, 2, 1) \
@@ -661,6 +667,16 @@ class Runtime : public AllStatic {
 
   // Helper functions used stubs.
   static void PerformGC(Object* result);
+};
+
+
+//---------------------------------------------------------------------------
+// Constants used by interface to runtime functions.
+
+enum kDeclareGlobalsFlags {
+  kDeclareGlobalsEvalFlag = 1 << 0,
+  kDeclareGlobalsStrictModeFlag = 1 << 1,
+  kDeclareGlobalsNativeFlag = 1 << 2
 };
 
 } }  // namespace v8::internal

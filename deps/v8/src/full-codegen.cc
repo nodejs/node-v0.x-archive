@@ -96,11 +96,6 @@ void BreakableStatementChecker::VisitWithStatement(WithStatement* stmt) {
 }
 
 
-void BreakableStatementChecker::VisitExitContextStatement(
-    ExitContextStatement* stmt) {
-}
-
-
 void BreakableStatementChecker::VisitSwitchStatement(SwitchStatement* stmt) {
   // Switch statements breakable if the tag expression is.
   Visit(stmt->tag());
@@ -190,9 +185,9 @@ void BreakableStatementChecker::VisitArrayLiteral(ArrayLiteral* expr) {
 void BreakableStatementChecker::VisitAssignment(Assignment* expr) {
   // If assigning to a property (including a global property) the assignment is
   // breakable.
-  Variable* var = expr->target()->AsVariableProxy()->AsVariable();
+  VariableProxy* proxy = expr->target()->AsVariableProxy();
   Property* prop = expr->target()->AsProperty();
-  if (prop != NULL || (var != NULL && var->is_global())) {
+  if (prop != NULL || (proxy != NULL && proxy->var()->IsUnallocated())) {
     is_breakable_ = true;
     return;
   }
@@ -291,11 +286,13 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   }
   unsigned table_offset = cgen.EmitStackCheckTable();
 
-  Code::Flags flags = Code::ComputeFlags(Code::FUNCTION, NOT_IN_LOOP);
+  Code::Flags flags = Code::ComputeFlags(Code::FUNCTION);
   Handle<Code> code = CodeGenerator::MakeCodeEpilogue(&masm, flags, info);
   code->set_optimizable(info->IsOptimizable());
   cgen.PopulateDeoptimizationData(code);
   code->set_has_deoptimization_support(info->HasDeoptimizationSupport());
+  code->set_has_debug_break_slots(
+      info->isolate()->debugger()->IsDebuggerActive());
   code->set_allow_osr_at_loop_nesting_level(0);
   code->set_stack_check_table_offset(table_offset);
   CodeGenerator::PrintCode(code, info);
@@ -392,26 +389,6 @@ void FullCodeGenerator::RecordStackCheck(int ast_id) {
   // state.
   BailoutEntry entry = { ast_id, masm_->pc_offset() };
   stack_checks_.Add(entry);
-}
-
-
-int FullCodeGenerator::SlotOffset(Slot* slot) {
-  ASSERT(slot != NULL);
-  // Offset is negative because higher indexes are at lower addresses.
-  int offset = -slot->index() * kPointerSize;
-  // Adjust by a (parameter or local) base offset.
-  switch (slot->type()) {
-    case Slot::PARAMETER:
-      offset += (info_->scope()->num_parameters() + 1) * kPointerSize;
-      break;
-    case Slot::LOCAL:
-      offset += JavaScriptFrameConstants::kLocal0Offset;
-      break;
-    case Slot::CONTEXT:
-    case Slot::LOOKUP:
-      UNREACHABLE();
-  }
-  return offset;
 }
 
 
@@ -529,34 +506,21 @@ void FullCodeGenerator::DoTest(const TestContext* context) {
 void FullCodeGenerator::VisitDeclarations(
     ZoneList<Declaration*>* declarations) {
   int length = declarations->length();
-  int globals = 0;
+  int global_count = 0;
   for (int i = 0; i < length; i++) {
     Declaration* decl = declarations->at(i);
-    Variable* var = decl->proxy()->var();
-    Slot* slot = var->AsSlot();
-
-    // If it was not possible to allocate the variable at compile
-    // time, we need to "declare" it at runtime to make sure it
-    // actually exists in the local context.
-    if ((slot != NULL && slot->type() == Slot::LOOKUP) || !var->is_global()) {
-      VisitDeclaration(decl);
-    } else {
-      // Count global variables and functions for later processing
-      globals++;
-    }
+    EmitDeclaration(decl->proxy(), decl->mode(), decl->fun(), &global_count);
   }
 
-  // Compute array of global variable and function declarations.
-  // Do nothing in case of no declared global functions or variables.
-  if (globals > 0) {
+  // Batch declare global functions and variables.
+  if (global_count > 0) {
     Handle<FixedArray> array =
-        isolate()->factory()->NewFixedArray(2 * globals, TENURED);
+        isolate()->factory()->NewFixedArray(2 * global_count, TENURED);
     for (int j = 0, i = 0; i < length; i++) {
       Declaration* decl = declarations->at(i);
       Variable* var = decl->proxy()->var();
-      Slot* slot = var->AsSlot();
 
-      if ((slot == NULL || slot->type() != Slot::LOOKUP) && var->is_global()) {
+      if (var->IsUnallocated()) {
         array->set(j++, *(var->name()));
         if (decl->fun() == NULL) {
           if (var->mode() == Variable::CONST) {
@@ -578,9 +542,18 @@ void FullCodeGenerator::VisitDeclarations(
       }
     }
     // Invoke the platform-dependent code generator to do the actual
-    // declaration the global variables and functions.
+    // declaration the global functions and variables.
     DeclareGlobals(array);
   }
+}
+
+
+int FullCodeGenerator::DeclareGlobalsFlags() {
+  int flags = 0;
+  if (is_eval()) flags |= kDeclareGlobalsEvalFlag;
+  if (is_strict_mode()) flags |= kDeclareGlobalsStrictModeFlag;
+  if (is_native()) flags |= kDeclareGlobalsNativeFlag;
+  return flags;
 }
 
 
@@ -842,10 +815,11 @@ void FullCodeGenerator::VisitInCurrentContext(Expression* expr) {
 
 void FullCodeGenerator::VisitBlock(Block* stmt) {
   Comment cmnt(masm_, "[ Block");
-  Breakable nested_statement(this, stmt);
+  NestedBlock nested_block(this, stmt);
   SetStatementPosition(stmt);
 
   Scope* saved_scope = scope();
+  // Push a block context when entering a block with block scoped variables.
   if (stmt->block_scope() != NULL) {
     { Comment cmnt(masm_, "[ Extend block context");
       scope_ = stmt->block_scope();
@@ -862,8 +836,16 @@ void FullCodeGenerator::VisitBlock(Block* stmt) {
   PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
   VisitStatements(stmt->statements());
   scope_ = saved_scope;
-  __ bind(nested_statement.break_label());
+  __ bind(nested_block.break_label());
   PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
+
+  // Pop block context if necessary.
+  if (stmt->block_scope() != NULL) {
+    LoadContextField(context_register(), Context::PREVIOUS_INDEX);
+    // Update local stack frame context field.
+    StoreToFrameField(StandardFrameConstants::kContextOffset,
+                      context_register());
+  }
 }
 
 
@@ -996,17 +978,6 @@ void FullCodeGenerator::VisitWithStatement(WithStatement* stmt) {
   { WithOrCatch body(this);
     Visit(stmt->statement());
   }
-
-  // Pop context.
-  LoadContextField(context_register(), Context::PREVIOUS_INDEX);
-  // Update local stack frame context field.
-  StoreToFrameField(StandardFrameConstants::kContextOffset, context_register());
-}
-
-
-void FullCodeGenerator::VisitExitContextStatement(ExitContextStatement* stmt) {
-  Comment cmnt(masm_, "[ ExitContextStatement");
-  SetStatementPosition(stmt);
 
   // Pop context.
   LoadContextField(context_register(), Context::PREVIOUS_INDEX);
@@ -1162,6 +1133,9 @@ void FullCodeGenerator::VisitTryCatchStatement(TryCatchStatement* stmt) {
   { WithOrCatch body(this);
     Visit(stmt->catch_block());
   }
+  // Restore the context.
+  LoadContextField(context_register(), Context::PREVIOUS_INDEX);
+  StoreToFrameField(StandardFrameConstants::kContextOffset, context_register());
   scope_ = saved_scope;
   __ jmp(&done);
 
@@ -1333,25 +1307,6 @@ void FullCodeGenerator::VisitThrow(Throw* expr) {
   __ CallRuntime(Runtime::kThrow, 1);
   decrement_stack_height();
   // Never returns here.
-}
-
-
-FullCodeGenerator::NestedStatement* FullCodeGenerator::TryFinally::Exit(
-    int* stack_depth,
-    int* context_length) {
-  // The macros used here must preserve the result register.
-  __ Drop(*stack_depth);
-  __ PopTryHandler();
-  *stack_depth = 0;
-
-  Register context = FullCodeGenerator::context_register();
-  while (*context_length > 0) {
-    codegen_->LoadContextField(context, Context::PREVIOUS_INDEX);
-    --(*context_length);
-  }
-
-  __ Call(finally_entry_);
-  return previous_;
 }
 
 

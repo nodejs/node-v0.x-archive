@@ -39,23 +39,6 @@ int uv_is_active(uv_handle_t* handle) {
 }
 
 
-int uv_getsockname(uv_handle_t* handle, struct sockaddr* name, int* namelen) {
-  uv_loop_t* loop = handle->loop;
-
-  switch (handle->type) {
-    case UV_TCP:
-      return uv_tcp_getsockname(loop, (uv_tcp_t*) handle, name, namelen);
-
-    case UV_UDP:
-      return uv_udp_getsockname(loop, (uv_udp_t*) handle, name, namelen);
-
-    default:
-      uv_set_sys_error(loop, WSAENOTSOCK);
-      return -1;
-  }
-}
-
-
 void uv_close(uv_handle_t* handle, uv_close_cb cb) {
   uv_tcp_t* tcp;
   uv_pipe_t* pipe;
@@ -137,6 +120,10 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
       uv_process_close(loop, process);
       return;
 
+    case UV_FS_EVENT:
+      uv_fs_event_close(loop, (uv_fs_event_t*)handle);
+      return;
+
     default:
       /* Not supported */
       abort();
@@ -192,6 +179,10 @@ void uv_process_endgames(uv_loop_t* loop) {
 
       case UV_PROCESS:
         uv_process_endgame(loop, (uv_process_t*) handle);
+        break;
+
+      case UV_FS_EVENT:
+        uv_fs_event_endgame(loop, (uv_fs_event_t*) handle);
         break;
 
       default:

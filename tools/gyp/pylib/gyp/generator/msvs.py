@@ -56,7 +56,7 @@ generator_default_variables = {
     # of the warnings.
 
     # TODO(jeanluc)  I had:  'LIB_DIR': '$(OutDir)lib',
-    #'LIB_DIR': '$(OutDir)/lib',
+    'LIB_DIR': '$(OutDir)/lib',
     'RULE_INPUT_ROOT': '$(InputName)',
     'RULE_INPUT_EXT': '$(InputExt)',
     'RULE_INPUT_NAME': '$(InputFileName)',
@@ -547,7 +547,7 @@ def _GenerateExternalRules(rules, output_dir, spec,
   # Write out all: target, including mkdir for each output directory.
   mk_file.write('all: %s\n' % ' '.join(first_outputs_cyg))
   for od in all_output_dirs:
-    mk_file.write('\tmkdir -p %s\n' % od)
+    mk_file.write('\tmkdir -p `cygpath -u "%s"`\n' % od)
   mk_file.write('\n')
   # Define how each output is generated.
   for rule in rules:
@@ -575,18 +575,7 @@ def _GenerateExternalRules(rules, output_dir, spec,
          'IntDir=$(IntDir)',
          '-j', '${NUMBER_OF_PROCESSORS_PLUS_1}',
          '-f', filename]
-
-  # Currently this weird argument munging is used to duplicate the way a
-  # python script would need to be run as part of the chrome tree.
-  # Eventually we should add some sort of rule_default option to set this
-  # per project. For now the behavior chrome needs is the default.
-  mcs = rule.get('msvs_cygwin_shell')
-  if mcs is None:
-    mcs = int(spec.get('msvs_cygwin_shell', 1))
-  elif isinstance(mcs, str):
-    mcs = int(mcs)
-  quote_cmd = int(rule.get('msvs_quote_cmd', 1))
-  cmd = _BuildCommandLineForRuleRaw(spec, cmd, mcs, False, quote_cmd)
+  cmd = _BuildCommandLineForRuleRaw(spec, cmd, True, False, True)
   # Insert makefile as 0'th input, so it gets the action attached there,
   # as this is easier to understand from in the IDE.
   all_inputs = list(all_inputs)
@@ -893,7 +882,7 @@ def _GenerateMSVSProject(project, options, version):
   p.AddFiles(sources)
 
   _AddToolFilesToMSVS(p, spec)
-  _HandlePreCompileHeaderStubs(p, spec)
+  _HandlePreCompiledHeaders(p, sources, spec)
   _AddActions(actions_to_add, spec, relative_path_of_gyp_file)
   _AddCopies(actions_to_add, spec)
   _WriteMSVSUserFile(project.path, version, spec)
@@ -1117,7 +1106,7 @@ def _GetOutputFilePathAndTool(spec):
       # TODO(jeanluc) If we want to avoid the MSB8012 warnings in
       # VisualStudio 2010, we will have to change the value of $(OutDir)
       # to contain the \lib suffix, rather than doing it as below.
-      'static_library': ('VCLibrarianTool', 'Lib', '$(OutDir)\\', '.lib'),
+      'static_library': ('VCLibrarianTool', 'Lib', '$(OutDir)\\lib\\', '.lib'),
       'dummy_executable': ('VCLinkerTool', 'Link', '$(IntDir)\\', '.junk'),
   }
   output_file_props = output_file_map.get(spec['type'])
@@ -1394,8 +1383,12 @@ def _AddToolFilesToMSVS(p, spec):
     p.AddToolFile(f)
 
 
-def _HandlePreCompileHeaderStubs(p, spec):
-  # Handle pre-compiled headers source stubs specially.
+def _HandlePreCompiledHeaders(p, sources, spec):
+  # Pre-compiled header source stubs need a different compiler flag
+  # (generate precompiled header) and any source file not of the same
+  # kind (i.e. C vs. C++) as the precompiled header source stub needs
+  # to have use of precompiled headers disabled.
+  extensions_excluded_from_precompile = []
   for config_name, config in spec['configurations'].iteritems():
     source = config.get('msvs_precompiled_source')
     if source:
@@ -1405,6 +1398,28 @@ def _HandlePreCompileHeaderStubs(p, spec):
                               {'UsePrecompiledHeader': '1'})
       p.AddFileConfig(source, _ConfigFullName(config_name, config),
                       {}, tools=[tool])
+      basename, extension = os.path.splitext(source)
+      if extension == '.c':
+        extensions_excluded_from_precompile = ['.cc', '.cpp', '.cxx']
+      else:
+        extensions_excluded_from_precompile = ['.c']
+  def DisableForSourceTree(source_tree):
+    for source in source_tree:
+      if isinstance(source, MSVSProject.Filter):
+        DisableForSourceTree(source.contents)
+      else:
+        basename, extension = os.path.splitext(source)
+        if extension in extensions_excluded_from_precompile:
+          for config_name, config in spec['configurations'].iteritems():
+            tool = MSVSProject.Tool('VCCLCompilerTool',
+                                    {'UsePrecompiledHeader': '0',
+                                     'ForcedIncludeFiles': '$(NOINHERIT)'})
+            p.AddFileConfig(_FixPath(source),
+                            _ConfigFullName(config_name, config),
+                            {}, tools=[tool])
+  # Do nothing if there was no precompiled source.
+  if extensions_excluded_from_precompile:
+    DisableForSourceTree(sources)
 
 
 def _AddActions(actions_to_add, spec, relative_path_of_gyp_file):
@@ -2650,6 +2665,7 @@ def _GetMSBuildSources(spec, sources, exclusions, extension_to_rule_name,
 
 def _AddSources2(spec, sources, exclusions, grouped_sources,
                  extension_to_rule_name, sources_handled_by_action):
+  extensions_excluded_from_precompile = []
   for source in sources:
     if isinstance(source, MSVSProject.Filter):
       _AddSources2(spec, source.contents, exclusions, grouped_sources,
@@ -2670,12 +2686,30 @@ def _AddSources2(spec, sources, exclusions, grouped_sources,
         for config_name, configuration in spec['configurations'].iteritems():
           precompiled_source = configuration.get('msvs_precompiled_source', '')
           precompiled_source = _FixPath(precompiled_source)
+          if not extensions_excluded_from_precompile:
+            # If the precompiled header is generated by a C source, we must
+            # not try to use it for C++ sources, and vice versa.
+            basename, extension = os.path.splitext(precompiled_source)
+            if extension == '.c':
+              extensions_excluded_from_precompile = ['.cc', '.cpp', '.cxx']
+            else:
+              extensions_excluded_from_precompile = ['.c']
+
           if precompiled_source == source:
             condition = _GetConfigurationCondition(config_name, configuration)
             detail.append(['PrecompiledHeader',
                            {'Condition': condition},
                            'Create'
                           ])
+          else:
+            # Turn off precompiled header usage for source files of a
+            # different type than the file that generated the
+            # precompiled header.
+            for extension in extensions_excluded_from_precompile:
+              if source.endswith(extension):
+                detail.append(['PrecompiledHeader', ''])
+                detail.append(['ForcedIncludeFiles', ''])
+
         group, element = _MapFileToMsBuildSourceType(source,
                                                      extension_to_rule_name)
         grouped_sources[group].append([element, {'Include': source}] + detail)

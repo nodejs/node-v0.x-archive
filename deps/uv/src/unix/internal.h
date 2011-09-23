@@ -25,6 +25,53 @@
 #include "uv-common.h"
 #include "uv-eio.h"
 
+#include <stddef.h> /* offsetof */
+
+#if defined(__linux__)
+
+#include <linux/version.h>
+#include <features.h>
+
+#undef HAVE_FUTIMES
+#undef HAVE_PIPE2
+#undef HAVE_ACCEPT4
+
+/* futimes() requires linux >= 2.6.22 and glib >= 2.6 */
+#if LINUX_VERSION_CODE >= 0x20616 && __GLIBC_PREREQ(2, 6)
+#define HAVE_FUTIMES
+#endif
+
+/* pipe2() requires linux >= 2.6.27 and glibc >= 2.9 */
+#if LINUX_VERSION_CODE >= 0x2061B && __GLIBC_PREREQ(2, 9)
+#define HAVE_PIPE2
+#endif
+
+/* accept4() requires linux >= 2.6.28 and glib >= 2.10 */
+#if LINUX_VERSION_CODE >= 0x2061C && __GLIBC_PREREQ(2, 10)
+#define HAVE_ACCEPT4
+#endif
+
+#endif /* __linux__ */
+
+#ifdef __APPLE__
+# define HAVE_FUTIMES
+#endif
+
+#ifdef __FreeBSD__
+# define HAVE_FUTIMES
+#endif
+
+#define container_of(ptr, type, member) \
+  ((type *) ((char *) (ptr) - offsetof(type, member)))
+
+#define SAVE_ERRNO(block) \
+  do { \
+    int _saved_errno = errno; \
+    do { block; } while (0); \
+    errno = _saved_errno; \
+  } \
+  while (0);
+
 /* flags */
 enum {
   UV_CLOSING  = 0x00000001, /* uv_close() called but not finished. */
@@ -48,12 +95,16 @@ int uv__cloexec(int fd, int set) __attribute__((unused));
 int uv__socket(int domain, int type, int protocol);
 
 /* error */
+uv_err_code uv_translate_sys_error(int sys_errno);
 uv_err_t uv_err_new(uv_loop_t* loop, int sys_error);
 uv_err_t uv_err_new_artificial(uv_loop_t* loop, int code);
 void uv_fatal_error(const int errorno, const char* syscall);
 
 /* stream */
+void uv__stream_init(uv_loop_t* loop, uv_stream_t* stream,
+    uv_handle_type type);
 int uv__stream_open(uv_stream_t*, int fd, int flags);
+void uv__stream_destroy(uv_stream_t* stream);
 void uv__stream_io(EV_P_ ev_io* watcher, int revents);
 void uv__server_io(EV_P_ ev_io* watcher, int revents);
 int uv__accept(int sockfd, struct sockaddr* saddr, socklen_t len);
@@ -71,5 +122,8 @@ int uv_pipe_cleanup(uv_pipe_t* handle);
 /* udp */
 void uv__udp_destroy(uv_udp_t* handle);
 void uv__udp_watcher_stop(uv_udp_t* handle, ev_io* w);
+
+/* fs */
+void uv__fs_event_destroy(uv_fs_event_t* handle);
 
 #endif /* UV_UNIX_INTERNAL_H_ */

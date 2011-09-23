@@ -41,7 +41,6 @@
 #include "natives.h"
 #include "objects-visiting.h"
 #include "runtime-profiler.h"
-#include "scanner-base.h"
 #include "scopeinfo.h"
 #include "snapshot.h"
 #include "v8threads.h"
@@ -81,14 +80,14 @@ Heap::Heap()
       reserved_semispace_size_(16*MB),
       max_semispace_size_(16*MB),
       initial_semispace_size_(1*MB),
-      max_old_generation_size_(1*GB),
+      max_old_generation_size_(1400*MB),
       max_executable_size_(256*MB),
       code_range_size_(512*MB),
 #else
       reserved_semispace_size_(8*MB),
       max_semispace_size_(8*MB),
       initial_semispace_size_(512*KB),
-      max_old_generation_size_(512*MB),
+      max_old_generation_size_(700*MB),
       max_executable_size_(128*MB),
       code_range_size_(0),
 #endif
@@ -842,6 +841,7 @@ void Heap::MarkCompactPrologue(bool is_compacting) {
   isolate_->keyed_lookup_cache()->Clear();
   isolate_->context_slot_cache()->Clear();
   isolate_->descriptor_lookup_cache()->Clear();
+  StringSplitCache::Clear(string_split_cache());
 
   isolate_->compilation_cache()->MarkCompactPrologue();
 
@@ -1627,7 +1627,7 @@ MaybeObject* Heap::AllocateMap(InstanceType instance_type, int instance_size) {
   map->set_unused_property_fields(0);
   map->set_bit_field(0);
   map->set_bit_field2(1 << Map::kIsExtensible);
-  map->set_elements_kind(JSObject::FAST_ELEMENTS);
+  map->set_elements_kind(FAST_ELEMENTS);
 
   // If the map object is aligned fill the padding area with Smi 0 objects.
   if (Map::kPadStart < Map::kSize) {
@@ -2223,6 +2223,13 @@ bool Heap::CreateInitialObjects() {
   }
   set_single_character_string_cache(FixedArray::cast(obj));
 
+  // Allocate cache for string split.
+  { MaybeObject* maybe_obj =
+        AllocateFixedArray(StringSplitCache::kStringSplitCacheSize, TENURED);
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  set_string_split_cache(FixedArray::cast(obj));
+
   // Allocate cache for external strings pointing to native source code.
   { MaybeObject* maybe_obj = AllocateFixedArray(Natives::GetBuiltinsCount());
     if (!maybe_obj->ToObject(&obj)) return false;
@@ -2245,6 +2252,75 @@ bool Heap::CreateInitialObjects() {
   isolate_->compilation_cache()->Clear();
 
   return true;
+}
+
+
+Object* StringSplitCache::Lookup(
+    FixedArray* cache, String* string, String* pattern) {
+  if (!string->IsSymbol() || !pattern->IsSymbol()) return Smi::FromInt(0);
+  uint32_t hash = string->Hash();
+  uint32_t index = ((hash & (kStringSplitCacheSize - 1)) &
+      ~(kArrayEntriesPerCacheEntry - 1));
+  if (cache->get(index + kStringOffset) == string &&
+      cache->get(index + kPatternOffset) == pattern) {
+    return cache->get(index + kArrayOffset);
+  }
+  index = ((index + kArrayEntriesPerCacheEntry) & (kStringSplitCacheSize - 1));
+  if (cache->get(index + kStringOffset) == string &&
+      cache->get(index + kPatternOffset) == pattern) {
+    return cache->get(index + kArrayOffset);
+  }
+  return Smi::FromInt(0);
+}
+
+
+void StringSplitCache::Enter(Heap* heap,
+                             FixedArray* cache,
+                             String* string,
+                             String* pattern,
+                             FixedArray* array) {
+  if (!string->IsSymbol() || !pattern->IsSymbol()) return;
+  uint32_t hash = string->Hash();
+  uint32_t index = ((hash & (kStringSplitCacheSize - 1)) &
+      ~(kArrayEntriesPerCacheEntry - 1));
+  if (cache->get(index + kStringOffset) == Smi::FromInt(0)) {
+    cache->set(index + kStringOffset, string);
+    cache->set(index + kPatternOffset, pattern);
+    cache->set(index + kArrayOffset, array);
+  } else {
+    uint32_t index2 =
+        ((index + kArrayEntriesPerCacheEntry) & (kStringSplitCacheSize - 1));
+    if (cache->get(index2 + kStringOffset) == Smi::FromInt(0)) {
+      cache->set(index2 + kStringOffset, string);
+      cache->set(index2 + kPatternOffset, pattern);
+      cache->set(index2 + kArrayOffset, array);
+    } else {
+      cache->set(index2 + kStringOffset, Smi::FromInt(0));
+      cache->set(index2 + kPatternOffset, Smi::FromInt(0));
+      cache->set(index2 + kArrayOffset, Smi::FromInt(0));
+      cache->set(index + kStringOffset, string);
+      cache->set(index + kPatternOffset, pattern);
+      cache->set(index + kArrayOffset, array);
+    }
+  }
+  if (array->length() < 100) {  // Limit how many new symbols we want to make.
+    for (int i = 0; i < array->length(); i++) {
+      String* str = String::cast(array->get(i));
+      Object* symbol;
+      MaybeObject* maybe_symbol = heap->LookupSymbol(str);
+      if (maybe_symbol->ToObject(&symbol)) {
+        array->set(i, symbol);
+      }
+    }
+  }
+  array->set_map(heap->fixed_cow_array_map());
+}
+
+
+void StringSplitCache::Clear(FixedArray* cache) {
+  for (int i = 0; i < kStringSplitCacheSize; i++) {
+    cache->set(i, Smi::FromInt(0));
+  }
 }
 
 
@@ -3339,11 +3415,36 @@ MaybeObject* Heap::AllocateJSProxy(Object* handler, Object* prototype) {
   map->set_prototype(prototype);
 
   // Allocate the proxy object.
-  Object* result;
+  JSProxy* result;
   MaybeObject* maybe_result = Allocate(map, NEW_SPACE);
-  if (!maybe_result->ToObject(&result)) return maybe_result;
-  JSProxy::cast(result)->set_handler(handler);
-  JSProxy::cast(result)->set_padding(Smi::FromInt(0));
+  if (!maybe_result->To<JSProxy>(&result)) return maybe_result;
+  result->InitializeBody(map->instance_size(), Smi::FromInt(0));
+  result->set_handler(handler);
+  return result;
+}
+
+
+MaybeObject* Heap::AllocateJSFunctionProxy(Object* handler,
+                                           Object* call_trap,
+                                           Object* construct_trap,
+                                           Object* prototype) {
+  // Allocate map.
+  // TODO(rossberg): Once we optimize proxies, think about a scheme to share
+  // maps. Will probably depend on the identity of the handler object, too.
+  Map* map;
+  MaybeObject* maybe_map_obj =
+      AllocateMap(JS_FUNCTION_PROXY_TYPE, JSFunctionProxy::kSize);
+  if (!maybe_map_obj->To<Map>(&map)) return maybe_map_obj;
+  map->set_prototype(prototype);
+
+  // Allocate the proxy object.
+  JSFunctionProxy* result;
+  MaybeObject* maybe_result = Allocate(map, NEW_SPACE);
+  if (!maybe_result->To<JSFunctionProxy>(&result)) return maybe_result;
+  result->InitializeBody(map->instance_size(), Smi::FromInt(0));
+  result->set_handler(handler);
+  result->set_call_trap(call_trap);
+  result->set_construct_trap(construct_trap);
   return result;
 }
 
@@ -3488,16 +3589,19 @@ MaybeObject* Heap::CopyJSObject(JSObject* source) {
 }
 
 
-MaybeObject* Heap::ReinitializeJSProxyAsJSObject(JSProxy* object) {
+MaybeObject* Heap::ReinitializeJSReceiver(
+    JSReceiver* object, InstanceType type, int size) {
+  ASSERT(type >= FIRST_JS_RECEIVER_TYPE);
+
   // Allocate fresh map.
   // TODO(rossberg): Once we optimize proxies, cache these maps.
   Map* map;
-  MaybeObject* maybe_map_obj =
-      AllocateMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+  MaybeObject* maybe_map_obj = AllocateMap(type, size);
   if (!maybe_map_obj->To<Map>(&map)) return maybe_map_obj;
 
-  // Check that the receiver has the same size as a fresh object.
-  ASSERT(map->instance_size() == object->map()->instance_size());
+  // Check that the receiver has at least the size of the fresh object.
+  int size_difference = object->map()->instance_size() - map->instance_size();
+  ASSERT(size_difference >= 0);
 
   map->set_prototype(object->map()->prototype());
 
@@ -3514,6 +3618,28 @@ MaybeObject* Heap::ReinitializeJSProxyAsJSObject(JSProxy* object) {
   // Reinitialize the object from the constructor map.
   InitializeJSObjectFromMap(JSObject::cast(object),
                             FixedArray::cast(properties), map);
+
+  // Functions require some minimal initialization.
+  if (type == JS_FUNCTION_TYPE) {
+    String* name;
+    MaybeObject* maybe_name = LookupAsciiSymbol("<freezing call trap>");
+    if (!maybe_name->To<String>(&name)) return maybe_name;
+    SharedFunctionInfo* shared;
+    MaybeObject* maybe_shared = AllocateSharedFunctionInfo(name);
+    if (!maybe_shared->To<SharedFunctionInfo>(&shared)) return maybe_shared;
+    JSFunction* func;
+    MaybeObject* maybe_func =
+        InitializeFunction(JSFunction::cast(object), shared, the_hole_value());
+    if (!maybe_func->To<JSFunction>(&func)) return maybe_func;
+    func->set_context(isolate()->context()->global_context());
+  }
+
+  // Put in filler if the new object is smaller than the old.
+  if (size_difference > 0) {
+    CreateFillerObjectAt(
+        object->address() + map->instance_size(), size_difference);
+  }
+
   return object;
 }
 
@@ -3546,6 +3672,9 @@ MaybeObject* Heap::ReinitializeJSGlobalProxy(JSFunction* constructor,
 
 MaybeObject* Heap::AllocateStringFromAscii(Vector<const char> string,
                                            PretenureFlag pretenure) {
+  if (string.length() == 1) {
+    return Heap::LookupSingleCharacterStringFromCode(string[0]);
+  }
   Object* result;
   { MaybeObject* maybe_result =
         AllocateRawAsciiString(string.length(), pretenure);
@@ -4085,10 +4214,9 @@ MaybeObject* Heap::AllocateBlockContext(JSFunction* function,
                                         SerializedScopeInfo* scope_info) {
   Object* result;
   { MaybeObject* maybe_result =
-        AllocateFixedArray(scope_info->NumberOfContextSlots());
+        AllocateFixedArrayWithHoles(scope_info->NumberOfContextSlots());
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
-  // TODO(keuchel): properly initialize context slots.
   Context* context = reinterpret_cast<Context*>(result);
   context->set_map(block_context_map());
   context->set_closure(function);

@@ -144,13 +144,15 @@ static void on_connection(uv_stream_t* server, int status) {
   case TCP:
     stream = malloc(sizeof(uv_tcp_t));
     ASSERT(stream != NULL);
-    uv_tcp_init(loop, (uv_tcp_t*)stream);
+    r = uv_tcp_init(loop, (uv_tcp_t*)stream);
+    ASSERT(r == 0);
     break;
 
   case PIPE:
     stream = malloc(sizeof(uv_pipe_t));
     ASSERT(stream != NULL);
-    uv_pipe_init(loop, (uv_pipe_t*)stream);
+    r = uv_pipe_init(loop, (uv_pipe_t*)stream);
+    ASSERT(r == 0);
     break;
 
   default:
@@ -272,7 +274,6 @@ static int pipe_echo_start(char* pipeName) {
 
 
 HELPER_IMPL(tcp4_echo_server) {
-  uv_init();
   loop = uv_default_loop();
 
   if (tcp4_echo_start(TEST_PORT))
@@ -284,7 +285,6 @@ HELPER_IMPL(tcp4_echo_server) {
 
 
 HELPER_IMPL(tcp6_echo_server) {
-  uv_init();
   loop = uv_default_loop();
 
   if (tcp6_echo_start(TEST_PORT))
@@ -296,7 +296,6 @@ HELPER_IMPL(tcp6_echo_server) {
 
 
 HELPER_IMPL(pipe_echo_server) {
-  uv_init();
   loop = uv_default_loop();
 
   if (pipe_echo_start(TEST_PIPENAME))

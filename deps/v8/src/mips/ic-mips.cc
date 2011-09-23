@@ -146,7 +146,7 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
   __ lw(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
   __ And(at,
          scratch1,
-         Operand(PropertyDetails::TypeField::mask() << kSmiTagSize));
+         Operand(PropertyDetails::TypeField::kMask << kSmiTagSize));
   __ Branch(miss, ne, at, Operand(zero_reg));
 
   // Get the value at the masked, scaled index and return.
@@ -196,9 +196,9 @@ static void GenerateDictionaryStore(MacroAssembler* masm,
   const int kElementsStartOffset = StringDictionary::kHeaderSize +
       StringDictionary::kElementsStartIndex * kPointerSize;
   const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
-  const int kTypeAndReadOnlyMask
-      = (PropertyDetails::TypeField::mask() |
-         PropertyDetails::AttributesField::encode(READ_ONLY)) << kSmiTagSize;
+  const int kTypeAndReadOnlyMask =
+      (PropertyDetails::TypeField::kMask |
+       PropertyDetails::AttributesField::encode(READ_ONLY)) << kSmiTagSize;
   __ lw(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
   __ And(at, scratch1, Operand(kTypeAndReadOnlyMask));
   __ Branch(miss, ne, at, Operand(zero_reg));
@@ -338,7 +338,7 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
   __ Addu(scratch1, elements,
           Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // The key is a smi.
-  ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
+  STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
   __ sll(at, key, kPointerSizeLog2 - kSmiTagSize);
   __ addu(at, at, scratch1);
   __ lw(scratch2, MemOperand(at));
@@ -372,7 +372,7 @@ static void GenerateKeyStringCheck(MacroAssembler* masm,
   // Is the string a symbol?
   // map: key map
   __ lbu(hash, FieldMemOperand(map, Map::kInstanceTypeOffset));
-  ASSERT(kSymbolTag != 0);
+  STATIC_ASSERT(kSymbolTag != 0);
   __ And(at, hash, Operand(kIsSymbolMask));
   __ Branch(not_symbol, eq, at, Operand(zero_reg));
 }
@@ -395,7 +395,6 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
 
   // Probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(kind,
-                                         NOT_IN_LOOP,
                                          MONOMORPHIC,
                                          extra_ic_state,
                                          NORMAL,
@@ -732,9 +731,7 @@ void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   // -----------------------------------
 
   // Probe the stub cache.
-  Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
-                                         NOT_IN_LOOP,
-                                         MONOMORPHIC);
+  Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC, MONOMORPHIC);
   Isolate::Current()->stub_cache()->GenerateProbe(
       masm, flags, a0, a2, a3, t0, t1);
 
@@ -1269,7 +1266,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   __ lw(t0, FieldMemOperand(elements, FixedArray::kLengthOffset));
   __ Branch(&slow, hs, key, Operand(t0));
   // Calculate key + 1 as smi.
-  ASSERT_EQ(0, kSmiTag);
+  STATIC_ASSERT(0 == kSmiTag);
   __ Addu(t3, key, Operand(Smi::FromInt(1)));
   __ sw(t3, FieldMemOperand(receiver, JSArray::kLengthOffset));
   __ Branch(&fast);
@@ -1395,10 +1392,8 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
   // -----------------------------------
 
   // Get the receiver from the stack and probe the stub cache.
-  Code::Flags flags = Code::ComputeFlags(Code::STORE_IC,
-                                         NOT_IN_LOOP,
-                                         MONOMORPHIC,
-                                         strict_mode);
+  Code::Flags flags =
+      Code::ComputeFlags(Code::STORE_IC, MONOMORPHIC, strict_mode);
   Isolate::Current()->stub_cache()->GenerateProbe(
       masm, flags, a1, a2, a3, t0, t1);
 

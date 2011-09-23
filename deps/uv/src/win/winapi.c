@@ -28,8 +28,10 @@
 
 sRtlNtStatusToDosError pRtlNtStatusToDosError;
 sNtQueryInformationFile pNtQueryInformationFile;
+sNtSetInformationFile pNtSetInformationFile;
 sGetQueuedCompletionStatusEx pGetQueuedCompletionStatusEx;
 sSetFileCompletionNotificationModes pSetFileCompletionNotificationModes;
+sCreateSymbolicLinkA pCreateSymbolicLinkA;
 
 
 void uv_winapi_init() {
@@ -55,6 +57,13 @@ void uv_winapi_init() {
     uv_fatal_error(GetLastError(), "GetProcAddress");
   }
 
+  pNtSetInformationFile = (sNtSetInformationFile) GetProcAddress(
+      ntdll_module,
+      "NtSetInformationFile");
+  if (pNtSetInformationFile == NULL) {
+    uv_fatal_error(GetLastError(), "GetProcAddress");
+  }
+
   kernel32_module = GetModuleHandleA("kernel32.dll");
   if (kernel32_module == NULL) {
     uv_fatal_error(GetLastError(), "GetModuleHandleA");
@@ -66,4 +75,7 @@ void uv_winapi_init() {
 
   pSetFileCompletionNotificationModes = (sSetFileCompletionNotificationModes)
     GetProcAddress(kernel32_module, "SetFileCompletionNotificationModes");
+
+  pCreateSymbolicLinkA = (sCreateSymbolicLinkA)
+    GetProcAddress(kernel32_module, "CreateSymbolicLinkA");
 }

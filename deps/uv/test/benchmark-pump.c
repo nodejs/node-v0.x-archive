@@ -273,10 +273,12 @@ static void connection_cb(uv_stream_t* s, int status) {
 
   if (type == TCP) {
     stream = (uv_stream_t*)malloc(sizeof(uv_tcp_t));
-    uv_tcp_init(loop, (uv_tcp_t*)stream);
+    r = uv_tcp_init(loop, (uv_tcp_t*)stream);
+    ASSERT(r == 0);
   } else {
     stream = (uv_stream_t*)malloc(sizeof(uv_pipe_t));
-    uv_pipe_init(loop, (uv_pipe_t*)stream);
+    r = uv_pipe_init(loop, (uv_pipe_t*)stream);
+    ASSERT(r == 0);
   }
 
   r = uv_accept(s, stream);
@@ -367,7 +369,6 @@ HELPER_IMPL(tcp_pump_server) {
   int r;
 
   type = TCP;
-  uv_init();
   loop = uv_default_loop();
 
   listen_addr = uv_ip4_addr("0.0.0.0", TEST_PORT);
@@ -391,7 +392,6 @@ HELPER_IMPL(pipe_pump_server) {
   int r;
   type = PIPE;
 
-  uv_init();
   loop = uv_default_loop();
 
   /* Server */
@@ -414,7 +414,6 @@ void tcp_pump(int n) {
   TARGET_CONNECTIONS = n;
   type = TCP;
 
-  uv_init();
   loop = uv_default_loop();
 
   connect_addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
@@ -431,7 +430,6 @@ void pipe_pump(int n) {
   TARGET_CONNECTIONS = n;
   type = PIPE;
 
-  uv_init();
   loop = uv_default_loop();
 
   /* Start making connections */

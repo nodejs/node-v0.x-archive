@@ -77,6 +77,7 @@ inline Heap* _inline_get_heap_();
   V(Object, instanceof_cache_map, InstanceofCacheMap)                          \
   V(Object, instanceof_cache_answer, InstanceofCacheAnswer)                    \
   V(FixedArray, single_character_string_cache, SingleCharacterStringCache)     \
+  V(FixedArray, string_split_cache, StringSplitCache)                          \
   V(Object, termination_exception, TerminationException)                       \
   V(FixedArray, empty_fixed_array, EmptyFixedArray)                            \
   V(ByteArray, empty_byte_array, EmptyByteArray)                               \
@@ -225,8 +226,7 @@ inline Heap* _inline_get_heap_();
   V(closure_symbol, "(closure)")                                         \
   V(use_strict, "use strict")                                            \
   V(dot_symbol, ".")                                                     \
-  V(anonymous_function_symbol, "(anonymous function)")                   \
-  V(block_scope_symbol, ".block")
+  V(anonymous_function_symbol, "(anonymous function)")
 
 // Forward declarations.
 class GCTracer;
@@ -440,17 +440,25 @@ class Heap {
   // Please note this does not perform a garbage collection.
   MUST_USE_RESULT MaybeObject* AllocateFunctionPrototype(JSFunction* function);
 
-  // Allocates a Harmony Proxy.
+  // Allocates a Harmony proxy or function proxy.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
   // failed.
   // Please note this does not perform a garbage collection.
   MUST_USE_RESULT MaybeObject* AllocateJSProxy(Object* handler,
                                                Object* prototype);
 
-  // Reinitialize a JSProxy into an (empty) JSObject.  The receiver
-  // must have the same size as an empty object.  The object is reinitialized
-  // and behaves as an object that has been freshly allocated.
-  MUST_USE_RESULT MaybeObject* ReinitializeJSProxyAsJSObject(JSProxy* object);
+  MUST_USE_RESULT MaybeObject* AllocateJSFunctionProxy(Object* handler,
+                                                       Object* call_trap,
+                                                       Object* construct_trap,
+                                                       Object* prototype);
+
+  // Reinitialize a JSReceiver into an (empty) JS object of respective type and
+  // size, but keeping the original prototype.  The receiver must have at least
+  // the size of the new object.  The object is reinitialized and behaves as an
+  // object that has been freshly allocated.
+  MUST_USE_RESULT MaybeObject* ReinitializeJSReceiver(JSReceiver* object,
+                                                      InstanceType type,
+                                                      int size);
 
   // Reinitialize an JSGlobalProxy based on a constructor.  The object
   // must have the same size as objects allocated using the
@@ -2174,6 +2182,27 @@ class GCTracer BASE_EMBEDDED {
   intptr_t promoted_objects_size_;
 
   Heap* heap_;
+};
+
+
+class StringSplitCache {
+ public:
+  static Object* Lookup(FixedArray* cache, String* string, String* pattern);
+  static void Enter(Heap* heap,
+                    FixedArray* cache,
+                    String* string,
+                    String* pattern,
+                    FixedArray* array);
+  static void Clear(FixedArray* cache);
+  static const int kStringSplitCacheSize = 0x100;
+
+ private:
+  static const int kArrayEntriesPerCacheEntry = 4;
+  static const int kStringOffset = 0;
+  static const int kPatternOffset = 1;
+  static const int kArrayOffset = 2;
+
+  static MaybeObject* WrapFixedArrayInJSArray(Object* fixed_array);
 };
 
 

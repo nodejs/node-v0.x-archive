@@ -62,11 +62,11 @@ def set_options(opt):
   opt.tool_options('compiler_cc')
   opt.tool_options('misc')
   opt.add_option( '--libdir'
-		, action='store'
-		, type='string'
-		, default=False
-		, help='Install into this libdir [Release: ${PREFIX}/lib]'
-		)
+                , action='store'
+                , type='string'
+                , default=False
+                , help='Install into this libdir [Release: ${PREFIX}/lib]'
+                )
   opt.add_option( '--debug'
                 , action='store_true'
                 , default=False
@@ -158,7 +158,29 @@ def set_options(opt):
                 )
 
 
-  opt.add_option('--shared-cares'
+  opt.add_option( '--shared-zlib'
+                , action='store_true'
+                , default=False
+                , help='Link to a shared zlib DLL instead of static linking'
+                , dest='shared_zlib'
+                )
+
+  opt.add_option( '--shared-zlib-includes'
+                , action='store'
+                , default=False
+                , help='Directory containing zlib header files'
+                , dest='shared_zlib_includes'
+                )
+
+  opt.add_option( '--shared-zlib-libpath'
+                , action='store'
+                , default=False
+                , help='A directory to search for the shared zlib DLL'
+                , dest='shared_zlib_libpath'
+                )
+
+
+  opt.add_option( '--shared-cares'
                 , action='store_true'
                 , default=False
                 , help='Link to a shared C-Ares DLL instead of static linking'
@@ -219,7 +241,7 @@ def get_node_version():
   return "%s.%s.%s%s" % ( node_major_version,
                            node_minor_version,
                            node_patch_version,
-                           "-pre" if node_is_release == "0" else ""
+                           node_is_release == "0" and "-pre" or ""
                          )
 
 
@@ -246,6 +268,7 @@ def configure(conf):
 
   conf.env["USE_SHARED_V8"] = o.shared_v8 or o.shared_v8_includes or o.shared_v8_libpath or o.shared_v8_libname
   conf.env["USE_SHARED_CARES"] = o.shared_cares or o.shared_cares_includes or o.shared_cares_libpath
+  conf.env["USE_SHARED_ZLIB"] = o.shared_zlib or o.shared_zlib_includes or o.shared_zlib_libpath
 
   conf.env["USE_GDBJIT"] = o.use_gdbjit
 
@@ -491,8 +514,12 @@ def configure(conf):
     conf.env.append_value('LINKFLAGS', '-pg')
 
   if sys.platform.startswith("win32"):
-    conf.env.append_value('LIB', 'ws2_32')
+    conf.env.append_value('LIB', 'psapi')
     conf.env.append_value('LIB', 'winmm')
+    # This enforces ws2_32 to be linked after crypto, otherwise the linker
+    # will run into undefined references from libcrypto.a
+    if not Options.options.use_openssl:
+      conf.env.append_value('LIB', 'ws2_32')
 
   conf.env.append_value('CPPFLAGS', '-Wno-unused-parameter');
   conf.env.append_value('CPPFLAGS', '-D_FORTIFY_SOURCE=2');
@@ -648,7 +675,7 @@ def build_uv(bld):
     bld.env_of_name('Debug').append_value("LINKFLAGS_UV", t)
 
   bld.install_files('${PREFIX}/include/node/', 'deps/uv/include/*.h')
-
+  bld.install_files('${PREFIX}/include/node/uv-private', 'deps/uv/include/uv-private/*.h')
   bld.install_files('${PREFIX}/include/node/ev', 'deps/uv/src/ev/*.h')
   bld.install_files('${PREFIX}/include/node/c-ares', """
     deps/uv/include/ares.h
@@ -834,7 +861,7 @@ def build(bld):
   node = bld.new_task_gen("cxx", product_type)
   node.name         = "node"
   node.target       = "node"
-  node.uselib = 'RT OPENSSL CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
+  node.uselib = 'RT OPENSSL ZLIB CARES EXECINFO DL KVM SOCKET NSL KSTAT UTIL OPROFILE'
   node.add_objects = 'http_parser'
   if product_type_is_lib:
     node.install_path = '${LIBDIR}'
@@ -853,6 +880,7 @@ def build(bld):
     src/node_os.cc
     src/node_dtrace.cc
     src/node_string.cc
+    src/node_zlib.cc
     src/timer_wrap.cc
     src/handle_wrap.cc
     src/stream_wrap.cc
@@ -861,6 +889,8 @@ def build(bld):
     src/pipe_wrap.cc
     src/cares_wrap.cc
     src/stdio_wrap.cc
+    src/tty_wrap.cc
+    src/fs_event_wrap.cc
     src/process_wrap.cc
     src/v8_typed_array.cc
   """
@@ -892,6 +922,9 @@ def build(bld):
   """
 
   if not bld.env["USE_SHARED_V8"]: node.includes += ' deps/v8/include '
+
+  if os.environ.has_key('RPATH'):
+    node.rpath = os.environ['RPATH']
 
   if sys.platform.startswith('cygwin'):
     bld.env.append_value('LINKFLAGS', '-Wl,--export-all-symbols')

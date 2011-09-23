@@ -139,6 +139,11 @@ assertTrue(WeakMap.prototype.has instanceof Function)
 assertTrue(WeakMap.prototype.delete instanceof Function)
 
 
+// Regression test for WeakMap prototype.
+assertTrue(WeakMap.prototype.constructor === WeakMap)
+assertTrue(Object.getPrototypeOf(WeakMap.prototype) === Object.prototype)
+
+
 // Regression test for issue 1617: The prototype of the WeakMap constructor
 // needs to be unique (i.e. different from the one of the Object constructor).
 assertFalse(WeakMap.prototype === Object.prototype);

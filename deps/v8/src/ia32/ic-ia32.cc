@@ -144,7 +144,7 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
       StringDictionary::kElementsStartIndex * kPointerSize;
   const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
   __ test(Operand(elements, r0, times_4, kDetailsOffset - kHeapObjectTag),
-          Immediate(PropertyDetails::TypeField::mask() << kSmiTagSize));
+          Immediate(PropertyDetails::TypeField::kMask << kSmiTagSize));
   __ j(not_zero, miss_label);
 
   // Get the value at the masked, scaled index.
@@ -198,9 +198,9 @@ static void GenerateDictionaryStore(MacroAssembler* masm,
       StringDictionary::kHeaderSize +
       StringDictionary::kElementsStartIndex * kPointerSize;
   const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
-  const int kTypeAndReadOnlyMask
-      = (PropertyDetails::TypeField::mask() |
-         PropertyDetails::AttributesField::encode(READ_ONLY)) << kSmiTagSize;
+  const int kTypeAndReadOnlyMask =
+      (PropertyDetails::TypeField::kMask |
+       PropertyDetails::AttributesField::encode(READ_ONLY)) << kSmiTagSize;
   __ test(Operand(elements, r0, times_4, kDetailsOffset - kHeapObjectTag),
           Immediate(kTypeAndReadOnlyMask));
   __ j(not_zero, miss_label);
@@ -324,7 +324,7 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
   __ cmp(key, FieldOperand(scratch, FixedArray::kLengthOffset));
   __ j(above_equal, out_of_range);
   // Fast case: Do the load.
-  ASSERT((kPointerSize == 4) && (kSmiTagSize == 1) && (kSmiTag == 0));
+  STATIC_ASSERT((kPointerSize == 4) && (kSmiTagSize == 1) && (kSmiTag == 0));
   __ mov(scratch, FieldOperand(scratch, key, times_2, FixedArray::kHeaderSize));
   __ cmp(Operand(scratch), Immediate(FACTORY->the_hole_value()));
   // In case the loaded value is the_hole we have to consult GetProperty
@@ -358,7 +358,7 @@ static void GenerateKeyStringCheck(MacroAssembler* masm,
   __ j(zero, index_string);
 
   // Is the string a symbol?
-  ASSERT(kSymbolTag != 0);
+  STATIC_ASSERT(kSymbolTag != 0);
   __ test_b(FieldOperand(map, Map::kInstanceTypeOffset), kIsSymbolMask);
   __ j(zero, not_symbol);
 }
@@ -832,7 +832,6 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
 
   // Probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(kind,
-                                         NOT_IN_LOOP,
                                          MONOMORPHIC,
                                          extra_ic_state,
                                          NORMAL,
@@ -1237,9 +1236,7 @@ void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   // -----------------------------------
 
   // Probe the stub cache.
-  Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
-                                         NOT_IN_LOOP,
-                                         MONOMORPHIC);
+  Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC, MONOMORPHIC);
   Isolate::Current()->stub_cache()->GenerateProbe(masm, flags, eax, ecx, ebx,
                                                   edx);
 
@@ -1339,10 +1336,8 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
   //  -- esp[0] : return address
   // -----------------------------------
 
-  Code::Flags flags = Code::ComputeFlags(Code::STORE_IC,
-                                         NOT_IN_LOOP,
-                                         MONOMORPHIC,
-                                         strict_mode);
+  Code::Flags flags =
+      Code::ComputeFlags(Code::STORE_IC, MONOMORPHIC, strict_mode);
   Isolate::Current()->stub_cache()->GenerateProbe(masm, flags, edx, ecx, ebx,
                                                   no_reg);
 

@@ -599,6 +599,7 @@ MaybeObject* Accessors::FunctionGetArguments(Object* object, void*) {
   if (!found_it) return isolate->heap()->undefined_value();
   Handle<JSFunction> function(holder, isolate);
 
+  if (function->shared()->native()) return isolate->heap()->null_value();
   // Find the top invocation of the function by traversing frames.
   List<JSFunction*> functions(2);
   for (JavaScriptFrameIterator it(isolate); !it.done(); it.Advance()) {
@@ -709,6 +710,7 @@ class FrameFunctionIterator {
     } while (next_function != NULL);
     return false;
   }
+
  private:
   void GetFunctions() {
     functions_.Rewind(0);
@@ -732,6 +734,7 @@ MaybeObject* Accessors::FunctionGetCaller(Object* object, void*) {
   bool found_it = false;
   JSFunction* holder = FindInPrototypeChain<JSFunction>(object, &found_it);
   if (!found_it) return isolate->heap()->undefined_value();
+  if (holder->shared()->native()) return isolate->heap()->null_value();
   Handle<JSFunction> function(holder, isolate);
 
   FrameFunctionIterator it(isolate, no_alloc);

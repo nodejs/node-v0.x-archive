@@ -203,16 +203,17 @@ inline int StrLength(const char* string) {
 template<class T, int shift, int size>
 class BitField {
  public:
+  // A uint32_t mask of bit field.  To use all bits of a uint32 in a
+  // bitfield without compiler warnings we have to compute 2^32 without
+  // using a shift count of 32.
+  static const uint32_t kMask = ((1U << shift) << size) - (1U << shift);
+
+  // Value for the field with all bits set.
+  static const T kMax = static_cast<T>((1U << size) - 1);
+
   // Tells whether the provided value fits into the bit field.
   static bool is_valid(T value) {
-    return (static_cast<uint32_t>(value) & ~((1U << (size)) - 1)) == 0;
-  }
-
-  // Returns a uint32_t mask of bit field.
-  static uint32_t mask() {
-    // To use all bits of a uint32 in a bitfield without compiler warnings we
-    // have to compute 2^32 without using a shift count of 32.
-    return ((1U << shift) << size) - (1U << shift);
+    return (static_cast<uint32_t>(value) & ~static_cast<uint32_t>(kMax)) == 0;
   }
 
   // Returns a uint32_t with the bit field value encoded.
@@ -223,17 +224,12 @@ class BitField {
 
   // Returns a uint32_t with the bit field value updated.
   static uint32_t update(uint32_t previous, T value) {
-    return (previous & ~mask()) | encode(value);
+    return (previous & ~kMask) | encode(value);
   }
 
   // Extracts the bit field from the value.
   static T decode(uint32_t value) {
-    return static_cast<T>((value & mask()) >> shift);
-  }
-
-  // Value for the field with all bits set.
-  static T max() {
-    return decode(mask());
+    return static_cast<T>((value & kMask) >> shift);
   }
 };
 
@@ -497,9 +493,6 @@ class Collector {
  public:
   explicit Collector(int initial_capacity = kMinCapacity)
       : index_(0), size_(0) {
-    if (initial_capacity < kMinCapacity) {
-      initial_capacity = kMinCapacity;
-    }
     current_chunk_ = Vector<T>::New(initial_capacity);
   }
 
@@ -601,25 +594,23 @@ class Collector {
   // Creates a new current chunk, and stores the old chunk in the chunks_ list.
   void Grow(int min_capacity) {
     ASSERT(growth_factor > 1);
-    int growth = current_chunk_.length() * (growth_factor - 1);
-    if (growth > max_growth) {
-      growth = max_growth;
-    }
-    int new_capacity = current_chunk_.length() + growth;
-    if (new_capacity < min_capacity) {
-      new_capacity = min_capacity + growth;
-    }
-    Vector<T> new_chunk = Vector<T>::New(new_capacity);
-    int new_index = PrepareGrow(new_chunk);
-    if (index_ > 0) {
-      chunks_.Add(current_chunk_.SubVector(0, index_));
+    int new_capacity;
+    int current_length = current_chunk_.length();
+    if (current_length < kMinCapacity) {
+      // The collector started out as empty.
+      new_capacity = min_capacity * growth_factor;
+      if (new_capacity < kMinCapacity) new_capacity = kMinCapacity;
     } else {
-      // Can happen if the call to PrepareGrow moves everything into
-      // the new chunk.
-      current_chunk_.Dispose();
+      int growth = current_length * (growth_factor - 1);
+      if (growth > max_growth) {
+        growth = max_growth;
+      }
+      new_capacity = current_length + growth;
+      if (new_capacity < min_capacity) {
+        new_capacity = min_capacity + growth;
+      }
     }
-    current_chunk_ = new_chunk;
-    index_ = new_index;
+    NewChunk(new_capacity);
     ASSERT(index_ + min_capacity <= current_chunk_.length());
   }
 
@@ -627,8 +618,15 @@ class Collector {
   // some of the current data into the new chunk. The function may update
   // the current index_ value to represent data no longer in the current chunk.
   // Returns the initial index of the new chunk (after copied data).
-  virtual int PrepareGrow(Vector<T> new_chunk)  {
-    return 0;
+  virtual void NewChunk(int new_capacity)  {
+    Vector<T> new_chunk = Vector<T>::New(new_capacity);
+    if (index_ > 0) {
+      chunks_.Add(current_chunk_.SubVector(0, index_));
+    } else {
+      current_chunk_.Dispose();
+    }
+    current_chunk_ = new_chunk;
+    index_ = 0;
   }
 };
 
@@ -683,20 +681,26 @@ class SequenceCollector : public Collector<T, growth_factor, max_growth> {
   int sequence_start_;
 
   // Move the currently active sequence to the new chunk.
-  virtual int PrepareGrow(Vector<T> new_chunk) {
-    if (sequence_start_ != kNoSequence) {
-      int sequence_length = this->index_ - sequence_start_;
-      // The new chunk is always larger than the current chunk, so there
-      // is room for the copy.
-      ASSERT(sequence_length < new_chunk.length());
-      for (int i = 0; i < sequence_length; i++) {
-        new_chunk[i] = this->current_chunk_[sequence_start_ + i];
-      }
-      this->index_ = sequence_start_;
-      sequence_start_ = 0;
-      return sequence_length;
+  virtual void NewChunk(int new_capacity) {
+    if (sequence_start_ == kNoSequence) {
+      // Fall back on default behavior if no sequence has been started.
+      this->Collector<T, growth_factor, max_growth>::NewChunk(new_capacity);
+      return;
     }
-    return 0;
+    int sequence_length = this->index_ - sequence_start_;
+    Vector<T> new_chunk = Vector<T>::New(sequence_length + new_capacity);
+    ASSERT(sequence_length < new_chunk.length());
+    for (int i = 0; i < sequence_length; i++) {
+      new_chunk[i] = this->current_chunk_[sequence_start_ + i];
+    }
+    if (sequence_start_ > 0) {
+      this->chunks_.Add(this->current_chunk_.SubVector(0, sequence_start_));
+    } else {
+      this->current_chunk_.Dispose();
+    }
+    this->current_chunk_ = new_chunk;
+    this->index_ = sequence_length;
+    sequence_start_ = 0;
   }
 };
 
@@ -882,6 +886,7 @@ class SimpleStringBuilder {
   int position_;
 
   bool is_finalized() const { return position_ < 0; }
+
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(SimpleStringBuilder);
 };

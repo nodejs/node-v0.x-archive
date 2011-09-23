@@ -123,8 +123,6 @@ int uv_tcp_read_start(uv_tcp_t* handle, uv_alloc_cb alloc_cb,
     uv_read_cb read_cb);
 int uv_tcp_write(uv_loop_t* loop, uv_write_t* req, uv_tcp_t* handle,
     uv_buf_t bufs[], int bufcnt, uv_write_cb cb);
-int uv_tcp_getsockname(uv_loop_t* loop, uv_tcp_t* handle,
-    struct sockaddr* name, int* namelen);
 
 void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle, uv_req_t* req);
 void uv_process_tcp_write_req(uv_loop_t* loop, uv_tcp_t* handle,
@@ -140,9 +138,6 @@ void uv_tcp_endgame(uv_loop_t* loop, uv_tcp_t* handle);
 /*
  * UDP
  */
-int uv_udp_getsockname(uv_loop_t* loop, uv_udp_t* handle,
-    struct sockaddr* name, int* namelen);
-
 void uv_process_udp_recv_req(uv_loop_t* loop, uv_udp_t* handle, uv_req_t* req);
 void uv_process_udp_send_req(uv_loop_t* loop, uv_udp_t* handle,
     uv_udp_send_t* req);
@@ -237,6 +232,14 @@ void uv_process_work_req(uv_loop_t* loop, uv_work_t* req);
 
 
 /*
+ * FS Event
+ */
+void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req, uv_fs_event_t* handle);
+void uv_fs_event_close(uv_loop_t* loop, uv_fs_event_t* handle);
+void uv_fs_event_endgame(uv_loop_t* loop, uv_fs_event_t* handle);
+
+
+/*
  * Error handling
  */
 extern const uv_err_t uv_ok_;
@@ -282,6 +285,21 @@ void uv_set_error(uv_loop_t* loop, uv_err_code code, int sys_errno);
 void uv_winapi_init();
 void uv_winsock_init();
 int uv_ntstatus_to_winsock_error(NTSTATUS status);
+
+
+/* Threads and synchronization */
+typedef struct uv_once_s {
+  unsigned char ran;
+  /* The actual event handle must be aligned to sizeof(HANDLE), so in */
+  /* practice it might overlap padding a little. */
+  HANDLE event;
+  HANDLE padding;
+} uv_once_t;
+
+#define UV_ONCE_INIT \
+  { 0, NULL, NULL }
+
+void uv_once(uv_once_t* guard, void (*callback)(void));
 
 
 #endif /* UV_WIN_INTERNAL_H_ */

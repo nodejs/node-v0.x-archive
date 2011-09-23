@@ -57,7 +57,8 @@ static void do_accept(uv_timer_t* timer_handle, int status) {
   ASSERT(status == 0);
   ASSERT(accepted_handle != NULL);
 
-  uv_tcp_init(uv_default_loop(), accepted_handle);
+  r = uv_tcp_init(uv_default_loop(), accepted_handle);
+  ASSERT(r == 0);
 
   /* Test to that uv_default_loop()->counters.tcp_init does not increase across the uv_accept. */
   tcpcnt = uv_default_loop()->counters.tcp_init;
@@ -180,8 +181,6 @@ static void client_connect() {
 
 
 TEST_IMPL(delayed_accept) {
-  uv_init();
-
   start_server();
 
   client_connect();

@@ -22,7 +22,7 @@ CC = $(PREFIX)gcc
 AR = $(PREFIX)ar
 E=
 CSTDFLAG=--std=c89 -pedantic -Wall -Wextra -Wno-unused-parameter
-CFLAGS=-g
+CFLAGS += -g
 CPPFLAGS += -Isrc/unix/ev
 LINKFLAGS=-lm
 
@@ -37,6 +37,7 @@ OBJS += src/unix/error.o
 OBJS += src/unix/process.o
 OBJS += src/unix/tcp.o
 OBJS += src/unix/pipe.o
+OBJS += src/unix/tty.o
 OBJS += src/unix/stream.o
 
 ifeq (SunOS,$(uname_S))
@@ -58,7 +59,7 @@ endif
 ifeq (Linux,$(uname_S))
 EV_CONFIG=config_linux.h
 EIO_CONFIG=config_linux.h
-CSTDFLAG += -D_XOPEN_SOURCE=600
+CSTDFLAG += -D_GNU_SOURCE
 CPPFLAGS += -Isrc/ares/config_linux
 LINKFLAGS+=-lrt
 OBJS += src/unix/linux.o
@@ -70,6 +71,14 @@ EIO_CONFIG=config_freebsd.h
 CPPFLAGS += -Isrc/ares/config_freebsd
 LINKFLAGS+=
 OBJS += src/unix/freebsd.o
+endif
+
+ifeq (NetBSD,$(uname_S))
+EV_CONFIG=config_netbsd.h
+EIO_CONFIG=config_netbsd.h
+CPPFLAGS += -Isrc/ares/config_netbsd
+LINKFLAGS+=
+OBJS += src/unix/netbsd.o
 endif
 
 ifneq (,$(findstring CYGWIN,$(uname_S)))

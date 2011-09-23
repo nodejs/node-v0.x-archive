@@ -63,6 +63,9 @@ using namespace v8;
 static Persistent<String> errno_symbol;
 static Persistent<String> syscall_symbol;
 static Persistent<String> subject_symbol;
+static Persistent<String> subjectaltname_symbol;
+static Persistent<String> modulus_symbol;
+static Persistent<String> exponent_symbol;
 static Persistent<String> issuer_symbol;
 static Persistent<String> valid_from_symbol;
 static Persistent<String> valid_to_symbol;
@@ -173,7 +176,7 @@ static BIO* LoadBIO (Handle<Value> v) {
 
   HandleScope scope;
 
-  int r;
+  int r = -1;
 
   if (v->IsString()) {
     String::Utf8Value s(v->ToString());
@@ -330,7 +333,7 @@ Handle<Value> SecureContext::SetCert(const Arguments& args) {
           String::New("SSL_CTX_use_certificate_chain")));
     }
     char string[120];
-    ERR_error_string(err, string);
+    ERR_error_string_n(err, string, sizeof string);
     return ThrowException(Exception::Error(String::New(string)));
   }
 
@@ -521,7 +524,10 @@ int Connection::HandleSSLError(const char* func, int rv) {
 
   int err = SSL_get_error(ssl_, rv);
 
-  if (err == SSL_ERROR_WANT_WRITE) {
+  if (err == SSL_ERROR_NONE) {
+    return 0;
+
+  } else if (err == SSL_ERROR_WANT_WRITE) {
     DEBUG_PRINT("[%p] SSL: %s want write\n", ssl_, func);
     return 0;
 
@@ -530,14 +536,24 @@ int Connection::HandleSSLError(const char* func, int rv) {
     return 0;
 
   } else {
-    static char ssl_error_buf[512];
-    ERR_error_string_n(err, ssl_error_buf, sizeof(ssl_error_buf));
-
     HandleScope scope;
-    Local<Value> e = Exception::Error(String::New(ssl_error_buf));
-    handle_->Set(String::New("error"), e);
+    BUF_MEM* mem;
+    BIO *bio;
 
-    DEBUG_PRINT("[%p] SSL: %s failed: (%d:%d) %s\n", ssl_, func, err, rv, ssl_error_buf);
+    assert(err == SSL_ERROR_SSL || err == SSL_ERROR_SYSCALL);
+
+    // XXX We need to drain the error queue for this thread or else OpenSSL
+    // has the possibility of blocking connections? This problem is not well
+    // understood. And we should be somehow propagating these errors up
+    // into JavaScript. There is no test which demonstrates this problem.
+    // https://github.com/joyent/node/issues/1719
+    if ((bio = BIO_new(BIO_s_mem()))) {
+      ERR_print_errors(bio);
+      BIO_get_mem_ptr(bio, &mem);
+      Local<Value> e = Exception::Error(String::New(mem->data, mem->length));
+      handle_->Set(String::New("error"), e);
+      BIO_free(bio);
+    }
 
     return rv;
   }
@@ -585,6 +601,9 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "clearPending", Connection::ClearPending);
   NODE_SET_PROTOTYPE_METHOD(t, "encPending", Connection::EncPending);
   NODE_SET_PROTOTYPE_METHOD(t, "getPeerCertificate", Connection::GetPeerCertificate);
+  NODE_SET_PROTOTYPE_METHOD(t, "getSession", Connection::GetSession);
+  NODE_SET_PROTOTYPE_METHOD(t, "setSession", Connection::SetSession);
+  NODE_SET_PROTOTYPE_METHOD(t, "isSessionReused", Connection::IsSessionReused);
   NODE_SET_PROTOTYPE_METHOD(t, "isInitFinished", Connection::IsInitFinished);
   NODE_SET_PROTOTYPE_METHOD(t, "verifyError", Connection::VerifyError);
   NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", Connection::GetCurrentCipher);
@@ -1087,6 +1106,38 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
     }
     (void) BIO_reset(bio);
 
+    int index = X509_get_ext_by_NID(peer_cert, NID_subject_alt_name, -1);
+    if (index >= 0) {
+      X509_EXTENSION* ext;
+      int rv;
+
+      ext = X509_get_ext(peer_cert, index);
+      assert(ext != NULL);
+
+      rv = X509V3_EXT_print(bio, ext, 0, 0);
+      assert(rv == 1);
+
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(subjectaltname_symbol, String::New(mem->data, mem->length));
+
+      (void) BIO_reset(bio);
+    }
+
+    EVP_PKEY *pkey = NULL;
+    RSA *rsa = NULL;
+    if( NULL != (pkey = X509_get_pubkey(peer_cert))
+        && NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
+        BN_print(bio, rsa->n);
+        BIO_get_mem_ptr(bio, &mem);
+        info->Set(modulus_symbol, String::New(mem->data, mem->length) );
+        (void) BIO_reset(bio);
+
+        BN_print(bio, rsa->e);
+        BIO_get_mem_ptr(bio, &mem);
+        info->Set(exponent_symbol, String::New(mem->data, mem->length) );
+        (void) BIO_reset(bio);
+    }
+
     ASN1_TIME_print(bio, X509_get_notBefore(peer_cert));
     BIO_get_mem_ptr(bio, &mem);
     info->Set(valid_from_symbol, String::New(mem->data, mem->length));
@@ -1139,6 +1190,83 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
   }
   return scope.Close(info);
 }
+
+Handle<Value> Connection::GetSession(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->ssl_ == NULL) return Undefined();
+
+  SSL_SESSION* sess = SSL_get_session(ss->ssl_);
+  if (!sess) return Undefined();
+
+  int slen = i2d_SSL_SESSION(sess, NULL);
+  assert(slen > 0);
+
+  if (slen > 0) {
+    unsigned char* sbuf = new unsigned char[slen];
+    unsigned char* p = sbuf;
+    i2d_SSL_SESSION(sess, &p);
+    Local<Value> s = Encode(sbuf, slen, BINARY);
+    delete[] sbuf;
+    return scope.Close(s);
+  }
+
+  return Null();
+}
+
+Handle<Value> Connection::SetSession(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (args.Length() < 1 || !args[0]->IsString()) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+
+  ASSERT_IS_STRING_OR_BUFFER(args[0]);
+  ssize_t slen = DecodeBytes(args[0], BINARY);
+
+  if (slen < 0) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+
+  char* sbuf = new char[slen];
+
+  ssize_t wlen = DecodeWrite(sbuf, slen, args[0], BINARY);
+  assert(wlen == slen);
+
+  const unsigned char* p = (unsigned char*) sbuf;
+  SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, wlen);
+
+  delete [] sbuf;
+
+  if (!sess)
+    return Undefined();
+
+  int r = SSL_set_session(ss->ssl_, sess);
+  SSL_SESSION_free(sess);
+
+  if (!r) {
+    Local<String> eStr = String::New("SSL_set_session error");
+    return ThrowException(Exception::Error(eStr));
+  }
+
+  return True();
+}
+
+Handle<Value> Connection::IsSessionReused(const Arguments& args) {
+  HandleScope scope;
+
+  Connection *ss = Connection::Unwrap(args);
+
+  if (ss->ssl_ == NULL) return False();
+  return SSL_session_reused(ss->ssl_) ? True() : False();
+}
+
 
 Handle<Value> Connection::Start(const Arguments& args) {
   HandleScope scope;
@@ -2384,6 +2512,7 @@ class Decipher : public ObjectWrap {
     int out_len;
     Local<Value> outString ;
 
+    out_value = NULL;
     int r = cipher->DecipherFinal(&out_value, &out_len, true);
 
     if (out_len == 0 || r == 0) {
@@ -3922,6 +4051,9 @@ void InitCrypto(Handle<Object> target) {
   issuer_symbol     = NODE_PSYMBOL("issuer");
   valid_from_symbol = NODE_PSYMBOL("valid_from");
   valid_to_symbol   = NODE_PSYMBOL("valid_to");
+  subjectaltname_symbol = NODE_PSYMBOL("subjectaltname");
+  modulus_symbol        = NODE_PSYMBOL("modulus");
+  exponent_symbol       = NODE_PSYMBOL("exponent");
   fingerprint_symbol   = NODE_PSYMBOL("fingerprint");
   name_symbol       = NODE_PSYMBOL("name");
   version_symbol    = NODE_PSYMBOL("version");

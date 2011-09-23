@@ -3396,8 +3396,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // a sequential string or an external string.
   // In the case of a sliced string its offset has to be taken into account.
   Label cons_string, check_encoding;
-  STATIC_ASSERT((kConsStringTag < kExternalStringTag));
-  STATIC_ASSERT((kSlicedStringTag > kExternalStringTag));
+  STATIC_ASSERT(kConsStringTag < kExternalStringTag);
+  STATIC_ASSERT(kSlicedStringTag > kExternalStringTag);
   __ cmp(Operand(ebx), Immediate(kExternalStringTag));
   __ j(less, &cons_string);
   __ j(equal, &runtime);
@@ -3551,7 +3551,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // stack overflow (on the backtrack stack) was detected in RegExp code but
   // haven't created the exception yet. Handle that in the runtime system.
   // TODO(592): Rerunning the RegExp to get the stack overflow exception.
-  ExternalReference pending_exception(Isolate::k_pending_exception_address,
+  ExternalReference pending_exception(Isolate::kPendingExceptionAddress,
                                       masm->isolate());
   __ mov(edx,
          Operand::StaticVariable(ExternalReference::the_hole_value_location(
@@ -4199,7 +4199,7 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
-  Label slow;
+  Label slow, non_function;
 
   // The receiver might implicitly be the global object. This is
   // indicated by passing the hole as the receiver to the call
@@ -4224,7 +4224,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ mov(edi, Operand(esp, (argc_ + 2) * kPointerSize));
 
   // Check that the function really is a JavaScript function.
-  __ JumpIfSmi(edi, &slow);
+  __ JumpIfSmi(edi, &non_function);
   // Goto slow case if we do not have a function.
   __ CmpObjectType(edi, JS_FUNCTION_TYPE, ecx);
   __ j(not_equal, &slow);
@@ -4251,15 +4251,32 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
   // Slow-case: Non-function called.
   __ bind(&slow);
+  // Check for function proxy.
+  __ CmpInstanceType(ecx, JS_FUNCTION_PROXY_TYPE);
+  __ j(not_equal, &non_function);
+  __ pop(ecx);
+  __ push(edi);  // put proxy as additional argument under return address
+  __ push(ecx);
+  __ Set(eax, Immediate(argc_ + 1));
+  __ Set(ebx, Immediate(0));
+  __ SetCallKind(ecx, CALL_AS_FUNCTION);
+  __ GetBuiltinEntry(edx, Builtins::CALL_FUNCTION_PROXY);
+  {
+    Handle<Code> adaptor =
+      masm->isolate()->builtins()->ArgumentsAdaptorTrampoline();
+    __ jmp(adaptor, RelocInfo::CODE_TARGET);
+  }
+
   // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
   // of the original receiver from the call site).
+  __ bind(&non_function);
   __ mov(Operand(esp, (argc_ + 1) * kPointerSize), edi);
   __ Set(eax, Immediate(argc_));
   __ Set(ebx, Immediate(0));
+  __ SetCallKind(ecx, CALL_AS_METHOD);
   __ GetBuiltinEntry(edx, Builtins::CALL_NON_FUNCTION);
   Handle<Code> adaptor =
       masm->isolate()->builtins()->ArgumentsAdaptorTrampoline();
-  __ SetCallKind(ecx, CALL_AS_METHOD);
   __ jmp(adaptor, RelocInfo::CODE_TARGET);
 }
 
@@ -4341,7 +4358,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ j(zero, &failure_returned);
 
   ExternalReference pending_exception_address(
-      Isolate::k_pending_exception_address, masm->isolate());
+      Isolate::kPendingExceptionAddress, masm->isolate());
 
   // Check that there is no pending exception, otherwise we
   // should have returned some failure value.
@@ -4482,11 +4499,11 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ push(ebx);
 
   // Save copies of the top frame descriptor on the stack.
-  ExternalReference c_entry_fp(Isolate::k_c_entry_fp_address, masm->isolate());
+  ExternalReference c_entry_fp(Isolate::kCEntryFPAddress, masm->isolate());
   __ push(Operand::StaticVariable(c_entry_fp));
 
   // If this is the outermost JS call, set js_entry_sp value.
-  ExternalReference js_entry_sp(Isolate::k_js_entry_sp_address,
+  ExternalReference js_entry_sp(Isolate::kJSEntrySPAddress,
                                 masm->isolate());
   __ cmp(Operand::StaticVariable(js_entry_sp), Immediate(0));
   __ j(not_equal, &not_outermost_js, Label::kNear);
@@ -4503,7 +4520,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Caught exception: Store result (exception) in the pending
   // exception field in the JSEnv and return a failure sentinel.
-  ExternalReference pending_exception(Isolate::k_pending_exception_address,
+  ExternalReference pending_exception(Isolate::kPendingExceptionAddress,
                                       masm->isolate());
   __ mov(Operand::StaticVariable(pending_exception), eax);
   __ mov(eax, reinterpret_cast<int32_t>(Failure::Exception()));
@@ -4554,7 +4571,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Restore the top frame descriptor from the stack.
   __ pop(Operand::StaticVariable(ExternalReference(
-      Isolate::k_c_entry_fp_address,
+      Isolate::kCEntryFPAddress,
       masm->isolate())));
 
   // Restore callee-saved registers (C calling conventions).
@@ -4872,8 +4889,8 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
 
   // Handle non-flat strings.
   __ and_(result_, kStringRepresentationMask);
-  STATIC_ASSERT((kConsStringTag < kExternalStringTag));
-  STATIC_ASSERT((kSlicedStringTag > kExternalStringTag));
+  STATIC_ASSERT(kConsStringTag < kExternalStringTag);
+  STATIC_ASSERT(kSlicedStringTag > kExternalStringTag);
   __ cmp(result_, kExternalStringTag);
   __ j(greater, &sliced_string, Label::kNear);
   __ j(equal, &call_runtime_);
@@ -4907,7 +4924,8 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
 
   // Check for 1-byte or 2-byte string.
   __ bind(&flat_string);
-  STATIC_ASSERT(kAsciiStringTag != 0);
+  STATIC_ASSERT((kStringEncodingMask & kAsciiStringTag) != 0);
+  STATIC_ASSERT((kStringEncodingMask & kTwoByteStringTag) == 0);
   __ test(result_, Immediate(kStringEncodingMask));
   __ j(not_zero, &ascii_string, Label::kNear);
 
@@ -5178,8 +5196,9 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ mov(edi, FieldOperand(edx, HeapObject::kMapOffset));
   __ movzx_b(edi, FieldOperand(edi, Map::kInstanceTypeOffset));
   __ and_(ecx, Operand(edi));
-  STATIC_ASSERT(kStringEncodingMask == kAsciiStringTag);
-  __ test(ecx, Immediate(kAsciiStringTag));
+  STATIC_ASSERT((kStringEncodingMask & kAsciiStringTag) != 0);
+  STATIC_ASSERT((kStringEncodingMask & kTwoByteStringTag) == 0);
+  __ test(ecx, Immediate(kStringEncodingMask));
   __ j(zero, &non_ascii);
   __ bind(&ascii_data);
   // Allocate an acsii cons string.
@@ -5210,7 +5229,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ cmp(edi, kAsciiStringTag | kAsciiDataHintTag);
   __ j(equal, &ascii_data);
   // Allocate a two byte cons string.
-  __ AllocateConsString(ecx, edi, no_reg, &string_add_runtime);
+  __ AllocateTwoByteConsString(ecx, edi, no_reg, &string_add_runtime);
   __ jmp(&allocated);
 
   // Handle creating a flat result. First check that both strings are not
@@ -5236,12 +5255,13 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // ebx: length of resulting flat string as a smi
   // edx: second string
   Label non_ascii_string_add_flat_result;
-  STATIC_ASSERT(kStringEncodingMask == kAsciiStringTag);
+  STATIC_ASSERT((kStringEncodingMask & kAsciiStringTag) != 0);
+  STATIC_ASSERT((kStringEncodingMask & kTwoByteStringTag) == 0);
   __ mov(ecx, FieldOperand(eax, HeapObject::kMapOffset));
-  __ test_b(FieldOperand(ecx, Map::kInstanceTypeOffset), kAsciiStringTag);
+  __ test_b(FieldOperand(ecx, Map::kInstanceTypeOffset), kStringEncodingMask);
   __ j(zero, &non_ascii_string_add_flat_result);
   __ mov(ecx, FieldOperand(edx, HeapObject::kMapOffset));
-  __ test_b(FieldOperand(ecx, Map::kInstanceTypeOffset), kAsciiStringTag);
+  __ test_b(FieldOperand(ecx, Map::kInstanceTypeOffset), kStringEncodingMask);
   __ j(zero, &string_add_runtime);
 
   // Both strings are ascii strings.  As they are short they are both flat.
@@ -5281,7 +5301,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // edx: second string
   __ bind(&non_ascii_string_add_flat_result);
   __ mov(ecx, FieldOperand(edx, HeapObject::kMapOffset));
-  __ test_b(FieldOperand(ecx, Map::kInstanceTypeOffset), kAsciiStringTag);
+  __ test_b(FieldOperand(ecx, Map::kInstanceTypeOffset), kStringEncodingMask);
   __ j(not_zero, &string_add_runtime);
   // Both strings are two byte strings. As they are short they are both
   // flat.
@@ -5642,9 +5662,6 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
 void SubStringStub::Generate(MacroAssembler* masm) {
   Label runtime;
 
-  if (FLAG_string_slices) {
-    __ jmp(&runtime);
-  }
   // Stack frame on entry.
   //  esp[0]: return address
   //  esp[4]: to
@@ -5706,7 +5723,84 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ movzx_b(ebx, FieldOperand(ebx, Map::kInstanceTypeOffset));
   __ Set(ecx, Immediate(2));
 
-  __ bind(&result_longer_than_two);
+  if (FLAG_string_slices) {
+    Label copy_routine;
+    // If coming from the make_two_character_string path, the string
+    // is too short to be sliced anyways.
+    STATIC_ASSERT(2 < SlicedString::kMinLength);
+    __ jmp(&copy_routine);
+    __ bind(&result_longer_than_two);
+
+    // eax: string
+    // ebx: instance type
+    // ecx: sub string length
+    // edx: from index (smi)
+    Label allocate_slice, sliced_string, seq_string;
+    __ cmp(ecx, SlicedString::kMinLength);
+    // Short slice.  Copy instead of slicing.
+    __ j(less, &copy_routine);
+    STATIC_ASSERT(kSeqStringTag == 0);
+    __ test(ebx, Immediate(kStringRepresentationMask));
+    __ j(zero, &seq_string, Label::kNear);
+    STATIC_ASSERT(kIsIndirectStringMask == (kSlicedStringTag & kConsStringTag));
+    STATIC_ASSERT(kIsIndirectStringMask != 0);
+    __ test(ebx, Immediate(kIsIndirectStringMask));
+    // External string.  Jump to runtime.
+    __ j(zero, &runtime);
+
+    Factory* factory = masm->isolate()->factory();
+    __ test(ebx, Immediate(kSlicedNotConsMask));
+    __ j(not_zero, &sliced_string, Label::kNear);
+    // Cons string.  Check whether it is flat, then fetch first part.
+    __ cmp(FieldOperand(eax, ConsString::kSecondOffset),
+           factory->empty_string());
+    __ j(not_equal, &runtime);
+    __ mov(edi, FieldOperand(eax, ConsString::kFirstOffset));
+    __ jmp(&allocate_slice, Label::kNear);
+
+    __ bind(&sliced_string);
+    // Sliced string.  Fetch parent and correct start index by offset.
+    __ add(edx, FieldOperand(eax, SlicedString::kOffsetOffset));
+    __ mov(edi, FieldOperand(eax, SlicedString::kParentOffset));
+    __ jmp(&allocate_slice, Label::kNear);
+
+    __ bind(&seq_string);
+    // Sequential string.  Just move string to the right register.
+    __ mov(edi, eax);
+
+    __ bind(&allocate_slice);
+    // edi: underlying subject string
+    // ebx: instance type of original subject string
+    // edx: offset
+    // ecx: length
+    // Allocate new sliced string.  At this point we do not reload the instance
+    // type including the string encoding because we simply rely on the info
+    // provided by the original string.  It does not matter if the original
+    // string's encoding is wrong because we always have to recheck encoding of
+    // the newly created string's parent anyways due to externalized strings.
+    Label two_byte_slice, set_slice_header;
+    STATIC_ASSERT((kStringEncodingMask & kAsciiStringTag) != 0);
+    STATIC_ASSERT((kStringEncodingMask & kTwoByteStringTag) == 0);
+    __ test(ebx, Immediate(kStringEncodingMask));
+    __ j(zero, &two_byte_slice, Label::kNear);
+    __ AllocateAsciiSlicedString(eax, ebx, no_reg, &runtime);
+    __ jmp(&set_slice_header, Label::kNear);
+    __ bind(&two_byte_slice);
+    __ AllocateTwoByteSlicedString(eax, ebx, no_reg, &runtime);
+    __ bind(&set_slice_header);
+    __ mov(FieldOperand(eax, SlicedString::kOffsetOffset), edx);
+    __ SmiTag(ecx);
+    __ mov(FieldOperand(eax, SlicedString::kLengthOffset), ecx);
+    __ mov(FieldOperand(eax, SlicedString::kParentOffset), edi);
+    __ mov(FieldOperand(eax, SlicedString::kHashFieldOffset),
+           Immediate(String::kEmptyHashField));
+    __ jmp(&return_eax);
+
+    __ bind(&copy_routine);
+  } else {
+    __ bind(&result_longer_than_two);
+  }
+
   // eax: string
   // ebx: instance type
   // ecx: result string length

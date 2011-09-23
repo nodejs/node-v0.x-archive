@@ -28,6 +28,7 @@
 #include <mswsock.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <sys/stat.h>
 
 #include "tree.h"
 
@@ -72,7 +73,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   uv_prepare_t* next_prepare_handle;                                          \
   uv_check_t* next_check_handle;                                              \
   uv_idle_t* next_idle_handle;                                                \
-  ares_channel ares_channel;                                                  \
+  ares_channel ares_chan;                                                     \
   int ares_active_sockets;                                                    \
   uv_timer_t ares_polling_timer;                                              \
   /* Last error code */                                                       \
@@ -85,7 +86,8 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   UV_GETADDRINFO_REQ,                     \
   UV_PROCESS_EXIT,                        \
   UV_PROCESS_CLOSE,                       \
-  UV_UDP_RECV
+  UV_UDP_RECV,                            \
+  UV_FS_EVENT_REQ
 
 #define UV_REQ_PRIVATE_FIELDS             \
   union {                                 \
@@ -234,10 +236,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   struct uv_process_close_s {             \
     UV_REQ_FIELDS                         \
   } close_req;                            \
-  struct uv_process_stdio_s {             \
-    uv_pipe_t* server_pipe;               \
-    HANDLE child_pipe;                    \
-  } stdio_pipes[3];                       \
+  HANDLE child_stdio[3];                  \
   int exit_signal;                        \
   DWORD spawn_errno;                      \
   HANDLE wait_handle;                     \
@@ -246,6 +245,8 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
 
 #define UV_FS_PRIVATE_FIELDS              \
   int flags;                              \
+  int last_error;                         \
+  struct _stati64 stat;                   \
   void* arg0;                             \
   union {                                 \
     struct {                              \
@@ -260,6 +261,19 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   };
 
 #define UV_WORK_PRIVATE_FIELDS            \
+
+#define UV_FS_EVENT_PRIVATE_FIELDS        \
+  struct uv_fs_event_req_s {              \
+    UV_REQ_FIELDS                         \
+  } req;                                  \
+  HANDLE dir_handle;                      \
+  int req_pending;                        \
+  uv_fs_event_cb cb;                      \
+  wchar_t* filew;                         \
+  int is_path_dir;                        \
+  char* buffer;
+
+#define UV_TTY_PRIVATE_FIELDS /* empty */
 
 int uv_utf16_to_utf8(const wchar_t* utf16Buffer, size_t utf16Size,
     char* utf8Buffer, size_t utf8Size);

@@ -30,6 +30,8 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
 
 /* TODO Expose callback to user to handle fatal error like V8 does. */
@@ -64,9 +66,10 @@ char* uv_strerror(uv_err_t err) {
 }
 
 
-static uv_err_code uv_translate_sys_error(int sys_errno) {
+uv_err_code uv_translate_sys_error(int sys_errno) {
   switch (sys_errno) {
     case 0: return UV_OK;
+    case ENOENT: return UV_ENOENT;
     case EACCES: return UV_EACCESS;
     case EBADF: return UV_EBADF;
     case EPIPE: return UV_EPIPE;
@@ -79,8 +82,13 @@ static uv_err_code uv_translate_sys_error(int sys_errno) {
     case ECONNREFUSED: return UV_ECONNREFUSED;
     case EADDRINUSE: return UV_EADDRINUSE;
     case EADDRNOTAVAIL: return UV_EADDRNOTAVAIL;
+    case ENOTCONN: return UV_ENOTCONN;
+    case EEXIST: return UV_EEXIST;
     default: return UV_UNKNOWN;
   }
+
+  assert(0 && "unreachable");
+  return -1;
 }
 
 

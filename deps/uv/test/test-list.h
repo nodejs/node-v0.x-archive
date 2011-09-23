@@ -19,6 +19,7 @@
  * IN THE SOFTWARE.
  */
 
+TEST_DECLARE   (tty)
 TEST_DECLARE   (tcp_ping_pong)
 TEST_DECLARE   (tcp_ping_pong_v6)
 TEST_DECLARE   (pipe_ping_pong)
@@ -31,6 +32,8 @@ TEST_DECLARE   (tcp_bind_error_fault)
 TEST_DECLARE   (tcp_bind_error_inval)
 TEST_DECLARE   (tcp_bind_localhost_ok)
 TEST_DECLARE   (tcp_listen_without_bind)
+TEST_DECLARE   (tcp_close)
+TEST_DECLARE   (tcp_write_error)
 TEST_DECLARE   (tcp_bind6_error_addrinuse)
 TEST_DECLARE   (tcp_bind6_error_addrnotavail)
 TEST_DECLARE   (tcp_bind6_error_fault)
@@ -72,10 +75,21 @@ TEST_DECLARE   (spawn_exit_code)
 TEST_DECLARE   (spawn_stdout)
 TEST_DECLARE   (spawn_stdin)
 TEST_DECLARE   (spawn_and_kill)
+TEST_DECLARE   (fs_file_noent)
 TEST_DECLARE   (fs_file_async)
 TEST_DECLARE   (fs_file_sync)
 TEST_DECLARE   (fs_async_dir)
 TEST_DECLARE   (fs_async_sendfile)
+TEST_DECLARE   (fs_fstat)
+TEST_DECLARE   (fs_chmod)
+TEST_DECLARE   (fs_chown)
+TEST_DECLARE   (fs_link)
+TEST_DECLARE   (fs_symlink)
+TEST_DECLARE   (fs_utime)
+TEST_DECLARE   (fs_futime)
+TEST_DECLARE   (fs_event_watch_dir)
+TEST_DECLARE   (fs_event_watch_file)
+TEST_DECLARE   (fs_event_watch_file_current_dir)
 TEST_DECLARE   (threadpool_queue_work_simple)
 #ifdef _WIN32
 TEST_DECLARE   (spawn_detect_pipe_name_collisions_on_windows)
@@ -88,6 +102,8 @@ HELPER_DECLARE (pipe_echo_server)
 
 
 TASK_LIST_START
+  TEST_ENTRY  (tty)
+
   TEST_ENTRY  (tcp_ping_pong)
   TEST_HELPER (tcp_ping_pong, tcp4_echo_server)
 
@@ -109,6 +125,8 @@ TASK_LIST_START
   TEST_ENTRY  (tcp_bind_error_inval)
   TEST_ENTRY  (tcp_bind_localhost_ok)
   TEST_ENTRY  (tcp_listen_without_bind)
+  TEST_ENTRY  (tcp_close)
+  TEST_ENTRY  (tcp_write_error)
 
   TEST_ENTRY  (tcp_bind6_error_addrinuse)
   TEST_ENTRY  (tcp_bind6_error_addrnotavail)
@@ -175,10 +193,20 @@ TASK_LIST_START
   TEST_ENTRY  (environment_creation)
 #endif
 
+  TEST_ENTRY  (fs_file_noent)
   TEST_ENTRY  (fs_file_async)
   TEST_ENTRY  (fs_file_sync)
   TEST_ENTRY  (fs_async_dir)
   TEST_ENTRY  (fs_async_sendfile)
+  TEST_ENTRY  (fs_fstat)
+  TEST_ENTRY  (fs_chmod)
+  TEST_ENTRY  (fs_chown)
+  TEST_ENTRY  (fs_utime)
+  TEST_ENTRY  (fs_futime)
+  TEST_ENTRY  (fs_symlink)
+  TEST_ENTRY  (fs_event_watch_dir)
+  TEST_ENTRY  (fs_event_watch_file)
+  TEST_ENTRY  (fs_event_watch_file_current_dir)
 
   TEST_ENTRY  (threadpool_queue_work_simple)
 

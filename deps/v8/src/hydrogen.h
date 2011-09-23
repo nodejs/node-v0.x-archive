@@ -102,6 +102,7 @@ class HBasicBlock: public ZoneObject {
   void RemovePhi(HPhi* phi);
   void AddInstruction(HInstruction* instr);
   bool Dominates(HBasicBlock* other) const;
+  int LoopNestingDepth() const;
 
   void SetInitialEnvironment(HEnvironment* env);
   void ClearEnvironment() { last_environment_ = NULL; }
@@ -455,12 +456,11 @@ class HEnvironment: public ZoneObject {
   // by 1 (receiver is parameter index -1 but environment index 0).
   // Stack-allocated local indices are shifted by the number of parameters.
   int IndexFor(Variable* variable) const {
-    Slot* slot = variable->AsSlot();
-    ASSERT(slot != NULL && slot->IsStackAllocated());
-    int shift = (slot->type() == Slot::PARAMETER)
+    ASSERT(variable->IsStackAllocated());
+    int shift = variable->IsParameter()
         ? 1
         : parameter_count_ + specials_count_;
-    return slot->index() + shift;
+    return variable->index() + shift;
   }
 
   Handle<JSFunction> closure_;
@@ -779,6 +779,10 @@ class HGraphBuilder: public AstVisitor {
   INLINE_RUNTIME_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_DECLARATION)
 #undef INLINE_FUNCTION_GENERATOR_DECLARATION
 
+  void HandleDeclaration(VariableProxy* proxy,
+                         Variable::Mode mode,
+                         FunctionLiteral* function);
+
   void VisitDelete(UnaryOperation* expr);
   void VisitVoid(UnaryOperation* expr);
   void VisitTypeof(UnaryOperation* expr);
@@ -851,7 +855,6 @@ class HGraphBuilder: public AstVisitor {
                            TypeInfo info,
                            HValue* value,
                            Representation rep);
-  void AssumeRepresentation(HValue* value, Representation rep);
   static Representation ToRepresentation(TypeInfo info);
 
   void SetupScope(Scope* scope);
@@ -933,7 +936,7 @@ class HGraphBuilder: public AstVisitor {
       HValue* external_elements,
       HValue* checked_key,
       HValue* val,
-      JSObject::ElementsKind elements_kind,
+      ElementsKind elements_kind,
       bool is_store);
 
   HInstruction* BuildMonomorphicElementAccess(HValue* object,

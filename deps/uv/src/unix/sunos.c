@@ -22,8 +22,11 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <unistd.h>
+#include <assert.h>
+#include <errno.h>
+
 #include <sys/time.h>
+#include <unistd.h>
 
 
 uint64_t uv_hrtime() {
@@ -57,4 +60,18 @@ int uv_exepath(char* buffer, size_t* size) {
   buffer[res] = '\0';
   *size = res;
   return (0);
+}
+
+
+int uv_fs_event_init(uv_loop_t* loop,
+                     uv_fs_event_t* handle,
+                     const char* filename,
+                     uv_fs_event_cb cb) {
+  uv_err_new(loop, ENOSYS);
+  return -1;
+}
+
+
+void uv__fs_event_destroy(uv_fs_event_t* handle) {
+  assert(0 && "implement me");
 }

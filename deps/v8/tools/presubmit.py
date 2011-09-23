@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2008 the V8 project authors. All rights reserved.
+# Copyright 2011 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -42,6 +42,7 @@ import pickle
 import re
 import sys
 import subprocess
+from subprocess import PIPE
 
 # Disabled LINT rules and reason.
 # build/include_what_you_use: Started giving false positives for variables
@@ -88,7 +89,6 @@ whitespace/blank_line
 whitespace/braces
 whitespace/comma
 whitespace/comments
-whitespace/end_of_line
 whitespace/ending_newline
 whitespace/indent
 whitespace/labels
@@ -231,11 +231,29 @@ COPYRIGHT_HEADER_PATTERN = re.compile(
 
 class SourceProcessor(SourceFileProcessor):
   """
-  Check that all files include a copyright notice.
+  Check that all files include a copyright notice and no trailing whitespaces.
   """
 
   RELEVANT_EXTENSIONS = ['.js', '.cc', '.h', '.py', '.c', 'SConscript',
-      'SConstruct', '.status']
+      'SConstruct', '.status', '.gyp', '.gypi']
+
+  # Overwriting the one in the parent class.
+  def FindFilesIn(self, path):
+    if os.path.exists(path+'/.git'):
+      output = subprocess.Popen('git ls-files --full-name',
+                                stdout=PIPE, cwd=path, shell=True)
+      result = []
+      for file in output.stdout.read().split():
+        for dir_part in os.path.dirname(file).split(os.sep):
+          if self.IgnoreDir(dir_part):
+            break
+        else:
+          if self.IsRelevant(file) and not self.IgnoreFile(file):
+            result.append(join(path, file))
+      if output.wait() == 0:
+        return result
+    return super(SourceProcessor, self).FindFilesIn(path)
+
   def IsRelevant(self, name):
     for ext in SourceProcessor.RELEVANT_EXTENSIONS:
       if name.endswith(ext):
@@ -273,17 +291,37 @@ class SourceProcessor(SourceFileProcessor):
       if not COPYRIGHT_HEADER_PATTERN.search(contents):
         print "%s is missing a correct copyright header." % name
         result = False
+    ext = base.split('.').pop()
+    if ' \n' in contents or contents.endswith(' '):
+      line = 0
+      lines = []
+      parts = contents.split(' \n')
+      if not contents.endswith(' '):
+        parts.pop()
+      for part in parts:
+        line += part.count('\n') + 1
+        lines.append(str(line))
+      linenumbers = ', '.join(lines)
+      if len(lines) > 1:
+        print "%s has trailing whitespaces in lines %s." % (name, linenumbers)
+      else:
+        print "%s has trailing whitespaces in line %s." % (name, linenumbers)
+      result = False
     return result
 
   def ProcessFiles(self, files, path):
     success = True
+    violations = 0
     for file in files:
       try:
         handle = open(file)
         contents = handle.read()
-        success = self.ProcessContents(file, contents) and success
+        if not self.ProcessContents(file, contents):
+          success = False
+          violations += 1
       finally:
         handle.close()
+    print "Total violating files: %s" % violations
     return success
 
 
@@ -299,8 +337,10 @@ def Main():
   parser = GetOptions()
   (options, args) = parser.parse_args()
   success = True
+  print "Running C++ lint check..."
   if not options.no_lint:
     success = CppLintProcessor().Run(workspace) and success
+  print "Running copyright header and trailing whitespaces check..."
   success = SourceProcessor().Run(workspace) and success
   if success:
     return 0

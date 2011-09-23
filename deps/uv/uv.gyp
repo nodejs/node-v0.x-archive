@@ -88,7 +88,6 @@
           'include_dirs': [
             'src/ares/config_win32'
           ],
-          'sources': [ 'src/ares/windows_port.c' ],
           'defines': [
             '_WIN32_WINNT=0x0502',
             'EIO_STACKSIZE=262144',
@@ -98,11 +97,13 @@
             'include/uv-private/tree.h',
             'include/uv-private/uv-win.h',
             'src/ares/config_win32/ares_config.h',
+            'src/ares/windows_port.c',
             'src/win/async.c',
             'src/win/cares.c',
             'src/win/core.c',
             'src/win/error.c',
             'src/win/fs.c',
+            'src/win/fs-event.c',
             'src/win/getaddrinfo.c',
             'src/win/handle.c',
             'src/win/internal.h',
@@ -113,7 +114,9 @@
             'src/win/stdio.c',
             'src/win/stream.c',
             'src/win/tcp.c',
+            'src/win/tty.c',
             'src/win/threadpool.c',
+            'src/win/threads.c',
             'src/win/timer.c',
             'src/win/udp.c',
             'src/win/util.c',
@@ -148,6 +151,7 @@
             'src/unix/udp.c',
             'src/unix/tcp.c',
             'src/unix/pipe.c',
+            'src/unix/tty.c',
             'src/unix/stream.c',
             'src/unix/cares.c',
             'src/unix/error.c',
@@ -160,23 +164,6 @@
             'src/unix/ev/ev_vars.h',
             'src/unix/ev/ev_wrap.h',
             'src/unix/ev/event.h',
-            # TODO: conditionally include the following based on OS?
-            'src/ares/config_cygwin/ares_config.h',
-            'src/ares/config_darwin/ares_config.h',
-            'src/ares/config_freebsd/ares_config.h',
-            'src/ares/config_linux/ares_config.h',
-            'src/ares/config_openbsd/ares_config.h',
-            'src/ares/config_sunos/ares_config.h',
-            'src/unix/eio/config_cygwin.h',
-            'src/unix/eio/config_darwin.h',
-            'src/unix/eio/config_freebsd.h',
-            'src/unix/eio/config_linux.h',
-            'src/unix/eio/config_sunos.h',
-            'src/unix/ev/config_cygwin.h',
-            'src/unix/ev/config_darwin.h',
-            'src/unix/ev/config_freebsd.h',
-            'src/unix/ev/config_linux.h',
-            'src/unix/ev/config_sunos.h',
           ],
           'include_dirs': [ 'src/unix/ev', ],
           'defines': [
@@ -191,7 +178,10 @@
           'include_dirs': [ 'src/ares/config_darwin' ],
           'sources': [ 'src/unix/darwin.c' ],
           'direct_dependent_settings': {
-            'libraries': [ '-framework CoreServices' ],
+            'libraries': [
+              '$(SDKROOT)/System/Library/Frameworks/Carbon.framework',
+              '$(SDKROOT)/System/Library/Frameworks/CoreServices.framework',
+            ],
           },
           'defines': [
             'EV_CONFIG_H="config_darwin.h"',
@@ -209,7 +199,27 @@
             'libraries': [ '-lrt' ],
           },
         }],
-        # TODO add OS=='sun'
+        [ 'OS=="solaris"', {
+          'include_dirs': [ 'src/ares/config_sunos' ],
+          'sources': [ 'src/unix/sunos.c' ],
+          'defines': [
+            '__EXTENSIONS__',
+            '_XOPEN_SOURCE=500',
+            'EV_CONFIG_H="config_sunos.h"',
+            'EIO_CONFIG_H="config_sunos.h"',
+          ],
+          'direct_dependent_settings': {
+            'libraries': [ '-lrt' ],
+          },
+        }],
+        [ 'OS=="freebsd"', {
+          'include_dirs': [ 'src/ares/config_freebsd' ],
+          'sources': [ 'src/unix/freebsd.c' ],
+          'defines': [
+            'EV_CONFIG_H="config_freebsd.h"',
+            'EIO_CONFIG_H="config_freebsd.h"',
+          ],
+        }],
       ]
     },
 
@@ -229,6 +239,7 @@
         'test/test-delayed-accept.c',
         'test/test-fail-always.c',
         'test/test-fs.c',
+        'test/test-fs-event.c',
         'test/test-get-currentexe.c',
         'test/test-getaddrinfo.c',
         'test/test-gethostbyname.c',
@@ -245,10 +256,13 @@
         'test/test-spawn.c',
         'test/test-tcp-bind-error.c',
         'test/test-tcp-bind6-error.c',
+        'test/test-tcp-close.c',
+        'test/test-tcp-write-error.c',
         'test/test-tcp-writealot.c',
         'test/test-threadpool.c',
         'test/test-timer-again.c',
         'test/test-timer.c',
+        'test/test-tty.c',
         'test/test-udp-dgram-too-big.c',
         'test/test-udp-ipv6.c',
         'test/test-udp-send-and-recv.c',
@@ -321,4 +335,5 @@
     }
   ]
 }
+
 

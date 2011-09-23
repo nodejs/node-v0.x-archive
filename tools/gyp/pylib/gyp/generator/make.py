@@ -43,7 +43,6 @@ generator_default_variables = {
   'INTERMEDIATE_DIR': '$(obj).$(TOOLSET)/geni',
   'SHARED_INTERMEDIATE_DIR': '$(obj)/gen',
   'PRODUCT_DIR': '$(builddir)',
-  'LIB_DIR': '$(obj).$(TOOLSET)',
   'RULE_INPUT_ROOT': '%(INPUT_ROOT)s',  # This gets expanded by Python.
   'RULE_INPUT_PATH': '$(abspath $<)',
   'RULE_INPUT_EXT': '$(suffix $<)',
@@ -62,7 +61,14 @@ generator_wants_sorted_dependencies = False
 
 def GetFlavor(params):
   """Returns |params.flavor| if it's set, the system's default flavor else."""
-  return params.get('flavor', 'mac' if sys.platform == 'darwin' else 'linux')
+  flavors = {
+    'darwin': 'mac',
+    'sunos5': 'solaris',
+    'freebsd7': 'freebsd',
+    'freebsd8': 'freebsd',
+  }
+  flavor = flavors.get(sys.platform, 'linux')
+  return params.get('flavor', flavor)
 
 
 def CalculateVariables(default_variables, params):
@@ -71,10 +77,13 @@ def CalculateVariables(default_variables, params):
   default_variables['LINKER_SUPPORTS_ICF'] = \
       gyp.system_test.TestLinkerSupportsICF(cc_command=cc_target)
 
-  if GetFlavor(params) == 'mac':
+  flavor = GetFlavor(params)
+  if flavor == 'mac':
     default_variables.setdefault('OS', 'mac')
     default_variables.setdefault('SHARED_LIB_SUFFIX', '.dylib')
     default_variables.setdefault('SHARED_LIB_DIR',
+                                 generator_default_variables['PRODUCT_DIR'])
+    default_variables.setdefault('LIB_DIR',
                                  generator_default_variables['PRODUCT_DIR'])
 
     # Copy additional generator configuration data from Xcode, which is shared
@@ -92,9 +101,10 @@ def CalculateVariables(default_variables, params):
     global COMPILABLE_EXTENSIONS
     COMPILABLE_EXTENSIONS.update({'.m': 'objc', '.mm' : 'objcxx'})
   else:
-    default_variables.setdefault('OS', 'linux')
+    default_variables.setdefault('OS', flavor)
     default_variables.setdefault('SHARED_LIB_SUFFIX', '.so')
     default_variables.setdefault('SHARED_LIB_DIR','$(builddir)/lib.$(TOOLSET)')
+    default_variables.setdefault('LIB_DIR', '$(obj).$(TOOLSET)')
 
 
 def CalculateGeneratorInputInfo(params):
@@ -178,6 +188,31 @@ quiet_cmd_solink_module = SOLINK_MODULE($(TOOLSET)) $@
 cmd_solink_module = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(filter-out FORCE_DO_CMD, $^) $(LIBS)
 """
 
+LINK_COMMANDS_ANDROID = """\
+quiet_cmd_alink = AR($(TOOLSET)) $@
+cmd_alink = rm -f $@ && $(AR.$(TOOLSET)) $(ARFLAGS.$(TOOLSET)) $@ $(filter %.o,$^)
+
+# Due to circular dependencies between libraries :(, we wrap the
+# special "figure out circular dependencies" flags around the entire
+# input list during linking.
+quiet_cmd_link = LINK($(TOOLSET)) $@
+quiet_cmd_link_host = LINK($(TOOLSET)) $@
+cmd_link = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ -Wl,--start-group $(LD_INPUTS) -Wl,--end-group $(LIBS)
+cmd_link_host = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(LD_INPUTS) $(LIBS)
+
+# Other shared-object link notes:
+# - Set SONAME to the library filename so our binaries don't reference
+# the local, absolute paths used on the link command-line.
+quiet_cmd_solink = SOLINK($(TOOLSET)) $@
+cmd_solink = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -Wl,-soname=$(@F) -o $@ -Wl,--whole-archive $(LD_INPUTS) -Wl,--no-whole-archive $(LIBS)
+
+quiet_cmd_solink_module = SOLINK_MODULE($(TOOLSET)) $@
+cmd_solink_module = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -Wl,-soname=$(@F) -o $@ -Wl,--start-group $(filter-out FORCE_DO_CMD, $^) -Wl,--end-group $(LIBS)
+quiet_cmd_solink_module_host = SOLINK_MODULE($(TOOLSET)) $@
+cmd_solink_module_host = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -Wl,-soname=$(@F) -o $@ $(filter-out FORCE_DO_CMD, $^) $(LIBS)
+"""
+
+
 # Header of toplevel Makefile.
 # This should go into the build tree, but it's easier to keep it here for now.
 SHARED_HEADER = ("""\
@@ -220,18 +255,20 @@ abs_obj := $(abspath $(obj))
 # generated dependency rule Makefiles in one pass.
 all_deps :=
 
-# C++ apps need to be linked with g++.  Not sure what's appropriate.
+# C++ apps need to be linked with g++.
 #
-# Note, the flock is used to seralize linking. Linking is a memory-intensive
+# Note: flock is used to seralize linking. Linking is a memory-intensive
 # process so running parallel links can often lead to thrashing.  To disable
-# the serialization, override FLOCK via an envrionment variable as follows:
+# the serialization, override LINK via an envrionment variable as follows:
 #
-#   export FLOCK=
+#   export LINK=g++
 #
 # This will allow make to invoke N linker processes as specified in -jN.
-FLOCK ?= %(flock)s $(builddir)/linker.lock
-LINK ?= $(FLOCK) $(CXX)
+LINK ?= %(flock)s $(builddir)/linker.lock $(CXX)
 
+%(make_global_settings)s
+
+LINK ?= $(FLOCK) $(CXX)
 CC.target ?= $(CC)
 CFLAGS.target ?= $(CFLAGS)
 CXX.target ?= $(CXX)
@@ -320,7 +357,7 @@ cmd_cc = $(CC.$(TOOLSET)) $(GYP_CFLAGS) $(DEPFLAGS) $(CFLAGS.$(TOOLSET)) -c -o $
 
 quiet_cmd_cxx = CXX($(TOOLSET)) $@
 cmd_cxx = $(CXX.$(TOOLSET)) $(GYP_CXXFLAGS) $(DEPFLAGS) $(CXXFLAGS.$(TOOLSET)) -c -o $@ $<
-%(mac_commands)s
+%(extra_commands)s
 quiet_cmd_touch = TOUCH $@
 cmd_touch = touch $@
 
@@ -432,6 +469,14 @@ cmd_mac_tool = ./gyp-mac-tool $(4) $< "$@"
 
 quiet_cmd_mac_package_framework = PACKAGE FRAMEWORK $@
 cmd_mac_package_framework = ./gyp-mac-tool package-framework "$@" $(4)
+"""
+
+SHARED_HEADER_SUN_COMMANDS = """
+# gyp-sun-tool is written next to the root Makefile by gyp.
+# Use $(4) for the command, since $(2) and $(3) are used as flag by do_cmd
+# already.
+quiet_cmd_sun_tool = SUNTOOL $(4) $<
+cmd_sun_tool = ./gyp-sun-tool $(4) $< "$@"
 """
 
 
@@ -738,6 +783,14 @@ class XcodeSettings(object):
     else:
       return self._GetStandaloneBinaryPath()
 
+  def _SdkPath(self):
+    sdk_root = 'macosx10.5'
+    if 'SDKROOT' in self._Settings():
+      sdk_root = self._Settings()['SDKROOT']
+    if sdk_root.startswith('macosx'):
+      sdk_root = 'MacOSX' + sdk_root[len('macosx'):]
+    return '/Developer/SDKs/%s.sdk' % sdk_root
+
   def GetCflags(self, configname):
     """Returns flags that need to be added to .c, .cc, .m, and .mm
     compilations."""
@@ -747,11 +800,9 @@ class XcodeSettings(object):
     self.configname = configname
     cflags = []
 
-    sdk_root = 'Mac10.5'
+    sdk_root = self._SdkPath()
     if 'SDKROOT' in self._Settings():
-      sdk_root = self._Settings()['SDKROOT']
-      cflags.append('-isysroot /Developer/SDKs/%s.sdk' % sdk_root)
-    sdk_root_dir = '/Developer/SDKs/%s.sdk' % sdk_root
+      cflags.append('-isysroot %s' % sdk_root)
 
     if self._Test('GCC_CW_ASM_SYNTAX', 'YES', default='YES'):
       cflags.append('-fasm-blocks')
@@ -770,22 +821,21 @@ class XcodeSettings(object):
 
     self._Appendf(cflags, 'GCC_OPTIMIZATION_LEVEL', '-O%s')
 
-    dbg_format = self._Settings().get('DEBUG_INFORMATION_FORMAT', 'dwarf')
-    if dbg_format == 'none':
-      pass
-    elif dbg_format == 'dwarf':
-      cflags.append('-gdwarf-2')
-    elif dbg_format == 'stabs':
-      raise NotImplementedError('stabs debug format is not supported yet.')
-    elif dbg_format == 'dwarf-with-dsym':
-      # TODO(thakis): this is needed for mac_breakpad chromium builds, but not
-      # for regular chromium builds.
-      # -gdwarf-2 as well, but needs to invoke dsymutil after linking too:
-      #   dsymutil build/Default/TestAppGyp.app/Contents/MacOS/TestAppGyp \
-      #       -o build/Default/TestAppGyp.app.dSYM
-      raise NotImplementedError('dsym debug format is not supported yet.')
-    else:
-      raise NotImplementedError('Unknown debug format %s' % dbg_format)
+    if self._Test('GCC_GENERATE_DEBUGGING_SYMBOLS', 'YES', default='YES'):
+      dbg_format = self._Settings().get('DEBUG_INFORMATION_FORMAT', 'dwarf')
+      if dbg_format == 'dwarf':
+        cflags.append('-gdwarf-2')
+      elif dbg_format == 'stabs':
+        raise NotImplementedError('stabs debug format is not supported yet.')
+      elif dbg_format == 'dwarf-with-dsym':
+        # TODO(thakis): this is needed for mac_breakpad chromium builds, but not
+        # for regular chromium builds.
+        # -gdwarf-2 as well, but needs to invoke dsymutil after linking too:
+        #   dsymutil build/Default/TestAppGyp.app/Contents/MacOS/TestAppGyp \
+        #       -o build/Default/TestAppGyp.app.dSYM
+        raise NotImplementedError('dsym debug format is not supported yet.')
+      else:
+        raise NotImplementedError('Unknown debug format %s' % dbg_format)
 
     if self._Test('GCC_SYMBOLS_PRIVATE_EXTERN', 'YES', default='NO'):
       cflags.append('-fvisibility=hidden')
@@ -802,6 +852,9 @@ class XcodeSettings(object):
     self._WarnUnimplemented('ARCHS')
     self._WarnUnimplemented('COPY_PHASE_STRIP')
     self._WarnUnimplemented('DEPLOYMENT_POSTPROCESSING')
+    self._WarnUnimplemented('GCC_DEBUGGING_SYMBOLS')
+    self._WarnUnimplemented('GCC_ENABLE_OBJC_EXCEPTIONS')
+    self._WarnUnimplemented('GCC_ENABLE_OBJC_GC')
     self._WarnUnimplemented('INFOPLIST_PREPROCESS')
     self._WarnUnimplemented('INFOPLIST_PREPROCESSOR_DEFINITIONS')
     self._WarnUnimplemented('STRIPFLAGS')
@@ -816,7 +869,7 @@ class XcodeSettings(object):
     config = self.spec['configurations'][self.configname]
     framework_dirs = config.get('mac_framework_dirs', [])
     for directory in framework_dirs:
-      cflags.append('-F ' + os.path.join(sdk_root_dir, directory))
+      cflags.append('-F ' + os.path.join(sdk_root, directory))
 
     self.configname = None
     return cflags
@@ -891,8 +944,8 @@ class XcodeSettings(object):
         ldflags, 'DYLIB_CURRENT_VERSION', '-current_version %s')
     self._Appendf(
         ldflags, 'MACOSX_DEPLOYMENT_TARGET', '-mmacosx-version-min=%s')
-    self._Appendf(
-        ldflags, 'SDKROOT', '-isysroot /Developer/SDKs/%s.sdk')
+    if 'SDKROOT' in self._Settings():
+      ldflags.append('-isysroot ' + self._SdkPath())
 
     for library_path in self._Settings().get('LIBRARY_SEARCH_PATHS', []):
       ldflags.append('-L' + library_path)
@@ -904,9 +957,7 @@ class XcodeSettings(object):
     # TODO: Do not hardcode arch. Supporting fat binaries will be annoying.
     ldflags.append('-arch i386')
 
-    # Xcode adds the product directory by default. It writes static libraries
-    # into the product directory. So add both.
-    ldflags.append('-L' + generator_default_variables['LIB_DIR'])
+    # Xcode adds the product directory by default.
     ldflags.append('-L' + generator_default_variables['PRODUCT_DIR'])
 
     install_name = self.GetPerTargetSetting('LD_DYLIB_INSTALL_NAME')
@@ -955,6 +1006,23 @@ class XcodeSettings(object):
     self.configname = None
     return ldflags
 
+  def GetPerTargetSettings(self):
+    """Gets a list of all the per-target settings. This will only fetch keys
+    whose values are the same across all configurations."""
+    first_pass = True
+    result = {}
+    for configname in sorted(self.xcode_settings.keys()):
+      if first_pass:
+        result = dict(self.xcode_settings[configname])
+        first_pass = False
+      else:
+        for key, value in self.xcode_settings[configname].iteritems():
+          if key not in result:
+            continue
+          elif result[key] != value:
+            del result[key]
+    return result
+
   def GetPerTargetSetting(self, setting, default=None):
     """Tries to get xcode_settings.setting from spec. Assumes that the setting
        has the same value in all configurations and throws otherwise."""
@@ -982,24 +1050,29 @@ class MacPrefixHeader(object):
     # This doesn't support per-configuration prefix headers. Good enough
     # for now.
     self.header = None
+    self.compile_headers = False
     if path_provider.flavor == 'mac':
       self.header = path_provider.xcode_settings.GetPerTargetSetting(
           'GCC_PREFIX_HEADER')
+      self.compile_headers = path_provider.xcode_settings.GetPerTargetSetting(
+          'GCC_PRECOMPILE_PREFIX_HEADER', default='NO') != 'NO'
     self.compiled_headers = {}
     if self.header:
       self.header = path_provider.Absolutify(self.header)
-      for lang in ['c', 'cc', 'm', 'mm']:
-        self.compiled_headers[lang] = path_provider.Pchify(self.header, lang)
+      if self.compile_headers:
+        for lang in ['c', 'cc', 'm', 'mm']:
+          self.compiled_headers[lang] = path_provider.Pchify(self.header, lang)
 
   def _Gch(self, lang):
     """Returns the actual file name of the prefix header for language |lang|."""
+    assert self.compile_headers
     return self.compiled_headers[lang] + '.gch'
 
   def WriteObjDependencies(self, compilable, objs, writer):
     """Writes dependencies from the object files in |objs| to the corresponding
     precompiled header file. |compilable[i]| has to be the source file belonging
     to |objs[i]|."""
-    if not self.header:
+    if not self.header or not self.compile_headers:
       return
 
     writer.WriteLn('# Dependencies from obj files to their precompiled headers')
@@ -1017,13 +1090,16 @@ class MacPrefixHeader(object):
 
   def GetInclude(self, lang):
     """Gets the cflags to include the prefix header for language |lang|."""
-    if lang not in self.compiled_headers:
+    if self.compile_headers and lang in self.compiled_headers:
+      return '-include %s ' % self.compiled_headers[lang]
+    elif self.header:
+      return '-include %s ' % self.header
+    else:
       return ''
-    return '-include %s ' % self.compiled_headers[lang]
 
   def WritePchTargets(self, writer):
     """Writes make rules to compile the prefix headers."""
-    if not self.header:
+    if not self.header or not self.compile_headers:
       return
 
     writer.WriteLn(self._Gch('c') + ": GYP_PCH_CFLAGS := "
@@ -1531,7 +1607,9 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     path = generator_default_variables['PRODUCT_DIR']
     dest_plist = os.path.join(path, self.xcode_settings.GetBundlePlistPath())
     dest_plist = QuoteSpaces(dest_plist)
-    self.WriteXcodeEnv(dest_plist, spec)  # plists can contain envvars.
+    extra_settings = self.xcode_settings.GetPerTargetSettings()
+    # plists can contain envvars and substitute them into the file..
+    self.WriteXcodeEnv(dest_plist, spec, additional_settings=extra_settings)
     self.WriteDoCmd([dest_plist], [info_plist], 'mac_tool,,,copy-info-plist',
                     part_of_all=True)
     bundle_deps.append(dest_plist)
@@ -1698,6 +1776,11 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     return target_prefix + target + target_ext
 
 
+  def _InstallImmediately(self):
+    return self.toolset == 'target' and self.flavor == 'mac' and self.type in (
+          'static_library', 'executable', 'shared_library', 'loadable_module')
+
+
   def ComputeOutput(self, spec):
     """Return the 'output' (full output path) of a gyp spec.
 
@@ -1710,7 +1793,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       return ''  # Doesn't have any output.
 
     path = os.path.join('$(obj).' + self.toolset, self.path)
-    if self.type == 'executable':
+    if self.type == 'executable' or self._InstallImmediately():
       path = '$(builddir)'
     path = spec.get('product_dir', path)
     return os.path.join(path, self.ComputeOutputBasename(spec))
@@ -1838,7 +1921,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       # After the framework is built, package it. Needs to happen before
       # postbuilds, since postbuilds depend on this.
       if self.type in ('shared_library', 'loadable_module'):
-        self.WriteLn('\t@$(call do_cmd,mac_package_framework,0,0,%s)' %
+        self.WriteLn('\t@$(call do_cmd,mac_package_framework,,,%s)' %
             self.xcode_settings.GetFrameworkVersion())
 
       # Bundle postbuilds can depend on the whole bundle, so run them after
@@ -1860,6 +1943,8 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     if postbuilds:
       assert not self.is_mac_bundle, ('Postbuilds for bundles should be done '
           'on the bundle, not the binary (target \'%s\')' % self.target)
+      assert 'product_dir' not in spec, ('Postbuilds do not work with '
+          'custom product_dir')
       self.WriteXcodeEnv(self.output_binary, spec)  # For postbuilds
       postbuilds = [EscapeShellArgument(p) for p in postbuilds]
       self.WriteLn('%s: builddir := $(abs_builddir)' % self.output_binary)
@@ -1869,8 +1954,13 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     if self.type == 'executable':
       self.WriteLn(
           '%s: LD_INPUTS := %s' % (self.output_binary, ' '.join(link_deps)))
-      self.WriteDoCmd([self.output_binary], link_deps, 'link', part_of_all,
-                      postbuilds=postbuilds)
+      if self.toolset == 'host' and self.flavor == 'android':
+        self.WriteDoCmd([self.output_binary], link_deps, 'link_host',
+                        part_of_all, postbuilds=postbuilds)
+      else:
+        self.WriteDoCmd([self.output_binary], link_deps, 'link', part_of_all,
+                        postbuilds=postbuilds)
+
     elif self.type == 'static_library':
       for link_dep in link_deps:
         assert ' ' not in link_dep, (
@@ -1886,9 +1976,13 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       for link_dep in link_deps:
         assert ' ' not in link_dep, (
             "Spaces in module input filenames not supported (%s)"  % link_dep)
-      self.WriteDoCmd(
-          [self.output_binary], link_deps, 'solink_module', part_of_all,
-          postbuilds=postbuilds)
+      if self.toolset == 'host' and self.flavor == 'android':
+        self.WriteDoCmd([self.output_binary], link_deps, 'solink_module_host',
+                        part_of_all, postbuilds=postbuilds)
+      else:
+        self.WriteDoCmd(
+            [self.output_binary], link_deps, 'solink_module', part_of_all,
+            postbuilds=postbuilds)
     elif self.type == 'none':
       # Write a stamp line.
       self.WriteDoCmd([self.output_binary], deps, 'touch', part_of_all,
@@ -1921,8 +2015,8 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
         file_desc = 'executable'
       install_path = self._InstallableTargetInstallPath()
       installable_deps = [self.output]
-      if self.is_mac_bundle:
-        # Bundles are created in their install_path location immediately.
+      if self.flavor == 'mac' and not 'product_dir' in spec:
+        # On mac, products are created in install_path immediately.
         assert install_path == self.output, '%s != %s' % (
             install_path, self.output)
 
@@ -2102,10 +2196,15 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
           modules.append(filename[len(prefix):-len(suffix)])
       return modules
 
+    # Retrieve the default value of 'SHARED_LIB_SUFFIX'
+    params = {'flavor': 'linux'}
+    default_variables = {}
+    CalculateVariables(default_variables, params)
+
     self.WriteList(
         DepsToModules(link_deps,
                       generator_default_variables['SHARED_LIB_PREFIX'],
-                      generator_default_variables['SHARED_LIB_SUFFIX']),
+                      default_variables['SHARED_LIB_SUFFIX']),
         'LOCAL_SHARED_LIBRARIES')
     self.WriteList(
         DepsToModules(link_deps,
@@ -2132,26 +2231,17 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     for a full list."""
     if self.flavor != 'mac': return {}
 
+    built_products_dir = generator_default_variables['PRODUCT_DIR']
     def StripProductDir(s):
-      product_dir = generator_default_variables['PRODUCT_DIR']
-      assert s.startswith(product_dir), s
-      return s[len(product_dir) + 1:]
+      assert s.startswith(built_products_dir), s
+      return s[len(built_products_dir) + 1:]
 
     product_name = spec.get('product_name', self.output)
 
-    # Some postbuilds try to read a build output file at
-    # ""${BUILT_PRODUCTS_DIR}/${FULL_PRODUCT_NAME}". Static libraries end up
-    # "$(obj).target", so
-    #   BUILT_PRODUCTS_DIR is $(builddir)
-    #   FULL_PRODUCT_NAME is $(out).target/path/to/lib.a
-    # Since $(obj) contains out/Debug already, the postbuild
-    # would get out/Debug/out/Debug/obj.target/path/to/lib.a. To prevent this,
-    # remove the "out/Debug" prefix from $(obj).
-    if product_name.startswith('$(obj)'):
-      product_name = (
-          '$(subst $(builddir)/,,$(obj))' + product_name[len('$(obj)'):])
+    if self._InstallImmediately():
+      if product_name.startswith(built_products_dir):
+        product_name = StripProductDir(product_name)
 
-    built_products_dir = generator_default_variables['PRODUCT_DIR']
     srcroot = self.path
     if target_relative_path:
       built_products_dir = os.path.relpath(built_products_dir, srcroot)
@@ -2171,11 +2261,14 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     }
     if self.type in ('executable', 'shared_library'):
       env['EXECUTABLE_NAME'] = os.path.basename(self.output_binary)
-    if self.type in ('executable', 'shared_library', 'loadable_module'):
+    if self.type in (
+        'executable', 'static_library', 'shared_library', 'loadable_module'):
       env['EXECUTABLE_PATH'] = self.xcode_settings.GetExecutablePath()
     if self.is_mac_bundle:
       env['CONTENTS_FOLDER_PATH'] = \
         self.xcode_settings.GetBundleContentsFolderPath()
+      env['UNLOCALIZED_RESOURCES_FOLDER_PATH'] = \
+          self.xcode_settings.GetBundleResourceFolder()
       env['INFOPLIST_PATH'] = self.xcode_settings.GetBundlePlistPath()
 
       # TODO(thakis): Remove this.
@@ -2186,16 +2279,40 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     return env
 
 
-  def WriteXcodeEnv(self, target, spec, target_relative_path=False):
-    env = self.GetXcodeEnv(spec, target_relative_path)
-    # For
-    #  foo := a\ b
-    # the escaped space does the right thing. For
-    #  export foo := a\ b
-    # it does not -- the backslash is written to the env as literal character.
-    # Hence, unescape all spaces here.
+  def WriteXcodeEnv(self,
+                    target,
+                    spec,
+                    target_relative_path=False,
+                    additional_settings={}):
+    env = additional_settings
+    env.update(self.GetXcodeEnv(spec, target_relative_path))
+
+    # Keys whose values will not have $(builddir) replaced with $(abs_builddir).
+    # These have special substitution rules in some cases; see above in
+    # GetXcodeEnv() for the full rationale.
+    keys_to_not_absolutify = ('PRODUCT_NAME', 'FULL_PRODUCT_NAME')
+
+    # Perform some transformations that are required to mimic Xcode behavior.
     for k in env:
+      # Values that are not strings but are, for example, lists or tuples such
+      # as LDFLAGS or CFLAGS, should not be written out because they are
+      # not needed and it's undefined how multi-valued keys should be written.
+      if not isinstance(env[k], str):
+        continue
+
+      # For
+      #  foo := a\ b
+      # the escaped space does the right thing. For
+      #  export foo := a\ b
+      # it does not -- the backslash is written to the env as literal character.
+      # Hence, unescape all spaces here.
       v = env[k].replace(r'\ ', ' ')
+
+      # Xcode works purely with absolute paths. When writing env variables to
+      # mimic its usage, replace $(builddir) with $(abs_builddir).
+      if k not in keys_to_not_absolutify:
+        v = v.replace('$(builddir)', '$(abs_builddir)')
+
       self.WriteLn('%s: export %s := %s' % (target, k, v))
 
 
@@ -2323,17 +2440,31 @@ def RunSystemTests(flavor):
            'LINK_flags': link_flags }
 
 
-def CopyMacTool(out_path):
-  """Finds mac_tool.gyp in the gyp directory and copies it to |out_path|."""
+def CopyTool(flavor, out_path):
+  """Finds (mac|sun)_tool.gyp in the gyp directory and copies it to |out_path|."""
+  prefix = { 'solaris': 'sun', 'mac': 'mac' }.get(flavor, None)
+  if not prefix:
+    return
+
+  tool_path = os.path.join(out_path, 'gyp-%s-tool' % prefix)
+  if os.path.exists(tool_path):
+    os.remove(tool_path)
+
+  # Slurp input file.
   source_path = os.path.join(
-      os.path.dirname(os.path.abspath(__file__)), '..', 'mac_tool.py')
+      os.path.dirname(os.path.abspath(__file__)), '..', '%s_tool.py' % prefix)
   source_file = open(source_path)
   source = source_file.readlines()
   source_file.close()
-  mactool_file = open(out_path, 'w')
-  mactool_file.write(
+
+  # Add header and write it out.
+  tool_file = open(tool_path, 'w')
+  tool_file.write(
       ''.join([source[0], '# Generated by gyp. Do not edit.\n'] + source[1:]))
-  mactool_file.close()
+  tool_file.close()
+
+  # Make file executable.
+  os.chmod(tool_path, 0o755)
 
 
 def GenerateOutput(target_list, target_dicts, data, params):
@@ -2387,7 +2518,7 @@ def GenerateOutput(target_list, target_dicts, data, params):
       'flock': 'flock',
       'flock_index': 1,
       'link_commands': LINK_COMMANDS_LINUX,
-      'mac_commands': '',
+      'extra_commands': '',
       'srcdir': srcdir,
     }
   if flavor == 'mac':
@@ -2395,9 +2526,44 @@ def GenerateOutput(target_list, target_dicts, data, params):
         'flock': './gyp-mac-tool flock',
         'flock_index': 2,
         'link_commands': LINK_COMMANDS_MAC,
-        'mac_commands': SHARED_HEADER_MAC_COMMANDS,
+        'extra_commands': SHARED_HEADER_MAC_COMMANDS,
+    })
+  elif flavor == 'solaris':
+    header_params.update({
+        'flock': './gyp-sun-tool flock',
+        'flock_index': 2,
+        'extra_commands': SHARED_HEADER_SUN_COMMANDS,
+    })
+  elif flavor == 'freebsd':
+    header_params.update({
+        'flock': 'lockf',
+    })
+
+  if flavor == 'android':
+    header_params.update({
+        'link_commands': LINK_COMMANDS_ANDROID,
     })
   header_params.update(RunSystemTests(flavor))
+
+  build_file, _, _ = gyp.common.ParseQualifiedTarget(target_list[0])
+  make_global_settings_dict = data[build_file].get('make_global_settings', {})
+  make_global_settings = ''
+  for key, value in make_global_settings_dict:
+    if value[0] != '$':
+      value = '$(abspath %s)' % value
+    if key == 'LINK':
+      make_global_settings += '%s ?= $(FLOCK) %s\n' % (key, value)
+    elif key in ['CC', 'CXX']:
+      make_global_settings += (
+          'ifneq (,$(filter $(origin %s), undefined default))\n' % key)
+      # Let gyp-time envvars win over global settings.
+      if key in os.environ:
+        value = os.environ[key]
+      make_global_settings += '  %s = %s\n' % (key, value)
+      make_global_settings += 'endif\n'
+    else:
+      make_global_settings += '%s ?= %s\n' % (key, value)
+  header_params['make_global_settings'] = make_global_settings
 
   ensure_directory_exists(makefile_path)
   root_makefile = open(makefile_path, 'w')
@@ -2413,13 +2579,9 @@ def GenerateOutput(target_list, target_dicts, data, params):
     root_makefile.write('TOOLSET := %s\n' % toolset)
     WriteRootHeaderSuffixRules(root_makefile)
 
-  # Put mac_tool next to the root Makefile.
-  if flavor == 'mac':
-    mactool_path = os.path.join(os.path.dirname(makefile_path), 'gyp-mac-tool')
-    if os.path.exists(mactool_path):
-      os.remove(mactool_path)
-    CopyMacTool(mactool_path)
-    os.chmod(mactool_path, 0o755)  # Make file executable.
+  # Put platform tool next to the root Makefile.
+  dest_path = os.path.dirname(makefile_path)
+  CopyTool(flavor, dest_path)
 
   # Find the list of targets that derive from the gyp file(s) being built.
   needed_targets = set()
@@ -2433,6 +2595,11 @@ def GenerateOutput(target_list, target_dicts, data, params):
   for qualified_target in target_list:
     build_file, target, toolset = gyp.common.ParseQualifiedTarget(
         qualified_target)
+
+    this_make_global_settings = data[build_file].get('make_global_settings', {})
+    assert make_global_settings_dict == this_make_global_settings, (
+        "make_global_settings needs to be the same for all targets.")
+
     build_files.add(gyp.common.RelativePath(build_file, options.toplevel_dir))
     included_files = data[build_file]['included_files']
     for included_file in included_files:
