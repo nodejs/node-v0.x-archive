@@ -94,7 +94,7 @@ void Platform::SetProcessTitle(char *title) {
   length = MultiByteToWideChar(CP_UTF8, 0, title, -1, title_w, length);
   if (!length) {
     _winapi_perror("MultiByteToWideChar");
-    delete title_w;
+    delete[] title_w;
     return;
   };
 
@@ -110,7 +110,7 @@ void Platform::SetProcessTitle(char *title) {
   free(process_title);
   process_title = strdup(title);
 
-  delete title_w;
+  delete[] title_w;
 }
 
 
@@ -339,6 +339,8 @@ double Platform::GetUptimeImpl() {
   double amount;
   char line[512];
   FILE *fpUptime = fopen("/proc/uptime", "r");
+
+  amount = 0;
 
   if (fpUptime) {
     if (fgets(line, 511, fpUptime) != NULL) {

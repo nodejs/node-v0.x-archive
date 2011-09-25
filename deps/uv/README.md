@@ -1,10 +1,52 @@
-This is the new networking layer for Node. Its purpose is to abstract
-IOCP on windows and libev on Unix systems. We intend to eventually contain
-all platform differences in this library.
+# libuv
+
+libuv is a new platform layer for Node. Its purpose is to abstract IOCP on
+windows and libev on Unix systems. We intend to eventually contain all
+platform differences in this library.
 
 http://nodejs.org/
 
-= Build Instructions
+## Features
+
+Implemented:
+
+ * Non-blocking TCP sockets
+
+ * Non-blocking named pipes
+
+ * UDP
+
+ * Timers
+
+ * Child process spawning
+
+ * Asynchronous DNS via c-ares or `uv_getaddrinfo`.
+
+ * Asynchronous file system APIs `uv_fs_*`
+
+ * High resolution time `uv_hrtime`
+
+ * Current executable path look up `uv_exepath`
+
+ * Thread pool scheduling `uv_queue_work`
+
+In-progress:
+
+ * File system events (Currently supports inotify, `ReadDirectoryChangesW`
+   and will support kqueue and event ports in the near future.)
+   `uv_fs_event_t`
+
+ * VT100 TTY `uv_tty_t`
+
+ * Socket sharing between processes `uv_ipc_t`
+
+
+## Documentation
+
+See `include/uv.h`.
+
+
+## Build Instructions
 
 For GCC (including MinGW) there are two methods building: via normal
 makefiles or via GYP. GYP is a meta-build system which can generate MSVS,
@@ -19,7 +61,7 @@ To build with Visual Studio run the vcbuilds.bat file which will
 checkout the GYP code into build/gyp and generate the uv.sln and
 related files.
 
-Windows users can also build from cmd-line using msbuild.  This is 
+Windows users can also build from cmd-line using msbuild.  This is
 done by running vcbuild.bat from Visual Studio command prompt.
 
 To have GYP generate build script for another system you will need to
@@ -38,7 +80,7 @@ Macintosh users run
     xcodebuild -project uv.xcodeproj -configuration Release -target All
 
 
-= Supported Platforms
+## Supported Platforms
 
 Microsoft Windows operating systems since Windows XP SP2. It can be built
 with either Visual Studio or MinGW.
