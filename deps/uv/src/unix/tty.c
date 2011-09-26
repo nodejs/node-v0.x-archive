@@ -23,8 +23,10 @@
 #include "internal.h"
 
 #include <assert.h>
+#include <unistd.h>
 #include <termios.h>
 #include <errno.h>
+#include <sys/ioctl.h>
 
 
 int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, int fd) {
@@ -67,3 +69,42 @@ fatal:
   return -1;
 }
 
+
+int uv_tty_get_winsize(uv_tty_t* tty, int* width, int* height) {
+  struct winsize ws;
+
+  if (ioctl(tty->fd, TIOCGWINSZ, &ws) < 0) {
+    uv_err_new(tty->loop, errno);
+    return -1;
+  }
+
+  *width = ws.ws_col;
+  *height = ws.ws_row;
+
+  return 0;
+}
+
+
+uv_handle_type uv_guess_handle(uv_file file) {
+  struct stat s;
+
+  if (file < 0) {
+    uv_err_new(NULL, EINVAL); /* XXX Need loop? */
+    return -1;
+  }
+
+  if (isatty(file)) {
+    return UV_TTY;
+  }
+
+  if (fstat(file, &s)) {
+    uv_err_new(NULL, errno); /* XXX Need loop? */
+    return -1;
+  }
+
+  if (!S_ISSOCK(s.st_mode) && !S_ISFIFO(s.st_mode)) {
+    return UV_FILE;
+  }
+
+  return UV_NAMED_PIPE;
+}

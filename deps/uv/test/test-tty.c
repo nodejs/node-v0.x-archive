@@ -1,4 +1,5 @@
 /* Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
  * deal in the Software without restriction, including without limitation the
@@ -19,59 +20,37 @@
  */
 
 #include "uv.h"
+#include "task.h"
 
-#include <stdio.h>
-#include <stdint.h>
-#include <assert.h>
-#include <errno.h>
+TEST_IMPL(tty) {
+  int r, width, height;
+  uv_tty_t tty;
+  uv_loop_t* loop = uv_default_loop();
 
-#include <sys/time.h>
-#include <unistd.h>
+  /*
+   * Not necessarally a problem if this assert goes off. E.G you are piping
+   * this test to a file. 0 == stdin.
+   */
+  ASSERT(UV_TTY == uv_guess_handle(0));
 
+  r = uv_tty_init(uv_default_loop(), &tty, 0);
+  ASSERT(r == 0);
 
-uint64_t uv_hrtime() {
-  return (gethrtime());
-}
+  r = uv_tty_get_winsize(&tty, &width, &height);
+  ASSERT(r == 0);
 
+  printf("width=%d height=%d\n", width, height);
 
-/*
- * We could use a static buffer for the path manipulations that we need outside
- * of the function, but this function could be called by multiple consumers and
- * we don't want to potentially create a race condition in the use of snprintf.
- */
-int uv_exepath(char* buffer, size_t* size) {
-  ssize_t res;
-  pid_t pid;
-  char buf[128];
+  /*
+   * Is it a safe assumption that most people have terminals larger than
+   * 10x10?
+   */
+  ASSERT(width > 10);
+  ASSERT(height > 10);
 
-  if (buffer == NULL)
-    return (-1);
+  uv_close((uv_handle_t*)&tty, NULL);
 
-  if (size == NULL)
-    return (-1);
+  uv_run(loop);
 
-  pid = getpid();
-  (void) snprintf(buf, sizeof (buf), "/proc/%d/path/a.out", pid);
-  res = readlink(buf, buffer, *size - 1);
-
-  if (res < 0)
-    return (res);
-
-  buffer[res] = '\0';
-  *size = res;
-  return (0);
-}
-
-
-int uv_fs_event_init(uv_loop_t* loop,
-                     uv_fs_event_t* handle,
-                     const char* filename,
-                     uv_fs_event_cb cb) {
-  uv_err_new(loop, ENOSYS);
-  return -1;
-}
-
-
-void uv__fs_event_destroy(uv_fs_event_t* handle) {
-  assert(0 && "implement me");
+  return 0;
 }

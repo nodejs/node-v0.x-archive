@@ -176,7 +176,7 @@ static BIO* LoadBIO (Handle<Value> v) {
 
   HandleScope scope;
 
-  int r;
+  int r = -1;
 
   if (v->IsString()) {
     String::Utf8Value s(v->ToString());
@@ -2512,6 +2512,7 @@ class Decipher : public ObjectWrap {
     int out_len;
     Local<Value> outString ;
 
+    out_value = NULL;
     int r = cipher->DecipherFinal(&out_value, &out_len, true);
 
     if (out_len == 0 || r == 0) {

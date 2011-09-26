@@ -73,6 +73,7 @@
       ],
 
       'sources': [
+        'src/fs_event_wrap.cc',
         'src/cares_wrap.cc',
         'src/handle_wrap.cc',
         'src/node.cc',
@@ -93,6 +94,7 @@
         'src/stream_wrap.cc',
         'src/tcp_wrap.cc',
         'src/timer_wrap.cc',
+        'src/tty_wrap.cc',
         'src/process_wrap.cc',
         'src/v8_typed_array.cc',
         'src/udp_wrap.cc',
@@ -116,7 +118,6 @@
         'src/node_stdio.h',
         'src/node_string.h',
         'src/node_version.h',
-        'src/node_zlib.h',
         'src/pipe_wrap.h',
         'src/platform.h',
         'src/req_wrap.h',
@@ -191,7 +192,14 @@
             '-ldl',
             '-lutil' # needed for openpty
           ],
-        }]
+        }],
+        [ 'OS=="freebsd"', {
+          'sources': [ 'src/platform_freebsd.cc' ],
+          'libraries': [
+            '-lutil',
+            '-lkvm',
+          ],
+        }],
       ],
       'msvs-settings': {
         'VCLinkerTool': {

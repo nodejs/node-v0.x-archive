@@ -103,6 +103,7 @@
             'src/win/core.c',
             'src/win/error.c',
             'src/win/fs.c',
+            'src/win/fs-event.c',
             'src/win/getaddrinfo.c',
             'src/win/handle.c',
             'src/win/internal.h',
@@ -163,23 +164,6 @@
             'src/unix/ev/ev_vars.h',
             'src/unix/ev/ev_wrap.h',
             'src/unix/ev/event.h',
-            # TODO: conditionally include the following based on OS?
-            'src/ares/config_cygwin/ares_config.h',
-            'src/ares/config_darwin/ares_config.h',
-            'src/ares/config_freebsd/ares_config.h',
-            'src/ares/config_linux/ares_config.h',
-            'src/ares/config_openbsd/ares_config.h',
-            'src/ares/config_sunos/ares_config.h',
-            'src/unix/eio/config_cygwin.h',
-            'src/unix/eio/config_darwin.h',
-            'src/unix/eio/config_freebsd.h',
-            'src/unix/eio/config_linux.h',
-            'src/unix/eio/config_sunos.h',
-            'src/unix/ev/config_cygwin.h',
-            'src/unix/ev/config_darwin.h',
-            'src/unix/ev/config_freebsd.h',
-            'src/unix/ev/config_linux.h',
-            'src/unix/ev/config_sunos.h',
           ],
           'include_dirs': [ 'src/unix/ev', ],
           'defines': [
@@ -194,7 +178,10 @@
           'include_dirs': [ 'src/ares/config_darwin' ],
           'sources': [ 'src/unix/darwin.c' ],
           'direct_dependent_settings': {
-            'libraries': [ '-framework CoreServices' ],
+            'libraries': [
+              '$(SDKROOT)/System/Library/Frameworks/Carbon.framework',
+              '$(SDKROOT)/System/Library/Frameworks/CoreServices.framework',
+            ],
           },
           'defines': [
             'EV_CONFIG_H="config_darwin.h"',
@@ -225,6 +212,14 @@
             'libraries': [ '-lrt' ],
           },
         }],
+        [ 'OS=="freebsd"', {
+          'include_dirs': [ 'src/ares/config_freebsd' ],
+          'sources': [ 'src/unix/freebsd.c' ],
+          'defines': [
+            'EV_CONFIG_H="config_freebsd.h"',
+            'EIO_CONFIG_H="config_freebsd.h"',
+          ],
+        }],
       ]
     },
 
@@ -244,6 +239,7 @@
         'test/test-delayed-accept.c',
         'test/test-fail-always.c',
         'test/test-fs.c',
+        'test/test-fs-event.c',
         'test/test-get-currentexe.c',
         'test/test-getaddrinfo.c',
         'test/test-gethostbyname.c',
@@ -261,10 +257,12 @@
         'test/test-tcp-bind-error.c',
         'test/test-tcp-bind6-error.c',
         'test/test-tcp-close.c',
+        'test/test-tcp-write-error.c',
         'test/test-tcp-writealot.c',
         'test/test-threadpool.c',
         'test/test-timer-again.c',
         'test/test-timer.c',
+        'test/test-tty.c',
         'test/test-udp-dgram-too-big.c',
         'test/test-udp-ipv6.c',
         'test/test-udp-send-and-recv.c',
@@ -337,4 +335,5 @@
     }
   ]
 }
+
 
