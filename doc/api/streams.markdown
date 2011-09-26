@@ -1,182 +1,431 @@
-## Streams
+# Status of this Document
 
-A stream is an abstract interface implemented by various objects in Node.
-For example a request to an HTTP server is a stream, as is stdout. Streams
-are readable, writable, or both. All streams are instances of `EventEmitter`.
+This is a proposal.  It does not match the code as of writing.
 
-## Readable Stream
+This describes the minimum contract that Stream objects must adhere to
+in order to properly interoperate with pipes.
 
-A `Readable Stream` has the following methods, members, and events.
+# Stream Class
 
-### Event: 'data'
+The parent class for all stream objects.  Implements the `pipe`
+method, and a default "pass-through" no-op filter interface.
 
-`function (data) { }`
+Streams that inherit from the Stream base class SHOULD override
+methods with their implementation-specific functionality, as
+appropriate, but the methods on the base class will provide a bare
+minimum amount of functionality.
 
-The `'data'` event emits either a `Buffer` (by default) or a string if
-`setEncoding()` was used.
+* `writable=false`, `readable=false`
 
-### Event: 'end'
+    The base class is neither writable nor readable by default.  One or
+    both of these must be set on the child instances.
 
-`function () { }`
+* `bool write(chunk, callback=null)`
 
-Emitted when the stream has received an EOF (FIN in TCP terminology).
-Indicates that no more `'data'` events will happen. If the stream is also
-writable, it may be possible to continue writing.
+    The base class write method emits a `data` event with the provided
+    chunk, calls the callback function if supplied, and returns true.
 
-### Event: 'error'
+    If called after `end()`, then MUST throw.  Otherwise, MUST NOT
+    throw.
 
-`function (exception) { }`
+    The callback function MUST be called asynchronously.
 
-Emitted if there was an error receiving data.
+* `bool end(chunk=null, callback=null)`
 
-### Event: 'close'
+    Writes the supplied chunk if provided, sets `ended=true`, emits
+    `end`, and returns true.
 
-`function () { }`
+    Calls the supplied callback on nextTick.
 
-Emitted when the underlying file descriptor has been closed. Not all streams
-will emit this.  (For example, an incoming HTTP request will not emit
-`'close'`.)
+    If called more than once, then MUST throw.  Otherwise, MUST NOT
+    throw.
 
-### Event: 'fd'
+    The callback function MUST be called asynchronously.
 
-`function (fd) { }`
+* `bool flush(callback=null)`
 
-Emitted when a file descriptor is received on the stream. Only UNIX streams
-support this functionality; all others will simply never emit this event.
+    Returns true, and calls the supplied callback on nextTick.
 
-### stream.readable
+    If called after `end()` then MUST throw.  Otherwise, MUST NOT throw.
 
-A boolean that is `true` by default, but turns `false` after an `'error'`
-occurred, the stream came to an `'end'`, or `destroy()` was called.
+    Note: Calling Stream.flush() does not indicate that an entire pipe
+    chain of Streams is flushed, but merely that this particular
+    stream's write queue is empty.
 
-### stream.setEncoding(encoding)
-Makes the data event emit a string instead of a `Buffer`. `encoding` can be
-`'utf8'`, `'ascii'`, or `'base64'`.
+    The callback function MUST be called asynchronously.
 
-### stream.pause()
+* `destroy(cb)`
 
-Pauses the incoming `'data'` events.
+    Emit `destroy`, and then `end`.  Call the supplied callback on
+    nextTick.  If called multiple times, does nothing after the first
+    call.
 
-### stream.resume()
+    Since `destroy()` may be called multiple times, it MUST be
+    idempotent, and do nothing if `destroy()` has already been called on
+    the stream.
 
-Resumes the incoming `'data'` events after a `pause()`.
+* `pause()`, `resume()`
 
-### stream.destroy()
+    Emits `pause` or `resume`, respectively.
 
-Closes the underlying file descriptor. Stream will not emit any more events.
+* `pipe()`
 
+    Proxies data and end events from the `this` (readable stream)
+    to the writable `dest` stream, managing backpressure and event
+    proxying appropriately.
 
-### stream.destroySoon()
+        Event ----------------> Result
+        src.on('data') -------> dest.write(data)
+        src.on('end') --------> dest.end()
+        dest.on('pause') -----> src.pause()
+        dest.on('resume') ----> src.resume()
+        ! dest.write(c) ------> src.pause()
+        dest.on('destroy') ---> src.destroy()
+        dest.on('error', e) --> src.emit('error', e)
+        src.pipe('dest') -----> dest.emit('pipe', src)
 
-After the write queue is drained, close the file descriptor.
+    The `dest` writable stream MUST be returned.
 
-### stream.pipe(destination, [options])
 
-This is a `Stream.prototype` method available on all `Stream`s.
+# Writable Streams
 
-Connects this read stream to `destination` WriteStream. Incoming
-data on this stream gets written to `destination`. The destination and source
-streams are kept in sync by pausing and resuming as necessary.
+Writable Streams SHOULD be an `instanceof` the Stream base class, but
+this is optional.
 
-This function returns the `destination` stream.
+Writable Streams MUST implement the following members and methods:
 
-Emulating the Unix `cat` command:
+* `writable=true`
 
-    process.stdin.resume();
-    process.stdin.pipe(process.stdout);
+    MUST have a `writable` flag set to `true`.
 
+    After being destroyed or ended, this flag MUST be set to `false`.
 
-By default `end()` is called on the destination when the source stream emits
-`end`, so that `destination` is no longer writable. Pass `{ end: false }` as
-`options` to keep the destination stream open.
+* `bool write(chunk, callback=null)`
 
-This keeps `process.stdout` open so that "Goodbye" can be written at the end.
+    If the chunk can be written entirely without buffering, then the
+    function SHOULD return true.
 
-    process.stdin.resume();
+    If the chunk must be stored in a write queue, and the upstream
+    readable stream should be
+    paused, then the `write` method MUST return `false`.  If `write`
+    returns `false` then it MUST emit a `drain` event when the queue is
+    emptied.
 
-    process.stdin.pipe(process.stdout, { end: false });
+    If a `callback` function is provided, then it MUST be called when
+    the chunk has been completely written, and MUST NOT be called prior
+    to nextTick.
 
-    process.stdin.on("end", function() {
-      process.stdout.write("Goodbye\n");
-    });
+    If `write` is called after `end`, then it SHOULD throw.
 
-NOTE: If the source stream does not support `pause()` and `resume()`, this function
-adds simple definitions which simply emit `'pause'` and `'resume'` events on
-the source stream.
+    * "write queue"
 
-## Writable Stream
+        The specifics of queueing or buffering data chunks on writable
+        streams is an implementation detail which may vary from stream to
+        stream, and need not be any sort of externally visible "queue".
 
-A `Writable Stream` has the following methods, members, and events.
+        Semantically, a `false` return from `write()` means "Please do
+        not continue to write to this stream, because doing so may have
+        adverse affects".  However, it is a strictly advisory message.
 
-### Event: 'drain'
+* `bool end(chunk=null, callback=null)`
 
-`function () { }`
+    The `end` method indicates that no more `write` calls will follow.
 
-After a `write()` method returned `false`, this event is emitted to
-indicate that it is safe to write again.
+    If a chunk is passed in as the first argument then it MUST be passed
+    to `this.write()`.  If a callback is provided as the last argument,
+    then it MUST be called when the stream's write queue is completely
+    flushed, or on nextTick.  The return value MUST be `false`
+    if there are buffered chunks in the write queue, and SHOULD be
+    `true` if the queue is empty.
 
-### Event: 'error'
+    If `end()` returns false, then it MUST emit a `drain` event at some
+    point in the future.
 
-`function (exception) { }`
+* `destroy(callback=null)`
 
-Emitted on error with the exception `exception`.
+    Clean up all worker threads, file descriptors, open sockets, or
+    whatever else may be associated with the stream, and immediately emit
+    `destroy` to indicate that it is no longer valid.
 
-### Event: 'close'
+    Note that `destroy()` is destructive, and should only be called when
+    it is acceptable to lose data, for example, to forcibly shut down a
+    TCP stream when the response is finished.
 
-`function () { }`
+    If there is no work for a `destroy` method to perform, then it MUST
+    at least emit the `destroy` event.
 
-Emitted when the underlying file descriptor has been closed.
+    If a callback is provided, then it MUST be called when the cleanup
+    is complete, but MUST NOT be called before nextTick.
 
-### Event: 'pipe'
+Writable streams SHOULD implement the following functions:
 
-`function (src) { }`
+* `bool flush(callback=null)`
 
-Emitted when the stream is passed to a readable stream's pipe method.
+    Make a best effort to push out any pending writes, even if doing so
+    would degrade performance or be otherwise sub-optimal.
 
-### stream.writable
+    Return value MUST be `false` if there are still pending writes that
+    could not yet be flushed.  Return value SHOULD be `true` if there
+    are no additional data chunks waiting to be processed.
 
-A boolean that is `true` by default, but turns `false` after an `'error'`
-occurred or `end()` / `destroy()` was called.
+    If a callback is provided, then it MUST be called once the write
+    queue is emptied, and MUST NOT be called before nextTick.
 
-### stream.write(string, encoding='utf8', [fd])
+Writable streams MUST implement the following events:
 
-Writes `string` with the given `encoding` to the stream.  Returns `true` if
-the string has been flushed to the kernel buffer.  Returns `false` to
-indicate that the kernel buffer is full, and the data will be sent out in
-the future. The `'drain'` event will indicate when the kernel buffer is
-empty again. The `encoding` defaults to `'utf8'`.
+* `emit('drain')`
 
-If the optional `fd` parameter is specified, it is interpreted as an integral
-file descriptor to be sent over the stream. This is only supported for UNIX
-streams, and is silently ignored otherwise. When writing a file descriptor in
-this manner, closing the descriptor before the stream drains risks sending an
-invalid (closed) FD.
+    If a `write()` call returns `false`, then a `drain` event MUST
+    be emitted when the queue is drained.
 
-### stream.write(buffer)
+* `emit('destroy')`
 
-Same as the above except with a raw buffer.
+    Emitted when `destroy()` is called.
 
-### stream.end()
+Writable Streams SHOULD implement the following events:
 
-Terminates the stream with EOF or FIN.
-This call will allow queued write data to be sent before closing the stream.
+* `emit('close')`
 
-### stream.end(string, encoding)
+    When all the underlying machinery of a stream is completely cleaned
+    up, sockets closed, threads completed, file descriptors closed, then
+    a writable stream SHOULD emit a `close` event.
 
-Sends `string` with the given `encoding` and terminates the stream with EOF
-or FIN. This is useful to reduce the number of packets sent.
+# Readable Streams
 
-### stream.end(buffer)
+Readable Streams SHOULD be an `instanceof` the Stream base class, but
+this is optional.
 
-Same as above but with a `buffer`.
+Readable Streams MUST implement the following members and methods:
 
-### stream.destroy()
+* `readable=true`
 
-Closes the underlying file descriptor. Stream will not emit any more events.
-Any queued write data will not be sent.
+    MUST have a `readable` flag set to `true`.
 
-### stream.destroySoon()
+    After being destroyed or ended, this flag MUST be set to `false`.
 
-After the write queue is drained, close the file descriptor. `destroySoon()`
-can still destroy straight away, as long as there is no data left in the queue
-for writes.
+* `pause()`
+
+    When `pause()` is called, the stream SHOULD stop emitting any `data`
+    events.
+
+* `resume()`
+
+    If paused, then `resume()` MUST cause data events to begin emitting
+    again.
+
+* `pipe(dest)`
+
+    See above under Stream base class.
+
+    Readable Streams MAY override the `pipe()` method from the Stream
+    base class, but SHOULD call `Stream.prototype.pipe.call(this, dest)`
+    at some point.
+
+    The `dest` writable stream MUST be returned.
+
+* `destroy(callback=null)`
+
+    Clean up all worker threads, file descriptors, open sockets, or
+    whatever else may be associated with the stream.  Stream MUST emit
+    `destroy` when the `destroy()` method is called.
+
+    Note that `destroy()` is destructive, and should only be called when
+    it is acceptable to lose data, for example, to forcibly shut down a
+    TCP stream when the response is finished.
+
+    This method MUST be idempotent, and MUST NOT throw or have other
+    deleterious effects when called multiple times on the same object.
+
+    An example `destroy()` method:
+
+        MyReadStream.prototype.destroy = function(callback) {
+          this.fd = null;
+          this._binding = null;
+          Stream.prototype.destroy.call(this, callback);
+        };
+
+Readable Strams MUST implement the following events:
+
+* `emit('data', chunk)`
+
+    Whenever data is available, if not paused, then the stream MUST emit
+    a data event with the data as an argument.
+
+    `data` events MUST NOT be emitted without a chunk argument.
+
+    `data` events MAY be emitted while paused.
+
+* `emit('end')`
+
+    When no more data is going to be emitted, the stream MUST emit an
+    `end` event.
+
+    This event MUST be emitted eventually by all readable streams, even
+    in cases where `error` is emitted, or `destroy()` is called.
+
+Readable Streams SHOULD implement the following events:
+
+* `emit('close')`
+
+    When all the underlying machinery of a stream is completely cleaned
+    up, sockets closed, threads completed, file descriptors closed, then
+    a readable stream SHOULD emit a `close` event.
+
+# Filter Streams
+
+Filter Streams are streams that are both readable and writable, where a
+`write()` method call corresponds to a `data` event being emitted at
+some later time.
+
+In order to properly proxy the events used by Stream.pipe, Filter
+streams SHOULD have the following additions to the ReadableStream and
+WritableStream APIs:
+
+* `allowHalfOpen=true`
+
+    The `allowHalfOpen` flag MUST be set to `true` for filter streams.
+
+* `pause()` -> `pause` event
+
+    The `pause()` method, in addition to halting the flow of `data`
+    events, SHOULD emit a `pause` event so that upstream writers can be
+    paused before the backpressure builds up.
+
+* `resume()` -> `resume` event
+
+    The `resume()` method, in addition to allowing a paused stream to
+    begin flowing data events again, SHOULD emit a `resume` event, so
+    that upstream writers can begin sending data before the `drain`
+    events propagate back.
+
+* `destroy(cb)`
+
+    Filter streams MUST emit the `destroy` event like a writable stream,
+    in addition to emitting the `end` event like a readable stream.
+
+    Since `destroy()` may be called multiple times, it MUST be
+    idempotent, and do nothing if `destroy()` has already been called on
+    the stream.
+
+# Duplex Streams
+
+Duplex Streams are streams that are both readable and writable, where
+the `write()` calls are messages *to* another agent, and the `data`
+events are messages *from* that same agent.
+
+In these cases, it may make sense to exist in a half-duplex state, where
+either the readable or the writable aspect of the stream is preserved,
+but the other is destroyed.
+
+* `bool allowHalfOpen`
+
+    The `allowHalfOpen` flag MUST be set to `true` if it supports this.
+
+* `close(chunk=null, callback=null)`
+
+    Semantically, this is sugar for:
+
+        stream.end(chunk, function() {
+          stream.destroy(callback);
+        });
+
+    However, when it is known that a duplex stream will be completely
+    destroyed after the write queue is empty, then the `close()` method
+    SHOULD be used, so that implementation-specific optimizations can be
+    executed.  For example, a TCP stream could stop reading on the
+    socket file descriptor.
+
+* `end(chunk=null, callback=null)`
+
+    On Duplex Streams, the `end()` method means that no more data will
+    be written.  However, it does **not** correspond directly to an
+    `end` event being emitted, if the stream can exist in a half-open
+    state.
+
+    If `allowHalfOpen` is not set to `true`, then this MUST cause the
+    stream to be fully destroyed once the write queue is flushed.
+
+* `destroy(cb)`
+
+    The destroy method MUST forcibly shut down both sides of the
+    stream, and emit a `destroy` event immediately.  If a callback
+    is supplied, then it MUST be called when the stream destruction is
+    complete, and MUST NOT be called before nextTick.
+
+    Since `destroy()` may be called multiple times, it MUST be
+    idempotent, and do nothing if `destroy()` has already been called on
+    the stream.
+
+# Using Streams
+
+Some guidelines and summary information for the Stream code contract:
+
+* Use the `pipe()` method to connect streams.
+
+    This is the best way to ensure that errors and events are handled
+    appropriately.
+
+* Errors propagate back up the `pipe()` chain.
+
+    In the case where you have a Readable stream `A`, a
+    readable/writable filter `B`, and a writable stream `C`, you'd do
+    this:
+
+        A.pipe(B).pipe(C);
+
+    If `C` emits an `error` event, then it will be proxied to the `B`
+    object, and then to the A object.  So, the best way to catch all
+    errors is to do:
+
+        A.pipe(B).pipe(C);
+        A.on('error', handleErrors);
+
+* Readable Streams: `end` MUST be emitted at some point.
+
+    Even if the stream was destroyed, or encountered an error, the `end`
+    event must be guaranteed to be emitted at some point in lifetime of
+    the stream object.
+
+# Issues
+
+* Event propagation in circular pipe chains
+
+    Consider this Stream.pipe chain:
+
+        A.pipe(B).pipe(C).pipe(A)
+
+    where A is a duplex stream, and B and C are filters.  A more
+    realistic situation where this can occur:
+
+        net.createServer(function (socket) {
+          socket.pipe(rot13Filter).pipe(GzipFilter).pipe(socket);
+        });
+
+    So, the incoming data from the socket is rot13'd, and then gzipped,
+    and then sent back to the client.
+
+    Consider what happens when an `error` event is raised in stream C:
+
+    1. `C.emit("error")`
+    2. `B.emit("error")`
+    3. `A.emit("error")`
+
+    At this point, presumably we catch and handle the error.
+    However, according to the `Stream.pipe` semantics, it will
+    **still** cause another error event to be emitted by C, since
+    `C` is upstream from `A`.
+
+    A similar problem can be seen in a simple
+    echo server duplex stream:
+
+        net.createServer(function (socket) {
+          socket.pipe(socket);
+        });
+
+    Any `error` event on the socket will cause another `error` event to
+    be emitted on the same object, and cause a RangeError.
+
+    The same behavior would occur with `destroy` events.  However, the
+    semantics are such that the cycle will be broken by the fact that
+    calling `stream.destroy()` a second time must do *nothing*, not even
+    emit `destroy` again.
