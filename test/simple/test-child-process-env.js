@@ -42,7 +42,19 @@ child.stdout.addListener('data', function(chunk) {
   response += chunk;
 });
 
+var child2 = spawn('/usr/bin/env', [], {});
+var response2 = '';
+
+child2.stdout.setEncoding('utf8');
+
+child2.stdout.addListener('data', function(chunk) {
+  console.log('stdout2: ' + chunk);
+  response2 += chunk;
+});
+
 process.addListener('exit', function() {
   assert.ok(response.indexOf('HELLO=WORLD') >= 0);
   assert.ok(response.indexOf('FOO=BAR') >= 0);
+
+  assert.ok(response2.indexOf('PATH=') >= 0);
 });
