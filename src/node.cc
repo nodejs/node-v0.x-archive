@@ -2178,14 +2178,24 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 }
 
 
-static void AtExit() {
+#if defined(__MINGW32__) || defined(_MSC_VER)
+static void OnExit() {
   node::Stdio::Flush();
   node::Stdio::DisableRawMode(STDIN_FILENO);
+  EmitExit(process, -1);
 }
+#else
+static void OnExit(int code, void* args) {
+  node::Stdio::Flush();
+  node::Stdio::DisableRawMode(STDIN_FILENO);
+  EmitExit(process, code);
+}
+#endif
 
 
 static void SignalExit(int signal) {
   Stdio::DisableRawMode(STDIN_FILENO);
+  EmitExit(process, signal);
   _exit(1);
 }
 
@@ -2197,7 +2207,11 @@ void Load(Handle<Object> process) {
 
   // The node.js file returns a function 'f'
 
-  atexit(AtExit);
+#if defined(__MINGW32__) || defined(_MSC_VER)
+  atexit(OnExit);
+#else
+  on_exit(OnExit, NULL);
+#endif
 
   TryCatch try_catch;
 
@@ -2504,14 +2518,17 @@ char** Init(int argc, char *argv[]) {
 }
 
 
-void EmitExit(v8::Handle<v8::Object> process) {
+void EmitExit(v8::Handle<v8::Object> process, int code) {
+  if (v8::V8::IsDead()) return;
+
+  HandleScope scope;
   // process.emit('exit')
   Local<Value> emit_v = process->Get(String::New("emit"));
   assert(emit_v->IsFunction());
   Local<Function> emit = Local<Function>::Cast(emit_v);
-  Local<Value> args[] = { String::New("exit") };
+  Local<Value> args[] = { String::New("exit"), Number::New(code) };
   TryCatch try_catch;
-  emit->Call(process, 1, args);
+  emit->Call(process, 2, args);
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
   }
@@ -2547,8 +2564,6 @@ int Start(int argc, char *argv[]) {
   // uv_unref'd) then this function exits. As long as there are active
   // watchers, it blocks.
   uv_run(uv_default_loop());
-
-  EmitExit(process);
 
 #ifndef NDEBUG
   // Clean up.
