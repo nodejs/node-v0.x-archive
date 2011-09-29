@@ -163,7 +163,6 @@
             'src/node_stdio_win32.cc',
             # headers to make for a more pleasant IDE experience
             'src/platform_win32.h',
-            'src/signal_wrap.cc',
           ],
           'defines': [
             'FD_SETSIZE=1024',

@@ -26,9 +26,15 @@
 #include "../uv-common.h"
 
 #include "tree.h"
+#include "linklist.h"
 #include "winapi.h"
 #include "winsock.h"
 
+
+/**
+ * signal
+ */
+void uv_signal_endgame(uv_loop_t* loop, uv_signal_t* handle);
 
 /*
  * Timers
