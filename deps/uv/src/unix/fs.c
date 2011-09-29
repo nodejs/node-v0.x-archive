@@ -149,18 +149,19 @@ static int uv__fs_after(eio_req* eio) {
     case UV_FS_READLINK:
       if (req->result == -1) {
         req->ptr = NULL;
-      } else {
-        assert(req->result > 0);
+        break;
+      }
+      assert(req->result > 0);
 
-        if ((name = realloc(req->eio->ptr2, req->result + 1)) == NULL) {
-          /* Not enough memory. Reuse buffer, chop off last byte. */
-          name = req->eio->ptr2;
-          req->result--;
-        }
-
+      /* Make zero-terminated copy of req->eio->ptr2 */
+      if ((req->ptr = name = malloc(req->result + 1))) {
+        memcpy(name, req->eio->ptr2, req->result);
         name[req->result] = '\0';
-        req->ptr = name;
         req->result = 0;
+      }
+      else {
+        req->errorno = ENOMEM;
+        req->result = -1;
       }
       break;
 
@@ -447,8 +448,11 @@ int uv_fs_fsync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
 
 int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
   char* path = NULL;
-#ifdef __FreeBSD__
-  /* freebsd doesn't have fdatasync, do a full fsync instead. */
+#if defined(__FreeBSD__) \
+  || (__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1060)
+  /* freebsd and pre-10.6 darwin don't have fdatasync,
+   * do a full fsync instead.
+   */
   WRAP_EIO(UV_FS_FDATASYNC, eio_fdatasync, fsync, ARGS1(file))
 #else
   WRAP_EIO(UV_FS_FDATASYNC, eio_fdatasync, fdatasync, ARGS1(file))
