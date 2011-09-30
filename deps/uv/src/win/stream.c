@@ -93,7 +93,7 @@ int uv_read_start(uv_stream_t* handle, uv_alloc_cb alloc_cb,
 
 
 int uv_read_stop(uv_stream_t* handle) {
-  if (handle->type = UV_TTY) {
+  if (handle->type == UV_TTY) {
     return uv_tty_read_stop((uv_tty_t*) handle);
   } else {
     handle->flags &= ~UV_HANDLE_READING;
