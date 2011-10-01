@@ -64,6 +64,7 @@ void uv_process_timers(uv_loop_t* loop);
 #define UV_HANDLE_UV_ALLOCED       0x20000
 #define UV_HANDLE_SYNC_BYPASS_IOCP 0x40000
 #define UV_HANDLE_ZERO_READ        0x80000
+#define UV_HANDLE_TTY_RAW          0x100000
 
 void uv_want_endgame(uv_loop_t* loop, uv_handle_t* handle);
 void uv_process_endgames(uv_loop_t* loop);
@@ -173,6 +174,33 @@ void uv_process_pipe_connect_req(uv_loop_t* loop, uv_pipe_t* handle,
 void uv_process_pipe_shutdown_req(uv_loop_t* loop, uv_pipe_t* handle,
     uv_shutdown_t* req);
 
+
+/*
+ * TTY
+ */
+void uv_console_init();
+
+int uv_tty_read_start(uv_tty_t* handle, uv_alloc_cb alloc_cb,
+    uv_read_cb read_cb);
+int uv_tty_read_stop(uv_tty_t* handle);
+int uv_tty_write(uv_loop_t* loop, uv_write_t* req, uv_tty_t* handle,
+    uv_buf_t bufs[], int bufcnt, uv_write_cb cb);
+void uv_tty_close(uv_tty_t* handle);
+
+void uv_process_tty_read_req(uv_loop_t* loop, uv_tty_t* handle,
+    uv_req_t* req);
+void uv_process_tty_write_req(uv_loop_t* loop, uv_tty_t* handle,
+    uv_write_t* req);
+/* TODO: remove me */
+void uv_process_tty_accept_req(uv_loop_t* loop, uv_tty_t* handle,
+    uv_req_t* raw_req);
+/* TODO: remove me */
+void uv_process_tty_connect_req(uv_loop_t* loop, uv_tty_t* handle,
+    uv_connect_t* req);
+
+void uv_tty_endgame(uv_loop_t* loop, uv_tty_t* handle);
+
+
 /*
  * Loop watchers
  */
@@ -247,9 +275,6 @@ extern const uv_err_t uv_ok_;
 void uv_fatal_error(const int errorno, const char* syscall);
 
 uv_err_code uv_translate_sys_error(int sys_errno);
-uv_err_t uv_new_sys_error(int sys_errno);
-void uv_set_sys_error(uv_loop_t* loop, int sys_errno);
-void uv_set_error(uv_loop_t* loop, uv_err_code code, int sys_errno);
 
 #define SET_REQ_STATUS(req, status)                                     \
    (req)->overlapped.Internal = (ULONG_PTR) (status)
@@ -271,12 +296,6 @@ void uv_set_error(uv_loop_t* loop, uv_err_code code, int sys_errno);
 
 #define GET_REQ_SOCK_ERROR(req)                                         \
   (uv_ntstatus_to_winsock_error(GET_REQ_STATUS((req))))
-
-#define GET_REQ_UV_ERROR(req)                                           \
-  (uv_new_sys_error(GET_REQ_ERROR((req))))
-
-#define GET_REQ_UV_SOCK_ERROR(req)                                      \
-  (uv_new_sys_error(GET_REQ_SOCK_ERROR((req))))
 
 
 /*

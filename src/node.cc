@@ -2180,12 +2180,12 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
 static void AtExit() {
   node::Stdio::Flush();
-  node::Stdio::DisableRawMode(STDIN_FILENO);
+  uv_tty_reset_mode();
 }
 
 
 static void SignalExit(int signal) {
-  Stdio::DisableRawMode(STDIN_FILENO);
+  uv_tty_reset_mode();
   _exit(1);
 }
 
@@ -2338,6 +2338,7 @@ static void ParseArgs(int argc, char **argv) {
   option_end_index = i;
 }
 
+static volatile bool debugger_running = false;
 
 static void EnableDebug(bool wait_connect) {
   // Start the debug thread and it's associated TCP server on port 5858.
@@ -2355,28 +2356,42 @@ static void EnableDebug(bool wait_connect) {
   assert(r);
 
   // Print out some information.
-  fprintf(stderr, "debugger listening on port %d", debug_port);
+  fprintf(stderr, "debugger listening on port %d\n", debug_port);
+
+  debugger_running = true;
 }
 
 
-static volatile bool hit_signal;
+#ifdef __POSIX__
+static void EnableDebugSignalHandler(int signal) {
+  // Break once process will return execution to v8
+  v8::Debug::DebugBreak();
 
-
-static void DebugSignalCB(const Debug::EventDetails& details) {
-  if (hit_signal && details.GetEvent() == v8::Break) {
-    hit_signal = false;
+  if (!debugger_running) {
     fprintf(stderr, "Hit SIGUSR1 - starting debugger agent.\n");
     EnableDebug(false);
   }
 }
+#endif // __POSIX__
 
+#if defined(__MINGW32__) || defined(_MSC_VER)
+static bool EnableDebugSignalHandler(DWORD signal) {
+  if (signal != CTRL_BREAK_EVENT) return false;
 
-static void EnableDebugSignalHandler(int signal) {
-  // This is signal safe.
-  hit_signal = true;
-  v8::Debug::SetDebugEventListener2(DebugSignalCB);
+  // Break once process will return execution to v8
   v8::Debug::DebugBreak();
+
+  if (!debugger_running) {
+    fprintf(stderr, "Hit Ctrl+Break - starting debugger agent.\n");
+    EnableDebug(false);
+    return true;
+  } else {
+    // Run default system action (terminate)
+    return false;
+  }
+
 }
+#endif
 
 
 #ifdef __POSIX__
@@ -2480,6 +2495,9 @@ char** Init(int argc, char *argv[]) {
 #ifdef __POSIX__
     RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
 #endif // __POSIX__
+#if defined(__MINGW32__) || defined(_MSC_VER)
+    SetConsoleCtrlHandler((PHANDLER_ROUTINE) EnableDebugSignalHandler, TRUE);
+#endif
   }
 
   return argv;
