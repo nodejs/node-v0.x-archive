@@ -75,6 +75,45 @@ steps over to the next line. There are a few other commands available and more
 to come type `help` to see others.
 
 
+### Usage
+
+#### Stepping
+
+* `cont`, `c` - Continue execution
+* `next`, `n` - Step next
+* `step`, `s` - Step in
+* `out`, `o` - Step out
+
+#### Breakpoints
+
+* `setBreakpoint()`, `sb()` - Set breakpoint on current line
+* `setBreakpoint('fn()')`, `sb(...)` - Set breakpoint on a first statement in
+functions body
+* `setBreakpoint('script.js', 1)`, `sb(...)` - Set breakpoint on first line of
+ script.js
+* `clearBreakpoint`, `cb(...)` - Clear breakpoint
+
+#### Info
+
+* `backtrace`, `bt` - Print backtrace of current execution frame
+* `list(5)` - List scripts source code with 5 line context (5 lines before and
+ after)
+* `watch(expr)` - Add expression to watch list
+* `unwatch(expr)` - Remove expression from watch list
+* `watchers` - List all watchers and their values (automatically listed on each
+ breakpoint)
+* `repl` - Open debugger's repl for evaluation in debugging script's context
+
+#### Execution control
+
+* `run` - Run script (automatically runs on debugger's start)
+* `restart` - Restart script
+* `kill` - Kill script
+
+#### Various
+* `scripts` - List all loaded scripts
+* `version` - Display v8's version
+
 ### Advanced Usage
 
 The V8 debugger can be enabled and accessed either by starting Node with
