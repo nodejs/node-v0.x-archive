@@ -130,6 +130,8 @@
             'src/win/winapi.h',
             'src/win/winsock.c',
             'src/win/winsock.h',
+            'include/uv-private/linklist.h',
+            'src/win/signal.c',
           ],
           'link_settings': {
             'libraries': [
@@ -272,6 +274,7 @@
         'test/test-udp-dgram-too-big.c',
         'test/test-udp-ipv6.c',
         'test/test-udp-send-and-recv.c',
+        'test/test-signal.c',
       ],
       'conditions': [
         [ 'OS=="win"', {
