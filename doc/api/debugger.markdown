@@ -120,6 +120,7 @@ breakpoint)
 * `kill` - Kill script
 
 #### Various
+
 * `scripts` - List all loaded scripts
 * `version` - Display v8's version
 
