@@ -74,8 +74,17 @@ The `repl` command allows you to evaluate code remotely. The `next` command
 steps over to the next line. There are a few other commands available and more
 to come type `help` to see others.
 
+### Watchers
 
-### Usage
+You can watch expression and variable values while debugging your code. On every
+breakpoint each expression from watchers list will be evaluated in current
+context and displayed just before breakpoint's source code listing.
+
+To start watching expression type `watch("my_expression")`, to get watchers'
+values use `watchers` and to finally remove watcher call
+`unwatch("my_expression")`.
+
+### Commands reference
 
 #### Stepping
 
@@ -90,18 +99,18 @@ to come type `help` to see others.
 * `setBreakpoint('fn()')`, `sb(...)` - Set breakpoint on a first statement in
 functions body
 * `setBreakpoint('script.js', 1)`, `sb(...)` - Set breakpoint on first line of
- script.js
+script.js
 * `clearBreakpoint`, `cb(...)` - Clear breakpoint
 
 #### Info
 
 * `backtrace`, `bt` - Print backtrace of current execution frame
 * `list(5)` - List scripts source code with 5 line context (5 lines before and
- after)
+after)
 * `watch(expr)` - Add expression to watch list
 * `unwatch(expr)` - Remove expression from watch list
 * `watchers` - List all watchers and their values (automatically listed on each
- breakpoint)
+breakpoint)
 * `repl` - Open debugger's repl for evaluation in debugging script's context
 
 #### Execution control
