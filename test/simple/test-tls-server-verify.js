@@ -36,7 +36,7 @@ if (!process.versions.openssl) {
 // - accepted and "authorized".
 
 var testCases =
-  [ { title: "Do not request certs. Everyone is unauthorized.",
+  [ { title: 'Do not request certs. Everyone is unauthorized.',
       requestCert: false,
       rejectUnauthorized: false,
       CAs: ['ca1-cert'],
@@ -48,7 +48,7 @@ var testCases =
         ]
     },
 
-    { title: "Allow both authed and unauthed connections with CA1",
+    { title: 'Allow both authed and unauthed connections with CA1',
       requestCert: true,
       rejectUnauthorized: false,
       CAs: ['ca1-cert'],
@@ -60,7 +60,7 @@ var testCases =
         ]
     },
 
-    { title: "Allow only authed connections with CA1",
+    { title: 'Allow only authed connections with CA1',
       requestCert: true,
       rejectUnauthorized: true,
       CAs: ['ca1-cert'],
@@ -72,7 +72,7 @@ var testCases =
         ]
     },
 
-    { title: "Allow only authed connections with CA1 and CA2",
+    { title: 'Allow only authed connections with CA1 and CA2',
       requestCert: true,
       rejectUnauthorized: true,
       CAs: ['ca1-cert', 'ca2-cert'],
@@ -85,20 +85,21 @@ var testCases =
     },
 
 
-    { title: "Allow only certs signed by CA2 but not in the CRL",
+    { title: 'Allow only certs signed by CA2 but not in the CRL',
       requestCert: true,
       rejectUnauthorized: true,
       CAs: ['ca2-cert'],
       crl: 'ca2-crl',
       clients:
-        [ { name: 'agent1', shouldReject: true, shouldAuth: false },
-          { name: 'agent2', shouldReject: true, shouldAuth: false  },
+        [
+          { name: 'agent1', shouldReject: true, shouldAuth: false },
+          { name: 'agent2', shouldReject: true, shouldAuth: false },
           { name: 'agent3', shouldReject: false, shouldAuth: true },
           // Agent4 has a cert in the CRL.
           { name: 'agent4', shouldReject: true, shouldAuth: false },
           { name: 'nocert', shouldReject: true }
         ]
-    },
+    }
   ];
 
 
@@ -133,7 +134,7 @@ function runClient (options, cb) {
   var args = ['s_client', '-connect', '127.0.0.1:' + common.PORT];
 
 
-  console.log("  connecting with", options.name);
+  console.log('  connecting with', options.name);
 
   switch (options.name) {
     case 'agent1':
@@ -190,14 +191,14 @@ function runClient (options, cb) {
     out += d;
 
     if (/_unauthed/g.test(out)) {
-      console.error("  * unauthed");
+      console.error('  * unauthed');
       client.stdin.end('goodbye\n');
       authed = false;
       rejected = false;
     }
 
     if (/_authed/g.test(out)) {
-      console.error("  * authed");
+      console.error('  * authed');
       client.stdin.end('goodbye\n');
       authed = true;
       rejected = false;
@@ -211,7 +212,7 @@ function runClient (options, cb) {
     //      ": s_client exited with error code " + code);
     if (options.shouldReject) {
       assert.equal(true, rejected, options.name +
-          " NOT rejected, but should have been");
+          ' NOT rejected, but should have been');
     } else {
       assert.equal(false, rejected, options.name +
           " rejected, but should NOT have been");
@@ -225,7 +226,7 @@ function runClient (options, cb) {
 
 // Run the tests
 var successfulTests = 0;
-function runTest (testIndex) {
+function runTest(testIndex) {
   var tcase = testCases[testIndex];
   if (!tcase) return;
 
@@ -246,7 +247,7 @@ function runTest (testIndex) {
 
   var connections = 0;
 
-  var server = tls.Server(serverOptions, function (c) {
+  var server = tls.Server(serverOptions, function(c) {
     connections++;
     if (c.authorized) {
       console.error('- authed connection: ' +
@@ -261,7 +262,7 @@ function runTest (testIndex) {
   function runNextClient(clientIndex) {
     var options = tcase.clients[clientIndex];
     if (options) {
-      runClient(options, function () {
+      runClient(options, function() {
         runNextClient(clientIndex + 1);
       });
     } else {
