@@ -111,19 +111,19 @@ function test(handler, request_generator, response_validator) {
   }
 
   function request_generator() {
-    return ('GET / HTTP/1.0\r\n'
-       + 'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n'
-       + 'Host: 127.0.0.1:1337\r\n'
-       + 'Accept: */*\r\n'
-       + '\r\n');
+    return ('GET / HTTP/1.0\r\n' +
+        'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n' +
+        'Host: 127.0.0.1:1337\r\n' +
+        'Accept: */*\r\n' +
+        '\r\n');
   }
 
   function response_validator(server_response, client_got_eof, timed_out) {
-    var expected_response = ('HTTP/1.1 200 OK\r\n'
-        + 'Content-Type: text/plain\r\n'
-        + 'Connection: close\r\n'
-        + '\r\n'
-        + 'Hello, world!');
+    var expected_response = ('HTTP/1.1 200 OK\r\n' +
+        'Content-Type: text/plain\r\n' +
+        'Connection: close\r\n' +
+        '\r\n' +
+        'Hello, world!');
 
     assert.equal(expected_response, server_response.data);
     assert.equal(1, server_response.chunks.length);
@@ -146,26 +146,26 @@ function test(handler, request_generator, response_validator) {
   }
 
   function request_generator() {
-    return ('GET / HTTP/1.1\r\n'
-       + 'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n'
-       + 'Connection: close\r\n'
-       + 'Host: 127.0.0.1:1337\r\n'
-       + 'Accept: */*\r\n'
-       + '\r\n');
+    return ('GET / HTTP/1.1\r\n' +
+        'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n' +
+        'Connection: close\r\n' +
+        'Host: 127.0.0.1:1337\r\n' +
+        'Accept: */*\r\n' +
+        '\r\n');
   }
 
   function response_validator(server_response, client_got_eof, timed_out) {
-    var expected_response = ('HTTP/1.1 200 OK\r\n'
-        + 'Content-Type: text/plain\r\n'
-        + 'Connection: close\r\n'
-        + 'Transfer-Encoding: chunked\r\n'
-        + '\r\n'
-        + '7\r\n'
-        + 'Hello, \r\n'
-        + '6\r\n'
-        + 'world!\r\n'
-        + '0\r\n'
-        + '\r\n');
+    var expected_response = ('HTTP/1.1 200 OK\r\n' +
+        'Content-Type: text/plain\r\n' +
+        'Connection: close\r\n' +
+        'Transfer-Encoding: chunked\r\n' +
+        '\r\n' +
+        '7\r\n' +
+        'Hello, \r\n' +
+        '6\r\n' +
+        'world!\r\n' +
+        '0\r\n' +
+        '\r\n');
 
     assert.equal(expected_response, server_response.data);
     assert.equal(1, server_response.chunks.length);
