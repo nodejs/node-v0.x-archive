@@ -45,6 +45,6 @@ setTimeout( function() {
 setTimeout( function() { 
 	// At this time, all sockets should still be ok
 	console.log("After timeout: " + test_result + " sockets closed");
-	assert.fail(test_result, test_threshold, "too much closed sockets", "<");
+	assert.ok(( test_result < test_threshold ), "too much closed sockets");
 	process.exit();
 }, 130000);
