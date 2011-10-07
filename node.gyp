@@ -1,6 +1,9 @@
 {
   'variables': {
     'v8_use_snapshot': 'true',
+    # Turn off -Werror in V8
+    # See http://codereview.chromium.org/8159015
+    'werror': '',
     'target_arch': 'ia32',
     'node_use_dtrace': 'false',
     'node_use_openssl%': 'true',
@@ -25,9 +28,7 @@
       'lib/freelist.js',
       'lib/fs.js',
       'lib/http.js',
-      'lib/http2.js',
       'lib/https.js',
-      'lib/https2.js',
       'lib/module.js',
       'lib/net_legacy.js',
       'lib/net_uv.js',
@@ -91,7 +92,6 @@
         'src/node_string.cc',
         'src/node_zlib.cc',
         'src/pipe_wrap.cc',
-        'src/stdio_wrap.cc',
         'src/stream_wrap.cc',
         'src/tcp_wrap.cc',
         'src/timer_wrap.cc',

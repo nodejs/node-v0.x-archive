@@ -144,9 +144,6 @@ static Persistent<String> tick_callback_sym;
 
 static bool use_uv = true;
 
-// disabled by default for now
-static bool use_http1 = false;
-
 #ifdef OPENSSL_NPN_NEGOTIATED
 static bool use_npn = true;
 #else
@@ -1081,6 +1078,9 @@ void MakeCallback(Handle<Object> object,
   HandleScope scope;
 
   Local<Value> callback_v = object->Get(String::New(method)); 
+  if (!callback_v->IsFunction()) {
+    fprintf(stderr, "method = %s", method);
+  }
   assert(callback_v->IsFunction());
   Local<Function> callback = Local<Function>::Cast(callback_v);
 
@@ -1560,6 +1560,38 @@ static Handle<Value> Uptime(const Arguments& args) {
   return scope.Close(Number::New(uptime));
 }
 
+
+v8::Handle<v8::Value> UVCounters(const v8::Arguments& args) {
+  HandleScope scope;
+
+  uv_counters_t* c = &uv_default_loop()->counters;
+
+  Local<Object> obj = Object::New();
+
+#define setc(name) obj->Set(String::New(#name), Integer::New(c->name));
+
+  setc(eio_init)
+  setc(req_init)
+  setc(handle_init)
+  setc(stream_init)
+  setc(tcp_init)
+  setc(udp_init)
+  setc(pipe_init)
+  setc(tty_init)
+  setc(prepare_init)
+  setc(check_init)
+  setc(idle_init)
+  setc(async_init)
+  setc(timer_init)
+  setc(process_init)
+  setc(fs_event_init)
+
+#undef setc
+
+  return scope.Close(obj);
+}
+
+
 v8::Handle<v8::Value> MemoryUsage(const v8::Arguments& args) {
   HandleScope scope;
   assert(args.Length() == 0);
@@ -2025,7 +2057,6 @@ static Handle<Object> GetFeatures() {
   );
 
   obj->Set(String::NewSymbol("uv"), Boolean::New(use_uv));
-  obj->Set(String::NewSymbol("http1"), Boolean::New(use_http1));
   obj->Set(String::NewSymbol("ipv6"), True()); // TODO ping libuv
   obj->Set(String::NewSymbol("tls_npn"), Boolean::New(use_npn));
   obj->Set(String::NewSymbol("tls_sni"), Boolean::New(use_sni));
@@ -2171,6 +2202,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "uptime", Uptime);
   NODE_SET_METHOD(process, "memoryUsage", MemoryUsage);
+  NODE_SET_METHOD(process, "uvCounters", UVCounters);
 
   NODE_SET_METHOD(process, "binding", Binding);
 
@@ -2274,7 +2306,6 @@ static void PrintHelp() {
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
          "  --use-legacy         use the legacy backend (default: libuv)\n"
-         "  --use-http1          use the legacy http library\n"
          "\n"
          "Enviromental variables:\n"
          "NODE_PATH              ':'-separated list of directories\n"
@@ -2298,9 +2329,6 @@ static void ParseArgs(int argc, char **argv) {
       argv[i] = const_cast<char*>("");
     } else if (!strcmp(arg, "--use-legacy")) {
       use_uv = false;
-      argv[i] = const_cast<char*>("");
-    } else if (!strcmp(arg, "--use-http1")) {
-      use_http1 = true;
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);

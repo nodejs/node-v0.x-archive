@@ -117,7 +117,6 @@
             'src/win/pipe.c',
             'src/win/process.c',
             'src/win/req.c',
-            'src/win/stdio.c',
             'src/win/stream.c',
             'src/win/tcp.c',
             'src/win/tty.c',
@@ -215,7 +214,10 @@
             'EIO_CONFIG_H="config_sunos.h"',
           ],
           'direct_dependent_settings': {
-            'libraries': [ '-lrt' ],
+            'libraries': [
+              '-lsocket',
+              '-lnsl',
+            ],
           },
         }],
         [ 'OS=="freebsd"', {
@@ -226,6 +228,9 @@
             'EIO_CONFIG_H="config_freebsd.h"',
           ],
         }],
+        [ 'OS=="mac" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
+          'sources': [ 'src/unix/kqueue.c' ],
+        }],
       ]
     },
 
@@ -234,12 +239,15 @@
       'type': 'executable',
       'dependencies': [ 'uv' ],
       'sources': [
+        'test/blackhole-server.c',
         'test/echo-server.c',
         'test/run-tests.c',
         'test/runner.c',
         'test/runner.h',
+        'test/test-get-loadavg.c',
         'test/task.h',
         'test/test-async.c',
+        'test/test-error.c',
         'test/test-callback-stack.c',
         'test/test-connection-fail.c',
         'test/test-delayed-accept.c',
@@ -247,11 +255,13 @@
         'test/test-fs.c',
         'test/test-fs-event.c',
         'test/test-get-currentexe.c',
+        'test/test-get-memory.c',
         'test/test-getaddrinfo.c',
         'test/test-gethostbyname.c',
         'test/test-getsockname.c',
         'test/test-hrtime.c',
         'test/test-idle.c',
+        'test/test-ipc.c',
         'test/test-list.h',
         'test/test-loop-handles.c',
         'test/test-pass-always.c',
@@ -263,6 +273,8 @@
         'test/test-tcp-bind-error.c',
         'test/test-tcp-bind6-error.c',
         'test/test-tcp-close.c',
+        'test/test-tcp-connect-error.c',
+        'test/test-tcp-connect6-error.c',
         'test/test-tcp-write-error.c',
         'test/test-tcp-writealot.c',
         'test/test-threadpool.c',
@@ -287,7 +299,13 @@
             'test/runner-unix.c',
             'test/runner-unix.h',
           ]
-        }]
+        }],
+        [ 'OS=="solaris"', { # make test-fs.c compile, needs _POSIX_C_SOURCE
+          'defines': [
+            '__EXTENSIONS__',
+            '_XOPEN_SOURCE=500',
+          ],
+        }],
       ],
       'msvs-settings': {
         'VCLinkerTool': {
@@ -309,9 +327,11 @@
         'test/benchmark-pump.c',
         'test/benchmark-sizes.c',
         'test/benchmark-spawn.c',
+        'test/benchmark-tcp-write-batch.c',
         'test/benchmark-udp-packet-storm.c',
         'test/dns-server.c',
         'test/echo-server.c',
+        'test/blackhole-server.c',
         'test/run-benchmarks.c',
         'test/runner.c',
         'test/runner.h',

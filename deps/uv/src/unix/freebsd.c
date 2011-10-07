@@ -25,8 +25,11 @@
 #include <errno.h>
 
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <sys/sysctl.h>
+#include <vm/vm_param.h> /* VM_LOADAVG */
 #include <time.h>
+#include <unistd.h> /* sysconf */
 
 #undef NANOSEC
 #define NANOSEC 1000000000
@@ -67,16 +70,39 @@ int uv_exepath(char* buffer, size_t* size) {
   return 0;
 }
 
+double uv_get_free_memory(void) {
+  int freecount;
+  size_t size = sizeof(freecount);
 
-int uv_fs_event_init(uv_loop_t* loop,
-                     uv_fs_event_t* handle,
-                     const char* filename,
-                     uv_fs_event_cb cb) {
-  uv__set_sys_error(loop, ENOSYS);
-  return -1;
+  if(sysctlbyname("vm.stats.vm.v_free_count",
+                  &freecount, &size, NULL, 0) == -1){
+    return -1;
+  }
+  return (double) freecount * sysconf(_SC_PAGESIZE);
+
 }
 
+double uv_get_total_memory(void) {
+  unsigned long info;
+  int which[] = {CTL_HW, HW_PHYSMEM};
 
-void uv__fs_event_destroy(uv_fs_event_t* handle) {
-  assert(0 && "implement me");
+  size_t size = sizeof(info);
+
+  if (sysctl(which, 2, &info, &size, NULL, 0) < 0) {
+    return -1;
+  }
+
+  return (double) info;
+}
+
+void uv_loadavg(double avg[3]) {
+  struct loadavg info;
+  size_t size = sizeof(info);
+  int which[] = {CTL_VM, VM_LOADAVG};
+
+  if (sysctl(which, 2, &info, &size, NULL, 0) < 0) return;
+
+  avg[0] = (double) info.ldavg[0] / info.fscale;
+  avg[1] = (double) info.ldavg[1] / info.fscale;
+  avg[2] = (double) info.ldavg[2] / info.fscale;
 }

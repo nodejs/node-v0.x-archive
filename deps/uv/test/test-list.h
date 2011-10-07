@@ -20,6 +20,7 @@
  */
 
 TEST_DECLARE   (tty)
+TEST_DECLARE   (ipc)
 TEST_DECLARE   (tcp_ping_pong)
 TEST_DECLARE   (tcp_ping_pong_v6)
 TEST_DECLARE   (tcp_ref)
@@ -53,6 +54,7 @@ TEST_DECLARE   (connection_fail)
 TEST_DECLARE   (connection_fail_doesnt_auto_close)
 TEST_DECLARE   (shutdown_eof)
 TEST_DECLARE   (callback_stack)
+TEST_DECLARE   (error_message)
 TEST_DECLARE   (timer)
 TEST_DECLARE   (timer_ref)
 TEST_DECLARE   (timer_ref2)
@@ -61,12 +63,14 @@ TEST_DECLARE   (idle_starvation)
 TEST_DECLARE   (loop_handles)
 TEST_DECLARE   (ref)
 TEST_DECLARE   (idle_ref)
+TEST_DECLARE   (get_loadavg)
 TEST_DECLARE   (async_ref)
 TEST_DECLARE   (prepare_ref)
 TEST_DECLARE   (check_ref)
 TEST_DECLARE   (unref_in_prepare_cb)
 TEST_DECLARE   (async)
 TEST_DECLARE   (get_currentexe)
+TEST_DECLARE   (get_memory)
 TEST_DECLARE   (hrtime)
 TEST_DECLARE   (getaddrinfo_basic)
 TEST_DECLARE   (getaddrinfo_concurrent)
@@ -108,6 +112,7 @@ HELPER_DECLARE (pipe_echo_server)
 
 TASK_LIST_START
   TEST_ENTRY  (tty)
+  TEST_ENTRY  (ipc)
 
 
   TEST_ENTRY  (tcp_ref)
@@ -164,6 +169,8 @@ TASK_LIST_START
   TEST_ENTRY  (callback_stack)
   TEST_HELPER (callback_stack, tcp4_echo_server)
 
+  TEST_ENTRY  (error_message)
+
   TEST_ENTRY  (timer)
   TEST_ENTRY  (timer_ref)
   TEST_ENTRY  (timer_ref2)
@@ -184,6 +191,10 @@ TASK_LIST_START
   TEST_ENTRY  (async)
 
   TEST_ENTRY  (get_currentexe)
+
+  TEST_ENTRY  (get_memory)
+
+  TEST_ENTRY  (get_loadavg)
 
   TEST_ENTRY  (hrtime)
 

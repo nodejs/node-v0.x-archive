@@ -19,9 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var assert = require('assert');
+var assert = require('assert'),
     dns = require('dns'),
-    net = require('net_uv');
+    net = require('net_uv'),
     isIP = net.isIP,
     isIPv4 = net.isIPv4,
     isIPv6 = net.isIPv6,
@@ -149,7 +149,7 @@ TEST(function test_reverse_bogus(done) {
     var req = dns.reverse('bogus ip', function() {
       assert.ok(false);
     });
-  } catch(e) {
+  } catch (e) {
     error = e;
   }
 
@@ -248,6 +248,18 @@ TEST(function test_resolveCname(done) {
 });
 
 
+TEST(function test_resolveTxt(done) {
+  var req = dns.resolveTxt('google.com', function(err, records) {
+    if (err) throw err;
+    assert.equal(records.length, 1);
+    assert.equal(records[0].indexOf('v=spf1'), 0);
+    done();
+  });
+
+  checkWrap(req);
+});
+
+
 TEST(function test_lookup_ipv4_explicit(done) {
   var req = dns.lookup('www.google.com', 4, function(err, ip, family) {
     if (err) throw err;
@@ -303,7 +315,7 @@ TEST(function test_lookup_ipv6_implicit(done) {
 TEST(function test_lookup_failure(done) {
   var req = dns.lookup('does.not.exist', 4, function(err, ip, family) {
     assert.ok(err instanceof Error);
-    assert.strictEqual(err.errno, dns.NOTFOUND)
+    assert.strictEqual(err.errno, dns.NOTFOUND);
     uv && assert.strictEqual(err.errno, 'ENOTFOUND');
 
     done();

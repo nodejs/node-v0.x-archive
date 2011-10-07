@@ -33,6 +33,12 @@ function makeBlock(f) {
 assert.ok(common.indirectInstanceOf(a.AssertionError.prototype, Error),
           'a.AssertionError instanceof Error');
 
+assert.throws(makeBlock(a, false), a.AssertionError, 'ok(false)');
+
+assert.doesNotThrow(makeBlock(a, true), a.AssertionError, 'ok(true)');
+
+assert.doesNotThrow(makeBlock(a, 'test', 'ok(\'test\')'));
+
 assert.throws(makeBlock(a.ok, false),
               a.AssertionError, 'ok(false)');
 
@@ -190,22 +196,22 @@ assert.doesNotThrow(function() {assert.ifError()});
 threw = false;
 try {
   assert.throws(
-    function() {
-      throw {};
-    },
-    Array
+      function() {
+        throw {}
+      },
+      Array
   );
-} catch(e) {
+} catch (e) {
   threw = true;
 }
-assert.ok(threw, "wrong constructor validation");
+assert.ok(threw, 'wrong constructor validation');
 
 // use a RegExp to validate error message
 a.throws(makeBlock(thrower, TypeError), /test/);
 
 // use a fn to validate error object
 a.throws(makeBlock(thrower, TypeError), function(err) {
-  if ( (err instanceof TypeError) && /test/.test(err)) {
+  if ((err instanceof TypeError) && /test/.test(err)) {
     return true;
   }
 });
@@ -222,7 +228,7 @@ c.b = c;
 var gotError = false;
 try {
   assert.deepEqual(b, c);
-} catch(e) {
+} catch (e) {
   gotError = true;
 }
 
@@ -251,12 +257,12 @@ testAssertionMessage(-Infinity, '"-Infinity"');
 testAssertionMessage('', '""');
 testAssertionMessage('foo', '"foo"');
 testAssertionMessage([], '[]');
-testAssertionMessage([1,2,3], '[1,2,3]');
+testAssertionMessage([1, 2, 3], '[1,2,3]');
 testAssertionMessage(/a/, '"/a/"');
 testAssertionMessage(/abc/gim, '"/abc/gim"');
 testAssertionMessage(function f() {}, '"function f() {}"');
 testAssertionMessage({}, '{}');
-testAssertionMessage({a:undefined, b:null}, '{"a":"undefined","b":null}');
-testAssertionMessage({a:NaN, b:Infinity, c:-Infinity},
+testAssertionMessage({a: undefined, b: null}, '{"a":"undefined","b":null}');
+testAssertionMessage({a: NaN, b: Infinity, c: -Infinity},
     '{"a":"NaN","b":"Infinity","c":"-Infinity"}');
 

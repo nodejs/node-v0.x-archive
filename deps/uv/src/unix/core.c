@@ -172,7 +172,7 @@ void uv_loop_delete(uv_loop_t* loop) {
 uv_loop_t* uv_default_loop() {
   if (!default_loop_ptr) {
     default_loop_ptr = &default_loop_struct;
-#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060
+#if HAVE_KQUEUE
     default_loop_struct.ev = ev_default_loop(EVBACKEND_KQUEUE);
 #else
     default_loop_struct.ev = ev_default_loop(EVFLAG_AUTO);
@@ -790,10 +790,3 @@ size_t uv__strlcpy(char* dst, const char* src, size_t size) {
 
   return src - org;
 }
-
-
-uv_stream_t* uv_std_handle(uv_loop_t* loop, uv_std_type type) {
-  assert(0 && "implement me");
-  return NULL;
-}
-

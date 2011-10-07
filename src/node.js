@@ -35,10 +35,6 @@
       process.features.uv = process.env.NODE_USE_UV != '0';
     }
 
-    if ('NODE_USE_HTTP1' in process.env) {
-      process.features.http1 = process.env.NODE_USE_HTTP1 != '0';
-    }
-
     // make sure --use-uv is propagated to child processes
     if (process.features.uv) {
       process.env.NODE_USE_UV = '1';
@@ -231,7 +227,7 @@
         case 'TTY':
           var tty = NativeModule.require('tty');
           stdout = new tty.WriteStream(fd);
-          stdout._type = "tty";
+          stdout._type = 'tty';
 
           // Hack to have stdout not keep the event loop alive.
           // See https://github.com/joyent/node/issues/1726
@@ -241,7 +237,7 @@
         case 'FILE':
           var fs = NativeModule.require('fs');
           stdout = new fs.WriteStream(null, {fd: fd});
-          stdout._type = "fs";
+          stdout._type = 'fs';
           break;
 
         case 'PIPE':
@@ -253,7 +249,7 @@
           // we'll just add this hack and set the `readable` member to false.
           // Test: ./node test/fixtures/echo.js < /etc/passwd
           stdout.readable = false;
-          stdout._type = "pipe";
+          stdout._type = 'pipe';
 
           // FIXME Hack to have stdout not keep the event loop alive.
           // See https://github.com/joyent/node/issues/1726
@@ -262,7 +258,7 @@
 
         default:
           // Probably an error on in uv_guess_handle()
-          throw new Error("Implement me. Unknown stdout file type!");
+          throw new Error('Implement me. Unknown stdout file type!');
       }
 
       // For supporting legacy API we put the FD here.
@@ -305,7 +301,7 @@
 
         default:
           // Probably an error on in uv_guess_handle()
-          throw new Error("Implement me. Unknown stdin file type!");
+          throw new Error('Implement me. Unknown stdin file type!');
       }
 
       // For supporting legacy API we put the FD here.
@@ -393,6 +389,12 @@
       var fd = parseInt(process.env.NODE_CHANNEL_FD);
       assert(fd >= 0);
       var cp = NativeModule.require('child_process');
+
+      // Load tcp_wrap to avoid situation where we might immediately receive
+      // a message.
+      // FIXME is this really necessary?
+      process.binding('tcp_wrap')
+
       cp._forkChild(fd);
       assert(process.send);
     }
@@ -407,7 +409,7 @@
     'mixin': 'process.mixin() has been removed.',
     'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
     'inherits': 'process.inherits() has moved to sys.inherits.',
-    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength',
+    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
   };
 
   startup.removedMethods = function() {
@@ -451,12 +453,6 @@
   // backend.
   function translateId(id) {
     switch (id) {
-      case 'http':
-        return process.features.http1 ? 'http' : 'http2';
-
-      case 'https':
-        return process.features.http1 ? 'https' : 'https2';
-
       case 'net':
         return process.features.uv ? 'net_uv' : 'net_legacy';
 
@@ -508,7 +504,7 @@
       throw new Error('No such native module ' + id);
     }
 
-    process.moduleLoadList.push("NativeModule " + id);
+    process.moduleLoadList.push('NativeModule ' + id);
 
     var nativeModule = new NativeModule(id);
 
