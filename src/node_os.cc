@@ -22,7 +22,7 @@
 
 #include <node.h>
 #include <node_os.h>
-#include <platform.h>
+#include "platform.h"
 
 #include <v8.h>
 
@@ -33,7 +33,6 @@
 # include <io.h>
 
 # include <platform_win32.h>
-# include <platform_win32_winsock.h>
 #endif
 
 #ifdef __POSIX__

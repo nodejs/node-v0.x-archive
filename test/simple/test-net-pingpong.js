@@ -52,7 +52,7 @@ function pingPongTest(port, host) {
       assert.equal(true, socket.readable);
       assert.equal(true, count <= N);
       if (/PING/.exec(data)) {
-        socket.write('PONG', function () {
+        socket.write('PONG', function() {
           sentPongs++;
           console.error('sent PONG');
         });
@@ -129,10 +129,10 @@ function pingPongTest(port, host) {
 }
 
 /* All are run at once, so run on different ports */
-pingPongTest(20989, 'localhost');
+pingPongTest(common.PIPE);
 pingPongTest(20988);
+pingPongTest(20989, 'localhost');
 pingPongTest(20997, '::1');
-pingPongTest('/tmp/pingpong.sock');
 
 process.addListener('exit', function() {
   assert.equal(4, tests_run);

@@ -32,7 +32,9 @@
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 #include <openssl/hmac.h>
+#include <openssl/rand.h>
 
 #ifdef OPENSSL_NPN_NEGOTIATED
 #include <node_buffer.h>
@@ -104,6 +106,12 @@ class Connection : ObjectWrap {
   v8::Persistent<v8::Value> selectedNPNProto_;
 #endif
 
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  v8::Persistent<v8::Function> sniCallback_;
+  v8::Persistent<v8::Value> sniContext_;
+  v8::Persistent<v8::String> servername_;
+#endif
+
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
   static v8::Handle<v8::Value> EncIn(const v8::Arguments& args);
@@ -113,6 +121,9 @@ class Connection : ObjectWrap {
   static v8::Handle<v8::Value> EncOut(const v8::Arguments& args);
   static v8::Handle<v8::Value> ClearIn(const v8::Arguments& args);
   static v8::Handle<v8::Value> GetPeerCertificate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetSession(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetSession(const v8::Arguments& args);
+  static v8::Handle<v8::Value> IsSessionReused(const v8::Arguments& args);
   static v8::Handle<v8::Value> IsInitFinished(const v8::Arguments& args);
   static v8::Handle<v8::Value> VerifyError(const v8::Arguments& args);
   static v8::Handle<v8::Value> GetCurrentCipher(const v8::Arguments& args);
@@ -133,6 +144,13 @@ class Connection : ObjectWrap {
                                       unsigned char **out, unsigned char *outlen,
                                       const unsigned char* in,
                                       unsigned int inlen, void *arg);
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  // SNI
+  static v8::Handle<v8::Value> GetServername(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetSNICallback(const v8::Arguments& args);
+  static int SelectSNIContextCallback_(SSL *s, int *ad, void* arg);
 #endif
 
   int HandleBIOError(BIO *bio, const char* func, int rv);
@@ -157,6 +175,17 @@ class Connection : ObjectWrap {
       SSL_free(ssl_);
       ssl_ = NULL;
     }
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+    if (!npnProtos_.IsEmpty()) npnProtos_.Dispose();
+    if (!selectedNPNProto_.IsEmpty()) selectedNPNProto_.Dispose();
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+   if (!sniCallback_.IsEmpty()) sniCallback_.Dispose();
+   if (!sniContext_.IsEmpty()) sniContext_.Dispose();
+   if (!servername_.IsEmpty()) servername_.Dispose();
+#endif
   }
 
  private:

@@ -21,66 +21,127 @@
 CC = $(PREFIX)gcc
 AR = $(PREFIX)ar
 E=
-CFLAGS=--std=gnu89 -Wno-variadic-macros -g
+CSTDFLAG=--std=c89 -pedantic -Wall -Wextra -Wno-unused-parameter
+CFLAGS += -g
+CPPFLAGS += -Isrc/unix/ev
 LINKFLAGS=-lm
 
+CPPFLAGS += -D_LARGEFILE_SOURCE
+CPPFLAGS += -D_FILE_OFFSET_BITS=64
+
+OBJS += src/unix/core.o
+OBJS += src/unix/fs.o
+OBJS += src/unix/cares.o
+OBJS += src/unix/udp.o
+OBJS += src/unix/error.o
+OBJS += src/unix/process.o
+OBJS += src/unix/tcp.o
+OBJS += src/unix/pipe.o
+OBJS += src/unix/tty.o
+OBJS += src/unix/stream.o
+
 ifeq (SunOS,$(uname_S))
-LINKFLAGS+=-lsocket -lnsl
-UV_OS_FILE=uv-sunos.c
+EV_CONFIG=config_sunos.h
+EIO_CONFIG=config_sunos.h
+CPPFLAGS += -Isrc/ares/config_sunos -D__EXTENSIONS__ -D_XOPEN_SOURCE=500
+LINKFLAGS+=-lsocket -lnsl -lkstat
+OBJS += src/unix/sunos.o
 endif
 
 ifeq (Darwin,$(uname_S))
+EV_CONFIG=config_darwin.h
+EIO_CONFIG=config_darwin.h
+CPPFLAGS += -Isrc/ares/config_darwin
 LINKFLAGS+=-framework CoreServices
-UV_OS_FILE=uv-darwin.c
+OBJS += src/unix/darwin.o
+OBJS += src/unix/kqueue.o
 endif
 
 ifeq (Linux,$(uname_S))
+EV_CONFIG=config_linux.h
+EIO_CONFIG=config_linux.h
+CSTDFLAG += -D_GNU_SOURCE
+CPPFLAGS += -Isrc/ares/config_linux
 LINKFLAGS+=-lrt
-UV_OS_FILE=uv-linux.c
+OBJS += src/unix/linux.o
 endif
 
 ifeq (FreeBSD,$(uname_S))
+EV_CONFIG=config_freebsd.h
+EIO_CONFIG=config_freebsd.h
+CPPFLAGS += -Isrc/ares/config_freebsd
 LINKFLAGS+=
-UV_OS_FILE=uv-freebsd.c
+OBJS += src/unix/freebsd.o
+OBJS += src/unix/kqueue.o
+endif
+
+ifeq (NetBSD,$(uname_S))
+EV_CONFIG=config_netbsd.h
+EIO_CONFIG=config_netbsd.h
+CPPFLAGS += -Isrc/ares/config_netbsd
+LINKFLAGS+=
+OBJS += src/unix/netbsd.o
+OBJS += src/unix/kqueue.o
+endif
+
+ifneq (,$(findstring CYGWIN,$(uname_S)))
+EV_CONFIG=config_cygwin.h
+EIO_CONFIG=config_cygwin.h
+# We drop the --std=c89, it hides CLOCK_MONOTONIC on cygwin
+CSTDFLAG = -D_GNU_SOURCE
+CPPFLAGS += -Isrc/ares/config_cygwin
+LINKFLAGS+=
+OBJS += src/unix/cygwin.o
 endif
 
 # Need _GNU_SOURCE for strdup?
 RUNNER_CFLAGS=$(CFLAGS) -D_GNU_SOURCE
+RUNNER_LINKFLAGS=$(LINKFLAGS)
 
-RUNNER_LINKFLAGS=$(LINKFLAGS) -pthread
+ifeq (SunOS,$(uname_S))
+RUNNER_LINKFLAGS += -pthreads
+else
+RUNNER_LINKFLAGS += -pthread
+endif
+
 RUNNER_LIBS=
 RUNNER_SRC=test/runner-unix.c
 
-uv.a: uv-unix.o uv-common.o uv-platform.o ev/ev.o c-ares/ares_query.o
-	$(AR) rcs uv.a uv-unix.o uv-platform.o uv-common.o ev/ev.o c-ares/*.o
+uv.a: $(OBJS) src/uv-common.o src/unix/ev/ev.o src/unix/uv-eio.o src/unix/eio/eio.o $(CARES_OBJS)
+	$(AR) rcs uv.a $(OBJS) src/uv-common.o src/unix/uv-eio.o src/unix/ev/ev.o src/unix/eio/eio.o $(CARES_OBJS)
 
-uv-platform.o: $(UV_OS_FILE) uv.h uv-unix.h
-	$(CC) $(CFLAGS) -c $(UV_OS_FILE) -o uv-platform.o
+src/unix/%.o: src/unix/%.c include/uv.h include/uv-private/uv-unix.h src/unix/internal.h
+	$(CC) $(CSTDFLAG) $(CPPFLAGS) -Isrc  $(CFLAGS) -c $< -o $@
 
-uv-unix.o: uv-unix.c uv.h uv-unix.h
-	$(CC) $(CFLAGS) -c uv-unix.c -o uv-unix.o
+src/uv-common.o: src/uv-common.c include/uv.h include/uv-private/uv-unix.h
+	$(CC) $(CSTDFLAG) $(CPPFLAGS) $(CFLAGS) -c src/uv-common.c -o src/uv-common.o
 
-uv-common.o: uv-common.c uv.h uv-unix.h
-	$(CC) $(CFLAGS) -c uv-common.c -o uv-common.o
+src/unix/ev/ev.o: src/unix/ev/ev.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c src/unix/ev/ev.c -o src/unix/ev/ev.o -DEV_CONFIG_H=\"$(EV_CONFIG)\"
 
-ev/ev.o: ev/config.h ev/ev.c
-	$(MAKE) -C ev
 
-ev/config.h:
-	cd ev && ./configure
+EIO_CPPFLAGS += $(CPPFLAGS)
+EIO_CPPFLAGS += -DEIO_CONFIG_H=\"$(EIO_CONFIG)\"
+EIO_CPPFLAGS += -DEIO_STACKSIZE=262144
+EIO_CPPFLAGS += -D_GNU_SOURCE
 
-c-ares/Makefile:
-	cd c-ares && ./configure
+src/unix/eio/eio.o: src/unix/eio/eio.c
+	$(CC) $(EIO_CPPFLAGS) $(CFLAGS) -c src/unix/eio/eio.c -o src/unix/eio/eio.o
 
-# Really we want to include all of the c-ares .o files in our uv.a static
-# library but let's just choose one as a dependency.
-c-ares/ares_query.o: c-ares/Makefile
-	$(MAKE) -C c-ares
+src/unix/uv-eio.o: src/unix/uv-eio.c
+	$(CC) $(CPPFLAGS) -Isrc/unix/eio/ $(CSTDFLAG) $(CFLAGS) -c src/unix/uv-eio.c -o src/unix/uv-eio.o
+
 
 clean-platform:
-	$(MAKE) -C ev clean
-	$(MAKE) -C c-ares clean
+	-rm -f src/ares/*.o
+	-rm -f src/unix/ev/*.o
+	-rm -f src/unix/eio/*.o
+	-rm -f src/unix/*.o
+	-rm -rf test/run-tests.dSYM run-benchmarks.dSYM
 
 distclean-platform:
-	$(MAKE) -C ev distclean
-	$(MAKE) -C c-ares clean
+	-rm -f src/ares/*.o
+	-rm -f src/unix/ev/*.o
+	-rm -f src/unix/*.o
+	-rm -f src/unix/eio/*.o
+	-rm -rf test/run-tests.dSYM run-benchmarks.dSYM

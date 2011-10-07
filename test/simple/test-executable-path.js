@@ -23,20 +23,20 @@ var common = require('../common');
 var assert = require('assert');
 var path = require('path');
 
-var isDebug = (process.version.indexOf('debug') >= 0);
+var isDebug = process.features.debug;
 
 var debugPath = path.normalize(path.join(__dirname, '..', '..',
-                                         'build', 'debug', 'node_g'));
+                                         'out', 'Debug', 'node'));
 var defaultPath = path.normalize(path.join(__dirname, '..', '..',
-                                           'build', 'default', 'node'));
+                                           'out', 'Release', 'node'));
 
-console.log('debugPath: ' + debugPath);
-console.log('defaultPath: ' + defaultPath);
-console.log('process.execPath: ' + process.execPath);
+console.error('debugPath: ' + debugPath);
+console.error('defaultPath: ' + defaultPath);
+console.error('process.execPath: ' + process.execPath);
 
-if (/node_g$/.test(process.execPath)) {
-  assert.equal(debugPath, process.execPath);
+if (isDebug) {
+  assert.ok(process.execPath.indexOf(debugPath) == 0);
 } else {
-  assert.equal(defaultPath, process.execPath);
+  assert.ok(process.execPath.indexOf(defaultPath) == 0);
 }
 

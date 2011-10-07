@@ -46,10 +46,16 @@ void List<T, P>::Add(const T& element) {
 
 template<typename T, class P>
 void List<T, P>::AddAll(const List<T, P>& other) {
-  int result_length = length_ + other.length_;
+  AddAll(other.ToVector());
+}
+
+
+template<typename T, class P>
+void List<T, P>::AddAll(const Vector<T>& other) {
+  int result_length = length_ + other.length();
   if (capacity_ < result_length) Resize(result_length);
-  for (int i = 0; i < other.length_; i++) {
-    data_[length_ + i] = other.data_[i];
+  for (int i = 0; i < other.length(); i++) {
+    data_[length_ + i] = other.at(i);
   }
   length_ = result_length;
 }
@@ -200,6 +206,35 @@ void List<T, P>::Initialize(int capacity) {
   length_ = 0;
 }
 
+
+template <typename T>
+int SortedListBSearch(
+    const List<T>& list, T elem, int (*cmp)(const T* x, const T* y)) {
+  int low = 0;
+  int high = list.length() - 1;
+  while (low <= high) {
+    int mid = (low + high) / 2;
+    T mid_elem = list[mid];
+
+    if (mid_elem > elem) {
+      high = mid - 1;
+      continue;
+    }
+    if (mid_elem < elem) {
+      low = mid + 1;
+      continue;
+    }
+    // Found the elememt.
+    return mid;
+  }
+  return -1;
+}
+
+
+template <typename T>
+int SortedListBSearch(const List<T>& list, T elem) {
+  return SortedListBSearch<T>(list, elem, PointerValueCompare<T>);
+}
 
 } }  // namespace v8::internal
 

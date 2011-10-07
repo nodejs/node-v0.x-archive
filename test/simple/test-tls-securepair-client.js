@@ -19,12 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 // There is a bug with 'openssl s_server' which makes it not flush certain
 // important events to stdout when done over a pipe. Therefore we skip this
 // test for all openssl versions less than 1.0.0.
 if (!process.versions.openssl ||
     parseInt(process.versions.openssl[0]) < 1) {
-  console.error("Skipping due to old OpenSSL version.");
+  console.error('Skipping due to old OpenSSL version.');
   process.exit(0);
 }
 
@@ -93,7 +96,7 @@ server.stdout.on('data', function(s) {
 });
 
 
-var timeout = setTimeout(function () {
+var timeout = setTimeout(function() {
   server.kill();
   process.exit(1);
 }, 5000);
@@ -134,7 +137,7 @@ function startClient() {
     console.log('client pair.cleartext.getCipher(): %j',
                 pair.cleartext.getCipher());
     setTimeout(function() {
-      pair.cleartext.write('hello\r\n', function () {
+      pair.cleartext.write('hello\r\n', function() {
         gotWriteCallback = true;
       });
     }, 500);

@@ -28,6 +28,12 @@ exports.libDir = path.join(exports.testDir, '../lib');
 exports.tmpDir = path.join(exports.testDir, 'tmp');
 exports.PORT = 12346;
 
+if (process.platform == 'win32') {
+  exports.PIPE = '\\\\.\\pipe\\libuv-test';
+} else {
+  exports.PIPE = exports.tmpDir + '/test.sock';
+}
+
 var util = require('util');
 for (var i in util) exports[i] = util[i];
 //for (var i in exports) global[i] = exports[i];
@@ -43,6 +49,31 @@ exports.indirectInstanceOf = function(obj, cls) {
   var clsChain = protoCtrChain(cls.prototype);
   var objChain = protoCtrChain(obj);
   return objChain.slice(-clsChain.length) === clsChain;
+};
+
+
+exports.ddCommand = function(filename, kilobytes) {
+  if (process.platform == 'win32') {
+    // 'fsutil file createnew' cannot be used on an existing file. If it
+    // already exists delete it.
+    if (require('path').existsSync(filename)) {
+      require('fs').unlinkSync(filename);
+    }
+    return 'fsutil.exe file createnew "' + filename + '" ' + (kilobytes * 1024);
+  } else {
+    return 'dd if=/dev/zero of="' + filename + '" bs=1024 count=' + kilobytes;
+  }
+};
+
+
+exports.spawnPwd = function(options) {
+  var spawn = require('child_process').spawn;
+
+  if (process.platform == 'win32') {
+    return spawn('cmd.exe', ['/c', 'cd'], options);
+  } else {
+    return spawn('pwd', [], options);
+  }
 };
 
 
@@ -79,6 +110,19 @@ process.on('exit', function() {
     knownGlobals.push(DTRACE_NET_SOCKET_WRITE);
   }
 
+  if (global.ArrayBuffer) {
+    knownGlobals.push(ArrayBuffer);
+    knownGlobals.push(Int8Array);
+    knownGlobals.push(Uint8Array);
+    knownGlobals.push(Int16Array);
+    knownGlobals.push(Uint16Array);
+    knownGlobals.push(Int32Array);
+    knownGlobals.push(Uint32Array);
+    knownGlobals.push(Float32Array);
+    knownGlobals.push(Float64Array);
+    knownGlobals.push(DataView);
+  }
+
   for (var x in global) {
     var found = false;
 
@@ -91,7 +135,7 @@ process.on('exit', function() {
 
     if (!found) {
       console.error('Unknown global: %s', x);
-      assert.ok(false, 'Unknown global founded');
+      assert.ok(false, 'Unknown global found');
     }
   }
 });

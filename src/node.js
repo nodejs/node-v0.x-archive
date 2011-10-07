@@ -27,7 +27,25 @@
 (function(process) {
   global = this;
 
+  var EventEmitter;
+
   function startup() {
+
+    if ('NODE_USE_UV' in process.env) {
+      process.features.uv = process.env.NODE_USE_UV != '0';
+    }
+
+    // make sure --use-uv is propagated to child processes
+    if (process.features.uv) {
+      process.env.NODE_USE_UV = '1';
+    } else {
+      delete process.env.NODE_USE_UV;
+    }
+
+    EventEmitter = NativeModule.require('events').EventEmitter;
+    process.__proto__ = EventEmitter.prototype;
+    process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
+
     startup.globalVariables();
     startup.globalTimeouts();
     startup.globalConsole();
@@ -62,12 +80,21 @@
       var d = NativeModule.require('_debugger');
       d.start();
 
+    } else if (process._eval != null) {
+      // User passed '-e' or '--eval' arguments to Node.
+      var Module = NativeModule.require('module');
+      var path = NativeModule.require('path');
+      var cwd = process.cwd();
+
+      var module = new Module('eval');
+      module.filename = path.join(cwd, 'eval');
+      module.paths = Module._nodeModulePaths(cwd);
+      module._compile('eval(process._eval)', 'eval');
+
     } else if (process.argv[1]) {
       // make process.argv[1] into a full path
-      if (!(/^http:\/\//).exec(process.argv[1])) {
-        var path = NativeModule.require('path');
-        process.argv[1] = path.resolve(process.argv[1]);
-      }
+      var path = NativeModule.require('path');
+      process.argv[1] = path.resolve(process.argv[1]);
 
       var Module = NativeModule.require('module');
       // REMOVEME: nextTick should not be necessary. This hack to get
@@ -75,18 +102,11 @@
       // Main entry point into most programs:
       process.nextTick(Module.runMain);
 
-    } else if (process._eval != null) {
-      // User passed '-e' or '--eval' arguments to Node.
-      var Module = NativeModule.require('module');
-      var rv = new Module()._compile('return eval(process._eval)', 'eval');
-      console.log(rv);
-
     } else {
-      var binding = process.binding('stdio');
-      var fd = binding.openStdin();
       var Module = NativeModule.require('module');
 
-      if (NativeModule.require('tty').isatty(fd)) {
+      // If stdin is a TTY.
+      if (NativeModule.require('tty').isatty(0)) {
         // REPL
         Module.requireRepl().start();
 
@@ -138,8 +158,11 @@
   };
 
   startup.globalConsole = function() {
-    global.console = NativeModule.require('console');
+    global.__defineGetter__('console', function() {
+      return NativeModule.require('console');
+    });
   };
+
 
   startup._lazyConstants = null;
 
@@ -190,52 +213,102 @@
   };
 
   startup.processStdio = function() {
-    var binding = process.binding('stdio'),
-        // FIXME Remove conditional when net is supported again on windows.
-        net = (process.platform !== "win32")
-              ? NativeModule.require('net')
-              : undefined,
-        fs = NativeModule.require('fs'),
-        tty = NativeModule.require('tty');
+    var stdout, stdin;
 
-    // process.stdout
+    process.__defineGetter__('stdout', function() {
+      if (stdout) return stdout;
 
-    var fd = binding.stdoutFD;
+      var tty_wrap = process.binding('tty_wrap');
+      var fd = 1;
 
-    if (binding.isatty(fd)) {
-      process.stdout = new tty.WriteStream(fd);
-    } else if (binding.isStdoutBlocking()) {
-      process.stdout = new fs.WriteStream(null, {fd: fd});
-    } else {
-      process.stdout = new net.Stream(fd);
-      // FIXME Should probably have an option in net.Stream to create a
-      // stream from an existing fd which is writable only. But for now
-      // we'll just add this hack and set the `readable` member to false.
-      // Test: ./node test/fixtures/echo.js < /etc/passwd
-      process.stdout.readable = false;
-    }
+      // Note stdout._type is used for test-module-load-list.js
 
-    // process.stderr
+      switch (tty_wrap.guessHandleType(fd)) {
+        case 'TTY':
+          var tty = NativeModule.require('tty');
+          stdout = new tty.WriteStream(fd);
+          stdout._type = 'tty';
 
-    var events = NativeModule.require('events');
-    var stderr = process.stderr = new events.EventEmitter();
+          // Hack to have stdout not keep the event loop alive.
+          // See https://github.com/joyent/node/issues/1726
+          stdout._handle.unref();
+          break;
+
+        case 'FILE':
+          var fs = NativeModule.require('fs');
+          stdout = new fs.WriteStream(null, {fd: fd});
+          stdout._type = 'fs';
+          break;
+
+        case 'PIPE':
+          var net = NativeModule.require('net');
+          stdout = new net.Stream(fd);
+
+          // FIXME Should probably have an option in net.Stream to create a
+          // stream from an existing fd which is writable only. But for now
+          // we'll just add this hack and set the `readable` member to false.
+          // Test: ./node test/fixtures/echo.js < /etc/passwd
+          stdout.readable = false;
+          stdout._type = 'pipe';
+
+          // FIXME Hack to have stdout not keep the event loop alive.
+          // See https://github.com/joyent/node/issues/1726
+          stdout._handle.unref();
+          break;
+
+        default:
+          // Probably an error on in uv_guess_handle()
+          throw new Error('Implement me. Unknown stdout file type!');
+      }
+
+      // For supporting legacy API we put the FD here.
+      stdout.fd = fd;
+
+      return stdout;
+    });
+
+    var stderr = process.stderr = new EventEmitter();
     stderr.writable = true;
     stderr.readable = false;
     stderr.write = process.binding('stdio').writeError;
     stderr.end = stderr.destroy = stderr.destroySoon = function() { };
+    // For supporting legacy API we put the FD here.
+    // XXX this could break things if anyone ever closes this stream?
+    stderr.fd = 2;
 
-    // process.stdin
+    process.__defineGetter__('stdin', function() {
+      if (stdin) return stdin;
 
-    var fd = binding.openStdin();
+      var tty_wrap = process.binding('tty_wrap');
+      var fd = 0;
 
-    if (binding.isatty(fd)) {
-      process.stdin = new tty.ReadStream(fd);
-    } else if (binding.isStdinBlocking()) {
-      process.stdin = new fs.ReadStream(null, {fd: fd});
-    } else {
-      process.stdin = new net.Stream(fd);
-      process.stdin.readable = true;
-    }
+      switch (tty_wrap.guessHandleType(fd)) {
+        case 'TTY':
+          var tty = NativeModule.require('tty');
+          stdin = new tty.ReadStream(fd);
+          break;
+
+        case 'FILE':
+          var fs = NativeModule.require('fs');
+          stdin = new fs.ReadStream(null, {fd: fd});
+          break;
+
+        case 'PIPE':
+          var net = NativeModule.require('net');
+          stdin = new net.Stream(fd);
+          stdin.readable = true;
+          break;
+
+        default:
+          // Probably an error on in uv_guess_handle()
+          throw new Error('Implement me. Unknown stdin file type!');
+      }
+
+      // For supporting legacy API we put the FD here.
+      stdin.fd = fd;
+
+      return stdin;
+    });
 
     process.openStdin = function() {
       process.stdin.resume();
@@ -267,7 +340,6 @@
   startup.processSignalHandlers = function() {
     // Load events module in order to access prototype elements on process like
     // process.addListener.
-    var events = NativeModule.require('events');
     var signalWatchers = {};
     var addListener = process.addListener;
     var removeListener = process.removeListener;
@@ -331,7 +403,7 @@
     'mixin': 'process.mixin() has been removed.',
     'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
     'inherits': 'process.inherits() has moved to sys.inherits.',
-    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength',
+    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
   };
 
   startup.removedMethods = function() {
@@ -374,10 +446,28 @@
   // flag --use-uv to enable the libuv backend instead of the legacy
   // backend.
   function translateId(id) {
-    if (id == 'net') {
-      return process.useUV || process.env.NODE_USE_UV ? 'net_uv' : 'net_legacy';
-    } else {
-      return id;
+    switch (id) {
+      case 'net':
+        return process.features.uv ? 'net_uv' : 'net_legacy';
+
+      case 'tty':
+        return process.features.uv ? 'tty_uv' : 'tty_legacy';
+
+      case 'child_process':
+        return process.features.uv ? 'child_process_uv' :
+                                     'child_process_legacy';
+
+      case 'timers':
+        return process.features.uv ? 'timers_uv' : 'timers_legacy';
+
+      case 'dgram':
+        return process.features.uv ? 'dgram_uv' : 'dgram_legacy';
+
+      case 'dns':
+        return process.features.uv ? 'dns_uv' : 'dns_legacy';
+
+      default:
+        return id;
     }
   }
 
@@ -408,6 +498,8 @@
       throw new Error('No such native module ' + id);
     }
 
+    process.moduleLoadList.push('NativeModule ' + id);
+
     var nativeModule = new NativeModule(id);
 
     nativeModule.compile();
@@ -436,7 +528,7 @@
   };
 
   NativeModule.wrapper = [
-    '(function (exports, require, module, __filename, __dirname, define) { ',
+    '(function (exports, require, module, __filename, __dirname) { ',
     '\n});'
   ];
 

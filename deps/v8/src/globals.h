@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,35 @@
 #ifndef V8_GLOBALS_H_
 #define V8_GLOBALS_H_
 
+// Define V8_INFINITY
+#define V8_INFINITY INFINITY
+
+// GCC specific stuff
+#ifdef __GNUC__
+
+#define __GNUC_VERSION_FOR_INFTY__ (__GNUC__ * 10000 + __GNUC_MINOR__ * 100)
+
+// Unfortunately, the INFINITY macro cannot be used with the '-pedantic'
+// warning flag and certain versions of GCC due to a bug:
+// http://gcc.gnu.org/bugzilla/show_bug.cgi?id=11931
+// For now, we use the more involved template-based version from <limits>, but
+// only when compiling with GCC versions affected by the bug (2.96.x - 4.0.x)
+// __GNUC_PREREQ is not defined in GCC for Mac OS X, so we define our own macro
+#if __GNUC_VERSION_FOR_INFTY__ >= 29600 && __GNUC_VERSION_FOR_INFTY__ < 40100
+#include <limits>
+#undef V8_INFINITY
+#define V8_INFINITY std::numeric_limits<double>::infinity()
+#endif
+#undef __GNUC_VERSION_FOR_INFTY__
+
+#endif  // __GNUC__
+
+#ifdef _MSC_VER
+#undef V8_INFINITY
+#define V8_INFINITY HUGE_VAL
+#endif
+
+
 #include "../include/v8stdint.h"
 
 namespace v8 {
@@ -54,7 +83,7 @@ namespace internal {
 #if CAN_USE_UNALIGNED_ACCESSES
 #define V8_HOST_CAN_READ_UNALIGNED 1
 #endif
-#elif defined(_MIPS_ARCH_MIPS32R2)
+#elif defined(__MIPSEL__)
 #define V8_HOST_ARCH_MIPS 1
 #define V8_HOST_ARCH_32_BIT 1
 #else
@@ -72,7 +101,7 @@ namespace internal {
 #define V8_TARGET_ARCH_IA32 1
 #elif defined(__ARMEL__)
 #define V8_TARGET_ARCH_ARM 1
-#elif defined(_MIPS_ARCH_MIPS32R2)
+#elif defined(__MIPSEL__)
 #define V8_TARGET_ARCH_MIPS 1
 #else
 #error Target architecture was not detected as supported by v8
@@ -198,6 +227,8 @@ const int kIntSize      = sizeof(int);       // NOLINT
 const int kDoubleSize   = sizeof(double);    // NOLINT
 const int kIntptrSize   = sizeof(intptr_t);  // NOLINT
 const int kPointerSize  = sizeof(void*);     // NOLINT
+
+const int kDoubleSizeLog2 = 3;
 
 #if V8_HOST_ARCH_64_BIT
 const int kPointerSizeLog2 = 3;

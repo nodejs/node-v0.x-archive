@@ -48,42 +48,49 @@ const $Number = global.Number;
 const $Function = global.Function;
 const $Boolean = global.Boolean;
 const $NaN = 0/0;
+const builtins = this;
 
-
-// ECMA-262, section 11.9.1, page 55.
+// ECMA-262 Section 11.9.3.
 function EQUALS(y) {
   if (IS_STRING(this) && IS_STRING(y)) return %StringEquals(this, y);
   var x = this;
 
-  // NOTE: We use iteration instead of recursion, because it is
-  // difficult to call EQUALS with the correct setting of 'this' in
-  // an efficient way.
   while (true) {
     if (IS_NUMBER(x)) {
-      if (y == null) return 1;  // not equal
-      return %NumberEquals(x, %ToNumber(y));
-    } else if (IS_STRING(x)) {
-      if (IS_STRING(y)) return %StringEquals(x, y);
-      if (IS_NUMBER(y)) return %NumberEquals(%ToNumber(x), y);
-      if (IS_BOOLEAN(y)) return %NumberEquals(%ToNumber(x), %ToNumber(y));
-      if (y == null) return 1;  // not equal
-      y = %ToPrimitive(y, NO_HINT);
-    } else if (IS_BOOLEAN(x)) {
-      if (IS_BOOLEAN(y)) {
-        return %_ObjectEquals(x, y) ? 0 : 1;
+      while (true) {
+        if (IS_NUMBER(y)) return %NumberEquals(x, y);
+        if (IS_NULL_OR_UNDEFINED(y)) return 1;  // not equal
+        if (!IS_SPEC_OBJECT(y)) {
+          // String or boolean.
+          return %NumberEquals(x, %ToNumber(y));
+        }
+        y = %ToPrimitive(y, NO_HINT);
       }
-      if (y == null) return 1;  // not equal
-      return %NumberEquals(%ToNumber(x), %ToNumber(y));
-    } else if (x == null) {
-      // NOTE: This checks for both null and undefined.
-      return (y == null) ? 0 : 1;
+    } else if (IS_STRING(x)) {
+      while (true) {
+        if (IS_STRING(y)) return %StringEquals(x, y);
+        if (IS_NUMBER(y)) return %NumberEquals(%ToNumber(x), y);
+        if (IS_BOOLEAN(y)) return %NumberEquals(%ToNumber(x), %ToNumber(y));
+        if (IS_NULL_OR_UNDEFINED(y)) return 1;  // not equal
+        y = %ToPrimitive(y, NO_HINT);
+      }
+    } else if (IS_BOOLEAN(x)) {
+      if (IS_BOOLEAN(y)) return %_ObjectEquals(x, y) ? 0 : 1;
+      if (IS_NULL_OR_UNDEFINED(y)) return 1;
+      if (IS_NUMBER(y)) return %NumberEquals(%ToNumber(x), y);
+      if (IS_STRING(y)) return %NumberEquals(%ToNumber(x), %ToNumber(y));
+      // y is object.
+      x = %ToNumber(x);
+      y = %ToPrimitive(y, NO_HINT);
+    } else if (IS_NULL_OR_UNDEFINED(x)) {
+      return IS_NULL_OR_UNDEFINED(y) ? 0 : 1;
     } else {
-      // x is not a number, boolean, null or undefined.
-      if (y == null) return 1;  // not equal
+      // x is an object.
       if (IS_SPEC_OBJECT(y)) {
         return %_ObjectEquals(x, y) ? 0 : 1;
       }
-
+      if (IS_NULL_OR_UNDEFINED(y)) return 1;  // not equal
+      if (IS_BOOLEAN(y)) y = %ToNumber(y);
       x = %ToPrimitive(x, NO_HINT);
     }
   }
@@ -348,7 +355,8 @@ function IN(x) {
   if (!IS_SPEC_OBJECT(x)) {
     throw %MakeTypeError('invalid_in_operator_use', [this, x]);
   }
-  return %_IsNonNegativeSmi(this) ? %HasElement(x, this) : %HasProperty(x, %ToString(this));
+  return %_IsNonNegativeSmi(this) && !%IsJSProxy(x) ?
+    %HasElement(x, this) : %HasProperty(x, %ToString(this));
 }
 
 
@@ -358,7 +366,7 @@ function IN(x) {
 // an expensive ToBoolean conversion in the generated code.
 function INSTANCE_OF(F) {
   var V = this;
-  if (!IS_FUNCTION(F)) {
+  if (!IS_SPEC_FUNCTION(F)) {
     throw %MakeTypeError('instanceof_function_expected', [V]);
   }
 
@@ -400,7 +408,7 @@ function CALL_NON_FUNCTION() {
   if (!IS_FUNCTION(delegate)) {
     throw %MakeTypeError('called_non_callable', [typeof this]);
   }
-  return delegate.apply(this, arguments);
+  return %Apply(delegate, this, arguments, 0, %_ArgumentsLength());
 }
 
 
@@ -409,7 +417,32 @@ function CALL_NON_FUNCTION_AS_CONSTRUCTOR() {
   if (!IS_FUNCTION(delegate)) {
     throw %MakeTypeError('called_non_callable', [typeof this]);
   }
-  return delegate.apply(this, arguments);
+  return %Apply(delegate, this, arguments, 0, %_ArgumentsLength());
+}
+
+
+function CALL_FUNCTION_PROXY() {
+  var arity = %_ArgumentsLength() - 1;
+  var proxy = %_Arguments(arity);  // The proxy comes in as an additional arg.
+  var trap = %GetCallTrap(proxy);
+  return %Apply(trap, this, arguments, 0, arity);
+}
+
+
+function CALL_FUNCTION_PROXY_AS_CONSTRUCTOR(proxy) {
+  var arity = %_ArgumentsLength() - 1;
+  var trap = %GetConstructTrap(proxy);
+  var receiver = void 0;
+  if (!IS_UNDEFINED(trap)) {
+    trap = %GetCallTrap(proxy);
+    var proto = proxy.prototype;
+    if (!IS_SPEC_OBJECT(proto) && proto !== null) {
+      throw MakeTypeError("proto_object_or_null", [proto]);
+    }
+    receiver = new global.Object();
+    receiver.__proto__ = proto;
+  }
+  return %Apply(trap, this, arguments, 1, arity);
 }
 
 
@@ -420,7 +453,8 @@ function APPLY_PREPARE(args) {
   // that takes care of more eventualities.
   if (IS_ARRAY(args)) {
     length = args.length;
-    if (%_IsSmi(length) && length >= 0 && length < 0x800000 && IS_FUNCTION(this)) {
+    if (%_IsSmi(length) && length >= 0 && length < 0x800000 &&
+        IS_SPEC_FUNCTION(this)) {
       return length;
     }
   }
@@ -434,7 +468,7 @@ function APPLY_PREPARE(args) {
     throw %MakeRangeError('stack_overflow', []);
   }
 
-  if (!IS_FUNCTION(this)) {
+  if (!IS_SPEC_FUNCTION(this)) {
     throw %MakeTypeError('apply_non_function', [ %ToString(this), typeof this ]);
   }
 
@@ -602,13 +636,13 @@ function IsPrimitive(x) {
 // ECMA-262, section 8.6.2.6, page 28.
 function DefaultNumber(x) {
   var valueOf = x.valueOf;
-  if (IS_FUNCTION(valueOf)) {
+  if (IS_SPEC_FUNCTION(valueOf)) {
     var v = %_CallFunction(x, valueOf);
     if (%IsPrimitive(v)) return v;
   }
 
   var toString = x.toString;
-  if (IS_FUNCTION(toString)) {
+  if (IS_SPEC_FUNCTION(toString)) {
     var s = %_CallFunction(x, toString);
     if (%IsPrimitive(s)) return s;
   }
@@ -620,13 +654,13 @@ function DefaultNumber(x) {
 // ECMA-262, section 8.6.2.6, page 28.
 function DefaultString(x) {
   var toString = x.toString;
-  if (IS_FUNCTION(toString)) {
+  if (IS_SPEC_FUNCTION(toString)) {
     var s = %_CallFunction(x, toString);
     if (%IsPrimitive(s)) return s;
   }
 
   var valueOf = x.valueOf;
-  if (IS_FUNCTION(valueOf)) {
+  if (IS_SPEC_FUNCTION(valueOf)) {
     var v = %_CallFunction(x, valueOf);
     if (%IsPrimitive(v)) return v;
   }
@@ -638,6 +672,6 @@ function DefaultString(x) {
 // NOTE: Setting the prototype for Array must take place as early as
 // possible due to code generation for array literals.  When
 // generating code for a array literal a boilerplate array is created
-// that is cloned when running the code.  It is essiential that the
+// that is cloned when running the code.  It is essential that the
 // boilerplate gets the right prototype.
 %FunctionSetPrototype($Array, new $Array(0));

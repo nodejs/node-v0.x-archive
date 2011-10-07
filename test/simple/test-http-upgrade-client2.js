@@ -39,33 +39,31 @@ var successCount = 0;
 
 server.listen(common.PORT, function() {
 
-  var client = http.createClient(common.PORT);
-
   function upgradeRequest(fn) {
-    console.log("req");
+    console.log('req');
     var header = { 'Connection': 'Upgrade', 'Upgrade': 'Test' };
-    var request = client.request('GET', '/', header);
+    var request = http.request({ port: common.PORT, headers: header });
     var wasUpgrade = false;
 
     function onUpgrade(res, socket, head) {
-      console.log("client upgraded");
+      console.log('client upgraded');
       wasUpgrade = true;
 
-      client.removeListener('upgrade', onUpgrade);
+      request.removeListener('upgrade', onUpgrade);
       socket.end();
     }
-    client.on('upgrade', onUpgrade);
+    request.on('upgrade', onUpgrade);
 
     function onEnd() {
-      console.log("client end");
-      client.removeListener('end', onEnd);
+      console.log('client end');
+      request.removeListener('end', onEnd);
       if (!wasUpgrade) {
         throw new Error('hasn\'t received upgrade event');
       } else {
         fn && process.nextTick(fn);
       }
     }
-    client.on('end', onEnd);
+    request.on('close', onEnd);
 
     request.write('head');
 
@@ -77,8 +75,6 @@ server.listen(common.PORT, function() {
       successCount++;
       // Test pass
       console.log('Pass!');
-      client.end();
-      client.destroy();
       server.close();
     });
   });

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -42,11 +42,12 @@ namespace v8 {
 namespace internal {
 
 void CPU::Setup() {
-  CpuFeatures::Clear();
-  CpuFeatures::Probe(true);
-  if (!CpuFeatures::IsSupported(SSE2) || Serializer::enabled()) {
-    V8::DisableCrankshaft();
-  }
+  CpuFeatures::Probe();
+}
+
+
+bool CPU::SupportsCrankshaft() {
+  return CpuFeatures::IsSupported(SSE2);
 }
 
 
@@ -66,7 +67,8 @@ void CPU::FlushICache(void* start, size_t size) {
   // solution is to run valgrind with --smc-check=all, but this comes at a big
   // performance cost.  We can notify valgrind to invalidate its cache.
 #ifdef VALGRIND_DISCARD_TRANSLATIONS
-  VALGRIND_DISCARD_TRANSLATIONS(start, size);
+  unsigned res = VALGRIND_DISCARD_TRANSLATIONS(start, size);
+  USE(res);
 #endif
 }
 

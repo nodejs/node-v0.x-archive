@@ -38,11 +38,11 @@ namespace internal {
 // Public V8 debugger API message handler function. This function just delegates
 // to the debugger agent through it's data parameter.
 void DebuggerAgentMessageHandler(const v8::Debug::Message& message) {
-  DebuggerAgent::instance_->DebuggerMessage(message);
+  DebuggerAgent* agent = Isolate::Current()->debugger_agent_instance();
+  ASSERT(agent != NULL);
+  agent->DebuggerMessage(message);
 }
 
-// static
-DebuggerAgent* DebuggerAgent::instance_ = NULL;
 
 // Debugger agent main thread.
 void DebuggerAgent::Run() {
@@ -102,21 +102,22 @@ void DebuggerAgent::WaitUntilListening() {
   listening_->Wait();
 }
 
+static const char* kCreateSessionMessage =
+    "Remote debugging session already active\r\n";
+
 void DebuggerAgent::CreateSession(Socket* client) {
   ScopedLock with(session_access_);
 
   // If another session is already established terminate this one.
   if (session_ != NULL) {
-    static const char* message = "Remote debugging session already active\r\n";
-
-    client->Send(message, StrLength(message));
+    client->Send(kCreateSessionMessage, StrLength(kCreateSessionMessage));
     delete client;
     return;
   }
 
   // Create a new session and hook up the debug message handler.
   session_ = new DebuggerAgentSession(this, client);
-  v8::Debug::SetMessageHandler2(DebuggerAgentMessageHandler);
+  isolate_->debugger()->SetMessageHandler(DebuggerAgentMessageHandler);
   session_->Start();
 }
 
@@ -168,7 +169,8 @@ void DebuggerAgentSession::Run() {
 
   while (true) {
     // Read data from the debugger front end.
-    SmartPointer<char> message = DebuggerAgentUtil::ReceiveMessage(client_);
+    SmartArrayPointer<char> message =
+        DebuggerAgentUtil::ReceiveMessage(client_);
 
     const char* msg = *message;
     bool is_closing_session = (msg == NULL);
@@ -202,7 +204,9 @@ void DebuggerAgentSession::Run() {
 
     // Send the request received to the debugger.
     v8::Debug::SendCommand(reinterpret_cast<const uint16_t *>(temp.start()),
-                           len);
+                           len,
+                           NULL,
+                           reinterpret_cast<v8::Isolate*>(agent_->isolate()));
 
     if (is_closing_session) {
       // Session is closed.
@@ -224,12 +228,12 @@ void DebuggerAgentSession::Shutdown() {
 }
 
 
-const char* DebuggerAgentUtil::kContentLength = "Content-Length";
-int DebuggerAgentUtil::kContentLengthSize =
+const char* const DebuggerAgentUtil::kContentLength = "Content-Length";
+const int DebuggerAgentUtil::kContentLengthSize =
     StrLength(kContentLength);
 
 
-SmartPointer<char> DebuggerAgentUtil::ReceiveMessage(const Socket* conn) {
+SmartArrayPointer<char> DebuggerAgentUtil::ReceiveMessage(const Socket* conn) {
   int received;
 
   // Read header.
@@ -247,7 +251,7 @@ SmartPointer<char> DebuggerAgentUtil::ReceiveMessage(const Socket* conn) {
       received = conn->Receive(&c, 1);
       if (received <= 0) {
         PrintF("Error %d\n", Socket::LastError());
-        return SmartPointer<char>();
+        return SmartArrayPointer<char>();
       }
 
       // Add character to header buffer.
@@ -284,12 +288,12 @@ SmartPointer<char> DebuggerAgentUtil::ReceiveMessage(const Socket* conn) {
     if (strcmp(key, kContentLength) == 0) {
       // Get the content length value if present and within a sensible range.
       if (value == NULL || strlen(value) > 7) {
-        return SmartPointer<char>();
+        return SmartArrayPointer<char>();
       }
       for (int i = 0; value[i] != '\0'; i++) {
         // Bail out if illegal data.
         if (value[i] < '0' || value[i] > '9') {
-          return SmartPointer<char>();
+          return SmartArrayPointer<char>();
         }
         content_length = 10 * content_length + (value[i] - '0');
       }
@@ -301,7 +305,7 @@ SmartPointer<char> DebuggerAgentUtil::ReceiveMessage(const Socket* conn) {
 
   // Return now if no body.
   if (content_length == 0) {
-    return SmartPointer<char>();
+    return SmartArrayPointer<char>();
   }
 
   // Read body.
@@ -309,11 +313,11 @@ SmartPointer<char> DebuggerAgentUtil::ReceiveMessage(const Socket* conn) {
   received = ReceiveAll(conn, buffer, content_length);
   if (received < content_length) {
     PrintF("Error %d\n", Socket::LastError());
-    return SmartPointer<char>();
+    return SmartArrayPointer<char>();
   }
   buffer[content_length] = '\0';
 
-  return SmartPointer<char>(buffer);
+  return SmartArrayPointer<char>(buffer);
 }
 
 

@@ -30,12 +30,52 @@ var f = __filename;
 
 assert.equal(path.basename(f), 'test-path.js');
 assert.equal(path.basename(f, '.js'), 'test-path');
+
+// POSIX filenames may include control characters
+// c.f. http://www.dwheeler.com/essays/fixing-unix-linux-filenames.html
+if (!isWindows) {
+  var controlCharFilename = 'Icon' + String.fromCharCode(13);
+  assert.equal(path.basename('/a/b/' + controlCharFilename), controlCharFilename);
+}
+
 assert.equal(path.extname(f), '.js');
+
 assert.equal(path.dirname(f).substr(-11), isWindows ? 'test\\simple' : 'test/simple');
 assert.equal(path.dirname('/a/b/'), '/a');
 assert.equal(path.dirname('/a/b'), '/a');
 assert.equal(path.dirname('/a'), '/');
 assert.equal(path.dirname('/'), '/');
+
+if (isWindows) {
+  assert.equal(path.dirname('c:\\'), 'c:\\');
+  assert.equal(path.dirname('c:\\foo'), 'c:\\');
+  assert.equal(path.dirname('c:\\foo\\'), 'c:\\');
+  assert.equal(path.dirname('c:\\foo\\bar'), 'c:\\foo');
+  assert.equal(path.dirname('c:\\foo\\bar\\'), 'c:\\foo');
+  assert.equal(path.dirname('c:\\foo\\bar\\baz'), 'c:\\foo\\bar');
+  assert.equal(path.dirname('\\'), '\\');
+  assert.equal(path.dirname('\\foo'), '\\');
+  assert.equal(path.dirname('\\foo\\'), '\\');
+  assert.equal(path.dirname('\\foo\\bar'), '\\foo');
+  assert.equal(path.dirname('\\foo\\bar\\'), '\\foo');
+  assert.equal(path.dirname('\\foo\\bar\\baz'), '\\foo\\bar');
+  assert.equal(path.dirname('c:'), 'c:');
+  assert.equal(path.dirname('c:foo'), 'c:');
+  assert.equal(path.dirname('c:foo\\'), 'c:');
+  assert.equal(path.dirname('c:foo\\bar'), 'c:foo');
+  assert.equal(path.dirname('c:foo\\bar\\'), 'c:foo');
+  assert.equal(path.dirname('c:foo\\bar\\baz'), 'c:foo\\bar');
+  assert.equal(path.dirname('\\\\unc\\share'), '\\\\unc\\share');
+  assert.equal(path.dirname('\\\\unc\\share\\foo'), '\\\\unc\\share\\');
+  assert.equal(path.dirname('\\\\unc\\share\\foo\\'), '\\\\unc\\share\\');
+  assert.equal(path.dirname('\\\\unc\\share\\foo\\bar'),
+               '\\\\unc\\share\\foo');
+  assert.equal(path.dirname('\\\\unc\\share\\foo\\bar\\'),
+               '\\\\unc\\share\\foo');
+  assert.equal(path.dirname('\\\\unc\\share\\foo\\bar\\baz'),
+               '\\\\unc\\share\\foo\\bar');
+}
+
 path.exists(f, function(y) { assert.equal(y, true) });
 
 assert.equal(path.existsSync(f), true);
@@ -140,24 +180,24 @@ if (isWindows) {
 if (isWindows) {
   // windows
   var resolveTests =
-    // arguments                                    result
-    [[['c:/blah\\blah', 'd:/games', 'c:../a'     ], 'c:\\blah\\a'    ],
-     [['c:/ignore', 'd:\\a/b\\c/d', '\\e.exe'    ], 'd:\\e.exe'      ],
-     [['c:/ignore', 'c:/some/file'               ], 'c:\\some\\file' ],
-     [['d:/ignore', 'd:some/dir//'               ], 'd:\\ignore\\some\\dir' ],
-     [['.'                                       ], process.cwd()    ],
-     [['//server/share', '..', 'relative\\'      ], '\\\\server\\share\\relative' ]];
+      // arguments                                    result
+      [[['c:/blah\\blah', 'd:/games', 'c:../a'], 'c:\\blah\\a'],
+       [['c:/ignore', 'd:\\a/b\\c/d', '\\e.exe'], 'd:\\e.exe'],
+       [['c:/ignore', 'c:/some/file'], 'c:\\some\\file'],
+       [['d:/ignore', 'd:some/dir//'], 'd:\\ignore\\some\\dir'],
+       [['.'], process.cwd()],
+       [['//server/share', '..', 'relative\\'], '\\\\server\\share\\relative']];
 } else {
   // Posix
   var resolveTests =
-    // arguments                                    result
-    [[['/var/lib', '../', 'file/'                ], '/var/file'      ],
-     [['/var/lib', '/../', 'file/'               ], '/file'          ],
-     [['a/b/c/', '../../..'                      ], process.cwd()    ],
-     [['.'                                       ], process.cwd()    ],
-     [['/some/dir', '.', '/absolute/'            ], '/absolute'      ]];
+      // arguments                                    result
+      [[['/var/lib', '../', 'file/'], '/var/file'],
+       [['/var/lib', '/../', 'file/'], '/file'],
+       [['a/b/c/', '../../..'], process.cwd()],
+       [['.'], process.cwd()],
+       [['/some/dir', '.', '/absolute/'], '/absolute']];
 }
-var failures = []
+var failures = [];
 resolveTests.forEach(function(test) {
   var actual = path.resolve.apply(path, test[0]);
   var expected = test[1];
@@ -173,25 +213,25 @@ assert.equal(failures.length, 0, failures.join(''));
 if (isWindows) {
   // windows
   var relativeTests =
-   // arguments                     result
-   [['c:/blah\\blah', 'd:/games',   'd:\\games'],
-    ['c:/aaaa/bbbb', 'c:/aaaa',     '..'],
-    ['c:/aaaa/bbbb', 'c:/cccc',     '..\\..\\cccc'],
-    ['c:/aaaa/bbbb', 'c:/aaaa/bbbb',''],
-    ['c:/aaaa/bbbb', 'c:/aaaa/cccc','..\\cccc'],
-    ['c:/aaaa/', 'c:/aaaa/cccc',    'cccc'],
-    ['c:/', 'c:\\aaaa\\bbbb',       'aaaa\\bbbb'],
-    ['c:/aaaa/bbbb', 'd:\\',        'd:\\']];
+      // arguments                     result
+      [['c:/blah\\blah', 'd:/games', 'd:\\games'],
+       ['c:/aaaa/bbbb', 'c:/aaaa', '..'],
+       ['c:/aaaa/bbbb', 'c:/cccc', '..\\..\\cccc'],
+       ['c:/aaaa/bbbb', 'c:/aaaa/bbbb', ''],
+       ['c:/aaaa/bbbb', 'c:/aaaa/cccc', '..\\cccc'],
+       ['c:/aaaa/', 'c:/aaaa/cccc', 'cccc'],
+       ['c:/', 'c:\\aaaa\\bbbb', 'aaaa\\bbbb'],
+       ['c:/aaaa/bbbb', 'd:\\', 'd:\\']];
 } else {
   // posix
   var relativeTests =
-    // arguments                    result
-    [['/var/lib', '/var',           '..'],
-     ['/var/lib', '/bin',           '../../bin'],
-     ['/var/lib', '/var/lib',       ''],
-     ['/var/lib', '/var/apache',    '../apache'],
-     ['/var/', '/var/lib',          'lib'],
-     ['/', '/var/lib',              'var/lib']];
+      // arguments                    result
+      [['/var/lib', '/var', '..'],
+       ['/var/lib', '/bin', '../../bin'],
+       ['/var/lib', '/var/lib', ''],
+       ['/var/lib', '/var/apache', '../apache'],
+       ['/var/', '/var/lib', 'lib'],
+       ['/', '/var/lib', 'var/lib']];
 }
 var failures = [];
 relativeTests.forEach(function(test) {

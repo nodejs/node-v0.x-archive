@@ -19,8 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 if (!process.versions.openssl) {
-  console.error("Skipping because node compiled without OpenSSL.");
+  console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
 }
 
@@ -37,7 +40,7 @@ var options = {
 
 var server = https.Server(options, function(req, res) {
   res.writeHead(200);
-  res.end("hello world\n");
+  res.end('hello world\n');
 });
 
 
@@ -47,9 +50,9 @@ var M = 10;
 
 server.listen(common.PORT, function() {
   for (var i = 0; i < N; i++) {
-    setTimeout(function () {
+    setTimeout(function() {
       for (var j = 0; j < M; j++) {
-        https.get({ port: common.PORT, path: '/', }, function(res) {
+        https.get({ port: common.PORT, path: '/' }, function(res) {
           console.log(res.statusCode);
           if (++responses == N * M) server.close();
         }).on('error', function(e) {

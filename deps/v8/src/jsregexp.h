@@ -28,7 +28,7 @@
 #ifndef V8_JSREGEXP_H_
 #define V8_JSREGEXP_H_
 
-#include "macro-assembler.h"
+#include "allocation.h"
 #include "zone-inl.h"
 
 namespace v8 {
@@ -175,6 +175,14 @@ class RegExpImpl {
   static ByteArray* IrregexpByteCode(FixedArray* re, bool is_ascii);
   static Code* IrregexpNativeCode(FixedArray* re, bool is_ascii);
 
+  // Limit the space regexps take up on the heap.  In order to limit this we
+  // would like to keep track of the amount of regexp code on the heap.  This
+  // is not tracked, however.  As a conservative approximation we track the
+  // total regexp code compiled including code that has subsequently been freed
+  // and the total executable memory at any point.
+  static const int kRegExpExecutableMemoryLimit = 16 * MB;
+  static const int kRegWxpCompiledLimit = 1 * MB;
+
  private:
   static String* last_ascii_string_;
   static String* two_byte_cached_string_;
@@ -247,6 +255,7 @@ class SetRelation BASE_EMBEDDED {
     return (bits_ == (kInFirst | kInSecond | kInBoth));
   }
   int value() { return bits_; }
+
  private:
   int bits_;
 };
@@ -396,6 +405,7 @@ class DispatchTable : public ZoneObject {
 
   template <typename Callback>
   void ForEach(Callback* callback) { return tree()->ForEach(callback); }
+
  private:
   // There can't be a static empty set since it allocates its
   // successors in a zone and caches them.
@@ -785,6 +795,7 @@ class ActionNode: public SeqRegExpNode {
   virtual int GreedyLoopTextLength() { return kNodeIsTooComplexForGreedyLoops; }
   virtual ActionNode* Clone() { return new ActionNode(*this); }
   virtual int ComputeFirstCharacterSet(int budget);
+
  private:
   union {
     struct {
@@ -853,6 +864,7 @@ class TextNode: public SeqRegExpNode {
   }
   void CalculateOffsets();
   virtual int ComputeFirstCharacterSet(int budget);
+
  private:
   enum TextEmitPassType {
     NON_ASCII_MATCH,             // Check for characters that can't match.
@@ -917,6 +929,7 @@ class AssertionNode: public SeqRegExpNode {
   virtual AssertionNode* Clone() { return new AssertionNode(*this); }
   AssertionNodeType type() { return type_; }
   void set_type(AssertionNodeType type) { type_ = type; }
+
  private:
   AssertionNode(AssertionNodeType t, RegExpNode* on_success)
       : SeqRegExpNode(on_success), type_(t) { }
@@ -947,6 +960,7 @@ class BackReferenceNode: public SeqRegExpNode {
   }
   virtual BackReferenceNode* Clone() { return new BackReferenceNode(*this); }
   virtual int ComputeFirstCharacterSet(int budget);
+
  private:
   int start_reg_;
   int end_reg_;
@@ -1063,7 +1077,7 @@ class ChoiceNode: public RegExpNode {
   virtual bool try_to_emit_quick_check_for_alternative(int i) { return true; }
 
  protected:
-  int GreedyLoopTextLength(GuardedAlternative* alternative);
+  int GreedyLoopTextLengthForAlternative(GuardedAlternative* alternative);
   ZoneList<GuardedAlternative>* alternatives_;
 
  private:
@@ -1293,6 +1307,7 @@ class Trace {
   }
   void InvalidateCurrentCharacter();
   void AdvanceCurrentPositionInTrace(int by, RegExpCompiler* compiler);
+
  private:
   int FindAffectedRegisters(OutSet* affected_registers);
   void PerformDeferredActions(RegExpMacroAssembler* macro,
@@ -1394,6 +1409,7 @@ FOR_EACH_NODE_TYPE(DECLARE_VISIT)
   void fail(const char* error_message) {
     error_message_ = error_message;
   }
+
  private:
   bool ignore_case_;
   bool is_ascii_;
@@ -1424,7 +1440,7 @@ class RegExpEngine: public AllStatic {
   struct CompilationResult {
     explicit CompilationResult(const char* error_message)
         : error_message(error_message),
-          code(Heap::the_hole_value()),
+          code(HEAP->the_hole_value()),
           num_registers(0) {}
     CompilationResult(Object* code, int registers)
       : error_message(NULL),
@@ -1447,16 +1463,16 @@ class RegExpEngine: public AllStatic {
 
 class OffsetsVector {
  public:
-  inline OffsetsVector(int num_registers)
+  explicit inline OffsetsVector(int num_registers)
       : offsets_vector_length_(num_registers) {
-    if (offsets_vector_length_ > kStaticOffsetsVectorSize) {
+    if (offsets_vector_length_ > Isolate::kJSRegexpStaticOffsetsVectorSize) {
       vector_ = NewArray<int>(offsets_vector_length_);
     } else {
-      vector_ = static_offsets_vector_;
+      vector_ = Isolate::Current()->jsregexp_static_offsets_vector();
     }
   }
   inline ~OffsetsVector() {
-    if (offsets_vector_length_ > kStaticOffsetsVectorSize) {
+    if (offsets_vector_length_ > Isolate::kJSRegexpStaticOffsetsVectorSize) {
       DeleteArray(vector_);
       vector_ = NULL;
     }
@@ -1467,13 +1483,12 @@ class OffsetsVector {
   static const int kStaticOffsetsVectorSize = 50;
 
  private:
-  static Address static_offsets_vector_address() {
-    return reinterpret_cast<Address>(&static_offsets_vector_);
+  static Address static_offsets_vector_address(Isolate* isolate) {
+    return reinterpret_cast<Address>(isolate->jsregexp_static_offsets_vector());
   }
 
   int* vector_;
   int offsets_vector_length_;
-  static int static_offsets_vector_[kStaticOffsetsVectorSize];
 
   friend class ExternalReference;
 };

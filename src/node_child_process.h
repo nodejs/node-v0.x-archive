@@ -29,7 +29,7 @@
 #include <uv.h>
 
 #ifdef __POSIX__
-# include <ev.h>
+# include <uv-private/ev.h>
 #endif
 
 #ifdef __MINGW32__
@@ -119,12 +119,10 @@ class ChildProcess : ObjectWrap {
 #endif // __POSIX__
 
 #ifdef __MINGW32__
-  static int do_spawn(eio_req *req);
-  static int after_spawn(eio_req *req);
   static void watch(ChildProcess *child);
   static void CALLBACK watch_wait_callback(void *data, BOOLEAN didTimeout);
   static void notify_spawn_failure(ChildProcess *child);
-  static void notify_exit(uv_handle_t* watcher, int status);
+  static void notify_exit(uv_async_t* watcher, int status);
   static int do_kill(ChildProcess *child, int sig);static void close_stdio_handles(ChildProcess *child);
 
   int pid_;

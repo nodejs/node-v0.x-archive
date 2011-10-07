@@ -19,17 +19,33 @@
  * IN THE SOFTWARE.
  */
 
-#include "../uv.h"
+#include "uv.h"
 #include "task.h"
+
+#ifndef MILLISEC
+# define MILLISEC 1000
+#endif
+
+#ifndef NANOSEC
+# define NANOSEC 1000000000
+#endif
 
 
 TEST_IMPL(hrtime) {
-  uint64_t a = uv_get_hrtime();
-  uv_sleep(1);
-  uint64_t b = uv_get_hrtime();
+  uint64_t a, b, diff;
 
-  uint64_t diff = b - a;
+  a = uv_hrtime();
+  uv_sleep(100);
+  b = uv_hrtime();
 
-  printf("diff = %llu\n", diff);
-  ASSERT(b - a >= NANOSEC / MILLISEC);
+  diff = b - a;
+
+  printf("diff = %llu\n", (unsigned long long int) diff);
+
+  /* The windows Sleep() function has only a resolution of 10-20 ms. */
+  /* Check that the difference between the two hrtime values is somewhat in */
+  /* the range we expect it to be. */
+  ASSERT(diff > (uint64_t) 80 * NANOSEC / MILLISEC);
+  ASSERT(diff < (uint64_t) 120 * NANOSEC / MILLISEC);
+  return 0;
 }

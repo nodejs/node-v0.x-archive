@@ -36,7 +36,6 @@
 
 #ifdef __MINGW32__
 # include <platform_win32.h>
-# include <platform_win32_winsock.h>
 #endif
 
 #ifdef __POSIX__
@@ -83,8 +82,6 @@
 # define SHUT_WR   SD_SEND
 # define SHUT_RDWR SD_BOTH
 #endif
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 
 namespace node {
@@ -520,7 +517,7 @@ do { \
         } else if (addrlen == sizeof(struct sockaddr_un)) { \
           /* first byte is '\0' and all remaining bytes are name;
            * it is not NUL-terminated and may contain embedded NULs */ \
-          (info)->Set(address_symbol, String::New(au->sun_path + 1, sizeof(au->sun_path - 1))); \
+          (info)->Set(address_symbol, String::New(au->sun_path + 1, sizeof(au->sun_path) - 1)); \
         } else { \
           (info)->Set(address_symbol, String::New(au->sun_path)); \
         } \
@@ -591,42 +588,6 @@ static Handle<Value> GetSockName(const Arguments& args) {
   return scope.Close(info);
 }
 
-static Handle<Value> GetSockFamily(const Arguments& args) {
-  HandleScope scope;
-
-  FD_ARG(args[0])
-
-  Local<Value> result;
-
-  struct sockaddr_storage address_storage;
-  socklen_t len = sizeof(struct sockaddr_storage);
-
-#ifdef __POSIX__
-  if (0 > getsockname(fd, (struct sockaddr *) &address_storage, &len)) {
-    return ThrowException(ErrnoException(errno, "getsockname"));
-  }
-
-#else // __MINGW32__
-  if (SOCKET_ERROR == getsockname(_get_osfhandle(fd),
-      (struct sockaddr *) &address_storage, &len)) {
-    return ThrowException(ErrnoException(WSAGetLastError(), "getsockname"));
-  }
-#endif // __MINGW32__
-  switch ((address_storage).ss_family) {
-    case AF_INET6:
-      result = String::New("AF_INET6");
-      break;
-    case AF_INET:
-      result = String::New("AF_INET");
-      break;
-    case AF_UNIX:
-      result = String::New("AF_UNIX");
-      break;
-    default:
-      result = Integer::New((address_storage).ss_family);
-  }
-  scope.Close(result);
-}
 
 static Handle<Value> GetPeerName(const Arguments& args) {
   HandleScope scope;
@@ -756,40 +717,6 @@ static Handle<Value> SocketError(const Arguments& args) {
   return scope.Close(Integer::New(error));
 }
 
-static Handle<Value> GetSockType(const Arguments& args) {
-  HandleScope scope;
-
-  FD_ARG(args[0])
-
-  int type;
-  socklen_t len = sizeof(int);
-
-#ifdef __POSIX__
-  int r = getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len);
-
-  if (r < 0) {
-    return ThrowException(ErrnoException(errno, "getsockopt"));
-  }
-#else // __MINGW32__
-  int r = getsockopt(_get_osfhandle(fd), SOL_SOCKET, SO_TYPE, (char*)&type, &len);
-
-  if (r < 0) {
-    return ThrowException(ErrnoException(WSAGetLastError(), "getsockopt"));
-  }
-#endif
-  Local<Value> result;
-  switch (type) {
-    case SOCK_STREAM:
-      result = String::New("SOCK_STREAM");
-      break;
-    case SOCK_DGRAM:
-      result = String::New("SOCK_DGRAM");
-      break;
-    default:
-      result = Integer::New(type);
-  }
-  return scope.Close(result);
-}
 
 //  var bytesRead = t.read(fd, buffer, offset, length);
 //  returns null on EAGAIN or EINTR, raises an exception on all other errors
@@ -1111,7 +1038,7 @@ static Handle<Value> SendMsg(const Arguments& args) {
   // Grab the actul data to be written, stuffing it into iov
   if (!Buffer::HasInstance(args[1])) {
     return ThrowException(Exception::TypeError(
-      String::New("Expected either a string or a buffer")));
+      String::New("Expected a buffer")));
   }
 
   Local<Object> buffer_obj = args[1]->ToObject();
@@ -1237,7 +1164,7 @@ static Handle<Value> SendTo(const Arguments& args) {
   // Grab the actul data to be written
   if (!Buffer::HasInstance(args[1])) {
     return ThrowException(Exception::TypeError(
-      String::New("Expected either a string or a buffer")));
+      String::New("Expected a buffer")));
   }
 
   Local<Object> buffer_obj = args[1]->ToObject();
@@ -1504,11 +1431,17 @@ static Handle<Value> SetMulticastTTL(const Arguments& args) {
       String::New("Argument must be a number")));
   }
 
-  int newttl = args[1]->Int32Value();
-  if (newttl < 0 || newttl > 255) {
+  int value = args[1]->Int32Value();
+  if (value < 0 || value > 255) {
     return ThrowException(Exception::TypeError(
       String::New("new MulticastTTL must be between 0 and 255")));
   }
+
+#ifdef __sun
+  unsigned char newttl = (unsigned char) value;
+#else
+  int newttl = value;
+#endif
 
   int r = setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL,
     reinterpret_cast<void*>(&newttl), sizeof(newttl));
@@ -1521,7 +1454,12 @@ static Handle<Value> SetMulticastTTL(const Arguments& args) {
 }
 
 static Handle<Value> SetMulticastLoopback(const Arguments& args) {
-  int flags, r;
+#ifdef __sun
+  unsigned char flags;
+#else
+  int flags;
+#endif
+  int r;
   HandleScope scope;
 
   FD_ARG(args[0])
@@ -1670,7 +1608,7 @@ static int AfterResolve(eio_req *req) {
 }
 
 
-static int Resolve(eio_req *req) {
+static void Resolve(eio_req *req) {
   // Note: this function is executed in the thread pool! CAREFUL
   struct resolve_request * rreq = (struct resolve_request *) req->data;
 
@@ -1683,7 +1621,6 @@ static int Resolve(eio_req *req) {
                             NULL,
                             &hints,
                             &(rreq->address_list));
-  return 0;
 }
 
 
@@ -1830,8 +1767,6 @@ void InitNet(Handle<Object> target) {
   NODE_SET_METHOD(target, "getaddrinfo", GetAddrInfo);
   NODE_SET_METHOD(target, "isIP", IsIP);
   NODE_SET_METHOD(target, "errnoException", CreateErrnoException);
-  NODE_SET_METHOD(target, "getsocktype", GetSockType);
-  NODE_SET_METHOD(target, "getsockfamily", GetSockFamily);
 
   errno_symbol          = NODE_PSYMBOL("errno");
   syscall_symbol        = NODE_PSYMBOL("syscall");

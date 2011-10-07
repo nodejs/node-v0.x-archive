@@ -28,6 +28,7 @@
 #ifndef V8_LITHIUM_H_
 #define V8_LITHIUM_H_
 
+#include "allocation.h"
 #include "hydrogen.h"
 #include "safepoint-table.h"
 
@@ -143,7 +144,8 @@ class LUnallocated: public LOperand {
   };
 
   static const int kMaxVirtualRegisters = 1 << (kVirtualRegisterWidth + 1);
-  static const int kMaxFixedIndices = 128;
+  static const int kMaxFixedIndex = 63;
+  static const int kMinFixedIndex = -64;
 
   bool HasIgnorePolicy() const { return policy() == IGNORE; }
   bool HasNoPolicy() const { return policy() == NONE; }
@@ -163,8 +165,7 @@ class LUnallocated: public LOperand {
   }
   Policy policy() const { return PolicyField::decode(value_); }
   void set_policy(Policy policy) {
-    value_ &= ~PolicyField::mask();
-    value_ |= PolicyField::encode(policy);
+    value_ = PolicyField::update(value_, policy);
   }
   int fixed_index() const {
     return static_cast<int>(value_) >> kFixedIndexShift;
@@ -175,8 +176,7 @@ class LUnallocated: public LOperand {
   }
 
   void set_virtual_register(unsigned id) {
-    value_ &= ~VirtualRegisterField::mask();
-    value_ |= VirtualRegisterField::encode(id);
+    value_ = VirtualRegisterField::update(value_, id);
   }
 
   LUnallocated* CopyUnconstrained() {
@@ -517,34 +517,34 @@ class ShallowIterator BASE_EMBEDDED {
       : env_(env),
         limit_(env != NULL ? env->values()->length() : 0),
         current_(0) {
-    current_ = AdvanceToNext(0);
+    SkipUninteresting();
   }
 
-  inline bool HasNext() {
-    return env_ != NULL && current_ < limit_;
-  }
+  bool Done() { return current_ >= limit_; }
 
-  inline LOperand* Next() {
-    ASSERT(HasNext());
+  LOperand* Current() {
+    ASSERT(!Done());
     return env_->values()->at(current_);
   }
 
-  inline void Advance() {
-    current_ = AdvanceToNext(current_ + 1);
+  void Advance() {
+    ASSERT(!Done());
+    ++current_;
+    SkipUninteresting();
   }
 
-  inline LEnvironment* env() { return env_; }
+  LEnvironment* env() { return env_; }
 
  private:
-  inline bool ShouldSkip(LOperand* op) {
+  bool ShouldSkip(LOperand* op) {
     return op == NULL || op->IsConstantOperand() || op->IsArgument();
   }
 
-  inline int AdvanceToNext(int start) {
-    while (start < limit_ && ShouldSkip(env_->values()->at(start))) {
-      start++;
+  // Skip until something interesting, beginning with and including current_.
+  void SkipUninteresting() {
+    while (current_ < limit_ && ShouldSkip(env_->values()->at(current_))) {
+      ++current_;
     }
-    return start;
   }
 
   LEnvironment* env_;
@@ -557,35 +557,35 @@ class ShallowIterator BASE_EMBEDDED {
 class DeepIterator BASE_EMBEDDED {
  public:
   explicit DeepIterator(LEnvironment* env)
-      : current_iterator_(env) { }
-
-  inline bool HasNext() {
-    if (current_iterator_.HasNext()) return true;
-    if (current_iterator_.env() == NULL) return false;
-    AdvanceToOuter();
-    return current_iterator_.HasNext();
+      : current_iterator_(env) {
+    SkipUninteresting();
   }
 
-  inline LOperand* Next() {
-    ASSERT(current_iterator_.HasNext());
-    return current_iterator_.Next();
+  bool Done() { return current_iterator_.Done(); }
+
+  LOperand* Current() {
+    ASSERT(!current_iterator_.Done());
+    return current_iterator_.Current();
   }
 
-  inline void Advance() {
-    if (current_iterator_.HasNext()) {
-      current_iterator_.Advance();
-    } else {
-      AdvanceToOuter();
-    }
+  void Advance() {
+    current_iterator_.Advance();
+    SkipUninteresting();
   }
 
  private:
-  inline void AdvanceToOuter() {
-    current_iterator_ = ShallowIterator(current_iterator_.env()->outer());
+  void SkipUninteresting() {
+    while (current_iterator_.env() != NULL && current_iterator_.Done()) {
+      current_iterator_ = ShallowIterator(current_iterator_.env()->outer());
+    }
   }
 
   ShallowIterator current_iterator_;
 };
+
+
+int ElementsKindToShiftSize(ElementsKind elements_kind);
+
 
 } }  // namespace v8::internal
 

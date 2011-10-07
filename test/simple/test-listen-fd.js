@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 // Verify that net.Server.listenFD() can be used to accept connections on an
 // already-bound, already-listening socket.
 
@@ -44,8 +47,7 @@ netBinding.listen(fd, 128);
 srv.listenFD(fd);
 
 // Make an HTTP request to the server above
-var hc = http.createClient(common.PORT, '127.0.0.1');
-hc.request('/').end();
+http.get({ port: common.PORT, host: '127.0.0.1', path: '/'});
 
 // Verify that we're exiting after having received an HTTP  request
 process.addListener('exit', function() {

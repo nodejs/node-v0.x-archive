@@ -19,10 +19,14 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-assert = require('assert');
-child = require('child_process');
+var common = require('../common.js'),
+    assert = require('assert'),
+    child = require('child_process'),
+    nodejs = '"' + process.execPath + '"';
 
-nodejs = '"' + process.execPath + '"';
+// replace \ by / because windows uses backslashes in paths, but they're still
+// interpreted as the escape character when put between quotes.
+var filename = __filename.replace(/\\/g, '/');
 
 if (module.parent) {
   // signal we've been loaded as a module
@@ -30,14 +34,20 @@ if (module.parent) {
   process.exit(42);
 }
 
-// assert that the result of the final expression is written to stdout
-child.exec(nodejs + ' --eval "1337; 42"',
+// assert that nothing is written to stdout
+child.exec(nodejs + ' --eval 42',
     function(err, stdout, stderr) {
-      assert.equal(parseInt(stdout), 42);
+      assert.equal(stdout, '');
+    });
+
+// assert that "42\n" is written to stderr
+child.exec(nodejs + ' --eval "console.error(42)"',
+    function(err, stdout, stderr) {
+      assert.equal(stderr, '42\n');
     });
 
 // assert that module loading works
-child.exec(nodejs + ' --eval "require(\'' + __filename + '\')"',
+child.exec(nodejs + ' --eval "require(\'' + filename + '\')"',
     function(status, stdout, stderr) {
       assert.equal(status.code, 42);
     });
@@ -50,6 +60,6 @@ child.exec(nodejs + ' --eval "require(\'./test/simple/test-cli-eval.js\')"',
 
 // empty program should do nothing
 child.exec(nodejs + ' -e ""', function(status, stdout, stderr) {
-  assert.equal(stdout, 'undefined\n');
+  assert.equal(stdout, '');
   assert.equal(stderr, '');
 });

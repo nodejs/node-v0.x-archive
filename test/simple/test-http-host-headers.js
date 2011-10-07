@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var http = require('http'),
     https = require('https'),
     fs = require('fs'),
@@ -33,9 +36,13 @@ var http = require('http'),
 
 function reqHandler(req, res) {
   console.log('Got request: ' + req.headers.host + ' ' + req.url);
-  assert.equal(req.headers.host, 'localhost:' + common.PORT,
-               'Wrong host header for req[' + req.url + ']: ' +
-               req.headers.host);
+  if (req.url === '/setHostFalse5') {
+    assert.equal(req.headers.host, undefined);
+  } else {
+    assert.equal(req.headers.host, 'localhost:' + common.PORT,
+                 'Wrong host header for req[' + req.url + ']: ' +
+                 req.headers.host);
+  }
   res.writeHead(200, {});
   //process.nextTick(function() { res.end('ok'); });
   res.end('ok');
@@ -145,6 +152,12 @@ function testHttps() {
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
+      port: common.PORT }, cb).on('error', thrower).end();
+
+    https.get({ method: 'GET',
+      path: '/setHostFalse' + (counter++),
+      host: 'localhost',
+      setHost: false,
       port: common.PORT }, cb).on('error', thrower).end();
   });
 }

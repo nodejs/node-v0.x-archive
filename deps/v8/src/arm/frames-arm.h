@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -72,6 +72,9 @@ static const RegList kCalleeSaved =
 
 static const int kNumCalleeSaved = 7 + kR9Available;
 
+// Double registers d8 to d15 are callee-saved.
+static const int kNumDoubleCalleeSaved = 8;
+
 
 // Number of registers for which space is reserved in safepoints. Must be a
 // multiple of 8.
@@ -90,10 +93,11 @@ static const int kNumSafepointSavedRegisters =
 
 class StackHandlerConstants : public AllStatic {
  public:
-  static const int kNextOffset  = 0 * kPointerSize;
-  static const int kStateOffset = 1 * kPointerSize;
-  static const int kFPOffset    = 2 * kPointerSize;
-  static const int kPCOffset    = 3 * kPointerSize;
+  static const int kNextOffset    = 0 * kPointerSize;
+  static const int kStateOffset   = 1 * kPointerSize;
+  static const int kContextOffset = 2 * kPointerSize;
+  static const int kFPOffset      = 3 * kPointerSize;
+  static const int kPCOffset      = 4 * kPointerSize;
 
   static const int kSize = kPCOffset + kPointerSize;
 };
@@ -136,7 +140,7 @@ class JavaScriptFrameConstants : public AllStatic {
  public:
   // FP-relative.
   static const int kLocal0Offset = StandardFrameConstants::kExpressionsOffset;
-  static const int kSavedRegistersOffset = +2 * kPointerSize;
+  static const int kLastParameterOffset = +2 * kPointerSize;
   static const int kFunctionOffset = StandardFrameConstants::kMarkerOffset;
 
   // Caller SP-relative.

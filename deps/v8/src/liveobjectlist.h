@@ -114,7 +114,6 @@ class LiveObjectList {
   static Object* PrintObj(int obj_id);
 
  private:
-
   struct Element {
     int id_;
     HeapObject* obj_;
@@ -224,7 +223,6 @@ class LiveObjectList {
 // Helper class for updating the LiveObjectList HeapObject pointers.
 class UpdateLiveObjectListVisitor: public ObjectVisitor {
  public:
-
   void VisitPointer(Object** p) { UpdatePointer(p); }
 
   void VisitPointers(Object** start, Object** end) {
@@ -237,10 +235,10 @@ class UpdateLiveObjectListVisitor: public ObjectVisitor {
   // to live new space objects, and not actually keep them alive.
   void UpdatePointer(Object** p) {
     Object* object = *p;
-    if (!Heap::InNewSpace(object)) return;
+    if (!HEAP->InNewSpace(object)) return;
 
     HeapObject* heap_obj = HeapObject::cast(object);
-    ASSERT(Heap::InFromSpace(heap_obj));
+    ASSERT(HEAP->InFromSpace(heap_obj));
 
     // We use the first word (where the map pointer usually is) of a heap
     // object to record the forwarding pointer.  A forwarding pointer can
@@ -273,28 +271,28 @@ class LiveObjectList {
   inline static void ProcessNonLive(HeapObject* obj) {}
   inline static void UpdateReferencesForScavengeGC() {}
 
-  inline static MaybeObject* Capture() { return Heap::undefined_value(); }
+  inline static MaybeObject* Capture() { return HEAP->undefined_value(); }
   inline static bool Delete(int id) { return false; }
   inline static MaybeObject* Dump(int id1,
                                   int id2,
                                   int start_idx,
                                   int dump_limit,
                                   Handle<JSObject> filter_obj) {
-    return Heap::undefined_value();
+    return HEAP->undefined_value();
   }
   inline static MaybeObject* Info(int start_idx, int dump_limit) {
-    return Heap::undefined_value();
+    return HEAP->undefined_value();
   }
   inline static MaybeObject* Summarize(int id1,
                                        int id2,
                                        Handle<JSObject> filter_obj) {
-    return Heap::undefined_value();
+    return HEAP->undefined_value();
   }
 
   inline static void Reset() {}
-  inline static Object* GetObj(int obj_id) { return Heap::undefined_value(); }
+  inline static Object* GetObj(int obj_id) { return HEAP->undefined_value(); }
   inline static Object* GetObjId(Handle<String> address) {
-    return Heap::undefined_value();
+    return HEAP->undefined_value();
   }
   inline static MaybeObject* GetObjRetainers(int obj_id,
                                              Handle<JSObject> instance_filter,
@@ -302,15 +300,15 @@ class LiveObjectList {
                                              int start,
                                              int count,
                                              Handle<JSObject> filter_obj) {
-    return Heap::undefined_value();
+    return HEAP->undefined_value();
   }
 
   inline static Object* GetPath(int obj_id1,
                                 int obj_id2,
                                 Handle<JSObject> instance_filter) {
-    return Heap::undefined_value();
+    return HEAP->undefined_value();
   }
-  inline static Object* PrintObj(int obj_id) { return Heap::undefined_value(); }
+  inline static Object* PrintObj(int obj_id) { return HEAP->undefined_value(); }
 };
 
 
@@ -319,4 +317,3 @@ class LiveObjectList {
 } }  // namespace v8::internal
 
 #endif  // V8_LIVEOBJECTLIST_H_
-

@@ -5,7 +5,7 @@ var TCP = process.binding('tcp_wrap').TCP;
 
 var server = new TCP();
 
-var r = server.bind("0.0.0.0", common.PORT);
+var r = server.bind('0.0.0.0', common.PORT);
 assert.equal(0, r);
 
 server.listen(128);
@@ -17,11 +17,11 @@ var recvCount = 0;
 
 server.onconnection = function(client) {
   assert.equal(0, client.writeQueueSize);
-  console.log("got connection");
+  console.log('got connection');
 
   function maybeCloseClient() {
     if (client.pendingWrites.length == 0 && client.gotEOF) {
-      console.log("close client");
+      console.log('close client');
       client.close();
     }
   }
@@ -37,8 +37,9 @@ server.onconnection = function(client) {
       var req = client.write(buffer, offset, length);
       client.pendingWrites.push(req);
 
-      console.log("client.writeQueueSize: " + client.writeQueueSize);
-      assert.equal(length, client.writeQueueSize);
+      console.log('client.writeQueueSize: ' + client.writeQueueSize);
+      // 11 bytes should flush
+      assert.equal(0, client.writeQueueSize);
 
       req.oncomplete = function(status, client_, req_, buffer_) {
         assert.equal(req, client.pendingWrites.shift());
@@ -49,17 +50,17 @@ server.onconnection = function(client) {
         assert.equal(req, req_);
         assert.equal(buffer, buffer_);
 
-        console.log("client.writeQueueSize: " + client.writeQueueSize);
+        console.log('client.writeQueueSize: ' + client.writeQueueSize);
         assert.equal(0, client.writeQueueSize);
 
         writeCount++;
-        console.log("write " + writeCount);
+        console.log('write ' + writeCount);
         maybeCloseClient();
       };
 
       sliceCount++;
     } else {
-      console.log("eof");
+      console.log('eof');
       client.gotEOF = true;
       server.close();
       eofCount++;
@@ -72,7 +73,7 @@ var net = require('net');
 
 var c = net.createConnection(common.PORT);
 c.on('connect', function() {
-  c.end("hello world");
+  c.end('hello world');
 });
 
 c.setEncoding('utf8');
@@ -82,7 +83,7 @@ c.on('data', function(d) {
 });
 
 c.on('close', function() {
-  console.error("client closed");
+  console.error('client closed');
 });
 
 process.on('exit', function() {

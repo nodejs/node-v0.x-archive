@@ -3,13 +3,15 @@ var assert = require('assert');
 
 var net = require('net');
 
-var conns = 0;
+var conns = 0, conns_closed = 0;
 
 var server = net.createServer(function(socket) {
   conns++;
   assert.equal('127.0.0.1', socket.remoteAddress);
+  assert.ok(socket.remotePort);
+  assert.notEqual(socket.remotePort, common.PORT);
   socket.on('end', function() {
-    server.close();
+    if (++conns_closed == 2) server.close();
   });
 });
 
@@ -28,6 +30,6 @@ server.listen(common.PORT, 'localhost', function() {
   });
 });
 
-process.exit(function() {
+process.on('exit', function() {
   assert.equal(2, conns);
 });

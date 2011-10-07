@@ -35,7 +35,7 @@
 namespace v8 {
 namespace internal {
 
-RegExpMacroAssembler::RegExpMacroAssembler() {
+RegExpMacroAssembler::RegExpMacroAssembler() : slow_safe_compiler_(false) {
 }
 
 
@@ -54,7 +54,8 @@ bool RegExpMacroAssembler::CanReadUnaligned() {
 
 #ifndef V8_INTERPRETED_REGEXP  // Avoid unused code, e.g., on ARM.
 
-NativeRegExpMacroAssembler::NativeRegExpMacroAssembler() {
+NativeRegExpMacroAssembler::NativeRegExpMacroAssembler()
+    : RegExpMacroAssembler() {
 }
 
 
@@ -64,7 +65,7 @@ NativeRegExpMacroAssembler::~NativeRegExpMacroAssembler() {
 
 bool NativeRegExpMacroAssembler::CanReadUnaligned() {
 #ifdef V8_TARGET_CAN_READ_UNALIGNED
-  return true;
+  return !slow_safe();
 #else
   return false;
 #endif
@@ -105,7 +106,8 @@ NativeRegExpMacroAssembler::Result NativeRegExpMacroAssembler::Match(
     Handle<String> subject,
     int* offsets_vector,
     int offsets_vector_length,
-    int previous_index) {
+    int previous_index,
+    Isolate* isolate) {
 
   ASSERT(subject->IsFlat());
   ASSERT(previous_index >= 0);
@@ -118,45 +120,52 @@ NativeRegExpMacroAssembler::Result NativeRegExpMacroAssembler::Match(
   String* subject_ptr = *subject;
   // Character offsets into string.
   int start_offset = previous_index;
-  int end_offset = subject_ptr->length();
+  int char_length = subject_ptr->length() - start_offset;
+  int slice_offset = 0;
 
-  // The string has been flattened, so it it is a cons string it contains the
+  // The string has been flattened, so if it is a cons string it contains the
   // full string in the first part.
   if (StringShape(subject_ptr).IsCons()) {
     ASSERT_EQ(0, ConsString::cast(subject_ptr)->second()->length());
     subject_ptr = ConsString::cast(subject_ptr)->first();
+  } else if (StringShape(subject_ptr).IsSliced()) {
+    SlicedString* slice = SlicedString::cast(subject_ptr);
+    subject_ptr = slice->parent();
+    slice_offset = slice->offset();
   }
   // Ensure that an underlying string has the same ascii-ness.
   bool is_ascii = subject_ptr->IsAsciiRepresentation();
   ASSERT(subject_ptr->IsExternalString() || subject_ptr->IsSeqString());
   // String is now either Sequential or External
   int char_size_shift = is_ascii ? 0 : 1;
-  int char_length = end_offset - start_offset;
 
   const byte* input_start =
-      StringCharacterPosition(subject_ptr, start_offset);
+      StringCharacterPosition(subject_ptr, start_offset + slice_offset);
   int byte_length = char_length << char_size_shift;
   const byte* input_end = input_start + byte_length;
   Result res = Execute(*regexp_code,
-                       subject_ptr,
+                       *subject,
                        start_offset,
                        input_start,
                        input_end,
-                       offsets_vector);
+                       offsets_vector,
+                       isolate);
   return res;
 }
 
 
 NativeRegExpMacroAssembler::Result NativeRegExpMacroAssembler::Execute(
     Code* code,
-    String* input,
+    String* input,  // This needs to be the unpacked (sliced, cons) string.
     int start_offset,
     const byte* input_start,
     const byte* input_end,
-    int* output) {
+    int* output,
+    Isolate* isolate) {
+  ASSERT(isolate == Isolate::Current());
   // Ensure that the minimum stack has been allocated.
-  RegExpStack stack;
-  Address stack_base = RegExpStack::stack_base();
+  RegExpStackScope stack_scope(isolate);
+  Address stack_base = stack_scope.stack()->stack_base();
 
   int direct_call = 0;
   int result = CALL_GENERATED_REGEXP_CODE(code->entry(),
@@ -166,23 +175,21 @@ NativeRegExpMacroAssembler::Result NativeRegExpMacroAssembler::Execute(
                                           input_end,
                                           output,
                                           stack_base,
-                                          direct_call);
+                                          direct_call,
+                                          isolate);
   ASSERT(result <= SUCCESS);
   ASSERT(result >= RETRY);
 
-  if (result == EXCEPTION && !Top::has_pending_exception()) {
+  if (result == EXCEPTION && !isolate->has_pending_exception()) {
     // We detected a stack overflow (on the backtrack stack) in RegExp code,
     // but haven't created the exception yet.
-    Top::StackOverflow();
+    isolate->StackOverflow();
   }
   return static_cast<Result>(result);
 }
 
 
-static unibrow::Mapping<unibrow::Ecma262Canonicalize> canonicalize;
-
-
-byte NativeRegExpMacroAssembler::word_character_map[] = {
+const byte NativeRegExpMacroAssembler::word_character_map[] = {
     0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
     0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
     0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -208,7 +215,11 @@ byte NativeRegExpMacroAssembler::word_character_map[] = {
 int NativeRegExpMacroAssembler::CaseInsensitiveCompareUC16(
     Address byte_offset1,
     Address byte_offset2,
-    size_t byte_length) {
+    size_t byte_length,
+    Isolate* isolate) {
+  ASSERT(isolate == Isolate::Current());
+  unibrow::Mapping<unibrow::Ecma262Canonicalize>* canonicalize =
+      isolate->regexp_macro_assembler_canonicalize();
   // This function is not allowed to cause a garbage collection.
   // A GC might move the calling generated code and invalidate the
   // return address on the stack.
@@ -222,10 +233,10 @@ int NativeRegExpMacroAssembler::CaseInsensitiveCompareUC16(
     unibrow::uchar c2 = substring2[i];
     if (c1 != c2) {
       unibrow::uchar s1[1] = { c1 };
-      canonicalize.get(c1, '\0', s1);
+      canonicalize->get(c1, '\0', s1);
       if (s1[0] != c2) {
         unibrow::uchar s2[1] = { c2 };
-        canonicalize.get(c2, '\0', s2);
+        canonicalize->get(c2, '\0', s2);
         if (s1[0] != s2[0]) {
           return 0;
         }
@@ -237,13 +248,16 @@ int NativeRegExpMacroAssembler::CaseInsensitiveCompareUC16(
 
 
 Address NativeRegExpMacroAssembler::GrowStack(Address stack_pointer,
-                                              Address* stack_base) {
-  size_t size = RegExpStack::stack_capacity();
-  Address old_stack_base = RegExpStack::stack_base();
+                                              Address* stack_base,
+                                              Isolate* isolate) {
+  ASSERT(isolate == Isolate::Current());
+  RegExpStack* regexp_stack = isolate->regexp_stack();
+  size_t size = regexp_stack->stack_capacity();
+  Address old_stack_base = regexp_stack->stack_base();
   ASSERT(old_stack_base == *stack_base);
   ASSERT(stack_pointer <= old_stack_base);
   ASSERT(static_cast<size_t>(old_stack_base - stack_pointer) <= size);
-  Address new_stack_base = RegExpStack::EnsureCapacity(size * 2);
+  Address new_stack_base = regexp_stack->EnsureCapacity(size * 2);
   if (new_stack_base == NULL) {
     return NULL;
   }

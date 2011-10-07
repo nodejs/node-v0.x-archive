@@ -19,7 +19,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "../uv.h"
+#include "uv.h"
 #include "task.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,8 +47,6 @@ static uintptr_t thread3_id = 0;
 
 /* Thread 1 makes sure that async1_cb_called reaches 3 before exiting. */
 void thread1_entry(void *arg) {
-  int state = 0;
-
   uv_sleep(50);
 
   while (1) {
@@ -118,8 +116,8 @@ static void close_cb(uv_handle_t* handle) {
 }
 
 
-static void async1_cb(uv_handle_t* handle, int status) {
-  ASSERT(handle == (uv_handle_t*)&async1_handle);
+static void async1_cb(uv_async_t* handle, int status) {
+  ASSERT(handle == &async1_handle);
   ASSERT(status == 0);
 
   async1_cb_called++;
@@ -127,7 +125,7 @@ static void async1_cb(uv_handle_t* handle, int status) {
 
   if (async1_cb_called > 2 && !async1_closed) {
     async1_closed = 1;
-    uv_close(handle, close_cb);
+    uv_close((uv_handle_t*)handle, close_cb);
   }
 }
 
@@ -147,10 +145,8 @@ static void async2_cb(uv_handle_t* handle, int status) {
 #endif
 
 
-static void prepare_cb(uv_handle_t* handle, int status) {
-  int r;
-
-  ASSERT(handle == (uv_handle_t*)&prepare_handle);
+static void prepare_cb(uv_prepare_t* handle, int status) {
+  ASSERT(handle == &prepare_handle);
   ASSERT(status == 0);
 
   switch (prepare_cb_called) {
@@ -172,8 +168,7 @@ static void prepare_cb(uv_handle_t* handle, int status) {
 #endif
 
     case 1:
-      r = uv_close(handle, close_cb);
-      ASSERT(r == 0);
+      uv_close((uv_handle_t*)handle, close_cb);
       break;
 
     default:
@@ -187,14 +182,12 @@ static void prepare_cb(uv_handle_t* handle, int status) {
 TEST_IMPL(async) {
   int r;
 
-  uv_init();
-
-  r = uv_prepare_init(&prepare_handle);
+  r = uv_prepare_init(uv_default_loop(), &prepare_handle);
   ASSERT(r == 0);
   r = uv_prepare_start(&prepare_handle, prepare_cb);
   ASSERT(r == 0);
 
-  r = uv_async_init(&async1_handle, async1_cb);
+  r = uv_async_init(uv_default_loop(), &async1_handle, async1_cb);
   ASSERT(r == 0);
 
 #if 0
@@ -202,7 +195,7 @@ TEST_IMPL(async) {
   ASSERT(r == 0);
 #endif
 
-  r = uv_run();
+  r = uv_run(uv_default_loop());
   ASSERT(r == 0);
 
   r = uv_wait_thread(thread1_id);

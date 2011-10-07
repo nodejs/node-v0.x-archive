@@ -42,10 +42,12 @@ namespace v8 {
 namespace internal {
 
 void CPU::Setup() {
-  CpuFeatures::Probe(true);
-  if (Serializer::enabled()) {
-    V8::DisableCrankshaft();
-  }
+  CpuFeatures::Probe();
+}
+
+
+bool CPU::SupportsCrankshaft() {
+  return true;  // Yay!
 }
 
 
@@ -65,7 +67,8 @@ void CPU::FlushICache(void* start, size_t size) {
   // solution is to run valgrind with --smc-check=all, but this comes at a big
   // performance cost.  We can notify valgrind to invalidate its cache.
 #ifdef VALGRIND_DISCARD_TRANSLATIONS
-  VALGRIND_DISCARD_TRANSLATIONS(start, size);
+  unsigned res = VALGRIND_DISCARD_TRANSLATIONS(start, size);
+  USE(res);
 #endif
 }
 

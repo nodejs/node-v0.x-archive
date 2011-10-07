@@ -24,29 +24,38 @@ CC = $(PREFIX)gcc
 AR = $(PREFIX)ar
 E=.exe
 
-CFLAGS=-g --std=gnu89 -Wno-variadic-macros -D_WIN32_WINNT=0x0501
+CFLAGS=$(CPPFLAGS) -g --std=gnu89 -D_WIN32_WINNT=0x0501 -Isrc/ares/config_win32
 LINKFLAGS=-lm
+
+CARES_OBJS += src/ares/windows_port.o
+CARES_OBJS += src/ares/ares_platform.o
+WIN_SRCS=$(wildcard src/win/*.c)
+WIN_OBJS=$(WIN_SRCS:.c=.o)
 
 RUNNER_CFLAGS=$(CFLAGS) -D_GNU_SOURCE # Need _GNU_SOURCE for strdup?
 RUNNER_LINKFLAGS=$(LINKFLAGS)
 RUNNER_LIBS=-lws2_32
 RUNNER_SRC=test/runner-win.c
 
-uv.a: uv-win.o uv-common.o c-ares/libcares.a
-	$(AR) rcs uv.a uv-win.o uv-common.o
-	$(AR) rs uv.a $(shell $(AR) -t c-ares/libcares.a | awk '{print "c-ares/" $$1}')
+uv.a: $(WIN_OBJS) src/uv-common.o $(CARES_OBJS)
+	$(AR) rcs uv.a src/win/*.o src/uv-common.o $(CARES_OBJS)
 
-uv-win.o: uv-win.c uv.h uv-win.h
-	$(CC) $(CFLAGS) -c uv-win.c -o uv-win.o
+src/win/%.o: src/win/%.c src/win/internal.h
+	$(CC) $(CFLAGS) -o $@ -c $<
 
-uv-common.o: uv-common.c uv.h uv-win.h
-	$(CC) $(CFLAGS) -c uv-common.c -o uv-common.o
+src/uv-common.o: src/uv-common.c include/uv.h include/uv-private/uv-win.h
+	$(CC) $(CFLAGS) -c src/uv-common.c -o src/uv-common.o
 
-c-ares/libcares.a:
-	$(MAKE) -C c-ares -f Makefile.m32 libcares.a
+EIO_CPPFLAGS += $(CPPFLAGS)
+EIO_CPPFLAGS += -DEIO_STACKSIZE=65536
+EIO_CPPFLAGS += -D_GNU_SOURCE
 
 clean-platform:
-	$(MAKE) -C c-ares -f Makefile.m32 clean
+	-rm -f src/ares/*.o
+	-rm -f src/eio/*.o
+	-rm -f src/win/*.o
 
 distclean-platform:
-	$(MAKE) -C c-ares -f Makefile.m32 distclean
+	-rm -f src/ares/*.o
+	-rm -f src/eio/*.o
+	-rm -f src/win/*.o

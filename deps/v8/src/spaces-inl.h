@@ -28,8 +28,9 @@
 #ifndef V8_SPACES_INL_H_
 #define V8_SPACES_INL_H_
 
-#include "memory.h"
+#include "isolate.h"
 #include "spaces.h"
+#include "v8memory.h"
 
 namespace v8 {
 namespace internal {
@@ -56,18 +57,18 @@ Page* PageIterator::next() {
 // Page
 
 Page* Page::next_page() {
-  return MemoryAllocator::GetNextPage(this);
+  return heap_->isolate()->memory_allocator()->GetNextPage(this);
 }
 
 
 Address Page::AllocationTop() {
-  PagedSpace* owner = MemoryAllocator::PageOwner(this);
+  PagedSpace* owner = heap_->isolate()->memory_allocator()->PageOwner(this);
   return owner->PageAllocationTop(this);
 }
 
 
 Address Page::AllocationWatermark() {
-  PagedSpace* owner = MemoryAllocator::PageOwner(this);
+  PagedSpace* owner = heap_->isolate()->memory_allocator()->PageOwner(this);
   if (this == owner->AllocationTopPage()) {
     return owner->top();
   }
@@ -82,7 +83,7 @@ uint32_t Page::AllocationWatermarkOffset() {
 
 
 void Page::SetAllocationWatermark(Address allocation_watermark) {
-  if ((Heap::gc_state() == Heap::SCAVENGE) && IsWatermarkValid()) {
+  if ((heap_->gc_state() == Heap::SCAVENGE) && IsWatermarkValid()) {
     // When iterating intergenerational references during scavenge
     // we might decide to promote an encountered young object.
     // We will allocate a space for such an object and put it
@@ -154,7 +155,8 @@ uint32_t Page::GetRegionMaskForAddress(Address addr) {
 
 uint32_t Page::GetRegionMaskForSpan(Address start, int length_in_bytes) {
   uint32_t result = 0;
-  if (length_in_bytes >= kPageSize) {
+  static const intptr_t kRegionMask = (1 << kRegionSizeLog2) - 1;
+  if (length_in_bytes + (OffsetFrom(start) & kRegionMask) >= kPageSize) {
     result = kAllRegionsDirtyMarks;
   } else if (length_in_bytes > 0) {
     int start_region = GetRegionNumberForAddress(start);
@@ -219,23 +221,26 @@ void Page::ClearRegionMarks(Address start, Address end, bool reaches_limit) {
 }
 
 
-void Page::FlipMeaningOfInvalidatedWatermarkFlag() {
-  watermark_invalidated_mark_ ^= 1 << WATERMARK_INVALIDATED;
+void Page::FlipMeaningOfInvalidatedWatermarkFlag(Heap* heap) {
+  heap->page_watermark_invalidated_mark_ ^= 1 << WATERMARK_INVALIDATED;
 }
 
 
 bool Page::IsWatermarkValid() {
-  return (flags_ & (1 << WATERMARK_INVALIDATED)) != watermark_invalidated_mark_;
+  return (flags_ & (1 << WATERMARK_INVALIDATED)) !=
+      heap_->page_watermark_invalidated_mark_;
 }
 
 
 void Page::InvalidateWatermark(bool value) {
   if (value) {
     flags_ = (flags_ & ~(1 << WATERMARK_INVALIDATED)) |
-             watermark_invalidated_mark_;
+             heap_->page_watermark_invalidated_mark_;
   } else {
-    flags_ = (flags_ & ~(1 << WATERMARK_INVALIDATED)) |
-             (watermark_invalidated_mark_ ^ (1 << WATERMARK_INVALIDATED));
+    flags_ =
+        (flags_ & ~(1 << WATERMARK_INVALIDATED)) |
+        (heap_->page_watermark_invalidated_mark_ ^
+         (1 << WATERMARK_INVALIDATED));
   }
 
   ASSERT(IsWatermarkValid() == !value);
@@ -264,7 +269,7 @@ void Page::ClearPageFlags() {
 void Page::ClearGCFields() {
   InvalidateWatermark(true);
   SetAllocationWatermark(ObjectAreaStart());
-  if (Heap::gc_state() == Heap::SCAVENGE) {
+  if (heap_->gc_state() == Heap::SCAVENGE) {
     SetCachedAllocationWatermark(ObjectAreaStart());
   }
   SetRegionMarks(kAllRegionsCleanMarks);
@@ -290,13 +295,13 @@ void Page::SetIsLargeObjectPage(bool is_large_object_page) {
   SetPageFlag(IS_NORMAL_PAGE, !is_large_object_page);
 }
 
-bool Page::IsPageExecutable() {
-  return GetPageFlag(IS_EXECUTABLE);
+Executability Page::PageExecutability() {
+  return GetPageFlag(IS_EXECUTABLE) ? EXECUTABLE : NOT_EXECUTABLE;
 }
 
 
-void Page::SetIsPageExecutable(bool is_page_executable) {
-  SetPageFlag(IS_EXECUTABLE, is_page_executable);
+void Page::SetPageExecutability(Executability executable) {
+  SetPageFlag(IS_EXECUTABLE, executable == EXECUTABLE);
 }
 
 
@@ -308,6 +313,7 @@ void MemoryAllocator::ChunkInfo::init(Address a, size_t s, PagedSpace* o) {
   size_ = s;
   owner_ = o;
   executable_ = (o == NULL) ? NOT_EXECUTABLE : o->executable();
+  owner_identity_ = (o == NULL) ? FIRST_SPACE : o->identity();
 }
 
 
@@ -373,50 +379,13 @@ bool MemoryAllocator::InInitialChunk(Address address) {
 }
 
 
-#ifdef ENABLE_HEAP_PROTECTION
-
-void MemoryAllocator::Protect(Address start, size_t size) {
-  OS::Protect(start, size);
-}
-
-
-void MemoryAllocator::Unprotect(Address start,
-                                size_t size,
-                                Executability executable) {
-  OS::Unprotect(start, size, executable);
-}
-
-
-void MemoryAllocator::ProtectChunkFromPage(Page* page) {
-  int id = GetChunkId(page);
-  OS::Protect(chunks_[id].address(), chunks_[id].size());
-}
-
-
-void MemoryAllocator::UnprotectChunkFromPage(Page* page) {
-  int id = GetChunkId(page);
-  OS::Unprotect(chunks_[id].address(), chunks_[id].size(),
-                chunks_[id].owner()->executable() == EXECUTABLE);
-}
-
-#endif
-
-
 // --------------------------------------------------------------------------
 // PagedSpace
 
 bool PagedSpace::Contains(Address addr) {
   Page* p = Page::FromAddress(addr);
   if (!p->is_valid()) return false;
-  return MemoryAllocator::IsPageInSpace(p, this);
-}
-
-
-bool PagedSpace::SafeContains(Address addr) {
-  if (!MemoryAllocator::SafeIsInAPageChunk(addr)) return false;
-  Page* p = Page::FromAddress(addr);
-  if (!p->is_valid()) return false;
-  return MemoryAllocator::IsPageInSpace(p, this);
+  return heap()->isolate()->memory_allocator()->IsPageInSpace(p, this);
 }
 
 
@@ -466,21 +435,6 @@ MaybeObject* PagedSpace::MCAllocateRaw(int size_in_bytes) {
 
 
 // -----------------------------------------------------------------------------
-// LargeObjectChunk
-
-Address LargeObjectChunk::GetStartAddress() {
-  // Round the chunk address up to the nearest page-aligned address
-  // and return the heap object in that page.
-  Page* page = Page::FromAddress(RoundUp(address(), Page::kPageSize));
-  return page->ObjectAreaStart();
-}
-
-
-void LargeObjectChunk::Free(Executability executable) {
-  MemoryAllocator::FreeRawMemory(address(), size(), executable);
-}
-
-// -----------------------------------------------------------------------------
 // NewSpace
 
 MaybeObject* NewSpace::AllocateRawInternal(int size_in_bytes,
@@ -501,6 +455,12 @@ MaybeObject* NewSpace::AllocateRawInternal(int size_in_bytes,
 }
 
 
+intptr_t LargeObjectSpace::Available() {
+  return LargeObjectChunk::ObjectSizeFor(
+      heap()->isolate()->memory_allocator()->Available());
+}
+
+
 template <typename StringType>
 void NewSpace::ShrinkStringAtAllocationBoundary(String* string, int length) {
   ASSERT(length <= string->length());
@@ -514,9 +474,9 @@ void NewSpace::ShrinkStringAtAllocationBoundary(String* string, int length) {
 
 
 bool FreeListNode::IsFreeListNode(HeapObject* object) {
-  return object->map() == Heap::raw_unchecked_byte_array_map()
-      || object->map() == Heap::raw_unchecked_one_pointer_filler_map()
-      || object->map() == Heap::raw_unchecked_two_pointer_filler_map();
+  return object->map() == HEAP->raw_unchecked_byte_array_map()
+      || object->map() == HEAP->raw_unchecked_one_pointer_filler_map()
+      || object->map() == HEAP->raw_unchecked_two_pointer_filler_map();
 }
 
 } }  // namespace v8::internal

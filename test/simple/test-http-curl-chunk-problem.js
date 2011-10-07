@@ -20,18 +20,25 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 if (!process.versions.openssl) {
-  console.error("Skipping because node compiled without OpenSSL.");
+  console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
 }
 
 // http://groups.google.com/group/nodejs/browse_thread/thread/f66cd3c960406919
 var common = require('../common');
 var assert = require('assert');
-var http = require('http'),
-    cp = require('child_process');
-
+var http = require('http');
+var cp = require('child_process');
+var fs = require('fs');
 
 var filename = require('path').join(common.tmpDir || '/tmp', 'big');
+
+// Clean up after ourselves. Leaving files around
+// in the tmp/ directory may break tests that depend
+// on a certain number of files being there.
+process.on('exit', function() {
+  fs.unlink(filename);
+});
 
 var count = 0;
 function maybeMakeRequest() {
@@ -48,11 +55,13 @@ function maybeMakeRequest() {
 }
 
 
-cp.exec('dd if=/dev/zero of="' + filename + '" bs=1024 count=10240',
-        function(err, stdout, stderr) {
-          if (err) throw err;
-          maybeMakeRequest();
-        });
+var ddcmd = common.ddCommand(filename, 10240);
+console.log('dd command: ', ddcmd);
+
+cp.exec(ddcmd, function(err, stdout, stderr) {
+  if (err) throw err;
+  maybeMakeRequest();
+});
 
 
 var server = http.createServer(function(req, res) {

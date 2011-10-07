@@ -19,15 +19,20 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var assert = require('assert');
 
 console.error(process.uptime());
-assert.ok(process.uptime() <= 0.9);
+assert.ok(process.uptime() <= 2);
+
+var original = process.uptime();
 
 setTimeout(function() {
   var uptime = process.uptime();
   // some wiggle room to account for timer
   // granularity, processor speed, and scheduling
-  assert.ok(uptime >= 2);
-  assert.ok(uptime <= 3);
+  assert.ok(uptime >= original + 2);
+  assert.ok(uptime <= original + 3);
 }, 2000);

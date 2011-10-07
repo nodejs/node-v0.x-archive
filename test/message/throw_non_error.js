@@ -19,12 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
 common.error('before');
 
 // custom error throwing
-throw { foo : 'bar' };
+throw { foo: 'bar' }
 
 common.error('after');

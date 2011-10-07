@@ -1,6 +1,6 @@
 ## Global Objects
 
-These object are available in all modules. Some of these objects aren't
+These objects are available in all modules. Some of these objects aren't
 actually in the global scope but in the module scope - this will be noted.
 
 ### global
@@ -20,6 +20,9 @@ The process object. See the [process object](process.html#process) section.
 
 Used to print to stdout and stderr. See the [stdio](stdio.html) section.
 
+### Buffer
+
+Used to handle binary data. See the [buffers](buffers.html) section.
 
 ### require()
 
@@ -38,20 +41,12 @@ Modules are cached in this object when they are required. By deleting a key
 value from this object, the next `require` will reload the module.
 
 
-### require.paths
-
-An array of search paths for `require()`.  This array can be modified to add
-custom paths.
-
-Example: add a new path to the beginning of the search list
-
-    require.paths.unshift('/usr/local/node');
-
-
 ### __filename
 
-The filename of the script being executed.  This is the absolute path, and not necessarily
-the same filename passed in as a command line argument.
+The filename of the code being executed.  This is the resolved absolute path
+of this code file.  For a main program this is not necessarily the same
+filename used in the command line.  The value inside a module is the path
+to that module file.
 
 Example: running `node example.js` from `/Users/mjr`
 
@@ -62,7 +57,7 @@ Example: running `node example.js` from `/Users/mjr`
 
 ### __dirname
 
-The dirname of the script being executed.
+The name of the directory that the currently executing script resides in.
 
 Example: running `node example.js` from `/Users/mjr`
 
@@ -78,6 +73,15 @@ A reference to the current module. In particular
 `module.exports` is the same as the `exports` object. See `src/node.js`
 for more information.
 `module` isn't actually a global but rather local to each module.
+
+
+### exports
+
+An object which is shared between all instances of the current module and
+made accessible through `require()`.
+`exports` is the same as the `module.exports` object. See `src/node.js`
+for more information.
+`exports` isn't actually a global but rather local to each module.
 
 ### setTimeout(cb, ms)
 ### clearTimeout(t)

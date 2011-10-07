@@ -34,24 +34,19 @@ namespace v8 {
 namespace internal {
 
 
-Address Zone::position_ = 0;
-Address Zone::limit_ = 0;
-int Zone::zone_excess_limit_ = 256 * MB;
-int Zone::segment_bytes_allocated_ = 0;
-unsigned Zone::allocation_size_ = 0;
-
-bool AssertNoZoneAllocation::allow_allocation_ = true;
-
-int ZoneScope::nesting_ = 0;
-
 // Segments represent chunks of memory: They have starting address
 // (encoded in the this pointer) and a size in bytes. Segments are
 // chained together forming a LIFO structure with the newest segment
-// available as Segment::head(). Segments are allocated using malloc()
+// available as segment_head_. Segments are allocated using malloc()
 // and de-allocated using free().
 
 class Segment {
  public:
+  void Initialize(Segment* next, int size) {
+    next_ = next;
+    size_ = size;
+  }
+
   Segment* next() const { return next_; }
   void clear_next() { next_ = NULL; }
 
@@ -61,45 +56,52 @@ class Segment {
   Address start() const { return address(sizeof(Segment)); }
   Address end() const { return address(size_); }
 
-  static Segment* head() { return head_; }
-  static void set_head(Segment* head) { head_ = head; }
-
-  // Creates a new segment, sets it size, and pushes it to the front
-  // of the segment chain. Returns the new segment.
-  static Segment* New(int size) {
-    Segment* result = reinterpret_cast<Segment*>(Malloced::New(size));
-    Zone::adjust_segment_bytes_allocated(size);
-    if (result != NULL) {
-      result->next_ = head_;
-      result->size_ = size;
-      head_ = result;
-    }
-    return result;
-  }
-
-  // Deletes the given segment. Does not touch the segment chain.
-  static void Delete(Segment* segment, int size) {
-    Zone::adjust_segment_bytes_allocated(-size);
-    Malloced::Delete(segment);
-  }
-
-  static int bytes_allocated() { return bytes_allocated_; }
-
  private:
   // Computes the address of the nth byte in this segment.
   Address address(int n) const {
     return Address(this) + n;
   }
 
-  static Segment* head_;
-  static int bytes_allocated_;
   Segment* next_;
   int size_;
 };
 
 
-Segment* Segment::head_ = NULL;
-int Segment::bytes_allocated_ = 0;
+Zone::Zone()
+    : zone_excess_limit_(256 * MB),
+      segment_bytes_allocated_(0),
+      position_(0),
+      limit_(0),
+      scope_nesting_(0),
+      segment_head_(NULL) {
+}
+unsigned Zone::allocation_size_ = 0;
+
+ZoneScope::~ZoneScope() {
+  ASSERT_EQ(Isolate::Current(), isolate_);
+  if (ShouldDeleteOnExit()) isolate_->zone()->DeleteAll();
+  isolate_->zone()->scope_nesting_--;
+}
+
+
+// Creates a new segment, sets it size, and pushes it to the front
+// of the segment chain. Returns the new segment.
+Segment* Zone::NewSegment(int size) {
+  Segment* result = reinterpret_cast<Segment*>(Malloced::New(size));
+  adjust_segment_bytes_allocated(size);
+  if (result != NULL) {
+    result->Initialize(segment_head_, size);
+    segment_head_ = result;
+  }
+  return result;
+}
+
+
+// Deletes the given segment. Does not touch the segment chain.
+void Zone::DeleteSegment(Segment* segment, int size) {
+  adjust_segment_bytes_allocated(-size);
+  Malloced::Delete(segment);
+}
 
 
 void Zone::DeleteAll() {
@@ -109,14 +111,14 @@ void Zone::DeleteAll() {
 #endif
 
   // Find a segment with a suitable size to keep around.
-  Segment* keep = Segment::head();
+  Segment* keep = segment_head_;
   while (keep != NULL && keep->size() > kMaximumKeptSegmentSize) {
     keep = keep->next();
   }
 
   // Traverse the chained list of segments, zapping (in debug mode)
   // and freeing every segment except the one we wish to keep.
-  Segment* current = Segment::head();
+  Segment* current = segment_head_;
   while (current != NULL) {
     Segment* next = current->next();
     if (current == keep) {
@@ -128,7 +130,7 @@ void Zone::DeleteAll() {
       // Zap the entire current segment (including the header).
       memset(current, kZapDeadByte, size);
 #endif
-      Segment::Delete(current, size);
+      DeleteSegment(current, size);
     }
     current = next;
   }
@@ -150,7 +152,15 @@ void Zone::DeleteAll() {
   }
 
   // Update the head segment to be the kept segment (if any).
-  Segment::set_head(keep);
+  segment_head_ = keep;
+}
+
+
+void Zone::DeleteKeptSegment() {
+  if (segment_head_ != NULL) {
+    DeleteSegment(segment_head_, segment_head_->size());
+    segment_head_ = NULL;
+  }
 }
 
 
@@ -158,16 +168,22 @@ Address Zone::NewExpand(int size) {
   // Make sure the requested size is already properly aligned and that
   // there isn't enough room in the Zone to satisfy the request.
   ASSERT(size == RoundDown(size, kAlignment));
-  ASSERT(position_ + size > limit_);
+  ASSERT(size > limit_ - position_);
 
   // Compute the new segment size. We use a 'high water mark'
   // strategy, where we increase the segment size every time we expand
   // except that we employ a maximum segment size when we delete. This
   // is to avoid excessive malloc() and free() overhead.
-  Segment* head = Segment::head();
+  Segment* head = segment_head_;
   int old_size = (head == NULL) ? 0 : head->size();
   static const int kSegmentOverhead = sizeof(Segment) + kAlignment;
-  int new_size = kSegmentOverhead + size + (old_size << 1);
+  int new_size_no_overhead = size + (old_size << 1);
+  int new_size = kSegmentOverhead + new_size_no_overhead;
+  // Guard against integer overflow.
+  if (new_size_no_overhead < size || new_size < kSegmentOverhead) {
+    V8::FatalProcessOutOfMemory("Zone");
+    return NULL;
+  }
   if (new_size < kMinimumSegmentSize) {
     new_size = kMinimumSegmentSize;
   } else if (new_size > kMaximumSegmentSize) {
@@ -177,7 +193,7 @@ Address Zone::NewExpand(int size) {
     // requested size.
     new_size = Max(kSegmentOverhead + size, kMaximumSegmentSize);
   }
-  Segment* segment = Segment::New(new_size);
+  Segment* segment = NewSegment(new_size);
   if (segment == NULL) {
     V8::FatalProcessOutOfMemory("Zone");
     return NULL;
@@ -186,6 +202,11 @@ Address Zone::NewExpand(int size) {
   // Recompute 'top' and 'limit' based on the new segment.
   Address result = RoundUp(segment->start(), kAlignment);
   position_ = result + size;
+  // Check for address overflow.
+  if (position_ < result) {
+    V8::FatalProcessOutOfMemory("Zone");
+    return NULL;
+  }
   limit_ = segment->end();
   ASSERT(position_ <= limit_);
   return result;

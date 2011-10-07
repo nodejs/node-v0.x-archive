@@ -22,13 +22,44 @@
 #ifndef SRC_NODE_H_
 #define SRC_NODE_H_
 
+// A dependency include (libeio\xthread.h) defines _WIN32_WINNT to another value
+// This should be defined in make system.
+// See issue https://github.com/joyent/node/issues/1236
+#if defined(__MINGW32__) || defined(_MSC_VER)
+#ifndef _WIN32_WINNT
+# define _WIN32_WINNT   0x0501
+#endif
+
+#define NOMINMAX
+
+#endif
+
+#if defined(_MSC_VER)
+#define PATH_MAX MAX_PATH
+#endif
+
 #include <uv.h>
-#include <eio.h>
 #include <v8.h>
 #include <sys/types.h> /* struct stat */
 #include <sys/stat.h>
 
 #include <node_object_wrap.h>
+
+#ifndef offset_of
+// g++ in strict mode complains loudly about the system offsetof() macro
+// because it uses NULL as the base address.
+#define offset_of(type, member) \
+  ((intptr_t) ((char *) &(((type *) 8)->member) - 8))
+#endif
+
+#ifndef container_of
+#define container_of(ptr, type, member) \
+  ((type *) ((char *) (ptr) - offset_of(type, member)))
+#endif
+
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
+#endif
 
 #ifndef NODE_STRINGIFY
 #define NODE_STRINGIFY(n) NODE_STRINGIFY_HELPER(n)
@@ -44,7 +75,7 @@ v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
 void Load(v8::Handle<v8::Object> process);
 void EmitExit(v8::Handle<v8::Object> process);
 
-#define NODE_PSYMBOL(s) Persistent<String>::New(String::NewSymbol(s))
+#define NODE_PSYMBOL(s) v8::Persistent<v8::String>::New(v8::String::NewSymbol(s))
 
 /* Converts a unixtime to V8 Date */
 #define NODE_UNIXTIME_V8(t) v8::Date::New(1000*static_cast<double>(t))

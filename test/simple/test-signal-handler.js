@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// libuv-broken
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -53,9 +56,9 @@ setInterval(function() {
 
 // Test addListener condition where a watcher for SIGNAL
 // has been previously registered, and `process.listeners(SIGNAL).length === 1`
-process.addListener('SIGHUP', function () {});
+process.addListener('SIGHUP', function() {});
 process.removeAllListeners('SIGHUP');
-process.addListener('SIGHUP', function () { sighup = true });
+process.addListener('SIGHUP', function() { sighup = true });
 process.kill(process.pid, 'SIGHUP');
 
 process.addListener('exit', function() {
