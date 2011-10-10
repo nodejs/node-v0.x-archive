@@ -54,77 +54,31 @@ using namespace v8;
 
 static char buf[MAXPATHLEN + 1];
 static char *process_title;
-static unsigned int process_title_size;
+static size_t process_title_size;
 double Platform::prog_start_time = Platform::GetUptime();
 
 char** Platform::SetupArgs(int argc, char *argv[]) {
   unsigned int i = 0;
-  unsigned int argv_length = 1;
-  unsigned int argv_items = 1 + argc;
-  unsigned int environ_length = 0;
-  unsigned int environ_items = 0;
+  size_t size = 0;
+  char *tmp;
 
-  char **argv_tmp;
+  for (i = 0; environ[i]; ++i);
 
-  while (argv[i]) {
-    argv_length += strlen(argv[i]) + 1;
-    i++;
+  if (i) {
+      tmp = environ[i - 1];
+  } else {
+      tmp = argv[argc - 1];
   }
 
-  process_title_size += argv[argc-1] + strlen(argv[argc-1]) - argv[0];
+  process_title_size = tmp + strlen(tmp) - argv[0];
 
-  if (environ && environ[0]) {
-    environ_length++;
-    environ_items++;
+  char **mem = (char **)malloc(process_title_size);
+  memcpy(mem, &argv[0], process_title_size);
 
-    i = 0;
-    while (environ[i]) {
-      environ_items++;
-      environ_length += strlen(environ[i]) + 1;
-      i++;
-    }
-
-    process_title_size += environ[i-1] + strlen(environ[i-1]) - environ[0];
-  }
-
-  char **mem = (char **)malloc((argv_length + argv_items * sizeof(char*)) + (environ_length + environ_items * sizeof(char*)));
-  char *tmp = (char*)mem + argv_items * sizeof(char*);
-
-  i = 0;
-  while (argv[i]) {
-    mem[i] = tmp;
-    int len = strlen(argv[i]);
-    memcpy(tmp, argv[i], len);
-    tmp[len] = NULL;
-    tmp += (len + 1);
-    i++;
-  }
-
-  mem[i] = NULL;
-
-  argv_tmp = mem;
-
-  if (environ && environ[0]) {
-    mem = (char **)tmp;
-    tmp += environ_items * sizeof(char*);
-
-    i = 0;
-    while (environ[i]) {
-      int len = strlen(environ[i]);
-      mem[i] = tmp;
-      memcpy(tmp, environ[i], len);
-      tmp[len] = NULL;
-      tmp += (len + 1);
-      i++;
-    }
-
-    mem[i] = NULL;
-
-    environ = mem;
-  }
+  environ = (char**)((char*)mem + (argc + 1) * sizeof(char*));
 
   process_title = argv[0];
-  return argv_tmp;
+  return mem;
 }
 
 
