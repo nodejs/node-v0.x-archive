@@ -58,38 +58,79 @@ static unsigned int process_title_size;
 double Platform::prog_start_time = Platform::GetUptime();
 
 char** Platform::SetupArgs(int argc, char *argv[]) {
-  int env_len = -1;
-  if (environ) {
-    while (environ[++env_len]);
+  unsigned int i = 0;
+  unsigned int argv_length = 1;
+  unsigned int argv_items = 1 + argc;
+  unsigned int environ_length = 0;
+  unsigned int environ_items = 0;
+
+  char **argv_tmp;
+
+  while (argv[i]) {
+    argv_length += strlen(argv[i]) + 1;
+    i++;
   }
 
-  if (env_len > 0) {
-    process_title_size = environ[env_len - 1] + strlen(environ[env_len - 1]) - argv[0];
-  } else {
-    process_title_size = argv[argc - 1] + strlen(argv[argc - 1]) - argv[0];
-  }
+  process_title_size += argv[argc-1] + strlen(argv[argc-1]) - argv[0];
 
-  if (environ) {
-    char **new_environ = (char **)malloc(env_len * sizeof(char *));
+  if (environ && environ[0]) {
+    environ_length++;
+    environ_items++;
 
-	unsigned int i = -1;
-	while (environ[++i]) {
-      new_environ[i] = strdup(environ[i]);
+    i = 0;
+    while (environ[i]) {
+      environ_items++;
+      environ_length += strlen(environ[i]) + 1;
+      i++;
     }
 
-	new_environ[env_len - 1] = '\0';
+    process_title_size += environ[i-1] + strlen(environ[i-1]) - environ[0];
+  }
 
-	environ = new_environ;
+  char **mem = (char **)malloc((argv_length + argv_items * sizeof(char*)) + (environ_length + environ_items * sizeof(char*)));
+  char *tmp = (char*)mem + argv_items * sizeof(char*);
+
+  i = 0;
+  while (argv[i]) {
+    mem[i] = tmp;
+    int len = strlen(argv[i]);
+    memcpy(tmp, argv[i], len);
+    tmp[len] = NULL;
+    tmp += (len + 1);
+    i++;
+  }
+
+  mem[i] = NULL;
+
+  argv_tmp = mem;
+
+  if (environ && environ[0]) {
+    mem = (char **)tmp;
+    tmp += environ_items * sizeof(char*);
+
+    i = 0;
+    while (environ[i]) {
+      int len = strlen(environ[i]);
+      mem[i] = tmp;
+      memcpy(tmp, environ[i], len);
+      tmp[len] = NULL;
+      tmp += (len + 1);
+      i++;
+    }
+
+    mem[i] = NULL;
+
+    environ = mem;
   }
 
   process_title = argv[0];
-  return argv;
+  return argv_tmp;
 }
 
 
 void Platform::SetProcessTitle(char *title) {
-  memset(process_title, '\0', process_title_size);
-  snprintf(process_title, process_title_size - 1, title);
+  memset(process_title, NULL, process_title_size);
+  strncpy(process_title, title, process_title_size);
 }
 
 
