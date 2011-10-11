@@ -2,8 +2,6 @@
 - readline
   - fix for two column glyphs. use Markus Kuhn's wcwidth.c
   - fix for commands that extend beyond term width
-- Erradicate all traces of 'binary' encoding. Only used, now, in OpenSSL
-  binding.
 - EventSource branch merged
 - Use C++ style casts everywhere.
 - Ruby-like Process#detach (is that possible?)

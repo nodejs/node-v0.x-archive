@@ -2026,11 +2026,8 @@ class Cipher : public ObjectWrap {
           base64(out, out_len, &out_hexdigest, &out_hex_len);
           outString = Encode(out_hexdigest, out_hex_len, BINARY);
           delete [] out_hexdigest;
-        } else if (strcasecmp(*encoding, "binary") == 0) {
-          outString = Encode(out, out_len, BINARY);
         } else {
-          fprintf(stderr, "node-crypto : Cipher .update encoding "
-                          "can be binary, hex or base64\n");
+          outString = Encode(out, out_len, BINARY);
         }
       }
     }
@@ -2084,11 +2081,8 @@ class Cipher : public ObjectWrap {
         base64(out_value, out_len, &out_hexdigest, &out_hex_len);
         outString = Encode(out_hexdigest, out_hex_len, BINARY);
         delete [] out_hexdigest;
-      } else if (strcasecmp(*encoding, "binary") == 0) {
-        outString = Encode(out_value, out_len, BINARY);
       } else {
-        fprintf(stderr, "node-crypto : Cipher .final encoding "
-                        "can be binary, hex or base64\n");
+        outString = Encode(out_value, out_len, BINARY);
       }
     }
     delete [] out_value;
@@ -2400,13 +2394,8 @@ class Decipher : public ObjectWrap {
         len = ciphertext_len;
         alloc_buf = true;
 
-      } else if (strcasecmp(*encoding, "binary") == 0) {
-        // Binary - do nothing
-
-      } else {
-        fprintf(stderr, "node-crypto : Decipher .update encoding "
-                        "can be binary, hex or base64\n");
       }
+      // Binary - do nothing
     }
 
     unsigned char *out=0;
@@ -2741,11 +2730,8 @@ class Hmac : public ObjectWrap {
         base64(md_value, md_len, &md_hexdigest, &md_hex_len);
         outString = Encode(md_hexdigest, md_hex_len, BINARY);
         delete [] md_hexdigest;
-      } else if (strcasecmp(*encoding, "binary") == 0) {
-        outString = Encode(md_value, md_len, BINARY);
       } else {
-        fprintf(stderr, "node-crypto : Hmac .digest encoding "
-                        "can be binary, hex or base64\n");
+        outString = Encode(md_value, md_len, BINARY);
       }
     }
     delete [] md_value;
@@ -2901,11 +2887,8 @@ class Hash : public ObjectWrap {
         base64(md_value, md_len, &md_hexdigest, &md_hex_len);
         outString = Encode(md_hexdigest, md_hex_len, BINARY);
         delete [] md_hexdigest;
-      } else if (strcasecmp(*encoding, "binary") == 0) {
-        outString = Encode(md_value, md_len, BINARY);
       } else {
-        fprintf(stderr, "node-crypto : Hash .digest encoding "
-                        "can be binary, hex or base64\n");
+        outString = Encode(md_value, md_len, BINARY);
       }
     }
 
@@ -3108,12 +3091,8 @@ class Sign : public ObjectWrap {
         base64(md_value, md_len, &md_hexdigest, &md_hex_len);
         outString = Encode(md_hexdigest, md_hex_len, BINARY);
         delete [] md_hexdigest;
-      } else if (strcasecmp(*encoding, "binary") == 0) {
-        outString = Encode(md_value, md_len, BINARY);
       } else {
-        outString = String::New("");
-        fprintf(stderr, "node-crypto : Sign .sign encoding "
-                        "can be binary, hex or base64\n");
+        outString = Encode(md_value, md_len, BINARY);
       }
     }
 
@@ -3352,11 +3331,8 @@ class Verify : public ObjectWrap {
         unbase64(hbuf, hlen, (char **)&dbuf, &dlen);
         r = verify->VerifyFinal(kbuf, klen, dbuf, dlen);
         delete [] dbuf;
-      } else if (strcasecmp(*encoding, "binary") == 0) {
-        r = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
       } else {
-        fprintf(stderr, "node-crypto : Verify .verify encoding "
-                        "can be binary, hex or base64\n");
+        r = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
       }
     }
 
@@ -3849,12 +3825,8 @@ class DiffieHellman : public ObjectWrap {
     } else if (strcasecmp(*encoding, "base64") == 0) {
       unbase64((unsigned char*)*buf, len, &retbuf, &retlen);
 
-    } else if (strcasecmp(*encoding, "binary") == 0) {
-      // Binary - do nothing
-    } else {
-      fprintf(stderr, "node-crypto : Diffie-Hellman parameter encoding "
-                      "can be binary, hex or base64\n");
     }
+    // Binary - do nothing
 
     if (retbuf != 0) {
       delete [] *buf;
@@ -3882,11 +3854,8 @@ class DiffieHellman : public ObjectWrap {
       base64(reinterpret_cast<unsigned char*>(buf), len, &retbuf, &retlen);
       outString = Encode(retbuf, retlen, BINARY);
       delete [] retbuf;
-    } else if (strcasecmp(*encoding, "binary") == 0) {
-      outString = Encode(buf, len, BINARY);
     } else {
-      fprintf(stderr, "node-crypto : Diffie-Hellman parameter encoding "
-                      "can be binary, hex or base64\n");
+      outString = Encode(buf, len, BINARY);
     }
 
     return scope.Close(outString);
