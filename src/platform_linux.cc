@@ -46,6 +46,8 @@
 #include <time.h>
 #endif
 
+#define ARGV_SET_NAME
+
 extern char **environ;
 
 namespace node {
@@ -58,6 +60,7 @@ static size_t process_title_size;
 double Platform::prog_start_time = Platform::GetUptime();
 
 char** Platform::SetupArgs(int argc, char *argv[]) {
+#ifdef ARGV_SET_NAME
   unsigned int i = 0;
   size_t size = 0;
   char *tmp;
@@ -65,26 +68,46 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
   for (i = 0; environ[i]; ++i);
 
   if (i) {
-      tmp = environ[i - 1];
+    tmp = environ[i - 1];
   } else {
-      tmp = argv[argc - 1];
+    tmp = argv[argc - 1];
   }
 
   process_title_size = tmp + strlen(tmp) - argv[0];
 
   char **mem = (char **)malloc(process_title_size);
+
+  if (mem == NULL) {
+    process_title = strdup(argv[0]);
+    return argv;
+  }
+
   memcpy(mem, &argv[0], process_title_size);
 
   environ = (char**)((char*)mem + (argc + 1) * sizeof(char*));
 
   process_title = argv[0];
   return mem;
+#else
+  process_title = strdup(argv[0]);
+  return argv;
+#endif
 }
 
 
 void Platform::SetProcessTitle(char *title) {
+#if defined(ARGV_SET_NAME)
   memset(process_title, NULL, process_title_size);
   strncpy(process_title, title, process_title_size);
+#elif defined(PR_SET_NAME)
+  if (process_title) free(process_title);
+  process_title = strdup(title);
+  prctl(PR_SET_NAME, process_title);
+#else
+  Local<Value> ex = Exception::Error(
+    String::New("'process.title' is not writable on your system, sorry."));
+  ThrowException(ex); // Safe, this method is only called from the main thread.
+#endif
 }
 
 
