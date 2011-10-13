@@ -29,8 +29,6 @@
 #include <stdio.h> // sscanf, snprintf
 
 /* SetProcessTitle */
-#include <sys/prctl.h>
-#include <linux/prctl.h>
 #include <stdlib.h> // free
 #include <string.h> // strdup
 
@@ -46,23 +44,61 @@
 #include <time.h>
 #endif
 
+#define ARGV_SET_NAME
+
+extern char **environ;
+
 namespace node {
 
 using namespace v8;
 
 static char buf[MAXPATHLEN + 1];
 static char *process_title;
+static size_t process_title_size;
 double Platform::prog_start_time = Platform::GetUptime();
 
-
 char** Platform::SetupArgs(int argc, char *argv[]) {
+#ifdef ARGV_SET_NAME
+  unsigned int i = 0;
+  char *tmp;
+  unsigned long int offset;
+
+  for (i = 0; environ[i]; ++i);
+
+  if (i) {
+    tmp = environ[i - 1];
+  } else {
+    tmp = argv[argc - 1];
+  }
+
+  process_title_size = tmp + (strlen(tmp) + 1) - argv[0];
+
+  char **mem = (char **)malloc(process_title_size);
+
+  if (mem == NULL) {
+    process_title = strdup(argv[0]);
+    return argv;
+  }
+
+  memcpy(mem, &argv[0], process_title_size);
+
+  offset = (char *)environ - (char *)argv;
+  environ = (char **)((char *)mem + offset);
+
+  process_title = argv[0];
+  return mem;
+#else
   process_title = strdup(argv[0]);
   return argv;
+#endif
 }
 
 
 void Platform::SetProcessTitle(char *title) {
-#ifdef PR_SET_NAME
+#if defined(ARGV_SET_NAME)
+  memset(process_title, NULL, process_title_size);
+  strncpy(process_title, title, process_title_size);
+#elif defined(PR_SET_NAME)
   if (process_title) free(process_title);
   process_title = strdup(title);
   prctl(PR_SET_NAME, process_title);
