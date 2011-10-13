@@ -62,8 +62,8 @@ double Platform::prog_start_time = Platform::GetUptime();
 char** Platform::SetupArgs(int argc, char *argv[]) {
 #ifdef ARGV_SET_NAME
   unsigned int i = 0;
-  size_t size = 0;
   char *tmp;
+  unsigned long int offset;
 
   for (i = 0; environ[i]; ++i);
 
@@ -73,7 +73,7 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
     tmp = argv[argc - 1];
   }
 
-  process_title_size = tmp + strlen(tmp) - argv[0];
+  process_title_size = tmp + (strlen(tmp) + 1) - argv[0];
 
   char **mem = (char **)malloc(process_title_size);
 
@@ -84,7 +84,8 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
 
   memcpy(mem, &argv[0], process_title_size);
 
-  environ = (char**)((char*)mem + (argc + 1) * sizeof(char*));
+  offset = (char *)environ - (char *)argv
+  environ = (char **)((char *)mem + offset);
 
   process_title = argv[0];
   return mem;
