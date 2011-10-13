@@ -27,6 +27,7 @@
 #include <sys/param.h> // for MAXPATHLEN
 #include <unistd.h> // getpagesize, sysconf
 #include <stdio.h> // sscanf, snprintf
+#include <fcntl.h> // open
 
 /* SetProcessTitle */
 #include <sys/prctl.h>
@@ -50,7 +51,6 @@ namespace node {
 
 using namespace v8;
 
-static char buf[MAXPATHLEN + 1];
 static char *process_title;
 double Platform::prog_start_time = Platform::GetUptime();
 
@@ -85,96 +85,70 @@ const char* Platform::GetProcessTitle(int *len) {
 
 
 int Platform::GetMemory(size_t *rss, size_t *vsize) {
-  FILE *f = fopen("/proc/self/stat", "r");
-  if (!f) return -1;
+  // See proc(5) manual
+  int fd = open("/proc/self/stat", O_RDONLY);
+  if (fd < 0) return -1;
 
-  int itmp;
-  char ctmp;
-  size_t page_size = getpagesize();
-  char *cbuf;
-  bool foundExeEnd;
+  char buf[512];
+  size_t value;
+  char *p;
+  ssize_t len = read(fd, buf, sizeof(buf));
+  close(fd);
 
-  /* PID */
-  if (fscanf(f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Exec file */
-  cbuf = buf;
-  foundExeEnd = false;
-  if (fscanf (f, "%c", cbuf++) == 0) goto error; // (
-  while (1) {
-    if (fscanf(f, "%c", cbuf) == 0) goto error;
-    if (*cbuf == ')') {
-      foundExeEnd = true;
-    } else if (foundExeEnd && *cbuf == ' ') {
-      *cbuf = 0;
-      break;
-    }
+  if (len == sizeof(buf))
+    buf[sizeof(buf)-1] = '\n';
+  if (len <= 0 || buf[len-1] != '\n') goto error;
+  //if (len < 40) goto error;
 
-    cbuf++;
+  p = buf;
+
+  if (*p < '1' || *p > '9') goto error;
+  do {
+      if (*++p == '\n') goto error;
+  } while (*p >= '0' && *p <= '9');
+  if (*p != ' ') goto error;
+  if (*++p != '(') goto error;
+
+  // skip process name
+  do {
+    if (*++p == '\n') goto error;
+  } while (*p != ')');
+  if (*++p != ' ') goto error;
+
+  // skip 20 columns
+  int i;
+  for(i=0; i<20; i++) {
+    do {
+      if (*++p == '\n') goto error;
+      if (*p == ')') goto error; // the process name breaks parsing
+    } while (*p != ' ');
   }
-  /* State */
-  if (fscanf (f, "%c ", &ctmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Parent process */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Process group */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Session id */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* TTY */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* TTY owner process group */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Flags */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Minor faults (no memory page) */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Minor faults, children */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Major faults (memory page faults) */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Major faults, children */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* utime */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* stime */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* utime, children */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* stime, children */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* jiffies remaining in current time slice */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* 'nice' value */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* jiffies until next timeout */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* jiffies until next SIGALRM */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* start time (jiffies since system boot) */
-  if (fscanf (f, "%d ", &itmp) == 0) goto error; /* coverity[secure_coding] */
 
-  /* Virtual memory size */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  *vsize = (size_t) itmp;
+  // read vsize
+  value = 0;
+  int c;
+  while (1) {
+    c = *++p;
+    if (c == ' ') break;
+    if (c < '0' || c > '9') goto error;
+    value = value * 10 + (c - '0');
+  }
+  *vsize = value;
 
-  /* Resident set size */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  *rss = (size_t) itmp * page_size;
-
-  /* rlim */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Start of text */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* End of text */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-  /* Start of stack */
-  if (fscanf (f, "%u ", &itmp) == 0) goto error; /* coverity[secure_coding] */
-
-  fclose (f);
+  // read rss
+  value = 0;
+  while (1) {
+    c = *++p;
+    if (c == ' ') break;
+    if (c < '0' || c > '9') goto error;
+    value = value * 10 + (c - '0');
+  }
+  *rss = value * getpagesize();
 
   return 0;
 
 error:
-  fclose (f);
+  *rss = *vsize = 0;
   return -1;
 }
 
