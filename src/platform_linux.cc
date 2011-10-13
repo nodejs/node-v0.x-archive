@@ -84,7 +84,7 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
 
   memcpy(mem, &argv[0], process_title_size);
 
-  offset = (char *)environ - (char *)argv
+  offset = (char *)environ - (char *)argv;
   environ = (char **)((char *)mem + offset);
 
   process_title = argv[0];
