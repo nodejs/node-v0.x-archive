@@ -25,6 +25,7 @@ var events = require('events');
 
 
 var count = 0;
+var gcount = 0;
 
 function listener1() {
   console.log('listener1');
@@ -39,6 +40,16 @@ function listener2() {
 function listener3() {
   console.log('listener3');
   count++;
+}
+
+function globalListener1() {
+  console.log('globalListener1');
+  gcount++;
+}
+
+function globalListener2() {
+  console.log('globalListener2');
+  gcount++;
 }
 
 var e1 = new events.EventEmitter();
@@ -57,5 +68,13 @@ e3.addListener('hello', listener2);
 e3.removeListener('hello', listener1);
 assert.deepEqual([listener2], e3.listeners('hello'));
 
+var e4 = new events.EventEmitter();
+e4.on('*', globalListener1);
+e4.removeListener('*', globalListener1);
+assert.deepEqual([], e4.listeners('*'));
 
-
+var e5 = new events.EventEmitter();
+e5.on('*', globalListener1);
+e5.on('*', globalListener2);
+e5.removeListener('*', globalListener1);
+assert.deepEqual([globalListener2], e5.listeners('*'));
