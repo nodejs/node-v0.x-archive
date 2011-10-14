@@ -424,7 +424,6 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
     result = script->Run();
     if (result.IsEmpty()) {
       if (context_flag == newContext) {
-        context->DetachGlobal();
         context->Exit();
         context.Dispose();
       }
@@ -442,7 +441,6 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
   if (context_flag == newContext) {
     // Clean up, clean up, everybody everywhere!
-    context->DetachGlobal();
     context->Exit();
     context.Dispose();
   } else if (context_flag == userContext) {
