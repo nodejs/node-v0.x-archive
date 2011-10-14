@@ -28,7 +28,9 @@ header on responses.
 
 **Note: these examples are drastically simplified to show
 the basic concept.**  Zlib encoding can be expensive, and the results
-ought to be cached.
+ought to be cached.  See <a href="#memory_Usage_Tuning">Memory Usage
+Tuning</a> below for more information on the speed/memory/compression
+tradeoffs involved in zlib usage.
 
     // client request example
     var zlib = require('zlib');
@@ -161,3 +163,13 @@ for small objects.
 
 This is in addition to a single internal output slab buffer of size
 `chunkSize`, which defaults to 16K.
+
+The speed of zlib compression is affected most dramatically by the
+`level` setting.  A higher level will result in better compression, but
+will take longer to complete.  A lower level will result in less
+compression, but will be much faster.
+
+In general, greater memory usage options will mean that node has to make
+fewer calls to zlib, since it'll be able to process more data in a
+single `write` operation.  So, this is another factor that affects the
+speed, at the cost of memory usage.
