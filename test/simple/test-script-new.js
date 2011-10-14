@@ -69,8 +69,8 @@ foo = 2;
 sandbox = { foo: 0, baz: 3 };
 script = new Script(code);
 var baz = script.runInNewContext(sandbox);
-//assert.equal(1, context.foo); // TODO: REIMPLEMENT ME
-//assert.equal(2, context.bar); // TODO: REIMPLEMENT ME
+assert.equal(1, sandbox.foo);
+assert.equal(2, sandbox.bar);
 assert.equal(2, foo);
 
 common.debug('call a function by reference');

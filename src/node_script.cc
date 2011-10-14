@@ -439,6 +439,11 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
     result = args.This();
   }
 
+  if (context_flag == userContext || context_flag == newContext) {
+    // success! copy changes back onto the sandbox object.
+    CloneObject(args.This(), context->Global()->GetPrototype(), sandbox);
+  }
+
   if (context_flag == newContext) {
     // Clean up, clean up, everybody everywhere!
     context->Exit();

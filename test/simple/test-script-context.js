@@ -40,7 +40,7 @@ assert.equal('lala', context.thing);
 common.debug('test updating context');
 script = new Script('foo = 3;');
 result = script.runInContext(context);
-//assert.equal(3, context.foo); // TODO: REIMPLEMENT ME
+assert.equal(3, context.foo);
 assert.equal('lala', context.thing);
 
 // Issue GH-1801
