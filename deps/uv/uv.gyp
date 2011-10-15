@@ -1,4 +1,17 @@
 {
+  'target_defaults': {
+    'conditions': [
+      ['OS != "win"', {
+        'defines': [
+          '_LARGEFILE_SOURCE',
+          '_FILE_OFFSET_BITS=64',
+          '_GNU_SOURCE',
+          'EIO_STACKSIZE=262144'
+        ],
+      }],
+    ],
+  },
+
   'targets': [
     {
       'target_name': 'uv',
@@ -171,12 +184,6 @@
             'src/unix/ev/event.h',
           ],
           'include_dirs': [ 'src/unix/ev', ],
-          'defines': [
-            '_LARGEFILE_SOURCE',
-            '_FILE_OFFSET_BITS=64',
-            '_GNU_SOURCE',
-            'EIO_STACKSIZE=262144'
-          ],
           'libraries': [ '-lm' ]
         }],
         [ 'OS=="mac"', {
@@ -215,6 +222,7 @@
           ],
           'direct_dependent_settings': {
             'libraries': [
+              '-lkstat',
               '-lsocket',
               '-lnsl',
             ],
@@ -226,6 +234,14 @@
           'defines': [
             'EV_CONFIG_H="config_freebsd.h"',
             'EIO_CONFIG_H="config_freebsd.h"',
+          ],
+        }],
+        [ 'OS=="openbsd"', {
+          'include_dirs': [ 'src/ares/config_openbsd' ],
+          'sources': [ 'src/unix/openbsd.c' ],
+          'defines': [
+            'EV_CONFIG_H="config_openbsd.h"',
+            'EIO_CONFIG_H="config_openbsd.h"',
           ],
         }],
         [ 'OS=="mac" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
@@ -284,6 +300,7 @@
         'test/test-udp-dgram-too-big.c',
         'test/test-udp-ipv6.c',
         'test/test-udp-send-and-recv.c',
+        'test/test-udp-multicast-join.c',
       ],
       'conditions': [
         [ 'OS=="win"', {

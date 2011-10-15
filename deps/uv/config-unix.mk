@@ -18,8 +18,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-CC = $(PREFIX)gcc
-AR = $(PREFIX)ar
 E=
 CSTDFLAG=--std=c89 -pedantic -Wall -Wextra -Wno-unused-parameter
 CFLAGS += -g
@@ -81,6 +79,15 @@ EIO_CONFIG=config_netbsd.h
 CPPFLAGS += -Isrc/ares/config_netbsd
 LINKFLAGS+=
 OBJS += src/unix/netbsd.o
+OBJS += src/unix/kqueue.o
+endif
+
+ifeq (OpenBSD,$(uname_S))
+EV_CONFIG=config_openbsd.h
+EIO_CONFIG=config_openbsd.h
+CPPFLAGS += -Isrc/ares/config_openbsd
+LINKFLAGS+=
+OBJS += src/unix/openbsd.o
 OBJS += src/unix/kqueue.o
 endif
 

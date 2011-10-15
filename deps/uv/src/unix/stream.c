@@ -53,6 +53,7 @@ void uv__stream_init(uv_loop_t* loop,
                      uv_stream_t* stream,
                      uv_handle_type type) {
   uv__handle_init(loop, (uv_handle_t*)stream, type);
+  loop->counters.stream_init++;
 
   stream->alloc_cb = NULL;
   stream->close_cb = NULL;
@@ -83,7 +84,7 @@ int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
   assert(fd >= 0);
   stream->fd = fd;
 
-  ((uv_handle_t*)stream)->flags |= flags;
+  stream->flags |= flags;
 
   /* Reuse the port address if applicable. */
   yes = 1;
@@ -481,7 +482,6 @@ static void uv__read(uv_stream_t* stream) {
   struct msghdr msg;
   struct cmsghdr* cmsg;
   char cmsg_space[64];
-  int received_fd = -1;
   struct ev_loop* ev = stream->loop->ev;
 
   /* XXX: Maybe instead of having UV_READING we just test if
@@ -563,7 +563,7 @@ static void uv__read(uv_stream_t* stream) {
       return;
     } else {
       /* Successful read */
-      size_t buflen = buf.len;
+      ssize_t buflen = buf.len;
 
       if (stream->read_cb) {
         stream->read_cb(stream, nread, buf);

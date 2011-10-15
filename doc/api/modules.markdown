@@ -98,10 +98,11 @@ return the built in HTTP module, even if there is a file by that name.
 ### File Modules
 
 If the exact filename is not found, then node will attempt to load the
-required filename with the added extension of `.js`, and then `.node`.
+required filename with the added extension of `.js`, `.json`, and then `.node`.
 
-`.js` files are interpreted as JavaScript text files, and `.node` files
-are interpreted as compiled addon modules loaded with `dlopen`.
+`.js` files are interpreted as JavaScript text files, and `.json` files are
+parsed as JSON text files. `.node` files are interpreted as compiled addon
+modules loaded with `dlopen`.
 
 A module prefixed with `'/'` is an absolute path to the file.  For
 example, `require('/home/marco/foo.js')` will load the file at
@@ -265,7 +266,8 @@ in pseudocode of what require.resolve does:
        a. Parse X/package.json, and look for "main" field.
        b. let M = X + (json main field)
        c. LOAD_AS_FILE(M)
-    2. LOAD_AS_FILE(X/index)
+    2. If X/index.js is a file, load X/index.js as JavaScript text.  STOP
+    3. If X/index.node is a file, load X/index.node as binary addon.  STOP
 
     LOAD_NODE_MODULES(X, START)
     1. let DIRS=NODE_MODULES_PATHS(START)

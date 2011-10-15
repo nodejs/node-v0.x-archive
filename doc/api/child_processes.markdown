@@ -59,15 +59,19 @@ The third argument is used to specify additional options, which defaults to:
 
     { cwd: undefined,
       env: process.env,
-      customFds: [-1, -1, -1],
       setsid: false
     }
 
 `cwd` allows you to specify the working directory from which the process is spawned.
 Use `env` to specify environment variables that will be visible to the new process.
-With `customFds` it is possible to hook up the new process' [stdin, stdout, stderr] to
-existing streams; `-1` means that a new stream should be created. `setsid`,
-if set true, will cause the subprocess to be run in a new session.
+
+There is a deprecated option called `customFds` which allows one to specify
+specific file descriptors for the stdio of the child process. This API is
+was not portable to all platforms and therefore removed. 
+With `customFds` it was possible to hook up the new process' [stdin, stdout,
+stderr] to existing streams; `-1` meant that a new stream should be created.
+
+`setsid`, if set true, will cause the subprocess to be run in a new session.
 
 Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit code:
 
@@ -190,7 +194,7 @@ leaner than `child_process.exec`. It has the same options.
 This is a special case of the `spawn()` functionality for spawning Node
 processes. In addition to having all the methods in a normal ChildProcess
 instance, the returned object has a communication channel built-in. The
-channel is written to with `child.send(message, [sendStream])` and messages
+channel is written to with `child.send(message, [sendHandle])` and messages
 are recieved by a `'message'` event on the child.
 
 For example:
@@ -217,16 +221,33 @@ In the child the `process` object will have a `send()` method, and `process`
 will emit objects each time it receives a message on its channel.
 
 By default the spawned Node process will have the stdin, stdout, stderr
-associated with the parent's. This can be overridden by using the
-`customFds` option.
+associated with the parent's.
 
 These child Nodes are still whole new instances of V8. Assume at least 30ms
 startup and 10mb memory for each new Node. That is, you cannot create many
 thousands of them.
 
-The `sendStream` option to `child.send()` is for sending a `net.Socket`
-or `net.Server` object to another process. Child will receive the handle as
-as second argument to the `message` event.
+The `sendHandle` option to `child.send()` is for sending a handle object to
+another process. Child will receive the handle as as second argument to the
+`message` event. Here is an example of sending a handle:
+
+    var server = require('net').createServer();
+    var child = require('child_process').fork(__dirname + '/child.js');
+    // Open up the server object and send the handle.
+    server.listen(1337, function() {
+      child.send({ server: true }, server._handle);
+    });
+
+Here is an example of receiving the server handle and sharing it between
+processes:
+
+    process.on('message', function(m, serverHandle) {
+      if (serverHandle) {
+        var server = require('net').createServer();
+        server.listen(serverHandle);
+      }
+    });
+
 
 
 ### child.kill(signal='SIGTERM')

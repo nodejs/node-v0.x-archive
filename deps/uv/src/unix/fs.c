@@ -85,8 +85,7 @@ void uv_fs_req_cleanup(uv_fs_t* req) {
 
   switch (req->fs_type) {
     case UV_FS_READDIR:
-      assert((req->result == -1 && req->ptr == NULL)
-          || (req->result >= 0 && req->ptr != NULL));
+      assert(req->result > 0 ? (req->ptr != NULL) : (req->ptr == NULL));
       free(req->ptr);
       req->ptr = NULL;
       break;
@@ -116,9 +115,6 @@ static int uv__fs_after(eio_req* eio) {
 
   switch (req->fs_type) {
     case UV_FS_READDIR:
-      if (req->eio->result == -1)
-        break; /* opendir() or readdir() operation failed. */
-
       /*
        * XXX This is pretty bad.
        * We alloc and copy the large null terminated string list from libeio.
@@ -128,16 +124,21 @@ static int uv__fs_after(eio_req* eio) {
        */
       buflen = 0;
       name = req->eio->ptr2;
+
       for (i = 0; i < req->result; i++) {
         namelen = strlen(name);
         buflen += namelen + 1;
-        /* TODO check ENOMEM */
         name += namelen;
         assert(*name == '\0');
         name++;
       }
-      req->ptr = malloc(buflen);
-      memcpy(req->ptr, req->eio->ptr2, buflen);
+
+      if (buflen) {
+        if ((req->ptr = malloc(buflen)))
+          memcpy(req->ptr, req->eio->ptr2, buflen);
+        else
+          uv__set_sys_error(req->loop, ENOMEM);
+      }
       break;
 
     case UV_FS_STAT:
@@ -495,7 +496,7 @@ int uv_fs_utime(uv_loop_t* loop, uv_fs_t* req, const char* path, double atime,
 }
 
 
-#if defined(HAVE_FUTIMES)
+#if HAVE_FUTIMES
 static int _futime(const uv_file file, double atime, double mtime) {
   struct timeval tv[2];
 
@@ -506,14 +507,18 @@ static int _futime(const uv_file file, double atime, double mtime) {
   tv[1].tv_sec = mtime;
   tv[1].tv_usec = (unsigned long)(mtime * 1000000) % 1000000;
 
+#ifdef __sun
+  return futimesat(file, NULL, tv);
+#else
   return futimes(file, tv);
+#endif
 }
 #endif
 
 
 int uv_fs_futime(uv_loop_t* loop, uv_fs_t* req, uv_file file, double atime,
     double mtime, uv_fs_cb cb) {
-#if defined(HAVE_FUTIMES)
+#if HAVE_FUTIMES
   const char* path = NULL;
 
   uv_fs_req_init(loop, req, UV_FS_FUTIME, path, cb);

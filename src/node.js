@@ -30,18 +30,6 @@
   var EventEmitter;
 
   function startup() {
-
-    if ('NODE_USE_UV' in process.env) {
-      process.features.uv = process.env.NODE_USE_UV != '0';
-    }
-
-    // make sure --use-uv is propagated to child processes
-    if (process.features.uv) {
-      process.env.NODE_USE_UV = '1';
-    } else {
-      delete process.env.NODE_USE_UV;
-    }
-
     EventEmitter = NativeModule.require('events').EventEmitter;
     process.__proto__ = EventEmitter.prototype;
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
@@ -80,6 +68,10 @@
       var d = NativeModule.require('_debugger');
       d.start();
 
+    } else if (process.argv[1] == 'cluster') {
+      var cluster = NativeModule.require('cluster');
+      cluster.start();
+
     } else if (process._eval != null) {
       // User passed '-e' or '--eval' arguments to Node.
       var Module = NativeModule.require('module');
@@ -95,6 +87,13 @@
       // make process.argv[1] into a full path
       var path = NativeModule.require('path');
       process.argv[1] = path.resolve(process.argv[1]);
+
+      // If this is a worker in cluster mode, start up the communiction
+      // channel.
+      if (process.env.NODE_WORKER_ID) {
+        var cluster = NativeModule.require('cluster');
+        cluster.startWorker();
+      }
 
       var Module = NativeModule.require('module');
       // REMOVEME: nextTick should not be necessary. This hack to get
@@ -212,69 +211,74 @@
     };
   };
 
+  function createWritableStdioStream(fd) {
+    var stream;
+    var tty_wrap = process.binding('tty_wrap');
+
+    // Note stream._type is used for test-module-load-list.js
+
+    switch (tty_wrap.guessHandleType(fd)) {
+      case 'TTY':
+        var tty = NativeModule.require('tty');
+        stream = new tty.WriteStream(fd);
+        stream._type = 'tty';
+
+        // Hack to have stream not keep the event loop alive.
+        // See https://github.com/joyent/node/issues/1726
+        if (stream._handle && stream._handle.unref) {
+          stream._handle.unref();
+        }
+        break;
+
+      case 'FILE':
+        var fs = NativeModule.require('fs');
+        stream = new fs.WriteStream(null, { fd: fd });
+        stream._type = 'fs';
+        break;
+
+      case 'PIPE':
+        var net = NativeModule.require('net');
+        stream = new net.Stream(fd);
+
+        // FIXME Should probably have an option in net.Stream to create a
+        // stream from an existing fd which is writable only. But for now
+        // we'll just add this hack and set the `readable` member to false.
+        // Test: ./node test/fixtures/echo.js < /etc/passwd
+        stream.readable = false;
+        stream._type = 'pipe';
+
+        // FIXME Hack to have stream not keep the event loop alive.
+        // See https://github.com/joyent/node/issues/1726
+        if (stream._handle && stream._handle.unref) {
+          stream._handle.unref();
+        }
+        break;
+
+      default:
+        // Probably an error on in uv_guess_handle()
+        throw new Error('Implement me. Unknown stream file type!');
+    }
+
+    // For supporting legacy API we put the FD here.
+    stream.fd = fd;
+
+    return stream;
+  }
+
   startup.processStdio = function() {
-    var stdout, stdin;
+    var stdin, stdout, stderr;
 
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
-
-      var tty_wrap = process.binding('tty_wrap');
-      var fd = 1;
-
-      // Note stdout._type is used for test-module-load-list.js
-
-      switch (tty_wrap.guessHandleType(fd)) {
-        case 'TTY':
-          var tty = NativeModule.require('tty');
-          stdout = new tty.WriteStream(fd);
-          stdout._type = 'tty';
-
-          // Hack to have stdout not keep the event loop alive.
-          // See https://github.com/joyent/node/issues/1726
-          stdout._handle.unref();
-          break;
-
-        case 'FILE':
-          var fs = NativeModule.require('fs');
-          stdout = new fs.WriteStream(null, {fd: fd});
-          stdout._type = 'fs';
-          break;
-
-        case 'PIPE':
-          var net = NativeModule.require('net');
-          stdout = new net.Stream(fd);
-
-          // FIXME Should probably have an option in net.Stream to create a
-          // stream from an existing fd which is writable only. But for now
-          // we'll just add this hack and set the `readable` member to false.
-          // Test: ./node test/fixtures/echo.js < /etc/passwd
-          stdout.readable = false;
-          stdout._type = 'pipe';
-
-          // FIXME Hack to have stdout not keep the event loop alive.
-          // See https://github.com/joyent/node/issues/1726
-          stdout._handle.unref();
-          break;
-
-        default:
-          // Probably an error on in uv_guess_handle()
-          throw new Error('Implement me. Unknown stdout file type!');
-      }
-
-      // For supporting legacy API we put the FD here.
-      stdout.fd = fd;
-
+      stdout = createWritableStdioStream(1);
       return stdout;
     });
 
-    var stderr = process.stderr = new EventEmitter();
-    stderr.writable = true;
-    stderr.readable = false;
-    stderr.write = process.binding('stdio').writeError;
-    stderr.end = stderr.destroy = stderr.destroySoon = function() { };
-    // For supporting legacy API we put the FD here.
-    // XXX this could break things if anyone ever closes this stream?
-    stderr.fd = 2;
+    process.__defineGetter__('stderr', function() {
+      if (stderr) return stderr;
+      stderr = createWritableStdioStream(2);
+      return stderr;
+    });
 
     process.__defineGetter__('stdin', function() {
       if (stdin) return stdin;
@@ -408,7 +412,7 @@
     'unwatchFile': 'process.unwatchFile() has moved to fs.unwatchFile()',
     'mixin': 'process.mixin() has been removed.',
     'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
-    'inherits': 'process.inherits() has moved to sys.inherits.',
+    'inherits': 'process.inherits() has moved to util.inherits()',
     '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
   };
 
@@ -448,37 +452,7 @@
   var Script = process.binding('evals').NodeScript;
   var runInThisContext = Script.runInThisContext;
 
-  // A special hook to test the new platform layer. Use the command-line
-  // flag --use-uv to enable the libuv backend instead of the legacy
-  // backend.
-  function translateId(id) {
-    switch (id) {
-      case 'net':
-        return process.features.uv ? 'net_uv' : 'net_legacy';
-
-      case 'tty':
-        return process.features.uv ? 'tty_uv' : 'tty_legacy';
-
-      case 'child_process':
-        return process.features.uv ? 'child_process_uv' :
-                                     'child_process_legacy';
-
-      case 'timers':
-        return process.features.uv ? 'timers_uv' : 'timers_legacy';
-
-      case 'dgram':
-        return process.features.uv ? 'dgram_uv' : 'dgram_legacy';
-
-      case 'dns':
-        return process.features.uv ? 'dns_uv' : 'dns_legacy';
-
-      default:
-        return id;
-    }
-  }
-
   function NativeModule(id) {
-    id = translateId(id);
     this.filename = id + '.js';
     this.id = id;
     this.exports = {};
@@ -489,8 +463,6 @@
   NativeModule._cache = {};
 
   NativeModule.require = function(id) {
-    id = translateId(id);
-
     if (id == 'native_module') {
       return NativeModule;
     }
@@ -515,17 +487,14 @@
   };
 
   NativeModule.getCached = function(id) {
-    id = translateId(id);
     return NativeModule._cache[id];
   }
 
   NativeModule.exists = function(id) {
-    id = translateId(id);
     return (id in NativeModule._source);
   }
 
   NativeModule.getSource = function(id) {
-    id = translateId(id);
     return NativeModule._source[id];
   }
 

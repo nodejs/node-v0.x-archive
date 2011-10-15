@@ -19,9 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// libuv-broken
-
-
 var common = require('../common');
 var assert = require('assert');
 var exec = require('child_process').exec;
@@ -108,7 +105,7 @@ exec('python -c "print 200000*\'C\'"', {maxBuffer: 1000},
        assert.ok(/maxBuffer/.test(err.message));
      });
 
-process.addListener('exit', function() {
+process.on('exit', function() {
   assert.equal(1, success_count);
   assert.equal(1, error_count);
 });
