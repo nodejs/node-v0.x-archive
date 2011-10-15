@@ -19,50 +19,39 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// libuv-broken
-
-
 var common = require('../common');
 var assert = require('assert');
+var tls = require('tls');
+var fs = require('fs');
 
-var spawn = require('child_process').spawn;
+var clientConnected = 0;
+var serverConnected = 0;
 
-var is_windows = process.platform === 'win32';
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+};
 
-var exitCode;
-var termSignal;
-var gotStdoutEOF = false;
-var gotStderrEOF = false;
-
-var cat = spawn(is_windows ? 'cmd' : 'cat');
-
-
-cat.stdout.on('data', function(chunk) {
-  assert.ok(false);
+var server = tls.Server(options, function(socket) {
+  if (++serverConnected === 2) {
+    server.close();
+  }
 });
 
-cat.stdout.on('end', function() {
-  gotStdoutEOF = true;
-});
+server.listen(common.PORT, function() {
+  var client1 = tls.connect(common.PORT, function() {
+    ++clientConnected;
+    client1.end();
+  });
 
-cat.stderr.on('data', function(chunk) {
-  assert.ok(false);
+  var client2 = tls.connect(common.PORT);
+  client2.on('secureConnect', function() {
+    ++clientConnected;
+    client2.end();
+  });
 });
-
-cat.stderr.on('end', function() {
-  gotStderrEOF = true;
-});
-
-cat.on('exit', function(code, signal) {
-  exitCode = code;
-  termSignal = signal;
-});
-
-cat.kill();
 
 process.on('exit', function() {
-  assert.strictEqual(exitCode, null);
-  assert.strictEqual(termSignal, 'SIGTERM');
-  assert.ok(gotStdoutEOF);
-  assert.ok(gotStderrEOF);
+  assert.equal(clientConnected, 2);
+  assert.equal(serverConnected, 2);
 });

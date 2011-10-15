@@ -19,50 +19,21 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// libuv-broken
-
-
 var common = require('../common');
 var assert = require('assert');
+var net = require('net');
+var gotError = false;
 
-var spawn = require('child_process').spawn;
-
-var is_windows = process.platform === 'win32';
-
-var exitCode;
-var termSignal;
-var gotStdoutEOF = false;
-var gotStderrEOF = false;
-
-var cat = spawn(is_windows ? 'cmd' : 'cat');
-
-
-cat.stdout.on('data', function(chunk) {
-  assert.ok(false);
+var server = net.createServer(function(socket) {
 });
-
-cat.stdout.on('end', function() {
-  gotStdoutEOF = true;
+server.listen(1, '1.1.1.1', function() { // EACCESS or EADDRNOTAVAIL
+  assert(false);
 });
-
-cat.stderr.on('data', function(chunk) {
-  assert.ok(false);
+server.on('error', function(error) {
+  common.debug(error);
+  gotError = true;
 });
-
-cat.stderr.on('end', function() {
-  gotStderrEOF = true;
-});
-
-cat.on('exit', function(code, signal) {
-  exitCode = code;
-  termSignal = signal;
-});
-
-cat.kill();
 
 process.on('exit', function() {
-  assert.strictEqual(exitCode, null);
-  assert.strictEqual(termSignal, 'SIGTERM');
-  assert.ok(gotStdoutEOF);
-  assert.ok(gotStderrEOF);
+  assert(gotError);
 });
