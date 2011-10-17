@@ -52,6 +52,7 @@ uv_handle_type uv_guess_handle(uv_file file) {
 
 int uv_is_active(uv_handle_t* handle) {
   switch (handle->type) {
+    case UV_SIGNAL:
     case UV_TIMER:
     case UV_IDLE:
     case UV_PREPARE:
@@ -116,6 +117,11 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
       if (udp->reqs_pending == 0) {
         uv_want_endgame(loop, handle);
       }
+      return;
+	  
+    case UV_SIGNAL:
+      uv_signal_stop((uv_signal_t*)handle);
+      uv_want_endgame(loop, handle);
       return;
 
     case UV_TIMER:
@@ -194,6 +200,10 @@ void uv_process_endgames(uv_loop_t* loop) {
 
       case UV_UDP:
         uv_udp_endgame(loop, (uv_udp_t*) handle);
+        break;
+
+      case UV_SIGNAL:
+        uv_signal_endgame(loop, (uv_signal_t*) handle);
         break;
 
       case UV_TIMER:

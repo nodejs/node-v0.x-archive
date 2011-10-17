@@ -113,7 +113,8 @@ typedef enum {
   UV_ARES_TASK,
   UV_ARES_EVENT,
   UV_PROCESS,
-  UV_FS_EVENT
+  UV_FS_EVENT,
+  UV_SIGNAL
 } uv_handle_type;
 
 typedef enum {
@@ -143,6 +144,7 @@ typedef struct uv_udp_s uv_udp_t;
 typedef struct uv_pipe_s uv_pipe_t;
 typedef struct uv_tty_s uv_tty_t;
 typedef struct uv_timer_s uv_timer_t;
+typedef struct uv_signal_s uv_signal_t;
 typedef struct uv_prepare_s uv_prepare_t;
 typedef struct uv_check_s uv_check_t;
 typedef struct uv_idle_s uv_idle_t;
@@ -220,6 +222,7 @@ typedef void (*uv_shutdown_cb)(uv_shutdown_t* req, int status);
 typedef void (*uv_connection_cb)(uv_stream_t* server, int status);
 typedef void (*uv_close_cb)(uv_handle_t* handle);
 typedef void (*uv_timer_cb)(uv_timer_t* handle, int status);
+typedef void (*uv_signal_cb)(uv_signal_t* handle, int status);
 /* TODO: do these really need a status argument? */
 typedef void (*uv_async_cb)(uv_async_t* handle, int status);
 typedef void (*uv_prepare_cb)(uv_prepare_t* handle, int status);
@@ -796,6 +799,28 @@ int uv_async_init(uv_loop_t*, uv_async_t* async, uv_async_cb async_cb);
  */
 int uv_async_send(uv_async_t* async);
 
+
+
+/*
+ * uv_signal_t is a subclass of uv_handle_t.
+ *
+ * Wraps libev's ev_signal watcher. Used to get woken up at a specified time
+ * in the future.
+ */
+struct uv_signal_s {
+  UV_HANDLE_FIELDS
+  UV_SIGNAL_PRIVATE_FIELDS
+};
+
+
+void uv_signal_registerHandler(uv_loop_t* loop);
+void uv_signal_unregisterHandler(uv_loop_t* loop);
+
+int uv_signal_init(uv_loop_t*, uv_signal_t* handle, uv_signal_cb cb, int signum);
+
+int uv_signal_start(uv_signal_t* handle);
+
+int uv_signal_stop(uv_signal_t* handle);
 
 /*
  * uv_timer_t is a subclass of uv_handle_t.

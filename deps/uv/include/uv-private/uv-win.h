@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 
 #include "tree.h"
+#include "ngx-queue.h"
 
 #define MAX_PIPENAME_LEN 256
 
@@ -133,6 +134,8 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   uv_handle_t* endgame_handles;                                               \
   /* The head of the timers tree */                                           \
   struct uv_timer_tree_s timers;                                              \
+  /* The head of the timers tree */                                           \
+  struct uv_signal_s signal_handles;                                          \
     /* Lists of active loop (prepare / check / idle) watchers */              \
   uv_prepare_t* prepare_handles;                                              \
   uv_check_t* check_handles;                                                  \
@@ -256,6 +259,11 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
     struct { uv_pipe_server_fields };     \
     struct { uv_pipe_connection_fields }; \
   };
+
+#define UV_SIGNAL_PRIVATE_FIELDS          \
+  ngx_queue_t queue;                      \
+  int signum;                             \
+  uv_signal_cb signal_cb;
 
 /* TODO: put the parser states in an union - TTY handles are always */
 /* half-duplex so read-state can safely overlap write-state. */

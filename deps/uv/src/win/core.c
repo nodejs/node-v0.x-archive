@@ -70,6 +70,7 @@ static void uv_loop_init(uv_loop_t* loop) {
   loop->endgame_handles = NULL;
 
   RB_INIT(&loop->timers);
+  ngx_queue_init(&loop->signal_handles.queue);
 
   loop->check_handles = NULL;
   loop->prepare_handles = NULL;

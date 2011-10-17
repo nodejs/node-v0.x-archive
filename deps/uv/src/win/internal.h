@@ -30,6 +30,11 @@
 #include "winsock.h"
 
 
+/**
+ * signal
+ */
+void uv_signal_endgame(uv_loop_t* loop, uv_signal_t* handle);
+
 /*
  * Timers
  */

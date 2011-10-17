@@ -106,6 +106,7 @@ TEST_DECLARE   (fs_readdir_file)
 TEST_DECLARE   (fs_open_dir)
 TEST_DECLARE   (threadpool_queue_work_simple)
 #ifdef _WIN32
+TEST_DECLARE   (signal)
 TEST_DECLARE   (spawn_detect_pipe_name_collisions_on_windows)
 TEST_DECLARE   (argument_escaping)
 TEST_DECLARE   (environment_creation)
@@ -222,6 +223,7 @@ TASK_LIST_START
   TEST_ENTRY  (spawn_detect_pipe_name_collisions_on_windows)
   TEST_ENTRY  (argument_escaping)
   TEST_ENTRY  (environment_creation)
+  TEST_ENTRY  (signal)
 #endif
 
   TEST_ENTRY  (fs_file_noent)
