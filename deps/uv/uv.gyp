@@ -111,6 +111,7 @@
           ],
           'sources': [
             'include/uv-private/tree.h',
+            'include/uv-private/ngx-queue.h',
             'include/uv-private/uv-win.h',
             'src/ares/config_win32/ares_config.h',
             'src/ares/windows_port.c',
@@ -142,6 +143,7 @@
             'src/win/winapi.h',
             'src/win/winsock.c',
             'src/win/winsock.h',
+            'src/win/signal.c',
           ],
           'link_settings': {
             'libraries': [
@@ -160,7 +162,6 @@
           'sources': [
             'include/uv-private/eio.h',
             'include/uv-private/ev.h',
-            'include/uv-private/ngx-queue.h',
             'include/uv-private/uv-unix.h',
             'src/unix/core.c',
             'src/unix/uv-eio.c',
@@ -301,6 +302,7 @@
         'test/test-udp-ipv6.c',
         'test/test-udp-send-and-recv.c',
         'test/test-udp-multicast-join.c',
+        'test/test-signal.c',
       ],
       'conditions': [
         [ 'OS=="win"', {
