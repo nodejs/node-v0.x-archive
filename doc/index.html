@@ -152,10 +152,6 @@ server.listen(1337, "127.0.0.1");
         <a href="http://www.kegel.com/c10k.html">this</a> and 
         <a href="http://bulk.fefe.de/scalable-networking.pdf">this.</a>
 
-        Node will show much better memory efficiency under high-loads
-        <!-- TODO benchmark -->
-        than systems which allocate 2mb thread stacks for each connection.
-
         Furthermore, users of Node are free from worries of dead-locking
         the process&mdash;there are no locks.  Almost no function in Node
         directly performs I/O, so the process never blocks. Because
