@@ -24,13 +24,15 @@ Compressing or decompressing a string can be done by using
 zlib.deflate/zlib.gzip and zlib.unzip.
 
     var input = '.................................';
-    zlib.deflate(input, function(buffer) {
-      console.log(buffer.toString('base64'));
+    zlib.deflate(input, function(err, buffer) {
+      if(!err)
+        console.log(buffer.toString('base64'));
     });
     
     var buffer = new Buffer('eJzT0yMAAGTvBe8=', 'base64')
-    zlib.unzip(buffer, function(str) {
-      console.log(str);
+    zlib.unzip(buffer, function(err, str) {
+      if(!err)
+        console.log(str);
     });
 
 To use this module in an HTTP client or server, use the
