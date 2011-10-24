@@ -20,6 +20,19 @@ fs.ReadStream into a zlib stream, then into an fs.WriteStream.
 
     inp.pipe(gzip).pipe(out);
 
+Compressing or decompressing a string can be done by using
+zlib.deflate/zlib.gzip and zlib.unzip.
+
+    var input = '.................................';
+    zlib.deflate(input, function(buffer) {
+      console.log(buffer.toString('base64'));
+    });
+    
+    var buffer = new Buffer('eJzT0yMAAGTvBe8=', 'base64')
+    zlib.unzip(buffer, function(str) {
+      console.log(str);
+    });
+
 To use this module in an HTTP client or server, use the
 [accept-encoding](http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.3)
 on requests, and the
@@ -119,6 +132,18 @@ Decompress a raw deflate stream.
 
 Decompress either a Gzip- or Deflate-compressed stream by auto-detecting
 the header.
+
+### zlib.deflate
+
+Compress a string with Deflate.
+
+### zlib.gzip
+
+Compress a string with Gzip.
+
+### zlib.inflate
+
+Decompress a raw Buffer with Unzip.
 
 ### Options
 
