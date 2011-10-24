@@ -34,7 +34,7 @@ zlib.deflate(inputString, function(err, buffer) {
 });
 
 zlib.gzip(inputString, function(err, buffer) {
-    assert.equal(buffer.toString('base64'), expectedBase64Gzip, 'deflate encoded string should match');
+    assert.equal(buffer.toString('base64'), expectedBase64Gzip, 'gzip encoded string should match');
 });
 
 var buffer = new Buffer(expectedBase64Deflate, 'base64');
