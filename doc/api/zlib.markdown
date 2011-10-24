@@ -141,7 +141,7 @@ Compress a string with Deflate.
 
 Compress a string with Gzip.
 
-### zlib.inflate
+### zlib.unzip
 
 Decompress a raw Buffer with Unzip.
 
