@@ -178,9 +178,12 @@ class ConfigurationContext(Utils.Context):
 				_Tools = Options.tooldir[0]
 				_3rdparty = os.sep.join((_Tools, '..', '3rdparty'))
 				for d in (_Tools, _3rdparty):
-					lst = os.listdir(d)
-					if tool + '.py' in lst:
-						break
+					try:
+						lst = os.listdir(d)
+						if tool + '.py' in lst:
+							break
+					except Exception:
+    				pass
 				else:
 					# try to download the tool from the repository then
 					for x in Utils.to_list(Options.remote_repo):
