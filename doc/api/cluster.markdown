@@ -21,11 +21,9 @@ which share server ports.
     }).listen(8000);
   }
 
-If we start it like this
+Running node will now share port 8000 between the workers:
 
-    % node cluster server.js 
-    Detected 2 cpus
+    % node server.js 
     Worker 2438 online
     Worker 2437 online
 
-Node will automatically share port 8000 between the multiple instances.
