@@ -58,3 +58,7 @@ assert.ok(ex.indexOf('[stack]') != -1);
 assert.ok(ex.indexOf('[message]') != -1);
 assert.ok(ex.indexOf('[arguments]') != -1);
 assert.ok(ex.indexOf('[type]') != -1);
+
+// GH-1941
+// should not throw:
+assert.equal(util.inspect(Object.create(Date.prototype)), '{}')
