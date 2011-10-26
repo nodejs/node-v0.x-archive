@@ -27,8 +27,29 @@ Running node will now share port 8000 between the workers:
     Worker 2438 online
     Worker 2437 online
 
-The following is an example of worker resuscitation, spawning
-a new worker process when another exits.
+### exports.startMaster([options])
+
+  Spawns the initial worker processes, one per CPU by default.
+
+  The following options are supported:
+  
+  - `filename`: script to execute in the worker process, defaults to `process.argv[1]`
+  - `args`: worker program arguments, defaulting to `process.argv.slice(2)`
+  - `workers`: the number of workers, defaulting to `os.cpus().length`
+
+### exports.spawnWorker([options])
+
+   Spawn a new worker process. This is called within `cluster.startMaster()`,
+   however it is useful to implement worker resuscitation as described below
+   in the "Common patterns" section.
+   
+   The `options` available are identical to `cluster.startMaster()`.
+
+## Common patterns
+
+## Worker resuscitation
+
+The following is an example of how you may implement worker resuscitation, spawning a new worker process when another exits.
 
   if (cluster.isMaster) {
     cluster.startMaster();
@@ -38,25 +59,3 @@ a new worker process when another exits.
     });
   }
   ... 
-
-Cluster ids the servers internally, allowing multiple
-servers to work as you would expect:
-
-  var cluster = require('cluster');
-  var http = require('http');
-
-  if (cluster.isMaster) {
-    cluster.startMaster();
-  } else {
-    http.Server(function(req, res) {
-      res.end("hello world 1\n");
-    }).listen(3000);
-
-    http.Server(function(req, res) {
-      res.end("hello world 2\n");
-    }).listen(3001);
-
-    http.Server(function(req, res) {
-      res.end("hello world 3\n");
-    }).listen(3002);
-  }
