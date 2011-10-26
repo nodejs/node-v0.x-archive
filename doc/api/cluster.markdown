@@ -10,7 +10,7 @@ which share server ports.
   var cluster = require('cluster');
   var http = require('http');
 
-  if (!cluster.isWorker()) {
+  if (cluster.isMaster()) {
     // Start the master process, fork workers.
     cluster.startMaster({ workers: 2 });
   } else {
