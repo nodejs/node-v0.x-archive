@@ -27,3 +27,14 @@ Running node will now share port 8000 between the workers:
     Worker 2438 online
     Worker 2437 online
 
+The following is an example of worker resuscitation, spawning
+a new worker process when another exits.
+
+  if (cluster.isMaster) {
+    cluster.startMaster();
+    process.on('SIGCHLD', function(){
+      console.log('worker killed');
+      cluster.spawnWorker();
+    });
+  }
+  ... 
