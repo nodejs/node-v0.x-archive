@@ -38,3 +38,25 @@ a new worker process when another exits.
     });
   }
   ... 
+
+Cluster ids the servers internally, allowing multiple
+servers to work as you would expect:
+
+  var cluster = require('cluster');
+  var http = require('http');
+
+  if (cluster.isMaster) {
+    cluster.startMaster();
+  } else {
+    http.Server(function(req, res) {
+      res.end("hello world 1\n");
+    }).listen(3000);
+
+    http.Server(function(req, res) {
+      res.end("hello world 2\n");
+    }).listen(3001);
+
+    http.Server(function(req, res) {
+      res.end("hello world 3\n");
+    }).listen(3002);
+  }
