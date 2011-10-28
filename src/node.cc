@@ -1644,22 +1644,72 @@ Handle<Value> Kill(const Arguments& args) {
 
 typedef void (*extInit)(Handle<Object> exports);
 
+// Return true iff the module name in args[0] can be located
+// in this binary (via dlopen). Only supports new module format.
+Handle<Value> HasStaticModule(const v8::Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 1) return Undefined();
+
+  String::Utf8Value symbol(args[0]->ToString());
+  char *symstr = NULL;
+  {
+    char *sym = *symbol;
+    char *p = strrchr(sym, '/');
+    if (p != NULL) {
+      sym = p+1;
+    }
+
+    p = strrchr(sym, '.');
+    if (p != NULL) {
+      *p = '\0';
+    }
+
+    size_t slen = strlen(sym);
+    symstr = static_cast<char*>(calloc(1, slen + sizeof("_module") + 1));
+    memcpy(symstr, sym, slen);
+    // This interface only supports new style modules.
+    memcpy(symstr+slen, "_module", sizeof("_module") + 1);
+  }
+
+  // Get the init() function from the dynamically shared object.
+  void *handle = dlopen(NULL, RTLD_LAZY);
+  node_module_struct *mod = static_cast<node_module_struct *>(
+      dlsym(handle, symstr));
+  free(symstr);
+
+  // Check the version, too.
+  if (mod && mod->version == NODE_MODULE_VERSION) {
+    return True();
+  }
+
+  return False();
+}
+
 // DLOpen is node.dlopen(). Used to load 'module.node' dynamically shared
 // objects.
 Handle<Value> DLOpen(const v8::Arguments& args) {
   node_module_struct compat_mod;
   HandleScope scope;
 
-  if (args.Length() < 2) return Undefined();
+  if (args.Length() < 3) return Undefined();
 
   String::Utf8Value filename(args[0]->ToString()); // Cast
   Local<Object> target = args[1]->ToObject(); // Cast
+  // if true, look for the symbols in this binary, don't load one.
+  bool snode = args[2]->ToBoolean()->Value(); // Cast  
 
   // Actually call dlopen().
   // FIXME: This is a blocking function and should be called asynchronously!
   // This function should be moved to file.cc and use libeio to make this
   // system call.
-  void *handle = dlopen(*filename, RTLD_LAZY);
+
+  void *handle;
+  if (snode) {
+    handle = dlopen(NULL, RTLD_LAZY);
+  } else {
+    handle = dlopen(*filename, RTLD_LAZY);
+  }
 
   // Handle errors.
   if (handle == NULL) {
@@ -2161,6 +2211,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "getgid", GetGid);
 
   NODE_SET_METHOD(process, "dlopen", DLOpen);
+  NODE_SET_METHOD(process, "hasStaticModule", HasStaticModule); 
   NODE_SET_METHOD(process, "_kill", Kill);
 #endif // __POSIX__
 
