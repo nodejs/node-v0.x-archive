@@ -11,26 +11,6 @@ for (var i = 0; i < 20*1024; i++) {
   fixed += "C";
 }
 
-var uname, rev;
-
-exec('git rev-list -1 HEAD', function (e, stdout) {
-  if (e) {
-    console.error("Problem executing: 'git rev-list -1 HEAD'");
-    throw new Error(e);
-  }
-  rev = stdout.replace(/\s/g, '');
-});
-
-exec('uname -a', function (e, stdout) {
-  if (e) {
-    console.error("Problem executing: 'uname -a'");
-    throw new Error(e);
-  }
-  uname = stdout.replace(/[\r\n]/g, '');
-});
-
-
-
 stored = {};
 storedBuffer = {};
 
@@ -39,6 +19,7 @@ var server = http.createServer(function (req, res) {
   var command = commands[1];
   var body = "";
   var arg = commands[2];
+  var n_chunks = parseInt(commands[3], 10);
   var status = 200;
 
   if (command == "bytes") {
@@ -73,19 +54,32 @@ var server = http.createServer(function (req, res) {
   } else if (command == "fixed") {
     body = fixed;
 
-  } else if (command == "info") {
-    body = 'rev=' + rev + '\nuname="' + uname + '"\n';
-
   } else {
     status = 404;
     body = "not found\n";
   }
 
-  var content_length = body.length.toString();
+  // example: http://localhost:port/bytes/512/4
+  // sends a 512 byte body in 4 chunks of 128 bytes
+  if (n_chunks > 0) {
+    res.writeHead(status, { "Content-Type": "text/plain",
+                            "Transfer-Encoding": "chunked" });
+    // send body in chunks
+    var len = body.length;
+    var step = ~~(len / n_chunks) || len;
 
-  res.writeHead(status, { "Content-Type": "text/plain",
-                          "Content-Length": content_length });
-  res.end(body);
+    for (var i = 0; i < len; i += step) {
+      res.write(body.slice(i, i + step));
+    }
+
+    res.end();
+  } else {
+    var content_length = body.length.toString();
+
+    res.writeHead(status, { "Content-Type": "text/plain",
+                            "Content-Length": content_length });
+    res.end(body);
+  }
 
 });
 
@@ -93,3 +87,6 @@ server.listen(port, function () {
   console.log('Listening at http://127.0.0.1:'+port+'/');
 });
 
+process.on('exit', function() {
+  console.error('libuv counters', process.uvCounters());
+});
