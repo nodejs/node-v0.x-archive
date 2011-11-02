@@ -103,9 +103,15 @@ You can test this server by connecting to it with `openssl s_client`:
 
 
 #### tls.connect(port, [host], [options], [secureConnectListener])
+#### tls.connect(options, [secureConnectListener])
 
-Creates a new client connection to the given `port` and `host`. (If `host`
-defaults to `localhost`.) `options` should be an object which specifies
+Creates a new client connection to the given `port` and `host` (old API) or
+`options.port` and `options.host`. (If `host` defaults to `localhost`.)
+`options` should be an object which specifies
+
+  - `host`: Host which client should connect to
+
+  - `port`: Port which client should connect to
 
   - `key`: A string or `Buffer` containing the private key of the client in
     PEM format.
