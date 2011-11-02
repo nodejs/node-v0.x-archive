@@ -42,7 +42,7 @@ var s = '南越国是前203年至前111年存在于岭南地区的一个国家�
 var ncallbacks = 0;
 
 // test that empty file will be created and have content added 
-fs.appendToFile(filename, s, function(e) {
+fs.appendFile(filename, s, function(e) {
   if (e) throw e;
 
   ncallbacks++;
@@ -60,7 +60,7 @@ fs.appendToFile(filename, s, function(e) {
 var filename2 = join(common.fixturesDir, 'append2.txt');
 fs.writeFileSync(filename2, currentFileData);
 
-fs.appendToFile(filename2, s, function(e) {
+fs.appendFile(filename2, s, function(e) {
   if (e) throw e;
 
   ncallbacks++;
@@ -74,14 +74,14 @@ fs.appendToFile(filename2, s, function(e) {
   });
 });
 
-// test that appendToFile accepts buffers
+// test that appendFile accepts buffers
 var filename3 = join(common.fixturesDir, 'append3.txt');
 fs.writeFileSync(filename3, currentFileData);
 
 var buf = new Buffer(s, 'utf8');
 common.error('appending to ' + filename3);
 
-fs.appendToFile(filename3, buf, function(e) {
+fs.appendFile(filename3, buf, function(e) {
    if (e) throw e;
 
    ncallbacks++;
@@ -95,13 +95,13 @@ fs.appendToFile(filename3, buf, function(e) {
   });
 });
 
-// test that appendToFile accepts numbers.
+// test that appendFile accepts numbers.
 var filename4 = join(common.fixturesDir, 'append4.txt');
 fs.writeFileSync(filename4, currentFileData);
 
 common.error('appending to ' + filename4);
 
-fs.appendToFile(filename4, n, function(e) {
+fs.appendFile(filename4, n, function(e) {
   if (e) throw e;
 
   ncallbacks++;

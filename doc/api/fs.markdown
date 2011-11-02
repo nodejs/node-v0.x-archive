@@ -385,7 +385,7 @@ Example:
 
 The synchronous version of `fs.writeFile`.
 
-### fs.appendToFile(filename, data, encoding='utf8', [callback])
+### fs.appendFile(filename, data, encoding='utf8', [callback])
 
 Asynchronously append data to a file, creating the file if it not yet exists.
 `data` can be a string or a buffer. The `encoding` argument is ignored if
@@ -393,7 +393,7 @@ Asynchronously append data to a file, creating the file if it not yet exists.
 
 Example:
 
-    fs.appendToFile('message.txt', 'data to append', function (err) {
+    fs.appendFile('message.txt', 'data to append', function (err) {
       if (err) throw err;
       console.log('The "data to append" was appended to file!');
     });
