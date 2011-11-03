@@ -1852,7 +1852,8 @@ class Cipher : public ObjectWrap {
       fprintf(stderr, "node-crypto : Unknown cipher %s\n", cipherType);
       return false;
     }
-    if (EVP_CIPHER_iv_length(cipher)!=iv_len) {
+    /* OpenSSL versions up to 0.9.8l failed to return the correct iv_length (0) for ECB ciphers */
+    if (EVP_CIPHER_iv_length(cipher) != iv_len && !(EVP_CIPHER_mode(cipher) == EVP_CIPH_ECB_MODE && iv_len == 0)) {
       fprintf(stderr, "node-crypto : Invalid IV length %d\n", iv_len);
       return false;
     }
@@ -2222,7 +2223,8 @@ class Decipher : public ObjectWrap {
       fprintf(stderr, "node-crypto : Unknown cipher %s\n", cipherType);
       return false;
     }
-    if (EVP_CIPHER_iv_length(cipher_) != iv_len) {
+    /* OpenSSL versions up to 0.9.8l failed to return the correct iv_length (0) for ECB ciphers */
+    if (EVP_CIPHER_iv_length(cipher_) != iv_len && !(EVP_CIPHER_mode(cipher_) == EVP_CIPH_ECB_MODE && iv_len == 0)) {
       fprintf(stderr, "node-crypto : Invalid IV length %d\n", iv_len);
       return false;
     }
