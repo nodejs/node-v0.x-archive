@@ -38,11 +38,11 @@ zlib.gzip(inputString, function(err, buffer) {
 });
 
 var buffer = new Buffer(expectedBase64Deflate, 'base64');
-zlib.unzip(buffer, function(err, str) {
-    assert.equal(str, inputString, 'decoded inflated string should match');
+zlib.unzip(buffer, function(err, buffer) {
+    assert.equal(buffer.toString(), inputString, 'decoded inflated string should match');
 });
 
 buffer = new Buffer(expectedBase64Gzip, 'base64');
-zlib.unzip(buffer, function(err, str) {
-    assert.equal(str, inputString, 'decoded gunzipped string should match');
+zlib.unzip(buffer, function(err, buffer) {
+    assert.equal(buffer.toString(), inputString, 'decoded gunzipped string should match');
 });
