@@ -398,6 +398,10 @@ Example:
       console.log('The "data to append" was appended to file!');
     });
 
+### fs.appendFileSync(filename, data, encoding='utf8')
+
+The synchronous version of `fs.appendFile`.
+
 ### fs.watchFile(filename, [options], listener)
 
 Watch for changes on `filename`. The callback `listener` will be called each
