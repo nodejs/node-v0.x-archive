@@ -25,14 +25,16 @@ zlib.deflate/zlib.gzip and zlib.unzip.
 
     var input = '.................................';
     zlib.deflate(input, function(err, buffer) {
-      if(!err)
+      if(!err) {
         console.log(buffer.toString('base64'));
+      }
     });
     
     var buffer = new Buffer('eJzT0yMAAGTvBe8=', 'base64')
     zlib.unzip(buffer, function(err, buffer) {
-      if(!err)
+      if(!err) {
         console.log(buffer.toString());
+      }
     });
 
 To use this module in an HTTP client or server, use the
