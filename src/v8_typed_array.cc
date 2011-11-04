@@ -25,6 +25,7 @@
 #include <v8.h>
 
 #include "v8_typed_array.h"
+#include "node_buffer.h"
 
 namespace {
 
@@ -151,6 +152,7 @@ class TypedArray {
     v8::Local<v8::Signature> default_signature = v8::Signature::New(ft_cache);
 
     static BatchedMethods methods[] = {
+        { "get", &TypedArray<TBytes, TEAType>::get },
       { "set", &TypedArray<TBytes, TEAType>::set },
       { "slice", &TypedArray<TBytes, TEAType>::subarray },
       { "subarray", &TypedArray<TBytes, TEAType>::subarray },
@@ -183,14 +185,50 @@ class TypedArray {
     unsigned int length = 0;
     unsigned int byte_offset = 0;
 
-    if (ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
+    if (node::Buffer::HasInstance(args[0])) {  // node::Buffer constructor.
+      //cout<<"Buffer constructor"<<endl;
+      buffer = v8::Local<v8::Object>::Cast(args[0]);
+      unsigned int buflen = buffer->GetIndexedPropertiesExternalArrayDataLength();
+
+      if (args[1]->Int32Value() < 0)
+        return ThrowRangeError("Byte offset out of range.");
+      byte_offset = args[1]->IsUndefined() ? 0 : args[1]->Uint32Value();
+
+      if (!checkAlignment(byte_offset, TBytes))
+        return ThrowRangeError("Byte offset is not aligned.");
+
+      if (args.Length() > 2) {
+        if (args[2]->Int32Value() < 0)
+          return ThrowRangeError("Length out of range.");
+        length = args[2]->Uint32Value();
+      }
+      else {
+        if (buflen < byte_offset || !checkAlignment(buflen - byte_offset, TBytes)) {
+          return ThrowRangeError("Byte offset / length is not aligned.");
+        }
+        length = (buflen - byte_offset) / TBytes;
+      }
+
+      // NOTE(deanm): Sloppy integer overflow checks.
+      if (byte_offset > buflen || byte_offset + length > buflen ||
+          byte_offset + length * TBytes > buflen) {
+        return ThrowRangeError("Length is out of range.");
+      }
+
+      // TODO(deanm): Error check.
+      void* buf = buffer->GetIndexedPropertiesExternalArrayData();
+      //cout<<"buf="<<hex<<buf<<dec<<" length="<<length<<endl;
+
+      args.This()->SetIndexedPropertiesToExternalArrayData( reinterpret_cast<char*>(buf) + byte_offset, TEAType, length);
+    }
+    else if (ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
       buffer = v8::Local<v8::Object>::Cast(args[0]);
       unsigned int buflen =
           buffer->GetIndexedPropertiesExternalArrayDataLength();
 
       if (args[1]->Int32Value() < 0)
         return ThrowRangeError("Byte offset out of range.");
-      byte_offset = args[1]->Uint32Value();
+      byte_offset = args[1]->IsUndefined() ? 0 : args[1]->Uint32Value();
 
       if (!checkAlignment(byte_offset, TBytes))
         return ThrowRangeError("Byte offset is not aligned.");
@@ -214,10 +252,11 @@ class TypedArray {
       }
 
       // TODO(deanm): Error check.
-      void* buf = buffer->GetPointerFromInternalField(0);
-      args.This()->SetIndexedPropertiesToExternalArrayData(
-          reinterpret_cast<char*>(buf) + byte_offset, TEAType, length);
-    } else if (args[0]->IsObject()) {  // TypedArray / type[] constructor.
+      void* buf = buffer->GetIndexedPropertiesExternalArrayData();
+
+      args.This()->SetIndexedPropertiesToExternalArrayData( reinterpret_cast<char*>(buf) + byte_offset, TEAType, length);
+    }
+    else if (args[0]->IsObject()) {  // TypedArray / type[] constructor.
       v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(args[0]);
       length = obj->Get(v8::String::New("length"))->Uint32Value();
 
@@ -277,13 +316,49 @@ class TypedArray {
     return args.This();
   }
 
+  static v8::Handle<v8::Value> get(const v8::Arguments& args) {
+    //cout<<"in TypedArray::get"<<endl;
+    if (args.Length() < 1)
+      return ThrowError("Wrong number of arguments.");
+
+    if(args[0]->IsNumber()) {
+      unsigned int index=args[0]->Uint32Value();
+      //cout<<"Getting index "<<index<<endl;
+      void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
+      //cout<<"ptr = "<<hex<<ptr<<dec<<endl;
+
+      if(TEAType==v8::kExternalByteArray) return v8::Integer::New(reinterpret_cast<char*>(ptr)[index]);
+      else if(TEAType==v8::kExternalUnsignedByteArray) return v8::Integer::New(reinterpret_cast<unsigned char*>(ptr)[index]);
+      else if(TEAType==v8::kExternalShortArray) return v8::Integer::New(reinterpret_cast<short*>(ptr)[index]);
+      else if(TEAType==v8::kExternalUnsignedShortArray) return v8::Integer::New(reinterpret_cast<unsigned short*>(ptr)[index]);
+      else if(TEAType==v8::kExternalIntArray) return v8::Integer::New(reinterpret_cast<int*>(ptr)[index]);
+      else if(TEAType==v8::kExternalUnsignedIntArray) return v8::Integer::New(reinterpret_cast<unsigned int*>(ptr)[index]);
+      else if(TEAType==v8::kExternalFloatArray) return v8::Number::New(reinterpret_cast<float*>(ptr)[index]);
+      else if(TEAType==v8::kExternalDoubleArray) return v8::Number::New(reinterpret_cast<double*>(ptr)[index]);
+    }
+    return v8::Undefined();
+  }
   static v8::Handle<v8::Value> set(const v8::Arguments& args) {
     if (args.Length() < 1)
       return ThrowError("Wrong number of arguments.");
 
-    if (!args[0]->IsObject())
-      return ThrowTypeError("Type error.");
+    //if (!args[0]->IsObject())
+    //  return ThrowTypeError("Type error.");
 
+    if(args[0]->IsNumber()) {
+      // index, <type> value
+      unsigned int index = args[0]->Uint32Value();
+      void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
+      if(TEAType==v8::kExternalByteArray) reinterpret_cast<char*>(ptr)[index] = (char) args[1]->Int32Value();
+      else if(TEAType==v8::kExternalUnsignedByteArray) reinterpret_cast<unsigned char*>(ptr)[index] = (unsigned char) args[1]->Int32Value();
+      else if(TEAType==v8::kExternalShortArray) reinterpret_cast<short*>(ptr)[index] = (short) args[1]->Int32Value();
+      else if(TEAType==v8::kExternalUnsignedShortArray) reinterpret_cast<unsigned short*>(ptr)[index] = (unsigned short) args[1]->Int32Value();
+      else if(TEAType==v8::kExternalIntArray) reinterpret_cast<int*>(ptr)[index] = (int) args[1]->Int32Value();
+      else if(TEAType==v8::kExternalUnsignedIntArray) reinterpret_cast<unsigned int*>(ptr)[index] = (unsigned int) args[1]->Int32Value();
+      else if(TEAType==v8::kExternalFloatArray) reinterpret_cast<float*>(ptr)[index] = (float) args[1]->NumberValue();
+      else if(TEAType==v8::kExternalDoubleArray) reinterpret_cast<double*>(ptr)[index] = (double) args[1]->NumberValue();
+    }
+    else if(args[0]->IsObject()) {
     v8::Handle<v8::Object> obj = v8::Handle<v8::Object>::Cast(args[0]);
 
     if (TypedArray<TBytes, TEAType>::HasInstance(obj)) {  // ArrayBufferView.
@@ -339,6 +414,7 @@ class TypedArray {
       for (uint32_t i = 0; i < src_length; ++i) {
         // Use the v8 setter to deal with typing.  Maybe slow?
         args.This()->Set(i + offset, obj->Get(i));
+        }
       }
     }
 
@@ -543,9 +619,8 @@ class DataView {
     if (!buffer->HasIndexedPropertiesInExternalArrayData())
       return ThrowError("Object must be an ArrayBuffer.");
 
-    unsigned int byte_length =
-        buffer->GetIndexedPropertiesExternalArrayDataLength();
-    unsigned int byte_offset = args[1]->Uint32Value();
+    unsigned int byte_length = buffer->GetIndexedPropertiesExternalArrayDataLength();
+    unsigned int byte_offset = args[1]->IsUndefined() ? 0 : args[1]->Uint32Value();
 
     if (args[1]->Int32Value() < 0 || byte_offset >= byte_length)
       return ThrowRangeError("byteOffset out of range.");
