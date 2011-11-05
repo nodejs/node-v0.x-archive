@@ -25,7 +25,7 @@
 
 #include <assert.h>
 #include <stdio.h>
-
+#include <pthread.h>
 
 /* TODO remove me! */
 static uv_loop_t* main_loop;
@@ -99,6 +99,15 @@ static void uv_eio_done_poll(void) {
   uv_async_send(&main_loop->uv_eio_done_poll_notifier);
 }
 
+static pthread_once_t eio_initialised = PTHREAD_ONCE_INIT;
+void eio_init_once() {
+  eio_init(uv_eio_want_poll, uv_eio_done_poll);
+  /*
+   * Don't handle more than 10 reqs on each eio_poll(). This is to avoid
+   * race conditions. See Node's test/simple/test-eio-race.js
+   */
+  eio_set_max_poll_reqs(10);
+}
 
 void uv_eio_init(uv_loop_t* loop) {
   if (loop->counters.eio_init == 0) {
@@ -118,12 +127,7 @@ void uv_eio_init(uv_loop_t* loop) {
         uv_eio_done_poll_notifier_cb);
     uv_unref(loop);
 
-    eio_init(uv_eio_want_poll, uv_eio_done_poll);
-    /*
-     * Don't handle more than 10 reqs on each eio_poll(). This is to avoid
-     * race conditions. See Node's test/simple/test-eio-race.js
-     */
-    eio_set_max_poll_reqs(10);
+    pthread_once(&eio_initialised, eio_init_once);
   } else {
     /*
      * If this assertion breaks then Ryan hasn't implemented support for
