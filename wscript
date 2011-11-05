@@ -563,9 +563,10 @@ def v8_cmd(bld, variant):
   else:
     snapshot = ""
 
-  cmd_R = sys.executable + ' "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s toolchain=%s library=static %s'
+  cmd_R = '"%s" "%s" -j %d -C "%s" -Y "%s" visibility=default mode=%s %s toolchain=%s library=static %s'
 
-  cmd = cmd_R % ( scons
+  cmd = cmd_R % ( sys.executable 
+                , scons
                 , Options.options.jobs
                 , safe_path(bld.srcnode.abspath(bld.env_of_name(variant)))
                 , safe_path(v8dir_src)
