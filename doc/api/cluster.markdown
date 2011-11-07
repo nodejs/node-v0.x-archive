@@ -177,7 +177,7 @@ Instead you have to use for..in loop, or use the `eachWorker` method.
         //Do something usefull with workers[workerID]
     }
 
-### cluster.eachWorker
+### cluster.eachWorker(callback)
 
 This method is go thouge all workers and call a given function.
     
@@ -186,7 +186,7 @@ This method is go thouge all workers and call a given function.
         worker.send("say hi");
     });
     
-### cluster.setupMaster
+### cluster.setupMaster([options])
 
 The `setupMaster` is used to change the default 'fork' behavure. It takes one option
 object argument.
@@ -219,7 +219,7 @@ The object is return from `fork()`, an can be optained from `cluster.workers` or
 
 Each new worker is given its own unique id, this id i stored in the `workerID`.
 
-### Worker.send
+### Worker.send(message)
 
 Use the `send()` method to send a message to a specific worker. When the message
 is recived in the worker, its 'message' event will be emitted.
@@ -254,7 +254,7 @@ from any worker by using:
 Each worker is given a unique id, is can be optained using `workerID`,
 this id are the same used in the master.
 
-### cluster.worker.respond
+### cluster.worker.respond(message, [callback])
 
 This method is used to send messages back to the master. It takes also a
 callback as a argument, there will be called when a master has echoed
