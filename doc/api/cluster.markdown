@@ -30,6 +30,19 @@ Running node will now share port 8000 between the workers:
     Worker 2438 online
     Worker 2437 online
 
+
+### cluster.isMaster
+
+This boolean flag is true if the process is a master. This is determinted
+by the `process.env.NODE_WORKER_ID`. If `process.env.NODE_WORKER_ID` is 
+undefined `isMaster` is `true`.
+
+### cluster.isWorker
+
+This boolean flag is true if the process is a worker forked from a master.
+If the `process.env.NODE_WORKER_ID` is set to a value diffrent from undefined
+`isWorker` is `true`.
+
 ### Event: 'death'
 
 When any of the workers die the cluster module will emit the 'death' event.
@@ -79,52 +92,68 @@ where the 'listening' event is emitted.
         console.log("We are now connected");
     });
 
-
 ### cluster.fork()
 
+Spawn a new worker process. This can only be called from the master process.
+The `fork()` will also return a fork object equal as it was `child_process.fork`
+there had been called.
+
 The difference between `cluster.fork()` and `child_process.fork()` is simply
-that cluster allows TCP servers to be shared between workers. `cluster.fork`
-is implemented on top of `child_process.fork`. The message passing API that
-is available with `child_process.fork` is available with `cluster` as well.
+that cluster allows TCP servers to be shared between workers. The message
+passing API that is available with `child_process.fork` is available with
+`cluster` as well.
+
 As an example, here is a cluster which keeps count of the number of requests
 in the master process via message passing:
 
     var cluster = require('cluster');
     var http = require('http');
-    var numReqs = 0;
 
     if (cluster.isMaster) {
-      // Fork workers.
-      for (var i = 0; i < 2; i++) {
-        var worker = cluster.fork();
-
-        worker.on('message', function(msg) {
-          if (msg.cmd && msg.cmd == 'notifyRequest') {
-            numReqs++;
-          }
-        });
-      }
-
+      
+      //Keep track of http requests
+      var numReqs = 0;
       setInterval(function() {
         console.log("numReqs =", numReqs);
       }, 1000);
+      
+      //Count requestes
+      var messageHandler = function (msg) {
+        if (msg.cmd && msg.cmd == 'notifyRequest') {
+          numReqs += 1;
+        }
+      };
+      
+      //Start workers and listen for messages containing notifyRequest
+      cluster.autoFork();
+      cluster.eachWorker(function (worker) {
+        worker.on('message', messageHandler);
+      });
+
     } else {
-      // Worker processes have a http server.
+     
+     // Worker processes have a http server.
       http.Server(function(req, res) {
         res.writeHead(200);
         res.end("hello world\n");
-        // Send message to master process
-        process.send({ cmd: 'notifyRequest' });
+        
+        // notify master about the request
+        cluster.worker.send({ cmd: 'notifyRequest' });
       }).listen(8000);
     }
 
+### cluster.autoFork()
 
+When `autoFork()` is called a number of worker is forked. How many workers 
+you will end up with, are determed by the number of CPU cores you have.
+You can finde the number by using `require('os').cups().length`.
 
-Spawn a new worker process. This can only be called from the master process.
+`autoFork()` will only start workers if no workers are running.
 
-### cluster.isMaster
-### cluster.isWorker
+The method do also spawn a new worker when on is dead. This is done using
+the `death` event.
 
-Boolean flags to determine if the current process is a master or a worker
-process in a cluster. A process `isMaster` if `process.env.NODE_WORKER_ID`
-is undefined.
+    cluster.on('death', function () {
+        console.log('restarting worker ...');
+        cluster.fork();
+    });
