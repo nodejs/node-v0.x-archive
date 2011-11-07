@@ -39,8 +39,6 @@ undefined `isMaster` is `true`.
 
 ### cluster.isWorker
 
-## Events
-
 This boolean flag is true if the process is a worker forked from a master.
 If the `process.env.NODE_WORKER_ID` is set to a value diffrent from undefined
 `isWorker` is `true`.
