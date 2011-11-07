@@ -39,6 +39,8 @@ undefined `isMaster` is `true`.
 
 ### cluster.isWorker
 
+## Events
+
 This boolean flag is true if the process is a worker forked from a master.
 If the `process.env.NODE_WORKER_ID` is set to a value diffrent from undefined
 `isWorker` is `true`.
@@ -157,3 +159,61 @@ the `death` event.
         console.log('restarting worker ...');
         cluster.fork();
     });
+
+### cluster.workers
+
+`cluster.workers` is an array containing all currently running workers, spawned
+by this master.
+
+However since the worker id is used as the index, you can not use a for loop.
+Instead you have to use for..in loop, or use the `eachWorker` method.
+
+    var workers = cluster.workers;
+    for (var workerID in workers) {
+        //Do something usefull with workers[workerID]
+    }
+
+### cluster.eachWorker
+
+This method is go thouge all workers and call a given function.
+    
+    //Say hi to all workers
+    cluster.eachWorker(function (worker) {
+        worker.send("say hi");
+    });
+    
+## Worker
+
+### Worker.send
+
+-- placeholder
+
+### Worker.workerID
+
+-- placeholder
+
+## cluster.worker 
+
+This object contain basic information about the worker.
+
+### cluster.worker.workerID
+
+Each worker is given a unique id, is can be optained using `workerID`,
+this id are the same used in the master.
+
+### cluster.worker.send
+
+This method is used to send messages back to the master. It takes also a
+callback as a argument, there will be called when a master has echoed
+a confirm message.
+    
+    var cluster = require("cluster");
+    cluster.worker.send({ cmd : "notifyRequest" }, function () {
+        //Master has resiced message
+    });
+
+### Event: message
+
+This event is emitted when a message from the master is recived.
+The diffrence between `cluster.worker.on('message')` and `process.on('message')`
+is that it only emits when a non internal message is recived.
