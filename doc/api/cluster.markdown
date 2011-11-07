@@ -186,6 +186,29 @@ This method is go thouge all workers and call a given function.
         worker.send("say hi");
     });
     
+### cluster.setupMaster
+
+The `setupMaster` is used to change the default 'fork' behavure. It takes one option
+object argument.
+
+Example:
+
+    var cluster = require("cluster");
+    cluster.setupMaster({
+        exec : "worker.js",
+        args : ["--use", "https"],
+        workers : 2
+    });
+    cluster.autoFork();
+
+The options argument can contain 3 different properties. 
+
+`exec` and `args` are used when forking a new worker.
+
+- `exec` are the file path to the worker file, by default this is the same file as the master.
+- `args` are a array of arguments send along with the worker, by default this is `process.argv.slice(2)`.
+- `workers` are the number of worker there will be created when using `autoFork()`
+
 ## Worker
 
 This object is a instance of `child_process.fork()` but contain also a `workerID`.
