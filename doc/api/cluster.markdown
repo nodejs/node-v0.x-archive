@@ -61,13 +61,19 @@ When a new worker is forked the cluster module will emit a 'fork' event.
 This can be used to log worker activity, and create you own timeout.
     
     var timeouts = [];
+    var errorMsg = function () {
+        console.error("Something must be worng with the connection ...");
+    });
+    
     cluster.on('fork', function (worker) {
-        timeouts[worker.workerID] = setTimeout(function () {
-            console.error("Something must be worng with the connection ...");
-        }, 2000);
+        timeouts[worker.workerID] = setTimeout(errorMsg, 2000);
     });
     cluster.on('listening', function (worker) {
         clearTimeout(timeouts[worker.workerID]);
+    });
+    cluster.on('death', function (worker) {
+        clearTimeout(timeouts[worker.workerID]);
+        errorMsg();
     });
 
 ### Event: 'online'
@@ -138,7 +144,7 @@ in the master process via message passing:
         res.end("hello world\n");
         
         // notify master about the request
-        cluster.worker.send({ cmd: 'notifyRequest' });
+        cluster.worker.respond({ cmd: 'notifyRequest' });
       }).listen(8000);
     }
 
@@ -182,31 +188,57 @@ This method is go thouge all workers and call a given function.
     
 ## Worker
 
-### Worker.send
-
--- placeholder
+This object is a instance of `child_process.fork()` but contain also a `workerID`.
+The object is return from `fork()`, an can be optained from `cluster.workers` or
+`cluster.eachWorker`;
 
 ### Worker.workerID
 
--- placeholder
+Each new worker is given its own unique id, this id i stored in the `workerID`.
+
+### Worker.send
+
+Use the `send()` method to send a message to a specific worker. When the message
+is recived in the worker, its 'message' event will be emitted.
+
+### Event: message
+
+This event overwrite the message event from `child_process.fork()`.
+
+The event is very much like the 'messge' event from `child_process.fork()` except
+that is don't emit when a internal message is recived. The event function do also
+recive a sencond argument containg the worker object.
+    
+    var messageHandler = function (msg, worker) {
+        console.log("The worker with ID:" + worker + " has send this mesage: ", msg);
+    };
+    cluster.eachWorker(function (worker) {
+        worker.on('message', messageHandler);
+    });
 
 ## cluster.worker 
 
-This object contain basic information about the worker.
-
+This object contain basic information about the worker, an can be optained
+from any worker by using:
+    
+    var cluster = require("cluster");
+    if (cluster.isWorker) {
+        var worker = cluster.worker;
+    }
+    
 ### cluster.worker.workerID
 
 Each worker is given a unique id, is can be optained using `workerID`,
 this id are the same used in the master.
 
-### cluster.worker.send
+### cluster.worker.respond
 
 This method is used to send messages back to the master. It takes also a
 callback as a argument, there will be called when a master has echoed
 a confirm message.
     
     var cluster = require("cluster");
-    cluster.worker.send({ cmd : "notifyRequest" }, function () {
+    cluster.worker.respond({ cmd : "notifyRequest" }, function () {
         //Master has resiced message
     });
 
