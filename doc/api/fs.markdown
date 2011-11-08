@@ -218,7 +218,7 @@ Synchronous rmdir(2).
 ### fs.mkdir(path, [mode], [callback])
 
 Asynchronous mkdir(2). No arguments other than a possible exception are given
-to the completion callback. `mode` defaults to `0777`. 
+to the completion callback. `mode` defaults to `0777`.
 
 ### fs.mkdirSync(path, [mode])
 
@@ -386,6 +386,9 @@ Example:
 The synchronous version of `fs.writeFile`.
 
 ### fs.watchFile(filename, [options], listener)
+
+***Warning:*** This method is deprecated, and will throw an error under
+Windows. Use `fs.watch` instead.
 
 Watch for changes on `filename`. The callback `listener` will be called each
 time the file is accessed.
