@@ -57,6 +57,12 @@ function runTests(atime, mtime, callback) {
     fs.utimesSync(__filename, atime, mtime);
     expect_ok('utimesSync', __filename, undefined, atime, mtime);
     tests_run++;
+    
+    if (is_windows) {
+      fd = fs.openSync(__filename, 'r+');
+    } else {
+      fd = fs.openSync(__filename, 'r');
+    }
 
     // some systems don't have futimes
     // if there's an error, it should be ENOSYS
@@ -87,6 +93,10 @@ function runTests(atime, mtime, callback) {
     expect_errno('futimesSync', -1, err, 'EBADF');
     tests_run++;
   }
+  //
+  // test sync code paths at first
+  //
+  syncTests();
 
   //
   // test async code paths
@@ -109,7 +119,6 @@ function runTests(atime, mtime, callback) {
 
         fs.futimes(-1, atime, mtime, function(err) {
           expect_errno('futimes', -1, err, 'EBADF');
-          syncTests();
           callback();
         });
         tests_run++;
