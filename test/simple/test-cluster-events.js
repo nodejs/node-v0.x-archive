@@ -1,7 +1,6 @@
 var cluster = require("cluster");
 var common = require('../common');
 var assert = require('assert');
-var cpus = require("os").cpus().length;
 
 if (cluster.isMaster) {
 	
@@ -25,8 +24,8 @@ if (cluster.isMaster) {
 		.autoFork();
 	
 	global.setTimeout(function () {
-		process.exit();
-		assert.fail("Timeout after 2 seconds");
+    assert.fail("Timeout after 2 seconds");
+    process.exit();
 	}, 2000);
 	
 	process.on("exit", function () {
