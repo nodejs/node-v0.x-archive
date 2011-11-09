@@ -42,12 +42,14 @@ To get started we create a file `hello.cc`:
     void init(Handle<Object> target) {
       NODE_SET_METHOD(target, "hello", Method);
     }
-    NODE_MODULE(hello, init);
+    NODE_MODULE(hello, init)
 
 Note that all Node addons must export an initialization function:
 
     void Initialize (Handle<Object> target);
-    NODE_MODULE(module_name, Initialize);
+    NODE_MODULE(module_name, Initialize)
+
+There is no semi-colon after `NODE_MODULE` as it's not a function (see `node.h`).
 
 The source code needs to be built into `hello.node`, the binary Addon. To
 do this we create a file called `wscript` which is python code and looks
