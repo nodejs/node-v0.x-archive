@@ -76,7 +76,7 @@ Running `node-waf configure build` will create a file
 provided for the ease of users.
 
 You can now use the binary addon in a Node project by pointing `require` to
-the recently build module:
+the recently built module:
 
     var addon = require('./build/Release/hello');
 
