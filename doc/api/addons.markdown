@@ -75,7 +75,7 @@ Running `node-waf configure build` will create a file
 `node-waf` is just [WAF](http://code.google.com/p/waf), the python-based build system. `node-waf` is
 provided for the ease of users.
 
-You can now use the binary addon in a Node project by pointing `require` to
+You can now use the binary addon in a Node project `hello.js` by pointing `require` to
 the recently built module:
 
     var addon = require('./build/Release/hello');
