@@ -160,6 +160,7 @@ setTimeout(function() {
 process.once('uncaughtException', function(e) {
   quit();
   console.error(e.toString());
+  child.kill('SIGKILL');
   process.exit(1);
 });
 
