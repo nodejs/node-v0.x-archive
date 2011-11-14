@@ -19,9 +19,6 @@ if [ $SERVER == "127.0.0.1" ]; then
   sleep 1
 fi
 
-info=`curl -s http://$SERVER:$PORT/info`
-eval $info
-
 date=`date "+%Y%m%d%H%M%S"`
 
 ab_hello_world() {
