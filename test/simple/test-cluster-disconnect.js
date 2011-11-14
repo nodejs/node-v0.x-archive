@@ -4,7 +4,7 @@ var assert = require('assert');
 
 if (cluster.isMaster) {
 
-  var state = "";
+  var state = '';
   var suicide = false;
   var disconnect = false;
   var cantSend = false;
@@ -15,29 +15,29 @@ if (cluster.isMaster) {
     suicide = worker.suicide;
     disconnect = true;
     try {
-      worker.send({cmd: "hallo"});
+      worker.send({cmd: 'hallo'});
     } catch (e) {
       cantSend = true;
     }
-    
+
     process.exit(0);
   });
   cluster.setupMaster({ workers: 1 });
-  
-  cluster.on('listening', function (worker) {
+
+  cluster.on('listening', function(worker) {
     //Disconnect worker
     worker.disconnect();
   });
-  
+
   cluster.autoFork();
-  
+
   //Timeout
   global.setTimeout(function() {
     assert.fail('Timeout after 2 seconds');
     process.exit(1);
   }, 2000);
-  
-  
+
+
   process.on('exit', function() {
     assert.ok(disconnect, 'The disconnect event did not emit');
     assert.equal(state, 'disconnect', 'The state should be disconnect');
