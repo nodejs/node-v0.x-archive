@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SERVER=127.0.0.1
-PORT=8000
+PORT=${PORT:=8000}
 
 # You may want to configure your TCP settings to make many ports available
 # to node and ab. On macintosh use: 
