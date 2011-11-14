@@ -16,7 +16,7 @@ which share server ports.
       cluster.autoFork();
       
     } else {
-      // Workers can use share any TCP connection
+      // Workers can share any TCP connection
       // In this case its a HTTP server
       http.createServer(function(req, res) {
         res.writeHead(200);
@@ -97,6 +97,16 @@ where the 'listening' event is emitted.
     cluster.on('listening', function (worker) {
         console.log("We are now connected");
     });
+    
+
+### Event: 'disconnect'
+
+When using the `disconnect()` in the master or in a worker, the `disconnect` event
+will emit when a connection is disconnected.
+
+    cluster.on('disconnect', function (worker) {
+        console.log("We can no longer recive messages from worker");
+    });
 
 ### cluster.fork()
 
@@ -144,7 +154,7 @@ in the master process via message passing:
         res.end("hello world\n");
         
         // notify master about the request
-        cluster.worker.respond({ cmd: 'notifyRequest' });
+        cluster.worker.send({ cmd: 'notifyRequest' });
       }).listen(8000);
     }
 
@@ -179,7 +189,7 @@ Instead you have to use for..in loop, or use the `eachWorker` method.
 
 ### cluster.eachWorker(callback)
 
-This method is go thouge all workers and call a given function.
+This method will go thouge all workers and call a given function.
     
     //Say hi to all workers
     cluster.eachWorker(function (worker) {
@@ -211,25 +221,40 @@ The options argument can contain 3 different properties.
 
 ## Worker
 
-This object is a instance of `child_process.fork()` but contain also a `workerID`.
-The object is return from `fork()`, an can be optained from `cluster.workers` or
-`cluster.eachWorker`;
+This object contain all public information and method about a worker. In the master
+it can be optained using `cluster.workers` or `cluster.eachWorker`. In a worker
+it can be optained using `cluster.worker`.
 
 ### Worker.workerID
 
 Each new worker is given its own unique id, this id i stored in the `workerID`.
 
-### Worker.send(message)
+### Worker.process
 
-Use the `send()` method to send a message to a specific worker. When the message
-is recived in the worker, its 'message' event will be emitted.
+All workers are created using `child_process.fork()`, the returned object from this
+function is stored in process.
+
+### Worker.send(message, [callback])
+
+In the master this function will send a message to a specific worker.
+In a worker the function will send a message to the master.
+
+The `send()` method takes a second optional argument. This is a callback function
+there will run the the message was rescived.
+
+    cluster.worker.send({ cmd: 'notifyRequest' }, function () {
+      //Master has recived message
+    });
+
+
+### Worker.kill()
+
+This function will kill the worker, and inform the master to not spawn a new worker.
 
 ### Event: message
 
-This event overwrite the message event from `child_process.fork()`.
-
-The event is very much like the 'messge' event from `child_process.fork()` except
-that is don't emit when a internal message is recived. The event function do also
+The event is very much like the 'message' event from `child_process.fork()` or `process.on('message')`
+except that is don't emit when a internal message is recived. The event function do also
 recive a sencond argument containg the worker object.
     
     var messageHandler = function (msg, worker) {
@@ -238,35 +263,11 @@ recive a sencond argument containg the worker object.
     cluster.eachWorker(function (worker) {
         worker.on('message', messageHandler);
     });
-
-## cluster.worker 
-
-This object contain basic information about the worker, an can be optained
-from any worker by using:
     
-    var cluster = require("cluster");
-    if (cluster.isWorker) {
-        var worker = cluster.worker;
-    }
-    
-### cluster.worker.workerID
+### Event: exit
 
-Each worker is given a unique id, is can be optained using `workerID`,
-this id are the same used in the master.
+This event will emit when a worker is dead or disconnected.
 
-### cluster.worker.respond(message, [callback])
+### Event: disconnect
 
-This method is used to send messages back to the master. It takes also a
-callback as a argument, there will be called when a master has echoed
-a confirm message.
-    
-    var cluster = require("cluster");
-    cluster.worker.respond({ cmd : "notifyRequest" }, function () {
-        //Master has resiced message
-    });
-
-### Event: message
-
-This event is emitted when a message from the master is recived.
-The diffrence between `cluster.worker.on('message')` and `process.on('message')`
-is that it only emits when a non internal message is recived.
+This event will emit when a worker is disconnect, and can't resive messages.
