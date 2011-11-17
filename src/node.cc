@@ -114,10 +114,38 @@ static Persistent<String> listeners_symbol;
 static Persistent<String> uncaught_exception_symbol;
 static Persistent<String> emit_symbol;
 
+struct watcher_struct {
+  int type;
+  void *w;
+};
+
+const int MAX_WATCHERS = 100;
+
+static watcher_struct *watchers = NULL;
+static int watcher_count = 0;
+
+Persistent<String> type_symbol;
+Persistent<String> handle_symbol;
+Persistent<String> stack_symbol;
+
+Persistent<String> filename_symbol;
+Persistent<String> functionname_symbol;
+Persistent<String> column_symbol;
+Persistent<String> linenumber_symbol;
+
+Persistent<String> read_symbol;
+Persistent<String> write_symbol;
+Persistent<String> timer_symbol;
+Persistent<String> periodic_symbol;
+Persistent<String> child_symbol;
+Persistent<String> signal_symbol;
+Persistent<String> stat_symbol;
+Persistent<String> custom_symbol;
+Persistent<String> unknown_symbol;
 
 static char *eval_string = NULL;
 static int option_end_index = 0;
-static bool use_debug_agent = false;
+bool use_debug_agent = false;
 static bool debug_wait_connect = false;
 static int debug_port=5858;
 static int max_stack_size = 0;
@@ -1689,6 +1717,112 @@ static Handle<Value> Binding(const Arguments& args) {
   return scope.Close(exports);
 }
 
+static Persistent<String> WatcherTypeToString(int type) {
+  switch (type) {
+    case EV_READ:     return read_symbol;
+    case EV_WRITE:    return write_symbol;
+    case EV_TIMER:    return timer_symbol;
+    case EV_PERIODIC: return periodic_symbol;
+    case EV_CHILD:    return child_symbol;
+    case EV_SIGNAL:   return signal_symbol;
+    case EV_STAT:     return stat_symbol;
+    case EV_CUSTOM:   return custom_symbol;
+    default:          return unknown_symbol;
+  }
+}
+
+static void WatcherCallback(EV_P_ int type, void *w) {
+  if (watcher_count >= MAX_WATCHERS)
+    return;
+
+  watcher_struct watcher;
+  watcher.type = type;
+  watcher.w = w;
+
+  watchers[watcher_count++] = watcher;
+}
+
+static Handle<Value> Watchers(const Arguments& args) {
+  HandleScope scope;
+
+  watchers = new watcher_struct[MAX_WATCHERS];
+  watcher_count = 0;
+
+  ev_walk(EV_DEFAULT_
+          EV_READ | EV_WRITE | EV_TIMER | EV_PERIODIC | EV_CHILD | EV_SIGNAL |
+          EV_STAT | EV_CUSTOM, WatcherCallback);
+
+  if (type_symbol.IsEmpty()) {
+    type_symbol = NODE_PSYMBOL("type");
+    handle_symbol = NODE_PSYMBOL("handle");
+    stack_symbol = NODE_PSYMBOL("stack");
+
+    filename_symbol = NODE_PSYMBOL("fileName");
+    functionname_symbol = NODE_PSYMBOL("functionName");
+    column_symbol = NODE_PSYMBOL("columnNumber");
+    linenumber_symbol = NODE_PSYMBOL("lineNumber");
+
+    read_symbol = NODE_PSYMBOL("read");
+    write_symbol = NODE_PSYMBOL("write");
+    timer_symbol = NODE_PSYMBOL("timer");
+    periodic_symbol = NODE_PSYMBOL("periodic");
+    child_symbol = NODE_PSYMBOL("child");
+    signal_symbol = NODE_PSYMBOL("signal");
+    stat_symbol = NODE_PSYMBOL("stat");
+    custom_symbol = NODE_PSYMBOL("custom");
+    unknown_symbol = NODE_PSYMBOL("unknown");
+  }
+
+  Local<Array> array = Array::New(watcher_count);
+
+  // Convert the array of watcher structs to an array of objects
+  for (int i = 0; i < watcher_count; i++) {
+    watcher_struct watcher_s = watchers[i];
+    ev_watcher* watcher = (ev_watcher*)watcher_s.w;
+
+    Local<Object> obj = Object::New();
+    obj->Set(type_symbol, WatcherTypeToString(watcher_s.type));
+
+    if (watcher->data != NULL) {
+      ObjectWrap* wrap = (ObjectWrap*)watcher->data;
+
+      obj->Set(handle_symbol, wrap->handle_);
+
+      // If there is a stack trace, convert it to a string
+      Persistent<StackTrace> trace = wrap->trace_;
+      if (!trace.IsEmpty()) {
+        Local<String> stack_str = String::Empty();
+        int length = trace->GetFrameCount();
+        for (int j = 0; j < length; j++) {
+          Local<StackFrame> frame = trace->GetFrame(j);
+
+          stack_str = String::Concat(stack_str, String::NewSymbol("    at "));
+          stack_str = String::Concat(stack_str, frame->GetFunctionName());
+          stack_str = String::Concat(stack_str, String::NewSymbol(" ("));
+          stack_str = String::Concat(stack_str, frame->GetScriptName());
+          stack_str = String::Concat(stack_str, String::NewSymbol(":"));
+          stack_str = String::Concat(stack_str,
+            Integer::NewFromUnsigned(frame->GetLineNumber())->ToString());
+          stack_str = String::Concat(stack_str, String::NewSymbol(":"));
+          stack_str = String::Concat(stack_str,
+            Integer::NewFromUnsigned(frame->GetColumn())->ToString());
+          stack_str = String::Concat(stack_str, String::NewSymbol(")"));
+          if (j < length - 1)
+            stack_str = String::Concat(stack_str, String::NewSymbol("\n"));
+        }
+        obj->Set(stack_symbol, stack_str);
+      }
+    }
+
+    array->Set(i, obj);
+  }
+
+  delete[] watchers;
+  watcher_count = 0;
+
+  return scope.Close(array);
+}
+
 
 static Handle<Value> ProcessTitleGetter(Local<String> property,
                                         const AccessorInfo& info) {
@@ -1952,6 +2086,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "uvCounters", UVCounters);
 
   NODE_SET_METHOD(process, "binding", Binding);
+
+  NODE_SET_METHOD(process, "watchers", Watchers);
 
   return process;
 }

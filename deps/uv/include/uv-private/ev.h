@@ -134,7 +134,7 @@ EV_CPP(extern "C" {)
 #endif
 
 #ifndef EV_WALK_ENABLE
-# define EV_WALK_ENABLE 0 /* not yet */
+# define EV_WALK_ENABLE 1
 #endif
 
 /*****************************************************************************/
