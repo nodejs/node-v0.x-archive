@@ -100,6 +100,12 @@ parser.add_option("--dest-cpu",
     dest="dest_cpu",
     help="CPU architecture to build for. Valid values are: arm, ia32, x64")
 
+parser.add_option("--dest-os",
+    action="store",
+    dest="dest_os",
+    help="Operating system to build for. Valid values are: win, linux, freebsd, openbsd, solaris, mac")
+
+
 (options, args) = parser.parse_args()
 
 
@@ -124,6 +130,16 @@ def uname(switch):
   return s
 
 
+def parse_arch(arch, default):
+  return {
+    'arm': 'arm',
+    'x86': 'ia32',
+    'i386': 'ia32',
+    'ia32': 'ia32',
+    'x86_64': 'x64',
+    'x64': 'x64'
+  }.get(arch, default)
+
 def host_arch():
   """Host architecture. One of arm, ia32 or x64."""
   arch = uname('-p')
@@ -131,26 +147,46 @@ def host_arch():
   if arch == 'unknown':
     arch = uname('-m')
 
-  return {
-    'arm': 'arm',
-    'x86': 'ia32',
-    'i386': 'ia32',
-    'x86_64': 'x64',
-  }.get(arch, 'ia32')
+  return parse_arch(arch, 'ia32')
 
 
 def target_arch():
-  # TODO act on options.dest_cpu
-  return host_arch()
+  return parse_arch(options.dest_cpu, host_arch())
+
+def parse_os(os, default):
+  # TODO what to do about cygwin/mingw
+  return {
+    'linux': 'linux',
+    'linux2': 'linux',
+    'win': 'win',
+    'win32': 'win',
+    'w64': 'win',
+    'cygwin': 'linux',
+    'darwin': 'mac',
+    'sunos5': 'solaris',
+    'freebsd7': 'freebsd',
+    'freebsd7': 'freebsd',
+    'openbsd': 'openbsd',
+  }.get(os, default)
+
+def host_os():
+  """Host operating system. One of win, linux, freebsd, openbsd, solaris, mac."""
+  return parse_os(sys.platform, 'linux')
+
+def target_os():
+  """Target operating system to build node for. One of win, linux, freebsd, openbsd, solaris, mac."""
+  return parse_os(options.dest_os, host_os())
 
 
 def configure_node(o):
-  # TODO add gdb and dest_cpu
+  # TODO add gdb
   o['variables']['node_debug'] = 'true' if options.debug else 'false'
   o['variables']['node_prefix'] = options.prefix if options.prefix else ''
   o['variables']['node_use_dtrace'] = 'true' if options.with_dtrace else 'false'
   o['variables']['host_arch'] = host_arch()
   o['variables']['target_arch'] = target_arch()
+  o['variables']['host_os'] = host_os()
+  o['variables']['OS'] = target_os()
 
   # TODO move to node.gyp
   if sys.platform == 'sunos5':
@@ -158,7 +194,9 @@ def configure_node(o):
 
 
 def configure_libz(o):
-  o['libraries'] += ['-lz']
+  # TODO add -lz to libraries if linking libz as shared
+  pass
+  
 
 
 def configure_v8(o):
@@ -172,6 +210,12 @@ def configure_v8(o):
     o['libraries'] += ['-l%s' % options.shared_v8_libname]
   if options.shared_v8_includes:
     o['include_dirs'] += [options.shared_v8_includes]
+
+  # prevent v8 being built twice when its not needed
+  if (target_arch()=="arm" and host_arch()!="arm") or (target_arch()=="x64" and host_arch()!="x64"):
+    o['variables']['want_separate_host_toolset'] = 1
+  else:
+    o['variables']['want_separate_host_toolset'] = 0
 
 
 def configure_cares(o):

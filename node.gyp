@@ -154,16 +154,25 @@
           'sources': [
             'src/platform_win32.cc',
             # headers to make for a more pleasant IDE experience
-            'src/platform_win32.h',
-            'tools/msvs/res/node.rc',
-          ],
+            'src/platform_win32.h',     
+          ],   
           'defines': [
             'FD_SETSIZE=1024',
             # we need to use node's preferred "win32" rather than gyp's preferred "win"
             'PLATFORM="win32"',
           ],
-          'libraries': [ '-lpsapi.lib' ]
-        },{ # POSIX
+          'conditions': [
+            [ 'host_os=="win"', {
+              'sources': [
+                'tools/msvs/res/node.rc',
+              ],
+              'libraries': [ '-lpsapi.lib' ],
+            },{ # host_os != win
+              # TODO use node.rc
+              'libraries': [ '-lpsapi' ],
+            }],
+          ],
+        },{ # OS != win
           'defines': [ '__POSIX__' ],
           'sources': [
             'src/node_signal_watcher.cc',
