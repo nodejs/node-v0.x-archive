@@ -14,7 +14,7 @@ which share server ports.
       // Spawn workers
       // By default the number of workers is the number of cores in your CPU.
       cluster.autoFork();
-      
+
     } else {
       // Workers can share any TCP connection
       // In this case its a HTTP server
@@ -34,7 +34,7 @@ Running node will now share port 8000 between the workers:
 ### cluster.isMaster
 
 This boolean flag is true if the process is a master. This is determinted
-by the `process.env.NODE_WORKER_ID`. If `process.env.NODE_WORKER_ID` is 
+by the `process.env.NODE_WORKER_ID`. If `process.env.NODE_WORKER_ID` is
 undefined `isMaster` is `true`.
 
 ### cluster.isWorker
@@ -59,12 +59,12 @@ This will automaticly be done when using the `autoFork()` method.
 
 When a new worker is forked the cluster module will emit a 'fork' event.
 This can be used to log worker activity, and create you own timeout.
-    
+
     var timeouts = [];
     var errorMsg = function () {
         console.error("Something must be worng with the connection ...");
     });
-    
+
     cluster.on('fork', function (worker) {
         timeouts[worker.workerID] = setTimeout(errorMsg, 2000);
     });
@@ -97,7 +97,7 @@ where the 'listening' event is emitted.
     cluster.on('listening', function (worker) {
         console.log("We are now connected");
     });
-    
+
 
 ### Event: 'disconnect'
 
@@ -108,94 +108,75 @@ will emit when a connection is disconnected.
         console.log("We can no longer recive messages from worker");
     });
 
+### Event: 'criticalError'
+
+When using the `autoFork()`. Worker will automaticly be respawed when they die.
+However if thare a a permanent error in a worker, lets say a syntax error. The worker
+will in a second and be respawend again. To prevent an infinity respawn loop, the module
+log the previously 5 deaths. If all 5 workers was alive in less than a second it won't
+respawn any more workes, and the `cluster.disconnect()` function will be runed.
+
+In this case the criticalError event will be emitted. The event can be used to notify
+the admin about an critical error.
+
+    cluster.on('criticalError', function () {
+        //Send admin an email
+    });
+
 ### cluster.fork()
 
 Spawn a new worker process. This can only be called from the master process.
 The `fork()` will also return a fork object equal as it was `child_process.fork`
 there had been called.
 
+When using `.fork()` you can not use the `.autoFork()` method. If you call
+`.autoFork()` it will throw an error.
+
 The difference between `cluster.fork()` and `child_process.fork()` is simply
 that cluster allows TCP servers to be shared between workers. The message
-passing API that is available with `child_process.fork` is available with
+passing API that is available with `child_process.fork` is available within
 `cluster` as well.
-
-As an example, here is a cluster which keeps count of the number of requests
-in the master process via message passing:
-
-    var cluster = require('cluster');
-    var http = require('http');
-
-    if (cluster.isMaster) {
-      
-      //Keep track of http requests
-      var numReqs = 0;
-      setInterval(function() {
-        console.log("numReqs =", numReqs);
-      }, 1000);
-      
-      //Count requestes
-      var messageHandler = function (msg) {
-        if (msg.cmd && msg.cmd == 'notifyRequest') {
-          numReqs += 1;
-        }
-      };
-      
-      //Start workers and listen for messages containing notifyRequest
-      cluster.autoFork();
-      cluster.eachWorker(function (worker) {
-        worker.on('message', messageHandler);
-      });
-
-    } else {
-     
-     // Worker processes have a http server.
-      http.Server(function(req, res) {
-        res.writeHead(200);
-        res.end("hello world\n");
-        
-        // notify master about the request
-        cluster.worker.send({ cmd: 'notifyRequest' });
-      }).listen(8000);
-    }
 
 ### cluster.autoFork()
 
-When `autoFork()` is called a number of worker is forked. How many workers 
-you will end up with, are determed by the number of CPU cores you have.
-You can finde the number by using `require('os').cups().length`.
+When `autoFork()` is called a number of worker is forked. How many workers
+you will end up with, are determed by `workers` property set in `setupMaster`.
+If no property it will default to the number CPU cores you have. You can finde
+the number by using `require('os').cups().length`.
 
-`autoFork()` will only start workers if no workers are running.
+When using `.autoFork()` you can not use the `.fork()` method. If you call
+`.fork()` it will throw an error.
 
-The method do also spawn a new worker when on is dead. This is done using
-the `death` event.
+The method do also spawn a new worker when on is dead. Unless they commit suicide
+this is known by checking the `worker.suicide` boolean. If you wan't to respawn
+workers there commit suicide you simply run `.autoFork()` manualy.
+    
+### cluster.destroy([callback])
 
-    cluster.on('death', function () {
-        console.log('restarting worker ...');
-        cluster.fork();
-    });
+When calling this method all workers will commit a non-gracefull suicide.
+This is usefull when you wan't to shutdown the master. It takes an optional
+callback argument there will be called when finished.
 
-### cluster.workers
+This method is automaticly used just before the mater dies. This can happen by
+calling `process.exit()`, the master gets `SIGINT` or `SIGTERM` signal, or by 
+an uncatched error. 
 
-`cluster.workers` is an array containing all currently running workers, spawned
-by this master.
+### cluster.disconnect()
 
-However since the worker id is used as the index, you can not use a for loop.
-Instead you have to use for..in loop, or use the `eachWorker` method.
+When calling this method all workers will commit a gracefull suicide. It takes an optional
+callback argument there will be called when finished.
 
-    var workers = cluster.workers;
-    for (var workerID in workers) {
-        //Do something usefull with workers[workerID]
-    }
+This method is automaticly used when the master gets a `SIGQUIT` signal.
 
 ### cluster.eachWorker(callback)
 
 This method will go thouge all workers and call a given function.
-    
+
     //Say hi to all workers
     cluster.eachWorker(function (worker) {
         worker.send("say hi");
     });
-    
+
 ### cluster.setupMaster([options])
 
 The `setupMaster` is used to change the default 'fork' behavure. It takes one option
@@ -211,7 +192,7 @@ Example:
     });
     cluster.autoFork();
 
-The options argument can contain 3 different properties. 
+The options argument can contain 3 different properties.
 
 `exec` and `args` are used when forking a new worker.
 
@@ -246,28 +227,94 @@ there will run the the message was rescived.
       //Master has recived message
     });
 
-
 ### Worker.kill()
 
 This function will kill the worker, and inform the master to not spawn a new worker.
+To know the diffrence between suicide and accidently death a suicide boolean is set to true.
+
+  cluster.on('death', function (worker) {
+    if (worker.suicide === true) {
+      console.log('Oh, it was just suicide' – no need to worry').
+    }
+  });
+  cluster.eachWorker(function (0) {
+    worker.kill();
+  });
+
+This method is automaticly used when the worker gets a `SIGINT` or `SIGTERM` signal.
+
+### Worker.suicide
+
+This property is a boolean. It is set when a worker dies, until then it is `undefined`.
+It is true if the worker was killed using the `.kill()` or  `.disconnect()` method, and false otherwise.
+
+### Worker.startup
+
+This property is the timestamp set when the worker was forked. It is basically set by:
+  
+  worker.statup = Date.now();
+
+### Worker.disconnect();
+  
+When running the function the worker will make a gracefull shoutdown. This involves closing
+all TCP sockets, and stoping the IPC channel between master and worker. Using the `.send()` method
+will throw an error. 
+
+Calling this method will emit first a `disconnect` event, followed by a `death` event. It will also set 
+`suicide` to true.
+
+This method is automaticly used when the worker gets a `SIGQUIT` signal.
 
 ### Event: message
 
 The event is very much like the 'message' event from `child_process.fork()` or `process.on('message')`
 except that is don't emit when a internal message is recived. The event function do also
 recive a sencond argument containg the worker object.
-    
-    var messageHandler = function (msg, worker) {
-        console.log("The worker with ID:" + worker + " has send this mesage: ", msg);
-    };
-    cluster.eachWorker(function (worker) {
+
+As an example, here is a cluster which keeps count of the number of requests
+in the master process via message passing:
+
+    var cluster = require('cluster');
+    var http = require('http');
+
+    if (cluster.isMaster) {
+
+      //Keep track of http requests
+      var numReqs = 0;
+      setInterval(function() {
+        console.log("numReqs =", numReqs);
+      }, 1000);
+
+      //Count requestes
+      var messageHandler = function (msg) {
+        if (msg.cmd && msg.cmd == 'notifyRequest') {
+          numReqs += 1;
+        }
+      };
+
+      //Start workers and listen for messages containing notifyRequest
+      cluster.autoFork();
+      cluster.eachWorker(function (worker) {
         worker.on('message', messageHandler);
-    });
-    
+      });
+
+    } else {
+
+     // Worker processes have a http server.
+      http.Server(function(req, res) {
+        res.writeHead(200);
+        res.end("hello world\n");
+
+        // notify master about the request
+        cluster.worker.send({ cmd: 'notifyRequest' });
+      }).listen(8000);
+    }
+
 ### Event: exit
 
 This event will emit when a worker is dead or disconnected.
 
 ### Event: disconnect
 
-This event will emit when a worker is disconnect, and can't resive messages.
+This event will emit when a worker is disconnect from the master,
+and can't resive or send messages.
