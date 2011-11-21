@@ -45,6 +45,7 @@
 #include <assert.h>
 #if !defined(_MSC_VER)
 #include <unistd.h> /* setuid, getuid */
+#include <sys/resource.h> /* setrlimit, getrlimit */
 #else
 #include <direct.h>
 #define chdir _chdir
@@ -1313,6 +1314,137 @@ static Handle<Value> SetUid(const Arguments& args) {
   return Undefined();
 }
 
+struct rlimit_name_to_res_t {
+  const char* name;
+  int resource;
+};
+
+static const rlimit_name_to_res_t rlimit_name_to_res[] = {
+  { "core", RLIMIT_CORE },
+  { "cpu", RLIMIT_CPU },
+  { "data", RLIMIT_DATA },
+  { "fsize", RLIMIT_FSIZE },
+  { "nofile", RLIMIT_NOFILE },
+  { "stack", RLIMIT_STACK },
+  { "as", RLIMIT_AS },
+  { 0, 0 }
+};
+
+static Handle<Value> GetRlimit(const Arguments& args) {
+  HandleScope scope;
+
+  if(args.Length() != 1) {
+    return ThrowException(Exception::Error(
+      String::New("getrlimit requires exactly 1 argument")));
+  }
+
+  struct rlimit limit;
+  if (!args[0]->IsString()) {
+    return ThrowException(Exception::Error(
+      String::New("getrlimit argument must be a string")));
+  }
+
+  String::Utf8Value rlimit_name(args[0]->ToString());
+  int resource = -1;
+  for(const rlimit_name_to_res_t* item = rlimit_name_to_res;
+      item->name; ++item) {
+    if(!strcmp(*rlimit_name, item->name)) {
+      resource = item->resource;
+      break;
+    }
+  }
+  if(resource < 0)
+  {
+    return ThrowException(Exception::Error(
+      String::New("getrlimit: unknown resource name")));
+  }
+
+  if(getrlimit(resource, &limit)) {
+    return ThrowException(ErrnoException(errno, "getrlimit"));
+  }
+
+  Local<Object> info = Object::New();
+  info->Set(String::New("soft"), Integer::NewFromUnsigned(limit.rlim_cur));
+  info->Set(String::New("hard"), Integer::NewFromUnsigned(limit.rlim_max));
+
+  return scope.Close(info);
+}
+
+static Handle<Value> SetRlimit(const Arguments& args) {
+  HandleScope scope;
+
+  if(args.Length() != 2) {
+    return ThrowException(Exception::Error(
+      String::New("setrlimit requires exactly 2 arguments")));
+  }
+
+  String::Utf8Value rlimit_name(args[0]->ToString());
+  int resource = -1;
+  for(const rlimit_name_to_res_t* item = rlimit_name_to_res;
+      item->name; ++item) {
+    if(!strcmp(*rlimit_name, item->name)) {
+      resource = item->resource;
+      break;
+    }
+  }
+
+  if(resource < 0)
+  {
+    return ThrowException(Exception::Error(
+      String::New("setrlimit: unknown resource name")));
+  }
+
+  if (!args[1]->IsObject()) {
+    return ThrowException(Exception::Error(
+      String::New("getrlimit second argument must be an object")));
+  }
+
+  Local<Object> limit_in = args[1]->ToObject(); // Cast
+  Local<String> soft_key = String::New("soft");
+  Local<String> hard_key = String::New("hard");
+  struct rlimit limit;
+  bool get_soft = false, get_hard = false;
+  if (limit_in->Has(soft_key)) {
+    if(limit_in->Get(soft_key)->IsNull()) {
+      limit.rlim_cur = RLIM_INFINITY;
+    }
+    else {
+      limit.rlim_cur = limit_in->Get(soft_key)->IntegerValue();
+    }
+  }
+  else {
+    get_soft = true;
+  }
+
+  if (limit_in->Has(hard_key)) {
+    if(limit_in->Get(hard_key)->IsNull()) {
+      limit.rlim_max = RLIM_INFINITY;
+    }
+    else {
+      limit.rlim_max = limit_in->Get(hard_key)->IntegerValue();
+    }
+  }
+  else {
+    get_hard = true;
+  }
+
+  if(get_soft || get_hard) {
+    // current values for the limits are needed
+    struct rlimit current;
+    if(getrlimit(resource, &current)) {
+      return ThrowException(ErrnoException(errno, "getrlimit"));
+    }
+    if(get_soft) { limit.rlim_cur = current.rlim_cur; }
+    if(get_hard) { limit.rlim_max = current.rlim_max; }
+  }
+
+  if(setrlimit(resource, &limit)) {
+    return ThrowException(ErrnoException(errno, "setrlimit"));
+  }
+
+  return Undefined();
+}
+
 
 #endif // __POSIX__
 
@@ -1939,6 +2071,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "setgid", SetGid);
   NODE_SET_METHOD(process, "getgid", GetGid);
+
+  NODE_SET_METHOD(process, "getrlimit", GetRlimit);
+  NODE_SET_METHOD(process, "setrlimit", SetRlimit);
 #endif // __POSIX__
 
   NODE_SET_METHOD(process, "_kill", Kill);
