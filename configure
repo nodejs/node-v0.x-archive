@@ -131,14 +131,20 @@ def uname(switch):
 
 
 def parse_arch(arch, default):
-  return {
-    'arm': 'arm',
-    'x86': 'ia32',
-    'i386': 'ia32',
-    'ia32': 'ia32',
-    'x86_64': 'x64',
-    'x64': 'x64'
-  }.get(arch, default)
+  mapping = {
+    'arm': {'arm'},
+    'ia32': {'x86','ia32','i386'},
+    'x64': {'x64','amd64','x86_64'},
+    # TODO support MIPS when acceptable
+  }
+  
+  if arch is not None:
+    for (arch_normalised, arch_mapping) in mapping.items():
+      for arch_optional in arch_mapping:
+        if arch.startswith(arch_optional):
+          return arch_normalised
+  
+  return default
 
 def host_arch():
   """Host architecture. One of arm, ia32 or x64."""
@@ -154,20 +160,22 @@ def target_arch():
   return parse_arch(options.dest_cpu, host_arch())
 
 def parse_os(os, default):
-  # TODO what to do about cygwin/mingw
-  return {
-    'linux': 'linux',
-    'linux2': 'linux',
-    'win': 'win',
-    'win32': 'win',
-    'w64': 'win',
-    'cygwin': 'linux',
-    'darwin': 'mac',
-    'sunos5': 'solaris',
-    'freebsd7': 'freebsd',
-    'freebsd7': 'freebsd',
-    'openbsd': 'openbsd',
-  }.get(os, default)
+  mapping = {
+    'linux': {'linux','cygwin'},
+    'win': {'w'},
+    'mac': {'mac','darwin','osx'},
+    'solaris': {'solaris','sunos'},
+    'freebsd': {'freebsd'},
+    'openbsd': {'openbsd'},
+  }
+  
+  if os is not None:
+    for (os_normalised, os_mapping) in mapping.items():
+      for os_optional in os_mapping:
+        if os.startswith(os_optional):
+          return os_normalised
+  
+  return default
 
 def host_os():
   """Host operating system. One of win, linux, freebsd, openbsd, solaris, mac."""
