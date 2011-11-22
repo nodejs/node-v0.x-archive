@@ -217,7 +217,7 @@ Handle<Value> UDPWrap::SetMembership(const Arguments& args,
                                 membership);
 
   if (r)
-    SetErrno(uv_last_error(wrap->handle_.loop).code);
+    SetErrno(uv_last_error(uv_default_loop()));
 
   return scope.Close(Integer::New(r));
 }
