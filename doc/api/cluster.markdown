@@ -310,11 +310,34 @@ in the master process via message passing:
       }).listen(8000);
     }
 
+### Event: online
+
+Same as the `cluster.on('online')` event, but emits only when the specified worker forks.
+
+  cluster.fork().on('online', function (worker) {
+    //Worker is online
+  };
+
+### Event: listening
+
+Same as the `cluster.on('listening')` event, but emits only when the specified worker forks.
+  
+  cluster.fork().on('listening', function (worker) {
+    //Worker is listening
+  };
+
 ### Event: exit
 
-This event will emit when a worker is dead or disconnected.
+Same as the `cluster.on('exit')` event, but emits only when the specified worker forks.
+  
+  cluster.fork().on('exit', function (worker) {
+    //Worker has died or disconnected
+  };
 
 ### Event: disconnect
 
-This event will emit when a worker is disconnect from the master,
-and can't resive or send messages.
+Same as the `cluster.on('disconnect')` event, but emits only when the specified worker forks.
+  
+  cluster.fork().on('disconnect', function (worker) {
+    //Worker had been disconnect
+  };
