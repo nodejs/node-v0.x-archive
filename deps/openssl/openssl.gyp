@@ -14,6 +14,10 @@
         'OPENSSL_THREADS',
         'PURIFY',
         '_REENTRANT',
+        'OPENSSL_NO_RC5',
+        'OPENSSL_NO_IDEA',
+        'OPENSSL_NO_CAMELLIA',
+        'OPENSSL_NO_MDC2',
       ],
 
       'cflags!': [
@@ -28,7 +32,7 @@
             'MK1MF_PLATFORM_VC_WIN32', # ditto
           ],
         }],
-        ['OS=="mac"', {
+        ['OS=="mac" or OS=="freebsd"', {
           'defines': [
             'TERMIOS'
           ],
