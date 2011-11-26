@@ -141,7 +141,7 @@ def parse_arch(arch, default):
   if arch is not None:
     for (arch_normalised, arch_mapping) in mapping.items():
       for arch_optional in arch_mapping:
-        if arch.startswith(arch_optional):
+        if arch == arch_optional:
           return arch_normalised
   
   return default
