@@ -2554,6 +2554,8 @@ int Start(int argc, char *argv[]) {
   EmitExit(process);
 
 #ifndef NDEBUG
+  while (!V8::IdleNotification()) ;
+
   // Clean up.
   context.Dispose();
   V8::Dispose();
