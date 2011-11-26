@@ -16,9 +16,11 @@ set config=Debug
 set target=Build
 set noprojgen=
 set nobuild=
+set nosign=
 set test=
 set test_args=
 set msi=
+set upload=
 
 :next-arg
 if "%1"=="" goto args-done
@@ -27,6 +29,7 @@ if /i "%1"=="release"      set config=Release&goto arg-ok
 if /i "%1"=="clean"        set target=Clean&goto arg-ok
 if /i "%1"=="noprojgen"    set noprojgen=1&goto arg-ok
 if /i "%1"=="nobuild"      set nobuild=1&goto arg-ok
+if /i "%1"=="nosign"       set nosign=1&goto arg-ok
 if /i "%1"=="test-uv"      set test=test-uv&goto arg-ok
 if /i "%1"=="test-internet"set test=test-internet&goto arg-ok
 if /i "%1"=="test-pummel"  set test=test-pummel&goto arg-ok
@@ -35,10 +38,14 @@ if /i "%1"=="test-message" set test=test-message&goto arg-ok
 if /i "%1"=="test-all"     set test=test-all&goto arg-ok
 if /i "%1"=="test"         set test=test&goto arg-ok
 if /i "%1"=="msi"          set msi=1&goto arg-ok
+if /i "%1"=="upload"       set upload=1&goto arg-ok
+
+
 :arg-ok
 shift
 goto next-arg
 :args-done
+if defined upload goto upload
 
 
 :project-gen
@@ -72,14 +79,21 @@ goto run
 msbuild node.sln /t:%target% /p:Configuration=%config% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 
+if defined nosign goto msi
+signtool sign /a Release\node.exe
+
 :msi
 @rem Skip msi generation if not requested
 if not defined msi goto run
-python "%~dp0tools\msi\getnodeversion.py" < "%~dp0src\node_version.h" > "%temp%\node_version.txt"
+python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
 if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
 for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
-msbuild "%~dp0tools\msi\nodemsi.sln" /t:Clean,Build /p:Configuration=%config% /p:NodeVersion=%NODE_VERSION% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+heat dir deps\npm -var var.NPMSourceDir -dr NodeModulesFolder -cg NPMFiles -gg -template fragment -nologo -out npm.wxs
+msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /t:Clean,Build /p:Configuration=%config% /p:NodeVersion=%NODE_VERSION% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
+
+if defined nosign goto run
+signtool sign /a Release\node.msi
 
 :run
 @rem Run tests if requested.
@@ -103,8 +117,21 @@ goto exit
 echo Failed to create vc project files. 
 goto exit
 
+:upload
+echo uploading .exe .msi .pdb to nodejs.org
+python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
+if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
+for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
+@echo on
+ssh node@nodejs.org mkdir -p web/nodejs.org/dist/v%NODE_VERSION%
+scp Release\node.msi node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node-v%NODE_VERSION%.msi
+scp Release\node.exe node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node.exe
+scp Release\node.pdb node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node.pdb
+@echo off
+goto exit
+
 :help
-echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [nobuild]
+echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [nobuild] [nosign]
 echo Examples:
 echo   vcbuild.bat                : builds debug build
 echo   vcbuild.bat release msi    : builds release build and MSI installer package

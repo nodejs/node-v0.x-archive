@@ -69,7 +69,8 @@ The externally maintained libraries used by Node are:
   - lib/buffer_ieee754.js is copyright 2008 Fair Oaks Labs, Inc. and released
     under the New BSD license.
 
-  - lib/punycode.js is copyright 2011 Ben Noordhuis and released under the MIT license.
+  - lib/punycode.js is copyright 2011 Mathias Bynens <http://mathiasbynens.be/>
+    and released under the MIT license.
 
   - tools/gyp GYP is a meta-build system copyright 2009 Google Inc and
     licensed under the three clause BSD license. See tools/gyp/LICENSE.
@@ -77,3 +78,9 @@ The externally maintained libraries used by Node are:
   - deps/zlib copyright 1995-2010 Jean-loup Gailly and Mark Adler
     licensed under a permissive free software license. See
     deps/zlib/LICENSE.
+
+  - deps/npm NPM is a package manager program copyright 2009, 2010, 2011
+    Isaac Z. Schlueter and licensed under MIT. NPM includes several
+    subpackages MIT or Apache licenses, see deps/npm/LICENSE for more
+    information. NPM is included in the Node .msi and .pkg distributions
+    but not in the Node binary itself.

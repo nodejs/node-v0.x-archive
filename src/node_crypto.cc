@@ -36,6 +36,13 @@
 
 #include <errno.h>
 
+/* Sigh. */
+#ifdef _WIN32
+# include <windows.h>
+#else
+# include <pthread.h>
+#endif
+
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 # define OPENSSL_CONST const
 #else
@@ -47,8 +54,11 @@
     return ThrowException(Exception::TypeError(String::New("Not a string or buffer"))); \
   }
 
-static const char *PUBLIC_KEY_PFX =  "-----BEGIN PUBLIC KEY-----";
-static const int PUBLIC_KEY_PFX_LEN = strlen(PUBLIC_KEY_PFX);
+static const char PUBLIC_KEY_PFX[] =  "-----BEGIN PUBLIC KEY-----";
+static const int PUBLIC_KEY_PFX_LEN = sizeof(PUBLIC_KEY_PFX) - 1;
+
+static const char PUBRSA_KEY_PFX[] =  "-----BEGIN RSA PUBLIC KEY-----";
+static const int PUBRSA_KEY_PFX_LEN = sizeof(PUBRSA_KEY_PFX) - 1;
 
 static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | ASN1_STRFLGS_ESC_MSB
@@ -75,6 +85,69 @@ static Persistent<String> version_symbol;
 static Persistent<String> ext_key_usage_symbol;
 
 static Persistent<FunctionTemplate> secure_context_constructor;
+
+#ifdef _WIN32
+
+static HANDLE* locks;
+
+
+static void crypto_lock_init(void) {
+  int i, n;
+
+  n = CRYPTO_num_locks();
+  locks = new HANDLE[n];
+
+  for (i = 0; i < n; i++)
+    if (!(locks[i] = CreateMutex(NULL, FALSE, NULL)))
+      abort();
+}
+
+
+static void crypto_lock_cb(int mode, int n, const char* file, int line) {
+  if (mode & CRYPTO_LOCK)
+    WaitForSingleObject(locks[n], INFINITE);
+  else
+    ReleaseMutex(locks[n]);
+}
+
+
+static unsigned long crypto_id_cb(void) {
+  return (unsigned long) GetCurrentThreadId();
+}
+
+#else /* !_WIN32 */
+
+static pthread_rwlock_t* locks;
+
+
+static void crypto_lock_init(void) {
+  int i, n;
+
+  n = CRYPTO_num_locks();
+  locks = new pthread_rwlock_t[n];
+
+  for (i = 0; i < n; i++)
+    if (pthread_rwlock_init(locks + i, NULL))
+      abort();
+}
+
+
+static void crypto_lock_cb(int mode, int n, const char* file, int line) {
+  if (mode & CRYPTO_LOCK) {
+    if (mode & CRYPTO_READ) pthread_rwlock_rdlock(locks + n);
+    if (mode & CRYPTO_WRITE) pthread_rwlock_wrlock(locks + n);
+  } else {
+    pthread_rwlock_unlock(locks + n);
+  }
+}
+
+
+static unsigned long crypto_id_cb(void) {
+  return (unsigned long) pthread_self();
+}
+
+#endif /* !_WIN32 */
+
 
 void SecureContext::Initialize(Handle<Object> target) {
   HandleScope scope;
@@ -3234,9 +3307,22 @@ class Verify : public ObjectWrap {
       return 0;
     }
 
-    // Check if this is a PKCS#8 public key before trying as X.509
+    // Check if this is a PKCS#8 or RSA public key before trying as X.509.
+    // Split this out into a separate function once we have more than one
+    // consumer of public keys.
     if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
       pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
+      if (pkey == NULL) {
+        ERR_print_errors_fp(stderr);
+        return 0;
+      }
+    } else if (strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
+      RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, NULL, NULL);
+      if (rsa) {
+        pkey = EVP_PKEY_new();
+        if (pkey) EVP_PKEY_set1_RSA(pkey, rsa);
+        RSA_free(rsa);
+      }
       if (pkey == NULL) {
         ERR_print_errors_fp(stderr);
         return 0;
@@ -3404,7 +3490,7 @@ class Verify : public ObjectWrap {
     delete [] kbuf;
     delete [] hbuf;
 
-    return scope.Close(Integer::New(r));
+    return Boolean::New(r && r != -1);
   }
 
   Verify () : ObjectWrap () {
@@ -4196,6 +4282,10 @@ void InitCrypto(Handle<Object> target) {
   SSL_load_error_strings();
   ERR_load_crypto_strings();
 
+  crypto_lock_init();
+  CRYPTO_set_locking_callback(crypto_lock_cb);
+  CRYPTO_set_id_callback(crypto_id_cb);
+
   // Turn off compression. Saves memory - do it in userland.
 #if !defined(OPENSSL_NO_COMP)
   STACK_OF(SSL_COMP)* comp_methods =
@@ -4239,5 +4329,5 @@ void InitCrypto(Handle<Object> target) {
 }  // namespace crypto
 }  // namespace node
 
-NODE_MODULE(node_crypto, node::crypto::InitCrypto);
+NODE_MODULE(node_crypto, node::crypto::InitCrypto)
 

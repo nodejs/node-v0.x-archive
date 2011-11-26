@@ -23,6 +23,14 @@ are created.
 Emitted when a socket is closed with `close()`.  No new `message` events will be emitted
 on this socket.
 
+### Event: 'error'
+
+`function (exception) {}`
+
+Emitted when an error occurs.
+
+---
+
 ### dgram.createSocket(type, [callback])
 
 Creates a datagram socket of the specified types.  Valid types are `udp4`
@@ -53,8 +61,9 @@ Example of sending a UDP packet to a random port on `localhost`;
     var dgram = require('dgram');
     var message = new Buffer("Some bytes");
     var client = dgram.createSocket("udp4");
-    client.send(message, 0, message.length, 41234, "localhost");
-    client.close();
+    client.send(message, 0, message.length, 41234, "localhost", function(err, bytes) {
+      client.close();
+    });
 
 **A Note about UDP datagram size**
 

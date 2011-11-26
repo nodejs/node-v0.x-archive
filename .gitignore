@@ -33,3 +33,6 @@ ipch/
 /options.gypi
 *-nodegyp*
 /gyp-mac-tool
+/dist-osx
+/npm.wxs
+/tools/msvs/npm.wixobj

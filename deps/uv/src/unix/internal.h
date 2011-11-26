@@ -27,6 +27,16 @@
 
 #include <stddef.h> /* offsetof */
 
+#if __STRICT_ANSI__
+# define inline __inline
+#endif
+
+#undef HAVE_FUTIMES
+#undef HAVE_PIPE2
+#undef HAVE_ACCEPT4
+#undef HAVE_KQUEUE
+#undef HAVE_PORTS_FS
+
 #if defined(__linux__)
 
 #include <linux/version.h>
@@ -48,6 +58,14 @@
 #endif
 
 #endif /* __linux__ */
+
+#if defined(__sun)
+# include <sys/port.h>
+# include <port.h>
+# ifdef PORT_SOURCE_FILE
+#  define HAVE_PORTS_FS 1
+# endif
+#endif /* __sun */
 
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__sun)
 # define HAVE_FUTIMES 1

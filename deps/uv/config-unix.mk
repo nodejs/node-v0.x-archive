@@ -50,6 +50,7 @@ endif
 ifeq (Darwin,$(uname_S))
 EV_CONFIG=config_darwin.h
 EIO_CONFIG=config_darwin.h
+CPPFLAGS += -D__DARWIN_64_BIT_INO_T=1
 CPPFLAGS += -Isrc/ares/config_darwin
 LINKFLAGS+=-framework CoreServices
 OBJS += src/unix/darwin.o
@@ -66,6 +67,15 @@ OBJS += src/unix/linux.o
 endif
 
 ifeq (FreeBSD,$(uname_S))
+EV_CONFIG=config_freebsd.h
+EIO_CONFIG=config_freebsd.h
+CPPFLAGS += -Isrc/ares/config_freebsd
+LINKFLAGS+=
+OBJS += src/unix/freebsd.o
+OBJS += src/unix/kqueue.o
+endif
+
+ifeq (DragonFly,$(uname_S))
 EV_CONFIG=config_freebsd.h
 EIO_CONFIG=config_freebsd.h
 CPPFLAGS += -Isrc/ares/config_freebsd

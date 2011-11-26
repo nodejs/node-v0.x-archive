@@ -56,36 +56,6 @@ void uv_fatal_error(const int errorno, const char* syscall) {
 }
 
 
-static int uv__translate_lib_error(int code) {
-  switch (code) {
-    case UV_ENOSYS: return ENOSYS;
-    case UV_ENOTSOCK: return ENOTSOCK;
-    case UV_ENOENT: return ENOENT;
-    case UV_EACCES: return EACCES;
-    case UV_EAFNOSUPPORT: return EAFNOSUPPORT;
-    case UV_EBADF: return EBADF;
-    case UV_EPIPE: return EPIPE;
-    case UV_EAGAIN: return EAGAIN;
-    case UV_ECONNRESET: return ECONNRESET;
-    case UV_EFAULT: return EFAULT;
-    case UV_EMFILE: return EMFILE;
-    case UV_EMSGSIZE: return EMSGSIZE;
-    case UV_EINVAL: return EINVAL;
-    case UV_ECONNREFUSED: return ECONNREFUSED;
-    case UV_EADDRINUSE: return EADDRINUSE;
-    case UV_EADDRNOTAVAIL: return EADDRNOTAVAIL;
-    case UV_ENOTDIR: return ENOTDIR;
-    case UV_ENOTCONN: return ENOTCONN;
-    case UV_EEXIST: return EEXIST;
-    case UV_EHOSTUNREACH: return EHOSTUNREACH;
-    default: return -1;
-  }
-
-  assert(0 && "unreachable");
-  return -1;
-}
-
-
 uv_err_code uv_translate_sys_error(int sys_errno) {
   switch (sys_errno) {
     case 0: return UV_OK;
@@ -106,35 +76,15 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case EADDRINUSE: return UV_EADDRINUSE;
     case EADDRNOTAVAIL: return UV_EADDRNOTAVAIL;
     case ENOTDIR: return UV_ENOTDIR;
+    case EISDIR: return UV_EISDIR;
     case ENOTCONN: return UV_ENOTCONN;
     case EEXIST: return UV_EEXIST;
     case EHOSTUNREACH: return UV_EHOSTUNREACH;
     case EAI_NONAME: return UV_ENOENT;
+    case ESRCH: return UV_ESRCH;
     default: return UV_UNKNOWN;
   }
 
   assert(0 && "unreachable");
   return -1;
-}
-
-
-/* TODO Pull in error messages so we don't have to
- *  a) rely on what the system provides us
- *  b) reverse-map the error codes
- */
-const char* uv_strerror(uv_err_t err) {
-  int errorno;
-
-  if (err.sys_errno_)
-    errorno = err.sys_errno_;
-  else
-    errorno = uv__translate_lib_error(err.code);
-
-  if (err.code == UV_EADDRINFO)
-    return gai_strerror(errorno);
-
-  if (errorno == -1)
-    return "Unknown error";
-  else
-    return strerror(errorno);
 }

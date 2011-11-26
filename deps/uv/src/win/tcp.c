@@ -824,9 +824,20 @@ void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle,
     /* An error occurred doing the read. */
     if ((handle->flags & UV_HANDLE_READING)) {
       handle->flags &= ~UV_HANDLE_READING;
-      uv__set_sys_error(loop, GET_REQ_SOCK_ERROR(req));
       buf = (handle->flags & UV_HANDLE_ZERO_READ) ?
             uv_buf_init(NULL, 0) : handle->read_buffer;
+
+      err = GET_REQ_SOCK_ERROR(req);
+
+      if (err == WSAECONNABORTED) {
+        /* 
+         * Turn WSAECONNABORTED into UV_ECONNRESET to be consistent with Unix.
+         */
+        uv__set_error(loop, UV_ECONNRESET, err);
+      } else {
+        uv__set_sys_error(loop, err);
+      }
+
       handle->read_cb((uv_stream_t*)handle, -1, buf);
     }
   } else {
@@ -887,8 +898,15 @@ void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle,
           uv__set_sys_error(loop, WSAEWOULDBLOCK);
           handle->read_cb((uv_stream_t*)handle, 0, buf);
         } else {
-          /* Ouch! serious error. */
-          uv__set_sys_error(loop, err);
+          if (err == WSAECONNABORTED) {
+            /* 
+             * Turn WSAECONNABORTED into UV_ECONNRESET to be consistent with Unix.
+             */
+            uv__set_error(loop, UV_ECONNRESET, err);
+          } else {
+            /* Ouch! serious error. */
+            uv__set_sys_error(loop, err);
+          }
           handle->flags &= ~UV_HANDLE_READING;
           handle->read_cb((uv_stream_t*)handle, -1, buf);
         }

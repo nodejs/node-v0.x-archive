@@ -1,10 +1,11 @@
 /*
  * Tests to verify we're writing signed integers correctly
  */
+var SlowBuffer = process.binding('buffer').SlowBuffer;
 var ASSERT = require('assert');
 
-function test8() {
-  var buffer = new Buffer(2);
+function test8(clazz) {
+  var buffer = new clazz(2);
 
   buffer.writeInt8(0x23, 0);
   buffer.writeInt8(-5, 1);
@@ -19,11 +20,24 @@ function test8() {
   ASSERT.throws(function() {
     buffer.writeInt8(0xabc, 0);
   });
+
+  /* Make sure we handle min/max correctly */
+  buffer.writeInt8(0x7f, 0);
+  buffer.writeInt8(-0x80, 1);
+
+  ASSERT.equal(0x7f, buffer[0]);
+  ASSERT.equal(0x80, buffer[1]);
+  ASSERT.throws(function() {
+    buffer.writeInt8(0x7f + 1, 0);
+  });
+  ASSERT.throws(function() {
+    buffer.writeInt8(-0x80 - 1, 0);
+  });
 }
 
 
-function test16() {
-  var buffer = new Buffer(6);
+function test16(clazz) {
+  var buffer = new clazz(6);
 
   buffer.writeInt16BE(0x0023, 0);
   buffer.writeInt16LE(0x0023, 2);
@@ -45,11 +59,38 @@ function test16() {
   ASSERT.equal(0x71, buffer[2]);
   ASSERT.equal(0x71, buffer[3]);
   ASSERT.equal(0xf9, buffer[4]);
+
+  /* Make sure we handle min/max correctly */
+  buffer.writeInt16BE(0x7fff, 0);
+  buffer.writeInt16BE(-0x8000, 2);
+  ASSERT.equal(0x7f, buffer[0]);
+  ASSERT.equal(0xff, buffer[1]);
+  ASSERT.equal(0x80, buffer[2]);
+  ASSERT.equal(0x00, buffer[3]);
+  ASSERT.throws(function() {
+    buffer.writeInt16BE(0x7fff + 1, 0);
+  });
+  ASSERT.throws(function() {
+    buffer.writeInt16BE(-0x8000 - 1, 0);
+  });
+
+  buffer.writeInt16LE(0x7fff, 0);
+  buffer.writeInt16LE(-0x8000, 2);
+  ASSERT.equal(0xff, buffer[0]);
+  ASSERT.equal(0x7f, buffer[1]);
+  ASSERT.equal(0x00, buffer[2]);
+  ASSERT.equal(0x80, buffer[3]);
+  ASSERT.throws(function() {
+    buffer.writeInt16LE(0x7fff + 1, 0);
+  });
+  ASSERT.throws(function() {
+    buffer.writeInt16LE(-0x8000 - 1, 0);
+  });
 }
 
 
-function test32() {
-  var buffer = new Buffer(8);
+function test32(clazz) {
+  var buffer = new clazz(8);
 
   buffer.writeInt32BE(0x23, 0);
   buffer.writeInt32LE(0x23, 4);
@@ -83,9 +124,47 @@ function test32() {
   ASSERT.equal(0xfe, buffer[5]);
   ASSERT.equal(0xff, buffer[6]);
   ASSERT.equal(0xcf, buffer[7]);
+
+  /* Make sure we handle min/max correctly */
+  buffer.writeInt32BE(0x7fffffff, 0);
+  buffer.writeInt32BE(-0x80000000, 4);
+  ASSERT.equal(0x7f, buffer[0]);
+  ASSERT.equal(0xff, buffer[1]);
+  ASSERT.equal(0xff, buffer[2]);
+  ASSERT.equal(0xff, buffer[3]);
+  ASSERT.equal(0x80, buffer[4]);
+  ASSERT.equal(0x00, buffer[5]);
+  ASSERT.equal(0x00, buffer[6]);
+  ASSERT.equal(0x00, buffer[7]);
+  ASSERT.throws(function() {
+    buffer.writeInt32BE(0x7fffffff + 1, 0);
+  });
+  ASSERT.throws(function() {
+    buffer.writeInt32BE(-0x80000000 - 1, 0);
+  });
+
+  buffer.writeInt32LE(0x7fffffff, 0);
+  buffer.writeInt32LE(-0x80000000, 4);
+  ASSERT.equal(0xff, buffer[0]);
+  ASSERT.equal(0xff, buffer[1]);
+  ASSERT.equal(0xff, buffer[2]);
+  ASSERT.equal(0x7f, buffer[3]);
+  ASSERT.equal(0x00, buffer[4]);
+  ASSERT.equal(0x00, buffer[5]);
+  ASSERT.equal(0x00, buffer[6]);
+  ASSERT.equal(0x80, buffer[7]);
+  ASSERT.throws(function() {
+    buffer.writeInt32LE(0x7fffffff + 1, 0);
+  });
+  ASSERT.throws(function() {
+    buffer.writeInt32LE(-0x80000000 - 1, 0);
+  });
 }
 
 
-test8();
-test16();
-test32();
+test8(Buffer);
+test8(SlowBuffer);
+test16(Buffer);
+test16(SlowBuffer);
+test32(Buffer);
+test32(SlowBuffer);

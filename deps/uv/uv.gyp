@@ -9,6 +9,9 @@
           'EIO_STACKSIZE=262144'
         ],
         'conditions': [
+          ['OS=="mac"', {
+            'defines': ['__DARWIN_64_BIT_INO_T=1'],
+          }],
           ['OS=="solaris"', {
             'cflags': ['-pthreads'],
             'ldlags': ['-pthreads'],
@@ -308,6 +311,7 @@
         'test/test-tcp-connect-error.c',
         'test/test-tcp-connect6-error.c',
         'test/test-tcp-write-error.c',
+        'test/test-tcp-write-to-half-open-connection.c',
         'test/test-tcp-writealot.c',
         'test/test-threadpool.c',
         'test/test-timer-again.c',
