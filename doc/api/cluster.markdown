@@ -188,17 +188,17 @@ Example:
     cluster.setupMaster({
         exec : "worker.js",
         args : ["--use", "https"],
-        workers : 2
+        workers : 2,
+        silent : true
     });
     cluster.autoFork();
 
 The options argument can contain 3 different properties.
 
-`exec` and `args` are used when forking a new worker.
-
 - `exec` are the file path to the worker file, by default this is the same file as the master.
 - `args` are a array of arguments send along with the worker, by default this is `process.argv.slice(2)`.
 - `workers` are the number of worker there will be created when using `autoFork()`
+- `silent`, if this option is true the output of a worker won't propagate to the master, by default this is false.
 
 ## Worker
 
