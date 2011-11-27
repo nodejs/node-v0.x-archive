@@ -43,18 +43,6 @@ This boolean flag is true if the process is a worker forked from a master.
 If the `process.env.NODE_WORKER_ID` is set to a value diffrent from undefined
 `isWorker` is `true`.
 
-### Event: 'death'
-
-When any of the workers die the cluster module will emit the 'death' event.
-This can be used to restart the worker by calling `fork()` again.
-
-    cluster.on('death', function(worker) {
-      console.log('worker ' + worker.pid + ' died. restart...');
-      cluster.fork();
-    });
-
-This will automaticly be done when using the `autoFork()` method.
-
 ### Event: 'fork'
 
 When a new worker is forked the cluster module will emit a 'fork' event.
@@ -98,6 +86,17 @@ where the 'listening' event is emitted.
         console.log("We are now connected");
     });
 
+### Event: 'death'
+
+When any of the workers die the cluster module will emit the 'death' event.
+This can be used to restart the worker by calling `fork()` again.
+
+    cluster.on('death', function(worker) {
+      console.log('worker ' + worker.pid + ' died. restart...');
+      cluster.fork();
+    });
+
+However the workers will automaticly respawn when using the `autoFork()` method.
 
 ### Event: 'disconnect'
 
@@ -107,6 +106,8 @@ will emit when a connection is disconnected.
     cluster.on('disconnect', function (worker) {
         console.log("We can no longer recive messages from worker");
     });
+    
+If the worker was killed using the `.kill()` or `.destroy()` this event will not emit.
 
 ### Event: 'criticalError'
 
@@ -320,7 +321,7 @@ Same as the `cluster.on('online')` event, but emits only when the specified work
 
 ### Event: listening
 
-Same as the `cluster.on('listening')` event, but emits only when the specified worker forks.
+Same as the `cluster.on('listening')` event, but emits only when the state change on the specified worker.
   
   cluster.fork().on('listening', function (worker) {
     //Worker is listening
@@ -328,7 +329,7 @@ Same as the `cluster.on('listening')` event, but emits only when the specified w
 
 ### Event: exit
 
-Same as the `cluster.on('exit')` event, but emits only when the specified worker forks.
+Same as the `cluster.on('exit')` event, but emits only when the state change on the specified worker.
   
   cluster.fork().on('exit', function (worker) {
     //Worker has died or disconnected
@@ -336,7 +337,7 @@ Same as the `cluster.on('exit')` event, but emits only when the specified worker
 
 ### Event: disconnect
 
-Same as the `cluster.on('disconnect')` event, but emits only when the specified worker forks.
+Same as the `cluster.on('disconnect')` event, but emits only when the state change on the specified worker.
   
   cluster.fork().on('disconnect', function (worker) {
     //Worker had been disconnect
