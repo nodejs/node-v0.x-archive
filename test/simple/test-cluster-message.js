@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-var common = require('../test/common');
+var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
 var net = require('net');
