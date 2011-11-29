@@ -46,6 +46,11 @@ class NODE_EXTERN ObjectWrap {
   }
 
 
+  static inline bool IsWrapped (v8::Handle<v8::Object> handle) {
+    return (handle->InternalFieldCount() > 0);
+  }
+
+
   template <class T>
   static inline T* Unwrap (v8::Handle<v8::Object> handle) {
     assert(!handle.IsEmpty());

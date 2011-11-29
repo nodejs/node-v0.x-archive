@@ -1,0 +1,9 @@
+This test currently uses node-waf. This should change in the near future.
+
+To run the tests, first do a `make install` in Node (use 
+`configure --prefix=...` as usual to specify prefix) and then in the
+current directory:
+
+    PREFIX_NODE=<node-install-path> make
+
+where `node-install-path` is the install prefix for Node.
