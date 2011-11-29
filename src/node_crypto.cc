@@ -2214,7 +2214,9 @@ class Decipher : public ObjectWrap {
       EVP_CIPHER_CTX_cleanup(&ctx);
       return false;
     }
-    EVP_CipherInit_ex(&ctx, NULL, NULL, (unsigned char *)key, (unsigned char *)iv, false);
+    EVP_CipherInit_ex(&ctx, NULL, NULL,
+      (unsigned char *)key,
+      (unsigned char *)iv, false);
     initialised_ = true;
     return true;
   }
