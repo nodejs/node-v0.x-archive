@@ -33,6 +33,7 @@ try {
 }
 
 // Testing whether EVP_CipherInit_ex is functioning correctly.
+// Reference: bug#1997
 
 (function()
 {
@@ -49,4 +50,3 @@ try {
   msg += decrypt.final('ascii');
   assert.equal(msg, 'Hello World!');
 }());
-
