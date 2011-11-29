@@ -42,6 +42,7 @@ if __name__ == '__main__':
     args.extend(['-I', options_fn])
 
   args.append('--depth=' + node_root)
+  args.append('--toplevel-dir=' + os.path.abspath(node_root))
 
   # There's a bug with windows which doesn't allow this feature.
   if sys.platform != 'win32':
