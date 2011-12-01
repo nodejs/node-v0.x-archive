@@ -3,8 +3,6 @@
     'conditions': [
       ['OS != "win"', {
         'defines': [
-          '_LARGEFILE_SOURCE',
-          '_FILE_OFFSET_BITS=64',
           '_GNU_SOURCE',
           'EIO_STACKSIZE=262144'
         ],
