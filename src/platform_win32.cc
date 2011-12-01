@@ -28,8 +28,8 @@
 #include <errno.h>
 #include <stdlib.h>
 #if defined(__MINGW32__)
-#include <sys/param.h> // for MAXPATHLEN
-#include <unistd.h> // getpagesize
+#include <sys/param.h>  // for MAXPATHLEN
+#include <unistd.h>  // getpagesize
 #endif
 
 #include <platform_win32.h>
@@ -164,7 +164,7 @@ static inline char* _getProcessTitle() {
     return NULL;
   }
 
-  title = (char *) malloc(length);
+  title = reinterpret_cast<char *>(malloc(length));
   if (!title) {
     perror("malloc");
     return NULL;
@@ -199,12 +199,10 @@ const char* Platform::GetProcessTitle(int *len) {
 
 
 int Platform::GetMemory(size_t *rss) {
-
   HANDLE current_process = GetCurrentProcess();
   PROCESS_MEMORY_COUNTERS pmc;
 
-  if ( !GetProcessMemoryInfo( current_process, &pmc, sizeof(pmc)) )
-  {
+  if ( !GetProcessMemoryInfo( current_process, &pmc, sizeof(pmc)) ) {
     winapi_perror("GetProcessMemoryInfo");
   }
 
@@ -214,12 +212,10 @@ int Platform::GetMemory(size_t *rss) {
 }
 
 int Platform::GetCPUInfo(Local<Array> *cpus) {
-
   HandleScope scope;
   *cpus = Array::New();
 
   for (int i = 0; i < 32; i++) {
-
     char key[128] = "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\";
     char processor_number[32];
     itoa(i, processor_number, 10);
@@ -259,7 +255,7 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
 
     RegCloseKey(processor_key);
 
-    Local<Object> times_info = Object::New(); // FIXME - find times on windows
+    Local<Object> times_info = Object::New();  // FIXME - find times on windows
     times_info->Set(String::New("user"), Integer::New(0));
     times_info->Set(String::New("nice"), Integer::New(0));
     times_info->Set(String::New("sys"), Integer::New(0));
@@ -270,21 +266,141 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
     cpu_info->Set(String::New("model"), String::New(cpu_brand));
     cpu_info->Set(String::New("speed"), Integer::New(cpu_speed));
     cpu_info->Set(String::New("times"), times_info);
-    (*cpus)->Set(i,cpu_info);
+    (*cpus)->Set(i, cpu_info);
   }
 
   return 0;
 }
 
-
 double Platform::GetUptimeImpl() {
-  return (double)GetTickCount()/1000.0;
+  return static_cast<double>(GetTickCount()/1000.0);
+}
+
+#define WORKING_BUFFER_SIZE   16*1024
+#define MAX_TRIES             3
+
+static inline LPTSTR _WCharToChar(LPCWSTR string_w,
+                                  LPDWORD return_length) {
+  DWORD string_size = WideCharToMultiByte(CP_OEMCP, NULL,
+                                          string_w, -1, NULL, 0, NULL, FALSE);
+  PCHAR pText = (PCHAR) malloc(string_size);
+  WideCharToMultiByte(CP_OEMCP, NULL, string_w, -1, pText,
+                                          string_size, NULL, FALSE);
+  if (return_length)
+    *return_length = (string_size - 1);
+
+  return pText;
 }
 
 Handle<Value> Platform::GetInterfaceAddresses() {
   HandleScope scope;
-  return scope.Close(Object::New());
+
+  Local<Object> ret, o;
+  Local<String> name, ipaddr, family;
+  Local<Array> ifarr;
+
+  PIP_ADAPTER_ADDRESSES adapter_address = NULL;
+  ULONG output_buffer_size = WORKING_BUFFER_SIZE;
+  ULONG iterations = 0;
+  DWORD api_result = 0;
+  DWORD name_size = 0;
+
+  do {
+      adapter_address = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(
+                                                 malloc(output_buffer_size));
+
+      if ( adapter_address == NULL ) {
+          return scope.Close(Object::New());
+      }
+
+      api_result = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX,
+                                        NULL, adapter_address,
+                                        &output_buffer_size);
+
+      if ( api_result == ERROR_BUFFER_OVERFLOW ) {
+          free(adapter_address);
+          adapter_address = NULL;
+      } else {
+          break;
+      }
+      iterations++;
+  } while ((api_result == ERROR_BUFFER_OVERFLOW) && (iterations < MAX_TRIES));
+
+  if (api_result == NO_ERROR) {
+    PIP_ADAPTER_ADDRESSES adapter_addr_cursor = adapter_address;
+    ret = Object::New();
+
+    while (adapter_addr_cursor) {
+        LPTSTR frienldy_name = _WCharToChar(adapter_addr_cursor->FriendlyName,
+                                            &name_size);
+
+        if (frienldy_name != NULL) {
+            name = String::New(frienldy_name);
+            free(frienldy_name);
+
+            if (ret->Has(name)) {
+                ifarr = Local<Array>::Cast(ret->Get(name));
+            } else {
+                ifarr = Array::New();
+                ret->Set(name, ifarr);
+            }
+
+            PIP_ADAPTER_UNICAST_ADDRESS uni_addr_cursor
+                               = adapter_addr_cursor->FirstUnicastAddress;
+
+            if (uni_addr_cursor != NULL) {
+                DWORD address_length = 128;
+                CHAR address[128];
+
+                while (uni_addr_cursor) {
+                  memset(address, 0x0, sizeof(address));
+
+                  if (WSAAddressToStringA(
+                          uni_addr_cursor->Address.lpSockaddr,
+                          uni_addr_cursor->Address.iSockaddrLength,
+                          NULL,
+                          address,
+                          &address_length) != SOCKET_ERROR) {
+                    u_short family_type = uni_addr_cursor->Address.lpSockaddr->sa_family;
+
+                   if (family_type == AF_INET6) {
+                        family = String::New("IPv6");
+                   } else if (family_type == AF_INET) {
+                     family = String::New("IPv4");
+                   } else {
+                     family = String::New("<unknown>");
+                   }
+
+                   o = Object::New();
+                   o->Set(String::New("address"), String::New(address));
+                   o->Set(String::New("family"), family);
+                   o->Set(String::New("internal"),
+                     (adapter_addr_cursor->IfType == MIB_IF_TYPE_LOOPBACK) ?
+                      True() : False());
+                   uni_addr_cursor = uni_addr_cursor->Next;
+                  }
+               }
+            }
+
+
+            ifarr->Set(ifarr->Length(), o);
+        }
+
+        adapter_addr_cursor = adapter_addr_cursor->Next;
+    }
+
+    if (adapter_address) {
+        free(adapter_address);
+    }
+    return scope.Close(ret);
+  } else {
+      if (adapter_address != NULL) {
+          free(adapter_address);
+      }
+      winapi_perror("GetAdaptersAddresses");
+      return ThrowException(ErrnoException(errno, "getifaddrs"));
+  }
 }
 
 
-} // namespace node
+}  // namespace node
