@@ -2175,10 +2175,10 @@ class Cipher : public ObjectWrap {
     assert(out_len != -1);
 
     if (out_len == 0 || r == 0) {
-      delete[] out_value; // allocated even if out_len = 0
+      delete [] out_value; // allocated even if out_len == 0
       if (r == 0) {
         Local<Value> exception = Exception::TypeError(
-	  String::New("CipherFinal fail"));
+          String::New("CipherFinal fail"));
         return ThrowException(exception);
       } else {
         return scope.Close(String::New(""));
@@ -2624,7 +2624,7 @@ class Decipher : public ObjectWrap {
       delete [] out_value; // allocated even if out_len == 0
       if (r == 0) {
         Local<Value> exception = Exception::TypeError(
-	  String::New("DecipherFinal fail"));
+          String::New("DecipherFinal fail"));
         return ThrowException(exception);
       } else {
         return scope.Close(String::New(""));
@@ -2674,7 +2674,7 @@ class Decipher : public ObjectWrap {
       delete [] out_value; // allocated even if out_len == 0
       if (r == 0) {
         Local<Value> exception = Exception::TypeError(
-	  String::New("DecipherFinal fail"));
+          String::New("DecipherFinal fail"));
         return ThrowException(exception);
       } else {
         return scope.Close(String::New(""));
