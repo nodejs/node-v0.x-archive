@@ -3,6 +3,7 @@
     'visibility%': 'hidden',         # V8's visibility setting
     'target_arch%': 'ia32',          # set v8's target architecture
     'host_arch%': 'ia32',            # set v8's host architecture
+    'host_os%': '<(OS)',             # set v8's host os 
     'library%': 'static_library',    # allow override to 'shared_library' for DLL/.so builds
     'component%': 'static_library',  # NB. these names match with what V8 expects
     'msvs_multi_core_compile': '0',  # we do enable multicore compiles, but not using the V8 way
@@ -96,18 +97,24 @@
       },
     },
     'conditions': [
-      ['OS == "win"', {
-        'msvs_cygwin_shell': 0, # prevent actions from trying to use cygwin
+      [ 'host_os == "win"', {
         'defines': [
           'WIN32',
-          # we don't really want VC++ warning us about
-          # how dangerous C functions are...
-          '_CRT_SECURE_NO_DEPRECATE',
-          # ... or that C implementations shouldn't use
-          # POSIX names
-          '_CRT_NONSTDC_NO_DEPRECATE',
           'BUILDING_V8_SHARED=1',
           'BUILDING_UV_SHARED=1',
+        ],
+        'conditions': [
+          [ 'OS=="win"', {
+            'msvs_cygwin_shell': 0, # prevent actions from trying to use cygwin
+            'defines': [
+              # we don't really want VC++ warning us about
+              # how dangerous C functions are...
+              '_CRT_SECURE_NO_DEPRECATE',
+              # ... or that C implementations shouldn't use
+              # POSIX names
+              '_CRT_NONSTDC_NO_DEPRECATE',
+            ],
+          }],
         ],
       }],
       [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
@@ -127,7 +134,7 @@
           }],
         ],
       }],
-      ['OS=="mac"', {
+      ['host_os=="mac"', {
         'xcode_settings': {
           'ALWAYS_SEARCH_USER_PATHS': 'NO',
           'GCC_CW_ASM_SYNTAX': 'NO',                # No -fasm-blocks
