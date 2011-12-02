@@ -114,8 +114,9 @@ methods: worker.send
     //When all workers are dead
     var progress = new ProgressTracker(function () {
       checks.cluster.allDead = true;
-      process.exit();
+      process.exit(0);
     });
+    progress.add(cluster.workers);
     
     //Disconnect all workers
     cluster.disconnect(function () {
