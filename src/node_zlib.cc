@@ -64,6 +64,7 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
  public:
 
   ZCtx() : ObjectWrap() {
+    dictionary_ = NULL;
   }
 
   ~ZCtx() {
@@ -73,9 +74,7 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
       (void)inflateEnd(&strm_);
     }
 
-    if (!pdictionary_.IsEmpty()) {
-      pdictionary_.Dispose();
-    }
+    if (dictionary_ != NULL) free(dictionary_);
   }
 
   // write(flush, in, in_off, in_len, out, out_off, out_len)
@@ -231,12 +230,19 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
             strategy == Z_FIXED ||
             strategy == Z_DEFAULT_STRATEGY) && "invalid strategy");
 
-    Local<Object> dictionary;
+    char* dictionary = NULL;
+    size_t dictionary_len = 0;
     if (args.Length() >= 5 && Buffer::HasInstance(args[4])) {
-      dictionary = args[4]->ToObject();
+      Local<Object> dictionary_ = args[4]->ToObject();
+
+      dictionary_len = Buffer::Length(dictionary_);
+      dictionary = new char[dictionary_len];
+
+      memcpy(dictionary, Buffer::Data(dictionary_), dictionary_len);
     }
 
-    Init(ctx, level, windowBits, memLevel, strategy, dictionary);
+    Init(ctx, level, windowBits, memLevel, strategy,
+         dictionary, dictionary_len);
     return Undefined();
   }
 
@@ -246,7 +252,8 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
        int windowBits,
        int memLevel,
        int strategy,
-       Handle<Object> dictionary) {
+       char* dictionary,
+       size_t dictionary_len) {
     ctx->level_ = level;
     ctx->windowBits_ = windowBits;
     ctx->memLevel_ = memLevel;
@@ -294,24 +301,23 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
 
     assert(err == Z_OK);
 
-    if (!dictionary.IsEmpty()) {
-      ctx->pdictionary_ = Persistent<Object>::New(dictionary);
-
+    ctx->dictionary_ = dictionary;
+    if (dictionary != NULL) {
       switch (mode) {
         case DEFLATE:
         case DEFLATERAW:
           err = deflateSetDictionary(
               &(ctx->strm_),
-              reinterpret_cast<Bytef *>(Buffer::Data(dictionary)),
-              Buffer::Length(dictionary)
+              reinterpret_cast<Bytef *>(dictionary),
+              dictionary_len
           );
           break;
         case INFLATE:
         case INFLATERAW:
           err = inflateSetDictionary(
               &(ctx->strm_),
-              reinterpret_cast<Bytef *>(Buffer::Data(dictionary)),
-              Buffer::Length(dictionary)
+              reinterpret_cast<Bytef *>(dictionary),
+              dictionary_len
           );
           break;
         default:
@@ -334,7 +340,7 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
   int memLevel_;
   int strategy_;
 
-  Persistent<Object> pdictionary_;
+  char* dictionary_;
 
   int flush_;
 
