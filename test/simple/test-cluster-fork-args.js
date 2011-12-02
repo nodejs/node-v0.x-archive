@@ -23,44 +23,36 @@
 var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
-var os = require('os');
+var os = require("os");
 
 if (cluster.isWorker) {
+  
+  //Just keep the worker alive
   var http = require('http');
   http.Server(function () {
 
-  }).listen(common.PORT, "127.0.0.1");
+  }).listen(common.PORT, "127.0.0.1", function () {
+    cluster.worker.send(process.env['cluster_test_env']);  
+  });
 }
 
 else if (cluster.isMaster) {
 
   var checks = {
-    callback: false,
-    noWorkers: false
+    correct: false
   };
   
-  var cpus = os.cpus().length;
-  
-  cluster.on('online', function lisenter () {
-    //When all workers are online
-    if (cluster.onlineWorkers === cpus) {
-      cluster.removeListener('online', lisenter);
-      
-      //Destroy cluster
-      cluster.destroy(function () {
-        checks.callback = true;
-        checks.noWorkers = (cluster.onlineWorkers === 0);
-        process.exit(0);
-      });
-    }
+  var worker = cluster.fork({
+    cluster_test_env : 'custom'
   });
-  
-  cluster.autoFork();
+  worker.on('message', function (data) {
+    checks.correct = (data === 'custom');
+    process.exit(0);
+  });
   
   //Check all values
   process.once('exit', function () {
-    assert.ok(checks.callback, 'The callback was never called');
-    assert.ok(checks.noWorkers, 'Not all workers was killed when the callback was called');
+    assert.ok(checks.correct, 'The worker did not receive the correct env.');
   });
 
 }

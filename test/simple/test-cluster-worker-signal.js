@@ -45,16 +45,19 @@ else if (cluster.isMaster) {
     "SIGINT": {
       killed: false,
       emit: false,
+      suicide: false,
       eventName: 'exit'
     },
     "SIGTERM": {
       killed: false,
       emit: false,
+      suicide: false,
       eventName: 'exit'
     },
     "SIGQUIT": {
       killed: false,
       emit: false,
+      suicide: false,
       eventName: 'disconnect'
     }
   };
@@ -70,16 +73,19 @@ else if (cluster.isMaster) {
     worker.on('listening', function () {
       
       //Check that it die
-      processWatch.watch(worker.process.pid, function () {
-        check.killed = true;
-        process.nextTick(function () {
-          progress.set(signalCode);
-        });
+      processWatch.watch(worker.process.pid, function (exist) {
+        if (!exist) {
+          check.killed = true;
+          process.nextTick(function () {
+            progress.set(signalCode);
+          });
+        }
       });
       
       //Check that the event emits
       worker.on(check.eventName, function () {
         check.emit = true;
+        check.suicide = worker.suicide;
       });
       
       //Send signalCode
@@ -92,7 +98,8 @@ else if (cluster.isMaster) {
         
     forEach(checks, function (check, signalCode) {
       assert.ok(check.killed, 'The worker did not die after sending the ' + signalCode + ' signal');
-      assert.ok(check.killed, 'The ' + check.eventName + ' event was never emitted after sending the ' + signalCode + ' signal');
+      assert.ok(check.emit, 'The ' + check.eventName + ' event was never emitted after sending the ' + signalCode + ' signal');
+      assert.ok(check.suicide, 'The worker was not set in suicide mode');
     });
     
   });
