@@ -209,7 +209,7 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
   Init(const Arguments& args) {
     HandleScope scope;
 
-    assert(args.Length() >= 4 &&
+    assert((args.Length() == 4 || args.Length() == 5) &&
            "init(windowBits, level, memLevel, strategy, [dictionary])");
 
     ZCtx<mode> *ctx = ObjectWrap::Unwrap< ZCtx<mode> >(args.This());
