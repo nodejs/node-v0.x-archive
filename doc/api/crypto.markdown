@@ -106,6 +106,13 @@ the output format of the enciphered data, and can be `'binary'`, `'base64'` or `
 
 Returns the enciphered contents, and can be called many times with new data as it is streamed.
 
+### cipher.setAutoPadding(auto_padding=true)
+
+You can disable automatic padding of the input data to block size. If `auto_padding` is false,
+the length of the entire input data must be a multiple of the cipher's block size or `final` will fail.
+Useful for non-standard padding, e.g. using `0x0` instead of PKCS padding. You must call this before `cipher.final`.
+
+
 ### cipher.final(output_encoding='binary')
 
 Returns any remaining enciphered contents, with `output_encoding` being one of: `'binary'`, `'base64'` or `'hex'`.
@@ -122,6 +129,12 @@ This is the mirror of the [createCipher()](#crypto.createCipher) above.
 
 Creates and returns a decipher object, with the given algorithm, key and iv.
 This is the mirror of the [createCipheriv()](#crypto.createCipheriv) above.
+
+### decipher.setAutoPadding(auto_padding=true)
+
+You can disable auto padding if the data has been encrypted without standard block padding to prevent
+`decipher.final` from checking and removing it. Can only work if the input data's length is a multiple of the
+ciphers block size. You must call this before streaming data to `decipher.update`.
 
 ### decipher.update(data, input_encoding='binary', output_encoding='binary')
 
