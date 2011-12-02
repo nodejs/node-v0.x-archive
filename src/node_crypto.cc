@@ -2177,7 +2177,8 @@ class Cipher : public ObjectWrap {
     if (out_len == 0 || r == 0) {
       delete[] out_value; // allocated even if out_len = 0
       if (r == 0) {
-        Local<Value> exception = Exception::TypeError(String::New("CipherFinal fail"));
+        Local<Value> exception = Exception::TypeError(
+	  String::New("CipherFinal fail"));
         return ThrowException(exception);
       } else {
         return scope.Close(String::New(""));
@@ -2261,7 +2262,8 @@ class Decipher : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "update", DecipherUpdate);
     NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
     NODE_SET_PROTOTYPE_METHOD(t, "final", DecipherFinal);
-    NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinalTolerate); // ! undocumented !
+    // this is completely undocumented:
+    NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinalTolerate);
 
     target->Set(String::NewSymbol("Decipher"), t->GetFunction());
   }
@@ -2621,7 +2623,8 @@ class Decipher : public ObjectWrap {
     if (out_len == 0 || r == 0) {
       delete [] out_value; // allocated even if out_len == 0
       if (r == 0) {
-        Local<Value> exception = Exception::TypeError(String::New("DecipherFinal fail"));
+        Local<Value> exception = Exception::TypeError(
+	  String::New("DecipherFinal fail"));
         return ThrowException(exception);
       } else {
         return scope.Close(String::New(""));
@@ -2670,7 +2673,8 @@ class Decipher : public ObjectWrap {
     if (out_len == 0 || r == 0) {
       delete [] out_value; // allocated even if out_len == 0
       if (r == 0) {
-        Local<Value> exception = Exception::TypeError(String::New("DecipherFinal fail"));
+        Local<Value> exception = Exception::TypeError(
+	  String::New("DecipherFinal fail"));
         return ThrowException(exception);
       } else {
         return scope.Close(String::New(""));
