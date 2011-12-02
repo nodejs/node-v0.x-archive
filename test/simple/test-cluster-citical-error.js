@@ -20,12 +20,11 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
 
 function forEach(obj, fn) {
-  Object.keys(obj).forEach(function (name, index) {
+  Object.keys(obj).forEach(function(name, index) {
     fn(obj[name], name, index);
   });
 }
@@ -35,39 +34,39 @@ if (cluster.isWorker) {
 }
 
 else if (cluster.isMaster) {
-  
+
   var checks = {
-    emit : false,
+    emit: false,
     noWorkers: false
   };
-  
+
   cluster.setupMaster({
     silent: true
   });
-  
-  cluster.on('citicalError', function () {
-    
+
+  cluster.on('citicalError', function() {
+
     //It emitted
     checks.emit = true;
-    
+
     //There should be no online workers
     checks.noWorkers = (cluster.onlineWorkers === 0);
-    
+
     process.exit(0);
   });
-  
+
   cluster.autoFork();
-  
+
   //Make sure that the master dies after 10 sec
-  setTimeout(function () {
+  setTimeout(function() {
     process.exit(1);
   }, 10000);
-  
-  //Check all values
-  process.once('exit', function () {
 
-    assert.ok(checks.emit, "The criticalError event did not emit");
-    assert.ok(checks.noWorkers, "When the criticalError event emitted there was still workers online");    
+  //Check all values
+  process.once('exit', function() {
+
+    assert.ok(checks.emit, 'The criticalError event did not emit');
+    assert.ok(checks.noWorkers, 'When the criticalError event emitted there was still workers online');
   });
 
 }

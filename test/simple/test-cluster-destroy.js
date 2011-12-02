@@ -27,9 +27,9 @@ var os = require('os');
 
 if (cluster.isWorker) {
   var http = require('http');
-  http.Server(function () {
+  http.Server(function() {
 
-  }).listen(common.PORT, "127.0.0.1");
+  }).listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
@@ -38,27 +38,27 @@ else if (cluster.isMaster) {
     callback: false,
     noWorkers: false
   };
-  
+
   var cpus = os.cpus().length;
-  
-  cluster.on('online', function lisenter () {
+
+  cluster.on('online', function lisenter() {
     //When all workers are online
     if (cluster.onlineWorkers === cpus) {
       cluster.removeListener('online', lisenter);
-      
+
       //Destroy cluster
-      cluster.destroy(function () {
+      cluster.destroy(function() {
         checks.callback = true;
         checks.noWorkers = (cluster.onlineWorkers === 0);
         process.exit(0);
       });
     }
   });
-  
+
   cluster.autoFork();
-  
+
   //Check all values
-  process.once('exit', function () {
+  process.once('exit', function() {
     assert.ok(checks.callback, 'The callback was never called');
     assert.ok(checks.noWorkers, 'Not all workers was killed when the callback was called');
   });

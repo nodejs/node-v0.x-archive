@@ -26,7 +26,7 @@ var cluster = require('cluster');
 var net = require('net');
 
 function forEach(obj, fn) {
-  Object.keys(obj).forEach(function (name, index) {
+  Object.keys(obj).forEach(function(name, index) {
     fn(obj[name], name, index);
   });
 }
@@ -36,105 +36,105 @@ if (cluster.isWorker) {
   // this will be used as cluster-shared-server
   //and as an alternativ IPC channel
   var server = net.Server();
-  server.on('connection', function (socket) {
-    
+  server.on('connection', function(socket) {
+
     //Tell master using TCP socket that a message is received
-    cluster.worker.on('message', function (message) {
+    cluster.worker.on('message', function(message) {
       socket.write(JSON.stringify({
         code: 'received message',
         echo: message
       }));
     });
-    
-    //When getting TCP data from master, send it back using IPC
-    socket.on('data', function (data) {
 
-      cluster.worker.send("message from worker", function () {
+    //When getting TCP data from master, send it back using IPC
+    socket.on('data', function(data) {
+
+      cluster.worker.send('message from worker', function() {
         //When master echo a callback, notify master using TCP socket
         socket.write(JSON.stringify({
           code: 'received callback'
         }));
       });
-      
+
     });
   });
-  
-  server.listen(common.PORT, "127.0.0.1");
+
+  server.listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
-    
+
   var checks = {
     master: {
-      "receive": false,
-      "correct": false,
-      "callback": false
+      'receive': false,
+      'correct': false,
+      'callback': false
     },
     worker: {
-      "receive": false,
-      "correct": false,
-      "callback": false
+      'receive': false,
+      'correct': false,
+      'callback': false
     }
   };
-  
+
   //Spawn worker and connect to TCP when worker is lisining
   var worker = cluster.fork();
-  
+
   //When a IPC message is resicved form the worker
-  worker.on('message', function (messsage) {
+  worker.on('message', function(messsage) {
     checks.master.receive = true;
-    checks.master.correct = (messsage === "message from worker");
+    checks.master.correct = (messsage === 'message from worker');
   });
-  
+
   //When a TCP connection is made with the worker¨
-  worker.on('listening', function () {
+  worker.on('listening', function() {
     var client;
-    
+
     client = net.connect(common.PORT, function() {
-      
+
       //Send message to worker, and check for callback
-      worker.send("message from master", function() {
+      worker.send('message from master', function() {
         checks.master.callback = true;
       });
-      
+
       //Request that the worker send a messae to the master using TCP
-      client.write("worker please send message to master");
+      client.write('worker please send message to master');
     });
-    
+
     client.on('data', function(data) {
       //All data is JSON
       data = JSON.parse(data.toString());
-      
-      switch(data.code) {
+
+      switch (data.code) {
         case 'received message':
           checks.worker.receive = true;
-          checks.worker.correct = (data.echo === "message from master");
+          checks.worker.correct = (data.echo === 'message from master');
           break;
         case 'received callback':
           checks.worker.callback = true;
           client.end();
           break;
         default:
-          throw new Error("worng TCP message recived: " + data);
+          throw new Error('worng TCP message recived: ' + data);
       }
     });
-    
+
     //When the connection ends kill worker and shutdown process
     client.on('end', function() {
       worker.kill();
     });
-    
-    worker.on('exit', function () {
+
+    worker.on('exit', function() {
       process.exit(0);
     });
-  
+
   });
-  
-  process.once('exit', function () {
-    forEach(checks, function (check, type) {
-      assert.ok(check.receive, "The " + type + " did not receive any message");
-      assert.ok(check.correct, "The " + type + " did not get the correct message");
-      assert.ok(check.callback, "The " + type + " did not get any callback after sending");
+
+  process.once('exit', function() {
+    forEach(checks, function(check, type) {
+      assert.ok(check.receive, 'The ' + type + ' did not receive any message');
+      assert.ok(check.correct, 'The ' + type + ' did not get the correct message');
+      assert.ok(check.callback, 'The ' + type + ' did not get any callback after sending');
     });
   });
 }

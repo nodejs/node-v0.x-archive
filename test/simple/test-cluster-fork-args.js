@@ -23,16 +23,15 @@
 var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
-var os = require("os");
 
 if (cluster.isWorker) {
-  
+
   //Just keep the worker alive
   var http = require('http');
-  http.Server(function () {
+  http.Server(function() {
 
-  }).listen(common.PORT, "127.0.0.1", function () {
-    cluster.worker.send(process.env['cluster_test_env']);  
+  }).listen(common.PORT, '127.0.0.1', function() {
+    cluster.worker.send(process.env['cluster_test_env']);
   });
 }
 
@@ -41,17 +40,17 @@ else if (cluster.isMaster) {
   var checks = {
     correct: false
   };
-  
+
   var worker = cluster.fork({
-    cluster_test_env : 'custom'
+    cluster_test_env: 'custom'
   });
-  worker.on('message', function (data) {
+  worker.on('message', function(data) {
     checks.correct = (data === 'custom');
     process.exit(0);
   });
-  
+
   //Check all values
-  process.once('exit', function () {
+  process.once('exit', function() {
     assert.ok(checks.correct, 'The worker did not receive the correct env.');
   });
 

@@ -23,72 +23,72 @@
 var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
-var os = require("os");
+var os = require('os');
 
 function forEach(obj, fn) {
-  Object.keys(obj).forEach(function (name, index) {
+  Object.keys(obj).forEach(function(name, index) {
     fn(obj[name], name, index);
   });
 }
 
 if (cluster.isWorker) {
   var http = require('http');
-  http.Server(function () {
+  http.Server(function() {
 
-  }).listen(common.PORT, "127.0.0.1");
+  }).listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
-  
+
   var workers = 0;
   var cpus = os.cpus().length;
 
-  cluster.on('online', function onlineEvent (worker) {
+  cluster.on('online', function onlineEvent(worker) {
     workers += 1;
     if (workers === cpus) {
       cluster.removeListener('online', onlineEvent);
       checkValues(worker);
     }
   });
-  
-  var checkProperty = function (obj, objName, propName) {
+
+  var checkProperty = function(obj, objName, propName) {
     var desc = Object.getOwnPropertyDescriptor(obj, propName);
-    
-    assert.equal(desc.enumerable, true, "The " + objName + "." + propName + " is not enumerable");
-    assert.equal(desc.configurable, false, "The " + objName + "." + propName + " is configurable");
-    
+
+    assert.equal(desc.enumerable, true, 'The ' + objName + '.' + propName + ' is not enumerable');
+    assert.equal(desc.configurable, false, 'The ' + objName + '.' + propName + ' is configurable');
+
     //If the property is a value (not a getter)
     if (desc.get === undefined) {
-      assert.equal(desc.writable, false, "The " + objName + "." + propName + " is writable");
+      assert.equal(desc.writable, false, 'The ' + objName + '.' + propName + ' is writable');
     }
   };
-  
-  
-  var checkValues = function (worker) {
-  
+
+
+  var checkValues = function(worker) {
+
     //Check cluster properties
-    checkProperty(cluster, "cluster", "isMaster");
-    checkProperty(cluster, "cluster", "isWorker");
-    checkProperty(cluster, "cluster", "onlineWorkers");
-    
+    checkProperty(cluster, 'cluster', 'isMaster');
+    checkProperty(cluster, 'cluster', 'isWorker');
+    checkProperty(cluster, 'cluster', 'onlineWorkers');
+
     //Check worker properties
-    checkProperty(worker, "worker", "startup");
-    checkProperty(worker, "worker", "workerID");
-    checkProperty(worker, "worker", "uniqueID");
-    
-    checkConficts();    
+    checkProperty(worker, 'worker', 'startup');
+    checkProperty(worker, 'worker', 'workerID');
+    checkProperty(worker, 'worker', 'uniqueID');
+
+    checkConficts();
   };
-  
-  var checkConficts = function () {
-    
+
+  var checkConficts = function() {
+
     //check cluster.fork conflict
-    assert.throws(cluster.fork, Error, "The cluster.fork should throw an error after using cluster.autoFork");
-    
+    assert.throws(cluster.fork, Error, 'The cluster.fork should throw an error after using cluster.autoFork');
+
     //Kill all workers
-    cluster.destroy(function () {
+    cluster.destroy(function() {
       process.exit(0);
     });
   };
-  
-  cluster.autoFork();  
+
+  cluster.autoFork();
 }

@@ -23,10 +23,10 @@
 var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
-var os = require("os");
+var os = require('os');
 
 function forEach(obj, fn) {
-  Object.keys(obj).forEach(function (name, index) {
+  Object.keys(obj).forEach(function(name, index) {
     fn(obj[name], name, index);
   });
 }
@@ -34,17 +34,17 @@ function forEach(obj, fn) {
 if (cluster.isWorker) {
 
   //Throw an error at some point
-  cluster.worker.on('message', function (message) {
-    if (message === "please throw error") {
+  cluster.worker.on('message', function(message) {
+    if (message === 'please throw error') {
       process.exit(0);
     }
   });
 
   //Just keep the worker alive
   var http = require('http');
-  http.Server(function () {
+  http.Server(function() {
 
-  }).listen(common.PORT, "127.0.0.1");
+  }).listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
@@ -71,26 +71,26 @@ else if (cluster.isMaster) {
   var forkUsed = false;
 
   //Incresement listenters
-  cluster.on('fork', function () {
-     uniqueID += 1;
+  cluster.on('fork', function() {
+    uniqueID += 1;
   });
 
-  cluster.on('online', function () {
+  cluster.on('online', function() {
     onlineWorkers += 1;
   });
 
-  cluster.on('listening', function () {
+  cluster.on('listening', function() {
     listeningWorkers += 1;
   });
 
-  cluster.on('death', function () {
+  cluster.on('death', function() {
     onlineWorkers -= 1;
     listeningWorkers -= 1;
   });
 
 
   //This listenter will be removed again
-  cluster.on('fork', function forkListenter (worker) {
+  cluster.on('fork', function forkListenter(worker) {
 
     workers += 1;
     workerID += 1;
@@ -111,7 +111,7 @@ else if (cluster.isMaster) {
   });
 
   //This listenter will be removed again
-  cluster.on('online', function onlineListenter () {
+  cluster.on('online', function onlineListenter() {
 
     //Check that the number of default workers are cpus
     checks.defaultWorkers = ((cluster.workers.length - 1) === cpus);
@@ -125,13 +125,13 @@ else if (cluster.isMaster) {
   });
 
   //This listenter will be removed again
-  cluster.on('listening', function listeningListenter (newWorker) {
+  cluster.on('listening', function listeningListenter(newWorker) {
 
     //next step begin kill and respawn check
     if (listeningWorkers === workers) {
       cluster.removeListener('listening', listeningListenter);
 
-      process.nextTick(function () {
+      process.nextTick(function() {
         checkThrowHandling(newWorker);
       });
     }
@@ -139,7 +139,7 @@ else if (cluster.isMaster) {
 
   var checkThrowHandling = function(killWorker) {
 
-    cluster.once('listening', function (newWorker) {
+    cluster.once('listening', function(newWorker) {
 
       //Set autoRespawn
       checks.autoRespawn = true;
@@ -154,10 +154,10 @@ else if (cluster.isMaster) {
     });
 
     //Force worker to make throw an error
-    killWorker.send("please throw error");
+    killWorker.send('please throw error');
   };
 
-  var checkKillHandling = function (killWorker) {
+  var checkKillHandling = function(killWorker) {
 
     var sometingsForked = false;
 
@@ -167,7 +167,7 @@ else if (cluster.isMaster) {
     cluster.once('fork', forkCheck);
 
     //If after 1 sec no worker is forked, we can assume there was no autoRespawn
-    setTimeout(function () {
+    setTimeout(function() {
 
       cluster.removeListener('fork', forkCheck);
 
@@ -175,7 +175,7 @@ else if (cluster.isMaster) {
         checks.suicideException = true;
       }
 
-      process.nextTick(function () {
+      process.nextTick(function() {
         checkManualRespawn(killWorker);
       });
 
@@ -184,14 +184,14 @@ else if (cluster.isMaster) {
     killWorker.kill();
   };
 
-  var checkManualRespawn = function (killWorker) {
+  var checkManualRespawn = function(killWorker) {
 
-    cluster.once('fork', function (newWorker) {
+    cluster.once('fork', function(newWorker) {
       checks.manualRespawn = true;
       checks.workerIDrespawnReuse = (killWorker.workerID === newWorker.workerID);
     });
 
-    cluster.once('listening', function () {
+    cluster.once('listening', function() {
       process.exit(0);
     });
 
@@ -202,18 +202,18 @@ else if (cluster.isMaster) {
   cluster.autoFork();
 
   //Check all values
-  process.once('exit', function () {
+  process.once('exit', function() {
 
-    assert.ok(checks.defaultWorkers, "There wasn't created the default number of worker");
-    assert.ok(checks.uniqueIDincrease, "The uniqueID did not increase correctly");
-    assert.ok(checks.workerIDincrease, "The workerID did not increase correctly");
-    assert.ok(checks.workerIDreuse, "The workerID was not resued when the worker respawn after an accidently death");
-    assert.ok(checks.workerIDrespawnReuse, "The workerID was not resued when a worker was manual respawned");
-    assert.ok(checks.onlineWorkers, "The onlineWorkers property did not return a correct value");
-    assert.ok(checks.startup, "The startup property was off by more that one second");
-    assert.ok(checks.autoRespawn, "There wasn't respawned a worker after an accidently death");
-    assert.ok(checks.manualRespawn, "The cluster module could not manually respawn worker");
-    assert.ok(checks.suicideException, "THe worker was respawn after a controlled suicide kill");
+    assert.ok(checks.defaultWorkers, 'There was not created the default number of worker');
+    assert.ok(checks.uniqueIDincrease, 'The uniqueID did not increase correctly');
+    assert.ok(checks.workerIDincrease, 'The workerID did not increase correctly');
+    assert.ok(checks.workerIDreuse, 'The workerID was not resued when the worker respawn after an accidently death');
+    assert.ok(checks.workerIDrespawnReuse, 'The workerID was not resued when a worker was manual respawned');
+    assert.ok(checks.onlineWorkers, 'The onlineWorkers property did not return a correct value');
+    assert.ok(checks.startup, 'The startup property was off by more that one second');
+    assert.ok(checks.autoRespawn, 'There was not respawned a worker after an accidently death');
+    assert.ok(checks.manualRespawn, 'The cluster module could not manually respawn worker');
+    assert.ok(checks.suicideException, 'THe worker was respawn after a controlled suicide kill');
   });
 
 }

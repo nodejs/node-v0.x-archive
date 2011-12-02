@@ -25,16 +25,16 @@ var assert = require('assert');
 var cluster = require('cluster');
 
 function forEach(obj, fn) {
-  Object.keys(obj).forEach(function (name, index) {
+  Object.keys(obj).forEach(function(name, index) {
     fn(obj[name], name, index);
   });
 }
 
 if (cluster.isWorker) {
   var http = require('http');
-  http.Server(function () {
+  http.Server(function() {
 
-  }).listen(common.PORT, "127.0.0.1");
+  }).listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
@@ -79,10 +79,10 @@ else if (cluster.isMaster) {
   var stateNames = Object.keys(checks.worker.states);
 
   //Check events, states, and emit arguments
-  forEach(checks.cluster.events, function (bool, name, index) {
+  forEach(checks.cluster.events, function(bool, name, index) {
 
     //Listen on event
-    cluster.on(name, function (/*worker*/) {
+    cluster.on(name, function(/*worker*/) {
 
       //Set event
       checks.cluster.events[name] = true;
@@ -96,22 +96,22 @@ else if (cluster.isMaster) {
   });
 
   //Kill worker when listening
-  cluster.on('listening', function () {
+  cluster.on('listening', function() {
     worker.kill();
   });
 
   //Kill process when worker is killed
-  cluster.on('death', function () {
+  cluster.on('death', function() {
     process.exit(0);
   });
 
   //Create worker
   worker = cluster.fork();
-  assert.ok(worker instanceof Object, "cluster.fork didn't return an object");
+  assert.ok(worker instanceof Object, 'cluster.fork did not return an object');
 
   //Check event
-  forEach(checks.worker.events, function (bool, name, index) {
-    worker.on(name, function () {
+  forEach(checks.worker.events, function(bool, name, index) {
+    worker.on(name, function() {
       //Set event
       checks.worker.events[name] = true;
 
@@ -121,30 +121,30 @@ else if (cluster.isMaster) {
   });
 
   //Check all values
-  process.once('exit', function () {
+  process.once('exit', function() {
     //Check cluster events
-    forEach(checks.cluster.events, function (check, name) {
-      assert.ok(check, "The cluster event '" + name + "' on the cluster object didn't fire");
+    forEach(checks.cluster.events, function(check, name) {
+      assert.ok(check, 'The cluster event "' + name + '" on the cluster object did not fire');
     });
 
     //Check cluster event arguments
-    forEach(checks.cluster.equal, function (check, name) {
-      assert.ok(check, "The cluster event '" + name + "' didn't emit with corrent argument");
+    forEach(checks.cluster.equal, function(check, name) {
+      assert.ok(check, 'The cluster event "' + name + '" did not emit with corrent argument');
     });
 
     //Check worker states
-    forEach(checks.worker.states, function (check, name) {
-      assert.ok(check, "The worker state '" + name + "' wasn't set to true");
+    forEach(checks.worker.states, function(check, name) {
+      assert.ok(check, 'The worker state "' + name + '" was not set to true');
     });
 
     //Check worker events
-    forEach(checks.worker.events, function (check, name) {
-      assert.ok(check, "The worker event '" + name + "' on the worker object didn't fire");
+    forEach(checks.worker.events, function(check, name) {
+      assert.ok(check, 'The worker event "' + name + '" on the worker object did not fire');
     });
 
     //Check worker event arguments
-    forEach(checks.worker.equal, function (check, name) {
-      assert.ok(check, "The worker event '" + name + "' didn't emit with corrent argument");
+    forEach(checks.worker.equal, function(check, name) {
+      assert.ok(check, 'The worker event "' + name + '" did not emit with corrent argument');
     });
   });
 

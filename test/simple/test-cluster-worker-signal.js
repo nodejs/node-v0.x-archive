@@ -27,81 +27,81 @@ var ProgressTracker = require('progressTracker');
 var processWatch = require('processWatch');
 
 function forEach(obj, fn) {
-  Object.keys(obj).forEach(function (name, index) {
+  Object.keys(obj).forEach(function(name, index) {
     fn(obj[name], name, index);
   });
 }
 
 if (cluster.isWorker) {
   var http = require('http');
-  http.Server(function () {
+  http.Server(function() {
 
-  }).listen(common.PORT, "127.0.0.1");
+  }).listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
 
   var checks = {
-    "SIGINT": {
+    'SIGINT': {
       killed: false,
       emit: false,
       suicide: false,
       eventName: 'exit'
     },
-    "SIGTERM": {
+    'SIGTERM': {
       killed: false,
       emit: false,
       suicide: false,
       eventName: 'exit'
     },
-    "SIGQUIT": {
+    'SIGQUIT': {
       killed: false,
       emit: false,
       suicide: false,
       eventName: 'disconnect'
     }
   };
-  
-  var progress = new ProgressTracker(function () {
+
+  var progress = new ProgressTracker(function() {
     process.exit(0);
   });
   progress.add(checks);
-  
-  forEach(checks, function (check, signalCode) {
-    
+
+  forEach(checks, function(check, signalCode) {
+
     var worker = cluster.fork();
-    worker.on('listening', function () {
-      
+    worker.on('listening', function() {
+
       //Check that it die
-      processWatch.watch(worker.process.pid, function (exist) {
+      processWatch.watch(worker.process.pid, function(exist) {
         if (!exist) {
           check.killed = true;
-          process.nextTick(function () {
+          process.nextTick(function() {
             progress.set(signalCode);
           });
         }
       });
-      
+
       //Check that the event emits
-      worker.on(check.eventName, function () {
+      worker.on(check.eventName, function() {
         check.emit = true;
         check.suicide = worker.suicide;
       });
-      
+
       //Send signalCode
-      process.kill(worker.process.pid, signalCode); 
+      process.kill(worker.process.pid, signalCode);
     });
   });
 
   //Check all values
-  process.once('exit', function () {
-        
-    forEach(checks, function (check, signalCode) {
+  process.once('exit', function() {
+
+    forEach(checks, function(check, signalCode) {
       assert.ok(check.killed, 'The worker did not die after sending the ' + signalCode + ' signal');
       assert.ok(check.emit, 'The ' + check.eventName + ' event was never emitted after sending the ' + signalCode + ' signal');
       assert.ok(check.suicide, 'The worker was not set in suicide mode');
     });
-    
+
   });
 
 }
