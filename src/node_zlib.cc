@@ -74,7 +74,7 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
       (void)inflateEnd(&strm_);
     }
 
-    if (dictionary_ != NULL) free(dictionary_);
+    if (dictionary_ != NULL) delete[] dictionary_;
   }
 
   // write(flush, in, in_off, in_len, out, out_off, out_len)
