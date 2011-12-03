@@ -166,6 +166,22 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
       case GUNZIP:
       case INFLATERAW:
         err = inflate(&(ctx->strm_), ctx->flush_);
+
+        // If data was encoded with dictionary
+        if (err == Z_NEED_DICT) {
+          assert(ctx->dictionary_ != NULL && "Stream has no dictionary");
+
+          // Load it
+          err = inflateSetDictionary(
+              &(ctx->strm_),
+              ctx->dictionary_,
+              ctx->dictionary_len_
+          );
+          assert(err == Z_OK && "Failed to set dictionary");
+
+          // And try to decode again
+          err = inflate(&(ctx->strm_), ctx->flush_);
+        }
         break;
       default:
         assert(0 && "wtf?");
@@ -301,22 +317,16 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
 
     assert(err == Z_OK);
 
-    ctx->dictionary_ = dictionary;
+    ctx->dictionary_ = reinterpret_cast<Bytef *>(dictionary);
+    ctx->dictionary_len_ = dictionary_len;
+
     if (dictionary != NULL) {
       switch (mode) {
         case DEFLATE:
         case DEFLATERAW:
           err = deflateSetDictionary(
               &(ctx->strm_),
-              reinterpret_cast<Bytef *>(dictionary),
-              dictionary_len
-          );
-          break;
-        case INFLATE:
-        case INFLATERAW:
-          err = inflateSetDictionary(
-              &(ctx->strm_),
-              reinterpret_cast<Bytef *>(dictionary),
+              ctx->dictionary_,
               dictionary_len
           );
           break;
@@ -324,7 +334,7 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
           break;
       }
 
-      assert(err == Z_OK);
+      assert(err == Z_OK && "Failed to set dictionary");
     }
 
     ctx->init_done_ = true;
@@ -340,7 +350,8 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
   int memLevel_;
   int strategy_;
 
-  char* dictionary_;
+  Bytef* dictionary_;
+  size_t dictionary_len_;
 
   int flush_;
 
