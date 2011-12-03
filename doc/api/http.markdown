@@ -394,6 +394,7 @@ Options:
 - `headers`: An object containing request headers.
 - `auth`: Basic authentication i.e. `'user:password'` to compute an
   Authorization header.
+- `version`: A string specifying the HTTP version. Defaults to `'1.1'`.
 - `agent`: Controls [Agent](#http.Agent) behavior. When an Agent is used
   request will default to `Connection: keep-alive`. Possible values:
  - `undefined` (default): use [global Agent](#http.globalAgent) for this host
@@ -514,17 +515,17 @@ Global instance of Agent which is used as the default for all http client reques
 
 ### agent.maxSockets
 
-By default set to 5. Determines how many concurrent sockets the agent can have 
+By default set to 5. Determines how many concurrent sockets the agent can have
 open per host.
 
 ### agent.sockets
 
-An object which contains arrays of sockets currently in use by the Agent. Do not 
+An object which contains arrays of sockets currently in use by the Agent. Do not
 modify.
 
 ### agent.requests
 
-An object which contains queues of requests that have not yet been assigned to 
+An object which contains queues of requests that have not yet been assigned to
 sockets. Do not modify.
 
 
@@ -680,19 +681,19 @@ Aborts a request.  (New since v0.3.8.)
 
 ### request.setTimeout(timeout, [callback])
 
-Once a socket is assigned to this request and is connected 
+Once a socket is assigned to this request and is connected
 [socket.setTimeout(timeout, [callback])](net.html#socket.setTimeout)
 will be called.
 
 ### request.setNoDelay(noDelay=true)
 
-Once a socket is assigned to this request and is connected 
+Once a socket is assigned to this request and is connected
 [socket.setNoDelay(noDelay)](net.html#socket.setNoDelay)
 will be called.
 
 ### request.setSocketKeepAlive(enable=false, [initialDelay])
 
-Once a socket is assigned to this request and is connected 
+Once a socket is assigned to this request and is connected
 [socket.setKeepAlive(enable, [initialDelay])](net.html#socket.setKeepAlive)
 will be called.
 
