@@ -33,14 +33,14 @@ Running node will now share port 8000 between the workers:
 
 ### cluster.isMaster
 
-This boolean flag is true if the process is a master. This is determinted
+This boolean flag is true if the process is a master. This is determined
 by the `process.env.NODE_WORKER_ID`. If `process.env.NODE_WORKER_ID` is
 undefined `isMaster` is `true`.
 
 ### cluster.isWorker
 
 This boolean flag is true if the process is a worker forked from a master.
-If the `process.env.NODE_WORKER_ID` is set to a value diffrent from undefined
+If the `process.env.NODE_WORKER_ID` is set to a value different efined
 `isWorker` is `true`.
 
 ### Event: 'fork'
@@ -50,7 +50,7 @@ This can be used to log worker activity, and create you own timeout.
 
     var timeouts = [];
     var errorMsg = function () {
-        console.error("Something must be worng with the connection ...");
+        console.error("Something must be wrong with the connection ...");
     });
 
     cluster.on('fork', function (worker) {
@@ -67,18 +67,18 @@ This can be used to log worker activity, and create you own timeout.
 ### Event: 'online'
 
 After forking a new worker, the worker should respond with a online message.
-When the master resive a online message it will emit such event.
-The diffrence between 'fork' and 'online' is that fork is emitted when the
+When the master receives a online message it will emit such event.
+The difference between 'fork' and 'online' is that fork is emitted when the
 master tries to fork a worker, and 'online' is emitted when the worker is being
 executed.
 
     cluster.on('online', function (worker) {
-        console.log("Yay the worker responed after it was forked");
+        console.log("Yay, the worker responded after it was forked");
     });
 
 ### Event: 'listening'
 
-When calling `listen()` from a worker, a 'listening' event is automaticly assigned
+When calling `listen()` from a worker, a 'listening' event is automatically assigned
 to the server instance. When the server is listening a message is send to the master
 where the 'listening' event is emitted.
 
@@ -96,7 +96,7 @@ This can be used to restart the worker by calling `fork()` again.
       cluster.fork();
     });
 
-However the workers will automaticly respawn when using the `autoFork()` method.
+However the workers will automatically respawn when using the `autoFork()` method.
 
 ### Event: 'disconnect'
 
@@ -111,11 +111,11 @@ If the worker was killed using the `.kill()` or `.destroy()` this event will not
 
 ### Event: 'criticalError'
 
-When using the `autoFork()`. Worker will automaticly be respawed when they die.
-However if thare a a permanent error in a worker, lets say a syntax error. The worker
-will in a second and be respawend again. To prevent an infinity respawn loop, the module
+When using the `autoFork()`. Worker will automatically  be respawed when they die.
+However if there is a permanent error in a worker, lets say a syntax error, the worker
+will die in a second and be respawend again. To prevent an infinity respawn loop, the module
 log the previously 5 deaths. If all 5 workers was alive in less than a second it won't
-respawn any more workes, and the `cluster.disconnect()` function will be runed.
+respawn any more workes, and the `cluster.disconnect()` function will be executed.
 
 In this case the criticalError event will be emitted. The event can be used to notify
 the admin about an critical error.
@@ -141,37 +141,37 @@ passing API that is available with `child_process.fork` is available within
 ### cluster.autoFork()
 
 When `autoFork()` is called a number of worker is forked. How many workers
-you will end up with, are determed by `workers` property set in `setupMaster`.
-If no property it will default to the number CPU cores you have. You can finde
+you will end up with, are determined by `workers` property set in `setupMaster`.
+If no property it will default to the number CPU cores you have. You can find
 the number by using `require('os').cups().length`.
 
-When using `.autoFork()` you can not use the `.fork()` method. If you call
+When using `.autoFork()` you can not use the `.fork()` method. If you do so
 `.fork()` it will throw an error.
 
-The method do also spawn a new worker when on is dead. Unless they commit suicide
-this is known by checking the `worker.suicide` boolean. If you wan't to respawn
-workers there commit suicide you simply run `.autoFork()` manualy.
+The method does also spawn a new worker when on is dead. Unless they commit suicide
+this is known by checking the `worker.suicide` boolean. If you want to respawn
+workers there commit suicide you simply run `.autoFork()` manually.
     
 ### cluster.destroy([callback])
 
-When calling this method all workers will commit a non-gracefull suicide.
-This is usefull when you wan't to shutdown the master. It takes an optional
+When calling this method all workers will commit a non-graceful suicide.
+This is useful when you want to shutdown the master quickly. It takes an optional
 callback argument there will be called when finished.
 
-This method is automaticly used just before the mater dies. This can happen by
-calling `process.exit()`, the master gets `SIGINT` or `SIGTERM` signal, or by 
+This method is automatically used just before the mater dies. This can happen by
+calling `process.exit()`, the master gets a `SIGINT` or a `SIGTERM` signal, or by 
 an uncatched error. 
 
 ### cluster.disconnect()
 
-When calling this method all workers will commit a gracefull suicide. It takes an optional
+When calling this method all workers will commit a graceful suicide. It takes an optional
 callback argument there will be called when finished.
 
 This method is automaticly used when the master gets a `SIGQUIT` signal.
 
 ### cluster.eachWorker(callback)
 
-This method will go thouge all workers and call a given function.
+This method will go through all workers and call a given function.
 
     //Say hi to all workers
     cluster.eachWorker(function (worker) {
@@ -180,7 +180,7 @@ This method will go thouge all workers and call a given function.
 
 ### cluster.setupMaster([options])
 
-The `setupMaster` is used to change the default 'fork' behavure. It takes one option
+The `setupMaster` is used to change the default 'fork' behavior. It takes one option
 object argument.
 
 Example:
@@ -203,9 +203,9 @@ The options argument can contain 3 different properties.
 
 ## Worker
 
-This object contain all public information and method about a worker. In the master
-it can be optained using `cluster.workers` or `cluster.eachWorker`. In a worker
-it can be optained using `cluster.worker`.
+This object contains all public information and method about a worker. In the master
+it can be obtainedusing `cluster.workers` or `cluster.eachWorker`. In a worker
+it can be obtained ained using `cluster.worker`.
 
 ### Worker.workerID
 
@@ -222,7 +222,7 @@ In the master this function will send a message to a specific worker.
 In a worker the function will send a message to the master.
 
 The `send()` method takes a second optional argument. This is a callback function
-there will run the the message was rescived.
+there will run the message was received.
 
     cluster.worker.send({ cmd: 'notifyRequest' }, function () {
       //Master has recived message
@@ -231,7 +231,7 @@ there will run the the message was rescived.
 ### Worker.kill()
 
 This function will kill the worker, and inform the master to not spawn a new worker.
-To know the diffrence between suicide and accidently death a suicide boolean is set to true.
+To know the difference between suicide and accidently death a suicide boolean is set to true.
 
     cluster.on('death', function (worker) {
         if (worker.suicide === true) {
@@ -257,22 +257,22 @@ This property is the timestamp set when the worker was forked. It is basically s
 
 ### Worker.disconnect();
   
-When running the function the worker will make a gracefull shoutdown. This involves closing
-all TCP sockets, and stoping the IPC channel between master and worker. Using the `.send()` method
+When running the function the worker will make a graceful shutdown. This involves closing
+all TCP sockets, and stopping the IPC channel between master and worker. Using the `.send()` method
 will throw an error. 
 
 Calling this method will emit first a `disconnect` event, followed by a `death` event. It will also set 
 `suicide` to true.
 
-This method is automaticly used when the worker gets a `SIGQUIT` signal.
+This method is automatically used when the worker gets a `SIGQUIT` signal.
 
 ### Event: message
 
 The event is very much like the 'message' event from `child_process.fork()` or `process.on('message')`
-except that is don't emit when a internal message is recived. The event function do also
-recive a sencond argument containg the worker object.
+except that is don't emit when a internal message is received. The event function does also
+receive a second argument containing the worker object.
 
-As an example, here is a cluster which keeps count of the number of requests
+As an example, here is a cluster that keeps count of the number of requests
 in the master process via message passing:
 
     var cluster = require('cluster');
@@ -340,5 +340,5 @@ Same as the `cluster.on('exit')` event, but emits only when the state change on 
 Same as the `cluster.on('disconnect')` event, but emits only when the state change on the specified worker.
   
     cluster.fork().on('disconnect', function (worker) {
-        //Worker had been disconnect
+        //Worker has been disconnected
     };
