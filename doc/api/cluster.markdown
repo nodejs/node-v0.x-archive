@@ -315,30 +315,30 @@ in the master process via message passing:
 
 Same as the `cluster.on('online')` event, but emits only when the specified worker forks.
 
-  cluster.fork().on('online', function (worker) {
-    //Worker is online
-  };
+     -m cluster.fork().on('online', function (worker) {
+        //Worker is online
+    };
 
 ### Event: listening
 
 Same as the `cluster.on('listening')` event, but emits only when the state change on the specified worker.
   
-  cluster.fork().on('listening', function (worker) {
-    //Worker is listening
-  };
+    cluster.fork().on('listening', function (worker) {
+        //Worker is listening
+    };
 
 ### Event: exit
 
 Same as the `cluster.on('exit')` event, but emits only when the state change on the specified worker.
   
-  cluster.fork().on('exit', function (worker) {
-    //Worker has died or disconnected
-  };
+    cluster.fork().on('exit', function (worker) {
+        //Worker has died or disconnected 
+    };
 
 ### Event: disconnect
 
 Same as the `cluster.on('disconnect')` event, but emits only when the state change on the specified worker.
   
-  cluster.fork().on('disconnect', function (worker) {
-    //Worker had been disconnect
-  };
+    cluster.fork().on('disconnect', function (worker) {
+        //Worker had been disconnect
+    };
