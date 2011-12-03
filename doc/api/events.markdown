@@ -83,6 +83,16 @@ manipulated, e.g. to remove listeners.
 
 Execute each of the listeners in order with the supplied arguments.
 
+#### Event: 'error'
+
+`function (error_object) { }`
+
+`error` events are emitted by many modules, that inherit from the `EventEmitter`.
+
+If no event listener is attached to this `error` event and an `error` is emitted, 
+a `new Error` exception is thrown which will end your application if you do not 
+catch it. Therefore you should always listen for an `error` event.
+
 #### Event: 'newListener'
 
 `function (event, listener) { }`
