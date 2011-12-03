@@ -233,14 +233,14 @@ there will run the the message was rescived.
 This function will kill the worker, and inform the master to not spawn a new worker.
 To know the diffrence between suicide and accidently death a suicide boolean is set to true.
 
-  cluster.on('death', function (worker) {
-    if (worker.suicide === true) {
-      console.log('Oh, it was just suicide' – no need to worry').
-    }
-  });
-  cluster.eachWorker(function (0) {
-    worker.kill();
-  });
+    cluster.on('death', function (worker) {
+        if (worker.suicide === true) {
+            console.log('Oh, it was just suicide' – no need to worry').
+        }
+    });
+    cluster.eachWorker(function (0) {
+        worker.kill();
+    });
 
 This method is automaticly used when the worker gets a `SIGINT` or `SIGTERM` signal.
 
@@ -253,7 +253,7 @@ It is true if the worker was killed using the `.kill()` or  `.disconnect()` meth
 
 This property is the timestamp set when the worker was forked. It is basically set by:
   
-  worker.statup = Date.now();
+    worker.statup = Date.now();
 
 ### Worker.disconnect();
   
