@@ -162,12 +162,33 @@ This method is automatically used just before the mater dies. This can happen by
 calling `process.exit()`, the master gets a `SIGINT` or a `SIGTERM` signal, or by 
 an uncatched error. 
 
-### cluster.disconnect()
+### cluster.disconnect([callback])
 
 When calling this method all workers will commit a graceful suicide. It takes an optional
 callback argument there will be called when finished.
 
 This method is automaticly used when the master gets a `SIGQUIT` signal.
+
+### cluster.restart([callback])
+
+When updateing your workers you don't want to restart the cluster by destroying all client socket.
+By using the this method the cluster will restart workers gracefully when nobody use them, and have
+minimum one worker online.
+
+This example restart the cluster each time the worker file changes:
+
+    var cluster = require('cluster');
+    var fs = require('fs');
+    cluster.setupMaster({
+        exec: 'worker.js'
+    });
+    fs.watchFile('worker.js', {persistent: false}, function (curr, prev) {
+        if (curr.ctime.getTime() === prev.ctime.getTime()) {
+            cluster.restart(function () {
+                console.log('all workers restarted');
+            });
+        }
+    });
 
 ### cluster.eachWorker(callback)
 
@@ -265,6 +286,11 @@ Calling this method will emit first a `disconnect` event, followed by a `death` 
 `suicide` to true.
 
 This method is automatically used when the worker gets a `SIGQUIT` signal.
+
+### Worker.restart([callback])
+
+This method will restart the worker, but without change in the `workerID` or the custom environment.
+The callback will be called when the new worker is listening for new connections.
 
 ### Event: message
 
