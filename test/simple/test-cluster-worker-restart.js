@@ -29,7 +29,8 @@ if (cluster.isWorker) {
   
   var time = Date.now();
   
-  //Just keep the worker alive
+  //Send a end message back to client
+  //containing env and startup time
   var server = net.createServer(function(socket) {
     socket.end(JSON.stringify({
       "time": time,
