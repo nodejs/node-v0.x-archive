@@ -336,8 +336,13 @@
   };
 
   startup.processKillAndExit = function() {
+    var exiting = false;
+
     process.exit = function(code) {
-      process.emit('exit', code || 0);
+      if (!exiting) {
+        exiting = true;
+        process.emit('exit', code || 0);
+      }
       process.reallyExit(code || 0);
     };
 
@@ -411,8 +416,7 @@
     // If we were spawned with env NODE_CHANNEL_FD then load that up and
     // start parsing data from that stream.
     if (process.env.NODE_CHANNEL_FD) {
-      var fd = parseInt(process.env.NODE_CHANNEL_FD);
-      assert(fd >= 0);
+      assert(parseInt(process.env.NODE_CHANNEL_FD) >= 0);
       var cp = NativeModule.require('child_process');
 
       // Load tcp_wrap to avoid situation where we might immediately receive
@@ -420,7 +424,7 @@
       // FIXME is this really necessary?
       process.binding('tcp_wrap')
 
-      cp._forkChild(fd);
+      cp._forkChild();
       assert(process.send);
     }
   }
