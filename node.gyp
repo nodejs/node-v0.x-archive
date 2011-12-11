@@ -189,6 +189,13 @@
             '-lkvm',
           ],
         }],
+        [ 'OS=="netbsd"', {
+          'sources': [ 'src/platform_netbsd.cc' ],
+          'libraries': [
+            '-lutil',
+            '-lkvm',
+          ],
+        }],
         [ 'OS=="solaris"', {
           'sources': [ 'src/platform_sunos.cc' ],
           'libraries': [
