@@ -110,7 +110,7 @@ void EmitExit(v8::Handle<v8::Object> process);
                     v8::ReadOnly|v8::DontDelete))
 
 template <typename target_t>
-void NODE_SET_METHOD(target_t obj, const char* name,
+void SetMethod(target_t obj, const char* name,
         v8::InvocationCallback callback)
 {
     obj->Set(v8::String::NewSymbol(name),
@@ -118,13 +118,16 @@ void NODE_SET_METHOD(target_t obj, const char* name,
 }
 
 template <typename target_t>
-void NODE_SET_PROTOTYPE_METHOD(target_t target,
+void SetPrototypeMethod(target_t target,
         const char* name, v8::InvocationCallback callback)
 {
     v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(callback);
     target->PrototypeTemplate()->Set(v8::String::NewSymbol(name), templ);
 }
 
+// for backwards compatibility
+#define NODE_SET_METHOD node::SetMethod
+#define NODE_SET_PROTOTYPE_METHOD node::SetPrototypeMethod
 
 enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
