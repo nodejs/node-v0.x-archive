@@ -43,6 +43,14 @@ function copy(src, dst, callback) {
   queue.push('cp -rf ' + src + ' ' + dst);
 }
 
+// Remove files
+function remove(files) {
+  files.forEach(function(file) {
+    file = path.join(variables.node_prefix, file);
+    queue.push('rm -rf ' + file);
+  });
+}
+
 // Run every command in queue, one-by-one
 function run() {
   var cmd = queue.shift();
@@ -82,16 +90,17 @@ if (cmd === 'install') {
   // Install npm (eventually)
   if (variables.node_install_npm) {
     copy('deps/npm', 'lib/node_modules/npm');
-    queue.push('ln -sF ../lib/node_modules/npm/bin/npm-cli.js ' +
-               path.join(variables.node_prefix, 'bin/npm'));
+    if (process.platform === 'win32') {
+      copy('deps/npm/bin/npm.cmd', 'bin/npm.cmd');
+    } else {
+      queue.push('ln -sF ../lib/node_modules/npm/bin/npm-cli.js ' +
+                 path.join(variables.node_prefix, 'bin/npm'));
+    }
   }
 } else {
-  [
+  remove([
      'bin/node', 'bin/npm', 'include/node/*', 'lib/node_modules'
-  ].forEach(function(file) {
-    file = path.join(variables.node_prefix, file);
-    queue.push('rm -rf ' + file);
-  });
+  ]);
 }
 
 run();
