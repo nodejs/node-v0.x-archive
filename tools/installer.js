@@ -2,7 +2,6 @@ var fs = require('fs'),
     path = require('path'),
     exec = require('child_process').exec,
     options = fs.readFileSync(process.argv[2]).toString(),
-    variables,
     cmd = process.argv[3];
 
 if (cmd !== 'install' && cmd !== 'uninstall') {
@@ -12,7 +11,8 @@ if (cmd !== 'install' && cmd !== 'uninstall') {
 
 // Parse options file and remove first comment line
 options = JSON.parse(options.split('\n').slice(1).join(''));
-variables = options.variables;
+var variables = options.variables,
+    node_prefix = variables.node_prefix || '/usr/local';
 
 // Execution queue
 var queue = [],
@@ -28,10 +28,8 @@ function copy(src, dst, callback) {
     return;
   }
 
-  dst = path.join(variables.node_prefix, dst);
+  dst = path.join(node_prefix, dst);
   var dir = dst.replace(/\/[^\/]*$/, '/');
-
-  console.log(dst, dir);
 
   // Create directory if hasn't done this yet
   if (dirs.indexOf(dir) === -1) {
@@ -39,14 +37,14 @@ function copy(src, dst, callback) {
     queue.push('mkdir -p ' + dir);
   }
 
-  // Queue file copy
+  // Queue file/dir copy
   queue.push('cp -rf ' + src + ' ' + dst);
 }
 
 // Remove files
 function remove(files) {
   files.forEach(function(file) {
-    file = path.join(variables.node_prefix, file);
+    file = path.join(node_prefix, file);
     queue.push('rm -rf ' + file);
   });
 }
@@ -72,13 +70,22 @@ if (cmd === 'install') {
     'src/node.h', 'src/node_buffer.h', 'src/node_object_wrap.h',
     'src/node_version.h',
     // v8
-    'deps/v8/include/*.h',
+    'deps/v8/include/v8-debug.h', 'deps/v8/include/v8-preparser.h',
+    'deps/v8/include/v8-profiler.h', 'deps/v8/include/v8-testing.h',
+    'deps/v8/include/v8.h', 'deps/v8/include/v8stdint.h',
     // uv
-    'deps/uv/include/*.h'
+    'deps/uv/include/uv.h'
   ], 'include/node/');
 
   // Private uv headers
-  copy('deps/uv/include/uv-private/*.h', 'include/node/uv-private/');
+  copy([
+    'deps/uv/include/uv-private/eio.h', 'deps/uv/include/uv-private/ev.h',
+    'deps/uv/include/uv-private/ngx-queue.h',
+    'deps/uv/include/uv-private/tree.h',
+    'deps/uv/include/uv-private/uv-unix.h',
+    'deps/uv/include/uv-private/uv-win.h',
+  ], 'include/node/uv-private/');
+
   copy([
     'deps/uv/include/ares.h',
     'deps/uv/include/ares_version.h'
@@ -90,12 +97,8 @@ if (cmd === 'install') {
   // Install npm (eventually)
   if (variables.node_install_npm) {
     copy('deps/npm', 'lib/node_modules/npm');
-    if (process.platform === 'win32') {
-      copy('deps/npm/bin/npm.cmd', 'bin/npm.cmd');
-    } else {
-      queue.push('ln -sF ../lib/node_modules/npm/bin/npm-cli.js ' +
-                 path.join(variables.node_prefix, 'bin/npm'));
-    }
+    queue.push('ln -sF ../lib/node_modules/npm/bin/npm-cli.js ' +
+               path.join(node_prefix, 'bin/npm'));
   }
 } else {
   remove([
