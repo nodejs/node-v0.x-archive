@@ -1,4 +1,11 @@
 BUILDTYPE ?= Release
+PREFIX := $(shell tools/gyp_node read-prefix ./options.gypi)
+INCLUDE_DIR = $(PREFIX)/include/node
+LIB_DIR = $(PREFIX)/lib
+BIN_DIR = $(PREFIX)/bin
+
+INSTALL = mkdir -p $(1) && cp -f $(2) $(1)/
+LINK = mkdir -p $(1) && ln -sF $(2) $(1)/$(3)
 
 all: out/Makefile
 	$(MAKE) -C out BUILDTYPE=$(BUILDTYPE)
@@ -10,7 +17,24 @@ out/Release/node: all
 out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp options.gypi
 	tools/gyp_node -f make
 
-install uninstall:
+install: all install-bin install-includes
+
+install-includes:
+	$(call INSTALL,$(INCLUDE_DIR),src/node.h)
+	$(call INSTALL,$(INCLUDE_DIR),src/node_buffer.h)
+	$(call INSTALL,$(INCLUDE_DIR),src/node_object_wrap.h)
+	$(call INSTALL,$(INCLUDE_DIR),src/node_version.h)
+	$(call INSTALL,$(INCLUDE_DIR),deps/v8/include/*.h)
+	$(call INSTALL,$(INCLUDE_DIR),deps/uv/include/*.h)
+	$(call INSTALL,$(INCLUDE_DIR)/uv-private,deps/uv/include/uv-private/*.h)
+	$(call INSTALL,$(INCLUDE_DIR)/c-ares,deps/uv/include/ares.h)
+	$(call INSTALL,$(INCLUDE_DIR)/c-ares,deps/uv/include/ares_version.h)
+
+install-bin:
+	$(call INSTALL,$(BIN_DIR),out/Release/node)
+	$(call LINK,$(BIN_DIR),`pwd`/deps/npm/bin/npm-cli.js,npm)
+
+uninstall:
 	@echo '`make $(@)` is not implemented yet. Bug bnoordhuis about it in #node.js'
 
 clean:
@@ -320,4 +344,4 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install all program staticlib dynamiclib test test-all website-upload
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload
