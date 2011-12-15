@@ -1,0 +1,33 @@
+#!/bin/bash 
+if [ -z "$NODE_ROOT" ] 
+then 
+  echo "NODE_ROOT enviromnet variable is not set! It must point to the root of the node's git directory and contain folders src, deps/v8/include and deps/uv/include"
+  echo "Check https://help.ubuntu.com/community/EnvironmentVariables on how to setup persistent environment variables"
+  echo "Probably the easiest way is to add an 'export NODE_ROOT=<location_to_node>' in your ~/.bashrc file"
+  exit 1 
+else
+	Proper_Node_Dir=1
+	[ -f "${NODE_ROOT}src/node.h" ] || { Proper_Node_Dir=0 && echo "ERROR: node.h was not in ${NODE_ROOT}src/node.h"; }
+	[ -f "${NODE_ROOT}deps/v8/include/v8.h" ] || { Proper_Node_Dir=0 && echo "ERROR: v8.h was not in ${NODE_ROOT}deps/v8/include/v8.h"; }
+	[ -f "${NODE_ROOT}deps/uv/include/uv.h" ] || { Proper_Node_Dir=0 && echo "ERROR: uv.h was not in ${NODE_ROOT}deps/uv/include/uv.h"; }
+	if  [ $Proper_Node_Dir -lt 1 ]
+	then
+		echo "The $NODE_ROOT doesn't seem to be correct"
+		exit 1
+	fi
+fi
+
+
+#Check if the user has specified an argument or use the default module.gyp
+module_filename=""
+if [ -z "$1" ] 
+then
+   [ -f "module.gyp" ] && module_filename="module.gyp" || echo "File module.gyp doesn't exist"
+else
+   [ -f "$1" ] && module_filename="$1" || echo "File $1 doesn't exist"
+fi
+#if we haven't got a gyp file exit
+[ -z "$module_filename" ] && echo "Gyp file not found!" && exit 1
+echo "Generating project"
+${NODE_ROOT}tools/gyp/gyp -f make $module_filename --depth=. -DNODE_ROOT=$NODE_ROOT
+
