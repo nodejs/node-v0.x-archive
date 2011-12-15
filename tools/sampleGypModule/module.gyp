@@ -15,7 +15,7 @@
 		],
 		
 		'includes': [ #This files loads all the required conditional staff for mac linux windows etc
-			'<(NODE_ROOT)/tools/node_module.gypi',
+			'../node_module.gypi',
 		],
     },
   ] # end targets
