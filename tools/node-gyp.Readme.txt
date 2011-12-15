@@ -1,0 +1,15 @@
+Node-gyp is a utility that helps the node module’s project generation.
+Node-gyp requires the "NODE_ROOT" enviroment variable to point to the node's source directory (the one that contains the src, deps and tools folders). 
+Usage
+-----
+* On windows, node-gyp can have up to two arguments, which are optional:
+  node-gyp [gyp-filename] [make]
+    gyp-filename: is the gyp file that will be processed (it must have a .gyp extension)
+    make: this is a command that dictates node-gyp to build the module using visual studio’s msbuild
+
+* On linux and mac, node-gyp has only one optional argument:
+  node-gyp [gyp-filename]
+    gyp-filename: is the gyp file that will be processed
+  
+  In order to build the generated Makefile, do a simple make. You may aggregate the commands by posting:
+  node-gyp && build
