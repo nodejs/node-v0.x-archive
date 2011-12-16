@@ -121,10 +121,10 @@ else if (cluster.isMaster) {
 
     //When the connection ends kill worker and shutdown process
     client.on('end', function() {
-      worker.kill();
+      worker.destroy();
     });
 
-    worker.on('exit', function() {
+    worker.on('death', function() {
       process.exit(0);
     });
 

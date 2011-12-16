@@ -46,7 +46,7 @@ else if (cluster.isMaster) {
     },
     worker: {
       emitDisconnect: false,
-      emitExit: false,
+      emitDeath: false,
       state: false,
       suicideMode: false,
       died: false
@@ -81,8 +81,8 @@ else if (cluster.isMaster) {
       checks.worker.suicideMode = worker.suicide;
       checks.worker.state = (worker.state === 'disconnect');
     });
-    worker.on('exit', function() {
-      checks.worker.emitExit = true;
+    worker.on('death', function() {
+      checks.worker.emitDeath = true;
 
       //check that it did die
       processWatch.watch(worker.process.pid, function(alive) {
@@ -136,7 +136,7 @@ else if (cluster.isMaster) {
 
     //Check worker events
     assert.ok(checks.worker.emitDisconnect, 'The disconnect event on the worker object did never emit');
-    assert.ok(checks.worker.emitExit, 'The exit event on the worker object did never emit');
+    assert.ok(checks.worker.emitDeath, 'The death event on the worker object did never emit');
 
     //Check worker state
     assert.ok(checks.worker.state, 'The worker state was not "disconnect" when the exit disconnect was emitted');

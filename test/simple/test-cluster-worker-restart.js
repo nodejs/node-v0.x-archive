@@ -26,9 +26,9 @@ var cluster = require('cluster');
 var net = require('net');
 
 if (cluster.isWorker) {
-  
+
   var time = Date.now();
-  
+
   //Send a end message back to client
   //containing env and startup time
   var server = net.createServer(function(socket) {
@@ -48,11 +48,11 @@ else if (cluster.isMaster) {
     envMatch: false
   };
 
-  //Fork a new worker with a custom env 
+  //Fork a new worker with a custom env
   var worker = cluster.fork({
     'custom_env': 'value'
   });
-  
+
   //Get startup time from worker
   var connect = function (callback) {
     var result;
@@ -67,26 +67,26 @@ else if (cluster.isMaster) {
   };
 
   worker.on('listening', function () {
-    
+
     //Connect to worker to get time
     connect(function (oldData) {
-      
+
       //restart worker
       worker.restart(function () {
         checks.callback = true;
-        
+
         //Connect again to new worker
         connect(function (newData) {
           //Did time change
           if (oldData.time !== newData.time) {
             checks.timeChanged = true;
           }
-          
+
           //Do old and new env match
           if (oldData.env === newData.env) {
             checks.envMatch = true;
           }
-          
+
           process.exit(0);
         });
       });

@@ -46,13 +46,13 @@ else if (cluster.isMaster) {
       killed: false,
       emit: false,
       suicide: false,
-      eventName: 'exit'
+      eventName: 'death'
     },
     'SIGTERM': {
       killed: false,
       emit: false,
       suicide: false,
-      eventName: 'exit'
+      eventName: 'death'
     },
     'SIGQUIT': {
       killed: false,

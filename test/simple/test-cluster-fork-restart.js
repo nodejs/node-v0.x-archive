@@ -40,27 +40,27 @@ else if (cluster.isMaster) {
     callback: false,
     wasRestarted: false
   };
-  
+
   //Start workers by fork
   cluster.fork();
   cluster.fork();
-  
+
   //When all workers are listening
   cluster.on('listening', function listeningEvent () {
     if (cluster.onlineWorkers === 2) {
       cluster.removeListener('listening', listeningEvent);
-        
+
       cluster.restart(function () {
         checks.callback = true;
         checks.workersMatch = (cluster.onlineWorkers === 2);
-          
+
         //The index in cluster.workers are unique ID
         //if a 3th index exist, a the worker did restart
         checks.wasRestarted = cluster.workers[3] !== undefined;
 
         process.exit(0);
       });
-        
+
     }
   });
 
@@ -70,5 +70,5 @@ else if (cluster.isMaster) {
     assert.ok(checks.workersMatch, 'Not all workers was restarted when the callback was called');
     assert.ok(checks.wasRestarted, 'The worker did not restart');
 });
- 
+
 }

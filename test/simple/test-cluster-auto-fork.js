@@ -181,7 +181,7 @@ else if (cluster.isMaster) {
 
     }, 1000);
 
-    killWorker.kill();
+    killWorker.destroy();
   };
 
   var checkManualRespawn = function(killWorker) {
