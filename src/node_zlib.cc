@@ -306,8 +306,8 @@ template <node_zlib_mode mode> class ZCtx : public ObjectWrap {
   { \
     Local<FunctionTemplate> z = FunctionTemplate::New(ZCtx<mode>::New); \
     z->InstanceTemplate()->SetInternalFieldCount(1); \
-    NODE_SET_PROTOTYPE_METHOD(z, "write", ZCtx<mode>::Write); \
-    NODE_SET_PROTOTYPE_METHOD(z, "init", ZCtx<mode>::Init); \
+    node::SetPrototypeMethod(z, "write", ZCtx<mode>::Write); \
+    node::SetPrototypeMethod(z, "init", ZCtx<mode>::Init); \
     z->SetClassName(String::NewSymbol(name)); \
     target->Set(String::NewSymbol(name), z->GetFunction()); \
   }

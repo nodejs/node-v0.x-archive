@@ -66,10 +66,10 @@ class ProcessWrap : public HandleWrap {
     constructor->InstanceTemplate()->SetInternalFieldCount(1);
     constructor->SetClassName(String::NewSymbol("Process"));
 
-    NODE_SET_PROTOTYPE_METHOD(constructor, "close", HandleWrap::Close);
+    node::SetPrototypeMethod(constructor, "close", HandleWrap::Close);
 
-    NODE_SET_PROTOTYPE_METHOD(constructor, "spawn", Spawn);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "kill", Kill);
+    node::SetPrototypeMethod(constructor, "spawn", Spawn);
+    node::SetPrototypeMethod(constructor, "kill", Kill);
 
     target->Set(String::NewSymbol("Process"), constructor->GetFunction());
   }

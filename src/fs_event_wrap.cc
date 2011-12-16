@@ -80,8 +80,8 @@ void FSEventWrap::Initialize(Handle<Object> target) {
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("FSEvent"));
 
-  NODE_SET_PROTOTYPE_METHOD(t, "start", Start);
-  NODE_SET_PROTOTYPE_METHOD(t, "close", Close);
+  node::SetPrototypeMethod(t, "start", Start);
+  node::SetPrototypeMethod(t, "close", Close);
 
   target->Set(String::NewSymbol("FSEvent"),
               Persistent<FunctionTemplate>::New(t)->GetFunction());

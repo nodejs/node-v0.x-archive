@@ -582,9 +582,9 @@ void InitHttpParser(Handle<Object> target) {
   t->Set(String::NewSymbol("REQUEST"), Integer::New(HTTP_REQUEST), attrib);
   t->Set(String::NewSymbol("RESPONSE"), Integer::New(HTTP_RESPONSE), attrib);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "execute", Parser::Execute);
-  NODE_SET_PROTOTYPE_METHOD(t, "finish", Parser::Finish);
-  NODE_SET_PROTOTYPE_METHOD(t, "reinitialize", Parser::Reinitialize);
+  node::SetPrototypeMethod(t, "execute", Parser::Execute);
+  node::SetPrototypeMethod(t, "finish", Parser::Finish);
+  node::SetPrototypeMethod(t, "reinitialize", Parser::Reinitialize);
 
   target->Set(String::NewSymbol("HTTPParser"), t->GetFunction());
 

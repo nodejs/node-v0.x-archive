@@ -39,8 +39,8 @@ void StatWatcher::Initialize(Handle<Object> target) {
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   constructor_template->SetClassName(String::NewSymbol("StatWatcher"));
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "start", StatWatcher::Start);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "stop", StatWatcher::Stop);
+  node::SetPrototypeMethod(constructor_template, "start", StatWatcher::Start);
+  node::SetPrototypeMethod(constructor_template, "stop", StatWatcher::Stop);
 
   target->Set(String::NewSymbol("StatWatcher"), constructor_template->GetFunction());
 }

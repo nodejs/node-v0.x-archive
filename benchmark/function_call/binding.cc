@@ -15,5 +15,5 @@ static Handle<Value> Hello(const Arguments& args) {
 extern "C" void init (Handle<Object> target) {
   HandleScope scope;
   //target->Set(String::New("hello"), String::New("World"));
-  NODE_SET_METHOD(target, "hello", Hello);
+  node::SetMethod(target, "hello", Hello);
 }

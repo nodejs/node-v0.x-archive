@@ -37,8 +37,8 @@ void SignalWatcher::Initialize(Handle<Object> target) {
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   constructor_template->SetClassName(String::NewSymbol("SignalWatcher"));
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "start", SignalWatcher::Start);
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "stop", SignalWatcher::Stop);
+  node::SetPrototypeMethod(constructor_template, "start", SignalWatcher::Start);
+  node::SetPrototypeMethod(constructor_template, "stop", SignalWatcher::Stop);
 
   target->Set(String::NewSymbol("SignalWatcher"),
       constructor_template->GetFunction());

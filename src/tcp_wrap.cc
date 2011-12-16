@@ -104,25 +104,25 @@ void TCPWrap::Initialize(Handle<Object> target) {
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
+  node::SetPrototypeMethod(t, "close", HandleWrap::Close);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "readStart", StreamWrap::ReadStart);
-  NODE_SET_PROTOTYPE_METHOD(t, "readStop", StreamWrap::ReadStop);
-  NODE_SET_PROTOTYPE_METHOD(t, "write", StreamWrap::Write);
-  NODE_SET_PROTOTYPE_METHOD(t, "shutdown", StreamWrap::Shutdown);
+  node::SetPrototypeMethod(t, "readStart", StreamWrap::ReadStart);
+  node::SetPrototypeMethod(t, "readStop", StreamWrap::ReadStop);
+  node::SetPrototypeMethod(t, "write", StreamWrap::Write);
+  node::SetPrototypeMethod(t, "shutdown", StreamWrap::Shutdown);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
-  NODE_SET_PROTOTYPE_METHOD(t, "listen", Listen);
-  NODE_SET_PROTOTYPE_METHOD(t, "connect", Connect);
-  NODE_SET_PROTOTYPE_METHOD(t, "bind6", Bind6);
-  NODE_SET_PROTOTYPE_METHOD(t, "connect6", Connect6);
-  NODE_SET_PROTOTYPE_METHOD(t, "getsockname", GetSockName);
-  NODE_SET_PROTOTYPE_METHOD(t, "getpeername", GetPeerName);
-  NODE_SET_PROTOTYPE_METHOD(t, "setNoDelay", SetNoDelay);
-  NODE_SET_PROTOTYPE_METHOD(t, "setKeepAlive", SetKeepAlive);
+  node::SetPrototypeMethod(t, "bind", Bind);
+  node::SetPrototypeMethod(t, "listen", Listen);
+  node::SetPrototypeMethod(t, "connect", Connect);
+  node::SetPrototypeMethod(t, "bind6", Bind6);
+  node::SetPrototypeMethod(t, "connect6", Connect6);
+  node::SetPrototypeMethod(t, "getsockname", GetSockName);
+  node::SetPrototypeMethod(t, "getpeername", GetPeerName);
+  node::SetPrototypeMethod(t, "setNoDelay", SetNoDelay);
+  node::SetPrototypeMethod(t, "setKeepAlive", SetKeepAlive);
 
 #ifdef _WIN32
-  NODE_SET_PROTOTYPE_METHOD(t, "setSimultaneousAccepts", SetSimultaneousAccepts);
+  node::SetPrototypeMethod(t, "setSimultaneousAccepts", SetSimultaneousAccepts);
 #endif
 
   tcpConstructor = Persistent<Function>::New(t->GetFunction());
