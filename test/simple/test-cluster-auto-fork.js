@@ -114,7 +114,7 @@ else if (cluster.isMaster) {
   cluster.on('online', function onlineListenter() {
 
     //Check that the number of default workers are cpus
-    checks.defaultWorkers = ((cluster.workers.length - 1) === cpus);
+    checks.defaultWorkers = (cluster.workers[cpus] !== undefined);
 
     //Check onlineWorkers
     checks.onlineWorkers = (onlineWorkers === cluster.onlineWorkers);
