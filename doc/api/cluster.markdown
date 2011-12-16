@@ -124,6 +124,12 @@ the admin about an critical error.
         //Send admin an email
     });
 
+### Event 'setup'
+
+When the `.setupMaster()` function has been executed this event emits. If `.setupMaster()`
+was not executed before `fork()` or `.autoFork()`, they will execute the function with no
+arguments.
+
 ### cluster.fork()
 
 Spawn a new worker process. This can only be called from the master process.
@@ -221,6 +227,15 @@ The options argument can contain 3 different properties.
 - `args` are a array of arguments send along with the worker, by default this is `process.argv.slice(2)`.
 - `workers` are the number of worker there will be created when using `autoFork()`
 - `silent`, if this option is true the output of a worker won't propagate to the master, by default this is false.
+
+### cluster.settings
+
+All settings set by the `.setupMaster` is stored in this settings object.
+This object is not supposed to be change or set manually, by you.
+There is also an `autoFork` property there is set to `auto` if you used the
+`autoFork` method, and manual if the `fork` method was used.
+
+All propertys are `undefined` if they are not yet set.
 
 ## Worker
 
