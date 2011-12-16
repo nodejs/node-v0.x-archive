@@ -739,17 +739,17 @@ static void Initialize(Handle<Object> target) {
   uv_ares_init_options(uv_default_loop(), &ares_channel, &options, 0);
   assert(r == 0);
 
-  NODE_SET_METHOD(target, "queryA", Query<QueryAWrap>);
-  NODE_SET_METHOD(target, "queryAaaa", Query<QueryAaaaWrap>);
-  NODE_SET_METHOD(target, "queryCname", Query<QueryCnameWrap>);
-  NODE_SET_METHOD(target, "queryMx", Query<QueryMxWrap>);
-  NODE_SET_METHOD(target, "queryNs", Query<QueryNsWrap>);
-  NODE_SET_METHOD(target, "queryTxt", Query<QueryTxtWrap>);
-  NODE_SET_METHOD(target, "querySrv", Query<QuerySrvWrap>);
-  NODE_SET_METHOD(target, "getHostByAddr", Query<GetHostByAddrWrap>);
-  NODE_SET_METHOD(target, "getHostByName", QueryWithFamily<GetHostByNameWrap>);
+  node::SetMethod(target, "queryA", Query<QueryAWrap>);
+  node::SetMethod(target, "queryAaaa", Query<QueryAaaaWrap>);
+  node::SetMethod(target, "queryCname", Query<QueryCnameWrap>);
+  node::SetMethod(target, "queryMx", Query<QueryMxWrap>);
+  node::SetMethod(target, "queryNs", Query<QueryNsWrap>);
+  node::SetMethod(target, "queryTxt", Query<QueryTxtWrap>);
+  node::SetMethod(target, "querySrv", Query<QuerySrvWrap>);
+  node::SetMethod(target, "getHostByAddr", Query<GetHostByAddrWrap>);
+  node::SetMethod(target, "getHostByName", QueryWithFamily<GetHostByNameWrap>);
 
-  NODE_SET_METHOD(target, "getaddrinfo", GetAddrInfo);
+  node::SetMethod(target, "getaddrinfo", GetAddrInfo);
 
   target->Set(String::NewSymbol("AF_INET"), Integer::New(AF_INET));
   target->Set(String::NewSymbol("AF_INET6"), Integer::New(AF_INET6));

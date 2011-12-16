@@ -170,15 +170,15 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
 void OS::Initialize(v8::Handle<v8::Object> target) {
   HandleScope scope;
 
-  NODE_SET_METHOD(target, "getHostname", GetHostname);
-  NODE_SET_METHOD(target, "getLoadAvg", GetLoadAvg);
-  NODE_SET_METHOD(target, "getUptime", GetUptime);
-  NODE_SET_METHOD(target, "getTotalMem", GetTotalMemory);
-  NODE_SET_METHOD(target, "getFreeMem", GetFreeMemory);
-  NODE_SET_METHOD(target, "getCPUs", GetCPUInfo);
-  NODE_SET_METHOD(target, "getOSType", GetOSType);
-  NODE_SET_METHOD(target, "getOSRelease", GetOSRelease);
-  NODE_SET_METHOD(target, "getInterfaceAddresses", GetInterfaceAddresses);
+  node::SetMethod(target, "getHostname", GetHostname);
+  node::SetMethod(target, "getLoadAvg", GetLoadAvg);
+  node::SetMethod(target, "getUptime", GetUptime);
+  node::SetMethod(target, "getTotalMem", GetTotalMemory);
+  node::SetMethod(target, "getFreeMem", GetFreeMemory);
+  node::SetMethod(target, "getCPUs", GetCPUInfo);
+  node::SetMethod(target, "getOSType", GetOSType);
+  node::SetMethod(target, "getOSRelease", GetOSRelease);
+  node::SetMethod(target, "getInterfaceAddresses", GetInterfaceAddresses);
 }
 
 

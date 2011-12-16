@@ -158,17 +158,17 @@ void SecureContext::Initialize(Handle<Object> target) {
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("SecureContext"));
 
-  NODE_SET_PROTOTYPE_METHOD(t, "init", SecureContext::Init);
-  NODE_SET_PROTOTYPE_METHOD(t, "setKey", SecureContext::SetKey);
-  NODE_SET_PROTOTYPE_METHOD(t, "setCert", SecureContext::SetCert);
-  NODE_SET_PROTOTYPE_METHOD(t, "addCACert", SecureContext::AddCACert);
-  NODE_SET_PROTOTYPE_METHOD(t, "addCRL", SecureContext::AddCRL);
-  NODE_SET_PROTOTYPE_METHOD(t, "addRootCerts", SecureContext::AddRootCerts);
-  NODE_SET_PROTOTYPE_METHOD(t, "setCiphers", SecureContext::SetCiphers);
-  NODE_SET_PROTOTYPE_METHOD(t, "setOptions", SecureContext::SetOptions);
-  NODE_SET_PROTOTYPE_METHOD(t, "setSessionIdContext",
+  node::SetPrototypeMethod(t, "init", SecureContext::Init);
+  node::SetPrototypeMethod(t, "setKey", SecureContext::SetKey);
+  node::SetPrototypeMethod(t, "setCert", SecureContext::SetCert);
+  node::SetPrototypeMethod(t, "addCACert", SecureContext::AddCACert);
+  node::SetPrototypeMethod(t, "addCRL", SecureContext::AddCRL);
+  node::SetPrototypeMethod(t, "addRootCerts", SecureContext::AddRootCerts);
+  node::SetPrototypeMethod(t, "setCiphers", SecureContext::SetCiphers);
+  node::SetPrototypeMethod(t, "setOptions", SecureContext::SetOptions);
+  node::SetPrototypeMethod(t, "setSessionIdContext",
                                SecureContext::SetSessionIdContext);
-  NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
+  node::SetPrototypeMethod(t, "close", SecureContext::Close);
 
   target->Set(String::NewSymbol("SecureContext"), t->GetFunction());
 }
@@ -708,33 +708,33 @@ void Connection::Initialize(Handle<Object> target) {
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("Connection"));
 
-  NODE_SET_PROTOTYPE_METHOD(t, "encIn", Connection::EncIn);
-  NODE_SET_PROTOTYPE_METHOD(t, "clearOut", Connection::ClearOut);
-  NODE_SET_PROTOTYPE_METHOD(t, "clearIn", Connection::ClearIn);
-  NODE_SET_PROTOTYPE_METHOD(t, "encOut", Connection::EncOut);
-  NODE_SET_PROTOTYPE_METHOD(t, "clearPending", Connection::ClearPending);
-  NODE_SET_PROTOTYPE_METHOD(t, "encPending", Connection::EncPending);
-  NODE_SET_PROTOTYPE_METHOD(t, "getPeerCertificate", Connection::GetPeerCertificate);
-  NODE_SET_PROTOTYPE_METHOD(t, "getSession", Connection::GetSession);
-  NODE_SET_PROTOTYPE_METHOD(t, "setSession", Connection::SetSession);
-  NODE_SET_PROTOTYPE_METHOD(t, "isSessionReused", Connection::IsSessionReused);
-  NODE_SET_PROTOTYPE_METHOD(t, "isInitFinished", Connection::IsInitFinished);
-  NODE_SET_PROTOTYPE_METHOD(t, "verifyError", Connection::VerifyError);
-  NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", Connection::GetCurrentCipher);
-  NODE_SET_PROTOTYPE_METHOD(t, "start", Connection::Start);
-  NODE_SET_PROTOTYPE_METHOD(t, "shutdown", Connection::Shutdown);
-  NODE_SET_PROTOTYPE_METHOD(t, "receivedShutdown", Connection::ReceivedShutdown);
-  NODE_SET_PROTOTYPE_METHOD(t, "close", Connection::Close);
+  node::SetPrototypeMethod(t, "encIn", Connection::EncIn);
+  node::SetPrototypeMethod(t, "clearOut", Connection::ClearOut);
+  node::SetPrototypeMethod(t, "clearIn", Connection::ClearIn);
+  node::SetPrototypeMethod(t, "encOut", Connection::EncOut);
+  node::SetPrototypeMethod(t, "clearPending", Connection::ClearPending);
+  node::SetPrototypeMethod(t, "encPending", Connection::EncPending);
+  node::SetPrototypeMethod(t, "getPeerCertificate", Connection::GetPeerCertificate);
+  node::SetPrototypeMethod(t, "getSession", Connection::GetSession);
+  node::SetPrototypeMethod(t, "setSession", Connection::SetSession);
+  node::SetPrototypeMethod(t, "isSessionReused", Connection::IsSessionReused);
+  node::SetPrototypeMethod(t, "isInitFinished", Connection::IsInitFinished);
+  node::SetPrototypeMethod(t, "verifyError", Connection::VerifyError);
+  node::SetPrototypeMethod(t, "getCurrentCipher", Connection::GetCurrentCipher);
+  node::SetPrototypeMethod(t, "start", Connection::Start);
+  node::SetPrototypeMethod(t, "shutdown", Connection::Shutdown);
+  node::SetPrototypeMethod(t, "receivedShutdown", Connection::ReceivedShutdown);
+  node::SetPrototypeMethod(t, "close", Connection::Close);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
-  NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", Connection::GetNegotiatedProto);
-  NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", Connection::SetNPNProtocols);
+  node::SetPrototypeMethod(t, "getNegotiatedProtocol", Connection::GetNegotiatedProto);
+  node::SetPrototypeMethod(t, "setNPNProtocols", Connection::SetNPNProtocols);
 #endif
 
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-  NODE_SET_PROTOTYPE_METHOD(t, "getServername", Connection::GetServername);
-  NODE_SET_PROTOTYPE_METHOD(t, "setSNICallback",  Connection::SetSNICallback);
+  node::SetPrototypeMethod(t, "getServername", Connection::GetServername);
+  node::SetPrototypeMethod(t, "setSNICallback",  Connection::SetSNICallback);
 #endif
 
   target->Set(String::NewSymbol("Connection"), t->GetFunction());
@@ -1894,10 +1894,10 @@ class Cipher : public ObjectWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", CipherInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "initiv", CipherInitIv);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", CipherUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "final", CipherFinal);
+    node::SetPrototypeMethod(t, "init", CipherInit);
+    node::SetPrototypeMethod(t, "initiv", CipherInitIv);
+    node::SetPrototypeMethod(t, "update", CipherUpdate);
+    node::SetPrototypeMethod(t, "final", CipherFinal);
 
     target->Set(String::NewSymbol("Cipher"), t->GetFunction());
   }
@@ -2255,11 +2255,11 @@ class Decipher : public ObjectWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", DecipherInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "initiv", DecipherInitIv);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", DecipherUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "final", DecipherFinal<false>);
-    NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinal<true>);
+    node::SetPrototypeMethod(t, "init", DecipherInit);
+    node::SetPrototypeMethod(t, "initiv", DecipherInitIv);
+    node::SetPrototypeMethod(t, "update", DecipherUpdate);
+    node::SetPrototypeMethod(t, "final", DecipherFinal<false>);
+    node::SetPrototypeMethod(t, "finaltol", DecipherFinal<true>);
 
     target->Set(String::NewSymbol("Decipher"), t->GetFunction());
   }
@@ -2669,9 +2669,9 @@ class Hmac : public ObjectWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", HmacInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", HmacUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "digest", HmacDigest);
+    node::SetPrototypeMethod(t, "init", HmacInit);
+    node::SetPrototypeMethod(t, "update", HmacUpdate);
+    node::SetPrototypeMethod(t, "digest", HmacDigest);
 
     target->Set(String::NewSymbol("Hmac"), t->GetFunction());
   }
@@ -2862,8 +2862,8 @@ class Hash : public ObjectWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "update", HashUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "digest", HashDigest);
+    node::SetPrototypeMethod(t, "update", HashUpdate);
+    node::SetPrototypeMethod(t, "digest", HashDigest);
 
     target->Set(String::NewSymbol("Hash"), t->GetFunction());
   }
@@ -3017,9 +3017,9 @@ class Sign : public ObjectWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", SignInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", SignUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "sign", SignFinal);
+    node::SetPrototypeMethod(t, "init", SignInit);
+    node::SetPrototypeMethod(t, "update", SignUpdate);
+    node::SetPrototypeMethod(t, "sign", SignFinal);
 
     target->Set(String::NewSymbol("Sign"), t->GetFunction());
   }
@@ -3220,9 +3220,9 @@ class Verify : public ObjectWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", VerifyInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", VerifyUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "verify", VerifyFinal);
+    node::SetPrototypeMethod(t, "init", VerifyInit);
+    node::SetPrototypeMethod(t, "update", VerifyUpdate);
+    node::SetPrototypeMethod(t, "verify", VerifyFinal);
 
     target->Set(String::NewSymbol("Verify"), t->GetFunction());
   }
@@ -3474,14 +3474,14 @@ class DiffieHellman : public ObjectWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "generateKeys", GenerateKeys);
-    NODE_SET_PROTOTYPE_METHOD(t, "computeSecret", ComputeSecret);
-    NODE_SET_PROTOTYPE_METHOD(t, "getPrime", GetPrime);
-    NODE_SET_PROTOTYPE_METHOD(t, "getGenerator", GetGenerator);
-    NODE_SET_PROTOTYPE_METHOD(t, "getPublicKey", GetPublicKey);
-    NODE_SET_PROTOTYPE_METHOD(t, "getPrivateKey", GetPrivateKey);
-    NODE_SET_PROTOTYPE_METHOD(t, "setPublicKey", SetPublicKey);
-    NODE_SET_PROTOTYPE_METHOD(t, "setPrivateKey", SetPrivateKey);
+    node::SetPrototypeMethod(t, "generateKeys", GenerateKeys);
+    node::SetPrototypeMethod(t, "computeSecret", ComputeSecret);
+    node::SetPrototypeMethod(t, "getPrime", GetPrime);
+    node::SetPrototypeMethod(t, "getGenerator", GetGenerator);
+    node::SetPrototypeMethod(t, "getPublicKey", GetPublicKey);
+    node::SetPrototypeMethod(t, "getPrivateKey", GetPrivateKey);
+    node::SetPrototypeMethod(t, "setPublicKey", SetPublicKey);
+    node::SetPrototypeMethod(t, "setPrivateKey", SetPrivateKey);
 
     target->Set(String::NewSymbol("DiffieHellman"), t->GetFunction());
   }
@@ -4303,9 +4303,9 @@ void InitCrypto(Handle<Object> target) {
   Sign::Initialize(target);
   Verify::Initialize(target);
 
-  NODE_SET_METHOD(target, "PBKDF2", PBKDF2);
-  NODE_SET_METHOD(target, "randomBytes", RandomBytes<RAND_bytes>);
-  NODE_SET_METHOD(target, "pseudoRandomBytes", RandomBytes<RAND_pseudo_bytes>);
+  node::SetMethod(target, "PBKDF2", PBKDF2);
+  node::SetMethod(target, "randomBytes", RandomBytes<RAND_bytes>);
+  node::SetMethod(target, "pseudoRandomBytes", RandomBytes<RAND_pseudo_bytes>);
 
   subject_symbol    = NODE_PSYMBOL("subject");
   issuer_symbol     = NODE_PSYMBOL("issuer");

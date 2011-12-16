@@ -40,7 +40,7 @@ To get started we create a file `hello.cc`:
     }
 
     void init(Handle<Object> target) {
-      NODE_SET_METHOD(target, "hello", Method);
+      node::SetMethod(target, "hello", Method);
     }
     NODE_MODULE(hello, init)
 

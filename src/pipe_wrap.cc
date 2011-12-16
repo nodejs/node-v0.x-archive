@@ -83,22 +83,22 @@ void PipeWrap::Initialize(Handle<Object> target) {
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
-  NODE_SET_PROTOTYPE_METHOD(t, "unref", HandleWrap::Unref);
-  NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
+  node::SetPrototypeMethod(t, "close", HandleWrap::Close);
+  node::SetPrototypeMethod(t, "unref", HandleWrap::Unref);
+  node::SetPrototypeMethod(t, "ref", HandleWrap::Ref);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "readStart", StreamWrap::ReadStart);
-  NODE_SET_PROTOTYPE_METHOD(t, "readStop", StreamWrap::ReadStop);
-  NODE_SET_PROTOTYPE_METHOD(t, "write", StreamWrap::Write);
-  NODE_SET_PROTOTYPE_METHOD(t, "shutdown", StreamWrap::Shutdown);
+  node::SetPrototypeMethod(t, "readStart", StreamWrap::ReadStart);
+  node::SetPrototypeMethod(t, "readStop", StreamWrap::ReadStop);
+  node::SetPrototypeMethod(t, "write", StreamWrap::Write);
+  node::SetPrototypeMethod(t, "shutdown", StreamWrap::Shutdown);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
-  NODE_SET_PROTOTYPE_METHOD(t, "listen", Listen);
-  NODE_SET_PROTOTYPE_METHOD(t, "connect", Connect);
-  NODE_SET_PROTOTYPE_METHOD(t, "open", Open);
+  node::SetPrototypeMethod(t, "bind", Bind);
+  node::SetPrototypeMethod(t, "listen", Listen);
+  node::SetPrototypeMethod(t, "connect", Connect);
+  node::SetPrototypeMethod(t, "open", Open);
 
 #ifdef _WIN32
-  NODE_SET_PROTOTYPE_METHOD(t, "setPendingInstances", SetPendingInstances);
+  node::SetPrototypeMethod(t, "setPendingInstances", SetPendingInstances);
 #endif
 
   pipeConstructor = Persistent<Function>::New(t->GetFunction());

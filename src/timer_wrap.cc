@@ -62,13 +62,13 @@ class TimerWrap : public HandleWrap {
     constructor->InstanceTemplate()->SetInternalFieldCount(1);
     constructor->SetClassName(String::NewSymbol("Timer"));
 
-    NODE_SET_PROTOTYPE_METHOD(constructor, "close", HandleWrap::Close);
+    node::SetPrototypeMethod(constructor, "close", HandleWrap::Close);
 
-    NODE_SET_PROTOTYPE_METHOD(constructor, "start", Start);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "stop", Stop);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "setRepeat", SetRepeat);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "getRepeat", GetRepeat);
-    NODE_SET_PROTOTYPE_METHOD(constructor, "again", Again);
+    node::SetPrototypeMethod(constructor, "start", Start);
+    node::SetPrototypeMethod(constructor, "stop", Stop);
+    node::SetPrototypeMethod(constructor, "setRepeat", SetRepeat);
+    node::SetPrototypeMethod(constructor, "getRepeat", GetRepeat);
+    node::SetPrototypeMethod(constructor, "again", Again);
 
     target->Set(String::NewSymbol("Timer"), constructor->GetFunction());
   }

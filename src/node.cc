@@ -2082,36 +2082,36 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
 
   // define various internal methods
-  NODE_SET_METHOD(process, "_needTickCallback", NeedTickCallback);
-  NODE_SET_METHOD(process, "reallyExit", Exit);
-  NODE_SET_METHOD(process, "chdir", Chdir);
-  NODE_SET_METHOD(process, "cwd", Cwd);
+  node::SetMethod(process, "_needTickCallback", NeedTickCallback);
+  node::SetMethod(process, "reallyExit", Exit);
+  node::SetMethod(process, "chdir", Chdir);
+  node::SetMethod(process, "cwd", Cwd);
 
 #ifdef _WIN32
-  NODE_SET_METHOD(process, "_cwdForDrive", CwdForDrive);
+  node::SetMethod(process, "_cwdForDrive", CwdForDrive);
 #endif
 
-  NODE_SET_METHOD(process, "umask", Umask);
+  node::SetMethod(process, "umask", Umask);
 
 #ifdef __POSIX__
-  NODE_SET_METHOD(process, "getuid", GetUid);
-  NODE_SET_METHOD(process, "setuid", SetUid);
+  node::SetMethod(process, "getuid", GetUid);
+  node::SetMethod(process, "setuid", SetUid);
 
-  NODE_SET_METHOD(process, "setgid", SetGid);
-  NODE_SET_METHOD(process, "getgid", GetGid);
+  node::SetMethod(process, "setgid", SetGid);
+  node::SetMethod(process, "getgid", GetGid);
 #endif // __POSIX__
 
-  NODE_SET_METHOD(process, "_kill", Kill);
+  node::SetMethod(process, "_kill", Kill);
 
-  NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
+  node::SetMethod(process, "_debugProcess", DebugProcess);
 
-  NODE_SET_METHOD(process, "dlopen", DLOpen);
+  node::SetMethod(process, "dlopen", DLOpen);
 
-  NODE_SET_METHOD(process, "uptime", Uptime);
-  NODE_SET_METHOD(process, "memoryUsage", MemoryUsage);
-  NODE_SET_METHOD(process, "uvCounters", UVCounters);
+  node::SetMethod(process, "uptime", Uptime);
+  node::SetMethod(process, "memoryUsage", MemoryUsage);
+  node::SetMethod(process, "uvCounters", UVCounters);
 
-  NODE_SET_METHOD(process, "binding", Binding);
+  node::SetMethod(process, "binding", Binding);
 
   return process;
 }

@@ -936,36 +936,36 @@ static Handle<Value> FUTimes(const Arguments& args) {
 void File::Initialize(Handle<Object> target) {
   HandleScope scope;
 
-  NODE_SET_METHOD(target, "close", Close);
-  NODE_SET_METHOD(target, "open", Open);
-  NODE_SET_METHOD(target, "read", Read);
-  NODE_SET_METHOD(target, "fdatasync", Fdatasync);
-  NODE_SET_METHOD(target, "fsync", Fsync);
-  NODE_SET_METHOD(target, "rename", Rename);
-  NODE_SET_METHOD(target, "truncate", Truncate);
-  NODE_SET_METHOD(target, "rmdir", RMDir);
-  NODE_SET_METHOD(target, "mkdir", MKDir);
-  NODE_SET_METHOD(target, "sendfile", SendFile);
-  NODE_SET_METHOD(target, "readdir", ReadDir);
-  NODE_SET_METHOD(target, "stat", Stat);
-  NODE_SET_METHOD(target, "lstat", LStat);
-  NODE_SET_METHOD(target, "fstat", FStat);
-  NODE_SET_METHOD(target, "link", Link);
-  NODE_SET_METHOD(target, "symlink", Symlink);
-  NODE_SET_METHOD(target, "readlink", ReadLink);
-  NODE_SET_METHOD(target, "unlink", Unlink);
-  NODE_SET_METHOD(target, "write", Write);
+  node::SetMethod(target, "close", Close);
+  node::SetMethod(target, "open", Open);
+  node::SetMethod(target, "read", Read);
+  node::SetMethod(target, "fdatasync", Fdatasync);
+  node::SetMethod(target, "fsync", Fsync);
+  node::SetMethod(target, "rename", Rename);
+  node::SetMethod(target, "truncate", Truncate);
+  node::SetMethod(target, "rmdir", RMDir);
+  node::SetMethod(target, "mkdir", MKDir);
+  node::SetMethod(target, "sendfile", SendFile);
+  node::SetMethod(target, "readdir", ReadDir);
+  node::SetMethod(target, "stat", Stat);
+  node::SetMethod(target, "lstat", LStat);
+  node::SetMethod(target, "fstat", FStat);
+  node::SetMethod(target, "link", Link);
+  node::SetMethod(target, "symlink", Symlink);
+  node::SetMethod(target, "readlink", ReadLink);
+  node::SetMethod(target, "unlink", Unlink);
+  node::SetMethod(target, "write", Write);
 
-  NODE_SET_METHOD(target, "chmod", Chmod);
-  NODE_SET_METHOD(target, "fchmod", FChmod);
-  //NODE_SET_METHOD(target, "lchmod", LChmod);
+  node::SetMethod(target, "chmod", Chmod);
+  node::SetMethod(target, "fchmod", FChmod);
+  //node::SetMethod(target, "lchmod", LChmod);
 
-  NODE_SET_METHOD(target, "chown", Chown);
-  NODE_SET_METHOD(target, "fchown", FChown);
-  //NODE_SET_METHOD(target, "lchown", LChown);
+  node::SetMethod(target, "chown", Chown);
+  node::SetMethod(target, "fchown", FChown);
+  //node::SetMethod(target, "lchown", LChown);
 
-  NODE_SET_METHOD(target, "utimes", UTimes);
-  NODE_SET_METHOD(target, "futimes", FUTimes);
+  node::SetMethod(target, "utimes", UTimes);
+  node::SetMethod(target, "futimes", FUTimes);
 
   errno_symbol = NODE_PSYMBOL("errno");
   encoding_symbol = NODE_PSYMBOL("node:encoding");

@@ -126,14 +126,14 @@ void UDPWrap::Initialize(Handle<Object> target) {
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("UDP"));
 
-  NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
-  NODE_SET_PROTOTYPE_METHOD(t, "send", Send);
-  NODE_SET_PROTOTYPE_METHOD(t, "bind6", Bind6);
-  NODE_SET_PROTOTYPE_METHOD(t, "send6", Send6);
-  NODE_SET_PROTOTYPE_METHOD(t, "close", Close);
-  NODE_SET_PROTOTYPE_METHOD(t, "recvStart", RecvStart);
-  NODE_SET_PROTOTYPE_METHOD(t, "recvStop", RecvStop);
-  NODE_SET_PROTOTYPE_METHOD(t, "getsockname", GetSockName);
+  node::SetPrototypeMethod(t, "bind", Bind);
+  node::SetPrototypeMethod(t, "send", Send);
+  node::SetPrototypeMethod(t, "bind6", Bind6);
+  node::SetPrototypeMethod(t, "send6", Send6);
+  node::SetPrototypeMethod(t, "close", Close);
+  node::SetPrototypeMethod(t, "recvStart", RecvStart);
+  node::SetPrototypeMethod(t, "recvStop", RecvStop);
+  node::SetPrototypeMethod(t, "getsockname", GetSockName);
 
   target->Set(String::NewSymbol("UDP"),
               Persistent<FunctionTemplate>::New(t)->GetFunction());

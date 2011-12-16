@@ -194,35 +194,35 @@ void WrappedScript::Initialize(Handle<Object> target) {
   // See GH-203 https://github.com/joyent/node/issues/203
   constructor_template->SetClassName(String::NewSymbol("NodeScript"));
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template,
+  node::SetPrototypeMethod(constructor_template,
                             "createContext",
                             WrappedScript::CreateContext);
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template,
+  node::SetPrototypeMethod(constructor_template,
                             "runInContext",
                             WrappedScript::RunInContext);
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template,
+  node::SetPrototypeMethod(constructor_template,
                             "runInThisContext",
                             WrappedScript::RunInThisContext);
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template,
+  node::SetPrototypeMethod(constructor_template,
                             "runInNewContext",
                             WrappedScript::RunInNewContext);
 
-  NODE_SET_METHOD(constructor_template,
+  node::SetMethod(constructor_template,
                   "createContext",
                   WrappedScript::CreateContext);
 
-  NODE_SET_METHOD(constructor_template,
+  node::SetMethod(constructor_template,
                   "runInContext",
                   WrappedScript::CompileRunInContext);
 
-  NODE_SET_METHOD(constructor_template,
+  node::SetMethod(constructor_template,
                   "runInThisContext",
                   WrappedScript::CompileRunInThisContext);
 
-  NODE_SET_METHOD(constructor_template,
+  node::SetMethod(constructor_template,
                   "runInNewContext",
                   WrappedScript::CompileRunInNewContext);
 

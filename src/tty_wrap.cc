@@ -67,19 +67,19 @@ class TTYWrap : StreamWrap {
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
-    NODE_SET_PROTOTYPE_METHOD(t, "unref", HandleWrap::Unref);
-    NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
+    node::SetPrototypeMethod(t, "close", HandleWrap::Close);
+    node::SetPrototypeMethod(t, "unref", HandleWrap::Unref);
+    node::SetPrototypeMethod(t, "ref", HandleWrap::Ref);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "readStart", StreamWrap::ReadStart);
-    NODE_SET_PROTOTYPE_METHOD(t, "readStop", StreamWrap::ReadStop);
-    NODE_SET_PROTOTYPE_METHOD(t, "write", StreamWrap::Write);
+    node::SetPrototypeMethod(t, "readStart", StreamWrap::ReadStart);
+    node::SetPrototypeMethod(t, "readStop", StreamWrap::ReadStop);
+    node::SetPrototypeMethod(t, "write", StreamWrap::Write);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "getWindowSize", TTYWrap::GetWindowSize);
-    NODE_SET_PROTOTYPE_METHOD(t, "setRawMode", SetRawMode);
+    node::SetPrototypeMethod(t, "getWindowSize", TTYWrap::GetWindowSize);
+    node::SetPrototypeMethod(t, "setRawMode", SetRawMode);
 
-    NODE_SET_METHOD(target, "isTTY", IsTTY);
-    NODE_SET_METHOD(target, "guessHandleType", GuessHandleType);
+    node::SetMethod(target, "isTTY", IsTTY);
+    node::SetMethod(target, "guessHandleType", GuessHandleType);
 
     target->Set(String::NewSymbol("TTY"), t->GetFunction());
   }
