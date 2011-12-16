@@ -91,7 +91,6 @@ else if (cluster.isMaster) {
 
   //This listenter will be removed again
   cluster.on('fork', function forkListenter(worker) {
-
     workers += 1;
     workerID += 1;
 
@@ -112,7 +111,6 @@ else if (cluster.isMaster) {
 
   //This listenter will be removed again
   cluster.on('online', function onlineListenter() {
-
     //Check that the number of default workers are cpus
     checks.defaultWorkers = (cluster.workers[cpus] !== undefined);
 
@@ -204,7 +202,7 @@ else if (cluster.isMaster) {
   //Check all values
   process.once('exit', function() {
 
-    assert.ok(checks.defaultWorkers, 'There was not created the default number of worker');
+    assert.ok(checks.defaultWorkers, 'The default number of worker was not created');
     assert.ok(checks.uniqueIDincrease, 'The uniqueID did not increase correctly');
     assert.ok(checks.workerIDincrease, 'The workerID did not increase correctly');
     assert.ok(checks.workerIDreuse, 'The workerID was not resued when the worker respawn after an accidently death');
