@@ -58,6 +58,7 @@
 
 #include <windows.h>
 #include <winsock2.h>
+#include <Iphlpapi.h>
 
 #if defined(_MSC_VER)
 #define STDIN_FILENO 0
