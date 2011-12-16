@@ -4122,8 +4122,10 @@ PBKDF2(const Arguments& args) {
     return ThrowException(Exception::TypeError(String::New("Bad key length")));
   char* key = new char[keylen];
 
-  if (!args[4]->IsFunction())
+  if (!args[4]->IsFunction()) {
+    delete [] key;
     return ThrowException(Exception::TypeError(String::New("Callback not a function")));
+  }
   Local<Function> callback = Local<Function>::Cast(args[4]);
 
   pbkdf2_req* request = new pbkdf2_req;
