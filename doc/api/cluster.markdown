@@ -106,8 +106,8 @@ will emit when a connection is disconnected.
     cluster.on('disconnect', function (worker) {
         console.log("We can no longer recive messages from worker");
     });
-    
-If the worker was killed using the `.kill()` or `.destroy()` this event will not emit.
+
+If the worker was killed using`.destroy()` this event will not emit.
 
 ### Event: 'criticalError'
 
@@ -151,7 +151,7 @@ When using `.autoFork()` you can not use the `.fork()` method. If you do so
 The method does also spawn a new worker when on is dead. Unless they commit suicide
 this is known by checking the `worker.suicide` boolean. If you want to respawn
 workers there commit suicide you simply run `.autoFork()` manually.
-    
+
 ### cluster.destroy([callback])
 
 When calling this method all workers will commit a non-graceful suicide.
@@ -159,8 +159,8 @@ This is useful when you want to shutdown the master quickly. It takes an optiona
 callback argument there will be called when finished.
 
 This method is automatically used just before the mater dies. This can happen by
-calling `process.exit()`, the master gets a `SIGINT` or a `SIGTERM` signal, or by 
-an uncatched error. 
+calling `process.exit()`, the master gets a `SIGINT` or a `SIGTERM` signal, or by
+an uncatched error.
 
 ### cluster.disconnect([callback])
 
@@ -249,7 +249,7 @@ there will run the message was received.
       //Master has recived message
     });
 
-### Worker.kill()
+### Worker.destroy()
 
 This function will kill the worker, and inform the master to not spawn a new worker.
 To know the difference between suicide and accidently death a suicide boolean is set to true.
@@ -259,8 +259,8 @@ To know the difference between suicide and accidently death a suicide boolean is
             console.log('Oh, it was just suicide' – no need to worry').
         }
     });
-    cluster.eachWorker(function (0) {
-        worker.kill();
+    cluster.eachWorker(function (worker) {
+        worker.destroy();
     });
 
 This method is automaticly used when the worker gets a `SIGINT` or `SIGTERM` signal.
@@ -268,21 +268,21 @@ This method is automaticly used when the worker gets a `SIGINT` or `SIGTERM` sig
 ### Worker.suicide
 
 This property is a boolean. It is set when a worker dies, until then it is `undefined`.
-It is true if the worker was killed using the `.kill()` or  `.disconnect()` method, and false otherwise.
+It is true if the worker was killed using the `.destroy()` or  `.disconnect()` method, and false otherwise.
 
 ### Worker.startup
 
 This property is the timestamp set when the worker was forked. It is basically set by:
-  
+
     worker.statup = Date.now();
 
 ### Worker.disconnect();
-  
+
 When running the function the worker will make a graceful shutdown. This involves closing
 all TCP sockets, and stopping the IPC channel between master and worker. Using the `.send()` method
-will throw an error. 
+will throw an error.
 
-Calling this method will emit first a `disconnect` event, followed by a `death` event. It will also set 
+Calling this method will emit first a `disconnect` event, followed by a `death` event. It will also set
 `suicide` to true.
 
 This method is automatically used when the worker gets a `SIGQUIT` signal.
@@ -348,7 +348,7 @@ Same as the `cluster.on('online')` event, but emits only when the specified work
 ### Event: listening
 
 Same as the `cluster.on('listening')` event, but emits only when the state change on the specified worker.
-  
+
     cluster.fork().on('listening', function (worker) {
         //Worker is listening
     };
@@ -356,15 +356,15 @@ Same as the `cluster.on('listening')` event, but emits only when the state chang
 ### Event: exit
 
 Same as the `cluster.on('exit')` event, but emits only when the state change on the specified worker.
-  
+
     cluster.fork().on('exit', function (worker) {
-        //Worker has died or disconnected 
+        //Worker has died or disconnected
     };
 
 ### Event: disconnect
 
 Same as the `cluster.on('disconnect')` event, but emits only when the state change on the specified worker.
-  
+
     cluster.fork().on('disconnect', function (worker) {
         //Worker has been disconnected
     };
