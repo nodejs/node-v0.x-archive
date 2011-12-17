@@ -31,12 +31,11 @@ if (isChild) {
   console.error('LOG: a stderr message');
 
   process.send('message from child');
-  process.once('message', function () {
+  process.once('message', function() {
     process.send('got message from master');
   });
-}
 
-else {
+} else {
 
   var checks = {
     stdoutNotPiped: false,
@@ -45,10 +44,8 @@ else {
     childReciveing: false
   };
 
-
-
   var child = fork(process.argv[1], ['child'], {silent: true});
-  child.on('message', function (message) {
+  child.on('message', function(message) {
 
     if (checks.childSending === false) {
       checks.childSending = (message === 'message from child');
