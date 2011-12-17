@@ -1,17 +1,21 @@
 {
 	'variables': {
-		#These are required variables to make a proper node module build
-		'library': 'shared_library', #This gypi file is about modules so everything is shared_library
-		'target_arch': 'ia32', #The architecture is hardcoded because of a i386 harcoded element in the gyp make.py file 
-		'output_directory': 'build/Release', #The output dir resembles the old node-waf output in order to keep the olde references
+		# These are required variables to make a proper node module build
+		'library': 'shared_library', # This gypi file is about modules so everything is shared_library
+		'target_arch': 'ia32', # The architecture is hardcoded because of a i386 harcoded element in the gyp make.py file 
+		# Normaly we could read the target_arch from node itself (when it will be build with gyp).
+		# MAC x64 will have to comment out all line in 
+		# gyp\pylib\gyp\generator\make.py that contain append('-arch i386') (2 instances)
+		# in order to make a proper 64 bit module
+		'output_directory': 'build/Release', # The output dir resembles the old node-waf output in order to keep the old references
 	},
-	#Needed declarations for the target
+	# Needed declarations for the target
 	'target_name': '<(module_name)',
 	'type': '<(library)',
-	 'product_name':'<(module_name)',
-	 'product_extension':'node',
-	 'product_dir':'<(output_directory)',
-	'product_prefix':'',#remove the default lib prefix on each library
+	'product_name':'<(module_name)',
+	'product_extension':'node',
+	'product_dir':'<(output_directory)',
+	'product_prefix':'',# Remove the default lib prefix on each library
 
 	'defines': [
 		'ARCH="<(target_arch)"',
@@ -29,10 +33,10 @@
 	'conditions': [
 		[ 'OS=="win"', {
 			'defines': [
-				# we need to use node's preferred "win32" rather than gyp's preferred "win"
+				# We need to use node's preferred "win32" rather than gyp's preferred "win"
 				'PLATFORM="win32"',
 			],
-			#we need to link to the node.lib file
+			# We need to link to the node.lib file
 			'libraries': [ '-l<(NODE_ROOT)/<(node_lib_folder)/node.lib' ],
 			'msvs_configuration_attributes': {
 				'OutputDirectory': '<(output_directory)',
@@ -45,11 +49,16 @@
 			},
 		}],
 		[ 'OS=="mac"', {
-			#MAC x64 users don't forget to comment out all line in 
-			#gyp\pylib\gyp\generator\make.py that contain append('-arch i386') (2 instances)
-			'libraries': [ #this is a hack to specify this linker option in make 
+			'libraries': [ # This specifies this library on both the compiler and the linker 
 				'-undefined dynamic_lookup',
 			],
+			# Based on gyp's documentation, the following should be enough but it seems 
+			# it doesn't work.
+			# 'link_settings': {
+			#	'ldflags': [
+			#		‘-undefined dynamic_lookup’,
+			#	],
+			# },
 		}],
 	],
 }
