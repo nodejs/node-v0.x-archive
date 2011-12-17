@@ -22,10 +22,10 @@ set gypfile=
 @rem if the user has specified the file, this is the one we will use. The file must have a gyp extension
 if defined %1 if exist %1 if "%~x1" == ".gyp" set gypfile=%1
 @rem otherwise try to locate the module.gyp file
-if not defined gypfile if exist "%CD%\module.gyp" set gypfile=module.gyp
+if not defined gypfile if exist "module.gyp" set gypfile=module.gyp
 if not defined gypfile goto gyp-file-missing
 @rem Generate visual studio solution
-python %NODE_ROOT%\tools\gyp\gyp -f msvs -G msvs_version=2010 %gypfile% --depth=. -DNODE_ROOT=%NODE_ROOT% -Dnode_lib_folder=%node_lib_folder%
+python %NODE_ROOT%\tools\gyp\gyp -f msvs -G msvs_version=2010 %gypfile% --depth=. -DNODE_ROOT=%NODE_ROOT% -Dnode_lib_folder=%node_lib_folder% -I%NODE_ROOT%\tools\node_module.gypi
 if errorlevel 1 goto exit-error
 if %requestedBuild% == 0 goto Finished
 @rem Build the solution

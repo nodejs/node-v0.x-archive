@@ -29,5 +29,5 @@ fi
 #if we haven't got a gyp file exit
 [ -z "$module_filename" ] && echo "Gyp file not found!" && exit 1
 echo "Generating project"
-${NODE_ROOT}/tools/gyp/gyp -f make $module_filename --depth=. -DNODE_ROOT=$NODE_ROOT
+${NODE_ROOT}/tools/gyp/gyp -f make $module_filename --depth=. -DNODE_ROOT=$NODE_ROOT -I${NODE_ROOT}/tools/node_module.gypi
 
