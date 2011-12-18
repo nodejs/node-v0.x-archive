@@ -35,6 +35,23 @@ Each argument is converted to a string with `util.inspect()`.
     util.format(1, 2, 3); // '1 2 3'
 
 
+### util.print()
+
+Outputs all arguments on `stdout`.
+
+    util.print('foo', 'bar'); 
+    // foobar
+
+
+### util.puts()
+
+Outputs all arguments on `stdout`, each argument on its own line.
+
+    util.puts('foo', 'bar');
+    // foo
+    // bar
+
+
 ### util.debug(string)
 
 A synchronous output function. Will block the process and
