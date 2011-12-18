@@ -31,3 +31,12 @@ assert.throws(function() {
 assert.throws(function() {
   require(common.fixturesDir + '/throws_error');
 });
+
+// Requiring a module that does not exist should throw an
+// error with it's `code` set to MODULE_NOT_FOUND
+try {
+  require(common.fixturesDir + '/DOES_NOT_EXIST');
+  assert(false, 'require() should have thrown an Error');
+} catch (e) {
+  assert.equal('MODULE_NOT_FOUND', e.code);
+}
