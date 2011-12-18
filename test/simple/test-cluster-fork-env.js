@@ -36,7 +36,7 @@ if (cluster.isWorker) {
   });
   worker.on('message', function(data) {
     if (typeof data === 'boolean') {
-      workerGotEnv = (data === true);
+      workerGotEnv = data;
       process.exit(0);
     }
   });
