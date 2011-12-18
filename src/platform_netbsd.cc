@@ -42,6 +42,8 @@ namespace node {
 
 using namespace v8;
 
+double Platform::prog_start_time = Platform::GetUptime();
+
 static char *process_title;
 
 char** Platform::SetupArgs(int argc, char *argv[]) {
@@ -65,7 +67,7 @@ const char* Platform::GetProcessTitle(int *len) {
   return NULL;
 }
 
-int Platform::GetMemory(size_t *rss, size_t *vsize) {
+int Platform::GetMemory(size_t *rss) {
   kvm_t *kd = NULL;
   struct kinfo_proc2 *kinfo = NULL;
   pid_t pid;
@@ -81,7 +83,6 @@ int Platform::GetMemory(size_t *rss, size_t *vsize) {
   if (kinfo == NULL) goto error;
 
   *rss = kinfo->p_vm_rssize * page_size;
-  *vsize = kinfo->p_uru_ixrss;
 
   kvm_close(kd);
 
@@ -92,11 +93,6 @@ error:
   return -1;
 }
 
-
-int Platform::GetExecutablePath(char* buffer, size_t* size) {
-  *size = 0;
-  return -1;
-}
 
 int Platform::GetCPUInfo(Local<Array> *cpus) {
   Local<Object> cpuinfo;
@@ -158,6 +154,7 @@ int Platform::GetCPUInfo(Local<Array> *cpus) {
   return 0;
 }
 
+/*
 double Platform::GetFreeMemory() {
   double pagesize = static_cast<double>(sysconf(_SC_PAGESIZE));
   struct uvmexp info;
@@ -170,6 +167,7 @@ double Platform::GetFreeMemory() {
 
   return static_cast<double>(info.free) * pagesize;
 }
+
 
 double Platform::GetTotalMemory() {
 #if defined(HW_PHYSMEM64)
@@ -187,8 +185,9 @@ double Platform::GetTotalMemory() {
 
   return static_cast<double>(info);
 }
+*/
 
-double Platform::GetUptime() {
+double Platform::GetUptimeImpl() {
   time_t now;
   struct timeval info;
   size_t size = sizeof(info);
@@ -202,6 +201,12 @@ double Platform::GetUptime() {
   return static_cast<double>(now - info.tv_sec);
 }
 
+Handle<Value> Platform::GetInterfaceAddresses() {
+  HandleScope scope;
+  return scope.Close(Object::New());
+}
+
+/*
 int Platform::GetLoadAvg(Local<Array> *loads) {
   struct loadavg info;
   size_t size = sizeof(info);
@@ -219,5 +224,6 @@ int Platform::GetLoadAvg(Local<Array> *loads) {
 
   return 0;
 }
+*/
 
 }  // namespace node

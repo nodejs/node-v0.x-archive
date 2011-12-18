@@ -215,7 +215,7 @@
           },
         },
       }],
-      ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
+      ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris" or OS=="netbsd"', {
         'conditions': [
           [ 'target_arch=="ia32"', {
             'cflags': [ '-m32' ],
@@ -259,7 +259,10 @@
           ['OS=="freebsd" or OS=="openbsd"', {
             'cflags': [ '-I/usr/local/include' ],
           }],
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd"', {
+          ['OS=="netbsd"', {
+            'cflags': [ '-I/usr/pkg/include' ],
+          }],
+          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
             'cflags': [ '-Wall', '<(werror)', '-W', '-Wno-unused-parameter',
                         '-Wnon-virtual-dtor' ],
           }],
@@ -267,7 +270,7 @@
       },
       'Release': {
         'conditions': [
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd"', {
+          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
             'cflags!': [
               '-O2',
               '-Os',
@@ -289,6 +292,9 @@
           }],
           ['OS=="freebsd" or OS=="openbsd"', {
             'cflags': [ '-I/usr/local/include' ],
+          }],
+          ['OS=="netbsd"', {
+            'cflags': [ '-I/usr/pkg/include' ],
           }],
           ['OS=="mac"', {
             'xcode_settings': {

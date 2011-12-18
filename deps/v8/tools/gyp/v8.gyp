@@ -681,6 +681,17 @@
                 ],
               }
             ],
+            ['OS=="netbsd"', {
+                'link_settings': {
+                  'libraries': [
+                    '-L/usr/local/lib -lexecinfo',
+                ]},
+                'sources': [
+                  '../../src/platform-netbsd.cc',
+                  '../../src/platform-posix.cc'
+                ],
+              }
+            ],
             ['OS=="solaris"', {
                 'sources': [
                   '../../src/platform-solaris.cc',

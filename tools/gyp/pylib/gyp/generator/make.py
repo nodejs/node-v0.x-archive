@@ -62,8 +62,9 @@ def GetFlavor(params):
     'sunos5': 'solaris',
     'freebsd7': 'freebsd',
     'freebsd8': 'freebsd',
+    'netbsd': 'netbsd',
   }
-  flavor = flavors.get(sys.platform, 'linux')
+  flavor = flavors.get(sys.platform, 'netbsd')
   return params.get('flavor', flavor)
 
 
@@ -2792,6 +2793,10 @@ def GenerateOutput(target_list, target_dicts, data, params):
         'extra_commands': SHARED_HEADER_SUN_COMMANDS,
     })
   elif flavor == 'freebsd':
+    header_params.update({
+        'flock': 'lockf',
+    })
+  elif flavor == 'netbsd':
     header_params.update({
         'flock': 'lockf',
     })

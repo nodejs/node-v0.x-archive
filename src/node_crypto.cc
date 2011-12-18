@@ -43,7 +43,7 @@
 # include <pthread.h>
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x10000000L
+#if OPENSSL_VERSION_NUMBER >= 0x00909000L
 # define OPENSSL_CONST const
 #else
 # define OPENSSL_CONST
