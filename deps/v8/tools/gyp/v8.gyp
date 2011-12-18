@@ -684,7 +684,7 @@
             ['OS=="netbsd"', {
                 'link_settings': {
                   'libraries': [
-                    '-L/usr/local/lib -lexecinfo',
+                    '-L/usr/pkg/lib -lexecinfo',
                 ]},
                 'sources': [
                   '../../src/platform-netbsd.cc',
