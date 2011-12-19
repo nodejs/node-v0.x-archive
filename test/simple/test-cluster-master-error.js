@@ -23,16 +23,6 @@
 var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
-var spawn = require('child_process').spawn;
-var os = require('os');
-var ProgressTracker = require('progressTracker');
-var processWatch = require('processWatch');
-
-function forEach(obj, fn) {
-  Object.keys(obj).forEach(function(name, index) {
-    fn(obj[name], name, index);
-  });
-}
 
 // Cluster setup
 if (cluster.isWorker) {
@@ -40,29 +30,54 @@ if (cluster.isWorker) {
   http.Server(function() {
 
   }).listen(common.PORT, '127.0.0.1');
-}
 
-else if (process.argv[2] === 'cluster' && cluster.isMaster) {
+} else if (process.argv[2] === 'cluster' && cluster.isMaster) {
 
-  var cpus = os.cpus().length;
+  var cpus = require('os').cpus().length;
 
-  cluster.on('online', function lisenter(worker) {
-    process.stdout.write('=' + worker.process.pid);
-    if (cluster.onlineWorkers === cpus) {
-      cluster.removeListener('online', lisenter);
+  //Send PID to testcase process
+  var forkNum = 0;
+  cluster.on('fork', function forkEvent(worker) {
+
+    //Send PID
+    process.send({
+      cmd: 'worker',
+      workerPID: worker.process.pid
+    });
+
+    //Stop listening when done
+    if (++forkNum === cpus) {
+      cluster.removeListener('fork', forkEvent);
+    }
+  });
+
+  //Throw accidently error when all workers are listening
+  var listeningNum = 0;
+  cluster.on('listening', function listeningEvent() {
+
+    //When all workers are listening
+    if (++listeningNum === cpus) {
+      //Stop listening
+      cluster.removeListener('listening', listeningEvent);
+
+      //throw accidently error
       setTimeout(function() {
         throw 'accidently error';
       }, 500);
     }
+
   });
 
-  //Startup a basic cluster
+  //Startup a basic respawn cluster
   cluster.autoFork();
-
 }
 
-//testcase
+//This is the testcase
 else {
+
+  var fork = require('child_process').fork;
+  var ProgressTracker = require('progressTracker');
+  var processWatch = require('processWatch');
 
   var checks = {
     master: false,
@@ -78,58 +93,51 @@ else {
   //List all workers
   var workers = [];
 
-  //Spawn a independtent cluster process
-  var master = spawn(process.argv[0], [process.argv[1], 'cluster']);
+  //Spawn a cluster process
+  var master = fork(process.argv[1], ['cluster'], {silent: true});
+
+  //relay output using only stdout
+  master.stdout.on('data', function (data) {
+    data.toString().split('\n').forEach(function (text) {
+      console.log('stdout: ' + text);
+    });
+  });
+
+  master.stderr.on('data', function (data) {
+    data.toString().split('\n').forEach(function (text) {
+      console.log('stderr: ' + text);
+    });
+  });
 
   //Handle messages from the cluster
-  master.stdout.on('data', function(data) {
-    data = data.toString();
+  master.on('message', function (data) {
 
-    //If this was not a testcode message
-    if (!data.match('=')) {
-      console.log('stdout: ' + data);
-    }
-
-    else {
-      //Sometimes there are sended more that one message in a buffer
-      var codes = data.split('=').filter(function(value) {
-        return value !== '';
-      });
-
-      codes.forEach(function(code) {
-        //Parse code
-        code = isNaN(code) ? code : parseInt(code, 10);
-
-        //is a Number = worker pid
-        if (typeof code === 'number') {
-          progress.add(code);
-          workers.push(code);
-        }
-      });
+    //Add worker pid to list and progress tracker
+    if (data.cmd === 'worker') {
+      progress.add('worker:' + data.workerPID);
+      workers.push(data.workerPID);
     }
   });
 
-  //If any error is recived relay and throw
-  master.stderr.on('data', function(data) {
-    if (data.toString().replace('\n', '') !== 'undefined') {
-      console.error('cluster error:' + data);
-    }
-  });
-
-  //When cluster is dead the the next worker
+  //When cluster is dead
   master.on('exit', function(code) {
+
+    //Check that the cluster died accidently
     checks.master = (code === 1);
+
+    //Inform progress tracker
     progress.set('master');
 
-    //watch all workers
+    //When master is dead all workers should be dead to
+    var alive = false;
     workers.forEach(function(pid) {
-      processWatch.watch(pid, function(exist) {
-        if (!exist) {
-          progress.set(pid);
-        }
-      });
+      if (processWatch.alive(pid)) {
+        alive = true;
+      }
     });
 
+    //If a worker was alive this did not act as expected
+    checks.workers = !alive;
   });
 
   process.once('exit', function() {
