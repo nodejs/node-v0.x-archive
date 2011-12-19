@@ -19,24 +19,48 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
 var common = require('../common');
 var assert = require('assert');
+var cluster = require('cluster');
 
-// A module with an error in it should throw
-assert.throws(function() {
-  require(common.fixturesDir + '/throws_error');
-});
+if (cluster.isWorker) {
+  process.send({
+    testcase: true,
+    prop: process.env['cluster_test_prop'],
+    overwrite: process.env['cluster_test_overwrite']
+  });
 
-// Requiring the same module again should throw as well
-assert.throws(function() {
-  require(common.fixturesDir + '/throws_error');
-});
+} else if (cluster.isMaster) {
 
-// Requiring a module that does not exist should throw an
-// error with its `code` set to MODULE_NOT_FOUND
-assert.throws(function () {
-  require(common.fixturesDir + '/DOES_NOT_EXIST');
-}, function (e) {
-  assert.equal('MODULE_NOT_FOUND', e.code);
-  return true;
-});
+  var checks = {
+    using: false,
+    overwrite: false
+  };
+
+  //To check that the cluster extend on the process.env we will overwrite a
+  //property
+  process.env['cluster_test_overwrite'] = 'old';
+
+  //Fork worker
+  var worker = cluster.fork({
+    'cluster_test_prop': 'custom',
+    'cluster_test_overwrite': 'new'
+  });
+
+  //Checks worker env
+  worker.on('message', function(data) {
+    if (data.testcase) {
+      checks.using = (data.prop === 'custom');
+      checks.overwrite = (data.overwrite === 'new');
+      process.exit(0);
+    }
+  });
+
+  process.once('exit', function() {
+    assert.ok(checks.using, 'The worker did not receive the correct env.');
+    assert.ok(checks.overwrite, 'The custom environment did not overwrite ' +
+              'the existing environment.');
+  });
+
+}
