@@ -25,33 +25,42 @@ var assert = require('assert');
 var cluster = require('cluster');
 
 if (cluster.isWorker) {
-
-  //Just keep the worker alive
-  var http = require('http');
-  http.Server(function() {
-
-  }).listen(common.PORT, '127.0.0.1', function() {
-    cluster.worker.send(process.env['cluster_test_env']);
+  process.send({
+    testcase: true,
+    prop: process.env['cluster_test_prop'],
+    overwrite: process.env['cluster_test_overwrite']
   });
-}
 
-else if (cluster.isMaster) {
+} else if (cluster.isMaster) {
 
   var checks = {
-    correct: false
+    using: false,
+    overwrite: false
   };
 
+  //To check that the cluster extend on the process.env we will overwrite a
+  //property
+  process.env['cluster_test_overwrite'] = 'old';
+
+  //Fork worker
   var worker = cluster.fork({
-    cluster_test_env: 'custom'
-  });
-  worker.on('message', function(data) {
-    checks.correct = (data === 'custom');
-    process.exit(0);
+    'cluster_test_prop': 'custom',
+    'cluster_test_overwrite': 'new'
   });
 
-  //Check all values
+  //Checks worker env
+  worker.on('message', function(data) {
+    if (data.testcase) {
+      checks.using = (data.prop === 'custom');
+      checks.overwrite = (data.overwrite === 'new');
+      process.exit(0);
+    }
+  });
+
   process.once('exit', function() {
-    assert.ok(checks.correct, 'The worker did not receive the correct env.');
+    assert.ok(checks.using, 'The worker did not receive the correct env.');
+    assert.ok(checks.overwrite, 'The custom environment did not overwrite ' +
+              'the existing environment.');
   });
 
 }
