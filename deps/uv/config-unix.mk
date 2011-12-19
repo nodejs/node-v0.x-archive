@@ -33,6 +33,7 @@ OBJS += src/unix/fs.o
 OBJS += src/unix/cares.o
 OBJS += src/unix/udp.o
 OBJS += src/unix/error.o
+OBJS += src/unix/thread.o
 OBJS += src/unix/process.o
 OBJS += src/unix/tcp.o
 OBJS += src/unix/pipe.o
@@ -50,7 +51,6 @@ endif
 ifeq (Darwin,$(uname_S))
 EV_CONFIG=config_darwin.h
 EIO_CONFIG=config_darwin.h
-CPPFLAGS += -D__DARWIN_64_BIT_INO_T=1
 CPPFLAGS += -Isrc/ares/config_darwin
 LINKFLAGS+=-framework CoreServices
 OBJS += src/unix/darwin.o

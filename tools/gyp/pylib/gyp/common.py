@@ -1,6 +1,4 @@
-#!/usr/bin/python
-
-# Copyright (c) 2009 Google Inc. All rights reserved.
+# Copyright (c) 2011 Google Inc. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -78,6 +76,9 @@ def ResolveTarget(build_file, target, toolset):
       # and os.path.join will return it as-is.
       build_file = os.path.normpath(os.path.join(os.path.dirname(build_file),
                                                  parsed_build_file))
+      # Further (to handle cases like ../cwd), make it relative to cwd)
+      if not os.path.isabs(build_file):
+        build_file = RelativePath(build_file, '.')
     else:
       build_file = parsed_build_file
 

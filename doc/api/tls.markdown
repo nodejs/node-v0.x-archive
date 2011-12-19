@@ -119,10 +119,14 @@ defaults to `localhost`.) `options` should be an object which specifies
     omitted several well known "root" CAs will be used, like VeriSign.
     These are used to authorize connections.
 
+  - `rejectUnauthorized`: If `true`, the server certificate is verified against
+    the list of supplied CAs. An `'error'` event is emitted if verification
+    fails. Default: `false`.
+
   - `NPNProtocols`: An array of string or `Buffer` containing supported NPN
     protocols. `Buffer` should have following format: `0x05hello0x05world`,
     where first byte is next protocol name's length. (Passing array should
-    usually be much simplier: `['hello', 'world']`.)
+    usually be much simpler: `['hello', 'world']`.)
 
   - `servername`: Servername for SNI (Server Name Indication) TLS extension.
 
@@ -173,7 +177,7 @@ thereafter.
 
 ### NPN and SNI
 
-NPN (Next Protocol Negotitation) and SNI (Server Name Indication) are TLS
+NPN (Next Protocol Negotiation) and SNI (Server Name Indication) are TLS
 handshake extensions allowing you:
 
   * NPN - to use one TLS server for multiple protocols (HTTP, SPDY)
@@ -309,7 +313,7 @@ becomes available only when `cleartextStream.authorized === false`.
 
 #### cleartextStream.getPeerCertificate()
 
-Returns an object representing the peer's certicicate. The returned object has
+Returns an object representing the peer's certificate. The returned object has
 some properties corresponding to the field of the certificate.
 
 Example:

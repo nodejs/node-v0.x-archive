@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -74,6 +74,8 @@ class StringsStorage {
   inline const char* GetFunctionName(const char* name);
 
  private:
+  static const int kMaxNameSize = 1024;
+
   INLINE(static bool StringsMatch(void* key1, void* key2)) {
     return strcmp(reinterpret_cast<char*>(key1),
                   reinterpret_cast<char*>(key2)) == 0;
@@ -257,7 +259,7 @@ class CodeMap {
     typedef Address Key;
     typedef CodeEntryInfo Value;
     static const Key kNoKey;
-    static const Value kNoValue;
+    static const Value NoValue() { return CodeEntryInfo(NULL, 0); }
     static int Compare(const Key& a, const Key& b) {
       return a < b ? -1 : (a > b ? 1 : 0);
     }
@@ -453,7 +455,8 @@ class HeapGraphEdge BASE_EMBEDDED {
     kProperty = v8::HeapGraphEdge::kProperty,
     kInternal = v8::HeapGraphEdge::kInternal,
     kHidden = v8::HeapGraphEdge::kHidden,
-    kShortcut = v8::HeapGraphEdge::kShortcut
+    kShortcut = v8::HeapGraphEdge::kShortcut,
+    kWeak = v8::HeapGraphEdge::kWeak
   };
 
   HeapGraphEdge() { }
@@ -463,7 +466,7 @@ class HeapGraphEdge BASE_EMBEDDED {
 
   Type type() { return static_cast<Type>(type_); }
   int index() {
-    ASSERT(type_ == kElement || type_ == kHidden);
+    ASSERT(type_ == kElement || type_ == kHidden || type_ == kWeak);
     return index_;
   }
   const char* name() {
@@ -550,7 +553,10 @@ class HeapEntry BASE_EMBEDDED {
   Vector<HeapGraphEdge*> retainers() {
     return Vector<HeapGraphEdge*>(retainers_arr(), retainers_count_); }
   HeapEntry* dominator() { return dominator_; }
-  void set_dominator(HeapEntry* entry) { dominator_ = entry; }
+  void set_dominator(HeapEntry* entry) {
+    ASSERT(entry != NULL);
+    dominator_ = entry;
+  }
 
   void clear_paint() { painted_ = kUnpainted; }
   bool painted_reachable() { return painted_ == kPainted; }
@@ -583,7 +589,8 @@ class HeapEntry BASE_EMBEDDED {
   int EntrySize() { return EntriesSize(1, children_count_, retainers_count_); }
   int RetainedSize(bool exact);
 
-  void Print(int max_depth, int indent);
+  void Print(
+      const char* prefix, const char* edge_name, int max_depth, int indent);
 
   Handle<HeapObject> GetHeapObject();
 
@@ -656,6 +663,7 @@ class HeapSnapshot {
   HeapEntry* root() { return root_entry_; }
   HeapEntry* gc_roots() { return gc_roots_entry_; }
   HeapEntry* natives_root() { return natives_root_entry_; }
+  HeapEntry* gc_subroot(int index) { return gc_subroot_entries_[index]; }
   List<HeapEntry*>* entries() { return &entries_; }
   int raw_entries_size() { return raw_entries_size_; }
 
@@ -669,6 +677,9 @@ class HeapSnapshot {
                       int retainers_count);
   HeapEntry* AddRootEntry(int children_count);
   HeapEntry* AddGcRootsEntry(int children_count, int retainers_count);
+  HeapEntry* AddGcSubrootEntry(int tag,
+                               int children_count,
+                               int retainers_count);
   HeapEntry* AddNativesRootEntry(int children_count, int retainers_count);
   void ClearPaint();
   HeapEntry* GetEntryById(uint64_t id);
@@ -690,6 +701,7 @@ class HeapSnapshot {
   HeapEntry* root_entry_;
   HeapEntry* gc_roots_entry_;
   HeapEntry* natives_root_entry_;
+  HeapEntry* gc_subroot_entries_[VisitorSynchronization::kNumberOfSyncTags];
   char* raw_entries_;
   List<HeapEntry*> entries_;
   bool entries_sorted_;
@@ -711,10 +723,13 @@ class HeapObjectsMap {
   void MoveObject(Address from, Address to);
 
   static uint64_t GenerateId(v8::RetainedObjectInfo* info);
+  static inline uint64_t GetNthGcSubrootId(int delta);
 
+  static const int kObjectIdStep = 2;
   static const uint64_t kInternalRootObjectId;
   static const uint64_t kGcRootsObjectId;
   static const uint64_t kNativesRootObjectId;
+  static const uint64_t kGcRootsFirstSubrootId;
   static const uint64_t kFirstAvailableObjectId;
 
  private:
@@ -920,7 +935,7 @@ class V8HeapExplorer : public HeapEntriesAllocator {
   virtual HeapEntry* AllocateEntry(
       HeapThing ptr, int children_count, int retainers_count);
   void AddRootEntries(SnapshotFillerInterface* filler);
-  int EstimateObjectsCount();
+  int EstimateObjectsCount(HeapIterator* iterator);
   bool IterateAndExtractReferences(SnapshotFillerInterface* filler);
   void TagGlobalObjects();
 
@@ -964,10 +979,16 @@ class V8HeapExplorer : public HeapEntriesAllocator {
                           HeapEntry* parent,
                           int index,
                           Object* child);
+  void SetWeakReference(HeapObject* parent_obj,
+                        HeapEntry* parent_entry,
+                        int index,
+                        Object* child_obj,
+                        int field_offset);
   void SetPropertyReference(HeapObject* parent_obj,
                             HeapEntry* parent,
                             String* reference_name,
                             Object* child,
+                            const char* name_format_string = NULL,
                             int field_offset = -1);
   void SetPropertyShortcutReference(HeapObject* parent_obj,
                                     HeapEntry* parent,
@@ -975,10 +996,15 @@ class V8HeapExplorer : public HeapEntriesAllocator {
                                     Object* child);
   void SetRootShortcutReference(Object* child);
   void SetRootGcRootsReference();
-  void SetGcRootsReference(Object* child);
+  void SetGcRootsReference(VisitorSynchronization::SyncTag tag);
+  void SetGcSubrootReference(
+      VisitorSynchronization::SyncTag tag, bool is_weak, Object* child);
   void TagObject(Object* obj, const char* tag);
 
   HeapEntry* GetEntry(Object* obj);
+
+  static inline HeapObject* GetNthGcSubrootObject(int delta);
+  static inline int GetGcSubrootOrder(HeapObject* subroot);
 
   Heap* heap_;
   HeapSnapshot* snapshot_;
@@ -988,8 +1014,11 @@ class V8HeapExplorer : public HeapEntriesAllocator {
   HeapObjectsSet objects_tags_;
 
   static HeapObject* const kGcRootsObject;
+  static HeapObject* const kFirstGcSubrootObject;
+  static HeapObject* const kLastGcSubrootObject;
 
   friend class IndexedReferencesExtractor;
+  friend class GcSubrootsEnumerator;
   friend class RootsReferencesExtractor;
 
   DISALLOW_COPY_AND_ASSIGN(V8HeapExplorer);

@@ -19,7 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 var common = require('../common');
 var assert = require('assert');
 var fork = require('child_process').fork;
@@ -31,7 +30,7 @@ if (isChild) {
   console.error('LOG: a stderr message');
 
   process.send('message from child');
-  process.once('message', function() {
+  process.once('message', function () {
     process.send('got message from master');
   });
 
@@ -44,19 +43,21 @@ if (isChild) {
     childReciveing: false
   };
 
-  var child = fork(process.argv[1], ['child'], {silent: true});
-  child.on('message', function(message) {
-
+  var child = fork(process.argv[1], ['child'], { silent: true });
+  child.on('message', function (message) {
     if (checks.childSending === false) {
       checks.childSending = (message === 'message from child');
     }
+
     if (checks.childReciveing === false) {
       checks.childReciveing = (message === 'got message from master');
     }
+
     if (checks.childReciveing === true) {
       child.kill();
     }
   });
+
   checks.stdoutNotPiped = (child.stdout && child.stdout.readable === true);
   checks.stderrNotPiped = (child.stderr && child.stderr.readable === true);
 
@@ -73,5 +74,4 @@ if (isChild) {
     assert.ok(checks.stdoutNotPiped, 'The stdout socket was piped to parent');
     assert.ok(checks.stdoutNotPiped, 'The stderr socket was piped to parent');
   });
-
 }

@@ -29,7 +29,10 @@ exports.makeList = makeList
 
 function pack (targetTarball, folder, pkg, dfc, cb) {
   if (typeof cb !== "function") cb = dfc, dfc = true
-  folder = path.resolve(process.cwd(), folder)
+  folder = path.resolve(folder)
+
+  log.verbose(folder, "pack")
+
   if (typeof pkg === "function") {
     cb = pkg, pkg = null
     return readJson(path.resolve(folder, "package.json"), function (er, pkg) {
@@ -45,6 +48,7 @@ function pack (targetTarball, folder, pkg, dfc, cb) {
   log.silly(folder, "makeList")
   makeList(folder, pkg, dfc, function (er, files, cleanup) {
     if (er) return cb(er)
+    // log.silly(files, "files")
     return packFiles(targetTarball, parent, files, pkg, function (er) {
       if (!cleanup || !cleanup.length) return cb(er)
       // try to be a good citizen, even/especially in the event of failure.
@@ -59,7 +63,7 @@ function pack (targetTarball, folder, pkg, dfc, cb) {
   })
 }
 
-function packFiles (targetTarball, parent, files, pkg, cb) {
+function packFiles (targetTarball, parent, files, pkg, cb_) {
 
   var p
 
@@ -70,16 +74,48 @@ function packFiles (targetTarball, parent, files, pkg, cb) {
 
   parent = path.resolve(parent, p)
 
+  var called = false
+  function cb (er) {
+    if (called) return
+    called = true
+    cb_(er)
+  }
+
   log.verbose(targetTarball, "tarball")
   log.verbose(parent, "parent")
   fstream.Reader({ type: "Directory"
                  , path: parent
                  , filter: function () {
-                     return -1 !== files.indexOf(this.path)
+                     // files should *always* get into tarballs
+                     // in a user-writable state, even if they're
+                     // being installed from some wackey vm-mounted
+                     // read-only filesystem.
+                     this.props.mode = this.props.mode | 0200
+                     var inc = -1 !== files.indexOf(this.path)
+
+                     // WARNING! Hackety hack!
+                     // XXX Fix this in a better way.
+                     // Rename .gitignore to .npmignore if there is not a
+                     // .npmignore file there already, the better to lock
+                     // down installed packages with git for deployment.
+                     if (this.basename === ".gitignore") {
+                       if (this.parent._entries.indexOf(".npmignore") !== -1) {
+                         return false
+                       }
+                       var d = path.dirname(this.path)
+                       this.basename = ".npmignore"
+                       this.path = path.join(d, ".npmignore")
+                     }
+                     return inc
                    }
                  })
     .on("error", log.er(cb, "error reading "+parent))
-    .pipe(tar.Pack())
+    // By default, npm includes some proprietary attributes in the
+    // package tarball.  This is sane, and allowed by the spec.
+    // However, npm *itself* excludes these from its own package,
+    // so that it can be more easily bootstrapped using old and
+    // non-compliant tar implementations.
+    .pipe(tar.Pack({ noProprietary: !npm.config.get("proprietary-attribs") }))
     .on("error", log.er(cb, "tar creation error "+targetTarball))
     .pipe(zlib.Gzip())
     .on("error", log.er(cb, "gzip error "+targetTarball))
@@ -126,7 +162,8 @@ function unpack_ ( tarball, unpackTarget, dMode, fMode, uid, gid, cb ) {
       rm(unpackTarget, function (er) {
         if (er) return cb(er)
         log.verbose(unpackTarget, "rm'ed")
-        fs.rename(folder, unpackTarget, function (er) {
+
+        moveIntoPlace(folder, unpackTarget, function (er) {
           if (er) return cb(er)
           log.verbose([folder, unpackTarget], "renamed")
           // curse you, nfs!  It will lie and tell you that the
@@ -142,6 +179,24 @@ function unpack_ ( tarball, unpackTarget, dMode, fMode, uid, gid, cb ) {
     })
   })
 }
+
+// on Windows, A/V software can lock the directory, causing this
+// to fail with an EACCES.  Try again on failure, for up to 1 second.
+// XXX Fix this by not unpacking into a temp directory, instead just
+// renaming things on the way out of the tarball.
+function moveIntoPlace (folder, unpackTarget, cb) {
+  var start = Date.now()
+  fs.rename(folder, unpackTarget, function CB (er) {
+    if (er
+        && process.platform === "win32"
+        && er.code === "EACCES"
+        && Date.now() - start < 1000) {
+      return fs.rename(folder, unpackTarget, CB)
+    }
+    cb(er)
+  })
+}
+
 
 function gunzTarPerm (tarball, tmp, dMode, fMode, uid, gid, cb) {
   if (!dMode) dMode = npm.modes.exec
@@ -276,7 +331,8 @@ function makeList (dir, pkg, dfc, cb) {
 
     makeList_(dir, pkg, exList, dfc, function (er, files, cleanup) {
       if (er) return cb(er)
-      var dirLen = dir.length + 1
+      var dirLen = dir.replace(/(\/|\\)$/, "").length + 1
+      log.silly([dir, dirLen], "dir, dirLen")
       files = files.map(function (file) {
         return path.join(name, file.substr(dirLen))
       })

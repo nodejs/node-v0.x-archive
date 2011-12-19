@@ -4080,7 +4080,7 @@
 
 /* from ntifs.h */
 /* MinGW already has it */
-#ifndef __MINGW32__
+#if defined(_MSC_VER) || defined(__MINGW64__)
   typedef struct _REPARSE_DATA_BUFFER {
     ULONG  ReparseTag;
     USHORT ReparseDataLength;
@@ -4281,6 +4281,10 @@ typedef enum _FILE_INFORMATION_CLASS {
                                              FILE_SPECIAL_ACCESS)
 #endif
 
+#ifndef IO_REPARSE_TAG_SYMLINK
+# define IO_REPARSE_TAG_SYMLINK (0xA000000CL)
+#endif
+
 typedef VOID (NTAPI *PIO_APC_ROUTINE)
              (PVOID ApcContext,
               PIO_STATUS_BLOCK IoStatusBlock,
@@ -4333,6 +4337,24 @@ typedef NTSTATUS (NTAPI *sNtSetInformationFile)
   } OVERLAPPED_ENTRY, *LPOVERLAPPED_ENTRY;
 #endif
 
+#ifdef __MINGW32__
+  typedef PVOID RTL_SRWLOCK;
+  typedef RTL_SRWLOCK SRWLOCK, *PSRWLOCK;
+#endif
+
+/* from wincon.h */
+#ifndef ENABLE_INSERT_MODE
+# define ENABLE_INSERT_MODE 0x20
+#endif
+
+#ifndef ENABLE_QUICK_EDIT_MODE
+# define ENABLE_QUICK_EDIT_MODE 0x40
+#endif
+
+#ifndef ENABLE_EXTENDED_FLAGS
+# define ENABLE_EXTENDED_FLAGS 0x80
+#endif
+
 typedef BOOL (WINAPI *sGetQueuedCompletionStatusEx)
              (HANDLE CompletionPort,
               LPOVERLAPPED_ENTRY lpCompletionPortEntries,
@@ -4350,6 +4372,28 @@ typedef BOOLEAN (WINAPI* sCreateSymbolicLinkW)
                  LPCWSTR lpTargetFileName,
                  DWORD dwFlags);
 
+typedef VOID (WINAPI* sInitializeSRWLock)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sAcquireSRWLockShared)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sAcquireSRWLockExclusive)
+             (PSRWLOCK SRWLock);
+
+typedef BOOL (WINAPI* sTryAcquireSRWLockShared)
+             (PSRWLOCK SRWLock);
+
+typedef BOOL (WINAPI* sTryAcquireSRWLockExclusive)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sReleaseSRWLockShared)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sReleaseSRWLockExclusive)
+             (PSRWLOCK SRWLock);
+
+
 
 /* Ntapi function pointers */
 extern sRtlNtStatusToDosError pRtlNtStatusToDosError;
@@ -4362,5 +4406,12 @@ extern sNtSetInformationFile pNtSetInformationFile;
 extern sGetQueuedCompletionStatusEx pGetQueuedCompletionStatusEx;
 extern sSetFileCompletionNotificationModes pSetFileCompletionNotificationModes;
 extern sCreateSymbolicLinkW pCreateSymbolicLinkW;
+extern sInitializeSRWLock pInitializeSRWLock;
+extern sAcquireSRWLockShared pAcquireSRWLockShared;
+extern sAcquireSRWLockExclusive pAcquireSRWLockExclusive;
+extern sTryAcquireSRWLockShared pTryAcquireSRWLockShared;
+extern sTryAcquireSRWLockExclusive pTryAcquireSRWLockExclusive;
+extern sReleaseSRWLockShared pReleaseSRWLockShared;
+extern sReleaseSRWLockExclusive pReleaseSRWLockExclusive;
 
 #endif /* UV_WIN_WINAPI_H_ */

@@ -137,6 +137,21 @@ typedef struct uv_buf_t {
 
 typedef int uv_file;
 
+typedef HANDLE uv_thread_t;
+
+typedef CRITICAL_SECTION uv_mutex_t;
+
+typedef union {
+  /* srwlock_ has type SRWLOCK, but not all toolchains define this type in */
+  /* windows.h. */
+  void* srwlock_;
+  struct {
+    uv_mutex_t read_mutex_;
+    uv_mutex_t write_mutex_;
+    unsigned int num_readers_;
+  } fallback_;
+} uv_rwlock_t;
+
 /* Platform-specific definitions for uv_dlopen support. */
 typedef HMODULE uv_lib_t;
 #define UV_DYNAMIC FAR WINAPI
@@ -276,7 +291,8 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   LPFN_WSARECVFROM func_wsarecvfrom;
 
 #define uv_pipe_server_fields             \
-  uv_pipe_accept_t accept_reqs[4];        \
+  int pending_instances;                  \
+  uv_pipe_accept_t* accept_reqs;          \
   uv_pipe_accept_t* pending_accepts;
 
 #define uv_pipe_connection_fields         \

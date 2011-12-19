@@ -9,9 +9,6 @@
           'EIO_STACKSIZE=262144'
         ],
         'conditions': [
-          ['OS=="mac"', {
-            'defines': ['__DARWIN_64_BIT_INO_T=1'],
-          }],
           ['OS=="solaris"', {
             'cflags': ['-pthreads'],
             'ldlags': ['-pthreads'],
@@ -142,13 +139,13 @@
             'src/win/internal.h',
             'src/win/loop-watcher.c',
             'src/win/pipe.c',
+            'src/win/thread.c',
             'src/win/process.c',
             'src/win/req.c',
             'src/win/stream.c',
             'src/win/tcp.c',
             'src/win/tty.c',
             'src/win/threadpool.c',
-            'src/win/threads.c',
             'src/win/timer.c',
             'src/win/udp.c',
             'src/win/util.c',
@@ -160,6 +157,8 @@
           'link_settings': {
             'libraries': [
               '-lws2_32.lib',
+              '-lpsapi.lib',
+              '-liphlpapi.lib'
             ],
           },
         }, { # Not Windows i.e. POSIX
@@ -188,6 +187,7 @@
             'src/unix/cares.c',
             'src/unix/dl.c',
             'src/unix/error.c',
+            'src/unix/thread.c',
             'src/unix/process.c',
             'src/unix/internal.h',
             'src/unix/eio/ecb.h',
@@ -277,10 +277,12 @@
         'test/runner.h',
         'test/test-get-loadavg.c',
         'test/task.h',
+        'test/test-util.c',
         'test/test-async.c',
         'test/test-error.c',
         'test/test-callback-stack.c',
         'test/test-connection-fail.c',
+        'test/test-cwd-and-chdir.c',
         'test/test-delayed-accept.c',
         'test/test-fail-always.c',
         'test/test-fs.c',
@@ -300,6 +302,8 @@
         'test/test-ping-pong.c',
         'test/test-pipe-bind-error.c',
         'test/test-pipe-connect-error.c',
+        'test/test-platform-output.c',
+        'test/test-process-title.c',
         'test/test-ref.c',
         'test/test-shutdown-eof.c',
         'test/test-spawn.c',
@@ -314,6 +318,8 @@
         'test/test-tcp-write-to-half-open-connection.c',
         'test/test-tcp-writealot.c',
         'test/test-threadpool.c',
+        'test/test-mutexes.c',
+        'test/test-thread.c',
         'test/test-timer-again.c',
         'test/test-timer.c',
         'test/test-tty.c',
@@ -321,6 +327,7 @@
         'test/test-udp-ipv6.c',
         'test/test-udp-send-and-recv.c',
         'test/test-udp-multicast-join.c',
+        'test/test-counters-init.c',
       ],
       'conditions': [
         [ 'OS=="win"', {
@@ -363,6 +370,7 @@
         'test/benchmark-pump.c',
         'test/benchmark-sizes.c',
         'test/benchmark-spawn.c',
+        'test/benchmark-thread.c',
         'test/benchmark-tcp-write-batch.c',
         'test/benchmark-udp-packet-storm.c',
         'test/dns-server.c',

@@ -822,7 +822,8 @@ void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle,
 
   if (!REQ_SUCCESS(req)) {
     /* An error occurred doing the read. */
-    if ((handle->flags & UV_HANDLE_READING)) {
+    if ((handle->flags & UV_HANDLE_READING) ||
+        !(handle->flags & UV_HANDLE_ZERO_READ)) {
       handle->flags &= ~UV_HANDLE_READING;
       buf = (handle->flags & UV_HANDLE_ZERO_READ) ?
             uv_buf_init(NULL, 0) : handle->read_buffer;
@@ -1084,7 +1085,7 @@ int uv_tcp_duplicate_socket(uv_tcp_t* handle, int pid,
   /* 
    * We're about to share the socket with another process.  Because
    * this is a listening socket, we assume that the other process will
-   * be accepting conections on it.  So, before sharing the socket
+   * be accepting connections on it.  So, before sharing the socket
    * with another process, we call listen here in the parent process.
    * This needs to be modified if the socket is shared with
    * another process for anything other than accepting connections.
@@ -1137,7 +1138,7 @@ int uv_tcp_simultaneous_accepts(uv_tcp_t* handle, int enable) {
 
   handle->flags |= UV_HANDLE_TCP_SINGLE_ACCEPT;
 
-  /* Flip the changing flag if we have already queueed multiple accepts. */
+  /* Flip the changing flag if we have already queued multiple accepts. */
   if (handle->flags & UV_HANDLE_LISTENING) {
     handle->flags |= UV_HANDLE_TCP_ACCEPT_STATE_CHANGING;
   }

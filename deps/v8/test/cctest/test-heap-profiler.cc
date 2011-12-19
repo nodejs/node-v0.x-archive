@@ -252,6 +252,28 @@ TEST(HeapSnapshotHeapNumbers) {
   CHECK_EQ(v8::HeapGraphNode::kHeapNumber, b->GetType());
 }
 
+TEST(HeapSnapshotSlicedString) {
+  v8::HandleScope scope;
+  LocalContext env;
+  CompileRun(
+      "parent_string = \"123456789.123456789.123456789.123456789.123456789."
+      "123456789.123456789.123456789.123456789.123456789."
+      "123456789.123456789.123456789.123456789.123456789."
+      "123456789.123456789.123456789.123456789.123456789.\";"
+      "child_string = parent_string.slice(100);");
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("strings"));
+  const v8::HeapGraphNode* global = GetGlobalObject(snapshot);
+  const v8::HeapGraphNode* parent_string =
+      GetProperty(global, v8::HeapGraphEdge::kShortcut, "parent_string");
+  CHECK_NE(NULL, parent_string);
+  const v8::HeapGraphNode* child_string =
+      GetProperty(global, v8::HeapGraphEdge::kShortcut, "child_string");
+  CHECK_NE(NULL, child_string);
+  const v8::HeapGraphNode* parent =
+      GetProperty(child_string, v8::HeapGraphEdge::kInternal, "parent");
+  CHECK_EQ(parent_string, parent);
+}
 
 TEST(HeapSnapshotInternalReferences) {
   v8::HandleScope scope;
@@ -294,7 +316,7 @@ TEST(HeapEntryIdsAndGC) {
   const v8::HeapSnapshot* snapshot1 =
       v8::HeapProfiler::TakeSnapshot(v8_str("s1"));
 
-  HEAP->CollectAllGarbage(true);  // Enforce compaction.
+  HEAP->CollectAllGarbage(i::Heap::kNoGCFlags);
 
   const v8::HeapSnapshot* snapshot2 =
       v8::HeapProfiler::TakeSnapshot(v8_str("s2"));
@@ -563,6 +585,22 @@ TEST(HeapSnapshotJSONSerializationAborting) {
 }
 
 
+static void CheckChildrenIds(const v8::HeapSnapshot* snapshot,
+                             const v8::HeapGraphNode* node,
+                             int level, int max_level) {
+  if (level > max_level) return;
+  CHECK_EQ(node, snapshot->GetNodeById(node->GetId()));
+  for (int i = 0, count = node->GetChildrenCount(); i < count; ++i) {
+    const v8::HeapGraphEdge* prop = node->GetChild(i);
+    const v8::HeapGraphNode* child =
+        snapshot->GetNodeById(prop->GetToNode()->GetId());
+    CHECK_EQ_UINT64_T(prop->GetToNode()->GetId(), child->GetId());
+    CHECK_EQ(prop->GetToNode(), child);
+    CheckChildrenIds(snapshot, child, level + 1, max_level);
+  }
+}
+
+
 TEST(HeapSnapshotGetNodeById) {
   v8::HandleScope scope;
   LocalContext env;
@@ -570,12 +608,7 @@ TEST(HeapSnapshotGetNodeById) {
   const v8::HeapSnapshot* snapshot =
       v8::HeapProfiler::TakeSnapshot(v8_str("id"));
   const v8::HeapGraphNode* root = snapshot->GetRoot();
-  CHECK_EQ(root, snapshot->GetNodeById(root->GetId()));
-  for (int i = 0, count = root->GetChildrenCount(); i < count; ++i) {
-    const v8::HeapGraphEdge* prop = root->GetChild(i);
-    CHECK_EQ(
-        prop->GetToNode(), snapshot->GetNodeById(prop->GetToNode()->GetId()));
-  }
+  CheckChildrenIds(snapshot, root, 0, 3);
   // Check a big id, which should not exist yet.
   CHECK_EQ(NULL, snapshot->GetNodeById(0x1000000UL));
 }
@@ -873,6 +906,20 @@ TEST(DocumentURLWithException) {
 }
 
 
+TEST(NoHandleLeaks) {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  CompileRun("document = { URL:\"abcdefgh\" };");
+
+  v8::Handle<v8::String> name(v8_str("leakz"));
+  int count_before = i::HandleScope::NumberOfHandles();
+  v8::HeapProfiler::TakeSnapshot(name);
+  int count_after = i::HandleScope::NumberOfHandles();
+  CHECK_EQ(count_before, count_after);
+}
+
+
 TEST(NodesIteration) {
   v8::HandleScope scope;
   LocalContext env;
@@ -1000,4 +1047,111 @@ TEST(GetConstructorName) {
   i::Handle<i::JSObject> js_obj6 = v8::Utils::OpenHandle(*obj6);
   CHECK_EQ(0, StringCmp(
       "Object", i::V8HeapExplorer::GetConstructorName(*js_obj6)));
+}
+
+
+TEST(FastCaseGetter) {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  CompileRun("var obj1 = {};\n"
+             "obj1.__defineGetter__('propWithGetter', function Y() {\n"
+             "  return 42;\n"
+             "});\n"
+             "obj1.__defineSetter__('propWithSetter', function Z(value) {\n"
+             "  return this.value_ = value;\n"
+             "});\n");
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("fastCaseGetter"));
+
+  const v8::HeapGraphNode* global = GetGlobalObject(snapshot);
+  CHECK_NE(NULL, global);
+  const v8::HeapGraphNode* obj1 =
+      GetProperty(global, v8::HeapGraphEdge::kShortcut, "obj1");
+  CHECK_NE(NULL, obj1);
+  const v8::HeapGraphNode* getterFunction =
+      GetProperty(obj1, v8::HeapGraphEdge::kProperty, "get-propWithGetter");
+  CHECK_NE(NULL, getterFunction);
+  const v8::HeapGraphNode* setterFunction =
+      GetProperty(obj1, v8::HeapGraphEdge::kProperty, "set-propWithSetter");
+  CHECK_NE(NULL, setterFunction);
+}
+
+
+bool HasWeakEdge(const v8::HeapGraphNode* node) {
+  for (int i = 0; i < node->GetChildrenCount(); ++i) {
+    const v8::HeapGraphEdge* handle_edge = node->GetChild(i);
+    if (handle_edge->GetType() == v8::HeapGraphEdge::kWeak) return true;
+  }
+  return false;
+}
+
+
+bool HasWeakGlobalHandle() {
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("weaks"));
+  const v8::HeapGraphNode* gc_roots = GetNode(
+      snapshot->GetRoot(), v8::HeapGraphNode::kObject, "(GC roots)");
+  CHECK_NE(NULL, gc_roots);
+  const v8::HeapGraphNode* global_handles = GetNode(
+      gc_roots, v8::HeapGraphNode::kObject, "(Global handles)");
+  CHECK_NE(NULL, global_handles);
+  return HasWeakEdge(global_handles);
+}
+
+
+static void PersistentHandleCallback(v8::Persistent<v8::Value> handle, void*) {
+  handle.Dispose();
+}
+
+
+TEST(WeakGlobalHandle) {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  CHECK(!HasWeakGlobalHandle());
+
+  v8::Persistent<v8::Object> handle =
+      v8::Persistent<v8::Object>::New(v8::Object::New());
+  handle.MakeWeak(NULL, PersistentHandleCallback);
+
+  CHECK(HasWeakGlobalHandle());
+}
+
+
+TEST(WeakGlobalContextRefs) {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("weaks"));
+  const v8::HeapGraphNode* gc_roots = GetNode(
+      snapshot->GetRoot(), v8::HeapGraphNode::kObject, "(GC roots)");
+  CHECK_NE(NULL, gc_roots);
+  const v8::HeapGraphNode* global_handles = GetNode(
+      gc_roots, v8::HeapGraphNode::kObject, "(Global handles)");
+  CHECK_NE(NULL, global_handles);
+  const v8::HeapGraphNode* global_context = GetNode(
+      global_handles, v8::HeapGraphNode::kHidden, "system / GlobalContext");
+  CHECK_NE(NULL, global_context);
+  CHECK(HasWeakEdge(global_context));
+}
+
+
+TEST(SfiAndJsFunctionWeakRefs) {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  CompileRun(
+      "fun = (function (x) { return function () { return x + 1; } })(1);");
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("fun"));
+  const v8::HeapGraphNode* global = GetGlobalObject(snapshot);
+  CHECK_NE(NULL, global);
+  const v8::HeapGraphNode* fun =
+      GetProperty(global, v8::HeapGraphEdge::kShortcut, "fun");
+  CHECK(HasWeakEdge(fun));
+  const v8::HeapGraphNode* shared =
+      GetProperty(fun, v8::HeapGraphEdge::kInternal, "shared");
+  CHECK(HasWeakEdge(shared));
 }
