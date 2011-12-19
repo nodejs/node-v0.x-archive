@@ -64,7 +64,7 @@ def GetFlavor(params):
     'freebsd8': 'freebsd',
     'netbsd': 'netbsd',
   }
-  flavor = flavors.get(sys.platform, 'netbsd')
+  flavor = flavors.get(sys.platform, 'linux')
   return params.get('flavor', flavor)
 
 
