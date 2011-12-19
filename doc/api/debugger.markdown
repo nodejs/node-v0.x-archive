@@ -98,6 +98,7 @@ prints the active watchers. To remove a watcher, type
 #### Breakpoints
 
 * `setBreakpoint()`, `sb()` - Set breakpoint on current line
+* `setBreakpoint(line)`, `sb(line)` - Set breakpoint on specific line
 * `setBreakpoint('fn()')`, `sb(...)` - Set breakpoint on a first statement in
 functions body
 * `setBreakpoint('script.js', 1)`, `sb(...)` - Set breakpoint on first line of
