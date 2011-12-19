@@ -52,7 +52,6 @@ else if (cluster.isMaster) {
     checks.setupEvent = true;
 
     var settings = cluster.settings;
-    console.log(settings);
     if (settings
     && settings.workers === (cpus + 1)
     && settings.args && settings.args[0] === 'custom argument'
