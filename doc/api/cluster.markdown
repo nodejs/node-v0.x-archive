@@ -9,20 +9,18 @@ all share server ports.
 
     var cluster = require('cluster');
     var http = require('http');
-    var numCPUs = require('os').cpus().length;
+    var os = require('os');
 
     if (cluster.isMaster) {
-      // Fork workers.
-      for (var i = 0; i < numCPUs; i++) {
+      // Spawn workers
+      for (i = 0, l = os.cpus().length; i < l; i++) {
         cluster.fork();
       }
 
-      cluster.on('death', function(worker) {
-        console.log('worker ' + worker.pid + ' died');
-      });
     } else {
-      // Worker processes have a http server.
-      http.Server(function(req, res) {
+      // Workers can share any TCP connection
+      // In this case its a HTTP server
+      http.createServer(function(req, res) {
         res.writeHead(200);
         res.end("hello world\n");
       }).listen(8000);
@@ -34,56 +32,61 @@ Running node will now share port 8000 between the workers:
     Worker 2438 online
     Worker 2437 online
 
-The difference between `cluster.fork()` and `child_process.fork()` is simply
-that cluster allows TCP servers to be shared between workers. `cluster.fork`
-is implemented on top of `child_process.fork`. The message passing API that
-is available with `child_process.fork` is available with `cluster` as well.
-As an example, here is a cluster which keeps count of the number of requests
-in the master process via message passing:
-
-    var cluster = require('cluster');
-    var http = require('http');
-    var numReqs = 0;
-
-    if (cluster.isMaster) {
-      // Fork workers.
-      for (var i = 0; i < 2; i++) {
-        var worker = cluster.fork();
-
-        worker.on('message', function(msg) {
-          if (msg.cmd && msg.cmd == 'notifyRequest') {
-            numReqs++;
-          }
-        });
-      }
-
-      setInterval(function() {
-        console.log("numReqs =", numReqs);
-      }, 1000);
-    } else {
-      // Worker processes have a http server.
-      http.Server(function(req, res) {
-        res.writeHead(200);
-        res.end("hello world\n");
-        // Send message to master process
-        process.send({ cmd: 'notifyRequest' });
-      }).listen(8000);
-    }
-
-
-
-### cluster.fork([env])
-
-Spawn a new worker process. This can only be called from the master process.
-The function takes an optional `env` object. The propertyies in this object
-will be added to the process environment in the worker.
 
 ### cluster.isMaster
+
+This boolean flag is true if the process is a master. This is determined
+by the `process.env.NODE_UNIQUE_ID`. If `process.env.NODE_UNIQUE_ID` is
+undefined `isMaster` is `true`.
+
 ### cluster.isWorker
 
-Boolean flags to determine if the current process is a master or a worker
-process in a cluster. A process `isMaster` if `process.env.NODE_WORKER_ID`
-is undefined.
+This boolean flag is true if the process is a worker forked from a master.
+If the `process.env.NODE_UNIQUE_ID` is set to a value different efined
+`isWorker` is `true`.
+
+### Event: 'fork'
+
+When a new worker is forked the cluster module will emit a 'fork' event.
+This can be used to log worker activity, and create you own timeout.
+
+    var timeouts = [];
+    var errorMsg = function () {
+        console.error("Something must be wrong with the connection ...");
+    });
+
+    cluster.on('fork', function (worker) {
+        timeouts[worker.uniqueID] = setTimeout(errorMsg, 2000);
+    });
+    cluster.on('listening', function (worker) {
+        clearTimeout(timeouts[worker.uniqueID]);
+    });
+    cluster.on('death', function (worker) {
+        clearTimeout(timeouts[worker.uniqueID]);
+        errorMsg();
+    });
+
+### Event: 'online'
+
+After forking a new worker, the worker should respond with a online message.
+When the master receives a online message it will emit such event.
+The difference between 'fork' and 'online' is that fork is emitted when the
+master tries to fork a worker, and 'online' is emitted when the worker is being
+executed.
+
+    cluster.on('online', function (worker) {
+        console.log("Yay, the worker responded after it was forked");
+    });
+
+### Event: 'listening'
+
+When calling `listen()` from a worker, a 'listening' event is automatically assigned
+to the server instance. When the server is listening a message is send to the master
+where the 'listening' event is emitted.
+
+    cluster.on('listening', function (worker) {
+        console.log("We are now connected");
+    });
 
 ### Event: 'death'
 
@@ -95,5 +98,140 @@ This can be used to restart the worker by calling `fork()` again.
       cluster.fork();
     });
 
-Different techniques can be used to restart the worker depending on the
-application.
+### cluster.fork()
+
+Spawn a new worker process. This can only be called from the master process.
+The `fork()` will also return a fork object equal as it was `child_process.fork`
+there had been called.
+
+The difference between `cluster.fork()` and `child_process.fork()` is simply
+that cluster allows TCP servers to be shared between workers. The message
+passing API that is available with `child_process.fork` is available within
+`cluster` as well.
+
+### cluster.eachWorker(callback)
+
+This method will go through all workers and call a given function.
+
+    //Say hi to all workers
+    cluster.eachWorker(function (worker) {
+        worker.send("say hi");
+    });
+
+## Worker
+
+This object contains all public information and method about a worker. In the master
+it can be obtainedusing `cluster.workers` or `cluster.eachWorker`. In a worker
+it can be obtained ained using `cluster.worker`.
+
+### Worker.uniqueID
+
+Each new worker is given its own unique id, this id i stored in the `uniqueID`.
+
+### Worker.process
+
+All workers are created using `child_process.fork()`, the returned object from this
+function is stored in process.
+
+### Worker.send(message, [callback])
+
+In the master this function will send a message to a specific worker.
+In a worker the function will send a message to the master.
+
+The `send()` method takes a second optional argument. This is a callback function
+there will run the message was received.
+
+    cluster.worker.send({ cmd: 'notifyRequest' }, function () {
+      //Master has recived message
+    });
+
+### Worker.destroy()
+
+This function will kill the worker, and inform the master to not spawn a new worker.
+To know the difference between suicide and accidently death a suicide boolean is set to true.
+
+    cluster.on('death', function (worker) {
+        if (worker.suicide === true) {
+            console.log('Oh, it was just suicide' – no need to worry').
+        }
+    });
+    cluster.eachWorker(function (worker) {
+        worker.destroy();
+    });
+
+### Worker.suicide
+
+This property is a boolean. It is set when a worker dies, until then it is `undefined`.
+It is true if the worker was killed using the `.destroy()` method, and false otherwise.
+
+### Event: message
+
+The event is very much like the 'message' event from `child_process.fork()` except
+that is don't emit when a internal message is received. The event function does also
+receive a second argument containing the worker object.
+
+As an example, here is a cluster that keeps count of the number of requests
+in the master process using the message system:
+
+    var cluster = require('cluster');
+    var http = require('http');
+
+    if (cluster.isMaster) {
+
+      //Keep track of http requests
+      var numReqs = 0;
+      setInterval(function() {
+        console.log("numReqs =", numReqs);
+      }, 1000);
+
+      //Count requestes
+      var messageHandler = function (msg) {
+        if (msg.cmd && msg.cmd == 'notifyRequest') {
+          numReqs += 1;
+        }
+      };
+
+      //Start workers and listen for messages containing notifyRequest
+      cluster.autoFork();
+      cluster.eachWorker(function (worker) {
+        worker.on('message', messageHandler);
+      });
+
+    } else {
+
+     // Worker processes have a http server.
+      http.Server(function(req, res) {
+        res.writeHead(200);
+        res.end("hello world\n");
+
+        // notify master about the request
+        cluster.worker.send({ cmd: 'notifyRequest' });
+      }).listen(8000);
+    }
+
+### Event: online
+
+Same as the `cluster.on('online')` event, but emits only when the state change
+on the specified worker
+
+    cluster.fork().on('online', function (worker) {
+        //Worker is online
+    };
+
+### Event: listening
+
+Same as the `cluster.on('listening')` event, but emits only when the state change
+on the specified worker.
+
+    cluster.fork().on('listening', function (worker) {
+        //Worker is listening
+    };
+
+### Event: death
+
+Same as the `cluster.on('death')` event, but emits only when the state change
+on the specified worker.
+
+    cluster.fork().on('death', function (worker) {
+        //Worker has died
+    };
