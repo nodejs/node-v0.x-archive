@@ -54,13 +54,13 @@ This can be used to log worker activity, and create you own timeout.
     });
 
     cluster.on('fork', function (worker) {
-        timeouts[worker.workerID] = setTimeout(errorMsg, 2000);
+        timeouts[worker.uniqueID] = setTimeout(errorMsg, 2000);
     });
     cluster.on('listening', function (worker) {
-        clearTimeout(timeouts[worker.workerID]);
+        clearTimeout(timeouts[worker.uniqueID]);
     });
     cluster.on('death', function (worker) {
-        clearTimeout(timeouts[worker.workerID]);
+        clearTimeout(timeouts[worker.uniqueID]);
         errorMsg();
     });
 
@@ -311,12 +311,12 @@ The callback will be called when the new worker is listening for new connections
 
 ### Event: message
 
-The event is very much like the 'message' event from `child_process.fork()` except that
-is don't emit when a internal message is received. The event function does also
+The event is very much like the 'message' event from `child_process.fork()` except
+that is don't emit when a internal message is received. The event function does also
 receive a second argument containing the worker object.
 
 As an example, here is a cluster that keeps count of the number of requests
-in the master process using message passing:
+in the master process using the message system:
 
     var cluster = require('cluster');
     var http = require('http');
@@ -374,10 +374,11 @@ on the specified worker.
 
 ### Event: death
 
-Same as the `cluster.on('death')` event, but emits only when the state change on the specified worker.
+Same as the `cluster.on('death')` event, but emits only when the state change
+on the specified worker.
 
     cluster.fork().on('death', function (worker) {
-        //Worker has died or disconnected
+        //Worker has died
     };
 
 ### Event: disconnect
