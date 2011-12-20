@@ -25,8 +25,7 @@ var assert = require('assert');
 var cluster = require('cluster');
 
 if (cluster.isWorker) {
-  process.send({
-    testcase: true,
+  cluster.worker.send({
     prop: process.env['cluster_test_prop'],
     overwrite: process.env['cluster_test_overwrite']
   });
@@ -50,11 +49,9 @@ if (cluster.isWorker) {
 
   //Checks worker env
   worker.on('message', function(data) {
-    if (data.testcase) {
-      checks.using = (data.prop === 'custom');
-      checks.overwrite = (data.overwrite === 'new');
-      process.exit(0);
-    }
+    checks.using = (data.prop === 'custom');
+    checks.overwrite = (data.overwrite === 'new');
+    process.exit(0);
   });
 
   process.once('exit', function() {
