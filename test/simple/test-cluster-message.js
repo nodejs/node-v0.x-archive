@@ -133,8 +133,10 @@ else if (cluster.isMaster) {
   process.once('exit', function() {
     forEach(checks, function(check, type) {
       assert.ok(check.receive, 'The ' + type + ' did not receive any message');
-      assert.ok(check.correct, 'The ' + type + ' did not get the correct message');
-      assert.ok(check.callback, 'The ' + type + ' did not get any callback after sending');
+      assert.ok(check.correct,
+                'The ' + type + ' did not get the correct message');
+      assert.ok(check.callback,
+                'The ' + type + ' did not get any callback after sending');
     });
   });
 }

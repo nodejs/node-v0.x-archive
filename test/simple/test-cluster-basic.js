@@ -82,7 +82,7 @@ else if (cluster.isMaster) {
   forEach(checks.cluster.events, function(bool, name, index) {
 
     //Listen on event
-    cluster.on(name, function(/*worker*/) {
+    cluster.on(name, function(/* worker */) {
 
       //Set event
       checks.cluster.events[name] = true;
@@ -91,7 +91,8 @@ else if (cluster.isMaster) {
       checks.cluster.equal[name] = worker === arguments[0];
 
       //Check state
-      checks.worker.states[stateNames[index]] = (stateNames[index] === worker.state);
+      var state = stateNames[index];
+      checks.worker.states[state] = (state === worker.state);
     });
   });
 
@@ -124,12 +125,14 @@ else if (cluster.isMaster) {
   process.once('exit', function() {
     //Check cluster events
     forEach(checks.cluster.events, function(check, name) {
-      assert.ok(check, 'The cluster event "' + name + '" on the cluster object did not fire');
+      assert.ok(check, 'The cluster event "' + name + '" on the cluster ' +
+                'object did not fire');
     });
 
     //Check cluster event arguments
     forEach(checks.cluster.equal, function(check, name) {
-      assert.ok(check, 'The cluster event "' + name + '" did not emit with corrent argument');
+      assert.ok(check, 'The cluster event "' + name + '" did not emit ' +
+                'with corrent argument');
     });
 
     //Check worker states
@@ -139,12 +142,14 @@ else if (cluster.isMaster) {
 
     //Check worker events
     forEach(checks.worker.events, function(check, name) {
-      assert.ok(check, 'The worker event "' + name + '" on the worker object did not fire');
+      assert.ok(check, 'The worker event "' + name + '" on the worker object ' +
+                'did not fire');
     });
 
     //Check worker event arguments
     forEach(checks.worker.equal, function(check, name) {
-      assert.ok(check, 'The worker event "' + name + '" did not emit with corrent argument');
+      assert.ok(check, 'The worker event "' + name + '" did not emit with ' +
+                'corrent argument');
     });
   });
 
