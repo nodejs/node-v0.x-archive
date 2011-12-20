@@ -104,19 +104,32 @@ Spawn a new worker process. This can only be called from the master process.
 The function takes an optional `env` object. The properties in this object
 will be added to the process environment in the worker.
 
-### cluster.eachWorker(callback)
+### cluster.workers
 
-This method will go through all workers and call a given function.
+In the cluster all living worker objects are stored in this object by there
+`uniqueID` as the key. This makes it easy to loop thouge all liveing workers.
 
-    //Say hi to all workers
-    cluster.eachWorker(function (worker) {
-        worker.send("say hi");
+    // Go througe all workers
+    function eachWorker(callback) {
+        for (var uniqueID in cluster.workers) {
+            workers(cluster.workers[uniqueID]);
+        }
+    }
+    eachWorker(function (worker) {
+        worker.send('big announcement to all workers');
+    });
+
+Should you wich to reference a worker over a communication channel this unsing
+there `uniqueID` this is also the easies way to find the worker.
+
+    socket.on('data', function (uniqueID) {
+        var worker = cluster.workers[uniqueID];
     });
 
 ## Worker
 
-This object contains all public information and method about a worker. In the master
-it can be obtainedusing `cluster.workers` or `cluster.eachWorker`. In a worker
+This object contains all public information and method about a worker.
+In the master it can be obtainedusing `cluster.workers`. In a worker
 it can be obtained ained using `cluster.worker`.
 
 ### Worker.uniqueID
@@ -150,9 +163,9 @@ To know the difference between suicide and accidently death a suicide boolean is
             console.log('Oh, it was just suicide' – no need to worry').
         }
     });
-    cluster.eachWorker(function (worker) {
-        worker.destroy();
-    });
+
+    //destroy worker
+    worker.destroy();
 
 ### Worker.suicide
 
