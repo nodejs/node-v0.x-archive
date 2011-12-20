@@ -9,11 +9,11 @@ all share server ports.
 
     var cluster = require('cluster');
     var http = require('http');
-    var os = require('os');
+    var numCPUs = require('os').cpus().length;
 
     if (cluster.isMaster) {
-      // Spawn workers
-      for (i = 0, l = os.cpus().length; i < l; i++) {
+      // Fork workers.
+      for (var i = 0; i < numCPUs; i++) {
         cluster.fork();
       }
 
