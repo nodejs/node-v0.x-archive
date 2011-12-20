@@ -86,7 +86,7 @@
 
       // If this is a worker in cluster mode, start up the communiction
       // channel.
-      if (process.env.NODE_WORKER_ID) {
+      if (process.env.NODE_UNIQUE_ID) {
         var cluster = NativeModule.require('cluster');
         cluster._setupWorker();
       }
