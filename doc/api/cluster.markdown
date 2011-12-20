@@ -98,16 +98,11 @@ This can be used to restart the worker by calling `fork()` again.
       cluster.fork();
     });
 
-### cluster.fork()
+### cluster.fork([env])
 
 Spawn a new worker process. This can only be called from the master process.
-The `fork()` will also return a fork object equal as it was `child_process.fork`
-there had been called.
-
-The difference between `cluster.fork()` and `child_process.fork()` is simply
-that cluster allows TCP servers to be shared between workers. The message
-passing API that is available with `child_process.fork` is available within
-`cluster` as well.
+The function takes an optional `env` object. The properties in this object
+will be added to the process environment in the worker.
 
 ### cluster.eachWorker(callback)
 
