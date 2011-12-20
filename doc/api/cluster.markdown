@@ -34,13 +34,13 @@ Running node will now share port 8000 between the workers:
 ### cluster.isMaster
 
 This boolean flag is true if the process is a master. This is determined
-by the `process.env.NODE_WORKER_ID`. If `process.env.NODE_WORKER_ID` is
+by the `process.env.NODE_UNIQUE_ID`. If `process.env.NODE_UNIQUE_ID` is
 undefined `isMaster` is `true`.
 
 ### cluster.isWorker
 
 This boolean flag is true if the process is a worker forked from a master.
-If the `process.env.NODE_WORKER_ID` is set to a value different efined
+If the `process.env.NODE_UNIQUE_ID` is set to a value different efined
 `isWorker` is `true`.
 
 ### Event: 'fork'
@@ -130,19 +130,14 @@ When the `.setupMaster()` function has been executed this event emits. If `.setu
 was not executed before `fork()` or `.autoFork()`, they will execute the function with no
 arguments.
 
-### cluster.fork()
+### cluster.fork([env])
 
 Spawn a new worker process. This can only be called from the master process.
-The `fork()` will also return a fork object equal as it was `child_process.fork`
-there had been called.
+The function takes an optional `env` object. The properties in this object
+will be added to the process environment in the worker.
 
 When using `.fork()` you can not use the `.autoFork()` method. If you call
 `.autoFork()` it will throw an error.
-
-The difference between `cluster.fork()` and `child_process.fork()` is simply
-that cluster allows TCP servers to be shared between workers. The message
-passing API that is available with `child_process.fork` is available within
-`cluster` as well.
 
 ### cluster.autoFork()
 
@@ -243,9 +238,16 @@ This object contains all public information and method about a worker. In the ma
 it can be obtainedusing `cluster.workers` or `cluster.eachWorker`. In a worker
 it can be obtained ained using `cluster.worker`.
 
+### Worker.uniqueID
+
+Each new worker is given its own unique id, this id i stored in the `uniqueID`.
+
+
 ### Worker.workerID
 
-Each new worker is given its own unique id, this id i stored in the `workerID`.
+When using the `autoFork` method, workers are also given a workerID. This id start from 0
+and incress to the value of the `workers` property set by `setupMaster`. When a worker
+restart this id is resused unlike the uniqueID.
 
 ### Worker.process
 
@@ -309,12 +311,12 @@ The callback will be called when the new worker is listening for new connections
 
 ### Event: message
 
-The event is very much like the 'message' event from `child_process.fork()` or `process.on('message')`
-except that is don't emit when a internal message is received. The event function does also
+The event is very much like the 'message' event from `child_process.fork()` except that
+is don't emit when a internal message is received. The event function does also
 receive a second argument containing the worker object.
 
 As an example, here is a cluster that keeps count of the number of requests
-in the master process via message passing:
+in the master process using message passing:
 
     var cluster = require('cluster');
     var http = require('http');
@@ -354,25 +356,27 @@ in the master process via message passing:
 
 ### Event: online
 
-Same as the `cluster.on('online')` event, but emits only when the specified worker forks.
+Same as the `cluster.on('online')` event, but emits only when the state change
+on the specified worker.
 
-     -m cluster.fork().on('online', function (worker) {
+    cluster.fork().on('online', function (worker) {
         //Worker is online
     };
 
 ### Event: listening
 
-Same as the `cluster.on('listening')` event, but emits only when the state change on the specified worker.
+Same as the `cluster.on('listening')` event, but emits only when the state change
+on the specified worker.
 
     cluster.fork().on('listening', function (worker) {
         //Worker is listening
     };
 
-### Event: exit
+### Event: death
 
-Same as the `cluster.on('exit')` event, but emits only when the state change on the specified worker.
+Same as the `cluster.on('death')` event, but emits only when the state change on the specified worker.
 
-    cluster.fork().on('exit', function (worker) {
+    cluster.fork().on('death', function (worker) {
         //Worker has died or disconnected
     };
 
