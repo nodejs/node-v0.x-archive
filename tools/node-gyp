@@ -1,33 +1,106 @@
-#!/bin/bash 
-if [ -z "$NODE_ROOT" ] 
-then 
-  echo "NODE_ROOT enviromnet variable is not set! It must point to the root of the node's git directory and contain folders src, deps/v8/include and deps/uv/include"
-  echo "Check https://help.ubuntu.com/community/EnvironmentVariables on how to setup persistent environment variables"
-  echo "Probably the easiest way is to add an 'export NODE_ROOT=<location_to_node>' in your ~/.bashrc file"
-  exit 1 
-else
-	Proper_Node_Dir=1
-	[ -f "${NODE_ROOT}/src/node.h" ] || { Proper_Node_Dir=0 && echo "ERROR: node.h was not in ${NODE_ROOT}/src/node.h"; }
-	[ -f "${NODE_ROOT}/deps/v8/include/v8.h" ] || { Proper_Node_Dir=0 && echo "ERROR: v8.h was not in ${NODE_ROOT}/deps/v8/include/v8.h"; }
-	[ -f "${NODE_ROOT}/deps/uv/include/uv.h" ] || { Proper_Node_Dir=0 && echo "ERROR: uv.h was not in ${NODE_ROOT}/deps/uv/include/uv.h"; }
-	if  [ $Proper_Node_Dir -lt 1 ]
-	then
-		echo "The $NODE_ROOT doesn't seem to be correct"
-		exit 1
-	fi
-fi
+#! /usr/bin/env python
+import os, os.path, sys, getopt
+join = os.path.join
+
+def generate_project(argv=None):
+	toolsdir = os.path.dirname(os.path.realpath(__file__))
+	# Check that gypi file exists
+	if not check_for_file(join(toolsdir,"node_module.gypi")):
+		return 1
+	
+	nodeRoot = join(toolsdir, "..")
+	# Windows specific
+	if sys.platform == 'win32':
+		requiredFilesFound = True
+		requiredFilesFound = requiredFilesFound and check_for_file(join(nodeRoot,"src","node.h"))
+		requiredFilesFound = requiredFilesFound and check_for_file(join(nodeRoot,"deps","v8","include","v8.h"))
+		requiredFilesFound = requiredFilesFound and check_for_file(join(nodeRoot,"deps","uv","include","uv.h"))
+		if (not requiredFilesFound):
+			return 1
+		# Try to locate the node.lib file
+		node_lib_folder = None
+		if not check_for_file(join(nodeRoot,"Release","node.lib")):
+			if check_for_file(join(nodeRoot,"Debug","node.lib")):
+				node_lib_folder="Debug"
+		else:
+			node_lib_folder="Release"
+		if node_lib_folder is None:
+			print "node.lib file was not found in neither Release nor Debug folders in %s" % nodeRoot
+			return 1
+			
+
+	# Check for input file
+	gyp_definition_file = None
+	# if there are any arguments available ("make" and/or filename)
+	if argv is not None and len(argv) > 0 :
+		if argv[0]!= "make" and check_for_file(join(os.getcwd(),argv[0])):
+			gyp_definition_file= join(os.getcwd(),argv[0])
+		elif len(argv) == 2 and argv[1]!= "make" and check_for_file(join(os.getcwd(),argv[1])):
+			gyp_definition_file= join(os.getcwd(),argv[1])
+	
+	# if the file is not specified in the arguments, check for default file
+	if gyp_definition_file is None:
+		if check_for_file(join(os.getcwd(),"module.gyp")):
+			gyp_definition_file = join(os.getcwd(),"module.gyp")
+		else:
+			return 1
+	
+	# Try to load gyp
+	try:
+		import gyp
+	except ImportError, e:
+		print "gyp is not in your path environment variable. Trying to retrieve it from node."
+		if not check_for_file(join(toolsdir, "gyp","pylib","gyp","__init__.py")):
+			return 1
+		else:
+			sys.path.append(join(toolsdir, "gyp","pylib"))
+			print "gyp located at %s" % join(toolsdir, "gyp")
+			import gyp
+	
+	# Create the gyp arguments
+	gyp_args = [gyp_definition_file,'--depth=.','-DNODE_ROOT=%s' % nodeRoot,'-I%s' % join(toolsdir,"node_module.gypi")];
+	if sys.platform == 'win32':
+		gyp_args.extend(['-f','msvs','-G','msvs_version=2010','-Dnode_lib_folder=%s' % node_lib_folder])
+	else: # If we want XCode for Mac, this is the place to specify it
+		gyp_args.extend(['-f','make'])
+	
+	# Execute the project generation
+	if gyp.main(gyp_args) != 0:
+		print "An error occured generating the project. Check the output for info"
+		return 1
+	print 'Generating project: Done'
+	
+	# Check if user asked to build the project too
+	build_project = False
+	if argv is not None and len(argv) > 0:
+		if argv[0]== "make":
+			build_project = True
+		elif len(argv) == 2 and argv[1]== "make":
+			build_project = True
+		if build_project:
+			if sys.platform == 'win32':
+				return build_project_with_visual_studio(toolsdir, gyp_definition_file)
+			else:
+				return build_project_with_make()
+	# End of node-gyp
+	return 0
+	
+def check_for_file(testFile):
+	if not os.path.isfile(testFile):
+		print 'Could not locate %s' % testFile
+		return False
+	else:
+		return True
+		
+def build_project_with_visual_studio(toolsdir, gyp_definition_file):
+	return os.system("%s %s" % (join(toolsdir,"vsbuild.bat"),gyp_definition_file))
+
+def build_project_with_make():
+	return os.system("make")
+
+if __name__ == '__main__':
+	# If this is called directly from python, then generate_project reading the command line args
+	generate_project(sys.argv[1:])
 
 
-#Check if the user has specified an argument or use the default module.gyp
-module_filename=""
-if [ -z "$1" ] 
-then
-   [ -f "module.gyp" ] && module_filename="module.gyp" || echo "File module.gyp doesn't exist"
-else
-   [ -f "$1" ] && module_filename="$1" || echo "File $1 doesn't exist"
-fi
-#if we haven't got a gyp file exit
-[ -z "$module_filename" ] && echo "Gyp file not found!" && exit 1
-echo "Generating project"
-${NODE_ROOT}/tools/gyp/gyp -f make $module_filename --depth=. -DNODE_ROOT=$NODE_ROOT -I${NODE_ROOT}/tools/node_module.gypi
 
