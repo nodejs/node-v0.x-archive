@@ -9,7 +9,6 @@ import os
 import os.path
 import sys
 import subprocess
-join = os.path.join
 
 def generate_project(argv):
 	""" Generate node module project. Takes two optional arguments:
@@ -21,11 +20,11 @@ def generate_project(argv):
 	toolsdir = os.path.dirname(os.path.realpath(__file__))
 	
 	# Check that gypi file exists in the tools folder
-	if not check_for_file(join(toolsdir, "node_module.gypi")):
+	if not check_for_file(toolsdir, "node_module.gypi"):
 		return False
 	
 	# Get a reference to node's source root
-	nodeRoot = join(toolsdir, "..")
+	nodeRoot = os.path.join(toolsdir, "..")
 	
 	# Windows specific: we have to locate header files and node.lib
 	if sys.platform == 'win32':
@@ -48,7 +47,7 @@ def generate_project(argv):
 		return False
 	
 	# Create the gyp arguments
-	gyp_args = [gyp_definition_file, '--depth=.', '-DNODE_ROOT=%s' % nodeRoot, '-I%s' % join(toolsdir,"node_module.gypi")];
+	gyp_args = [gyp_definition_file, '--depth=.', '-DNODE_ROOT=%s' % nodeRoot, '-I%s' % os.path.join(toolsdir,"node_module.gypi")];
 	if sys.platform == 'win32': # Visual studio 2010 for windows
 		gyp_args.extend(['-f', 'msvs', '-G', 'msvs_version=2010', '-Dnode_lib_folder=%s' % node_lib_folder])
 	else: # If we want XCode for Mac, this is the place to specify it
@@ -71,10 +70,11 @@ def generate_project(argv):
 	# End of node-gyp
 	return True
 	
-def check_for_file(testFile):
+def check_for_file(path, *args):
 	""" Check if the specified file exist and returns True or False.
 		If the file is not found, it prints a message."""
-		
+	
+	testFile = os.path.join(path, *args)
 	if not os.path.isfile(testFile):
 		print 'Could not locate %s' % testFile
 		return False
@@ -85,15 +85,15 @@ def windows_include_headers_found(nodeRoot):
 	""" Check the nodeRoot folder to see if node.h, v8.h and uv.h 
 		files exist in there. Returns True or False"""
 		
-	return check_for_file(join(nodeRoot, "src", "node.h")) and check_for_file(join(nodeRoot, "deps", "v8" , "include", "v8.h")) and check_for_file(join(nodeRoot, "deps", "uv", "include", "uv.h"))
+	return check_for_file(nodeRoot, "src", "node.h") and check_for_file(nodeRoot, "deps", "v8" , "include", "v8.h") and check_for_file(nodeRoot, "deps", "uv", "include", "uv.h")
 
 def windows_locate_node_lib(nodeRoot):
 	""" Check the nodeRoot folder to see if node.lib file exists and returns 
 		whether the file was found in the Release or the Debug folder.
 		Returns None if the lib was not found."""
 		
-	if not check_for_file(join(nodeRoot, "Release", "node.lib")):
-		if check_for_file(join(nodeRoot, "Debug", "node.lib")):
+	if not check_for_file(nodeRoot, "Release", "node.lib"):
+		if check_for_file(nodeRoot, "Debug", "node.lib"):
 			return "Debug"
 	else:
 		return "Release"
@@ -110,15 +110,15 @@ def locate_gyp_file(argv):
 	gyp_definition_file = None
 	# if there are any arguments available ("make" and/or filename)
 	if argv:
-		if argv[0]!= "make" and check_for_file(join(os.getcwd(), argv[0])):
-			gyp_definition_file= join(os.getcwd(), argv[0])
-		elif len(argv) == 2 and argv[1]!= "make" and check_for_file(join(os.getcwd(),argv[1])):
-			gyp_definition_file= join(os.getcwd(), argv[1])
+		if argv[0]!= "make" and check_for_file(os.getcwd(), argv[0]):
+			gyp_definition_file= os.path.join(os.getcwd(), argv[0])
+		elif len(argv) == 2 and argv[1]!= "make" and check_for_file(os.getcwd(),argv[1]):
+			gyp_definition_file= os.path.join(os.getcwd(), argv[1])
 	
 	# if the file is not specified in the arguments, check for default file
 	if gyp_definition_file is None:
-		if check_for_file(join(os.getcwd(), "module.gyp")):
-			gyp_definition_file = join(os.getcwd(), "module.gyp")
+		if check_for_file(os.getcwd(), "module.gyp"):
+			gyp_definition_file = os.path.join(os.getcwd(), "module.gyp")
 	return gyp_definition_file
 
 def load_gyp(toolsdir):
@@ -131,11 +131,11 @@ def load_gyp(toolsdir):
 		return gyp
 	except ImportError, e:
 		print "gyp is not in your path environment variable. Trying to retrieve it from node."
-		if not check_for_file(join(toolsdir, "gyp", "pylib", "gyp", "__init__.py")):
+		if not check_for_file(toolsdir, "gyp", "pylib", "gyp", "__init__.py"):
 			return None
 		else:
-			sys.path.append(join(toolsdir, "gyp", "pylib"))
-			print "gyp located at %s" % join(toolsdir, "gyp")
+			sys.path.append(os.path.join(toolsdir, "gyp", "pylib"))
+			print "gyp located at %s" % os.path.join(toolsdir, "gyp")
 			import gyp
 			return gyp
 	
@@ -154,7 +154,7 @@ def build_project_with_visual_studio(toolsdir, gyp_definition_file):
 	""" Builds the generated project using Visual Studio's tools. Calls the vsbuild.bat
 		script located in the same folder as this module"""
 		
-	return subprocess.call([join(toolsdir, "vsbuild.bat"), gyp_definition_file])
+	return subprocess.call([os.path.join(toolsdir, "vsbuild.bat"), gyp_definition_file])
 
 def build_project_with_make():
 	""" Builds the generated Makefile using make"""
