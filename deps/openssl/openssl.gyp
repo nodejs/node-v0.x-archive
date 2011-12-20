@@ -38,7 +38,7 @@
             'TERMIO',
           ],
         }],
-        ['target_arch=="ia32"', {
+        ['target_arch=="ia32" or target_arch=="x64"', {
           'include_dirs': [
             'config/piii',
           ],
