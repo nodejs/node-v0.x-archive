@@ -182,6 +182,13 @@
             '-lkvm',
           ],
         }],
+        [ 'OS=="netbsd"', {
+          'sources': [ 'src/platform_netbsd.cc' ],
+          'libraries': [
+            '-lutil',
+            '-lkvm',
+          ],
+        }],
         [ 'OS=="solaris"', {
           'libraries': [
             '-lkstat',

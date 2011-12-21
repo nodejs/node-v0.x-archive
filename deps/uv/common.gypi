@@ -113,7 +113,7 @@
           '_CRT_NONSTDC_NO_DEPRECATE',
         ],
       }],
-      [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
+      [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris" or OS=="netbsd"', {
         'variables': {
           'gcc_version%': '<!(python build/gcc_version.py)>)',
         },
