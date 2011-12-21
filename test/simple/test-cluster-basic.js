@@ -30,6 +30,7 @@ function forEach(obj, fn) {
   });
 }
 
+
 if (cluster.isWorker) {
   var http = require('http');
   http.Server(function() {
@@ -38,6 +39,9 @@ if (cluster.isWorker) {
 }
 
 else if (cluster.isMaster) {
+
+  assert.equal('NODE_UNIQUE_ID' in process.env, false,
+      'cluster.isMaster should not be true when NODE_UNIQUE_ID is set');
 
   var checks = {
     cluster: {
@@ -108,7 +112,8 @@ else if (cluster.isMaster) {
 
   //Create worker
   worker = cluster.fork();
-  assert.ok(worker instanceof Object, 'cluster.fork did not return an object');
+  assert.ok(worker instanceof cluster.Worker,
+      'the worker is not a instance of the Worker constructor');
 
   //Check event
   forEach(checks.worker.events, function(bool, name, index) {
