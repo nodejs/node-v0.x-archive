@@ -141,17 +141,16 @@ function calls and return a result. This is the main and only needed source
       HandleScope scope;
 
       if (args.Length() < 2) {
-        ThrowException(Exception::TypeError(String::New("Wrong number of arguments")));
-        return scope.Close(Undefined());
+        return ThrowException(Exception::TypeError(String::New("Wrong number of arguments")));
       }
 
       if (!args[0]->IsNumber() || !args[1]->IsNumber()) {
-        ThrowException(Exception::TypeError(String::New("Wrong arguments")));
-        return scope.Close(Undefined());
+        return ThrowException(Exception::TypeError(String::New("Wrong arguments")));
       }
 
-      Local<Number> num = Number::New(args[0]->NumberValue() + 
-          args[1]->NumberValue());
+      double a = args[0]->NumberValue();
+      double b = args[1]->NumberValue();
+      Local<Number> num = Number::New(a + b);
       return scope.Close(num);
     }
 
