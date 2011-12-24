@@ -52,8 +52,9 @@ function request(i) {
     var socket = req.socket;
     socket.on('close', function() {
       ++count;
-      assert.equal(http.globalAgent.sockets[name].length, max - count);
-      assert.equal(http.globalAgent.sockets[name].indexOf(socket), -1);
+      var sockets = http.globalAgent.sockets[name] || [];
+      assert.equal(sockets.length, max - count);
+      assert.equal(sockets.indexOf(socket), -1);
       if (count === max) {
         server.close();
       }
@@ -62,5 +63,9 @@ function request(i) {
 }
 
 process.on('exit', function() {
+  // no leaking arrays:
+  assert.equal(Object.keys(http.globalAgent.sockets).length, 0);
+  assert.equal(Object.keys(http.globalAgent.requests).length, 0);
+
   assert.equal(count, max);
 });

@@ -54,4 +54,7 @@ server.listen(common.PORT, function() {
 
 process.on('exit', function() {
   assert.equal(N * M, responses);
+  // no leaking arrays:
+  assert.equal(Object.keys(http.globalAgent.sockets).length, 0);
+  assert.equal(Object.keys(http.globalAgent.requests).length, 0);
 });

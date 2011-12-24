@@ -77,7 +77,7 @@ srv.listen(common.PORT, '127.0.0.1', function() {
 
     process.nextTick(function() {
       // Make sure this request got removed from the pool.
-      assert.equal(http.globalAgent.sockets[options.host + ':' + options.port].length, 0);
+      assert.equal(Object.keys(http.globalAgent.sockets).length, 0);
       socket.end();
       srv.close();
 
