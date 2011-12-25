@@ -119,6 +119,20 @@ process.on('exit', function() {
     knownGlobals.push(DataView);
   }
 
+  if (global.Proxy) {
+    knownGlobals.push(Proxy);
+  }
+
+  if (global.WeakMap) {
+    knownGlobals.push(WeakMap);
+  }
+
+  if (global.Map) {
+    knownGlobals.push(Map);
+    knownGlobals.push(Set);
+  }
+
+
   for (var x in global) {
     var found = false;
 
