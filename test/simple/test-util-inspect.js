@@ -155,5 +155,7 @@ assert.equal(util.inspect(circular), '{ p: \u00ABCircular\u00BB }');
 
 // Recurse limit
 var depth = { p1: { p2: { p3: { p4: {} } } } };
+
 assert.equal(util.inspect(depth), '{ p1: { p2: { p3: \u00ABMore\u00BB } } }');
 assert.equal(util.inspect(depth, null, 3), '{ p1: { p2: { p3: { p4: \u00ABMore\u00BB } } } }');
+assert.equal(util.inspect(depth, null, 4), '{ p1: { p2: { p3: { p4: {} } } } }');
