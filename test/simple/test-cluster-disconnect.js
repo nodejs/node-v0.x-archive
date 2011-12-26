@@ -53,6 +53,13 @@ else if (cluster.isMaster) {
     }
   };
 
+  // Go througe all workers
+  var eachWorker = function(callback) {
+      for (var uniqueID in cluster.workers) {
+          callback(cluster.workers[uniqueID]);
+      }
+  };
+
   //run beginTest when all workers are running
   var cpus = os.cpus().length;
   var workers = 0;
@@ -99,7 +106,7 @@ else if (cluster.isMaster) {
 
     //Save the workers in a list
     var workerList = [];
-    cluster.eachWorker(function(worker) {
+    eachWorker(function(worker) {
       workerList.push(worker);
     });
 
