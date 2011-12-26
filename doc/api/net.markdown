@@ -339,14 +339,17 @@ Disables the Nagle algorithm. By default TCP connections use the Nagle
 algorithm, they buffer data before sending it off. Setting `noDelay` will
 immediately fire off data each time `socket.write()` is called.
 
-#### socket.setKeepAlive(enable=false, [initialDelay])
+#### socket.setKeepAlive(enable=false, [initialDelay], [probeInterval], [failureCount])
 
-Enable/disable keep-alive functionality, and optionally set the initial
-delay before the first keepalive probe is sent on an idle socket.
-Set `initialDelay` (in milliseconds) to set the delay between the last
-data packet received and the first keepalive probe. Setting 0 for
-initialDelay will leave the value unchanged from the default
-(or previous) setting.
+Enable/disable keep-alive functionality, and optionally override default
+keep-alive options. Set `initialDelay` (in milliseconds) to set the delay
+between the last data packet received and the first keepalive probe. Set
+`probeInterval` (in milliseconds) to set the interval between the keep-
+alive probes sent after the initial probe. Set `failureCount` to set the
+maximum number of probes that can fail before the OS closes the connection.
+probeInterval and failureCount do not work on Windows OS. Setting 0 for
+initialDelay, probeInterval, or failureCount will leave the value unchanged
+from the default (or previous) setting.
 
 #### socket.address()
 

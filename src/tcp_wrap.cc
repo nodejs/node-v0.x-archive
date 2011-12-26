@@ -267,8 +267,10 @@ Handle<Value> TCPWrap::SetKeepAlive(const Arguments& args) {
 
   int enable = args[0]->Int32Value();
   unsigned int delay = args[1]->Uint32Value();
+  unsigned int interval = args[2]->Uint32Value();
+  unsigned int count = args[3]->Uint32Value();
 
-  int r = uv_tcp_keepalive(&wrap->handle_, enable, delay);
+  int r = uv_tcp_keepalive(&wrap->handle_, enable, delay, interval, count);
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
 
