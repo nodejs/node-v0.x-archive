@@ -191,13 +191,26 @@ This example restart the cluster each time the worker file changes:
         }
     });
 
-### cluster.eachWorker(callback)
+### cluster.workers
 
-This method will go through all workers and call a given function.
+In the cluster all living worker objects are stored in this object by there
+`uniqueID` as the key. This makes it easy to loop thouge all liveing workers.
 
-    //Say hi to all workers
-    cluster.eachWorker(function (worker) {
-        worker.send("say hi");
+    // Go througe all workers
+    function eachWorker(callback) {
+        for (var uniqueID in cluster.workers) {
+            workers(cluster.workers[uniqueID]);
+        }
+    }
+    eachWorker(function (worker) {
+        worker.send('big announcement to all workers');
+    });
+
+Should you wich to reference a worker over a communication channel this unsing
+there `uniqueID` this is also the easies way to find the worker.
+
+    socket.on('data', function (uniqueID) {
+        var worker = cluster.workers[uniqueID];
     });
 
 ### cluster.setupMaster([options])
@@ -234,8 +247,8 @@ All propertys are `undefined` if they are not yet set.
 
 ## Worker
 
-This object contains all public information and method about a worker. In the master
-it can be obtainedusing `cluster.workers` or `cluster.eachWorker`. In a worker
+This object contains all public information and method about a worker.
+In the master it can be obtainedusing `cluster.workers`. In a worker
 it can be obtained ained using `cluster.worker`.
 
 ### Worker.uniqueID
