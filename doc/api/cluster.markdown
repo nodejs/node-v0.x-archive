@@ -112,7 +112,7 @@ In the cluster all living worker objects are stored in this object by there
     // Go througe all workers
     function eachWorker(callback) {
         for (var uniqueID in cluster.workers) {
-            workers(cluster.workers[uniqueID]);
+            callback(cluster.workers[uniqueID]);
         }
     }
     eachWorker(function (worker) {
