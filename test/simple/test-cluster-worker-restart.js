@@ -64,6 +64,10 @@ else if (cluster.isMaster) {
         callback(result);
       });
     });
+    socket.on('error', function (err) {
+      throw err;
+      process.exit(1);
+    });
   };
 
   worker.on('listening', function () {
