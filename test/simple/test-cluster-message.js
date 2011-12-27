@@ -32,13 +32,13 @@ function forEach(obj, fn) {
 }
 
 if (cluster.isWorker) {
-  //Create a tcp server
+  // Create a tcp server
   // this will be used as cluster-shared-server
-  //and as an alternativ IPC channel
+  // and as an alternativ IPC channel
   var server = net.Server();
   server.on('connection', function(socket) {
 
-    //Tell master using TCP socket that a message is received
+    // Tell master using TCP socket that a message is received
     cluster.worker.on('message', function(message) {
       socket.write(JSON.stringify({
         code: 'received message',
@@ -46,11 +46,11 @@ if (cluster.isWorker) {
       }));
     });
 
-    //When getting TCP data from master, send it back using IPC
+    // When getting TCP data from master, send it back using IPC
     socket.on('data', function(data) {
 
       cluster.worker.send('message from worker', function() {
-        //When master echo a callback, notify master using TCP socket
+        // When master echo a callback, notify master using TCP socket
         socket.write(JSON.stringify({
           code: 'received callback'
         }));
@@ -77,32 +77,32 @@ else if (cluster.isMaster) {
     }
   };
 
-  //Spawn worker and connect to TCP when worker is lisining
+  // Spawn worker and connect to TCP when worker is lisining
   var worker = cluster.fork();
 
-  //When a IPC message is resicved form the worker
+  // When a IPC message is resicved form the worker
   worker.on('message', function(messsage) {
     checks.master.receive = true;
     checks.master.correct = (messsage === 'message from worker');
   });
 
-  //When a TCP connection is made with the worker
+  // When a TCP connection is made with the worker
   worker.on('listening', function() {
     var client;
 
     client = net.connect(common.PORT, function() {
 
-      //Send message to worker, and check for callback
+      // Send message to worker, and check for callback
       worker.send('message from master', function() {
         checks.master.callback = true;
       });
 
-      //Request that the worker send a messae to the master using TCP
+      // Request that the worker send a messae to the master using TCP
       client.write('worker please send message to master');
     });
 
     client.on('data', function(data) {
-      //All data is JSON
+      // All data is JSON
       data = JSON.parse(data.toString());
 
       switch (data.code) {
@@ -119,7 +119,7 @@ else if (cluster.isMaster) {
       }
     });
 
-    //When the connection ends kill worker and shutdown process
+    // When the connection ends kill worker and shutdown process
     client.on('end', function() {
       worker.destroy();
     });
