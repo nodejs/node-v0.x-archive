@@ -199,6 +199,9 @@ else if (cluster.isMaster) {
   //Start all workers
   cluster.autoFork();
 
+  //check cluster.fork conflict
+  assert.throws(cluster.fork, Error, 'The cluster.fork should throw an error after using cluster.autoFork');
+
   //Check all values
   process.once('exit', function() {
 
