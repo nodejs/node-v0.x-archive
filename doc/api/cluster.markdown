@@ -17,6 +17,9 @@ all share server ports.
         cluster.fork();
       }
 
+      cluster.on('death', function(worker) {
+        console.log('worker ' + worker.pid + ' died');
+      });
     } else {
       // Workers can share any TCP connection
       // In this case its a HTTP server
