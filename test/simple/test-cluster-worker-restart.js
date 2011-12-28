@@ -64,13 +64,11 @@ else if (cluster.isMaster) {
         callback(result);
       });
     });
-    socket.on('error', function (err) {
-      throw err;
-      process.exit(1);
-    });
   };
 
   worker.on('listening', function () {
+
+    console.log('first time: ');
 
     //Connect to worker to get time
     connect(function (oldData) {
@@ -78,6 +76,8 @@ else if (cluster.isMaster) {
       //restart worker
       worker.restart(function () {
         checks.callback = true;
+
+        console.log('second time:');
 
         //Connect again to new worker
         connect(function (newData) {
