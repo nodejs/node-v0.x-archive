@@ -149,12 +149,7 @@ function is stored in process.
 In the master this function will send a message to a specific worker.
 In a worker the function will send a message to the master.
 
-The `send()` method takes a second optional argument. This is a callback function
-there will run the message was received.
-
-    cluster.worker.send({ cmd: 'notifyRequest' }, function () {
-      //Master has recived message
-    });
+    cluster.worker.send({ cmd: 'notifyRequest' });
 
 ### Worker.destroy()
 

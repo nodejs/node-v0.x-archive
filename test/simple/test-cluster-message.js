@@ -46,17 +46,7 @@ if (cluster.isWorker) {
       }));
     });
 
-    // When getting TCP data from master, send it back using IPC
-    socket.on('data', function(data) {
-
-      cluster.worker.send('message from worker', function() {
-        // When master echo a callback, notify master using TCP socket
-        socket.write(JSON.stringify({
-          code: 'received callback'
-        }));
-      });
-
-    });
+    cluster.worker.send('message from worker');
   });
 
   server.listen(common.PORT, '127.0.0.1');
@@ -67,55 +57,55 @@ else if (cluster.isMaster) {
   var checks = {
     master: {
       'receive': false,
-      'correct': false,
-      'callback': false
+      'correct': false
     },
     worker: {
       'receive': false,
-      'correct': false,
-      'callback': false
+      'correct': false
     }
   };
 
-  // Spawn worker and connect to TCP when worker is lisining
+
+  var client;
+  var check = function(type, result) {
+    checks[type].receive = true;
+    checks[type].correct = result;
+
+    var missing = false;
+    forEach(checks, function (type) {
+      if (type.receive === false) missing = true;
+    });
+
+    if (missing === false) {
+      client.end();
+    }
+  };
+
+  // Spawn worker
   var worker = cluster.fork();
 
   // When a IPC message is resicved form the worker
-  worker.on('message', function(messsage) {
-    checks.master.receive = true;
-    checks.master.correct = (messsage === 'message from worker');
+  worker.on('message', function(message) {
+    check('master', message === 'message from worker');
   });
 
-  // When a TCP connection is made with the worker
+  // When a TCP connection is made with the worker connect to it
   worker.on('listening', function() {
-    var client;
 
     client = net.connect(common.PORT, function() {
 
-      // Send message to worker, and check for callback
-      worker.send('message from master', function() {
-        checks.master.callback = true;
-      });
-
-      // Request that the worker send a messae to the master using TCP
-      client.write('worker please send message to master');
+      //Send message to worker
+      worker.send('message from master');
     });
 
     client.on('data', function(data) {
       // All data is JSON
       data = JSON.parse(data.toString());
 
-      switch (data.code) {
-        case 'received message':
-          checks.worker.receive = true;
-          checks.worker.correct = (data.echo === 'message from master');
-          break;
-        case 'received callback':
-          checks.worker.callback = true;
-          client.end();
-          break;
-        default:
-          throw new Error('worng TCP message recived: ' + data);
+      if (data.code === 'received message') {
+        check('worker', data.echo === 'message from master');
+      } else {
+        throw new Error('worng TCP message recived: ' + data);
       }
     });
 
@@ -135,8 +125,6 @@ else if (cluster.isMaster) {
       assert.ok(check.receive, 'The ' + type + ' did not receive any message');
       assert.ok(check.correct,
                 'The ' + type + ' did not get the correct message');
-      assert.ok(check.callback,
-                'The ' + type + ' did not get any callback after sending');
     });
   });
 }
