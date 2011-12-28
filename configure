@@ -157,8 +157,8 @@ def host_arch():
 
 
 def target_arch():
-  # TODO act on options.dest_cpu
-  return host_arch()
+  """Destination architecture. One of arm, ia32 or x64. Defaults to host architecture."""
+  return options.dest_cpu or host_arch()
 
 
 def configure_node(o):
