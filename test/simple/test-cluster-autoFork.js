@@ -36,7 +36,7 @@ if (cluster.isWorker) {
   //Throw an error at some point
   cluster.worker.on('message', function(message) {
     if (message === 'please throw error') {
-      process.exit(0);
+      throw "error";
     }
   });
 
@@ -190,7 +190,7 @@ else if (cluster.isMaster) {
     });
 
     cluster.once('listening', function() {
-      process.exit(0);
+      cluster.destroy(process.exit);
     });
 
     cluster.autoFork();
