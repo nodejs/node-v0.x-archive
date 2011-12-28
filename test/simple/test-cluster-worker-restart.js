@@ -23,21 +23,25 @@
 var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
-var net = require('net');
 
 if (cluster.isWorker) {
 
+  //Just keep the worker alive
+  var http = require('http');
+  http.Server(function() {
+
+  }).listen(common.PORT, '127.0.0.1');
+
   var time = Date.now();
 
-  //Send a end message back to client
+  //Send a end message back to master
   //containing env and startup time
-  var server = net.createServer(function(socket) {
-    socket.end(JSON.stringify({
+  cluster.worker.on('message', function () {
+    cluster.worker.send({
       "time": time,
       "env": process.env['custom_env']
-    }));
+    });
   });
-  server.listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
@@ -49,34 +53,19 @@ else if (cluster.isMaster) {
   };
 
   //Fork a new worker with a custom env
-  var worker = cluster.fork({
+  var oldWorker = cluster.fork({
     'custom_env': 'value'
   });
 
-  //Get startup time from worker
-  var connect = function (callback) {
-    var result;
-    var socket = net.connect(common.PORT, '127.0.0.1', function () {
-      socket.on('data', function (data) {
-        result = JSON.parse(data);
-      });
-      socket.on('end', function () {
-        callback(result);
-      });
-    });
-  };
-
-  worker.on('listening', function () {
-
-    //Connect to worker to get time
-    connect(function (oldData) {
+  //Get data from original worker
+  oldWorker.on('listening', function () {
+    oldWorker.on('message', function (oldData) {
 
       //restart worker
-      worker.restart(function () {
+      oldWorker.restart(function (newWorker) {
         checks.callback = true;
 
-        //Connect again to new worker
-        connect(function (newData) {
+        newWorker.on('message', function (newData) {
           //Did time change
           if (oldData.time !== newData.time) {
             checks.timeChanged = true;
@@ -88,9 +77,13 @@ else if (cluster.isMaster) {
           }
 
           process.exit(0);
+
         });
+        newWorker.send('ping');
       });
+
     });
+    oldWorker.send('ping');
   });
 
   //Check all values
