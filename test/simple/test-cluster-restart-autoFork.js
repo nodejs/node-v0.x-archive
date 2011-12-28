@@ -28,50 +28,72 @@ var os = require('os');
 if (cluster.isWorker) {
 
   //Just keep the worker alive
-  var http = require('http');
-  http.Server(function() {
-
-  }).listen(common.PORT, '127.0.0.1');
+  var net = require('net');
+  var server = net.createServer(function(socket) {
+    socket.end('hallo');
+  });
+  server.listen(common.PORT, '127.0.0.1');
 }
 
 else if (cluster.isMaster) {
 
+  // Go througe all workers
+  var eachWorker = function(callback) {
+      for (var uniqueID in cluster.workers) {
+          callback(cluster.workers[uniqueID]);
+      }
+  };
+
   var checks = {
     workersMatch: false,
     callback: false,
+    listeningState: false,
     wasRestarted: false
   };
-  
+
   var cpus = os.cpus().length;
-  
+
   //Start workers by fork
   cluster.autoFork();
-  
+
   //Disconnect the first worker
-  cluster.on('listening', function listeningEvent (worker) {
+  cluster.on('listening', function listeningEvent(worker) {
     //When all workers are online
     if (cluster.onlineWorkers === cpus) {
       cluster.removeListener('listening', listeningEvent);
-      
+
       //When using autoFork, workers there did suicide do also respawn
-      //to test that we will disconnect a singel worker
-      worker.disconnect();
+      //when calling cluster.restart. To test that we will disconnect
+      //a singel worker
       worker.once('disconnect', function () {
         var time = Date.now();
-        
+
         //Check that startup time is greate that the current time
         //this will indicate any new workers
         cluster.once('fork', function (worker) {
           checks.wasRestarted = (worker.startup >= time);
         });
-        
+
         //restart worker and when done, check that all workers was created
-        cluster.restart(function () {
+        cluster.restart(function() {
           checks.callback = true;
           checks.workersMatch = (cluster.onlineWorkers === cpus);
-          process.exit(0);
+
+          var missing = false;
+          eachWorker(function (worker) {
+            if (worker.state !== 'listening') missing = true;
+          });
+          checks.listeningState = !missing;
+
+          console.log(cluster.workers);
+          cluster.destroy(function() {
+            process.exit(0);
+          });
         });
       });
+
+      //disconnect now
+      worker.disconnect();
     }
   });
 
@@ -79,7 +101,8 @@ else if (cluster.isMaster) {
   process.once('exit', function() {
     assert.ok(checks.callback, 'The callback from restart was not called');
     assert.ok(checks.workersMatch, 'Not all workers was restarted when the callback was called');
+    assert.ok(checks.listeningState, 'All workers did not have the listening when restart callback was called');
     assert.ok(checks.wasRestarted, 'The worker did not restart');
 });
- 
+
 }
