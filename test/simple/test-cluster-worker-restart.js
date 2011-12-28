@@ -68,16 +68,12 @@ else if (cluster.isMaster) {
 
   worker.on('listening', function () {
 
-    console.log('first time: ');
-
     //Connect to worker to get time
     connect(function (oldData) {
 
       //restart worker
       worker.restart(function () {
         checks.callback = true;
-
-        console.log('second time:');
 
         //Connect again to new worker
         connect(function (newData) {
