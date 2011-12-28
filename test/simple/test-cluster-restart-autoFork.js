@@ -30,7 +30,6 @@ if (cluster.isWorker) {
   //Just keep the worker alive
   var net = require('net');
   var server = net.createServer(function(socket) {
-    socket.end('hallo');
   });
   server.listen(common.PORT, '127.0.0.1');
 }
