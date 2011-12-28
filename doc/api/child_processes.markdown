@@ -21,8 +21,18 @@ This event is emitted after the child process ends. If the process terminated
 normally, `code` is the final exit code of the process, otherwise `null`. If
 the process terminated due to receipt of a signal, `signal` is the string name
 of the signal, otherwise `null`.
+When using the `.isolate()` method the `exit` event won't emit when the process die.
 
 See `waitpid(2)`.
+
+### Event: 'isolate'
+
+This event will emit after all sockets are closed after using the `.isolate()` method.
+
+### Event: 'disconnect'
+
+This event will emit after using the `.disconnect()` method. The event is only emitted
+when using `.fork()`.
 
 ### child.stdin
 
@@ -258,7 +268,9 @@ processes:
       }
     });
 
-
+To close the IPC connection between parent and child use the `child.disconnect()` method.
+This allow the child to die gracefull since there is no IPC channel keeping it alive.
+After calling this the `disconnect` event will emit.
 
 ### child.kill(signal='SIGTERM')
 
@@ -279,3 +291,13 @@ Note that while the function is called `kill`, the signal delivered to the child
 process may not actually kill it.  `kill` really just sends a signal to a process.
 
 See `kill(2)`
+
+### child.isolate([callback])
+
+This function will isolate the process from its parent. This allow the parent to
+self terminate because the child no longer is a part of the event loop. However
+this has the sideefect that the `exit` event won't emit.
+
+When all std sockets between parent and child are closed the callback and the
+`isolate` event will emit.
+
