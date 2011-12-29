@@ -348,8 +348,8 @@ in the master process using the message system:
 
       //Start workers and listen for messages containing notifyRequest
       cluster.autoFork();
-      cluster.eachWorker(function (worker) {
-        worker.on('message', messageHandler);
+      Object.keys(cluster.workers).forEach(function (uniqueID) {
+        cluster.workers[uniqueID].on('message', messageHandler);
       });
 
     } else {
