@@ -30,7 +30,6 @@ var watchSeenOne = 0;
 var watchSeenTwo = 0;
 var watchSeenThree = 0;
 
-var startDir = process.cwd();
 var testDir = common.fixturesDir;
 
 var filenameOne = 'watch.txt';
@@ -44,17 +43,20 @@ var filenameThree = 'newfile.txt';
 var testsubdir = path.join(testDir, 'testsubdir');
 var filepathThree = path.join(testsubdir, filenameThree);
 
-
 process.on('exit', function() {
-  fs.unlinkSync(filepathOne);
-  fs.unlinkSync(filepathTwoAbs);
-  fs.unlinkSync(filepathThree);
-  fs.rmdirSync(testsubdir);
+  try { fs.unlinkSync(filepathOne); } catch (e) {}
+  try { fs.unlinkSync(filepathTwoAbs); } catch (e) {}
+  try { fs.unlinkSync(filepathThree); } catch (e) {}
+  try { fs.rmdirSync(testsubdir); } catch (e) {}
   assert.ok(watchSeenOne > 0);
   assert.ok(watchSeenTwo > 0);
   assert.ok(watchSeenThree > 0);
 });
 
+process.once('uncaughtException', function (err) {
+  console.error(err.stack);
+  process.exit(1);
+});
 
 fs.writeFileSync(filepathOne, 'hello');
 
