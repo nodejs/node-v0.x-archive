@@ -269,8 +269,10 @@ function is stored in process.
 
 ### Worker.send(message)
 
-In the master this function will send a message to a specific worker.
-In a worker the function will send a message to the master.
+This function is equal to the send methods provided by `child_process.fork()`.
+In the master you should use this function to send a message to a specific worker.
+However in a worker you can also use `process.send(message)`, since this is the same
+function.
 
     cluster.worker.send({ cmd: 'notifyRequest' });
 
@@ -319,9 +321,9 @@ The callback will be called when the new worker is listening for new connections
 
 ### Event: message
 
-The event is very much like the 'message' event from `child_process.fork()` except
-that is don't emit when a internal message is received. The event function does also
-receive a second argument containing the worker object.
+This event is the same as the one provided by `child_process.fork()`.
+In the master you should use this event, however in a worker you can also use
+`process.on('message')`
 
 As an example, here is a cluster that keeps count of the number of requests
 in the master process using the message system:
@@ -358,7 +360,7 @@ in the master process using the message system:
         res.end("hello world\n");
 
         // notify master about the request
-        cluster.worker.send({ cmd: 'notifyRequest' });
+        process.send({ cmd: 'notifyRequest' });
       }).listen(8000);
     }
 
