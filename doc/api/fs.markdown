@@ -170,12 +170,14 @@ the completion callback.
 
 Synchronous link(2).
 
-### fs.symlink(linkdata, path, [callback])
+### fs.symlink(linkdata, path, [type], [callback])
 
 Asynchronous symlink(2). No arguments other than a possible exception are given
 to the completion callback.
+`type` argument can be either `'dir'` or `'file'` (default is `'file'`).  It is only 
+used on Windows (ignored on other platforms).
 
-### fs.symlinkSync(linkdata, path)
+### fs.symlinkSync(linkdata, path, [type])
 
 Synchronous symlink(2).
 
@@ -315,10 +317,10 @@ without waiting for the callback. For this scenario,
 Synchronous version of buffer-based `fs.write()`. Returns the number of bytes
 written.
 
-### fs.writeSync(fd, str, position, encoding='utf8')
+### fs.writeSync(fd, str, position, [encoding])
 
-Synchronous version of string-based `fs.write()`. Returns the number of _bytes_
-written.
+Synchronous version of string-based `fs.write()`. `encoding` defaults to
+`'utf8'`. Returns the number of _bytes_ written.
 
 ### fs.read(fd, buffer, offset, length, position, [callback])
 
@@ -368,11 +370,11 @@ If `encoding` is specified then this function returns a string. Otherwise it
 returns a buffer.
 
 
-### fs.writeFile(filename, data, encoding='utf8', [callback])
+### fs.writeFile(filename, data, [encoding], [callback])
 
 Asynchronously writes data to a file, replacing the file if it already exists.
 `data` can be a string or a buffer. The `encoding` argument is ignored if
-`data` is a buffer.
+`data` is a buffer. It defaults to `'utf8'`.
 
 Example:
 
@@ -381,7 +383,7 @@ Example:
       console.log('It\'s saved!');
     });
 
-### fs.writeFileSync(filename, data, encoding='utf8')
+### fs.writeFileSync(filename, data, [encoding])
 
 The synchronous version of `fs.writeFile`.
 

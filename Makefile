@@ -1,35 +1,41 @@
-WAF=python tools/waf-light
+BUILDTYPE ?= Release
 
-web_root = node@nodejs.org:~/web/nodejs.org/
+ifeq ($(BUILDTYPE),Release)
+all: out/Makefile node
+else
+all: out/Makefile node_g
+endif
 
-#
-# Because we recursively call make from waf we need to make sure that we are
-# using the correct make. Not all makes are GNU Make, but this likely only
-# works with gnu make. To deal with this we remember how the user invoked us
-# via a make builtin variable and use that in all subsequent operations
-#
-export NODE_MAKE := $(MAKE)
+# The .PHONY is needed to ensure that we recursively use the out/Makefile
+# to check for changes.
+.PHONY: node node_g
 
-all: program
-	@-[ -f out/Release/node ] && ls -lh out/Release/node
+node:
+	$(MAKE) -C out BUILDTYPE=Release
+	ln -fs out/Release/node node
 
-all-progress:
-	@$(WAF) -p build
+node_g:
+	$(MAKE) -C out BUILDTYPE=Debug
+	ln -fs out/Debug/node node_g
 
-program:
-	@$(WAF) --product-type=program build
+out/Debug/node:
+	$(MAKE) -C out BUILDTYPE=Debug
 
-staticlib:
-	@$(WAF) --product-type=cstaticlib build
+out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
+	tools/gyp_node -f make
 
-dynamiclib:
-	@$(WAF) --product-type=cshlib build
-
-install:
-	@$(WAF) install
+install: all
+	out/Release/node tools/installer.js ./config.gypi install
 
 uninstall:
-	@$(WAF) uninstall
+	out/Release/node tools/installer.js ./config.gypi uninstall
+
+clean:
+	-rm -rf out/Makefile node node_g out/**/*.o  out/**/*.a out/$(BUILDTYPE)/node
+
+distclean:
+	-rm -rf out
+	-rm config.gypi
 
 test: all
 	python tools/test.py --mode=release simple message
@@ -42,6 +48,7 @@ test-valgrind: all
 
 test-all: all
 	python tools/test.py --mode=debug,release
+	$(MAKE) test-npm
 
 test-all-http1: all
 	python tools/test.py --mode=debug,release --use-http1
@@ -67,8 +74,11 @@ test-pummel: all
 test-internet: all
 	python tools/test.py internet
 
+test-npm: node
+	./node deps/npm/test/run.js
 
-out/Release/node: all
+test-npm-publish: node
+	npm_package_config_publishtest=true ./node deps/npm/test/run.js
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
 apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html))
@@ -103,7 +113,7 @@ website_files = \
 	out/doc/ryan-speaker.jpg \
 	out/doc/yahoo-logo.png
 
-doc docs: out/Release/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
+doc: out/Release/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -120,7 +130,7 @@ out/doc/api/%.html: doc/api/%.markdown out/Release/node $(apidoc_dirs) $(apiasse
 out/doc/%:
 
 website-upload: doc
-	scp -r out/doc/* $(web_root)
+	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
 
 docopen: out/doc/api/all.html
 	-google-chrome out/doc/api/all.html
@@ -128,42 +138,11 @@ docopen: out/doc/api/all.html
 docclean:
 	-rm -rf out/doc
 
-clean:
-	$(WAF) clean
-	-find tools -name "*.pyc" | xargs rm -f
-
-distclean: docclean
-	-find tools -name "*.pyc" | xargs rm -f
-	-rm -rf dist-osx
-	-rm -rf out/ node node_g
-
-check:
-	@tools/waf-light check
-
-VERSION=v$(shell python tools/getnodeversion.py)
+VERSION=$(shell git describe)
 TARNAME=node-$(VERSION)
-TARBALL=$(TARNAME).tar.gz
-PKG=out/$(TARNAME).pkg
-
-packagemaker=/Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
 
 #dist: doc/node.1 doc/api
-dist: $(TARBALL) $(PKG)
-
-PKGDIR=out/dist-osx
-
-pkg: $(PKG)
-
-$(PKG):
-	-rm -rf $(PKGDIR)
-	$(WAF) configure --prefix=/usr/local
-	DESTDIR=$(PKGDIR) $(WAF) install 
-	$(packagemaker) \
-		--id "org.nodejs.NodeJS-$(VERSION)" \
-		--doc tools/osx-pkg.pmdoc \
-		--out $(PKG)
-
-$(TARBALL): out/doc
+dist: doc
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
@@ -173,11 +152,6 @@ $(TARBALL): out/doc
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
 	gzip -f -9 $(TARNAME).tar
-
-dist-upload: $(TARBALL) $(PKG)
-	ssh node@nodejs.org mkdir -p web/nodejs.org/dist/$(VERSION)
-	scp $(TARBALL) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARBALL)
-	scp $(PKG) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARNAME).pkg
 
 bench:
 	 benchmark/http_simple_bench.sh
@@ -195,4 +169,4 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean dist-upload check uninstall install all program staticlib dynamiclib test test-all website-upload
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload

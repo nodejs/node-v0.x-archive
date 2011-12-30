@@ -22,6 +22,7 @@
 #include "node.h"
 #include "node_file.h"
 #include "node_buffer.h"
+#include <node_vars.h>
 #ifdef __POSIX__
 # include "node_stat_watcher.h"
 #endif
@@ -37,8 +38,31 @@
 
 #if defined(__MINGW32__) || defined(_MSC_VER)
 # include <io.h>
-# include <platform_win32.h>
 #endif
+
+
+#include <node_vars.h>
+// We do the following to minimize the detal between v0.6 branch. We want to
+// use the variables as they were being used before.
+#define on_headers_sym NODE_VAR(on_headers_sym)
+#define encoding_symbol NODE_VAR(encoding_symbol)
+#define errno_symbol NODE_VAR(errno_symbol)
+#define buf_symbol NODE_VAR(buf_symbol)
+#define oncomplete_sym NODE_VAR(oncomplete_sym)
+#define stats_constructor_template NODE_VAR(stats_constructor_template)
+#define dev_symbol NODE_VAR(dev_symbol)
+#define ino_symbol NODE_VAR(ino_symbol)
+#define mode_symbol NODE_VAR(mode_symbol)
+#define nlink_symbol NODE_VAR(nlink_symbol)
+#define uid_symbol NODE_VAR(uid_symbol)
+#define gid_symbol NODE_VAR(gid_symbol)
+#define rdev_symbol NODE_VAR(rdev_symbol)
+#define size_symbol NODE_VAR(size_symbol)
+#define blksize_symbol NODE_VAR(blksize_symbol)
+#define blocks_symbol NODE_VAR(blocks_symbol)
+#define atime_symbol NODE_VAR(atime_symbol)
+#define mtime_symbol NODE_VAR(mtime_symbol)
+#define ctime_symbol NODE_VAR(ctime_symbol)
 
 
 namespace node {
@@ -50,11 +74,6 @@ using namespace v8;
   ThrowException(Exception::TypeError(String::New("Bad argument")))
 
 typedef class ReqWrap<uv_fs_t> FSReqWrap;
-
-static Persistent<String> encoding_symbol;
-static Persistent<String> errno_symbol;
-static Persistent<String> buf_symbol;
-static Persistent<String> oncomplete_sym;
 
 
 #ifdef _LARGEFILE_SOURCE
@@ -207,7 +226,7 @@ struct fs_req_wrap {
 
 #define ASYNC_CALL(func, callback, ...)                           \
   FSReqWrap* req_wrap = new FSReqWrap();                          \
-  int r = uv_fs_##func(uv_default_loop(), &req_wrap->req_,        \
+  int r = uv_fs_##func(Loop(), &req_wrap->req_,              \
       __VA_ARGS__, After);                                        \
   assert(r == 0);                                                 \
   req_wrap->object_->Set(oncomplete_sym, callback);               \
@@ -216,9 +235,9 @@ struct fs_req_wrap {
 
 #define SYNC_CALL(func, path, ...)                                \
   fs_req_wrap req_wrap;                                           \
-  int result = uv_fs_##func(uv_default_loop(), &req_wrap.req, __VA_ARGS__, NULL); \
+  int result = uv_fs_##func(Loop(), &req_wrap.req, __VA_ARGS__, NULL); \
   if (result < 0) {                                               \
-    int code = uv_last_error(uv_default_loop()).code;             \
+    int code = uv_last_error(Loop()).code;             \
     return ThrowException(UVException(code, #func, "", path));    \
   }
 
@@ -244,22 +263,6 @@ static Handle<Value> Close(const Arguments& args) {
   }
 }
 
-
-static Persistent<FunctionTemplate> stats_constructor_template;
-
-static Persistent<String> dev_symbol;
-static Persistent<String> ino_symbol;
-static Persistent<String> mode_symbol;
-static Persistent<String> nlink_symbol;
-static Persistent<String> uid_symbol;
-static Persistent<String> gid_symbol;
-static Persistent<String> rdev_symbol;
-static Persistent<String> size_symbol;
-static Persistent<String> blksize_symbol;
-static Persistent<String> blocks_symbol;
-static Persistent<String> atime_symbol;
-static Persistent<String> mtime_symbol;
-static Persistent<String> ctime_symbol;
 
 Local<Object> BuildStatsObject(NODE_STAT_STRUCT *s) {
   HandleScope scope;

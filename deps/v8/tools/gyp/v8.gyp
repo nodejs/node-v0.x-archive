@@ -72,11 +72,7 @@
                   },
                 }],
                 ['soname_version!=""', {
-                  # Ideally, we'd like to specify the full filename for the
-                  # library and set it to "libv8.so.<(soname_version)",
-                  # but currently the best we can do is use 'product_name' and
-                  # get "libv8-<(soname_version).so".
-                  'product_name': 'v8-<(soname_version)',
+                  'product_extension': 'so.<(soname_version)',
                 }],
               ],
             },
@@ -225,6 +221,9 @@
         {
           'target_name': 'v8_base',
           'type': '<(library)',
+          'variables': {
+            'optimize': 'max',
+          },
           'include_dirs+': [
             '../../src',
           ],
@@ -240,7 +239,6 @@
             '../../src/assembler.cc',
             '../../src/assembler.h',
             '../../src/ast.cc',
-            '../../src/ast-inl.h',
             '../../src/ast.h',
             '../../src/atomicops_internals_x86_gcc.cc',
             '../../src/bignum.cc',
@@ -340,6 +338,8 @@
             '../../src/ic-inl.h',
             '../../src/ic.cc',
             '../../src/ic.h',
+            '../../src/incremental-marking.cc',
+            '../../src/incremental-marking.h',
             '../../src/inspector.cc',
             '../../src/inspector.h',
             '../../src/interpreter-irregexp.cc',
@@ -394,6 +394,7 @@
             '../../src/prettyprinter.h',
             '../../src/property.cc',
             '../../src/property.h',
+            '../../src/property-details.h',
             '../../src/profile-generator-inl.h',
             '../../src/profile-generator.cc',
             '../../src/profile-generator.h',
@@ -431,6 +432,9 @@
             '../../src/spaces-inl.h',
             '../../src/spaces.cc',
             '../../src/spaces.h',
+            '../../src/store-buffer-inl.h',
+            '../../src/store-buffer.cc',
+            '../../src/store-buffer.h',
             '../../src/string-search.cc',
             '../../src/string-search.h',
             '../../src/string-stream.cc',
@@ -549,6 +553,40 @@
                 '../../src/ia32/stub-cache-ia32.cc',
               ],
             }],
+            ['v8_target_arch=="mips"', {
+              'sources': [
+                '../../src/mips/assembler-mips.cc',
+                '../../src/mips/assembler-mips.h',
+                '../../src/mips/assembler-mips-inl.h',
+                '../../src/mips/builtins-mips.cc',
+                '../../src/mips/codegen-mips.cc',
+                '../../src/mips/codegen-mips.h',
+                '../../src/mips/code-stubs-mips.cc',
+                '../../src/mips/code-stubs-mips.h',
+                '../../src/mips/constants-mips.cc',
+                '../../src/mips/constants-mips.h',
+                '../../src/mips/cpu-mips.cc',
+                '../../src/mips/debug-mips.cc',
+                '../../src/mips/deoptimizer-mips.cc',
+                '../../src/mips/disasm-mips.cc',
+                '../../src/mips/frames-mips.cc',
+                '../../src/mips/frames-mips.h',
+                '../../src/mips/full-codegen-mips.cc',
+                '../../src/mips/ic-mips.cc',
+                '../../src/mips/lithium-codegen-mips.cc',
+                '../../src/mips/lithium-codegen-mips.h',
+                '../../src/mips/lithium-gap-resolver-mips.cc',
+                '../../src/mips/lithium-gap-resolver-mips.h',
+                '../../src/mips/lithium-mips.cc',
+                '../../src/mips/lithium-mips.h',
+                '../../src/mips/macro-assembler-mips.cc',
+                '../../src/mips/macro-assembler-mips.h',
+                '../../src/mips/regexp-macro-assembler-mips.cc',
+                '../../src/mips/regexp-macro-assembler-mips.h',
+                '../../src/mips/simulator-mips.cc',
+                '../../src/mips/stub-cache-mips.cc',
+              ],
+            }],
             ['v8_target_arch=="x64" or v8_target_arch=="mac" or OS=="mac"', {
               'sources': [
                 '../../src/x64/assembler-x64-inl.h',
@@ -586,7 +624,8 @@
                     ['v8_compress_startup_data=="bz2"', {
                       'libraries': [
                         '-lbz2',
-                    ]}],
+                      ]
+                    }],
                   ],
                 },
                 'sources': [
@@ -596,25 +635,29 @@
               }
             ],
             ['OS=="android"', {
+                'defines': [
+                  'CAN_USE_VFP_INSTRUCTIONS',
+                ],
                 'sources': [
                   '../../src/platform-posix.cc',
                 ],
                 'conditions': [
-                  ['host_os=="mac" and _toolset!="target"', {
-                    'sources': [
-                      '../../src/platform-macos.cc'
-                    ]
+                  ['host_os=="mac"', {
+                    'target_conditions': [
+                      ['_toolset=="host"', {
+                        'sources': [
+                          '../../src/platform-macos.cc'
+                        ]
+                      }, {
+                        'sources': [
+                          '../../src/platform-linux.cc'
+                        ]
+                      }],
+                    ],
                   }, {
                     'sources': [
                       '../../src/platform-linux.cc'
                     ]
-                  }],
-                  ['_toolset=="target"', {
-                    'link_settings': {
-                      'libraries': [
-                        '-llog',
-                       ],
-                     }
                   }],
                 ],
               },
@@ -638,6 +681,13 @@
                 'sources': [
                   '../../src/platform-openbsd.cc',
                   '../../src/platform-posix.cc'
+                ],
+              }
+            ],
+            ['OS=="solaris"', {
+                'sources': [
+                  '../../src/platform-solaris.cc',
+                  '../../src/platform-posix.cc',
                 ],
               }
             ],
@@ -697,7 +747,7 @@
             'experimental_library_files': [
               '../../src/macros.py',
               '../../src/proxy.js',
-              '../../src/weakmap.js',
+              '../../src/collection.js',
             ],
           },
           'actions': [
@@ -743,6 +793,7 @@
           'target_name': 'mksnapshot',
           'type': 'executable',
           'dependencies': [
+            'v8_base',
             'v8_nosnapshot',
           ],
           'include_dirs+': [
@@ -760,8 +811,8 @@
             ['v8_compress_startup_data=="bz2"', {
               'libraries': [
                 '-lbz2',
-              ]}
-            ],
+              ]
+            }],
           ],
         },
         {
@@ -786,7 +837,8 @@
             ['v8_compress_startup_data=="bz2"', {
               'libraries': [
                 '-lbz2',
-              ]}],
+              ]
+            }],
           ],
         },
         {
@@ -858,7 +910,7 @@
       'targets': [
         {
           'target_name': 'v8',
-          'type': 'settings',
+          'type': 'none',
           'conditions': [
             ['want_separate_host_toolset==1', {
               'toolsets': ['host', 'target'],

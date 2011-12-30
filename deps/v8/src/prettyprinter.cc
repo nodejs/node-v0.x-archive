@@ -372,13 +372,6 @@ void PrettyPrinter::VisitCompareOperation(CompareOperation* node) {
 }
 
 
-void PrettyPrinter::VisitCompareToNull(CompareToNull* node) {
-  Print("(");
-  Visit(node->expression());
-  Print("%s null)", Token::String(node->op()));
-}
-
-
 void PrettyPrinter::VisitThisFunction(ThisFunction* node) {
   Print("<this-function>");
 }
@@ -454,6 +447,7 @@ void PrettyPrinter::Print(const char* format, ...) {
 
 
 void PrettyPrinter::PrintStatements(ZoneList<Statement*>* statements) {
+  if (statements == NULL) return;
   for (int i = 0; i < statements->length(); i++) {
     if (i != 0) Print(" ");
     Visit(statements->at(i));
@@ -1020,15 +1014,6 @@ void AstPrinter::VisitCompareOperation(CompareOperation* node) {
 }
 
 
-void AstPrinter::VisitCompareToNull(CompareToNull* node) {
-  const char* name = node->is_strict()
-      ? "COMPARE-TO-NULL-STRICT"
-      : "COMPARE-TO-NULL";
-  IndentedScope indent(this, name, node);
-  Visit(node->expression());
-}
-
-
 void AstPrinter::VisitThisFunction(ThisFunction* node) {
   IndentedScope indent(this, "THIS-FUNCTION");
 }
@@ -1401,16 +1386,6 @@ void JsonAstBuilder::VisitCompareOperation(CompareOperation* expr) {
   }
   Visit(expr->left());
   Visit(expr->right());
-}
-
-
-void JsonAstBuilder::VisitCompareToNull(CompareToNull* expr) {
-  TagScope tag(this, "CompareToNull");
-  {
-    AttributesScope attributes(this);
-    AddAttribute("is_strict", expr->is_strict());
-  }
-  Visit(expr->expression());
 }
 
 

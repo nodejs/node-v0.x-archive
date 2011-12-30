@@ -137,6 +137,31 @@ typedef struct uv_buf_t {
 
 typedef int uv_file;
 
+typedef HANDLE uv_thread_t;
+
+typedef CRITICAL_SECTION uv_mutex_t;
+
+typedef union {
+  /* srwlock_ has type SRWLOCK, but not all toolchains define this type in */
+  /* windows.h. */
+  void* srwlock_;
+  struct {
+    uv_mutex_t read_mutex_;
+    uv_mutex_t write_mutex_;
+    unsigned int num_readers_;
+  } fallback_;
+} uv_rwlock_t;
+
+#define UV_ONCE_INIT { 0, NULL, NULL }
+
+typedef struct uv_once_s {
+  unsigned char ran;
+  /* The actual event handle must be aligned to sizeof(HANDLE), so in */
+  /* practice it might overlap padding a little. */
+  HANDLE event;
+  HANDLE padding;
+} uv_once_t;
+
 /* Platform-specific definitions for uv_dlopen support. */
 typedef HMODULE uv_lib_t;
 #define UV_DYNAMIC FAR WINAPI

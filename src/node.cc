@@ -20,6 +20,8 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <node.h>
+#include <node_isolate.h>
+#include <node_internals.h>
 
 #include <uv.h>
 
@@ -56,16 +58,11 @@ typedef int mode_t;
 #include <errno.h>
 #include <sys/types.h>
 
-#if defined(__MINGW32__) || defined(_MSC_VER)
-# include <platform_win32.h> /* winapi_perror() */
-#endif
-
 #ifdef __POSIX__
 # include <pwd.h> /* getpwnam() */
 # include <grp.h> /* getgrnam() */
 #endif
 
-#include "platform.h"
 #include <node_buffer.h>
 #ifdef __POSIX__
 # include <node_io_watcher.h>
@@ -95,78 +92,66 @@ using namespace v8;
 extern char **environ;
 # endif
 
+
+#include <node_vars.h>
+
+// We do the following to minimize the detal between v0.6 branch. We want to
+// use the variables as they were being used before.
+#define check_tick_watcher NODE_VAR(check_tick_watcher)
+#define code_symbol NODE_VAR(code_symbol)
+#define emit_symbol NODE_VAR(emit_symbol)
+#define errno_symbol NODE_VAR(errno_symbol)
+#define errpath_symbol NODE_VAR(errpath_symbol)
+#define gc_check NODE_VAR(gc_check)
+#define gc_idle NODE_VAR(gc_idle)
+#define gc_timer NODE_VAR(gc_timer)
+#define getbuf NODE_VAR(getbuf)
+#define heap_total_symbol NODE_VAR(heap_total_symbol)
+#define heap_used_symbol NODE_VAR(heap_used_symbol)
+#define listeners_symbol NODE_VAR(listeners_symbol)
+#define need_tick_cb NODE_VAR(need_tick_cb)
+#define prepare_tick_watcher NODE_VAR(prepare_tick_watcher)
+#define process NODE_VAR(process)
+#define rss_symbol NODE_VAR(rss_symbol)
+#define syscall_symbol NODE_VAR(syscall_symbol)
+#define tick_callback_sym NODE_VAR(tick_callback_sym)
+#define tick_spinner NODE_VAR(tick_spinner)
+#define tick_time_head NODE_VAR(tick_time_head)
+#define tick_times NODE_VAR(tick_times)
+#define uncaught_exception_symbol NODE_VAR(uncaught_exception_symbol)
+#define use_npn NODE_VAR(use_npn)
+#define use_sni NODE_VAR(use_sni)
+#define uncaught_exception_counter NODE_VAR(uncaught_exception_counter)
+#define debug_watcher NODE_VAR(debug_watcher)
+#define binding_cache NODE_VAR(binding_cache)
+#define module_load_list NODE_VAR(module_load_list)
+#define node_isolate NODE_VAR(node_isolate)
+#define debugger_running NODE_VAR(debugger_running)
+#define prog_start_time NODE_VAR(prog_start_time)
+
 namespace node {
 
-static Persistent<Object> process;
-
-static Persistent<String> errno_symbol;
-static Persistent<String> syscall_symbol;
-static Persistent<String> errpath_symbol;
-static Persistent<String> code_symbol;
-
-static Persistent<String> rss_symbol;
-static Persistent<String> heap_total_symbol;
-static Persistent<String> heap_used_symbol;
-
-static Persistent<String> listeners_symbol;
-static Persistent<String> uncaught_exception_symbol;
-static Persistent<String> emit_symbol;
-
-
-static bool print_eval = false;
-static char *eval_string = NULL;
-static int option_end_index = 0;
-static bool use_debug_agent = false;
-static bool debug_wait_connect = false;
-static int debug_port=5858;
-static int max_stack_size = 0;
-
-static uv_check_t check_tick_watcher;
-static uv_prepare_t prepare_tick_watcher;
-static uv_idle_t tick_spinner;
-static bool need_tick_cb;
-static Persistent<String> tick_callback_sym;
-
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-static bool use_npn = true;
-#else
-static bool use_npn = false;
-#endif
-
-#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-static bool use_sni = true;
-#else
-static bool use_sni = false;
-#endif
-
-#ifdef __POSIX__
-// Buffer for getpwnam_r(), getgrpam_r() and other misc callers; keep this
-// scoped at file-level rather than method-level to avoid excess stack usage.
-static char getbuf[PATH_MAX + 1];
-#endif
-
-// We need to notify V8 when we're idle so that it can run the garbage
-// collector. The interface to this is V8::IdleNotification(). It returns
-// true if the heap hasn't be fully compacted, and needs to be run again.
-// Returning false means that it doesn't have anymore work to do.
-//
-// A rather convoluted algorithm has been devised to determine when Node is
-// idle. You'll have to figure it out for yourself.
-static uv_check_t gc_check;
-static uv_idle_t gc_idle;
-static uv_timer_t gc_timer;
-bool need_gc;
-
-
-#define FAST_TICK 700.
-#define GC_WAIT_TIME 5000.
-#define RPM_SAMPLES 100
 #define TICK_TIME(n) tick_times[(tick_time_head - (n)) % RPM_SAMPLES]
-static int64_t tick_times[RPM_SAMPLES];
-static int tick_time_head;
+
+static int option_end_index;
+static unsigned long max_stack_size;
+static unsigned short debug_port = 5858;
+static bool debug_wait_connect;
+static bool use_debug_agent;
+static const char* eval_string;
+static bool print_eval;
 
 static void CheckStatus(uv_timer_t* watcher, int status);
+
+
+uv_loop_t* Loop() {
+#if defined(HAVE_ISOLATES) && HAVE_ISOLATES
+  return Isolate::GetCurrent()->GetLoop();
+#else
+  return uv_default_loop();
+#endif
+}
+
 
 static void StartGCTimer () {
   if (!uv_is_active((uv_handle_t*) &gc_timer)) {
@@ -194,7 +179,7 @@ static void Idle(uv_idle_t* watcher, int status) {
 static void Check(uv_check_t* watcher, int status) {
   assert(watcher == &gc_check);
 
-  tick_times[tick_time_head] = uv_now(uv_default_loop());
+  tick_times[tick_time_head] = uv_now(Loop());
   tick_time_head = (tick_time_head + 1) % RPM_SAMPLES;
 
   StartGCTimer();
@@ -224,7 +209,7 @@ static void Tick(void) {
   need_tick_cb = false;
   if (uv_is_active((uv_handle_t*) &tick_spinner)) {
     uv_idle_stop(&tick_spinner);
-    uv_unref(uv_default_loop());
+    uv_unref(Loop());
   }
 
   HandleScope scope;
@@ -266,7 +251,7 @@ static Handle<Value> NeedTickCallback(const Arguments& args) {
   // tick_spinner to keep the event loop alive long enough to handle it.
   if (!uv_is_active((uv_handle_t*) &tick_spinner)) {
     uv_idle_start(&tick_spinner, Spin);
-    uv_ref(uv_default_loop());
+    uv_ref(Loop());
   }
   return Undefined();
 }
@@ -873,6 +858,30 @@ Local<Value> UVException(int errorno,
 
 
 #ifdef _WIN32
+// Does about the same as strerror(),
+// but supports all windows error messages
+static const char *winapi_strerror(const int errorno) {
+  char *errmsg = NULL;
+
+  FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+      FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errorno,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
+
+  if (errmsg) {
+    // Remove trailing newlines
+    for (int i = strlen(errmsg) - 1;
+        i >= 0 && (errmsg[i] == '\n' || errmsg[i] == '\r'); i--) {
+      errmsg[i] = '\0';
+    }
+
+    return errmsg;
+  } else {
+    // FormatMessage failed
+    return "Unknown error";
+  }
+}
+
+
 Local<Value> WinapiErrnoException(int errorno,
                                   const char* syscall,
                                   const char* msg,
@@ -1218,6 +1227,12 @@ Local<Value> ExecuteString(Handle<String> source, Handle<Value> filename) {
 }
 
 
+static Handle<Value> Abort(const Arguments& args) {
+  abort();
+  return Undefined();
+}
+
+
 static Handle<Value> Chdir(const Arguments& args) {
   HandleScope scope;
 
@@ -1488,7 +1503,7 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
     }
   }
 
-  double d = uv_now(uv_default_loop()) - TICK_TIME(3);
+  double d = uv_now(Loop()) - TICK_TIME(3);
 
   //printfb("timer d = %f\n", d);
 
@@ -1498,24 +1513,26 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
   }
 }
 
+
 static Handle<Value> Uptime(const Arguments& args) {
   HandleScope scope;
   assert(args.Length() == 0);
+  double uptime;
 
-  double uptime =  Platform::GetUptime(true);
+  uv_err_t err = uv_uptime(&uptime);
 
-  if (uptime < 0) {
+  if (err.code != UV_OK) {
     return Undefined();
   }
 
-  return scope.Close(Number::New(uptime));
+  return scope.Close(Number::New(uptime - prog_start_time));
 }
 
 
 v8::Handle<v8::Value> UVCounters(const v8::Arguments& args) {
   HandleScope scope;
 
-  uv_counters_t* c = &uv_default_loop()->counters;
+  uv_counters_t* c = &Loop()->counters;
 
   Local<Object> obj = Object::New();
 
@@ -1550,10 +1567,10 @@ v8::Handle<v8::Value> MemoryUsage(const v8::Arguments& args) {
 
   size_t rss;
 
-  int r = Platform::GetMemory(&rss);
+  uv_err_t err = uv_resident_set_memory(&rss);
 
-  if (r != 0) {
-    return ThrowException(Exception::Error(String::New(strerror(errno))));
+  if (err.code != UV_OK) {
+    return ThrowException(UVException(err.code, "uv_resident_set_memory"));
   }
 
   Local<Object> info = Object::New();
@@ -1679,7 +1696,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
       if (err.code == UV_ENOENT)
         message = "Module entry point not found.";
       else
-        message = "Out of memory.";
+        message = uv_strerror(err);
 
       return ThrowException(Exception::Error(String::New(message)));
     }
@@ -1710,7 +1727,6 @@ static void OnFatalError(const char* location, const char* message) {
   exit(1);
 }
 
-static int uncaught_exception_counter = 0;
 
 void FatalException(TryCatch &try_catch) {
   HandleScope scope;
@@ -1763,12 +1779,10 @@ void FatalException(TryCatch &try_catch) {
 }
 
 
-static uv_async_t debug_watcher;
-
 static void DebugMessageCallback(uv_async_t* watcher, int status) {
   HandleScope scope;
   assert(watcher == &debug_watcher);
-  Debug::ProcessDebugMessages();
+  v8::Debug::ProcessDebugMessages();
 }
 
 static void DebugMessageDispatch(void) {
@@ -1780,15 +1794,12 @@ static void DebugMessageDispatch(void) {
   uv_async_send(&debug_watcher);
 }
 
-static void DebugBreakMessageHandler(const Debug::Message& message) {
+static void DebugBreakMessageHandler(const v8::Debug::Message& message) {
   // do nothing with debug messages.
   // The message handler will get changed by DebuggerAgent::CreateSession in
   // debug-agent.cc of v8/src when a new session is created
 }
 
-
-Persistent<Object> binding_cache;
-Persistent<Array> module_load_list;
 
 static Handle<Value> Binding(const Arguments& args) {
   HandleScope scope;
@@ -1848,9 +1859,9 @@ static Handle<Value> Binding(const Arguments& args) {
 static Handle<Value> ProcessTitleGetter(Local<String> property,
                                         const AccessorInfo& info) {
   HandleScope scope;
-  int len;
-  const char *s = Platform::GetProcessTitle(&len);
-  return scope.Close(s ? String::New(s, len) : String::Empty());
+  char buffer[512];
+  uv_get_process_title(buffer, sizeof(buffer));
+  return scope.Close(String::New(buffer));
 }
 
 
@@ -1859,7 +1870,8 @@ static void ProcessTitleSetter(Local<String> property,
                                const AccessorInfo& info) {
   HandleScope scope;
   String::Utf8Value title(value->ToString());
-  Platform::SetProcessTitle(*title);
+  // TODO: protect with a lock
+  uv_set_process_title(*title);
 }
 
 
@@ -1974,11 +1986,21 @@ static Handle<Object> GetFeatures() {
   obj->Set(String::NewSymbol("tls"),
       Boolean::New(get_builtin_module("crypto") != NULL));
 
+
+  obj->Set(String::NewSymbol("isolates"),
+#if HAVE_ISOLATES
+    True()
+#else
+    False()
+#endif
+  );
+
   return scope.Close(obj);
 }
 
 
 static Handle<Value> DebugProcess(const Arguments& args);
+static Handle<Value> DebugPause(const Arguments& args);
 
 Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   HandleScope scope;
@@ -1988,7 +2010,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   Local<FunctionTemplate> process_template = FunctionTemplate::New();
 
   process = Persistent<Object>::New(process_template->GetFunction()->NewInstance());
-
 
   process->SetAccessor(String::New("title"),
                        ProcessTitleGetter,
@@ -2084,6 +2105,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   // define various internal methods
   NODE_SET_METHOD(process, "_needTickCallback", NeedTickCallback);
   NODE_SET_METHOD(process, "reallyExit", Exit);
+  NODE_SET_METHOD(process, "abort", Abort);
   NODE_SET_METHOD(process, "chdir", Chdir);
   NODE_SET_METHOD(process, "cwd", Cwd);
 
@@ -2104,6 +2126,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "_kill", Kill);
 
   NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
+  NODE_SET_METHOD(process, "_debugPause", DebugPause);
 
   NODE_SET_METHOD(process, "dlopen", DLOpen);
 
@@ -2281,23 +2304,20 @@ static void ParseArgs(int argc, char **argv) {
 }
 
 
-static Isolate* node_isolate = NULL;
-static volatile bool debugger_running = false;
-
 static void EnableDebug(bool wait_connect) {
   // If we're called from another thread, make sure to enter the right
   // v8 isolate.
   node_isolate->Enter();
 
   // Start the debug thread and it's associated TCP server on port 5858.
-  bool r = Debug::EnableAgent("node " NODE_VERSION, debug_port);
+  bool r = v8::Debug::EnableAgent("node " NODE_VERSION, debug_port);
 
   if (wait_connect) {
     // Set up an empty handler so v8 will not continue until a debugger
     // attaches. This is the same behavior as Debug::EnableAgent(_,_,true)
     // except we don't break at the beginning of the script.
     // see Debugger::StartAgent in debug.cc of v8/src
-    Debug::SetMessageHandler2(node::DebugBreakMessageHandler);
+    v8::Debug::SetMessageHandler2(node::DebugBreakMessageHandler);
   }
 
   // Crappy check that everything went well. FIXME
@@ -2314,6 +2334,7 @@ static void EnableDebug(bool wait_connect) {
 
 
 #ifdef __POSIX__
+// FIXME this is positively unsafe with isolates/threads
 static void EnableDebugSignalHandler(int signal) {
   // Break once process will return execution to v8
   v8::Debug::DebugBreak(node_isolate);
@@ -2510,9 +2531,15 @@ static Handle<Value> DebugProcess(const Arguments& args) {
 #endif // _WIN32
 
 
-char** Init(int argc, char *argv[]) {
+static Handle<Value> DebugPause(const Arguments& args) {
+  v8::Debug::DebugBreak(node_isolate);
+  return Undefined();
+}
+
+
+char** ProcessInit(int argc, char *argv[]) {
   // Hack aroung with the argv pointer. Used for process.title = "blah".
-  argv = node::Platform::SetupArgs(argc, argv);
+  argv = uv_setup_args(argc, argv);
 
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);
@@ -2550,61 +2577,10 @@ char** Init(int argc, char *argv[]) {
 #ifdef __POSIX__
   // Ignore SIGPIPE
   RegisterSignalHandler(SIGPIPE, SIG_IGN);
+  // TODO decide whether to handle these signals per-process or per-thread
   RegisterSignalHandler(SIGINT, SignalExit);
   RegisterSignalHandler(SIGTERM, SignalExit);
 #endif // __POSIX__
-
-  uv_prepare_init(uv_default_loop(), &prepare_tick_watcher);
-  uv_prepare_start(&prepare_tick_watcher, PrepareTick);
-  uv_unref(uv_default_loop());
-
-  uv_check_init(uv_default_loop(), &check_tick_watcher);
-  uv_check_start(&check_tick_watcher, node::CheckTick);
-  uv_unref(uv_default_loop());
-
-  uv_idle_init(uv_default_loop(), &tick_spinner);
-  uv_unref(uv_default_loop());
-
-  uv_check_init(uv_default_loop(), &gc_check);
-  uv_check_start(&gc_check, node::Check);
-  uv_unref(uv_default_loop());
-
-  uv_idle_init(uv_default_loop(), &gc_idle);
-  uv_unref(uv_default_loop());
-
-  uv_timer_init(uv_default_loop(), &gc_timer);
-  uv_unref(uv_default_loop());
-
-  V8::SetFatalErrorHandler(node::OnFatalError);
-
-
-  // Set the callback DebugMessageDispatch which is called from the debug
-  // thread.
-  Debug::SetDebugMessageDispatchHandler(node::DebugMessageDispatch);
-
-  // Initialize the async watcher. DebugMessageCallback() is called from the
-  // main thread to execute a random bit of javascript - which will give V8
-  // control so it can handle whatever new message had been received on the
-  // debug thread.
-  uv_async_init(uv_default_loop(), &node::debug_watcher,
-      node::DebugMessageCallback);
-  // unref it so that we exit the event loop despite it being active.
-  uv_unref(uv_default_loop());
-
-  // Fetch a reference to the main isolate, so we have a reference to it
-  // even when we need it to access it from another (debugger) thread.
-  node_isolate = Isolate::GetCurrent();
-
-  // If the --debug flag was specified then initialize the debug thread.
-  if (use_debug_agent) {
-    EnableDebug(debug_wait_connect);
-  } else {
-#ifdef _WIN32
-    RegisterDebugSignalHandler();
-#else // Posix
-    RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
-#endif // __POSIX__
-  }
 
   return argv;
 }
@@ -2624,19 +2600,75 @@ void EmitExit(v8::Handle<v8::Object> process_l) {
 }
 
 
-int Start(int argc, char *argv[]) {
-  // This needs to run *before* V8::Initialize()
-  argv = Init(argc, argv);
+// Create a new isolate with node::Isolate::New() before you call this function
+void StartThread(node::Isolate* isolate,
+                 int argc,
+                 char** argv) {
+  HandleScope scope;
 
-  v8::V8::Initialize();
-  v8::HandleScope handle_scope;
+  assert(node::Isolate::GetCurrent() == isolate);
 
-  // Create the one and only Context.
-  Persistent<v8::Context> context = v8::Context::New();
-  v8::Context::Scope context_scope(context);
+  uv_loop_t* loop = isolate->GetLoop();
+  uv_prepare_init(loop, &prepare_tick_watcher);
+  uv_prepare_start(&prepare_tick_watcher, PrepareTick);
+  uv_unref(loop);
+
+  uv_check_init(loop, &check_tick_watcher);
+  uv_check_start(&check_tick_watcher, node::CheckTick);
+  uv_unref(loop);
+
+  uv_idle_init(loop, &tick_spinner);
+  uv_unref(loop);
+
+  uv_check_init(loop, &gc_check);
+  uv_check_start(&gc_check, node::Check);
+  uv_unref(loop);
+
+  uv_idle_init(loop, &gc_idle);
+  uv_unref(loop);
+
+  uv_timer_init(loop, &gc_timer);
+  uv_unref(loop);
+
+  V8::SetFatalErrorHandler(node::OnFatalError);
+
+  // Set the callback DebugMessageDispatch which is called from the debug
+  // thread.
+  v8::Debug::SetDebugMessageDispatchHandler(node::DebugMessageDispatch);
+
+  // Initialize the async watcher. DebugMessageCallback() is called from the
+  // main thread to execute a random bit of javascript - which will give V8
+  // control so it can handle whatever new message had been received on the
+  // debug thread.
+  uv_async_init(loop, &debug_watcher, node::DebugMessageCallback);
+  // unref it so that we exit the event loop despite it being active.
+  uv_unref(loop);
+
+  // Fetch a reference to the main isolate, so we have a reference to it
+  // even when we need it to access it from another (debugger) thread.
+  node_isolate = v8::Isolate::GetCurrent();
+
+  // If the --debug flag was specified then initialize the debug thread.
+  if (use_debug_agent) {
+    EnableDebug(debug_wait_connect);
+  } else {
+#ifdef _WIN32
+    RegisterDebugSignalHandler();
+#else // Posix
+    RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
+#endif // __POSIX__
+  }
 
   Handle<Object> process_l = SetupProcessObject(argc, argv);
-  v8_typed_array::AttachBindings(context->Global());
+
+  process_l->Set(String::NewSymbol("tid"),
+                 Integer::NewFromUnsigned(isolate->id_));
+
+  // FIXME crashes with "CHECK(heap->isolate() == Isolate::Current()) failed"
+  //v8_typed_array::AttachBindings(v8::Context::GetCurrent()->Global());
+
+  // Initialize prog_start_time to get relative uptime.
+  uv_uptime(&prog_start_time);
 
   // Create all the objects, load modules, do everything.
   // so your next reading stop should be node::Load()!
@@ -2647,13 +2679,36 @@ int Start(int argc, char *argv[]) {
   // there are no watchers on the loop (except for the ones that were
   // uv_unref'd) then this function exits. As long as there are active
   // watchers, it blocks.
-  uv_run(uv_default_loop());
+  uv_run(loop);
 
   EmitExit(process_l);
+}
+
+
+int Start(int argc, char *argv[]) {
+  // This needs to run *before* V8::Initialize()
+  argv = ProcessInit(argc, argv);
+
+  v8::V8::Initialize();
+  v8::HandleScope handle_scope;
+
+  // Get the id of the this, the main, thread.
+  uv_thread_t tid = uv_thread_self();
+
+  // Create the main node::Isolate object
+  node::Isolate::Initialize();
+  Isolate* isolate = new node::Isolate();
+  isolate->tid_ = tid;
+  isolate->Enter();
+  StartThread(isolate, argc, argv);
+  isolate->Dispose();
+
+  // The main thread/isolate is done. Wait for all other thread/isolates to
+  // finish.
+  node::Isolate::JoinAll();
 
 #ifndef NDEBUG
   // Clean up.
-  context.Dispose();
   V8::Dispose();
 #endif  // NDEBUG
 

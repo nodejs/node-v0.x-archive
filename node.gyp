@@ -55,7 +55,7 @@
 
       'dependencies': [
         'deps/http_parser/http_parser.gyp:http_parser',
-        'deps/v8/tools/gyp/v8-node.gyp:v8',
+        'deps/v8/tools/gyp/v8.gyp:v8',
         'deps/uv/uv.gyp:uv',
         'deps/zlib/zlib.gyp:zlib',
         'node_js2c#host',
@@ -72,7 +72,9 @@
         'src/cares_wrap.cc',
         'src/handle_wrap.cc',
         'src/node.cc',
+        'src/node_vars.cc',
         'src/node_buffer.cc',
+        'src/node_isolate.cc',
         'src/node_constants.cc',
         'src/node_extensions.cc',
         'src/node_file.cc',
@@ -94,7 +96,9 @@
         # headers to make for a more pleasant IDE experience
         'src/handle_wrap.h',
         'src/node.h',
+        'src/node_vars.h',
         'src/node_buffer.h',
+        'src/node_isolate.h',
         'src/node_constants.h',
         'src/node_crypto.h',
         'src/node_extensions.h',
@@ -107,7 +111,6 @@
         'src/node_string.h',
         'src/node_version.h',
         'src/pipe_wrap.h',
-        'src/platform.h',
         'src/req_wrap.h',
         'src/stream_wrap.h',
         'src/v8_typed_array.h',
@@ -122,13 +125,18 @@
       ],
 
       'defines': [
+        'NODE_WANT_INTERNALS=1',
         'ARCH="<(target_arch)"',
         'PLATFORM="<(OS)"',
-        '_LARGEFILE_SOURCE',
-        '_FILE_OFFSET_BITS=64',
       ],
 
       'conditions': [
+        [ 'node_use_isolates=="true"', {
+          'defines': [ 'HAVE_ISOLATES=1' ],
+        }, {
+          'defines': [ 'HAVE_ISOLATES=0' ],
+        }],
+
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [ 'src/node_crypto.cc' ],
@@ -152,9 +160,6 @@
 
         [ 'OS=="win"', {
           'sources': [
-            'src/platform_win32.cc',
-            # headers to make for a more pleasant IDE experience
-            'src/platform_win32.h',
             'tools/msvs/res/node.rc',
           ],
           'defines': [
@@ -172,25 +177,21 @@
           ]
         }],
         [ 'OS=="mac"', {
-          'sources': [ 'src/platform_darwin.cc' ],
           'libraries': [ '-framework Carbon' ],
         }],
         [ 'OS=="linux"', {
-          'sources': [ 'src/platform_linux.cc' ],
           'libraries': [
             '-ldl',
             '-lutil' # needed for openpty
           ],
         }],
         [ 'OS=="freebsd"', {
-          'sources': [ 'src/platform_freebsd.cc' ],
           'libraries': [
             '-lutil',
             '-lkvm',
           ],
         }],
         [ 'OS=="solaris"', {
-          'sources': [ 'src/platform_sunos.cc' ],
           'libraries': [
             '-lkstat',
           ],
@@ -207,9 +208,6 @@
       'target_name': 'node_js2c',
       'type': 'none',
       'toolsets': ['host'],
-      'variables': {
-      },
-
       'actions': [
         {
           'action_name': 'node_js2c',

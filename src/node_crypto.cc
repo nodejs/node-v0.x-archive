@@ -24,6 +24,7 @@
 
 #include <node.h>
 #include <node_buffer.h>
+#include <node_vars.h>
 #include <node_root_certs.h>
 
 #include <string.h>
@@ -56,97 +57,81 @@
 
 static const char PUBLIC_KEY_PFX[] =  "-----BEGIN PUBLIC KEY-----";
 static const int PUBLIC_KEY_PFX_LEN = sizeof(PUBLIC_KEY_PFX) - 1;
-
 static const char PUBRSA_KEY_PFX[] =  "-----BEGIN RSA PUBLIC KEY-----";
 static const int PUBRSA_KEY_PFX_LEN = sizeof(PUBRSA_KEY_PFX) - 1;
-
 static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | ASN1_STRFLGS_ESC_MSB
                                  | XN_FLAG_SEP_MULTILINE
                                  | XN_FLAG_FN_SN;
 
+
+#include <node_vars.h>
+// We do the following to minimize the detal between v0.6 branch. We want to
+// use the variables as they were being used before.
+#define on_headers_sym NODE_VAR(on_headers_sym)
+#define errno_symbol NODE_VAR(errno_symbol)
+#define syscall_symbol NODE_VAR(syscall_symbol)
+#define subject_symbol NODE_VAR(subject_symbol)
+#define subjectaltname_symbol NODE_VAR(subjectaltname_symbol)
+#define modulus_symbol NODE_VAR(modulus_symbol)
+#define exponent_symbol NODE_VAR(exponent_symbol)
+#define issuer_symbol NODE_VAR(issuer_symbol)
+#define valid_from_symbol NODE_VAR(valid_from_symbol)
+#define valid_to_symbol NODE_VAR(valid_to_symbol)
+#define fingerprint_symbol NODE_VAR(fingerprint_symbol)
+#define name_symbol NODE_VAR(name_symbol)
+#define version_symbol NODE_VAR(version_symbol)
+#define ext_key_usage_symbol NODE_VAR(ext_key_usage_symbol)
+#define secure_context_constructor NODE_VAR(secure_context_constructor)
+
+
 namespace node {
 namespace crypto {
 
+static uv_rwlock_t* locks;
+
 using namespace v8;
-
-static Persistent<String> errno_symbol;
-static Persistent<String> syscall_symbol;
-static Persistent<String> subject_symbol;
-static Persistent<String> subjectaltname_symbol;
-static Persistent<String> modulus_symbol;
-static Persistent<String> exponent_symbol;
-static Persistent<String> issuer_symbol;
-static Persistent<String> valid_from_symbol;
-static Persistent<String> valid_to_symbol;
-static Persistent<String> fingerprint_symbol;
-static Persistent<String> name_symbol;
-static Persistent<String> version_symbol;
-static Persistent<String> ext_key_usage_symbol;
-
-static Persistent<FunctionTemplate> secure_context_constructor;
-
-#ifdef _WIN32
-
-static HANDLE* locks;
-
-
-static void crypto_lock_init(void) {
-  int i, n;
-
-  n = CRYPTO_num_locks();
-  locks = new HANDLE[n];
-
-  for (i = 0; i < n; i++)
-    if (!(locks[i] = CreateMutex(NULL, FALSE, NULL)))
-      abort();
-}
-
-
-static void crypto_lock_cb(int mode, int n, const char* file, int line) {
-  if (mode & CRYPTO_LOCK)
-    WaitForSingleObject(locks[n], INFINITE);
-  else
-    ReleaseMutex(locks[n]);
-}
 
 
 static unsigned long crypto_id_cb(void) {
+#ifdef _WIN32
   return (unsigned long) GetCurrentThreadId();
-}
-
 #else /* !_WIN32 */
-
-static pthread_rwlock_t* locks;
+  return (unsigned long) pthread_self();
+#endif /* !_WIN32 */
+}
 
 
 static void crypto_lock_init(void) {
   int i, n;
 
   n = CRYPTO_num_locks();
-  locks = new pthread_rwlock_t[n];
+  locks = new uv_rwlock_t[n];
 
   for (i = 0; i < n; i++)
-    if (pthread_rwlock_init(locks + i, NULL))
+    if (uv_rwlock_init(locks + i))
       abort();
 }
 
 
 static void crypto_lock_cb(int mode, int n, const char* file, int line) {
+  assert((mode & CRYPTO_LOCK) || (mode & CRYPTO_UNLOCK));
+  assert((mode & CRYPTO_READ) || (mode & CRYPTO_WRITE));
+
   if (mode & CRYPTO_LOCK) {
-    if (mode & CRYPTO_READ) pthread_rwlock_rdlock(locks + n);
-    if (mode & CRYPTO_WRITE) pthread_rwlock_wrlock(locks + n);
+    if (mode & CRYPTO_READ)
+      uv_rwlock_rdlock(locks + n);
+    else
+      uv_rwlock_wrlock(locks + n);
   } else {
-    pthread_rwlock_unlock(locks + n);
+    if (mode & CRYPTO_READ)
+      uv_rwlock_rdunlock(locks + n);
+    else
+      uv_rwlock_wrunlock(locks + n);
   }
 }
 
 
-static unsigned long crypto_id_cb(void) {
-  return (unsigned long) pthread_self();
-}
-
-#endif /* !_WIN32 */
 
 
 void SecureContext::Initialize(Handle<Object> target) {
@@ -1699,9 +1684,20 @@ static void HexEncode(unsigned char *md_value,
                       int* md_hex_len) {
   *md_hex_len = (2*(md_len));
   *md_hexdigest = new char[*md_hex_len + 1];
-  for (int i = 0; i < md_len; i++) {
-    snprintf((char *)(*md_hexdigest + (i*2)), 3, "%02x",  md_value[i]);
+
+  char* buff = *md_hexdigest;
+  const int len = *md_hex_len;
+  for (int i = 0; i < len; i += 2) {
+    // nibble nibble
+    const int index = i / 2;
+    const char msb = (md_value[index] >> 4) & 0x0f;
+    const char lsb = md_value[index] & 0x0f;
+
+    buff[i] = (msb < 10) ? msb + '0' : (msb - 10) + 'a';
+    buff[i + 1] = (lsb < 10) ? lsb + '0' : (lsb - 10) + 'a';
   }
+  // null terminator
+  buff[*md_hex_len] = '\0';
 }
 
 #define hex2i(c) ((c) <= '9' ? ((c) - '0') : (c) <= 'Z' ? ((c) - 'A' + 10) \
@@ -2164,13 +2160,16 @@ class Cipher : public ObjectWrap {
 
     HandleScope scope;
 
-    unsigned char* out_value;
-    int out_len;
+    unsigned char* out_value = NULL;
+    int out_len = -1;
     char* out_hexdigest;
     int out_hex_len;
     Local<Value> outString ;
 
     int r = cipher->CipherFinal(&out_value, &out_len);
+
+    assert(out_value != NULL);
+    assert(out_len != -1);
 
     if (out_len == 0 || r == 0) {
       return scope.Close(String::New(""));
@@ -2587,11 +2586,14 @@ class Decipher : public ObjectWrap {
 
     Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
 
-    unsigned char* out_value;
-    int out_len;
+    unsigned char* out_value = NULL;
+    int out_len = -1;
     Local<Value> outString;
 
     int r = cipher->DecipherFinal<TOLERATE_PADDING>(&out_value, &out_len);
+
+    assert(out_value != NULL);
+    assert(out_len != -1);
 
     if (out_len == 0 || r == 0) {
       delete[] out_value;
@@ -2792,13 +2794,16 @@ class Hmac : public ObjectWrap {
 
     HandleScope scope;
 
-    unsigned char* md_value;
-    unsigned int md_len;
+    unsigned char* md_value = NULL;
+    unsigned int md_len = -1;
     char* md_hexdigest;
     int md_hex_len;
     Local<Value> outString ;
 
     int r = hmac->HmacDigest(&md_value, &md_len);
+
+    assert(md_value != NULL);
+    assert(md_len != -1);
 
     if (md_len == 0 || r == 0) {
       return scope.Close(String::New(""));
@@ -2859,10 +2864,7 @@ class Hash : public ObjectWrap {
 
   bool HashInit (const char* hashType) {
     md = EVP_get_digestbyname(hashType);
-    if(!md) {
-      fprintf(stderr, "node-crypto : Unknown message digest %s\n", hashType);
-      return false;
-    }
+    if(!md) return false;
     EVP_MD_CTX_init(&mdctx);
     EVP_DigestInit_ex(&mdctx, md, NULL);
     initialised_ = true;
@@ -2886,13 +2888,16 @@ class Hash : public ObjectWrap {
         "Must give hashtype string as argument")));
     }
 
-    Hash *hash = new Hash();
-    hash->Wrap(args.This());
-
     String::Utf8Value hashType(args[0]->ToString());
 
-    hash->HashInit(*hashType);
+    Hash *hash = new Hash();
+    if (!hash->HashInit(*hashType)) {
+      delete hash;
+      return ThrowException(Exception::Error(String::New(
+        "Digest method not supported")));
+    }
 
+    hash->Wrap(args.This());
     return args.This();
   }
 
@@ -3504,8 +3509,7 @@ class DiffieHellman : public ObjectWrap {
 
     if (args.Length() > 0) {
       if (args[0]->IsInt32()) {
-        diffieHellman->Init(args[0]->Int32Value());
-        initialized = true;
+        initialized = diffieHellman->Init(args[0]->Int32Value());
       } else {
         if (args[0]->IsString()) {
           char* buf;
@@ -3521,16 +3525,15 @@ class DiffieHellman : public ObjectWrap {
             return ThrowException(Exception::Error(
                   String::New("Invalid argument")));
           } else {
-            diffieHellman->Init(reinterpret_cast<unsigned char*>(buf), len);
+            initialized = diffieHellman->Init(
+                reinterpret_cast<unsigned char*>(buf), len);
             delete[] buf;
-            initialized = true;
           }
         } else if (Buffer::HasInstance(args[0])) {
           Local<Object> buffer = args[0]->ToObject();
-          diffieHellman->Init(
+          initialized = diffieHellman->Init(
                   reinterpret_cast<unsigned char*>(Buffer::Data(buffer)),
                   Buffer::Length(buffer));
-          initialized = true;
         }
       }
     }
@@ -4115,7 +4118,8 @@ PBKDF2(const Arguments& args) {
 
   req = new uv_work_t();
   req->data = request;
-  uv_queue_work(uv_default_loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
+  uv_queue_work(Loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
+
   return Undefined();
 
 err:
@@ -4237,7 +4241,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     Local<Function> callback_v = Local<Function>(Function::Cast(*args[1]));
     req->callback_ = Persistent<Function>::New(callback_v);
 
-    uv_queue_work(uv_default_loop(),
+    uv_queue_work(Loop(),
                   &req->work_req_,
                   RandomBytesWork<generator>,
                   RandomBytesAfter<generator>);
