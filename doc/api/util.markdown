@@ -72,6 +72,20 @@ Example of inspecting all properties of the `util` object:
 
     console.log(util.inspect(util, true, null));
 
+Custom objects may also define their own `inspect()` function, to output a custom
+representation of the object. The function will be invoked when the object has
+`inspect` called on it. The arguments passed to the function are in the order:
+`depth`, `showHidden`, and `colors`:
+
+    var util = require('util');
+
+    var o = {}
+    o.inspect = function (depth, showHidden, colors) {
+      return util.inspect('custom output', showHidden, depth, colors);
+    }
+
+    console.log(util.inspect(o, false, null, true));
+
 
 ### util.isArray(object)
 
