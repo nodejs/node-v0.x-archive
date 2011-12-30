@@ -815,6 +815,8 @@ private:
 namespace v8_typed_array {
 
 void AttachBindings(v8::Handle<v8::Object> obj) {
+  v8::HandleScope scope;
+
   obj->Set(v8::String::New("ArrayBuffer"),
       ArrayBuffer::GetTemplate()->GetFunction());
   obj->Set(v8::String::New("Int8Array"),
@@ -856,3 +858,5 @@ int SizeOfArrayElementForType(v8::ExternalArrayType type) {
 }
 
 }  // namespace v8_typed_array
+
+NODE_MODULE(node_typed_array, v8_typed_array::AttachBindings)
