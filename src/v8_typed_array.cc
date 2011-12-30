@@ -184,46 +184,13 @@ private:
     unsigned int length = 0;
     unsigned int byte_offset = 0;
 
-    if (node::Buffer::HasInstance(args[0])) {  // node::Buffer constructor.
-      buffer = v8::Local<v8::Object>::Cast(args[0]);
-      unsigned int buflen = buffer->GetIndexedPropertiesExternalArrayDataLength();
-
-      if (args[1]->Int32Value() < 0)
-        return ThrowRangeError("Byte offset out of range.");
-      byte_offset = args[1]->IsUndefined() ? 0 : args[1]->Uint32Value();
-
-      if (!checkAlignment(byte_offset, TBytes))
-        return ThrowRangeError("Byte offset is not aligned.");
-
-      if (args.Length() > 2) {
-        if (args[2]->Int32Value() < 0)
-          return ThrowRangeError("Length out of range.");
-        length = args[2]->Uint32Value();
-      }
-      else {
-        if (buflen < byte_offset || !checkAlignment(buflen - byte_offset, TBytes)) {
-          return ThrowRangeError("Byte offset / length is not aligned.");
-        }
-        length = (buflen - byte_offset) / TBytes;
-      }
-
-      // NOTE(deanm): Sloppy integer overflow checks.
-      if (byte_offset > buflen || byte_offset + length > buflen ||
-          byte_offset + length * TBytes > buflen) {
-        return ThrowRangeError("Length is out of range.");
-      }
-
-      // TODO(deanm): Error check.
-      void* buf = buffer->GetIndexedPropertiesExternalArrayData();
-
-      args.This()->SetIndexedPropertiesToExternalArrayData( reinterpret_cast<char*>(buf) + byte_offset, TEAType, length);
-    }
-    else if (ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
+    // [m1k3] added support for Buffer constructor
+    if (node::Buffer::HasInstance(args[0]) || ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
       buffer = v8::Local<v8::Object>::Cast(args[0]);
       unsigned int buflen =
           buffer->GetIndexedPropertiesExternalArrayDataLength();
 
-      if (args[1]->Int32Value() < 0)
+      if (!args[1]->IsUndefined() && args[1]->Int32Value() < 0)
         return ThrowRangeError("Byte offset out of range.");
       byte_offset = args[1]->IsUndefined() ? 0 : args[1]->Uint32Value();
 
