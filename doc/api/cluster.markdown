@@ -151,7 +151,8 @@ In the master you should use this function to send a message to a specific worke
 However in a worker you can also use `process.send(message)`, since this is the same
 function.
 
-    cluster.worker.send({ cmd: 'notifyRequest' });
+    var worker = cluster.fork();
+    worker.send({ cmd: 'notifyRequest' });
 
 ### Worker.destroy()
 
