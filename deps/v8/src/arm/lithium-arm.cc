@@ -1779,11 +1779,12 @@ LInstruction* LChunkBuilder::DoLoadGlobalGeneric(HLoadGlobalGeneric* instr) {
 
 
 LInstruction* LChunkBuilder::DoStoreGlobalCell(HStoreGlobalCell* instr) {
-  LOperand* temp = TempRegister();
-  LOperand* value = UseTempRegister(instr->value());
-  LInstruction* result = new LStoreGlobalCell(value, temp);
-  if (instr->RequiresHoleCheck()) result = AssignEnvironment(result);
-  return result;
+  LOperand* value = UseRegister(instr->value());
+  // Use a temp to check the value in the cell in the case where we perform
+  // a hole check.
+  return instr->RequiresHoleCheck()
+      ? AssignEnvironment(new LStoreGlobalCell(value, TempRegister()))
+      : new LStoreGlobalCell(value, NULL);
 }
 
 
@@ -1937,8 +1938,7 @@ LInstruction* LChunkBuilder::DoStoreKeyedFastElement(
   LOperand* key = needs_write_barrier
       ? UseTempRegister(instr->key())
       : UseRegisterOrConstantAtStart(instr->key());
-
-  return AssignEnvironment(new LStoreKeyedFastElement(obj, key, val));
+  return new LStoreKeyedFastElement(obj, key, val);
 }
 
 

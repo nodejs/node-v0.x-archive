@@ -1856,9 +1856,7 @@ LInstruction* LChunkBuilder::DoLoadGlobalGeneric(HLoadGlobalGeneric* instr) {
 
 LInstruction* LChunkBuilder::DoStoreGlobalCell(HStoreGlobalCell* instr) {
   LStoreGlobalCell* result =
-      new(zone()) LStoreGlobalCell(UseTempRegister(instr->value()),
-                           TempRegister(),
-                           TempRegister());
+      new(zone()) LStoreGlobalCell(UseRegister(instr->value()));
   return instr->RequiresHoleCheck() ? AssignEnvironment(result) : result;
 }
 
@@ -2025,8 +2023,7 @@ LInstruction* LChunkBuilder::DoStoreKeyedFastElement(
   LOperand* key = needs_write_barrier
       ? UseTempRegister(instr->key())
       : UseRegisterOrConstantAtStart(instr->key());
-
-  return AssignEnvironment(new(zone()) LStoreKeyedFastElement(obj, key, val));
+  return new(zone()) LStoreKeyedFastElement(obj, key, val);
 }
 
 
