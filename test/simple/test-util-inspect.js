@@ -79,3 +79,16 @@ assert.doesNotThrow(function () {
 // GH-2225
 var x = { inspect: util.inspect };
 assert.ok(util.inspect(x).indexOf('inspect') != -1);
+
+// test for custom inspect() functionality
+var o = { foo: 'bar' };
+var inspectCalled = false;
+o.inspect = function (d, h, c) {
+  inspectCalled = true;
+  assert.equal(d, 10);
+  assert.equal(h, false);
+  assert.equal(c, true);
+  return this.foo;
+}
+assert.equal(util.inspect(o, false, 10, true), 'bar');
+assert.ok(inspectCalled);
