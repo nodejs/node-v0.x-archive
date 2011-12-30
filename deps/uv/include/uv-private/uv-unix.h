@@ -44,6 +44,9 @@ typedef struct {
 
 typedef int uv_file;
 
+#define UV_ONCE_INIT PTHREAD_ONCE_INIT
+
+typedef pthread_once_t uv_once_t;
 typedef pthread_t uv_thread_t;
 typedef pthread_mutex_t uv_mutex_t;
 typedef pthread_rwlock_t uv_rwlock_t;
@@ -60,6 +63,8 @@ typedef void* uv_lib_t;
    * definition of ares_timeout(). \
    */ \
   ev_timer timer; \
+  /* Poll result queue */ \
+  eio_channel uv_eio_channel; \
   struct ev_loop* ev;
 
 #define UV_REQ_BUFSML_SIZE (4)

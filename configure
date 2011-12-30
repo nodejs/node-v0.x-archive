@@ -27,6 +27,11 @@ parser.add_option("--without-npm",
     dest="without_npm",
     help="Don\'t install the bundled npm package manager")
 
+parser.add_option("--without-isolates",
+    action="store_true",
+    dest="without_isolates",
+    help="Build without isolates (no threads, single loop) [Default: False]")
+
 parser.add_option("--without-ssl",
     action="store_true",
     dest="without_ssl",
@@ -163,6 +168,7 @@ def target_arch():
 
 def configure_node(o):
   # TODO add gdb and dest_cpu
+  o['variables']['node_use_isolates'] = b(not options.without_isolates)
   o['variables']['node_debug'] = b(options.debug)
   o['variables']['node_prefix'] = options.prefix if options.prefix else ''
   o['variables']['node_use_dtrace'] = b(options.with_dtrace)
@@ -231,8 +237,6 @@ def configure_openssl(o):
       libs or cflags or options.openssl_libpath or options.openssl_includes)
 
 
-print "configure options:", options
-
 output = {
   'variables': {},
   'include_dirs': [],
@@ -255,8 +259,9 @@ output = {
   'variables': variables,
   'target_defaults': output
 }
+pprint.pprint(output, indent=2)
 
-fn = os.path.join(root_dir, 'options.gypi')
+fn = os.path.join(root_dir, 'config.gypi')
 print "creating ", fn
 
 f = open(fn, 'w+')

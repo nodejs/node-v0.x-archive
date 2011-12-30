@@ -21,21 +21,21 @@ node_g:
 out/Debug/node:
 	$(MAKE) -C out BUILDTYPE=Debug
 
-out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp options.gypi
+out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
 	tools/gyp_node -f make
 
 install: all
-	out/Release/node tools/installer.js ./options.gypi install
+	out/Release/node tools/installer.js ./config.gypi install
 
 uninstall:
-	out/Release/node tools/installer.js ./options.gypi uninstall
+	out/Release/node tools/installer.js ./config.gypi uninstall
 
 clean:
 	-rm -rf out/Makefile node node_g out/**/*.o  out/**/*.a out/$(BUILDTYPE)/node
 
 distclean:
 	-rm -rf out
-	-rm options.gypi
+	-rm config.gypi
 
 test: all
 	python tools/test.py --mode=release simple message
@@ -48,6 +48,7 @@ test-valgrind: all
 
 test-all: all
 	python tools/test.py --mode=debug,release
+	$(MAKE) test-npm
 
 test-all-http1: all
 	python tools/test.py --mode=debug,release --use-http1
@@ -72,6 +73,12 @@ test-pummel: all
 
 test-internet: all
 	python tools/test.py internet
+
+test-npm: node
+	./node deps/npm/test/run.js
+
+test-npm-publish: node
+	npm_package_config_publishtest=true ./node deps/npm/test/run.js
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
 apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html))
