@@ -37,17 +37,17 @@ if (cluster.isWorker) {
     overwrite: false
   };
 
-  //To check that the cluster extend on the process.env we will overwrite a
-  //property
+  // To check that the cluster extend on the process.env we will overwrite a
+  // property
   process.env['cluster_test_overwrite'] = 'old';
 
-  //Fork worker
+  // Fork worker
   var worker = cluster.fork({
     'cluster_test_prop': 'custom',
     'cluster_test_overwrite': 'new'
   });
 
-  //Checks worker env
+  // Checks worker env
   worker.on('message', function(data) {
     checks.using = (data.prop === 'custom');
     checks.overwrite = (data.overwrite === 'new');

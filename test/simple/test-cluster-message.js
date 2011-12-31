@@ -32,21 +32,21 @@ function forEach(obj, fn) {
 }
 
 if (cluster.isWorker) {
-  //Create a tcp server
+  // Create a tcp server
   // this will be used as cluster-shared-server
-  //and as an alternativ IPC channel
+  // and as an alternativ IPC channel
   var server = net.Server();
   server.on('connection', function(socket) {
 
-    //Tell master using TCP socket that a message is received
-    cluster.worker.on('message', function(message) {
+    // Tell master using TCP socket that a message is received
+    process.on('message', function(message) {
       socket.write(JSON.stringify({
         code: 'received message',
         echo: message
       }));
     });
 
-    cluster.worker.send('message from worker');
+    process.send('message from worker');
   });
 
   server.listen(common.PORT, '127.0.0.1');
@@ -65,13 +65,14 @@ else if (cluster.isMaster) {
     }
   };
 
+
   var client;
   var check = function(type, result) {
     checks[type].receive = true;
     checks[type].correct = result;
 
     var missing = false;
-    forEach(checks, function (type) {
+    forEach(checks, function(type) {
       if (type.receive === false) missing = true;
     });
 
@@ -80,25 +81,25 @@ else if (cluster.isMaster) {
     }
   };
 
-  //Spawn worker
+  // Spawn worker
   var worker = cluster.fork();
 
-  //When a IPC message is resicved form the worker
+  // When a IPC message is resicved form the worker
   worker.on('message', function(message) {
     check('master', message === 'message from worker');
   });
 
-  //When a TCP connection is made with the worker connect to it
+  // When a TCP connection is made with the worker connect to it
   worker.on('listening', function() {
 
     client = net.connect(common.PORT, function() {
 
-      //Send message to worker, and check for callback
+      //Send message to worker
       worker.send('message from master');
     });
 
     client.on('data', function(data) {
-      //All data is JSON
+      // All data is JSON
       data = JSON.parse(data.toString());
 
       if (data.code === 'received message') {
@@ -108,7 +109,7 @@ else if (cluster.isMaster) {
       }
     });
 
-    //When the connection ends kill worker and shutdown process
+    // When the connection ends kill worker and shutdown process
     client.on('end', function() {
       worker.destroy();
     });
@@ -122,7 +123,8 @@ else if (cluster.isMaster) {
   process.once('exit', function() {
     forEach(checks, function(check, type) {
       assert.ok(check.receive, 'The ' + type + ' did not receive any message');
-      assert.ok(check.correct, 'The ' + type + ' did not get the correct message');
+      assert.ok(check.correct,
+                'The ' + type + ' did not get the correct message');
     });
   });
 }
