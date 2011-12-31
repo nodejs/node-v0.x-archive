@@ -23,7 +23,7 @@ var common = require('../common');
 var assert = require('assert');
 var a = require('assert');
 
-function makeBlock(f) {
+function makeFunction(f) {
   var args = Array.prototype.slice.call(arguments, 1);
   return function() {
     return f.apply(this, args);
@@ -33,97 +33,97 @@ function makeBlock(f) {
 assert.ok(common.indirectInstanceOf(a.AssertionError.prototype, Error),
           'a.AssertionError instanceof Error');
 
-assert.throws(makeBlock(a, false), a.AssertionError, 'ok(false)');
+assert.throws(makeFunction(a, false), a.AssertionError, 'ok(false)');
 
-assert.doesNotThrow(makeBlock(a, true), a.AssertionError, 'ok(true)');
+assert.doesNotThrow(makeFunction(a, true), a.AssertionError, 'ok(true)');
 
-assert.doesNotThrow(makeBlock(a, 'test', 'ok(\'test\')'));
+assert.doesNotThrow(makeFunction(a, 'test', 'ok(\'test\')'));
 
-assert.throws(makeBlock(a.ok, false),
+assert.throws(makeFunction(a.ok, false),
               a.AssertionError, 'ok(false)');
 
-assert.doesNotThrow(makeBlock(a.ok, true),
+assert.doesNotThrow(makeFunction(a.ok, true),
                     a.AssertionError, 'ok(true)');
 
-assert.doesNotThrow(makeBlock(a.ok, 'test'), 'ok(\'test\')');
+assert.doesNotThrow(makeFunction(a.ok, 'test'), 'ok(\'test\')');
 
-assert.throws(makeBlock(a.equal, true, false), a.AssertionError, 'equal');
+assert.throws(makeFunction(a.equal, true, false), a.AssertionError, 'equal');
 
-assert.doesNotThrow(makeBlock(a.equal, null, null), 'equal');
+assert.doesNotThrow(makeFunction(a.equal, null, null), 'equal');
 
-assert.doesNotThrow(makeBlock(a.equal, undefined, undefined), 'equal');
+assert.doesNotThrow(makeFunction(a.equal, undefined, undefined), 'equal');
 
-assert.doesNotThrow(makeBlock(a.equal, null, undefined), 'equal');
+assert.doesNotThrow(makeFunction(a.equal, null, undefined), 'equal');
 
-assert.doesNotThrow(makeBlock(a.equal, true, true), 'equal');
+assert.doesNotThrow(makeFunction(a.equal, true, true), 'equal');
 
-assert.doesNotThrow(makeBlock(a.equal, 2, '2'), 'equal');
+assert.doesNotThrow(makeFunction(a.equal, 2, '2'), 'equal');
 
-assert.doesNotThrow(makeBlock(a.notEqual, true, false), 'notEqual');
+assert.doesNotThrow(makeFunction(a.notEqual, true, false), 'notEqual');
 
-assert.throws(makeBlock(a.notEqual, true, true),
+assert.throws(makeFunction(a.notEqual, true, true),
               a.AssertionError, 'notEqual');
 
-assert.throws(makeBlock(a.strictEqual, 2, '2'),
+assert.throws(makeFunction(a.strictEqual, 2, '2'),
               a.AssertionError, 'strictEqual');
 
-assert.throws(makeBlock(a.strictEqual, null, undefined),
+assert.throws(makeFunction(a.strictEqual, null, undefined),
               a.AssertionError, 'strictEqual');
 
-assert.doesNotThrow(makeBlock(a.notStrictEqual, 2, '2'), 'notStrictEqual');
+assert.doesNotThrow(makeFunction(a.notStrictEqual, 2, '2'), 'notStrictEqual');
 
 // deepEquals joy!
 // 7.2
-assert.doesNotThrow(makeBlock(a.deepEqual, new Date(2000, 3, 14),
+assert.doesNotThrow(makeFunction(a.deepEqual, new Date(2000, 3, 14),
                     new Date(2000, 3, 14)), 'deepEqual date');
 
-assert.throws(makeBlock(a.deepEqual, new Date(), new Date(2000, 3, 14)),
+assert.throws(makeFunction(a.deepEqual, new Date(), new Date(2000, 3, 14)),
               a.AssertionError,
               'deepEqual date');
 
 // 7.3
-assert.doesNotThrow(makeBlock(a.deepEqual, /a/, /a/));
-assert.doesNotThrow(makeBlock(a.deepEqual, /a/g, /a/g));
-assert.doesNotThrow(makeBlock(a.deepEqual, /a/i, /a/i));
-assert.doesNotThrow(makeBlock(a.deepEqual, /a/m, /a/m));
-assert.doesNotThrow(makeBlock(a.deepEqual, /a/igm, /a/igm));
-assert.throws(makeBlock(a.deepEqual, /ab/, /a/));
-assert.throws(makeBlock(a.deepEqual, /a/g, /a/));
-assert.throws(makeBlock(a.deepEqual, /a/i, /a/));
-assert.throws(makeBlock(a.deepEqual, /a/m, /a/));
-assert.throws(makeBlock(a.deepEqual, /a/igm, /a/im));
+assert.doesNotThrow(makeFunction(a.deepEqual, /a/, /a/));
+assert.doesNotThrow(makeFunction(a.deepEqual, /a/g, /a/g));
+assert.doesNotThrow(makeFunction(a.deepEqual, /a/i, /a/i));
+assert.doesNotThrow(makeFunction(a.deepEqual, /a/m, /a/m));
+assert.doesNotThrow(makeFunction(a.deepEqual, /a/igm, /a/igm));
+assert.throws(makeFunction(a.deepEqual, /ab/, /a/));
+assert.throws(makeFunction(a.deepEqual, /a/g, /a/));
+assert.throws(makeFunction(a.deepEqual, /a/i, /a/));
+assert.throws(makeFunction(a.deepEqual, /a/m, /a/));
+assert.throws(makeFunction(a.deepEqual, /a/igm, /a/im));
 
 var re1 = /a/;
 re1.lastIndex = 3;
-assert.throws(makeBlock(a.deepEqual, re1, /a/));
+assert.throws(makeFunction(a.deepEqual, re1, /a/));
 
 
 // 7.4
-assert.doesNotThrow(makeBlock(a.deepEqual, 4, '4'), 'deepEqual == check');
-assert.doesNotThrow(makeBlock(a.deepEqual, true, 1), 'deepEqual == check');
-assert.throws(makeBlock(a.deepEqual, 4, '5'),
+assert.doesNotThrow(makeFunction(a.deepEqual, 4, '4'), 'deepEqual == check');
+assert.doesNotThrow(makeFunction(a.deepEqual, true, 1), 'deepEqual == check');
+assert.throws(makeFunction(a.deepEqual, 4, '5'),
               a.AssertionError,
               'deepEqual == check');
 
 // 7.5
 // having the same number of owned properties && the same set of keys
-assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4}, {a: 4}));
-assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
-assert.doesNotThrow(makeBlock(a.deepEqual, [4], ['4']));
-assert.throws(makeBlock(a.deepEqual, {a: 4}, {a: 4, b: true}),
+assert.doesNotThrow(makeFunction(a.deepEqual, {a: 4}, {a: 4}));
+assert.doesNotThrow(makeFunction(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
+assert.doesNotThrow(makeFunction(a.deepEqual, [4], ['4']));
+assert.throws(makeFunction(a.deepEqual, {a: 4}, {a: 4, b: true}),
               a.AssertionError);
-assert.doesNotThrow(makeBlock(a.deepEqual, ['a'], {0: 'a'}));
+assert.doesNotThrow(makeFunction(a.deepEqual, ['a'], {0: 'a'}));
 //(although not necessarily the same order),
-assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '1'}, {b: '1', a: 4}));
+assert.doesNotThrow(makeFunction(a.deepEqual, {a: 4, b: '1'}, {b: '1', a: 4}));
 var a1 = [1, 2, 3];
 var a2 = [1, 2, 3];
 a1.a = 'test';
 a1.b = true;
 a2.b = true;
 a2.a = 'test';
-assert.throws(makeBlock(a.deepEqual, Object.keys(a1), Object.keys(a2)),
+assert.throws(makeFunction(a.deepEqual, Object.keys(a1), Object.keys(a2)),
               a.AssertionError);
-assert.doesNotThrow(makeBlock(a.deepEqual, a1, a2));
+assert.doesNotThrow(makeFunction(a.deepEqual, a1, a2));
 
 // having an identical prototype property
 var nbRoot = {
@@ -147,35 +147,35 @@ nameBuilder2.prototype = nbRoot;
 var nb1 = new nameBuilder('Ryan', 'Dahl');
 var nb2 = new nameBuilder2('Ryan', 'Dahl');
 
-assert.doesNotThrow(makeBlock(a.deepEqual, nb1, nb2));
+assert.doesNotThrow(makeFunction(a.deepEqual, nb1, nb2));
 
 nameBuilder2.prototype = Object;
 nb2 = new nameBuilder2('Ryan', 'Dahl');
-assert.throws(makeBlock(a.deepEqual, nb1, nb2), a.AssertionError);
+assert.throws(makeFunction(a.deepEqual, nb1, nb2), a.AssertionError);
 
 // String literal + object blew up my implementation...
-assert.throws(makeBlock(a.deepEqual, 'a', {}), a.AssertionError);
+assert.throws(makeFunction(a.deepEqual, 'a', {}), a.AssertionError);
 
 // Testing the throwing
 function thrower(errorConstructor) {
   throw new errorConstructor('test');
 }
-var aethrow = makeBlock(thrower, a.AssertionError);
-aethrow = makeBlock(thrower, a.AssertionError);
+var aethrow = makeFunction(thrower, a.AssertionError);
+aethrow = makeFunction(thrower, a.AssertionError);
 
 // the basic calls work
-assert.throws(makeBlock(thrower, a.AssertionError),
+assert.throws(makeFunction(thrower, a.AssertionError),
               a.AssertionError, 'message');
-assert.throws(makeBlock(thrower, a.AssertionError), a.AssertionError);
-assert.throws(makeBlock(thrower, a.AssertionError));
+assert.throws(makeFunction(thrower, a.AssertionError), a.AssertionError);
+assert.throws(makeFunction(thrower, a.AssertionError));
 
 // if not passing an error, catch all.
-assert.throws(makeBlock(thrower, TypeError));
+assert.throws(makeFunction(thrower, TypeError));
 
 // when passing a type, only catch errors of the appropriate type
 var threw = false;
 try {
-  a.throws(makeBlock(thrower, TypeError), a.AssertionError);
+  a.throws(makeFunction(thrower, TypeError), a.AssertionError);
 } catch (e) {
   threw = true;
   assert.ok(e instanceof TypeError, 'type');
@@ -187,7 +187,7 @@ threw = false;
 
 // doesNotThrow should pass through all errors
 try {
-  a.doesNotThrow(makeBlock(thrower, TypeError), a.AssertionError);
+  a.doesNotThrow(makeFunction(thrower, TypeError), a.AssertionError);
 } catch (e) {
   threw = true;
   assert.ok(e instanceof TypeError);
@@ -197,7 +197,7 @@ assert.equal(true, threw,
 
 // key difference is that throwing our correct error makes an assertion error
 try {
-  a.doesNotThrow(makeBlock(thrower, TypeError), TypeError);
+  a.doesNotThrow(makeFunction(thrower, TypeError), TypeError);
 } catch (e) {
   threw = true;
   assert.ok(e instanceof a.AssertionError);
@@ -224,14 +224,23 @@ try {
 assert.ok(threw, 'wrong constructor validation');
 
 // use a RegExp to validate error message
-a.throws(makeBlock(thrower, TypeError), /test/);
+a.throws(makeFunction(thrower, TypeError), /test/);
 
 // use a fn to validate error object
-a.throws(makeBlock(thrower, TypeError), function(err) {
+a.throws(makeFunction(thrower, TypeError), function(err) {
   if ((err instanceof TypeError) && /test/.test(err)) {
     return true;
   }
 });
+
+var gotError = false;
+try {
+  assert('manny' == 'tobi');
+} catch (err) {
+  assert("'manny' == 'tobi'" == err.message);
+  process.exit(1)
+}
+assert(gotError);
 
 
 // GH-207. Make sure deepEqual doesn't loop forever on circular refs
