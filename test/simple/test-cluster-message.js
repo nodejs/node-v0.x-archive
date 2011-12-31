@@ -72,7 +72,7 @@ else if (cluster.isMaster) {
     checks[type].correct = result;
 
     var missing = false;
-    forEach(checks, function (type) {
+    forEach(checks, function(type) {
       if (type.receive === false) missing = true;
     });
 

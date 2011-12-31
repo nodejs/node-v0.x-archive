@@ -23,7 +23,7 @@ var common = require('../common');
 var assert = require('assert');
 
 //messages
-var PREFIX = "NODE_";
+var PREFIX = 'NODE_';
 var normal = {cmd: 'foo' + PREFIX};
 var internal = {cmd: PREFIX + 'bar'};
 
@@ -42,16 +42,16 @@ if (process.argv[2] === 'child') {
   var child = fork(process.argv[1], ['child']);
 
   var gotNormal;
-  child.once('message', function (data) {
+  child.once('message', function(data) {
     gotNormal = data;
   });
 
   var gotInternal;
-  child.once('inernalMessage', function (data) {
+  child.once('inernalMessage', function(data) {
     gotInternal = data;
   });
 
-  process.on('exit', function () {
+  process.on('exit', function() {
     assert.deepEqual(gotNormal, normal);
     assert.deepEqual(gotInternal, internal);
   });
