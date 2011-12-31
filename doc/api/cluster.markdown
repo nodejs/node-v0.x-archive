@@ -50,18 +50,18 @@ This can be used to log worker activity, and create you own timeout.
 
     var timeouts = [];
     var errorMsg = function () {
-        console.error("Something must be wrong with the connection ...");
+      console.error("Something must be wrong with the connection ...");
     });
 
     cluster.on('fork', function (worker) {
-        timeouts[worker.uniqueID] = setTimeout(errorMsg, 2000);
+      timeouts[worker.uniqueID] = setTimeout(errorMsg, 2000);
     });
     cluster.on('listening', function (worker) {
-        clearTimeout(timeouts[worker.uniqueID]);
+      clearTimeout(timeouts[worker.uniqueID]);
     });
     cluster.on('death', function (worker) {
-        clearTimeout(timeouts[worker.uniqueID]);
-        errorMsg();
+      clearTimeout(timeouts[worker.uniqueID]);
+      errorMsg();
     });
 
 ### Event: 'online'
@@ -73,7 +73,7 @@ master tries to fork a worker, and 'online' is emitted when the worker is being
 executed.
 
     cluster.on('online', function (worker) {
-        console.log("Yay, the worker responded after it was forked");
+      console.log("Yay, the worker responded after it was forked");
     });
 
 ### Event: 'listening'
@@ -83,7 +83,7 @@ to the server instance. When the server is listening a message is send to the ma
 where the 'listening' event is emitted.
 
     cluster.on('listening', function (worker) {
-        console.log("We are now connected");
+      console.log("We are now connected");
     });
 
 ### Event: 'death'
@@ -104,7 +104,7 @@ When using the `disconnect()` in the master or in a worker, the `disconnect` eve
 will emit when a connection is disconnected.
 
     cluster.on('disconnect', function (worker) {
-        console.log("We can no longer recive messages from worker");
+      console.log("We can no longer recive messages from worker");
     });
 
 If the worker was killed using`.destroy()` this event will not emit.
@@ -121,7 +121,7 @@ In this case the criticalError event will be emitted. The event can be used to n
 the admin about an critical error.
 
     cluster.on('criticalError', function () {
-        //Send admin an email
+      // Send admin an email
     });
 
 ### Event 'setup'
@@ -181,14 +181,14 @@ This example restart the cluster each time the worker file changes:
     var cluster = require('cluster');
     var fs = require('fs');
     cluster.setupMaster({
-        exec: 'worker.js'
+      exec: 'worker.js'
     });
     fs.watchFile('worker.js', {persistent: false}, function (curr, prev) {
-        if (curr.ctime.getTime() === prev.ctime.getTime()) {
-            cluster.restart(function () {
-                console.log('all workers restarted');
-            });
-        }
+      if (curr.ctime.getTime() === prev.ctime.getTime()) {
+        cluster.restart(function () {
+          console.log('all workers restarted');
+        });
+      }
     });
 
 ### cluster.workers
@@ -198,19 +198,19 @@ In the cluster all living worker objects are stored in this object by there
 
     // Go througe all workers
     function eachWorker(callback) {
-        for (var uniqueID in cluster.workers) {
-            callback(cluster.workers[uniqueID]);
-        }
+      for (var uniqueID in cluster.workers) {
+        callback(cluster.workers[uniqueID]);
+      }
     }
     eachWorker(function (worker) {
-        worker.send('big announcement to all workers');
+      worker.send('big announcement to all workers');
     });
 
 Should you wich to reference a worker over a communication channel this unsing
 there `uniqueID` this is also the easies way to find the worker.
 
     socket.on('data', function (uniqueID) {
-        var worker = cluster.workers[uniqueID];
+      var worker = cluster.workers[uniqueID];
     });
 
 ### cluster.setupMaster([options])
@@ -222,10 +222,10 @@ Example:
 
     var cluster = require("cluster");
     cluster.setupMaster({
-        exec : "worker.js",
-        args : ["--use", "https"],
-        workers : 2,
-        silent : true
+      exec : "worker.js",
+      args : ["--use", "https"],
+      workers : 2,
+      silent : true
     });
     cluster.autoFork();
 
@@ -282,12 +282,12 @@ This function will kill the worker, and inform the master to not spawn a new wor
 To know the difference between suicide and accidently death a suicide boolean is set to true.
 
     cluster.on('death', function (worker) {
-        if (worker.suicide === true) {
-            console.log('Oh, it was just suicide' – no need to worry').
-        }
+      if (worker.suicide === true) {
+          console.log('Oh, it was just suicide' – no need to worry').
+      }
     });
     cluster.eachWorker(function (worker) {
-        worker.destroy();
+      worker.destroy();
     });
 
 This method is automaticly used when the worker gets a `SIGINT` or `SIGTERM` signal.
@@ -333,20 +333,20 @@ in the master process using the message system:
 
     if (cluster.isMaster) {
 
-      //Keep track of http requests
+      // Keep track of http requests
       var numReqs = 0;
       setInterval(function() {
         console.log("numReqs =", numReqs);
       }, 1000);
 
-      //Count requestes
+      // Count requestes
       var messageHandler = function (msg) {
         if (msg.cmd && msg.cmd == 'notifyRequest') {
           numReqs += 1;
         }
       };
 
-      //Start workers and listen for messages containing notifyRequest
+      // Start workers and listen for messages containing notifyRequest
       cluster.autoFork();
       Object.keys(cluster.workers).forEach(function (uniqueID) {
         cluster.workers[uniqueID].on('message', messageHandler);
@@ -354,7 +354,7 @@ in the master process using the message system:
 
     } else {
 
-     // Worker processes have a http server.
+      // Worker processes have a http server.
       http.Server(function(req, res) {
         res.writeHead(200);
         res.end("hello world\n");
@@ -370,7 +370,7 @@ Same as the `cluster.on('online')` event, but emits only when the state change
 on the specified worker.
 
     cluster.fork().on('online', function (worker) {
-        //Worker is online
+      //Worker is online
     };
 
 ### Event: listening
@@ -379,7 +379,7 @@ Same as the `cluster.on('listening')` event, but emits only when the state chang
 on the specified worker.
 
     cluster.fork().on('listening', function (worker) {
-        //Worker is listening
+      //Worker is listening
     };
 
 ### Event: death
@@ -388,7 +388,7 @@ Same as the `cluster.on('death')` event, but emits only when the state change
 on the specified worker.
 
     cluster.fork().on('death', function (worker) {
-        //Worker has died
+      //Worker has died
     };
 
 ### Event: disconnect
@@ -396,5 +396,5 @@ on the specified worker.
 Same as the `cluster.on('disconnect')` event, but emits only when the state change on the specified worker.
 
     cluster.fork().on('disconnect', function (worker) {
-        //Worker has been disconnected
+      //Worker has been disconnected
     };
