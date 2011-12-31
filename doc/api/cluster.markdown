@@ -269,10 +269,10 @@ function is stored in process.
 
 ### Worker.send(message, [sendHandle])
 
- This function is equal to the send methods provided by `child_process.fork()`.
- In the master you should use this function to send a message to a specific worker.
- However in a worker you can also use `process.send(message)`, since this is the same
- function.
+This function is equal to the send methods provided by `child_process.fork()`.
+In the master you should use this function to send a message to a specific worker.
+However in a worker you can also use `process.send(message)`, since this is the same
+function.
 
 This example will echo back all messages from the master:
 
@@ -293,12 +293,12 @@ To know the difference between suicide and accidently death a suicide boolean is
 
     cluster.on('death', function (worker) {
       if (worker.suicide === true) {
-          console.log('Oh, it was just suicide' – no need to worry').
+        console.log('Oh, it was just suicide' – no need to worry').
       }
     });
-    cluster.eachWorker(function (worker) {
-      worker.destroy();
-    });
+
+    // destroy worker
+    worker.destroy();
 
 This method is automaticly used when the worker gets a `SIGINT` or `SIGTERM` signal.
 
@@ -380,7 +380,7 @@ Same as the `cluster.on('online')` event, but emits only when the state change
 on the specified worker.
 
     cluster.fork().on('online', function (worker) {
-      //Worker is online
+      // Worker is online
     };
 
 ### Event: listening
@@ -389,7 +389,7 @@ Same as the `cluster.on('listening')` event, but emits only when the state chang
 on the specified worker.
 
     cluster.fork().on('listening', function (worker) {
-      //Worker is listening
+      // Worker is listening
     };
 
 ### Event: death
@@ -398,7 +398,7 @@ Same as the `cluster.on('death')` event, but emits only when the state change
 on the specified worker.
 
     cluster.fork().on('death', function (worker) {
-      //Worker has died
+      // Worker has died
     };
 
 ### Event: disconnect
@@ -406,5 +406,5 @@ on the specified worker.
 Same as the `cluster.on('disconnect')` event, but emits only when the state change on the specified worker.
 
     cluster.fork().on('disconnect', function (worker) {
-      //Worker has been disconnected
+      // Worker has been disconnected
     };
