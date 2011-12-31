@@ -39,14 +39,14 @@ if (cluster.isWorker) {
   server.on('connection', function(socket) {
 
     // Tell master using TCP socket that a message is received
-    cluster.worker.on('message', function(message) {
+    process.on('message', function(message) {
       socket.write(JSON.stringify({
         code: 'received message',
         echo: message
       }));
     });
 
-    cluster.worker.send('message from worker');
+    process.send('message from worker');
   });
 
   server.listen(common.PORT, '127.0.0.1');
