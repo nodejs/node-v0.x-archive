@@ -1622,8 +1622,10 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   err = uv_dlopen(*filename, &lib);
   if (err.code != UV_OK) {
     Local<Value> exception = Exception::Error(
-        String::Concat(String::New("Unable to load shared library "),
-        args[0]->ToString()));
+        String::Concat(String::Concat(String::Concat(String::New("Unable to load shared library "),
+        args[0]->ToString()),
+        String::New(": ")),
+        String::New(uv_strerror(err))));
     return ThrowException(exception);
   }
 
