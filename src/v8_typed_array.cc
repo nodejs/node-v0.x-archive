@@ -186,7 +186,8 @@ class TypedArray {
     unsigned int byte_offset = 0;
 
     // [m1k3] added support for Buffer constructor
-    if (node::Buffer::HasInstance(args[0]) || ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
+    if (node::Buffer::HasInstance(args[0])
+        || ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
       buffer = v8::Local<v8::Object>::Cast(args[0]);
       unsigned int buflen =
           buffer->GetIndexedPropertiesExternalArrayDataLength();
@@ -218,7 +219,8 @@ class TypedArray {
 
       // TODO(deanm): Error check.
       void* buf = buffer->GetIndexedPropertiesExternalArrayData();
-      args.This()->SetIndexedPropertiesToExternalArrayData( reinterpret_cast<char*>(buf) + byte_offset, TEAType, length);
+      args.This()->SetIndexedPropertiesToExternalArrayData(
+          reinterpret_cast<char*>(buf) + byte_offset, TEAType, length);
     }
     else if (args[0]->IsObject()) {  // TypedArray / type[] constructor.
       v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(args[0]);
