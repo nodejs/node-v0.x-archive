@@ -53,7 +53,7 @@ function test(clazz) {
 
   // The layout is now
   // var index
-  //  b = |0|1|2|3|4|5|6|7| bytes (not indexable)
+  // b = |0|1|2|3|4|5|6|7| bytes (not indexable)
   // v1 = |0 |1 | indices (indexable)
   // v2 = |0|1|2|3|4|5|
   // v3 = |0 |1 |
@@ -102,7 +102,7 @@ function test(clazz) {
 // basic Typed Arrays tests
 var size = 8;
 var ab = new ArrayBuffer(size);
-//assert.equal(size, ab.byteLength);
+assert.equal(size, ab.byteLength);
 test(ab);
 
 // testing sharing Buffer object
