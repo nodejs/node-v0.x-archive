@@ -38,7 +38,7 @@ The difference between `cluster.fork()` and `child_process.fork()` is simply
 that cluster allows TCP servers to be shared between workers. `cluster.fork`
 is implemented on top of `child_process.fork`. The message passing API that
 is available with `child_process.fork` is available with `cluster` as well.
-As an example, here is a cluster which keeps count of the number of requests
+As an example, here is a cluster which keeps a count of the number of requests
 in the master process via message passing:
 
     var cluster = require('cluster');
