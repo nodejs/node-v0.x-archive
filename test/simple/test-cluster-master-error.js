@@ -71,10 +71,9 @@ if (cluster.isWorker) {
   // Startup a basic cluster
   cluster.fork();
   cluster.fork();
-}
 
-// This is the testcase
-else {
+} else {
+  // This is the testcase
 
   var fork = require('child_process').fork;
 
@@ -97,19 +96,6 @@ else {
 
   // Spawn a cluster process
   var master = fork(process.argv[1], ['cluster'], {silent: true});
-
-  // relay output using only stdout
-  master.stdout.on('data', function(data) {
-    data.toString().split('\n').forEach(function(text) {
-      console.log('stdout: ' + text);
-    });
-  });
-
-  master.stderr.on('data', function(data) {
-    data.toString().split('\n').forEach(function(text) {
-      console.log('stderr: ' + text);
-    });
-  });
 
   // Handle messages from the cluster
   master.on('message', function(data) {

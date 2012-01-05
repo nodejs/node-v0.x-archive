@@ -26,11 +26,10 @@ var cluster = require('cluster');
 
 if (cluster.isWorker) {
 
-  //Just keep the worker alive
+  // Just keep the worker alive
   process.send(process.argv[2]);
-}
 
-else if (cluster.isMaster) {
+} else if (cluster.isMaster) {
 
   var checks = {
     args: false,
@@ -52,7 +51,7 @@ else if (cluster.isMaster) {
     }
   });
 
-  //Setup master
+  // Setup master
   cluster.setupMaster({
     args: ['custom argument'],
     silent: true
@@ -70,17 +69,17 @@ else if (cluster.isMaster) {
       worker.destroy();
     });
 
-    //All workers are online
+    // All workers are online
     if (cluster.onlineWorkers === totalWorkers) {
       checks.workers = true;
     }
   });
 
-  //Start all workers
+  // Start all workers
   cluster.fork();
   cluster.fork();
 
-  //Check all values
+  // Check all values
   process.once('exit', function() {
     assert.ok(checks.args, 'The arguments was noy send to the worker');
     assert.ok(checks.setupEvent, 'The setup event was never emitted');
