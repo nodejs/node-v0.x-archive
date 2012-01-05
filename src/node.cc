@@ -2690,6 +2690,7 @@ int Start(int argc, char *argv[]) {
   argv = ProcessInit(argc, argv);
 
   v8::V8::Initialize();
+  v8::Locker locker;
   v8::HandleScope handle_scope;
 
   // Get the id of the this, the main, thread.
