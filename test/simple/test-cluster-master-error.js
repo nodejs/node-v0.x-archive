@@ -68,8 +68,9 @@ if (cluster.isWorker) {
 
   });
 
-  // Startup a basic respawn cluster
-  cluster.autoFork();
+  // Startup a basic cluster
+  cluster.fork();
+  cluster.fork();
 }
 
 // This is the testcase
