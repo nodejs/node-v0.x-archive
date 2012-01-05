@@ -9,6 +9,9 @@ Unix/Macintosh (requires python >= 2.5.2):
     make
     make install
 
+If you run into problems while executing `./configure`, it is probably because you use Python3.
+[See the Wiki for help.](https://github.com/joyent/node/wiki/Installation)
+
 Windows:
 
     vcbuild.bat
