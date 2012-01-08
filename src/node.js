@@ -208,14 +208,13 @@
     };
   };
 
+  var _errnoException = null;
+
   function errnoException(errorno, syscall) {
-    // TODO make this more compatible with ErrnoException from src/node.cc
-    // Once all of Node is using this function the ErrnoException from
-    // src/node.cc should be removed.
-    var e = new Error(syscall + ' ' + errorno);
-    e.errno = e.code = errorno;
-    e.syscall = syscall;
-    return e;
+    if (!_errnoException) {
+      _errnoException = NativeModule.require('util')._errnoException;
+    }
+    return _errnoException(errorno, syscall);
   }
 
   function createWritableStdioStream(fd) {
