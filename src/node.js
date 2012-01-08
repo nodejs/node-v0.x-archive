@@ -361,7 +361,7 @@
       }
 
       if (r) {
-        throw errnoException(errno, 'kill');
+        throw errnoException(__errno, 'kill');
       }
     };
   };
