@@ -70,13 +70,14 @@ not be emitted.
 
 `function (request, socket, head) { }`
 
-Emitted each time a client requests a http upgrade. If this event isn't
-listened for, then clients requesting an upgrade will have their connections
-closed.
+Emitted each time a client requests a http upgrade or CONNECT method.
+If this event isn't listened for, then clients requesting an upgrade or
+CONNECT method will have their connections closed.
 
-* `request` is the arguments for the http request, as it is in the request event.
-* `socket` is the network socket between the server and client.
-* `head` is an instance of Buffer, the first packet of the upgraded stream, this may be empty.
+* `request` is the arguments for the http request, as it is in the request
+* event. `socket` is the network socket between the server and client.
+* `head` is an instance of Buffer, the first packet of the upgraded stream,
+* this may be empty.
 
 After this event is emitted, the request's socket will not have a `data`
 event listener, meaning you will need to bind to it in order to handle data
@@ -597,9 +598,9 @@ Emitted after a socket is assigned to this request.
 
 `function (response, socket, head) { }`
 
-Emitted each time a server responds to a request with an upgrade. If this
-event isn't being listened for, clients receiving an upgrade header will have
-their connections closed.
+Emitted each time a server responds to a request with an upgrade or CONNECT
+method. If this event isn't being listened for, clients receiving an upgrade
+header will have their connections closed.
 
 A client server pair that show you how to listen for the `upgrade` event using `http.getAgent`:
 
