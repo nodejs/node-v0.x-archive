@@ -58,7 +58,6 @@ struct globals {
   int64_t tick_times[RPM_SAMPLES];
   int tick_time_head;
   int uncaught_exception_counter;
-  uv_async_t debug_watcher;
   v8::Persistent<v8::Object> binding_cache;
   v8::Persistent<v8::Array> module_load_list;
   v8::Isolate* node_isolate;
@@ -167,6 +166,13 @@ struct globals {
   v8::Persistent<v8::String> chars_written_sym;
   v8::Persistent<v8::String> write_sym;
   v8::Persistent<v8::FunctionTemplate> buffer_constructor_template;
+
+  // node_script.cc
+  v8::Persistent<v8::FunctionTemplate> wrapped_context_constructor;
+  v8::Persistent<v8::FunctionTemplate> wrapped_script_constructor;
+
+  // node_isolate.cc
+  v8::Persistent<v8::FunctionTemplate> isolate_debugger_constructor;
 
   // node_signal_watcher.cc
   v8::Persistent<v8::String> callback_symbol;
