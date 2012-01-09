@@ -84,6 +84,7 @@ class NODE_EXTERN Buffer: public ObjectWrap {
     return Buffer::Length(b->handle_);
   }
 
+  static v8::Local<v8::String> EncodingToString(enum encoding e);
 
   ~Buffer();
 

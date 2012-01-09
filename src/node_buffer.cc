@@ -753,6 +753,26 @@ bool Buffer::HasInstance(v8::Handle<v8::Value> val) {
   return false;
 }
 
+Local<String> Buffer::EncodingToString(enum encoding e) {
+  // Note: these should match the expected encodings in libs/buffer.js
+  switch (e) {
+    case ASCII:
+      return String::NewSymbol("ascii");
+    case UTF8:
+      return String::NewSymbol("utf8");
+    case BASE64:
+      return String::NewSymbol("base64");
+    case UCS2:
+      return String::NewSymbol("ucs2");
+    case BINARY:
+      return String::NewSymbol("binary");
+    case HEX:
+      return String::NewSymbol("hex");
+    default:
+      // A new encoding was added that we don't know about, so fail hard.
+      assert(0);
+  };
+}
 
 void Buffer::Initialize(Handle<Object> target) {
   HandleScope scope;

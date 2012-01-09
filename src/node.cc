@@ -1055,7 +1055,21 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
-  Local<String> str = val->ToString();
+  Local<String> str;
+  // Buffers are special because their toString method will call the slice
+  // method that is appropriate for the encoding passed in.  If the encoding is
+  // not specified, then it defaults to UTF-8 which isn't ideal for all
+  // encodings.
+  if (Buffer::HasInstance(val)) {
+    assert(val->IsObject());
+    Local<Object> obj = val->ToObject();
+    Local<Function> toString =
+      obj->Get(String::NewSymbol("toString")).As<Function>();
+    Local<Value> argv[] = { Buffer::EncodingToString(encoding) };
+    str = toString->Call(obj, 1, argv)->ToString();
+  } else {
+    str = val->ToString();
+  }
 
   if (encoding == UTF8) return str->Utf8Length();
   else if (encoding == UCS2) return str->Length() * 2;
