@@ -78,9 +78,7 @@ public:
 
   ~Queue() {
     IF_DEBUG({
-      uv_mutex_lock(&mutex_);
-      assert(ngx_queue_empty(&queue_));
-      uv_mutex_unlock(&mutex_);
+      assert(IsEmpty());
     })
     uv_mutex_destroy(&mutex_);
   }
@@ -105,6 +103,15 @@ public:
     delete m;
 
     return item;
+  }
+
+  bool IsEmpty() {
+    bool result;
+    uv_mutex_lock(&mutex_);
+    result = ngx_queue_empty(&queue_);
+    uv_mutex_unlock(&mutex_);
+
+    return result;
   }
 
 private:
@@ -147,8 +154,10 @@ private:
   }
 
   void OnMessage() {
-    T item = queue_.Consume();
-    callback_(item, arg_);
+    while (!queue_.IsEmpty()) {
+      T item = queue_.Consume();
+      callback_(item, arg_);
+    }
   }
 
   void* arg_;
