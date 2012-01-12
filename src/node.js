@@ -431,18 +431,18 @@
     // If we were spawned with env NODE_CHANNEL_FD then load that up and
     // start parsing data from that stream.
     if (process.env.NODE_CHANNEL_FD) {
-      assert(parseInt(process.env.NODE_CHANNEL_FD) >= 0);
+      assert(parseInt(process.env.NODE_CHANNEL_FD, 10) >= 0);
       var cp = NativeModule.require('child_process');
 
       // Load tcp_wrap to avoid situation where we might immediately receive
       // a message.
       // FIXME is this really necessary?
-      process.binding('tcp_wrap')
+      process.binding('tcp_wrap');
 
-      cp._forkChild();
-      assert(process.send);
+      var r = cp._forkChild();
+      assert(r);
     }
-  }
+  };
 
   startup._removedProcessMethods = {
     'assert': 'process.assert() use require("assert").ok() instead',
