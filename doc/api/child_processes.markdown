@@ -1,76 +1,47 @@
 ## Child Processes
 
-Node provides a tri-directional `popen(3)` facility through the `ChildProcess`
-class.
+The `child_process` module expose diffrent ways to spawn a new child. Depending
+on what method you use the child will be a new process or a new thread.
 
-It is possible to stream data through the child's `stdin`, `stdout`, and
-`stderr` in a fully non-blocking way.
+A new **process** is created when calling `.spawn`, `.execFile` or `.exec`. these
+methods return a new `Process` object and share the same propertyies and functions
+exposed from this.
 
-To create a child process use `require('child_process').spawn()`.
+A new **thread** is created only when calling `.fork`. The method returns a new
+`Thread` object.
 
-Child processes always have three streams associated with them. `child.stdin`,
-`child.stdout`, and `child.stderr`.
-
-`ChildProcess` is an `EventEmitter`.
-
-### Event:  'exit'
-
-`function (code, signal) {}`
-
-This event is emitted after the child process ends. If the process terminated
-normally, `code` is the final exit code of the process, otherwise `null`. If
-the process terminated due to receipt of a signal, `signal` is the string name
-of the signal, otherwise `null`.
-
-See `waitpid(2)`.
-
-### child.stdin
-
-A `Writable Stream` that represents the child process's `stdin`.
-Closing this stream via `end()` often causes the child process to terminate.
-
-### child.stdout
-
-A `Readable Stream` that represents the child process's `stdout`.
-
-### child.stderr
-
-A `Readable Stream` that represents the child process's `stderr`.
-
-### child.pid
-
-The PID of the child process.
-
-Example:
-
-    var spawn = require('child_process').spawn,
-        grep  = spawn('grep', ['ssh']);
-
-    console.log('Spawned child pid: ' + grep.pid);
-    grep.stdin.end();
-
+Both the `Thread` and then `Process` object inherts properties and mehods form
+the `Child` object.
 
 ### child_process.spawn(command, [args], [options])
 
-Launches a new process with the given `command`, with  command line arguments in `args`.
-If omitted, `args` defaults to an empty Array.
+This method will spawn a new `process`, with the given `command` and with the
+`args` array as the arguments.
 
-The third argument is used to specify additional options, which defaults to:
+Compared to the command line this would be equal to:
 
-    { cwd: undefined,
-      env: process.env,
-      setsid: false
-    }
+  $ command + " " + args.join(" ")
 
-`cwd` allows you to specify the working directory from which the process is spawned.
-Use `env` to specify environment variables that will be visible to the new process.
+The third argument `options` is an object takeing this properies:
 
-`setsid`, if set true, will cause the subprocess to be run in a new session.
+- cwd: change the current working directory
+- env: set the environment of the process, defaults to `process.env`
+- setsid: if set to true, will cause the subprocess to be run in a new session
+- channel: if set to true, the `stdin` channel will be used as a two way IPC channel
+
+Note that if useing an empty `options` object the process will spawn with an
+empty environment. This is because of backwards compatibility issues with a
+deprecated API.
+
+The return object is a `Process` object this will always have two `readable streams`
+`stdout` and `stderr`. By default is will also have a `writable stream` called `stdin`.
+
+However if using the `channel` option there will not be a `stdin` stream, but
+a `writable and readable stream` set in `.channel`.
 
 Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit code:
 
-    var util  = require('util'),
-        spawn = require('child_process').spawn,
+    var spawn = require('child_process').spawn,
         ls    = spawn('ls', ['-lh', '/usr']);
 
     ls.stdout.on('data', function (data) {
@@ -85,83 +56,78 @@ Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit cod
       console.log('child process exited with code ' + code);
     });
 
+Example of using a simple IRC `channel` there echo back messages:
 
-Example: A very elaborate way to run 'ps ax | grep ssh'
+    if (process.argv[2] === 'child') {
+      process.channel.on('data', function (chunk) {
+        process.channel.write(chunk);
+      });
+    } else {
+      var spawn = require('child_process').spawn;
+      var child = spawn(process.execPath, [process.argv[1], 'child'], {
+        channel: true
+      });
+      child.send('Hallo world');
+      child.on('data', function (chunk) {
+        console.log(chunk.toString());
+      });
+    }
 
-    var util  = require('util'),
-        spawn = require('child_process').spawn,
+This example shows a very elaborate way to run `ps ax | grep ssh`
+
+    var spawn = require('child_process').spawn,
         ps    = spawn('ps', ['ax']),
         grep  = spawn('grep', ['ssh']);
 
-    ps.stdout.on('data', function (data) {
-      grep.stdin.write(data);
-    });
-
-    ps.stderr.on('data', function (data) {
-      console.log('ps stderr: ' + data);
-    });
+    ps.stdout.pipe(grep.stdin);
 
     ps.on('exit', function (code) {
-      if (code !== 0) {
-        console.log('ps process exited with code ' + code);
-      }
+      if (code !== 0) console.log('ps process exited with code ' + code);
       grep.stdin.end();
     });
 
-    grep.stdout.on('data', function (data) {
-      console.log(data);
-    });
-
-    grep.stderr.on('data', function (data) {
-      console.log('grep stderr: ' + data);
-    });
-
     grep.on('exit', function (code) {
-      if (code !== 0) {
-        console.log('grep process exited with code ' + code);
-      }
+      if (code !== 0) console.log('grep process exited with code ' + code);
     });
 
+### child_process.execFile(file, [args], [options], callback)
 
-Example of checking for failed exec:
+This is much like the `.spawn` execept that it buffer `stderr` and `stdout`
+and execute the `callback` when done.
 
-    var spawn = require('child_process').spawn,
-        child = spawn('bad_command');
+The callback gets with the arguments `error`, `stdout` and `stderr`, when
+the process exits with `code 0` (sucess) the `error` argument will be null.
+And `stdout` and `stderr` will be strings containing the `std` output.
 
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', function (data) {
-      if (/^execvp\(\)/.test(data)) {
-        console.log('Failed to start child process.');
-      }
-    });
+If there was an error the `error` object will contain an `Error` object. And
+the `stdout` and `stderr` will be the output until the error occurred.
 
-Note that if spawn receives an empty options object, it will result in
-spawning the process with an empty environment rather than using
-`process.env`. This due to backwards compatibility issues with a deprecated
-API.
+In case the process was killed interntional by an buffer overload or timeout
+the error object will have a `.killed` property set to `true`. Futhermore
+the `.code` and `.signal` properties will be the code or signal there terminated
+the process.
 
-There is a deprecated option called `customFds` which allows one to specify
-specific file descriptors for the stdio of the child process. This API was
-not portable to all platforms and therefore removed.
-With `customFds` it was possible to hook up the new process' [stdin, stdout,
-stderr] to existing streams; `-1` meant that a new stream should be created.
-Use at your own risk.
+The `options` object take the same options as `.spawn` but take also the following:
 
-There are several internal options. In particular `stdinStream`,
-`stdoutStream`, `stderrStream`. They are for INTERNAL USE ONLY. As with all
-undocumented APIs in Node, they should not be used.
+- encoding: will tell how output should is encoded, by default this is 'utf8'
+- maxBuffer: This is maximum buffer `stderr` and `stdout` can have, by default this is 200 KB
+- timeout: When set the process will be killed after the given time.
+- killSignal: The signal there will be send to childs in case of buffer overload or timeout
 
-See also: `child_process.exec()`
+Note that `.execFile` also return a `Process` object, so you can also listen on
+`stderr` and `stdout` without buffering it up.
 
 ### child_process.exec(command, [options], callback)
 
-Runs a command in a shell and buffers the output.
+This this is like `.execFile` except that it execute a subshell where the
+`command` is being executed.
 
-    var util = require('util'),
-        exec = require('child_process').exec,
-        child;
+The `options` argument is also the same.
 
-    child = exec('cat *.js bad_file | wc -l',
+This runs a command in a shell and buffers the output:
+
+    var exec = require('child_process').exec;
+    var child = exec('cat *.js bad_file | wc -l',
       function (error, stdout, stderr) {
         console.log('stdout: ' + stdout);
         console.log('stderr: ' + stderr);
@@ -170,47 +136,24 @@ Runs a command in a shell and buffers the output.
         }
     });
 
-The callback gets the arguments `(error, stdout, stderr)`. On success, `error`
-will be `null`.  On error, `error` will be an instance of `Error` and `err.code`
-will be the exit code of the child process, and `err.signal` will be set to the
-signal that terminated the process.
+Note that `.exec` also return a `Process` object, so you can also listen on
+`stderr` and `stdout` without buffering it up.
 
-There is a second optional argument to specify several options. The default options are
+### chid.fork(file, [args], [options])
 
-    { encoding: 'utf8',
-      timeout: 0,
-      maxBuffer: 200*1024,
-      killSignal: 'SIGTERM',
-      cwd: null,
-      env: null }
+This method is do not spawn a new process, but a thread. It also do inherts from
+the `Thread` object and not the `Process` object. This result in a significant
+diffrenence.
 
-If `timeout` is greater than 0, then it will kill the child process
-if it runs longer than `timeout` milliseconds. The child process is killed with
-`killSignal` (default: `'SIGTERM'`). `maxBuffer` specifies the largest
-amount of data allowed on stdout or stderr - if this value is exceeded then
-the child process is killed.
+The most important is that the `stdout` and `stderr` channel connected to the parent
+so output from the child will be send to the parent directly. Also the new node
+instance comes with a `JSON-linebreak IPC` allowing you to easy send messages and
+receive `JSON` messages between parent and child.
 
+For example the parent could look like:
 
-### child_process.execFile(file, args, options, callback)
-
-This is similar to `child_process.exec()` except it does not execute a
-subshell but rather the specified file directly. This makes it slightly
-leaner than `child_process.exec`. It has the same options.
-
-
-### child_process.fork(modulePath, arguments, options)
-
-This is a special case of the `spawn()` functionality for spawning Node
-processes. In addition to having all the methods in a normal ChildProcess
-instance, the returned object has a communication channel built-in. The
-channel is written to with `child.send(message, [sendHandle])` and messages
-are received by a `'message'` event on the child.
-
-For example:
-
-    var cp = require('child_process');
-
-    var n = cp.fork(__dirname + '/sub.js');
+    var fork = require('child_process').fork;
+    var child = fork('./child.js', );
 
     n.on('message', function(m) {
       console.log('PARENT got message:', m);
@@ -218,7 +161,7 @@ For example:
 
     n.send({ hello: 'world' });
 
-And then the child script, `'sub.js'` might look like this:
+And then the child script, `child.js` might look like this:
 
     process.on('message', function(m) {
       console.log('CHILD got message:', m);
@@ -226,62 +169,128 @@ And then the child script, `'sub.js'` might look like this:
 
     process.send({ foo: 'bar' });
 
-In the child the `process` object will have a `send()` method, and `process`
-will emit objects each time it receives a message on its channel.
+The `.send` method can also send handlers between parent and child. This is done
+by parsing a second argument to `.send` and the `message` event handle function.
 
-There is a special case when sending a `{cmd: 'NODE_foo'}` message. All messages
-containing a `NODE_` prefix in its `cmd` property will not be emitted in
-the `message` event, since they are internal messages used by node core.
-Messages containing the prefix are emitted in the `internalMessage` event, you
-should by all means avoid using this feature, it may change without warranty.
+The `args` array is arguments parsed to new node process. In the a shell this
+would be equal to:
 
-By default the spawned Node process will have the stdout, stderr associated
-with the parent's. To change this behavior set the `silent` property in the
-`options` object to `true`.
+    $ "node " + command + " " + args.join(" ")
 
-These child Nodes are still whole new instances of V8. Assume at least 30ms
-startup and 10mb memory for each new Node. That is, you cannot create many
-thousands of them.
+The `options` object takes the following:
 
-The `sendHandle` option to `child.send()` is for sending a handle object to
-another process. Child will receive the handle as as second argument to the
-`message` event. Here is an example of sending a handle:
+- silent: if set to true the stdout and stderr wont be shared between child an parent.
+But do note that there is no way to resicve the output from the parent.
 
-    var server = require('net').createServer();
-    var child = require('child_process').fork(__dirname + '/child.js');
-    // Open up the server object and send the handle.
-    server.listen(1337, function() {
-      child.send({ server: true }, server._handle);
-    });
+## Child
 
-Here is an example of receiving the server handle and sharing it between
-processes:
+All methods in this module return an objects there inherts properties and methods
+from this.
 
-    process.on('message', function(m, serverHandle) {
-      if (serverHandle) {
-        var server = require('net').createServer();
-        server.listen(serverHandle);
-      }
-    });
+This allow you to easy check if a object is child:
 
+    var cp = require('child_process');
+    var child = cp.fork('./child.js');
+    if (child instanceof cp.Child) {
+      //the object is a Child
+    }
 
+### Child.kill(signal='SIGTERM')
 
-### child.kill([signal])
+All childs can killed the same way, by using this method. Note that this method
+actually don't kill the process but send a signal to it. By default the signal
+will be `SIGTERM` but can be changed by setting the `signal` argument.
 
-Send a signal to the child process. If no argument is given, the process will
-be sent `'SIGTERM'`. See `signal(7)` for a list of available signals.
+### Event: exit
 
-    var spawn = require('child_process').spawn,
-        grep  = spawn('grep', ['ssh']);
+When the child dies the `child.signalCode` and `child.exitCode` property is set.
+Note that only one of them set the other will be `null`. This is then follwed by
+emiting the `exit` event. Also note that the event handler takes two arguments
+`code` and `signal` this will be equal to thee `signalCode` and `exitCode` properties.
+
+If the child was by the parent the `child.killed` property will be set to `true`.
+
+Example of sending the `SIGHUP` to `grep ssh`.
+
+    var exec = require('child_process').exec,
+        grep  = exec('grep ssh');
 
     grep.on('exit', function (code, signal) {
-      console.log('child process terminated due to receipt of signal '+signal);
+      console.log('child process terminated due to receipt of signal '+ signal);
     });
 
     // send SIGHUP to process
     grep.kill('SIGHUP');
 
-Note that while the function is called `kill`, the signal delivered to the child
-process may not actually kill it.  `kill` really just sends a signal to a process.
+## Process
 
-See `kill(2)`
+The methods there return a `Process` instance are `.spawn`, `.execFile` and `.exec`.
+
+You can detect if a object is a process by doing:
+
+    var cp = require('child_process');
+    var child = cp.fork('./child.js');
+    if (child instanceof cp.Process) {
+      //the object is a new Process
+    }
+
+### Process.stdin
+### Process.stdout
+### Process.stderr
+
+When spawning a new process this streams are available though the `Process` object.
+The `wirtable` streams are `stdin` and the `readable` streams are `stdout` and `stderr`.
+
+Not that `stdin` is not set if the `channel` option was set to `true`.
+
+This example shows how to pipe data between parent and child. Note that in this
+case you should use `fork` since this share the all channels between parent and child
+on a lower level, which is faster.
+
+    var spawn = require('child_process').spawn;
+    var child = spawn(process.execPath, './child.js');
+
+    //Pipe streams
+    process.stdin.pipe(child.stdin);
+    process.stdout.pipe(child.stdout);
+    process.stderr.pipe(child.stderr);
+
+### Process.pid
+
+All process are assigned a process ID by the OS, this can be acces by using this property.
+
+## Thread
+
+The only method there return a `Thread` object is `.fork`.
+
+You can detect if a object is a thread by doing:
+
+    var cp = require('child_process');
+    var child = cp.fork('./child.js');
+    if (child instanceof cp.Thread) {
+      //the object is a new Thread
+    }
+
+### Thread.tid
+
+All process are assigned a thread ID by the OS, this can be acces by using this property.
+
+### Thread.send(message, [sendHandle])
+
+As decriped earlier the `.send` method can be used to send `JSON` messages between
+parent and child. Normal text messages are also allowed.
+
+The `.send` method do also allow sending socket handlers, this is done by
+parseing a second argument to the `.send` method.
+
+### Event: message
+
+When sending a message, the message is resicved in the child or parent by the
+`message` event. The first argument in the event handle is a parsed JSON object
+and the second is a handle if one was send:
+
+Example of a child echoing back messages and handlers:
+
+    process.on('message', function (message, handle) {
+      process.send(message, handle);
+    };
