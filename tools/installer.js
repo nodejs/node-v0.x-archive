@@ -97,7 +97,7 @@ if (cmd === 'install') {
 
   // Copy node-gyp files
   copy('common.gypi', 'lib/node/');
-  copy('tools/', 'lib/node/tools/');
+  copy('tools/*', 'lib/node/tools/');
   queue.push('ln -sf ../lib/node/tools/node-gyp ' +
              path.join(node_prefix, 'bin/node-gyp'));
 
