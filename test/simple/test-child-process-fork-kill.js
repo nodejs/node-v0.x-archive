@@ -23,7 +23,7 @@ var assert = require('assert');
 var common = require('../common');
 
 if (process.argv[2] === 'child') {
-  //keep process from self terminating
+  // keep process from self terminating
   setInterval(function() {}, 200);
 
   if (process.argv[3] === 'signal') {
@@ -31,14 +31,16 @@ if (process.argv[2] === 'child') {
       process.send('got it');
     });
   } else if (process.argv[3] === 'kill') {
-    //SIGINT and SIGTERM
+    // SIGINT and SIGTERM
   } else if (process.argv[3] === 'exit') {
     process.exit(1);
   }
 
   process.send('ready');
 
-} else {
+} else if (process.argv[2] === 'testcase') {
+
+  // testcase
   var check = 0;
   var fork = require('child_process').fork;
 
@@ -74,7 +76,7 @@ if (process.argv[2] === 'child') {
     if (msg === 'ready') {
       child3.kill('SIGTERM');
     } else if (msg === 'got it') {
-      //this won't be prevented since no event listener exist
+      // this won't be prevented since no event listener exist
       child3.kill('SIGINT');
     }
   });
@@ -82,6 +84,32 @@ if (process.argv[2] === 'child') {
   process.on('exit', function () {
     assert.equal(check, 3);
     assert.equal(message, 'got it');
+    process.stdout.write('exit\n');
   });
 
+} else {
+  // we need this to check that process.on('exit') fires
+
+  var spawn = require('child_process').spawn;
+  var child = spawn(process.execPath, [process.argv[1], 'testcase']);
+
+  // pipe stderr and stdin
+  child.stderr.pipe(process.stderr);
+  process.stdin.pipe(child.stdin);
+
+  var missing = true;
+  child.stdout.on('data', function(chunk) {
+    if (missing) {
+        missing = chunk.toString() !== 'exit\n';
+    }
+    process.stdout.write(chunk);
+  });
+
+  child.on('exit', function(code) {
+    process.exit(code);
+  });
+
+  process.on('exit', function() {
+    assert.equal(missing, false);
+  });
 }
