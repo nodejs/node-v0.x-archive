@@ -36,6 +36,8 @@ if (process.argv[2] === 'child') {
     process.exit(1);
   }
 
+  process.send('ready');
+
 } else {
   var check = 0;
   var fork = require('child_process').fork;
@@ -47,7 +49,6 @@ if (process.argv[2] === 'child') {
     assert.equal(signal, null);
     check++;
   });
-
 
   var child2 = fork(process.argv[1], ['child', 'kill']);
 
@@ -70,11 +71,13 @@ if (process.argv[2] === 'child') {
   var message = '';
   child3.on('message', function (msg) {
     message = msg;
-
-    //this won't be prevented since no event listener exist
-    child3.kill('SIGINT');
+    if (msg === 'ready') {
+      child3.kill('SIGTERM');
+    } else if (msg === 'got it') {
+      //this won't be prevented since no event listener exist
+      child3.kill('SIGINT');
+    }
   });
-  child3.kill('SIGTERM');
 
   process.on('exit', function () {
     assert.equal(check, 3);
