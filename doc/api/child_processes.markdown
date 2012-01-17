@@ -20,7 +20,7 @@ This method will spawn a new `process`, with the given `command` and with the
 
 Compared to the command line this would be equal to:
 
-  $ command + " " + args.join(" ")
+    $ command + " " + args.join(" ")
 
 The third argument `options` is an object takeing this properies:
 
