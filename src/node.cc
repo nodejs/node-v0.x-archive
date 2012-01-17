@@ -962,9 +962,7 @@ void MakeCallback(Handle<Object> object,
 void SetErrno(uv_err_t err) {
   HandleScope scope;
 
-  if (errno_symbol.IsEmpty()) {
-    errno_symbol = NODE_PSYMBOL("errno");
-  }
+  Local<String> errno_symbol = String::NewSymbol("__errno");
 
   if (err.code == UV_UNKNOWN) {
     char errno_buf[100];
