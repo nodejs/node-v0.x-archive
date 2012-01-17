@@ -1,3 +1,4 @@
+BUILDTYPE := $(shell python -c "print 'Debug' if eval (open('config.gypi').read(), {'__builtins__': None},None)['variables']['node_debug'] == 'true' else 'Release'")
 BUILDTYPE ?= Release
 PYTHON ?= python
 
