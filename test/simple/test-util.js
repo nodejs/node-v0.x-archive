@@ -57,6 +57,7 @@ assert.equal(false, util.isDate({}))
 assert.equal(false, util.isDate([]))
 assert.equal(false, util.isDate(new Error))
 assert.equal(false, util.isDate(Object.create(Date.prototype)))
+assert.equal(false, util.isDate(new Date('not a date')))
 
 // isError
 assert.equal(true, util.isError(new Error))
