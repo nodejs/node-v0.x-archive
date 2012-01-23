@@ -23,6 +23,7 @@ var common = require('../common');
 var assert = require('assert');
 
 var path = require('path');
+var fs = require('fs');
 
 var isWindows = process.platform === 'win32';
 
@@ -78,9 +79,33 @@ if (isWindows) {
                '\\\\unc\\share\\foo\\bar');
 }
 
-path.exists(f, function(y) { assert.equal(y, true) });
+var errTest = common.fixturesDir + '/path-exists-test';
+var existent, nonExistent, existsButThrows;
+
+fs.writeFileSync(errTest, '');
+fs.chmodSync(errTest, 0);
+
+path.exists(f, function(y) { 
+  existent = y;
+});
+path.exists(f + '-NO', function(y) { 
+  nonExistent = y;
+});
+path.exists(errTest, function(y) { 
+  existsButThrows = y;
+});
+
+process.on('exit', function () {
+  assert.strictEqual(existent, true);
+  assert.strictEqual(nonExistent, false);
+  assert.strictEqual(existsButThrows, true);
+});
 
 assert.equal(path.existsSync(f), true);
+assert.equal(path.existsSync(f + '-NO'), false);
+assert.equal(path.existsSync(errTest), true);
+
+fs.unlinkSync(errTest);
 
 assert.equal(path.extname(''), '');
 assert.equal(path.extname('/path/to/file'), '');
