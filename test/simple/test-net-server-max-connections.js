@@ -21,85 +21,100 @@
 
 var common = require('../common');
 var assert = require('assert');
-
 var net = require('net');
 
-// This test creates 200 connections to a server and sets the server's
-// maxConnections property to 100. The first 100 connections make it through
-// and the last 100 connections are rejected.
-// TODO: test that the server can accept more connections after it reaches
+// This test creates MAX + EX connections to a server and sets the server's
+// maxConnections property to MAX. The first MAX connections make it through
+// and the last EX connections are rejected.
+//
+// It also tests that the server can accept more connections after it reaches
 // its maximum and some are closed.
 
-var N = 200;
+var MAX = 100;
+var EX = MAX;
+var ex = EX;
 var count = 0;
-var closes = 0;
 var waits = [];
+var close = false;
+var closes = 0;
+var some;
+
 
 var server = net.createServer(function(connection) {
-  console.error('connect %d', count++);
-  connection.write('hello');
+  console.log('connections: %d', server.connections);
+  count++;
+  connection.write('hey');
   waits.push(function() { connection.end(); });
 });
 
+server.maxConnections = MAX;
+
 server.listen(common.PORT, function() {
-  for (var i = 0; i < N; i++) {
-    makeConnection(i);
-  }
+  makeConnections(MAX + EX);
 });
 
-server.maxConnections = N / 2;
 
-console.error('server.maxConnections = %d', server.maxConnections);
+function makeConnections(num) {
+  for (var i = 0; i < num; i++) {
+    setTimeout(function() {
 
+      var c = net.createConnection(common.PORT);
+      var gotData = false;
 
-function makeConnection(index) {
-  setTimeout(function() {
-    var c = net.createConnection(common.PORT);
-    var gotData = false;
+      c.on('end', function() { c.end(); });
 
-    c.on('end', function() { c.end(); });
+      c.on('data', function(b) {
+        gotData = true;
+        assert.ok(0 < b.length);
+      });
 
-    c.on('data', function(b) {
-      gotData = true;
-      assert.ok(0 < b.length);
-    });
+      c.on('error', function(e) {
+        console.error('error: %s', e);
+      });
 
-    c.on('error', function(e) {
-      console.error('error %d: %s', index, e);
-    });
+      c.on('close', function() {
+        closes++;
 
-    c.on('close', function() {
-      console.error('closed %d', index);
-      closes++;
-
-      if (closes < N / 2) {
-        assert.ok(server.maxConnections <= index,
-                  index +
-                  ' was one of the first closed connections ' +
-                  'but shouldnt have been');
-      }
-
-      if (closes === N / 2) {
-        var cb;
-        console.error('calling wait callback.');
-        while (cb = waits.shift()) {
-          cb();
+        if (!gotData) {
+          assert.equal(server.connections, MAX);
+          if (!--ex || close) { closeConnections(); }
         }
-        server.close();
-      }
 
-      if (index < server.maxConnections) {
-        assert.equal(true, gotData,
-                     index + ' didn\'t get data, but should have');
-      } else {
-        assert.equal(false, gotData,
-                     index + ' got data, but shouldn\'t have');
-      }
-    });
-  }, index);
+        if (gotData && (--count === (MAX - some)) && !close) {
+          close = true;
+
+          // make sure the connections are closed
+          var back = 1;
+          (function backoff() {
+            back *= 2;
+            if (server.connections > count) {
+              setTimeout(backoff, back);
+            } else {
+              makeConnections(MAX - count + 1);
+            }
+          }());
+
+        }
+
+      });
+
+    }, i);
+  }
 }
 
+function closeConnections() {
+  if (!close) {
+    assert.equal(waits.length, MAX);
+    some = Math.floor(Math.random() * (MAX - 1) + 1);
+    console.error('closing %d connections', some);
+    for (var i = 0; i < some; i++) { (waits.shift())(); }
+  } else {
+    var cb;
+    while (cb = waits.shift()) { cb(); }
+    server.close();
+  }
+}
 
 process.on('exit', function() {
-  assert.equal(N, closes);
+  assert.equal(MAX + EX + some + 1, closes);
 });
