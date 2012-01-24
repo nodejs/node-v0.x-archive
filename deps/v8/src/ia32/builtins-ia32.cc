@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -333,7 +333,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ push(ebx);
     __ push(ebx);
 
-    // Setup pointer to last argument.
+    // Set up pointer to last argument.
     __ lea(ebx, Operand(ebp, StandardFrameConstants::kCallerSPOffset));
 
     // Copy arguments and receiver to the expression stack.
@@ -1297,6 +1297,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
   __ bind(&has_non_smi_element);
   // Throw away the array that's only been partially constructed.
   __ pop(eax);
+  __ UndoAllocationInNewSpace(eax);
 
   // Restore argc and constructor before running the generic code.
   __ bind(&prepare_generic_code_call);

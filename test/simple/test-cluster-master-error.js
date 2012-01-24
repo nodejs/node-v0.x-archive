@@ -31,118 +31,102 @@ if (cluster.isWorker) {
 
   }).listen(common.PORT, '127.0.0.1');
 
-} else if (process.argv[2] === 'cluster' && cluster.isMaster) {
+} else if (process.argv[2] === 'cluster') {
 
-  var cpus = require('os').cpus().length;
+  var totalWorkers = 2;
 
-  //Send PID to testcase process
+  // Send PID to testcase process
   var forkNum = 0;
   cluster.on('fork', function forkEvent(worker) {
 
-    //Send PID
+    // Send PID
     process.send({
       cmd: 'worker',
       workerPID: worker.process.pid
     });
 
-    //Stop listening when done
-    if (++forkNum === cpus) {
+    // Stop listening when done
+    if (++forkNum === totalWorkers) {
       cluster.removeListener('fork', forkEvent);
     }
   });
 
-  //Throw accidently error when all workers are listening
+  // Throw accidently error when all workers are listening
   var listeningNum = 0;
   cluster.on('listening', function listeningEvent() {
 
-    //When all workers are listening
-    if (++listeningNum === cpus) {
-      //Stop listening
+    // When all workers are listening
+    if (++listeningNum === totalWorkers) {
+      // Stop listening
       cluster.removeListener('listening', listeningEvent);
 
-      //throw accidently error
-      setTimeout(function() {
+      // throw accidently error
+      process.nextTick(function() {
         throw 'accidently error';
-      }, 500);
+      });
     }
 
   });
 
-  //Startup a basic respawn cluster
-  cluster.autoFork();
-}
+  // Startup a basic cluster
+  cluster.fork();
+  cluster.fork();
 
-//This is the testcase
-else {
+} else {
+  // This is the testcase
 
   var fork = require('child_process').fork;
-  var ProgressTracker = require('progressTracker');
-  var processWatch = require('processWatch');
 
-  var checks = {
-    master: false,
-    workers: false
+  var isAlive = function(pid) {
+    try {
+      //this will throw an error if the process is dead
+      process.kill(pid, 0);
+
+      return true;
+    } catch (e) {
+      return false;
+    }
   };
 
-  //Keep track of progress
-  var progress = new ProgressTracker(function() {
-    checks.workers = true;
-  });
-  progress.add('master');
+  var existMaster = false;
+  var existWorker = false;
 
-  //List all workers
+  // List all workers
   var workers = [];
 
-  //Spawn a cluster process
+  // Spawn a cluster process
   var master = fork(process.argv[1], ['cluster'], {silent: true});
 
-  //relay output using only stdout
-  master.stdout.on('data', function (data) {
-    data.toString().split('\n').forEach(function (text) {
-      console.log('stdout: ' + text);
-    });
-  });
+  // Handle messages from the cluster
+  master.on('message', function(data) {
 
-  master.stderr.on('data', function (data) {
-    data.toString().split('\n').forEach(function (text) {
-      console.log('stderr: ' + text);
-    });
-  });
-
-  //Handle messages from the cluster
-  master.on('message', function (data) {
-
-    //Add worker pid to list and progress tracker
+    // Add worker pid to list and progress tracker
     if (data.cmd === 'worker') {
-      progress.add('worker:' + data.workerPID);
       workers.push(data.workerPID);
     }
   });
 
-  //When cluster is dead
+  // When cluster is dead
   master.on('exit', function(code) {
 
-    //Check that the cluster died accidently
-    checks.master = (code === 1);
+    // Check that the cluster died accidently
+    existMaster = (code === 1);
 
-    //Inform progress tracker
-    progress.set('master');
-
-    //When master is dead all workers should be dead to
+    // When master is dead all workers should be dead to
     var alive = false;
     workers.forEach(function(pid) {
-      if (processWatch.alive(pid)) {
+      if (isAlive(pid)) {
         alive = true;
       }
     });
 
-    //If a worker was alive this did not act as expected
-    checks.workers = !alive;
+    // If a worker was alive this did not act as expected
+    existWorker = !alive;
   });
 
   process.once('exit', function() {
-    assert.ok(checks.master, 'The master did not die after when an error was throwed');
-    assert.ok(checks.workers, 'The workers did not die after when an error was throwed in the master');
+    assert.ok(existMaster, 'The master did not die after an error was throwed');
+    assert.ok(existWorker, 'The workers did not die after an error in the master');
   });
 
 }

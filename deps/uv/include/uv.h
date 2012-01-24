@@ -202,6 +202,9 @@ typedef struct uv_work_s uv_work_t;
 UV_EXTERN uv_loop_t* uv_loop_new(void);
 UV_EXTERN void uv_loop_delete(uv_loop_t*);
 
+/* This is a debugging tool. It's NOT part of the official API. */
+UV_EXTERN int uv_loop_refcount(const uv_loop_t*);
+
 
 /*
  * Returns the default loop.
@@ -649,6 +652,32 @@ UV_EXTERN int uv_udp_getsockname(uv_udp_t* handle, struct sockaddr* name,
 UV_EXTERN int uv_udp_set_membership(uv_udp_t* handle,
     const char* multicast_addr, const char* interface_addr,
     uv_membership membership);
+
+/*
+ * Set the multicast ttl
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  ttl                 1 through 255
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl);
+
+/*
+ * Set broadcast on or off
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  on                  1 for on, 0 for off
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+int uv_udp_set_broadcast(uv_udp_t* handle, int on);
 
 /*
  * Send data. If the socket has not previously been bound with `uv_udp_bind`
@@ -1313,7 +1342,8 @@ UV_EXTERN uv_err_t uv_dlopen(const char* filename, uv_lib_t* library);
 UV_EXTERN uv_err_t uv_dlclose(uv_lib_t library);
 
 /*
- * Retrieves a data pointer from a dynamic library.
+ * Retrieves a data pointer from a dynamic library. It is legal for a symbol to
+ * map to NULL.
  */
 UV_EXTERN uv_err_t uv_dlsym(uv_lib_t library, const char* name, void** ptr);
 
@@ -1348,7 +1378,6 @@ UV_EXTERN void uv_once(uv_once_t* guard, void (*callback)(void));
 UV_EXTERN int uv_thread_create(uv_thread_t *tid,
     void (*entry)(void *arg), void *arg);
 UV_EXTERN int uv_thread_join(uv_thread_t *tid);
-UV_EXTERN uv_thread_t uv_thread_self(void);
 
 /* the presence of these unions force similar struct layout */
 union uv_any_handle {

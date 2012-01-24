@@ -23,8 +23,10 @@
 #define SRC_NODE_ISOLATE_H_
 
 #include "v8.h"
+#include "v8-debug.h"
 #include "uv.h"
 #include "node_vars.h"
+#include "node_object_wrap.h"
 #include "ngx-queue.h"
 
 #ifdef NDEBUG
@@ -42,11 +44,28 @@
 
 namespace node {
 
+template <class T>
+
+class Channel;
+
+class IsolateWrap;
+class IsolateChannel;
+class IsolateMessage;
+class IsolateDebugger;
+class IsolateDebuggerMessage;
+
 class Isolate {
 public:
   char** argv_;
   int argc_;
   uv_thread_t tid_;
+
+  enum {
+    kNone,
+    kDebug,
+    kDebugBrk
+  } debug_state;
+  IsolateDebugger* debugger_instance;
 
   // Call this before instantiating any Isolate
   static void Initialize();
@@ -54,7 +73,8 @@ public:
 
   typedef void (*AtExitCallback)(void* arg);
 
-  static void JoinAll();
+  static v8::Handle<v8::Value> Send(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Unref(const v8::Arguments& args);
 
   static Isolate* GetCurrent() {
     return reinterpret_cast<Isolate*>(v8::Isolate::GetCurrent()->GetData());
@@ -86,37 +106,78 @@ public:
 
   // This constructor is used for every non-main thread
   Isolate();
-
-  ~Isolate() {
-    if (argv_) {
-      delete argv_;
-    }
-  }
+  ~Isolate();
 
   void Enter();
+  void Exit();
 
   /* Shutdown the isolate. Call this method at thread death. */
   void Dispose();
 
 private:
+  friend class IsolateWrap;
 
   struct AtExitCallbackInfo {
-    ngx_queue_t at_exit_callbacks_;
     AtExitCallback callback_;
+    ngx_queue_t queue_;
     void* arg_;
   };
 
+  static void OnMessage(IsolateMessage*, void*);
+
+  // Forbid implicit constructors and copy constructors
+  void operator=(const Isolate&) {}
+  Isolate(const Isolate&) {}
+
+  ngx_queue_t isolate_list_; // linked list of all isolates
   ngx_queue_t at_exit_callbacks_;
   v8::Persistent<v8::Context> v8_context_;
   v8::Isolate* v8_isolate_;
+  IsolateChannel* send_channel_;
+  IsolateChannel* recv_channel_;
   uv_loop_t* loop_;
-
-  // Each isolate is a member of the static list_head.
-  ngx_queue_t list_member_;
 
   // Global variables for this isolate.
   struct globals globals_;
   bool globals_init_;
+};
+
+class IsolateDebugger : ObjectWrap {
+public:
+  static void Initialize();
+  void Init();
+  static void InitCallback(uv_async_t* c, int status);
+
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static IsolateDebugger* New(v8::Handle<v8::Value> init);
+
+  static v8::Handle<v8::Value> Write(const v8::Arguments& args);
+
+  static void DebugMessageHandler(const v8::Debug::Message& message);
+  static void MessageCallback(IsolateDebuggerMessage* msg, void*);
+
+  IsolateDebugger(v8::Handle<v8::Value> init);
+  ~IsolateDebugger();
+
+protected:
+  Isolate* host_;
+  uv_loop_t* host_loop_;
+
+  uv_async_t init_callback_;
+  v8::Persistent<v8::Value> init_callback_fn_;
+
+  bool initialized_;
+  Isolate* debuggee_;
+  v8::Isolate* debuggee_v8_;
+
+  struct debug_msg_s {
+    uint16_t* value;
+    int len;
+
+    IsolateDebugger* d;
+  };
+
+  Channel<IsolateDebuggerMessage*>* msg_channel_;
 };
 
 } // namespace node

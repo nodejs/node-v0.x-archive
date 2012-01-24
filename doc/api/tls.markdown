@@ -102,10 +102,20 @@ You can test this server by connecting to it with `openssl s_client`:
     openssl s_client -connect 127.0.0.1:8000
 
 
+#### tls.connect(options, [secureConnectListener])
 #### tls.connect(port, [host], [options], [secureConnectListener])
 
-Creates a new client connection to the given `port` and `host`. (If `host`
-defaults to `localhost`.) `options` should be an object which specifies
+Creates a new client connection to the given `port` and `host` (old API) or
+`options.port` and `options.host`. (If `host` is omitted, it defaults to
+`localhost`.) `options` should be an object which specifies:
+
+  - `host`: Host the client should connect to
+
+  - `port`: Port the client should connect to
+
+  - `socket`: Establish secure connection on a given socket rather than
+    creating a new socket. If this option is specified, `host` and `port`
+    are ignored.
 
   - `key`: A string or `Buffer` containing the private key of the client in
     PEM format.
@@ -241,7 +251,7 @@ server, you unauthorized connections may be accepted.
 SNI.
 
 
-### Event: 'clientError'
+#### Event: 'clientError'
 
 `function (exception) { }`
 

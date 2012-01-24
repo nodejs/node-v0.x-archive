@@ -27,16 +27,10 @@ var os = require('os');
 
 if (cluster.isWorker) {
 
-  //Just keep the worker alive
-  var http = require('http');
-  http.Server(function() {
+  // Just keep the worker alive
+  process.send(process.argv[2]);
 
-  }).listen(common.PORT, '127.0.0.1', function() {
-    cluster.worker.send(process.argv[2]);
-  });
-}
-
-else if (cluster.isMaster) {
+} else if (cluster.isMaster) {
 
   var checks = {
     workers: false,
@@ -48,7 +42,7 @@ else if (cluster.isMaster) {
 
   var cpus = os.cpus().length;
 
-  cluster.once('setup', function () {
+  cluster.once('setup', function() {
     checks.setupEvent = true;
 
     var settings = cluster.settings;
@@ -61,7 +55,7 @@ else if (cluster.isMaster) {
     }
   });
 
-  //Setup master
+  // Setup master
   cluster.setupMaster({
     workers: (cpus + 1),
     args: ['custom argument'],
@@ -70,29 +64,29 @@ else if (cluster.isMaster) {
 
   var correctIn = 0;
 
-  cluster.on('online', function lisenter(worker) {
+  cluster.on('online', function (worker) {
 
     worker.once('message', function(data) {
       correctIn += (data === 'custom argument' ? 1 : 0);
       if (correctIn === (cpus + 1)) {
         checks.args = true;
-        process.exit(0);
+        cluster.destroy();
       }
     });
 
-    //All workers are online
+    // All workers are online
     if (cluster.onlineWorkers === (cpus + 1)) {
       checks.workers = true;
     }
   });
 
-  //Start all workers
+  // Start all workers
   cluster.autoFork();
 
-  //forkMode should now be auto
+  // forkMode should now be auto
   checks.forkMode = cluster.settings.forkMode === 'auto';
 
-  //Check all values
+  // Check all values
   process.once('exit', function() {
     assert.ok(checks.workers, 'Not all workers was spawned.');
     assert.ok(checks.args, 'The arguments was noy send to the worker');

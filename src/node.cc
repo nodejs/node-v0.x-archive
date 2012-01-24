@@ -122,7 +122,6 @@ extern char **environ;
 #define use_npn NODE_VAR(use_npn)
 #define use_sni NODE_VAR(use_sni)
 #define uncaught_exception_counter NODE_VAR(uncaught_exception_counter)
-#define debug_watcher NODE_VAR(debug_watcher)
 #define binding_cache NODE_VAR(binding_cache)
 #define module_load_list NODE_VAR(module_load_list)
 #define node_isolate NODE_VAR(node_isolate)
@@ -1055,6 +1054,10 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
+  if (encoding == BINARY && Buffer::HasInstance(val)) {
+    return Buffer::Length(val->ToObject());
+  }
+
   Local<String> str = val->ToString();
 
   if (encoding == UTF8) return str->Utf8Length();
@@ -1778,21 +1781,6 @@ void FatalException(TryCatch &try_catch) {
   uncaught_exception_counter--;
 }
 
-
-static void DebugMessageCallback(uv_async_t* watcher, int status) {
-  HandleScope scope;
-  assert(watcher == &debug_watcher);
-  v8::Debug::ProcessDebugMessages();
-}
-
-static void DebugMessageDispatch(void) {
-  // This function is called from V8's debug thread when a debug TCP client
-  // has sent a message.
-
-  // Send a signal to our main thread saying that it should enter V8 to
-  // handle the message.
-  uv_async_send(&debug_watcher);
-}
 
 static void DebugBreakMessageHandler(const v8::Debug::Message& message) {
   // do nothing with debug messages.
@@ -2632,37 +2620,39 @@ void StartThread(node::Isolate* isolate,
 
   V8::SetFatalErrorHandler(node::OnFatalError);
 
-  // Set the callback DebugMessageDispatch which is called from the debug
-  // thread.
-  v8::Debug::SetDebugMessageDispatchHandler(node::DebugMessageDispatch);
-
-  // Initialize the async watcher. DebugMessageCallback() is called from the
-  // main thread to execute a random bit of javascript - which will give V8
-  // control so it can handle whatever new message had been received on the
-  // debug thread.
-  uv_async_init(loop, &debug_watcher, node::DebugMessageCallback);
-  // unref it so that we exit the event loop despite it being active.
-  uv_unref(loop);
-
   // Fetch a reference to the main isolate, so we have a reference to it
   // even when we need it to access it from another (debugger) thread.
   node_isolate = v8::Isolate::GetCurrent();
 
-  // If the --debug flag was specified then initialize the debug thread.
-  if (use_debug_agent) {
-    EnableDebug(debug_wait_connect);
-  } else {
+  // Only main isolate is allowed to run a debug agent and listen for signals
+  if (isolate->id_ == 1) {
+    // If the --debug flag was specified then initialize the debug thread.
+    if (use_debug_agent) {
+      EnableDebug(debug_wait_connect);
+    } else {
 #ifdef _WIN32
-    RegisterDebugSignalHandler();
+      RegisterDebugSignalHandler();
 #else // Posix
-    RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
+      RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
 #endif // __POSIX__
+    }
+  } else if (isolate->debug_state != Isolate::kNone) {
+    isolate->debugger_instance->Init();
   }
 
   Handle<Object> process_l = SetupProcessObject(argc, argv);
 
   process_l->Set(String::NewSymbol("tid"),
                  Integer::NewFromUnsigned(isolate->id_));
+
+  // TODO check (isolate->channel_ != NULL)
+  if (isolate->id_ > 1) {
+    process_l->Set(String::NewSymbol("_send"),
+                   FunctionTemplate::New(Isolate::Send)->GetFunction());
+
+    process_l->Set(String::NewSymbol("_exit"),
+                   FunctionTemplate::New(Isolate::Unref)->GetFunction());
+  }
 
   // FIXME crashes with "CHECK(heap->isolate() == Isolate::Current()) failed"
   //v8_typed_array::AttachBindings(v8::Context::GetCurrent()->Global());
@@ -2692,20 +2682,13 @@ int Start(int argc, char *argv[]) {
   v8::V8::Initialize();
   v8::HandleScope handle_scope;
 
-  // Get the id of the this, the main, thread.
-  uv_thread_t tid = uv_thread_self();
-
   // Create the main node::Isolate object
   node::Isolate::Initialize();
   Isolate* isolate = new node::Isolate();
-  isolate->tid_ = tid;
+  isolate->tid_ = (uv_thread_t) -1;
   isolate->Enter();
   StartThread(isolate, argc, argv);
   isolate->Dispose();
-
-  // The main thread/isolate is done. Wait for all other thread/isolates to
-  // finish.
-  node::Isolate::JoinAll();
 
 #ifndef NDEBUG
   // Clean up.

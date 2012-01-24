@@ -63,10 +63,29 @@ tcp.listen(common.PORT, function() {
 
   assert.equal('opening', socket.readyState);
 
+  // Make sure that anything besides a buffer or a string throws.
+  [ null,
+    true,
+    false,
+    undefined,
+    1,
+    1.0,
+    1 / 0,
+    +Infinity
+    -Infinity,
+    [],
+    {}
+  ].forEach(function(v) {
+    function f() {
+      socket.write(v);
+    }
+    assert.throws(f, TypeError);
+  });
+
   // Write a string that contains a multi-byte character sequence to test that
   // `bytesWritten` is incremented with the # of bytes, not # of characters.
   var a = "L'État, c'est ";
-  var b = "moi";
+  var b = 'moi';
 
   // We're still connecting at this point so the datagram is first pushed onto
   // the connect queue. Make sure that it's not added to `bytesWritten` again

@@ -15,6 +15,9 @@ all share server ports.
       // By default the number of workers is the number of cores in your CPU.
       cluster.autoFork();
 
+      cluster.on('death', function(worker) {
+        console.log('worker ' + worker.pid + ' died');
+      });
     } else {
       // Workers can share any TCP connection
       // In this case its a HTTP server
@@ -293,7 +296,7 @@ To know the difference between suicide and accidentally death a suicide boolean 
 
     cluster.on('death', function (worker) {
       if (worker.suicide === true) {
-        console.log('Oh, it was just suicide' – no need to worry').
+        console.log('Oh, it was just suicide\' – no need to worry').
       }
     });
 

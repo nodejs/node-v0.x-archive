@@ -1,7 +1,7 @@
 .\" Generated with Ronnjs/v0.1
 .\" http://github.com/kapouer/ronnjs/
 .
-.TH "NPM\-CONFIG" "1" "December 2011" "" ""
+.TH "NPM\-CONFIG" "1" "January 2012" "" ""
 .
 .SH "NAME"
 \fBnpm-config\fR \-\- Manage the npm configuration file
@@ -127,6 +127,9 @@ The following shorthands are parsed on the command\-line:
 .
 .IP "\(bu" 4
 \fB\-s\fR, \fB\-\-silent\fR: \fB\-\-loglevel silent\fR
+.
+.IP "\(bu" 4
+\fB\-q\fR, \fB\-\-quiet\fR: \fB\-\-loglevel warn\fR
 .
 .IP "\(bu" 4
 \fB\-d\fR: \fB\-\-loglevel info\fR
@@ -465,6 +468,21 @@ skips cache when requesting from the registry\.
 prevents checks against clobbering non\-npm files\.
 .
 .IP "" 0
+.
+.SS "git"
+.
+.IP "\(bu" 4
+Default: \fB"git"\fR
+.
+.IP "\(bu" 4
+Type: String
+.
+.IP "" 0
+.
+.P
+The command to use for git commands\.  If git is installed on the
+computer, but is not in the \fBPATH\fR, then set this to the full path to
+the git binary\.
 .
 .SS "global"
 .

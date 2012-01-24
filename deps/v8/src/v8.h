@@ -108,13 +108,17 @@ class V8 : public AllStatic {
   // Idle notification directly from the API.
   static bool IdleNotification(int hint);
 
+  static void AddCallCompletedCallback(CallCompletedCallback callback);
+  static void RemoveCallCompletedCallback(CallCompletedCallback callback);
+  static void FireCallCompletedCallback(Isolate* isolate);
+
  private:
   static void InitializeOncePerProcess();
 
   // True if engine is currently running
   static bool is_running_;
   // True if V8 has ever been run
-  static bool has_been_setup_;
+  static bool has_been_set_up_;
   // True if error has been signaled for current engine
   // (reset to false if engine is restarted)
   static bool has_fatal_error_;
@@ -123,6 +127,8 @@ class V8 : public AllStatic {
   static bool has_been_disposed_;
   // True if we are using the crankshaft optimizing compiler.
   static bool use_crankshaft_;
+  // List of callbacks when a Call completes.
+  static List<CallCompletedCallback>* call_completed_callbacks_;
 };
 
 

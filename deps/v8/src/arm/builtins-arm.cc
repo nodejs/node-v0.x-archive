@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -316,7 +316,8 @@ static void AllocateJSArray(MacroAssembler* masm,
 static void ArrayNativeCode(MacroAssembler* masm,
                             Label* call_generic_code) {
   Counters* counters = masm->isolate()->counters();
-  Label argc_one_or_more, argc_two_or_more, not_empty_array, empty_array;
+  Label argc_one_or_more, argc_two_or_more, not_empty_array, empty_array,
+      has_non_smi_element;
 
   // Check for array construction with zero arguments or one.
   __ cmp(r0, Operand(0, RelocInfo::NONE));
@@ -332,7 +333,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                        r5,
                        call_generic_code);
   __ IncrementCounter(counters->array_function_native(), 1, r3, r4);
-  // Setup return value, remove receiver from stack and return.
+  // Set up return value, remove receiver from stack and return.
   __ mov(r0, r2);
   __ add(sp, sp, Operand(kPointerSize));
   __ Jump(lr);
@@ -375,7 +376,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                   true,
                   call_generic_code);
   __ IncrementCounter(counters->array_function_native(), 1, r2, r4);
-  // Setup return value, remove receiver and argument from stack and return.
+  // Set up return value, remove receiver and argument from stack and return.
   __ mov(r0, r3);
   __ add(sp, sp, Operand(2 * kPointerSize));
   __ Jump(lr);
@@ -415,7 +416,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
   __ bind(&loop);
   __ ldr(r2, MemOperand(r7, kPointerSize, PostIndex));
   if (FLAG_smi_only_arrays) {
-    __ JumpIfNotSmi(r2, call_generic_code);
+    __ JumpIfNotSmi(r2, &has_non_smi_element);
   }
   __ str(r2, MemOperand(r5, -kPointerSize, PreIndex));
   __ bind(&entry);
@@ -431,6 +432,10 @@ static void ArrayNativeCode(MacroAssembler* masm,
   __ add(sp, sp, Operand(kPointerSize));
   __ mov(r0, r3);
   __ Jump(lr);
+
+  __ bind(&has_non_smi_element);
+  __ UndoAllocationInNewSpace(r3, r4);
+  __ b(call_generic_code);
 }
 
 
@@ -946,10 +951,10 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // sp[4]: number of arguments (smi-tagged)
     __ ldr(r3, MemOperand(sp, 4 * kPointerSize));
 
-    // Setup pointer to last argument.
+    // Set up pointer to last argument.
     __ add(r2, fp, Operand(StandardFrameConstants::kCallerSPOffset));
 
-    // Setup number of arguments for function call below
+    // Set up number of arguments for function call below
     __ mov(r0, Operand(r3, LSR, kSmiTagSize));
 
     // Copy arguments and receiver to the expression stack.
@@ -1077,10 +1082,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // Set up the context from the function argument.
     __ ldr(cp, FieldMemOperand(r1, JSFunction::kContextOffset));
 
-    // Set up the roots register.
-    ExternalReference roots_array_start =
-        ExternalReference::roots_array_start(masm->isolate());
-    __ mov(r10, Operand(roots_array_start));
+    __ InitializeRootRegister();
 
     // Push the function and the receiver onto the stack.
     __ push(r1);

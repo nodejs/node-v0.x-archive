@@ -27,7 +27,11 @@ var net = require('net');
 var socketCloses = 0;
 var N = 10;
 
-var n = fork(common.fixturesDir + '/fork2.js');
+var options = {
+  thread: process.TEST_ISOLATE ? true : false
+};
+
+var n = fork(common.fixturesDir + '/fork2.js', [], options);
 
 var messageCount = 0;
 
@@ -47,12 +51,12 @@ server.listen(common.PORT, function() {
 function makeConnections() {
   for (var i = 0; i < N; i++) {
     var socket = net.connect(common.PORT, function() {
-      console.log("CLIENT connected");
+      console.log('CLIENT connected');
     });
 
-    socket.on("close", function() {
+    socket.on('close', function() {
       socketCloses++;
-      console.log("CLIENT closed " + socketCloses);
+      console.log('CLIENT closed ' + socketCloses);
       if (socketCloses == N) {
         n.kill();
         server.close();

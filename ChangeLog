@@ -1,4 +1,84 @@
-2011.12.14, Version 0.6.6 (stable)
+2012.01.16, Version 0.7.0 (unstable)
+
+* Upgrade V8 to 3.8.6
+
+* Use GYP build system on unix (Ben Noordhuis)
+
+* Experimenetal isolates support (Ben Noordhuis)
+
+* Improvements to Cluster API (Andreas Madsen)
+
+* Use isolates for internal debugger (Fedor Indutny)
+
+* Bug fixes
+
+
+2012.01.19, Version 0.6.8 (stable)
+
+* Update V8 to 3.6.6.19
+
+* Numeric key hash collision fix for V8 (Erik Corry, Fedor Indutny)
+
+* Add missing TTY key translations for F1-F5 on Windows (Brandon Benvie)
+
+* path.extname bugfix with . and .. paths (Bert Belder)
+
+* cluster: don't always kill the master on uncaughtException (Ben Noordhuis)
+
+* Update npm to 1.1.0-2 (isaacs)
+
+* typed arrays: set class name (Ben Noordhuis)
+
+* zlib binding cleanup (isaacs, Bert Belder)
+
+* dgram: use slab memory allocator (Michael Bernstein)
+
+* fix segfault #2473
+
+* #2521 60% improvement in fs.stat on Windows (Igor Zinkovsky)
+
+
+2012.01.06, Version 0.6.7 (stable), d5a189acef14a851287ee555f7a39431fe276e1c
+
+* V8 hash collision fix (Breaks MIPS) (Bert Belder, Erik Corry)
+
+* Upgrade V8 to 3.6.6.15
+
+* Upgrade npm to 1.1.0-beta-10 (isaacs)
+
+* many doc updates (Ben Noordhuis, Jeremy Martin, koichik, Dave Irvine,
+  Seong-Rak Choi, Shannen, Adam Malcontenti-Wilson, koichik)
+
+* Fix segfault in node_http_parser.cc
+
+* dgram, timers: fix memory leaks (Ben Noordhuis, Yoshihiro Kikuchi)
+
+* repl: fix repl.start not passing the `ignoreUndefined` arg (Damon Oehlman)
+
+* #1980: Socket.pause null reference when called on a closed Stream (koichik)
+
+* #2263: XMLHttpRequest piped in a writable file stream hang (koichik)
+
+* #2069: http resource leak (koichik)
+
+* buffer.readInt global pollution fix (Phil Sung)
+
+* timers: fix performance regression (Ben Noordhuis)
+
+* #2308, #2246: node swallows openssl error on request (koichik)
+
+* #2114: timers: remove _idleTimeout from item in .unenroll() (James Hartig)
+
+* #2379: debugger: Request backtrace w/o refs (Fedor Indutny)
+
+* simple DTrace ustack helper (Dave Pacheco)
+
+* crypto: rewrite HexDecode without snprintf (Roman Shtylman)
+
+* crypto: don't ignore DH init errors (Ben Noordhuis)
+
+
+2011.12.14, Version 0.6.6
 
 * npm update to 1.1.0-beta-4 (Isaac Z. Schlueter)
 

@@ -110,7 +110,8 @@ const char* StringsStorage::GetCopy(const char* src) {
   Vector<char> dst = Vector<char>::New(len + 1);
   OS::StrNCpy(dst, src, len);
   dst[len] = '\0';
-  uint32_t hash = HashSequentialString(dst.start(), len);
+  uint32_t hash =
+      HashSequentialString(dst.start(), len, HEAP->HashSeed());
   return AddOrDisposeString(dst.start(), hash);
 }
 
@@ -143,7 +144,8 @@ const char* StringsStorage::GetVFormatted(const char* format, va_list args) {
     DeleteArray(str.start());
     return format;
   }
-  uint32_t hash = HashSequentialString(str.start(), len);
+  uint32_t hash = HashSequentialString(
+      str.start(), len, HEAP->HashSeed());
   return AddOrDisposeString(str.start(), hash);
 }
 
@@ -153,7 +155,8 @@ const char* StringsStorage::GetName(String* name) {
     int length = Min(kMaxNameSize, name->length());
     SmartArrayPointer<char> data =
         name->ToCString(DISALLOW_NULLS, ROBUST_STRING_TRAVERSAL, 0, length);
-    uint32_t hash = HashSequentialString(*data, length);
+    uint32_t hash =
+        HashSequentialString(*data, length, name->GetHeap()->HashSeed());
     return AddOrDisposeString(data.Detach(), hash);
   }
   return "";
@@ -178,18 +181,21 @@ void CodeEntry::CopyData(const CodeEntry& source) {
 
 
 uint32_t CodeEntry::GetCallUid() const {
-  uint32_t hash = ComputeIntegerHash(tag_);
+  uint32_t hash = ComputeIntegerHash(tag_, v8::internal::kZeroHashSeed);
   if (shared_id_ != 0) {
-    hash ^= ComputeIntegerHash(
-        static_cast<uint32_t>(shared_id_));
+    hash ^= ComputeIntegerHash(static_cast<uint32_t>(shared_id_),
+                               v8::internal::kZeroHashSeed);
   } else {
     hash ^= ComputeIntegerHash(
-        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(name_prefix_)));
+        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(name_prefix_)),
+        v8::internal::kZeroHashSeed);
     hash ^= ComputeIntegerHash(
-        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(name_)));
+        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(name_)),
+        v8::internal::kZeroHashSeed);
     hash ^= ComputeIntegerHash(
-        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(resource_name_)));
-    hash ^= ComputeIntegerHash(line_number_);
+        static_cast<uint32_t>(reinterpret_cast<uintptr_t>(resource_name_)),
+        v8::internal::kZeroHashSeed);
+    hash ^= ComputeIntegerHash(line_number_, v8::internal::kZeroHashSeed);
   }
   return hash;
 }
@@ -898,7 +904,7 @@ void ProfileGenerator::RecordTickSample(const TickSample& sample) {
       entry++;
     }
 
-    for (const Address *stack_pos = sample.stack,
+    for (const Address* stack_pos = sample.stack,
            *stack_end = stack_pos + sample.frames_count;
          stack_pos != stack_end;
          ++stack_pos) {
@@ -1225,10 +1231,10 @@ HeapSnapshot::HeapSnapshot(HeapSnapshotsCollection* collection,
       entries_sorted_(false) {
   STATIC_ASSERT(
       sizeof(HeapGraphEdge) ==
-      SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapGraphEdgeSize);  // NOLINT
+      SnapshotSizeConstants<kPointerSize>::kExpectedHeapGraphEdgeSize);
   STATIC_ASSERT(
       sizeof(HeapEntry) ==
-      SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapEntrySize);  // NOLINT
+      SnapshotSizeConstants<kPointerSize>::kExpectedHeapEntrySize);
   for (int i = 0; i < VisitorSynchronization::kNumberOfSyncTags; ++i) {
     gc_subroot_entries_[i] = NULL;
   }
@@ -1501,10 +1507,13 @@ void HeapObjectsMap::RemoveDeadEntries() {
 uint64_t HeapObjectsMap::GenerateId(v8::RetainedObjectInfo* info) {
   uint64_t id = static_cast<uint64_t>(info->GetHash());
   const char* label = info->GetLabel();
-  id ^= HashSequentialString(label, static_cast<int>(strlen(label)));
+  id ^= HashSequentialString(label,
+                             static_cast<int>(strlen(label)),
+                             HEAP->HashSeed());
   intptr_t element_count = info->GetElementCount();
   if (element_count != -1)
-    id ^= ComputeIntegerHash(static_cast<uint32_t>(element_count));
+    id ^= ComputeIntegerHash(static_cast<uint32_t>(element_count),
+                             v8::internal::kZeroHashSeed);
   return id << 1;
 }
 
@@ -1586,7 +1595,7 @@ Handle<HeapObject> HeapSnapshotsCollection::FindHeapObjectById(uint64_t id) {
 }
 
 
-HeapEntry *const HeapEntriesMap::kHeapEntryPlaceholder =
+HeapEntry* const HeapEntriesMap::kHeapEntryPlaceholder =
     reinterpret_cast<HeapEntry*>(1);
 
 HeapEntriesMap::HeapEntriesMap()
@@ -1715,16 +1724,16 @@ void HeapObjectsSet::SetTag(Object* obj, const char* tag) {
 }
 
 
-HeapObject *const V8HeapExplorer::kInternalRootObject =
+HeapObject* const V8HeapExplorer::kInternalRootObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kInternalRootObjectId));
-HeapObject *const V8HeapExplorer::kGcRootsObject =
+HeapObject* const V8HeapExplorer::kGcRootsObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kGcRootsObjectId));
-HeapObject *const V8HeapExplorer::kFirstGcSubrootObject =
+HeapObject* const V8HeapExplorer::kFirstGcSubrootObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kGcRootsFirstSubrootId));
-HeapObject *const V8HeapExplorer::kLastGcSubrootObject =
+HeapObject* const V8HeapExplorer::kLastGcSubrootObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kFirstAvailableObjectId));
 
@@ -2221,13 +2230,13 @@ void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj,
           break;
         case CALLBACKS: {
           Object* callback_obj = descs->GetValue(i);
-          if (callback_obj->IsFixedArray()) {
-            FixedArray* accessors = FixedArray::cast(callback_obj);
-            if (Object* getter = accessors->get(JSObject::kGetterIndex)) {
+          if (callback_obj->IsAccessorPair()) {
+            AccessorPair* accessors = AccessorPair::cast(callback_obj);
+            if (Object* getter = accessors->getter()) {
               SetPropertyReference(js_obj, entry, descs->GetKey(i),
                                    getter, "get-%s");
             }
-            if (Object* setter = accessors->get(JSObject::kSetterIndex)) {
+            if (Object* setter = accessors->setter()) {
               SetPropertyReference(js_obj, entry, descs->GetKey(i),
                                    setter, "set-%s");
             }
@@ -2280,7 +2289,7 @@ void V8HeapExplorer::ExtractElementReferences(JSObject* js_obj,
       }
     }
   } else if (js_obj->HasDictionaryElements()) {
-    NumberDictionary* dictionary = js_obj->element_dictionary();
+    SeededNumberDictionary* dictionary = js_obj->element_dictionary();
     int length = dictionary->Capacity();
     for (int i = 0; i < length; ++i) {
       Object* k = dictionary->KeyAt(i);

@@ -2635,6 +2635,9 @@ typedef void (*MemoryAllocationCallback)(ObjectSpace space,
                                          AllocationAction action,
                                          int size);
 
+// --- Leave Script Callback ---
+typedef void (*CallCompletedCallback)();
+
 // --- Failed Access Check Callback ---
 typedef void (*FailedAccessCheckCallback)(Local<Object> target,
                                           AccessType type,
@@ -2845,6 +2848,17 @@ class V8EXPORT StartupDataDecompressor {  // NOLINT
  */
 typedef bool (*EntropySource)(unsigned char* buffer, size_t length);
 
+
+/**
+ * Interface for iterating though all external resources in the heap.
+ */
+class V8EXPORT ExternalResourceVisitor {  // NOLINT
+ public:
+  virtual ~ExternalResourceVisitor() {}
+  virtual void VisitExternalString(Handle<String> string) {}
+};
+
+
 /**
  * Container class for static utility functions.
  */
@@ -3033,10 +3047,23 @@ class V8EXPORT V8 {
                                           AllocationAction action);
 
   /**
-   * This function removes callback which was installed by
-   * AddMemoryAllocationCallback function.
+   * Removes callback that was installed by AddMemoryAllocationCallback.
    */
   static void RemoveMemoryAllocationCallback(MemoryAllocationCallback callback);
+
+  /**
+   * Adds a callback to notify the host application when a script finished
+   * running.  If a script re-enters the runtime during executing, the
+   * CallCompletedCallback is only invoked when the outer-most script
+   * execution ends.  Executing scripts inside the callback do not trigger
+   * further callbacks.
+   */
+  static void AddCallCompletedCallback(CallCompletedCallback callback);
+
+  /**
+   * Removes callback that was installed by AddCallCompletedCallback.
+   */
+  static void RemoveCallCompletedCallback(CallCompletedCallback callback);
 
   /**
    * Allows the host application to group objects together. If one
@@ -3186,6 +3213,13 @@ class V8EXPORT V8 {
    * Get statistics about the heap memory usage.
    */
   static void GetHeapStatistics(HeapStatistics* heap_statistics);
+
+  /**
+   * Iterates through all external resources referenced from current isolate
+   * heap. This method is not expected to be used except for debugging purposes
+   * and may be quite slow.
+   */
+  static void VisitExternalResources(ExternalResourceVisitor* visitor);
 
   /**
    * Optional notification that the embedder is idle.
@@ -3800,7 +3834,7 @@ class Internals {
   static const int kFullStringRepresentationMask = 0x07;
   static const int kExternalTwoByteRepresentationTag = 0x02;
 
-  static const int kJSObjectType = 0xa6;
+  static const int kJSObjectType = 0xa7;
   static const int kFirstNonstringType = 0x80;
   static const int kForeignType = 0x85;
 

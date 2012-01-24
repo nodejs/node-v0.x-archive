@@ -5,8 +5,28 @@ var isolates = process.binding('isolates');
 console.log("count: %d", isolates.count());
 
 if (process.tid === 1) {
-  var isolate = isolates.create(process.argv);
-  //process._joinIsolate(isolate);
+  var isolate = isolates.create(process.argv, {
+    debug: function init(d) {
+      d.onmessage = function(data) {
+        data = JSON.parse(data);
+        if (data.event === 'break') {
+          d.write(JSON.stringify({
+            type: 'request',
+            seq: 1,
+            command: 'continue'
+          }));
+        }
+      };
+    }
+  });
+
+  isolate.onmessage = function() {
+    console.error("onmessage");
+  };
+  isolate.onexit = function() {
+    console.error("onexit");
+  };
+
   console.error("master");
   fs.stat(__dirname, function(err, stat) {
     if (err) throw err;
@@ -32,6 +52,7 @@ if (process.tid === 1) {
     fs.stat(__dirname, function(err, stat) {
       if (err) throw err;
       console.error('thread 2', stat.mtime);
+      process.exit();
     });
   }, 500);
 
