@@ -21,9 +21,14 @@
 
 var assert = require('assert');
 var fs = require('fs');
+var common = require('../common');
 var f = __filename;
+var errTest = common.tmpDir + '/fs-exists-test';
 var exists;
 var doesNotExist;
+var existsButThrows;
+
+fs.symlinkSync(errTest, errTest);
 
 fs.exists(f, function(y) {
   exists = y;
@@ -33,10 +38,18 @@ fs.exists(f + '-NO', function (y) {
   doesNotExist = y;
 });
 
+fs.exists(errTest, function (y) {
+  existsButThrows = y;
+});
+
 assert(fs.existsSync(f));
 assert(!fs.existsSync(f + '-NO'));
+assert(fs.existsSync(errTest));
+
+fs.unlinkSync(errTest);
 
 process.on('exit', function () {
   assert.strictEqual(exists, true);
   assert.strictEqual(doesNotExist, false);
+  assert.strictEqual(existsButThrows, true);
 });
