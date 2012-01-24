@@ -24,6 +24,13 @@ of the signal, otherwise `null`.
 
 See `waitpid(2)`.
 
+### Event: 'disconnect'
+
+This event will emit after using the `.disconnect()` method in the parent or
+in the child. After this event has emitted it is not possible to send messages
+to the child or parent. An alternative way to check if you can send messages
+is to check if the `child.connected` property is `true`.
+
 ### child.stdin
 
 A `Writable Stream` that represents the child process's `stdin`.
@@ -265,6 +272,11 @@ processes:
     });
 
 
+To close the IPC connection between parent and child use the `child.disconnect()`
+method. This allow the child to die graceful since there is no IPC channel
+keeping it alive. When calling this method the `disconnect` event will emit
+in both parent and child. The `connected` flag will also be set to `false`.
+Please note that you can call `process.disconnect()` from the child.
 
 ### child.kill([signal])
 
