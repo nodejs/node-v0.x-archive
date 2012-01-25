@@ -27,6 +27,7 @@ var common = require('../common'),
     assert = require('assert'),
     Buffer = require('buffer').Buffer,
     LOCAL_BROADCAST_HOST = '255.255.255.255',
+    TIMEOUT = 5000,
     messages = [
       new Buffer('First message to send'),
       new Buffer('Second message to send'),
@@ -38,8 +39,34 @@ if (cluster.isMaster) {
   var workers = {},
     listeners = 3,
     listening = 0,
+    dead = 0,
     i = 0,
-    done = 0;
+    done = 0,
+    timer = null;
+
+  //handle the death of workers
+  cluster.on('death', function (worker) {
+    //don't consider this the true death if the worker has finished successfully
+    if (worker.isDone) {
+      return;
+    }
+
+    dead += 1;
+    console.error('Worker %d died. %d dead of %d', worker.pid, dead, listeners);
+
+    if (dead === listeners) {
+      console.error('All workers have died.');
+      console.error('Fail');
+      process.exit(1);
+    }
+  });
+
+  //exit the test if it doesn't succeed within TIMEOUT
+  timer = setTimeout(function () {
+    console.error('Responses were not received within %d ms.', TIMEOUT);
+    console.error('Fail');
+    process.exit(1);
+  }, TIMEOUT);
 
   //launch child processes
   for (var x = 0; x < listeners; x++) {
@@ -63,6 +90,7 @@ if (cluster.isMaster) {
 
           if (worker.messagesReceived.length === messages.length) {
             done += 1;
+            worker.isDone = true;
             console.error('%d received %d messages total.', worker.pid,
                     worker.messagesReceived.length);
           }
@@ -91,6 +119,9 @@ if (cluster.isMaster) {
               assert.equal(count, messages.length
                 ,'A worker received an invalid multicast message');
             });
+
+            clearTimeout(timer);
+            console.error('Success');
           }
         }
       });
