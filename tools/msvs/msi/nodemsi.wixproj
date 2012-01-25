@@ -16,16 +16,18 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <OutputPath>..\..\..\$(Configuration)\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\</DefineConstants>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\;IncludeDir=..\..\..\Debug\include\;LibDir=..\..\..\Debug\lib\</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <OutputPath>..\..\..\$(Configuration)\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\</DefineConstants>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\;IncludeDir=..\..\..\Release\include\;LibDir=..\..\..\Release\lib\</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="product.wxs" />
     <Compile Include="..\..\..\npm.wxs" />
+    <Compile Include="..\..\..\includes.wxs" />
+    <Compile Include="..\..\..\libs.wxs" />
   </ItemGroup>
   <ItemGroup>
     <WixExtension Include="WixUIExtension">

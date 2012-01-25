@@ -72,6 +72,8 @@
       <ComponentRef Id="npmrc" />
       <ComponentRef Id="npmappdata_folder" />
       <ComponentGroupRef Id="NPMFiles" />
+      <ComponentGroupRef Id="IncludeFiles" />
+      <ComponentGroupRef Id="LibFiles" />
       <?if $(var.Configuration) = Debug ?>
       <ComponentRef Id="nodepdb"/>
       <?endif?>
