@@ -476,6 +476,55 @@ var parseTests = {
     'href': 'www.example.com',
     'pathname': 'www.example.com',
     'path': 'www.example.com'
+  },
+  // ipv6 support
+  '[fe80::1]': {
+    'href': '[fe80::1]',
+    'pathname': '[fe80::1]',
+    'path': '[fe80::1]'
+  },
+  'coap://[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]': {
+    'protocol': 'coap:',
+    'slashes': true,
+    'host': '[fedc:ba98:7654:3210:fedc:ba98:7654:3210]',
+    'hostname': 'fedc:ba98:7654:3210:fedc:ba98:7654:3210',
+    'href': 'coap://[fedc:ba98:7654:3210:fedc:ba98:7654:3210]/',
+    'pathname': '/',
+    'path': '/'
+  },
+  'coap://[1080:0:0:0:8:800:200C:417A]:61616/': {
+    'protocol': 'coap:',
+    'slashes': true,
+    'host': '[1080:0:0:0:8:800:200c:417a]:61616',
+    'port': '61616',
+    'hostname': '1080:0:0:0:8:800:200c:417a',
+    'href': 'coap://[1080:0:0:0:8:800:200c:417a]:61616/',
+    'pathname': '/',
+    'path': '/'
+  },
+  'http://user:password@[3ffe:2a00:100:7031::1]:8080': {
+    'protocol': 'http:',
+    'slashes': true,
+    'auth': 'user:password',
+    'host': '[3ffe:2a00:100:7031::1]:8080',
+    'port': '8080',
+    'hostname': '3ffe:2a00:100:7031::1',
+    'href': 'http://user:password@[3ffe:2a00:100:7031::1]:8080/',
+    'pathname': '/',
+    'path': '/'
+  },
+  'coap://u:p@[::192.9.5.5]:61616/.well-known/r?n=Temperature': {
+    'protocol': 'coap:',
+    'slashes': true,
+    'auth': 'u:p',
+    'host': '[::192.9.5.5]:61616',
+    'port': '61616',
+    'hostname': '::192.9.5.5',
+    'href': 'coap://u:p@[::192.9.5.5]:61616/.well-known/r?n=Temperature',
+    'search': '?n=Temperature',
+    'query': 'n=Temperature',
+    'pathname': '/.well-known/r',
+    'path': '/.well-known/r?n=Temperature'
   }
 };
 
