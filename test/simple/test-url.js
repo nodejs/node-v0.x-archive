@@ -699,6 +699,22 @@ var formatTests = {
     'hostname': 'foo',
     'protocol': 'dot.test:',
     'pathname': '/bar'
+  },
+  // ipv6 support
+  'coap:u:p@[::1]:61616/.well-known/r?n=Temperature': {
+    'href': 'coap:u:p@[::1]:61616/.well-known/r?n=Temperature',
+    'protocol': 'coap:',
+    'auth': 'u:p',
+    'hostname': '::1',
+    'port': '61616',
+    'pathname': '/.well-known/r',
+    'search': 'n=Temperature'
+  },
+  'coap:[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:61616/s/stopButton': {
+    'href': 'coap:[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:61616/s/stopButton',
+    'protocol': 'coap',
+    'host': '[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:61616',
+    'pathname': '/s/stopButton'
   }
 };
 for (var u in formatTests) {
