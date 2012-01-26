@@ -21,11 +21,11 @@
 
 var common = require('../common'),
     assert = require('assert'),
-    cluster = require('cluster'),
     dgram = require('dgram'),
     util = require('util'),
     assert = require('assert'),
     Buffer = require('buffer').Buffer,
+    fork = require('child_process').fork,
     LOCAL_BROADCAST_HOST = '224.0.0.1',
     TIMEOUT = 5000,
     messages = [
@@ -35,7 +35,7 @@ var common = require('../common'),
       new Buffer('Fourth message to send')
     ];
 
-if (cluster.isMaster) {
+if (process.argv[2] !== 'child') {
   var workers = {},
     listeners = 3,
     listening = 0,
@@ -43,23 +43,6 @@ if (cluster.isMaster) {
     i = 0,
     done = 0,
     timer = null;
-
-  //handle the death of workers
-  cluster.on('death', function (worker) {
-    //don't consider this the true death if the worker has finished successfully
-    if (worker.isDone) {
-      return;
-    }
-
-    dead += 1;
-    console.error('Worker %d died. %d dead of %d', worker.pid, dead, listeners);
-
-    if (dead === listeners) {
-      console.error('All workers have died.');
-      console.error('Fail');
-      process.exit(1);
-    }
-  });
 
   //exit the test if it doesn't succeed within TIMEOUT
   timer = setTimeout(function () {
@@ -71,10 +54,27 @@ if (cluster.isMaster) {
   //launch child processes
   for (var x = 0; x < listeners; x++) {
     (function () {
-      var worker = cluster.fork();
+      var worker = fork(process.argv[1], ['child']);
       workers[worker.pid] = worker;
 
       worker.messagesReceived = [];
+
+      //handle the death of workers
+      worker.on('exit', function (code, signal) {
+         //don't consider this the true death if the worker has finished successfully
+        if (worker.isDone) {
+          return;
+        }
+        
+        dead += 1;
+        console.error('Worker %d died. %d dead of %d', worker.pid, dead, listeners);
+
+        if (dead === listeners) {
+          console.error('All workers have died.');
+          console.error('Fail');
+          process.exit(1);
+        }
+      });
 
       worker.on('message', function (msg) {
         if (msg.listening) {
@@ -160,7 +160,7 @@ if (cluster.isMaster) {
   };
 }
 
-if (!cluster.isMaster) {
+if (process.argv[2] === 'child') {
   var receivedMessages = [];
   var listenSocket = dgram.createSocket('udp4');
 
