@@ -5,8 +5,15 @@ PYTHON ?= python
 
 ifeq ($(BUILDTYPE),Release)
 all: out/Makefile node
+
+install: all
+	out/Release/node tools/installer.js ./config.gypi install
 else
 all: out/Makefile node_g
+
+install: all
+	$(MAKE) -C out BUILDTYPE=Release
+	out/Release/node tools/installer.js ./config.gypi install
 endif
 
 # The .PHONY is needed to ensure that we recursively use the out/Makefile
@@ -29,9 +36,6 @@ out/Debug/node:
 
 out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
 	tools/gyp_node -f make
-
-install: all
-	out/Release/node tools/installer.js ./config.gypi install
 
 uninstall:
 	out/Release/node tools/installer.js ./config.gypi uninstall
@@ -131,7 +135,7 @@ out/doc/%: doc/%
 	cp $< $@
 
 out/doc/api/%.html: doc/api/%.markdown node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
-	out/Release/node tools/doctool/doctool.js doc/template.html $< > $@
+	out/$(BUILDTYPE)/node tools/doctool/doctool.js doc/template.html $< > $@
 
 out/doc/%:
 
