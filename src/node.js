@@ -563,14 +563,14 @@
     NativeModule._cache[this.id] = this;
   };
 
-  NativeModule.prototype.deprecate = function(method, alt) {
+  NativeModule.prototype.deprecate = function(method, message) {
     var original = this.exports[method];
     var self = this;
 
     Object.defineProperty(this.exports, method, {
       enumerable: false,
       value: function() {
-        var message = self.id + '.' + method + ' is deprecated. Use `' + alt + '`.';
+        message = self.id + '.' + method + ' is deprecated. ' + (message || '');
 
         if ((new RegExp('\\b' + self.id + '\\b')).test(process.env.NODE_DEBUG))
           console.trace(message);
