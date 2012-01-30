@@ -119,10 +119,43 @@ clearTimeout(y);
 var z = setTimeout(t, 200);
 clearTimeout(y);
 
+var chainedsetTimeoutIterations = 0;
+var issue2515Manifested = true;
+var issue2515Timeout;
+var issue2515Interval;
+var setIntervalIterations = 0;
+
+setTimeout(function() { // Wait 5 seconds for previous tests to complete.
+  issue2515Interval = setInterval(function() {
+    chainedsetTimeoutIterations++;
+    // Clear timeout if one exists.
+    if (issue2515Timeout) { clearTimeout(issue2515Timeout); }
+    // Create a timeout.
+    issue2515Timeout = setTimeout(function() {}, 1);
+  }, 1);
+  setTimeout(function() { // Issue #2515 should manifest in 5 seconds or less.
+    clearInterval(issue2515Interval);
+    issue2515Manifested = false;
+    checksetIntervalIterations();
+  }, 5000);  
+}, 5000);
+
+function checksetIntervalIterations() {
+  var setIntervalInterval = setInterval(function() {
+    setIntervalIterations++;
+  }, 1);
+  setTimeout(function() {
+    clearInterval(setIntervalInterval);
+  }, 5000);
+}
 
 process.on('exit', function() {
   assert.equal(true, setTimeout_called);
   assert.equal(3, interval_count);
   assert.equal(11, count4);
   assert.equal(0, expectedTimeouts, 'clearTimeout cleared too many timeouts');
+  assert.equal(false, issue2515Manifested, 'clearTimeout destroyed other timers. Issue #2515');
+  // We expect a minimum of 1 timer tick per 4ms.
+  assert.equal(true, setIntervalIterations>=1000, 'Not enough iterations from setInterval. expected: >=1000, actual: '+setIntervalIterations);
+  assert.equal(true, chainedsetTimeoutIterations>=1000, 'Not enough iterations from chained setTimeouts. expected: >=1000, actual: '+chainedsetTimeoutIterations);
 });
