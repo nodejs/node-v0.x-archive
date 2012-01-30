@@ -1,0 +1,22 @@
+{
+    "name":"understanding_event_emitters",
+    "author": 
+    [ 
+      {
+	      "name" : "Tim Caswell",
+      	"url" : "https://twitter.com/#!/creationix"
+      },
+      {
+        "name" : "Felix Geisendörfer",
+        "url" : "https://twitter.com/#!/felixge"
+      }
+    ],
+    "editor":
+     [ 
+     	{
+	       "name" : "Garen J. Torikian",
+       	  "url": "https://twitter.com/#!/gjtorikian"
+       	}
+     ]
+ 
+}

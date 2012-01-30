@@ -1,0 +1,17 @@
+{
+    "name":"creating_an_http_server",
+    "author": 
+    [ 
+      {
+        "name" : "Felix Geisendörfer",
+        "url" : "https://twitter.com/#!/felixge"
+      }
+    ],
+    "editor": 
+    [ 
+      {
+	      "name" : "Garen J. Torikian",
+          "url": "https://twitter.com/#!/gjtorikian"
+      }
+    ]
+}

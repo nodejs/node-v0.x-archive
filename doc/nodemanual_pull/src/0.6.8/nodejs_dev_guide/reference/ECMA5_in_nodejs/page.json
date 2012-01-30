@@ -1,0 +1,10 @@
+{
+    "name":"ECMA5_in_nodejs",
+    "author": 
+    [ 
+      {
+	      "name" : "Node.js Community Wiki",
+          "url": "https://github.com/joyent/node/wiki/ECMA-5-Mozilla-Features-Implemented-in-V8"
+      }
+    ]
+}

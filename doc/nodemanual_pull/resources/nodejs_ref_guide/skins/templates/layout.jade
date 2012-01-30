@@ -1,0 +1,57 @@
+include ../../../common_layout
+include lib
+
+mixin identifyBuild(tree)
+
+mixin doctype
+
+if nodejsRef == 'true'
+  mixin head('Node.js API Reference')
+
+body(onload="styleCode()")
+
+  mixin topBar(tree.children[0].href)
+
+  mixin header
+
+  .container
+    .content
+      .row.container
+        .span5.offset4.sidebarContainer
+          #sidebar
+            if nodejsRef == 'true'
+              include nodejs_ref_menu.jade
+        .span11
+          for obj in tree.children
+            .membersBackground
+            .members
+              .membersContent
+                  h1.memberHeader
+                    -var heading = obj.path
+                    span.name #{heading}
+                  
+                  -if (true || obj.filename.indexOf("index") < 0)
+                    if obj.type == 'class' || obj.type == 'namespace' || obj.type == 'section'
+                      ul(class='tabs', data-tabs='tabs')
+                        for selector, title in {'Events': ['event', 'events'], 'Constructors': ['constructor', 'constructors'], 'Class methods': ['class method', 'class_methods'], 'Class properties': ['class property', 'class_properties'], 'Instance methods': ['instance method', 'instance_methods'], 'Instance properties': ['instance property', 'instance_properties'], 'Constants': ['constant', 'constants']}
+                          methods = obj.children.filter(function(x){return x.type === selector[0]})
+                            li(class="dropdown", data-dropdown="dropdown")
+                              if methods.length
+                                a(href="\#", class="dropdown-toggle")!= renameMemberTitle(title, methods.length)
+                                ul.dropdown-menu
+                                  for m in methods
+                                    li(data-id='#{m.id}', class='memberLink')
+                                      mixin link(m, true)                                 
+                    else
+                      ul(class='tabs', data-tabs='tabs')
+                      -console.log("I did not create a menu for: { obj.id: " + obj.id + ", obj.name: " + obj.name + " }, which is a " + obj.type)
+          #content
+             mixin api()
+
+             div(id="disqus_thread")
+
+    mixin footer
+
+  mixin endingScripts
+
+</html>

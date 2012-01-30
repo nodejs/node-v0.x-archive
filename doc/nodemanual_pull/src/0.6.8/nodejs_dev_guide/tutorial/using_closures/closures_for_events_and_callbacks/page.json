@@ -1,0 +1,17 @@
+{
+    "name":"closures_for_events_and_callbacks",
+    "author": 
+    [ 
+      {
+	    "name" : "Tim Caswell",
+      	"url" : "https://twitter.com/#!/creationix"
+      }
+    ],
+    "editor":
+     [ 
+     	{
+	     "name" : "Garen J. Torikian",
+       	  "url": "https://twitter.com/#!/gjtorikian"
+       	}
+     ]
+}

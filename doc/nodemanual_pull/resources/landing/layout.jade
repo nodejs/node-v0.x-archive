@@ -1,0 +1,39 @@
+include ../common_layout
+
+mixin identifyBuild('','')
+
+mixin doctype
+
+mixin head('Node.js Manual')
+
+body(onload="styleCode()")
+
+  mixin topBar(whoAmI)
+
+  mixin header
+
+  .container
+    .content
+      .row.container
+        .span5.offset4.sidebarContainer
+          #sidebar
+            h3
+              a(href='./nodejs_ref_guide/') Node.js API Reference
+            h3
+              a(href='./nodejs_dev_guide/') Node.js Guide
+            h3
+              a(href='./js_doc/') Javascript Reference
+        .span11
+          div.title
+            h1.pageTitle #{title}
+
+          .dev_guide#content
+            mixin markdown(data)
+
+          div#disqus_thread
+
+    mixin footer
+
+  mixin endingScripts
+
+</html>
