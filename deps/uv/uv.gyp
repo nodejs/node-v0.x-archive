@@ -250,6 +250,11 @@
             'EV_CONFIG_H="config_freebsd.h"',
             'EIO_CONFIG_H="config_freebsd.h"',
           ],
+          'direct_dependent_settings': {
+            'libraries': [
+              '-lkvm',
+            ],
+          },
         }],
         [ 'OS=="openbsd"', {
           'include_dirs': [ 'src/ares/config_openbsd' ],
@@ -296,6 +301,7 @@
         'test/test-hrtime.c',
         'test/test-idle.c',
         'test/test-ipc.c',
+        'test/test-ipc-threads.c',
         'test/test-list.h',
         'test/test-loop-handles.c',
         'test/test-multiple-listen.c',
