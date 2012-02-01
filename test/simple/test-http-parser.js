@@ -24,7 +24,7 @@ var assert = require('assert');
 
 var HTTPParser = process.binding('http_parser').HTTPParser;
 
-var CRLF = "\r\n";
+var CRLF = '\r\n';
 var REQUEST = HTTPParser.REQUEST;
 var RESPONSE = HTTPParser.RESPONSE;
 
@@ -463,7 +463,7 @@ function expectBody(expected) {
     assert.equal(info.versionMinor, 1);
     assert.deepEqual(info.headers || parser.headers,
       ['Content-Type', 'text/plain',
-       'Transfer-Encoding','chunked']);
+       'Transfer-Encoding', 'chunked']);
   });
 
   var expected_body = '123123456123456789123456789ABC123456789ABCDEF';
