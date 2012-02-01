@@ -123,30 +123,8 @@
 
     if (process.tid === 1) return;
 
-    var net = NativeModule.require('net');
-
     // isolate initialization
-    process.send = function(msg, sendHandle) {
-      if (typeof msg === 'undefined') throw new TypeError('Bad argument.');
-      msg = JSON.stringify(msg);
-      msg = new Buffer(msg);
-
-      // Update simultaneous accepts on Windows
-      net._setSimultaneousAccepts(sendHandle);
-
-      return process._send(msg, sendHandle);
-    };
-
-    process._onmessage = function(msg, recvHandle) {
-      msg = JSON.parse('' + msg);
-
-      // Update simultaneous accepts on Windows
-      net._setSimultaneousAccepts(recvHandle);
-
-      process.emit('message', msg, recvHandle);
-    };
-
-    process.exit = process._exit;
+    NativeModule.require('child_process')._isolateInit();
   }
 
   startup.globalVariables = function() {
