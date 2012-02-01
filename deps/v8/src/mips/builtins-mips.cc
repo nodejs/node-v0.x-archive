@@ -339,7 +339,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                        t1,
                        call_generic_code);
   __ IncrementCounter(counters->array_function_native(), 1, a3, t0);
-  // Setup return value, remove receiver from stack and return.
+  // Set up return value, remove receiver from stack and return.
   __ mov(v0, a2);
   __ Addu(sp, sp, Operand(kPointerSize));
   __ Ret();
@@ -382,7 +382,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                   call_generic_code);
   __ IncrementCounter(counters->array_function_native(), 1, a2, t0);
 
-  // Setup return value, remove receiver and argument from stack and return.
+  // Set up return value, remove receiver and argument from stack and return.
   __ mov(v0, a3);
   __ Addu(sp, sp, Operand(2 * kPointerSize));
   __ Ret();
@@ -895,7 +895,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
       // Initialize the FixedArray.
       // a1: constructor
-      // a3: number of elements in properties array (un-tagged)
+      // a3: number of elements in properties array (untagged)
       // t4: JSObject
       // t5: start of next object
       __ LoadRoot(t6, Heap::kFixedArrayMapRootIndex);
@@ -981,10 +981,10 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // sp[4]: number of arguments (smi-tagged)
     __ lw(a3, MemOperand(sp, 4 * kPointerSize));
 
-    // Setup pointer to last argument.
+    // Set up pointer to last argument.
     __ Addu(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset));
 
-    // Setup number of arguments for function call below.
+    // Set up number of arguments for function call below.
     __ srl(a0, a3, kSmiTagSize);
 
     // Copy arguments and receiver to the expression stack.
@@ -1099,7 +1099,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // ----------- S t a t e -------------
   //  -- a0: code entry
   //  -- a1: function
-  //  -- a2: reveiver_pointer
+  //  -- a2: receiver_pointer
   //  -- a3: argc
   //  -- s0: argv
   // -----------------------------------
@@ -1114,17 +1114,14 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // Set up the context from the function argument.
     __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
 
-    // Set up the roots register.
-    ExternalReference roots_array_start =
-        ExternalReference::roots_array_start(masm->isolate());
-    __ li(s6, Operand(roots_array_start));
+    __ InitializeRootRegister();
 
     // Push the function and the receiver onto the stack.
     __ Push(a1, a2);
 
     // Copy arguments to the stack in a loop.
     // a3: argc
-    // s0: argv, ie points to first arg
+    // s0: argv, i.e. points to first arg
     Label loop, entry;
     __ sll(t0, a3, kPointerSizeLog2);
     __ addu(t2, s0, t0);

@@ -73,6 +73,9 @@
     # Enable profiling support. Only required on Windows.
     'v8_enable_prof%': 0,
 
+    # Some versions of GCC 4.5 seem to need -fno-strict-aliasing.
+    'v8_no_strict_aliasing%': 0,
+
     # Chrome needs this definition unconditionally. For standalone V8 builds,
     # it's handled in build/standalone.gypi.
     'want_separate_host_toolset%': 1,
@@ -208,6 +211,11 @@
           'COMPRESS_STARTUP_DATA_BZ2',
         ],
       }],
+      ['OS=="win"', {
+        'defines': [
+          'WIN32',
+        ],
+      }],
       ['OS=="win" and v8_enable_prof==1', {
         'msvs_settings': {
           'VCLinkerTool': {
@@ -222,12 +230,15 @@
             'cflags': [ '-m32' ],
             'ldflags': [ '-m32' ],
           }],
-        ],
+          [ 'v8_no_strict_aliasing==1', {
+            'cflags': [ '-fno-strict-aliasing' ],
+          }],
+        ],  # conditions
       }],
       ['OS=="solaris"', {
         'defines': [ '__C99FEATURES__=1' ],  # isinf() etc.
       }],
-    ],
+    ],  # conditions
     'configurations': {
       'Debug': {
         'defines': [
@@ -268,10 +279,11 @@
                         '-Wnon-virtual-dtor' ],
           }],
         ],
-      },
+      },  # Debug
       'Release': {
         'conditions': [
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
+          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" \
+            or OS=="android"', {
             'cflags!': [
               '-O2',
               '-Os',
@@ -283,7 +295,7 @@
               '-O3',
             ],
             'conditions': [
-              [ 'gcc_version==44', {
+              [ 'gcc_version==44 and clang==0', {
                 'cflags': [
                   # Avoid crashes with gcc 4.4 in the v8 test suite.
                   '-fno-tree-vrp',
@@ -307,10 +319,9 @@
               # is specified explicitly.
               'GCC_STRICT_ALIASING': 'YES',
             },
-          }],
+          }],  # OS=="mac"
           ['OS=="win"', {
             'msvs_configuration_attributes': {
-              'OutputDirectory': '<(DEPTH)\\build\\$(ConfigurationName)',
               'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
               'CharacterSet': '1',
             },
@@ -342,9 +353,9 @@
                 # 'StackReserveSize': '297152',
               },
             },
-          }],
-        ],
-      },
-    },
-  },
+          }],  # OS=="win"
+        ],  # conditions
+      },  # Release
+    },  # configurations
+  },  # target_defaults
 }

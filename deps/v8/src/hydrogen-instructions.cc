@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -416,18 +416,18 @@ void HValue::PrintRangeTo(StringStream* stream) {
 
 
 void HValue::PrintChangesTo(StringStream* stream) {
-  int changes_flags = ChangesFlags();
-  if (changes_flags == 0) return;
+  GVNFlagSet changes_flags = ChangesFlags();
+  if (changes_flags.IsEmpty()) return;
   stream->Add(" changes[");
-  if (changes_flags == AllSideEffects()) {
+  if (changes_flags == AllSideEffectsFlagSet()) {
     stream->Add("*");
   } else {
     bool add_comma = false;
-#define PRINT_DO(type)                         \
-    if (changes_flags & (1 << kChanges##type)) { \
-      if (add_comma) stream->Add(",");           \
-      add_comma = true;                          \
-      stream->Add(#type);                        \
+#define PRINT_DO(type)                            \
+    if (changes_flags.Contains(kChanges##type)) { \
+      if (add_comma) stream->Add(",");            \
+      add_comma = true;                           \
+      stream->Add(#type);                         \
     }
     GVN_FLAG_LIST(PRINT_DO);
 #undef PRINT_DO
@@ -785,6 +785,29 @@ HValue* HConstant::Canonicalize() {
 
 HValue* HTypeof::Canonicalize() {
   return HasNoUses() && !IsBlockEntry() ? NULL : this;
+}
+
+
+HValue* HBitwise::Canonicalize() {
+  if (!representation().IsInteger32()) return this;
+  // If x is an int32, then x & -1 == x, x | 0 == x and x ^ 0 == x.
+  int32_t nop_constant = (op() == Token::BIT_AND) ? -1 : 0;
+  if (left()->IsConstant() &&
+      HConstant::cast(left())->HasInteger32Value() &&
+      HConstant::cast(left())->Integer32Value() == nop_constant) {
+    return right();
+  }
+  if (right()->IsConstant() &&
+      HConstant::cast(right())->HasInteger32Value() &&
+      HConstant::cast(right())->Integer32Value() == nop_constant) {
+    return left();
+  }
+  return this;
+}
+
+
+HValue* HChange::Canonicalize() {
+  return (from().Equals(to())) ? value() : this;
 }
 
 
@@ -1316,6 +1339,23 @@ Range* HShl::InferRange() {
 }
 
 
+Range* HLoadKeyedSpecializedArrayElement::InferRange() {
+  switch (elements_kind()) {
+    case EXTERNAL_PIXEL_ELEMENTS:
+      return new Range(0, 255);
+    case EXTERNAL_BYTE_ELEMENTS:
+      return new Range(-128, 127);
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+      return new Range(0, 255);
+    case EXTERNAL_SHORT_ELEMENTS:
+      return new Range(-32768, 32767);
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+      return new Range(0, 65535);
+    default:
+      return HValue::InferRange();
+  }
+}
+
 
 void HCompareGeneric::PrintDataTo(StringStream* stream) {
   stream->Add(Token::Name(token()));
@@ -1385,21 +1425,21 @@ HLoadNamedFieldPolymorphic::HLoadNamedFieldPolymorphic(HValue* context,
   SetOperandAt(0, context);
   SetOperandAt(1, object);
   set_representation(Representation::Tagged());
-  SetFlag(kDependsOnMaps);
+  SetGVNFlag(kDependsOnMaps);
   for (int i = 0;
        i < types->length() && types_.length() < kMaxLoadPolymorphism;
        ++i) {
     Handle<Map> map = types->at(i);
     LookupResult lookup(map->GetIsolate());
     map->LookupInDescriptors(NULL, *name, &lookup);
-    if (lookup.IsProperty()) {
+    if (lookup.IsFound()) {
       switch (lookup.type()) {
         case FIELD: {
           int index = lookup.GetLocalFieldIndexFromMap(*map);
           if (index < 0) {
-            SetFlag(kDependsOnInobjectFields);
+            SetGVNFlag(kDependsOnInobjectFields);
           } else {
-            SetFlag(kDependsOnBackingStoreFields);
+            SetGVNFlag(kDependsOnBackingStoreFields);
           }
           types_.Add(types->at(i));
           break;

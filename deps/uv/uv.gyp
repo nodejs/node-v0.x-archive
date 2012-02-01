@@ -250,6 +250,11 @@
             'EV_CONFIG_H="config_freebsd.h"',
             'EIO_CONFIG_H="config_freebsd.h"',
           ],
+          'direct_dependent_settings': {
+            'libraries': [
+              '-lkvm',
+            ],
+          },
         }],
         [ 'OS=="openbsd"', {
           'include_dirs': [ 'src/ares/config_openbsd' ],
@@ -284,6 +289,7 @@
         'test/test-connection-fail.c',
         'test/test-cwd-and-chdir.c',
         'test/test-delayed-accept.c',
+        'test/test-eio-overflow.c',
         'test/test-fail-always.c',
         'test/test-fs.c',
         'test/test-fs-event.c',
@@ -295,6 +301,7 @@
         'test/test-hrtime.c',
         'test/test-idle.c',
         'test/test-ipc.c',
+        'test/test-ipc-threads.c',
         'test/test-list.h',
         'test/test-loop-handles.c',
         'test/test-multiple-listen.c',
@@ -302,7 +309,6 @@
         'test/test-ping-pong.c',
         'test/test-pipe-bind-error.c',
         'test/test-pipe-connect-error.c',
-        'test/test-pipe-pair.c',
         'test/test-platform-output.c',
         'test/test-process-title.c',
         'test/test-ref.c',
@@ -326,6 +332,7 @@
         'test/test-tty.c',
         'test/test-udp-dgram-too-big.c',
         'test/test-udp-ipv6.c',
+        'test/test-udp-options.c',
         'test/test-udp-send-and-recv.c',
         'test/test-udp-multicast-join.c',
         'test/test-counters-init.c',

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -203,7 +203,7 @@ class MacroAssembler: public Assembler {
                    Label* on_black,
                    Label::Distance on_black_distance = Label::kFar);
 
-  // Detects conservatively whether an object is data-only, ie it does need to
+  // Detects conservatively whether an object is data-only, i.e. it does need to
   // be scanned by the garbage collector.
   void JumpIfDataObject(Register value,
                         Register scratch,
@@ -328,7 +328,7 @@ class MacroAssembler: public Assembler {
   // ---------------------------------------------------------------------------
   // JavaScript invokes
 
-  // Setup call kind marking in rcx. The method takes rcx as an
+  // Set up call kind marking in rcx. The method takes rcx as an
   // explicit first parameter to make the code more readable at the
   // call sites.
   void SetCallKind(Register dst, CallKind kind);
@@ -745,7 +745,7 @@ class MacroAssembler: public Assembler {
       Label* on_not_both_flat_ascii,
       Label::Distance near_jump = Label::kFar);
 
-  // Check whether the instance type represents a flat ascii string. Jump to the
+  // Check whether the instance type represents a flat ASCII string. Jump to the
   // label if not. If the instance type can be scratched specify same register
   // for both instance type and scratch.
   void JumpIfInstanceTypeIsNotSequentialAscii(
@@ -889,13 +889,24 @@ class MacroAssembler: public Assembler {
                                    XMMRegister xmm_scratch,
                                    Label* fail);
 
-  // Check if the map of an object is equal to a specified map and
-  // branch to label if not. Skip the smi check if not required
-  // (object is known to be a heap object)
+  // Compare an object's map with the specified map and its transitioned
+  // elements maps if mode is ALLOW_ELEMENT_TRANSITION_MAPS. FLAGS are set with
+  // result of map compare. If multiple map compares are required, the compare
+  // sequences branches to early_success.
+  void CompareMap(Register obj,
+                  Handle<Map> map,
+                  Label* early_success,
+                  CompareMapMode mode = REQUIRE_EXACT_MAP);
+
+  // Check if the map of an object is equal to a specified map and branch to
+  // label if not. Skip the smi check if not required (object is known to be a
+  // heap object). If mode is ALLOW_ELEMENT_TRANSITION_MAPS, then also match
+  // against maps that are ElementsKind transition maps of the specified map.
   void CheckMap(Register obj,
                 Handle<Map> map,
                 Label* fail,
-                SmiCheckType smi_check_type);
+                SmiCheckType smi_check_type,
+                CompareMapMode mode = REQUIRE_EXACT_MAP);
 
   // Check if the map of an object is equal to a specified map and branch to a
   // specified target if equal. Skip the smi check if not required (object is
@@ -975,6 +986,7 @@ class MacroAssembler: public Assembler {
                               Register scratch,
                               Label* miss);
 
+  void GetNumberHash(Register r0, Register scratch);
 
   void LoadFromNumberDictionary(Label* miss,
                                 Register elements,
@@ -1297,6 +1309,7 @@ class MacroAssembler: public Assembler {
                       Handle<Code> code_constant,
                       Register code_register,
                       Label* done,
+                      bool* definitely_mismatches,
                       InvokeFlag flag,
                       Label::Distance near_jump = Label::kFar,
                       const CallWrapper& call_wrapper = NullCallWrapper(),

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -75,7 +75,7 @@ extern "C" {
 namespace v8 {
 namespace internal {
 
-// 0 is never a valid thread id on MacOSX since a ptread_t is
+// 0 is never a valid thread id on MacOSX since a pthread_t is
 // a pointer.
 static const pthread_t kNoThread = (pthread_t) 0;
 
@@ -93,7 +93,7 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-void OS::Setup() {
+void OS::SetUp() {
   // Seed the random number generator. We preserve microsecond resolution.
   uint64_t seed = Ticks() ^ (getpid() << 16);
   srandom(static_cast<unsigned int>(seed));
@@ -103,7 +103,7 @@ void OS::Setup() {
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -473,17 +473,11 @@ class Thread::PlatformData : public Malloced {
   pthread_t thread_;  // Thread handle for pthread.
 };
 
+
 Thread::Thread(const Options& options)
     : data_(new PlatformData),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -736,10 +730,13 @@ class Sampler::PlatformData : public Malloced {
   thread_act_t profiled_thread_;
 };
 
+
 class SamplerThread : public Thread {
  public:
+  static const int kSamplerThreadStackSize = 32 * KB;
+
   explicit SamplerThread(int interval)
-      : Thread("SamplerThread"),
+      : Thread(Thread::Options("SamplerThread", kSamplerThreadStackSize)),
         interval_(interval) {}
 
   static void AddActiveSampler(Sampler* sampler) {
@@ -854,6 +851,7 @@ class SamplerThread : public Thread {
   static Mutex* mutex_;
   static SamplerThread* instance_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SamplerThread);
 };
 

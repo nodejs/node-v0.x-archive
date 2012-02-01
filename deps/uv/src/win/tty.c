@@ -1069,12 +1069,25 @@ static int uv_tty_set_style(uv_tty_t* handle, DWORD* error) {
       bg_bright = 0;
 
     } else if (arg == 1) {
-      /* Bright */
+      /* Foreground bright on */
       fg_bright = 1;
 
-    } else if (arg == 21 || arg == 22) {
-      /* Bright off. */
+    } else if (arg == 2) {
+      /* Both bright off */
       fg_bright = 0;
+      bg_bright = 0;
+
+    } else if (arg == 5) {
+      /* Background bright on */
+      bg_bright = 1;
+
+    } else if (arg == 21 || arg == 22) {
+      /* Foreground bright off */
+      fg_bright = 0;
+
+    } else if (arg == 25) {
+      /* Background bright off */
+      bg_bright = 0;
 
     } else if (arg >= 30 && arg <= 37) {
       /* Set foreground color */
@@ -1091,6 +1104,17 @@ static int uv_tty_set_style(uv_tty_t* handle, DWORD* error) {
     } else if (arg ==  49) {
       /* Default background color */
       bg_color = 0;
+
+    } else if (arg >= 90 && arg <= 97) {
+      /* Set bold foreground color */
+      fg_bright = 1;
+      fg_color = arg - 90;
+
+    } else if (arg >= 100 && arg <= 107) {
+      /* Set bold background color */
+      bg_bright = 1;
+      bg_color = arg - 100;
+
     }
   }
 
@@ -1376,7 +1400,7 @@ static int uv_tty_write_bufs(uv_tty_t* handle, uv_buf_t bufs[], int bufcnt,
               /* We were not currently parsing a number */
 
               /* Check for too many arguments */
-              if (handle->ansi_csi_argc >= COUNTOF(handle->ansi_csi_argv)) {
+              if (handle->ansi_csi_argc >= ARRAY_SIZE(handle->ansi_csi_argv)) {
                 ansi_parser_state |= ANSI_IGNORE;
                 continue;
               }
@@ -1412,7 +1436,7 @@ static int uv_tty_write_bufs(uv_tty_t* handle, uv_buf_t bufs[], int bufcnt,
               /* If ANSI_IN_ARG is not set, add another argument and */
               /* default it to 0. */
               /* Check for too many arguments */
-              if (handle->ansi_csi_argc >= COUNTOF(handle->ansi_csi_argv)) {
+              if (handle->ansi_csi_argc >= ARRAY_SIZE(handle->ansi_csi_argv)) {
                 ansi_parser_state |= ANSI_IGNORE;
                 continue;
               }
@@ -1592,7 +1616,7 @@ static int uv_tty_write_bufs(uv_tty_t* handle, uv_buf_t bufs[], int bufcnt,
         /* If a \n immediately follows a \r or vice versa, ignore it. */
         if (previous_eol == 0 || utf8_codepoint == previous_eol) {
           /* If there's no room in the utf16 buf, flush it first. */
-          if (2 > COUNTOF(utf16_buf) - utf16_buf_used) {
+          if (2 > ARRAY_SIZE(utf16_buf) - utf16_buf_used) {
             uv_tty_emit_text(handle, utf16_buf, utf16_buf_used, error);
             utf16_buf_used = 0;
           }
@@ -1609,7 +1633,7 @@ static int uv_tty_write_bufs(uv_tty_t* handle, uv_buf_t bufs[], int bufcnt,
         /* Encode character into utf-16 buffer. */
 
         /* If there's no room in the utf16 buf, flush it first. */
-        if (1 > COUNTOF(utf16_buf) - utf16_buf_used) {
+        if (1 > ARRAY_SIZE(utf16_buf) - utf16_buf_used) {
           uv_tty_emit_text(handle, utf16_buf, utf16_buf_used, error);
           utf16_buf_used = 0;
         }

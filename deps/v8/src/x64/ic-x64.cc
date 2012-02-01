@@ -462,30 +462,58 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ movl(rdi, FieldOperand(rax, String::kHashFieldOffset));
   __ shr(rdi, Immediate(String::kHashShift));
   __ xor_(rcx, rdi);
-  __ and_(rcx, Immediate(KeyedLookupCache::kCapacityMask));
+  int mask = (KeyedLookupCache::kCapacityMask & KeyedLookupCache::kHashMask);
+  __ and_(rcx, Immediate(mask));
 
   // Load the key (consisting of map and symbol) from the cache and
   // check for match.
+  Label load_in_object_property;
+  static const int kEntriesPerBucket = KeyedLookupCache::kEntriesPerBucket;
+  Label hit_on_nth_entry[kEntriesPerBucket];
   ExternalReference cache_keys
       = ExternalReference::keyed_lookup_cache_keys(masm->isolate());
-  __ movq(rdi, rcx);
-  __ shl(rdi, Immediate(kPointerSizeLog2 + 1));
-  __ LoadAddress(kScratchRegister, cache_keys);
-  __ cmpq(rbx, Operand(kScratchRegister, rdi, times_1, 0));
+
+  for (int i = 0; i < kEntriesPerBucket - 1; i++) {
+    Label try_next_entry;
+    __ movq(rdi, rcx);
+    __ shl(rdi, Immediate(kPointerSizeLog2 + 1));
+    __ LoadAddress(kScratchRegister, cache_keys);
+    int off = kPointerSize * i * 2;
+    __ cmpq(rbx, Operand(kScratchRegister, rdi, times_1, off));
+    __ j(not_equal, &try_next_entry);
+    __ cmpq(rax, Operand(kScratchRegister, rdi, times_1, off + kPointerSize));
+    __ j(equal, &hit_on_nth_entry[i]);
+    __ bind(&try_next_entry);
+  }
+
+  int off = kPointerSize * (kEntriesPerBucket - 1) * 2;
+  __ cmpq(rbx, Operand(kScratchRegister, rdi, times_1, off));
   __ j(not_equal, &slow);
-  __ cmpq(rax, Operand(kScratchRegister, rdi, times_1, kPointerSize));
+  __ cmpq(rax, Operand(kScratchRegister, rdi, times_1, off + kPointerSize));
   __ j(not_equal, &slow);
 
   // Get field offset, which is a 32-bit integer.
   ExternalReference cache_field_offsets
       = ExternalReference::keyed_lookup_cache_field_offsets(masm->isolate());
-  __ LoadAddress(kScratchRegister, cache_field_offsets);
-  __ movl(rdi, Operand(kScratchRegister, rcx, times_4, 0));
-  __ movzxbq(rcx, FieldOperand(rbx, Map::kInObjectPropertiesOffset));
-  __ subq(rdi, rcx);
-  __ j(above_equal, &property_array_property);
+
+  // Hit on nth entry.
+  for (int i = kEntriesPerBucket - 1; i >= 0; i--) {
+    __ bind(&hit_on_nth_entry[i]);
+    if (i != 0) {
+      __ addl(rcx, Immediate(i));
+    }
+    __ LoadAddress(kScratchRegister, cache_field_offsets);
+    __ movl(rdi, Operand(kScratchRegister, rcx, times_4, 0));
+    __ movzxbq(rcx, FieldOperand(rbx, Map::kInObjectPropertiesOffset));
+    __ subq(rdi, rcx);
+    __ j(above_equal, &property_array_property);
+    if (i != 0) {
+      __ jmp(&load_in_object_property);
+    }
+  }
 
   // Load in-object property.
+  __ bind(&load_in_object_property);
   __ movzxbq(rcx, FieldOperand(rbx, Map::kInstanceSizeOffset));
   __ addq(rcx, rdi);
   __ movq(rax, FieldOperand(rdx, rcx, times_pointer_size, 0));

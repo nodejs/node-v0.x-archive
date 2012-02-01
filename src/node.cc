@@ -2649,6 +2649,9 @@ void StartThread(node::Isolate* isolate,
   if (isolate->id_ > 1) {
     process_l->Set(String::NewSymbol("_send"),
                    FunctionTemplate::New(Isolate::Send)->GetFunction());
+
+    process_l->Set(String::NewSymbol("_exit"),
+                   FunctionTemplate::New(Isolate::Unref)->GetFunction());
   }
 
   // FIXME crashes with "CHECK(heap->isolate() == Isolate::Current()) failed"
@@ -2679,13 +2682,10 @@ int Start(int argc, char *argv[]) {
   v8::V8::Initialize();
   v8::HandleScope handle_scope;
 
-  // Get the id of the this, the main, thread.
-  uv_thread_t tid = uv_thread_self();
-
   // Create the main node::Isolate object
   node::Isolate::Initialize();
   Isolate* isolate = new node::Isolate();
-  isolate->tid_ = tid;
+  isolate->tid_ = (uv_thread_t) -1;
   isolate->Enter();
   StartThread(isolate, argc, argv);
   isolate->Dispose();

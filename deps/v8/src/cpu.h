@@ -53,7 +53,7 @@ namespace internal {
 class CPU : public AllStatic {
  public:
   // Initializes the cpu architecture support. Called once at VM startup.
-  static void Setup();
+  static void SetUp();
 
   static bool SupportsCrankshaft();
 

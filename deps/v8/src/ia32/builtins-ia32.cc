@@ -333,7 +333,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ push(ebx);
     __ push(ebx);
 
-    // Setup pointer to last argument.
+    // Set up pointer to last argument.
     __ lea(ebx, Operand(ebp, StandardFrameConstants::kCallerSPOffset));
 
     // Copy arguments and receiver to the expression stack.
@@ -537,7 +537,7 @@ static void Generate_NotifyDeoptimizedHelper(MacroAssembler* masm,
   {
     FrameScope scope(masm, StackFrame::INTERNAL);
 
-    // Pass the function and deoptimization type to the runtime system.
+    // Pass deoptimization type to the runtime system.
     __ push(Immediate(Smi::FromInt(static_cast<int>(type))));
     __ CallRuntime(Runtime::kNotifyDeoptimized, 1);
 
@@ -1644,6 +1644,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   __ mov(edi, Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
   __ call(edx);
 
+  masm->isolate()->heap()->SetArgumentsAdaptorDeoptPCOffset(masm->pc_offset());
   // Leave frame and return.
   LeaveArgumentsAdaptorFrame(masm);
   __ ret(0);

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -59,6 +59,7 @@ class LOperand: public ZoneObject {
   bool IsDoubleRegister() const { return kind() == DOUBLE_REGISTER; }
   bool IsArgument() const { return kind() == ARGUMENT; }
   bool IsUnallocated() const { return kind() == UNALLOCATED; }
+  bool IsIgnored() const { return kind() == INVALID; }
   bool Equals(LOperand* other) const { return value_ == other->value_; }
   int VirtualRegister();
 
@@ -89,8 +90,7 @@ class LUnallocated: public LOperand {
     FIXED_SLOT,
     MUST_HAVE_REGISTER,
     WRITABLE_REGISTER,
-    SAME_AS_FIRST_INPUT,
-    IGNORE
+    SAME_AS_FIRST_INPUT
   };
 
   // Lifetime of operand inside the instruction.
@@ -121,9 +121,9 @@ class LUnallocated: public LOperand {
 
   // The superclass has a KindField.  Some policies have a signed fixed
   // index in the upper bits.
-  static const int kPolicyWidth = 4;
+  static const int kPolicyWidth = 3;
   static const int kLifetimeWidth = 1;
-  static const int kVirtualRegisterWidth = 17;
+  static const int kVirtualRegisterWidth = 18;
 
   static const int kPolicyShift = kKindFieldWidth;
   static const int kLifetimeShift = kPolicyShift + kPolicyWidth;
@@ -143,12 +143,10 @@ class LUnallocated: public LOperand {
                         kVirtualRegisterWidth> {
   };
 
-  static const int kMaxVirtualRegisters = 1 << (kVirtualRegisterWidth + 1);
+  static const int kMaxVirtualRegisters = 1 << kVirtualRegisterWidth;
   static const int kMaxFixedIndex = 63;
   static const int kMinFixedIndex = -64;
 
-  bool HasIgnorePolicy() const { return policy() == IGNORE; }
-  bool HasNoPolicy() const { return policy() == NONE; }
   bool HasAnyPolicy() const {
     return policy() == ANY;
   }
@@ -234,9 +232,7 @@ class LMoveOperands BASE_EMBEDDED {
   }
 
   bool IsIgnored() const {
-    return destination_ != NULL &&
-        destination_->IsUnallocated() &&
-        LUnallocated::cast(destination_)->HasIgnorePolicy();
+    return destination_ != NULL && destination_->IsIgnored();
   }
 
   // We clear both operands to indicate move that's been eliminated.
@@ -265,7 +261,7 @@ class LConstantOperand: public LOperand {
     return reinterpret_cast<LConstantOperand*>(op);
   }
 
-  static void SetupCache();
+  static void SetUpCache();
 
  private:
   static const int kNumCachedOperands = 128;
@@ -300,7 +296,7 @@ class LStackSlot: public LOperand {
     return reinterpret_cast<LStackSlot*>(op);
   }
 
-  static void SetupCache();
+  static void SetUpCache();
 
  private:
   static const int kNumCachedOperands = 128;
@@ -324,7 +320,7 @@ class LDoubleStackSlot: public LOperand {
     return reinterpret_cast<LDoubleStackSlot*>(op);
   }
 
-  static void SetupCache();
+  static void SetUpCache();
 
  private:
   static const int kNumCachedOperands = 128;
@@ -348,7 +344,7 @@ class LRegister: public LOperand {
     return reinterpret_cast<LRegister*>(op);
   }
 
-  static void SetupCache();
+  static void SetUpCache();
 
  private:
   static const int kNumCachedOperands = 16;
@@ -372,7 +368,7 @@ class LDoubleRegister: public LOperand {
     return reinterpret_cast<LDoubleRegister*>(op);
   }
 
-  static void SetupCache();
+  static void SetUpCache();
 
  private:
   static const int kNumCachedOperands = 16;
@@ -443,12 +439,14 @@ class LPointerMap: public ZoneObject {
 class LEnvironment: public ZoneObject {
  public:
   LEnvironment(Handle<JSFunction> closure,
+               bool is_arguments_adaptor,
                int ast_id,
                int parameter_count,
                int argument_count,
                int value_count,
                LEnvironment* outer)
       : closure_(closure),
+        is_arguments_adaptor_(is_arguments_adaptor),
         arguments_stack_height_(argument_count),
         deoptimization_index_(Safepoint::kNoDeoptimizationIndex),
         translation_index_(-1),
@@ -505,8 +503,11 @@ class LEnvironment: public ZoneObject {
 
   void PrintTo(StringStream* stream);
 
+  bool is_arguments_adaptor() const { return is_arguments_adaptor_; }
+
  private:
   Handle<JSFunction> closure_;
+  bool is_arguments_adaptor_;
   int arguments_stack_height_;
   int deoptimization_index_;
   int translation_index_;
@@ -523,8 +524,6 @@ class LEnvironment: public ZoneObject {
   LOperand** spilled_double_registers_;
 
   LEnvironment* outer_;
-
-  friend class LCodegen;
 };
 
 

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,34 +25,36 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
-
 #include "api.h"
 
-#include "arguments.h"
+#include <math.h>  // For isnan.
+#include <string.h>  // For memcpy, strlen.
+#include "../include/v8-debug.h"
+#include "../include/v8-profiler.h"
+#include "../include/v8-testing.h"
 #include "bootstrapper.h"
 #include "compiler.h"
+#include "conversions-inl.h"
+#include "counters.h"
 #include "debug.h"
 #include "deoptimizer.h"
 #include "execution.h"
-#include "flags.h"
 #include "global-handles.h"
 #include "heap-profiler.h"
 #include "messages.h"
-#include "natives.h"
 #include "parser.h"
 #include "platform.h"
 #include "profile-generator-inl.h"
+#include "property-details.h"
+#include "property.h"
 #include "runtime-profiler.h"
 #include "scanner-character-streams.h"
-#include "serialize.h"
 #include "snapshot.h"
+#include "unicode-inl.h"
 #include "v8threads.h"
 #include "version.h"
 #include "vm-state-inl.h"
 
-#include "../include/v8-profiler.h"
-#include "../include/v8-testing.h"
 
 #define LOG_API(isolate, expr) LOG(isolate, ApiEntryCall(expr))
 
@@ -741,6 +743,7 @@ void Context::Exit() {
   i::Context* last_context =
       isolate->handle_scope_implementer()->RestoreContext();
   isolate->set_context(last_context);
+  isolate->set_context_exit_happened(true);
 }
 
 
@@ -2165,6 +2168,11 @@ bool Value::IsInt32() const {
   if (obj->IsSmi()) return true;
   if (obj->IsNumber()) {
     double value = obj->Number();
+    static const i::DoubleRepresentation minus_zero(-0.0);
+    i::DoubleRepresentation rep(value);
+    if (rep.bits == minus_zero.bits) {
+      return false;
+    }
     return i::FastI2D(i::FastD2I(value)) == value;
   }
   return false;
@@ -2177,6 +2185,11 @@ bool Value::IsUint32() const {
   if (obj->IsSmi()) return i::Smi::cast(*obj)->value() >= 0;
   if (obj->IsNumber()) {
     double value = obj->Number();
+    static const i::DoubleRepresentation minus_zero(-0.0);
+    i::DoubleRepresentation rep(value);
+    if (rep.bits == minus_zero.bits) {
+      return false;
+    }
     return i::FastUI2D(i::FastD2UI(value)) == value;
   }
   return false;
@@ -2739,7 +2752,7 @@ bool v8::Object::Set(uint32_t index, v8::Handle<Value> value) {
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::Object> value_obj = Utils::OpenHandle(*value);
   EXCEPTION_PREAMBLE(isolate);
-  i::Handle<i::Object> obj = i::SetElement(
+  i::Handle<i::Object> obj = i::JSObject::SetElement(
       self,
       index,
       value_obj,
@@ -2845,7 +2858,7 @@ Local<Value> v8::Object::GetPrototype() {
              return Local<v8::Value>());
   ENTER_V8(isolate);
   i::Handle<i::Object> self = Utils::OpenHandle(this);
-  i::Handle<i::Object> result = i::GetPrototype(self);
+  i::Handle<i::Object> result(self->GetPrototype());
   return Utils::ToLocal(result);
 }
 
@@ -2999,7 +3012,7 @@ bool v8::Object::Delete(v8::Handle<String> key) {
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
-  return i::DeleteProperty(self, key_obj)->IsTrue();
+  return i::JSObject::DeleteProperty(self, key_obj)->IsTrue();
 }
 
 
@@ -3020,7 +3033,7 @@ bool v8::Object::Delete(uint32_t index) {
   ENTER_V8(isolate);
   HandleScope scope;
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
-  return i::DeleteElement(self, index)->IsTrue();
+  return i::JSObject::DeleteElement(self, index)->IsTrue();
 }
 
 
@@ -3225,7 +3238,7 @@ int v8::Object::GetIdentityHash() {
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
-  return i::GetIdentityHash(self);
+  return i::JSObject::GetIdentityHash(self);
 }
 
 
@@ -3238,7 +3251,8 @@ bool v8::Object::SetHiddenValue(v8::Handle<v8::String> key,
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
   i::Handle<i::Object> value_obj = Utils::OpenHandle(*value);
-  i::Handle<i::Object> result = i::SetHiddenProperty(self, key_obj, value_obj);
+  i::Handle<i::Object> result =
+      i::JSObject::SetHiddenProperty(self, key_obj, value_obj);
   return *result == *self;
 }
 
@@ -3607,6 +3621,12 @@ void Function::SetName(v8::Handle<v8::String> name) {
 Handle<Value> Function::GetName() const {
   i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
   return Utils::ToLocal(i::Handle<i::Object>(func->shared()->name()));
+}
+
+
+Handle<Value> Function::GetInferredName() const {
+  i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
+  return Utils::ToLocal(i::Handle<i::Object>(func->shared()->inferred_name()));
 }
 
 
@@ -4035,6 +4055,13 @@ void v8::V8::GetHeapStatistics(HeapStatistics* heap_statistics) {
       heap->CommittedMemoryExecutable());
   heap_statistics->set_used_heap_size(heap->SizeOfObjects());
   heap_statistics->set_heap_size_limit(heap->MaxReserved());
+}
+
+
+void v8::V8::VisitExternalResources(ExternalResourceVisitor* visitor) {
+  i::Isolate* isolate = i::Isolate::Current();
+  IsDeadCheck(isolate, "v8::V8::VisitExternalResources");
+  isolate->heap()->VisitExternalResources(visitor);
 }
 
 
@@ -5542,7 +5569,7 @@ void Debug::DisableAgent() {
 
 
 void Debug::ProcessDebugMessages() {
-  i::Execution::ProcessDebugMesssages(true);
+  i::Execution::ProcessDebugMessages(true);
 }
 
 Local<Context> Debug::GetDebugContext() {

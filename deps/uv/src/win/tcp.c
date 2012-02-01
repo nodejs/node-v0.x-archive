@@ -42,10 +42,6 @@ const unsigned int uv_simultaneous_server_accepts = 32;
 /* A zero-size buffer for use by uv_tcp_read */
 static char uv_zero_[] = "";
 
-/* Counter to keep track of active tcp streams */
-static unsigned int active_tcp_streams = 0;
-
-
 static int uv__tcp_nodelay(uv_tcp_t* handle, SOCKET socket, int enable) {
   if (setsockopt(socket,
                  IPPROTO_TCP,
@@ -217,7 +213,7 @@ void uv_tcp_endgame(uv_loop_t* loop, uv_tcp_t* handle) {
       handle->close_cb((uv_handle_t*)handle);
     }
 
-    active_tcp_streams--;
+    loop->active_tcp_streams--;
 
     uv_unref(loop);
   }
@@ -399,7 +395,7 @@ static void uv_tcp_queue_read(uv_loop_t* loop, uv_tcp_t* handle) {
    * Preallocate a read buffer if the number of active streams is below
    * the threshold.
   */
-  if (active_tcp_streams < uv_active_tcp_streams_threshold) {
+  if (loop->active_tcp_streams < uv_active_tcp_streams_threshold) {
     handle->flags &= ~UV_HANDLE_ZERO_READ;
     handle->read_buffer = handle->alloc_cb((uv_handle_t*) handle, 65536);
     assert(handle->read_buffer.len > 0);
@@ -559,7 +555,7 @@ int uv_tcp_accept(uv_tcp_t* server, uv_tcp_t* client) {
     }
   }
 
-  active_tcp_streams++;
+  loop->active_tcp_streams++;
 
   return rv;
 }
@@ -1007,7 +1003,7 @@ void uv_process_tcp_connect_req(uv_loop_t* loop, uv_tcp_t* handle,
                       NULL,
                       0) == 0) {
         uv_connection_init((uv_stream_t*)handle);
-        active_tcp_streams++;
+        loop->active_tcp_streams++;
         ((uv_connect_cb)req->cb)(req, 0);
       } else {
         uv__set_sys_error(loop, WSAGetLastError());
@@ -1023,7 +1019,7 @@ void uv_process_tcp_connect_req(uv_loop_t* loop, uv_tcp_t* handle,
 }
 
 
-int uv_tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info) {
+int uv__tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info) {
   SOCKET socket = WSASocketW(AF_INET,
                              SOCK_STREAM,
                              IPPROTO_IP,
@@ -1144,4 +1140,25 @@ int uv_tcp_simultaneous_accepts(uv_tcp_t* handle, int enable) {
   }
 
   return 0;
+}
+
+
+int uv_tcp_export(uv_tcp_t* tcp, uv_stream_info_t* info) {
+  if (uv_tcp_duplicate_socket(tcp, GetCurrentProcessId(),
+      &info->socket_info) == -1) {
+    return -1;
+  }
+
+  info->type = UV_TCP;
+  return 0;
+}
+
+
+int uv_tcp_import(uv_tcp_t* tcp, uv_stream_info_t* info) {
+  if (info->type != UV_TCP) {
+    uv__set_sys_error(tcp->loop, WSAEINVAL);
+    return -1;
+  }
+
+  return uv__tcp_import(tcp, &info->socket_info);
 }

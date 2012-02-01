@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -198,7 +198,7 @@ double modulo(double x, double y) {
 
 // ----------------------------------------------------------------------------
 // The Time class represents time on win32. A timestamp is represented as
-// a 64-bit integer in 100 nano-seconds since January 1, 1601 (UTC). JavaScript
+// a 64-bit integer in 100 nanoseconds since January 1, 1601 (UTC). JavaScript
 // timestamps are represented as a doubles in milliseconds since 00:00:00 UTC,
 // January 1, 1970.
 
@@ -528,7 +528,7 @@ char* Time::LocalTimezone() {
 }
 
 
-void OS::Setup() {
+void OS::SetUp() {
   // Seed the random number generator.
   // Convert the current time to a 64-bit integer first, before converting it
   // to an unsigned. Going directly can cause an overflow and the seed to be
@@ -776,7 +776,7 @@ void OS::StrNCpy(Vector<char> dest, const char* src, size_t n) {
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -1526,16 +1526,9 @@ class Thread::PlatformData : public Malloced {
 // handle until it is started.
 
 Thread::Thread(const Options& options)
-    : stack_size_(options.stack_size) {
+    : stack_size_(options.stack_size()) {
   data_ = new PlatformData(kNoThread);
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : stack_size_(0) {
-  data_ = new PlatformData(kNoThread);
-  set_name(name);
+  set_name(options.name());
 }
 
 
@@ -1825,7 +1818,7 @@ bool Win32Socket::SetReuseAddress(bool reuse_address) {
 }
 
 
-bool Socket::Setup() {
+bool Socket::SetUp() {
   // Initialize Winsock32
   int err;
   WSADATA winsock_data;
@@ -1901,8 +1894,10 @@ class Sampler::PlatformData : public Malloced {
 
 class SamplerThread : public Thread {
  public:
+  static const int kSamplerThreadStackSize = 32 * KB;
+
   explicit SamplerThread(int interval)
-      : Thread("SamplerThread"),
+      : Thread(Thread::Options("SamplerThread", kSamplerThreadStackSize)),
         interval_(interval) {}
 
   static void AddActiveSampler(Sampler* sampler) {
@@ -2006,6 +2001,7 @@ class SamplerThread : public Thread {
   static Mutex* mutex_;
   static SamplerThread* instance_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SamplerThread);
 };
 

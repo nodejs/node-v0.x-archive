@@ -124,12 +124,12 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
   // Get the function from the stack.
   __ movq(rcx, Operand(rsp, 1 * kPointerSize));
 
-  // Setup the object header.
+  // Set up the object header.
   __ LoadRoot(kScratchRegister, Heap::kFunctionContextMapRootIndex);
   __ movq(FieldOperand(rax, HeapObject::kMapOffset), kScratchRegister);
   __ Move(FieldOperand(rax, FixedArray::kLengthOffset), Smi::FromInt(length));
 
-  // Setup the fixed slots.
+  // Set up the fixed slots.
   __ Set(rbx, 0);  // Set to NULL.
   __ movq(Operand(rax, Context::SlotOffset(Context::CLOSURE_INDEX)), rcx);
   __ movq(Operand(rax, Context::SlotOffset(Context::PREVIOUS_INDEX)), rsi);
@@ -173,7 +173,7 @@ void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
   // Get the serialized scope info from the stack.
   __ movq(rbx, Operand(rsp, 2 * kPointerSize));
 
-  // Setup the object header.
+  // Set up the object header.
   __ LoadRoot(kScratchRegister, Heap::kBlockContextMapRootIndex);
   __ movq(FieldOperand(rax, HeapObject::kMapOffset), kScratchRegister);
   __ Move(FieldOperand(rax, FixedArray::kLengthOffset), Smi::FromInt(length));
@@ -194,7 +194,7 @@ void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
   __ movq(rcx, ContextOperand(rcx, Context::CLOSURE_INDEX));
   __ bind(&after_sentinel);
 
-  // Setup the fixed slots.
+  // Set up the fixed slots.
   __ movq(ContextOperand(rax, Context::CLOSURE_INDEX), rcx);
   __ movq(ContextOperand(rax, Context::PREVIOUS_INDEX), rsi);
   __ movq(ContextOperand(rax, Context::EXTENSION_INDEX), rbx);
@@ -2357,6 +2357,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   const int kParameterMapHeaderSize =
       FixedArray::kHeaderSize + 2 * kPointerSize;
   Label no_parameter_map;
+  __ xor_(r8, r8);
   __ testq(rbx, rbx);
   __ j(zero, &no_parameter_map, Label::kNear);
   __ lea(r8, Operand(rbx, times_pointer_size, kParameterMapHeaderSize));
@@ -2399,7 +2400,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
     __ movq(FieldOperand(rax, i), rdx);
   }
 
-  // Setup the callee in-object property.
+  // Set up the callee in-object property.
   STATIC_ASSERT(Heap::kArgumentsCalleeIndex == 1);
   __ movq(rdx, Operand(rsp, 3 * kPointerSize));
   __ movq(FieldOperand(rax, JSObject::kHeaderSize +
@@ -2414,7 +2415,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
                        Heap::kArgumentsLengthIndex * kPointerSize),
           rcx);
 
-  // Setup the elements pointer in the allocated arguments object.
+  // Set up the elements pointer in the allocated arguments object.
   // If we allocated a parameter map, edi will point there, otherwise to the
   // backing store.
   __ lea(rdi, Operand(rax, Heap::kArgumentsObjectSize));
@@ -2450,16 +2451,13 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   Label parameters_loop, parameters_test;
 
   // Load tagged parameter count into r9.
-  __ movq(r9, Operand(rsp, 1 * kPointerSize));
+  __ Integer32ToSmi(r9, rbx);
   __ Move(r8, Smi::FromInt(Context::MIN_CONTEXT_SLOTS));
-  __ addq(r8, Operand(rsp, 3 * kPointerSize));
+  __ addq(r8, Operand(rsp, 1 * kPointerSize));
   __ subq(r8, r9);
   __ Move(r11, factory->the_hole_value());
   __ movq(rdx, rdi);
-  __ SmiToInteger64(kScratchRegister, r9);
-  __ lea(rdi, Operand(rdi, kScratchRegister,
-                      times_pointer_size,
-                      kParameterMapHeaderSize));
+  __ lea(rdi, Operand(rdi, rbx, times_pointer_size, kParameterMapHeaderSize));
   // r9 = loop variable (tagged)
   // r8 = mapping index (tagged)
   // r11 = the hole value
@@ -2495,9 +2493,8 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   Label arguments_loop, arguments_test;
   __ movq(r8, rbx);
   __ movq(rdx, Operand(rsp, 2 * kPointerSize));
-  // Untag rcx and r8 for the loop below.
+  // Untag rcx for the loop below.
   __ SmiToInteger64(rcx, rcx);
-  __ SmiToInteger64(r8, r8);
   __ lea(kScratchRegister, Operand(r8, times_pointer_size, 0));
   __ subq(rdx, kScratchRegister);
   __ jmp(&arguments_test, Label::kNear);
@@ -2621,7 +2618,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   // Get the parameters pointer from the stack.
   __ movq(rdx, Operand(rsp, 2 * kPointerSize));
 
-  // Setup the elements pointer in the allocated arguments object and
+  // Set up the elements pointer in the allocated arguments object and
   // initialize the header in the elements fixed array.
   __ lea(rdi, Operand(rax, Heap::kArgumentsObjectSizeStrict));
   __ movq(FieldOperand(rax, JSObject::kElementsOffset), rdi);
@@ -2771,7 +2768,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
                          kShortExternalStringMask));
   STATIC_ASSERT((kStringTag | kSeqStringTag | kTwoByteStringTag) == 0);
   __ j(zero, &seq_two_byte_string, Label::kNear);
-  // Any other flat string must be a flat ascii string.  None of the following
+  // Any other flat string must be a flat ASCII string.  None of the following
   // string type tests will succeed if subject is not a string or a short
   // external string.
   __ andb(rbx, Immediate(kIsNotStringMask |
@@ -2822,16 +2819,16 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
            Immediate(kStringRepresentationMask | kStringEncodingMask));
   STATIC_ASSERT((kSeqStringTag | kTwoByteStringTag) == 0);
   __ j(zero, &seq_two_byte_string, Label::kNear);
-  // Any other flat string must be sequential ascii or external.
+  // Any other flat string must be sequential ASCII or external.
   __ testb(FieldOperand(rbx, Map::kInstanceTypeOffset),
            Immediate(kStringRepresentationMask));
   __ j(not_zero, &external_string);
 
   __ bind(&seq_ascii_string);
-  // rdi: subject string (sequential ascii)
+  // rdi: subject string (sequential ASCII)
   // rax: RegExp data (FixedArray)
   __ movq(r11, FieldOperand(rax, JSRegExp::kDataAsciiCodeOffset));
-  __ Set(rcx, 1);  // Type is ascii.
+  __ Set(rcx, 1);  // Type is ASCII.
   __ jmp(&check_code, Label::kNear);
 
   __ bind(&seq_two_byte_string);
@@ -2847,7 +2844,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ JumpIfSmi(r11, &runtime);
 
   // rdi: subject string
-  // rcx: encoding of subject string (1 if ascii, 0 if two_byte);
+  // rcx: encoding of subject string (1 if ASCII, 0 if two_byte);
   // r11: code
   // Load used arguments before starting to push arguments for call to native
   // RegExp code to avoid handling changing stack height.
@@ -2855,7 +2852,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // rdi: subject string
   // rbx: previous index
-  // rcx: encoding of subject string (1 if ascii 0 if two_byte);
+  // rcx: encoding of subject string (1 if ASCII 0 if two_byte);
   // r11: code
   // All checks done. Now push arguments for native regexp code.
   Counters* counters = masm->isolate()->counters();
@@ -2912,7 +2909,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Keep track on aliasing between argX defined above and the registers used.
   // rdi: subject string
   // rbx: previous index
-  // rcx: encoding of subject string (1 if ascii 0 if two_byte);
+  // rcx: encoding of subject string (1 if ASCII 0 if two_byte);
   // r11: code
   // r14: slice offset
   // r15: original subject string
@@ -3483,7 +3480,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   __ JumpIfNotBothSequentialAsciiStrings(
       rdx, rax, rcx, rbx, &check_unequal_objects);
 
-  // Inline comparison of ascii strings.
+  // Inline comparison of ASCII strings.
   if (cc_ == equal) {
     StringCompareStub::GenerateFlatAsciiStringEquals(masm,
                                                      rdx,
@@ -3942,7 +3939,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   Label not_outermost_js, not_outermost_js_2;
   {  // NOLINT. Scope block confuses linter.
     MacroAssembler::NoRootArrayScope uninitialized_root_register(masm);
-    // Setup frame.
+    // Set up frame.
     __ push(rbp);
     __ movq(rbp, rsp);
 
@@ -4156,12 +4153,14 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
     // Get return address and delta to inlined map check.
     __ movq(kScratchRegister, Operand(rsp, 0 * kPointerSize));
     __ subq(kScratchRegister, Operand(rsp, 1 * kPointerSize));
-    __ movq(Operand(kScratchRegister, kOffsetToMapCheckValue), rax);
     if (FLAG_debug_code) {
       __ movl(rdi, Immediate(kWordBeforeMapCheckValue));
       __ cmpl(Operand(kScratchRegister, kOffsetToMapCheckValue - 4), rdi);
       __ Assert(equal, "InstanceofStub unexpected call site cache (check).");
     }
+    __ movq(kScratchRegister,
+            Operand(kScratchRegister, kOffsetToMapCheckValue));
+    __ movq(Operand(kScratchRegister, 0), rax);
   }
 
   __ movq(rcx, FieldOperand(rax, Map::kPrototypeOffset));
@@ -4516,7 +4515,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ SmiCompare(rbx, Smi::FromInt(2));
   __ j(not_equal, &longer_than_two);
 
-  // Check that both strings are non-external ascii strings.
+  // Check that both strings are non-external ASCII strings.
   __ JumpIfBothInstanceTypesAreNotSequentialAscii(r8, r9, rbx, rcx,
                                                   &call_runtime);
 
@@ -4548,7 +4547,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   __ bind(&longer_than_two);
   // Check if resulting string will be flat.
-  __ SmiCompare(rbx, Smi::FromInt(String::kMinNonFlatLength));
+  __ SmiCompare(rbx, Smi::FromInt(ConsString::kMinLength));
   __ j(below, &string_add_flat_result);
   // Handle exceptionally long strings in the runtime system.
   STATIC_ASSERT((String::kMaxLength & 0x80000000) == 0);
@@ -4556,7 +4555,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ j(above, &call_runtime);
 
   // If result is not supposed to be flat, allocate a cons string object. If
-  // both strings are ascii the result is an ascii cons string.
+  // both strings are ASCII the result is an ASCII cons string.
   // rax: first string
   // rbx: length of resulting flat string
   // rdx: second string
@@ -4570,7 +4569,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ testl(rcx, Immediate(kStringEncodingMask));
   __ j(zero, &non_ascii);
   __ bind(&ascii_data);
-  // Allocate an acsii cons string.
+  // Allocate an ASCII cons string.
   __ AllocateAsciiConsString(rcx, rdi, no_reg, &call_runtime);
   __ bind(&allocated);
   // Fill the fields of the cons string.
@@ -4584,7 +4583,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ ret(2 * kPointerSize);
   __ bind(&non_ascii);
   // At least one of the strings is two-byte. Check whether it happens
-  // to contain only ascii characters.
+  // to contain only ASCII characters.
   // rcx: first instance type AND second instance type.
   // r8: first instance type.
   // r9: second instance type.
@@ -4600,7 +4599,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ jmp(&allocated);
 
   // We cannot encounter sliced strings or cons strings here since:
-  STATIC_ASSERT(SlicedString::kMinLength >= String::kMinNonFlatLength);
+  STATIC_ASSERT(SlicedString::kMinLength >= ConsString::kMinLength);
   // Handle creating a flat result from either external or sequential strings.
   // Locate the first characters' locations.
   // rax: first string
@@ -4658,7 +4657,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ j(zero, &non_ascii_string_add_flat_result);
 
   __ bind(&make_flat_ascii_string);
-  // Both strings are ascii strings. As they are short they are both flat.
+  // Both strings are ASCII strings. As they are short they are both flat.
   __ AllocateAsciiString(rax, rbx, rdi, r8, r9, &call_runtime);
   // rax: result string
   // Locate first character of result.
@@ -4675,7 +4674,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ ret(2 * kPointerSize);
 
   __ bind(&non_ascii_string_add_flat_result);
-  // Both strings are ascii strings. As they are short they are both flat.
+  // Both strings are ASCII strings. As they are short they are both flat.
   __ AllocateTwoByteString(rax, rbx, rdi, r8, r9, &call_runtime);
   // rax: result string
   // Locate first character of result.
@@ -4929,7 +4928,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     // JumpIfInstanceTypeIsNotSequentialAscii does not use it implicitly
     Register temp = kScratchRegister;
 
-    // Check that the candidate is a non-external ascii string.
+    // Check that the candidate is a non-external ASCII string.
     __ movzxbl(temp, FieldOperand(map, Map::kInstanceTypeOffset));
     __ JumpIfInstanceTypeIsNotSequentialAscii(
         temp, temp, &next_probe[i]);
@@ -4959,7 +4958,7 @@ void StringHelper::GenerateHashInit(MacroAssembler* masm,
                                     Register character,
                                     Register scratch) {
   // hash = (seed + character) + ((seed + character) << 10);
-  __ LoadRoot(scratch, Heap::kStringHashSeedRootIndex);
+  __ LoadRoot(scratch, Heap::kHashSeedRootIndex);
   __ SmiToInteger32(scratch, scratch);
   __ addl(scratch, character);
   __ movl(hash, scratch);
@@ -5003,13 +5002,12 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
   __ shll(scratch, Immediate(15));
   __ addl(hash, scratch);
 
-  uint32_t kHashShiftCutOffMask = (1 << (32 - String::kHashShift)) - 1;
-  __ andl(hash, Immediate(kHashShiftCutOffMask));
+  __ andl(hash, Immediate(String::kHashBitMask));
 
   // if (hash == 0) hash = 27;
   Label hash_not_zero;
   __ j(not_zero, &hash_not_zero);
-  __ Set(hash, 27);
+  __ Set(hash, StringHasher::kZeroHash);
   __ bind(&hash_not_zero);
 }
 
@@ -5080,7 +5078,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ ret(3 * kPointerSize);
 
   __ bind(&make_two_character_string);
-  // Setup registers for allocating the two character string.
+  // Set up registers for allocating the two character string.
   __ movzxwq(rbx, FieldOperand(rax, rdx, times_1, SeqAsciiString::kHeaderSize));
   __ AllocateAsciiString(rax, rcx, r11, r14, r15, &runtime);
   __ movw(FieldOperand(rax, SeqAsciiString::kHeaderSize), rbx);
@@ -5410,7 +5408,7 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   // Check that both are sequential ASCII strings.
   __ JumpIfNotBothSequentialAsciiStrings(rdx, rax, rcx, rbx, &runtime);
 
-  // Inline comparison of ascii strings.
+  // Inline comparison of ASCII strings.
   __ IncrementCounter(counters->string_compare_native(), 1);
   // Drop arguments from the stack
   __ pop(rcx);

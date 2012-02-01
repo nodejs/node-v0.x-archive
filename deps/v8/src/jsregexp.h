@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -35,9 +35,11 @@
 namespace v8 {
 namespace internal {
 
-
+class NodeVisitor;
+class RegExpCompiler;
 class RegExpMacroAssembler;
-
+class RegExpNode;
+class RegExpTree;
 
 class RegExpImpl {
  public:
@@ -634,7 +636,7 @@ class RegExpNode: public ZoneObject {
   static const int kNodeIsTooComplexForGreedyLoops = -1;
   virtual int GreedyLoopTextLength() { return kNodeIsTooComplexForGreedyLoops; }
   Label* label() { return &label_; }
-  // If non-generic code is generated for a node (ie the node is not at the
+  // If non-generic code is generated for a node (i.e. the node is not at the
   // start of the trace) then it cannot be reused.  This variable sets a limit
   // on how often we allow that to happen before we insist on starting a new
   // trace and generating generic code for a node that can be reused by flushing

@@ -1,4 +1,81 @@
-2012.01.06, Version 0.6.7 (stable)
+2012.01.23, Version 0.7.1 (unstable)
+
+* Update V8 to 3.8.8
+
+* Install node-waf by default (Fedor Indutny)
+
+* crypto: Add ability to turn off PKCS padding (Ingmar Runge)
+
+* v8: implement VirtualMemory class on SunOS (Ben Noordhuis)
+
+* Add cluster.setupMaster (Andreas Madsen)
+
+* move `path.exists*` to `fs.exists*` (Maciej Małecki)
+
+* typed arrays: set class name (Ben Noordhuis)
+
+* libuv bug fixes (Igor Zinkovsky, Ben Noordhuis, Dan VerWeire)
+
+
+2012.01.16, Version 0.7.0 (unstable), 9cc55dca6f67a6096c858b841c677b0593404321
+
+* Upgrade V8 to 3.8.6
+
+* Use GYP build system on unix (Ben Noordhuis)
+
+* Experimenetal isolates support (Ben Noordhuis)
+
+* Improvements to Cluster API (Andreas Madsen)
+
+* Use isolates for internal debugger (Fedor Indutny)
+
+* Bug fixes
+
+
+2012.01.27, Version 0.6.9 (stable)
+
+* dgram: Bring back missing functionality for Unix (Dan VerWeire, Roman Shtylman, Ben Noordhuis)
+  - Note: Windows UDP support not yet complete.
+
+* http: Fix parser memory leak (koichik)
+
+* zlib: Fix #2365 crashes on invalid input (Nicolas LaCasse)
+
+* module: fix --debug-brk on symlinked scripts (Fedor Indutny)
+
+* Documentation Restyling (Matthew Fitzsimmons)
+
+* Update npm to 1.1.0-3 (isaacs)
+
+* Windows: fix regression in stat() calls to C:\ (Bert Belder)
+
+
+2012.01.19, Version 0.6.8 (stable), d18cebaf8a7ac701dabd71a3aa4eb0571db6a645
+
+* Update V8 to 3.6.6.19
+
+* Numeric key hash collision fix for V8 (Erik Corry, Fedor Indutny)
+
+* Add missing TTY key translations for F1-F5 on Windows (Brandon Benvie)
+
+* path.extname bugfix with . and .. paths (Bert Belder)
+
+* cluster: don't always kill the master on uncaughtException (Ben Noordhuis)
+
+* Update npm to 1.1.0-2 (isaacs)
+
+* typed arrays: set class name (Ben Noordhuis)
+
+* zlib binding cleanup (isaacs, Bert Belder)
+
+* dgram: use slab memory allocator (Michael Bernstein)
+
+* fix segfault #2473
+
+* #2521 60% improvement in fs.stat on Windows (Igor Zinkovsky)
+
+
+2012.01.06, Version 0.6.7 (stable), d5a189acef14a851287ee555f7a39431fe276e1c
 
 * V8 hash collision fix (Breaks MIPS) (Bert Belder, Erik Corry)
 

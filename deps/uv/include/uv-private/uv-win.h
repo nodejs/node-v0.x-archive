@@ -23,6 +23,7 @@
 # define _WIN32_WINNT   0x0502
 #endif
 
+#include <process.h>
 #include <stdint.h>
 #include <winsock2.h>
 #include <mswsock.h>
@@ -102,6 +103,9 @@
                        LPOVERLAPPED lpOverlapped,
                        LPTRANSMIT_FILE_BUFFERS lpTransmitBuffers,
                        DWORD dwFlags);
+
+  typedef PVOID RTL_SRWLOCK;
+  typedef RTL_SRWLOCK SRWLOCK, *PSRWLOCK;
 #endif
 
 typedef int (WSAAPI* LPFN_WSARECV)
@@ -144,7 +148,7 @@ typedef CRITICAL_SECTION uv_mutex_t;
 typedef union {
   /* srwlock_ has type SRWLOCK, but not all toolchains define this type in */
   /* windows.h. */
-  void* srwlock_;
+  SRWLOCK srwlock_;
   struct {
     uv_mutex_t read_mutex_;
     uv_mutex_t write_mutex_;
@@ -196,7 +200,11 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   uv_idle_t* next_idle_handle;                                                \
   ares_channel ares_chan;                                                     \
   int ares_active_sockets;                                                    \
-  uv_timer_t ares_polling_timer;
+  uv_timer_t ares_polling_timer;                                              \
+  /* Counter to keep track of active tcp streams */                           \
+  unsigned int active_tcp_streams;                                            \
+  /* Counter to keep track of active udp streams */                           \
+  unsigned int active_udp_streams;
 
 #define UV_REQ_TYPE_PRIVATE               \
   /* TODO: remove the req suffix */       \
@@ -441,6 +449,11 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   wchar_t* short_filew;                   \
   wchar_t* dirw;                          \
   char* buffer;
+
+#define UV_STREAM_INFO_PRIVATE_FIELDS     \
+  union {                                 \
+    WSAPROTOCOL_INFOW socket_info;        \
+  };
 
 int uv_utf16_to_utf8(const wchar_t* utf16Buffer, size_t utf16Size,
     char* utf8Buffer, size_t utf8Size);

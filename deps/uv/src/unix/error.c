@@ -59,6 +59,7 @@ void uv_fatal_error(const int errorno, const char* syscall) {
 uv_err_code uv_translate_sys_error(int sys_errno) {
   switch (sys_errno) {
     case 0: return UV_OK;
+    case EPERM: return UV_EPERM;
     case ENOSYS: return UV_ENOSYS;
     case ENOTSOCK: return UV_ENOTSOCK;
     case ENOENT: return UV_ENOENT;
@@ -71,6 +72,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case EFAULT: return UV_EFAULT;
     case EMFILE: return UV_EMFILE;
     case EMSGSIZE: return UV_EMSGSIZE;
+    case ENAMETOOLONG: return UV_ENAMETOOLONG;
     case EINVAL: return UV_EINVAL;
     case ECONNREFUSED: return UV_ECONNREFUSED;
     case EADDRINUSE: return UV_EADDRINUSE;
@@ -85,7 +87,5 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ETIMEDOUT: return UV_ETIMEDOUT;
     default: return UV_UNKNOWN;
   }
-
-  assert(0 && "unreachable");
-  return -1;
+  UNREACHABLE();
 }

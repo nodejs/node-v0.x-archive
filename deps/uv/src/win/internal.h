@@ -143,10 +143,13 @@ void uv_process_tcp_connect_req(uv_loop_t* loop, uv_tcp_t* handle,
 
 void uv_tcp_endgame(uv_loop_t* loop, uv_tcp_t* handle);
 
-int uv_tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info);
+int uv__tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info);
 
 int uv_tcp_duplicate_socket(uv_tcp_t* handle, int pid,
     LPWSAPROTOCOL_INFOW protocol_info);
+
+int uv_tcp_export(uv_tcp_t* tcp, uv_stream_info_t* info);
+int uv_tcp_import(uv_tcp_t* tcp, uv_stream_info_t* info);
 
 
 /*
@@ -284,10 +287,8 @@ void uv_fs_event_endgame(uv_loop_t* loop, uv_fs_event_t* handle);
 
 /* Utils */
 int uv_parent_pid();
-
-
+void uv_filetime_to_time_t(FILETIME* file_time,  time_t* stat_time);
 void uv_fatal_error(const int errorno, const char* syscall);
-
 uv_err_code uv_translate_sys_error(int sys_errno);
 
 #define SET_REQ_STATUS(req, status)                                     \

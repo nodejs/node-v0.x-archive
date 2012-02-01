@@ -285,8 +285,9 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = createWritableStdioStream(1);
-      stdout.end = stdout.destroy = stdout.destroySoon = function() {
-        throw new Error('process.stdout cannot be closed');
+      stdout.destroy = stdout.destroySoon = function(er) {
+        er = er || new Error('process.stdout cannot be closed.');
+        stdout.emit('error', er);
       };
       return stdout;
     });
@@ -294,8 +295,9 @@
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = createWritableStdioStream(2);
-      stderr.end = stderr.destroy = stderr.destroySoon = function() {
-        throw new Error('process.stderr cannot be closed');
+      stderr.destroy = stderr.destroySoon = function(er) {
+        er = er || new Error('process.stderr cannot be closed.');
+        stderr.emit('error', er);
       };
       return stderr;
     });
@@ -431,6 +433,11 @@
 
       var r = cp._setupSpawnChannel();
       assert(r);
+    } else if (process.tid !== 1) {
+      // Load tcp_wrap to avoid situation where we might immediately receive
+      // a message.
+      // FIXME is this really necessary?
+      process.binding('tcp_wrap');
     }
   };
 
@@ -447,9 +454,15 @@
   };
 
   startup.removedMethods = function() {
+    var desc = {
+      configurable: true,
+      writable: true,
+      enumerable: false
+    };
     for (var method in startup._removedProcessMethods) {
       var reason = startup._removedProcessMethods[method];
-      process[method] = startup._removedMethod(reason);
+      desc.value = startup._removedMethod(reason);
+      Object.defineProperty(process, method, desc);
     }
   };
 
@@ -549,6 +562,35 @@
 
   NativeModule.prototype.cache = function() {
     NativeModule._cache[this.id] = this;
+  };
+
+  // Wrap a core module's method in a wrapper that will warn on first use
+  // and then return the result of invoking the original function. After
+  // first being called the original method is restored.
+  NativeModule.prototype.deprecate = function(method, message) {
+    var original = this.exports[method];
+    var self = this;
+    var warned = false;
+    message = message || '';
+
+    Object.defineProperty(this.exports, method, {
+      enumerable: false,
+      value: function() {
+        if (!warned) {
+          warned = true;
+          message = self.id + '.' + method + ' is deprecated. ' + message;
+
+          var moduleIdCheck = new RegExp('\\b' + self.id + '\\b');
+          if (moduleIdCheck.test(process.env.NODE_DEBUG))
+            console.trace(message);
+          else
+            console.error(message);
+
+          self.exports[method] = original;
+        }
+        return original.apply(this, arguments);
+      }
+    });
   };
 
   startup();

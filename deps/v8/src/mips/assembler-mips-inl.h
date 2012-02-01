@@ -30,13 +30,14 @@
 
 // The original source code covered by the above license above has been
 // modified significantly by Google Inc.
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 
 
 #ifndef V8_MIPS_ASSEMBLER_MIPS_INL_H_
 #define V8_MIPS_ASSEMBLER_MIPS_INL_H_
 
 #include "mips/assembler-mips.h"
+
 #include "cpu.h"
 #include "debug.h"
 
@@ -75,6 +76,16 @@ Operand::Operand(Register rm) {
 
 bool Operand::is_reg() const {
   return rm_.is_valid();
+}
+
+
+int FPURegister::ToAllocationIndex(FPURegister reg) {
+  ASSERT(reg.code() % 2 == 0);
+  ASSERT(reg.code() / 2 < kNumAllocatableRegisters);
+  ASSERT(reg.is_valid());
+  ASSERT(!reg.is(kDoubleRegZero));
+  ASSERT(!reg.is(kLithiumScratchDouble));
+  return (reg.code() / 2);
 }
 
 
@@ -133,7 +144,7 @@ Object* RelocInfo::target_object() {
 }
 
 
-Handle<Object> RelocInfo::target_object_handle(Assembler *origin) {
+Handle<Object> RelocInfo::target_object_handle(Assembler* origin) {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
   return Handle<Object>(reinterpret_cast<Object**>(
       Assembler::target_address_at(pc_)));

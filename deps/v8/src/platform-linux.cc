@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -78,7 +78,7 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-void OS::Setup() {
+void OS::SetUp() {
   // Seed the random number generator. We preserve microsecond resolution.
   uint64_t seed = Ticks() ^ (getpid() << 16);
   srandom(static_cast<unsigned int>(seed));
@@ -326,7 +326,7 @@ double OS::LocalTimeOffset() {
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -512,7 +512,7 @@ void OS::LogSharedLibraryAddresses() {
       }
       LOG(isolate, SharedLibraryEvent(lib_name, start, end));
     } else {
-      // Entry not describing executable data. Skip to end of line to setup
+      // Entry not describing executable data. Skip to end of line to set up
       // reading the next entry.
       do {
         c = getc(fp);
@@ -720,15 +720,8 @@ class Thread::PlatformData : public Malloced {
 
 Thread::Thread(const Options& options)
     : data_(new PlatformData()),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData()),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -1035,8 +1028,10 @@ class SignalSender : public Thread {
     FULL_INTERVAL
   };
 
+  static const int kSignalSenderStackSize = 32 * KB;
+
   explicit SignalSender(int interval)
-      : Thread("SignalSender"),
+      : Thread(Thread::Options("SignalSender", kSignalSenderStackSize)),
         vm_tgid_(getpid()),
         interval_(interval) {}
 
@@ -1151,6 +1146,9 @@ class SignalSender : public Thread {
     // occuring during signal delivery.
     useconds_t interval = interval_ * 1000 - 100;
     if (full_or_half == HALF_INTERVAL) interval /= 2;
+#if defined(ANDROID)
+    usleep(interval);
+#else
     int result = usleep(interval);
 #ifdef DEBUG
     if (result != 0 && errno != EINTR) {
@@ -1160,8 +1158,9 @@ class SignalSender : public Thread {
               errno);
       ASSERT(result == 0 || errno == EINTR);
     }
-#endif
+#endif  // DEBUG
     USE(result);
+#endif  // ANDROID
   }
 
   const int vm_tgid_;
@@ -1174,6 +1173,7 @@ class SignalSender : public Thread {
   static bool signal_handler_installed_;
   static struct sigaction old_signal_handler_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SignalSender);
 };
 

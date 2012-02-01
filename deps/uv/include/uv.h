@@ -115,7 +115,9 @@ typedef intptr_t ssize_t;
   XX( 45, EAISOCKTYPE, "") \
   XX( 46, ESHUTDOWN, "") \
   XX( 47, EEXIST, "file already exists") \
-  XX( 48, ESRCH, "no such process")
+  XX( 48, ESRCH, "no such process") \
+  XX( 49, ENAMETOOLONG, "name too long") \
+  XX( 50, EPERM, "operation not permitted")
 
 
 #define UV_ERRNO_GEN(val, name, s) UV_##name = val,
@@ -179,6 +181,7 @@ typedef struct uv_process_s uv_process_t;
 typedef struct uv_counters_s uv_counters_t;
 typedef struct uv_cpu_info_s uv_cpu_info_t;
 typedef struct uv_interface_address_s uv_interface_address_t;
+typedef struct uv_stream_info_s uv_stream_info_t;
 /* Request types */
 typedef struct uv_req_s uv_req_t;
 typedef struct uv_shutdown_s uv_shutdown_t;
@@ -201,6 +204,9 @@ typedef struct uv_work_s uv_work_t;
  */
 UV_EXTERN uv_loop_t* uv_loop_new(void);
 UV_EXTERN void uv_loop_delete(uv_loop_t*);
+
+/* This is a debugging tool. It's NOT part of the official API. */
+UV_EXTERN int uv_loop_refcount(const uv_loop_t*);
 
 
 /*
@@ -527,6 +533,28 @@ UV_EXTERN int uv_tcp_getpeername(uv_tcp_t* handle, struct sockaddr* name,
     int* namelen);
 
 /*
+ * uv_stream_info_t is used to store exported stream (using uv_export),
+ * which can be imported into a different event-loop within the same process
+ * (using uv_import).
+ */
+struct uv_stream_info_s {
+  uv_handle_type type;
+  UV_STREAM_INFO_PRIVATE_FIELDS
+};
+
+/*
+ * Exports uv_stream_t as uv_stream_info_t value, which could
+ * be used to initialize shared streams within the same process.
+ */
+UV_EXTERN int uv_export(uv_stream_t* stream, uv_stream_info_t* info);
+
+/*
+ * Imports uv_stream_info_t value into uv_stream_t to initialize
+ * shared stream.
+ */
+UV_EXTERN int uv_import(uv_stream_t* stream, uv_stream_info_t* info);
+
+/*
  * uv_tcp_connect, uv_tcp_connect6
  * These functions establish IPv4 and IPv6 TCP connections. Provide an
  * initialized TCP handle and an uninitialized uv_connect_t*. The callback
@@ -649,6 +677,59 @@ UV_EXTERN int uv_udp_getsockname(uv_udp_t* handle, struct sockaddr* name,
 UV_EXTERN int uv_udp_set_membership(uv_udp_t* handle,
     const char* multicast_addr, const char* interface_addr,
     uv_membership membership);
+
+/*
+ * Set IP multicast loop flag. Makes multicast packets loop back to
+ * local sockets.
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  on                  1 for on, 0 for off
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_multicast_loop(uv_udp_t* handle, int on);
+
+/*
+ * Set the multicast ttl
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  ttl                 1 through 255
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl);
+
+/*
+ * Set broadcast on or off
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  on                  1 for on, 0 for off
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_broadcast(uv_udp_t* handle, int on);
+
+/*
+ * Set the time to live
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  ttl                 1 through 255
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_ttl(uv_udp_t* handle, int ttl);
 
 /*
  * Send data. If the socket has not previously been bound with `uv_udp_bind`
@@ -783,13 +864,6 @@ struct uv_pipe_s {
  * this pipe will be used for handle passing between processes.
  */
 UV_EXTERN int uv_pipe_init(uv_loop_t*, uv_pipe_t* handle, int ipc);
-
-/*
- * Connects two initialized pipes on different loops.
- * Data written to one pipe will appear on the other side.
- * This function is thread-safe.
- */
-UV_EXTERN uv_err_t uv_pipe_pair(uv_pipe_t* a, uv_pipe_t* b);
 
 /*
  * Opens an existing file descriptor or HANDLE as a pipe.
@@ -1356,7 +1430,6 @@ UV_EXTERN void uv_once(uv_once_t* guard, void (*callback)(void));
 UV_EXTERN int uv_thread_create(uv_thread_t *tid,
     void (*entry)(void *arg), void *arg);
 UV_EXTERN int uv_thread_join(uv_thread_t *tid);
-UV_EXTERN uv_thread_t uv_thread_self(void);
 
 /* the presence of these unions force similar struct layout */
 union uv_any_handle {

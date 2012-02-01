@@ -91,12 +91,6 @@ int uv_pipe_init(uv_loop_t* loop, uv_pipe_t* handle, int ipc) {
 }
 
 
-uv_err_t uv_pipe_pair(uv_pipe_t* a, uv_pipe_t* b) {
-  /* Implement me */
-  return uv__new_artificial_error(UV_ENOSYS);
-}
-
-
 static void uv_pipe_connection_init(uv_pipe_t* handle) {
   uv_connection_init((uv_stream_t*) handle);
   handle->read_req.data = handle;
@@ -655,7 +649,7 @@ int uv_pipe_accept(uv_pipe_t* server, uv_stream_t* client) {
       return -1;
     }
 
-    return uv_tcp_import((uv_tcp_t*)client, server->pending_socket_info);
+    return uv__tcp_import((uv_tcp_t*)client, server->pending_socket_info);
   } else {
     pipe_client = (uv_pipe_t*)client;
 

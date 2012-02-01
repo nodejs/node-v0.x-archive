@@ -356,7 +356,7 @@ void StackGuard::EnableInterrupts() {
 
 void StackGuard::SetStackLimit(uintptr_t limit) {
   ExecutionAccess access(isolate_);
-  // If the current limits are special (eg due to a pending interrupt) then
+  // If the current limits are special (e.g. due to a pending interrupt) then
   // leave them alone.
   uintptr_t jslimit = SimulatorStack::JsLimitFromCLimit(isolate_, limit);
   if (thread_local_.jslimit_ == thread_local_.real_jslimit_) {
@@ -845,13 +845,13 @@ Object* Execution::DebugBreakHelper() {
   // Clear the debug break request flag.
   isolate->stack_guard()->Continue(DEBUGBREAK);
 
-  ProcessDebugMesssages(debug_command_only);
+  ProcessDebugMessages(debug_command_only);
 
   // Return to continue execution.
   return isolate->heap()->undefined_value();
 }
 
-void Execution::ProcessDebugMesssages(bool debug_command_only) {
+void Execution::ProcessDebugMessages(bool debug_command_only) {
   Isolate* isolate = Isolate::Current();
   // Clear the debug command request flag.
   isolate->stack_guard()->Continue(DEBUGCOMMAND);

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -343,6 +343,17 @@ class HEnvironment: public ZoneObject {
                Scope* scope,
                Handle<JSFunction> closure);
 
+  bool is_arguments_adaptor() const {
+    return arguments_adaptor_;
+  }
+
+  HEnvironment* DiscardInlined(bool drop_extra) {
+    HEnvironment* outer = outer_->is_arguments_adaptor() ?
+        outer_->outer_ : outer_;
+    if (drop_extra) outer->Drop(1);
+    return outer;
+  }
+
   // Simple accessors.
   Handle<JSFunction> closure() const { return closure_; }
   const ZoneList<HValue*>* values() const { return &values_; }
@@ -427,6 +438,7 @@ class HEnvironment: public ZoneObject {
   // environment is the outer environment but the top expression stack
   // elements are moved to an inner environment as parameters.
   HEnvironment* CopyForInlining(Handle<JSFunction> target,
+                                int arguments,
                                 FunctionLiteral* function,
                                 HConstant* undefined,
                                 CallKind call_kind) const;
@@ -449,6 +461,10 @@ class HEnvironment: public ZoneObject {
 
  private:
   explicit HEnvironment(const HEnvironment* other);
+
+  // Create an argument adaptor environment.
+  HEnvironment(HEnvironment* outer, Handle<JSFunction> closure, int arguments);
+
 
   // True if index is included in the expression stack part of the environment.
   bool HasExpressionAt(int index) const;
@@ -478,6 +494,7 @@ class HEnvironment: public ZoneObject {
   int pop_count_;
   int push_count_;
   int ast_id_;
+  bool arguments_adaptor_;
 };
 
 
@@ -870,7 +887,7 @@ class HGraphBuilder: public AstVisitor {
                            Representation rep);
   static Representation ToRepresentation(TypeInfo info);
 
-  void SetupScope(Scope* scope);
+  void SetUpScope(Scope* scope);
   virtual void VisitStatements(ZoneList<Statement*>* statements);
 
 #define DECLARE_VISIT(type) virtual void Visit##type(type* node);
@@ -1056,10 +1073,10 @@ class HValueMap: public ZoneObject {
     Resize(kInitialSize);
   }
 
-  void Kill(int flags);
+  void Kill(GVNFlagSet flags);
 
   void Add(HValue* value) {
-    present_flags_ |= value->flags();
+    present_flags_.Add(value->gvn_flags());
     Insert(value);
   }
 
@@ -1092,7 +1109,8 @@ class HValueMap: public ZoneObject {
   int array_size_;
   int lists_size_;
   int count_;  // The number of values stored in the HValueMap.
-  int present_flags_;  // All flags that are in any value in the HValueMap.
+  GVNFlagSet present_flags_;  // All flags that are in any value in the
+                              // HValueMap.
   HValueMapListElement* array_;  // Primary store - contains the first value
   // with a given hash.  Colliding elements are stored in linked lists.
   HValueMapListElement* lists_;  // The linked lists containing hash collisions.

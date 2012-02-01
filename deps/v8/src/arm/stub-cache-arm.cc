@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -376,13 +376,9 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
   // r0 : value
   Label exit;
 
-  // Check that the receiver isn't a smi.
-  __ JumpIfSmi(receiver_reg, miss_label);
-
-  // Check that the map of the receiver hasn't changed.
-  __ ldr(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
-  __ cmp(scratch, Operand(Handle<Map>(object->map())));
-  __ b(ne, miss_label);
+  // Check that the map of the object hasn't changed.
+  __ CheckMap(receiver_reg, scratch, Handle<Map>(object->map()), miss_label,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
@@ -566,11 +562,11 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
                                       int argc) {
   // ----------- S t a t e -------------
   //  -- sp[0]              : holder (set by CheckPrototypes)
-  //  -- sp[4]              : callee js function
+  //  -- sp[4]              : callee JS function
   //  -- sp[8]              : call data
-  //  -- sp[12]             : last js argument
+  //  -- sp[12]             : last JS argument
   //  -- ...
-  //  -- sp[(argc + 3) * 4] : first js argument
+  //  -- sp[(argc + 3) * 4] : first JS argument
   //  -- sp[(argc + 4) * 4] : receiver
   // -----------------------------------
   // Get the function and setup the context.
@@ -587,7 +583,7 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   } else {
     __ Move(r6, call_data);
   }
-  // Store js function and call data.
+  // Store JS function and call data.
   __ stm(ib, sp, r5.bit() | r6.bit());
 
   // r2 points to call data as expected by Arguments
@@ -742,7 +738,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
           ? CALL_AS_FUNCTION
           : CALL_AS_METHOD;
       __ InvokeFunction(optimization.constant_function(), arguments_,
-                        JUMP_FUNCTION, call_kind);
+                        JUMP_FUNCTION, NullCallWrapper(), call_kind);
     }
 
     // Deferred code for fast API call case---clean preallocated space.
@@ -1019,10 +1015,9 @@ Register StubCompiler::CheckPrototypes(Handle<JSObject> object,
       __ ldr(reg, FieldMemOperand(scratch1, Map::kPrototypeOffset));
     } else {
       Handle<Map> current_map(current->map());
-      __ ldr(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
-      __ cmp(scratch1, Operand(current_map));
-      // Branch on the result of the map check.
-      __ b(ne, miss);
+      __ CheckMap(reg, scratch1, current_map, miss, DONT_DO_SMI_CHECK,
+                  ALLOW_ELEMENT_TRANSITION_MAPS);
+
       // Check access rights to the global object.  This has to happen after
       // the map check so that we know that the object is actually a global
       // object.
@@ -1053,9 +1048,8 @@ Register StubCompiler::CheckPrototypes(Handle<JSObject> object,
   LOG(masm()->isolate(), IntEvent("check-maps-depth", depth + 1));
 
   // Check the holder map.
-  __ ldr(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
-  __ cmp(scratch1, Operand(Handle<Map>(current->map())));
-  __ b(ne, miss);
+  __ CheckMap(reg, scratch1, Handle<Map>(current->map()), miss,
+              DONT_DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform security check for access to the global object.
   ASSERT(holder->IsJSGlobalProxy() || !holder->IsAccessCheckNeeded());
@@ -1150,7 +1144,7 @@ void StubCompiler::GenerateLoadCallback(Handle<JSObject> object,
   __ EnterExitFrame(false, kApiStackSpace);
 
   // Create AccessorInfo instance on the stack above the exit frame with
-  // scratch2 (internal::Object **args_) as the data.
+  // scratch2 (internal::Object** args_) as the data.
   __ str(scratch2, MemOperand(sp, 1 * kPointerSize));
   __ add(r1, sp, Operand(1 * kPointerSize));  // r1 = AccessorInfo&
 
@@ -1185,7 +1179,7 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
   // and CALLBACKS, so inline only them, other cases may be added
   // later.
   bool compile_followup_inline = false;
-  if (lookup->IsProperty() && lookup->IsCacheable()) {
+  if (lookup->IsFound() && lookup->IsCacheable()) {
     if (lookup->type() == FIELD) {
       compile_followup_inline = true;
     } else if (lookup->type() == CALLBACKS &&
@@ -1910,7 +1904,8 @@ Handle<Code> CallStubCompiler::CompileStringFromCharCodeCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function,  arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -1989,7 +1984,7 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ vmrs(r3);
   // Set custom FPCSR:
   //  - Set rounding mode to "Round towards Minus Infinity"
-  //    (ie bits [23:22] = 0b10).
+  //    (i.e. bits [23:22] = 0b10).
   //  - Clear vfp cumulative exception flags (bits [3:0]).
   //  - Make sure Flush-to-zero mode control bit is unset (bit 22).
   __ bic(r9, r3,
@@ -2055,7 +2050,8 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ bind(&slow);
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -2153,7 +2149,8 @@ Handle<Code> CallStubCompiler::CompileMathAbsCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -2331,7 +2328,8 @@ Handle<Code> CallStubCompiler::CompileCallConstant(Handle<Object> object,
   CallKind call_kind = CallICBase::Contextual::decode(extra_state_)
       ? CALL_AS_FUNCTION
       : CALL_AS_METHOD;
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, call_kind);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), call_kind);
 
   // Handle call cache miss.
   __ bind(&miss);
@@ -2411,7 +2409,7 @@ Handle<Code> CallStubCompiler::CompileCallGlobal(
     __ str(r3, MemOperand(sp, argc * kPointerSize));
   }
 
-  // Setup the context (function already in r1).
+  // Set up the context (function already in r1).
   __ ldr(cp, FieldMemOperand(r1, JSFunction::kContextOffset));
 
   // Jump to the cached code (tail call).
@@ -2472,13 +2470,9 @@ Handle<Code> StoreStubCompiler::CompileStoreCallback(
   // -----------------------------------
   Label miss;
 
-  // Check that the object isn't a smi.
-  __ JumpIfSmi(r1, &miss);
-
   // Check that the map of the object hasn't changed.
-  __ ldr(r3, FieldMemOperand(r1, HeapObject::kMapOffset));
-  __ cmp(r3, Operand(Handle<Map>(object->map())));
-  __ b(ne, &miss);
+  __ CheckMap(r1, r3, Handle<Map>(object->map()), &miss,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
@@ -2520,13 +2514,9 @@ Handle<Code> StoreStubCompiler::CompileStoreInterceptor(
   // -----------------------------------
   Label miss;
 
-  // Check that the object isn't a smi.
-  __ JumpIfSmi(r1, &miss);
-
   // Check that the map of the object hasn't changed.
-  __ ldr(r3, FieldMemOperand(r1, HeapObject::kMapOffset));
-  __ cmp(r3, Operand(Handle<Map>(receiver->map())));
-  __ b(ne, &miss);
+  __ CheckMap(r1, r3, Handle<Map>(receiver->map()), &miss,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (receiver->IsJSGlobalProxy()) {

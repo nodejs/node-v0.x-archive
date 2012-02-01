@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -96,7 +96,7 @@ inline Heap* _inline_get_heap_();
   V(FixedArray, single_character_string_cache, SingleCharacterStringCache)     \
   V(FixedArray, string_split_cache, StringSplitCache)                          \
   V(Object, termination_exception, TerminationException)                       \
-  V(Smi, string_hash_seed, StringHashSeed)                                     \
+  V(Smi, hash_seed, HashSeed)                                                  \
   V(Map, string_map, StringMap)                                                \
   V(Map, symbol_map, SymbolMap)                                                \
   V(Map, cons_string_map, ConsStringMap)                                       \
@@ -146,8 +146,8 @@ inline Heap* _inline_get_heap_();
   V(Map, neander_map, NeanderMap)                                              \
   V(JSObject, message_listeners, MessageListeners)                             \
   V(Foreign, prototype_accessors, PrototypeAccessors)                          \
-  V(NumberDictionary, code_stubs, CodeStubs)                                   \
-  V(NumberDictionary, non_monomorphic_cache, NonMonomorphicCache)              \
+  V(UnseededNumberDictionary, code_stubs, CodeStubs)                           \
+  V(UnseededNumberDictionary, non_monomorphic_cache, NonMonomorphicCache)      \
   V(PolymorphicCodeCache, polymorphic_code_cache, PolymorphicCodeCache)        \
   V(Code, js_entry_code, JsEntryCode)                                          \
   V(Code, js_construct_entry_code, JsConstructEntryCode)                       \
@@ -156,6 +156,7 @@ inline Heap* _inline_get_heap_();
   V(Script, empty_script, EmptyScript)                                         \
   V(Smi, real_stack_limit, RealStackLimit)                                     \
   V(StringDictionary, intrinsic_function_names, IntrinsicFunctionNames)        \
+  V(Smi, arguments_adaptor_deopt_pc_offset, ArgumentsAdaptorDeoptPCOffset)
 
 #define ROOT_LIST(V)                                  \
   STRONG_ROOT_LIST(V)                                 \
@@ -434,7 +435,7 @@ class ExternalStringTable {
 class Heap {
  public:
   // Configure heap size before setup. Return false if the heap has been
-  // setup already.
+  // set up already.
   bool ConfigureHeap(int max_semispace_size,
                      intptr_t max_old_gen_size,
                      intptr_t max_executable_size);
@@ -443,7 +444,7 @@ class Heap {
   // Initializes the global object heap. If create_heap_objects is true,
   // also creates the basic non-mutable objects.
   // Returns whether it succeeded.
-  bool Setup(bool create_heap_objects);
+  bool SetUp(bool create_heap_objects);
 
   // Destroys all memory allocated by the heap.
   void TearDown();
@@ -453,8 +454,8 @@ class Heap {
   // jslimit_/real_jslimit_ variable in the StackGuard.
   void SetStackLimits();
 
-  // Returns whether Setup has been called.
-  bool HasBeenSetup();
+  // Returns whether SetUp has been called.
+  bool HasBeenSetUp();
 
   // Returns the maximum amount of memory reserved for the heap.  For
   // the young generation, we reserve 4 times the amount needed for a
@@ -615,6 +616,9 @@ class Heap {
   // Allocates an empty PolymorphicCodeCache.
   MUST_USE_RESULT MaybeObject* AllocatePolymorphicCodeCache();
 
+  // Allocates a pre-tenured empty AccessorPair.
+  MUST_USE_RESULT MaybeObject* AllocateAccessorPair();
+
   // Clear the Instanceof cache (used when a prototype changes).
   inline void ClearInstanceofCache();
 
@@ -687,7 +691,7 @@ class Heap {
       PretenureFlag pretenure = NOT_TENURED);
 
   // Computes a single character string where the character has code.
-  // A cache is used for ascii codes.
+  // A cache is used for ASCII codes.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
   // failed. Please note this does not perform a garbage collection.
   MUST_USE_RESULT MaybeObject* LookupSingleCharacterStringFromCode(
@@ -1064,7 +1068,7 @@ class Heap {
   // Heap root getters.  We have versions with and without type::cast() here.
   // You can't use type::cast during GC because the assert fails.
   // TODO(1490): Try removing the unchecked accessors, now that GC marking does
-  // not corrupt the stack.
+  // not corrupt the map.
 #define ROOT_ACCESSOR(type, name, camel_name)                                  \
   type* name() {                                                               \
     return type::cast(roots_[k##camel_name##RootIndex]);                       \
@@ -1136,7 +1140,7 @@ class Heap {
   inline AllocationSpace TargetSpaceId(InstanceType type);
 
   // Sets the stub_cache_ (only used when expanding the dictionary).
-  void public_set_code_stubs(NumberDictionary* value) {
+  void public_set_code_stubs(UnseededNumberDictionary* value) {
     roots_[kCodeStubsRootIndex] = value;
   }
 
@@ -1148,7 +1152,7 @@ class Heap {
   }
 
   // Sets the non_monomorphic_cache_ (only used when expanding the dictionary).
-  void public_set_non_monomorphic_cache(NumberDictionary* value) {
+  void public_set_non_monomorphic_cache(UnseededNumberDictionary* value) {
     roots_[kNonMonomorphicCacheRootIndex] = value;
   }
 
@@ -1378,6 +1382,7 @@ class Heap {
   void CheckNewSpaceExpansionCriteria();
 
   inline void IncrementYoungSurvivorsCounter(int survived) {
+    ASSERT(survived >= 0);
     young_survivors_after_last_gc_ = survived;
     survived_since_last_expansion_ += survived;
   }
@@ -1409,6 +1414,8 @@ class Heap {
 
   void ProcessWeakReferences(WeakObjectRetainer* retainer);
 
+  void VisitExternalResources(v8::ExternalResourceVisitor* visitor);
+
   // Helper function that governs the promotion policy from new space to
   // old.  If the object's old address lies below the new space's age
   // mark or if we've already filled the bottom 1/16th of the to space,
@@ -1425,6 +1432,7 @@ class Heap {
 
   // Returns the size of objects residing in non new spaces.
   intptr_t PromotedSpaceSize();
+  intptr_t PromotedSpaceSizeOfObjects();
 
   double total_regexp_code_generated() { return total_regexp_code_generated_; }
   void IncreaseTotalRegexpCodeGenerated(int size) {
@@ -1506,10 +1514,15 @@ class Heap {
     return idle_notification_will_schedule_next_gc_;
   }
 
-  uint32_t StringHashSeed() {
-    uint32_t seed = static_cast<uint32_t>(string_hash_seed()->value());
-    ASSERT(FLAG_randomize_string_hashes || seed == 0);
+  uint32_t HashSeed() {
+    uint32_t seed = static_cast<uint32_t>(hash_seed()->value());
+    ASSERT(FLAG_randomize_hashes || seed == 0);
     return seed;
+  }
+
+  void SetArgumentsAdaptorDeoptPCOffset(int pc_offset) {
+    ASSERT(arguments_adaptor_deopt_pc_offset() == Smi::FromInt(0));
+    set_arguments_adaptor_deopt_pc_offset(Smi::FromInt(pc_offset));
   }
 
  private:
@@ -1794,11 +1807,13 @@ class Heap {
 
   enum SurvivalRateTrend { INCREASING, STABLE, DECREASING, FLUCTUATING };
 
-  static const int kYoungSurvivalRateThreshold = 90;
+  static const int kYoungSurvivalRateHighThreshold = 90;
+  static const int kYoungSurvivalRateLowThreshold = 10;
   static const int kYoungSurvivalRateAllowedDeviation = 15;
 
   int young_survivors_after_last_gc_;
   int high_survival_rate_period_length_;
+  int low_survival_rate_period_length_;
   double survival_rate_;
   SurvivalRateTrend previous_survival_rate_trend_;
   SurvivalRateTrend survival_rate_trend_;
@@ -1831,16 +1846,26 @@ class Heap {
     }
   }
 
+  bool IsStableOrDecreasingSurvivalTrend() {
+    switch (survival_rate_trend()) {
+      case STABLE:
+      case DECREASING:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   bool IsIncreasingSurvivalTrend() {
     return survival_rate_trend() == INCREASING;
   }
 
-  bool IsDecreasingSurvivalTrend() {
-    return survival_rate_trend() == DECREASING;
-  }
-
   bool IsHighSurvivalRate() {
     return high_survival_rate_period_length_ > 0;
+  }
+
+  bool IsLowSurvivalRate() {
+    return low_survival_rate_period_length_ > 0;
   }
 
   void SelectScavengingVisitorsTable();
@@ -1911,7 +1936,7 @@ class Heap {
   PromotionQueue promotion_queue_;
 
   // Flag is set when the heap has been configured.  The heap can be repeatedly
-  // configured through the API until it is setup.
+  // configured through the API until it is set up.
   bool configured_;
 
   ExternalStringTable external_string_table_;
@@ -2130,10 +2155,16 @@ class KeyedLookupCache {
   // Clear the cache.
   void Clear();
 
-  static const int kLength = 64;
+  static const int kLength = 256;
   static const int kCapacityMask = kLength - 1;
-  static const int kMapHashShift = 2;
+  static const int kMapHashShift = 5;
+  static const int kHashMask = -4;  // Zero the last two bits.
+  static const int kEntriesPerBucket = 4;
   static const int kNotFound = -1;
+
+  // kEntriesPerBucket should be a power of 2.
+  STATIC_ASSERT((kEntriesPerBucket & (kEntriesPerBucket - 1)) == 0);
+  STATIC_ASSERT(kEntriesPerBucket == -kHashMask);
 
  private:
   KeyedLookupCache() {
@@ -2371,7 +2402,7 @@ class GCTracer BASE_EMBEDDED {
   intptr_t start_size_;  // Size of objects in heap set in constructor.
   GarbageCollector collector_;  // Type of collector.
 
-  // A count (including this one, eg, the first collection is 1) of the
+  // A count (including this one, e.g. the first collection is 1) of the
   // number of garbage collections.
   unsigned int gc_count_;
 
@@ -2608,6 +2639,7 @@ class PathTracer : public ObjectVisitor {
 
   AssertNoAllocation no_alloc;  // i.e. no gc allowed.
 
+ private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(PathTracer);
 };
 #endif  // DEBUG || LIVE_OBJECT_LIST
