@@ -610,12 +610,20 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
     return scope.Close(Integer::New(0));
   }
 
+  // handle zero-length string so long as the offset is okay
+  const size_t slen = s.length();
+  if (slen == 0) {
+    if (offset <= buffer->length_) {
+      return scope.Close(Integer::New(0));
+    } 
+  } 
+
   if (offset >= buffer->length_) {
     return ThrowException(Exception::TypeError(String::New(
             "Offset is out of bounds")));
   }
 
-  const size_t size = base64_decoded_size(*s, s.length());
+  const size_t size = base64_decoded_size(*s, slen);
   if (size > buffer->length_ - offset) {
     // throw exception, don't silently truncate
     return ThrowException(Exception::TypeError(String::New(
@@ -626,7 +634,7 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
   char* start = buffer->data_ + offset;
   char* dst = start;
   const char *src = *s;
-  const char *const srcEnd = src + s.length();
+  const char *const srcEnd = src + slen;
 
   while (src < srcEnd) {
     int remaining = srcEnd - src;
@@ -664,7 +672,7 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
   }
 
   constructor_template->GetFunction()->Set(chars_written_sym,
-                                           Integer::New(s.length()));
+                                           Integer::New(slen));
 
   return scope.Close(Integer::New(dst - start));
 }
