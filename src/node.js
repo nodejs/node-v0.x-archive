@@ -123,17 +123,27 @@
 
     if (process.tid === 1) return;
 
+    var net = NativeModule.require('net');
+
     // isolate initialization
-    process.send = function(msg) {
+    process.send = function(msg, sendHandle) {
       if (typeof msg === 'undefined') throw new TypeError('Bad argument.');
       msg = JSON.stringify(msg);
       msg = new Buffer(msg);
-      return process._send(msg);
+
+      // Update simultaneous accepts on Windows
+      net._setSimultaneousAccepts(sendHandle);
+
+      return process._send(msg, sendHandle);
     };
 
-    process._onmessage = function(msg) {
+    process._onmessage = function(msg, recvHandle) {
       msg = JSON.parse('' + msg);
-      process.emit('message', msg);
+
+      // Update simultaneous accepts on Windows
+      net._setSimultaneousAccepts(recvHandle);
+
+      process.emit('message', msg, recvHandle);
     };
 
     process.exit = process._exit;
@@ -297,8 +307,9 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = createWritableStdioStream(1);
-      stdout.end = stdout.destroy = stdout.destroySoon = function() {
-        throw new Error('process.stdout cannot be closed');
+      stdout.destroy = stdout.destroySoon = function(er) {
+        er = er || new Error('process.stdout cannot be closed.');
+        stdout.emit('error', er);
       };
       return stdout;
     });
@@ -306,8 +317,9 @@
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = createWritableStdioStream(2);
-      stderr.end = stderr.destroy = stderr.destroySoon = function() {
-        throw new Error('process.stderr cannot be closed');
+      stderr.destroy = stderr.destroySoon = function(er) {
+        er = er || new Error('process.stderr cannot be closed.');
+        stderr.emit('error', er);
       };
       return stderr;
     });
@@ -439,10 +451,15 @@
       // Load tcp_wrap to avoid situation where we might immediately receive
       // a message.
       // FIXME is this really necessary?
-      process.binding('tcp_wrap')
+      process.binding('tcp_wrap');
 
       cp._forkChild();
       assert(process.send);
+    } else if (process.tid !== 1) {
+      // Load tcp_wrap to avoid situation where we might immediately receive
+      // a message.
+      // FIXME is this really necessary?
+      process.binding('tcp_wrap');
     }
   }
 
