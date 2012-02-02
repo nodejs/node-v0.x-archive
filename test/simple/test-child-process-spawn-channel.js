@@ -21,16 +21,27 @@
 
 var common = require('../common');
 var assert = require('assert');
-var fork = require('child_process').fork;
+var spawn = require('child_process').spawn;
 
-var filename = common.fixturesDir + '/destroy-stdin.js';
+if (process.argv[2] === 'child') {
+  process.channel.on('data', function (chunk) {
+    process.channel.write(chunk);
+    process.exit(0);
+  });
 
-var options = {
-  thread: process.TEST_ISOLATE ? true : false
-};
+} else {
 
-// Ensure that we don't accidentally close fd 0 and
-// reuse it for something else, it causes all kinds
-// of obscure bugs.
-process.stdin.destroy();
-fork(filename, [], options).stdin.on('end', process.exit);
+  var child = spawn(process.execPath, [process.argv[1], 'child'], {
+    channel: true
+  });
+  var message = '';
+
+  child.channel.on('data', function (chunk) {
+    message = chunk.toString();
+  });
+  child.channel.write('hallo world');
+
+  process.on('exit', function() {
+    assert.equal(message, 'hallo world');
+  });
+}

@@ -123,30 +123,8 @@
 
     if (process.tid === 1) return;
 
-    var net = NativeModule.require('net');
-
     // isolate initialization
-    process.send = function(msg, sendHandle) {
-      if (typeof msg === 'undefined') throw new TypeError('Bad argument.');
-      msg = JSON.stringify(msg);
-      msg = new Buffer(msg);
-
-      // Update simultaneous accepts on Windows
-      net._setSimultaneousAccepts(sendHandle);
-
-      return process._send(msg, sendHandle);
-    };
-
-    process._onmessage = function(msg, recvHandle) {
-      msg = JSON.parse('' + msg);
-
-      // Update simultaneous accepts on Windows
-      net._setSimultaneousAccepts(recvHandle);
-
-      process.emit('message', msg, recvHandle);
-    };
-
-    process.exit = process._exit;
+    NativeModule.require('child_process')._isolateInit();
   }
 
   startup.globalVariables = function() {
@@ -445,7 +423,7 @@
     // If we were spawned with env NODE_CHANNEL_FD then load that up and
     // start parsing data from that stream.
     if (process.env.NODE_CHANNEL_FD) {
-      assert(parseInt(process.env.NODE_CHANNEL_FD) >= 0);
+      assert(parseInt(process.env.NODE_CHANNEL_FD, 10) >= 0);
       var cp = NativeModule.require('child_process');
 
       // Load tcp_wrap to avoid situation where we might immediately receive
@@ -453,15 +431,15 @@
       // FIXME is this really necessary?
       process.binding('tcp_wrap');
 
-      cp._forkChild();
-      assert(process.send);
+      var r = cp._setupSpawnChannel();
+      assert(r);
     } else if (process.tid !== 1) {
       // Load tcp_wrap to avoid situation where we might immediately receive
       // a message.
       // FIXME is this really necessary?
       process.binding('tcp_wrap');
     }
-  }
+  };
 
   startup._removedProcessMethods = {
     'assert': 'process.assert() use require("assert").ok() instead',
