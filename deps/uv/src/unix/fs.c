@@ -41,7 +41,7 @@
 #define ARGS4(a,b,c,d) (a), (b), (c), (d)
 
 #define WRAP_EIO(type, eiofunc, func, args) \
-  uv_fs_req_init(loop, req, type, path, cb); \
+  uv_fs_req_init(loop, req, type, path, new_path, cb); \
   if (cb) { \
     /* async */ \
     req->eio = eiofunc(args, EIO_PRI_DEFAULT, uv__fs_after, req, &loop->uv_eio_channel); \
@@ -62,7 +62,7 @@
 
 
 static void uv_fs_req_init(uv_loop_t* loop, uv_fs_t* req, uv_fs_type fs_type,
-    const char* path, uv_fs_cb cb) {
+    const char* path, const char* new_path, uv_fs_cb cb) {
   /* Make sure the thread pool is initialized. */
   uv_eio_init(loop);
 
@@ -74,6 +74,7 @@ static void uv_fs_req_init(uv_loop_t* loop, uv_fs_t* req, uv_fs_type fs_type,
   req->result = 0;
   req->ptr = NULL;
   req->path = path ? strdup(path) : NULL;
+  req->new_path = new_path ? strdup(new_path) : NULL;
   req->errorno = 0;
   req->eio = NULL;
 }
@@ -82,6 +83,7 @@ static void uv_fs_req_init(uv_loop_t* loop, uv_fs_t* req, uv_fs_type fs_type,
 void uv_fs_req_cleanup(uv_fs_t* req) {
   free(req->path);
   req->path = NULL;
+  req->new_path = NULL;
 
   switch (req->fs_type) {
     case UV_FS_READDIR:
@@ -179,14 +181,15 @@ static int uv__fs_after(eio_req* eio) {
 
 
 int uv_fs_close(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
-  char* path = NULL;
+  const char* path = NULL;
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_CLOSE, eio_close, close, ARGS1(file));
 }
 
 
 int uv_fs_open(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
     int mode, uv_fs_cb cb) {
-  uv_fs_req_init(loop, req, UV_FS_OPEN, path, cb);
+  uv_fs_req_init(loop, req, UV_FS_OPEN, path, NULL, cb);
 
   if (cb) {
     /* async */
@@ -216,7 +219,7 @@ int uv_fs_open(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
 
 int uv_fs_read(uv_loop_t* loop, uv_fs_t* req, uv_file fd, void* buf,
     size_t length, off_t offset, uv_fs_cb cb) {
-  uv_fs_req_init(loop, req, UV_FS_READ, NULL, cb);
+  uv_fs_req_init(loop, req, UV_FS_READ, NULL, NULL, cb);
 
   if (cb) {
     /* async */
@@ -248,13 +251,14 @@ int uv_fs_read(uv_loop_t* loop, uv_fs_t* req, uv_file fd, void* buf,
 
 
 int uv_fs_unlink(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_UNLINK, eio_unlink, unlink, ARGS1(path))
 }
 
 
 int uv_fs_write(uv_loop_t* loop, uv_fs_t* req, uv_file file, void* buf,
     size_t length, off_t offset, uv_fs_cb cb) {
-  uv_fs_req_init(loop, req, UV_FS_WRITE, NULL, cb);
+  uv_fs_req_init(loop, req, UV_FS_WRITE, NULL, NULL, cb);
 
   if (cb) {
     /* async */
@@ -286,11 +290,13 @@ int uv_fs_write(uv_loop_t* loop, uv_fs_t* req, uv_file file, void* buf,
 
 int uv_fs_mkdir(uv_loop_t* loop, uv_fs_t* req, const char* path, int mode,
     uv_fs_cb cb) {
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_MKDIR, eio_mkdir, mkdir, ARGS2(path, mode))
 }
 
 
 int uv_fs_rmdir(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_RMDIR, eio_rmdir, rmdir, ARGS1(path))
 }
 
@@ -302,7 +308,7 @@ int uv_fs_readdir(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
   size_t size = 0;
   size_t d_namlen = 0;
 
-  uv_fs_req_init(loop, req, UV_FS_READDIR, path, cb);
+  uv_fs_req_init(loop, req, UV_FS_READDIR, path, NULL, cb);
 
   if (cb) {
     /* async */
@@ -362,7 +368,7 @@ int uv_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
   char* pathdup;
   int pathlen;
 
-  uv_fs_req_init(loop, req, UV_FS_STAT, path, cb);
+  uv_fs_req_init(loop, req, UV_FS_STAT, path, NULL, cb);
 
   /* TODO do this without duplicating the string. */
   /* TODO security */
@@ -406,7 +412,7 @@ int uv_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
 
 
 int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
-  uv_fs_req_init(loop, req, UV_FS_FSTAT, NULL, cb);
+  uv_fs_req_init(loop, req, UV_FS_FSTAT, NULL, NULL, cb);
 
   if (cb) {
     /* async */
@@ -435,20 +441,22 @@ int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
 }
 
 
-int uv_fs_rename(uv_loop_t* loop, uv_fs_t* req, const char* path, const char* new_path,
-    uv_fs_cb cb) {
+int uv_fs_rename(uv_loop_t* loop, uv_fs_t* req, const char* path,
+    const char* new_path, uv_fs_cb cb) {
   WRAP_EIO(UV_FS_RENAME, eio_rename, rename, ARGS2(path, new_path))
 }
 
 
 int uv_fs_fsync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
-  char* path = NULL;
+  const char* path = NULL;
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_FSYNC, eio_fsync, fsync, ARGS1(file))
 }
 
 
 int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
-  char* path = NULL;
+  const char* path = NULL;
+  const char* new_path = NULL;
 #if defined(__FreeBSD__) \
   || (__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1060)
   /* freebsd and pre-10.6 darwin don't have fdatasync,
@@ -463,14 +471,16 @@ int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
 
 int uv_fs_ftruncate(uv_loop_t* loop, uv_fs_t* req, uv_file file, off_t offset,
     uv_fs_cb cb) {
-  char* path = NULL;
+  const char* path = NULL;
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_FTRUNCATE, eio_ftruncate, ftruncate, ARGS2(file, offset))
 }
 
 
 int uv_fs_sendfile(uv_loop_t* loop, uv_fs_t* req, uv_file out_fd, uv_file in_fd,
     off_t in_offset, size_t length, uv_fs_cb cb) {
-  char* path = NULL;
+  const char* path = NULL;
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_SENDFILE, eio_sendfile, eio_sendfile_sync,
       ARGS4(out_fd, in_fd, in_offset, length))
 }
@@ -478,6 +488,7 @@ int uv_fs_sendfile(uv_loop_t* loop, uv_fs_t* req, uv_file out_fd, uv_file in_fd,
 
 int uv_fs_chmod(uv_loop_t* loop, uv_fs_t* req, const char* path, int mode,
     uv_fs_cb cb) {
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_CHMOD, eio_chmod, chmod, ARGS2(path, mode))
 }
 
@@ -492,6 +503,7 @@ static int _utime(const char* path, double atime, double mtime) {
 
 int uv_fs_utime(uv_loop_t* loop, uv_fs_t* req, const char* path, double atime,
     double mtime, uv_fs_cb cb) {
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_UTIME, eio_utime, _utime, ARGS3(path, atime, mtime))
 }
 
@@ -518,11 +530,11 @@ static int _futime(const uv_file file, double atime, double mtime) {
 
 int uv_fs_futime(uv_loop_t* loop, uv_fs_t* req, uv_file file, double atime,
     double mtime, uv_fs_cb cb) {
-  const char* path = NULL;
-
-  uv_fs_req_init(loop, req, UV_FS_FUTIME, path, cb);
+  uv_fs_req_init(loop, req, UV_FS_FUTIME, NULL, NULL, cb);
 
 #if HAVE_FUTIMES
+  const char* path = NULL;
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_FUTIME, eio_futime, _futime, ARGS3(file, atime, mtime))
 #else
   uv__set_sys_error(loop, ENOSYS);
@@ -535,7 +547,7 @@ int uv_fs_lstat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
   char* pathdup;
   int pathlen;
 
-  uv_fs_req_init(loop, req, UV_FS_LSTAT, path, cb);
+  uv_fs_req_init(loop, req, UV_FS_LSTAT, path, NULL, cb);
 
   /* TODO do this without duplicating the string. */
   /* TODO security */
@@ -595,7 +607,7 @@ int uv_fs_readlink(uv_loop_t* loop, uv_fs_t* req, const char* path,
   ssize_t size;
   char* buf;
 
-  uv_fs_req_init(loop, req, UV_FS_READLINK, path, cb);
+  uv_fs_req_init(loop, req, UV_FS_READLINK, path, NULL, cb);
 
   if (cb) {
     if ((req->eio = eio_readlink(path, EIO_PRI_DEFAULT, uv__fs_after, req,  &loop->uv_eio_channel))) {
@@ -643,20 +655,23 @@ int uv_fs_readlink(uv_loop_t* loop, uv_fs_t* req, const char* path,
 
 int uv_fs_fchmod(uv_loop_t* loop, uv_fs_t* req, uv_file file, int mode,
     uv_fs_cb cb) {
-  char* path = NULL;
+  const char* path = NULL;
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_FCHMOD, eio_fchmod, fchmod, ARGS2(file, mode))
 }
 
 
 int uv_fs_chown(uv_loop_t* loop, uv_fs_t* req, const char* path, int uid,
     int gid, uv_fs_cb cb) {
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_CHOWN, eio_chown, chown, ARGS3(path, uid, gid))
 }
 
 
 int uv_fs_fchown(uv_loop_t* loop, uv_fs_t* req, uv_file file, int uid, int gid,
     uv_fs_cb cb) {
-  char* path = NULL;
+  const char* path = NULL;
+  const char* new_path = NULL;
   WRAP_EIO(UV_FS_FCHOWN, eio_fchown, fchown, ARGS3(file, uid, gid))
 }
 

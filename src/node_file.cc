@@ -110,10 +110,23 @@ static void After(uv_fs_t *req) {
     if (!req->path) {
       argv[0] = UVException(req->errorno);
     } else {
+
+      // If new_path is defined and errorno == ENOENT, check which one doesn't exist
+      // and use the appropriate path
+      // This is used by rename, link and symlink
+      char* path = req->path;
+      if (req->new_path && req->errorno == UV_ENOENT) {
+        uv_fs_t stat_req;
+        if (uv_fs_stat(Loop(), &stat_req, req->path, NULL) == 0) {
+	        // If the problem isn't with path, it must be with new_path
+          path = req->new_path;
+        }
+      }
+
       argv[0] = UVException(req->errorno,
                             NULL,
                             NULL,
-                            static_cast<const char*>(req->path));
+                            static_cast<const char*>(path));
     }
   } else {
     // error value is empty or null for non-error.
