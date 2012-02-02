@@ -99,6 +99,18 @@ python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
 if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
 for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
 heat dir deps\npm -var var.NPMSourceDir -dr NodeModulesFolder -cg NPMFiles -gg -template fragment -nologo -out npm.wxs
+if "%config%"=="Debug" set includeDir=Debug\include\
+if "%config%"=="Release" set includeDir=Release\include\
+mkdir %includeDir%
+del /F /S /Q %includeDir%\*.*
+xcopy /Y deps\v8\include\*.h %includeDir%
+xcopy /S /Y deps\uv\include\*.h %includeDir%
+xcopy /Y src\*.h %includeDir%
+heat dir %includeDir% -var var.IncludeDir -dr NodeRoot -cg IncludeFiles -gg -template fragment -nologo -out includes.wxs
+if "%config%"=="Debug" set libDir=Debug\lib\
+if "%config%"=="Release" set libDir=Release\lib\
+xcopy /Y %libDir%..\*.lib %libDir%
+heat dir %libDir% -var var.LibDir -dr NodeRoot -cg LibFiles -gg -template fragment -nologo -out libs.wxs
 msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /t:Clean,Build /p:Configuration=%config% /p:NodeVersion=%NODE_VERSION% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 

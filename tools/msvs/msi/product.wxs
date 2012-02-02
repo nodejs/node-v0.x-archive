@@ -42,6 +42,12 @@
                          Part="last" 
                          System="yes" 
                          Value="[NodeRoot]" />
+            <Environment Id="node_home_env"
+                         Action="set"             
+                         Name="NODE_HOME" 
+                         Part="all" 
+                         System="yes" 
+                         Value="[NodeRoot]" />
           </Component>
           <Component Id="npmcmd" Guid="31e9986d-74cd-44e1-878c-194d3e997d32">
             <File Id="filenpmcmd" KeyPath="yes" Source="$(var.NPMSourceDir)\bin\npm.cmd" />
@@ -75,6 +81,8 @@
       <ComponentRef Id="npmrc" />
       <ComponentRef Id="npmappdata_folder" />
       <ComponentGroupRef Id="NPMFiles" />
+      <ComponentGroupRef Id="IncludeFiles" />
+      <ComponentGroupRef Id="LibFiles" />
       <?if $(var.Configuration) = Debug ?>
       <ComponentRef Id="nodepdb"/>
       <?endif?>

@@ -36,4 +36,8 @@ ipch/
 /gyp-mac-tool
 /dist-osx
 /npm.wxs
+/includes.wxs
+/libs.wxs
 /tools/msvs/npm.wixobj
+/tools/msvs/includes.wixobj
+/tools/msvs/libs.wixobj
