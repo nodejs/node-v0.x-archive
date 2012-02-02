@@ -38,7 +38,7 @@ if (process.argv[2] === 'child') {
 
   process.send('ready');
 
-} else if (process.argv[2] === 'testcase') {
+} else {
 
   // testcase
   var check = 0;
@@ -84,32 +84,6 @@ if (process.argv[2] === 'child') {
   process.on('exit', function () {
     assert.equal(check, 3);
     assert.equal(message, 'got it');
-    process.stdout.write('exit\n');
   });
 
-} else {
-  // we need this to check that process.on('exit') fires
-
-  var spawn = require('child_process').spawn;
-  var child = spawn(process.execPath, [process.argv[1], 'testcase']);
-
-  // pipe stderr and stdin
-  child.stderr.pipe(process.stderr);
-  process.stdin.pipe(child.stdin);
-
-  var missing = true;
-  child.stdout.on('data', function(chunk) {
-    if (missing) {
-        missing = chunk.toString() !== 'exit\n';
-    }
-    process.stdout.write(chunk);
-  });
-
-  child.on('exit', function(code) {
-    process.exit(code);
-  });
-
-  process.on('exit', function() {
-    assert.equal(missing, false);
-  });
 }
