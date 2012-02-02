@@ -22,6 +22,9 @@ normally, `code` is the final exit code of the process, otherwise `null`. If
 the process terminated due to receipt of a signal, `signal` is the string name
 of the signal, otherwise `null`.
 
+Note when using the `.independent()` method the `exit` event won't be emit when
+the process die.
+
 See `waitpid(2)`.
 
 ### Event: 'disconnect'
@@ -30,6 +33,11 @@ This event is emitted after using the `.disconnect()` method in the parent or
 in the child. After disconnecting it is no longer possible to send messages.
 An alternative way to check if you can send messages is to see if the
 `child.connected` property is `true`.
+
+### Event: 'independent'
+
+When using the `.independent()` method, this event will emit after all file
+descriptor connections with child has been closed.
 
 ### child.stdin
 
@@ -297,3 +305,12 @@ Note that while the function is called `kill`, the signal delivered to the child
 process may not actually kill it.  `kill` really just sends a signal to a process.
 
 See `kill(2)`
+
+### child.independent()
+
+This method will make the parent independent of the child, allowing the parent
+to die but still have a living child. Note after calling this function the parent
+is not capable of knowing when the child die so the `exit` will never emit.
+
+When all connections with the child has been closed the `independent` event
+will be emitted. Before that a `child.persistent` flag is set to `false`.
