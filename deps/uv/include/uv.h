@@ -1215,6 +1215,7 @@ struct uv_fs_s {
   ssize_t result;
   void* ptr;
   char* path;
+  char* new_path;
   int errorno;
   UV_FS_PRIVATE_FIELDS
 };
