@@ -81,6 +81,7 @@ typedef int mode_t;
 #endif
 #include "node_script.h"
 #include "v8_typed_array.h"
+#include "node_errno.h"
 
 using namespace v8;
 
