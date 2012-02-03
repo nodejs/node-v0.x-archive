@@ -88,7 +88,7 @@ process.on('exit', function() {
                       process,
                       global];
 
-  if (global.errno) {
+  if (global.errno !== undefined) {
     knownGlobals.push(errno);
   }
 
