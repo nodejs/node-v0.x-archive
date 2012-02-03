@@ -40,6 +40,14 @@ static const char* get_uv_errno_string(int errorno) {
   err.code = (uv_err_code)errorno;
   return uv_err_name(err);
 }
+static Handle<Value> GetErrnoCode(const Arguments& args) {
+  HandleScope scope;
+
+  int errno = args[0]->NumberValue();
+  Local<String> code = String::New(get_uv_errno_string(errno));
+
+  return scope.Close(code);
+}
 
 // return the readable errno message
 static const char* get_uv_errno_message(int errorno) {
@@ -48,7 +56,16 @@ static const char* get_uv_errno_message(int errorno) {
   err.code = (uv_err_code)errorno;
   return uv_strerror(err);
 }
+static Handle<Value> GetErrnoMessage(const Arguments& args) {
+  HandleScope scope;
 
+  int errno = args[0]->NumberValue();
+  Local<String> msg = String::New(get_uv_errno_message(errno));
+
+  return scope.Close(msg);
+}
+
+// create an errno object
 static Handle<Value> ErrnoException(const Arguments& args) {
   HandleScope scope;
 
@@ -125,6 +142,8 @@ void Errno::Initialize(v8::Handle<v8::Object> target) {
   HandleScope scope;
 
   NODE_SET_METHOD(target, "errnoException", ErrnoException);
+  NODE_SET_METHOD(target, "getErrnoCode", GetErrnoCode);
+  NODE_SET_METHOD(target, "getErrnoMessage", GetErrnoMessage);
 }
 
 }  // namespace node
