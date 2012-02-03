@@ -1,6 +1,6 @@
 
-/** read-only
-NaN -> Object
+### read-only
+## NaN -> Object
 
 NaN is a property of the global object, i.e. it is a variable in global scope.
 
@@ -18,5 +18,5 @@ Equality operator (`==` and `===`) can't be used to test a value against NaN. Us
 	isNaN(Number.NaN);  // true
 
 
-**/
+
 

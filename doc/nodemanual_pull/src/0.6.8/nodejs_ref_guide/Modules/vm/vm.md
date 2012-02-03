@@ -1,5 +1,5 @@
-/**
-class vm
+
+## class vm
 
 
 In Node.js, Javascript code can be compiled and run immediately or compiled, saved, and run later. To do that, you can add `require('vm');` to your code.
@@ -8,10 +8,10 @@ In Node.js, Javascript code can be compiled and run immediately or compiled, sav
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-vm.runInThisContext(code [, filename]) -> String
+
+
+## vm.runInThisContext(code [, filename]) -> String
 - code (String):  The code to run
 - filename (String): A filename to emulate where the code is coming from 
 
@@ -29,11 +29,11 @@ Since `vm.runInThisContext()` doesn't have access to the local scope, `localVar`
 
 A string representing the result of running `code`.
 
-**/ 
+ 
 
 
-/**
-vm.runInNewContext(code [, sandbox] [, filename]) -> Void
+
+## vm.runInNewContext(code [, sandbox] [, filename]) -> Void
 - code (String): The code to run
 - sandbox (Object): A global object with properties to pass into `code`
 - filename (String):  A filename to emulate where the code is coming from
@@ -51,11 +51,11 @@ Here's an example to ompile and execute code that increments a global variable a
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.runInNewContext.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-vm.runInContext(code, context [, filename]) -> String
+
+## vm.runInContext(code, context [, filename]) -> String
 - code (String): The code to run
 - context (Object): The context to execute it in, coming from [[vm.createContext `vm.createContext()`]]
 - filename (String): A filename to emulate where the code is coming from
@@ -78,22 +78,22 @@ Compiling and executing code in an existing context.
 
 A string representing the result of running `code`.
 
-**/ 
+ 
 
 
-/**
-vm.createContext([initSandbox]) -> Object
+
+## vm.createContext([initSandbox]) -> Object
 - initSandbox (Object): An object that is shallow-copied to seed the initial contents of the global object used by the context
 
 `vm.createContext()` creates a new context which is suitable for use as the second argument of a subsequent call to `vm.runInContext()`. 
 
 A (V8) context comprises a global object together with a set of build-in objects and functions.
 
-**/ 
+ 
 
 
-/**
-vm.createScript(code [, filename]) -> vm.Script
+
+## vm.createScript(code [, filename]) -> vm.Script
 - code (String): The code to run
 - filename (String): A filename to emulate where the code is coming from
 
@@ -103,4 +103,4 @@ This script can be run later many times using the other `vm` methods. In case of
 
 `createScript()` compiles `code` as if it were loaded from `filename`, but does not run it. Instead, it returns a `vm.Script` object representing this compiled code. The returned script is not bound to any global object. It is bound before each run, just for that run. The `filename` is optional, and is only used in stack traces.
 
-**/ 
+ 

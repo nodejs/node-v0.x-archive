@@ -1,5 +1,5 @@
-/** section: debugger
-Debugging_Node.js
+### section: debugger
+## Debugging_Node.js
 
 V8 comes with an extensive debugger which is accessible out-of-process via a simple [TCP protocol](http://code.google.com/p/v8/wiki/DebuggerProtocol).
 
@@ -118,4 +118,3 @@ To start watching an expression, type `watch("my_expression")`. `watchers` print
 
 The V8 debugger can be enabled and accessed either by starting Node.js with the `--debug` command-line flag or by signaling an existing Node.js process with `SIGUSR1`.
 
-**/

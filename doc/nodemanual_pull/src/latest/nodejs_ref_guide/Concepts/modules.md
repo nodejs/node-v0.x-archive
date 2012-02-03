@@ -1,5 +1,5 @@
-/** section: Modules
-Modules
+### section: Modules
+## Modules
 
 Node.js has a simple module loading system. In Node.js, files and modules are in one-to-one correspondence. 
 
@@ -291,4 +291,3 @@ Furthermore, to make the module lookup process even more optimal, rather than pu
 
 In order to make modules available to the Node.js REPL, it might be useful to also add the `/usr/lib/node_modules` folder to the `$NODE_PATH` environment variable.  Since the module lookups using `node_modules` folders are all relative, and based on the real path of the files making the calls to `require()`, the packages themselves can be anywhere.
 
-**/

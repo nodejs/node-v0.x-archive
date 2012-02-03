@@ -1,6 +1,6 @@
 
-/** section: Javascript_Reference
-class RegExp
+### section: Javascript_Reference
+## class RegExp
 
 This object provides a concise and flexible means for "matching" (specifying and recognizing) strings of text, such as particular characters, words, or patterns of characters. 
 
@@ -49,11 +49,11 @@ One can test at run-time whether the sticky flag is supported, using `try{...} c
 </ul>
 
 
-**/
 
 
-/**
-	new RegExp(pattern [, flags])
+
+
+## 	new RegExp(pattern [, flags])
 - pattern (String): The text of the regular expression.
 - flags (String):  Any additional parameters to use in the regular expression
 
@@ -78,10 +78,10 @@ Notice that the parameters to the literal format don't use quotation marks to in
 	/ab+c/i;  
 	new RegExp("ab+c", "i"); 
 
-**/
 
-/** read-only
-RegExp.global -> Boolean
+
+### read-only
+## RegExp.global -> Boolean
 
 `global` is a property of an individual regular expression object.
 
@@ -89,10 +89,10 @@ The value of `global` is true if the "`g`" flag was used; otherwise, `false`. Th
 
 You can't change this property directly.
 
-**/
 
-/** read-only
-RegExp.ignoreCase -> Boolean
+
+### read-only
+## RegExp.ignoreCase -> Boolean
 
 `ignoreCase` is a property of an individual regular expression object.
 
@@ -100,10 +100,10 @@ The value of `ignoreCase` is true if the "`i`" flag was used; otherwise, false. 
 
 You can't change this property directly.
 
-**/
 
-/** read-only
-RegExp.multiline -> Boolean
+
+### read-only
+## RegExp.multiline -> Boolean
 
 `multiline` is a property of an individual regular expression object.
 
@@ -111,10 +111,10 @@ The value of `multiline` is true if the "`m`" flag was used; otherwise, false. T
 
 You can't change this property directly.
 
-**/
 
-/**
-RegExp.lastIndex -> Number
+
+
+## RegExp.lastIndex -> Number
 
 A read/write integer property that specifies the index at which to start the next match.
 
@@ -131,10 +131,10 @@ For example, consider the following sequence of statements:
 * `re("hi")`: Returns `["hi", "hi"]` with `lastIndex` equal to 2
 * `re("hi")`: Returns `[""]`, an empty array whose zeroth element is the match string. In this case, the empty string because `lastIndex` was 2 (and still is 2) and "`hi`" has length 2.
 
-**/
 
-/** read-only
-RegExp.source -> String
+
+### read-only
+## RegExp.source -> String
 
 `source` is a property of an individual regular expression object.
 
@@ -142,10 +142,10 @@ This property contains the text of the pattern, excluding the forward slashes.
 
 You can't change this property directly.
 
-**/
 
-/**
-RegExp.test([str])  -> Boolean
+
+
+## RegExp.test([str])  -> Boolean
 - str (String): The string against which to match the regular expression.
 
  Executes the search for a match between a regular expression and a specified string. Returns `true` or `false`.
@@ -159,10 +159,10 @@ The following example prints a message which depends on the success of the test:
     
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/RegExp/regexp.test.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>  
 
-**/
 
-/**
-RegExp.exec(str) -> Array | null
+
+
+## RegExp.exec(str) -> Array | null
 - str (String): The string against which to match the regular expression.
 
 Executes a search for a match in a specified string. Returns a result array, or `null`.
@@ -208,10 +208,10 @@ You can also use `exec()` without creating a RegExp object:
 
 This will display an alert containing 'hello world!'.
 
-**/
 
-/**
-RegExp.toString() -> String
+
+
+## RegExp.toString() -> String
 
 The `RegExp` object overrides the `toString` method of the `[Object]` object; it does not inherit [[Object.toString `Object.toString()`]]. For `RegExp` objects, the `toString` method returns a string representation of the regular expression.
 
@@ -223,5 +223,5 @@ The `RegExp` object overrides the `toString` method of the `[Object]` object; it
 	console.log(myExp.toString()); // displays "/a+b+c/"
     
 
-**/
+
 

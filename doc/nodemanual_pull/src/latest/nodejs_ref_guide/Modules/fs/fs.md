@@ -1,5 +1,5 @@
-/** 
-class fs
+
+## class fs
 
 In Node.js, file input and output is provided by simple wrappers around standard [POSIX functions](http://en.wikipedia.org/wiki/POSIX). All the read and write methods methods have asynchronous and synchronous forms. To use this module, include `require('fs')` in your code. 
 
@@ -43,11 +43,11 @@ In the example above, it could be that `fs.stat` is executed before `fs.rename`.
       });
     });
 
-**/
 
 
-/**
-fs.rename(path1, path2 [, callback]) -> Void
+
+
+## fs.rename(path1, path2 [, callback]) -> Void
 - path1 (String): The original filename and path
 - path2 (String): The new filename and path
 - callback (Function):   An optional callback to execute once the function completes
@@ -57,16 +57,16 @@ An asynchronous [rename(2)](http://www.kernel.org/doc/man-pages/online/pages/man
 
 
 
-**/ 
+ 
 
-/**
-fs.renameSync(path1, path2) -> Void
+
+## fs.renameSync(path1, path2) -> Void
 - path1 (String): The original filename and path
 - path2 (String): The new filename and path
 
 A synchronous [rename(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/rename.2.html) operation. Turns `path1` into `path2`.
 
-**/ 
+ 
 
 
 /* 
@@ -78,21 +78,21 @@ fs.truncate(fd, len [, callback(err)]) -> Void
 
 An asynchronous [ftruncate(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/truncate.2.html). It truncates a file to the specified length.
 
-**/ 
+ 
 
 
-/**
-fs.truncateSync(fd, len) -> Void
+
+## fs.truncateSync(fd, len) -> Void
 - fd (Number): The file descriptor
 - len (Number): The final file length 
 
 A synchronous [ftruncate(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/truncate.2.html). It truncates a file to the specified length.
 
-**/ 
+ 
 
 
-/**
-fs.chown(path, uid, gid [, callback(err)]) -> Void
+
+## fs.chown(path, uid, gid [, callback(err)]) -> Void
 - path (String): The path to the file
 - uid (Number): The new owner id
 - gid (Number): The new group id
@@ -101,21 +101,21 @@ fs.chown(path, uid, gid [, callback(err)]) -> Void
 
 An asynchronous [chown(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/chown.2.html). This changes the ownership of the file specified by `path`, which is de-referenced if it is a symbolic link.
 
-**/ 
+ 
 
 
-/**
-fs.chownSync(path, uid, gid) -> Void
+
+## fs.chownSync(path, uid, gid) -> Void
 - path (String): The path to the file
 - uid (Number): The new owner id
 - gid (Number): The new group id
 
 A synchronous [chown(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/chown.2.html). This changes the ownership of the file specified by `path`, which is dereferenced if it is a symbolic link
 
-**/ 
+ 
 
-/**
-fs.fchown(fd, uid, gid, [callback(err)]) -> Void
+
+## fs.fchown(fd, uid, gid, [callback(err)]) -> Void
 - path (String): The path to the file
 - uid (Number): The new owner id
 - gid (Number): The new group id
@@ -124,21 +124,21 @@ fs.fchown(fd, uid, gid, [callback(err)]) -> Void
 
 An asynchronous [fchown(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/fchown.2.html). This changes the ownership of the file referred to by the open file descriptor fd.
 
-**/ 
+ 
 
-/**
-fs.fchownSync(fd, uid, gid) -> Void
+
+## fs.fchownSync(fd, uid, gid) -> Void
 - path (String): The path to the file
 - uid (Number): The new owner id
 - gid (Number): The new group id
 
 A synchronous [fchown(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/fchown.2.html). This changes the ownership of the file referred to by the open file descriptor fd.
 
-**/ 
+ 
 
 
-/**
-fs.lchown(path, uid, gid, [callback(err)]) -> Void
+
+## fs.lchown(path, uid, gid, [callback(err)]) -> Void
 - path (String): The path to the file
 - uid (Number): The new owner id
 - gid (Number): The new group id
@@ -147,22 +147,22 @@ fs.lchown(path, uid, gid, [callback(err)]) -> Void
 
 An asynchronous [lchown(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/lchown.2.html). This is like [[fs.chown `chown()`]], but doesn't dereference symbolic links.
 
-**/ 
+ 
 
 
-/**
-fs.lchownSync(path, uid, gid) -> Void
+
+## fs.lchownSync(path, uid, gid) -> Void
 - path (String): The path to the file
 - uid (Number): The new owner id
 - gid (Number): The new group id
 
 Synchronous [lchown(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/lchown.2.html). This is like [[fs.chownSync `chownSync()`]], but doesn't dereference symbolic links
 
-**/ 
+ 
 
 
-/**
-fs.chmod(path, mode, [callback(err)]) -> Void
+
+## fs.chmod(path, mode, [callback(err)]) -> Void
 - path (String): The path to the file
 - mode (Number): The new permissions
 - callback (Function):   An optional callback to execute once the function completes
@@ -170,21 +170,21 @@ fs.chmod(path, mode, [callback(err)]) -> Void
 
 An asynchronous [chmod(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/chmod.2.html). This changes the permissions of the file specified whose, which is dereferenced if it is a symbolic link.
 
-**/ 
+ 
 
 
-/**
-fs.chmodSync(path, mode) -> Void
+
+## fs.chmodSync(path, mode) -> Void
 - path (String): The path to the file
 - mode (Number): The new permissions
 
 A synchronous [chmod(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/chmod.2.html). This changes the permissions of the file specified whose, which is dereferenced if it is a symbolic link.
 
-**/ 
+ 
 
 
-/**
-fs.fchmod(fd, mode, [callback(err)]) -> Void
+
+## fs.fchmod(fd, mode, [callback(err)]) -> Void
 - fd (Number): The file descriptor
 - mode (Number): The new permissions
 - callback (Function):   An optional callback to execute once the function completes
@@ -192,21 +192,21 @@ fs.fchmod(fd, mode, [callback(err)]) -> Void
 
 An asynchronous [fchmod(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/fchmod.2.html). This changes the permissions of the file referred to by the open file descriptor.
 
-**/ 
+ 
 
 
-/**
-fs.fchmodSync(fd, mode) -> Void
+
+## fs.fchmodSync(fd, mode) -> Void
 - fd (Number): The file descriptor
 - mode (Number): The new permissions
 
 A synchronous [fchmod(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/fchmod.2.html). This changes the permissions of the file referred to by the open file descriptor.
 
-**/ 
+ 
 
 
-/**
-fs.lchmod(path, mode, [callback()]) -> Void
+
+## fs.lchmod(path, mode, [callback()]) -> Void
 - path (String): The path to the file
 - mode (Number): The new permissions
 - callback (Function):   An optional callback to execute once the function completes
@@ -214,21 +214,21 @@ fs.lchmod(path, mode, [callback()]) -> Void
 
 An asynchronous [lchmod(2)](http://www.daemon-systems.org/man/lchmod.2.html). This is like [[fs.chmod `chmod()`]] except in the case where the named file is a symbolic link, in which case `lchmod()` sets the permission bits of the link, while `chmod()` sets the bits of the file the link references.
 
-**/ 
+ 
 
 
-/**
-fs.lchmodSync(path, mode) -> Void
+
+## fs.lchmodSync(path, mode) -> Void
 - path (String): The path to the file
 - mode (Number): The new permissions
 
 A synchronous [lchmod(2)](http://www.daemon-systems.org/man/lchmod.2.html). This is like [[fs.chmodSync `chmodSync()`]]except in the case where the named file is a symbolic link, in which case `lchmod()` sets the permission bits of the link, while `chmod()` sets the bits of the file the link references.
 
-**/ 
+ 
 
 
-/**
-fs.stat(path, [callback(err, stats)]) -> fs.Stats
+
+## fs.stat(path, [callback(err, stats)]) -> fs.Stats
 - path (String): The path to the file
 - callback (Function):   An optional callback to execute once the function completes
 - err (Error): The possible exception
@@ -236,11 +236,11 @@ fs.stat(path, [callback(err, stats)]) -> fs.Stats
 
 An asynchronous [stat(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/stat.2.html). 
 
-**/ 
+ 
 
 
-/**
-fs.lstat(path, [callback(err, stats)]) -> fs.Stats
+
+## fs.lstat(path, [callback(err, stats)]) -> fs.Stats
 - path (String): The path to the file
 - callback (Function):   An optional callback to execute once the function completes
 - err (Error): The possible exception
@@ -249,11 +249,11 @@ fs.lstat(path, [callback(err, stats)]) -> fs.Stats
 An asynchronous [lstat(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/stat.2.html). 
 
 
-**/ 
+ 
 
 
-/**
-fs.fstat(fd, [callback(err, stats)]) -> fs.Stats
+
+## fs.fstat(fd, [callback(err, stats)]) -> fs.Stats
 - fd (Number): The file descriptor
 - callback (Function):   An optional callback to execute once the function completes
 - err (Error): The possible exception
@@ -261,38 +261,38 @@ fs.fstat(fd, [callback(err, stats)]) -> fs.Stats
 
 An asynchronous [fstat(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/stat.2.html). 
 
-**/ 
+ 
 
 
-/**
-fs.statSync(path) -> fs.Stats
+
+## fs.statSync(path) -> fs.Stats
 - path (String): The path to the file
 
 A synchronous [stat(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/stat.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.lstatSync(path) -> fs.Stats
+
+## fs.lstatSync(path) -> fs.Stats
 - path (String): The path to the file
 
 A synchronous [lstat(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/stat.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.fstatSync(fd) -> fs.Stats
+
+## fs.fstatSync(fd) -> fs.Stats
 - fd (Number): The file descriptor
 
 A synchronous [fstat(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/stat.2.html). 
 
-**/ 
+ 
 
 
-/**
-fs.link(srcpath, dstpath, [callback(err)]) -> Void
+
+## fs.link(srcpath, dstpath, [callback(err)]) -> Void
 - srcpath (String): The original path of a file
 - dstpath (String): The new file link path
 - callback (Function):   An optional callback to execute once the function completes
@@ -300,21 +300,21 @@ fs.link(srcpath, dstpath, [callback(err)]) -> Void
 
 An asynchronous [link(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/link.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.linkSync(srcpath, dstpath) -> Void
+
+## fs.linkSync(srcpath, dstpath) -> Void
 - srcpath (String): The original path of a file
 - dstpath (String): The new file link path
 
 A synchronous [link(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/link.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.symlink(linkdata, path, [type='file'], [callback(err)]) -> Void
+
+## fs.symlink(linkdata, path, [type='file'], [callback(err)]) -> Void
 - linkdata (String): The original path of a file
 - path (String): The new file link path
 - type (String): This can be either `'dir'` or `'file'`.  It is only used on Windows ( andignored on other platforms)
@@ -323,22 +323,22 @@ fs.symlink(linkdata, path, [type='file'], [callback(err)]) -> Void
 
 An asynchronous [symlink(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/symlink.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.symlinkSync(linkdata, path, [type='file']) -> Void
+
+## fs.symlinkSync(linkdata, path, [type='file']) -> Void
 - linkdata (String): The original path of a file
 - path (String): The new file link path
 - type (String): This can be either `'dir'` or `'file'`.  It is only used on Windows ( andignored on other platforms)
 
 A synchronous [symlink(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/symlink.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.readlink(path, [callback(err, linkString)]) -> Void
+
+## fs.readlink(path, [callback(err, linkString)]) -> Void
 - path (String): The original path of a link
 - callback (Function):  An optional callback to execute once the function completes
 - err (Error): The possible exception
@@ -346,11 +346,11 @@ fs.readlink(path, [callback(err, linkString)]) -> Void
  
 An asynchronous [readlink(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/readlink.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.readlinkSync(path) -> String
+
+## fs.readlinkSync(path) -> String
 - path (String): The original path of a link
 
 A synchronous [readlink(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/readlink.2.html).
@@ -359,11 +359,11 @@ A synchronous [readlink(2)](http://www.kernel.org/doc/man-pages/online/pages/man
 
 The symbolic link's string value.
 
-**/ 
+ 
 
 
-/**
-fs.realpath(path, [callback(err, resolvedPath)]) -> Void
+
+## fs.realpath(path, [callback(err, resolvedPath)]) -> Void
 - path (String): A path to a file
 - callback (Function):  An optional callback to execute once the function completes
 - err (Error): The possible exception
@@ -372,11 +372,11 @@ fs.realpath(path, [callback(err, resolvedPath)]) -> Void
 An asynchronous [realpath(3)](http://www.kernel.org/doc/man-pages/online/pages/man3/realpath.3.html). You can use [[process.cwd `process.cwd()`]] to resolve relative paths.
 
 
-**/ 
+ 
 
 
-/**
-fs.realpathSync(path) -> String
+
+## fs.realpathSync(path) -> String
 - path (String): A path to a file
 
 A synchronous [realpath(3)](http://www.kernel.org/doc/man-pages/online/pages/man3/realpath.3.html).
@@ -385,49 +385,49 @@ A synchronous [realpath(3)](http://www.kernel.org/doc/man-pages/online/pages/man
 
 The resolved path.
 
-**/ 
+ 
 
 
-/**
-fs.unlink(path, [callback(err)]) -> Void
+
+## fs.unlink(path, [callback(err)]) -> Void
 - srcpath (String): The path to a file
 - callback (Function):   An optional callback to execute once the function completes
 - err (Error): The possible exception
 
 An asynchronous [unlink(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/unlink.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.unlinkSync(path) -> Void
+
+## fs.unlinkSync(path) -> Void
 - srcpath (String): The path to a file
 
 A synchronous [unlink(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/unlink.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.rmdir(path [, callback(err)]) -> Void
+
+## fs.rmdir(path [, callback(err)]) -> Void
 - path (String): The path to a directory
 - callback (Function):   An optional callback to execute once the function completes
 - err (Error): The possible exception
 
 An asynchronous [rmdir(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/rmdir.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.rmdirSync(path) -> Void
+
+## fs.rmdirSync(path) -> Void
 - path (String): The path to a directory
 
 A synchronous [rmdir(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/rmdir.2.html).
-**/ 
+ 
 
-/**
-fs.mkdir(path [, mode=777] [, callback(err)]) -> Void
+
+## fs.mkdir(path [, mode=777] [, callback(err)]) -> Void
 - path (String): The path to the new directory
 - mode (Number): An optional permission to set
 - callback (Function):   An optional callback to execute once the function completes
@@ -435,21 +435,21 @@ fs.mkdir(path [, mode=777] [, callback(err)]) -> Void
 
 An asynchronous [mkdir(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/mkdir.2.html). 
 
-**/ 
+ 
 
 
-/**
-fs.mkdirSync(path [, mode=777]) -> Void
+
+## fs.mkdirSync(path [, mode=777]) -> Void
 - path (String): The path to the new directory
 - mode (Number): An optional permission to set
 
 A synchronous [mkdir(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/mkdir.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.readdir(path, [callback(err, files)]) -> Void
+
+## fs.readdir(path, [callback(err, files)]) -> Void
 - path (String): The path to the directory
 - callback (Function):  An optional callback to execute once the function completes
 - err (Error): The possible exception
@@ -457,21 +457,21 @@ fs.readdir(path, [callback(err, files)]) -> Void
 
 An asynchronous [readdir(3)](http://www.kernel.org/doc/man-pages/online/pages/man3/readdir.3.html).  It reads the contents of a directory.
 
-**/ 
+ 
 
 
-/**
-fs.readdirSync(path) -> Void
+
+## fs.readdirSync(path) -> Void
 - path (String): The path to the directory
 
 
 A synchronous [readdir(3)](http://www.kernel.org/doc/man-pages/online/pages/man3/readdir.3.html). Returns an array of filenames, excluding `'.'` and `'..'`.
 
-**/ 
+ 
 
 
-/**
-fs.close(fd, [callback(err)]) -> Void
+
+## fs.close(fd, [callback(err)]) -> Void
 - fd (Number): The file descriptor
 - callback (Function):   An optional callback to execute once the function completes
 - err (Error): The possible exception
@@ -479,20 +479,20 @@ fs.close(fd, [callback(err)]) -> Void
 
 An asynchronous file close; for more information, see [close(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/close.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.closeSync(fd) -> Void
+
+## fs.closeSync(fd) -> Void
 - fd (Number): The file descriptor
 
 A synchronous file close; for more information, see [close(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/close.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.open(path, flags [, mode=666] [, callback(err, fd)]) -> Void
+
+## fs.open(path, flags [, mode=666] [, callback(err, fd)]) -> Void
 - path (String): The path to the file
 - flags (String): A string indicating how to open the file
 - mode (Number):  The optional permissions to give the file if it's created
@@ -516,11 +516,11 @@ An asynchronous file open; for more information, see [open(2)](http://www.kernel
 
 * `'a+'`: Opens the file for reading and appending. The file is created if it doesn't exist.
 
-**/ 
+ 
 
 
-/**
-fs.openSync(path, flags, [mode=666]) -> Number
+
+## fs.openSync(path, flags, [mode=666]) -> Number
 - path (String): The path to the file
 - flags (String): A string indicating how to open the file
 - mode (Number):  The optional permissions to give the file if it's created
@@ -545,11 +545,11 @@ A synchronous file open; for more information, see [open(2)](http://www.kernel.o
 
 An open file descriptor.
 
-**/ 
+ 
 
 
-/**
-fs.utimes(path, atime, mtime, [callback()]) -> Void
+
+## fs.utimes(path, atime, mtime, [callback()]) -> Void
 - path (String): The path to the file
 - atime (Number): The new access time
 - mtime (Number): The new modification time
@@ -557,22 +557,22 @@ fs.utimes(path, atime, mtime, [callback()]) -> Void
 
 An asynchronous [utime(2)](http://kernel.org/doc/man-pages/online/pages/man2/utime.2.html). Changes the timestamps of the file referenced by the supplied path.
 
-**/ 
+ 
 
 
-/**
-fs.utimesSync(path, atime, mtime) -> Void
+
+## fs.utimesSync(path, atime, mtime) -> Void
 - path (String): The path to the file
 - atime (Number): The new access time
 - mtime (Number): The new modification time
 
 A synchronous [utime(2)](http://kernel.org/doc/man-pages/online/pages/man2/utime.2.html). Change the timestamps of the file referenced by the supplied path.
 
-**/ 
+ 
 
 
-/**
-fs.futimes(fd, atime, mtime, [callback()]) -> Void
+
+## fs.futimes(fd, atime, mtime, [callback()]) -> Void
 - fd (Number): The file descriptor
 - atime (Number): The new access time
 - mtime (Number): The new modification time
@@ -580,11 +580,11 @@ fs.futimes(fd, atime, mtime, [callback()]) -> Void
 
 An asynchronous [futimes(3)](http://www.kernel.org/doc/man-pages/online/pages/man3/lutimes.3.html). Change the file timestamps of a file referenced by the supplied file descriptor.
 
-**/ 
+ 
 
 
-/**
-fs.futimesSync(fd, atime, mtime) -> Void
+
+## fs.futimesSync(fd, atime, mtime) -> Void
 - fd (Number): The file descriptor
 - atime (Number): The new access time
 - mtime (Number): The new modification time
@@ -592,32 +592,32 @@ fs.futimesSync(fd, atime, mtime) -> Void
 
 A synchronous [futimes(3)](http://www.kernel.org/doc/man-pages/online/pages/man3/lutimes.3.html). Change the file timestamps of a file referenced by the supplied file descriptor.
 
-**/ 
+ 
 
 
-/**
-fs.fsync(fd, [callback(err)]) -> Void
+
+## fs.fsync(fd, [callback(err)]) -> Void
 - fd (Number): The file descriptor
 - callback (Function): An optional callback to execute once the function completes
 
 
 An asynchronous [fsync(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/fsync.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.fsyncSync(fd) -> Void
+
+## fs.fsyncSync(fd) -> Void
 - fd (Number): The file descriptor
 
 
 A synchronous [fsync(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/fsync.2.html).
  
-**/ 
+ 
 
 
-/**
-fs.write(fd, buffer, offset, length, position, [callback(err, written, buffer)]) -> Void
+
+## fs.write(fd, buffer, offset, length, position, [callback(err, written, buffer)]) -> Void
 - fd (Number): The file descriptor
 - buffer (Buffer): The buffer to write
 - offset (Number): Indicates where in the buffer to start at
@@ -632,11 +632,11 @@ Writes `buffer` to the file specified by `fd`. Note that it's unsafe to use `fs.
 
 For more information, see [pwrite(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/pwrite.2.html).
 
-**/ 
+ 
 
 
-/**
-fs.writeSync(fd, buffer, offset, length, position) -> Number
+
+## fs.writeSync(fd, buffer, offset, length, position) -> Number
 fs.writeSync(fd, str, position, [encoding='utf8']) -> Number
 - fd (Number): The file descriptor
 - buffer (Buffer): The buffer to write
@@ -652,12 +652,12 @@ A synchronous version of the buffer-based [[fs.write `fs.write()`]].
 
 Returns the number of bytes written.
 
-**/ 
+ 
  
 
 
-/**
-fs.read(fd, buffer, offset, length, position, [callback()]) -> Void
+
+## fs.read(fd, buffer, offset, length, position, [callback()]) -> Void
 - fd (Number): The file descriptor to read from
 - buffer (Buffer): The buffer to write to
 - offset (Number): Indicates where in the buffer to start writing at
@@ -670,11 +670,11 @@ fs.read(fd, buffer, offset, length, position, [callback()]) -> Void
 
 Read data from the file specified by `fd` and writes it to `buffer`. If `position` is `null`, data will be read from the current file position.
 
-**/ 
+ 
 
 
-/**
-fs.readSync(fd, buffer, offset, length, position) -> Number
+
+## fs.readSync(fd, buffer, offset, length, position) -> Number
 fs.readSync(fd, length, position, encoding) -> Number
 - fd (Number): The file descriptor to read from
 - buffer (Buffer): The buffer to write to
@@ -690,11 +690,11 @@ The synchronous version of buffer-based [[fs.read `fs.read()`]]. Reads data from
 
 The number of bytes read.
 
-**/ 
+ 
 
 
-/**
-fs.readFile(filename, [encoding], [callback(err, data)]) -> Void
+
+## fs.readFile(filename, [encoding], [callback(err, data)]) -> Void
 - filename (String): The name of the file to read
 - encoding (String): The encoding to use
 - callback (Function):  An optional callback to execute once the function completes
@@ -711,11 +711,11 @@ Asynchronously reads the entire contents of a file. If no encoding is specified,
       console.log(data);
     });
 
-**/ 
+ 
 
 
-/**
-fs.readFileSync(filename, [encoding]) -> String | Buffer
+
+## fs.readFileSync(filename, [encoding]) -> String | Buffer
 - filename (String): The name of the file to read
 - encoding (String): The encoding to use
  
@@ -725,11 +725,11 @@ Synchronous version of [[fs.readFile `fs.readFile()`]]. Returns the contents of 
 #### Returns
 
 The contents of the `filename`. If `encoding` is specified, then this function returns a string. Otherwise it returns a [[buffer buffer]].
-**/ 
+ 
 
 
-/**
-fs.writeFile(filename, data, [encoding='utf8'], [callback()]) -> Void
+
+## fs.writeFile(filename, data, [encoding='utf8'], [callback()]) -> Void
 - filename (String): The name of the file to write to
 - data (String | buffer): The data to write (this can be a string or a buffer)
 - encoding (String): The encoding to use (this is ignored if `data` is a buffer)
@@ -741,11 +741,11 @@ Asynchronously writes data to a file, replacing the file if it already exists.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/fs/fs.writefile.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-fs.writeFileSync(filename, data, [encoding='utf8']) -> Void
+
+## fs.writeFileSync(filename, data, [encoding='utf8']) -> Void
 - filename (String): The name of the file to write to
 - data (String | buffer): The data to write (this can be a string or a buffer)
 - encoding (String): The encoding to use (this is ignored if `data` is a buffer)
@@ -753,11 +753,11 @@ fs.writeFileSync(filename, data, [encoding='utf8']) -> Void
 
 The synchronous version of [[fs.writeFile `fs.writeFile()`]].
 
-**/ 
+ 
 
 
-/**
-fs.watchFile(filename, [options={ persistent: true, interval: 0 }], listener(curr, prev)) -> Void
+
+## fs.watchFile(filename, [options={ persistent: true, interval: 0 }], listener(curr, prev)) -> Void
 - filename (String): The name of the file to watch
 - options (Object):  Any optional arguments indicating how often to watch
 - listener (Function):  The callback to execute each time the file is accessed
@@ -781,20 +781,20 @@ On Linux systems with [inotify](http://en.wikipedia.org/wiki/Inotify), `interval
     });
 
 
-**/ 
+ 
 
 
-/**
-fs.unwatchFile(filename) -> Void
+
+## fs.unwatchFile(filename) -> Void
 - filename (String): The filename to watch
 
 Stops watching for changes on `filename`.
 
-**/ 
+ 
 
 
-/**
-fs.watch(filename[, options = {persistent: true}], listener(event, filename)) -> fs.FSWatcher
+
+## fs.watch(filename[, options = {persistent: true}], listener(event, filename)) -> fs.FSWatcher
 - filename (String): The filename (or directory) to watch
 - options (Object): An optional arguments indicating how to watch the files
 - listener (Function):  The callback to execute each time the file is accessed
@@ -819,10 +819,10 @@ Watch for changes on `filename`.
         }
     });
 
-**/ 
+ 
 
-/**
-fs.createReadStream(path, [options]) -> fs.ReadStream
+
+## fs.createReadStream(path, [options]) -> fs.ReadStream
 - path (String): The path to read from
 - options (Object): Any optional arguments indicating how to read the stream
 
@@ -848,10 +848,10 @@ Here's an example to read the last 10 bytes of a file which is 100 bytes long:
     fs.createReadStream('sample.txt', {start: 90, end: 99});
 
 
-**/ 
+ 
 
-/**
-fs.createWriteStream(path, [options]) -> fs.WriteStream
+
+## fs.createWriteStream(path, [options]) -> fs.WriteStream
 - path (String): The path to read from
 - options (Object):  Any optional arguments indicating how to write the stream
 
@@ -868,4 +868,4 @@ Returns a new [[streams.WriteStream WriteStream]] object.
 Modifying a file rather than replacing it may require a `flags` mode of `r+` rather than the default mode `w`.
 
 
-**/
+

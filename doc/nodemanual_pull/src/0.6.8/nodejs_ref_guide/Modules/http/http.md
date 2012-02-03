@@ -1,6 +1,6 @@
 
-/** 
-class http
+
+## class http
 
 The HTTP interfaces in Node.js are designed to support many features of the protocol which have been traditionally difficult to use. In particular, large, possibly chunk-encoded, messages. The interface is careful to never buffer entire requests or responses&mdash;the user is always able to stream data. To use the HTTP server and client, add `require('http')` to your code.
 
@@ -22,12 +22,12 @@ For more information, read [this article on how to create HTTP servers](../nodej
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/http/http.js&linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
 
-/**
-http.get(options, callback()) -> Void
+
+
+## http.get(options, callback()) -> Void
 - options (Object): Options to pass to the request
 - callback (Function):  The callback to execute once the method finishes 
 
@@ -47,34 +47,34 @@ Since most requests are GET requests without bodies, Node.js provides this conve
       console.log("Got error: " + e.message);
     });
 
-**/ 
+ 
 
-/**
-http.createServer(requestListener(options, requestListener)) -> http.Server
+
+## http.createServer(requestListener(options, requestListener)) -> http.Server
 - requestListener (Function): A function that is automatically added to the `'request'` event
 - options (Object):  Any options you want to pass to the server
 - requestListener (Function): An optional listener
 
 Returns a new web server object.
 
-**/ 
+ 
 
-/**
-http.globalAgent -> http.Agent
+
+## http.globalAgent -> http.Agent
 
 This is the global instance of [[http.Agent `http.Agent`]] which is used as the default for all HTTP client requests.
 
-**/ 
+ 
 
-/**
-http.globalAgent.requests -> Object
+
+## http.globalAgent.requests -> Object
 
 An object which contains queues of requests that have not yet been assigned to  sockets. **Don't modify this!**
 
-**/
 
-/**
-http.request(options, callback(response)) -> http.ClientRequest
+
+
+## http.request(options, callback(response)) -> http.ClientRequest
 - options (Object): Options to pass to the request
 - callback (Function):  The callback to execute once the method finishes
 - response (http.ClientRequest): The server's response, including headers and status code
@@ -144,4 +144,4 @@ An instance of the `http.ClientRequest` class. The `ClientRequest` instance is a
 
 If any error is encountered during the request (be that with DNS resolution, TCP level errors, or actual HTTP parse errors) an `'error'` event is emitted on the returned request object.
 
-**/  
+  

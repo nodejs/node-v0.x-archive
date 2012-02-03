@@ -1,7 +1,7 @@
 
 
-/**
-class net.Server
+
+## class net.Server
 
 This class is used to create a TCP or UNIX server. A server is a `net.Socket` that can listen for new incoming connections.
 
@@ -9,45 +9,45 @@ This class is used to create a TCP or UNIX server. A server is a `net.Socket` th
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/net/net.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-net.Server@listening()
+
+
+## net.Server@listening()
 
 
 Emitted when the server has been bound after calling `server.listen`.
 
 
-**/ 
+ 
 
 
-/**
-net.Server@connection(socket)
+
+## net.Server@connection(socket)
 - socket (net.Socket): An instance of `net.Socket`
 
 Emitted when a new connection is made.
 
-**/ 
+ 
 
-/**
-net.Server@close()
+
+## net.Server@close()
 
 Emitted when the server closes.
 
 
-**/ 
+ 
 
-/**
-net.Server@error(exception)
+
+## net.Server@error(exception)
 
 Emitted when an error occurs.  The `'close'` event is called directly following this event.  See an example in the discussion of [[net.Server.listen `net.Server.listen`]]
 
 
-**/ 
+ 
 
-/**
-net.Server.listen(port [, host] [, listeningListener]) -> Void
+
+## net.Server.listen(port [, host] [, listeningListener]) -> Void
 net.Server.listen(path [, listeningListener]) -> Void
 - port (Number): The port to connect to
 - host (String): The name of the host to connect to
@@ -71,28 +71,28 @@ One issue some users run into is getting `EADDRINUSE` errors. This means that an
 
 <Note>All sockets in Node.js set `SO_REUSEADDR` already.</Note>
 
-**/ 
+ 
 
-/**
-net.Server.pause(msecs=1000) -> Void
+
+## net.Server.pause(msecs=1000) -> Void
 - msecs (Number): The number of milliseconds to pause for
 
 Stop accepting connections for the given number of milliseconds. This could be useful for throttling new connections against DoS attacks or other oversubscriptions.
 
-**/ 
+ 
 
 
-/**
-net.Server.close() -> Void
+
+## net.Server.close() -> Void
 
 Stops the server from accepting new connections. This function is asynchronous, and  the server is finally closed when it emits a `'close' event.
 
 
-**/
 
 
-/**
-net.Server.address() -> Object
+
+
+## net.Server.address() -> Object
 
 Returns the bound address and port of the server as reported by the operating system. Useful to find which port was assigned when giving getting an OS-assigned address. 
 
@@ -104,26 +104,26 @@ This returns an object with two properties, like this:
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/net/net.server.address.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
 
-/**
-net.Server.maxConnections -> Number
+
+## net.Server.maxConnections -> Number
 
 Set this property to reject connections when the server's connection count gets high.
 
 
-**/
 
 
-/**
-net.Server.connections -> Number
+
+
+## net.Server.connections -> Number
 
 The number of concurrent connections on the server.
 
 
-**/ 
+ 
 
 
 

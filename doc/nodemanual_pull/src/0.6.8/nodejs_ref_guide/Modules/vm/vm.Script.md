@@ -1,13 +1,13 @@
-/**
-class vm.Script
+
+## class vm.Script
 
 This object is created as a result of the [[vm.createScript `vm.createScript()`]] method. It represents some compiled code than can be run at a later moment.
 
 
-**/
 
-/**
-vm.Script.runInThisContext() -> String
+
+
+## vm.Script.runInThisContext() -> String
 
 Similar to `vm.runInThisContext()`, but a method of the precompiled `Script` object.
 
@@ -23,11 +23,11 @@ Using `script.runInThisContext()` to compile code once and run it multiple times
 
 A string representing the result of running `code`.
 
-**/ 
+ 
 
 
-/**
-vm.Script.runInNewContext([sandbox]) -> String
+
+## vm.Script.runInNewContext([sandbox]) -> String
 - sandbox (Object): A global object with properties to pass into the `Script` object
 
 Similar to `vm.runInNewContext()`, this is a method of a precompiled `Script` object.
@@ -46,5 +46,5 @@ Compiling code that increments a global variable and sets one, then execute the 
 
 A string representing the result of running `code`.
 
-**/ 
+ 
 

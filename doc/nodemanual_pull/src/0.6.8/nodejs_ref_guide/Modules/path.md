@@ -1,5 +1,5 @@
-/**
-class path
+
+## class path
 
 This module contains utilities for handling and transforming file paths. Add `require('path')` to your code to use this module.
 
@@ -10,10 +10,10 @@ Almost all these methods perform only string transformations. **The file system 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/** 
-path.normalize(p) -> String
+
+
+## path.normalize(p) -> String
 - p (String):  The path to normalize
 
 Normalize a string path, taking care of `'..'` and `'.'` parts.
@@ -24,11 +24,11 @@ When multiple slashes are found, they're replaced by a single one; when the path
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.normalize.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-path.join(path1, path2 [, paths...]) -> String
+
+
+## path.join(path1, path2 [, paths...]) -> String
 - path1 (String): The first path to join
 - path2 (String): The second path to join
 - paths (String): Additional paths to join
@@ -39,11 +39,11 @@ Join all arguments together and normalize the resulting path. Non-string argumen
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.join.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-path.resolve([from ...], to)  -> String
+
+
+## path.resolve([from ...], to)  -> String
 - from (String): Paths to prepend (and append) to `to`
 - to (String):  The path to resolve
 
@@ -69,11 +69,11 @@ The difference is that the different paths don't need to exist and may also be f
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.resolve.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-path.relative(from, to) -> String
+
+
+## path.relative(from, to) -> String
 - from (String):  The starting path
 - to (String):  To final path
 
@@ -87,11 +87,11 @@ At times, you have two absolute paths, and you need to derive the relative path 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.relative.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-path.dirname(p) -> String
+
+
+## path.dirname(p) -> String
 - p (String):  A path
 
 Return the directory name of a path.  Similar to the Unix [`dirname`](http://www.kernel.org/doc/man-pages/online/pages/man3/basename.3.html) command.
@@ -100,11 +100,11 @@ Return the directory name of a path.  Similar to the Unix [`dirname`](http://www
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.dirname.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-path.basename(p, [ext]) -> String
+
+
+## path.basename(p, [ext]) -> String
 - p (String):  A path
 - ext (String): If provided, the extension to omit
 
@@ -114,11 +114,11 @@ Return the last portion of a path.  Similar to the Unix [`basename`](http://www.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.basename.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-path.extname(p) -> String
+
+
+## path.extname(p) -> String
 - p (String):  A path
 
 Return the extension of the path, from the last '.' to end of string in the last portion of the path.  If there is no '.' in the last portion of the path or the first character of it is '.', then the method returns an empty string.  
@@ -127,11 +127,11 @@ Return the extension of the path, from the last '.' to end of string in the last
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.extname.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
-path.exists(p [, callback(exists)]) -> String
+
+
+## path.exists(p [, callback(exists)]) -> String
 - p (String):  A path to check
 - callback (Function): A callback to execute once the method completes
 - exists (Boolean):  This is `true` if the path actually exists
@@ -142,16 +142,16 @@ Tests whether or not the given path exists by checking with the file system.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/path/path.exists.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
 
-/**
- path.existsSync(p) -> Boolean
+
+
+##  path.existsSync(p) -> Boolean
 - p (String):  A path to check
 
 The synchronous version of `path.exists`. Tests whether or not the given path exists by checking with the file system
 
 #### Returns
 `true` if the path exists, `false` otherwise.
-**/
+
 

@@ -1,6 +1,6 @@
 
-/** section: Javascript_Reference
-class Array 
+### section: Javascript_Reference
+## class Array 
 
 Arrays are list-like objects that come with a several built-in methods to perform traversal and mutation operations. Neither the size of a Javascript array nor the types of its elements are fixed. Since an array's size can grow or shrink at any time, Javascript arrays are not guaranteed to be dense. In general, these are convenient characteristics, but if these are desirable things to have for your use case, you might consider using WebGL typed arrays.
 
@@ -120,10 +120,10 @@ Here is the output:
 * [New in Javascript 1.6: Array extras](https://developer.mozilla.org/en/Javascript/New_in_Javascript/1.6#Array_extras)
 * [Typed Arrays](https://developer.mozilla.org/en/Javascript_typed_arrays)
 
-**/
 
-/**
-	new Array(element0, element1..., elementN)
+
+
+## 	new Array(element0, element1..., elementN)
 	new Array(arrayLength) 
 - elementN (Object): A Javascript array is initialized with the given elements, except in the case where a single argument is passed to theArray constructor and that argument is a number. Note that this special case only applies to Javascript arrays created with the `Array` constructor, not with array literals created with the bracket syntax.
 - arrayLength (Number): If the first argument passed to the `Array` constructor is an integer between 0 and 232-1 (inclusive), a new Javascript array is created with that number of elements. If the argument is any other number, a [[RangeError `RangeError`]] exception is thrown.
@@ -131,10 +131,10 @@ Here is the output:
 Constructs a new array. Note that you can also just create a new array by defining a sequence of elements, like this: `[element0, element1, ..., elementN]`.
 
 	
-**/
 
-/**
-Array.length -> Number
+
+
+## Array.length -> Number
 
 An unsigned, 32-bit integer (a value less than 2^32) that specifies the number of elements in an array.
 
@@ -154,10 +154,10 @@ The following example shortens the array `statesUS` to a length of 50 if the cur
         statesUS.length=50
     }
 	
-**/
 
-/**
-Array.join(separator=",") -> String
+
+
+## Array.join(separator=",") -> String
 - separator (String): A string to separate each element of the array. The separator is converted to a string if necessary.
 
 Joins all elements of an array into a string.	
@@ -176,10 +176,10 @@ The following example creates an array, a, with three elements, then joins the a
 * [[Array.reverse `reverse()`]]
 * [[String.split `String.split()`]]
 * [[Array.toString `toString()`]]
-**/
 
-/**
-Array.slice(begin[, end]) -> Array
+
+
+## Array.slice(begin[, end]) -> Array
 - begin (Number): Zero-based index at which to begin extraction. As a negative index, start indicates an offset from the end of the sequence. slice(-2) extracts the second-to-last element and the last element in the sequence.
 - end (Number): Zero-based index at which to end extraction. slice extracts up to but not including end. slice(1,4) extracts the second element through the fourth element (elements indexed 1, 2, and 3). As a negative index, end indicates an offset from the end of the sequence. slice(2,-1) extracts the third element through the second-to-last element in the sequence. If end is omitted, slice extracts to the end of the sequence. 
 
@@ -209,10 +209,10 @@ This script writes:
 	myCar[0].color = purple
 	newCar[0].color = purple
 	
-**/
 
-/**
-Array.indexOf(searchElement[, fromIndex = 0]) -> Number
+
+
+## Array.indexOf(searchElement[, fromIndex = 0]) -> Number
 - searchElement (String): Element to locate in the array.
 - fromIndex (Number): The index at which to begin the search. Defaults to 0, i.e. the whole array will be searched. If the index is greater than or equal to the length of the array, -1 is returned, i.e. the array will not be searched. If negative, it is taken as the offset from the end of the array. Note that even when the index is negative, the array is still searched from front to back. If the calculated index is less than 0, the whole array will be searched.
 
@@ -235,10 +235,10 @@ The following example uses indexOf to find all the indices of an element in a gi
 #### See also
 
 * [[Array.lastIndexOf `lastIndexOf()`]]
-**/
 
-/**
-Array.push(element0, element1..., elementN) -> Number
+
+
+## Array.push(element0, element1..., elementN) -> Number
 - elementN (Object): The elements to add to the end of the array.
 	
 Mutates an array by appending the given elements to the end of an array and returning its new length.
@@ -264,10 +264,10 @@ The new length property of the object upon which the method was called.
 * [[Array.unshift `unshift()`]]
 * [[Array.concat `concat()`]]
 
-**/
 
-/**
-Array.splice(index , howMany[, element1[, element2...[, elementN]]]) -> Array
+
+
+## Array.splice(index , howMany[, element1[, element2...[, elementN]]]) -> Array
 Array.splice(index[, howMany[, element1[, element2...[, elementN]]]]) -> Array
 - index (Number): Index at which to start changing the array. If negative, will begin that many elements from the end.
 - howMany (Number): Indicates the number of old array elements to remove. If howMany is 0, no elements are removed. In this case, you should specify at least one new element. If no howMany parameter is specified (second syntax above, which is a SpiderMonkey extension), all elements after index are removed.
@@ -287,10 +287,10 @@ The following script illustrate the use of splice:
 
 An array containing the removed elements. If only one element is removed, an array of one element is returned.
 
-**/
 
-/**
-Array.isArray(obj) -> Boolean
+
+
+## Array.isArray(obj) -> Boolean
 - obj (Object): The object to be checked
  
 Returns `true` if an object is an array, `false` if it is not.
@@ -315,10 +315,10 @@ This function is part of the ECMAScript 5 standard. See the [Web Tech Blog](http
 	Array.isArray(true);
 	Array.isArray(false);
 	 	
-**/
 
-/**
-Array.pop() -> Object
+
+
+## Array.pop() -> Object
 
 Removes the last element from an array and returns that element.
   
@@ -340,10 +340,10 @@ undefined
 * [[Array.push `push()`]]
 * [[Array.shift `shift()`]]
 * [[Array.unshift `unshift()`]]
-**/
 
-/**
-Array.reverse() -> Void
+
+
+## Array.reverse() -> Void
 
 Reverses an array in place. The first array element becomes the last and the last becomes the first.
 
@@ -366,10 +366,10 @@ This code changes `myArray` so that:
 #### See Also
 * [[Array.join `join()`]]
 * [[Array.sort `sort()`]]
-**/
 
-/**
-Array.shift() -> Object
+
+
+## Array.shift() -> Object
  
 Removes the first element from an array and returns that element. This method changes the length of the array.
 
@@ -390,10 +390,10 @@ This example displays the following:
 * [[Array.pop `pop()`]]
 * [[Array.push `push()`]]
 * [[Array.unshift `unshift()`]]
-**/
 
-/**
-Array.sort([compareFunction]) -> Array
+
+
+## Array.sort([compareFunction]) -> Array
 - compareFunction (Function): Defines the sort order. If omitted, the array is sorted lexicographically according to the string conversion of each element.
 
 Sorts the elements of an array in place and returns the array.
@@ -463,10 +463,10 @@ This example produces the following output. As the output shows, when a compare 
 #### See Also
 * [[Array.join `join()`]]
 * [[Array.reverse `reverse()`]]
-**/
 
-/**
-Array.concat(value1, value2..., valueN) -> Array
+
+
+## Array.concat(value1, value2..., valueN) -> Array
 - valueN (Object | Array): Objects and/or arrays to concatenate to the resulting array
 	
 Returns a new array comprised of this array joined with other array(s) and/or value(s).
@@ -514,10 +514,10 @@ The following code concatenates three values to an array:
 	// creates array ["a", "b", "c", 1, 2, 3], leaving alpha unchanged
 	var alphaNumeric = alpha.concat(1, [2, 3]);
 
-**/
 
-/**
-Array.unshift(element1, element2..., elementN) -> Number
+
+
+## Array.unshift(element1, element2..., elementN) -> Number
 - elementN (Object): The elements to add to the front of the array.
 
 Adds one or more elements to the beginning of an array and returns the new length of the array.
@@ -542,10 +542,10 @@ Adds one or more elements to the beginning of an array and returns the new lengt
 * [[Array.pop `pop()`]]
 * [[Array.push `push()`]]
 * [[Array.shift `shift()`]]
-**/
 
-/**
-Array.toString() -> String
+
+
+## Array.toString() -> String
 
 	Returns a string representing the specified array and its elements.
 
@@ -557,10 +557,10 @@ The [[Array `Array`]] object overrides the `toString` method of [[Object `Object
 Javascript calls the `toString` method automatically when an array is to be represented as a text value or when an array is referred to in a string concatenation.
 
 
-**/
 
-/**
-Array.lastIndexOf(searchElement[, fromIndex]) -> Number
+
+
+## Array.lastIndexOf(searchElement[, fromIndex]) -> Number
 - searchElement (Object): Element to locate in the array. 
 - fromIndex (Number): The index at which to start searching backwards. Defaults to the array's length, i.e. the whole array will be searched. If the index is greater than or equal to the length of the array, the whole array will be searched. If negative, it is taken as the offset from the end of the array. Note that even when the index is negative, the array is still searched from back to front. If the calculated index is less than 0, -1 is returned, i.e. the array will not be searched.
 
@@ -603,10 +603,10 @@ The following example uses `lastIndexOf` to locate values in an array:
 #### See also
  [[Array.indexOf `indexOf()`]]
  
-**/
 
-/**
-Array.filter(callback(element, index, array)[, thisObject]) -> Array
+
+
+## Array.filter(callback(element, index, array)[, thisObject]) -> Array
 - callback (Function): Used to test each element of the array.
 - element (Object): The value of the current element
 - index (Number): The index of the element
@@ -629,10 +629,10 @@ The following example uses `filter` to create a filtered array that has all elem
 	
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/Array/array.filter.1.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 		
-**/
 
-/**
-Array.forEach(callback(element, index, array)[, thisArg]) -> Array
+
+
+## Array.forEach(callback(element, index, array)[, thisArg]) -> Array
 - callback (Function): Used to test each element of the array.
 - element (Object): The value of the current element
 - index (Number): The index of the element
@@ -670,10 +670,10 @@ The range of elements processed by `forEach` is set before the first invocation 
  	var o1 = {a:1, b:2};
  	var o2 = copy(o1); // o2 looks like o1 now
 	 	 	 
-**/
 
-/**
-Array.every(callback(element, index, array)[, thisObject]) -> Boolean
+
+
+## Array.every(callback(element, index, array)[, thisObject]) -> Boolean
 - callback (Function): Used to test each element of the array.
 - element (Object): The value of the current element
 - index (Number): The index of the element
@@ -704,10 +704,10 @@ The following example tests whether all elements in the array are bigger than 10
     passed = [12, 54, 18, 130, 44].every(isBigEnough);
     // passed is true
 
-**/
 
-/**
-Array.map(callback(element, index, array)[, thisArg]) -> Array
+
+
+## Array.map(callback(element, index, array)[, thisArg]) -> Array
 - callback (Function): Used to test each element of the array.
 - element (Object): The value of the current element
 - index (Number): The index of the element
@@ -761,10 +761,10 @@ The range of elements processed by `map` is set before the first invocation of `
  	// To the callback function, Array.prototype.map passes 3 arguments: the element, the index, the array
  	// The third argument is ignored by parseInt, but not the second one, hence the possible confusion.
 	 	
-**/
 
-/**
-Array.some(callback(element, index, array)[, thisObject]) -> Boolean
+
+
+## Array.some(callback(element, index, array)[, thisObject]) -> Boolean
 - callback (Function): Used to test each element of the array.
 - element (Object): The value of the current element
 - index (Number): The index of the element
@@ -793,10 +793,10 @@ The following example tests whether some element in the array is bigger than 10.
     passed = [12, 5, 8, 1, 4].some(isBigEnough);
     // passed is true
 	
-**/
 
-/**
-Array.reduceRight(callback(previousValue, currentValue, index, array)[, initialValue]) -> Object
+
+
+## Array.reduceRight(callback(previousValue, currentValue, index, array)[, initialValue]) -> Object
 - callback (Function): Function to execute on each value in the array, taking four arguments
 - previousValue (Object): The value previously returned in the last invocation of the callback, or `initialValue`, if supplied.
 - currentValue (Object): The current element being processed in the array.
@@ -876,10 +876,10 @@ And if you were to provide an `initialValue`, the result would look like this:
 
  * [[Array.reduce `reduce()`]]
 
-**/
 
-/**
-Array.reduce(callback(previousValue, currentValue, index, array)[, initialValue]) -> Object
+
+
+## Array.reduce(callback(previousValue, currentValue, index, array)[, initialValue]) -> Object
 - callback (Function): Function to execute on each value in the array, taking four arguments
 - previousValue (Object): The value previously returned in the last invocation of the callback, or `initialValue`, if supplied.
 - currentValue (Object): The current element being processed in the array.
@@ -926,5 +926,5 @@ The value returned by `reduce` this time would be, of course, `20`.
 
 * [[Array.reduceRight `reduceRight()`]]
  
-**/
+
 

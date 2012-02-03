@@ -1,5 +1,5 @@
-/**
-class dgram
+
+## class dgram
 
 A datagram socket is a type of connectionless Internet socket, for the sending or receiving point for packet delivery services. Datagram sockets are available in Node.js by adding `require('dgram')` to your code.
 
@@ -19,43 +19,43 @@ For `IPv6`, the minimum `MTU` is `1280` octets; however, the mandatory minimum f
 		
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-dgram@message(msg, rinfo)
+
+
+## dgram@message(msg, rinfo)
 - msg (Buffer): A `Buffer` of information
 - rinfo (Object): An object with the sender's address information and the number of bytes in the datagram. 
 
 Emitted when a new datagram is available on a socket. 
 
 
-**/ 
+ 
 
 
-/**
-dgram@listening()
+
+## dgram@listening()
 
 Emitted when a socket starts listening for datagrams. This happens as soon as UDP sockets are created.
 
-**/ 
+ 
 
-/**
-dgram@close()
+
+## dgram@close()
 
 Emitted when a socket is closed with [[dgram.close `dgramclose()`]].  No new `message` events are emitted on this socket.
 
-**/ 
+ 
 
-/**
-dgram@error(exception)
+
+## dgram@error(exception)
 - exception (Error): The error that was encountered
 
 Emitted when an error occurs.
 
-**/ 
+ 
 
-/**
-dgram.createSocket(type, [callback()]) -> dgram
+
+## dgram.createSocket(type, [callback()]) -> dgram
 - type (String):  The type of socket to create; valid types are `udp4` and `udp6`
 - callback (Function): A callback that's added as a listener for `message` events
 
@@ -64,10 +64,10 @@ Creates a datagram socket of the specified types.
 If you want to receive datagrams, call `socket.bind()`. `socket.bind()` binds to the "all interfaces" address on a random port (it does the right thing for both `udp4` and `udp6` sockets). You can then retrieve the address and port with `socket.address().address` and `socket.address().port`.
 
 
-**/ 
+ 
 
-/**
-dgram.send(buf, offset, length, port, address, [callback(err)]) -> Void
+
+## dgram.send(buf, offset, length, port, address, [callback(err)]) -> Void
 - buf (Buffer): The data buffer to send
 - offset (Number):  Indicates where in the buffer to start at
 - length (Number):  Indicates how much of the buffer to use
@@ -87,11 +87,11 @@ If the socket has not been previously bound with a call to [[dgram.bind `dgram.b
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.send.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-dgram.bind(port [, address]) -> Void
+
+## dgram.bind(port [, address]) -> Void
 - port (Number): The port to bind to
 - address (String): The address to attach to
 
@@ -101,37 +101,37 @@ For UDP sockets, listen for datagrams on a named `port` and optional `address`. 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.bind.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-dgram.close() -> Void
+
+## dgram.close() -> Void
 
 Close the underlying socket and stop listening for data on it.
-**/ 
+ 
 
 
-/**
-dgram.address() -> Object
+
+## dgram.address() -> Object
 
 Returns an object containing the address information for a socket.  For UDP sockets, this object contains the properties `address` and `port`.
 
-**/ 
+ 
 
 
-/**
-dgram.setBroadcast(flag) -> Void
+
+## dgram.setBroadcast(flag) -> Void
 - flag (Boolean): The value of `SO_BROADCAST`
 
 Sets or clears the `SO_BROADCAST` socket option.  When this option is set to `true`, UDP packets may be sent to a local interface's broadcast address.
 
 
 
-**/ 
+ 
 
 
-/**
-dgram.setTTL(ttl) -> Void
+
+## dgram.setTTL(ttl) -> Void
 - ttl (Number): The value of `IP_TTL`
 
 Sets the `IP_TTL` socket option. TTL stands for "Time to Live," but in this context it specifies the number of IP hops that a packet is allowed to go through. Each router or gateway that forwards a packet decrements the TTL.  If the TTL is decremented to 0 by a router, it will not be forwarded.  Changing TTL values is typically done for network probes or when multicasting.
@@ -139,11 +139,11 @@ Sets the `IP_TTL` socket option. TTL stands for "Time to Live," but in this cont
 The argument to `setTTL()` is a number of hops between 1 and 255.  The default on most systems is 64.
 
 
-**/ 
+ 
 
 
-/**
-dgram.setMulticastTTL(ttl) -> Void
+
+## dgram.setMulticastTTL(ttl) -> Void
 - ttl (Number): The value of `IP_MULTICAST_TTL` 
 
 Sets the `IP_MULTICAST_TTL` socket option.  TTL stands for "Time to Live," but in this context it specifies the number of IP hops that a packet is allowed to go through, specifically for multicast traffic.  Each router or gateway that forwards a packet decrements the TTL. If the TTL is decremented to 0 by a router, it will not be forwarded.
@@ -151,21 +151,21 @@ Sets the `IP_MULTICAST_TTL` socket option.  TTL stands for "Time to Live," but i
 The argument to `setMulticastTTL()` is a number of hops between 0 and 255.  The default on most systems is 64.
 
 
-**/ 
+ 
 
 
-/**
-dgram.setMulticastLoopback(flag) -> Void
+
+## dgram.setMulticastLoopback(flag) -> Void
 - flag (Boolean):  The value of `IP_MULTICAST_LOOP`
 
 Sets or clears the `IP_MULTICAST_LOOP` socket option.  When this option is `true`, multicast packets will also be received on the local interface.
 
 
-**/ 
+ 
 
 
-/**
-dgram.addMembership(multicastAddress [, multicastInterface]) -> Void
+
+## dgram.addMembership(multicastAddress [, multicastInterface]) -> Void
 - multicastAddress (String): The address to add
 - multicastInterface (String): The interface to use
 
@@ -177,11 +177,11 @@ If `multicastInterface` is not specified, the OS will try to add membership to a
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.addMembership.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-dgram.dropMembership(multicastAddress [, multicastInterface])
+
+## dgram.dropMembership(multicastAddress [, multicastInterface])
 - multicastAddress (String): The address to drop
 - multicastInterface (String): The interface to use
 
@@ -189,5 +189,5 @@ The opposite of `addMembership`&mdash;this tells the kernel to leave a multicast
 
 If `multicastInterface` is not specified, the OS will try to drop membership to all valid interfaces.
 
-**/ 
+ 
 

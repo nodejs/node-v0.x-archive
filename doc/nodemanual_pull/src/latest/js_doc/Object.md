@@ -1,15 +1,15 @@
 
 
-/** section: Javascript_Reference
-class Object
+### section: Javascript_Reference
+## class Object
 
 All objects in Javascript are descended from `Object`; all objects inherit methods and properties from `Object.prototype`, although they may be overridden. For example, other constructors' prototypes override the constructor property and provide their own `toString()` methods. Changes to the Object prototype object are propagated to all objects unless the properties and methods subject to those changes are overridden further along the prototype chain.
 	            
 
-**/
 
-/**
-new Object([value])
+
+
+## new Object([value])
 - value (Object): Any value
 
 Creates an object wrapper.
@@ -37,29 +37,29 @@ The following examples store [[Boolean `Boolean`]] objects in `o`:
 	// equivalent to o = new Boolean(false);
     var o = new Object(Boolean());
 
-**/
 
-/** deprecated
-Object.proto -> Object
+
+### deprecated
+## Object.proto -> Object
  
 Refers to the prototype of the object, which may be an object or `null` (which usually means the object is `Object.prototype`, which has no prototype).  It is sometimes used to implement prototype-inheritance based property lookup.
 
 This property is deprecated and should not be used in new code: use [[Object.getPrototypeOf `getPrototypeOf()`]] instead.
 
 
-**/
 
-/**	
-Object.toLocaleString() -> String
+
+
+## Object.toLocaleString() -> String
 
 Returns a string representing the object. This method is meant to be overriden by derived objects for locale-specific purposes.
 
 This function is provided to give objects a generic `toLocaleString()` method, even though not all may use it. Currently, only [[Array `Array`]], [[Number `Number`]], and [[Date `Date]]` override `toLocaleString()`.
 
-**/
 
-/**
-Object.toSource() -> String
+
+
+## Object.toSource() -> String
 
 Returns a string representing the source code of the object.
 
@@ -120,10 +120,10 @@ returns
 
 	({name:"Gabby", breed:"Lab", color:"chocolate", sex:"girl"})
 
-**/
 
-/**
-Object.toString() -> String
+
+
+## Object.toString() -> String
    
  Returns a string representing the object.
 
@@ -215,10 +215,10 @@ With the preceding code in place, any time `theDog` is used in a string context,
 * [[Object.toSource `toSource()`]]]
 * [[Object.valueOf `valueOf()`]]
 
-**/
 
-/**
-Object.valueOf() -> Object
+
+
+## Object.valueOf() -> Object
 
 Returns the primitive value of the specified object
 
@@ -253,10 +253,10 @@ An object's `valueOf` method is usually invoked by Javascript, but you can invok
 
 * [[Object.toString `toString()`]]
 
-**/
 
-/** deprecated
-Object.__defineGetter__(sprop, fun)
+
+### deprecated
+## Object.__defineGetter__(sprop, fun)
 - sprop (String): Contains the name of the property to bind to the given function
 - fun (Function): A Function to be bound to a lookup of the specified property
 
@@ -272,10 +272,10 @@ The `__defineGetter__` allows a [getter](https://developer.mozilla.org/en/Javasc
 * `Object.__lookupGetter__`
 * [JS Guide:Defining Getters and Setters](https://developer.mozilla.org/en/Javascript/Guide/Obsolete_Pages/Creating_New_Objects/Defining_Getters_and_Setters)
 
-**/
 
-/**
-Object.__defineSetter__(sprop, fun)
+
+
+## Object.__defineSetter__(sprop, fun)
 - sprop (String): Contains the name of the property to bind to the given function
 - fun (Function): A Function to be bound to a lookup of the specified property
 
@@ -290,10 +290,10 @@ The `__defineSetter__` method allows a [setter](https://developer.mozilla.org/en
 * `Object.__lookupSetter__`
 * [JS Guide:Defining Getters and Setters](https://developer.mozilla.org/en/Javascript/Guide/Obsolete_Pages/Creating_New_Objects/Defining_Getters_and_Setters)
 
-**/
 
-/**
-Object.hasOwnProperty() -> Boolean
+
+
+## Object.hasOwnProperty() -> Boolean
 - prop (String): The name of the property to test.
   
 Returns a boolean indicating whether the object has the specified property.
@@ -344,10 +344,10 @@ The following example shows how to iterate over the properties of an object with
     }
       
 
-**/
 
-/**
-Object.isPrototypeOf(object) -> Boolean
+
+
+## Object.isPrototypeOf(object) -> Boolean
 - object (Object): The object whose prototype chain will be searched
 
 Tests for an object in another object's prototype chain.
@@ -398,10 +398,10 @@ This, along with the `instanceof` operator particularly comes in handy if you ha
 
 * [`instanceof`](https://developer.mozilla.org/en/Javascript/Reference/Operators/instanceof)
 
-**/
 
-/** deprecated
-Object.__lookupGetter__(sprop) -> Function
+
+### deprecated
+## Object.__lookupGetter__(sprop) -> Function
 - sprop (String): Contains the name of the property whose getter should be returned
 
 Return the function bound as a getter to the specified property.
@@ -417,10 +417,10 @@ If a getter has been defined for an object's property, it's not possible to refe
 * [JS Guide:Defining Getters and Setters](https://developer.mozilla.org/en/Javascript/Guide/Obsolete_Pages/Creating_New_Objects/Defining_Getters_and_Setters)
 
 
-**/
 
-/**
-Object.__lookupSetter__(sprop) -> Function
+
+
+## Object.__lookupSetter__(sprop) -> Function
 - sprop (String): Contains the name of the property whose getter should be returned
 
 Return the function bound as a setter to the specified property.
@@ -434,10 +434,10 @@ If a setter has been defined for an object's property, it's not possible to refe
 * [JS Guide:Defining Getters and Setters](https://developer.mozilla.org/en/Javascript/Guide/Obsolete_Pages/Creating_New_Objects/Defining_Getters_and_Setters)
 
 
-**/
 
-/**
-Object.__noSuchMethod__ -> Function
+
+
+## Object.__noSuchMethod__ -> Function
 
 Executes a function when a non-existent method is called on an object. It takes the form of:
 
@@ -538,10 +538,10 @@ An example of using this idea is shown below.
 	 console.log("bob's address is: "+bob.getAddr());
          
 
-**/
 
-/**
-Object.propertyIsEnumerable(prop) -> Boolean
+
+
+## Object.propertyIsEnumerable(prop) -> Boolean
 - prop (String): The name of the property to test.
 
 Returns a Boolean indicating whether the specified property is enumerable.
@@ -612,14 +612,14 @@ The following example demonstrates the enumerability of user-defined versus buil
     o.propertyIsEnumerable('firstMethod'); // returns false
 
 
-**/
+
 
 
  
 
 
-/**
-Object.defineProperty(obj, prop, descriptor) -> Object 
+
+## Object.defineProperty(obj, prop, descriptor) -> Object 
 - obj (Object): The object on which to define the property.
 - prop (String): The name of the property to be defined or modified.
 - descriptor (String): The descriptor for the property being defined or modified.
@@ -761,10 +761,10 @@ You can do the same thing with an anonymous descriptor object.
 	// adding a readonly data descriptor - not configurable, enumerable
 	setProp(5, myObj, "myString", "Hello world!");
 	// etc. etc.
-**/
 
-/**
-Object.create(proto [, propertiesObject]) -> Object | TypeError
+
+
+## Object.create(proto [, propertiesObject]) -> Object | TypeError
 - proto (Object): The object which should be the prototype of the newly-created object.
 - propertiesObject (Object): If specified and not undefined, an object whose enumerable own properties (that is, those properties defined upon itself and not enumerable properties along its prototype chain) specify property descriptors to be added to the newly-created object, with the corresponding property names.
 
@@ -818,10 +818,10 @@ Creates a new object with the specified prototype object and properties. Throws 
 * John Resig's post on [getPrototypeOf](http://ejohn.org/blog/objectgetprototypeof/)
  
 
-**/
 
-/**
-Object.defineProperties() -> Void
+
+
+## Object.defineProperties() -> Void
 - obj (Object): The object on which to define or modify properties.
 - props (Object): An object whose own enumerable properties constitute descriptors for the properties to be defined or modified.
 
@@ -895,10 +895,10 @@ Assuming a pristine execution environment with all names and properties referrin
 * [[Object.defineProperty `defineProperty()`]]
 * [[Object.keys `keys()`]]
 
-**/
 
-/**
-Object.getOwnPropertyDescriptor(obj, prop) -> Object
+
+
+## Object.getOwnPropertyDescriptor(obj, prop) -> Object
 - obj (Object): The object in which to look for the property
 - prop (String): The name of the property whose description is to be retrieved
 
@@ -937,10 +937,10 @@ Returns a property descriptor for an own property (that is, one directly present
 
 * [[Object.defineProperty `defineProperty()`]]
 
-**/
 
-/**
-Object.keys(obj) -> Array
+
+
+## Object.keys(obj) -> Array
 - obj (Object): The object whose enumerable own properties are to be returned.
 
 Returns an array of all own enumerable properties found upon a given object, in the same order as that given by looping over the properties of the object manually (such as by using `for...in`).
@@ -966,10 +966,10 @@ If you want all properties, even the not enumerable, see [[Object.getOwnProperty
 * [[Object.create `create()`]]
 * [[Object.getOwnPropertyNames `getOwnPropertyNames()`]]
 
-**/
 
-/**
-Object.getOwnPropertyNames(obj) -> Array
+
+
+## Object.getOwnPropertyNames(obj) -> Array
 - obj (Object): The object whose enumerable and non-enumerable own properties are to be returned.
  
  Returns an array  whose elements are strings corresponding to the enumerable _and non-enumerable_ properties found directly upon `obj`. The ordering of the enumerable properties in the array is consistent with the ordering exposed by looping over the properties of the object manually (such as by using `for...in`).  The ordering of the non-enumerable properties in the array, and among the enumerable properties, is not defined.
@@ -997,10 +997,10 @@ If you want only the enumerable properties, see [[Object.keys `keys()`]].
 * [[Object.create `create()`]]
 * [[Object.keys `keys()`]]
 
-**/
 
-/**
-Object.getPrototypeOf(object) -> Object
+
+
+## Object.getPrototypeOf(object) -> Object
 - object (Object): The object whose prototype is to be returned.  
 
 Returns the prototype of the specified object. Throws a [[TypeError `TypeError`]] exception if the object parameter isn't an `Object`.
@@ -1010,10 +1010,10 @@ Returns the prototype of the specified object. Throws a [[TypeError `TypeError`]
 * [[Object.isPrototypeOf `isPrototypeOf()`]]
 * John Resig's post on [getPrototypeOf](http://ejohn.org/blog/objectgetprototypeof)
 
-**/
 
-/**
-Object.preventExtensions(object) -> Void
+
+
+## Object.preventExtensions(object) -> Void
 - object (Object): The object which should be made non-extensible.
 
 Prevents new properties from ever being added to an object (i.e. prevents future extensions to the object).
@@ -1057,10 +1057,10 @@ An object is extensible if new properties can be added to it. This method marks 
 * [[Object.freeze `freeze()`]]
 * [[Object.isFrozen `isFrozen()`]]
 
-**/
 
-/**
-Object.isExtensible() -> Boolean
+
+
+## Object.isExtensible() -> Boolean
 
 Determines if an object is extensible (whether it can have new properties added to it).
 
@@ -1092,10 +1092,10 @@ Objects are extensible by default: they can have new properties added to them. A
 * [[Object.freeze `freeze()`]]
 * [[Object.isFrozen `isFrozen()`]]
 
-**/
 
-/**
-Object.seal(obj) -> Void
+
+
+## Object.seal(obj) -> Void
 - obj (Object): The object which should be sealed.
 
 By default objects are [[Object.extensible extensible]] (meaning, new properties can be added to them). Sealing an object prevents new properties from being added and marks all existing properties as non-configurable. This has the effect of making the set of properties on the object fixed and immutable.
@@ -1149,10 +1149,10 @@ Making all properties non-configurable also prevents them from being converted f
 * [[Object.freeze `freeze()`]]
 * [[Object.isFrozen `isFrozen()`]]
 
-**/
 
-/**
-Object.freeze(obj) -> Object
+
+
+## Object.freeze(obj) -> Object
 - obj (Object): The object which should be frozen.
 
 Freezes an object: that is, prevents new properties from being added to it; prevents existing properties from being removed; and prevents existing properties, or their enumerability, configurability, or writability, from being changed.In essence the object is made effectively immutable. The method returns the object being frozen.
@@ -1201,10 +1201,10 @@ Any attempt to add or remove from the property set of a frozen object throws a [
 * [[Object.seal `seal()`]]
 * [[Object.isSealed `isSealed()`]]
 
-**/
 
-/**
-Object.isSealed(obj) -> Boolean
+
+
+## Object.isSealed(obj) -> Boolean
 - obj (Object): The object which should be checked.
 
 Returns true if the object is sealed, otherwise false. An object is sealed if it is [[Object.isExtensible non-extensible]] and if all its properties are non-configurable and therefore not removable (but not necessarily non-writable).
@@ -1254,10 +1254,10 @@ Returns true if the object is sealed, otherwise false. An object is sealed if it
 * [[Object.freeze `freeze()`]]
 * [[Object.isFrozen `isFrozen()`]]
 
-**/
 
-/**
-Object.isFrozen(obj) -> Boolean
+
+
+## Object.isFrozen(obj) -> Boolean
 - obj (Object): The object which should be checked.
     
 Determine if an object is frozen.
@@ -1273,10 +1273,10 @@ An object is frozen if and only if it is not [[Object.isExtensible extensible]],
 * [[Object.seal `seal()`]]
 * [[Object.isSealed `isSealed()`]]
 
-**/
 
-/**
-Object.constructor -> Function
+
+
+## Object.constructor -> Function
    
 Returns a reference to the `Object` function that created the instance's prototype. Note that the value of this property is a reference to the function itself, not a string containing the function's name, but it isn't read only (except for primitive [[Boolean `Boolean`]], [[Number `Number`]], or [[String `String`]] values of: 1, true, "read-only").
 
@@ -1322,4 +1322,3 @@ The following example shows how to modify constructor value of generic objects. 
     alert(types.join("\n"));
 
 
-**/

@@ -1,5 +1,5 @@
-/**
-class tls
+
+## class tls
 
 The `tls` module uses OpenSSL to provide both the Transport Layer Security and the Secure Socket Layer; in other words, it provides encrypted stream communications. To access this module, add `require('tls')` in your code. 
 
@@ -35,19 +35,19 @@ As of the v0.4 Node.js branch, no function exists for starting a TLS session on 
 
 The technique is to use `tls.createSecurePair()`, which returns two streams: an encrypted stream and a cleartext stream. The encrypted stream is then piped to the socket; the cleartext stream is what the user interacts with thereafter. [Here is a gist that shows how to do just that.](http://gist.github.com/848444)
 
-**/
 
-/**
-tls@secure()
+
+
+## tls@secure()
 
 The event is emitted from the SecurePair once the pair has successfully established a secure connection.
 
 Similar to the checking for the server `'secureConnection'` event, [[tls.CleartextStream.authorized `tls.CleartextStream.authorized`]] should be checked to confirm whether the certificate used properly authorized.
-**/ 
+ 
 
 
-/**
-tls@secureConnection(cleartextStream)
+
+## tls@secureConnection(cleartextStream)
 - cleartextStream (tls.CleartextStream): A object containing the NPN and SNI string protocols
 
 This event is emitted after a new connection has been successfully handshaked. The argument is a instance of [[tls.CleartextStream CleartextStream]]. It has all the common stream methods and events.
@@ -56,11 +56,11 @@ If [[tls.CleartextStream.authorized `tls.CleartextStream.authorized`]] is `false
 
 `cleartextStream.npnProtocol` is a string containing the selected NPN protocol. `cleartextStream.servername` is a string containing the servername requested with SNI.
 
-**/ 
+ 
 
 
-/**
-tls.connect(port [, host=localhost] [, options] [, secureConnectListener]) -> tls.CleartextStream
+
+## tls.connect(port [, host=localhost] [, options] [, secureConnectListener]) -> tls.CleartextStream
 - port (Number):  The port to connect to
 - host (String):  An optional hostname to connect to`
 - options (Object):  Any options you want to pass to the server
@@ -115,11 +115,11 @@ Creates a new client connection to the given `port` and `host`. This function re
       server.close();
     });
     
-**/ 
+ 
 
 
-/**
-tls.createSecurePair([credentials] [, isServer] [, requestCert] [, rejectUnauthorized]) -> tls.SecurePair
+
+## tls.createSecurePair([credentials] [, isServer] [, requestCert] [, rejectUnauthorized]) -> tls.SecurePair
 - credentials (Object):  An optional credentials object from [[crypto.createCredentials `crypto.createCredentials()`]]
 - isServer (Boolean):  An optional boolean indicating whether this TLS connection should be opened as a server (`true`) or a client (`false`)
 - requestCert (Boolean): A boolean indicating whether a server should request a certificate from a connecting client; only applies to server connections
@@ -129,11 +129,11 @@ Creates a new secure `pair` object with two streams, one of which reads/writes e
 
 Generally, the encrypted strean is piped to/from an incoming encrypted data stream, and the cleartext one is used as a replacement for the initial encrypted stream.
 
-**/ 
+ 
 
 
-/**
-tls.createServer(options [, secureConnectionListener]) -> Void
+
+## tls.createServer(options [, secureConnectionListener]) -> Void
 - options (Object):  Any options you want to pass to the server
 - secureConnectionListener (Function): An optional listener
 
@@ -197,7 +197,7 @@ You can test this server by connecting to it with `openssl s_client`:
 
     openssl s_client -connect 127.0.0.1:8000
 
-**/ 
+ 
 
 
 

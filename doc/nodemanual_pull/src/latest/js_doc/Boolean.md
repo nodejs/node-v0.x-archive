@@ -1,6 +1,6 @@
 
-/** section: Javascript_Reference
-class Boolean
+### section: Javascript_Reference
+## class Boolean
 
 The `Boolean` object is an object wrapper for a boolean value.
 
@@ -34,10 +34,10 @@ If you specify any object, including a Boolean object whose value is false, as t
         
 Don't use a Boolean object in place of a Boolean primitive.
 
-**/
 
-/**
-new Boolean(value)
+
+
+## new Boolean(value)
 - value (Boolean): The initial value of the Boolean object.
 
 The value passed as the first parameter is converted to a boolean value, if necessary. If value is omitted or is 0, -0, null, `false`, NaN, undefined, or the empty string (""), the object has an initial value of false. All other values, including any object or the string "false", create an object with an initial value of `true`.
@@ -58,10 +58,10 @@ The value passed as the first parameter is converted to a boolean value, if nece
 	bfalseString = new Boolean("false");
 	bSuLin = new Boolean("Su Lin");
 
-**/
 
-/**
-Boolean.toString() -> String
+
+
+## Boolean.toString() -> String
   
 For Boolean objects, this method returns a string representation of the object.
 
@@ -77,10 +77,10 @@ For Boolean objects and values, the built-in `toString` method returns the strin
 #### See Also 
 * [[Object.toString `Object.toString()`]]
 
-**/
 
-/**
-Boolean.valueOf() -> Boolean
+
+
+## Boolean.valueOf() -> Boolean
 
 This method returns the primitive value of a Boolean object or literal Boolean as a Boolean data type.
 
@@ -94,5 +94,5 @@ This method is usually called internally by Javascript and not explicitly in cod
 #### See Also
 * [[Object.valueOf `Object.valueOf`]]
 
-**/
+
 

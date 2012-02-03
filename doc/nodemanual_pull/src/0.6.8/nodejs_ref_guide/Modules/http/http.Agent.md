@@ -1,6 +1,6 @@
 
-/** 
-class http.Agent
+
+## class http.Agent
 
 Starting with Node.js version 0.5.3, there's a new implementation of the HTTP Agent which is used for pooling sockets used in HTTP client requests.
 
@@ -23,20 +23,20 @@ Alternatively, you could just opt out of pooling entirely using `agent:false`:
 			// Do stuff
 		});
 
-**/
 
 
 
-/**
-http.Agent.maxSockets -> Number
+
+
+## http.Agent.maxSockets -> Number
 
 Determines how many concurrent sockets the agent can have open per host. By default, this is set to 5. 
 
-**/
 
-/**
-http.Agent.sockets -> Array
+
+
+## http.Agent.sockets -> Array
 
 An object which contains arrays of sockets currently in use by the Agent. **Don't modify this!**
 
-**/ 
+ 

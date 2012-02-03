@@ -1,5 +1,5 @@
-/**
-class process
+
+## class process
 
 The `process` object is a global object, and can be accessed from anywhere. It is an instance of [[eventemitter `EventEmitter`]].
 
@@ -12,10 +12,10 @@ Signal events are emitted when processes receive a signal. See [sigaction(2)](ht
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-process@exit()
+
+
+## process@exit()
 
 Emitted when the process is about to exit.  This is a good hook to perform constant time checks of the module's state (like for unit tests).  The main event loop will no longer be run after the `exit` callback finishes, so timers may not be scheduled.
 
@@ -28,11 +28,11 @@ Emitted when the process is about to exit.  This is a good hook to perform const
         console.log('About to exit.');
     });
 
-**/ 
+ 
 
 
-/**
-process@uncaughtException(err)
+
+## process@uncaughtException(err)
 - err (Error): The standard Error Object
 
 Emitted when an exception bubbles all the way back to the event loop. If a listener is added for this exception, the default action (which is to print a stack trace and exit) won't occur.
@@ -44,11 +44,11 @@ Emitted when an exception bubbles all the way back to the event loop. If a liste
 <Note>An `uncaughtException` is a very crude mechanism for exception handling. Using `try / catch` in your program gives you more control over your program's flow.  Especially for server programs that are designed to stay running forever, `uncaughtException` can be a useful safety mechanism.</Note>
 
 
-**/ 
+ 
 
 
-/**
-process.chdir(directory) -> Void
+
+## process.chdir(directory) -> Void
 - directory (String):  The directory name to change to
 
 Changes the current working directory of the process or throws an exception if that fails.
@@ -64,22 +64,22 @@ Changes the current working directory of the process or throws an exception if t
       console.log('chdir failed: ' + err);
     }
 
-**/ 
+ 
 
 
-/**
-process.cwd() -> String
+
+## process.cwd() -> String
 
 Returns the current working directory of the process. For example:
 
   console.log('Current directory: ' + process.cwd());
 
-**/
 
 
 
-/**
-process.exit(code=0) -> Void
+
+
+## process.exit(code=0) -> Void
 - code (Number): The code to end with
 
 Ends the process with the specified `code`.
@@ -90,11 +90,11 @@ Ends the process with the specified `code`.
 
 The shell that executed this should see the exit code as `1`.
 
-**/ 
+ 
 
 
-/**
-process.getgid() -> Number
+
+## process.getgid() -> Number
 
 Gets the group identity of the process. This is the numerical group id, not the group name. For more information, see [getgid(2)](http://kernel.org/doc/man-pages/online/pages/man2/getgid.2.html).
 
@@ -103,11 +103,11 @@ Gets the group identity of the process. This is the numerical group id, not the 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.getgid.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
 
-**/
 
 
-/**
-process.getuid() -> Number
+
+
+## process.getuid() -> Number
 
 
 Gets the user identity of the process. Note that this is the numerical userid, not the username. For more information, see [getuid(2)](http://kernel.org/doc/man-pages/online/pages/man2/getuid.2.html).
@@ -116,11 +116,11 @@ Gets the user identity of the process. Note that this is the numerical userid, n
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.getuid.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.kill(pid, signal='SIGTERM') -> Void
+
+## process.kill(pid, signal='SIGTERM') -> Void
 - pid (Number):  The process id to kill
 - signal (String): A string describing the signal to send; the default is `SIGTERM`.
 
@@ -141,11 +141,11 @@ Send a signal to a process. The `signal` names are strings like 'SIGINT' or 'SIG
 
     process.kill(process.pid, 'SIGHUP');
 
-**/ 
+ 
 
 
-/**
-process.memoryUsage() -> Object
+
+## process.memoryUsage() -> Object
 
 Returns an object describing the memory usage of the Node.js process measured in bytes.
 
@@ -161,11 +161,11 @@ This generates:
 
 In this object, `heapTotal` and `heapUsed` refer to V8's memory usage.
 
-**/
 
 
-/**
-process.nextTick(callback()) -> Void
+
+
+## process.nextTick(callback()) -> Void
 - callback (Function):  The callback function to execute on the next tick
 
 On the next loop around the event loop call this callback. This is **not** a simple alias to `setTimeout(fn, 0)`; it's much more efficient.
@@ -174,11 +174,11 @@ On the next loop around the event loop call this callback. This is **not** a sim
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.nexttick.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.setgid(id) -> Void
+
+## process.setgid(id) -> Void
 - id (Number): The new identity for the group process
 
 Sets the group identity of the process. This accepts either a numerical ID or a groupname string. If a groupname is specified, this method blocks while resolving it to a numerical ID. For more information, see [setgid(2)](http://kernel.org/doc/man-pages/online/pages/man2/setgid.2.html).
@@ -187,11 +187,11 @@ Sets the group identity of the process. This accepts either a numerical ID or a 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.setgid.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
  
-**/ 
+ 
 
 
-/**
-process.setuid(id) -> Void
+
+## process.setuid(id) -> Void
 - id (Number):  The new identity for the user process
 
 Sets the user identity of the process. This accepts either a numerical ID or a username string.  If a username is specified, this method blocks while resolving it to a numerical ID. For more information, see [setuid(2)](http://kernel.org/doc/man-pages/online/pages/man2/setuid.2.html).
@@ -200,11 +200,11 @@ Sets the user identity of the process. This accepts either a numerical ID or a u
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.setuid.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.umask([mask]) -> Void
+
+## process.umask([mask]) -> Void
 - mask (Number): The mode creation mask to get or set
 
 Sets or reads the process's file mode creation mask. Child processes inherit the mask from the parent process. Returns the old mask if `mask` argument is given, otherwise returns the current mask.
@@ -213,19 +213,19 @@ Sets or reads the process's file mode creation mask. Child processes inherit the
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.umask.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.uptime() -> Number
+
+## process.uptime() -> Number
 
 Returns the number of seconds Node.js has been running.
 
-**/
 
 
-/**
-process.arch -> String
+
+
+## process.arch -> String
 
 Identifies which processor architecture you're running on: `'arm'`, `'ia32'`, or `'x64'`.
 
@@ -233,11 +233,11 @@ Identifies which processor architecture you're running on: `'arm'`, `'ia32'`, or
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.arch.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.argv -> Array
+
+## process.argv -> Array
 
 An array containing the command line arguments.  The first element is 'node', and the second element is the name of the Javascript file.  The next elements will be any additional command line arguments.
 
@@ -259,11 +259,11 @@ You should see the following results:
   3: two=three
   4: four
 
-**/
+
 
  
-/**
-process.execPath -> String
+
+## process.execPath -> String
 
 This is the absolute pathname of the executable that started the process.
 
@@ -271,11 +271,11 @@ This is the absolute pathname of the executable that started the process.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.execpath.js?linestart=3&lineend=0&showlines=true' defer='defer'></script>
     
-**/ 
+ 
 
 
-/**
-process.pid -> Number
+
+## process.pid -> Number
 
 Returns the PID of the process.
 
@@ -283,11 +283,11 @@ Returns the PID of the process.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.pid.js?linestart=3&lineend=0&showlines=true' defer='defer'></script>
     
-**/ 
+ 
 
    
-/**
-process.platform -> String
+
+## process.platform -> String
 
 Identifies the platform you're running on, like `'linux2'`, `'darwin'`, etc.
 
@@ -295,20 +295,20 @@ Identifies the platform you're running on, like `'linux2'`, `'darwin'`, etc.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.platform.js?linestart=3&lineend=0&showlines=true' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.title -> Void | String
+
+## process.title -> Void | String
 
 A getter and setter to set what is displayed in `ps`.
 
-**/ 
+ 
 
 
 
-/**
-process.version -> String
+
+## process.version -> String
 
 A compiled-in property that exposes the `NODE_VERSION`.
 
@@ -316,11 +316,11 @@ A compiled-in property that exposes the `NODE_VERSION`.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.version.js?linestart=3&lineend=0&showlines=true' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.versions -> Object
+
+## process.versions -> Object
 
 A property exposing version strings of Node.js and its dependencies.
 
@@ -337,11 +337,11 @@ outputs something similar to:
     ares: '1.7.4',
     ev: '4.4',
     openssl: '1.0.0e-fips' }
-**/ 
+ 
 
 
-/**
-process.installPrefix -> String
+
+## process.installPrefix -> String
 
 A compiled-in property that exposes the `NODE_PREFIX`.
 
@@ -349,29 +349,29 @@ A compiled-in property that exposes the `NODE_PREFIX`.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.installprefix.js?linestart=3&lineend=0&showlines=true' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-process.stderr -> fs.WriteStream
+
+## process.stderr -> fs.WriteStream
 
 A writable stream to stderr.
 
 `process.stderr` and `process.stdout` are unlike other streams in Node.js in that writes to them are usually blocking.  They are blocking in the case that they refer to regular files or TTY file descriptors. In the case they refer to pipes, they are non-blocking like other streams.
 
-**/
 
 
-/**
-process.env -> Object
+
+
+## process.env -> Object
 
 An object containing the user environment. For more information, see [environ(7)](http://kernel.org/doc/man-pages/online/pages/man7/environ.7.html).
 
-**/ 
+ 
 
 
-/**
-process.stdin -> fs.ReadableStream
+
+## process.stdin -> fs.ReadableStream
 
 A `Readable Stream` for stdin. The stdin stream is paused by default, so one must call `process.stdin.resume()` to read from it.
 
@@ -381,11 +381,11 @@ Here's an example of opening standard input and listening for both events:
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/process/process.stdin.js?linestart=3&lineend=0&showlines=true' defer='defer'></script>
 
-**/
 
 
-/**
-process.stdout -> fs.WriteStream
+
+
+## process.stdout -> fs.WriteStream
 
 
 A writable stream to `stdout`.
@@ -398,5 +398,5 @@ As an aside, here's what the innards of `console.log()` look like:
       process.stdout.write(d + '\n');
     };
 
-**/ 
+ 
 

@@ -1,6 +1,6 @@
 
-/** section: crypto
-class crypto
+### section: crypto
+## class crypto
 
 The `crypto` module offers a way of encapsulating secure credentials to be used as part of a secure HTTPS net or HTTP connection. To access this module, add `require('crypto')` to your code. 
 
@@ -24,10 +24,10 @@ This documentation is organized to describe those objects within their own secti
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/crypto/crypto.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-crypto.createCipher(algorithm, password) -> cipher
+
+
+## crypto.createCipher(algorithm, password) -> cipher
 - algorithm (String):  The algorithm to use
 - password (String):  The password to use
 
@@ -35,11 +35,11 @@ Creates and returns a cipher object with the given algorithm and password.
 
 The `password` is used to derive both the key and IV, which must be a binary-encoded string. For more information, see the section on [[buffer buffers]].
 
-**/ 
+ 
 
 
-/**
-crypto.createCipheriv(algorithm, key, iv) -> cipher
+
+## crypto.createCipheriv(algorithm, key, iv) -> cipher
 - algorithm (String): The algorithm to use
 - key (String): A raw key used in the algorithm
 - iv (String): The [initialization vector](http://en.wikipedia.org/wiki/Initialization_vector)
@@ -49,11 +49,11 @@ Creates and returns a cipher object, with the given algorithm, key, and IV.
 Both `key` and `iv` must be a binary-encoded string. For more information, see the section on [[buffer buffers]].
 
 
-**/ 
+ 
 
 
-/**
-crypto.createCredentials([details]) -> Object
+
+## crypto.createCredentials([details]) -> Object
 - details (String): A dictionary of fields to populate the credential with
 
 Creates a credentials object, with  `details` being a dictionary with the following keys:
@@ -68,32 +68,32 @@ If no `ca` details are given, then Node.js uses the default publicly trusted lis
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/crypto/crypto.createCredentials.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-crypto.createDecipher(algorithm, password) -> decipher
+
+## crypto.createDecipher(algorithm, password) -> decipher
 - algorithm (String): The algorithm to use
 - password (String): The password to use
 
 Creates and returns a decipher object, with the given algorithm and key.
 
-**/ 
+ 
 
 
-/**
-crypto.createDecipheriv(algorithm, key, iv) -> decipher
+
+## crypto.createDecipheriv(algorithm, key, iv) -> decipher
 - algorithm (String): The algorithm to use
 - key (String): A raw key used in the algorithm
 - iv (String): The [initialization vector](http://en.wikipedia.org/wiki/Initialization_vector)
 
 Creates and returns a decipher object, with the given algorithm, key, and iv.
 
-**/ 
+ 
 
 
-/**
-crypto.createDiffieHellman(prime_length) -> diffieHellman
+
+## crypto.createDiffieHellman(prime_length) -> diffieHellman
 crypto.createDiffieHellman(prime, encoding='binary') -> diffieHellman
 
 Creates a Diffie-Hellman key exchange object and generates a prime of the given bit length. The generator used is `2`.
@@ -106,11 +106,11 @@ Creates a Diffie-Hellman key exchange object and generates a prime of the given 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/crypto/crypto.createDiffieHellman.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-crypto.createHash(algorithm) -> hash
+
+## crypto.createHash(algorithm) -> hash
 - algorithm (String): The hash algorithm to use
 
 Creates and returns a cryptographic hash object with the given algorithm. The object can be used to generate hash digests.
@@ -139,21 +139,21 @@ This program takes the sha1 sum of a file:
       console.log(d + '  ' + filename);
     });
 
-**/ 
+ 
 
 
-/**
-crypto.createSign(algorithm) -> signer
+
+## crypto.createSign(algorithm) -> signer
 - algorithm (String) : The algorithm to use
 
 Creates and returns a signing object string, with the given `algorithm`.
 
 
-**/ 
+ 
 
 
-/**
-crypto.createHmac(algorithm, key) -> hmac
+
+## crypto.createHmac(algorithm, key) -> hmac
 - algorithm (String): The algorithm to use
 - key (String): The HMAC key to be used
 
@@ -163,11 +163,11 @@ Creates and returns a cryptographic HMAC object with the given algorithm and key
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/crypto/crypto.createHmac.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-crypto.pbkdf2(password, salt, iterations, keylen, callback(err, derivedKey)) -> Void
+
+## crypto.pbkdf2(password, salt, iterations, keylen, callback(err, derivedKey)) -> Void
 - password (String): The password to use
 - salt (String): The salt to use
 - iterations (String): The number of iterations to use
@@ -182,11 +182,11 @@ An asynchronous PBKDF2 function that applies pseudorandom function HMAC-SHA1 to 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/crypto/crypto.pbkdf2.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-crypto.randomBytes(size [, callback(ex, buf)]) -> String | Void
+
+## crypto.randomBytes(size [, callback(ex, buf)]) -> String | Void
 - size (Number): The size of the cryptographic data
 - callback (Function): The callback to execute when finished
 - ex (Error): The error object
@@ -198,14 +198,14 @@ Generates cryptographically strong pseudo-random data, either asynchronously or 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/crypto/crypto.randomBytes.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
-/**
-crypto.createVerify(algorithim) -> verifier
+
+## crypto.createVerify(algorithim) -> verifier
 - algorithm (String) : The algorithm to use
 
 Creates and returns a verification object, with the given algorithm.
 
 This is the mirror of the [[signer `signer`]] object.
 
-**/ 
+ 

@@ -1,5 +1,5 @@
-/**
-class repl
+
+## class repl
 
 A Read-Eval-Print-Loop (REPL) is available both as a standalone program and easily includable in other programs.  REPL provides a way to interactively run Javascript and see the results.  It can be used for debugging, testing, or just trying things out.
 
@@ -68,10 +68,10 @@ The following key combinations in the REPL have special effects:
   - `<ctrl>D` - Similar to the `.exit` keyword, it closes to stream and exits the REPL
         
 
-**/
 
-/**
-repl.start([prompt='&gt; '] [, stream=process.stdin] [, eval=eval] [, useGlobal=false] [, ignoreUndefined=false])
+
+
+## repl.start([prompt='&gt; '] [, stream=process.stdin] [, eval=eval] [, useGlobal=false] [, ignoreUndefined=false])
  - prompt (String): The starting prompt
  - stream (String): The stream to read from
  - eval (String): An asynchronous wrapper function that executes after each line
@@ -109,4 +109,4 @@ repl.start([prompt='&gt; '] [, stream=process.stdin] [, eval=eval] [, useGlobal=
        repl.start("node via TCP socket> ", socket);
      }).listen(5001);
 
-**/
+

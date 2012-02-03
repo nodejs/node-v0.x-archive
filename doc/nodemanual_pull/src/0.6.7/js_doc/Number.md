@@ -1,7 +1,7 @@
 
 
-/** section: Javascript_Reference
-class Number
+### section: Javascript_Reference
+## class Number
 
 This is a wrapper object that allows you to work with numerical values.
 
@@ -28,10 +28,10 @@ The following example converts the `Date` object to a numerical value using `Num
 * [[Math `Math`]]
 
 
-**/
 
-/**
-new Number(value)
+
+
+## new Number(value)
 - value (Object): The numeric value of the object being created.
 
 The primary uses for the Number object are:
@@ -39,10 +39,10 @@ The primary uses for the Number object are:
 * If the argument can't be converted into a number, it returns NaN.
 * In a non-constructor context (i.e., without the `new` operator), `Number` can be used to perform a type conversion.
 
-**/
 
-/**
-Number.MAX_VALUE = "1.79E+308"
+
+
+## Number.MAX_VALUE = "1.79E+308"
 
 The maximum numeric value representable in Javascript. Values larger than `MAX_VALUE` are represented as [[Infinity `Infinity`]].
 
@@ -55,10 +55,10 @@ The following code multiplies two numeric values. If the result is less than or 
     else
        func2();
 
-**/
 
-/**
-Number.MIN_VALUE = "5e-324"
+
+
+## Number.MIN_VALUE = "5e-324"
    
 The smallest positive numeric value representable in Javascript. Values smaller than `MIN_VALUE` ("underflow values") are converted to 0.
 
@@ -73,10 +73,10 @@ The following code divides two numeric values. If the result is greater than or 
     else
        func2()
 
-**/
 
-/**
-Number.NEGATIVE_INFINITY -> Number
+
+
+## Number.NEGATIVE_INFINITY -> Number
    
 The value of `Number.NEGATIVE_INFINITY` is the same as the negative value of the global object's `[Infinity]` property.
 
@@ -107,17 +107,17 @@ In the following example, the variable smallNumber is assigned a value that is s
 #### See Also
 * [[Infinity `Infinity`]]
 * `Number.POSITIVE_INFINITY`
-**/
 
-/** alias of: NaN
-Number.NaN -> Number
+
+### alias of: NaN
+## Number.NaN -> Number
   
 A value representing "Not-A-Number."
 
-**/
 
-/**
-Number.POSITIVE_INFINITY -> Number
+
+
+## Number.POSITIVE_INFINITY -> Number
   
 A value representing the positive Infinity value.
 
@@ -152,10 +152,10 @@ In the following example, the variable bigNumber is assigned a value that is lar
 * [[Infinity `Infinity`]]
 * `Number.NEGATIVE_INFINITY`
 
-**/
 
-/** 
-Number.toExponential([fractionDigits]) -> Function
+
+
+## Number.toExponential([fractionDigits]) -> Function
 - fractionDigits (Number): An integer specifying the number of digits after the decimal point. Defaults to as many digits as necessary to specify the number.
  
 Returns a string representing a `Number` object in exponential notation with one digit before the decimal point, rounded to `fractionDigits` digits after the decimal point. If the `fractionDigits` argument is omitted, the number of digits after the decimal point defaults to the number of digits necessary to represent the value uniquely.
@@ -180,10 +180,10 @@ If a number has more digits that requested by the `fractionDigits` parameter, th
 * [[Number.toPrecision `toPrecision()`]]
 * [[Number.toString `toString()`]]
 
-**/
 
-/**
-Number.toFixed([digits = 0]) -> String
+
+
+## Number.toFixed([digits = 0]) -> String
 - digits (Number): The number of digits to appear after the decimal point; this may be a value between 0 and 20, inclusive, and implementations may optionally support a larger range of values.
   
 Formats a number using fixed-point notation.
@@ -222,10 +222,10 @@ A string representation of `number` that does not use exponential notation and h
 
 * [[Number.toExponential `toExponential()`]]
 
-**/
 
-/**
-Number.toLocaleString() -> String
+
+
+## Number.toLocaleString() -> String
 
 This method converts the number into a string which is suitable for presentation in the given locale.
 
@@ -235,10 +235,10 @@ This method converts the number into a string which is suitable for presentation
 	console.log(number.toLocaleString()); // Displays "3,500" in English locale
          
 
-**/
 
-/**
-Number.toPrecision([precision]) -> String
+
+
+## Number.toPrecision([precision]) -> String
 - precision (Number): An integer specifying the number of significant digits.
 
 Returns a string representing the Number object to the specified precision. 
@@ -265,10 +265,10 @@ A string representing a `Number` object in fixed-point or exponential notation r
 * [[Number.toFixed `toFixed()`]]
 * [[Number.toString `toString()`]]
 
-**/
 
-/**
-	Number.toSource() -> String
+
+
+## 	Number.toSource() -> String
 
 Returns a string representing the source code of the object. The `toSource` method returns the following values:
 
@@ -280,10 +280,10 @@ Returns a string representing the source code of the object. The `toSource` meth
 This method is usually called internally by Javascript and not explicitly in code.
 
 
-**/
 
-/**
-Number.toString([radix = 10]) -> String
+
+
+## Number.toString([radix = 10]) -> String
 - radix (Number): An integer between 2 and 36 specifying the base to use for representing numeric values.
 	
 Returns a string representing the specified Number object.
@@ -311,10 +311,10 @@ If toString is given a radix not between 2 and 36, an exception is thrown.
 * [[Number.toSource `toSource()`]]
 * [[Number.valueOf valueOf()`]]
 
-**/
 
-/**
-Number.valueOf() -> Number
+
+
+## Number.valueOf() -> Number
 
 The `valueOf` method of `Number` returns the primitive value of a `Number` object as a number data type.
 
@@ -326,5 +326,5 @@ This method is usually called internally by Javascript and not explicitly in cod
 	print(x.valueOf());     // prints "0"
 
 
-**/
+
 

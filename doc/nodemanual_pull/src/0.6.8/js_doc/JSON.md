@@ -1,6 +1,6 @@
 
-/** section: Javascript_Reference
-class JSON
+### section: Javascript_Reference
+## class JSON
 
 The JSON object contains methods for parsing JSON and converting values to JSON. It can't be called or constructed, and aside from its two method properties it has no interesting functionality of its own.
 
@@ -62,10 +62,10 @@ The full JSON syntax is as follows:
 
 Insignificant whitespace may be present anywhere except within a JSONNumber (numbers must contain no whitespace) or JSONString (where it is interpreted as the corresponding character in the string, or would cause an error). The tab character (U+0009), carriage return (U+000D), line feed (U+000A), and space (U+0020) characters are the only valid whitespace characters.
 
-**/
 
-/**
-JSON.parse(text[, reviver])
+
+
+## JSON.parse(text[, reviver])
 - text (String): The string to parse as JSON. See the JSON object for a description of JSON syntax.
 - reviver (String): If a function, prescribes how the value originally produced by parsing is transformed, before being returned.
 
@@ -92,10 +92,10 @@ The reviver is ultimately called with the empty string and the topmost value to 
 
 	JSON.parse('null'); // null</pre>
 
-**/
 
-/**
-JSON.stringify(value[, replacer [, space]])
+
+
+## JSON.stringify(value[, replacer [, space]])
 - value (String): The value to convert to a JSON string.
 - replacer (Function | Array): If a function, transforms values and properties encountered while stringifying; if an array, specifies the set of properties included in objects in the final string.
 - space (String): Causes the resulting string to be pretty-printed.
@@ -170,5 +170,5 @@ If an object being stringified has a property named `toJSON` whose value is a fu
 	var foo = {foundation: "Mozilla", model: "box", week: 45, transport: "car", month: 7};
 	var jsonString = JSON.stringify(foo, censor); // {"week":45,"month":7}
 
-**/
+
 

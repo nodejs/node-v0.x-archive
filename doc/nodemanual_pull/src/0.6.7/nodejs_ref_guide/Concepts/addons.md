@@ -1,5 +1,5 @@
-/** section: Addons
-Addons
+### section: Addons
+## Addons
 
 Addons are dynamically linked shared objects. They can provide glue to C and C++ libraries. The API (at the moment) is rather complex, involving knowledge of several libraries:
 
@@ -74,4 +74,3 @@ You can now use the binary addon in a Node project `hello.js` by pointing `requi
 For the moment, that is all the documentation on addons. Please see
 [https://github.com/pietern/hiredis-node](https://github.com/pietern/hiredis-node">https://github.com/pietern/hiredis-node) for a real example.
 
-**/

@@ -1,5 +1,5 @@
-/**
-class zlib
+
+## class zlib
 
 This provides bindings to Gzip/Gunzip, Deflate/Inflate, and DeflateRaw/InflateRaw classes. Each class takes the same options, and is a readable/writable Stream.
 
@@ -120,71 +120,71 @@ To use this module in an HTTP client or server, use the [accept-encoding](http:/
       }
     }).listen(1337);
 
-**/
 
-/**
-zlib.createGzip([options])
+
+
+## zlib.createGzip([options])
 - options (Object): The standard [[zlib.options `options`]] object available to all the methods.
 
 Returns a new Object for Gzip compression.
-**/ 
+ 
 
 
-/**
-zlib.createGunzip([options])
+
+## zlib.createGunzip([options])
 - options (Object): The standard [[zlib.options `options`]] object available to all the methods.
 
 Returns a new object for Gunzip compression.
 
-**/
 
 
-/**
-zlib.createDeflate([options])
+
+
+## zlib.createDeflate([options])
 - options (Object): The standard [[zlib.options `options`]] object available to all the methods.
 
 Returns a new object for compressing using deflate.
 
-**/ 
+ 
 
 
-/**
-zlib.createInflate([options])
+
+## zlib.createInflate([options])
 - options (Object): The standard [[zlib.options `options`]] object available to all the methods.
 
 Returns a new object to decompress a deflate stream.
 
-**/ 
+ 
 
 
-/**
-zlib.createDeflateRaw([options])
+
+## zlib.createDeflateRaw([options])
 - options (Object): The standard [[zlib.options `options`]] object available to all the methods.
 
 Returns a new object for compressing using deflate, without an appended zlib header.
 
-**/ 
+ 
  
 
-/**
-zlib.createInflateRaw([options])
+
+## zlib.createInflateRaw([options])
 - options (Object): The standard [[zlib.options `options`]] object available to all the methods.
 
 Returns a new object to decompress a raw deflate stream (one without an appended zlib header).
 
-**/ 
+ 
 
-/**
-zlib.createUnzip([options])
+
+## zlib.createUnzip([options])
 - options (Object): The standard [[zlib.options `options`]] object available to all the methods.
 
 Returns a new unzip to decompress either a Gzip- or Deflate-compressed stream by auto-detecting the header.
 
-**/ 
+ 
 
 
-/**
-zlib.deflate(buf, callback(error, result))
+
+## zlib.deflate(buf, callback(error, result))
 - buf (Buffer): The buffer to compress
 - callback (Function): The function to execute once the method completes
 - error (Error): The standard error object
@@ -193,11 +193,11 @@ zlib.deflate(buf, callback(error, result))
 
 Compresses a buffer using deflate.
 
-**/ 
+ 
 
 
-/**
-zlib.deflateRaw(buf, callback(error, result))
+
+## zlib.deflateRaw(buf, callback(error, result))
 - buf (Buffer): The buffer to compress
 - callback (Function): The function to execute once the method completes
 - error (Error): The standard error object
@@ -206,11 +206,11 @@ zlib.deflateRaw(buf, callback(error, result))
 
 Compresses a buffer using a raw deflate stream (one without an appended zlib header).
 
-**/ 
+ 
 
 
-/**
-zlib.gzip(buf, callback(error, result))
+
+## zlib.gzip(buf, callback(error, result))
 - buf (Buffer): The buffer to compress
 - callback (Function): The function to execute once the method completes
 - error (Error): The standard error object
@@ -219,11 +219,11 @@ zlib.gzip(buf, callback(error, result))
 
 Compresses a buffer using Gzip.
 
-**/ 
+ 
 
 
-/**
-zlib.gunzip(buf, callback(error, result))
+
+## zlib.gunzip(buf, callback(error, result))
 - buf (Buffer): The buffer to compress
 - callback (Function): The function to execute once the method completes
 - error (Error): The standard error object
@@ -232,11 +232,11 @@ zlib.gunzip(buf, callback(error, result))
 
 Decompress a buffer with Gunzip.
 
-**/ 
+ 
 
 
-/**
-zlib.inflate(buf, callback(error, result))
+
+## zlib.inflate(buf, callback(error, result))
 - buf (Buffer): The buffer to compress
 - callback (Function): The function to execute once the method completes
 - error (Error): The standard error object
@@ -245,11 +245,11 @@ zlib.inflate(buf, callback(error, result))
 
 Decompress a buffer with Inflate.
 
-**/ 
+ 
 
 
-/**
-zlib.inflateRaw(buf, callback(error, result))
+
+## zlib.inflateRaw(buf, callback(error, result))
 - buf (Buffer): The buffer to compress
 - callback (Function): The function to execute once the method completes
 - error (Error): The standard error object
@@ -258,11 +258,11 @@ zlib.inflateRaw(buf, callback(error, result))
 
 Decompress a raw buffer with a raw deflate stream (one without an appended zlib header)..
 
-**/ 
+ 
 
 
-/**
-zlib.unzip(buf, callback(error, result))
+
+## zlib.unzip(buf, callback(error, result))
 - buf (Buffer): The buffer to compress
 - callback (Function): The function to execute once the method completes
 - error (Error): The standard error object
@@ -270,5 +270,5 @@ zlib.unzip(buf, callback(error, result))
 
 Decompress a buffer with Unzip.
 
-**/
+
 

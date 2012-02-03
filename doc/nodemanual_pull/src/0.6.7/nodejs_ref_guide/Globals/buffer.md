@@ -1,6 +1,6 @@
 
-/** section: buffer_Module
-class Buffer
+### section: buffer_Module
+## class Buffer
 
 A `Buffer` is similar to an array of integers, but corresponds to a raw memory allocation outside the V8 heap.  While pure Javascript is Unicode friendly, it is not nice to binary data.  When dealing with TCP streams or the file system, it's necessary to handle octet streams. Node.js has several strategies for manipulating, creating, and consuming these octet streams (and raw data) within the `Buffer` object. 
 
@@ -26,10 +26,10 @@ In most cases, the default of `'utf8'` is used.
 
 
 For more information, see [this article on manipulating buffers](../nodejs_dev_guide/manipulating_buffers.html).
-**/
 
-/** 
-new Buffer(array)
+
+
+## new Buffer(array)
 new Buffer(size)
 new Buffer(str, encoding='utf8')
 
@@ -45,11 +45,11 @@ You can use either:
 
     var bBuffer = new Buffer("This is a Buffer.", "utf8");
 
-**/ 
+ 
 
 
-/**
-Buffer.byteLength(string, encoding='utf8') -> Number
+
+## Buffer.byteLength(string, encoding='utf8') -> Number
 - string (String): The string to check
 - encoding (String): The encoding that the string is in
 
@@ -62,10 +62,10 @@ Gives the actual byte length of a string.  This is not the same as `String.lengt
 #### Returns
 
 Returns the byte length of a buffer
-**/ 
+ 
 
-/**
-Buffer.copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length) -> Void
+
+## Buffer.copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length) -> Void
 - targetBuffer (Buffer): The buffer to copy into
 - targetStart (Number): The offset to start at for the buffer you're copying into
 - sourceStart (Number): The offset to start at for the buffer you're copying from
@@ -77,11 +77,11 @@ Performs a copy between buffers. The source and target regions can overlap.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.copy.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-Buffer.fill(value, offset=0, end=buffer.length) -> Void
+
+## Buffer.fill(value, offset=0, end=buffer.length) -> Void
 - value (Object): The value to use to fill the buffer
 - offset (Number): The position in the buffer to start filling at
 - end (Number): The position in the buffer to stop filling at
@@ -92,22 +92,22 @@ Fills the buffer with the specified value. If the offset and end are not given, 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.fill.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
     
-**/ 
+ 
 
 
-/**
-Buffer.isBuffer(obj) -> Boolean
+
+## Buffer.isBuffer(obj) -> Boolean
 - obj (Object): The object to check
 
 Returns `true` if `obj` is a `Buffer`.
 
 
 
-**/ 
+ 
 
 
-/**
-Buffer.readDoubleBE(offset, noAssert=false) -> String
+
+## Buffer.readDoubleBE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -117,11 +117,11 @@ Reads a 64-bit double from the buffer at the specified offset in big endian nota
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readDoubleBELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
  
-**/ 
+ 
 
 
-/**
-Buffer.readDoubleLE(offset, noAssert=false) -> String
+
+## Buffer.readDoubleLE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -132,11 +132,11 @@ Reads a 64 bit double from the buffer at the specified offset in little endian n
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readDoubleBELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
  
-**/ 
+ 
 
 
-/**
-Buffer.readFloatBE(offset, noAssert=false) -> String
+
+## Buffer.readFloatBE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -147,11 +147,11 @@ Reads a 32 bit float from the buffer at the specified offset in big endian notat
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readFloatBELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>    
  
-**/ 
+ 
 
 
-/**
-Buffer.readFloatLE(offset, noAssert=false) -> String
+
+## Buffer.readFloatLE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -162,11 +162,11 @@ Reads a 32 bit float from the buffer at the specified offset in little endian no
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readFloatBELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>      
  
-**/
 
 
-/**
-Buffer.readInt8(offset, noAssert=false) -> String
+
+
+## Buffer.readInt8(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -175,11 +175,11 @@ Reads a signed 8 bit integer from the buffer at the specified offset.
 This function also works as [[buffer.readUInt8 `buffer.readUInt8()`]], except buffer contents are treated as two's complement signed values. 
 
 
-**/ 
+ 
 
 
-/**
-Buffer.readInt16BE(offset, noAssert=false) -> String
+
+## Buffer.readInt16BE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -189,11 +189,11 @@ This function also works as [[buffer.readUInt16BE `buffer.readUInt16BE()`]], exc
 
 
 
-**/ 
+ 
 
 
-/**
-Buffer.readInt16LE(offset, noAssert=false) -> String
+
+## Buffer.readInt16LE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -203,11 +203,11 @@ This function also works as [[buffer.readUInt16LE `buffer.readUInt16LE()`]], exc
 
 
 
-**/ 
+ 
 
 
-/**
-Buffer.readInt32BE(offset, noAssert=false) -> String
+
+## Buffer.readInt32BE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -216,11 +216,11 @@ Reads a signed 32 bit integer from the buffer at the specified offset in big end
 This function works like [[buffer.readUInt32BE `buffer.readUInt32BE()`]], except buffer contents are treated as a two's complement signed values.
 
 
-**/ 
+ 
 
 
-/**
-Buffer.readInt32LE(offset, noAssert=false) -> String
+
+## Buffer.readInt32LE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -230,11 +230,11 @@ Reads a signed 32 bit integer from the buffer at the specified offset in little 
 This function works like [[buffer.readUInt32LE `buffer.readUInt32LE()`]], except buffer contents are treated as a two's complement signed values.
 
 
-**/ 
+ 
 
 
-/**
-Buffer.readUInt8(offset, noAssert=false) -> String
+
+## Buffer.readUInt8(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -245,11 +245,11 @@ Reads an unsigned 8 bit integer from the buffer at the specified offset.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readUInt8.js?linestart=3&lineend=0&showlines=false' defer='defer'></script> 
 
-**/ 
+ 
 
 
-/**
-Buffer.readUInt16BE(offset, noAssert=false) -> String
+
+## Buffer.readUInt16BE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -259,11 +259,11 @@ Reads an unsigned 16 bit integer from the buffer at the specified offset in the 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readUInt16BELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script> 
 
-**/ 
+ 
 
 
-/**
-Buffer.readUInt16LE(offset, noAssert=false) -> String
+
+## Buffer.readUInt16LE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -273,11 +273,11 @@ Reads an unsigned 16 bit integer from the buffer at the specified offset in the 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readUInt16BELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script> 
 
-**/ 
+ 
 
 
-/**
-Buffer.readUInt32BE(offset, noAssert=false) -> String
+
+## Buffer.readUInt32BE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -287,11 +287,11 @@ Reads an unsigned 32 bit integer from the buffer at the specified offset in the 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readUInt32BELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
    
-**/ 
+ 
 
 
-/**
-Buffer.readUInt32LE(offset, noAssert=false) -> String
+
+## Buffer.readUInt32LE(offset, noAssert=false) -> String
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
 
@@ -302,11 +302,11 @@ Reads an unsigned 32 bit integer from the buffer at the specified offset in the 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readUInt32BELE.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>   
     
-**/ 
+ 
 
 
-/**
-Buffer.slice(start, end=buffer.length) -> Buffer
+
+## Buffer.slice(start, end=buffer.length) -> Buffer
 - start (Number): The offset in the buffer to start from
 - end (Number): The position of the last byte to slice. Defaults to the length of the buffer
 
@@ -320,11 +320,11 @@ Building a `Buffer` with the ASCII alphabet, taking a slice, then modifying one 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.readUInt32BELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>   
     
-**/ 
+ 
 
 
-/** related to: buffer.write
-Buffer.toString(encoding="utf8", start=0, end=buffer.length) -> String
+### related to: buffer.write
+## Buffer.toString(encoding="utf8", start=0, end=buffer.length) -> String
 - encoding (String): The encoding to use; defaults to `utf8`
 - start (Number): The starting byte offset; defaults to `0`
 - end (Number): The number of bytes to write; defaults to the length of the buffer
@@ -332,11 +332,11 @@ Buffer.toString(encoding="utf8", start=0, end=buffer.length) -> String
 Decodes and returns a string from buffer data encoded with `encoding` beginning at `start` and ending at `end`.
 
 
-**/ 
+ 
 
 
-/**
-Buffer.write(string, offset=0, length = startPos, encoding="utf8") -> Number
+
+## Buffer.write(string, offset=0, length = startPos, encoding="utf8") -> Number
 - string (String): The string to write
 - offset (Number): The starting byte offset
 - length (Number): The number of bytes to write; defaults to the length of the buffer minus any offset (`buffer.length` - `buffer.offset`)
@@ -354,11 +354,11 @@ Writing a utf8 string into a buffer, then printing it:
 #### Returns
 
 Returns number of octets written.
-**/ 
+ 
 
 
-/**
-Buffer.writeDoubleBE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeDoubleBE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -369,11 +369,11 @@ Writes `value` to the buffer at the specified offset in the big endian format. N
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeDoubleBELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-Buffer.writeDoubleLE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeDoubleLE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -384,11 +384,11 @@ Writes `value` to the buffer at the specified offset in the little endian format
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeDoubleBELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-Buffer.writeFloatBE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeFloatBE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -399,11 +399,11 @@ Writes `value` to the buffer at the specified offset in the big endian format. N
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeFloatBELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
    
-**/ 
+ 
 
 
-/**
-Buffer.writeFloatLE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeFloatLE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -414,11 +414,11 @@ Writes `value` to the buffer at the specified offset in the little endian format
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeFloatBELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-Buffer.writeInt8(value, offset, noAssert=false) -> Void
+
+## Buffer.writeInt8(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -429,11 +429,11 @@ Works as `buffer.writeUInt8()`, except value is written out as a two's complemen
 
 
 
-**/ 
+ 
 
 
-/**
-Buffer.writeInt16BE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeInt16BE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -443,11 +443,11 @@ Writes `value` to the buffer at the specified offset in the big endian format. N
 This function also works as `buffer.writeUInt16*()`, except value is written out as a two's complement signed integer into `buffer`.
 
 
-**/ 
+ 
 
 
-/**
-Buffer.writeInt16LE(value, offset, noAssert=alse) -> Void
+
+## Buffer.writeInt16LE(value, offset, noAssert=alse) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -457,11 +457,11 @@ Writes `value` to the buffer at the specified offset in the little endian format
 This function also works as `buffer.writeUInt16*()`, except value is written out as a two's complement signed integer into `buffer`.
 
 
-**/ 
+ 
 
 
-/**
-Buffer.writeInt32BE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeInt32BE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -471,11 +471,11 @@ Writes `value` to the buffer at the specified offset in the big endian format. N
 This function also works as `buffer.writeUInt32*`, except value is written out as a two's complement signed integer into `buffer`.
 
 
-**/ 
+ 
 
 
-/**
-Buffer.writeInt32LE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeInt32LE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -485,11 +485,11 @@ Writes `value` to the buffer at the specified offset in the little endian format
 This function also works as `buffer.writeUInt32*`, except value is written out as a two's complement signed integer into `buffer`.
 
 
-**/ 
+ 
 
 
-/**
-Buffer.writeUInt8(value, offset, noAssert=false) -> Void
+
+## Buffer.writeUInt8(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -500,11 +500,11 @@ Writes `value` to the buffer at the specified offset. Note that `value` must be 
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeUInt8.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-Buffer.writeUInt16BE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeUInt16BE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -515,11 +515,11 @@ Writes `value` to the buffer at the specified offset in the big endian format. N
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeUInt16BELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-Buffer.writeUInt16LE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeUInt16LE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean):  If `true`, skips the validation of the offset 
@@ -531,11 +531,11 @@ Writes `value` to the buffer at the specified offset in the little endian format
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeUInt16BELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
 
-**/ 
+ 
 
 
-/**
-Buffer.writeUInt32BE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeUInt32BE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean): If `true`, skips the validation of the offset. This means that `offset` may be beyond the end of the buffer, and is typically not recommended.
@@ -547,11 +547,11 @@ Writes `value` to the buffer at the specified offset in the big endian format. N
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeUInt32BELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
 
-**/ 
+ 
 
 
-/**
-Buffer.writeUInt32LE(value, offset, noAssert=false) -> Void
+
+## Buffer.writeUInt32LE(value, offset, noAssert=false) -> Void
 - value (String): The content to write
 - offset (Number): The starting position
 - noAssert (Boolean):  If `true`, skips the validation of the offset 
@@ -563,11 +563,11 @@ Writes `value` to the buffer at the specified offset in the little endian format
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.writeUInt32BELE.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
  
 
-**/ 
+ 
 
 
-/**
-Buffer.index -> Number
+
+## Buffer.index -> Number
 
 Gets and sets the octet at `index` in an array format. The values refer to individual bytes, so the legal range is between `0x00` and `0xFF` hex or `0` and `255`.
 
@@ -575,16 +575,16 @@ Gets and sets the octet at `index` in an array format. The values refer to indiv
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.index.js?linestart=4&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/** 
-Buffer._charsWritten -> Number
+
+
+## Buffer._charsWritten -> Number
 
 The number of characters written by [[buffer.write `buffer.write()`]]. This value is overwritten each time `buffer.write()` is called.
-**/ 
+ 
 
-/**
-Buffer.length -> Number
+
+## Buffer.length -> Number
 
 
 The size of the buffer in bytes.  Note that this is not necessarily the size of the contents. `length` refers to the amount of memory allocated for the buffer object.  It does not change when the contents of the buffer are changed.
@@ -594,14 +594,14 @@ The size of the buffer in bytes.  Note that this is not necessarily the size of 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/buffer/buffer.length.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
      
     
-**/ 
+ 
 
 
-/**
-Buffer.INSPECT_MAX_BYTES = "50"
+
+## Buffer.INSPECT_MAX_BYTES = "50"
 
 
 The number of bytes returned when `buffer.inspect()` is called. This can be overridden by user modules.
 
-**/
+
 

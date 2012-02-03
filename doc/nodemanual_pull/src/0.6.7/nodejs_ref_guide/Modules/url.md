@@ -1,5 +1,5 @@
-/**
-class url
+
+## class url
 
 This module has utilities for URL resolution and parsing. To use it, add `require('url')` to your code.
 
@@ -51,22 +51,22 @@ Parsed URL objects have some or all of the following fields, depending on whethe
 
   For the URL above, this is: `'#hash'`
 
-**/
 
 
-/**
-url.parse(urlStr [, parseQueryString=false] [, slashesDenoteHost=false]) -> Object
+
+
+## url.parse(urlStr [, parseQueryString=false] [, slashesDenoteHost=false]) -> Object
 - urlStr (String): The URL string
 - parseQueryString (Boolean): If `true`, the method parses the URL using the [[querystring `querystring`]] module
 - slashesDenoteHost (Boolean): If `true`, `//foo/bar` acts like `{ host : 'foo', pathname  '/bar' }`, instead of `{ pathname : '//foo/bar' }`
 
 Takes a URL string, and return it as an object.
 
-**/ 
+ 
 
 
-/**
-url.format(urlObj) -> String
+
+## url.format(urlObj) -> String
  - urlObj (String): The object to tranform into a URL
 
 Take a parsed URL object, and return a formatted URL string that contains these properties:
@@ -85,11 +85,11 @@ Take a parsed URL object, and return a formatted URL string that contains these 
 * `search` is treated the same with or without the leading `?` 
 * `hash` is treated the same with or without the leading `#` 
 
-**/ 
+ 
 
 
-/**
-url.resolve(from, to) -> String
+
+## url.resolve(from, to) -> String
 - from (String): The base URL
 - to  (String): The href URL
 
@@ -98,5 +98,5 @@ Takes a base URL, and a href URL, and resolve them as a browser would for an anc
 #### Example
 	
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/url/url.resolve.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
-**/ 
+ 
 

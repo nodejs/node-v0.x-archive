@@ -1,5 +1,5 @@
-/**
-class dns
+
+## class dns
 
 DNS is the backbone of all operations on the Internet. To access this module, include `require('dns')` in your code.
 
@@ -9,10 +9,10 @@ Whenever a Node.js developer does something like `net.connect(80, 'google.com')`
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dns/dns.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-dns.lookup(domain, [family=null], callback(err, address, family)) -> Void
+
+
+## dns.lookup(domain, [family=null], callback(err, address, family)) -> Void
 - domain (String): The domain to resolve
 - family (Number): Indicates whether to use IPv4 (`4`) or IPv6 (`6`)
 - callback (Function): The function to execute once the method completes
@@ -26,11 +26,11 @@ Resolves a domain (e.g. `'google.com'`) into the first found A (IPv4) or AAAA (I
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dns/dns.lookup.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-dns.resolve(domain, [rrtype='A'], callback(err, addresses)) -> Void
+
+## dns.resolve(domain, [rrtype='A'], callback(err, addresses)) -> Void
 - domain (String): The domain to resolve
 - rrtype (String): The record type to use
 - callback (Function):  The function to execute once the method completes
@@ -52,11 +52,11 @@ Resolves a domain (e.g. `'google.com'`) into an array of the record types specif
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dns/dns.resolve.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-dns.resolve4(domain, callback(err, addresses)) -> Void
+
+## dns.resolve4(domain, callback(err, addresses)) -> Void
 - domain (String): The domain to resolve
 - callback (Function): The function to execute once the method completes
 - err (Error): The `Error` object
@@ -64,11 +64,11 @@ dns.resolve4(domain, callback(err, addresses)) -> Void
 
 The same as [[dns.resolve `dns.resolve()`]], but only for IPv4 queries (`A` records).
 
-**/ 
+ 
 
 
-/**
-dns.resolve6(domain, callback(err, addresses)) -> Void
+
+## dns.resolve6(domain, callback(err, addresses)) -> Void
 - domain (String): The domain to resolve
 - callback (Function): The function to execute once the method completes
 - err (Error): The `Error` object
@@ -77,11 +77,11 @@ dns.resolve6(domain, callback(err, addresses)) -> Void
 The same as [[dns.resolve4 `dns.resolve4()`]] except for IPv6 queries (an `AAAA` query).
 
 
-**/ 
+ 
 
 
-/**
-dns.resolveMx(domain, callback(err, addresses)) -> Void
+
+## dns.resolveMx(domain, callback(err, addresses)) -> Void
 - domain (String): The domain to resolve
 - callback (Function): The function to execute once the method completes
 - err (Error): The `Error` object
@@ -90,11 +90,11 @@ dns.resolveMx(domain, callback(err, addresses)) -> Void
 The same as [[dns.resolve `dns.resolve()`]], but only for mail exchange queries (`MX` records).
 
 
-**/ 
+ 
 
 
-/**
-dns.resolveTxt(domain, callback(err, addresses)) -> Void
+
+## dns.resolveTxt(domain, callback(err, addresses)) -> Void
 - domain (String): The domain to resolve
 - callback (Function): The function to execute once the method completes
 - err (Error): The `Error` object
@@ -102,11 +102,11 @@ dns.resolveTxt(domain, callback(err, addresses)) -> Void
 
 The same as [[dns.resolve `dns.resolve()`]], but only for text queries (`TXT` records).
 
-**/ 
+ 
 
 
-/**
-dns.resolveSrv(domain, callback(err, addresses)) -> Void
+
+## dns.resolveSrv(domain, callback(err, addresses)) -> Void
 - domain (String): The domain to resolve
 - callback (Function): The function to execute once the method completes
 - err (Error): The `Error` object
@@ -115,11 +115,11 @@ dns.resolveSrv(domain, callback(err, addresses)) -> Void
 The same as [[dns.resolve `dns.resolve()`]], but only for service records (`SRV` records).
 
 
-**/ 
+ 
 
 
-/**
-dns.reverse(ip, callback(err, domains)) -> Void
+
+## dns.reverse(ip, callback(err, domains)) -> Void
 - ip (String): The IP address to reverse
 - callback (Function):  The function to execute once the method completes
 - err (Error): The `Error` object
@@ -127,11 +127,11 @@ dns.reverse(ip, callback(err, domains)) -> Void
 
 Reverse resolves an IP address to an array of domain names.
 
-**/ 
+ 
 
 
-/**
-dns.resolveNs(domain, callback(err, domains)) -> Void
+
+## dns.resolveNs(domain, callback(err, domains)) -> Void
 - domain (String): The domain to resolve
 - callback (Function): The function to execute once the method completes
 - err (Error): The `Error` object
@@ -139,11 +139,11 @@ dns.resolveNs(domain, callback(err, domains)) -> Void
 
 The same as [[dns.resolve `dns.resolve()`]], but only for name server records (`NS` records).
 
-**/ 
+ 
 
 
-/**
-dns.resolveCname(domain, callback(err, domains)) -> Void
+
+## dns.resolveCname(domain, callback(err, domains)) -> Void
 - domain (String): The domain to resolve
 - callback (Function): The function to execute once the method completes
 - err (Error): The `Error` object
@@ -159,5 +159,5 @@ Each DNS query can return one of the following error codes:
 - `dns.NODATA`: domain exists but no data of reqd type.
 - `dns.NOMEM`: out of memory while processing.
 - `dns.BADQUERY`: the query is malformed.
-**/ 
+ 
 

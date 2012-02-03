@@ -1,5 +1,5 @@
-/**
-class os
+
+## class os
 
 This provides a way to retrieve various information about the underlaying operating system. Add `require('os')` in your code to access this module.
 
@@ -7,19 +7,19 @@ This provides a way to retrieve various information about the underlaying operat
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/os/os.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
+
   
-/**
-os.arch() -> String
+
+## os.arch() -> String
 
 Returns the operating system CPU architecture.
 
-**/ 
+ 
 
 
 
-/**
-os.cpus() -> Array
+
+## os.cpus() -> Array
 
 Returns an array of objects containing information about each CPU/core installed: the model, speed (in MHz), and times (an object containing the number of CPU ticks spent in: user, nice, sys, idle, and irq).
 
@@ -92,28 +92,28 @@ Example inspection of os.cpus:
          idle: 1072572010,
          irq: 30 } } ]
 
-**/
+
            
-/**
-os.freemem() -> Number
+
+## os.freemem() -> Number
 
 
 Returns the amount of free system memory in bytes.
 
-**/ 
+ 
 
 
-/**
-os.hostname() -> String
+
+## os.hostname() -> String
 
 
 Returns the hostname of the operating system.
 
-**/ 
+ 
 
 
-/**
-os.networkInterfaces() -> Object
+
+## os.networkInterfaces() -> Object
 
 
 Returns a list of network interfaces.
@@ -133,56 +133,56 @@ Returns a list of network interfaces.
       ppp0: [ { address: '10.2.0.231', family: 'IPv4', internal: false } ] }
 
 
-**/ 
+ 
 
 
-/**
-os.loadavg() -> Array
+
+## os.loadavg() -> Array
 
 
 Returns an array containing the 1, 5, and 15 minute load averages.
 
-**/ 
+ 
 
 
-/**
-os.platform() -> String
+
+## os.platform() -> String
 
  
 Returns the operating system platform.
 
-**/ 
+ 
 
 
-/**
-os.release() -> String
+
+## os.release() -> String
 
  
 Returns the operating system release.
 
-**/ 
+ 
 
 
-/**
-os.totalmem() -> Number
+
+## os.totalmem() -> Number
 
 Returns the total amount of system memory in bytes.
 
-**/ 
+ 
 
 
-/**
-os.type() -> String
+
+## os.type() -> String
 
 Returns the operating system name.
 
-**/ 
+ 
 
 
-/**
-os.uptime() -> Number
+
+## os.uptime() -> Number
 
 
 Returns the system uptime in seconds.
-**/ 
+ 
 

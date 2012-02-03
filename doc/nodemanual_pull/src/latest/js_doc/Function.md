@@ -1,15 +1,15 @@
 
 
-/** section: Javascript_Reference
-class Function
+### section: Javascript_Reference
+## class Function
 
 Every function in Javascript is actually a `Function` object. Yes, it's true. Thus, all the following methods can be called on any function.
 
-**/
 
 
-/**
-new Function([argN...], functionBody)
+
+
+## new Function([argN...], functionBody)
 - argN (Object): Names to be used by the function as formal argument names. Each must be a string that corresponds to a valid Javascript identifier or a list of such strings separated with a comma; for example "x", "theValue", or "a,b".
 - functionBody (String): A string containing the Javascript statements comprising the function definition.
 
@@ -26,11 +26,11 @@ Invoking the Function constructor as a function (without using the new operator)
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/Function/function.1.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
             
 The arguments "`a`" and "`b`" are formal argument names that are used in the function body, "`return a + b`".
-**/
 
 
-/**
-Function.caller -> Function
+
+
+## Function.caller -> Function
 
 Returns the function that invoked the specified function.
 
@@ -76,19 +76,19 @@ This property replaces the deprecated `arguments.caller`.
           return ("This function's caller was " + myFunc.caller);
     }
 
-**/
 
-/** 
-Function.constructor -> Function
+
+
+## Function.constructor -> Function
 
 Returns a reference to the [[Function `Function`]] function that created the instance's prototype. Note that the value of this property is a reference to the function itself, not a string containing the function's name.
 
 For more information, see [[Object.constructor `Object.constructor`]].
 
-**/
 
-/**
-Function.length -> Number
+
+
+## Function.length -> Number
   
 `length` is a property of a function object, and indicates how many arguments the function expects, i.e. the number of formal parameters. By contrast, [`arguments.length`](https://developer.mozilla.org/en/Javascript/Reference/Functions_and_function_scope/arguments/length) is local to a function and provides the number of arguments actually passed to the function.
 
@@ -96,10 +96,10 @@ Function.length -> Number
  
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/Function/function.length.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>          
  
-**/
 
-/** read-only
-Function.name -> String
+
+### read-only
+## Function.name -> String
 
 The `name` property returns the name of a function, or an empty string for anonymous functions:
 
@@ -148,10 +148,10 @@ You can define a function with a name in a [function expression](https://develop
  	var b = new a();
  	console.log(b.constructor.name); // Prints "a"
  
-**/
 
-/**
-Function.apply(thisArg[, argsArray]) -> Void
+
+
+## Function.apply(thisArg[, argsArray]) -> Void
 - thisArg (Object): The value of this provided for the call to fun.  Note that this may not be the actual value seen by the method: if the method is a function in non-strict mode code, null and undefined will be replaced with the global object, and primitive values will be boxed.  
 - argsArray (Object): An array like object, specifying the arguments with which fun should be called, or `null` or `undefined` if no arguments should be provided to the function.
 
@@ -240,10 +240,10 @@ Since ECMAScript 5th Edition you can also use any kind of object which is array 
 * [[Function.call `call()`]]
 * [[Function.bind `bind()`]]
 
-**/
 
-/**
-Function.call(thisArg[, argN...]) -> Void
+
+
+## Function.call(thisArg[, argN...]) -> Void
 - thisArg (Object): The value of this provided for the call to this function.  Note that this may not be the actual value seen by the method: if the method is a function in non-strict mode code, null and undefined will be replaced with the global object, and primitive values will be boxed.
 - argN (Object): Arguments for the object.
 
@@ -300,10 +300,10 @@ Example: Using `call` to chain constructors for an object
 	 }
          
 
-**/
 
-/** 
-Function.toSource() -> String
+
+
+## Function.toSource() -> String
 	
 Returns a string representing the source code for the function.
 
@@ -321,10 +321,10 @@ The `toSource` method returns the following values:
 This method is usually called internally by Javascript and not explicitly in code. You can call `toSource` while debugging to examine the contents of an object.
 
 
-**/
 
-/**
-Function.toString(indentation) -> String
+
+
+## Function.toString(indentation) -> String
 - indentation (Number): The amount of spaces to indent the string representation of the source code. If indentation is less than or equal to -1, most unnecessary spaces are removed.
 
 Returns a string representing the source code of the function.
@@ -334,10 +334,10 @@ The `[Function]` object overrides the [[Object.toString `Object.toString()`]] me
 
 Javascript calls the `toString` method automatically when a `Function` is to be represented as a text value, e.g. when a function is concatenated with a string.
 
-**/
 
-/** deprecated
-Function.arguments -> Array
+
+### deprecated
+## Function.arguments -> Array
 
 An array-like object corresponding to the arguments passed to a function.
  
@@ -360,19 +360,19 @@ Calling `f(2)` outputs:
 	after: 0
 	after: 1
  
-**/
 
-/** deprecated
-Function.arity -> Number
+
+### deprecated
+## Function.arity -> Number
    
 Specifies the number of arguments expected by the function.
 
 The `arity` property no longer exists and has been replaced by the [[Function.length `length`]] property.
 
-**/
 
-/**
-Function.bind(thisArg[, argN...]) -> Function
+
+
+## Function.bind(thisArg[, argN...]) -> Function
 - thisArg (Object): The value to be passed as the this parameter to the target function when the bound function is called. The value is ignored if the bound function is constructed using the new operator.
 - argN (Object): Arguments to prepend to arguments provided to the bound function when invoking the target function.
 
@@ -527,4 +527,3 @@ With `bind`, this can be simplified to the following. `slice` will be a bound fu
 * [[Function.apply `apply()`]]
 * [[Function.call `call()`]]
 
-**/

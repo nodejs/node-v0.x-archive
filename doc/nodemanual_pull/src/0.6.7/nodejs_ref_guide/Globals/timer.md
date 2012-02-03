@@ -1,5 +1,5 @@
-/**
-class timer
+
+## class timer
 
 The timer functions are useful for scheduling functions to run after a defined amount of time. All of the objects in this class are global; the method calls don't need to be prepended with an object name.
 
@@ -32,30 +32,30 @@ The solution to the above problem is to create a [closure](http://stackoverflow.
         )(i)};
 
 
-**/
 
 
-/**
-timer.clearInterval(intervalId) -> Void
+
+
+## timer.clearInterval(intervalId) -> Void
 - intervalId (Number):  The id of the interval
 
 Stops a interval from triggering. 
 
 
-**/ 
+ 
 
 
-/**
-timer.clearTimeout(timeoutId) -> Void
+
+## timer.clearTimeout(timeoutId) -> Void
 - timeoutId (Number):  The id of the timeout
 
 Prevents a timeout from triggering.
 
-**/ 
+ 
 
 
-/**
-timer.setInterval(callback(), delay [, arg...]) -> Void
+
+## timer.setInterval(callback(), delay [, arg...]) -> Void
 - callback (Function):  The callback function to execute
 - delay (Number):  The delay (in milliseconds) before executing the callback
 - arg (Object): Any optional arguments to pass the to callback
@@ -75,11 +75,11 @@ This schedules the repeated execution of a callback function after a defined del
 		    clearInterval(this);
 		}, 1000, 'test param');
 
-**/ 
+ 
 
 
-/**
- timer.setTimeout(callback(), delay [, arg...]) -> Void
+
+##  timer.setTimeout(callback(), delay [, arg...]) -> Void
 - callback (Function):  The callback function to execute
 - delay (Number):  The delay (in milliseconds) before executing the callback
 - arg (Object): Any optional arguments to pass the to callback
@@ -87,4 +87,4 @@ This schedules the repeated execution of a callback function after a defined del
 This function schedules the execution of a one-time callback function after a defined delay, It returns a `timeoutId`, which can be used later with `clearTimeout()`. Optionally, you can also pass arguments to the callback. 
 
 
-**/ 
+ 

@@ -1,6 +1,6 @@
 
-/** section: Javascript_Reference
-class Date
+### section: Javascript_Reference
+## class Date
 
 
 The Javascript date is measured in milliseconds since midnight 01 January, 1970 UTC. A day holds 86,400,000 milliseconds. The Javascript `Date` object range is -100,000,000 days to 100,000,000 days relative to 01 January, 1970 UTC.
@@ -25,10 +25,10 @@ The following examples show how to determine the elapsed time between two Javasc
 	
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/Date/date.1.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 	 	   
-**/
 
-/**
-new Date()
+
+
+## new Date()
 new Date(milliseconds)
 new Date(dateString)
 new Date(year, month, day [, hour, minute, second, millisecond ])
@@ -45,10 +45,10 @@ new Date(year, month, day [, hour, minute, second, millisecond ])
 If you supply no arguments, the constructor creates a Javascript Date object for today's date and time according to local time. If you supply some arguments but not others, the missing arguments are set to 0. If you supply any arguments, you must supply at least the year, month, and day. You can omit the hours, minutes, seconds, and milliseconds.
 
 <Note>Javascript `Date` objects can only be instantiated by calling Javascript `Date` as a constructor: calling it as a regular function (i.e. without the new operator) will return a string rather than a `Date` object; unlike other Javascript object types, Javascript `Date` objects have no literal syntax.</Note>
-**/
 
-/**
-Date.parse(dateString) -> Number
+
+
+## Date.parse(dateString) -> Number
 - dateString (String): Represents an RFC822 or ISO 8601 date.
 
 Parses a string representation of a date, and returns the number of milliseconds since January 1, 1970, 00:00:00, UTC.
@@ -99,19 +99,19 @@ Some other examples:
 
 * [[Date.UTC `Date.UTC`]]
 
-**/
 
-/** 
-	Date.now() -> Number
+
+
+## 	Date.now() -> Number
 	 	 	
 
 The `now` method returns the milliseconds elapsed since 1 January 197, 00:00:0, UTC up until now as a [[Number `Number`]].
 
 When using `now` to create timestamps or unique IDs, keep in mind that the resolution may be 1 milliseconds on Windows (see [this bug](https://bugzilla.mozilla.org/show_bug.cgi?id=363258)), so you could end up with several equal values if `now` is called multiple times within a short time span
-**/
 
-/**
-Date.UTC(year, month[, day, hour, minute, second, millisecond ])
+
+
+## Date.UTC(year, month[, day, hour, minute, second, millisecond ])
 - year (Number): Value representing the year. For compatibility (in order to avoid the Y2K problem), you should always specify the year in full; use 1998, rather than 98.
 - month (Number): Value representing the month, beginning with 0 for January to 11 for December.
 - day (Number): Value representing the day of the month (1-31).
@@ -145,10 +145,10 @@ The following statement creates a `Date` object using GMT instead of local time:
 
 * [[Date.parse `Date.parse()`]]
 
-**/
 
-/**
-Date.getFullYear() -> Number
+
+
+## Date.getFullYear() -> Number
 
 	Returns the year of the specified date according to local time.
 	
@@ -168,10 +168,10 @@ The following example assigns the four-digit value of the current year to the va
 * [[Date.getYear `Date.getYear()`]]
 * [[Date.getUTCFullYear `Date.getUTCFullYear()`]]
 * [[Date.setFullYear `Date.setFullYear()`]]
-**/
 
-/** 	
-Date.setFullYear(yearValue[, monthValue[, dayValue]]) -> Void
+
+
+## Date.setFullYear(yearValue[, monthValue[, dayValue]]) -> Void
 - yearValue (Number): Specifies the numeric value of the year, for example, 1995.
 - monthValue  (Number): A value between 0 and 11 representing the months January through December.
 - dayValue  (Number): A value between 1 and 31 representing the day of the month. If you specify the `dayValue` parameter, you must also specify the`monthValue`.
@@ -192,10 +192,10 @@ If a parameter you specify is outside of the expected range, `setFullYear` attem
 * [[Date.getUTCFullYear `getUTCFullYear()`]]
 * [[Date.setUTCFullYear `setUTCFullYear()`]]
 * [[Date.setYear `setYear()`]] 
-**/
 
-/**
-	Date.getUTCFullYear() -> Number
+
+
+## 	Date.getUTCFullYear() -> Number
 	
 Returns the year in the specified date according to universal time.
 
@@ -211,10 +211,10 @@ The following example assigns the four-digit value of the current year to the va
 
 * [[Date.getFullYear `getFullYear()`]]
 * [[Date.setFullYear `setFullYear()`]]
-**/
 
- /**	
-	Date.setUTCFullYear(yearValue[, monthValue[, dayValue]]) -> Void
+
+
+## 	Date.setUTCFullYear(yearValue[, monthValue[, dayValue]]) -> Void
 - yearValue (Number): Specifies the numeric value of the year, for example, 1995. 
 - monthValue  (Number): A value between 0 and 11 representing the months January through December. 
 - dayValue  (Number):  A value between 1 and 31 representing the day of the month. If you specify the dayValue parameter, you must also specify the monthValue.
@@ -235,19 +235,19 @@ If a parameter you specify is outside of the expected range, `setUTCFullYear` at
 
 * [[Date.getUTCFullYear `getUTCFullYear()`]]
 * [[Date.setFullYear `setFullYear()`]]
-**/
 
-/** 
-Date.constructor -> Function
+
+
+## Date.constructor -> Function
 
 Returns a reference to the [[Date `Date`]] function that created the instance's prototype. Note that the value of this property is a reference to the function itself, not a string containing the function's name.
 
 For more information, see [[Object.constructor `Object.constructor`]].
 
-**/
 
- /** 
-	Date.getDate() -> Number
+
+
+## 	Date.getDate() -> Number
 	
 Returns the day of the month for the specified date according to local time.
 
@@ -267,10 +267,10 @@ The second statement below assigns the value 25 to the variable `day`, based on 
 * [[Date.getUTCDate `getUTCDate()`]]
 * [[Date.getUTCDay `getUTCDay()`]]
 * [[Date.setDate `setDate()`]]
-**/
 
- /**
-Date.getDay() -> Number
+
+
+## Date.getDay() -> Number
 	
 Returns the day of the week for the specified date according to local time.
 
@@ -289,10 +289,10 @@ The second statement below assigns the value 1 to `weekday`, based on the value 
 
 * [[Date.getUTCDay `getUTCDay()`]]
 * [[Date.setDate `setDate()`]]
-**/
 
- /**
-	Date.getHours() -> Number
+
+
+## 	Date.getHours() -> Number
 	
 	Returns the hour for the specified date according to local time.
 
@@ -309,10 +309,10 @@ The value returned by `getHours` is an integer between 0 and 23.
 
 * [[Date.getUTCHours `getUTCHours()`]]
 * [[Date.setHours `setHours()`]]
-**/
 
- /**
-Date.getMilliseconds() -> Number
+
+
+## Date.getMilliseconds() -> Number
 	
 Returns the milliseconds in the specified date according to local time.
 
@@ -330,10 +330,10 @@ The following example assigns the milliseconds portion of the current time to th
 
 * [[Date.getUTCMilliseconds `getUTCMilliseconds()`]]
 * [[Date.setMilliseconds `setMilliseconds()`]]
-**/
 
-/** 
-Date.getMinutes() -> Number
+
+
+## Date.getMinutes() -> Number
 	
 Returns the minutes in the specified date according to local time.
 
@@ -350,10 +350,10 @@ The second statement below assigns the value 1, to the variable `minutes`, based
 
 * [[Date.getUTCMinutes `getUTCMinutes()`]]
 * [[Date.setMinutes `setMinutes()`]]
-**/
 
-/**
-Date.getMonth() -> Number
+
+
+## Date.getMonth() -> Number
 	
 Returns the month in the specified date according to local time.
 
@@ -370,10 +370,10 @@ The second statement below assigns the value 1, to the variable `month`, based o
 
 * [[Date.getUTCMonth `getUTCMonth()`]]
 * [[Date.setMonth `setMonth()`]]
-**/
 
-/**
-Date.getSeconds() -> Number
+
+
+## Date.getSeconds() -> Number
 	
 Returns the seconds in the specified date according to local time.
 
@@ -391,10 +391,10 @@ The second statement below assigns the value 3, to the variable `secs`, based on
 
 * [[Date.getUTCSeconds `getUTCSeconds()`]]
 * [[Date.setSeconds `setSeconds()`]]
-**/
 
-/**
-Date.getTime() -> Number
+
+
+## Date.getTime() -> Number
 	
 Returns the numeric value corresponding to the time for the specified date according to universal time.
 
@@ -416,10 +416,10 @@ Subtracting two subsequent getTime calls on newly generated Date objects, give t
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/Date/date.getTime.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-Date.getTimezoneOffset() -> Number
+
+
+## Date.getTimezoneOffset() -> Number
 	
 Returns the time-zone offset from UTC, in minutes, for the current locale.
 	
@@ -430,10 +430,10 @@ The time-zone offset is the difference, in minutes, between UTCand local time. N
 	var x = new Date()
 	var currentTimeZoneOffsetInHours = x.getTimezoneOffset()/60
 	
-**/
 
-/**	
-Date.getUTCDate() -> Number
+
+
+## Date.getUTCDate() -> Number
 	
 Returns the day (date) of the month in the specified date according to universal time.
 
@@ -452,10 +452,10 @@ The following example assigns the day portion of the current date to the variabl
 * [[Date.getDate `getDate()`]]
 * [[Date.getUTCDay `getUTCDay()`]]
 * [[Date.setUTCDate `setUTCDate()`]]
-**/
 
- /**
-	Date.getUTCDay() -> Number
+
+
+## 	Date.getUTCDay() -> Number
 	
 	Returns the day of the week in the specified date according to universal time.
 
@@ -474,10 +474,10 @@ The following example assigns the weekday portion of the current date to the var
 * [[Date.getDay `getDay()`]]
 * [[Date.getUTCDate `getUTCDate()`]]
 * [[Date.setUTCDate `setUTCDate()`]]
-**/
 
-/**	
-	Date.getUTCHours() -> Number
+
+
+## 	Date.getUTCHours() -> Number
 	
 	Returns the hours in the specified date according to universal time.
 
@@ -496,10 +496,10 @@ The following example assigns the hours portion of the current time to the varia
 
 * [[Date.getHours `getHours()`]]
 * [[Date.setUTCHours `setUTCHours()`]]
-**/
 
-/**
-	Date.getUTCMilliseconds() -> Number
+
+
+## 	Date.getUTCMilliseconds() -> Number
 	
 	Returns the milliseconds in the specified date according to universal time.
 
@@ -517,10 +517,10 @@ The following example assigns the milliseconds portion of the current time to th
 
 * [[Date.getMilliseconds `getMilliseconds()`]]
 * [[Date.setUTCMilliseconds `setUTCmilliseconds()`]]
-**/
 
-/**	
-Date.getUTCMinutes() -> Number
+
+
+## Date.getUTCMinutes() -> Number
 	
 Returns the minutes in the specified date according to universal time.
 	
@@ -540,10 +540,10 @@ The following example assigns the minutes portion of the current time to the var
 
 * [[Date.getMinutes `getMinutes()`]]
 * [[Date.setUTCMinutes `setUTCMinutes()`]]
-**/
 
-/**	
-	Date.getUTCMonth() -> Number
+
+
+## 	Date.getUTCMonth() -> Number
 	
 	Returns the month of the specified date according to universal time.
 
@@ -563,10 +563,10 @@ The following example assigns the month portion of the current date to the varia
 
 * [[Date.getMonth `getMonth()`]]
 * [[Date.setUTCMonth `setUTCMonth()`]]
-**/
 
-/**	
-	Date.getUTCSeconds() -> Number
+
+
+## 	Date.getUTCSeconds() -> Number
 	
 	Returns the seconds in the specified date according to universal time.
 
@@ -584,10 +584,10 @@ The following example assigns the seconds portion of the current time to the var
 
 * [[Date.getSeconds `getSeconds()`]]
 * [[Date.setUTCSeconds `setUTCSeconds()`]]
-**/
 
-/** deprecated
-Date.getYear() -> Number
+
+### deprecated
+## Date.getYear() -> Number
 	
 	Returns the year in the specified date according to local time.
 
@@ -634,10 +634,10 @@ The `getYear` method returns the year minus 1900, thus:
 * [[Date.getUTCFullYear `getUTCFullYear()`]]
 * [[Date.setYear `setYear()`]]
  
-**/
 
-/**
-Date.setDate(dayValue) -> Void
+
+
+## Date.setDate(dayValue) -> Void
 - dayValue (Number): A value from 1 to 31, representing the day of the month.
 
 	Sets the day of the month for a specified date according to local time.
@@ -656,10 +656,10 @@ If the parameter you specify is outside of the expected range, `setDate` attempt
 
 * [[Date.getDate `getDate()`]]
 * [[Date.setUTCDate `setUTCDate()`]]
-**/
 
-/**
-Date.setHours(hoursValue[, minutesValue][, secondsValue][, msValue]) -> Void
+
+
+## Date.setHours(hoursValue[, minutesValue][, secondsValue][, msValue]) -> Void
 - hoursValue (Number): Value between 0 and 23, representing the hour. 
 - minutesValue  (Number): Value between 0 and 59, representing the minutes. 
 - secondsValue  (Number): Value between 0 and 59, representing the seconds. If you specify the secondsValue parameter, you must also specify the minutesValue. 
@@ -682,10 +682,10 @@ If a parameter you specify is outside of the expected range, `setHours` attempts
 
 * [[Date.getHours `getHours()`]]
 * [[Date.setUTCHours `setUTCHours()`]]
-**/
 
-/**
-	Date.setMilliseconds(millisecondsValue) -> Void
+
+
+## 	Date.setMilliseconds(millisecondsValue) -> Void
 - millisecondsValue (Number): An Integer between 0 and 999, representing the milliseconds
 
 Sets the milliseconds for a specified date according to local time.
@@ -702,10 +702,10 @@ If you specify a number outside the expected range, the date information in the 
 
 * [[Date.getMilliseconds `getMilliseconds()`]]
 * [[Date.setUTCMilliseconds `setUTCMilliseconds()`]]
-**/
 
-/**
-Date.setMinutes(minutesValue[, secondsValue[, msValue]]) -> Void
+
+
+## Date.setMinutes(minutesValue[, secondsValue[, msValue]]) -> Void
 - minutesValue (Number): Value between 0 and 59, representing the minutes. 
 - secondsValue  (Number): Value between 0 and 59, representing the seconds. If you specify the secondsValue parameter, you must also specify the minutesValue.
 - msValue  (Number): Value between 0 and 999, representing the milliseconds. If you specify the msValue parameter, you must also specify the minutesValue and secondsValue.	
@@ -720,10 +720,10 @@ If a parameter you specify is outside of the expected range, `setMinutes` attemp
 
 * [[Date.getMinutes `getMinutes()`]]
 * [[Date.setUTCMinutes `setUTCMinutes()`]]
-**/
 
-/**
-Date.setSeconds(secondsValue[, msValue]) -> Void
+
+
+## Date.setSeconds(secondsValue[, msValue]) -> Void
 - secondsValue (Number): Value between 0 and 59. 
 - msValue  (Number): Value between 0 and 999, representing the milliseconds.	
 
@@ -738,10 +738,10 @@ If a parameter you specify is outside of the expected range, `setSeconds` attemp
 
 * [[Date.getSeconds `getSeconds()`]]
 * [[Date.setUTCSeconds `setUTCSeconds()`]]
-**/
 
-/**
-Date.setMonth(monthValue[, dayValue]) -> Void
+
+
+## Date.setMonth(monthValue[, dayValue]) -> Void
 - monthValue (Number): Value between 0 and 11 (representing the months January through December).
 - dayValue (Number): Value from 1 to 31, representing the day of the month.
 
@@ -755,10 +755,10 @@ If a parameter you specify is outside of the expected range, `setMonth` attempts
 
 * [[Date.getMonth `getMonth()`]]
 * [[Date.setUTCMonth `setUTCMonth()`]]
-**/
 
-/**
-	Date.setUTCDate(dayValue) -> Void
+
+
+## 	Date.setUTCDate(dayValue) -> Void
 - dayValue (Number): Value from 1 to 31, representing the day of the month.
 	
 Sets the day of the month for a specified date according to universal time.
@@ -775,10 +775,10 @@ If a parameter you specify is outside of the expected range, `setUTCDate` attemp
 
 * [[Date.getUTCDate `getUTCDate()`]]
 * [[Date.setDate `setDate()`]]
-**/
 
-/**
-	Date.setTime(timeValue) -> Void
+
+
+## 	Date.setTime(timeValue) -> Void
 - timeValue (Number): An integer representing the number of milliseconds since 1 January 1970, 00:00:00 UTC.
 	
 Sets the `Date` object to the time represented by a number of milliseconds since January 1, 1970, 00:00:0, UTC.
@@ -796,10 +796,10 @@ Use the `setTime` method to help assign a date and time to another `Date` object
 
 * [[Date.getTime `getTime()`]]
 * [[Date.setUTCHours `setUTCHours()`]]
-**/
 
-/**	
-	Date.setUTCHours(hoursValue[, minutesValue[, secondsValue[, msValue]]]) -> Void
+
+
+## 	Date.setUTCHours(hoursValue[, minutesValue[, secondsValue[, msValue]]]) -> Void
 - hoursValue (Number): Value between 0 and 23, representing the hour. 
 - minutesValue  (Number): Value between 0 and 59, representing the minutes. 
 - secondsValue  (Number): Value between 0 and 59, representing the seconds. If you specify the secondsValue parameter, you must also specify the minutesValue.
@@ -821,10 +821,10 @@ If a parameter you specify is outside of the expected range, `setUTCHours` attem
 
 * [[Date.getUTCHours `getUTCHours()`]]
 * [[Date.setHours `setHours()`]]
-**/
 
-/** 	
-	Date.setUTCMilliseconds(millisecondsValue) -> Void
+
+
+## 	Date.setUTCMilliseconds(millisecondsValue) -> Void
 - millisecondsValue (Number): Value between 0 and 999, representing the milliseconds
 
 Sets the milliseconds for a specified date according to universal time.
@@ -840,10 +840,10 @@ If a parameter you specify is outside of the expected range, `setUTCMilliseconds
 
 * [[Date.getUTCMilliseconds `getUTCMilliseconds()`]]
 * [[Date.setMilliseconds `setMilliseconds()`]]
-**/
 
-/**	
-	Date.setUTCMinutes(minutesValue[, secondsValue[, msValue]]) -> Void
+
+
+## 	Date.setUTCMinutes(minutesValue[, secondsValue[, msValue]]) -> Void
 - minutesValue (Number): Value between 0 and 59, representing the minutes. 
 - secondsValue  (Number): Value between 0 and 59, representing the seconds. If you specify the secondsValue parameter, you must also specify the minutesValue. 
 - msValue  (Number): Value between 0 and 999, representing the milliseconds. If you specify the msValue parameter, you must also specify the minutesValue and secondsValue.
@@ -863,10 +863,10 @@ If a parameter you specify is outside of the expected range, `setUTCMinutes` att
 
 * [[Date.getUTCMinutes `getUTCMinutes()`]]
 * [[Date.setMinutes `setMinutes()`]]
-**/
 
-/** 	
-	Date.setUTCMonth(monthValue[, dayValue]) -> Void
+
+
+## 	Date.setUTCMonth(monthValue[, dayValue]) -> Void
 - monthValue (Number): An integer between 0 and 11, representing the months January through December. 
 - dayValue  (Number): An iinteger from 1 to 31, representing the day of the month.
 
@@ -887,10 +887,10 @@ theBigDay.setUTCMonth(11);
 
 * [[Date.getUTCMonth `getUTCMonth()`]]
 * [[Date.setMonth `setMonth()`]]
-**/
 
-/**	
-	Date.setUTCSeconds(secondsValue[, msValue]) -> Void
+
+
+## 	Date.setUTCSeconds(secondsValue[, msValue]) -> Void
 - secondsValue (Number): Value between 0 and 59. 
 - msValue (Number): Value between 0 and 999, representing the milliseconds.
 
@@ -909,10 +909,10 @@ If a parameter you specify is outside of the expected range, `setUTCSeconds` att
 
 * [[Date.getUTCSeconds `getUTCSeconds()`]]
 * [[Date.setSeconds `setSeconds()`]]
-**/
 
-/** deprecated
-Date.setYear(yearValue) -> Void
+
+### deprecated
+## Date.setYear(yearValue) -> Void
 - yearValue (Number): Specifies the numeric value of the year, for example, 1995. 
 
 	Sets the year for a specified date according to local time.
@@ -936,10 +936,10 @@ To take into account years before and after 2000, you should use [[Date.setFullY
 * [[Date.getYear `getYear()`]]
 * [[Date.setFullYear `setFullYear()`]]
 * [[Date.setUTCFullYear `setUTCFullYear()`]]
-**/
 
-/**
-Date.toDateString() -> String
+
+
+## Date.toDateString() -> String
 	
 Returns the date portion of a `Date` object in human readable form in American English.
 
@@ -957,10 +957,10 @@ The `toDateString` method is especially useful because compliant engines impleme
 * [[Date.toLocaleDateString `toLocaleDateString()`]]
 * [[Date.toTimeString `toTimeString()`]]
 * [[Date.toString `toString()`]]
-**/
 
-/**
-Date.toISOString() -> String
+
+
+## Date.toISOString() -> String
 	
 
 	Javascript provides a direct way to convert a date object into a string in the [ISO 860, Extended Format](http://en.wikipedia.org/wiki/ISO_860).
@@ -977,10 +977,10 @@ Date.toISOString() -> String
 
 * [[Date.toUTCString `toUTCString()`]]
 
-**/
 
-/**
-Date.toJSON() -> JSON
+
+
+## Date.toJSON() -> JSON
 	
 Returns a [[JSON `JSON`]] representation of the Date object.
 
@@ -990,10 +990,10 @@ Returns a [[JSON `JSON`]] representation of the Date object.
 	var backToDate = new Date(jsonDate);
 
 	console.log("Serialized date object: " + jsonDate);
-**/
 
-/** deprecated
-Date.toGMTString() -> String
+
+### deprecated
+## Date.toGMTString() -> String
 	
 Converts a date to a string, using Internet GMT convetions.
 
@@ -1005,10 +1005,10 @@ The `toGMTString()` method converts the date to GMT (UTC) using the operating sy
 
 * [[Date.toLocaleString `toLocaleString()`]]
 * [[Date.toUTCString `toUTCString()`]]
-**/
 
-/**
-Date.toUTCString() -> String
+
+
+## Date.toUTCString() -> String
 
 	Converts a date to a string, using the universal time convention.
 	
@@ -1022,10 +1022,10 @@ The value returned by `toUTCString` is a readable string in American English in 
 #### See Also
 
 * [[Date.toLocaleString `toLocaleString()`]]
-**/
 
-/**	
-Date.toLocaleDateString() -> String
+
+
+## Date.toLocaleDateString() -> String
 	
 Converts a date to a string, returning the "date" portion using the operating system's locale's conventions. This method returns a string value that is similar to the following form: 12/18/95. (The exact format depends on the platform, locale and user's settings.)
 
@@ -1046,10 +1046,10 @@ You shouldn't use this method in contexts where you rely on a particular format 
 * [[Date.toLocaleTimeString `toLocaleTimeString()`]]
 * [[Date.toLocaleString `toLocaleString()`]]
 * [[Date.toLocaleTimeString `toLocaleTimeString()`]]
-**/
 
-/**
-Date.toLocaleTimeString() -> String
+
+
+## Date.toLocaleTimeString() -> String
 	
 Converts a date to a string, returning the "time" portion using the current locale's conventions.
 
@@ -1077,10 +1077,10 @@ This method returns a string value that is similar to the following form: 17:28:
 * [[Date.toLocaleString `toLocaleString()`]]
 * [[Date.toLocaleDateString `toLocaleDateString()`]]
 
-**/
 
-/**
-Date.toLocaleFormat(formatString) -> String
+
+
+## Date.toLocaleFormat(formatString) -> String
 - formatString (String): Format string in the same format expected by the `strftime()` function in C. 	
 
 	Converts a date to a string using the specified formatting.
@@ -1100,10 +1100,10 @@ This method returns a string such as "Wednesday, October 3, 2007". Note that the
 * [[Date.toLocaleString `toLocaleString()`]]
 * [[Date.toLocaleDateString `toLocaleDateString()`]] 
 * [[Date.toLocaleTimeString `toLocaleTimeString()`]]
-**/
 
-/**
-	Date.toLocaleString() -> String
+
+
+## 	Date.toLocaleString() -> String
 	
 	Converts a date to a string, using the operating system's locale's conventions.
 
@@ -1128,10 +1128,10 @@ In this example, `toLocaleString` returns a string value that is similar to the 
 * [[Date.toString `toString()`]]
 * [[Date.toUTCString `toUTCString()`]]
 * [[Date.toLocaleDateString `toLocaleDateString()`]]
-**/
 
-/**
-	Date.toSource() -> String
+
+
+## 	Date.toSource() -> String
 	
 The `toSource` method returns the following values:
 
@@ -1149,10 +1149,10 @@ This method is usually called internally by Javascript and not explicitly in cod
 #### See Also
 
 * [[Object.toSource `toSource()`]]
-**/
 
-/**
-Date.toString() -> String
+
+
+## Date.toString() -> String
 	
 	Returns a string representing the specified Date object.
 
@@ -1179,10 +1179,10 @@ The following assigns the `toString` value of a `Date` object to `myVar`:
 * [[Date.toDateString `toDateString()`]]
 * [[Date.toTimeString `toTimeString()`]]
 * [[Date.toLocaleString `toLocaleString()`]]
-**/
 
-/**
-Date.toTimeString() -> String
+
+
+## Date.toTimeString() -> String
 
 [[Date `Date`]] instances refer to a specific point in time. Calling [[Date.toString `toString()`]] will return the date formatted in a human readable form in American English. Sometimes it is desirable to obtain a string of the time portion; such a thing can be accomplished with the this method.
 
@@ -1201,10 +1201,10 @@ The toTimeString method is especially useful because compliant engines implement
 * [[Date.toDateString `toDateString()`]]
 * [[Date.toString `toString()`]]
 
-**/
+
 
 /**	related to: Date.getTime
-	Date.valueOf() -> Number
+## 	Date.valueOf() -> Number
 	
 The `valueOf` method returns the primitive value of a `Date` object as a number data type, the number of milliseconds since midnight 01 January, 1970 UTC.
 
@@ -1222,5 +1222,5 @@ Returns the primitive value of a Date object.
 ####  See also 
 
 * [[Object.valueOf `Object.valueOf()`]]
-**/
+
 

@@ -1,11 +1,11 @@
-/** section: HTTPS
-class https.Server
+### section: HTTPS
+## class https.Server
 
 This class is a subclass of [[tls.Server `tls.Server`]] and emits the same events as [[http.Server `http.Server`]].
 
 Creating HTTPS servers is somewhat complicated and requires generating certificates. 
 
-**/
+
 
 /* 
 https.Server@request(request, response)
@@ -14,26 +14,26 @@ https.Server@request(request, response)
 
 Emitted each time there is a request. Note that, in the case of keep-alive connections, there may be multiple requests per connection.
 
-**/ 
+ 
 
 
-/**
-https.Server@connection(socket)
+
+## https.Server@connection(socket)
 - socket (net.Socket): An object of type [[net.Socket `net.Socket`]]
 
 Emitted when a new TCP stream is established. Usually users won't want to access this event. The `socket` can also be accessed at [[http.ServerRequest.connection]].
 
-**/ 
+ 
 
-/**
-https.Server@close(socket)
+
+## https.Server@close(socket)
 - socket (net.Socket): An object of type [[net.Socket `net.Socket`]]
 
 Emitted when the server closes.
-**/ 
+ 
 
-/**
-https.Server@checkContinue(request, response)
+
+## https.Server@checkContinue(request, response)
 - request  (http.ServerRequest): An instance of `http.ServerRequest`
 - response (http.ServerResponse): An instance of `http.ServerResponse`
 
@@ -43,10 +43,10 @@ Handling this event involves calling `response.writeContinue` if the client shou
 
 <Note>When this event is emitted and handled, the `request` event is not be emitted.</Note>
 
-**/ 
+ 
 
-/**
-https.Server@upgrade(request, socket, head)
+
+## https.Server@upgrade(request, socket, head)
 - request (http.ServerRequest): The arguments for the http request, as it is in the request event
 - socket (Number): The network socket between the server and client
 - head (Buffer):  The first packet of the upgraded stream; this can be empty
@@ -55,21 +55,21 @@ Emitted each time a client requests a http upgrade. If this event isn't listened
 
 After this event is emitted, the request's socket won't have a `data` event listener, meaning you will need to bind to it in order to handle data sent to the server on that socket.
 
-**/ 
+ 
 
-/**
-https.Server@clientError(exception)
+
+## https.Server@clientError(exception)
 - exception (Error): The exception being thrown
 
 If a client connection emits an `'error'` event, it's forwarded here.
 
  
-**/ 
+ 
 
 
 
-/** related to: net.Server.listen
-https.Server.listen(port [, hostname] [, callback()])  -> Void
+### related to: net.Server.listen
+## https.Server.listen(port [, hostname] [, callback()])  -> Void
 https.Server.listen(port [, callback()])  -> Void
 - port (Number): The port to listen to
 - hostname (String):  The hostname to listen to
@@ -81,11 +81,11 @@ This function is asynchronous. The `callback()` is added as a listener for the <
 
 
 
-**/ 
+ 
  
 
-/** related to: net.Server.close
-https.Server.close() -> Void
+### related to: net.Server.close
+## https.Server.close() -> Void
 
 Stops the server from accepting new connections.
-**/ 
+ 

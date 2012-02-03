@@ -1,7 +1,7 @@
 
 
- /** section: child_process
-  * class child_process
+### section: child_process
+##   * class child_process
   *
 Node.js provides a tri-directional [`popen(3)`](http://www.kernel.org/doc/man-pages/online/pages/man3/popen.3.html) facility through this `ChildProcess` class. It's possible to stream data through the child's `stdin`, `stdout`, and `stderr` in a fully non-blocking way.
 
@@ -18,10 +18,10 @@ Child processes always have three streams associated with them. They are:
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child_process.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-child_process@exit(code, signal)
+
+
+## child_process@exit(code, signal)
 - code (Number): The final exit code of the process (otherwise, `null`)
 - signal (String): The string name of the signal (otherwise, `null`)
 
@@ -31,26 +31,26 @@ This event is emitted after the child process ends.
 For more information, see [waitpid(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/wait.2.html).
 
  
-**/ 
+ 
 
-/**
- child_process.stdin -> streams.WritableStream
+
+##  child_process.stdin -> streams.WritableStream
 
 A [[streams.WritableStream `Writable Stream`]] that represents the child process's `stdin`. Closing this stream via [[child.process.end `end()`]] often causes the child process to terminate.
 
-**/ 
+ 
 
 
-/**
-child_process.stdout -> streams.ReadableStream
+
+## child_process.stdout -> streams.ReadableStream
 
  
 A [[streams.ReadableStream `Readable Stream`]] that represents the child process's `stdout`.
 
-**/ 
+ 
 
-/**
-child_process.pid -> Number
+
+## child_process.pid -> Number
 
 The PID of the child process.
 
@@ -58,11 +58,11 @@ The PID of the child process.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.pid.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/** related to: child_process.exec
-child_process.spawn(command, [args=[]] [, options]) -> Void
+### related to: child_process.exec
+## child_process.spawn(command, [args=[]] [, options]) -> Void
 - command (String): The Unix command to spawn
 - args (String | Array): The command line arguments to pass
 - options (Object):  Any additional options you want to transfer
@@ -102,11 +102,11 @@ There is also a deprecated option called `customFds`, which allows one to specif
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.spawn_3.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/** related to: child_process.spawn
-child_process.exec(command[, options], callback(error, stdout, stderr)) -> Object
+### related to: child_process.spawn
+## child_process.exec(command[, options], callback(error, stdout, stderr)) -> Object
 - command (String): The Unix command to run
 - options (Object):The options to pass to the command
 - callback (Function): The function to run after the method completes
@@ -144,10 +144,10 @@ These refer to:
 
 An object containing the three standard streams, plus other parameters like the PID, signal code, and exit code
 
-**/ 
+ 
 
-/** related to: child_process.exec
-child_process.execFile(file, args, options, callback(error, stdout, stderr)) -> Void
+### related to: child_process.exec
+## child_process.execFile(file, args, options, callback(error, stdout, stderr)) -> Void
 - file (String): The file location with the commands to run
 - args (String): The command line arguments to pass
 - options (Object): The options to pass to the `exec` call
@@ -160,11 +160,11 @@ A function similar to `child.exec()`, except instead of executing a subshell it 
 
 
 
-**/ 
+ 
 
 
-/** related to: child_process.spawn
-child_process.fork(modulePath, arguments, options) -> Object
+### related to: child_process.spawn
+## child_process.fork(modulePath, arguments, options) -> Object
 - modulePath (String): The location of the module
 - arguments (String): Any starting arguments to use
 - options (Object): Any additional options to pass
@@ -204,11 +204,11 @@ Here's an example of receiving the server handle and sharing it between processe
     });
 
 
-**/ 
+ 
 
 
-/**
-child_process.kill([signal='SIGTERM']) -> Void
+
+## child_process.kill([signal='SIGTERM']) -> Void
 - signal (String): The kill signal to send
 
 Sends a signal to the child process. See [`signal(7)`](http://www.kernel.org/doc/man-pages/online/pages/man7/signal.7.html) for a list of available signals.
@@ -221,4 +221,4 @@ For more information, see [`kill(2)`](http://www.kernel.org/doc/man-pages/online
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.kill.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
+

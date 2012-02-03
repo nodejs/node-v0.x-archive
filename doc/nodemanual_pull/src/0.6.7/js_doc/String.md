@@ -1,6 +1,6 @@
 
-/** section: Javascript_Reference
-class String
+### section: Javascript_Reference
+## class String
 
 Strings are useful for holding data that can be represented in text form. Some of the most-used operations on strings are to check their [[String.length length]], to build and concatenate them using the `+` and `+=` string operators, and checking for the existence or location of substrings with the [[String.substring `substring()`]] and [[String.substr `substr()`]] methods.
 
@@ -50,11 +50,11 @@ A String object can always be converted to its primitive counterpart with the [[
 
 	console.log(eval(s2.valueOf())); // returns the number 4
 
-**/
 
 
-/**
-new String(thing)
+
+
+## new String(thing)
 String(thing)
 - thing (Object): Anything to be converted to a string.
 
@@ -65,10 +65,10 @@ String literals can also take the forms:
 	'string text'  
 	"string text"  
 
-**/
 
-/**
-String.replace(pattern, replacement[, flags]) -> String
+
+
+## String.replace(pattern, replacement[, flags]) -> String
 - pattern (RegExp | String): A RegExp object to match, or a String to match. The match is replaced by the return value of `replacement`.
 - replacement (String | Function): The String that replaces the substring received from the `pattern` (a number of special replacement patterns are supported); or,a function to be invoked to create the new substring (to put in place of the substring received from `phrase`).
 - flags (String): A string specifying a combination of regular expression flags. 
@@ -158,10 +158,10 @@ The regular expression `test` checks for any number that ends with F. The number
     
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/String/string.replace.7.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
             
-**/
 
-/**
-String.length() -> Number
+
+
+## String.length() -> Number
 
 The length of a string.
 
@@ -182,10 +182,10 @@ For an empty string, `length` is 0.
 #### See also
 
 * [Javascript String.length and Internationalizing Web Applications](http://developer.teradata.com/blog/jasonstrimpel/2011/11/Javascript-string-length-and-internationalizing-web-applications "http://developer.teradata.com/blog/jasonstrimpel/2011/11/Javascript-string-length-and-internationalizing-web-applications")
-**/
 
-/**
-String.substring(indexA[, indexB]) -> String
+
+
+## String.substring(indexA[, indexB]) -> String
 - indexA (Number): Value between 0 and one less than the length of the string.
 - indexB (Number): Value between 0 and the length of the string.
 
@@ -225,10 +225,10 @@ Note that this can result in an infinite loop if `oldS` is itself a substring of
 * [[String.substr `substr()`]]
 * [[String.slice `slice()`]] 
 
-**/
 
-/**
-String.substr(start[, length]) -> String
+
+
+## String.substr(start[, length]) -> String
 - start (Number): Location at which to begin extracting characters.
 - length (Number): The number of characters to extract.
 
@@ -264,10 +264,10 @@ This script displays:
 * [[String.slice `slice()`]]
 * [[String.substring `substring()`]] 
 
-**/
 
-/**
-String.charAt(index)
+
+
+## String.charAt(index)
 - index (Number): Value between 0 and 1 less than the length of the string.
 
 Returns the specified character from a string.
@@ -309,10 +309,10 @@ While the previous example may be more frequently useful for those wishing to su
 * [[String.split `split()`]]
 * [[String.charCodeAt `charCodeAt()`]]
 
-**/
 
-/**
-String.valueOf() -> String
+
+
+## String.valueOf() -> String
 
 Returns the primitive value of a String object.
 
@@ -332,10 +332,10 @@ This method is usually called internally by Javascript and not explicitly in cod
 * [[String.toString `toString()`]]
 * [[Object.valueOf `Object.valueOf()`]]
 
-**/
 
-/**
-String.fromCharCode(num1..., numN) -> String
+
+
+## String.fromCharCode(num1..., numN) -> String
 - numN (Number): A sequence of numbers that are Unicode values.
 
 Returns a string created by using the specified sequence of Unicode values. This method returns a string and not a `String` object.
@@ -361,10 +361,10 @@ The following example returns the string "ABC".
 #### See Also
 [[String.charCodeAt `charCodeAt()`]] 
 
-**/
 
-/**
-String.localeCompare(compareString) 
+
+
+## String.localeCompare(compareString) 
 - compareString (String): The string against which the referring string is comparing
 
 Returns a number indicating whether a reference string comes before or after or is the same as the given string in sort order. Returns -1 if the string occurs earlier in a sort than `compareString`, returns 1 if the string occurs afterwards in such a sort, and returns 0 if they occur at the same level.
@@ -375,19 +375,19 @@ The following example demonstrates the different potential results for a string 
     
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/String/string.localecompare.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
             
-**/
 
-/** 
-String.constructor -> Function
+
+
+## String.constructor -> Function
 
 Returns a reference to the [[String `String`]] function that created the instance's prototype. Note that the value of this property is a reference to the function itself, not a string containing the function's name. Note that the value of this property is a reference to the function itself, not a string containing the function's name.
 
 For more information, see [[Object.constructor `Object.constructor`]].
 
-**/
 
-/**
-String.charCodeAt(index)
+
+
+## String.charCodeAt(index)
 - index (Number): Value greater than 0 and less than the length of the string; if it is not a number, it defaults to 0.
 
 Returns the numeric Unicode value of the character at the given index (except for unicode codepoints > 0x10000).
@@ -473,10 +473,10 @@ This version might be used in for loops and the like when it is unknown whether 
 * [[String.fromCharCode `fromCharCode()`]]
 * [[String.charAt `charAt()`]]
 
-**/
 
-/**
-String.concat(string1..., stringN) -> String
+
+
+## String.concat(string1..., stringN) -> String
 - stringN (String): Strings to concatenate to this string.
 
 This method combines the text from one or more strings and returns a new string. Changes to the text in one string don't affect the other string.
@@ -489,10 +489,10 @@ The following example combines strings into a new string.
  console.log(hello.concat("Kevin", " have a nice day.")); /// Hello, Kevin have a nice day.
    
 
-**/
 
-/**
-String.indexOf(searchValue[, fromIndex=0]) -> Number
+
+
+## String.indexOf(searchValue[, fromIndex=0]) -> Number
 - searchValue (String): A string representing the value to search for.
 - fromIndex (Number): The location within the calling string to start the search from. It can be any integer between 0 and the length of the string.
 
@@ -536,10 +536,10 @@ The following example sets `count` to the number of occurrences of the letter `x
 * [[String.split `split()`]]
 * [[Array.indexOf `Array.indexOf()`]]
 
-**/
 
-/**
-String.lastIndexOf(searchValue[, fromIndex]) -> Number
+
+
+## String.lastIndexOf(searchValue[, fromIndex]) -> Number
 - searchValue (String): A string representing the value to search for.
 - fromIndex (String): The location within the calling string to start the search from, indexed from left to right. It can be any integer between 0 and the length of the string. The default value is the length of the string.
 
@@ -562,10 +562,10 @@ The following example uses `indexOf` and `lastIndexOf` to locate values in the s
 * [[String.indexOf `indexOf()`]]
 * [[String.split `split()`]]
 
-**/
 
-/**
-String.match(regexp) -> String | Array | null
+
+
+## String.match(regexp) -> String | Array | null
 -regexp (RegExp): A regular expression used to find a match. If a non-RegExp object is passed, it is implicitly converted to a RegExp by using `new RegExp(regexp)`.
 
 Used to retrieve the matches when matching a string against a regular expression.
@@ -602,10 +602,10 @@ The following example demonstrates the use of the global and ignore case flags w
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/String/string.match.2.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-	String.quote() -> String
+
+
+## 	String.quote() -> String
 
 Returns a copy of the string, replacing various special characters in the string with their escape sequences and wrapping the result in double-quotes (").
 
@@ -613,10 +613,10 @@ Returns a copy of the string, replacing various special characters in the string
 
 <table class = \"standard-table\" style = \"table-layout: fixed; width: 100%;\"> <thead> <tr> <th class = \"header\" scope = \"col\"><code>str</code></th> <th class = \"header\" scope = \"col\"><code>str.quote()</code></th> <th class = \"header\" scope = \"col\"><code>eval(str.quote())</code></th> </tr> </thead> <tbody> <tr> <td><code>Hello world!</code></td> <td><code>&quot;Hello world!&quot;</code></td> <td><code>Hello world!</code></td> </tr> <tr> <td><code>Hello<br/> &nbsp; &nbsp; &nbsp; &nbsp; world!</code></td> <td><code>&quot;Hello\\n\\tworld!&quot;</code></td> <td><code>Hello<br/> &nbsp; &nbsp; &nbsp; &nbsp; world!</code></td> </tr> <tr> <td><code>&quot; \\ &mdash; '</code></td> <td><code>\\&quot; \\\\ \\u2014 '</code></td> <td><code>&quot; \\ &mdash; '</code></td> </tr> </tbody></table>
 
-**/
 
-/**
-String.search(regexp) -> Number
+
+
+## String.search(regexp) -> Number
 - regexp (RegExp): A  regular expression object. If a non-RegExp object obj is passed, it is implicitly converted to a RegExp by using `new RegExp(regexp)`.
 
 Executes the search for a match between a regular expression and this `String` object.
@@ -631,10 +631,10 @@ The following example prints a message which depends on the success of the test.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/String/string.search.1.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
             
-**/
 
-/**
-String.slice(beginslice[, endSlice]) -> String
+
+
+## String.slice(beginslice[, endSlice]) -> String
 - beginSlice (Number): The zero-based index at which to begin extraction.
 - endSlice  (Number): The zero-based index at which to end extraction. If omitted, slice extracts to the end of the string.
 
@@ -658,10 +658,10 @@ This writes:
 
     morning is upon u
     
-**/
 
-/**
-String.split([separator][, limit]) -> Array
+
+
+## String.split([separator][, limit]) -> Array
 - separator (String): Specifies the character to use for separating the string. The separator is treated as a string or a regular expression. If separator is omitted, the array returned contains one element consisting of the entire string.
 - limit (Number): Number specifying a limit on the number of splits to be found. The split method still splits on every match of separator, but it truncates the returned array to at most limit elements.
 
@@ -729,10 +729,10 @@ This script displays the following:
 * [[String.lastIndexOf `lastIndexOf()`]] 
 * [[Array.join `Array.join()`]]
 
-**/
 
-/**
-String.toLocaleLowerCase() -> String
+
+
+## String.toLocaleLowerCase() -> String
 
 Returns the calling string value converted to lower case, according to any locale-specific case mappings.
 
@@ -746,10 +746,10 @@ The following example displays the string "alphabet":
 	var upperText="ALPHABET";
 	console.log(upperText.toLocaleLowerCase());
 
-**/
 
-/**
-String.toLowerCase() -> String
+
+
+## String.toLowerCase() -> String
 
 Returns the calling string value converted to lowercase.
 
@@ -768,10 +768,10 @@ The following example displays the lowercase string "`alphabet`":
 * [[String.toLocaleLowerCase `toLocaleLowerCase()`]]
 * [[String.toUpperCase `toUpperCase()`]] 
 
-**/
 
-/**
-	String.toUpperCase() -> String
+
+
+## 	String.toUpperCase() -> String
 
 The `toUpperCase` method returns the value of the string converted to uppercase. `toUpperCase` does not affect the value of the string itself.
 
@@ -786,10 +786,10 @@ The following example displays the string "`ALPHABET`":
 * [[String.toLocaleUpperCase `toLocaleUpperCase()`]] 
 * [[String.toLowerCase `toLowerCase()`]] 
 
-**/
 
-/**
-String.toLocaleUpperCase()  -> String
+
+
+## String.toLocaleUpperCase()  -> String
 
 Returns the calling string value converted to upper case, according to any locale-specific case mappings.
 
@@ -804,10 +804,10 @@ The following example displays the string "ALPHABET":
 	console.log(lowerText.toLocaleUpperCase());
             
 
-**/
 
-/**
-String.toString() -> String
+
+
+## String.toString() -> String
 
 Returns a string representing the specified object.
 
@@ -824,10 +824,10 @@ The following example displays the string value of a String object:
 #### See Also
 * [[Object.toString `Object.toString()`]]
 
-**/
 
-/**
-String.trim() -> String
+
+
+## String.trim() -> String
 
 This method returns the string stripped of whitespace from both ends. `trim` does not affect the value of the string itself.
 
@@ -843,10 +843,10 @@ The following example displays the lowercase string "foo":
 * [[String.trimLeft `trimLeft()`]]
 * [[String.trimRight `trimRight()`]]
 
-**/
 
-/**
-String.trimLeft() -> String
+
+
+## String.trimLeft() -> String
 
 The `trimLeft` method returns the string stripped of whitespace from its left end. `trimLeft` does not affect the value of the string itself.
 
@@ -861,10 +861,10 @@ The following example displays the lowercase string "foo ":
 * [[String.trim `trim()`]]
 * [[String.trimRight `trimRight()`]]
 
-**/
 
-/**
-String.trimRight() -> String
+
+
+## String.trimRight() -> String
 
 The `trimRight` method returns the string stripped of whitespace from its right end. `trimRight` does not affect the value of the string itself.
 
@@ -878,4 +878,4 @@ The following example displays the lowercase string "  foo":
 * [[String.trim `trim()`]]
 * [[String.trimLeft `trimLeftt()`]]
 
-**/
+

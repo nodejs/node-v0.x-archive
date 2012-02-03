@@ -1,75 +1,75 @@
 
-/** section: Streams
-class streams.ReadableStream
+### section: Streams
+## class streams.ReadableStream
 
-**/
 
-/**
-streams.ReadableStream@close()
+
+
+## streams.ReadableStream@close()
 
 Emitted when the underlying file descriptor has been closed. Not all streams emit this.  For example, an incoming HTTP request don't emit `close`.
 
-**/ 
+ 
 
 
-/**
-streams.ReadableStream@data(data)
+
+## streams.ReadableStream@data(data)
 - data (Buffer | String):  The data being emitted
 
 The `data` event emits either a `Buffer` (by default) or a string if `setEncoding()` was previously used on the stream.
 
-**/ 
+ 
 
 
-/**
-streams.ReadableStream@end()
+
+## streams.ReadableStream@end()
 
 Emitted when the stream has received an EOF (FIN in TCP terminology). Indicates that no more `data` events will happen. If the stream is also writable, it may be possible to continue writing.
 
-**/ 
+ 
 
 
-/**
-streams.ReadableStream@error()
+
+## streams.ReadableStream@error()
 
 Emitted if there was an error receiving data.
-**/ 
+ 
 
 
-/**
-streams.ReadableStream@pipe(src)
+
+## streams.ReadableStream@pipe(src)
 - src (streams.ReadableStream): The readable stream
 
 Emitted when the stream is passed to a readable stream's pipe method.
 
-**/ 
+ 
 
 
-/**
-streams.ReadableStream.destroy() -> Void
+
+## streams.ReadableStream.destroy() -> Void
 
 Closes the underlying file descriptor. The stream will not emit any more events.
-**/ 
+ 
 
 
-/**
-streams.ReadableStream.destroySoon()-> Void
+
+## streams.ReadableStream.destroySoon()-> Void
 
 After the write queue is drained, close the file descriptor.
 
-**/ 
+ 
 
 
-/**
-streams.ReadableStream.pause()-> Void
+
+## streams.ReadableStream.pause()-> Void
 
 Pause any incoming `'data'` events.
 
-**/
 
 
-/**
-streams.ReadableStream.pipe(destination [, options]) -> streams
+
+
+## streams.ReadableStream.pipe(destination [, options]) -> streams
 - destination (streams.WritableStream):  The WriteStream to connect to
 - options (Object):  Any optional commands to send
 
@@ -97,21 +97,21 @@ This keeps `process.stdout` open so that "Goodbye" can be written at the end.
     });
 
  
-**/ 
+ 
 
-/** related to: streams.ReadableStream.data
-streams.ReadableStream.setEncoding(encoding)
+### related to: streams.ReadableStream.data
+## streams.ReadableStream.setEncoding(encoding)
 - encoding (String): The encoding to use; this can be `'utf8'`, `'ascii'`, or `'base64'`.
 
 Makes the `data` event emit a string instead of a `Buffer`.
 
-**/ 
+ 
 
 
-/**
-streams.ReadableStream.resume() -> Void
+
+## streams.ReadableStream.resume() -> Void
 
 Resumes the incoming `'data'` events after a `pause()`. 
 
-**/ 
+ 
 

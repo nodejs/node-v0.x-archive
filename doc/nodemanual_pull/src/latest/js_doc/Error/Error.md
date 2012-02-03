@@ -1,6 +1,6 @@
 
-/** section: Javascript_Reference
-class Error
+### section: Javascript_Reference
+## class Error
 
 
 Runtime errors result in new `Error` objects being created and thrown.
@@ -44,10 +44,10 @@ You can choose to handle only specific error types by testing the error type wit
 		// ... etc
 	}
 
-**/
 
-/**
-new Error([message[, fileName[, lineNumber]]])
+
+
+## new Error([message[, fileName[, lineNumber]]])
 - message (String): Human-readable description of the error
 - fileName (String): The name of the file containing the code that caused the exception (Non-standard)
 - lineNumber (Number): The line number of the code that caused the exception (Non-standard)
@@ -60,10 +60,10 @@ The Error object can be extended to create Error Types for your project.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/js_doc/Error/error.1.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-Error.message -> String
+
+
+## Error.message -> String
     
 A human-readable description of the error.
 
@@ -76,10 +76,10 @@ By default, the `message` property is an empty string, but this behavior can be 
 	var e = new Error("Could not parse input"); // e.message is "Could not parse input"
 	throw e;
     
-**/
 
-/**
-Error.name -> String
+
+
+## Error.name -> String
    
 A name for the type of error.
     
@@ -91,10 +91,10 @@ By default, `Error` instances are given the name "Error". The `name` property, i
 	e.name = "ParseError";                // e.toString() would return
 	throw e;                              // "ParseError: Malformed input"
 
-**/
 
-/**
-Error.stack -> String
+
+
+## Error.stack -> String
 
 This non-standard property of `Error` objects offers a trace of which functions were called, in what order, from which line and file, and with what arguments. The stack string proceeds from the most recent calls to earlier ones, leading back to the original global scope call.
 
@@ -138,10 +138,10 @@ Assuming the above markup is saved as C:\example.html on a Windows file system a
 	@file:///C:/example.html:21
 
 
-**/
 
-/**
-Error.toString() -> String
+
+
+## Error.toString() -> String
 
 Returns a string representing the specified Error object.
     
@@ -166,4 +166,4 @@ Note that when creating a string representation of the `name` and `message` prop
 	e.name = "Error";
 	e.toString(); // returns "Error"
 
-**/
+

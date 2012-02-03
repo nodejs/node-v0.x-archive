@@ -1,5 +1,5 @@
-/**
-class eventemitter
+
+## class eventemitter
 
 Many objects in Node.js emit events. Some examples include:
 
@@ -22,20 +22,20 @@ All EventEmitters automatically emit the event `'newListener'` when new listener
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/event_emitter/eventemitter.js?linestart=0&lineend=0&showlines=false' defer='defer'></script>
 
-**/
 
-/**
-eventemitter@newListener(event, listener)
+
+
+## eventemitter@newListener(event, listener)
 - event (String): The event to emit
 - listener (Function): The attaching listener
 
 This event is emitted any time someone adds a new listener, but *before* the listener is attached.
 
-**/ 
+ 
 
 
-/** alias of: eventemitter.on
-eventemitter.addListener(event, callback()) -> Void
+### alias of: eventemitter.on
+## eventemitter.addListener(event, callback()) -> Void
 - event (String):  The event to listen for
 - callback (Function):  The listener callback to execute
 
@@ -45,21 +45,21 @@ Adds a listener to the end of the listeners array for the specified event.
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/event_emitter/eventemitter.addlistener.js?linestart=0&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 
 
-/**
-eventemitter.emit(event [, arg...]) -> Void
+
+## eventemitter.emit(event [, arg...]) -> Void
 - event (String): The event to listen for
 - arg (Object):  Any optional arguments for the listeners
 
 Execute each of the subscribed listeners in order with the supplied arguments.
 
-**/ 
+ 
 
 
-/**
-eventemitter.listeners(event) -> Void
+
+## eventemitter.listeners(event) -> Void
 - event (String): The event type to listen for
 
 Returns an array of listeners for the specified event. This array can be manipulated, e.g. to remove listeners.
@@ -68,11 +68,11 @@ Returns an array of listeners for the specified event. This array can be manipul
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/event_emitter/eventemitter.listeners.js?linestart=0&lineend=0&showlines=false' defer='defer'></script>
     
-**/ 
+ 
 
 
-/**
-eventemitter.once(event, listener) -> Void
+
+## eventemitter.once(event, listener) -> Void
 - event (String):  The event to listen for
 - callback (Function):  The listener callback to execute
 
@@ -84,20 +84,20 @@ Adds a **one time** listener for the event. This listener is invoked only the ne
       console.log('Ah, we have our first user!');
     });
 
-**/ 
+ 
 
 
-/**
-eventemitter.removeAllListeners([event]) -> Void
+
+## eventemitter.removeAllListeners([event]) -> Void
 - event (String): An optional event type to remove
 
 Removes all listeners, or those of the specified event.
 
-**/ 
+ 
 
 
-/**
-eventemitter.removeListener(event, listener) -> Void
+
+## eventemitter.removeListener(event, listener) -> Void
 - event (String):  The event to listen for
 - callback (Function):  The listener callback to execute
 
@@ -114,11 +114,11 @@ Remove a listener from the listener array for the specified event.
     // ...
     server.removeListener('connection', callback);
 
-**/ 
+ 
 
 
-/**
-eventemitter.setMaxListeners(n) -> Void
+
+## eventemitter.setMaxListeners(n) -> Void
 - n (Number): The maximum number of listeners
 
 By default, EventEmitters print a warning if more than 10 listeners are added for a particular event. This is a useful default which helps finding memory leaks.
@@ -129,5 +129,5 @@ Obviously, not all Emitters should be limited to 10. This function allows that t
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/event_emitter/eventemitter.setMaxListeners.js?linestart=0&lineend=0&showlines=false' defer='defer'></script>
 
-**/ 
+ 
 

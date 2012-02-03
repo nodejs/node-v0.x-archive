@@ -1,5 +1,5 @@
-/**
-class https
+
+## class https
 
 HTTPS is the HTTP protocol over TLS/SSL. In Node.js, this is implemented as a separate module. To use this module, include `require('https')` in your code.
 
@@ -9,12 +9,12 @@ Creating HTTPS servers is somewhat complicated and requires generating certifica
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/https/https.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**/
+
 
  
 
-/** related to: tls.createServer
-https.createServer(options [, requestListener]) -> https.Server
+### related to: tls.createServer
+## https.createServer(options [, requestListener]) -> https.Server
 - options (Object):  Any options you want to pass to the server
 - requestListener (Function): An optional listener
 
@@ -41,11 +41,11 @@ The `options` object has a mix of required and optional values:
 
   - `SNICallback`: A function that is called if the client supports the SNI TLS extension. Only one argument will be passed to it: `servername`. `SNICallback` should return a SecureContext instance. You can use `crypto.createCredentials(...).context` to get a proper SecureContext. If `SNICallback` wasn't provided, a default callback within the high-level API is used (for more information, see below).
 
-**/ 
+ 
 
 
-/**
-https.request(options, callback()) -> Void
+
+## https.request(options, callback()) -> Void
 - options (Object): Any options you want to pass to the server
 - callback (Function):  The callback to execute
 
@@ -113,11 +113,11 @@ Or, if you choose not to use an `Agent`:
       ...
     }
 
-**/ 
+ 
 
 
-/**
-https.get(options, callback()) -> Void
+
+## https.get(options, callback()) -> Void
 - options (Object): Options to pass to the request
 - callback (Function): The callback to execute once the method finishes 
 
@@ -128,15 +128,15 @@ Since most requests are GET requests without bodies, Node.js provides this conve
 #### Example
 
 <script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/https/https.get.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
-**/
 
 
 
 
-/**
- https.globalAgent -> https.Agent
+
+
+##  https.globalAgent -> https.Agent
 
 A global instance of the [`https.Agent`](https.Agent.html), which is used as the default for all HTTPS client requests.
 
-**/
+
 
