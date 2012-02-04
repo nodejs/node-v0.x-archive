@@ -27,7 +27,7 @@ Here's an example of the **wrong** way to perform more than one asynchronous ope
       if (err) throw err;
       console.log('renamed complete');
     });
-		// ERROR: THIS IS NOT CORRECT!
+    // ERROR: THIS IS NOT CORRECT!
     fs.stat('/tmp/world', function (err, stats) {
       if (err) throw err;
       console.log('stats: ' + JSON.stringify(stats));
@@ -865,6 +865,155 @@ Returns a new [[streams.WriteStream WriteStream]] object.
 `options` may also include a `start` option to allow writing data at some position past the beginning of the file.  
 
 Modifying a file rather than replacing it may require a `flags` mode of `r+` rather than the default mode `w`.
+
+
+
+## class fs.FSWatcher
+
+Objects returned from [[fs.watch `fs.watch()`]] are of this type. You can monitor any changes that occur on a watched file by listening for the events in this object.
+
+
+  
+
+
+## fs.FSWatcher.close() -> Void
+
+Stop watching for changes on the given `FSWatcher`.
+ 
+
+
+
+## fs.FSWatcher@change(event, filename) -> Void
+- event (String): The event that occured, either `'rename'` or '`change'`
+- filename (String): The name of the file which triggered the event
+
+Emitted when something changes in a watched directory or file. See more details in [[fs.watch `fs.watch()`]].
+
+ 
+
+
+
+## fs.FSWatcher@error(exception) -> Void
+- exception (Error): The exception that was caught
+
+Emitted when an error occurs.
+
+ 
+
+## class fs.ReadStream
+
+This is a [Readable Stream](streams.ReadableStream.html), created from the function [[fs.createReadStream `fs.createReadStream()`]].
+
+For more information, see [the documentation on the `stream` object](streams.html).
+
+ 
+
+
+## fs.ReadStream@open(fd) -> Void
+- fd (Number):  The file descriptor used by the `ReadStream`
+
+Emitted when a file is opened.
+
+ 
+
+
+
+## class fs.WriteStream
+
+This is a [Writable Stream](streams.WritableStream.html), created from the function [[fs.createWriteStream `fs.createWriteStream()`]].
+
+For more information, see [the documentation on the `stream` object](streams.html).
+
+ 
+
+
+## fs.WriteStream@open(fd) -> Void
+- fd (Number):  The file descriptor used by the `WriteStream`
+
+Emitted when a file is opened for writing.
+
+ 
+
+
+
+## fs.WriteStream.bytesWritten -> Number
+
+The number of bytes written so far. This doesn't include data that is still queued for writing.
+
+
+
+
+## class fs.Stats
+
+Objects returned from [[fs.stat `fs.stat()`]], [[fs.lstat `fs.lstat()`]], and [[fs.fstat `fs.fstat()`]] (and their synchronous counterparts) are of this type. The object contains the following methods:
+
+For a regular file, `util.inspect(fs.Stats)` returns a string similar to this:
+
+    { dev: 2114,
+      ino: 48064969,
+      mode: 33188,
+      nlink: 1,
+      uid: 85,
+      gid: 100,
+      rdev: 0,
+      size: 527,
+      blksize: 4096,
+      blocks: 8,
+      atime: Mon, 10 Oct 2011 23:24:11 GMT,
+      mtime: Mon, 10 Oct 2011 23:24:11 GMT,
+      ctime: Mon, 10 Oct 2011 23:24:11 GMT }
+
+Please note that `atime`, `mtime`, and `ctime` are instances of the [Date](../js_doc/Date.html) object, and to compare the values of these objects you should use appropriate methods. For most general uses, [`getTime()`](../js_doc/Date.html#getTime) returns the number of milliseconds elapsed since _1 January 1970 00:00:00 UTC_, and this integer should be sufficient for any comparison. However, there are additional methods which can be used for displaying fuzzy information.
+
+
+
+
+
+## fs.Stats.isFile() -> Boolean
+
+Indicates if the object is a file.
+
+ 
+
+
+## fs.Stats.isDirectory() -> Boolean
+
+Indicates if the object is a directory.
+
+
+
+
+## fs.Stats.isBlockDevice() -> Boolean
+
+Indicates if the object is a [block device](http://en.wikipedia.org/wiki/Device_file#Block_devices).
+
+
+
+
+## fs.Stats.isCharacterDevice() -> Boolean
+
+Indicates if the object is a [character device](http://en.wikipedia.org/wiki/Device_file#Character_devices).
+
+
+
+
+## fs.Stats.isSymbolicLink() -> Boolean
+
+Indicates if the object is a symbolic link; this is only valid with `fs.lstat()` and `fs.lstatSynch()`.
+
+
+
+
+## fs.Stats.isFIFO() -> Boolean
+
+Indicates if the object is a [named pipe](http://en.wikipedia.org/wiki/Named_pipe).
+
+
+
+
+## fs.Stats.isSocket() -> Boolean
+
+Indicates if the object is a [socket file](http://en.wikipedia.org/wiki/Unix_file_types#Socket).
 
 
 
