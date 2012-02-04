@@ -29,7 +29,7 @@ var server2 = net.createServer(function(socket) {
 });
 server1.listen(common.PORT);
 server2.on('error', function(error) {
-  assert.equal(true, error.message.indexOf('EADDRINUSE') >= 0);
+  assert.equal(error.code, 'EADDRINUSE');
   server1.close();
 });
 server2.listen(common.PORT);
