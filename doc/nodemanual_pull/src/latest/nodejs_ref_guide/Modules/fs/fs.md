@@ -69,8 +69,7 @@ A synchronous [rename(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/
  
 
 
-/* 
-fs.truncate(fd, len [, callback(err)]) -> Void
+## fs.truncate(fd, len [, callback(err)]) -> Void
 - fd (Number): The file descriptor
 - len (Number): The final file length
 - callback (Function):   An optional callback to execute once the function completes
@@ -637,7 +636,7 @@ For more information, see [pwrite(2)](http://www.kernel.org/doc/man-pages/online
 
 
 ## fs.writeSync(fd, buffer, offset, length, position) -> Number
-fs.writeSync(fd, str, position, [encoding='utf8']) -> Number
+## fs.writeSync(fd, str, position, [encoding='utf8']) -> Number
 - fd (Number): The file descriptor
 - buffer (Buffer): The buffer to write
 - offset (Number): Indicates where in the buffer to start at
@@ -675,7 +674,7 @@ Read data from the file specified by `fd` and writes it to `buffer`. If `positio
 
 
 ## fs.readSync(fd, buffer, offset, length, position) -> Number
-fs.readSync(fd, length, position, encoding) -> Number
+## fs.readSync(fd, length, position, encoding) -> Number
 - fd (Number): The file descriptor to read from
 - buffer (Buffer): The buffer to write to
 - offset (Number): Indicates where in the buffer to start writing at

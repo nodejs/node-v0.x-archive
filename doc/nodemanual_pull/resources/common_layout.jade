@@ -101,16 +101,7 @@ mixin endingScripts
 
 
 mixin identifyBuild(tree, type)
-  if tree
-    if tree.children[0].parentDir.indexOf('nodejs_ref_guide') >= 0
-        -nodejsRef = 'true'
-    else if tree.children[0].parentDir.indexOf('js_doc') >= 0 
-        -jsDoc = 'true'
-  else if (type == 'nodejs_dev_guide')
-      -nodejsDev = 'true'
-  else
-    landingPage = 'true'
-    -dirPrefix = './'
+  -nodejsRef = 'true'
 
 mixin markdown(text, inline)
   html = markdown(text, inline)

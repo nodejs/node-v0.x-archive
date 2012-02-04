@@ -1,7 +1,7 @@
 
 
+## class child_process
 ### section: child_process
-##   * class child_process
   *
 Node.js provides a tri-directional [`popen(3)`](http://www.kernel.org/doc/man-pages/online/pages/man3/popen.3.html) facility through this `ChildProcess` class. It's possible to stream data through the child's `stdin`, `stdout`, and `stderr` in a fully non-blocking way.
 
@@ -61,8 +61,8 @@ The PID of the child process.
  
 
 
-### related to: child_process.exec
 ## child_process.spawn(command, [args=[]] [, options]) -> Void
+### related to: child_process.exec
 - command (String): The Unix command to spawn
 - args (String | Array): The command line arguments to pass
 - options (Object):  Any additional options you want to transfer
@@ -105,8 +105,8 @@ There is also a deprecated option called `customFds`, which allows one to specif
  
 
 
-### related to: child_process.spawn
 ## child_process.exec(command[, options], callback(error, stdout, stderr)) -> Object
+### related to: child_process.spawn
 - command (String): The Unix command to run
 - options (Object):The options to pass to the command
 - callback (Function): The function to run after the method completes
@@ -146,8 +146,8 @@ An object containing the three standard streams, plus other parameters like the 
 
  
 
-### related to: child_process.exec
 ## child_process.execFile(file, args, options, callback(error, stdout, stderr)) -> Void
+### related to: child_process.exec
 - file (String): The file location with the commands to run
 - args (String): The command line arguments to pass
 - options (Object): The options to pass to the `exec` call
@@ -163,8 +163,8 @@ A function similar to `child.exec()`, except instead of executing a subshell it 
  
 
 
-### related to: child_process.spawn
 ## child_process.fork(modulePath, arguments, options) -> Object
+### related to: child_process.spawn
 - modulePath (String): The location of the module
 - arguments (String): Any starting arguments to use
 - options (Object): Any additional options to pass
