@@ -1010,7 +1010,7 @@ void SetErrno(uv_err_t err) {
     snprintf(errno_buf, 100, "Unknown system errno %d", err.sys_errno_);
     Context::GetCurrent()->Global()->Set(errno_symbol, String::New(errno_buf));
   } else {
-    Context::GetCurrent()->Global()->Set(errno_symbol, Number::New(err.sys_errno_));
+    Context::GetCurrent()->Global()->Set(errno_symbol, Number::New(err.code));
   }
 }
 
