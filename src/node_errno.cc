@@ -24,14 +24,14 @@
 #include <node_vars.h>
 #include <cstring>
 
-#define syscall_symbol NODE_VAR(syscall_symbol)
-#define errno_symbol NODE_VAR(errno_symbol)
-#define errpath_symbol NODE_VAR(errpath_symbol)
-#define code_symbol NODE_VAR(code_symbol)
+using namespace v8;
 
 namespace node {
 
-using namespace v8;
+static Persistent<String> errno_symbol;
+static Persistent<String> syscall_symbol;
+static Persistent<String> errpath_symbol;
+static Persistent<String> code_symbol;
 
 // return the errno key as a string
 static const char* get_uv_errno_string(int errorno) {
