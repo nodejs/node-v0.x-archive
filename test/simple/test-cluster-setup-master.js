@@ -23,6 +23,7 @@
 var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
+var os = require('os');
 
 if (cluster.isWorker) {
 
@@ -32,58 +33,66 @@ if (cluster.isWorker) {
 } else if (cluster.isMaster) {
 
   var checks = {
+    workers: false,
     args: false,
     setupEvent: false,
-    settingsObject: false
+    settingsObject: false,
+    forkMode: false
   };
 
-  var totalWorkers = 2;
+  var cpus = os.cpus().length;
 
   cluster.once('setup', function() {
     checks.setupEvent = true;
 
     var settings = cluster.settings;
-    if (settings &&
-        settings.args && settings.args[0] === 'custom argument' &&
-        settings.silent === true &&
-        settings.exec === process.argv[1]) {
+    if (settings
+    && settings.workers === (cpus + 1)
+    && settings.args && settings.args[0] === 'custom argument'
+    && settings.silent === true
+    && settings.exec === process.argv[1]) {
       checks.settingsObject = true;
     }
   });
 
   // Setup master
   cluster.setupMaster({
+    workers: (cpus + 1),
     args: ['custom argument'],
     silent: true
   });
 
   var correctIn = 0;
 
-  cluster.on('online', function lisenter(worker) {
+  cluster.on('online', function (worker) {
 
     worker.once('message', function(data) {
       correctIn += (data === 'custom argument' ? 1 : 0);
-      if (correctIn === totalWorkers) {
+      if (correctIn === (cpus + 1)) {
         checks.args = true;
+        cluster.destroy();
       }
-      worker.destroy();
     });
 
     // All workers are online
-    if (cluster.onlineWorkers === totalWorkers) {
+    if (cluster.onlineWorkers === (cpus + 1)) {
       checks.workers = true;
     }
   });
 
   // Start all workers
-  cluster.fork();
-  cluster.fork();
+  cluster.autoFork();
+
+  // forkMode should now be auto
+  checks.forkMode = cluster.settings.forkMode === 'auto';
 
   // Check all values
   process.once('exit', function() {
+    assert.ok(checks.workers, 'Not all workers was spawned.');
     assert.ok(checks.args, 'The arguments was noy send to the worker');
     assert.ok(checks.setupEvent, 'The setup event was never emitted');
     assert.ok(checks.settingsObject, 'The settingsObject do not have correct properties');
+    assert.ok(checks.forkMode, 'The forkMode was not set to auto after autoFork was executed');
   });
 
 }
