@@ -35,8 +35,13 @@
         },
       },
       'Release': {
+        'conditions': [
+          [ 'OS!="solaris"', {
+            'cflags': [ '-fomit-frame-pointer' ]
+          }],
+        ],
         # 'defines': [ 'NDEBUG' ],
-        'cflags': [ '-O3', '-fomit-frame-pointer', '-fdata-sections', '-ffunction-sections' ],
+        'cflags': [ '-O3', '-fdata-sections', '-ffunction-sections' ],
         'msvs_settings': {
           'VCCLCompilerTool': {
             'target_conditions': [
