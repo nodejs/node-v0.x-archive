@@ -15,6 +15,9 @@
       }],
       [ 'OS=="win"', {
         'libraries': [ '-l<(node_root_dir)/$(Configuration)/node.lib' ],
+      }],
+      [ 'OS=="linux"', {
+        'cflags': [ '-fPIC' ],
       }]
     ]
   }
