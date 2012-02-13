@@ -93,6 +93,7 @@ class FmtElm {
   FmtElm(void* value) : type_(POINTER) {  // NOLINT
     data_.u_pointer_ = value;
   }
+
  private:
   friend class StringStream;
   enum Type { INT, DOUBLE, C_STR, LC_STR, OBJ, HANDLE, POINTER };
@@ -138,10 +139,12 @@ class StringStream {
            FmtElm arg3);
 
   // Getting the message out.
-  void OutputToStdOut();
+  void OutputToFile(FILE* out);
+  void OutputToStdOut() { OutputToFile(stdout); }
   void Log();
   Handle<String> ToString();
-  SmartPointer<const char> ToCString() const;
+  SmartArrayPointer<const char> ToCString() const;
+  int length() const { return length_; }
 
   // Object printing support.
   void PrintName(Object* o);

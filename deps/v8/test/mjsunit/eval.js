@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -39,7 +39,7 @@ assertEquals(1, count);
 
 try {
   eval('hest 7 &*^*&^');
-  assertTrue(false, 'Did not throw on syntax error.');
+  assertUnreachable('Did not throw on syntax error.');
 } catch (e) {
   assertEquals('SyntaxError', e.name);
 }
@@ -108,7 +108,17 @@ foo = 0;
 result =
   (function() {
     var foo = 2;
+    // Should be non-direct call.
     return x.eval('foo');
+  })();
+assertEquals(0, result);
+
+foo = 0;
+result =
+  (function() {
+    var foo = 2;
+    // Should be non-direct call.
+    return (1,eval)('foo');
   })();
 assertEquals(0, result);
 
@@ -117,9 +127,21 @@ result =
   (function() {
     var eval = function(x) { return x; };
     var foo = eval(2);
+    // Should be non-direct call.
     return e('foo');
   })();
 assertEquals(0, result);
+
+foo = 0;
+result =
+  (function() {
+    var foo = 2;
+    // Should be direct call.
+    with ({ eval : e }) {
+      return eval('foo');
+    }
+  })();
+assertEquals(2, result);
 
 result =
   (function() {
@@ -135,19 +157,17 @@ result =
   })();
 assertEquals(this, result);
 
-result =
-  (function() {
-    var obj = { f: function(eval) { return eval("this"); } };
-    return obj.f(eval);
-  })();
-assertEquals(this, result);
+(function() {
+  var obj = { f: function(eval) { return eval("this"); } };
+  result = obj.f(eval);
+  assertEquals(obj, result);
+})();
 
-result =
-  (function() {
-    var obj = { f: function(eval) { arguments; return eval("this"); } };
-    return obj.f(eval);
-  })();
-assertEquals(this, result);
+(function() {
+  var obj = { f: function(eval) { arguments; return eval("this"); } };
+  result = obj.f(eval);
+  assertEquals(obj, result);
+})();
 
 eval = function(x) { return 2 * x; };
 result =
@@ -155,3 +175,15 @@ result =
     return (function() { return eval(2); })();
   })();
 assertEquals(4, result);
+
+
+
+
+// Regression test: calling a function named eval found in a context that is
+// not the global context should get the global object as receiver.
+result =
+    (function () {
+      var eval = function (x) { return this; };
+      with ({}) { return eval('ignore'); }
+    })();
+assertEquals(this, result);

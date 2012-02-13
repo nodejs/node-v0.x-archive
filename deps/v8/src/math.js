@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -38,32 +38,32 @@ const $abs = MathAbs;
 function MathConstructor() {}
 %FunctionSetInstanceClassName(MathConstructor, 'Math');
 const $Math = new MathConstructor();
-$Math.__proto__ = global.Object.prototype;
+$Math.__proto__ = $Object.prototype;
 %SetProperty(global, "Math", $Math, DONT_ENUM);
 
 // ECMA 262 - 15.8.2.1
 function MathAbs(x) {
   if (%_IsSmi(x)) return x >= 0 ? x : -x;
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   if (x === 0) return 0;  // To handle -0.
   return x > 0 ? x : -x;
 }
 
 // ECMA 262 - 15.8.2.2
 function MathAcos(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %Math_acos(x);
 }
 
 // ECMA 262 - 15.8.2.3
 function MathAsin(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %Math_asin(x);
 }
 
 // ECMA 262 - 15.8.2.4
 function MathAtan(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %Math_atan(x);
 }
 
@@ -71,32 +71,32 @@ function MathAtan(x) {
 // The naming of y and x matches the spec, as does the order in which
 // ToNumber (valueOf) is called.
 function MathAtan2(y, x) {
-  if (!IS_NUMBER(y)) y = ToNumber(y);
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(y)) y = NonNumberToNumber(y);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %Math_atan2(y, x);
 }
 
 // ECMA 262 - 15.8.2.6
 function MathCeil(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %Math_ceil(x);
 }
 
 // ECMA 262 - 15.8.2.7
 function MathCos(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %_MathCos(x);
 }
 
 // ECMA 262 - 15.8.2.8
 function MathExp(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %Math_exp(x);
 }
 
 // ECMA 262 - 15.8.2.9
 function MathFloor(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   // It's more common to call this with a positive number that's out
   // of range than negative numbers; check the upper bound first.
   if (x < 0x80000000 && x > 0) {
@@ -112,26 +112,39 @@ function MathFloor(x) {
 
 // ECMA 262 - 15.8.2.10
 function MathLog(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
-  return %Math_log(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
+  return %_MathLog(x);
 }
 
 // ECMA 262 - 15.8.2.11
 function MathMax(arg1, arg2) {  // length == 2
   var length = %_ArgumentsLength();
+  if (length == 2) {
+    if (!IS_NUMBER(arg1)) arg1 = NonNumberToNumber(arg1);
+    if (!IS_NUMBER(arg2)) arg2 = NonNumberToNumber(arg2);
+    if (arg2 > arg1) return arg2;
+    if (arg1 > arg2) return arg1;
+    if (arg1 == arg2) {
+      // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can be
+      // a Smi or a heap number.
+      return (arg1 == 0 && !%_IsSmi(arg1) && 1 / arg1 < 0) ? arg2 : arg1;
+    }
+    // All comparisons failed, one of the arguments must be NaN.
+    return 0/0;  // Compiler constant-folds this to NaN.
+  }
   if (length == 0) {
     return -1/0;  // Compiler constant-folds this to -Infinity.
   }
   var r = arg1;
-  if (!IS_NUMBER(r)) r = ToNumber(r);
+  if (!IS_NUMBER(r)) r = NonNumberToNumber(r);
   if (NUMBER_IS_NAN(r)) return r;
   for (var i = 1; i < length; i++) {
     var n = %_Arguments(i);
-    if (!IS_NUMBER(n)) n = ToNumber(n);
+    if (!IS_NUMBER(n)) n = NonNumberToNumber(n);
     if (NUMBER_IS_NAN(n)) return n;
     // Make sure +0 is considered greater than -0.  -0 is never a Smi, +0 can be
     // a Smi or heap number.
-    if (n > r || (r === 0 && n === 0 && !%_IsSmi(r) && 1 / r < 0)) r = n;
+    if (n > r || (r == 0 && n == 0 && !%_IsSmi(r) && 1 / r < 0)) r = n;
   }
   return r;
 }
@@ -139,27 +152,40 @@ function MathMax(arg1, arg2) {  // length == 2
 // ECMA 262 - 15.8.2.12
 function MathMin(arg1, arg2) {  // length == 2
   var length = %_ArgumentsLength();
+  if (length == 2) {
+    if (!IS_NUMBER(arg1)) arg1 = NonNumberToNumber(arg1);
+    if (!IS_NUMBER(arg2)) arg2 = NonNumberToNumber(arg2);
+    if (arg2 > arg1) return arg1;
+    if (arg1 > arg2) return arg2;
+    if (arg1 == arg2) {
+      // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can be
+      // a Smi or a heap number.
+      return (arg1 == 0 && !%_IsSmi(arg1) && 1 / arg1 < 0) ? arg1 : arg2;
+    }
+    // All comparisons failed, one of the arguments must be NaN.
+    return 0/0;  // Compiler constant-folds this to NaN.
+  }
   if (length == 0) {
     return 1/0;  // Compiler constant-folds this to Infinity.
   }
   var r = arg1;
-  if (!IS_NUMBER(r)) r = ToNumber(r);
+  if (!IS_NUMBER(r)) r = NonNumberToNumber(r);
   if (NUMBER_IS_NAN(r)) return r;
   for (var i = 1; i < length; i++) {
     var n = %_Arguments(i);
-    if (!IS_NUMBER(n)) n = ToNumber(n);
+    if (!IS_NUMBER(n)) n = NonNumberToNumber(n);
     if (NUMBER_IS_NAN(n)) return n;
-    // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can b a
+    // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can be a
     // Smi or a heap number.
-    if (n < r || (r === 0 && n === 0 && !%_IsSmi(n) && 1 / n < 0)) r = n;
+    if (n < r || (r == 0 && n == 0 && !%_IsSmi(n) && 1 / n < 0)) r = n;
   }
   return r;
 }
 
 // ECMA 262 - 15.8.2.13
 function MathPow(x, y) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
-  if (!IS_NUMBER(y)) y = ToNumber(y);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
+  if (!IS_NUMBER(y)) y = NonNumberToNumber(y);
   return %_MathPow(x, y);
 }
 
@@ -170,33 +196,34 @@ function MathRandom() {
 
 // ECMA 262 - 15.8.2.15
 function MathRound(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %RoundNumber(x);
 }
 
 // ECMA 262 - 15.8.2.16
 function MathSin(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %_MathSin(x);
 }
 
 // ECMA 262 - 15.8.2.17
 function MathSqrt(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
   return %_MathSqrt(x);
 }
 
 // ECMA 262 - 15.8.2.18
 function MathTan(x) {
-  if (!IS_NUMBER(x)) x = ToNumber(x);
-  return %Math_tan(x);
+  if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
+  return %_MathTan(x);
 }
 
 
 // -------------------------------------------------------------------
 
-function SetupMath() {
-  // Setup math constants.
+function SetUpMath() {
+  %CheckIsBootstrapping();
+  // Set up math constants.
   // ECMA-262, section 15.8.1.1.
   %OptimizeObjectForAddingMultipleProperties($Math, 8);
   %SetProperty($Math,
@@ -220,7 +247,7 @@ function SetupMath() {
                DONT_ENUM |  DONT_DELETE | READ_ONLY);
   %SetProperty($Math,
                "LOG10E",
-               0.43429448190325176,
+               0.4342944819032518,
                DONT_ENUM |  DONT_DELETE | READ_ONLY);
   %SetProperty($Math,
                "PI",
@@ -236,9 +263,9 @@ function SetupMath() {
                DONT_ENUM |  DONT_DELETE | READ_ONLY);
   %ToFastProperties($Math);
 
-  // Setup non-enumerable functions of the Math object and
+  // Set up non-enumerable functions of the Math object and
   // set their names.
-  InstallFunctionsOnHiddenPrototype($Math, DONT_ENUM, $Array(
+  InstallFunctions($Math, DONT_ENUM, $Array(
     "random", MathRandom,
     "abs", MathAbs,
     "acos", MathAcos,
@@ -258,7 +285,6 @@ function SetupMath() {
     "max", MathMax,
     "min", MathMin
   ));
-};
+}
 
-
-SetupMath();
+SetUpMath();

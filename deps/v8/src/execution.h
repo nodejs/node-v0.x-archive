@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,8 @@
 #ifndef V8_EXECUTION_H_
 #define V8_EXECUTION_H_
 
+#include "allocation.h"
+
 namespace v8 {
 namespace internal {
 
@@ -38,7 +40,9 @@ enum InterruptFlag {
   DEBUGBREAK = 1 << 1,
   DEBUGCOMMAND = 1 << 2,
   PREEMPT = 1 << 3,
-  TERMINATE = 1 << 4
+  TERMINATE = 1 << 4,
+  RUNTIME_PROFILER_TICK = 1 << 5,
+  GC_REQUEST = 1 << 6
 };
 
 class Execution : public AllStatic {
@@ -50,11 +54,16 @@ class Execution : public AllStatic {
   // *pending_exception tells whether the invoke resulted in
   // a pending exception.
   //
-  static Handle<Object> Call(Handle<JSFunction> func,
+  // When convert_receiver is set, and the receiver is not an object,
+  // and the function called is not in strict mode, receiver is converted to
+  // an object.
+  //
+  static Handle<Object> Call(Handle<Object> callable,
                              Handle<Object> receiver,
                              int argc,
-                             Object*** args,
-                             bool* pending_exception);
+                             Handle<Object> argv[],
+                             bool* pending_exception,
+                             bool convert_receiver = false);
 
   // Construct object from function, the caller supplies an array of
   // arguments. Arguments are Object* type. After function returns,
@@ -65,7 +74,7 @@ class Execution : public AllStatic {
   //
   static Handle<Object> New(Handle<JSFunction> func,
                             int argc,
-                            Object*** args,
+                            Handle<Object> argv[],
                             bool* pending_exception);
 
   // Call a function, just like Call(), but make sure to silently catch
@@ -75,7 +84,7 @@ class Execution : public AllStatic {
   static Handle<Object> TryCall(Handle<JSFunction> func,
                                 Handle<Object> receiver,
                                 int argc,
-                                Object*** args,
+                                Handle<Object> argv[],
                                 bool* caught_exception);
 
   // ECMA-262 9.2
@@ -105,6 +114,11 @@ class Execution : public AllStatic {
   // Create a new date object from 'time'.
   static Handle<Object> NewDate(double time, bool* exc);
 
+  // Create a new regular expression object from 'pattern' and 'flags'.
+  static Handle<JSRegExp> NewJSRegExp(Handle<String> pattern,
+                                      Handle<String> flags,
+                                      bool* exc);
+
   // Used to implement [] notation on strings (calls JS code)
   static Handle<Object> CharAt(Handle<String> str, uint32_t index);
 
@@ -122,84 +136,98 @@ class Execution : public AllStatic {
                                           Handle<Object> is_global);
 #ifdef ENABLE_DEBUGGER_SUPPORT
   static Object* DebugBreakHelper();
-  static void ProcessDebugMesssages(bool debug_command_only);
+  static void ProcessDebugMessages(bool debug_command_only);
 #endif
 
   // If the stack guard is triggered, but it is not an actual
   // stack overflow, then handle the interruption accordingly.
-  static Object* HandleStackGuardInterrupt();
+  MUST_USE_RESULT static MaybeObject* HandleStackGuardInterrupt();
 
   // Get a function delegate (or undefined) for the given non-function
   // object. Used for support calling objects as functions.
   static Handle<Object> GetFunctionDelegate(Handle<Object> object);
+  static Handle<Object> TryGetFunctionDelegate(Handle<Object> object,
+                                               bool* has_pending_exception);
 
   // Get a function delegate (or undefined) for the given non-function
   // object. Used for support calling objects as constructors.
   static Handle<Object> GetConstructorDelegate(Handle<Object> object);
+  static Handle<Object> TryGetConstructorDelegate(Handle<Object> object,
+                                                  bool* has_pending_exception);
 };
 
 
 class ExecutionAccess;
+class Isolate;
 
 
 // StackGuard contains the handling of the limits that are used to limit the
 // number of nested invocations of JavaScript and the stack size used in each
 // invocation.
-class StackGuard : public AllStatic {
+class StackGuard {
  public:
   // Pass the address beyond which the stack should not grow.  The stack
   // is assumed to grow downwards.
-  static void SetStackLimit(uintptr_t limit);
+  void SetStackLimit(uintptr_t limit);
 
   // Threading support.
-  static char* ArchiveStackGuard(char* to);
-  static char* RestoreStackGuard(char* from);
-  static int ArchiveSpacePerThread();
-  static void FreeThreadResources();
+  char* ArchiveStackGuard(char* to);
+  char* RestoreStackGuard(char* from);
+  static int ArchiveSpacePerThread() { return sizeof(ThreadLocal); }
+  void FreeThreadResources();
   // Sets up the default stack guard for this thread if it has not
   // already been set up.
-  static void InitThread(const ExecutionAccess& lock);
+  void InitThread(const ExecutionAccess& lock);
   // Clears the stack guard for this thread so it does not look as if
   // it has been set up.
-  static void ClearThread(const ExecutionAccess& lock);
+  void ClearThread(const ExecutionAccess& lock);
 
-  static bool IsStackOverflow();
-  static bool IsPreempted();
-  static void Preempt();
-  static bool IsInterrupted();
-  static void Interrupt();
-  static bool IsTerminateExecution();
-  static void TerminateExecution();
+  bool IsStackOverflow();
+  bool IsPreempted();
+  void Preempt();
+  bool IsInterrupted();
+  void Interrupt();
+  bool IsTerminateExecution();
+  void TerminateExecution();
+  bool IsRuntimeProfilerTick();
+  void RequestRuntimeProfilerTick();
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  static bool IsDebugBreak();
-  static void DebugBreak();
-  static bool IsDebugCommand();
-  static void DebugCommand();
+  bool IsDebugBreak();
+  void DebugBreak();
+  bool IsDebugCommand();
+  void DebugCommand();
 #endif
-  static void Continue(InterruptFlag after_what);
+  bool IsGCRequest();
+  void RequestGC();
+  void Continue(InterruptFlag after_what);
 
   // This provides an asynchronous read of the stack limits for the current
   // thread.  There are no locks protecting this, but it is assumed that you
   // have the global V8 lock if you are using multiple V8 threads.
-  static uintptr_t climit() {
+  uintptr_t climit() {
     return thread_local_.climit_;
   }
-  static uintptr_t jslimit() {
+  uintptr_t real_climit() {
+    return thread_local_.real_climit_;
+  }
+  uintptr_t jslimit() {
     return thread_local_.jslimit_;
   }
-  static uintptr_t real_jslimit() {
+  uintptr_t real_jslimit() {
     return thread_local_.real_jslimit_;
   }
-  static Address address_of_jslimit() {
+  Address address_of_jslimit() {
     return reinterpret_cast<Address>(&thread_local_.jslimit_);
   }
-  static Address address_of_real_jslimit() {
+  Address address_of_real_jslimit() {
     return reinterpret_cast<Address>(&thread_local_.real_jslimit_);
   }
 
  private:
+  StackGuard();
+
   // You should hold the ExecutionAccess lock when calling this method.
-  static bool has_pending_interrupts(const ExecutionAccess& lock) {
+  bool has_pending_interrupts(const ExecutionAccess& lock) {
     // Sanity check: We shouldn't be asking about pending interrupts
     // unless we're not postponing them anymore.
     ASSERT(!should_postpone_interrupts(lock));
@@ -207,32 +235,20 @@ class StackGuard : public AllStatic {
   }
 
   // You should hold the ExecutionAccess lock when calling this method.
-  static bool should_postpone_interrupts(const ExecutionAccess& lock) {
+  bool should_postpone_interrupts(const ExecutionAccess& lock) {
     return thread_local_.postpone_interrupts_nesting_ > 0;
   }
 
   // You should hold the ExecutionAccess lock when calling this method.
-  static void set_interrupt_limits(const ExecutionAccess& lock) {
-    // Ignore attempts to interrupt when interrupts are postponed.
-    if (should_postpone_interrupts(lock)) return;
-    thread_local_.jslimit_ = kInterruptLimit;
-    thread_local_.climit_ = kInterruptLimit;
-    Heap::SetStackLimits();
-  }
+  inline void set_interrupt_limits(const ExecutionAccess& lock);
 
   // Reset limits to actual values. For example after handling interrupt.
   // You should hold the ExecutionAccess lock when calling this method.
-  static void reset_limits(const ExecutionAccess& lock) {
-    thread_local_.jslimit_ = thread_local_.real_jslimit_;
-    thread_local_.climit_ = thread_local_.real_climit_;
-    Heap::SetStackLimits();
-  }
+  inline void reset_limits(const ExecutionAccess& lock);
 
   // Enable or disable interrupts.
-  static void EnableInterrupts();
-  static void DisableInterrupts();
-
-  static const uintptr_t kLimitSize = kPointerSize * 128 * KB;
+  void EnableInterrupts();
+  void DisableInterrupts();
 
 #ifdef V8_TARGET_ARCH_X64
   static const uintptr_t kInterruptLimit = V8_UINT64_C(0xfffffffffffffffe);
@@ -247,8 +263,10 @@ class StackGuard : public AllStatic {
     ThreadLocal() { Clear(); }
     // You should hold the ExecutionAccess lock when you call Initialize or
     // Clear.
-    void Initialize();
     void Clear();
+
+    // Returns true if the heap's stack limits should be set, false if not.
+    bool Initialize(Isolate* isolate);
 
     // The stack limit is split into a JavaScript and a C++ stack limit. These
     // two are the same except when running on a simulator where the C++ and
@@ -269,67 +287,18 @@ class StackGuard : public AllStatic {
     int interrupt_flags_;
   };
 
-  static ThreadLocal thread_local_;
+  // TODO(isolates): Technically this could be calculated directly from a
+  //                 pointer to StackGuard.
+  Isolate* isolate_;
+  ThreadLocal thread_local_;
 
+  friend class Isolate;
   friend class StackLimitCheck;
   friend class PostponeInterruptsScope;
+
+  DISALLOW_COPY_AND_ASSIGN(StackGuard);
 };
 
-
-// Support for checking for stack-overflows in C++ code.
-class StackLimitCheck BASE_EMBEDDED {
- public:
-  bool HasOverflowed() const {
-    // Stack has overflowed in C++ code only if stack pointer exceeds the C++
-    // stack guard and the limits are not set to interrupt values.
-    // TODO(214): Stack overflows are ignored if a interrupt is pending. This
-    // code should probably always use the initial C++ limit.
-    return (reinterpret_cast<uintptr_t>(this) < StackGuard::climit()) &&
-           StackGuard::IsStackOverflow();
-  }
-};
-
-
-// Support for temporarily postponing interrupts. When the outermost
-// postpone scope is left the interrupts will be re-enabled and any
-// interrupts that occurred while in the scope will be taken into
-// account.
-class PostponeInterruptsScope BASE_EMBEDDED {
- public:
-  PostponeInterruptsScope() {
-    StackGuard::thread_local_.postpone_interrupts_nesting_++;
-    StackGuard::DisableInterrupts();
-  }
-
-  ~PostponeInterruptsScope() {
-    if (--StackGuard::thread_local_.postpone_interrupts_nesting_ == 0) {
-      StackGuard::EnableInterrupts();
-    }
-  }
-};
-
-
-class GCExtension : public v8::Extension {
- public:
-  GCExtension() : v8::Extension("v8/gc", kSource) {}
-  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunction(
-      v8::Handle<v8::String> name);
-  static v8::Handle<v8::Value> GC(const v8::Arguments& args);
- private:
-  static const char* const kSource;
-};
-
-
-class ExternalizeStringExtension : public v8::Extension {
- public:
-  ExternalizeStringExtension() : v8::Extension("v8/externalize", kSource) {}
-  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunction(
-      v8::Handle<v8::String> name);
-  static v8::Handle<v8::Value> Externalize(const v8::Arguments& args);
-  static v8::Handle<v8::Value> IsAscii(const v8::Arguments& args);
- private:
-  static const char* const kSource;
-};
 
 } }  // namespace v8::internal
 

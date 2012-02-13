@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -33,18 +33,22 @@
 #include <errno.h>
 #include <time.h>
 
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
 
-#if defined(ANDROID)
+#undef MAP_TYPE
+
+#if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
 #define LOG_TAG "v8"
-#include <utils/Log.h>  // LOG_PRI_VA
+#include <android/log.h>
 #endif
 
 #include "v8.h"
@@ -53,6 +57,66 @@
 
 namespace v8 {
 namespace internal {
+
+
+// Maximum size of the virtual memory.  0 means there is no artificial
+// limit.
+
+intptr_t OS::MaxVirtualMemory() {
+  struct rlimit limit;
+  int result = getrlimit(RLIMIT_DATA, &limit);
+  if (result != 0) return 0;
+  return limit.rlim_cur;
+}
+
+
+intptr_t OS::CommitPageSize() {
+  static intptr_t page_size = getpagesize();
+  return page_size;
+}
+
+
+#ifndef __CYGWIN__
+// Get rid of writable permission on code allocations.
+void OS::ProtectCode(void* address, const size_t size) {
+  mprotect(address, size, PROT_READ | PROT_EXEC);
+}
+
+
+// Create guard pages.
+void OS::Guard(void* address, const size_t size) {
+  mprotect(address, size, PROT_NONE);
+}
+#endif  // __CYGWIN__
+
+
+void* OS::GetRandomMmapAddr() {
+  Isolate* isolate = Isolate::UncheckedCurrent();
+  // Note that the current isolate isn't set up in a call path via
+  // CpuFeatures::Probe. We don't care about randomization in this case because
+  // the code page is immediately freed.
+  if (isolate != NULL) {
+#ifdef V8_TARGET_ARCH_X64
+    uint64_t rnd1 = V8::RandomPrivate(isolate);
+    uint64_t rnd2 = V8::RandomPrivate(isolate);
+    uint64_t raw_addr = (rnd1 << 32) ^ rnd2;
+    // Currently available CPUs have 48 bits of virtual addressing.  Truncate
+    // the hint address to 46 bits to give the kernel a fighting chance of
+    // fulfilling our placement request.
+    raw_addr &= V8_UINT64_C(0x3ffffffff000);
+#else
+    uint32_t raw_addr = V8::RandomPrivate(isolate);
+    // The range 0x20000000 - 0x60000000 is relatively unpopulated across a
+    // variety of ASLR modes (PAE kernel, NX compat mode, etc) and on macos
+    // 10.6 and 10.7.
+    raw_addr &= 0x3ffff000;
+    raw_addr += 0x20000000;
+#endif
+    return reinterpret_cast<void*>(raw_addr);
+  }
+  return NULL;
+}
+
 
 // ----------------------------------------------------------------------------
 // Math functions
@@ -118,11 +182,28 @@ int OS::GetLastError() {
 //
 
 FILE* OS::FOpen(const char* path, const char* mode) {
-  return fopen(path, mode);
+  FILE* file = fopen(path, mode);
+  if (file == NULL) return NULL;
+  struct stat file_stat;
+  if (fstat(fileno(file), &file_stat) != 0) return NULL;
+  bool is_regular_file = ((file_stat.st_mode & S_IFREG) != 0);
+  if (is_regular_file) return file;
+  fclose(file);
+  return NULL;
 }
 
 
-const char* OS::LogFileOpenMode = "w";
+bool OS::Remove(const char* path) {
+  return (remove(path) == 0);
+}
+
+
+FILE* OS::OpenTemporaryFile() {
+  return tmpfile();
+}
+
+
+const char* const OS::LogFileOpenMode = "w";
 
 
 void OS::Print(const char* format, ...) {
@@ -134,10 +215,27 @@ void OS::Print(const char* format, ...) {
 
 
 void OS::VPrint(const char* format, va_list args) {
-#if defined(ANDROID)
-  LOG_PRI_VA(ANDROID_LOG_INFO, LOG_TAG, format, args);
+#if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
+  __android_log_vprint(ANDROID_LOG_INFO, LOG_TAG, format, args);
 #else
   vprintf(format, args);
+#endif
+}
+
+
+void OS::FPrint(FILE* out, const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  VFPrint(out, format, args);
+  va_end(args);
+}
+
+
+void OS::VFPrint(FILE* out, const char* format, va_list args) {
+#if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
+  __android_log_vprint(ANDROID_LOG_INFO, LOG_TAG, format, args);
+#else
+  vfprintf(out, format, args);
 #endif
 }
 
@@ -151,8 +249,8 @@ void OS::PrintError(const char* format, ...) {
 
 
 void OS::VPrintError(const char* format, va_list args) {
-#if defined(ANDROID)
-  LOG_PRI_VA(ANDROID_LOG_ERROR, LOG_TAG, format, args);
+#if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
+  __android_log_vprint(ANDROID_LOG_ERROR, LOG_TAG, format, args);
 #else
   vfprintf(stderr, format, args);
 #endif
@@ -173,13 +271,40 @@ int OS::VSNPrintF(Vector<char> str,
                   va_list args) {
   int n = vsnprintf(str.start(), str.length(), format, args);
   if (n < 0 || n >= str.length()) {
-    str[str.length() - 1] = '\0';
+    // If the length is zero, the assignment fails.
+    if (str.length() > 0)
+      str[str.length() - 1] = '\0';
     return -1;
   } else {
     return n;
   }
 }
 
+
+#if defined(V8_TARGET_ARCH_IA32)
+static OS::MemCopyFunction memcopy_function = NULL;
+static Mutex* memcopy_function_mutex = OS::CreateMutex();
+// Defined in codegen-ia32.cc.
+OS::MemCopyFunction CreateMemCopyFunction();
+
+// Copy memory area to disjoint memory area.
+void OS::MemCopy(void* dest, const void* src, size_t size) {
+  if (memcopy_function == NULL) {
+    ScopedLock lock(memcopy_function_mutex);
+    if (memcopy_function == NULL) {
+      OS::MemCopyFunction temp = CreateMemCopyFunction();
+      MemoryBarrier();
+      memcopy_function = temp;
+    }
+  }
+  // Note: here we rely on dependent reads being ordered. This is true
+  // on all architectures we currently support.
+  (*memcopy_function)(dest, src, size);
+#ifdef DEBUG
+  CHECK_EQ(0, memcmp(dest, src, size));
+#endif
+}
+#endif  // V8_TARGET_ARCH_IA32
 
 // ----------------------------------------------------------------------------
 // POSIX string support.
@@ -204,6 +329,14 @@ class POSIXSocket : public Socket {
   explicit POSIXSocket() {
     // Create the socket.
     socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (IsValid()) {
+      // Allow rapid reuse.
+      static const int kOn = 1;
+      int ret = setsockopt(socket_, SOL_SOCKET, SO_REUSEADDR,
+                           &kOn, sizeof(kOn));
+      ASSERT(ret == 0);
+      USE(ret);
+    }
   }
   explicit POSIXSocket(int socket): socket_(socket) { }
   virtual ~POSIXSocket() { Shutdown(); }
@@ -328,7 +461,7 @@ bool POSIXSocket::SetReuseAddress(bool reuse_address) {
 }
 
 
-bool Socket::Setup() {
+bool Socket::SetUp() {
   // Nothing to do on POSIX.
   return true;
 }

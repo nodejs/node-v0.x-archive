@@ -1,60 +1,33 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #ifndef node_script_h
 #define node_script_h
 
 #include <node.h>
 #include <node_object_wrap.h>
 #include <v8.h>
-#include <ev.h>
+#include <uv.h>
 
 namespace node {
-
-class Context : ObjectWrap {
- public:
-  static void Initialize (v8::Handle<v8::Object> target);
-  static v8::Handle<v8::Value> New (const v8::Arguments& args);
-
-  v8::Persistent<v8::Context> GetV8Context();
-  static v8::Local<v8::Object> NewInstance();
-
- protected:
-
-  static v8::Persistent<v8::FunctionTemplate> constructor_template;
-
-  Context ();
-  ~Context();
-
-  v8::Persistent<v8::Context> context_;
-};
-
-
-class Script : ObjectWrap {
- public:
-  static void Initialize (v8::Handle<v8::Object> target);
-
-  enum EvalInputFlags { compileCode, unwrapExternal };
-  enum EvalContextFlags { thisContext, newContext, userContext };
-  enum EvalOutputFlags { returnResult, wrapExternal };
-
-  template <EvalInputFlags iFlag, EvalContextFlags cFlag, EvalOutputFlags oFlag>
-  static v8::Handle<v8::Value> EvalMachine(const v8::Arguments& args);
-
- protected:
-  static v8::Persistent<v8::FunctionTemplate> constructor_template;
-
-  Script () : ObjectWrap () {}
-  ~Script();
-
-  static v8::Handle<v8::Value> New (const v8::Arguments& args);
-  static v8::Handle<v8::Value> CreateContext (const v8::Arguments& arg);
-  static v8::Handle<v8::Value> RunInContext (const v8::Arguments& args);
-  static v8::Handle<v8::Value> RunInThisContext (const v8::Arguments& args);
-  static v8::Handle<v8::Value> RunInNewContext (const v8::Arguments& args);
-  static v8::Handle<v8::Value> CompileRunInContext (const v8::Arguments& args);
-  static v8::Handle<v8::Value> CompileRunInThisContext (const v8::Arguments& args);
-  static v8::Handle<v8::Value> CompileRunInNewContext (const v8::Arguments& args);
-
-  v8::Persistent<v8::Script> script_;
-};
 
 
 void InitEvals(v8::Handle<v8::Object> target);

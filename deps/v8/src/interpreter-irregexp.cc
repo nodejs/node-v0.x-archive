@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -33,17 +33,17 @@
 #include "utils.h"
 #include "ast.h"
 #include "bytecodes-irregexp.h"
+#include "jsregexp.h"
 #include "interpreter-irregexp.h"
-
 
 namespace v8 {
 namespace internal {
 
 
-static unibrow::Mapping<unibrow::Ecma262Canonicalize> interp_canonicalize;
+typedef unibrow::Mapping<unibrow::Ecma262Canonicalize> Canonicalize;
 
-
-static bool BackRefMatchesNoCase(int from,
+static bool BackRefMatchesNoCase(Canonicalize* interp_canonicalize,
+                                 int from,
                                  int current,
                                  int len,
                                  Vector<const uc16> subject) {
@@ -53,8 +53,8 @@ static bool BackRefMatchesNoCase(int from,
     if (old_char == new_char) continue;
     unibrow::uchar old_string[1] = { old_char };
     unibrow::uchar new_string[1] = { new_char };
-    interp_canonicalize.get(old_char, '\0', old_string);
-    interp_canonicalize.get(new_char, '\0', new_string);
+    interp_canonicalize->get(old_char, '\0', old_string);
+    interp_canonicalize->get(new_char, '\0', new_string);
     if (old_string[0] != new_string[0]) {
       return false;
     }
@@ -63,7 +63,8 @@ static bool BackRefMatchesNoCase(int from,
 }
 
 
-static bool BackRefMatchesNoCase(int from,
+static bool BackRefMatchesNoCase(Canonicalize* interp_canonicalize,
+                                 int from,
                                  int current,
                                  int len,
                                  Vector<const char> subject) {
@@ -150,11 +151,11 @@ static int32_t Load16Aligned(const byte* pc) {
 // matching terminates.
 class BacktrackStack {
  public:
-  explicit BacktrackStack() {
-    if (cache_ != NULL) {
+  explicit BacktrackStack(Isolate* isolate) : isolate_(isolate) {
+    if (isolate->irregexp_interpreter_backtrack_stack_cache() != NULL) {
       // If the cache is not empty reuse the previously allocated stack.
-      data_ = cache_;
-      cache_ = NULL;
+      data_ = isolate->irregexp_interpreter_backtrack_stack_cache();
+      isolate->set_irregexp_interpreter_backtrack_stack_cache(NULL);
     } else {
       // Cache was empty. Allocate a new backtrack stack.
       data_ = NewArray<int>(kBacktrackStackSize);
@@ -162,9 +163,9 @@ class BacktrackStack {
   }
 
   ~BacktrackStack() {
-    if (cache_ == NULL) {
+    if (isolate_->irregexp_interpreter_backtrack_stack_cache() == NULL) {
       // The cache is empty. Keep this backtrack stack around.
-      cache_ = data_;
+      isolate_->set_irregexp_interpreter_backtrack_stack_cache(data_);
     } else {
       // A backtrack stack was already cached, just release this one.
       DeleteArray(data_);
@@ -179,25 +180,24 @@ class BacktrackStack {
   static const int kBacktrackStackSize = 10000;
 
   int* data_;
-  static int* cache_;
+  Isolate* isolate_;
 
   DISALLOW_COPY_AND_ASSIGN(BacktrackStack);
 };
 
-int* BacktrackStack::cache_ = NULL;
-
 
 template <typename Char>
-static bool RawMatch(const byte* code_base,
-                     Vector<const Char> subject,
-                     int* registers,
-                     int current,
-                     uint32_t current_char) {
+static RegExpImpl::IrregexpResult RawMatch(Isolate* isolate,
+                                           const byte* code_base,
+                                           Vector<const Char> subject,
+                                           int* registers,
+                                           int current,
+                                           uint32_t current_char) {
   const byte* pc = code_base;
   // BacktrackStack ensures that the memory allocated for the backtracking stack
   // is returned to the system or cached if there is no stack being cached at
   // the moment.
-  BacktrackStack backtrack_stack;
+  BacktrackStack backtrack_stack(isolate);
   int* backtrack_stack_base = backtrack_stack.data();
   int* backtrack_sp = backtrack_stack_base;
   int backtrack_stack_space = backtrack_stack.max_size();
@@ -211,24 +211,24 @@ static bool RawMatch(const byte* code_base,
     switch (insn & BYTECODE_MASK) {
       BYTECODE(BREAK)
         UNREACHABLE();
-        return false;
+        return RegExpImpl::RE_FAILURE;
       BYTECODE(PUSH_CP)
         if (--backtrack_stack_space < 0) {
-          return false;  // No match on backtrack stack overflow.
+          return RegExpImpl::RE_EXCEPTION;
         }
         *backtrack_sp++ = current;
         pc += BC_PUSH_CP_LENGTH;
         break;
       BYTECODE(PUSH_BT)
         if (--backtrack_stack_space < 0) {
-          return false;  // No match on backtrack stack overflow.
+          return RegExpImpl::RE_EXCEPTION;
         }
         *backtrack_sp++ = Load32Aligned(pc + 4);
         pc += BC_PUSH_BT_LENGTH;
         break;
       BYTECODE(PUSH_REGISTER)
         if (--backtrack_stack_space < 0) {
-          return false;  // No match on backtrack stack overflow.
+          return RegExpImpl::RE_EXCEPTION;
         }
         *backtrack_sp++ = registers[insn >> BYTECODE_SHIFT];
         pc += BC_PUSH_REGISTER_LENGTH;
@@ -278,9 +278,9 @@ static bool RawMatch(const byte* code_base,
         pc += BC_POP_REGISTER_LENGTH;
         break;
       BYTECODE(FAIL)
-        return false;
+        return RegExpImpl::RE_FAILURE;
       BYTECODE(SUCCEED)
-        return true;
+        return RegExpImpl::RE_SUCCESS;
       BYTECODE(ADVANCE_CP)
         current += insn >> BYTECODE_SHIFT;
         pc += BC_ADVANCE_CP_LENGTH;
@@ -584,7 +584,8 @@ static bool RawMatch(const byte* code_base,
           pc = code_base + Load32Aligned(pc + 4);
           break;
         } else {
-          if (BackRefMatchesNoCase(from, current, len, subject)) {
+          if (BackRefMatchesNoCase(isolate->interp_canonicalize_mapping(),
+                                   from, current, len, subject)) {
             current += len;
             pc += BC_CHECK_NOT_BACK_REF_NO_CASE_LENGTH;
           } else {
@@ -607,6 +608,15 @@ static bool RawMatch(const byte* code_base,
           pc = code_base + Load32Aligned(pc + 4);
         }
         break;
+      BYTECODE(SET_CURRENT_POSITION_FROM_END) {
+        int by = static_cast<uint32_t>(insn) >> BYTECODE_SHIFT;
+        if (subject.length() - current > by) {
+          current = subject.length() - by;
+          current_char = subject[current - 1];
+        }
+        pc += BC_SET_CURRENT_POSITION_FROM_END_LENGTH;
+        break;
+      }
       default:
         UNREACHABLE();
         break;
@@ -615,27 +625,33 @@ static bool RawMatch(const byte* code_base,
 }
 
 
-bool IrregexpInterpreter::Match(Handle<ByteArray> code_array,
-                                Handle<String> subject,
-                                int* registers,
-                                int start_position) {
+RegExpImpl::IrregexpResult IrregexpInterpreter::Match(
+    Isolate* isolate,
+    Handle<ByteArray> code_array,
+    Handle<String> subject,
+    int* registers,
+    int start_position) {
   ASSERT(subject->IsFlat());
 
   AssertNoAllocation a;
   const byte* code_base = code_array->GetDataStartAddress();
   uc16 previous_char = '\n';
-  if (subject->IsAsciiRepresentation()) {
-    Vector<const char> subject_vector = subject->ToAsciiVector();
+  String::FlatContent subject_content = subject->GetFlatContent();
+  if (subject_content.IsAscii()) {
+    Vector<const char> subject_vector = subject_content.ToAsciiVector();
     if (start_position != 0) previous_char = subject_vector[start_position - 1];
-    return RawMatch(code_base,
+    return RawMatch(isolate,
+                    code_base,
                     subject_vector,
                     registers,
                     start_position,
                     previous_char);
   } else {
-    Vector<const uc16> subject_vector = subject->ToUC16Vector();
+    ASSERT(subject_content.IsTwoByte());
+    Vector<const uc16> subject_vector = subject_content.ToUC16Vector();
     if (start_position != 0) previous_char = subject_vector[start_position - 1];
-    return RawMatch(code_base,
+    return RawMatch(isolate,
+                    code_base,
                     subject_vector,
                     registers,
                     start_position,

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -31,66 +31,111 @@ namespace v8 {
 namespace internal {
 
 
-#ifdef DEBUG
-void LookupResult::Print() {
+void LookupResult::Iterate(ObjectVisitor* visitor) {
+  LookupResult* current = this;  // Could be NULL.
+  while (current != NULL) {
+    visitor->VisitPointer(BitCast<Object**>(&current->holder_));
+    current = current->next_;
+  }
+}
+
+
+#ifdef OBJECT_PRINT
+void LookupResult::Print(FILE* out) {
   if (!IsFound()) {
-    PrintF("Not Found\n");
+    PrintF(out, "Not Found\n");
     return;
   }
 
-  PrintF("LookupResult:\n");
-  PrintF(" -cacheable = %s\n", IsCacheable() ? "true" : "false");
-  PrintF(" -attributes = %x\n", GetAttributes());
+  PrintF(out, "LookupResult:\n");
+  PrintF(out, " -cacheable = %s\n", IsCacheable() ? "true" : "false");
+  PrintF(out, " -attributes = %x\n", GetAttributes());
   switch (type()) {
     case NORMAL:
-      PrintF(" -type = normal\n");
-      PrintF(" -entry = %d", GetDictionaryEntry());
+      PrintF(out, " -type = normal\n");
+      PrintF(out, " -entry = %d", GetDictionaryEntry());
       break;
     case MAP_TRANSITION:
-      PrintF(" -type = map transition\n");
-      PrintF(" -map:\n");
-      GetTransitionMap()->Print();
-      PrintF("\n");
+      PrintF(out, " -type = map transition\n");
+      PrintF(out, " -map:\n");
+      GetTransitionMap()->Print(out);
+      PrintF(out, "\n");
+      break;
+    case ELEMENTS_TRANSITION:
+      PrintF(out, " -type = elements transition\n");
+      PrintF(out, " -map:\n");
+      GetTransitionMap()->Print(out);
+      PrintF(out, "\n");
       break;
     case CONSTANT_FUNCTION:
-      PrintF(" -type = constant function\n");
-      PrintF(" -function:\n");
-      GetConstantFunction()->Print();
-      PrintF("\n");
+      PrintF(out, " -type = constant function\n");
+      PrintF(out, " -function:\n");
+      GetConstantFunction()->Print(out);
+      PrintF(out, "\n");
       break;
     case FIELD:
-      PrintF(" -type = field\n");
-      PrintF(" -index = %d", GetFieldIndex());
-      PrintF("\n");
+      PrintF(out, " -type = field\n");
+      PrintF(out, " -index = %d", GetFieldIndex());
+      PrintF(out, "\n");
       break;
     case CALLBACKS:
-      PrintF(" -type = call backs\n");
-      PrintF(" -callback object:\n");
-      GetCallbackObject()->Print();
+      PrintF(out, " -type = call backs\n");
+      PrintF(out, " -callback object:\n");
+      GetCallbackObject()->Print(out);
+      break;
+    case HANDLER:
+      PrintF(out, " -type = lookup proxy\n");
       break;
     case INTERCEPTOR:
-      PrintF(" -type = lookup interceptor\n");
+      PrintF(out, " -type = lookup interceptor\n");
       break;
     case CONSTANT_TRANSITION:
-      PrintF(" -type = constant property transition\n");
+      PrintF(out, " -type = constant property transition\n");
+      PrintF(out, " -map:\n");
+      GetTransitionMap()->Print(out);
+      PrintF(out, "\n");
       break;
     case NULL_DESCRIPTOR:
-      PrintF(" =type = null descriptor\n");
+      PrintF(out, " =type = null descriptor\n");
       break;
   }
 }
 
 
-void Descriptor::Print() {
-  PrintF("Descriptor ");
-  GetKey()->ShortPrint();
-  PrintF(" @ ");
-  GetValue()->ShortPrint();
-  PrintF(" %d\n", GetDetails().index());
+void Descriptor::Print(FILE* out) {
+  PrintF(out, "Descriptor ");
+  GetKey()->ShortPrint(out);
+  PrintF(out, " @ ");
+  GetValue()->ShortPrint(out);
+  PrintF(out, " %d\n", GetDetails().index());
 }
 
 
 #endif
+
+
+bool Descriptor::ContainsTransition() {
+  switch (details_.type()) {
+    case MAP_TRANSITION:
+    case CONSTANT_TRANSITION:
+    case ELEMENTS_TRANSITION:
+      return true;
+    case CALLBACKS: {
+      if (!value_->IsAccessorPair()) return false;
+      AccessorPair* accessors = AccessorPair::cast(value_);
+      return accessors->getter()->IsMap() || accessors->setter()->IsMap();
+    }
+    case NORMAL:
+    case FIELD:
+    case CONSTANT_FUNCTION:
+    case HANDLER:
+    case INTERCEPTOR:
+    case NULL_DESCRIPTOR:
+      return false;
+  }
+  UNREACHABLE();  // Keep the compiler happy.
+  return false;
+}
 
 
 } }  // namespace v8::internal

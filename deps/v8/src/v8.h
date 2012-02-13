@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -35,13 +35,10 @@
 #if defined(GOOGLE3)
 // Google3 special flag handling.
 #if defined(DEBUG) && defined(NDEBUG)
-// If both are defined in Google3, then we are building an optimized v8 with
-// assertions enabled.
+// V8 only uses DEBUG and whenever it is set we are building a debug
+// version of V8. We do not use NDEBUG and simply undef it here for
+// consistency.
 #undef NDEBUG
-#elif !defined(DEBUG) && !defined(NDEBUG)
-// If neither is defined in Google3, then we are building a debug v8. Mark it
-// as such.
-#define DEBUG
 #endif
 #endif  // defined(GOOGLE3)
 
@@ -53,20 +50,21 @@
 
 // Basic includes
 #include "../include/v8.h"
-#include "globals.h"
-#include "checks.h"
+#include "v8globals.h"
+#include "v8checks.h"
 #include "allocation.h"
-#include "utils.h"
+#include "v8utils.h"
 #include "flags.h"
 
 // Objects & heap
 #include "objects-inl.h"
 #include "spaces-inl.h"
 #include "heap-inl.h"
+#include "incremental-marking-inl.h"
+#include "mark-compact-inl.h"
 #include "log-inl.h"
 #include "cpu-profiler-inl.h"
 #include "handles-inl.h"
-#include "vm-state-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -84,7 +82,9 @@ class V8 : public AllStatic {
   static bool Initialize(Deserializer* des);
   static void TearDown();
   static bool IsRunning() { return is_running_; }
+  static bool UseCrankshaft() { return use_crankshaft_; }
   // To be dead you have to have lived
+  // TODO(isolates): move IsDead to Isolate.
   static bool IsDead() { return has_fatal_error_ || has_been_disposed_; }
   static void SetFatalError();
 
@@ -92,25 +92,53 @@ class V8 : public AllStatic {
   static void FatalProcessOutOfMemory(const char* location,
                                       bool take_snapshot = false);
 
+  // Allows an entropy source to be provided for use in random number
+  // generation.
+  static void SetEntropySource(EntropySource source);
   // Random number generation support. Not cryptographically safe.
-  static uint32_t Random();
-  static Object* FillHeapNumberWithRandom(Object* heap_number);
+  static uint32_t Random(Context* context);
+  // We use random numbers internally in memory allocation and in the
+  // compilers for security. In order to prevent information leaks we
+  // use a separate random state for internal random number
+  // generation.
+  static uint32_t RandomPrivate(Isolate* isolate);
+  static Object* FillHeapNumberWithRandom(Object* heap_number,
+                                          Context* context);
 
   // Idle notification directly from the API.
-  static bool IdleNotification();
+  static bool IdleNotification(int hint);
+
+  static void AddCallCompletedCallback(CallCompletedCallback callback);
+  static void RemoveCallCompletedCallback(CallCompletedCallback callback);
+  static void FireCallCompletedCallback(Isolate* isolate);
 
  private:
+  static void InitializeOncePerProcess();
+
   // True if engine is currently running
   static bool is_running_;
   // True if V8 has ever been run
-  static bool has_been_setup_;
+  static bool has_been_set_up_;
   // True if error has been signaled for current engine
   // (reset to false if engine is restarted)
   static bool has_fatal_error_;
   // True if engine has been shut down
   // (reset if engine is restarted)
   static bool has_been_disposed_;
+  // True if we are using the crankshaft optimizing compiler.
+  static bool use_crankshaft_;
+  // List of callbacks when a Call completes.
+  static List<CallCompletedCallback>* call_completed_callbacks_;
 };
+
+
+// JavaScript defines two kinds of 'nil'.
+enum NilValue { kNullValue, kUndefinedValue };
+
+
+// JavaScript defines two kinds of equality.
+enum EqualityKind { kStrictEquality, kNonStrictEquality };
+
 
 } }  // namespace v8::internal
 

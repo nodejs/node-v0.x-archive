@@ -43,22 +43,26 @@ class DebuggerAgentSession;
 // handles connection from a remote debugger.
 class DebuggerAgent: public Thread {
  public:
-  explicit DebuggerAgent(const char* name, int port)
-      : name_(StrDup(name)), port_(port),
+  DebuggerAgent(const char* name, int port)
+      : Thread(name),
+        isolate_(Isolate::Current()),
+        name_(StrDup(name)), port_(port),
         server_(OS::CreateSocket()), terminate_(false),
         session_access_(OS::CreateMutex()), session_(NULL),
         terminate_now_(OS::CreateSemaphore(0)),
         listening_(OS::CreateSemaphore(0)) {
-    ASSERT(instance_ == NULL);
-    instance_ = this;
+    ASSERT(isolate_->debugger_agent_instance() == NULL);
+    isolate_->set_debugger_agent_instance(this);
   }
   ~DebuggerAgent() {
-     instance_ = NULL;
+     isolate_->set_debugger_agent_instance(NULL);
      delete server_;
   }
 
   void Shutdown();
   void WaitUntilListening();
+
+  Isolate* isolate() { return isolate_; }
 
  private:
   void Run();
@@ -67,7 +71,8 @@ class DebuggerAgent: public Thread {
   void CloseSession();
   void OnSessionClosed(DebuggerAgentSession* session);
 
-  SmartPointer<const char> name_;  // Name of the embedding application.
+  Isolate* isolate_;
+  SmartArrayPointer<const char> name_;  // Name of the embedding application.
   int port_;  // Port to use for the agent.
   Socket* server_;  // Server socket for listen/accept.
   bool terminate_;  // Termination flag.
@@ -75,8 +80,6 @@ class DebuggerAgent: public Thread {
   DebuggerAgentSession* session_;  // Current active session if any.
   Semaphore* terminate_now_;  // Semaphore to signal termination.
   Semaphore* listening_;
-
-  static DebuggerAgent* instance_;
 
   friend class DebuggerAgentSession;
   friend void DebuggerAgentMessageHandler(const v8::Debug::Message& message);
@@ -90,7 +93,8 @@ class DebuggerAgent: public Thread {
 class DebuggerAgentSession: public Thread {
  public:
   DebuggerAgentSession(DebuggerAgent* agent, Socket* client)
-      : agent_(agent), client_(client) {}
+      : Thread("v8:DbgAgntSessn"),
+        agent_(agent), client_(client) {}
 
   void DebuggerMessage(Vector<uint16_t> message);
   void Shutdown();
@@ -110,10 +114,9 @@ class DebuggerAgentSession: public Thread {
 // Utility methods factored out to be used by the D8 shell as well.
 class DebuggerAgentUtil {
  public:
-  static const char* kContentLength;
-  static int kContentLengthSize;
+  static const char* const kContentLength;
 
-  static SmartPointer<char> ReceiveMessage(const Socket* conn);
+  static SmartArrayPointer<char> ReceiveMessage(const Socket* conn);
   static bool SendConnectMessage(const Socket* conn,
                                  const char* embedding_host);
   static bool SendMessage(const Socket* conn, const Vector<uint16_t> message);

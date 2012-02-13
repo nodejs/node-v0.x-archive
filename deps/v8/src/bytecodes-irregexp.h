@@ -1,4 +1,4 @@
-// Copyright 2008-2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -33,12 +33,12 @@ namespace v8 {
 namespace internal {
 
 
-static const int BYTECODE_MASK = 0xff;
+const int BYTECODE_MASK = 0xff;
 // The first argument is packed in with the byte code in one word, but so it
 // has 24 bits, but it can be positive and negative so only use 23 bits for
 // positive values.
-static const unsigned int MAX_FIRST_ARG = 0x7fffffu;
-static const int BYTECODE_SHIFT = 8;
+const unsigned int MAX_FIRST_ARG = 0x7fffffu;
+const int BYTECODE_SHIFT = 8;
 
 #define BYTECODE_ITERATOR(V)                                                   \
 V(BREAK,              0, 4)   /* bc8                                        */ \
@@ -88,7 +88,8 @@ V(CHECK_REGISTER_EQ_POS, 43, 8) /* bc8 reg_idx24 addr32                     */ \
 V(CHECK_AT_START,    44, 8)   /* bc8 pad24 addr32                           */ \
 V(CHECK_NOT_AT_START, 45, 8)  /* bc8 pad24 addr32                           */ \
 V(CHECK_GREEDY,      46, 8)   /* bc8 pad24 addr32                           */ \
-V(ADVANCE_CP_AND_GOTO, 47, 8) /* bc8 offset24 addr32                        */
+V(ADVANCE_CP_AND_GOTO, 47, 8) /* bc8 offset24 addr32                        */ \
+V(SET_CURRENT_POSITION_FROM_END, 48, 4) /* bc8 idx24                        */
 
 #define DECLARE_BYTECODES(name, code, length) \
   static const int BC_##name = code;

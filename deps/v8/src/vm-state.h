@@ -28,47 +28,30 @@
 #ifndef V8_VM_STATE_H_
 #define V8_VM_STATE_H_
 
+#include "allocation.h"
+#include "isolate.h"
+
 namespace v8 {
 namespace internal {
 
 class VMState BASE_EMBEDDED {
-#ifdef ENABLE_VMSTATE_TRACKING
  public:
-  inline VMState(StateTag state);
+  inline VMState(Isolate* isolate, StateTag tag);
   inline ~VMState();
 
-  StateTag state() { return state_; }
-  void set_external_callback(Address external_callback) {
-    external_callback_ = external_callback;
-  }
-
-  // Used for debug asserts.
-  static bool is_outermost_external() {
-    return current_state_ == 0;
-  }
-
-  static StateTag current_state() {
-    VMState* state = reinterpret_cast<VMState*>(current_state_);
-    return state ? state->state() : EXTERNAL;
-  }
-
-  static Address external_callback() {
-    VMState* state = reinterpret_cast<VMState*>(current_state_);
-    return state ? state->external_callback_ : NULL;
-  }
-
  private:
-  bool disabled_;
-  StateTag state_;
-  VMState* previous_;
-  Address external_callback_;
+  Isolate* isolate_;
+  StateTag previous_tag_;
+};
 
-  // A stack of VM states.
-  static AtomicWord current_state_;
-#else
+
+class ExternalCallbackScope BASE_EMBEDDED {
  public:
-  explicit VMState(StateTag state) {}
-#endif
+  inline ExternalCallbackScope(Isolate* isolate, Address callback);
+  inline ~ExternalCallbackScope();
+ private:
+  Isolate* isolate_;
+  Address previous_callback_;
 };
 
 } }  // namespace v8::internal

@@ -55,7 +55,7 @@ assertEquals(s, s.substr(-100));
 assertEquals('abc', s.substr(-100, 3));
 assertEquals(s1, s.substr(-s.length + 1));
 
-// assertEquals('', s.substr(0, void 0)); // smjs and rhino 
+// assertEquals('', s.substr(0, void 0)); // smjs and rhino
 assertEquals('abcdefghijklmn', s.substr(0, void 0));  // kjs and v8
 assertEquals('', s.substr(0, null));
 assertEquals(s, s.substr(0, String(s.length)));
@@ -134,4 +134,21 @@ for (var i = 0; i < 10000; i++) {
   var z = x.substring(i % xl);
   assertEquals(xl - (i % xl), z.length);
   cache.push(z);
+}
+
+// Substring of substring.
+var cache = [];
+var last = x;
+var offset = 0;
+for (var i = 0; i < 64; i++) {
+  var z = last.substring(i);
+  last = z;
+  cache.push(z);
+  offset += i;
+}
+for (var i = 63; i >= 0; i--) {
+  var z = cache.pop();
+  assertTrue(/\u2028123456789ABCDEF/.test(z));
+  assertEquals(xl - offset, z.length);
+  offset -= i;
 }

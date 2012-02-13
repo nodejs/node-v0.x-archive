@@ -28,8 +28,6 @@
 #ifndef V8_PROFILE_GENERATOR_INL_H_
 #define V8_PROFILE_GENERATOR_INL_H_
 
-#ifdef ENABLE_LOGGING_AND_PROFILING
-
 #include "profile-generator.h"
 
 namespace v8 {
@@ -45,29 +43,18 @@ const char* StringsStorage::GetFunctionName(const char* name) {
 }
 
 
-CodeEntry::CodeEntry(int security_token_id)
-    : call_uid_(0),
-      tag_(Logger::FUNCTION_TAG),
-      name_prefix_(kEmptyNamePrefix),
-      name_(""),
-      resource_name_(""),
-      line_number_(0),
-      security_token_id_(security_token_id) {
-}
-
-
 CodeEntry::CodeEntry(Logger::LogEventsAndTags tag,
                      const char* name_prefix,
                      const char* name,
                      const char* resource_name,
                      int line_number,
                      int security_token_id)
-    : call_uid_(next_call_uid_++),
-      tag_(tag),
+    : tag_(tag),
       name_prefix_(name_prefix),
       name_(name),
       resource_name_(resource_name),
       line_number_(line_number),
+      shared_id_(0),
       security_token_id_(security_token_id) {
 }
 
@@ -91,40 +78,6 @@ ProfileNode::ProfileNode(ProfileTree* tree, CodeEntry* entry)
 }
 
 
-void CodeMap::AddCode(Address addr, CodeEntry* entry, unsigned size) {
-  CodeTree::Locator locator;
-  tree_.Insert(addr, &locator);
-  locator.set_value(CodeEntryInfo(entry, size));
-}
-
-
-void CodeMap::MoveCode(Address from, Address to) {
-  tree_.Move(from, to);
-}
-
-void CodeMap::DeleteCode(Address addr) {
-  tree_.Remove(addr);
-}
-
-
-template<class Visitor>
-void HeapEntriesMap::UpdateEntries(Visitor* visitor) {
-  for (HashMap::Entry* p = entries_.Start();
-       p != NULL;
-       p = entries_.Next(p)) {
-    if (!IsAlias(p->value)) {
-      EntryInfo* entry_info = reinterpret_cast<EntryInfo*>(p->value);
-      entry_info->entry = visitor->GetEntry(
-          reinterpret_cast<HeapObject*>(p->key),
-          entry_info->children_count,
-          entry_info->retainers_count);
-      entry_info->children_count = 0;
-      entry_info->retainers_count = 0;
-    }
-  }
-}
-
-
 CodeEntry* ProfileGenerator::EntryForVMState(StateTag tag) {
   switch (tag) {
     case GC:
@@ -141,8 +94,35 @@ CodeEntry* ProfileGenerator::EntryForVMState(StateTag tag) {
   }
 }
 
-} }  // namespace v8::internal
 
-#endif  // ENABLE_LOGGING_AND_PROFILING
+uint64_t HeapObjectsMap::GetNthGcSubrootId(int delta) {
+  return kGcRootsFirstSubrootId + delta * kObjectIdStep;
+}
+
+
+HeapObject* V8HeapExplorer::GetNthGcSubrootObject(int delta) {
+  return reinterpret_cast<HeapObject*>(
+      reinterpret_cast<char*>(kFirstGcSubrootObject) +
+      delta * HeapObjectsMap::kObjectIdStep);
+}
+
+
+int V8HeapExplorer::GetGcSubrootOrder(HeapObject* subroot) {
+  return static_cast<int>(
+      (reinterpret_cast<char*>(subroot) -
+       reinterpret_cast<char*>(kFirstGcSubrootObject)) /
+      HeapObjectsMap::kObjectIdStep);
+}
+
+
+uint64_t HeapEntry::id() {
+  union {
+    Id stored_id;
+    uint64_t returned_id;
+  } id_adaptor = {id_};
+  return id_adaptor.returned_id;
+}
+
+} }  // namespace v8::internal
 
 #endif  // V8_PROFILE_GENERATOR_INL_H_

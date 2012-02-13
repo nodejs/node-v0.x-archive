@@ -81,12 +81,7 @@ function TimeFromYear(year) {
 
 
 function InLeapYear(time) {
-  return DaysInYear(YEAR_FROM_TIME(time)) == 366 ? 1 : 0;
-}
-
-
-function DayWithinYear(time) {
-  return DAY(time) - DayFromYear(YEAR_FROM_TIME(time));
+  return DaysInYear(YearFromTime(time)) - 365;  // Returns 1 or 0.
 }
 
 
@@ -114,9 +109,9 @@ function EquivalentTime(t) {
   // the actual year if it is in the range 1970..2037
   if (t >= 0 && t <= 2.1e12) return t;
 
-  var day = MakeDay(EquivalentYear(YEAR_FROM_TIME(t)),
-                    MONTH_FROM_TIME(t),
-                    DATE_FROM_TIME(t));
+  var day = MakeDay(EquivalentYear(YearFromTime(t)),
+                    MonthFromTime(t),
+                    DateFromTime(t));
   return MakeDate(day, TimeWithinDay(t));
 }
 
@@ -246,16 +241,13 @@ function LocalTime(time) {
 
 
 var ltcache = {
-  key: null, 
+  key: null,
   val: null
 };
 
 function LocalTimeNoCheck(time) {
   var ltc = ltcache;
   if (%_ObjectEquals(time, ltc.key)) return ltc.val;
-  if (time < -MAX_TIME_MS || time > MAX_TIME_MS) {
-    return $NaN;
-  }
 
   // Inline the DST offset cache checks for speed.
   // The cache is hit, or DaylightSavingsOffset is called,
@@ -302,8 +294,8 @@ function TimeInYear(year) {
 }
 
 
-var ymd_from_time_cache = [$NaN, $NaN, $NaN];
-var ymd_from_time_cached_time = $NaN;
+var ymd_from_time_cache = [1970, 0, 1];
+var ymd_from_time_cached_time = 0;
 
 function YearFromTime(t) {
   if (t !== ymd_from_time_cached_time) {
@@ -312,7 +304,7 @@ function YearFromTime(t) {
     }
 
     %DateYMDFromTime(t, ymd_from_time_cache);
-    ymd_from_time_cached_time = t
+    ymd_from_time_cached_time = t;
   }
 
   return ymd_from_time_cache[0];
@@ -324,7 +316,7 @@ function MonthFromTime(t) {
       return $NaN;
     }
     %DateYMDFromTime(t, ymd_from_time_cache);
-    ymd_from_time_cached_time = t
+    ymd_from_time_cached_time = t;
   }
 
   return ymd_from_time_cache[1];
@@ -337,7 +329,7 @@ function DateFromTime(t) {
     }
 
     %DateYMDFromTime(t, ymd_from_time_cache);
-    ymd_from_time_cached_time = t
+    ymd_from_time_cached_time = t;
   }
 
   return ymd_from_time_cache[2];
@@ -359,28 +351,32 @@ function MakeDay(year, month, date) {
   date = TO_INTEGER_MAP_MINUS_ZERO(date);
 
   if (year < kMinYear || year > kMaxYear ||
-      month < kMinMonth || month > kMaxMonth ||
-      date < kMinDate || date > kMaxDate) {
+      month < kMinMonth || month > kMaxMonth) {
     return $NaN;
   }
 
-  // Now we rely on year, month and date being SMIs.
-  return %DateMakeDay(year, month, date);
+  // Now we rely on year and month being SMIs.
+  return %DateMakeDay(year, month) + date - 1;
 }
 
 
 // ECMA 262 - 15.9.1.13
 function MakeDate(day, time) {
-  if (!$isFinite(day)) return $NaN;
-  if (!$isFinite(time)) return $NaN;
-  return day * msPerDay + time;
+  var time = day * msPerDay + time;
+  // Some of our runtime funtions for computing UTC(time) rely on
+  // times not being significantly larger than MAX_TIME_MS. If there
+  // is no way that the time can be within range even after UTC
+  // conversion we return NaN immediately instead of relying on
+  // TimeClip to do it.
+  if ($abs(time) > MAX_TIME_BEFORE_UTC) return $NaN;
+  return time;
 }
 
 
 // ECMA 262 - 15.9.1.14
 function TimeClip(time) {
   if (!$isFinite(time)) return $NaN;
-  if ($abs(time) > 8.64E15) return $NaN;
+  if ($abs(time) > MAX_TIME_MS) return $NaN;
   return TO_INTEGER(time);
 }
 
@@ -424,7 +420,7 @@ var Date_cache = {
         value = DateParse(year);
         if (!NUMBER_IS_NAN(value)) {
           cache.time = value;
-          cache.year = YEAR_FROM_TIME(LocalTimeNoCheck(value));
+          cache.year = YearFromTime(LocalTimeNoCheck(value));
           cache.string = year;
         }
       }
@@ -449,8 +445,9 @@ var Date_cache = {
     minutes = argc > 4 ? ToNumber(minutes) : 0;
     seconds = argc > 5 ? ToNumber(seconds) : 0;
     ms = argc > 6 ? ToNumber(ms) : 0;
-    year = (!NUMBER_IS_NAN(year) && 0 <= TO_INTEGER(year) && TO_INTEGER(year) <= 99)
-        ? 1900 + TO_INTEGER(year) : year;
+    year = (!NUMBER_IS_NAN(year) &&
+            0 <= TO_INTEGER(year) &&
+            TO_INTEGER(year) <= 99) ? 1900 + TO_INTEGER(year) : year;
     var day = MakeDay(year, month, date);
     var time = MakeTime(hours, minutes, seconds, ms);
     value = TimeClip(UTC(MakeDate(day, time)));
@@ -463,7 +460,8 @@ var Date_cache = {
 
 
 var WeekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-var Months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+var Months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 
 function TwoDigitString(value) {
@@ -479,8 +477,10 @@ function DateString(time) {
 }
 
 
-var LongWeekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-var LongMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+var LongWeekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday',
+    'Thursday', 'Friday', 'Saturday'];
+var LongMonths = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
 
 
 function LongDateString(time) {
@@ -560,8 +560,9 @@ function DateUTC(year, month, date, hours, minutes, seconds, ms) {
   minutes = argc > 4 ? ToNumber(minutes) : 0;
   seconds = argc > 5 ? ToNumber(seconds) : 0;
   ms = argc > 6 ? ToNumber(ms) : 0;
-  year = (!NUMBER_IS_NAN(year) && 0 <= TO_INTEGER(year) && TO_INTEGER(year) <= 99)
-      ? 1900 + TO_INTEGER(year) : year;
+  year = (!NUMBER_IS_NAN(year) &&
+          0 <= TO_INTEGER(year) &&
+          TO_INTEGER(year) <= 99) ? 1900 + TO_INTEGER(year) : year;
   var day = MakeDay(year, month, date);
   var time = MakeTime(hours, minutes, seconds, ms);
   return %_SetValueOf(this, TimeClip(MakeDate(day, time)));
@@ -603,7 +604,7 @@ function DateToTimeString() {
 
 // ECMA 262 - 15.9.5.5
 function DateToLocaleString() {
-  return DateToString.call(this);
+  return %_CallFunction(this, DateToString);
 }
 
 
@@ -642,7 +643,7 @@ function DateGetFullYear() {
   if (NUMBER_IS_NAN(t)) return t;
   var cache = Date_cache;
   if (cache.time === t) return cache.year;
-  return YEAR_FROM_TIME(LocalTimeNoCheck(t));
+  return YearFromTime(LocalTimeNoCheck(t));
 }
 
 
@@ -650,7 +651,7 @@ function DateGetFullYear() {
 function DateGetUTCFullYear() {
   var t = DATE_VALUE(this);
   if (NUMBER_IS_NAN(t)) return t;
-  return YEAR_FROM_TIME(t);
+  return YearFromTime(t);
 }
 
 
@@ -658,7 +659,7 @@ function DateGetUTCFullYear() {
 function DateGetMonth() {
   var t = DATE_VALUE(this);
   if (NUMBER_IS_NAN(t)) return t;
-  return MONTH_FROM_TIME(LocalTimeNoCheck(t));
+  return MonthFromTime(LocalTimeNoCheck(t));
 }
 
 
@@ -666,7 +667,7 @@ function DateGetMonth() {
 function DateGetUTCMonth() {
   var t = DATE_VALUE(this);
   if (NUMBER_IS_NAN(t)) return t;
-  return MONTH_FROM_TIME(t);
+  return MonthFromTime(t);
 }
 
 
@@ -674,7 +675,7 @@ function DateGetUTCMonth() {
 function DateGetDate() {
   var t = DATE_VALUE(this);
   if (NUMBER_IS_NAN(t)) return t;
-  return DATE_FROM_TIME(LocalTimeNoCheck(t));
+  return DateFromTime(LocalTimeNoCheck(t));
 }
 
 
@@ -687,7 +688,7 @@ function DateGetUTCDate() {
 
 // ECMA 262 - 15.9.5.16
 function DateGetDay() {
-  var t = %_ValueOf(this);
+  var t = DATE_VALUE(this);
   if (NUMBER_IS_NAN(t)) return t;
   return WeekDay(LocalTimeNoCheck(t));
 }
@@ -695,7 +696,7 @@ function DateGetDay() {
 
 // ECMA 262 - 15.9.5.17
 function DateGetUTCDay() {
-  var t = %_ValueOf(this);
+  var t = DATE_VALUE(this);
   if (NUMBER_IS_NAN(t)) return t;
   return WeekDay(t);
 }
@@ -781,7 +782,10 @@ function DateSetTime(ms) {
 function DateSetMilliseconds(ms) {
   var t = LocalTime(DATE_VALUE(this));
   ms = ToNumber(ms);
-  var time = MakeTime(HOUR_FROM_TIME(t), MIN_FROM_TIME(t), SEC_FROM_TIME(t), ms);
+  var time = MakeTime(HOUR_FROM_TIME(t),
+                      MIN_FROM_TIME(t),
+                      SEC_FROM_TIME(t),
+                      ms);
   return %_SetValueOf(this, TimeClip(UTC(MakeDate(DAY(t), time))));
 }
 
@@ -790,7 +794,10 @@ function DateSetMilliseconds(ms) {
 function DateSetUTCMilliseconds(ms) {
   var t = DATE_VALUE(this);
   ms = ToNumber(ms);
-  var time = MakeTime(HOUR_FROM_TIME(t), MIN_FROM_TIME(t), SEC_FROM_TIME(t), ms);
+  var time = MakeTime(HOUR_FROM_TIME(t),
+                      MIN_FROM_TIME(t),
+                      SEC_FROM_TIME(t),
+                      ms);
   return %_SetValueOf(this, TimeClip(MakeDate(DAY(t), time)));
 }
 
@@ -869,7 +876,7 @@ function DateSetUTCHours(hour, min, sec, ms) {
 function DateSetDate(date) {
   var t = LocalTime(DATE_VALUE(this));
   date = ToNumber(date);
-  var day = MakeDay(YEAR_FROM_TIME(t), MONTH_FROM_TIME(t), date);
+  var day = MakeDay(YearFromTime(t), MonthFromTime(t), date);
   return %_SetValueOf(this, TimeClip(UTC(MakeDate(day, TimeWithinDay(t)))));
 }
 
@@ -878,7 +885,7 @@ function DateSetDate(date) {
 function DateSetUTCDate(date) {
   var t = DATE_VALUE(this);
   date = ToNumber(date);
-  var day = MakeDay(YEAR_FROM_TIME(t), MONTH_FROM_TIME(t), date);
+  var day = MakeDay(YearFromTime(t), MonthFromTime(t), date);
   return %_SetValueOf(this, TimeClip(MakeDate(day, TimeWithinDay(t))));
 }
 
@@ -888,7 +895,7 @@ function DateSetMonth(month, date) {
   var t = LocalTime(DATE_VALUE(this));
   month = ToNumber(month);
   date = %_ArgumentsLength() < 2 ? NAN_OR_DATE_FROM_TIME(t) : ToNumber(date);
-  var day = MakeDay(YEAR_FROM_TIME(t), month, date);
+  var day = MakeDay(YearFromTime(t), month, date);
   return %_SetValueOf(this, TimeClip(UTC(MakeDate(day, TimeWithinDay(t)))));
 }
 
@@ -898,7 +905,7 @@ function DateSetUTCMonth(month, date) {
   var t = DATE_VALUE(this);
   month = ToNumber(month);
   date = %_ArgumentsLength() < 2 ? NAN_OR_DATE_FROM_TIME(t) : ToNumber(date);
-  var day = MakeDay(YEAR_FROM_TIME(t), month, date);
+  var day = MakeDay(YearFromTime(t), month, date);
   return %_SetValueOf(this, TimeClip(MakeDate(day, TimeWithinDay(t))));
 }
 
@@ -909,8 +916,8 @@ function DateSetFullYear(year, month, date) {
   t = NUMBER_IS_NAN(t) ? 0 : LocalTimeNoCheck(t);
   year = ToNumber(year);
   var argc = %_ArgumentsLength();
-  month = argc < 2 ? MONTH_FROM_TIME(t) : ToNumber(month);
-  date = argc < 3 ? DATE_FROM_TIME(t) : ToNumber(date);
+  month = argc < 2 ? MonthFromTime(t) : ToNumber(month);
+  date = argc < 3 ? DateFromTime(t) : ToNumber(date);
   var day = MakeDay(year, month, date);
   return %_SetValueOf(this, TimeClip(UTC(MakeDate(day, TimeWithinDay(t)))));
 }
@@ -922,8 +929,8 @@ function DateSetUTCFullYear(year, month, date) {
   if (NUMBER_IS_NAN(t)) t = 0;
   var argc = %_ArgumentsLength();
   year = ToNumber(year);
-  month = argc < 2 ? MONTH_FROM_TIME(t) : ToNumber(month);
-  date = argc < 3 ? DATE_FROM_TIME(t) : ToNumber(date);
+  month = argc < 2 ? MonthFromTime(t) : ToNumber(month);
+  date = argc < 3 ? DateFromTime(t) : ToNumber(date);
   var day = MakeDay(year, month, date);
   return %_SetValueOf(this, TimeClip(MakeDate(day, TimeWithinDay(t))));
 }
@@ -935,9 +942,9 @@ function DateToUTCString() {
   if (NUMBER_IS_NAN(t)) return kInvalidDate;
   // Return UTC string of the form: Sat, 31 Jan 1970 23:00:00 GMT
   return WeekDays[WeekDay(t)] + ', '
-      + TwoDigitString(DATE_FROM_TIME(t)) + ' '
-      + Months[MONTH_FROM_TIME(t)] + ' '
-      + YEAR_FROM_TIME(t) + ' '
+      + TwoDigitString(DateFromTime(t)) + ' '
+      + Months[MonthFromTime(t)] + ' '
+      + YearFromTime(t) + ' '
       + TimeString(t) + ' GMT';
 }
 
@@ -946,7 +953,7 @@ function DateToUTCString() {
 function DateGetYear() {
   var t = DATE_VALUE(this);
   if (NUMBER_IS_NAN(t)) return $NaN;
-  return YEAR_FROM_TIME(LocalTimeNoCheck(t)) - 1900;
+  return YearFromTime(LocalTimeNoCheck(t)) - 1900;
 }
 
 
@@ -958,7 +965,7 @@ function DateSetYear(year) {
   if (NUMBER_IS_NAN(year)) return %_SetValueOf(this, $NaN);
   year = (0 <= TO_INTEGER(year) && TO_INTEGER(year) <= 99)
       ? 1900 + TO_INTEGER(year) : year;
-  var day = MakeDay(year, MONTH_FROM_TIME(t), DATE_FROM_TIME(t));
+  var day = MakeDay(year, MonthFromTime(t), DateFromTime(t));
   return %_SetValueOf(this, TimeClip(UTC(MakeDate(day, TimeWithinDay(t)))));
 }
 
@@ -971,7 +978,7 @@ function DateSetYear(year) {
 // do that either.  Instead, we create a new function whose name
 // property will return toGMTString.
 function DateToGMTString() {
-  return DateToUTCString.call(this);
+  return %_CallFunction(this, DateToUTCString);
 }
 
 
@@ -981,38 +988,92 @@ function PadInt(n, digits) {
 }
 
 
+// ECMA 262 - 15.9.5.43
 function DateToISOString() {
   var t = DATE_VALUE(this);
-  if (NUMBER_IS_NAN(t)) return kInvalidDate;
-  return this.getUTCFullYear() + '-' + PadInt(this.getUTCMonth() + 1, 2) +
-      '-' + PadInt(this.getUTCDate(), 2) + 'T' + PadInt(this.getUTCHours(), 2) +
-      ':' + PadInt(this.getUTCMinutes(), 2) + ':' + PadInt(this.getUTCSeconds(), 2) +
+  if (NUMBER_IS_NAN(t)) throw MakeRangeError("invalid_time_value", []);
+  var year = this.getUTCFullYear();
+  var year_string;
+  if (year >= 0 && year <= 9999) {
+    year_string = PadInt(year, 4);
+  } else {
+    if (year < 0) {
+      year_string = "-" + PadInt(-year, 6);
+    } else {
+      year_string = "+" + PadInt(year, 6);
+    }
+  }
+  return year_string +
+      '-' + PadInt(this.getUTCMonth() + 1, 2) +
+      '-' + PadInt(this.getUTCDate(), 2) +
+      'T' + PadInt(this.getUTCHours(), 2) +
+      ':' + PadInt(this.getUTCMinutes(), 2) +
+      ':' + PadInt(this.getUTCSeconds(), 2) +
       '.' + PadInt(this.getUTCMilliseconds(), 3) +
       'Z';
 }
 
 
 function DateToJSON(key) {
-  return CheckJSONPrimitive(this.toISOString());
+  var o = ToObject(this);
+  var tv = DefaultNumber(o);
+  if (IS_NUMBER(tv) && !NUMBER_IS_FINITE(tv)) {
+    return null;
+  }
+  return o.toISOString();
+}
+
+
+function ResetDateCache() {
+
+  // Reset the local_time_offset:
+  local_time_offset = %DateLocalTimeOffset();
+
+  // Reset the DST offset cache:
+  var cache = DST_offset_cache;
+  cache.offset = 0;
+  cache.start = 0;
+  cache.end = -1;
+  cache.increment = 0;
+  cache.initial_increment = 19 * msPerDay;
+
+  // Reset the timezone cache:
+  timezone_cache_time = $NaN;
+  timezone_cache_timezone = undefined;
+
+  // Reset the ltcache:
+  ltcache.key = null;
+  ltcache.val = null;
+
+  // Reset the ymd_from_time_cache:
+  ymd_from_time_cache = [$NaN, $NaN, $NaN];
+  ymd_from_time_cached_time = $NaN;
+
+  // Reset the date cache:
+  cache = Date_cache;
+  cache.time = $NaN;
+  cache.year = $NaN;
+  cache.string = null;
 }
 
 
 // -------------------------------------------------------------------
 
-function SetupDate() {
-  // Setup non-enumerable properties of the Date object itself.
+function SetUpDate() {
+  %CheckIsBootstrapping();
+  // Set up non-enumerable properties of the Date object itself.
   InstallFunctions($Date, DONT_ENUM, $Array(
     "UTC", DateUTC,
     "parse", DateParse,
     "now", DateNow
   ));
 
-  // Setup non-enumerable constructor property of the Date prototype object.
+  // Set up non-enumerable constructor property of the Date prototype object.
   %SetProperty($Date.prototype, "constructor", $Date, DONT_ENUM);
 
-  // Setup non-enumerable functions of the Date prototype object and
+  // Set up non-enumerable functions of the Date prototype object and
   // set their names.
-  InstallFunctionsOnHiddenPrototype($Date.prototype, DONT_ENUM, $Array(
+  InstallFunctions($Date.prototype, DONT_ENUM, $Array(
     "toString", DateToString,
     "toDateString", DateToDateString,
     "toTimeString", DateToTimeString,
@@ -1062,4 +1123,4 @@ function SetupDate() {
   ));
 }
 
-SetupDate();
+SetUpDate();

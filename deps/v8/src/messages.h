@@ -89,23 +89,23 @@ class MessageLocation {
 // of message listeners registered in an environment
 class MessageHandler {
  public:
-  // Report a message (w/o JS heap allocation).
-  static void ReportMessage(const char* msg);
-
   // Returns a message object for the API to use.
-  static Handle<Object> MakeMessageObject(const char* type,
-                                          MessageLocation* loc,
-                                          Vector< Handle<Object> > args,
-                                          Handle<String> stack_trace,
-                                          Handle<JSArray> stack_frames);
+  static Handle<JSMessageObject> MakeMessageObject(
+      const char* type,
+      MessageLocation* loc,
+      Vector< Handle<Object> > args,
+      Handle<String> stack_trace,
+      Handle<JSArray> stack_frames);
 
   // Report a formatted message (needs JS allocation).
-  static void ReportMessage(MessageLocation* loc, Handle<Object> message);
+  static void ReportMessage(Isolate* isolate,
+                            MessageLocation* loc,
+                            Handle<Object> message);
 
   static void DefaultMessageReport(const MessageLocation* loc,
                                    Handle<Object> message_obj);
   static Handle<String> GetMessage(Handle<Object> data);
-  static SmartPointer<char> GetLocalizedMessage(Handle<Object> data);
+  static SmartArrayPointer<char> GetLocalizedMessage(Handle<Object> data);
 };
 
 } }  // namespace v8::internal

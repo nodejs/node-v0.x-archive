@@ -1,4 +1,4 @@
-// Copyright 2007-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -44,7 +44,7 @@ typedef unsigned char byte;
  * The max length of the result of converting the case of a single
  * character.
  */
-static const int kMaxMappingSize = 4;
+const int kMaxMappingSize = 4;
 
 template <class T, int size = 256>
 class Predicate {
@@ -97,7 +97,7 @@ class UnicodeData {
  private:
   friend class Test;
   static int GetByteCount();
-  static uchar kMaxCodePoint;
+  static const uchar kMaxCodePoint;
 };
 
 // --- U t f   8 ---

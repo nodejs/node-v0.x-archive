@@ -34,11 +34,12 @@ import utils
 
 class CcTestCase(test.TestCase):
 
-  def __init__(self, path, executable, mode, raw_name, dependency, context):
+  def __init__(self, path, executable, mode, raw_name, dependency, context, variant_flags):
     super(CcTestCase, self).__init__(context, path, mode)
     self.executable = executable
     self.raw_name = raw_name
     self.dependency = dependency
+    self.variant_flags = variant_flags
 
   def GetLabel(self):
     return "%s %s %s" % (self.mode, self.path[-2], self.path[-1])
@@ -47,8 +48,14 @@ class CcTestCase(test.TestCase):
     return self.path[-1]
 
   def BuildCommand(self, name):
-    serialization_file = join('obj', 'test', self.mode, 'serdes')
+    serialization_file = ''
+    if exists(join(self.context.buildspace, 'obj', 'test', self.mode)):
+      serialization_file = join('obj', 'test', self.mode, 'serdes')
+    else:
+      serialization_file = join('obj', 'serdes')
     serialization_file += '_' + self.GetName()
+    serialization_file = join(self.context.buildspace, serialization_file)
+    serialization_file += ''.join(self.variant_flags).replace('-', '_')
     serialization_option = '--testing_serialization_file=' + serialization_file
     result = [ self.executable, name, serialization_option ]
     result += self.context.GetVmFlags(self, self.mode)
@@ -74,10 +81,16 @@ class CcTestConfiguration(test.TestConfiguration):
   def GetBuildRequirements(self):
     return ['cctests']
 
-  def ListTests(self, current_path, path, mode):
-    executable = join('obj', 'test', mode, 'cctest')
+  def ListTests(self, current_path, path, mode, variant_flags):
+    executable = 'cctest'
     if utils.IsWindows():
       executable += '.exe'
+    executable = join(self.context.buildspace, executable)
+    if not exists(executable):
+      executable = join('obj', 'test', mode, 'cctest')
+      if utils.IsWindows():
+        executable += '.exe'
+      executable = join(self.context.buildspace, executable)
     output = test.Execute([executable, '--list'], self.context)
     if output.exit_code != 0:
       print output.stdout
@@ -91,7 +104,8 @@ class CcTestConfiguration(test.TestConfiguration):
       if dependency != '':
         dependency = relative_path[0] + '/' + dependency
       if self.Contains(path, full_path):
-        result.append(CcTestCase(full_path, executable, mode, raw_test, dependency, self.context))
+        result.append(CcTestCase(full_path, executable, mode, raw_test, dependency, self.context, variant_flags))
+    result.sort()
     return result
 
   def GetTestStatus(self, sections, defs):

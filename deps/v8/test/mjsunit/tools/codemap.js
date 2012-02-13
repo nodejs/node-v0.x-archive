@@ -30,7 +30,7 @@
 
 
 function newCodeEntry(size, name) {
-  return new devtools.profiler.CodeMap.CodeEntry(size, name);
+  return new CodeMap.CodeEntry(size, name);
 };
 
 
@@ -47,7 +47,7 @@ function assertNoEntry(codeMap, addr) {
 
 
 (function testLibrariesAndStaticCode() {
-  var codeMap = new devtools.profiler.CodeMap();
+  var codeMap = new CodeMap();
   codeMap.addLibrary(0x1500, newCodeEntry(0x3000, 'lib1'));
   codeMap.addLibrary(0x15500, newCodeEntry(0x5000, 'lib2'));
   codeMap.addLibrary(0x155500, newCodeEntry(0x10000, 'lib3'));
@@ -97,7 +97,7 @@ function assertNoEntry(codeMap, addr) {
 
 
 (function testDynamicCode() {
-  var codeMap = new devtools.profiler.CodeMap();
+  var codeMap = new CodeMap();
   codeMap.addCode(0x1500, newCodeEntry(0x200, 'code1'));
   codeMap.addCode(0x1700, newCodeEntry(0x100, 'code2'));
   codeMap.addCode(0x1900, newCodeEntry(0x50, 'code3'));
@@ -123,7 +123,7 @@ function assertNoEntry(codeMap, addr) {
 
 
 (function testCodeMovesAndDeletions() {
-  var codeMap = new devtools.profiler.CodeMap();
+  var codeMap = new CodeMap();
   codeMap.addCode(0x1500, newCodeEntry(0x200, 'code1'));
   codeMap.addCode(0x1700, newCodeEntry(0x100, 'code2'));
   assertEntry(codeMap, 'code1', 0x1500);
@@ -139,7 +139,7 @@ function assertNoEntry(codeMap, addr) {
 
 
 (function testDynamicNamesDuplicates() {
-  var codeMap = new devtools.profiler.CodeMap();
+  var codeMap = new CodeMap();
   // Code entries with same names but different addresses.
   codeMap.addCode(0x1500, newCodeEntry(0x200, 'code'));
   codeMap.addCode(0x1700, newCodeEntry(0x100, 'code'));
@@ -152,29 +152,32 @@ function assertNoEntry(codeMap, addr) {
 
 
 (function testStaticEntriesExport() {
-  var codeMap = new devtools.profiler.CodeMap();
+  var codeMap = new CodeMap();
   codeMap.addStaticCode(0x1500, newCodeEntry(0x3000, 'lib1'));
   codeMap.addStaticCode(0x15500, newCodeEntry(0x5000, 'lib2'));
   codeMap.addStaticCode(0x155500, newCodeEntry(0x10000, 'lib3'));
   var allStatics = codeMap.getAllStaticEntries();
+  allStatics = allStatics.map(String);
   allStatics.sort();
   assertEquals(['lib1: 3000', 'lib2: 5000', 'lib3: 10000'], allStatics);
 })();
 
 
 (function testDynamicEntriesExport() {
-  var codeMap = new devtools.profiler.CodeMap();
+  var codeMap = new CodeMap();
   codeMap.addCode(0x1500, newCodeEntry(0x200, 'code1'));
   codeMap.addCode(0x1700, newCodeEntry(0x100, 'code2'));
   codeMap.addCode(0x1900, newCodeEntry(0x50, 'code3'));
   var allDynamics = codeMap.getAllDynamicEntries();
+  allDynamics = allDynamics.map(String);
   allDynamics.sort();
   assertEquals(['code1: 200', 'code2: 100', 'code3: 50'], allDynamics);
   codeMap.deleteCode(0x1700);
   var allDynamics2 = codeMap.getAllDynamicEntries();
+  allDynamics2 = allDynamics2.map(String);
   allDynamics2.sort();
   assertEquals(['code1: 200', 'code3: 50'], allDynamics2);
   codeMap.deleteCode(0x1500);
   var allDynamics3 = codeMap.getAllDynamicEntries();
-  assertEquals(['code3: 50'], allDynamics3);
+  assertEquals(['code3: 50'], allDynamics3.map(String));
 })();

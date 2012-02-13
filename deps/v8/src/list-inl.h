@@ -46,10 +46,16 @@ void List<T, P>::Add(const T& element) {
 
 template<typename T, class P>
 void List<T, P>::AddAll(const List<T, P>& other) {
-  int result_length = length_ + other.length_;
+  AddAll(other.ToVector());
+}
+
+
+template<typename T, class P>
+void List<T, P>::AddAll(const Vector<T>& other) {
+  int result_length = length_ + other.length();
   if (capacity_ < result_length) Resize(result_length);
-  for (int i = 0; i < other.length_; i++) {
-    data_[length_ + i] = other.data_[i];
+  for (int i = 0; i < other.length(); i++) {
+    data_[length_ + i] = other.at(i);
   }
   length_ = result_length;
 }
@@ -96,6 +102,17 @@ Vector<T> List<T, P>::AddBlock(T value, int count) {
 
 
 template<typename T, class P>
+void List<T, P>::InsertAt(int index, const T& elm) {
+  ASSERT(index >= 0 && index <= length_);
+  Add(elm);
+  for (int i = length_ - 1; i > index; --i) {
+    data_[i] = data_[i - 1];
+  }
+  data_[index] = elm;
+}
+
+
+template<typename T, class P>
 T List<T, P>::Remove(int i) {
   T element = at(i);
   length_--;
@@ -104,6 +121,18 @@ T List<T, P>::Remove(int i) {
     i++;
   }
   return element;
+}
+
+
+template<typename T, class P>
+bool List<T, P>::RemoveElement(const T& elm) {
+  for (int i = 0; i < length_; i++) {
+    if (data_[i] == elm) {
+      Remove(i);
+      return true;
+    }
+  }
+  return false;
 }
 
 
@@ -134,12 +163,22 @@ void List<T, P>::Iterate(Visitor* visitor) {
 
 
 template<typename T, class P>
-bool List<T, P>::Contains(const T& elm) {
+bool List<T, P>::Contains(const T& elm) const {
   for (int i = 0; i < length_; i++) {
     if (data_[i] == elm)
       return true;
   }
   return false;
+}
+
+
+template<typename T, class P>
+int List<T, P>::CountOccurrences(const T& elm, int start, int end) const {
+  int result = 0;
+  for (int i = start; i <= end; i++) {
+    if (data_[i] == elm) ++result;
+  }
+  return result;
 }
 
 
@@ -165,6 +204,36 @@ void List<T, P>::Initialize(int capacity) {
   data_ = (capacity > 0) ? NewData(capacity) : NULL;
   capacity_ = capacity;
   length_ = 0;
+}
+
+
+template <typename T>
+int SortedListBSearch(
+    const List<T>& list, T elem, int (*cmp)(const T* x, const T* y)) {
+  int low = 0;
+  int high = list.length() - 1;
+  while (low <= high) {
+    int mid = (low + high) / 2;
+    T mid_elem = list[mid];
+
+    if (cmp(&mid_elem, &elem) > 0) {
+      high = mid - 1;
+      continue;
+    }
+    if (cmp(&mid_elem, &elem) < 0) {
+      low = mid + 1;
+      continue;
+    }
+    // Found the elememt.
+    return mid;
+  }
+  return -1;
+}
+
+
+template <typename T>
+int SortedListBSearch(const List<T>& list, T elem) {
+  return SortedListBSearch<T>(list, elem, PointerValueCompare<T>);
 }
 
 

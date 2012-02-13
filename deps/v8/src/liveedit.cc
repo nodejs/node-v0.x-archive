@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,13 +29,16 @@
 #include "v8.h"
 
 #include "liveedit.h"
+
+#include "compilation-cache.h"
 #include "compiler.h"
-#include "oprofile-agent.h"
-#include "scopes.h"
-#include "scopeinfo.h"
-#include "global-handles.h"
 #include "debug.h"
-#include "memory.h"
+#include "deoptimizer.h"
+#include "global-handles.h"
+#include "parser.h"
+#include "scopeinfo.h"
+#include "scopes.h"
+#include "v8memory.h"
 
 namespace v8 {
 namespace internal {
@@ -44,6 +47,18 @@ namespace internal {
 #ifdef ENABLE_DEBUGGER_SUPPORT
 
 
+void SetElementNonStrict(Handle<JSObject> object,
+                         uint32_t index,
+                         Handle<Object> value) {
+  // Ignore return value from SetElement. It can only be a failure if there
+  // are element setters causing exceptions and the debugger context has none
+  // of these.
+  Handle<Object> no_failure;
+  no_failure = JSObject::SetElement(object, index, value, kNonStrictMode);
+  ASSERT(!no_failure.is_null());
+  USE(no_failure);
+}
+
 // A simple implementation of dynamic programming algorithm. It solves
 // the problem of finding the difference of 2 arrays. It uses a table of results
 // of subproblems. Each cell contains a number together with 2-bit flag
@@ -51,7 +66,7 @@ namespace internal {
 class Differencer {
  public:
   explicit Differencer(Comparator::Input* input)
-      : input_(input), len1_(input->getLength1()), len2_(input->getLength2()) {
+      : input_(input), len1_(input->GetLength1()), len2_(input->GetLength2()) {
     buffer_ = NewArray<int>(len1_ * len2_);
   }
   ~Differencer() {
@@ -136,7 +151,7 @@ class Differencer {
         if (cached_res == kEmptyCellValue) {
           Direction dir;
           int res;
-          if (input_->equals(pos1, pos2)) {
+          if (input_->Equals(pos1, pos2)) {
             res = CompareUpToTail(pos1 + 1, pos2 + 1);
             dir = EQ;
           } else {
@@ -255,20 +270,157 @@ void Comparator::CalculateDifference(Comparator::Input* input,
 
 static bool CompareSubstrings(Handle<String> s1, int pos1,
                               Handle<String> s2, int pos2, int len) {
-  static StringInputBuffer buf1;
-  static StringInputBuffer buf2;
-  buf1.Reset(*s1);
-  buf1.Seek(pos1);
-  buf2.Reset(*s2);
-  buf2.Seek(pos2);
   for (int i = 0; i < len; i++) {
-    ASSERT(buf1.has_more() && buf2.has_more());
-    if (buf1.GetNext() != buf2.GetNext()) {
+    if (s1->Get(i + pos1) != s2->Get(i + pos2)) {
       return false;
     }
   }
   return true;
 }
+
+
+// Additional to Input interface. Lets switch Input range to subrange.
+// More elegant way would be to wrap one Input as another Input object
+// and translate positions there, but that would cost us additional virtual
+// call per comparison.
+class SubrangableInput : public Comparator::Input {
+ public:
+  virtual void SetSubrange1(int offset, int len) = 0;
+  virtual void SetSubrange2(int offset, int len) = 0;
+};
+
+
+class SubrangableOutput : public Comparator::Output {
+ public:
+  virtual void SetSubrange1(int offset, int len) = 0;
+  virtual void SetSubrange2(int offset, int len) = 0;
+};
+
+
+static int min(int a, int b) {
+  return a < b ? a : b;
+}
+
+
+// Finds common prefix and suffix in input. This parts shouldn't take space in
+// linear programming table. Enable subranging in input and output.
+static void NarrowDownInput(SubrangableInput* input,
+    SubrangableOutput* output) {
+  const int len1 = input->GetLength1();
+  const int len2 = input->GetLength2();
+
+  int common_prefix_len;
+  int common_suffix_len;
+
+  {
+    common_prefix_len = 0;
+    int prefix_limit = min(len1, len2);
+    while (common_prefix_len < prefix_limit &&
+        input->Equals(common_prefix_len, common_prefix_len)) {
+      common_prefix_len++;
+    }
+
+    common_suffix_len = 0;
+    int suffix_limit = min(len1 - common_prefix_len, len2 - common_prefix_len);
+
+    while (common_suffix_len < suffix_limit &&
+        input->Equals(len1 - common_suffix_len - 1,
+        len2 - common_suffix_len - 1)) {
+      common_suffix_len++;
+    }
+  }
+
+  if (common_prefix_len > 0 || common_suffix_len > 0) {
+    int new_len1 = len1 - common_suffix_len - common_prefix_len;
+    int new_len2 = len2 - common_suffix_len - common_prefix_len;
+
+    input->SetSubrange1(common_prefix_len, new_len1);
+    input->SetSubrange2(common_prefix_len, new_len2);
+
+    output->SetSubrange1(common_prefix_len, new_len1);
+    output->SetSubrange2(common_prefix_len, new_len2);
+  }
+}
+
+
+// A helper class that writes chunk numbers into JSArray.
+// Each chunk is stored as 3 array elements: (pos1_begin, pos1_end, pos2_end).
+class CompareOutputArrayWriter {
+ public:
+  CompareOutputArrayWriter()
+      : array_(FACTORY->NewJSArray(10)), current_size_(0) {}
+
+  Handle<JSArray> GetResult() {
+    return array_;
+  }
+
+  void WriteChunk(int char_pos1, int char_pos2, int char_len1, int char_len2) {
+    SetElementNonStrict(array_,
+                       current_size_,
+                       Handle<Object>(Smi::FromInt(char_pos1)));
+    SetElementNonStrict(array_,
+                        current_size_ + 1,
+                        Handle<Object>(Smi::FromInt(char_pos1 + char_len1)));
+    SetElementNonStrict(array_,
+                        current_size_ + 2,
+                        Handle<Object>(Smi::FromInt(char_pos2 + char_len2)));
+    current_size_ += 3;
+  }
+
+ private:
+  Handle<JSArray> array_;
+  int current_size_;
+};
+
+
+// Represents 2 strings as 2 arrays of tokens.
+// TODO(LiveEdit): Currently it's actually an array of charactres.
+//     Make array of tokens instead.
+class TokensCompareInput : public Comparator::Input {
+ public:
+  TokensCompareInput(Handle<String> s1, int offset1, int len1,
+                       Handle<String> s2, int offset2, int len2)
+      : s1_(s1), offset1_(offset1), len1_(len1),
+        s2_(s2), offset2_(offset2), len2_(len2) {
+  }
+  virtual int GetLength1() {
+    return len1_;
+  }
+  virtual int GetLength2() {
+    return len2_;
+  }
+  bool Equals(int index1, int index2) {
+    return s1_->Get(offset1_ + index1) == s2_->Get(offset2_ + index2);
+  }
+
+ private:
+  Handle<String> s1_;
+  int offset1_;
+  int len1_;
+  Handle<String> s2_;
+  int offset2_;
+  int len2_;
+};
+
+
+// Stores compare result in JSArray. Converts substring positions
+// to absolute positions.
+class TokensCompareOutput : public Comparator::Output {
+ public:
+  TokensCompareOutput(CompareOutputArrayWriter* array_writer,
+                      int offset1, int offset2)
+        : array_writer_(array_writer), offset1_(offset1), offset2_(offset2) {
+  }
+
+  void AddChunk(int pos1, int pos2, int len1, int len2) {
+    array_writer_->WriteChunk(pos1 + offset1_, pos2 + offset2_, len1, len2);
+  }
+
+ private:
+  CompareOutputArrayWriter* array_writer_;
+  int offset1_;
+  int offset2_;
+};
 
 
 // Wraps raw n-elements line_ends array as a list of n+1 lines. The last line
@@ -313,19 +465,26 @@ class LineEndsWrapper {
 
 
 // Represents 2 strings as 2 arrays of lines.
-class LineArrayCompareInput : public Comparator::Input {
+class LineArrayCompareInput : public SubrangableInput {
  public:
   LineArrayCompareInput(Handle<String> s1, Handle<String> s2,
                         LineEndsWrapper line_ends1, LineEndsWrapper line_ends2)
-      : s1_(s1), s2_(s2), line_ends1_(line_ends1), line_ends2_(line_ends2) {
+      : s1_(s1), s2_(s2), line_ends1_(line_ends1),
+        line_ends2_(line_ends2),
+        subrange_offset1_(0), subrange_offset2_(0),
+        subrange_len1_(line_ends1_.length()),
+        subrange_len2_(line_ends2_.length()) {
   }
-  int getLength1() {
-    return line_ends1_.length();
+  int GetLength1() {
+    return subrange_len1_;
   }
-  int getLength2() {
-    return line_ends2_.length();
+  int GetLength2() {
+    return subrange_len2_;
   }
-  bool equals(int index1, int index2) {
+  bool Equals(int index1, int index2) {
+    index1 += subrange_offset1_;
+    index2 += subrange_offset2_;
+
     int line_start1 = line_ends1_.GetLineStart(index1);
     int line_start2 = line_ends2_.GetLineStart(index2);
     int line_end1 = line_ends1_.GetLineEnd(index1);
@@ -335,7 +494,16 @@ class LineArrayCompareInput : public Comparator::Input {
     if (len1 != len2) {
       return false;
     }
-    return CompareSubstrings(s1_, line_start1, s2_, line_start2, len1);
+    return CompareSubstrings(s1_, line_start1, s2_, line_start2,
+                             len1);
+  }
+  void SetSubrange1(int offset, int len) {
+    subrange_offset1_ = offset;
+    subrange_len1_ = len;
+  }
+  void SetSubrange2(int offset, int len) {
+    subrange_offset2_ = offset;
+    subrange_len2_ = len;
   }
 
  private:
@@ -343,51 +511,83 @@ class LineArrayCompareInput : public Comparator::Input {
   Handle<String> s2_;
   LineEndsWrapper line_ends1_;
   LineEndsWrapper line_ends2_;
+  int subrange_offset1_;
+  int subrange_offset2_;
+  int subrange_len1_;
+  int subrange_len2_;
 };
 
 
-// Stores compare result in JSArray. Each chunk is stored as 3 array elements:
-// (pos1_begin, pos1_end, pos2_end).
-class LineArrayCompareOutput : public Comparator::Output {
+// Stores compare result in JSArray. For each chunk tries to conduct
+// a fine-grained nested diff token-wise.
+class TokenizingLineArrayCompareOutput : public SubrangableOutput {
  public:
-  LineArrayCompareOutput(LineEndsWrapper line_ends1, LineEndsWrapper line_ends2)
-      : array_(Factory::NewJSArray(10)), current_size_(0),
-        line_ends1_(line_ends1), line_ends2_(line_ends2) {
+  TokenizingLineArrayCompareOutput(LineEndsWrapper line_ends1,
+                                   LineEndsWrapper line_ends2,
+                                   Handle<String> s1, Handle<String> s2)
+      : line_ends1_(line_ends1), line_ends2_(line_ends2), s1_(s1), s2_(s2),
+        subrange_offset1_(0), subrange_offset2_(0) {
   }
 
   void AddChunk(int line_pos1, int line_pos2, int line_len1, int line_len2) {
+    line_pos1 += subrange_offset1_;
+    line_pos2 += subrange_offset2_;
+
     int char_pos1 = line_ends1_.GetLineStart(line_pos1);
     int char_pos2 = line_ends2_.GetLineStart(line_pos2);
     int char_len1 = line_ends1_.GetLineStart(line_pos1 + line_len1) - char_pos1;
     int char_len2 = line_ends2_.GetLineStart(line_pos2 + line_len2) - char_pos2;
 
-    SetElement(array_, current_size_, Handle<Object>(Smi::FromInt(char_pos1)));
-    SetElement(array_, current_size_ + 1,
-               Handle<Object>(Smi::FromInt(char_pos1 + char_len1)));
-    SetElement(array_, current_size_ + 2,
-               Handle<Object>(Smi::FromInt(char_pos2 + char_len2)));
-    current_size_ += 3;
+    if (char_len1 < CHUNK_LEN_LIMIT && char_len2 < CHUNK_LEN_LIMIT) {
+      // Chunk is small enough to conduct a nested token-level diff.
+      HandleScope subTaskScope;
+
+      TokensCompareInput tokens_input(s1_, char_pos1, char_len1,
+                                      s2_, char_pos2, char_len2);
+      TokensCompareOutput tokens_output(&array_writer_, char_pos1,
+                                          char_pos2);
+
+      Comparator::CalculateDifference(&tokens_input, &tokens_output);
+    } else {
+      array_writer_.WriteChunk(char_pos1, char_pos2, char_len1, char_len2);
+    }
+  }
+  void SetSubrange1(int offset, int len) {
+    subrange_offset1_ = offset;
+  }
+  void SetSubrange2(int offset, int len) {
+    subrange_offset2_ = offset;
   }
 
   Handle<JSArray> GetResult() {
-    return array_;
+    return array_writer_.GetResult();
   }
 
  private:
-  Handle<JSArray> array_;
-  int current_size_;
+  static const int CHUNK_LEN_LIMIT = 800;
+
+  CompareOutputArrayWriter array_writer_;
   LineEndsWrapper line_ends1_;
   LineEndsWrapper line_ends2_;
+  Handle<String> s1_;
+  Handle<String> s2_;
+  int subrange_offset1_;
+  int subrange_offset2_;
 };
 
 
-Handle<JSArray> LiveEdit::CompareStringsLinewise(Handle<String> s1,
-                                                 Handle<String> s2) {
+Handle<JSArray> LiveEdit::CompareStrings(Handle<String> s1,
+                                         Handle<String> s2) {
+  s1 = FlattenGetString(s1);
+  s2 = FlattenGetString(s2);
+
   LineEndsWrapper line_ends1(s1);
   LineEndsWrapper line_ends2(s2);
 
   LineArrayCompareInput input(s1, s2, line_ends1, line_ends2);
-  LineArrayCompareOutput output(line_ends1, line_ends2);
+  TokenizingLineArrayCompareOutput output(line_ends1, line_ends2, s1, s2);
+
+  NarrowDownInput(&input, &output);
 
   Comparator::CalculateDifference(&input, &output);
 
@@ -395,55 +595,44 @@ Handle<JSArray> LiveEdit::CompareStringsLinewise(Handle<String> s1,
 }
 
 
-static void CompileScriptForTracker(Handle<Script> script) {
-  const bool is_eval = false;
-  const bool is_global = true;
+static void CompileScriptForTracker(Isolate* isolate, Handle<Script> script) {
   // TODO(635): support extensions.
-  Extension* extension = NULL;
-
-  PostponeInterruptsScope postpone;
-
-  // Only allow non-global compiles for eval.
-  ASSERT(is_eval || is_global);
+  PostponeInterruptsScope postpone(isolate);
 
   // Build AST.
-  ScriptDataImpl* pre_data = NULL;
-  FunctionLiteral* lit = MakeAST(is_global, script, extension, pre_data);
-
-  // Check for parse errors.
-  if (lit == NULL) {
-    ASSERT(Top::has_pending_exception());
-    return;
+  CompilationInfo info(script);
+  info.MarkAsGlobal();
+  // Parse and don't allow skipping lazy functions.
+  if (ParserApi::Parse(&info, kNoParsingFlags)) {
+    // Compile the code.
+    LiveEditFunctionTracker tracker(info.isolate(), info.function());
+    if (Compiler::MakeCodeForLiveEdit(&info)) {
+      ASSERT(!info.code().is_null());
+      tracker.RecordRootFunctionInfo(info.code());
+    } else {
+      info.isolate()->StackOverflow();
+    }
   }
-
-  // Compile the code.
-  CompilationInfo info(lit, script, is_eval);
-
-  LiveEditFunctionTracker tracker(lit);
-  Handle<Code> code = MakeCodeForLiveEdit(&info);
-
-  // Check for stack-overflow exceptions.
-  if (code.is_null()) {
-    Top::StackOverflow();
-    return;
-  }
-  tracker.RecordRootFunctionInfo(code);
 }
+
 
 // Unwraps JSValue object, returning its field "value"
 static Handle<Object> UnwrapJSValue(Handle<JSValue> jsValue) {
   return Handle<Object>(jsValue->value());
 }
 
+
 // Wraps any object into a OpaqueReference, that will hide the object
 // from JavaScript.
-static Handle<JSValue> WrapInJSValue(Object* object) {
-  Handle<JSFunction> constructor = Top::opaque_reference_function();
+static Handle<JSValue> WrapInJSValue(Handle<Object> object) {
+  Handle<JSFunction> constructor =
+      Isolate::Current()->opaque_reference_function();
   Handle<JSValue> result =
-      Handle<JSValue>::cast(Factory::NewJSObject(constructor));
-  result->set_value(object);
+      Handle<JSValue>::cast(FACTORY->NewJSObject(constructor));
+  result->set_value(*object);
   return result;
 }
+
 
 // Simple helper class that creates more or less typed structures over
 // JSArray object. This is an adhoc method of passing structures from C++
@@ -452,7 +641,7 @@ template<typename S>
 class JSArrayBasedStruct {
  public:
   static S Create() {
-    Handle<JSArray> array = Factory::NewJSArray(S::kSize_);
+    Handle<JSArray> array = FACTORY->NewJSArray(S::kSize_);
     return S(array);
   }
   static S cast(Object* object) {
@@ -465,20 +654,24 @@ class JSArrayBasedStruct {
   Handle<JSArray> GetJSArray() {
     return array_;
   }
+
  protected:
   void SetField(int field_position, Handle<Object> value) {
-    SetElement(array_, field_position, value);
+    SetElementNonStrict(array_, field_position, value);
   }
   void SetSmiValueField(int field_position, int value) {
-    SetElement(array_, field_position, Handle<Smi>(Smi::FromInt(value)));
+    SetElementNonStrict(array_,
+                        field_position,
+                        Handle<Smi>(Smi::FromInt(value)));
   }
   Object* GetField(int field_position) {
-    return array_->GetElement(field_position);
+    return array_->GetElementNoExceptionThrown(field_position);
   }
   int GetSmiValueField(int field_position) {
     Object* res = GetField(field_position);
     return Smi::cast(res)->value();
   }
+
  private:
   Handle<JSArray> array_;
 };
@@ -503,17 +696,17 @@ class FunctionInfoWrapper : public JSArrayBasedStruct<FunctionInfoWrapper> {
   }
   void SetFunctionCode(Handle<Code> function_code,
       Handle<Object> code_scope_info) {
-    Handle<JSValue> code_wrapper = WrapInJSValue(*function_code);
+    Handle<JSValue> code_wrapper = WrapInJSValue(function_code);
     this->SetField(kCodeOffset_, code_wrapper);
 
-    Handle<JSValue> scope_wrapper = WrapInJSValue(*code_scope_info);
+    Handle<JSValue> scope_wrapper = WrapInJSValue(code_scope_info);
     this->SetField(kCodeScopeInfoOffset_, scope_wrapper);
   }
   void SetOuterScopeInfo(Handle<Object> scope_info_array) {
     this->SetField(kOuterScopeInfoOffset_, scope_info_array);
   }
   void SetSharedFunctionInfo(Handle<SharedFunctionInfo> info) {
-    Handle<JSValue> info_holder = WrapInJSValue(*info);
+    Handle<JSValue> info_holder = WrapInJSValue(info);
     this->SetField(kSharedFunctionInfoOffset_, info_holder);
   }
   int GetParentIndex() {
@@ -551,6 +744,7 @@ class FunctionInfoWrapper : public JSArrayBasedStruct<FunctionInfoWrapper> {
   friend class JSArrayBasedStruct<FunctionInfoWrapper>;
 };
 
+
 // Wraps SharedFunctionInfo along with some of its fields for passing it
 // back to JavaScript. SharedFunctionInfo object itself is additionally
 // wrapped into BlindReference for sanitizing reasons.
@@ -558,7 +752,7 @@ class SharedInfoWrapper : public JSArrayBasedStruct<SharedInfoWrapper> {
  public:
   static bool IsInstance(Handle<JSArray> array) {
     return array->length() == Smi::FromInt(kSize_) &&
-        array->GetElement(kSharedInfoOffset_)->IsJSValue();
+        array->GetElementNoExceptionThrown(kSharedInfoOffset_)->IsJSValue();
   }
 
   explicit SharedInfoWrapper(Handle<JSArray> array)
@@ -569,7 +763,7 @@ class SharedInfoWrapper : public JSArrayBasedStruct<SharedInfoWrapper> {
                      Handle<SharedFunctionInfo> info) {
     HandleScope scope;
     this->SetField(kFunctionNameOffset_, name);
-    Handle<JSValue> info_holder = WrapInJSValue(*info);
+    Handle<JSValue> info_holder = WrapInJSValue(info);
     this->SetField(kSharedInfoOffset_, info_holder);
     this->SetSmiValueField(kStartPositionOffset_, start_position);
     this->SetSmiValueField(kEndPositionOffset_, end_position);
@@ -591,39 +785,41 @@ class SharedInfoWrapper : public JSArrayBasedStruct<SharedInfoWrapper> {
   friend class JSArrayBasedStruct<SharedInfoWrapper>;
 };
 
+
 class FunctionInfoListener {
  public:
   FunctionInfoListener() {
     current_parent_index_ = -1;
     len_ = 0;
-    result_ = Factory::NewJSArray(10);
+    result_ = FACTORY->NewJSArray(10);
   }
 
   void FunctionStarted(FunctionLiteral* fun) {
     HandleScope scope;
     FunctionInfoWrapper info = FunctionInfoWrapper::Create();
     info.SetInitialProperties(fun->name(), fun->start_position(),
-                              fun->end_position(), fun->num_parameters(),
+                              fun->end_position(), fun->parameter_count(),
                               current_parent_index_);
     current_parent_index_ = len_;
-    SetElement(result_, len_, info.GetJSArray());
+    SetElementNonStrict(result_, len_, info.GetJSArray());
     len_++;
   }
 
   void FunctionDone() {
     HandleScope scope;
     FunctionInfoWrapper info =
-        FunctionInfoWrapper::cast(result_->GetElement(current_parent_index_));
+        FunctionInfoWrapper::cast(
+            result_->GetElementNoExceptionThrown(current_parent_index_));
     current_parent_index_ = info.GetParentIndex();
   }
 
- public:
   // Saves only function code, because for a script function we
   // may never create a SharedFunctionInfo object.
   void FunctionCode(Handle<Code> function_code) {
     FunctionInfoWrapper info =
-        FunctionInfoWrapper::cast(result_->GetElement(current_parent_index_));
-    info.SetFunctionCode(function_code, Handle<Object>(Heap::null_value()));
+        FunctionInfoWrapper::cast(
+            result_->GetElementNoExceptionThrown(current_parent_index_));
+    info.SetFunctionCode(function_code, Handle<Object>(HEAP->null_value()));
   }
 
   // Saves full information about a function: its code, its scope info
@@ -633,7 +829,8 @@ class FunctionInfoListener {
       return;
     }
     FunctionInfoWrapper info =
-        FunctionInfoWrapper::cast(result_->GetElement(current_parent_index_));
+        FunctionInfoWrapper::cast(
+            result_->GetElementNoExceptionThrown(current_parent_index_));
     info.SetFunctionCode(Handle<Code>(shared->code()),
         Handle<Object>(shared->scope_info()));
     info.SetSharedFunctionInfo(shared);
@@ -648,7 +845,7 @@ class FunctionInfoListener {
   Object* SerializeFunctionScope(Scope* scope) {
     HandleScope handle_scope;
 
-    Handle<JSArray> scope_info_list = Factory::NewJSArray(10);
+    Handle<JSArray> scope_info_list = FACTORY->NewJSArray(10);
     int scope_info_length = 0;
 
     // Saves some description of scope. It stores name and indexes of
@@ -656,42 +853,28 @@ class FunctionInfoListener {
     // scopes of this chain.
     Scope* outer_scope = scope->outer_scope();
     if (outer_scope == NULL) {
-      return Heap::undefined_value();
+      return HEAP->undefined_value();
     }
     do {
-      ZoneList<Variable*> list(10);
-      outer_scope->CollectUsedVariables(&list);
-      int j = 0;
-      for (int i = 0; i < list.length(); i++) {
-        Variable* var1 = list[i];
-        Slot* slot = var1->slot();
-        if (slot != NULL && slot->type() == Slot::CONTEXT) {
-          if (j != i) {
-            list[j] = var1;
-          }
-          j++;
-        }
-      }
+      ZoneList<Variable*> stack_list(outer_scope->StackLocalCount());
+      ZoneList<Variable*> context_list(outer_scope->ContextLocalCount());
+      outer_scope->CollectStackAndContextLocals(&stack_list, &context_list);
+      context_list.Sort(&Variable::CompareIndex);
 
-      // Sort it.
-      for (int k = 1; k < j; k++) {
-        int l = k;
-        for (int m = k + 1; m < j; m++) {
-          if (list[l]->slot()->index() > list[m]->slot()->index()) {
-            l = m;
-          }
-        }
-        list[k] = list[l];
-      }
-      for (int i = 0; i < j; i++) {
-        SetElement(scope_info_list, scope_info_length, list[i]->name());
+      for (int i = 0; i < context_list.length(); i++) {
+        SetElementNonStrict(scope_info_list,
+                            scope_info_length,
+                            context_list[i]->name());
         scope_info_length++;
-        SetElement(scope_info_list, scope_info_length,
-                   Handle<Smi>(Smi::FromInt(list[i]->slot()->index())));
+        SetElementNonStrict(
+            scope_info_list,
+            scope_info_length,
+            Handle<Smi>(Smi::FromInt(context_list[i]->index())));
         scope_info_length++;
       }
-      SetElement(scope_info_list, scope_info_length,
-                 Handle<Object>(Heap::null_value()));
+      SetElementNonStrict(scope_info_list,
+                          scope_info_length,
+                          Handle<Object>(HEAP->null_value()));
       scope_info_length++;
 
       outer_scope = outer_scope->outer_scope();
@@ -705,18 +888,18 @@ class FunctionInfoListener {
   int current_parent_index_;
 };
 
-static FunctionInfoListener* active_function_info_listener = NULL;
 
 JSArray* LiveEdit::GatherCompileInfo(Handle<Script> script,
                                      Handle<String> source) {
-  CompilationZoneScope zone_scope(DELETE_ON_EXIT);
+  Isolate* isolate = Isolate::Current();
+  ZoneScope zone_scope(isolate, DELETE_ON_EXIT);
 
   FunctionInfoListener listener;
   Handle<Object> original_source = Handle<Object>(script->source());
   script->set_source(*source);
-  active_function_info_listener = &listener;
-  CompileScriptForTracker(script);
-  active_function_info_listener = NULL;
+  isolate->set_active_function_info_listener(&listener);
+  CompileScriptForTracker(isolate, script);
+  isolate->set_active_function_info_listener(NULL);
   script->set_source(*original_source);
 
   return *(listener.GetResult());
@@ -728,12 +911,12 @@ void LiveEdit::WrapSharedFunctionInfos(Handle<JSArray> array) {
   int len = Smi::cast(array->length())->value();
   for (int i = 0; i < len; i++) {
     Handle<SharedFunctionInfo> info(
-        SharedFunctionInfo::cast(array->GetElement(i)));
+        SharedFunctionInfo::cast(array->GetElementNoExceptionThrown(i)));
     SharedInfoWrapper info_wrapper = SharedInfoWrapper::Create();
     Handle<String> name_handle(String::cast(info->name()));
     info_wrapper.SetProperties(name_handle, info->start_position(),
                                info->end_position(), info);
-    SetElement(array, i, info_wrapper.GetJSArray());
+    SetElementNonStrict(array, i, info_wrapper.GetJSArray());
   }
 }
 
@@ -798,12 +981,13 @@ class ReferenceCollectorVisitor : public ObjectVisitor {
 
 // Finds all references to original and replaces them with substitution.
 static void ReplaceCodeObject(Code* original, Code* substitution) {
-  ASSERT(!Heap::InNewSpace(substitution));
+  ASSERT(!HEAP->InNewSpace(substitution));
 
+  HeapIterator iterator;
   AssertNoAllocation no_allocations_please;
 
   // A zone scope for ReferenceCollectorVisitor.
-  ZoneScope scope(DELETE_ON_EXIT);
+  ZoneScope scope(Isolate::Current(), DELETE_ON_EXIT);
 
   ReferenceCollectorVisitor visitor(original);
 
@@ -811,12 +995,11 @@ static void ReplaceCodeObject(Code* original, Code* substitution) {
   // so temporary replace the pointers with offset numbers
   // in prologue/epilogue.
   {
-    Heap::IterateStrongRoots(&visitor, VISIT_ALL);
+    HEAP->IterateStrongRoots(&visitor, VISIT_ALL);
   }
 
   // Now iterate over all pointers of all objects, including code_target
   // implicit pointers.
-  HeapIterator iterator;
   for (HeapObject* obj = iterator.next(); obj != NULL; obj = iterator.next()) {
     obj->Iterate(&visitor);
   }
@@ -832,12 +1015,68 @@ static bool IsJSFunctionCode(Code* code) {
 }
 
 
-Object* LiveEdit::ReplaceFunctionCode(Handle<JSArray> new_compile_info_array,
-                                      Handle<JSArray> shared_info_array) {
+// Returns true if an instance of candidate were inlined into function's code.
+static bool IsInlined(JSFunction* function, SharedFunctionInfo* candidate) {
+  AssertNoAllocation no_gc;
+
+  if (function->code()->kind() != Code::OPTIMIZED_FUNCTION) return false;
+
+  DeoptimizationInputData* data =
+      DeoptimizationInputData::cast(function->code()->deoptimization_data());
+
+  if (data == HEAP->empty_fixed_array()) return false;
+
+  FixedArray* literals = data->LiteralArray();
+
+  int inlined_count = data->InlinedFunctionCount()->value();
+  for (int i = 0; i < inlined_count; ++i) {
+    JSFunction* inlined = JSFunction::cast(literals->get(i));
+    if (inlined->shared() == candidate) return true;
+  }
+
+  return false;
+}
+
+
+class DependentFunctionsDeoptimizingVisitor : public OptimizedFunctionVisitor {
+ public:
+  explicit DependentFunctionsDeoptimizingVisitor(
+      SharedFunctionInfo* function_info)
+      : function_info_(function_info) {}
+
+  virtual void EnterContext(Context* context) {
+  }
+
+  virtual void VisitFunction(JSFunction* function) {
+    if (function->shared() == function_info_ ||
+        IsInlined(function, function_info_)) {
+      Deoptimizer::DeoptimizeFunction(function);
+    }
+  }
+
+  virtual void LeaveContext(Context* context) {
+  }
+
+ private:
+  SharedFunctionInfo* function_info_;
+};
+
+
+static void DeoptimizeDependentFunctions(SharedFunctionInfo* function_info) {
+  AssertNoAllocation no_allocation;
+
+  DependentFunctionsDeoptimizingVisitor visitor(function_info);
+  Deoptimizer::VisitAllOptimizedFunctions(&visitor);
+}
+
+
+MaybeObject* LiveEdit::ReplaceFunctionCode(
+    Handle<JSArray> new_compile_info_array,
+    Handle<JSArray> shared_info_array) {
   HandleScope scope;
 
   if (!SharedInfoWrapper::IsInstance(shared_info_array)) {
-    return Top::ThrowIllegalOperation();
+    return Isolate::Current()->ThrowIllegalOperation();
   }
 
   FunctionInfoWrapper compile_info_wrapper(new_compile_info_array);
@@ -845,39 +1084,65 @@ Object* LiveEdit::ReplaceFunctionCode(Handle<JSArray> new_compile_info_array,
 
   Handle<SharedFunctionInfo> shared_info = shared_info_wrapper.GetInfo();
 
+  HEAP->EnsureHeapIsIterable();
+
   if (IsJSFunctionCode(shared_info->code())) {
-    ReplaceCodeObject(shared_info->code(),
-                      *(compile_info_wrapper.GetFunctionCode()));
+    Handle<Code> code = compile_info_wrapper.GetFunctionCode();
+    ReplaceCodeObject(shared_info->code(), *code);
     Handle<Object> code_scope_info =  compile_info_wrapper.GetCodeScopeInfo();
     if (code_scope_info->IsFixedArray()) {
-      shared_info->set_scope_info(SerializedScopeInfo::cast(*code_scope_info));
+      shared_info->set_scope_info(ScopeInfo::cast(*code_scope_info));
     }
   }
 
   if (shared_info->debug_info()->IsDebugInfo()) {
     Handle<DebugInfo> debug_info(DebugInfo::cast(shared_info->debug_info()));
     Handle<Code> new_original_code =
-        Factory::CopyCode(compile_info_wrapper.GetFunctionCode());
+        FACTORY->CopyCode(compile_info_wrapper.GetFunctionCode());
     debug_info->set_original_code(*new_original_code);
   }
 
-  shared_info->set_start_position(compile_info_wrapper.GetStartPosition());
-  shared_info->set_end_position(compile_info_wrapper.GetEndPosition());
+  int start_position = compile_info_wrapper.GetStartPosition();
+  int end_position = compile_info_wrapper.GetEndPosition();
+  shared_info->set_start_position(start_position);
+  shared_info->set_end_position(end_position);
 
   shared_info->set_construct_stub(
-      Builtins::builtin(Builtins::JSConstructStubGeneric));
+      Isolate::Current()->builtins()->builtin(
+          Builtins::kJSConstructStubGeneric));
 
-  return Heap::undefined_value();
+  DeoptimizeDependentFunctions(*shared_info);
+  Isolate::Current()->compilation_cache()->Remove(shared_info);
+
+  return HEAP->undefined_value();
 }
 
 
-// TODO(635): Eval caches its scripts (same text -- same compiled info).
-// Make sure we clear such caches.
+MaybeObject* LiveEdit::FunctionSourceUpdated(
+    Handle<JSArray> shared_info_array) {
+  HandleScope scope;
+
+  if (!SharedInfoWrapper::IsInstance(shared_info_array)) {
+    return Isolate::Current()->ThrowIllegalOperation();
+  }
+
+  SharedInfoWrapper shared_info_wrapper(shared_info_array);
+  Handle<SharedFunctionInfo> shared_info = shared_info_wrapper.GetInfo();
+
+  DeoptimizeDependentFunctions(*shared_info);
+  Isolate::Current()->compilation_cache()->Remove(shared_info);
+
+  return HEAP->undefined_value();
+}
+
+
 void LiveEdit::SetFunctionScript(Handle<JSValue> function_wrapper,
                                  Handle<Object> script_handle) {
   Handle<SharedFunctionInfo> shared_info =
       Handle<SharedFunctionInfo>::cast(UnwrapJSValue(function_wrapper));
   shared_info->set_script(*script_handle);
+
+  Isolate::Current()->compilation_cache()->Remove(shared_info);
 }
 
 
@@ -896,17 +1161,17 @@ static int TranslatePosition(int original_position,
   int array_len = Smi::cast(position_change_array->length())->value();
   // TODO(635): binary search may be used here
   for (int i = 0; i < array_len; i += 3) {
-    int chunk_start =
-        Smi::cast(position_change_array->GetElement(i))->value();
+    Object* element = position_change_array->GetElementNoExceptionThrown(i);
+    int chunk_start = Smi::cast(element)->value();
     if (original_position < chunk_start) {
       break;
     }
-    int chunk_end =
-        Smi::cast(position_change_array->GetElement(i + 1))->value();
+    element = position_change_array->GetElementNoExceptionThrown(i + 1);
+    int chunk_end = Smi::cast(element)->value();
     // Position mustn't be inside a chunk.
     ASSERT(original_position >= chunk_end);
-    int chunk_changed_end =
-        Smi::cast(position_change_array->GetElement(i + 2))->value();
+    element = position_change_array->GetElementNoExceptionThrown(i + 2);
+    int chunk_changed_end = Smi::cast(element)->value();
     position_diff = chunk_changed_end - chunk_end;
   }
 
@@ -963,7 +1228,7 @@ class RelocInfoBuffer {
       V8::FatalProcessOutOfMemory("RelocInfoBuffer::GrowBuffer");
     }
 
-    // Setup new buffer.
+    // Set up new buffer.
     byte* new_buffer = NewArray<byte>(new_buffer_size);
 
     // Copy the data.
@@ -991,7 +1256,8 @@ class RelocInfoBuffer {
 
 // Patch positions in code (changes relocation info section) and possibly
 // returns new instance of code.
-static Handle<Code> PatchPositionsInCode(Handle<Code> code,
+static Handle<Code> PatchPositionsInCode(
+    Handle<Code> code,
     Handle<JSArray> position_change_array) {
 
   RelocInfoBuffer buffer_writer(code->relocation_size(),
@@ -1006,7 +1272,7 @@ static Handle<Code> PatchPositionsInCode(Handle<Code> code,
         int new_position = TranslatePosition(position,
                                              position_change_array);
         if (position != new_position) {
-          RelocInfo info_copy(rinfo->pc(), rinfo->rmode(), new_position);
+          RelocInfo info_copy(rinfo->pc(), rinfo->rmode(), new_position, NULL);
           buffer_writer.Write(&info_copy);
           continue;
         }
@@ -1025,17 +1291,17 @@ static Handle<Code> PatchPositionsInCode(Handle<Code> code,
     // Relocation info section now has different size. We cannot simply
     // rewrite it inside code object. Instead we have to create a new
     // code object.
-    Handle<Code> result(Factory::CopyCode(code, buffer));
+    Handle<Code> result(FACTORY->CopyCode(code, buffer));
     return result;
   }
 }
 
 
-Object* LiveEdit::PatchFunctionPositions(
+MaybeObject* LiveEdit::PatchFunctionPositions(
     Handle<JSArray> shared_info_array, Handle<JSArray> position_change_array) {
 
   if (!SharedInfoWrapper::IsInstance(shared_info_array)) {
-    return Top::ThrowIllegalOperation();
+    return Isolate::Current()->ThrowIllegalOperation();
   }
 
   SharedInfoWrapper shared_info_wrapper(shared_info_array);
@@ -1044,13 +1310,16 @@ Object* LiveEdit::PatchFunctionPositions(
   int old_function_start = info->start_position();
   int new_function_start = TranslatePosition(old_function_start,
                                              position_change_array);
-  info->set_start_position(new_function_start);
-  info->set_end_position(TranslatePosition(info->end_position(),
-                                           position_change_array));
+  int new_function_end = TranslatePosition(info->end_position(),
+                                           position_change_array);
+  int new_function_token_pos =
+      TranslatePosition(info->function_token_position(), position_change_array);
 
-  info->set_function_token_position(
-      TranslatePosition(info->function_token_position(),
-      position_change_array));
+  info->set_start_position(new_function_start);
+  info->set_end_position(new_function_end);
+  info->set_function_token_position(new_function_token_pos);
+
+  HEAP->EnsureHeapIsIterable();
 
   if (IsJSFunctionCode(info->code())) {
     // Patch relocation info section of the code.
@@ -1066,14 +1335,14 @@ Object* LiveEdit::PatchFunctionPositions(
     }
   }
 
-  return Heap::undefined_value();
+  return HEAP->undefined_value();
 }
 
 
 static Handle<Script> CreateScriptCopy(Handle<Script> original) {
   Handle<String> original_source(String::cast(original->source()));
 
-  Handle<Script> copy = Factory::NewScript(original_source);
+  Handle<Script> copy = FACTORY->NewScript(original_source);
 
   copy->set_name(original->name());
   copy->set_line_offset(original->line_offset());
@@ -1098,15 +1367,16 @@ Object* LiveEdit::ChangeScriptSource(Handle<Script> original_script,
     Handle<Script> old_script = CreateScriptCopy(original_script);
     old_script->set_name(String::cast(*old_script_name));
     old_script_object = old_script;
-    Debugger::OnAfterCompile(old_script, Debugger::SEND_WHEN_DEBUGGING);
+    Isolate::Current()->debugger()->OnAfterCompile(
+        old_script, Debugger::SEND_WHEN_DEBUGGING);
   } else {
-    old_script_object = Handle<Object>(Heap::null_value());
+    old_script_object = Handle<Object>(HEAP->null_value());
   }
 
   original_script->set_source(*new_source);
 
   // Drop line ends so that they will be recalculated.
-  original_script->set_line_ends(Heap::undefined_value());
+  original_script->set_line_ends(HEAP->undefined_value());
 
   return *old_script_object;
 }
@@ -1138,19 +1408,23 @@ void LiveEdit::ReplaceRefToNestedFunction(
 // Check an activation against list of functions. If there is a function
 // that matches, its status in result array is changed to status argument value.
 static bool CheckActivation(Handle<JSArray> shared_info_array,
-                            Handle<JSArray> result, StackFrame* frame,
+                            Handle<JSArray> result,
+                            StackFrame* frame,
                             LiveEdit::FunctionPatchabilityStatus status) {
-  if (!frame->is_java_script()) {
-    return false;
-  }
+  if (!frame->is_java_script()) return false;
+
+  Handle<JSFunction> function(
+      JSFunction::cast(JavaScriptFrame::cast(frame)->function()));
+
   int len = Smi::cast(shared_info_array->length())->value();
   for (int i = 0; i < len; i++) {
-    JSValue* wrapper = JSValue::cast(shared_info_array->GetElement(i));
+    JSValue* wrapper =
+        JSValue::cast(shared_info_array->GetElementNoExceptionThrown(i));
     Handle<SharedFunctionInfo> shared(
         SharedFunctionInfo::cast(wrapper->value()));
 
-    if (frame->code() == shared->code()) {
-      SetElement(result, i, Handle<Smi>(Smi::FromInt(status)));
+    if (function->shared() == *shared || IsInlined(*function, *shared)) {
+      SetElementNonStrict(result, i, Handle<Smi>(Smi::FromInt(status)));
       return true;
     }
   }
@@ -1163,7 +1437,8 @@ static bool CheckActivation(Handle<JSArray> shared_info_array,
 static bool FixTryCatchHandler(StackFrame* top_frame,
                                StackFrame* bottom_frame) {
   Address* pointer_address =
-      &Memory::Address_at(Top::get_address_from_id(Top::k_handler_address));
+      &Memory::Address_at(Isolate::Current()->get_address_from_id(
+          Isolate::kHandlerAddress));
 
   while (*pointer_address < top_frame->sp()) {
     pointer_address = &Memory::Address_at(*pointer_address);
@@ -1198,19 +1473,26 @@ static const char* DropFrames(Vector<StackFrame*> frames,
   ASSERT(bottom_js_frame->is_java_script());
 
   // Check the nature of the top frame.
-  if (pre_top_frame->code()->is_inline_cache_stub() &&
-      pre_top_frame->code()->ic_state() == DEBUG_BREAK) {
+  Isolate* isolate = Isolate::Current();
+  Code* pre_top_frame_code = pre_top_frame->LookupCode();
+  if (pre_top_frame_code->is_inline_cache_stub() &&
+      pre_top_frame_code->ic_state() == DEBUG_BREAK) {
     // OK, we can drop inline cache calls.
     *mode = Debug::FRAME_DROPPED_IN_IC_CALL;
-  } else if (pre_top_frame->code() == Debug::debug_break_slot()) {
+  } else if (pre_top_frame_code ==
+             isolate->debug()->debug_break_slot()) {
     // OK, we can drop debug break slot.
     *mode = Debug::FRAME_DROPPED_IN_DEBUG_SLOT_CALL;
-  } else if (pre_top_frame->code() ==
-      Builtins::builtin(Builtins::FrameDropper_LiveEdit)) {
+  } else if (pre_top_frame_code ==
+      isolate->builtins()->builtin(
+          Builtins::kFrameDropper_LiveEdit)) {
     // OK, we can drop our own code.
     *mode = Debug::FRAME_DROPPED_IN_DIRECT_CALL;
-  } else if (pre_top_frame->code()->kind() == Code::STUB &&
-      pre_top_frame->code()->major_key()) {
+  } else if (pre_top_frame_code ==
+      isolate->builtins()->builtin(Builtins::kReturn_DebugBreak)) {
+    *mode = Debug::FRAME_DROPPED_IN_RETURN_CALL;
+  } else if (pre_top_frame_code->kind() == Code::STUB &&
+      pre_top_frame_code->major_key()) {
     // Entry from our unit tests, it's fine, we support this case.
     *mode = Debug::FRAME_DROPPED_IN_DIRECT_CALL;
   } else {
@@ -1232,7 +1514,7 @@ static const char* DropFrames(Vector<StackFrame*> frames,
   // Make sure FixTryCatchHandler is idempotent.
   ASSERT(!FixTryCatchHandler(pre_top_frame, bottom_js_frame));
 
-  Handle<Code> code(Builtins::builtin(Builtins::FrameDropper_LiveEdit));
+  Handle<Code> code = Isolate::Current()->builtins()->FrameDropper_LiveEdit();
   top_frame->set_pc(code->entry());
   pre_top_frame->SetCallerFp(bottom_js_frame->fp());
 
@@ -1259,8 +1541,9 @@ static bool IsDropableFrame(StackFrame* frame) {
 // removing all listed function if possible and if do_drop is true.
 static const char* DropActivationsInActiveThread(
     Handle<JSArray> shared_info_array, Handle<JSArray> result, bool do_drop) {
-
-  ZoneScope scope(DELETE_ON_EXIT);
+  Isolate* isolate = Isolate::Current();
+  Debug* debug = isolate->debug();
+  ZoneScope scope(isolate, DELETE_ON_EXIT);
   Vector<StackFrame*> frames = CreateStackMap();
 
   int array_len = Smi::cast(shared_info_array->length())->value();
@@ -1269,7 +1552,7 @@ static const char* DropActivationsInActiveThread(
   int frame_index = 0;
   for (; frame_index < frames.length(); frame_index++) {
     StackFrame* frame = frames[frame_index];
-    if (frame->id() == Debug::break_frame_id()) {
+    if (frame->id() == debug->break_frame_id()) {
       top_frame_index = frame_index;
       break;
     }
@@ -1346,7 +1629,7 @@ static const char* DropActivationsInActiveThread(
       break;
     }
   }
-  Debug::FramesHaveBeenDropped(new_id, drop_mode,
+  debug->FramesHaveBeenDropped(new_id, drop_mode,
                                restarter_frame_function_pointer);
 
   // Replace "blocked on active" with "replaced on active" status.
@@ -1355,7 +1638,7 @@ static const char* DropActivationsInActiveThread(
         Smi::FromInt(LiveEdit::FUNCTION_BLOCKED_ON_ACTIVE_STACK)) {
       Handle<Object> replaced(
           Smi::FromInt(LiveEdit::FUNCTION_REPLACED_ON_ACTIVE_STACK));
-      SetElement(result, i, replaced);
+      SetElementNonStrict(result, i, replaced);
     }
   }
   return NULL;
@@ -1369,8 +1652,8 @@ class InactiveThreadActivationsChecker : public ThreadVisitor {
       : shared_info_array_(shared_info_array), result_(result),
         has_blocked_functions_(false) {
   }
-  void VisitThread(ThreadLocalTop* top) {
-    for (StackFrameIterator it(top); !it.done(); it.Advance()) {
+  void VisitThread(Isolate* isolate, ThreadLocalTop* top) {
+    for (StackFrameIterator it(isolate, top); !it.done(); it.Advance()) {
       has_blocked_functions_ |= CheckActivation(
           shared_info_array_, result_, it.frame(),
           LiveEdit::FUNCTION_BLOCKED_ON_OTHER_STACK);
@@ -1391,19 +1674,22 @@ Handle<JSArray> LiveEdit::CheckAndDropActivations(
     Handle<JSArray> shared_info_array, bool do_drop) {
   int len = Smi::cast(shared_info_array->length())->value();
 
-  Handle<JSArray> result = Factory::NewJSArray(len);
+  Handle<JSArray> result = FACTORY->NewJSArray(len);
 
   // Fill the default values.
   for (int i = 0; i < len; i++) {
-    SetElement(result, i,
-               Handle<Smi>(Smi::FromInt(FUNCTION_AVAILABLE_FOR_PATCH)));
+    SetElementNonStrict(
+        result,
+        i,
+        Handle<Smi>(Smi::FromInt(FUNCTION_AVAILABLE_FOR_PATCH)));
   }
 
 
   // First check inactive threads. Fail if some functions are blocked there.
   InactiveThreadActivationsChecker inactive_threads_checker(shared_info_array,
                                                             result);
-  ThreadManager::IterateArchivedThreads(&inactive_threads_checker);
+  Isolate::Current()->thread_manager()->IterateArchivedThreads(
+      &inactive_threads_checker);
   if (inactive_threads_checker.HasBlockedFunctions()) {
     return result;
   }
@@ -1414,42 +1700,44 @@ Handle<JSArray> LiveEdit::CheckAndDropActivations(
   if (error_message != NULL) {
     // Add error message as an array extra element.
     Vector<const char> vector_message(error_message, StrLength(error_message));
-    Handle<String> str = Factory::NewStringFromAscii(vector_message);
-    SetElement(result, len, str);
+    Handle<String> str = FACTORY->NewStringFromAscii(vector_message);
+    SetElementNonStrict(result, len, str);
   }
   return result;
 }
 
 
-LiveEditFunctionTracker::LiveEditFunctionTracker(FunctionLiteral* fun) {
-  if (active_function_info_listener != NULL) {
-    active_function_info_listener->FunctionStarted(fun);
+LiveEditFunctionTracker::LiveEditFunctionTracker(Isolate* isolate,
+                                                 FunctionLiteral* fun)
+    : isolate_(isolate) {
+  if (isolate_->active_function_info_listener() != NULL) {
+    isolate_->active_function_info_listener()->FunctionStarted(fun);
   }
 }
 
 
 LiveEditFunctionTracker::~LiveEditFunctionTracker() {
-  if (active_function_info_listener != NULL) {
-    active_function_info_listener->FunctionDone();
+  if (isolate_->active_function_info_listener() != NULL) {
+    isolate_->active_function_info_listener()->FunctionDone();
   }
 }
 
 
 void LiveEditFunctionTracker::RecordFunctionInfo(
     Handle<SharedFunctionInfo> info, FunctionLiteral* lit) {
-  if (active_function_info_listener != NULL) {
-    active_function_info_listener->FunctionInfo(info, lit->scope());
+  if (isolate_->active_function_info_listener() != NULL) {
+    isolate_->active_function_info_listener()->FunctionInfo(info, lit->scope());
   }
 }
 
 
 void LiveEditFunctionTracker::RecordRootFunctionInfo(Handle<Code> code) {
-  active_function_info_listener->FunctionCode(code);
+  isolate_->active_function_info_listener()->FunctionCode(code);
 }
 
 
-bool LiveEditFunctionTracker::IsActive() {
-  return active_function_info_listener != NULL;
+bool LiveEditFunctionTracker::IsActive(Isolate* isolate) {
+  return isolate->active_function_info_listener() != NULL;
 }
 
 
@@ -1457,7 +1745,8 @@ bool LiveEditFunctionTracker::IsActive() {
 
 // This ifdef-else-endif section provides working or stub implementation of
 // LiveEditFunctionTracker.
-LiveEditFunctionTracker::LiveEditFunctionTracker(FunctionLiteral* fun) {
+LiveEditFunctionTracker::LiveEditFunctionTracker(Isolate* isolate,
+                                                 FunctionLiteral* fun) {
 }
 
 
@@ -1474,7 +1763,7 @@ void LiveEditFunctionTracker::RecordRootFunctionInfo(Handle<Code> code) {
 }
 
 
-bool LiveEditFunctionTracker::IsActive() {
+bool LiveEditFunctionTracker::IsActive(Isolate* isolate) {
   return false;
 }
 

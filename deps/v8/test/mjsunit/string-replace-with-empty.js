@@ -25,33 +25,45 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --expose-externalize-string
+// Flags: --expose-externalize-string --expose-gc
 
-assertEquals("0123", "aa0bb1cc2dd3".replace(/[a-z]/g, ""));
-assertEquals("0123", "\u1234a0bb1cc2dd3".replace(/[\u1234a-z]/g, ""));
+function test() {
+  assertEquals("0123", "aa0bb1cc2dd3".replace(/[a-z]/g, ""));
+  assertEquals("0123", "\u1234a0bb1cc2dd3".replace(/[\u1234a-z]/g, ""));
 
-var expected = "0123";
-var cons = "a0b1c2d3";
-for (var i = 0; i < 5; i++) {
-  expected += expected;
-  cons += cons;
-}
-assertEquals(expected, cons.replace(/[a-z]/g, ""));
-cons = "\u12340b1c2d3";
-for (var i = 0; i < 5; i++) {
-  cons += cons;
-}
-assertEquals(expected, cons.replace(/[\u1234a-z]/g, ""));
+  var expected = "0123";
+  var cons = "a0b1c2d3";
+  for (var i = 0; i < 5; i++) {
+    expected += expected;
+    cons += cons;
+  }
+  assertEquals(expected, cons.replace(/[a-z]/g, ""));
+  cons = "\u12340b1c2d3";
+  for (var i = 0; i < 5; i++) {
+    cons += cons;
+  }
+  assertEquals(expected, cons.replace(/[\u1234a-z]/g, ""));
 
-cons = "a0b1c2d3";
-for (var i = 0; i < 5; i++) {
-  cons += cons;
+  cons = "a0b1c2d3";
+  for (var i = 0; i < 5; i++) {
+    cons += cons;
+  }
+  externalizeString(cons, true/* force two-byte */);
+  assertEquals(expected, cons.replace(/[a-z]/g, ""));
+  cons = "\u12340b1c2d3";
+  for (var i = 0; i < 5; i++) {
+    cons += cons;
+  }
+  externalizeString(cons);
+  assertEquals(expected, cons.replace(/[\u1234a-z]/g, ""));
 }
-externalizeString(cons, true/* force two-byte */);
-assertEquals(expected, cons.replace(/[a-z]/g, ""));
-cons = "\u12340b1c2d3";
-for (var i = 0; i < 5; i++) {
-  cons += cons;
-}
-externalizeString(cons);
-assertEquals(expected, cons.replace(/[\u1234a-z]/g, ""));
+
+test();
+
+// Clear the regexp cache to allow the GC to work.
+"foo".replace(/foo/g, "");
+
+// GC in order to free up things on the C side so we don't get
+// a memory leak.  This makes valgrind happy.
+gc();
+gc();

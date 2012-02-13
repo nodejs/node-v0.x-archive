@@ -29,14 +29,8 @@
 #define V8_APIUTILS_H_
 
 namespace v8 {
-
 class ImplementationUtilities {
  public:
-  static v8::Handle<v8::Primitive> Undefined();
-  static v8::Handle<v8::Primitive> Null();
-  static v8::Handle<v8::Boolean> True();
-  static v8::Handle<v8::Boolean> False();
-
   static int GetNameCount(ExtensionConfiguration* that) {
     return that->name_count_;
   }
@@ -45,19 +39,29 @@ class ImplementationUtilities {
     return that->names_;
   }
 
-  static v8::Arguments NewArguments(Local<Value> data,
-                                    Local<Object> holder,
-                                    Local<Function> callee,
-                                    bool is_construct_call,
-                                    void** argv, int argc) {
-    return v8::Arguments(data, holder, callee, is_construct_call, argv, argc);
+  // Packs additional parameters for the NewArguments function. |implicit_args|
+  // is a pointer to the last element of 3-elements array controlled by GC.
+  static void PrepareArgumentsData(internal::Object** implicit_args,
+                                   internal::Object* data,
+                                   internal::JSFunction* callee,
+                                   internal::Object* holder) {
+    implicit_args[v8::Arguments::kDataIndex] = data;
+    implicit_args[v8::Arguments::kCalleeIndex] = callee;
+    implicit_args[v8::Arguments::kHolderIndex] = holder;
+  }
+
+  static v8::Arguments NewArguments(internal::Object** implicit_args,
+                                    internal::Object** argv, int argc,
+                                    bool is_construct_call) {
+    ASSERT(implicit_args[v8::Arguments::kCalleeIndex]->IsJSFunction());
+    ASSERT(implicit_args[v8::Arguments::kHolderIndex]->IsHeapObject());
+
+    return v8::Arguments(implicit_args, argv, argc, is_construct_call);
   }
 
   // Introduce an alias for the handle scope data to allow non-friends
   // to access the HandleScope data.
   typedef v8::HandleScope::Data HandleScopeData;
-
-  static HandleScopeData* CurrentHandleScope();
 
 #ifdef DEBUG
   static void ZapHandleRange(internal::Object** begin, internal::Object** end);

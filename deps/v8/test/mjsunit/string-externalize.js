@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --expose-externalize-string
+// Flags: --expose-externalize-string --expose-gc
 
 var size = 1024;
 
@@ -44,7 +44,7 @@ function test() {
   assertFalse(isAsciiString(twoByteExternalWithAsciiData));
 
   var realTwoByteExternalString =
-      "\u1234\u1234" + (function() { return "\u1234"; })();
+      "\u1234\u1234\u1234\u1234" + (function() { return "\u1234"; })();
   externalizeString(realTwoByteExternalString);
   assertFalse(isAsciiString(realTwoByteExternalString));
 
@@ -93,3 +93,7 @@ function test() {
 for (var i = 0; i < 10; i++) {
   test();
 }
+
+// Clean up string to make Valgrind happy.
+gc();
+gc();

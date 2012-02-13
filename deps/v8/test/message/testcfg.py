@@ -103,10 +103,13 @@ class MessageTestConfiguration(test.TestConfiguration):
     else:
         return []
 
-  def ListTests(self, current_path, path, mode):
+  def ListTests(self, current_path, path, mode, variant_flags):
     mjsunit = [current_path + [t] for t in self.Ls(self.root)]
     regress = [current_path + ['regress', t] for t in self.Ls(join(self.root, 'regress'))]
     bugs = [current_path + ['bugs', t] for t in self.Ls(join(self.root, 'bugs'))]
+    mjsunit.sort()
+    regress.sort()
+    bugs.sort()
     all_tests = mjsunit + regress + bugs
     result = []
     for test in all_tests:
@@ -122,7 +125,7 @@ class MessageTestConfiguration(test.TestConfiguration):
     return result
 
   def GetBuildRequirements(self):
-    return ['sample', 'sample=shell']
+    return ['d8']
 
   def GetTestStatus(self, sections, defs):
     status_file = join(self.root, 'message.status')

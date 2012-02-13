@@ -30,7 +30,7 @@
 
 
 (function testIsEmpty() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   assertTrue(tree.isEmpty());
   tree.insert(0, 'value');
   assertFalse(tree.isEmpty());
@@ -38,7 +38,7 @@
 
 
 (function testExportValues() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   assertArrayEquals([], tree.exportValues());
   tree.insert(0, 'value');
   assertArrayEquals(['value'], tree.exportValues());
@@ -79,21 +79,21 @@ function createSampleTree() {
 
 
 (function testSplay() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   tree.root_ = createSampleTree();
-  assertArrayEquals(['50', '30', '60', '10', '40', '90', '20', '70', '100', '15', '80'],
+  assertArrayEquals([50, 30, 60, 10, 40, 90, 20, 70, 100, 15, 80],
                     tree.exportValues());
   tree.splay_(50);
-  assertArrayEquals(['50', '30', '60', '10', '40', '90', '20', '70', '100', '15', '80'],
+  assertArrayEquals([50, 30, 60, 10, 40, 90, 20, 70, 100, 15, 80],
                     tree.exportValues());
   tree.splay_(80);
-  assertArrayEquals(['80', '60', '90', '50', '70', '100', '30', '10', '40', '20', '15'],
+  assertArrayEquals([80, 60, 90, 50, 70, 100, 30, 10, 40, 20, 15],
                     tree.exportValues());
 })();
 
 
 (function testInsert() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   tree.insert(5, 'root');
   tree.insert(3, 'left');
   assertArrayEquals(['left', 'root'], tree.exportValues());
@@ -103,7 +103,7 @@ function createSampleTree() {
 
 
 (function testFind() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   tree.insert(5, 'root');
   tree.insert(3, 'left');
   tree.insert(7, 'right');
@@ -117,7 +117,7 @@ function createSampleTree() {
 
 
 (function testFindMin() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   assertEquals(null, tree.findMin());
   tree.insert(5, 'root');
   tree.insert(3, 'left');
@@ -127,7 +127,7 @@ function createSampleTree() {
 
 
 (function testFindMax() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   assertEquals(null, tree.findMax());
   tree.insert(5, 'root');
   tree.insert(3, 'left');
@@ -137,7 +137,7 @@ function createSampleTree() {
 
 
 (function testFindGreatestLessThan() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   assertEquals(null, tree.findGreatestLessThan(10));
   tree.insert(5, 'root');
   tree.insert(3, 'left');
@@ -151,7 +151,7 @@ function createSampleTree() {
 
 
 (function testRemove() {
-  var tree = new goog.structs.SplayTree();
+  var tree = new SplayTree();
   assertThrows('tree.remove(5)');
   tree.insert(5, 'root');
   tree.insert(3, 'left');

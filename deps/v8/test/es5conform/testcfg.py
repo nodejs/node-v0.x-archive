@@ -73,7 +73,7 @@ class ES5ConformTestConfiguration(test.TestConfiguration):
   def __init__(self, context, root):
     super(ES5ConformTestConfiguration, self).__init__(context, root)
 
-  def ListTests(self, current_path, path, mode):
+  def ListTests(self, current_path, path, mode, variant_flags):
     tests = []
     current_root = join(self.root, 'data', 'TestCases')
     harness = []
@@ -82,8 +82,10 @@ class ES5ConformTestConfiguration(test.TestConfiguration):
     for root, dirs, files in os.walk(current_root):
       for dotted in [x  for x in dirs if x.startswith('.')]:
         dirs.remove(dotted)
+      dirs.sort()
       root_path = root[len(self.root):].split(os.path.sep)
       root_path = current_path + [x for x in root_path if x]
+      files.sort()
       for file in files:
         if file.endswith('.js'):
           full_path = root_path + [file[:-3]]
@@ -95,7 +97,7 @@ class ES5ConformTestConfiguration(test.TestConfiguration):
     return tests
 
   def GetBuildRequirements(self):
-    return ['sample', 'sample=shell']
+    return ['d8']
 
   def GetTestStatus(self, sections, defs):
     status_file = join(self.root, 'es5conform.status')

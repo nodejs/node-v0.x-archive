@@ -1,4 +1,4 @@
-// Copyright 2006-2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,8 @@
 #ifndef V8_LIST_H_
 #define V8_LIST_H_
 
+#include "utils.h"
+
 namespace v8 {
 namespace internal {
 
@@ -47,7 +49,6 @@ namespace internal {
 template <typename T, class P>
 class List {
  public:
-
   List() { Initialize(0); }
   INLINE(explicit List(int capacity)) { Initialize(capacity); }
   INLINE(~List()) { DeleteData(data_); }
@@ -66,13 +67,13 @@ class List {
 
   // Returns a reference to the element at index i.  This reference is
   // not safe to use after operations that can change the list's
-  // backing store (eg, Add).
-  inline T& operator[](int i) const  {
+  // backing store (e.g. Add).
+  inline T& operator[](int i) const {
     ASSERT(0 <= i);
     ASSERT(i < length_);
     return data_[i];
   }
-  inline T& at(int i) const  { return operator[](i); }
+  inline T& at(int i) const { return operator[](i); }
   inline T& last() const { return at(length_ - 1); }
   inline T& first() const { return at(0); }
 
@@ -80,7 +81,7 @@ class List {
   INLINE(int length() const) { return length_; }
   INLINE(int capacity() const) { return capacity_; }
 
-  Vector<T> ToVector() { return Vector<T>(data_, length_); }
+  Vector<T> ToVector() const { return Vector<T>(data_, length_); }
 
   Vector<const T> ToConstVector() { return Vector<const T>(data_, length_); }
 
@@ -90,6 +91,12 @@ class List {
 
   // Add all the elements from the argument list to this list.
   void AddAll(const List<T, P>& other);
+
+  // Add all the elements from the vector to this list.
+  void AddAll(const Vector<T>& other);
+
+  // Inserts the element at the specific index.
+  void InsertAt(int index, const T& element);
 
   // Added 'count' elements with the value 'value' and returns a
   // vector that allows access to the elements.  The vector is valid
@@ -102,6 +109,10 @@ class List {
   // size of the list.
   T Remove(int i);
 
+  // Remove the given element from the list. Returns whether or not
+  // the input is included in the list in the first place.
+  bool RemoveElement(const T& elm);
+
   // Removes the last element without deleting it even if T is a
   // pointer type. Returns the removed element.
   INLINE(T RemoveLast()) { return Remove(length_ - 1); }
@@ -113,7 +124,11 @@ class List {
   // Drops all but the first 'pos' elements from the list.
   INLINE(void Rewind(int pos));
 
-  bool Contains(const T& elm);
+  // Drop the last 'count' elements from the list.
+  INLINE(void RewindBy(int count)) { Rewind(length_ - count); }
+
+  bool Contains(const T& elm) const;
+  int CountOccurrences(const T& elm, int start, int end) const;
 
   // Iterate through all list entries, starting at index 0.
   void Iterate(void (*callback)(T* x));
@@ -148,14 +163,24 @@ class List {
   DISALLOW_COPY_AND_ASSIGN(List);
 };
 
-class FrameElement;
+class Map;
+class Code;
+template<typename T> class Handle;
+typedef List<Map*> MapList;
+typedef List<Code*> CodeList;
+typedef List<Handle<Map> > MapHandleList;
+typedef List<Handle<Code> > CodeHandleList;
 
-// Add() is inlined, ResizeAdd() called by Add() is inlined except for
-// Lists of FrameElements, and ResizeAddInternal() is inlined in ResizeAdd().
-template <>
-void List<FrameElement,
-          FreeStoreAllocationPolicy>::ResizeAdd(const FrameElement& element);
+// Perform binary search for an element in an already sorted
+// list. Returns the index of the element of -1 if it was not found.
+template <typename T>
+int SortedListBSearch(
+    const List<T>& list, T elem, int (*cmp)(const T* x, const T* y));
+template <typename T>
+int SortedListBSearch(const List<T>& list, T elem);
+
 
 } }  // namespace v8::internal
+
 
 #endif  // V8_LIST_H_

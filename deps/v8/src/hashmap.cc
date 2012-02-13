@@ -25,20 +25,18 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+#include "../include/v8stdint.h"
+#include "globals.h"
+#include "checks.h"
+#include "utils.h"
+#include "allocation.h"
 
 #include "hashmap.h"
 
 namespace v8 {
 namespace internal {
 
-Allocator HashMap::DefaultAllocator;
-
-
-HashMap::HashMap() {
-  allocator_ = NULL;
-  match_ = NULL;
-}
+Allocator* HashMap::DefaultAllocator = ::new Allocator();
 
 
 HashMap::HashMap(MatchFun match,
@@ -195,7 +193,7 @@ void HashMap::Initialize(uint32_t capacity) {
   ASSERT(IsPowerOf2(capacity));
   map_ = reinterpret_cast<Entry*>(allocator_->New(capacity * sizeof(Entry)));
   if (map_ == NULL) {
-    V8::FatalProcessOutOfMemory("HashMap::Initialize");
+    v8::internal::FatalProcessOutOfMemory("HashMap::Initialize");
     return;
   }
   capacity_ = capacity;

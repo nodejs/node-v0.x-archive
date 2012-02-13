@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,129 +28,234 @@
 #ifndef V8_COMPILER_H_
 #define V8_COMPILER_H_
 
+#include "allocation.h"
 #include "ast.h"
-#include "frame-element.h"
-#include "parser.h"
-#include "register-allocator.h"
 #include "zone.h"
 
 namespace v8 {
 namespace internal {
 
+class ScriptDataImpl;
+
 // CompilationInfo encapsulates some information known at compile time.  It
 // is constructed based on the resources available at compile-time.
 class CompilationInfo BASE_EMBEDDED {
  public:
-  // Lazy compilation of a JSFunction.
-  CompilationInfo(Handle<JSFunction> closure,
-                  int loop_nesting,
-                  Handle<Object> receiver)
-      : closure_(closure),
-        function_(NULL),
-        is_eval_(false),
-        loop_nesting_(loop_nesting),
-        receiver_(receiver) {
-    Initialize();
-    ASSERT(!closure_.is_null() &&
-           shared_info_.is_null() &&
-           script_.is_null());
+  explicit CompilationInfo(Handle<Script> script);
+  explicit CompilationInfo(Handle<SharedFunctionInfo> shared_info);
+  explicit CompilationInfo(Handle<JSFunction> closure);
+
+  Isolate* isolate() {
+    ASSERT(Isolate::Current() == isolate_);
+    return isolate_;
   }
-
-  // Lazy compilation based on SharedFunctionInfo.
-  explicit CompilationInfo(Handle<SharedFunctionInfo> shared_info)
-      : shared_info_(shared_info),
-        function_(NULL),
-        is_eval_(false),
-        loop_nesting_(0) {
-    Initialize();
-    ASSERT(closure_.is_null() &&
-           !shared_info_.is_null() &&
-           script_.is_null());
+  bool is_lazy() const { return IsLazy::decode(flags_); }
+  bool is_eval() const { return IsEval::decode(flags_); }
+  bool is_global() const { return IsGlobal::decode(flags_); }
+  bool is_classic_mode() const { return language_mode() == CLASSIC_MODE; }
+  bool is_extended_mode() const { return language_mode() == EXTENDED_MODE; }
+  LanguageMode language_mode() const {
+    return LanguageModeField::decode(flags_);
   }
+  bool is_in_loop() const { return IsInLoop::decode(flags_); }
+  FunctionLiteral* function() const { return function_; }
+  Scope* scope() const { return scope_; }
+  Scope* global_scope() const { return global_scope_; }
+  Handle<Code> code() const { return code_; }
+  Handle<JSFunction> closure() const { return closure_; }
+  Handle<SharedFunctionInfo> shared_info() const { return shared_info_; }
+  Handle<Script> script() const { return script_; }
+  v8::Extension* extension() const { return extension_; }
+  ScriptDataImpl* pre_parse_data() const { return pre_parse_data_; }
+  Handle<Context> calling_context() const { return calling_context_; }
+  int osr_ast_id() const { return osr_ast_id_; }
 
-  // Eager compilation.
-  CompilationInfo(FunctionLiteral* literal, Handle<Script> script, bool is_eval)
-      : script_(script),
-        function_(literal),
-        is_eval_(is_eval),
-        loop_nesting_(0) {
-    Initialize();
-    ASSERT(closure_.is_null() &&
-           shared_info_.is_null() &&
-           !script_.is_null());
+  void MarkAsEval() {
+    ASSERT(!is_lazy());
+    flags_ |= IsEval::encode(true);
   }
-
-  // We can only get a JSFunction if we actually have one.
-  Handle<JSFunction> closure() { return closure_; }
-
-  // We can get a SharedFunctionInfo from a JSFunction or if we actually
-  // have one.
-  Handle<SharedFunctionInfo> shared_info() {
-    if (!closure().is_null()) {
-      return Handle<SharedFunctionInfo>(closure()->shared());
+  void MarkAsGlobal() {
+    ASSERT(!is_lazy());
+    flags_ |= IsGlobal::encode(true);
+  }
+  void SetLanguageMode(LanguageMode language_mode) {
+    ASSERT(this->language_mode() == CLASSIC_MODE ||
+           this->language_mode() == language_mode ||
+           language_mode == EXTENDED_MODE);
+    flags_ = LanguageModeField::update(flags_, language_mode);
+  }
+  void MarkAsInLoop() {
+    ASSERT(is_lazy());
+    flags_ |= IsInLoop::encode(true);
+  }
+  void MarkAsNative() {
+    flags_ |= IsNative::encode(true);
+  }
+  bool is_native() const {
+    return IsNative::decode(flags_);
+  }
+  void SetFunction(FunctionLiteral* literal) {
+    ASSERT(function_ == NULL);
+    function_ = literal;
+  }
+  void SetScope(Scope* scope) {
+    ASSERT(scope_ == NULL);
+    scope_ = scope;
+  }
+  void SetGlobalScope(Scope* global_scope) {
+    ASSERT(global_scope_ == NULL);
+    global_scope_ = global_scope;
+  }
+  void SetCode(Handle<Code> code) { code_ = code; }
+  void SetExtension(v8::Extension* extension) {
+    ASSERT(!is_lazy());
+    extension_ = extension;
+  }
+  void SetPreParseData(ScriptDataImpl* pre_parse_data) {
+    ASSERT(!is_lazy());
+    pre_parse_data_ = pre_parse_data;
+  }
+  void SetCallingContext(Handle<Context> context) {
+    ASSERT(is_eval());
+    calling_context_ = context;
+  }
+  void SetOsrAstId(int osr_ast_id) {
+    ASSERT(IsOptimizing());
+    osr_ast_id_ = osr_ast_id;
+  }
+  void MarkCompilingForDebugging(Handle<Code> current_code) {
+    ASSERT(mode_ != OPTIMIZE);
+    ASSERT(current_code->kind() == Code::FUNCTION);
+    flags_ |= IsCompilingForDebugging::encode(true);
+    if (current_code->is_compiled_optimizable()) {
+      EnableDeoptimizationSupport();
     } else {
-      return shared_info_;
+      mode_ = CompilationInfo::NONOPT;
     }
   }
-
-  // We can always get a script.  Either we have one or we can get a shared
-  // function info.
-  Handle<Script> script() {
-    if (!script_.is_null()) {
-      return script_;
-    } else {
-      ASSERT(shared_info()->script()->IsScript());
-      return Handle<Script>(Script::cast(shared_info()->script()));
-    }
+  bool IsCompilingForDebugging() {
+    return IsCompilingForDebugging::decode(flags_);
   }
 
-  // There should always be a function literal, but it may be set after
-  // construction (for lazy compilation).
-  FunctionLiteral* function() { return function_; }
-  void set_function(FunctionLiteral* literal) { function_ = literal; }
-
-  // Simple accessors.
-  bool is_eval() { return is_eval_; }
-  int loop_nesting() { return loop_nesting_; }
-  bool has_receiver() { return !receiver_.is_null(); }
-  Handle<Object> receiver() { return receiver_; }
-
-  bool has_this_properties() { return has_this_properties_; }
-  void set_has_this_properties(bool flag) { has_this_properties_ = flag; }
-
-  bool has_global_object() {
+  bool has_global_object() const {
     return !closure().is_null() && (closure()->context()->global() != NULL);
   }
 
-  GlobalObject* global_object() {
+  GlobalObject* global_object() const {
     return has_global_object() ? closure()->context()->global() : NULL;
   }
 
-  bool has_globals() { return has_globals_; }
-  void set_has_globals(bool flag) { has_globals_ = flag; }
+  // Accessors for the different compilation modes.
+  bool IsOptimizing() const { return mode_ == OPTIMIZE; }
+  bool IsOptimizable() const { return mode_ == BASE; }
+  void SetOptimizing(int osr_ast_id) {
+    SetMode(OPTIMIZE);
+    osr_ast_id_ = osr_ast_id;
+  }
+  void DisableOptimization();
 
-  // Derived accessors.
-  Scope* scope() { return function()->scope(); }
-
- private:
-  void Initialize() {
-    has_this_properties_ = false;
-    has_globals_ = false;
+  // Deoptimization support.
+  bool HasDeoptimizationSupport() const {
+    return SupportsDeoptimization::decode(flags_);
+  }
+  void EnableDeoptimizationSupport() {
+    ASSERT(IsOptimizable());
+    flags_ |= SupportsDeoptimization::encode(true);
   }
 
+  // Determine whether or not we can adaptively optimize.
+  bool AllowOptimize() {
+    return V8::UseCrankshaft() && !closure_.is_null();
+  }
+
+  // Disable all optimization attempts of this info for the rest of the
+  // current compilation pipeline.
+  void AbortOptimization();
+
+ private:
+  Isolate* isolate_;
+
+  // Compilation mode.
+  // BASE is generated by the full codegen, optionally prepared for bailouts.
+  // OPTIMIZE is optimized code generated by the Hydrogen-based backend.
+  // NONOPT is generated by the full codegen or the classic backend
+  //   and is not prepared for recompilation/bailouts. These functions
+  //   are never recompiled.
+  enum Mode {
+    BASE,
+    OPTIMIZE,
+    NONOPT
+  };
+
+  CompilationInfo() : function_(NULL) {}
+
+  void Initialize(Mode mode) {
+    mode_ = V8::UseCrankshaft() ? mode : NONOPT;
+    ASSERT(!script_.is_null());
+    if (script_->type()->value() == Script::TYPE_NATIVE) {
+      MarkAsNative();
+    }
+    if (!shared_info_.is_null()) {
+      ASSERT(language_mode() == CLASSIC_MODE);
+      SetLanguageMode(shared_info_->language_mode());
+    }
+  }
+
+  void SetMode(Mode mode) {
+    ASSERT(V8::UseCrankshaft());
+    mode_ = mode;
+  }
+
+  // Flags using template class BitField<type, start, length>.  All are
+  // false by default.
+  //
+  // Compilation is either eager or lazy.
+  class IsLazy:   public BitField<bool, 0, 1> {};
+  // Flags that can be set for eager compilation.
+  class IsEval:   public BitField<bool, 1, 1> {};
+  class IsGlobal: public BitField<bool, 2, 1> {};
+  // Flags that can be set for lazy compilation.
+  class IsInLoop: public BitField<bool, 3, 1> {};
+  // Strict mode - used in eager compilation.
+  class LanguageModeField: public BitField<LanguageMode, 4, 2> {};
+  // Is this a function from our natives.
+  class IsNative: public BitField<bool, 6, 1> {};
+  // Is this code being compiled with support for deoptimization..
+  class SupportsDeoptimization: public BitField<bool, 7, 1> {};
+  // If compiling for debugging produce just full code matching the
+  // initial mode setting.
+  class IsCompilingForDebugging: public BitField<bool, 8, 1> {};
+
+
+  unsigned flags_;
+
+  // Fields filled in by the compilation pipeline.
+  // AST filled in by the parser.
+  FunctionLiteral* function_;
+  // The scope of the function literal as a convenience.  Set to indicate
+  // that scopes have been analyzed.
+  Scope* scope_;
+  // The global scope provided as a convenience.
+  Scope* global_scope_;
+  // The compiled code.
+  Handle<Code> code_;
+
+  // Possible initial inputs to the compilation process.
   Handle<JSFunction> closure_;
   Handle<SharedFunctionInfo> shared_info_;
   Handle<Script> script_;
 
-  FunctionLiteral* function_;
+  // Fields possibly needed for eager compilation, NULL by default.
+  v8::Extension* extension_;
+  ScriptDataImpl* pre_parse_data_;
 
-  bool is_eval_;
-  int loop_nesting_;
+  // The context of the caller is needed for eval code, and will be a null
+  // handle otherwise.
+  Handle<Context> calling_context_;
 
-  Handle<Object> receiver_;
-
-  bool has_this_properties_;
-  bool has_globals_;
+  // Compilation mode flag and whether deoptimization is allowed.
+  Mode mode_;
+  int osr_ast_id_;
 
   DISALLOW_COPY_AND_ASSIGN(CompilationInfo);
 };
@@ -163,17 +268,21 @@ class CompilationInfo BASE_EMBEDDED {
 // functions, they will be compiled and allocated as part of the compilation
 // of the source code.
 
-// Please note this interface returns shared function infos.
-// This means you need to call Factory::NewFunctionFromSharedFunctionInfo
-// before you have a real function with a context.
+// Please note this interface returns shared function infos.  This means you
+// need to call Factory::NewFunctionFromSharedFunctionInfo before you have a
+// real function with a context.
 
 class Compiler : public AllStatic {
  public:
-  enum ValidationState { VALIDATE_JSON, DONT_VALIDATE_JSON };
+  // Default maximum number of function optimization attempts before we
+  // give up.
+  static const int kDefaultMaxOptCount = 10;
 
-  // All routines return a JSFunction.
-  // If an error occurs an exception is raised and
-  // the return handle contains NULL.
+  static const int kMaxInliningLevels = 3;
+
+  // All routines return a SharedFunctionInfo.
+  // If an error occurs an exception is raised and the return handle
+  // contains NULL.
 
   // Compile a String source within a context.
   static Handle<SharedFunctionInfo> Compile(Handle<String> source,
@@ -189,19 +298,17 @@ class Compiler : public AllStatic {
   static Handle<SharedFunctionInfo> CompileEval(Handle<String> source,
                                                 Handle<Context> context,
                                                 bool is_global,
-                                                ValidationState validation);
+                                                LanguageMode language_mode,
+                                                int scope_position);
 
-  // Compile from function info (used for lazy compilation). Returns
-  // true on success and false if the compilation resulted in a stack
-  // overflow.
+  // Compile from function info (used for lazy compilation). Returns true on
+  // success and false if the compilation resulted in a stack overflow.
   static bool CompileLazy(CompilationInfo* info);
 
-  // Compile a shared function info object (the function is possibly
-  // lazily compiled). Called recursively from a backend code
-  // generator 'caller' to build the shared function info.
+  // Compile a shared function info object (the function is possibly lazily
+  // compiled).
   static Handle<SharedFunctionInfo> BuildFunctionInfo(FunctionLiteral* node,
-                                                      Handle<Script> script,
-                                                      AstVisitor* caller);
+                                                      Handle<Script> script);
 
   // Set the function info for a newly compiled function.
   static void SetFunctionInfo(Handle<SharedFunctionInfo> function_info,
@@ -209,35 +316,13 @@ class Compiler : public AllStatic {
                               bool is_toplevel,
                               Handle<Script> script);
 
- private:
-  static void RecordFunctionCompilation(Logger::LogEventsAndTags tag,
-                                        Handle<String> name,
-                                        Handle<String> inferred_name,
-                                        int start_position,
-                                        Handle<Script> script,
-                                        Handle<Code> code);
-};
-
-
 #ifdef ENABLE_DEBUGGER_SUPPORT
-
-Handle<Code> MakeCodeForLiveEdit(CompilationInfo* info);
-
+  static bool MakeCodeForLiveEdit(CompilationInfo* info);
 #endif
 
-
-// During compilation we need a global list of handles to constants
-// for frame elements.  When the zone gets deleted, we make sure to
-// clear this list of handles as well.
-class CompilationZoneScope : public ZoneScope {
- public:
-  explicit CompilationZoneScope(ZoneScopeMode mode) : ZoneScope(mode) { }
-  virtual ~CompilationZoneScope() {
-    if (ShouldDeleteOnExit()) {
-      FrameElement::ClearConstantList();
-      Result::ClearConstantList();
-    }
-  }
+  static void RecordFunctionCompilation(Logger::LogEventsAndTags tag,
+                                        CompilationInfo* info,
+                                        Handle<SharedFunctionInfo> shared);
 };
 
 

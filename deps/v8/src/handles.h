@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,7 @@
 #ifndef V8_HANDLES_H_
 #define V8_HANDLES_H_
 
+#include "allocation.h"
 #include "apiutils.h"
 
 namespace v8 {
@@ -39,11 +40,12 @@ namespace internal {
 // Handles are only valid within a HandleScope.
 // When a handle is created for an object a cell is allocated in the heap.
 
-template<class T>
+template<typename T>
 class Handle {
  public:
   INLINE(explicit Handle(T** location)) { location_ = location; }
   INLINE(explicit Handle(T* obj));
+  INLINE(Handle(T* obj, Isolate* isolate));
 
   INLINE(Handle()) : location_(NULL) {}
 
@@ -82,7 +84,7 @@ class Handle {
   }
 
   static Handle<T> null() { return Handle<T>(); }
-  bool is_null() { return location_ == NULL; }
+  bool is_null() const { return location_ == NULL; }
 
   // Closes the given scope, but lets this handle escape. See
   // implementation in api.h.
@@ -107,38 +109,33 @@ class Handle {
 // for which the handle scope has been deleted is undefined.
 class HandleScope {
  public:
-  HandleScope() : previous_(current_) {
-    current_.extensions = 0;
-  }
+  inline HandleScope();
+  explicit inline HandleScope(Isolate* isolate);
 
-  ~HandleScope() {
-    Leave(&previous_);
-  }
+  inline ~HandleScope();
 
   // Counts the number of allocated handles.
   static int NumberOfHandles();
 
   // Creates a new handle with the given value.
   template <typename T>
-  static inline T** CreateHandle(T* value) {
-    internal::Object** cur = current_.next;
-    if (cur == current_.limit) cur = Extend();
-    // Update the current next field, set the value in the created
-    // handle, and return the result.
-    ASSERT(cur < current_.limit);
-    current_.next = cur + 1;
-
-    T** result = reinterpret_cast<T**>(cur);
-    *result = value;
-    return result;
-  }
+  static inline T** CreateHandle(T* value, Isolate* isolate);
 
   // Deallocates any extensions used by the current scope.
-  static void DeleteExtensions();
+  static void DeleteExtensions(Isolate* isolate);
 
-  static Address current_extensions_address();
   static Address current_next_address();
   static Address current_limit_address();
+  static Address current_level_address();
+
+  // Closes the HandleScope (invalidating all handles
+  // created in the scope of the HandleScope) and returns
+  // a Handle backed by the parent scope holding the
+  // value of the argument handle.
+  template <typename T>
+  Handle<T> CloseAndEscape(Handle<T> handle_value);
+
+  Isolate* isolate() { return isolate_; }
 
  private:
   // Prevent heap allocation or illegal handle scopes.
@@ -147,28 +144,11 @@ class HandleScope {
   void* operator new(size_t size);
   void operator delete(void* size_t);
 
-  static v8::ImplementationUtilities::HandleScopeData current_;
-  const v8::ImplementationUtilities::HandleScopeData previous_;
+  inline void CloseScope();
 
-  // Pushes a fresh handle scope to be used when allocating new handles.
-  static void Enter(
-      v8::ImplementationUtilities::HandleScopeData* previous) {
-    *previous = current_;
-    current_.extensions = 0;
-  }
-
-  // Re-establishes the previous scope state. Should be called only
-  // once, and only for the current scope.
-  static void Leave(
-      const v8::ImplementationUtilities::HandleScopeData* previous) {
-    if (current_.extensions > 0) {
-      DeleteExtensions();
-    }
-    current_ = *previous;
-#ifdef DEBUG
-    ZapRange(current_.next, current_.limit);
-#endif
-  }
+  Isolate* isolate_;
+  Object** prev_next_;
+  Object** prev_limit_;
 
   // Extend the handle scope making room for more handles.
   static internal::Object** Extend();
@@ -187,13 +167,6 @@ class HandleScope {
 // an object of expected type, or the handle is an error if running out
 // of space or encountering an internal error.
 
-void NormalizeProperties(Handle<JSObject> object,
-                         PropertyNormalizationMode mode,
-                         int expected_additional_properties);
-void NormalizeElements(Handle<JSObject> object);
-void TransformToFastProperties(Handle<JSObject> object,
-                               int unused_property_fields);
-
 // Flattens a string.
 void FlattenString(Handle<String> str);
 
@@ -201,68 +174,32 @@ void FlattenString(Handle<String> str);
 // string.
 Handle<String> FlattenGetString(Handle<String> str);
 
-Handle<Object> SetProperty(Handle<JSObject> object,
-                           Handle<String> key,
-                           Handle<Object> value,
-                           PropertyAttributes attributes);
-
 Handle<Object> SetProperty(Handle<Object> object,
                            Handle<Object> key,
                            Handle<Object> value,
-                           PropertyAttributes attributes);
+                           PropertyAttributes attributes,
+                           StrictModeFlag strict_mode);
 
 Handle<Object> ForceSetProperty(Handle<JSObject> object,
                                 Handle<Object> key,
                                 Handle<Object> value,
                                 PropertyAttributes attributes);
 
-Handle<Object> SetNormalizedProperty(Handle<JSObject> object,
-                                     Handle<String> key,
-                                     Handle<Object> value,
-                                     PropertyDetails details);
-
 Handle<Object> ForceDeleteProperty(Handle<JSObject> object,
                                    Handle<Object> key);
 
-Handle<Object> IgnoreAttributesAndSetLocalProperty(Handle<JSObject> object,
-                                                   Handle<String> key,
-                                                   Handle<Object> value,
-    PropertyAttributes attributes);
-
-Handle<Object> SetPropertyWithInterceptor(Handle<JSObject> object,
-                                          Handle<String> key,
-                                          Handle<Object> value,
-                                          PropertyAttributes attributes);
-
-Handle<Object> SetElement(Handle<JSObject> object,
-                          uint32_t index,
-                          Handle<Object> value);
-
-Handle<Object> GetProperty(Handle<JSObject> obj,
+Handle<Object> GetProperty(Handle<JSReceiver> obj,
                            const char* name);
 
 Handle<Object> GetProperty(Handle<Object> obj,
                            Handle<Object> key);
-
-Handle<Object> GetElement(Handle<Object> obj,
-                          uint32_t index);
 
 Handle<Object> GetPropertyWithInterceptor(Handle<JSObject> receiver,
                                           Handle<JSObject> holder,
                                           Handle<String> name,
                                           PropertyAttributes* attributes);
 
-Handle<Object> GetPrototype(Handle<Object> obj);
-
 Handle<Object> SetPrototype(Handle<JSObject> obj, Handle<Object> value);
-
-// Return the object's hidden properties object. If the object has no hidden
-// properties and create_if_needed is true, then a new hidden property object
-// will be allocated. Otherwise the Heap::undefined_value is returned.
-Handle<Object> GetHiddenProperties(Handle<JSObject> obj, bool create_if_needed);
-
-Handle<Object> DeleteElement(Handle<JSObject> obj, uint32_t index);
-Handle<Object> DeleteProperty(Handle<JSObject> obj, Handle<String> prop);
 
 Handle<Object> LookupSingleCharacterStringFromCode(uint32_t index);
 
@@ -287,21 +224,23 @@ Handle<FixedArray> CalculateLineEnds(Handle<String> string,
 int GetScriptLineNumber(Handle<Script> script, int code_position);
 // The safe version does not make heap allocations but may work much slower.
 int GetScriptLineNumberSafe(Handle<Script> script, int code_position);
+int GetScriptColumnNumber(Handle<Script> script, int code_position);
 
 // Computes the enumerable keys from interceptors. Used for debug mirrors and
 // by GetKeysInFixedArrayFor below.
-v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSObject> receiver,
+v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSReceiver> receiver,
                                                  Handle<JSObject> object);
-v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSObject> receiver,
+v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSReceiver> receiver,
                                                    Handle<JSObject> object);
 
 enum KeyCollectionType { LOCAL_ONLY, INCLUDE_PROTOS };
 
 // Computes the enumerable keys for a JSObject. Used for implementing
 // "for (n in object) { }".
-Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSObject> object,
-                                          KeyCollectionType type);
-Handle<JSArray> GetKeysFor(Handle<JSObject> object);
+Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSReceiver> object,
+                                          KeyCollectionType type,
+                                          bool* threw);
+Handle<JSArray> GetKeysFor(Handle<JSReceiver> object, bool* threw);
 Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
                                        bool cache_result);
 
@@ -314,7 +253,6 @@ Handle<String> SubString(Handle<String> str,
                          int start,
                          int end,
                          PretenureFlag pretenure = NOT_TENURED);
-
 
 // Sets the expected number of properties for the function's instances.
 void SetExpectedNofProperties(Handle<JSFunction> func, int nof);
@@ -334,24 +272,15 @@ Handle<JSGlobalProxy> ReinitializeJSGlobalProxy(
 Handle<Object> SetPrototype(Handle<JSFunction> function,
                             Handle<Object> prototype);
 
+Handle<ObjectHashSet> ObjectHashSetAdd(Handle<ObjectHashSet> table,
+                                       Handle<Object> key);
 
-// Does lazy compilation of the given function. Returns true on success and
-// false if the compilation resulted in a stack overflow.
-enum ClearExceptionFlag { KEEP_EXCEPTION, CLEAR_EXCEPTION };
+Handle<ObjectHashSet> ObjectHashSetRemove(Handle<ObjectHashSet> table,
+                                          Handle<Object> key);
 
-bool EnsureCompiled(Handle<SharedFunctionInfo> shared,
-                    ClearExceptionFlag flag);
-
-bool CompileLazyShared(Handle<SharedFunctionInfo> shared,
-                       ClearExceptionFlag flag);
-
-bool CompileLazy(Handle<JSFunction> function,
-                 Handle<Object> receiver,
-                 ClearExceptionFlag flag);
-
-bool CompileLazyInLoop(Handle<JSFunction> function,
-                       Handle<Object> receiver,
-                       ClearExceptionFlag flag);
+Handle<ObjectHashTable> PutIntoObjectHashTable(Handle<ObjectHashTable> table,
+                                               Handle<Object> key,
+                                               Handle<Object> value);
 
 class NoHandleAllocation BASE_EMBEDDED {
  public:
@@ -362,28 +291,9 @@ class NoHandleAllocation BASE_EMBEDDED {
   inline NoHandleAllocation();
   inline ~NoHandleAllocation();
  private:
-  int extensions_;
+  int level_;
 #endif
 };
-
-
-// ----------------------------------------------------------------------------
-
-
-// Stack allocated wrapper call for optimizing adding multiple
-// properties to an object.
-class OptimizedObjectForAddingMultipleProperties BASE_EMBEDDED {
- public:
-  OptimizedObjectForAddingMultipleProperties(Handle<JSObject> object,
-                                             int expected_property_count,
-                                             bool condition = true);
-  ~OptimizedObjectForAddingMultipleProperties();
- private:
-  bool has_been_transformed_;  // Tells whether the object has been transformed.
-  int unused_property_fields_;  // Captures the unused number of field.
-  Handle<JSObject> object_;    // The object being optimized.
-};
-
 
 } }  // namespace v8::internal
 

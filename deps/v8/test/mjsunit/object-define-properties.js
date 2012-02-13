@@ -26,7 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Tests the Object.defineProperties method - ES 15.2.3.7
-// Note that the internal DefineOwnProperty method is tested through 
+// Note that the internal DefineOwnProperty method is tested through
 // object-define-property.js, this file only contains tests specific for
 // Object.defineProperties. Also note that object-create.js contains
 // a range of indirect tests on this method since Object.create uses
@@ -54,3 +54,19 @@ var x = Object.defineProperties(obj, desc);
 
 assertEquals(x.foo, 10);
 assertEquals(x.bar, 42);
+
+
+// Make sure that all property descriptors are calculated before any
+// modifications are done.
+
+var object = {};
+
+assertThrows(function() {
+    Object.defineProperties(object, {
+      foo: { value: 1 },
+      bar: { value: 2, get: function() { return 3; } }
+    });
+  }, TypeError);
+
+assertEquals(undefined, object.foo);
+assertEquals(undefined, object.bar);

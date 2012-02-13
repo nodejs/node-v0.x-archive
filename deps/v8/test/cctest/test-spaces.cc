@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -32,7 +32,9 @@
 
 using namespace v8::internal;
 
+#if 0
 static void VerifyRegionMarking(Address page_start) {
+#ifdef ENABLE_CARDMARKING_WRITE_BARRIER
   Page* p = Page::FromAddress(page_start);
 
   p->SetRegionMarks(Page::kAllRegionsCleanMarks);
@@ -54,9 +56,13 @@ static void VerifyRegionMarking(Address page_start) {
        addr += kPointerSize) {
     CHECK(Page::FromAddress(addr)->IsRegionDirty(addr));
   }
+#endif
 }
+#endif
 
 
+// TODO(gc) you can no longer allocate pages like this. Details are hidden.
+#if 0
 TEST(Page) {
   byte* mem = NewArray<byte>(2*Page::kPageSize);
   CHECK(mem != NULL);
@@ -65,6 +71,8 @@ TEST(Page) {
   Address page_start = RoundUp(start, Page::kPageSize);
 
   Page* p = Page::FromAddress(page_start);
+  // Initialized Page has heap pointer, normally set by memory_allocator.
+  p->heap_ = HEAP;
   CHECK(p->address() == page_start);
   CHECK(p->is_valid());
 
@@ -87,132 +95,156 @@ TEST(Page) {
 
   DeleteArray(mem);
 }
+#endif
+
+
+namespace v8 {
+namespace internal {
+
+// Temporarily sets a given allocator in an isolate.
+class TestMemoryAllocatorScope {
+ public:
+  TestMemoryAllocatorScope(Isolate* isolate, MemoryAllocator* allocator)
+      : isolate_(isolate),
+        old_allocator_(isolate->memory_allocator_) {
+    isolate->memory_allocator_ = allocator;
+  }
+
+  ~TestMemoryAllocatorScope() {
+    isolate_->memory_allocator_ = old_allocator_;
+  }
+
+ private:
+  Isolate* isolate_;
+  MemoryAllocator* old_allocator_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestMemoryAllocatorScope);
+};
+
+} }  // namespace v8::internal
 
 
 TEST(MemoryAllocator) {
-  CHECK(Heap::ConfigureHeapDefault());
-  CHECK(MemoryAllocator::Setup(Heap::MaxReserved()));
+  OS::SetUp();
+  Isolate* isolate = Isolate::Current();
+  isolate->InitializeLoggingAndCounters();
+  Heap* heap = isolate->heap();
+  CHECK(isolate->heap()->ConfigureHeapDefault());
 
-  OldSpace faked_space(Heap::MaxReserved(), OLD_POINTER_SPACE, NOT_EXECUTABLE);
+  MemoryAllocator* memory_allocator = new MemoryAllocator(isolate);
+  CHECK(memory_allocator->SetUp(heap->MaxReserved(),
+                                heap->MaxExecutableSize()));
+
   int total_pages = 0;
-  int requested = 2;
-  int allocated;
-  // If we request two pages, we should get one or two.
+  OldSpace faked_space(heap,
+                       heap->MaxReserved(),
+                       OLD_POINTER_SPACE,
+                       NOT_EXECUTABLE);
   Page* first_page =
-      MemoryAllocator::AllocatePages(requested, &allocated, &faked_space);
-  CHECK(first_page->is_valid());
-  CHECK(allocated > 0 && allocated <= 2);
-  total_pages += allocated;
+      memory_allocator->AllocatePage(&faked_space, NOT_EXECUTABLE);
 
-  Page* last_page = first_page;
-  for (Page* p = first_page; p->is_valid(); p = p->next_page()) {
-    CHECK(MemoryAllocator::IsPageInSpace(p, &faked_space));
-    last_page = p;
+  first_page->InsertAfter(faked_space.anchor()->prev_page());
+  CHECK(first_page->is_valid());
+  CHECK(first_page->next_page() == faked_space.anchor());
+  total_pages++;
+
+  for (Page* p = first_page; p != faked_space.anchor(); p = p->next_page()) {
+    CHECK(p->owner() == &faked_space);
   }
 
-  // Again, we should get one or two pages.
-  Page* others =
-      MemoryAllocator::AllocatePages(requested, &allocated, &faked_space);
-  CHECK(others->is_valid());
-  CHECK(allocated > 0 && allocated <= 2);
-  total_pages += allocated;
-
-  MemoryAllocator::SetNextPage(last_page, others);
+  // Again, we should get n or n - 1 pages.
+  Page* other =
+      memory_allocator->AllocatePage(&faked_space, NOT_EXECUTABLE);
+  CHECK(other->is_valid());
+  total_pages++;
+  other->InsertAfter(first_page);
   int page_count = 0;
-  for (Page* p = first_page; p->is_valid(); p = p->next_page()) {
-    CHECK(MemoryAllocator::IsPageInSpace(p, &faked_space));
+  for (Page* p = first_page; p != faked_space.anchor(); p = p->next_page()) {
+    CHECK(p->owner() == &faked_space);
     page_count++;
   }
   CHECK(total_pages == page_count);
 
   Page* second_page = first_page->next_page();
   CHECK(second_page->is_valid());
-
-  // Freeing pages at the first chunk starting at or after the second page
-  // should free the entire second chunk.  It will return the last page in the
-  // first chunk (if the second page was in the first chunk) or else an
-  // invalid page (if the second page was the start of the second chunk).
-  Page* free_return = MemoryAllocator::FreePages(second_page);
-  CHECK(free_return == last_page || !free_return->is_valid());
-  MemoryAllocator::SetNextPage(first_page, free_return);
-
-  // Freeing pages in the first chunk starting at the first page should free
-  // the first chunk and return an invalid page.
-  Page* invalid_page = MemoryAllocator::FreePages(first_page);
-  CHECK(!invalid_page->is_valid());
-
-  MemoryAllocator::TearDown();
+  memory_allocator->Free(first_page);
+  memory_allocator->Free(second_page);
+  memory_allocator->TearDown();
+  delete memory_allocator;
 }
 
 
 TEST(NewSpace) {
-  CHECK(Heap::ConfigureHeapDefault());
-  CHECK(MemoryAllocator::Setup(Heap::MaxReserved()));
+  OS::SetUp();
+  Isolate* isolate = Isolate::Current();
+  isolate->InitializeLoggingAndCounters();
+  Heap* heap = isolate->heap();
+  CHECK(heap->ConfigureHeapDefault());
+  MemoryAllocator* memory_allocator = new MemoryAllocator(isolate);
+  CHECK(memory_allocator->SetUp(heap->MaxReserved(),
+                                heap->MaxExecutableSize()));
+  TestMemoryAllocatorScope test_scope(isolate, memory_allocator);
 
-  NewSpace new_space;
+  NewSpace new_space(heap);
 
-  void* chunk =
-      MemoryAllocator::ReserveInitialChunk(4 * Heap::ReservedSemiSpaceSize());
-  CHECK(chunk != NULL);
-  Address start = RoundUp(static_cast<Address>(chunk),
-                          2 * Heap::ReservedSemiSpaceSize());
-  CHECK(new_space.Setup(start, 2 * Heap::ReservedSemiSpaceSize()));
-  CHECK(new_space.HasBeenSetup());
+  CHECK(new_space.SetUp(HEAP->ReservedSemiSpaceSize(),
+                        HEAP->ReservedSemiSpaceSize()));
+  CHECK(new_space.HasBeenSetUp());
 
   while (new_space.Available() >= Page::kMaxHeapObjectSize) {
-    Object* obj = new_space.AllocateRaw(Page::kMaxHeapObjectSize);
-    CHECK(!obj->IsFailure());
+    Object* obj =
+        new_space.AllocateRaw(Page::kMaxHeapObjectSize)->ToObjectUnchecked();
     CHECK(new_space.Contains(HeapObject::cast(obj)));
   }
 
   new_space.TearDown();
-  MemoryAllocator::TearDown();
+  memory_allocator->TearDown();
+  delete memory_allocator;
 }
 
 
 TEST(OldSpace) {
-  CHECK(Heap::ConfigureHeapDefault());
-  CHECK(MemoryAllocator::Setup(Heap::MaxReserved()));
+  OS::SetUp();
+  Isolate* isolate = Isolate::Current();
+  isolate->InitializeLoggingAndCounters();
+  Heap* heap = isolate->heap();
+  CHECK(heap->ConfigureHeapDefault());
+  MemoryAllocator* memory_allocator = new MemoryAllocator(isolate);
+  CHECK(memory_allocator->SetUp(heap->MaxReserved(),
+                                heap->MaxExecutableSize()));
+  TestMemoryAllocatorScope test_scope(isolate, memory_allocator);
 
-  OldSpace* s = new OldSpace(Heap::MaxOldGenerationSize(),
+  OldSpace* s = new OldSpace(heap,
+                             heap->MaxOldGenerationSize(),
                              OLD_POINTER_SPACE,
                              NOT_EXECUTABLE);
   CHECK(s != NULL);
 
-  void* chunk =
-      MemoryAllocator::ReserveInitialChunk(4 * Heap::ReservedSemiSpaceSize());
-  CHECK(chunk != NULL);
-  Address start = static_cast<Address>(chunk);
-  size_t size = RoundUp(start, 2 * Heap::ReservedSemiSpaceSize()) - start;
-
-  CHECK(s->Setup(start, size));
+  CHECK(s->SetUp());
 
   while (s->Available() > 0) {
-    Object* obj = s->AllocateRaw(Page::kMaxHeapObjectSize);
-    CHECK(!obj->IsFailure());
+    s->AllocateRaw(Page::kMaxHeapObjectSize)->ToObjectUnchecked();
   }
 
   s->TearDown();
   delete s;
-  MemoryAllocator::TearDown();
+  memory_allocator->TearDown();
+  delete memory_allocator;
 }
 
 
 TEST(LargeObjectSpace) {
-  CHECK(Heap::Setup(false));
+  v8::V8::Initialize();
 
-  LargeObjectSpace* lo = Heap::lo_space();
+  LargeObjectSpace* lo = HEAP->lo_space();
   CHECK(lo != NULL);
 
-  Map* faked_map = reinterpret_cast<Map*>(HeapObject::FromAddress(0));
   int lo_size = Page::kPageSize;
 
-  Object* obj = lo->AllocateRaw(lo_size);
-  CHECK(!obj->IsFailure());
+  Object* obj = lo->AllocateRaw(lo_size, NOT_EXECUTABLE)->ToObjectUnchecked();
   CHECK(obj->IsHeapObject());
 
   HeapObject* ho = HeapObject::cast(obj);
-  ho->set_map(faked_map);
 
   CHECK(lo->Contains(HeapObject::cast(obj)));
 
@@ -221,20 +253,14 @@ TEST(LargeObjectSpace) {
   CHECK(lo->Contains(ho));
 
   while (true) {
-    int available = lo->Available();
-    obj = lo->AllocateRaw(lo_size);
-    if (obj->IsFailure()) break;
-    HeapObject::cast(obj)->set_map(faked_map);
+    intptr_t available = lo->Available();
+    { MaybeObject* maybe_obj = lo->AllocateRaw(lo_size, NOT_EXECUTABLE);
+      if (!maybe_obj->ToObject(&obj)) break;
+    }
     CHECK(lo->Available() < available);
   };
 
   CHECK(!lo->IsEmpty());
 
-  obj = lo->AllocateRaw(lo_size);
-  CHECK(obj->IsFailure());
-
-  lo->TearDown();
-  delete lo;
-
-  MemoryAllocator::TearDown();
+  CHECK(lo->AllocateRaw(lo_size, NOT_EXECUTABLE)->IsFailure());
 }

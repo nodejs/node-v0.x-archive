@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -58,10 +58,13 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
           return kVisitConsString;
         }
 
+      case kSlicedStringTag:
+        return kVisitSlicedString;
+
       case kExternalStringTag:
         return GetVisitorIdForSize(kVisitDataObject,
                                    kVisitDataObjectGeneric,
-                                   ExternalString::kSize);
+                                   instance_size);
     }
     UNREACHABLE();
   }
@@ -70,8 +73,14 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case BYTE_ARRAY_TYPE:
       return kVisitByteArray;
 
+    case FREE_SPACE_TYPE:
+      return kVisitFreeSpace;
+
     case FIXED_ARRAY_TYPE:
       return kVisitFixedArray;
+
+    case FIXED_DOUBLE_ARRAY_TYPE:
+      return kVisitFixedDoubleArray;
 
     case ODDBALL_TYPE:
       return kVisitOddball;
@@ -85,13 +94,39 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case JS_GLOBAL_PROPERTY_CELL_TYPE:
       return kVisitPropertyCell;
 
+    case JS_SET_TYPE:
+      return GetVisitorIdForSize(kVisitStruct,
+                                 kVisitStructGeneric,
+                                 JSSet::kSize);
+
+    case JS_MAP_TYPE:
+      return GetVisitorIdForSize(kVisitStruct,
+                                 kVisitStructGeneric,
+                                 JSMap::kSize);
+
+    case JS_WEAK_MAP_TYPE:
+      return kVisitJSWeakMap;
+
+    case JS_REGEXP_TYPE:
+      return kVisitJSRegExp;
+
     case SHARED_FUNCTION_INFO_TYPE:
       return kVisitSharedFunctionInfo;
 
-    case PROXY_TYPE:
+    case JS_PROXY_TYPE:
+      return GetVisitorIdForSize(kVisitStruct,
+                                 kVisitStructGeneric,
+                                 JSProxy::kSize);
+
+    case JS_FUNCTION_PROXY_TYPE:
+      return GetVisitorIdForSize(kVisitStruct,
+                                 kVisitStructGeneric,
+                                 JSFunctionProxy::kSize);
+
+    case FOREIGN_TYPE:
       return GetVisitorIdForSize(kVisitDataObject,
                                  kVisitDataObjectGeneric,
-                                 Proxy::kSize);
+                                 Foreign::kSize);
 
     case FILLER_TYPE:
       return kVisitDataObjectGeneric;
@@ -100,10 +135,10 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case JS_CONTEXT_EXTENSION_OBJECT_TYPE:
     case JS_VALUE_TYPE:
     case JS_ARRAY_TYPE:
-    case JS_REGEXP_TYPE:
     case JS_GLOBAL_PROXY_TYPE:
     case JS_GLOBAL_OBJECT_TYPE:
     case JS_BUILTINS_OBJECT_TYPE:
+    case JS_MESSAGE_OBJECT_TYPE:
       return GetVisitorIdForSize(kVisitJSObject,
                                  kVisitJSObjectGeneric,
                                  instance_size);
@@ -112,7 +147,7 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
       return kVisitJSFunction;
 
     case HEAP_NUMBER_TYPE:
-    case PIXEL_ARRAY_TYPE:
+    case EXTERNAL_PIXEL_ARRAY_TYPE:
     case EXTERNAL_BYTE_ARRAY_TYPE:
     case EXTERNAL_UNSIGNED_BYTE_ARRAY_TYPE:
     case EXTERNAL_SHORT_ARRAY_TYPE:
@@ -120,6 +155,7 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case EXTERNAL_INT_ARRAY_TYPE:
     case EXTERNAL_UNSIGNED_INT_ARRAY_TYPE:
     case EXTERNAL_FLOAT_ARRAY_TYPE:
+    case EXTERNAL_DOUBLE_ARRAY_TYPE:
       return GetVisitorIdForSize(kVisitDataObject,
                                  kVisitDataObjectGeneric,
                                  instance_size);

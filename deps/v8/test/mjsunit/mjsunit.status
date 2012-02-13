@@ -1,4 +1,4 @@
-# Copyright 2008 the V8 project authors. All rights reserved.
+# Copyright 2011 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -30,21 +30,45 @@ prefix mjsunit
 # All tests in the bug directory are expected to fail.
 bugs: FAIL
 
+##############################################################################
+# Fails.
+regress/regress-1119: FAIL
+
+##############################################################################
+
+# Issue 1845: http://code.google.com/p/v8/issues/detail?id=1845
+harmony/proxies-example-membrane: SKIP
+
+# NewGC: BUG(1719) slow to collect arrays over several contexts.
+regress/regress-524: SKIP
+
+##############################################################################
+# Too slow in debug mode with --stress-opt
+compiler/regress-stacktrace-methods: PASS, SKIP if $mode == debug
+compiler/regress-funcaller: PASS, SKIP if $mode == debug
+regress/regress-create-exception: PASS, SKIP if $mode == debug
+
+##############################################################################
 # This one uses a built-in that's only present in debug mode. It takes
-# too long to run in debug mode on ARM.
-fuzz-natives: PASS, SKIP if ($mode == release || $arch == arm)
+# too long to run in debug mode on ARM and MIPS.
+fuzz-natives: PASS, SKIP if ($mode == release || $arch == arm || $arch == mips)
 
 big-object-literal: PASS, SKIP if ($arch == arm)
 
 # Issue 488: this test sometimes times out.
 array-constructor: PASS || TIMEOUT
 
-# Very slow on ARM, contains no architecture dependent code.
-unicode-case-overoptimization: PASS, TIMEOUT if ($arch == arm)
+# Very slow on ARM and MIPS, contains no architecture dependent code.
+unicode-case-overoptimization: PASS, TIMEOUT if ($arch == arm || $arch == mips)
 
 # Skip long running test in debug and allow it to timeout in release mode.
 regress/regress-524: (PASS || TIMEOUT), SKIP if $mode == debug
 
+# Stack manipulations in LiveEdit are buggy - see bug 915
+debug-liveedit-check-stack: SKIP
+debug-liveedit-patch-positions-replace: SKIP
+
+##############################################################################
 [ $arch == arm ]
 
 # Slow tests which times out in debug mode.
@@ -56,20 +80,91 @@ array-constructor: PASS, SKIP if $mode == debug
 unicode-test: PASS, (PASS || FAIL) if $mode == debug
 
 # Times out often in release mode on ARM.
+compiler/regress-stacktrace-methods: PASS, PASS || TIMEOUT if $mode == release
 array-splice: PASS || TIMEOUT
 
-# Skip long running test in debug mode on ARM.
-string-indexof-2: PASS, SKIP if $mode == debug
+# Long running test.
+mirror-object: PASS || TIMEOUT
+string-indexof-2: PASS || TIMEOUT
 
-# Stack manipulations in LiveEdit is implemented for ia32 only.
-debug-liveedit-check-stack: SKIP
+# BUG(3251035): Timeouts in long looping crankshaft optimization
+# tests. Skipping because having them timeout takes too long on the
+# buildbot.
+compiler/alloc-number: SKIP
+compiler/array-length: SKIP
+compiler/assignment-deopt: SKIP
+compiler/deopt-args: SKIP
+compiler/inline-compare: SKIP
+compiler/inline-global-access: SKIP
+compiler/optimized-function-calls: SKIP
+compiler/pic: SKIP
+compiler/property-calls: SKIP
+compiler/recursive-deopt: SKIP
+compiler/regress-4: SKIP
+compiler/regress-funcaller: SKIP
+compiler/regress-gvn: SKIP
+compiler/regress-rep-change: SKIP
+compiler/regress-arguments: SKIP
+compiler/regress-funarguments: SKIP
+compiler/regress-or: SKIP
+compiler/regress-3249650: SKIP
+compiler/simple-deopt: SKIP
+regress/regress-490: SKIP
+regress/regress-634: SKIP
+regress/regress-create-exception: SKIP
+regress/regress-3218915: SKIP
+regress/regress-3247124: SKIP
 
+# Requires bigger stack size in the Genesis and if stack size is increased,
+# the test requires too much time to run.  However, the problem test covers
+# should be platform-independent.
+regress/regress-1132: SKIP
+
+##############################################################################
 [ $arch == mips ]
 
-# Stack manipulations in LiveEdit is implemented for ia32 only.
-debug-liveedit-check-stack: SKIP
+# Slow tests which times out in debug mode.
+try: PASS, SKIP if $mode == debug
+debug-scripts-request: PASS, SKIP if $mode == debug
+array-constructor: PASS, SKIP if $mode == debug
 
-# Skip all tests on MIPS.
-*: SKIP
+# Times out often in release mode on MIPS.
+compiler/regress-stacktrace-methods: PASS, PASS || TIMEOUT if $mode == release
+array-splice: PASS || TIMEOUT
 
+# Long running test.
+mirror-object: PASS || TIMEOUT
+string-indexof-2: PASS || TIMEOUT
 
+# BUG(3251035): Timeouts in long looping crankshaft optimization
+# tests. Skipping because having them timeout takes too long on the
+# buildbot.
+compiler/alloc-number: SKIP
+compiler/array-length: SKIP
+compiler/assignment-deopt: SKIP
+compiler/deopt-args: SKIP
+compiler/inline-compare: SKIP
+compiler/inline-global-access: SKIP
+compiler/optimized-function-calls: SKIP
+compiler/pic: SKIP
+compiler/property-calls: SKIP
+compiler/recursive-deopt: SKIP
+compiler/regress-4: SKIP
+compiler/regress-funcaller: SKIP
+compiler/regress-gvn: SKIP
+compiler/regress-rep-change: SKIP
+compiler/regress-arguments: SKIP
+compiler/regress-funarguments: SKIP
+compiler/regress-or: SKIP
+compiler/regress-3249650: SKIP
+compiler/simple-deopt: SKIP
+regress/regress-490: SKIP
+regress/regress-634: SKIP
+regress/regress-create-exception: SKIP
+regress/regress-3218915: SKIP
+regress/regress-3247124: SKIP
+
+# Requires bigger stack size in the Genesis and if stack size is increased,
+# the test requires too much time to run.  However, the problem test covers
+# should be platform-independent.
+regress/regress-1132: SKIP

@@ -36,27 +36,34 @@
 
 #include "cpu.h"
 #include "macro-assembler.h"
-
-#ifndef __arm__
-#include "simulator-arm.h"  // for cache flushing.
-#endif
+#include "simulator.h"  // for cache flushing.
 
 namespace v8 {
 namespace internal {
 
-void CPU::Setup() {
+void CPU::SetUp() {
   CpuFeatures::Probe();
 }
 
 
+bool CPU::SupportsCrankshaft() {
+  return CpuFeatures::IsSupported(VFP3);
+}
+
+
 void CPU::FlushICache(void* start, size_t size) {
-#if !defined (__arm__)
+  // Nothing to do flushing no instructions.
+  if (size == 0) {
+    return;
+  }
+
+#if defined (USE_SIMULATOR)
   // Not generating ARM instructions for C-code. This means that we are
   // building an ARM emulator based target.  We should notify the simulator
   // that the Icache was flushed.
   // None of this code ends up in the snapshot so there are no issues
   // around whether or not to generate the code when building snapshots.
-  assembler::arm::Simulator::FlushICache(start, size);
+  Simulator::FlushICache(Isolate::Current()->simulator_i_cache(), start, size);
 #else
   // Ideally, we would call
   //   syscall(__ARM_NR_cacheflush, start,
@@ -68,62 +75,33 @@ void CPU::FlushICache(void* start, size_t size) {
   register uint32_t end asm("a2") =
       reinterpret_cast<uint32_t>(start) + size;
   register uint32_t flg asm("a3") = 0;
-  #ifdef __ARM_EABI__
-    #if defined (__arm__) && !defined(__thumb__)
-      // __arm__ may be defined in thumb mode.
-      register uint32_t scno asm("r7") = __ARM_NR_cacheflush;
-      asm volatile(
-          "swi 0x0"
-          : "=r" (beg)
-          : "0" (beg), "r" (end), "r" (flg), "r" (scno));
-    #else
-      // r7 is reserved by the EABI in thumb mode.
-      asm volatile(
-      "@   Enter ARM Mode  \n\t"
-          "adr r3, 1f      \n\t"
-          "bx  r3          \n\t"
-          ".ALIGN 4        \n\t"
-          ".ARM            \n"
-      "1:  push {r7}       \n\t"
-          "mov r7, %4      \n\t"
-          "swi 0x0         \n\t"
-          "pop {r7}        \n\t"
-      "@   Enter THUMB Mode\n\t"
-          "adr r3, 2f+1    \n\t"
-          "bx  r3          \n\t"
-          ".THUMB          \n"
-      "2:                  \n\t"
-          : "=r" (beg)
-          : "0" (beg), "r" (end), "r" (flg), "r" (__ARM_NR_cacheflush)
-          : "r3");
-    #endif
+  #if defined (__arm__) && !defined(__thumb__)
+    // __arm__ may be defined in thumb mode.
+    register uint32_t scno asm("r7") = __ARM_NR_cacheflush;
+    asm volatile(
+        "svc 0x0"
+        : "=r" (beg)
+        : "0" (beg), "r" (end), "r" (flg), "r" (scno));
   #else
-    #if defined (__arm__) && !defined(__thumb__)
-      // __arm__ may be defined in thumb mode.
-      asm volatile(
-          "swi %1"
-          : "=r" (beg)
-          : "i" (__ARM_NR_cacheflush), "0" (beg), "r" (end), "r" (flg));
-    #else
-      // Do not use the value of __ARM_NR_cacheflush in the inline assembly
-      // below, because the thumb mode value would be used, which would be
-      // wrong, since we switch to ARM mode before executing the swi instruction
-      asm volatile(
-      "@   Enter ARM Mode  \n\t"
-          "adr r3, 1f      \n\t"
-          "bx  r3          \n\t"
-          ".ALIGN 4        \n\t"
-          ".ARM            \n"
-      "1:  swi 0x9f0002    \n"
-      "@   Enter THUMB Mode\n\t"
-          "adr r3, 2f+1    \n\t"
-          "bx  r3          \n\t"
-          ".THUMB          \n"
-      "2:                  \n\t"
-          : "=r" (beg)
-          : "0" (beg), "r" (end), "r" (flg)
-          : "r3");
-    #endif
+    // r7 is reserved by the EABI in thumb mode.
+    asm volatile(
+    "@   Enter ARM Mode  \n\t"
+        "adr r3, 1f      \n\t"
+        "bx  r3          \n\t"
+        ".ALIGN 4        \n\t"
+        ".ARM            \n"
+    "1:  push {r7}       \n\t"
+        "mov r7, %4      \n\t"
+        "svc 0x0         \n\t"
+        "pop {r7}        \n\t"
+    "@   Enter THUMB Mode\n\t"
+        "adr r3, 2f+1    \n\t"
+        "bx  r3          \n\t"
+        ".THUMB          \n"
+    "2:                  \n\t"
+        : "=r" (beg)
+        : "0" (beg), "r" (end), "r" (flg), "r" (__ARM_NR_cacheflush)
+        : "r3");
   #endif
 #endif
 }

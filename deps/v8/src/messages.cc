@@ -1,5 +1,4 @@
-
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -32,7 +31,6 @@
 #include "execution.h"
 #include "messages.h"
 #include "spaces-inl.h"
-#include "top.h"
 
 namespace v8 {
 namespace internal {
@@ -42,13 +40,13 @@ namespace internal {
 // by default.
 void MessageHandler::DefaultMessageReport(const MessageLocation* loc,
                                           Handle<Object> message_obj) {
-  SmartPointer<char> str = GetLocalizedMessage(message_obj);
+  SmartArrayPointer<char> str = GetLocalizedMessage(message_obj);
   if (loc == NULL) {
     PrintF("%s\n", *str);
   } else {
     HandleScope scope;
     Handle<Object> data(loc->script()->name());
-    SmartPointer<char> data_str;
+    SmartArrayPointer<char> data_str;
     if (data->IsString())
       data_str = Handle<String>::cast(data)->ToCString(DISALLOW_NULLS);
     PrintF("%s:%i: %s\n", *data_str ? *data_str : "<unknown>",
@@ -57,111 +55,111 @@ void MessageHandler::DefaultMessageReport(const MessageLocation* loc,
 }
 
 
-void MessageHandler::ReportMessage(const char* msg) {
-  PrintF("%s\n", msg);
-}
-
-
-Handle<Object> MessageHandler::MakeMessageObject(
+Handle<JSMessageObject> MessageHandler::MakeMessageObject(
     const char* type,
     MessageLocation* loc,
     Vector< Handle<Object> > args,
     Handle<String> stack_trace,
     Handle<JSArray> stack_frames) {
-  // Build error message object
-  v8::HandleScope scope;  // Instantiate a closeable HandleScope for EscapeFrom.
-  Handle<Object> type_str = Factory::LookupAsciiSymbol(type);
-  Handle<Object> array = Factory::NewJSArray(args.length());
-  for (int i = 0; i < args.length(); i++)
-    SetElement(Handle<JSArray>::cast(array), i, args[i]);
+  Handle<String> type_handle = FACTORY->LookupAsciiSymbol(type);
+  Handle<FixedArray> arguments_elements =
+      FACTORY->NewFixedArray(args.length());
+  for (int i = 0; i < args.length(); i++) {
+    arguments_elements->set(i, *args[i]);
+  }
+  Handle<JSArray> arguments_handle =
+      FACTORY->NewJSArrayWithElements(arguments_elements);
 
-  Handle<JSFunction> fun(Top::global_context()->make_message_fun());
-  int start, end;
-  Handle<Object> script;
+  int start = 0;
+  int end = 0;
+  Handle<Object> script_handle = FACTORY->undefined_value();
   if (loc) {
     start = loc->start_pos();
     end = loc->end_pos();
-    script = GetScriptWrapper(loc->script());
-  } else {
-    start = end = 0;
-    script = Factory::undefined_value();
+    script_handle = GetScriptWrapper(loc->script());
   }
-  Handle<Object> start_handle(Smi::FromInt(start));
-  Handle<Object> end_handle(Smi::FromInt(end));
-  Handle<Object> stack_trace_val = stack_trace.is_null()
-    ? Factory::undefined_value()
-    : Handle<Object>::cast(stack_trace);
-  Handle<Object> stack_frames_val =  stack_frames.is_null()
-    ? Factory::undefined_value()
-    : Handle<Object>::cast(stack_frames);
-  const int argc = 7;
-  Object** argv[argc] = { type_str.location(),
-                          array.location(),
-                          start_handle.location(),
-                          end_handle.location(),
-                          script.location(),
-                          stack_trace_val.location(),
-                          stack_frames_val.location() };
 
-  // Setup a catch handler to catch exceptions in creating the message. This
-  // handler is non-verbose to avoid calling MakeMessage recursively in case of
-  // an exception.
-  v8::TryCatch catcher;
-  catcher.SetVerbose(false);
-  catcher.SetCaptureMessage(false);
+  Handle<Object> stack_trace_handle = stack_trace.is_null()
+      ? Handle<Object>::cast(FACTORY->undefined_value())
+      : Handle<Object>::cast(stack_trace);
 
-  // Format the message.
-  bool caught_exception = false;
-  Handle<Object> message =
-      Execution::Call(fun, Factory::undefined_value(), argc, argv,
-                      &caught_exception);
+  Handle<Object> stack_frames_handle = stack_frames.is_null()
+      ? Handle<Object>::cast(FACTORY->undefined_value())
+      : Handle<Object>::cast(stack_frames);
 
-  // If creating the message (in JS code) resulted in an exception, we
-  // skip doing the callback. This usually only happens in case of
-  // stack overflow exceptions being thrown by the parser when the
-  // stack is almost full.
-  if (caught_exception) return Handle<Object>();
+  Handle<JSMessageObject> message =
+      FACTORY->NewJSMessageObject(type_handle,
+                                  arguments_handle,
+                                  start,
+                                  end,
+                                  script_handle,
+                                  stack_trace_handle,
+                                  stack_frames_handle);
 
-  return message.EscapeFrom(&scope);
+  return message;
 }
 
 
-void MessageHandler::ReportMessage(MessageLocation* loc,
+void MessageHandler::ReportMessage(Isolate* isolate,
+                                   MessageLocation* loc,
                                    Handle<Object> message) {
+  // We are calling into embedder's code which can throw exceptions.
+  // Thus we need to save current exception state, reset it to the clean one
+  // and ignore scheduled exceptions callbacks can throw.
+  Isolate::ExceptionScope exception_scope(isolate);
+  isolate->clear_pending_exception();
+  isolate->set_external_caught_exception(false);
+
   v8::Local<v8::Message> api_message_obj = v8::Utils::MessageToLocal(message);
 
-  v8::NeanderArray global_listeners(Factory::message_listeners());
+  v8::NeanderArray global_listeners(FACTORY->message_listeners());
   int global_length = global_listeners.length();
   if (global_length == 0) {
     DefaultMessageReport(loc, message);
+    if (isolate->has_scheduled_exception()) {
+      isolate->clear_scheduled_exception();
+    }
   } else {
     for (int i = 0; i < global_length; i++) {
       HandleScope scope;
       if (global_listeners.get(i)->IsUndefined()) continue;
       v8::NeanderObject listener(JSObject::cast(global_listeners.get(i)));
-      Handle<Proxy> callback_obj(Proxy::cast(listener.get(0)));
+      Handle<Foreign> callback_obj(Foreign::cast(listener.get(0)));
       v8::MessageCallback callback =
-          FUNCTION_CAST<v8::MessageCallback>(callback_obj->proxy());
+          FUNCTION_CAST<v8::MessageCallback>(callback_obj->foreign_address());
       Handle<Object> callback_data(listener.get(1));
-      callback(api_message_obj, v8::Utils::ToLocal(callback_data));
+      {
+        // Do not allow exceptions to propagate.
+        v8::TryCatch try_catch;
+        callback(api_message_obj, v8::Utils::ToLocal(callback_data));
+      }
+      if (isolate->has_scheduled_exception()) {
+        isolate->clear_scheduled_exception();
+      }
     }
   }
 }
 
 
 Handle<String> MessageHandler::GetMessage(Handle<Object> data) {
-  Handle<String> fmt_str = Factory::LookupAsciiSymbol("FormatMessage");
+  Handle<String> fmt_str = FACTORY->LookupAsciiSymbol("FormatMessage");
   Handle<JSFunction> fun =
       Handle<JSFunction>(
-          JSFunction::cast(Top::builtins()->GetProperty(*fmt_str)));
-  Object** argv[1] = { data.location() };
+          JSFunction::cast(
+              Isolate::Current()->js_builtins_object()->
+              GetPropertyNoExceptionThrown(*fmt_str)));
+  Handle<Object> argv[] = { data };
 
   bool caught_exception;
   Handle<Object> result =
-      Execution::TryCall(fun, Top::builtins(), 1, argv, &caught_exception);
+      Execution::TryCall(fun,
+                         Isolate::Current()->js_builtins_object(),
+                         ARRAY_SIZE(argv),
+                         argv,
+                         &caught_exception);
 
   if (caught_exception || !result->IsString()) {
-    return Factory::LookupAsciiSymbol("<error>");
+    return FACTORY->LookupAsciiSymbol("<error>");
   }
   Handle<String> result_string = Handle<String>::cast(result);
   // A string that has been obtained from JS code in this way is
@@ -174,7 +172,8 @@ Handle<String> MessageHandler::GetMessage(Handle<Object> data) {
 }
 
 
-SmartPointer<char> MessageHandler::GetLocalizedMessage(Handle<Object> data) {
+SmartArrayPointer<char> MessageHandler::GetLocalizedMessage(
+    Handle<Object> data) {
   HandleScope scope;
   return GetMessage(data)->ToCString(DISALLOW_NULLS);
 }

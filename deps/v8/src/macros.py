@@ -26,7 +26,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Dictionary that is passed as defines for js2c.py.
-# Used for defines that must be defined for all native js files.
+# Used for defines that must be defined for all native JS files.
 
 const NONE        = 0;
 const READ_ONLY   = 1;
@@ -38,12 +38,13 @@ const GETTER = 0;
 const SETTER = 1;
 
 # These definitions must match the index of the properties in objects.h.
-const kApiTagOffset               = 0;
-const kApiPropertyListOffset      = 1;
-const kApiSerialNumberOffset      = 2;
-const kApiConstructorOffset       = 2;
-const kApiPrototypeTemplateOffset = 5;
-const kApiParentTemplateOffset    = 6;
+const kApiTagOffset                 = 0;
+const kApiPropertyListOffset        = 1;
+const kApiSerialNumberOffset        = 2;
+const kApiConstructorOffset         = 2;
+const kApiPrototypeTemplateOffset   = 5;
+const kApiParentTemplateOffset      = 6;
+const kApiFlagOffset                = 14;
 
 const NO_HINT     = 0;
 const NUMBER_HINT = 1;
@@ -64,6 +65,7 @@ const msPerMonth       = 2592000000;
 
 # For apinatives.js
 const kUninitialized = -1;
+const kReadOnlyPrototypeBit = 3;  # For FunctionTemplateInfo, matches objects.h
 
 # Note: kDayZeroInJulianDay = ToJulianDay(1970, 0, 1).
 const kInvalidDate        = 'Invalid Date';
@@ -80,8 +82,6 @@ const kMinYear  = -1000000;
 const kMaxYear  = 1000000;
 const kMinMonth = -10000000;
 const kMaxMonth = 10000000;
-const kMinDate  = -100000000;
-const kMaxDate  = 100000000;
 
 # Native cache ids.
 const STRING_TO_REGEXP_CACHE_ID = 0;
@@ -101,6 +101,9 @@ macro IS_OBJECT(arg)            = (%_IsObject(arg));
 macro IS_ARRAY(arg)             = (%_IsArray(arg));
 macro IS_FUNCTION(arg)          = (%_IsFunction(arg));
 macro IS_REGEXP(arg)            = (%_IsRegExp(arg));
+macro IS_SET(arg)               = (%_ClassOf(arg) === 'Set');
+macro IS_MAP(arg)               = (%_ClassOf(arg) === 'Map');
+macro IS_WEAKMAP(arg)           = (%_ClassOf(arg) === 'WeakMap');
 macro IS_DATE(arg)              = (%_ClassOf(arg) === 'Date');
 macro IS_NUMBER_WRAPPER(arg)    = (%_ClassOf(arg) === 'Number');
 macro IS_STRING_WRAPPER(arg)    = (%_ClassOf(arg) === 'String');
@@ -114,18 +117,34 @@ macro FLOOR(arg)                = $floor(arg);
 
 # Macro for ECMAScript 5 queries of the type:
 # "Type(O) is object."
-# This is the same as being either a function or an object in V8 terminology.
+# This is the same as being either a function or an object in V8 terminology
+# (including proxies).
 # In addition, an undetectable object is also included by this.
-macro IS_SPEC_OBJECT(arg) = (%_IsSpecObject(arg));
+macro IS_SPEC_OBJECT(arg)   = (%_IsSpecObject(arg));
+
+# Macro for ECMAScript 5 queries of the type:
+# "IsCallable(O)"
+# We assume here that this is the same as being either a function or a function
+# proxy. That ignores host objects with [[Call]] methods, but in most situations
+# we cannot handle those anyway.
+macro IS_SPEC_FUNCTION(arg) = (%_ClassOf(arg) === 'Function');
+
+# Indices in bound function info retrieved by %BoundFunctionGetBindings(...).
+const kBoundFunctionIndex = 0;
+const kBoundThisIndex = 1;
+const kBoundArgumentsStartIndex = 2;
 
 # Inline macros. Use %IS_VAR to make sure arg is evaluated only once.
 macro NUMBER_IS_NAN(arg) = (!%_IsSmi(%IS_VAR(arg)) && !(arg == arg));
+macro NUMBER_IS_FINITE(arg) = (%_IsSmi(%IS_VAR(arg)) || ((arg == arg) && (arg != 1/0) && (arg != -1/0)));
 macro TO_INTEGER(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : %NumberToInteger(ToNumber(arg)));
 macro TO_INTEGER_MAP_MINUS_ZERO(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : %NumberToIntegerMapMinusZero(ToNumber(arg)));
 macro TO_INT32(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : (arg >> 0));
 macro TO_UINT32(arg) = (arg >>> 0);
 macro TO_STRING_INLINE(arg) = (IS_STRING(%IS_VAR(arg)) ? arg : NonStringToString(arg));
-
+macro TO_NUMBER_INLINE(arg) = (IS_NUMBER(%IS_VAR(arg)) ? arg : NonNumberToNumber(arg));
+macro TO_OBJECT_INLINE(arg) = (IS_SPEC_OBJECT(%IS_VAR(arg)) ? arg : ToObject(arg));
+macro JSON_NUMBER_TO_STRING(arg) = ((%_IsSmi(%IS_VAR(arg)) || arg - arg == 0) ? %_NumberToString(arg) : "null");
 
 # Macros implemented in Python.
 python macro CHAR_CODE(str) = ord(str[1]);
@@ -140,15 +159,14 @@ macro NUMBER_OF_CAPTURES(array) = ((array)[0]);
 
 # Limit according to ECMA 262 15.9.1.1
 const MAX_TIME_MS = 8640000000000000;
+# Limit which is MAX_TIME_MS + msPerMonth.
+const MAX_TIME_BEFORE_UTC = 8640002592000000;
 
 # Gets the value of a Date object. If arg is not a Date object
 # a type error is thrown.
 macro DATE_VALUE(arg) = (%_ClassOf(arg) === 'Date' ? %_ValueOf(arg) : ThrowDateTypeError());
 macro DAY(time) = ($floor(time / 86400000));
-macro MONTH_FROM_TIME(time) = (MonthFromTime(time));
-macro DATE_FROM_TIME(time) = (DateFromTime(time));
-macro NAN_OR_DATE_FROM_TIME(time) = (NUMBER_IS_NAN(time) ? time : DATE_FROM_TIME(time));
-macro YEAR_FROM_TIME(time) = (YearFromTime(time));
+macro NAN_OR_DATE_FROM_TIME(time) = (NUMBER_IS_NAN(time) ? time : DateFromTime(time));
 macro HOUR_FROM_TIME(time) = (Modulo($floor(time / 3600000), 24));
 macro MIN_FROM_TIME(time) = (Modulo($floor(time / 60000), 60));
 macro NAN_OR_MIN_FROM_TIME(time) = (NUMBER_IS_NAN(time) ? time : MIN_FROM_TIME(time));
@@ -166,7 +184,7 @@ macro CAPTURE(index) = (3 + (index));
 const CAPTURE0 = 3;
 const CAPTURE1 = 4;
 
-# PropertyDescriptor return value indices - must match 
+# PropertyDescriptor return value indices - must match
 # PropertyDescriptorIndices in runtime.cc.
 const IS_ACCESSOR_INDEX = 0;
 const VALUE_INDEX = 1;
@@ -175,3 +193,17 @@ const SETTER_INDEX = 3;
 const WRITABLE_INDEX = 4;
 const ENUMERABLE_INDEX = 5;
 const CONFIGURABLE_INDEX = 6;
+
+# For messages.js
+# Matches Script::Type from objects.h
+const TYPE_NATIVE = 0;
+const TYPE_EXTENSION = 1;
+const TYPE_NORMAL = 2;
+
+# Matches Script::CompilationType from objects.h
+const COMPILATION_TYPE_HOST = 0;
+const COMPILATION_TYPE_EVAL = 1;
+const COMPILATION_TYPE_JSON = 2;
+
+# Matches Messages::kNoLineNumberInfo from v8.h
+const kNoLineNumberInfo = 0;

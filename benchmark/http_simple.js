@@ -1,14 +1,10 @@
 path = require("path");
-Buffer = require("buffer").Buffer;
+exec = require("child_process").exec;
+http = require("http");
 
 port = parseInt(process.env.PORT || 8000);
 
-var old = (process.argv[2] == 'old');
-
 console.log('pid ' + process.pid);
-
-http = require(old ? "http_old" : 'http');
-if (old) console.log('old version');
 
 fixed = ""
 for (var i = 0; i < 20*1024; i++) {
@@ -18,11 +14,12 @@ for (var i = 0; i < 20*1024; i++) {
 stored = {};
 storedBuffer = {};
 
-http.createServer(function (req, res) {
+var server = http.createServer(function (req, res) {
   var commands = req.url.split("/");
   var command = commands[1];
   var body = "";
   var arg = commands[2];
+  var n_chunks = parseInt(commands[3], 10);
   var status = 200;
 
   if (command == "bytes") {
@@ -57,24 +54,45 @@ http.createServer(function (req, res) {
   } else if (command == "fixed") {
     body = fixed;
 
+  } else if (command == "echo") {
+    res.writeHead(200, { "Content-Type": "text/plain",
+                         "Transfer-Encoding": "chunked" });
+    req.pipe(res);
+    return;
+
   } else {
     status = 404;
     body = "not found\n";
   }
 
-  var content_length = body.length.toString();
+  // example: http://localhost:port/bytes/512/4
+  // sends a 512 byte body in 4 chunks of 128 bytes
+  if (n_chunks > 0) {
+    res.writeHead(status, { "Content-Type": "text/plain",
+                            "Transfer-Encoding": "chunked" });
+    // send body in chunks
+    var len = body.length;
+    var step = ~~(len / n_chunks) || len;
 
-  res.writeHead( status
-                , { "Content-Type": "text/plain"
-                  , "Content-Length": content_length
-                  }
-                );
-  if (old) {
-    res.write(body, 'ascii');
-    res.close();
+    for (var i = 0; i < len; i += step) {
+      res.write(body.slice(i, i + step));
+    }
+
+    res.end();
   } else {
-    res.end(body, 'ascii');
-  }
-}).listen(port);
+    var content_length = body.length.toString();
 
-console.log('Listening at http://127.0.0.1:'+port+'/');
+    res.writeHead(status, { "Content-Type": "text/plain",
+                            "Content-Length": content_length });
+    res.end(body);
+  }
+
+});
+
+server.listen(port, function () {
+  console.log('Listening at http://127.0.0.1:'+port+'/');
+});
+
+process.on('exit', function() {
+  console.error('libuv counters', process.uvCounters());
+});

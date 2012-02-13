@@ -33,13 +33,13 @@ function C() {
   this.x = 23;
 }
 
-// If a setter is added to the prototype chain of a simple constructor setting 
-// one of the properties assigned in the constructor then this setter is 
+// If a setter is added to the prototype chain of a simple constructor setting
+// one of the properties assigned in the constructor then this setter is
 // ignored when constructing new objects from the constructor.
 
-// This only happens if the setter is added _after_ an instance has been 
+// This only happens if the setter is added _after_ an instance has been
 // created.
 
 assertEquals(23, new C().x);
 C.prototype.__defineSetter__('x', function(value) { this.y = 23; });
-assertEquals(void 0, new C().x));
+assertEquals(void 0, new C().x);

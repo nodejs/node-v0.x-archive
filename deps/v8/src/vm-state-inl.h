@@ -29,6 +29,7 @@
 #define V8_VM_STATE_INL_H_
 
 #include "vm-state.h"
+#include "runtime-profiler.h"
 
 namespace v8 {
 namespace internal {
@@ -38,7 +39,6 @@ namespace internal {
 // logger and partially threaded through the call stack.  States are pushed by
 // VMState construction and popped by destruction.
 //
-#ifdef ENABLE_VMSTATE_TRACKING
 inline const char* StateToString(StateTag state) {
   switch (state) {
     case JS:
@@ -49,88 +49,48 @@ inline const char* StateToString(StateTag state) {
       return "COMPILER";
     case OTHER:
       return "OTHER";
+    case EXTERNAL:
+      return "EXTERNAL";
     default:
       UNREACHABLE();
       return NULL;
   }
 }
 
-VMState::VMState(StateTag state)
-    : disabled_(true),
-      state_(OTHER),
-      external_callback_(NULL) {
-#ifdef ENABLE_LOGGING_AND_PROFILING
-  if (!Logger::is_logging() && !CpuProfiler::is_profiling()) {
-    return;
-  }
-#endif
 
-  disabled_ = false;
-#if !defined(ENABLE_HEAP_PROTECTION)
-  // When not protecting the heap, there is no difference between
-  // EXTERNAL and OTHER.  As an optimization in that case, we will not
-  // perform EXTERNAL->OTHER transitions through the API.  We thus
-  // compress the two states into one.
-  if (state == EXTERNAL) state = OTHER;
-#endif
-  state_ = state;
-  // Save the previous state.
-  previous_ = reinterpret_cast<VMState*>(current_state_);
-  // Install the new state.
-  OS::ReleaseStore(&current_state_, reinterpret_cast<AtomicWord>(this));
-
-#ifdef ENABLE_LOGGING_AND_PROFILING
+VMState::VMState(Isolate* isolate, StateTag tag)
+    : isolate_(isolate), previous_tag_(isolate->current_vm_state()) {
   if (FLAG_log_state_changes) {
-    LOG(UncheckedStringEvent("Entering", StateToString(state_)));
-    if (previous_ != NULL) {
-      LOG(UncheckedStringEvent("From", StateToString(previous_->state_)));
-    }
+    LOG(isolate, UncheckedStringEvent("Entering", StateToString(tag)));
+    LOG(isolate, UncheckedStringEvent("From", StateToString(previous_tag_)));
   }
-#endif
 
-#ifdef ENABLE_HEAP_PROTECTION
-  if (FLAG_protect_heap) {
-    if (state_ == EXTERNAL) {
-      // We are leaving V8.
-      ASSERT((previous_ != NULL) && (previous_->state_ != EXTERNAL));
-      Heap::Protect();
-    } else if ((previous_ == NULL) || (previous_->state_ == EXTERNAL)) {
-      // We are entering V8.
-      Heap::Unprotect();
-    }
-  }
-#endif
+  isolate_->SetCurrentVMState(tag);
 }
 
 
 VMState::~VMState() {
-  if (disabled_) return;
-  // Return to the previous state.
-  OS::ReleaseStore(&current_state_, reinterpret_cast<AtomicWord>(previous_));
-
-#ifdef ENABLE_LOGGING_AND_PROFILING
   if (FLAG_log_state_changes) {
-    LOG(UncheckedStringEvent("Leaving", StateToString(state_)));
-    if (previous_ != NULL) {
-      LOG(UncheckedStringEvent("To", StateToString(previous_->state_)));
-    }
+    LOG(isolate_,
+        UncheckedStringEvent("Leaving",
+                              StateToString(isolate_->current_vm_state())));
+    LOG(isolate_,
+        UncheckedStringEvent("To", StateToString(previous_tag_)));
   }
-#endif  // ENABLE_LOGGING_AND_PROFILING
 
-#ifdef ENABLE_HEAP_PROTECTION
-  if (FLAG_protect_heap) {
-    if (state_ == EXTERNAL) {
-      // We are reentering V8.
-      ASSERT((previous_ != NULL) && (previous_->state_ != EXTERNAL));
-      Heap::Unprotect();
-    } else if ((previous_ == NULL) || (previous_->state_ == EXTERNAL)) {
-      // We are leaving V8.
-      Heap::Protect();
-    }
-  }
-#endif  // ENABLE_HEAP_PROTECTION
+  isolate_->SetCurrentVMState(previous_tag_);
 }
-#endif  // ENABLE_VMSTATE_TRACKING
+
+
+ExternalCallbackScope::ExternalCallbackScope(Isolate* isolate, Address callback)
+    : isolate_(isolate), previous_callback_(isolate->external_callback()) {
+  isolate_->set_external_callback(callback);
+}
+
+ExternalCallbackScope::~ExternalCallbackScope() {
+  isolate_->set_external_callback(previous_callback_);
+}
+
 
 } }  // namespace v8::internal
 

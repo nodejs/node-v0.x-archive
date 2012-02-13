@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,7 @@
 // Platform specific code for MacOS goes here. For the POSIX comaptible parts
 // the implementation is in platform-posix.cc.
 
+#include <dlfcn.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <mach/mach_init.h>
@@ -47,9 +48,10 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/types.h>
+#include <sys/sysctl.h>
 #include <stdarg.h>
 #include <stdlib.h>
-
+#include <string.h>
 #include <errno.h>
 
 #undef MAP_TYPE
@@ -57,6 +59,7 @@
 #include "v8.h"
 
 #include "platform.h"
+#include "vm-state-inl.h"
 
 // Manually define these here as weak imports, rather than including execinfo.h.
 // This lets us launch on 10.4 which does not have these calls.
@@ -72,7 +75,7 @@ extern "C" {
 namespace v8 {
 namespace internal {
 
-// 0 is never a valid thread id on MacOSX since a ptread_t is
+// 0 is never a valid thread id on MacOSX since a pthread_t is
 // a pointer.
 static const pthread_t kNoThread = (pthread_t) 0;
 
@@ -87,20 +90,20 @@ double ceiling(double x) {
 }
 
 
-void OS::Setup() {
-  // Seed the random number generator.
-  // Convert the current time to a 64-bit integer first, before converting it
-  // to an unsigned. Going directly will cause an overflow and the seed to be
-  // set to all ones. The seed will be identical for different instances that
-  // call this setup code within the same millisecond.
-  uint64_t seed = static_cast<uint64_t>(TimeCurrentMillis());
+static Mutex* limit_mutex = NULL;
+
+
+void OS::SetUp() {
+  // Seed the random number generator. We preserve microsecond resolution.
+  uint64_t seed = Ticks() ^ (getpid() << 16);
   srandom(static_cast<unsigned int>(seed));
+  limit_mutex = CreateMutex();
 }
 
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -108,6 +111,9 @@ static void* highest_ever_allocated = reinterpret_cast<void*>(0);
 
 
 static void UpdateAllocatedSpaceLimits(void* address, int size) {
+  ASSERT(limit_mutex != NULL);
+  ScopedLock lock(limit_mutex);
+
   lowest_ever_allocated = Min(lowest_ever_allocated, address);
   highest_ever_allocated =
       Max(highest_ever_allocated,
@@ -138,11 +144,14 @@ void* OS::Allocate(const size_t requested,
                    bool is_executable) {
   const size_t msize = RoundUp(requested, getpagesize());
   int prot = PROT_READ | PROT_WRITE | (is_executable ? PROT_EXEC : 0);
-  void* mbase = mmap(NULL, msize, prot,
+  void* mbase = mmap(OS::GetRandomMmapAddr(),
+                     msize,
+                     prot,
                      MAP_PRIVATE | MAP_ANON,
-                     kMmapFd, kMmapFdOffset);
+                     kMmapFd,
+                     kMmapFdOffset);
   if (mbase == MAP_FAILED) {
-    LOG(StringEvent("OS::Allocate", "mmap failed"));
+    LOG(Isolate::Current(), StringEvent("OS::Allocate", "mmap failed"));
     return NULL;
   }
   *allocated = msize;
@@ -157,20 +166,6 @@ void OS::Free(void* address, const size_t size) {
   USE(result);
   ASSERT(result == 0);
 }
-
-
-#ifdef ENABLE_HEAP_PROTECTION
-
-void OS::Protect(void* address, size_t size) {
-  UNIMPLEMENTED();
-}
-
-
-void OS::Unprotect(void* address, size_t size, bool is_executable) {
-  UNIMPLEMENTED();
-}
-
-#endif
 
 
 void OS::Sleep(int milliseconds) {
@@ -195,6 +190,7 @@ class PosixMemoryMappedFile : public OS::MemoryMappedFile {
     : file_(file), memory_(memory), size_(size) { }
   virtual ~PosixMemoryMappedFile();
   virtual void* memory() { return memory_; }
+  virtual int size() { return size_; }
  private:
   FILE* file_;
   void* memory_;
@@ -202,25 +198,51 @@ class PosixMemoryMappedFile : public OS::MemoryMappedFile {
 };
 
 
+OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
+  FILE* file = fopen(name, "r+");
+  if (file == NULL) return NULL;
+
+  fseek(file, 0, SEEK_END);
+  int size = ftell(file);
+
+  void* memory =
+      mmap(OS::GetRandomMmapAddr(),
+           size,
+           PROT_READ | PROT_WRITE,
+           MAP_SHARED,
+           fileno(file),
+           0);
+  return new PosixMemoryMappedFile(file, memory, size);
+}
+
+
 OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
     void* initial) {
   FILE* file = fopen(name, "w+");
   if (file == NULL) return NULL;
-  fwrite(initial, size, 1, file);
+  int result = fwrite(initial, size, 1, file);
+  if (result < 1) {
+    fclose(file);
+    return NULL;
+  }
   void* memory =
-      mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+      mmap(OS::GetRandomMmapAddr(),
+          size,
+          PROT_READ | PROT_WRITE,
+          MAP_SHARED,
+          fileno(file),
+          0);
   return new PosixMemoryMappedFile(file, memory, size);
 }
 
 
 PosixMemoryMappedFile::~PosixMemoryMappedFile() {
-  if (memory_) munmap(memory_, size_);
+  if (memory_) OS::Free(memory_, size_);
   fclose(file_);
 }
 
 
 void OS::LogSharedLibraryAddresses() {
-#ifdef ENABLE_LOGGING_AND_PROFILING
   unsigned int images_count = _dyld_image_count();
   for (unsigned int i = 0; i < images_count; ++i) {
     const mach_header* header = _dyld_get_image_header(i);
@@ -239,9 +261,13 @@ void OS::LogSharedLibraryAddresses() {
     if (code_ptr == NULL) continue;
     const uintptr_t slide = _dyld_get_image_vmaddr_slide(i);
     const uintptr_t start = reinterpret_cast<uintptr_t>(code_ptr) + slide;
-    LOG(SharedLibraryEvent(_dyld_get_image_name(i), start, start + size));
+    LOG(Isolate::Current(),
+        SharedLibraryEvent(_dyld_get_image_name(i), start, start + size));
   }
-#endif  // ENABLE_LOGGING_AND_PROFILING
+}
+
+
+void OS::SignalCodeMovingGC() {
 }
 
 
@@ -317,33 +343,102 @@ int OS::StackWalk(Vector<StackFrame> frames) {
 }
 
 
+VirtualMemory::VirtualMemory() : address_(NULL), size_(0) { }
 
 
-VirtualMemory::VirtualMemory(size_t size) {
-  address_ = mmap(NULL, size, PROT_NONE,
-                  MAP_PRIVATE | MAP_ANON | MAP_NORESERVE,
-                  kMmapFd, kMmapFdOffset);
-  size_ = size;
+VirtualMemory::VirtualMemory(size_t size)
+    : address_(ReserveRegion(size)), size_(size) { }
+
+
+VirtualMemory::VirtualMemory(size_t size, size_t alignment)
+    : address_(NULL), size_(0) {
+  ASSERT(IsAligned(alignment, static_cast<intptr_t>(OS::AllocateAlignment())));
+  size_t request_size = RoundUp(size + alignment,
+                                static_cast<intptr_t>(OS::AllocateAlignment()));
+  void* reservation = mmap(OS::GetRandomMmapAddr(),
+                           request_size,
+                           PROT_NONE,
+                           MAP_PRIVATE | MAP_ANON | MAP_NORESERVE,
+                           kMmapFd,
+                           kMmapFdOffset);
+  if (reservation == MAP_FAILED) return;
+
+  Address base = static_cast<Address>(reservation);
+  Address aligned_base = RoundUp(base, alignment);
+  ASSERT_LE(base, aligned_base);
+
+  // Unmap extra memory reserved before and after the desired block.
+  if (aligned_base != base) {
+    size_t prefix_size = static_cast<size_t>(aligned_base - base);
+    OS::Free(base, prefix_size);
+    request_size -= prefix_size;
+  }
+
+  size_t aligned_size = RoundUp(size, OS::AllocateAlignment());
+  ASSERT_LE(aligned_size, request_size);
+
+  if (aligned_size != request_size) {
+    size_t suffix_size = request_size - aligned_size;
+    OS::Free(aligned_base + aligned_size, suffix_size);
+    request_size -= suffix_size;
+  }
+
+  ASSERT(aligned_size == request_size);
+
+  address_ = static_cast<void*>(aligned_base);
+  size_ = aligned_size;
 }
 
 
 VirtualMemory::~VirtualMemory() {
   if (IsReserved()) {
-    if (0 == munmap(address(), size())) address_ = MAP_FAILED;
+    bool result = ReleaseRegion(address(), size());
+    ASSERT(result);
+    USE(result);
   }
 }
 
 
+void VirtualMemory::Reset() {
+  address_ = NULL;
+  size_ = 0;
+}
+
+
+void* VirtualMemory::ReserveRegion(size_t size) {
+  void* result = mmap(OS::GetRandomMmapAddr(),
+                      size,
+                      PROT_NONE,
+                      MAP_PRIVATE | MAP_ANON | MAP_NORESERVE,
+                      kMmapFd,
+                      kMmapFdOffset);
+
+  if (result == MAP_FAILED) return NULL;
+
+  return result;
+}
+
+
 bool VirtualMemory::IsReserved() {
-  return address_ != MAP_FAILED;
+  return address_ != NULL;
 }
 
 
 bool VirtualMemory::Commit(void* address, size_t size, bool is_executable) {
+  return CommitRegion(address, size, is_executable);
+}
+
+
+bool VirtualMemory::CommitRegion(void* address,
+                                 size_t size,
+                                 bool is_executable) {
   int prot = PROT_READ | PROT_WRITE | (is_executable ? PROT_EXEC : 0);
-  if (MAP_FAILED == mmap(address, size, prot,
+  if (MAP_FAILED == mmap(address,
+                         size,
+                         prot,
                          MAP_PRIVATE | MAP_ANON | MAP_FIXED,
-                         kMmapFd, kMmapFdOffset)) {
+                         kMmapFd,
+                         kMmapFdOffset)) {
     return false;
   }
 
@@ -353,59 +448,58 @@ bool VirtualMemory::Commit(void* address, size_t size, bool is_executable) {
 
 
 bool VirtualMemory::Uncommit(void* address, size_t size) {
-  return mmap(address, size, PROT_NONE,
-              MAP_PRIVATE | MAP_ANON | MAP_NORESERVE | MAP_FIXED,
-              kMmapFd, kMmapFdOffset) != MAP_FAILED;
+  return UncommitRegion(address, size);
 }
 
 
-class ThreadHandle::PlatformData : public Malloced {
- public:
-  explicit PlatformData(ThreadHandle::Kind kind) {
-    Initialize(kind);
-  }
+bool VirtualMemory::UncommitRegion(void* address, size_t size) {
+  return mmap(address,
+              size,
+              PROT_NONE,
+              MAP_PRIVATE | MAP_ANON | MAP_NORESERVE | MAP_FIXED,
+              kMmapFd,
+              kMmapFdOffset) != MAP_FAILED;
+}
 
-  void Initialize(ThreadHandle::Kind kind) {
-    switch (kind) {
-      case ThreadHandle::SELF: thread_ = pthread_self(); break;
-      case ThreadHandle::INVALID: thread_ = kNoThread; break;
-    }
-  }
+
+bool VirtualMemory::ReleaseRegion(void* address, size_t size) {
+  return munmap(address, size) == 0;
+}
+
+
+class Thread::PlatformData : public Malloced {
+ public:
+  PlatformData() : thread_(kNoThread) {}
   pthread_t thread_;  // Thread handle for pthread.
 };
 
 
-
-ThreadHandle::ThreadHandle(Kind kind) {
-  data_ = new PlatformData(kind);
-}
-
-
-void ThreadHandle::Initialize(ThreadHandle::Kind kind) {
-  data_->Initialize(kind);
-}
-
-
-ThreadHandle::~ThreadHandle() {
-  delete data_;
-}
-
-
-bool ThreadHandle::IsSelf() const {
-  return pthread_equal(data_->thread_, pthread_self());
-}
-
-
-bool ThreadHandle::IsValid() const {
-  return data_->thread_ != kNoThread;
-}
-
-
-Thread::Thread() : ThreadHandle(ThreadHandle::INVALID) {
+Thread::Thread(const Options& options)
+    : data_(new PlatformData),
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
 Thread::~Thread() {
+  delete data_;
+}
+
+
+static void SetThreadName(const char* name) {
+  // pthread_setname_np is only available in 10.6 or later, so test
+  // for it at runtime.
+  int (*dynamic_pthread_setname_np)(const char*);
+  *reinterpret_cast<void**>(&dynamic_pthread_setname_np) =
+    dlsym(RTLD_DEFAULT, "pthread_setname_np");
+  if (!dynamic_pthread_setname_np)
+    return;
+
+  // Mac OS X does not expose the length limit of the name, so hardcode it.
+  static const int kMaxNameLength = 63;
+  USE(kMaxNameLength);
+  ASSERT(Thread::kMaxThreadNameLength <= kMaxNameLength);
+  dynamic_pthread_setname_np(name);
 }
 
 
@@ -414,29 +508,111 @@ static void* ThreadEntry(void* arg) {
   // This is also initialized by the first argument to pthread_create() but we
   // don't know which thread will run first (the original thread or the new
   // one) so we initialize it here too.
-  thread->thread_handle_data()->thread_ = pthread_self();
-  ASSERT(thread->IsValid());
+  thread->data()->thread_ = pthread_self();
+  SetThreadName(thread->name());
+  ASSERT(thread->data()->thread_ != kNoThread);
   thread->Run();
   return NULL;
 }
 
 
+void Thread::set_name(const char* name) {
+  strncpy(name_, name, sizeof(name_));
+  name_[sizeof(name_) - 1] = '\0';
+}
+
+
 void Thread::Start() {
-  pthread_create(&thread_handle_data()->thread_, NULL, ThreadEntry, this);
+  pthread_attr_t* attr_ptr = NULL;
+  pthread_attr_t attr;
+  if (stack_size_ > 0) {
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, static_cast<size_t>(stack_size_));
+    attr_ptr = &attr;
+  }
+  pthread_create(&data_->thread_, attr_ptr, ThreadEntry, this);
+  ASSERT(data_->thread_ != kNoThread);
 }
 
 
 void Thread::Join() {
-  pthread_join(thread_handle_data()->thread_, NULL);
+  pthread_join(data_->thread_, NULL);
 }
 
 
+#ifdef V8_FAST_TLS_SUPPORTED
+
+static Atomic32 tls_base_offset_initialized = 0;
+intptr_t kMacTlsBaseOffset = 0;
+
+// It's safe to do the initialization more that once, but it has to be
+// done at least once.
+static void InitializeTlsBaseOffset() {
+  const size_t kBufferSize = 128;
+  char buffer[kBufferSize];
+  size_t buffer_size = kBufferSize;
+  int ctl_name[] = { CTL_KERN , KERN_OSRELEASE };
+  if (sysctl(ctl_name, 2, buffer, &buffer_size, NULL, 0) != 0) {
+    V8_Fatal(__FILE__, __LINE__, "V8 failed to get kernel version");
+  }
+  // The buffer now contains a string of the form XX.YY.ZZ, where
+  // XX is the major kernel version component.
+  // Make sure the buffer is 0-terminated.
+  buffer[kBufferSize - 1] = '\0';
+  char* period_pos = strchr(buffer, '.');
+  *period_pos = '\0';
+  int kernel_version_major =
+      static_cast<int>(strtol(buffer, NULL, 10));  // NOLINT
+  // The constants below are taken from pthreads.s from the XNU kernel
+  // sources archive at www.opensource.apple.com.
+  if (kernel_version_major < 11) {
+    // 8.x.x (Tiger), 9.x.x (Leopard), 10.x.x (Snow Leopard) have the
+    // same offsets.
+#if defined(V8_HOST_ARCH_IA32)
+    kMacTlsBaseOffset = 0x48;
+#else
+    kMacTlsBaseOffset = 0x60;
+#endif
+  } else {
+    // 11.x.x (Lion) changed the offset.
+    kMacTlsBaseOffset = 0;
+  }
+
+  Release_Store(&tls_base_offset_initialized, 1);
+}
+
+static void CheckFastTls(Thread::LocalStorageKey key) {
+  void* expected = reinterpret_cast<void*>(0x1234CAFE);
+  Thread::SetThreadLocal(key, expected);
+  void* actual = Thread::GetExistingThreadLocal(key);
+  if (expected != actual) {
+    V8_Fatal(__FILE__, __LINE__,
+             "V8 failed to initialize fast TLS on current kernel");
+  }
+  Thread::SetThreadLocal(key, NULL);
+}
+
+#endif  // V8_FAST_TLS_SUPPORTED
+
+
 Thread::LocalStorageKey Thread::CreateThreadLocalKey() {
+#ifdef V8_FAST_TLS_SUPPORTED
+  bool check_fast_tls = false;
+  if (tls_base_offset_initialized == 0) {
+    check_fast_tls = true;
+    InitializeTlsBaseOffset();
+  }
+#endif
   pthread_key_t key;
   int result = pthread_key_create(&key, NULL);
   USE(result);
   ASSERT(result == 0);
-  return static_cast<LocalStorageKey>(key);
+  LocalStorageKey typed_key = static_cast<LocalStorageKey>(key);
+#ifdef V8_FAST_TLS_SUPPORTED
+  // If we just initialized fast TLS support, make sure it works.
+  if (check_fast_tls) CheckFastTls(typed_key);
+#endif
+  return typed_key;
 }
 
 
@@ -467,7 +643,6 @@ void Thread::YieldCPU() {
 
 class MacOSMutex : public Mutex {
  public:
-
   MacOSMutex() {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -475,11 +650,20 @@ class MacOSMutex : public Mutex {
     pthread_mutex_init(&mutex_, &attr);
   }
 
-  ~MacOSMutex() { pthread_mutex_destroy(&mutex_); }
+  virtual ~MacOSMutex() { pthread_mutex_destroy(&mutex_); }
 
-  int Lock() { return pthread_mutex_lock(&mutex_); }
+  virtual int Lock() { return pthread_mutex_lock(&mutex_); }
+  virtual int Unlock() { return pthread_mutex_unlock(&mutex_); }
 
-  int Unlock() { return pthread_mutex_unlock(&mutex_); }
+  virtual bool TryLock() {
+    int result = pthread_mutex_trylock(&mutex_);
+    // Return false if the lock is busy and locking failed.
+    if (result == EBUSY) {
+      return false;
+    }
+    ASSERT(result == 0);  // Verify no other errors.
+    return true;
+  }
 
  private:
   pthread_mutex_t mutex_;
@@ -528,51 +712,115 @@ Semaphore* OS::CreateSemaphore(int count) {
 }
 
 
-#ifdef ENABLE_LOGGING_AND_PROFILING
-
 class Sampler::PlatformData : public Malloced {
  public:
-  explicit PlatformData(Sampler* sampler)
-      : sampler_(sampler),
-        task_self_(mach_task_self()),
-        profiled_thread_(0),
-        sampler_thread_(0) {
+  PlatformData() : profiled_thread_(mach_thread_self()) {}
+
+  ~PlatformData() {
+    // Deallocate Mach port for thread.
+    mach_port_deallocate(mach_task_self(), profiled_thread_);
   }
 
-  Sampler* sampler_;
+  thread_act_t profiled_thread() { return profiled_thread_; }
+
+ private:
   // Note: for profiled_thread_ Mach primitives are used instead of PThread's
   // because the latter doesn't provide thread manipulation primitives required.
   // For details, consult "Mac OS X Internals" book, Section 7.3.
-  mach_port_t task_self_;
   thread_act_t profiled_thread_;
-  pthread_t sampler_thread_;
+};
 
-  // Sampler thread handler.
-  void Runner() {
-    // Loop until the sampler is disengaged, keeping the specified samling freq.
-    for ( ; sampler_->IsActive(); OS::Sleep(sampler_->interval_)) {
-      TickSample sample_obj;
-      TickSample* sample = CpuProfiler::TickSampleEvent();
-      if (sample == NULL) sample = &sample_obj;
 
-      // We always sample the VM state.
-      sample->state = VMState::current_state();
-      // If profiling, we record the pc and sp of the profiled thread.
-      if (sampler_->IsProfiling()
-          && KERN_SUCCESS == thread_suspend(profiled_thread_)) {
+class SamplerThread : public Thread {
+ public:
+  static const int kSamplerThreadStackSize = 32 * KB;
+
+  explicit SamplerThread(int interval)
+      : Thread(Thread::Options("SamplerThread", kSamplerThreadStackSize)),
+        interval_(interval) {}
+
+  static void AddActiveSampler(Sampler* sampler) {
+    ScopedLock lock(mutex_);
+    SamplerRegistry::AddActiveSampler(sampler);
+    if (instance_ == NULL) {
+      instance_ = new SamplerThread(sampler->interval());
+      instance_->Start();
+    } else {
+      ASSERT(instance_->interval_ == sampler->interval());
+    }
+  }
+
+  static void RemoveActiveSampler(Sampler* sampler) {
+    ScopedLock lock(mutex_);
+    SamplerRegistry::RemoveActiveSampler(sampler);
+    if (SamplerRegistry::GetState() == SamplerRegistry::HAS_NO_SAMPLERS) {
+      RuntimeProfiler::StopRuntimeProfilerThreadBeforeShutdown(instance_);
+      delete instance_;
+      instance_ = NULL;
+    }
+  }
+
+  // Implement Thread::Run().
+  virtual void Run() {
+    SamplerRegistry::State state;
+    while ((state = SamplerRegistry::GetState()) !=
+           SamplerRegistry::HAS_NO_SAMPLERS) {
+      bool cpu_profiling_enabled =
+          (state == SamplerRegistry::HAS_CPU_PROFILING_SAMPLERS);
+      bool runtime_profiler_enabled = RuntimeProfiler::IsEnabled();
+      // When CPU profiling is enabled both JavaScript and C++ code is
+      // profiled. We must not suspend.
+      if (!cpu_profiling_enabled) {
+        if (rate_limiter_.SuspendIfNecessary()) continue;
+      }
+      if (cpu_profiling_enabled) {
+        if (!SamplerRegistry::IterateActiveSamplers(&DoCpuProfile, this)) {
+          return;
+        }
+      }
+      if (runtime_profiler_enabled) {
+        if (!SamplerRegistry::IterateActiveSamplers(&DoRuntimeProfile, NULL)) {
+          return;
+        }
+      }
+      OS::Sleep(interval_);
+    }
+  }
+
+  static void DoCpuProfile(Sampler* sampler, void* raw_sampler_thread) {
+    if (!sampler->isolate()->IsInitialized()) return;
+    if (!sampler->IsProfiling()) return;
+    SamplerThread* sampler_thread =
+        reinterpret_cast<SamplerThread*>(raw_sampler_thread);
+    sampler_thread->SampleContext(sampler);
+  }
+
+  static void DoRuntimeProfile(Sampler* sampler, void* ignored) {
+    if (!sampler->isolate()->IsInitialized()) return;
+    sampler->isolate()->runtime_profiler()->NotifyTick();
+  }
+
+  void SampleContext(Sampler* sampler) {
+    thread_act_t profiled_thread = sampler->platform_data()->profiled_thread();
+    TickSample sample_obj;
+    TickSample* sample = CpuProfiler::TickSampleEvent(sampler->isolate());
+    if (sample == NULL) sample = &sample_obj;
+
+    if (KERN_SUCCESS != thread_suspend(profiled_thread)) return;
+
 #if V8_HOST_ARCH_X64
-        thread_state_flavor_t flavor = x86_THREAD_STATE64;
-        x86_thread_state64_t state;
-        mach_msg_type_number_t count = x86_THREAD_STATE64_COUNT;
+    thread_state_flavor_t flavor = x86_THREAD_STATE64;
+    x86_thread_state64_t state;
+    mach_msg_type_number_t count = x86_THREAD_STATE64_COUNT;
 #if __DARWIN_UNIX03
 #define REGISTER_FIELD(name) __r ## name
 #else
 #define REGISTER_FIELD(name) r ## name
 #endif  // __DARWIN_UNIX03
 #elif V8_HOST_ARCH_IA32
-        thread_state_flavor_t flavor = i386_THREAD_STATE;
-        i386_thread_state_t state;
-        mach_msg_type_number_t count = i386_THREAD_STATE_COUNT;
+    thread_state_flavor_t flavor = i386_THREAD_STATE;
+    i386_thread_state_t state;
+    mach_msg_type_number_t count = i386_THREAD_STATE_COUNT;
 #if __DARWIN_UNIX03
 #define REGISTER_FIELD(name) __e ## name
 #else
@@ -582,84 +830,66 @@ class Sampler::PlatformData : public Malloced {
 #error Unsupported Mac OS X host architecture.
 #endif  // V8_HOST_ARCH
 
-        if (thread_get_state(profiled_thread_,
-                             flavor,
-                             reinterpret_cast<natural_t*>(&state),
-                             &count) == KERN_SUCCESS) {
-          sample->pc = reinterpret_cast<Address>(state.REGISTER_FIELD(ip));
-          sample->sp = reinterpret_cast<Address>(state.REGISTER_FIELD(sp));
-          sample->fp = reinterpret_cast<Address>(state.REGISTER_FIELD(bp));
-          sampler_->SampleStack(sample);
-        }
-        thread_resume(profiled_thread_);
-      }
-
-      // Invoke tick handler with program counter and stack pointer.
-      sampler_->Tick(sample);
+    if (thread_get_state(profiled_thread,
+                         flavor,
+                         reinterpret_cast<natural_t*>(&state),
+                         &count) == KERN_SUCCESS) {
+      sample->state = sampler->isolate()->current_vm_state();
+      sample->pc = reinterpret_cast<Address>(state.REGISTER_FIELD(ip));
+      sample->sp = reinterpret_cast<Address>(state.REGISTER_FIELD(sp));
+      sample->fp = reinterpret_cast<Address>(state.REGISTER_FIELD(bp));
+      sampler->SampleStack(sample);
+      sampler->Tick(sample);
     }
+    thread_resume(profiled_thread);
   }
+
+  const int interval_;
+  RuntimeProfilerRateLimiter rate_limiter_;
+
+  // Protects the process wide state below.
+  static Mutex* mutex_;
+  static SamplerThread* instance_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(SamplerThread);
 };
 
 #undef REGISTER_FIELD
 
 
-// Entry point for sampler thread.
-static void* SamplerEntry(void* arg) {
-  Sampler::PlatformData* data =
-      reinterpret_cast<Sampler::PlatformData*>(arg);
-  data->Runner();
-  return 0;
-}
+Mutex* SamplerThread::mutex_ = OS::CreateMutex();
+SamplerThread* SamplerThread::instance_ = NULL;
 
 
-Sampler::Sampler(int interval, bool profiling)
-    : interval_(interval), profiling_(profiling), active_(false) {
-  data_ = new PlatformData(this);
+Sampler::Sampler(Isolate* isolate, int interval)
+    : isolate_(isolate),
+      interval_(interval),
+      profiling_(false),
+      active_(false),
+      samples_taken_(0) {
+  data_ = new PlatformData;
 }
 
 
 Sampler::~Sampler() {
+  ASSERT(!IsActive());
   delete data_;
 }
 
 
 void Sampler::Start() {
-  // If we are profiling, we need to be able to access the calling
-  // thread.
-  if (IsProfiling()) {
-    data_->profiled_thread_ = mach_thread_self();
-  }
-
-  // Create sampler thread with high priority.
-  // According to POSIX spec, when SCHED_FIFO policy is used, a thread
-  // runs until it exits or blocks.
-  pthread_attr_t sched_attr;
-  sched_param fifo_param;
-  pthread_attr_init(&sched_attr);
-  pthread_attr_setinheritsched(&sched_attr, PTHREAD_EXPLICIT_SCHED);
-  pthread_attr_setschedpolicy(&sched_attr, SCHED_FIFO);
-  fifo_param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-  pthread_attr_setschedparam(&sched_attr, &fifo_param);
-
-  active_ = true;
-  pthread_create(&data_->sampler_thread_, &sched_attr, SamplerEntry, data_);
+  ASSERT(!IsActive());
+  SetActive(true);
+  SamplerThread::AddActiveSampler(this);
 }
 
 
 void Sampler::Stop() {
-  // Seting active to false triggers termination of the sampler
-  // thread.
-  active_ = false;
-
-  // Wait for sampler thread to terminate.
-  pthread_join(data_->sampler_thread_, NULL);
-
-  // Deallocate Mach port for thread.
-  if (IsProfiling()) {
-    mach_port_deallocate(data_->task_self_, data_->profiled_thread_);
-  }
+  ASSERT(IsActive());
+  SamplerThread::RemoveActiveSampler(this);
+  SetActive(false);
 }
 
-#endif  // ENABLE_LOGGING_AND_PROFILING
 
 } }  // namespace v8::internal

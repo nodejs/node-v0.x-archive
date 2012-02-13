@@ -46,22 +46,28 @@
 
 // ECMA-262 section 15.5.4.2
 function StringToString() {
-  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this))
+  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this)) {
     throw new $TypeError('String.prototype.toString is not generic');
+  }
   return %_ValueOf(this);
 }
 
 
 // ECMA-262 section 15.5.4.3
 function StringValueOf() {
-  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this))
+  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this)) {
     throw new $TypeError('String.prototype.valueOf is not generic');
+  }
   return %_ValueOf(this);
 }
 
 
 // ECMA-262, section 15.5.4.4
 function StringCharAt(pos) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.charAt"]);
+  }
   var result = %_StringCharAt(this, pos);
   if (%_IsSmi(result)) {
     result = %_StringCharAt(TO_STRING_INLINE(this), TO_INTEGER(pos));
@@ -72,6 +78,10 @@ function StringCharAt(pos) {
 
 // ECMA-262 section 15.5.4.5
 function StringCharCodeAt(pos) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.charCodeAt"]);
+  }
   var result = %_StringCharCodeAt(this, pos);
   if (!%_IsSmi(result)) {
     result = %_StringCharCodeAt(TO_STRING_INLINE(this), TO_INTEGER(pos));
@@ -82,12 +92,16 @@ function StringCharCodeAt(pos) {
 
 // ECMA-262, section 15.5.4.6
 function StringConcat() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.concat"]);
+  }
   var len = %_ArgumentsLength();
   var this_as_string = TO_STRING_INLINE(this);
   if (len === 1) {
     return this_as_string + %_Arguments(0);
   }
-  var parts = new $Array(len + 1);
+  var parts = new InternalArray(len + 1);
   parts[0] = this_as_string;
   for (var i = 0; i < len; i++) {
     var part = %_Arguments(i);
@@ -101,39 +115,44 @@ function StringConcat() {
 
 
 // ECMA-262 section 15.5.4.7
-function StringIndexOf(searchString /* position */) {  // length == 1
-  var subject_str = TO_STRING_INLINE(this);
-  var pattern_str = TO_STRING_INLINE(searchString);
-  var subject_str_len = subject_str.length;
-  var pattern_str_len = pattern_str.length;
+function StringIndexOf(pattern /* position */) {  // length == 1
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.indexOf"]);
+  }
+  var subject = TO_STRING_INLINE(this);
+  pattern = TO_STRING_INLINE(pattern);
   var index = 0;
   if (%_ArgumentsLength() > 1) {
-    var arg1 = %_Arguments(1);  // position
-    index = TO_INTEGER(arg1);
+    index = %_Arguments(1);  // position
+    index = TO_INTEGER(index);
+    if (index < 0) index = 0;
+    if (index > subject.length) index = subject.length;
   }
-  if (index < 0) index = 0;
-  if (index > subject_str_len) index = subject_str_len;
-  if (pattern_str_len + index > subject_str_len) return -1;
-  return %StringIndexOf(subject_str, pattern_str, index);
+  return %StringIndexOf(subject, pattern, index);
 }
 
 
 // ECMA-262 section 15.5.4.8
-function StringLastIndexOf(searchString /* position */) {  // length == 1
+function StringLastIndexOf(pat /* position */) {  // length == 1
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.lastIndexOf"]);
+  }
   var sub = TO_STRING_INLINE(this);
   var subLength = sub.length;
-  var pat = TO_STRING_INLINE(searchString);
+  var pat = TO_STRING_INLINE(pat);
   var patLength = pat.length;
   var index = subLength - patLength;
   if (%_ArgumentsLength() > 1) {
     var position = ToNumber(%_Arguments(1));
-    if (!$isNaN(position)) {
+    if (!NUMBER_IS_NAN(position)) {
       position = TO_INTEGER(position);
       if (position < 0) {
         position = 0;
       }
       if (position + patLength < subLength) {
-        index = position
+        index = position;
       }
     }
   }
@@ -144,61 +163,36 @@ function StringLastIndexOf(searchString /* position */) {  // length == 1
 }
 
 
-function CloneDenseArray(array) {
-  if (array === null) return null;
-  var clone = new $Array(array.length);
-  for (var i = 0; i < array.length; i++) {
-    clone[i] = array[i];
-  }
-  return clone;
-}
-
-
 // ECMA-262 section 15.5.4.9
 //
 // This function is implementation specific.  For now, we do not
 // do anything locale specific.
 function StringLocaleCompare(other) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.localeCompare"]);
+  }
   if (%_ArgumentsLength() === 0) return 0;
-
-  var this_str = TO_STRING_INLINE(this);
-  var other_str = TO_STRING_INLINE(other);
-  return %StringLocaleCompare(this_str, other_str);
+  return %StringLocaleCompare(TO_STRING_INLINE(this),
+                              TO_STRING_INLINE(other));
 }
 
 
 // ECMA-262 section 15.5.4.10
 function StringMatch(regexp) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.match"]);
+  }
   var subject = TO_STRING_INLINE(this);
   if (IS_REGEXP(regexp)) {
-    if (!regexp.global) return regexp.exec(subject);
-
-    var cache = regExpCache;
-    var saveAnswer = false;
-
-    if (%_ObjectEquals(cache.type, 'match') &&
-        %_IsRegExpEquivalent(cache.regExp, regexp) &&
-        %_ObjectEquals(cache.subject, subject)) {
-      if (cache.answerSaved) {
-        return CloneDenseArray(cache.answer);
-      } else {
-        saveAnswer = true;
-      }
-    }
+    if (!regexp.global) return RegExpExecNoTests(regexp, subject, 0);
     %_Log('regexp', 'regexp-match,%0S,%1r', [subject, regexp]);
     // lastMatchInfo is defined in regexp.js.
-    var result = %StringMatch(subject, regexp, lastMatchInfo);
-    cache.type = 'match';
-    cache.regExp = regexp;
-    cache.subject = subject;
-    if (saveAnswer) cache.answer = CloneDenseArray(result);
-    cache.answerSaved = saveAnswer;
-    return result;
+    return %StringMatch(subject, regexp, lastMatchInfo);
   }
   // Non-regexp argument.
   regexp = new $RegExp(regexp);
-  // Don't check regexp exec cache, since the regexp is new.
-  // TODO(lrn): Change this if we start caching regexps here.
   return RegExpExecNoTests(regexp, subject, 0);
 }
 
@@ -208,9 +202,7 @@ function StringMatch(regexp) {
 // otherwise we call the runtime system.
 function SubString(string, start, end) {
   // Use the one character string cache.
-  if (start + 1 == end) {
-    return %_StringCharAt(string, start);
-  }
+  if (start + 1 == end) return %_StringCharAt(string, start);
   return %_SubString(string, start, end);
 }
 
@@ -225,13 +217,16 @@ var reusableMatchInfo = [2, "", "", -1, -1];
 
 // ECMA-262, section 15.5.4.11
 function StringReplace(search, replace) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.replace"]);
+  }
   var subject = TO_STRING_INLINE(this);
 
   // Delegate to one of the regular expression variants if necessary.
   if (IS_REGEXP(search)) {
     %_Log('regexp', 'regexp-replace,%0r,%1S', [search, subject]);
-    if (IS_FUNCTION(replace)) {
-      regExpCache.type = 'none';
+    if (IS_SPEC_FUNCTION(replace)) {
       if (search.global) {
         return StringReplaceGlobalRegExpWithFunction(subject, search, replace);
       } else {
@@ -240,12 +235,24 @@ function StringReplace(search, replace) {
                                                         replace);
       }
     } else {
-      return StringReplaceRegExp(subject, search, replace);
+      return %StringReplaceRegExpWithString(subject,
+                                            search,
+                                            TO_STRING_INLINE(replace),
+                                            lastMatchInfo);
     }
   }
 
   // Convert the search argument to a string and search for it.
   search = TO_STRING_INLINE(search);
+  if (search.length == 1 &&
+      subject.length > 0xFF &&
+      IS_STRING(replace) &&
+      %StringIndexOf(replace, '$', 0) < 0) {
+    // Searching by traversing a cons string tree and replace with cons of
+    // slices works only when the replaced string is a single character, being
+    // replaced by a simple string and only pays off for long strings.
+    return %StringReplaceOneCharWithString(subject, search, replace);
+  }
   var start = %StringIndexOf(subject, search, 0);
   if (start < 0) return subject;
   var end = start + search.length;
@@ -255,8 +262,13 @@ function StringReplace(search, replace) {
   builder.addSpecialSlice(0, start);
 
   // Compute the string to replace with.
-  if (IS_FUNCTION(replace)) {
-    builder.add(replace.call(null, search, start, subject));
+  if (IS_SPEC_FUNCTION(replace)) {
+    var receiver = %GetDefaultReceiver(replace);
+    builder.add(%_CallFunction(receiver,
+                               search,
+                               start,
+                               subject,
+                               replace));
   } else {
     reusableMatchInfo[CAPTURE0] = start;
     reusableMatchInfo[CAPTURE1] = end;
@@ -271,43 +283,21 @@ function StringReplace(search, replace) {
 }
 
 
-// Helper function for regular expressions in String.prototype.replace.
-function StringReplaceRegExp(subject, regexp, replace) {
-  var cache = regExpCache;
-  if (%_ObjectEquals(cache.type, 'replace') &&
-      %_IsRegExpEquivalent(cache.regExp, regexp) &&
-      %_ObjectEquals(cache.replaceString, replace) &&
-      %_ObjectEquals(cache.subject, subject)) {
-    return cache.answer;
-  }
-  replace = TO_STRING_INLINE(replace);
-  var answer = %StringReplaceRegExpWithString(subject,
-                                              regexp,
-                                              replace,
-                                              lastMatchInfo);
-  cache.subject = subject;
-  cache.regExp = regexp;
-  cache.replaceString = replace;
-  cache.answer = answer;
-  cache.type = 'replace';
-  return answer;
-}
-
-
 // Expand the $-expressions in the string and return a new string with
 // the result.
 function ExpandReplacement(string, subject, matchInfo, builder) {
+  var length = string.length;
+  var builder_elements = builder.elements;
   var next = %StringIndexOf(string, '$', 0);
   if (next < 0) {
-    builder.add(string);
+    if (length > 0) builder_elements.push(string);
     return;
   }
 
   // Compute the number of captures; see ECMA-262, 15.5.4.11, p. 102.
   var m = NUMBER_OF_CAPTURES(matchInfo) >> 1;  // Includes the match.
 
-  if (next > 0) builder.add(SubString(string, 0, next));
-  var length = string.length;
+  if (next > 0) builder_elements.push(SubString(string, 0, next));
 
   while (true) {
     var expansion = '$';
@@ -316,7 +306,7 @@ function ExpandReplacement(string, subject, matchInfo, builder) {
       var peek = %_StringCharCodeAt(string, position);
       if (peek == 36) {         // $$
         ++position;
-        builder.add('$');
+        builder_elements.push('$');
       } else if (peek == 38) {  // $& - match
         ++position;
         builder.addSpecialSlice(matchInfo[CAPTURE0],
@@ -353,14 +343,14 @@ function ExpandReplacement(string, subject, matchInfo, builder) {
           // digit capture references, we can only enter here when a
           // single digit capture reference is outside the range of
           // captures.
-          builder.add('$');
+          builder_elements.push('$');
           --position;
         }
       } else {
-        builder.add('$');
+        builder_elements.push('$');
       }
     } else {
-      builder.add('$');
+      builder_elements.push('$');
     }
 
     // Go the the next $ in the string.
@@ -370,15 +360,17 @@ function ExpandReplacement(string, subject, matchInfo, builder) {
     // haven't reached the end, we need to append the suffix.
     if (next < 0) {
       if (position < length) {
-        builder.add(SubString(string, position, length));
+        builder_elements.push(SubString(string, position, length));
       }
       return;
     }
 
     // Append substring between the previous and the next $ character.
-    builder.add(SubString(string, position, next));
+    if (next > position) {
+      builder_elements.push(SubString(string, position, next));
+    }
   }
-};
+}
 
 
 // Compute the string of a given regular expression capture.
@@ -391,7 +383,7 @@ function CaptureString(string, lastCaptureInfo, index) {
   if (start < 0) return;
   var end = lastCaptureInfo[CAPTURE(scaled + 1)];
   return SubString(string, start, end);
-};
+}
 
 
 // Add the string of a given regular expression capture to the
@@ -404,12 +396,12 @@ function addCaptureString(builder, matchInfo, index) {
   if (start < 0) return;
   var end = matchInfo[CAPTURE(scaled + 1)];
   builder.addSpecialSlice(start, end);
-};
+}
 
 // TODO(lrn): This array will survive indefinitely if replace is never
 // called again. However, it will be empty, since the contents are cleared
 // in the finally block.
-var reusableReplaceArray = $Array(16);
+var reusableReplaceArray = new InternalArray(16);
 
 // Helper function for replacing regular expressions with the result of a
 // function application in String.prototype.replace.
@@ -422,7 +414,7 @@ function StringReplaceGlobalRegExpWithFunction(subject, regexp, replace) {
     // of another replace) or we have failed to set the reusable array
     // back due to an exception in a replacement function. Create a new
     // array to use in the future, or until the original is written back.
-    resultArray = $Array(16);
+    resultArray = new InternalArray(16);
   }
   var res = %RegExpExecMultiple(regexp,
                                 subject,
@@ -438,8 +430,8 @@ function StringReplaceGlobalRegExpWithFunction(subject, regexp, replace) {
   var i = 0;
   if (NUMBER_OF_CAPTURES(lastMatchInfo) == 2) {
     var match_start = 0;
-    var override = [null, 0, subject];
-    var receiver = %GetGlobalReceiver();
+    var override = new InternalArray(null, 0, subject);
+    var receiver = %GetDefaultReceiver(replace);
     while (i < len) {
       var elem = res[i];
       if (%_IsSmi(elem)) {
@@ -454,26 +446,21 @@ function StringReplaceGlobalRegExpWithFunction(subject, regexp, replace) {
         lastMatchInfoOverride = override;
         var func_result =
             %_CallFunction(receiver, elem, match_start, subject, replace);
-        if (!IS_STRING(func_result)) {
-          func_result = NonStringToString(func_result);
-        }
-        res[i] = func_result;
+        res[i] = TO_STRING_INLINE(func_result);
         match_start += elem.length;
       }
       i++;
     }
   } else {
+    var receiver = %GetDefaultReceiver(replace);
     while (i < len) {
       var elem = res[i];
       if (!%_IsSmi(elem)) {
         // elem must be an Array.
         // Use the apply argument as backing for global RegExp properties.
         lastMatchInfoOverride = elem;
-        var func_result = replace.apply(null, elem);
-        if (!IS_STRING(func_result)) {
-          func_result = NonStringToString(func_result);
-        }
-        res[i] = func_result;
+        var func_result = %Apply(replace, receiver, elem, 0, elem.length);
+        res[i] = TO_STRING_INLINE(func_result);
       }
       i++;
     }
@@ -498,21 +485,22 @@ function StringReplaceNonGlobalRegExpWithFunction(subject, regexp, replace) {
   // The number of captures plus one for the match.
   var m = NUMBER_OF_CAPTURES(matchInfo) >> 1;
   var replacement;
+  var receiver = %GetDefaultReceiver(replace);
   if (m == 1) {
     // No captures, only the match, which is always valid.
     var s = SubString(subject, index, endOfMatch);
     // Don't call directly to avoid exposing the built-in global object.
     replacement =
-        %_CallFunction(%GetGlobalReceiver(), s, index, subject, replace);
+        %_CallFunction(receiver, s, index, subject, replace);
   } else {
-    var parameters = $Array(m + 2);
+    var parameters = new InternalArray(m + 2);
     for (var j = 0; j < m; j++) {
       parameters[j] = CaptureString(subject, matchInfo, j);
     }
     parameters[j] = index;
     parameters[j + 1] = subject;
 
-    replacement = replace.apply(null, parameters);
+    replacement = %Apply(replace, receiver, parameters, 0, j + 2);
   }
 
   result.add(replacement);  // The add method converts to string if necessary.
@@ -525,6 +513,10 @@ function StringReplaceNonGlobalRegExpWithFunction(subject, regexp, replace) {
 
 // ECMA-262 section 15.5.4.12
 function StringSearch(re) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.search"]);
+  }
   var regexp;
   if (IS_STRING(re)) {
     regexp = %_GetFromCache(STRING_TO_REGEXP_CACHE_ID, re);
@@ -533,8 +525,7 @@ function StringSearch(re) {
   } else {
     regexp = new $RegExp(re);
   }
-  var s = TO_STRING_INLINE(this);
-  var match = DoRegExpExec(regexp, s, 0);
+  var match = DoRegExpExec(regexp, TO_STRING_INLINE(this), 0);
   if (match) {
     return match[CAPTURE0];
   }
@@ -544,34 +535,44 @@ function StringSearch(re) {
 
 // ECMA-262 section 15.5.4.13
 function StringSlice(start, end) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.slice"]);
+  }
   var s = TO_STRING_INLINE(this);
   var s_len = s.length;
   var start_i = TO_INTEGER(start);
   var end_i = s_len;
-  if (end !== void 0)
+  if (end !== void 0) {
     end_i = TO_INTEGER(end);
+  }
 
   if (start_i < 0) {
     start_i += s_len;
-    if (start_i < 0)
+    if (start_i < 0) {
       start_i = 0;
+    }
   } else {
-    if (start_i > s_len)
+    if (start_i > s_len) {
       start_i = s_len;
+    }
   }
 
   if (end_i < 0) {
     end_i += s_len;
-    if (end_i < 0)
+    if (end_i < 0) {
       end_i = 0;
+    }
   } else {
-    if (end_i > s_len)
+    if (end_i > s_len) {
       end_i = s_len;
+    }
   }
 
   var num_c = end_i - start_i;
-  if (num_c < 0)
+  if (num_c < 0) {
     num_c = 0;
+  }
 
   return SubString(s, start_i, start_i + num_c);
 }
@@ -579,9 +580,12 @@ function StringSlice(start, end) {
 
 // ECMA-262 section 15.5.4.14
 function StringSplit(separator, limit) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.split"]);
+  }
   var subject = TO_STRING_INLINE(this);
   limit = (IS_UNDEFINED(limit)) ? 0xffffffff : TO_UINT32(limit);
-  if (limit === 0) return [];
 
   // ECMA-262 says that if separator is undefined, the result should
   // be an array of size 1 containing the entire string.  SpiderMonkey
@@ -595,67 +599,48 @@ function StringSplit(separator, limit) {
   var length = subject.length;
   if (!IS_REGEXP(separator)) {
     separator = TO_STRING_INLINE(separator);
+
+    if (limit === 0) return [];
+
     var separator_length = separator.length;
 
     // If the separator string is empty then return the elements in the subject.
-    if (separator_length === 0) return %StringToArray(subject);
+    if (separator_length === 0) return %StringToArray(subject, limit);
 
     var result = %StringSplit(subject, separator, limit);
 
     return result;
   }
 
-  var cache = regExpCache;
-  var saveAnswer = false;
-
-  if (%_ObjectEquals(cache.type, 'split') &&
-      %_IsRegExpEquivalent(cache.regExp, separator) &&
-      %_ObjectEquals(cache.subject, subject) &&
-      %_ObjectEquals(cache.lastIndex, limit)) {
-    if (cache.answerSaved) {
-      return CloneDenseArray(cache.answer);
-    } else {
-      saveAnswer = true;
-    }
-  }
-
-  cache.type = 'split';
-  cache.regExp = separator;
-  cache.subject = subject;
-  // Reuse lastIndex field for split limit when type is "split".
-  cache.lastIndex = limit;
+  if (limit === 0) return [];
 
   %_Log('regexp', 'regexp-split,%0S,%1r', [subject, separator]);
 
   if (length === 0) {
-    cache.answerSaved = true;
-    if (splitMatch(separator, subject, 0, 0) != null) {
-      cache.answer = [];
+    if (DoRegExpExec(separator, subject, 0, 0) != null) {
       return [];
     }
-    cache.answer = [subject];
     return [subject];
   }
 
   var currentIndex = 0;
   var startIndex = 0;
+  var startMatch = 0;
   var result = [];
 
   outer_loop:
   while (true) {
 
     if (startIndex === length) {
-      result[result.length] = subject.slice(currentIndex, length);
+      result.push(SubString(subject, currentIndex, length));
       break;
     }
 
-    var matchInfo = splitMatch(separator, subject, currentIndex, startIndex);
-
-    if (IS_NULL(matchInfo)) {
-      result[result.length] = subject.slice(currentIndex, length);
+    var matchInfo = DoRegExpExec(separator, subject, startIndex);
+    if (matchInfo == null || length === (startMatch = matchInfo[CAPTURE0])) {
+      result.push(SubString(subject, currentIndex, length));
       break;
     }
-
     var endIndex = matchInfo[CAPTURE1];
 
     // We ignore a zero-length match at the currentIndex.
@@ -664,44 +649,42 @@ function StringSplit(separator, limit) {
       continue;
     }
 
-    result[result.length] = SubString(subject, currentIndex, matchInfo[CAPTURE0]);
+    if (currentIndex + 1 == startMatch) {
+      result.push(%_StringCharAt(subject, currentIndex));
+    } else {
+      result.push(%_SubString(subject, currentIndex, startMatch));
+    }
+
     if (result.length === limit) break;
 
-    var num_captures = NUMBER_OF_CAPTURES(matchInfo);
-    for (var i = 2; i < num_captures; i += 2) {
-      var start = matchInfo[CAPTURE(i)];
-      var end = matchInfo[CAPTURE(i + 1)];
-      if (start != -1 && end != -1) {
-        result[result.length] = SubString(subject, start, end);
+    var matchinfo_len = NUMBER_OF_CAPTURES(matchInfo) + REGEXP_FIRST_CAPTURE;
+    for (var i = REGEXP_FIRST_CAPTURE + 2; i < matchinfo_len; ) {
+      var start = matchInfo[i++];
+      var end = matchInfo[i++];
+      if (end != -1) {
+        if (start + 1 == end) {
+          result.push(%_StringCharAt(subject, start));
+        } else {
+          result.push(%_SubString(subject, start, end));
+        }
       } else {
-        result[result.length] = void 0;
+        result.push(void 0);
       }
       if (result.length === limit) break outer_loop;
     }
 
     startIndex = currentIndex = endIndex;
   }
-  if (saveAnswer) cache.answer = CloneDenseArray(result);
-  cache.answerSaved = saveAnswer;
   return result;
-}
-
-
-// ECMA-262 section 15.5.4.14
-// Helper function used by split.  This version returns the matchInfo
-// instead of allocating a new array with basically the same information.
-function splitMatch(separator, subject, current_index, start_index) {
-  var matchInfo = DoRegExpExec(separator, subject, start_index);
-  if (matchInfo == null) return null;
-  // Section 15.5.4.14 paragraph two says that we do not allow zero length
-  // matches at the end of the string.
-  if (matchInfo[CAPTURE0] === subject.length) return null;
-  return matchInfo;
 }
 
 
 // ECMA-262 section 15.5.4.15
 function StringSubstring(start, end) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.subString"]);
+  }
   var s = TO_STRING_INLINE(this);
   var s_len = s.length;
 
@@ -727,12 +710,18 @@ function StringSubstring(start, end) {
     }
   }
 
-  return SubString(s, start_i, end_i);
+  return ((start_i + 1 == end_i)
+          ? %_StringCharAt(s, start_i)
+          : %_SubString(s, start_i, end_i));
 }
 
 
 // This is not a part of ECMA-262.
 function StringSubstr(start, n) {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.substr"]);
+  }
   var s = TO_STRING_INLINE(this);
   var len;
 
@@ -765,47 +754,77 @@ function StringSubstr(start, n) {
   var end = start + len;
   if (end > s.length) end = s.length;
 
-  return SubString(s, start, end);
+  return ((start + 1 == end)
+          ? %_StringCharAt(s, start)
+          : %_SubString(s, start, end));
 }
 
 
 // ECMA-262, 15.5.4.16
 function StringToLowerCase() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.toLowerCase"]);
+  }
   return %StringToLowerCase(TO_STRING_INLINE(this));
 }
 
 
 // ECMA-262, 15.5.4.17
 function StringToLocaleLowerCase() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.toLocaleLowerCase"]);
+  }
   return %StringToLowerCase(TO_STRING_INLINE(this));
 }
 
 
 // ECMA-262, 15.5.4.18
 function StringToUpperCase() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.toUpperCase"]);
+  }
   return %StringToUpperCase(TO_STRING_INLINE(this));
 }
 
 
 // ECMA-262, 15.5.4.19
 function StringToLocaleUpperCase() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.toLocaleUpperCase"]);
+  }
   return %StringToUpperCase(TO_STRING_INLINE(this));
 }
 
 // ES5, 15.5.4.20
 function StringTrim() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.trim"]);
+  }
   return %StringTrim(TO_STRING_INLINE(this), true, true);
 }
 
 function StringTrimLeft() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.trimLeft"]);
+  }
   return %StringTrim(TO_STRING_INLINE(this), true, false);
 }
 
 function StringTrimRight() {
+  if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.trimRight"]);
+  }
   return %StringTrim(TO_STRING_INLINE(this), false, true);
 }
 
-var static_charcode_array = new $Array(4);
+var static_charcode_array = new InternalArray(4);
 
 // ECMA-262, section 15.5.3.2
 function StringFromCharCode(code) {
@@ -835,7 +854,7 @@ function HtmlEscape(str) {
                               .replace(/>/g, "&gt;")
                               .replace(/"/g, "&quot;")
                               .replace(/'/g, "&#039;");
-};
+}
 
 
 // Compatibility support for KJS.
@@ -910,62 +929,53 @@ function ReplaceResultBuilder(str) {
   if (%_ArgumentsLength() > 1) {
     this.elements = %_Arguments(1);
   } else {
-    this.elements = new $Array();
+    this.elements = new InternalArray();
   }
   this.special_string = str;
 }
 
-
-ReplaceResultBuilder.prototype.add = function(str) {
-  str = TO_STRING_INLINE(str);
-  if (str.length > 0) {
+SetUpLockedPrototype(ReplaceResultBuilder,
+  $Array("elements", "special_string"), $Array(
+  "add", function(str) {
+    str = TO_STRING_INLINE(str);
+    if (str.length > 0) this.elements.push(str);
+  },
+  "addSpecialSlice", function(start, end) {
+    var len = end - start;
+    if (start < 0 || len <= 0) return;
+    if (start < 0x80000 && len < 0x800) {
+      this.elements.push((start << 11) | len);
+    } else {
+      // 0 < len <= String::kMaxLength and Smi::kMaxValue >= String::kMaxLength,
+      // so -len is a smi.
+      var elements = this.elements;
+      elements.push(-len);
+      elements.push(start);
+    }
+  },
+  "generate", function() {
     var elements = this.elements;
-    elements[elements.length] = str;
+    return %StringBuilderConcat(elements, elements.length, this.special_string);
   }
-}
-
-
-ReplaceResultBuilder.prototype.addSpecialSlice = function(start, end) {
-  var len = end - start;
-  if (start < 0 || len <= 0) return;
-  var elements = this.elements;
-  if (start < 0x80000 && len < 0x800) {
-    elements[elements.length] = (start << 11) | len;
-  } else {
-    // 0 < len <= String::kMaxLength and Smi::kMaxValue >= String::kMaxLength,
-    // so -len is a smi.
-    elements[elements.length] = -len;
-    elements[elements.length] = start;
-  }
-}
-
-
-ReplaceResultBuilder.prototype.generate = function() {
-  var elements = this.elements;
-  return %StringBuilderConcat(elements, elements.length, this.special_string);
-}
-
-
-function StringToJSON(key) {
-  return CheckJSONPrimitive(this.valueOf());
-}
+));
 
 
 // -------------------------------------------------------------------
 
-function SetupString() {
-  // Setup the constructor property on the String prototype object.
+function SetUpString() {
+  %CheckIsBootstrapping();
+  // Set up the constructor property on the String prototype object.
   %SetProperty($String.prototype, "constructor", $String, DONT_ENUM);
 
 
-  // Setup the non-enumerable functions on the String object.
+  // Set up the non-enumerable functions on the String object.
   InstallFunctions($String, DONT_ENUM, $Array(
     "fromCharCode", StringFromCharCode
   ));
 
 
-  // Setup the non-enumerable functions on the String prototype object.
-  InstallFunctionsOnHiddenPrototype($String.prototype, DONT_ENUM, $Array(
+  // Set up the non-enumerable functions on the String prototype object.
+  InstallFunctions($String.prototype, DONT_ENUM, $Array(
     "valueOf", StringValueOf,
     "toString", StringToString,
     "charAt", StringCharAt,
@@ -1000,10 +1010,8 @@ function SetupString() {
     "small", StringSmall,
     "strike", StringStrike,
     "sub", StringSub,
-    "sup", StringSup,
-    "toJSON", StringToJSON
+    "sup", StringSup
   ));
 }
 
-
-SetupString();
+SetUpString();

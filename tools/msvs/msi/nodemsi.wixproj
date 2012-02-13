@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <ProductVersion>3.5</ProductVersion>
+    <ProjectGuid>{1d808ff0-b5a9-4be9-859d-b334b6f48be2}</ProjectGuid>
+    <SchemaVersion>2.0</SchemaVersion>
+    <OutputName>node</OutputName>
+    <OutputType>Package</OutputType>
+    <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' AND '$(MSBuildExtensionsPath32)' != '' ">$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets</WixTargetsPath>
+    <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' ">$(MSBuildExtensionsPath)\Microsoft\WiX\v3.x\Wix.targets</WixTargetsPath>
+    <NodeVersion Condition=" '$(NodeVersion)' == '' ">0.0.0.0</NodeVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <OutputPath>..\..\..\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <OutputPath>..\..\..\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="product.wxs" />
+    <Compile Include="..\..\..\npm.wxs" />
+  </ItemGroup>
+  <ItemGroup>
+    <WixExtension Include="WixUIExtension">
+      <HintPath>$(WixExtDir)\WixUIExtension.dll</HintPath>
+      <Name>WixUIExtension</Name>
+    </WixExtension>
+  </ItemGroup>
+  <UsingTask TaskName="GenerateProductId" TaskFactory="CodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.v4.0.dll">
+    <ParameterGroup>
+      <ProductId ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          this.ProductId = System.Guid.NewGuid().ToString().ToUpper();
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+  <Import Project="$(WixTargetsPath)" />
+    <Target Name="BeforeBuild">
+      <GenerateProductId>
+        <Output PropertyName="NodeProductId" TaskParameter="ProductId"/>
+      </GenerateProductId>
+      <CreateProperty Value="$(DefineConstants);ProductId=$(NodeProductId)">
+        <Output TaskParameter="Value" PropertyName="DefineConstants" />
+      </CreateProperty>
+    </Target>
+</Project>

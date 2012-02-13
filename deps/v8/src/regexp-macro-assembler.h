@@ -48,6 +48,7 @@ class RegExpMacroAssembler {
   enum IrregexpImplementation {
     kIA32Implementation,
     kARMImplementation,
+    kMIPSImplementation,
     kX64Implementation,
     kBytecodeImplementation
   };
@@ -73,11 +74,11 @@ class RegExpMacroAssembler {
   virtual void CheckAtStart(Label* on_at_start) = 0;
   // Dispatch after looking the current character up in a 2-bits-per-entry
   // map.  The destinations vector has up to 4 labels.
-  virtual void CheckCharacter(uint32_t c, Label* on_equal) = 0;
+  virtual void CheckCharacter(unsigned c, Label* on_equal) = 0;
   // Bitwise and the current character with the given constant and then
   // check for a match with c.
-  virtual void CheckCharacterAfterAnd(uint32_t c,
-                                      uint32_t and_with,
+  virtual void CheckCharacterAfterAnd(unsigned c,
+                                      unsigned and_with,
                                       Label* on_equal) = 0;
   virtual void CheckCharacterGT(uc16 limit, Label* on_greater) = 0;
   virtual void CheckCharacterLT(uc16 limit, Label* on_less) = 0;
@@ -101,9 +102,9 @@ class RegExpMacroAssembler {
   // fail to match then goto the on_failure label.  End of input always
   // matches.  If the label is NULL then we should pop a backtrack address off
   // the stack and go to that.
-  virtual void CheckNotCharacter(uint32_t c, Label* on_not_equal) = 0;
-  virtual void CheckNotCharacterAfterAnd(uint32_t c,
-                                         uint32_t and_with,
+  virtual void CheckNotCharacter(unsigned c, Label* on_not_equal) = 0;
+  virtual void CheckNotCharacterAfterAnd(unsigned c,
+                                         unsigned and_with,
                                          Label* on_not_equal) = 0;
   // Subtract a constant from the current character, then or with the given
   // constant and then check for a match with c.
@@ -129,7 +130,7 @@ class RegExpMacroAssembler {
     return false;
   }
   virtual void Fail() = 0;
-  virtual Handle<Object> GetCode(Handle<String> source) = 0;
+  virtual Handle<HeapObject> GetCode(Handle<String> source) = 0;
   virtual void GoTo(Label* label) = 0;
   // Check whether a register is >= a given constant and go to a label if it
   // is.  Backtracks instead if the label is NULL.
@@ -155,11 +156,19 @@ class RegExpMacroAssembler {
                             StackCheckFlag check_stack_limit) = 0;
   virtual void ReadCurrentPositionFromRegister(int reg) = 0;
   virtual void ReadStackPointerFromRegister(int reg) = 0;
+  virtual void SetCurrentPositionFromEnd(int by) = 0;
   virtual void SetRegister(int register_index, int to) = 0;
   virtual void Succeed() = 0;
   virtual void WriteCurrentPositionToRegister(int reg, int cp_offset) = 0;
   virtual void ClearRegisters(int reg_from, int reg_to) = 0;
   virtual void WriteStackPointerToRegister(int reg) = 0;
+
+  // Controls the generation of large inlined constants in the code.
+  void set_slow_safe(bool ssc) { slow_safe_compiler_ = ssc; }
+  bool slow_safe() { return slow_safe_compiler_; }
+
+ private:
+  bool slow_safe_compiler_;
 };
 
 
@@ -189,30 +198,33 @@ class NativeRegExpMacroAssembler: public RegExpMacroAssembler {
                       Handle<String> subject,
                       int* offsets_vector,
                       int offsets_vector_length,
-                      int previous_index);
+                      int previous_index,
+                      Isolate* isolate);
 
   // Compares two-byte strings case insensitively.
   // Called from generated RegExp code.
   static int CaseInsensitiveCompareUC16(Address byte_offset1,
                                         Address byte_offset2,
-                                        size_t byte_length);
+                                        size_t byte_length,
+                                        Isolate* isolate);
 
   // Called from RegExp if the backtrack stack limit is hit.
   // Tries to expand the stack. Returns the new stack-pointer if
   // successful, and updates the stack_top address, or returns 0 if unable
   // to grow the stack.
   // This function must not trigger a garbage collection.
-  static Address GrowStack(Address stack_pointer, Address* stack_top);
+  static Address GrowStack(Address stack_pointer, Address* stack_top,
+                           Isolate* isolate);
 
   static const byte* StringCharacterPosition(String* subject, int start_index);
 
   // Byte map of ASCII characters with a 0xff if the character is a word
   // character (digit, letter or underscore) and 0x00 otherwise.
   // Used by generated RegExp code.
-  static byte word_character_map[128];
+  static const byte word_character_map[128];
 
   static Address word_character_map_address() {
-    return &word_character_map[0];
+    return const_cast<Address>(&word_character_map[0]);
   }
 
   static Result Execute(Code* code,
@@ -220,7 +232,8 @@ class NativeRegExpMacroAssembler: public RegExpMacroAssembler {
                         int start_offset,
                         const byte* input_start,
                         const byte* input_end,
-                        int* output);
+                        int* output,
+                        Isolate* isolate);
 };
 
 #endif  // V8_INTERPRETED_REGEXP

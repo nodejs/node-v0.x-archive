@@ -1,4 +1,4 @@
-// Copyright 2007-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,7 +28,9 @@
 #ifndef V8_V8_COUNTERS_H_
 #define V8_V8_COUNTERS_H_
 
+#include "allocation.h"
 #include "counters.h"
+#include "v8globals.h"
 
 namespace v8 {
 namespace internal {
@@ -45,14 +47,7 @@ namespace internal {
   /* Total compilation times. */                                      \
   HT(compile, V8.Compile)                                             \
   HT(compile_eval, V8.CompileEval)                                    \
-  HT(compile_lazy, V8.CompileLazy)                                    \
-  /* Individual compiler passes. */                                   \
-  HT(rewriting, V8.Rewriting)                                         \
-  HT(usage_analysis, V8.UsageAnalysis)                                \
-  HT(variable_allocation, V8.VariableAllocation)                      \
-  HT(ast_optimization, V8.ASTOptimization)                            \
-  HT(code_generation, V8.CodeGeneration)                              \
-  HT(deferred_code_generation, V8.DeferredCodeGeneration)
+  HT(compile_lazy, V8.CompileLazy)
 
 
 // WARNING: STATS_COUNTER_LIST_* is a very large macro that is causing MSVC
@@ -112,7 +107,10 @@ namespace internal {
   SC(contexts_created_by_snapshot, V8.ContextsCreatedBySnapshot)      \
   /* Number of code objects found from pc. */                         \
   SC(pc_to_code, V8.PcToCode)                                         \
-  SC(pc_to_code_cached, V8.PcToCodeCached)
+  SC(pc_to_code_cached, V8.PcToCodeCached)                            \
+  /* The store-buffer implementation of the write barrier. */         \
+  SC(store_buffer_compactions, V8.StoreBufferCompactions)             \
+  SC(store_buffer_overflows, V8.StoreBufferOverflows)
 
 
 #define STATS_COUNTER_LIST_2(SC)                                      \
@@ -131,13 +129,12 @@ namespace internal {
      V8.GCCompactorCausedByWeakHandles)                               \
   SC(gc_last_resort_from_js, V8.GCLastResortFromJS)                   \
   SC(gc_last_resort_from_handles, V8.GCLastResortFromHandles)         \
-  SC(map_slow_to_fast_elements, V8.MapSlowToFastElements)             \
-  SC(map_fast_to_slow_elements, V8.MapFastToSlowElements)             \
   /* How is the generic keyed-load stub used? */                      \
   SC(keyed_load_generic_smi, V8.KeyedLoadGenericSmi)                  \
   SC(keyed_load_generic_symbol, V8.KeyedLoadGenericSymbol)            \
   SC(keyed_load_generic_lookup_cache, V8.KeyedLoadGenericLookupCache) \
   SC(keyed_load_generic_slow, V8.KeyedLoadGenericSlow)                \
+  SC(keyed_load_polymorphic_stubs, V8.KeyedLoadPolymorphicStubs)      \
   SC(keyed_load_external_array_slow, V8.KeyedLoadExternalArraySlow)   \
   /* How is the generic keyed-call stub used? */                      \
   SC(keyed_call_generic_smi_fast, V8.KeyedCallGenericSmiFast)         \
@@ -161,11 +158,26 @@ namespace internal {
   SC(named_load_inline_miss, V8.NamedLoadInlineMiss)                  \
   SC(named_load_global_inline, V8.NamedLoadGlobalInline)              \
   SC(named_load_global_inline_miss, V8.NamedLoadGlobalInlineMiss)     \
+  SC(dont_delete_hint_hit, V8.DontDeleteHintHit)                      \
+  SC(dont_delete_hint_miss, V8.DontDeleteHintMiss)                    \
+  SC(named_load_global_stub, V8.NamedLoadGlobalStub)                  \
+  SC(named_load_global_stub_miss, V8.NamedLoadGlobalStubMiss)         \
   SC(keyed_store_field, V8.KeyedStoreField)                           \
+  SC(named_store_inline_field, V8.NamedStoreInlineField)              \
   SC(keyed_store_inline, V8.KeyedStoreInline)                         \
+  SC(named_load_inline_generic, V8.NamedLoadInlineGeneric)            \
+  SC(named_load_inline_field, V8.NamedLoadInlineFast)                 \
+  SC(keyed_load_inline_generic, V8.KeyedLoadInlineGeneric)            \
+  SC(keyed_load_inline_fast, V8.KeyedLoadInlineFast)                  \
+  SC(keyed_store_inline_generic, V8.KeyedStoreInlineGeneric)          \
+  SC(keyed_store_inline_fast, V8.KeyedStoreInlineFast)                \
+  SC(named_store_inline_generic, V8.NamedStoreInlineGeneric)          \
+  SC(named_store_inline_fast, V8.NamedStoreInlineFast)                \
   SC(keyed_store_inline_miss, V8.KeyedStoreInlineMiss)                \
   SC(named_store_global_inline, V8.NamedStoreGlobalInline)            \
   SC(named_store_global_inline_miss, V8.NamedStoreGlobalInlineMiss)   \
+  SC(keyed_store_polymorphic_stubs, V8.KeyedStorePolymorphicStubs)    \
+  SC(keyed_store_external_array_slow, V8.KeyedStoreExternalArraySlow) \
   SC(store_normal_miss, V8.StoreNormalMiss)                           \
   SC(store_normal_hit, V8.StoreNormalHit)                             \
   SC(cow_arrays_created_stub, V8.COWArraysCreatedStub)                \
@@ -189,13 +201,8 @@ namespace internal {
   SC(array_function_runtime, V8.ArrayFunctionRuntime)                 \
   SC(array_function_native, V8.ArrayFunctionNative)                   \
   SC(for_in, V8.ForIn)                                                \
-  SC(memcopy_aligned, V8.MemCopyAligned)                              \
-  SC(memcopy_unaligned, V8.MemCopyUnaligned)                          \
-  SC(memcopy_noxmm, V8.MemCopyNoXMM)                                  \
   SC(enum_cache_hits, V8.EnumCacheHits)                               \
   SC(enum_cache_misses, V8.EnumCacheMisses)                           \
-  SC(reloc_info_count, V8.RelocInfoCount)                             \
-  SC(reloc_info_size, V8.RelocInfoSize)                               \
   SC(zone_segment_bytes, V8.ZoneSegmentBytes)                         \
   SC(compute_entry_frame, V8.ComputeEntryFrame)                       \
   SC(generic_binary_stub_calls, V8.GenericBinaryStubCalls)            \
@@ -227,19 +234,29 @@ namespace internal {
   SC(math_sqrt, V8.MathSqrt)                                          \
   SC(math_tan, V8.MathTan)                                            \
   SC(transcendental_cache_hit, V8.TranscendentalCacheHit)             \
-  SC(transcendental_cache_miss, V8.TranscendentalCacheMiss)
+  SC(transcendental_cache_miss, V8.TranscendentalCacheMiss)           \
+  SC(stack_interrupts, V8.StackInterrupts)                            \
+  SC(runtime_profiler_ticks, V8.RuntimeProfilerTicks)                 \
+  SC(other_ticks, V8.OtherTicks)                                      \
+  SC(js_opt_ticks, V8.JsOptTicks)                                     \
+  SC(js_non_opt_ticks, V8.JsNonoptTicks)                              \
+  SC(js_other_ticks, V8.JsOtherTicks)                                 \
+  SC(smi_checks_removed, V8.SmiChecksRemoved)                         \
+  SC(map_checks_removed, V8.MapChecksRemoved)                         \
+  SC(quote_json_char_count, V8.QuoteJsonCharacterCount)               \
+  SC(quote_json_char_recount, V8.QuoteJsonCharacterReCount)
 
 
 // This file contains all the v8 counters that are in use.
-class Counters : AllStatic {
+class Counters {
  public:
 #define HT(name, caption) \
-  static HistogramTimer name;
+  HistogramTimer* name() { return &name##_; }
   HISTOGRAM_TIMER_LIST(HT)
 #undef HT
 
 #define SC(name, caption) \
-  static StatsCounter name;
+  StatsCounter* name() { return &name##_; }
   STATS_COUNTER_LIST_1(SC)
   STATS_COUNTER_LIST_2(SC)
 #undef SC
@@ -249,17 +266,43 @@ class Counters : AllStatic {
     HISTOGRAM_TIMER_LIST(RATE_ID)
 #undef RATE_ID
 #define COUNTER_ID(name, caption) k_##name,
-  STATS_COUNTER_LIST_1(COUNTER_ID)
-  STATS_COUNTER_LIST_2(COUNTER_ID)
+    STATS_COUNTER_LIST_1(COUNTER_ID)
+    STATS_COUNTER_LIST_2(COUNTER_ID)
 #undef COUNTER_ID
 #define COUNTER_ID(name) k_##name,
-  STATE_TAG_LIST(COUNTER_ID)
+    STATE_TAG_LIST(COUNTER_ID)
 #undef COUNTER_ID
     stats_counter_count
   };
 
+  StatsCounter* state_counters(StateTag state) {
+    return &state_counters_[state];
+  }
+
+ private:
+#define HT(name, caption) \
+  HistogramTimer name##_;
+  HISTOGRAM_TIMER_LIST(HT)
+#undef HT
+
+#define SC(name, caption) \
+  StatsCounter name##_;
+  STATS_COUNTER_LIST_1(SC)
+  STATS_COUNTER_LIST_2(SC)
+#undef SC
+
+  enum {
+#define COUNTER_ID(name) __##name,
+    STATE_TAG_LIST(COUNTER_ID)
+#undef COUNTER_ID
+    kSlidingStateWindowCounterCount
+  };
+
   // Sliding state window counters.
-  static StatsCounter state_counters[];
+  StatsCounter state_counters_[kSlidingStateWindowCounterCount];
+  friend class Isolate;
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(Counters);
 };
 
 } }  // namespace v8::internal

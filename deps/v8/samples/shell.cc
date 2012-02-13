@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -26,13 +26,28 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <v8.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef COMPRESS_STARTUP_DATA_BZ2
+#error Using compressed startup data is not supported for this sample
+#endif
 
+/**
+ * This sample program shows how to implement a simple javascript shell
+ * based on V8.  This includes initializing V8 with command line options,
+ * creating global functions, compiling and executing strings.
+ *
+ * For a more sophisticated shell, consider using the debug shell D8.
+ */
+
+
+v8::Persistent<v8::Context> CreateShellContext();
 void RunShell(v8::Handle<v8::Context> context);
+int RunMain(int argc, char* argv[]);
 bool ExecuteString(v8::Handle<v8::String> source,
                    v8::Handle<v8::Value> name,
                    bool print_result,
@@ -46,9 +61,37 @@ v8::Handle<v8::String> ReadFile(const char* name);
 void ReportException(v8::TryCatch* handler);
 
 
-int RunMain(int argc, char* argv[]) {
+static bool run_shell;
+
+
+int main(int argc, char* argv[]) {
   v8::V8::SetFlagsFromCommandLine(&argc, argv, true);
+  run_shell = (argc == 1);
   v8::HandleScope handle_scope;
+  v8::Persistent<v8::Context> context = CreateShellContext();
+  if (context.IsEmpty()) {
+    printf("Error creating context\n");
+    return 1;
+  }
+  context->Enter();
+  int result = RunMain(argc, argv);
+  if (run_shell) RunShell(context);
+  context->Exit();
+  context.Dispose();
+  v8::V8::Dispose();
+  return result;
+}
+
+
+// Extracts a C string from a V8 Utf8Value.
+const char* ToCString(const v8::String::Utf8Value& value) {
+  return *value ? *value : "<string conversion failed>";
+}
+
+
+// Creates a new execution environment containing the built-in
+// functions.
+v8::Persistent<v8::Context> CreateShellContext() {
   // Create a template for the global object.
   v8::Handle<v8::ObjectTemplate> global = v8::ObjectTemplate::New();
   // Bind the global 'print' function to the C++ Print callback.
@@ -61,58 +104,8 @@ int RunMain(int argc, char* argv[]) {
   global->Set(v8::String::New("quit"), v8::FunctionTemplate::New(Quit));
   // Bind the 'version' function
   global->Set(v8::String::New("version"), v8::FunctionTemplate::New(Version));
-  // Create a new execution environment containing the built-in
-  // functions
-  v8::Handle<v8::Context> context = v8::Context::New(NULL, global);
-  // Enter the newly created execution environment.
-  v8::Context::Scope context_scope(context);
-  bool run_shell = (argc == 1);
-  for (int i = 1; i < argc; i++) {
-    const char* str = argv[i];
-    if (strcmp(str, "--shell") == 0) {
-      run_shell = true;
-    } else if (strcmp(str, "-f") == 0) {
-      // Ignore any -f flags for compatibility with the other stand-
-      // alone JavaScript engines.
-      continue;
-    } else if (strncmp(str, "--", 2) == 0) {
-      printf("Warning: unknown flag %s.\nTry --help for options\n", str);
-    } else if (strcmp(str, "-e") == 0 && i + 1 < argc) {
-      // Execute argument given to -e option directly
-      v8::HandleScope handle_scope;
-      v8::Handle<v8::String> file_name = v8::String::New("unnamed");
-      v8::Handle<v8::String> source = v8::String::New(argv[i + 1]);
-      if (!ExecuteString(source, file_name, false, true))
-        return 1;
-      i++;
-    } else {
-      // Use all other arguments as names of files to load and run.
-      v8::HandleScope handle_scope;
-      v8::Handle<v8::String> file_name = v8::String::New(str);
-      v8::Handle<v8::String> source = ReadFile(str);
-      if (source.IsEmpty()) {
-        printf("Error reading '%s'\n", str);
-        return 1;
-      }
-      if (!ExecuteString(source, file_name, false, true))
-        return 1;
-    }
-  }
-  if (run_shell) RunShell(context);
-  return 0;
-}
 
-
-int main(int argc, char* argv[]) {
-  int result = RunMain(argc, argv);
-  v8::V8::Dispose();
-  return result;
-}
-
-
-// Extracts a C string from a V8 Utf8Value.
-const char* ToCString(const v8::String::Utf8Value& value) {
-  return *value ? *value : "<string conversion failed>";
+  return v8::Context::New(NULL, global);
 }
 
 
@@ -185,6 +178,8 @@ v8::Handle<v8::Value> Quit(const v8::Arguments& args) {
   // If not arguments are given args[0] will yield undefined which
   // converts to the integer value 0.
   int exit_code = args[0]->Int32Value();
+  fflush(stdout);
+  fflush(stderr);
   exit(exit_code);
   return v8::Undefined();
 }
@@ -217,20 +212,52 @@ v8::Handle<v8::String> ReadFile(const char* name) {
 }
 
 
+// Process remaining command line arguments and execute files
+int RunMain(int argc, char* argv[]) {
+  for (int i = 1; i < argc; i++) {
+    const char* str = argv[i];
+    if (strcmp(str, "--shell") == 0) {
+      run_shell = true;
+    } else if (strcmp(str, "-f") == 0) {
+      // Ignore any -f flags for compatibility with the other stand-
+      // alone JavaScript engines.
+      continue;
+    } else if (strncmp(str, "--", 2) == 0) {
+      printf("Warning: unknown flag %s.\nTry --help for options\n", str);
+    } else if (strcmp(str, "-e") == 0 && i + 1 < argc) {
+      // Execute argument given to -e option directly.
+      v8::Handle<v8::String> file_name = v8::String::New("unnamed");
+      v8::Handle<v8::String> source = v8::String::New(argv[++i]);
+      if (!ExecuteString(source, file_name, false, true)) return 1;
+    } else {
+      // Use all other arguments as names of files to load and run.
+      v8::Handle<v8::String> file_name = v8::String::New(str);
+      v8::Handle<v8::String> source = ReadFile(str);
+      if (source.IsEmpty()) {
+        printf("Error reading '%s'\n", str);
+        continue;
+      }
+      if (!ExecuteString(source, file_name, false, true)) return 1;
+    }
+  }
+  return 0;
+}
+
+
 // The read-eval-execute loop of the shell.
 void RunShell(v8::Handle<v8::Context> context) {
-  printf("V8 version %s\n", v8::V8::GetVersion());
+  printf("V8 version %s [sample shell]\n", v8::V8::GetVersion());
   static const int kBufferSize = 256;
+  // Enter the execution environment before evaluating any code.
+  v8::Context::Scope context_scope(context);
+  v8::Local<v8::String> name(v8::String::New("(shell)"));
   while (true) {
     char buffer[kBufferSize];
     printf("> ");
     char* str = fgets(buffer, kBufferSize, stdin);
     if (str == NULL) break;
     v8::HandleScope handle_scope;
-    ExecuteString(v8::String::New(str),
-                  v8::String::New("(shell)"),
-                  true,
-                  true);
+    ExecuteString(v8::String::New(str), name, true, true);
   }
   printf("\n");
 }
@@ -252,11 +279,13 @@ bool ExecuteString(v8::Handle<v8::String> source,
   } else {
     v8::Handle<v8::Value> result = script->Run();
     if (result.IsEmpty()) {
+      assert(try_catch.HasCaught());
       // Print errors that happened during execution.
       if (report_exceptions)
         ReportException(&try_catch);
       return false;
     } else {
+      assert(!try_catch.HasCaught());
       if (print_result && !result->IsUndefined()) {
         // If all went well and the result wasn't undefined then print
         // the returned value.

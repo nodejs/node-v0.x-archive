@@ -63,7 +63,7 @@ assertEquals(1, twoByteString.indexOf("\u0391"), "Alpha");
 assertEquals(2, twoByteString.indexOf("\u03a3"), "First Sigma");
 assertEquals(3, twoByteString.indexOf("\u03a3",3), "Second Sigma");
 assertEquals(4, twoByteString.indexOf("\u0395"), "Epsilon");
-assertEquals(-1, twoByteString.indexOf("\u0392"), "Not beta");  
+assertEquals(-1, twoByteString.indexOf("\u0392"), "Not beta");
 
 // Test multi-char pattern
 assertEquals(0, twoByteString.indexOf("\u039a\u0391"), "lambda Alpha");
@@ -71,7 +71,7 @@ assertEquals(1, twoByteString.indexOf("\u0391\u03a3"), "Alpha Sigma");
 assertEquals(2, twoByteString.indexOf("\u03a3\u03a3"), "Sigma Sigma");
 assertEquals(3, twoByteString.indexOf("\u03a3\u0395"), "Sigma Epsilon");
 
-assertEquals(-1, twoByteString.indexOf("\u0391\u03a3\u0395"), 
+assertEquals(-1, twoByteString.indexOf("\u0391\u03a3\u0395"),
     "Not Alpha Sigma Epsilon");
 
 //single char pattern
@@ -97,3 +97,29 @@ assertEquals(1534, long.indexOf("AJABACA", 511), "Long AJABACA, Second J");
 pattern = "JABACABADABACABA";
 assertEquals(511, long.indexOf(pattern), "Long JABACABA..., First J");
 assertEquals(1535, long.indexOf(pattern, 512), "Long JABACABA..., Second J");
+
+
+// Search for a non-ASCII string in a pure ASCII string.
+var asciiString = "arglebargleglopglyfarglebargleglopglyfarglebargleglopglyf";
+assertEquals(-1, asciiString.indexOf("\x2061"));
+
+
+// Search in string containing many non-ASCII chars.
+var allCodePoints = [];
+for (var i = 0; i < 65536; i++) allCodePoints[i] = i;
+var allCharsString = String.fromCharCode.apply(String, allCodePoints);
+// Search for string long enough to trigger complex search with ASCII pattern
+// and UC16 subject.
+assertEquals(-1, allCharsString.indexOf("notfound"));
+
+// Find substrings.
+var lengths = [1, 4, 15];  // Single char, simple and complex.
+var indices = [0x5, 0x65, 0x85, 0x105, 0x205, 0x285, 0x2005, 0x2085, 0xfff0];
+for (var lengthIndex = 0; lengthIndex < lengths.length; lengthIndex++) {
+  var length = lengths[lengthIndex];
+  for (var i = 0; i < indices.length; i++) {
+    var index = indices[i];
+    var pattern = allCharsString.substring(index, index + length);
+    assertEquals(index, allCharsString.indexOf(pattern));
+  }
+}

@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,17 +28,13 @@
 #include "v8.h"
 
 #include "bootstrapper.h"
-#include "codegen-inl.h"
+#include "codegen.h"
 #include "compiler.h"
 #include "debug.h"
-#include "oprofile-agent.h"
 #include "prettyprinter.h"
-#include "register-allocator-inl.h"
 #include "rewriter.h"
 #include "runtime.h"
-#include "scopeinfo.h"
 #include "stub-cache.h"
-#include "virtual-frame-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -62,66 +58,6 @@ Comment::~Comment() {
 #undef __
 
 
-CodeGenerator* CodeGeneratorScope::top_ = NULL;
-
-
-void CodeGenerator::ProcessDeferred() {
-  while (!deferred_.is_empty()) {
-    DeferredCode* code = deferred_.RemoveLast();
-    ASSERT(masm_ == code->masm());
-    // Record position of deferred code stub.
-    masm_->RecordStatementPosition(code->statement_position());
-    if (code->position() != RelocInfo::kNoPosition) {
-      masm_->RecordPosition(code->position());
-    }
-    // Generate the code.
-    Comment cmnt(masm_, code->comment());
-    masm_->bind(code->entry_label());
-    if (code->AutoSaveAndRestore()) {
-      code->SaveRegisters();
-    }
-    code->Generate();
-    if (code->AutoSaveAndRestore()) {
-      code->RestoreRegisters();
-      code->Exit();
-    }
-  }
-}
-
-
-void DeferredCode::Exit() {
-  masm_->jmp(exit_label());
-}
-
-
-void CodeGenerator::SetFrame(VirtualFrame* new_frame,
-                             RegisterFile* non_frame_registers) {
-  RegisterFile saved_counts;
-  if (has_valid_frame()) {
-    frame_->DetachFromCodeGenerator();
-    // The remaining register reference counts are the non-frame ones.
-    allocator_->SaveTo(&saved_counts);
-  }
-
-  if (new_frame != NULL) {
-    // Restore the non-frame register references that go with the new frame.
-    allocator_->RestoreFrom(non_frame_registers);
-    new_frame->AttachToCodeGenerator();
-  }
-
-  frame_ = new_frame;
-  saved_counts.CopyTo(non_frame_registers);
-}
-
-
-void CodeGenerator::DeleteFrame() {
-  if (has_valid_frame()) {
-    frame_->DetachFromCodeGenerator();
-    frame_ = NULL;
-  }
-}
-
-
 void CodeGenerator::MakeCodePrologue(CompilationInfo* info) {
 #ifdef DEBUG
   bool print_source = false;
@@ -129,7 +65,7 @@ void CodeGenerator::MakeCodePrologue(CompilationInfo* info) {
   bool print_json_ast = false;
   const char* ftype;
 
-  if (Bootstrapper::IsActive()) {
+  if (Isolate::Current()->bootstrapper()->IsActive()) {
     print_source = FLAG_print_builtin_source;
     print_ast = FLAG_print_builtin_ast;
     print_json_ast = FLAG_print_builtin_json_ast;
@@ -138,6 +74,16 @@ void CodeGenerator::MakeCodePrologue(CompilationInfo* info) {
     print_source = FLAG_print_source;
     print_ast = FLAG_print_ast;
     print_json_ast = FLAG_print_json_ast;
+    Vector<const char> filter = CStrVector(FLAG_hydrogen_filter);
+    if (print_source && !filter.is_empty()) {
+      print_source = info->function()->name()->IsEqualTo(filter);
+    }
+    if (print_ast && !filter.is_empty()) {
+      print_ast = info->function()->name()->IsEqualTo(filter);
+    }
+    if (print_json_ast && !filter.is_empty()) {
+      print_json_ast = info->function()->name()->IsEqualTo(filter);
+    }
     ftype = "user-defined";
   }
 
@@ -168,19 +114,33 @@ void CodeGenerator::MakeCodePrologue(CompilationInfo* info) {
 Handle<Code> CodeGenerator::MakeCodeEpilogue(MacroAssembler* masm,
                                              Code::Flags flags,
                                              CompilationInfo* info) {
+  Isolate* isolate = info->isolate();
+
   // Allocate and install the code.
   CodeDesc desc;
   masm->GetCode(&desc);
-  Handle<Code> code = Factory::NewCode(desc, flags, masm->CodeObject());
+  Handle<Code> code =
+      isolate->factory()->NewCode(desc, flags, masm->CodeObject());
 
+  if (!code.is_null()) {
+    isolate->counters()->total_compiled_code_size()->Increment(
+        code->instruction_size());
+  }
+  return code;
+}
+
+
+void CodeGenerator::PrintCode(Handle<Code> code, CompilationInfo* info) {
 #ifdef ENABLE_DISASSEMBLER
-  bool print_code = Bootstrapper::IsActive()
+  bool print_code = Isolate::Current()->bootstrapper()->IsActive()
       ? FLAG_print_builtin_code
-      : FLAG_print_code;
-  if (print_code) {
+      : (FLAG_print_code || (info->IsOptimizing() && FLAG_print_opt_code));
+  Vector<const char> filter = CStrVector(FLAG_hydrogen_filter);
+  FunctionLiteral* function = info->function();
+  bool match = filter.is_empty() || function->debug_name()->IsEqualTo(filter);
+  if (print_code && match) {
     // Print the source code if available.
     Handle<Script> script = info->script();
-    FunctionLiteral* function = info->function();
     if (!script->IsUndefined() && !script->source()->IsUndefined()) {
       PrintF("--- Raw source ---\n");
       StringInputBuffer stream(String::cast(script->source()));
@@ -194,208 +154,34 @@ Handle<Code> CodeGenerator::MakeCodeEpilogue(MacroAssembler* masm,
       }
       PrintF("\n\n");
     }
-    PrintF("--- Code ---\n");
-    code->Disassemble(*function->name()->ToCString());
+    if (info->IsOptimizing()) {
+      if (FLAG_print_unopt_code) {
+        PrintF("--- Unoptimized code ---\n");
+        info->closure()->shared()->code()->Disassemble(
+            *function->debug_name()->ToCString());
+      }
+      PrintF("--- Optimized code ---\n");
+    } else {
+      PrintF("--- Code ---\n");
+    }
+    code->Disassemble(*function->debug_name()->ToCString());
   }
 #endif  // ENABLE_DISASSEMBLER
-
-  if (!code.is_null()) {
-    Counters::total_compiled_code_size.Increment(code->instruction_size());
-  }
-  return code;
 }
 
-
-// Generate the code. Takes a function literal, generates code for it, assemble
-// all the pieces into a Code object. This function is only to be called by
-// the compiler.cc code.
-Handle<Code> CodeGenerator::MakeCode(CompilationInfo* info) {
-  Handle<Script> script = info->script();
-  if (!script->IsUndefined() && !script->source()->IsUndefined()) {
-    int len = String::cast(script->source())->length();
-    Counters::total_old_codegen_source_size.Increment(len);
-  }
-  MakeCodePrologue(info);
-  // Generate code.
-  const int kInitialBufferSize = 4 * KB;
-  MacroAssembler masm(NULL, kInitialBufferSize);
-  CodeGenerator cgen(&masm);
-  CodeGeneratorScope scope(&cgen);
-  cgen.Generate(info);
-  if (cgen.HasStackOverflow()) {
-    ASSERT(!Top::has_pending_exception());
-    return Handle<Code>::null();
-  }
-
-  InLoopFlag in_loop = (cgen.loop_nesting() != 0) ? IN_LOOP : NOT_IN_LOOP;
-  Code::Flags flags = Code::ComputeFlags(Code::FUNCTION, in_loop);
-  return MakeCodeEpilogue(cgen.masm(), flags, info);
-}
-
-
-#ifdef ENABLE_LOGGING_AND_PROFILING
 
 bool CodeGenerator::ShouldGenerateLog(Expression* type) {
   ASSERT(type != NULL);
-  if (!Logger::is_logging() && !CpuProfiler::is_profiling()) return false;
+  Isolate* isolate = Isolate::Current();
+  if (!isolate->logger()->is_logging() && !CpuProfiler::is_profiling(isolate)) {
+    return false;
+  }
   Handle<String> name = Handle<String>::cast(type->AsLiteral()->handle());
   if (FLAG_log_regexp) {
-    static Vector<const char> kRegexp = CStrVector("regexp");
-    if (name->IsEqualTo(kRegexp))
+    if (name->IsEqualTo(CStrVector("regexp")))
       return true;
   }
   return false;
-}
-
-#endif
-
-
-Handle<Code> CodeGenerator::ComputeCallInitialize(
-    int argc,
-    InLoopFlag in_loop) {
-  if (in_loop == IN_LOOP) {
-    // Force the creation of the corresponding stub outside loops,
-    // because it may be used when clearing the ICs later - it is
-    // possible for a series of IC transitions to lose the in-loop
-    // information, and the IC clearing code can't generate a stub
-    // that it needs so we need to ensure it is generated already.
-    ComputeCallInitialize(argc, NOT_IN_LOOP);
-  }
-  CALL_HEAP_FUNCTION(
-      StubCache::ComputeCallInitialize(argc, in_loop, Code::CALL_IC),
-      Code);
-}
-
-
-Handle<Code> CodeGenerator::ComputeKeyedCallInitialize(
-    int argc,
-    InLoopFlag in_loop) {
-  if (in_loop == IN_LOOP) {
-    // Force the creation of the corresponding stub outside loops,
-    // because it may be used when clearing the ICs later - it is
-    // possible for a series of IC transitions to lose the in-loop
-    // information, and the IC clearing code can't generate a stub
-    // that it needs so we need to ensure it is generated already.
-    ComputeKeyedCallInitialize(argc, NOT_IN_LOOP);
-  }
-  CALL_HEAP_FUNCTION(
-      StubCache::ComputeCallInitialize(argc, in_loop, Code::KEYED_CALL_IC),
-      Code);
-}
-
-void CodeGenerator::ProcessDeclarations(ZoneList<Declaration*>* declarations) {
-  int length = declarations->length();
-  int globals = 0;
-  for (int i = 0; i < length; i++) {
-    Declaration* node = declarations->at(i);
-    Variable* var = node->proxy()->var();
-    Slot* slot = var->slot();
-
-    // If it was not possible to allocate the variable at compile
-    // time, we need to "declare" it at runtime to make sure it
-    // actually exists in the local context.
-    if ((slot != NULL && slot->type() == Slot::LOOKUP) || !var->is_global()) {
-      VisitDeclaration(node);
-    } else {
-      // Count global variables and functions for later processing
-      globals++;
-    }
-  }
-
-  // Return in case of no declared global functions or variables.
-  if (globals == 0) return;
-
-  // Compute array of global variable and function declarations.
-  Handle<FixedArray> array = Factory::NewFixedArray(2 * globals, TENURED);
-  for (int j = 0, i = 0; i < length; i++) {
-    Declaration* node = declarations->at(i);
-    Variable* var = node->proxy()->var();
-    Slot* slot = var->slot();
-
-    if ((slot != NULL && slot->type() == Slot::LOOKUP) || !var->is_global()) {
-      // Skip - already processed.
-    } else {
-      array->set(j++, *(var->name()));
-      if (node->fun() == NULL) {
-        if (var->mode() == Variable::CONST) {
-          // In case this is const property use the hole.
-          array->set_the_hole(j++);
-        } else {
-          array->set_undefined(j++);
-        }
-      } else {
-        Handle<SharedFunctionInfo> function =
-            Compiler::BuildFunctionInfo(node->fun(), script(), this);
-        // Check for stack-overflow exception.
-        if (HasStackOverflow()) return;
-        array->set(j++, *function);
-      }
-    }
-  }
-
-  // Invoke the platform-dependent code generator to do the actual
-  // declaration the global variables and functions.
-  DeclareGlobals(array);
-}
-
-
-void CodeGenerator::VisitIncrementOperation(IncrementOperation* expr) {
-  UNREACHABLE();
-}
-
-
-// Lookup table for code generators for special runtime calls which are
-// generated inline.
-#define INLINE_FUNCTION_GENERATOR_ADDRESS(Name, argc, ressize)          \
-    &CodeGenerator::Generate##Name,
-
-const CodeGenerator::InlineFunctionGenerator
-    CodeGenerator::kInlineFunctionGenerators[] = {
-        INLINE_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_ADDRESS)
-        INLINE_RUNTIME_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_ADDRESS)
-};
-#undef INLINE_FUNCTION_GENERATOR_ADDRESS
-
-
-CodeGenerator::InlineFunctionGenerator
-  CodeGenerator::FindInlineFunctionGenerator(Runtime::FunctionId id) {
-    return kInlineFunctionGenerators[
-      static_cast<int>(id) - static_cast<int>(Runtime::kFirstInlineFunction)];
-}
-
-
-bool CodeGenerator::CheckForInlineRuntimeCall(CallRuntime* node) {
-  ZoneList<Expression*>* args = node->arguments();
-  Handle<String> name = node->name();
-  Runtime::Function* function = node->function();
-  if (function != NULL && function->intrinsic_type == Runtime::INLINE) {
-    InlineFunctionGenerator generator =
-        FindInlineFunctionGenerator(function->function_id);
-    if (generator != NULL) {
-      ((*this).*(generator))(args);
-      return true;
-    }
-  }
-  return false;
-}
-
-
-// Simple condition analysis.  ALWAYS_TRUE and ALWAYS_FALSE represent a
-// known result for the test expression, with no side effects.
-CodeGenerator::ConditionAnalysis CodeGenerator::AnalyzeCondition(
-    Expression* cond) {
-  if (cond == NULL) return ALWAYS_TRUE;
-
-  Literal* lit = cond->AsLiteral();
-  if (lit == NULL) return DONT_KNOW;
-
-  if (lit->IsTrue()) {
-    return ALWAYS_TRUE;
-  } else if (lit->IsFalse()) {
-    return ALWAYS_FALSE;
-  }
-
-  return DONT_KNOW;
 }
 
 
@@ -403,98 +189,42 @@ bool CodeGenerator::RecordPositions(MacroAssembler* masm,
                                     int pos,
                                     bool right_here) {
   if (pos != RelocInfo::kNoPosition) {
-    masm->RecordStatementPosition(pos);
-    masm->RecordPosition(pos);
+    masm->positions_recorder()->RecordStatementPosition(pos);
+    masm->positions_recorder()->RecordPosition(pos);
     if (right_here) {
-      return masm->WriteRecordedPositions();
+      return masm->positions_recorder()->WriteRecordedPositions();
     }
   }
   return false;
 }
 
 
-void CodeGenerator::CodeForFunctionPosition(FunctionLiteral* fun) {
-  if (FLAG_debug_info) RecordPositions(masm(), fun->start_position(), false);
-}
-
-
-void CodeGenerator::CodeForReturnPosition(FunctionLiteral* fun) {
-  if (FLAG_debug_info) RecordPositions(masm(), fun->end_position() - 1, false);
-}
-
-
-void CodeGenerator::CodeForStatementPosition(Statement* stmt) {
-  if (FLAG_debug_info) RecordPositions(masm(), stmt->statement_pos(), false);
-}
-
-
-void CodeGenerator::CodeForDoWhileConditionPosition(DoWhileStatement* stmt) {
-  if (FLAG_debug_info)
-    RecordPositions(masm(), stmt->condition_position(), false);
-}
-
-
-void CodeGenerator::CodeForSourcePosition(int pos) {
-  if (FLAG_debug_info && pos != RelocInfo::kNoPosition) {
-    masm()->RecordPosition(pos);
-  }
-}
-
-
-const char* GenericUnaryOpStub::GetName() {
-  switch (op_) {
-    case Token::SUB:
-      if (negative_zero_ == kStrictNegativeZero) {
-        return overwrite_ == UNARY_OVERWRITE
-            ? "GenericUnaryOpStub_SUB_Overwrite_Strict0"
-            : "GenericUnaryOpStub_SUB_Alloc_Strict0";
-      } else {
-        return overwrite_ == UNARY_OVERWRITE
-            ? "GenericUnaryOpStub_SUB_Overwrite_Ignore0"
-            : "GenericUnaryOpStub_SUB_Alloc_Ignore0";
-      }
-    case Token::BIT_NOT:
-      return overwrite_ == UNARY_OVERWRITE
-          ? "GenericUnaryOpStub_BIT_NOT_Overwrite"
-          : "GenericUnaryOpStub_BIT_NOT_Alloc";
-    default:
-      UNREACHABLE();
-      return "<unknown>";
-  }
-}
-
-
 void ArgumentsAccessStub::Generate(MacroAssembler* masm) {
   switch (type_) {
-    case READ_ELEMENT: GenerateReadElement(masm); break;
-    case NEW_OBJECT: GenerateNewObject(masm); break;
+    case READ_ELEMENT:
+      GenerateReadElement(masm);
+      break;
+    case NEW_NON_STRICT_FAST:
+      GenerateNewNonStrictFast(masm);
+      break;
+    case NEW_NON_STRICT_SLOW:
+      GenerateNewNonStrictSlow(masm);
+      break;
+    case NEW_STRICT:
+      GenerateNewStrict(masm);
+      break;
   }
 }
 
 
 int CEntryStub::MinorKey() {
+  int result = (save_doubles_ == kSaveFPRegs) ? 1 : 0;
   ASSERT(result_size_ == 1 || result_size_ == 2);
 #ifdef _WIN64
-  return result_size_ == 1 ? 0 : 1;
+  return result | ((result_size_ == 1) ? 0 : 2);
 #else
-  return 0;
+  return result;
 #endif
-}
-
-
-bool ApiGetterEntryStub::GetCustomCache(Code** code_out) {
-  Object* cache = info()->load_stub_cache();
-  if (cache->IsUndefined()) {
-    return false;
-  } else {
-    *code_out = Code::cast(cache);
-    return true;
-  }
-}
-
-
-void ApiGetterEntryStub::SetCustomCache(Code* value) {
-  info()->set_load_stub_cache(value);
 }
 
 

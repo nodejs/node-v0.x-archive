@@ -35,24 +35,33 @@
 #include "serialize.h"
 #include "cctest.h"
 
-using v8::internal::byte;
-using v8::internal::OS;
 using v8::internal::Assembler;
-using v8::internal::Operand;
-using v8::internal::Immediate;
-using v8::internal::Label;
-using v8::internal::rax;
-using v8::internal::rsi;
-using v8::internal::rdi;
-using v8::internal::rcx;
-using v8::internal::rdx;
-using v8::internal::rbp;
-using v8::internal::rsp;
-using v8::internal::FUNCTION_CAST;
+using v8::internal::Code;
 using v8::internal::CodeDesc;
-using v8::internal::less_equal;
-using v8::internal::not_equal;
+using v8::internal::FUNCTION_CAST;
+using v8::internal::Immediate;
+using v8::internal::Isolate;
+using v8::internal::Label;
+using v8::internal::OS;
+using v8::internal::Operand;
+using v8::internal::byte;
 using v8::internal::greater;
+using v8::internal::less_equal;
+using v8::internal::equal;
+using v8::internal::not_equal;
+using v8::internal::r13;
+using v8::internal::r15;
+using v8::internal::r8;
+using v8::internal::r9;
+using v8::internal::rax;
+using v8::internal::rbx;
+using v8::internal::rbp;
+using v8::internal::rcx;
+using v8::internal::rdi;
+using v8::internal::rdx;
+using v8::internal::rsi;
+using v8::internal::rsp;
+using v8::internal::times_1;
 
 // Test the x64 assembler by compiling some simple functions into
 // a buffer and executing them.  These tests do not initialize the
@@ -79,14 +88,25 @@ static const v8::internal::Register arg2 = rsi;
 #define __ assm.
 
 
+static v8::Persistent<v8::Context> env;
+
+
+static void InitializeVM() {
+  if (env.IsEmpty()) {
+    env = v8::Context::New();
+  }
+}
+
+
 TEST(AssemblerX64ReturnOperation) {
+  OS::SetUp();
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
                                                  &actual_size,
                                                  true));
   CHECK(buffer);
-  Assembler assm(buffer, static_cast<int>(actual_size));
+  Assembler assm(Isolate::Current(), buffer, static_cast<int>(actual_size));
 
   // Assemble a simple function that copies argument 2 and returns it.
   __ movq(rax, arg2);
@@ -101,13 +121,14 @@ TEST(AssemblerX64ReturnOperation) {
 }
 
 TEST(AssemblerX64StackOperations) {
+  OS::SetUp();
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
                                                  &actual_size,
                                                  true));
   CHECK(buffer);
-  Assembler assm(buffer, static_cast<int>(actual_size));
+  Assembler assm(Isolate::Current(), buffer, static_cast<int>(actual_size));
 
   // Assemble a simple function that copies argument 2 and returns it.
   // We compile without stack frame pointers, so the gdb debugger shows
@@ -132,13 +153,14 @@ TEST(AssemblerX64StackOperations) {
 }
 
 TEST(AssemblerX64ArithmeticOperations) {
+  OS::SetUp();
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
                                                  &actual_size,
                                                  true));
   CHECK(buffer);
-  Assembler assm(buffer, static_cast<int>(actual_size));
+  Assembler assm(Isolate::Current(), buffer, static_cast<int>(actual_size));
 
   // Assemble a simple function that adds arguments returning the sum.
   __ movq(rax, arg2);
@@ -153,13 +175,14 @@ TEST(AssemblerX64ArithmeticOperations) {
 }
 
 TEST(AssemblerX64ImulOperation) {
+  OS::SetUp();
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
                                                  &actual_size,
                                                  true));
   CHECK(buffer);
-  Assembler assm(buffer, static_cast<int>(actual_size));
+  Assembler assm(Isolate::Current(), buffer, static_cast<int>(actual_size));
 
   // Assemble a simple function that multiplies arguments returning the high
   // word.
@@ -180,13 +203,14 @@ TEST(AssemblerX64ImulOperation) {
 }
 
 TEST(AssemblerX64MemoryOperands) {
+  OS::SetUp();
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
                                                  &actual_size,
                                                  true));
   CHECK(buffer);
-  Assembler assm(buffer, static_cast<int>(actual_size));
+  Assembler assm(Isolate::Current(), buffer, static_cast<int>(actual_size));
 
   // Assemble a simple function that copies argument 2 and returns it.
   __ push(rbp);
@@ -213,13 +237,14 @@ TEST(AssemblerX64MemoryOperands) {
 }
 
 TEST(AssemblerX64ControlFlow) {
+  OS::SetUp();
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
                                                  &actual_size,
                                                  true));
   CHECK(buffer);
-  Assembler assm(buffer, static_cast<int>(actual_size));
+  Assembler assm(Isolate::Current(), buffer, static_cast<int>(actual_size));
 
   // Assemble a simple function that copies argument 1 and returns it.
   __ push(rbp);
@@ -241,13 +266,14 @@ TEST(AssemblerX64ControlFlow) {
 }
 
 TEST(AssemblerX64LoopImmediates) {
+  OS::SetUp();
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
                                                  &actual_size,
                                                  true));
   CHECK(buffer);
-  Assembler assm(buffer, static_cast<int>(actual_size));
+  Assembler assm(Isolate::Current(), buffer, static_cast<int>(actual_size));
   // Assemble two loops using rax as counter, and verify the ending counts.
   Label Fail;
   __ movq(rax, Immediate(-3));
@@ -288,5 +314,130 @@ TEST(AssemblerX64LoopImmediates) {
   int result =  FUNCTION_CAST<F0>(buffer)();
   CHECK_EQ(1, result);
 }
+
+
+TEST(OperandRegisterDependency) {
+  int offsets[4] = {0, 1, 0xfed, 0xbeefcad};
+  for (int i = 0; i < 4; i++) {
+    int offset = offsets[i];
+    CHECK(Operand(rax, offset).AddressUsesRegister(rax));
+    CHECK(!Operand(rax, offset).AddressUsesRegister(r8));
+    CHECK(!Operand(rax, offset).AddressUsesRegister(rcx));
+
+    CHECK(Operand(rax, rax, times_1, offset).AddressUsesRegister(rax));
+    CHECK(!Operand(rax, rax, times_1, offset).AddressUsesRegister(r8));
+    CHECK(!Operand(rax, rax, times_1, offset).AddressUsesRegister(rcx));
+
+    CHECK(Operand(rax, rcx, times_1, offset).AddressUsesRegister(rax));
+    CHECK(Operand(rax, rcx, times_1, offset).AddressUsesRegister(rcx));
+    CHECK(!Operand(rax, rcx, times_1, offset).AddressUsesRegister(r8));
+    CHECK(!Operand(rax, rcx, times_1, offset).AddressUsesRegister(r9));
+    CHECK(!Operand(rax, rcx, times_1, offset).AddressUsesRegister(rdx));
+    CHECK(!Operand(rax, rcx, times_1, offset).AddressUsesRegister(rsp));
+
+    CHECK(Operand(rsp, offset).AddressUsesRegister(rsp));
+    CHECK(!Operand(rsp, offset).AddressUsesRegister(rax));
+    CHECK(!Operand(rsp, offset).AddressUsesRegister(r15));
+
+    CHECK(Operand(rbp, offset).AddressUsesRegister(rbp));
+    CHECK(!Operand(rbp, offset).AddressUsesRegister(rax));
+    CHECK(!Operand(rbp, offset).AddressUsesRegister(r13));
+
+    CHECK(Operand(rbp, rax, times_1, offset).AddressUsesRegister(rbp));
+    CHECK(Operand(rbp, rax, times_1, offset).AddressUsesRegister(rax));
+    CHECK(!Operand(rbp, rax, times_1, offset).AddressUsesRegister(rcx));
+    CHECK(!Operand(rbp, rax, times_1, offset).AddressUsesRegister(r13));
+    CHECK(!Operand(rbp, rax, times_1, offset).AddressUsesRegister(r8));
+    CHECK(!Operand(rbp, rax, times_1, offset).AddressUsesRegister(rsp));
+
+    CHECK(Operand(rsp, rbp, times_1, offset).AddressUsesRegister(rsp));
+    CHECK(Operand(rsp, rbp, times_1, offset).AddressUsesRegister(rbp));
+    CHECK(!Operand(rsp, rbp, times_1, offset).AddressUsesRegister(rax));
+    CHECK(!Operand(rsp, rbp, times_1, offset).AddressUsesRegister(r15));
+    CHECK(!Operand(rsp, rbp, times_1, offset).AddressUsesRegister(r13));
+  }
+}
+
+
+TEST(AssemblerX64LabelChaining) {
+  // Test chaining of label usages within instructions (issue 1644).
+  v8::HandleScope scope;
+  Assembler assm(Isolate::Current(), NULL, 0);
+
+  Label target;
+  __ j(equal, &target);
+  __ j(not_equal, &target);
+  __ bind(&target);
+  __ nop();
+}
+
+
+TEST(AssemblerMultiByteNop) {
+  InitializeVM();
+  v8::HandleScope scope;
+  v8::internal::byte buffer[1024];
+  Assembler assm(Isolate::Current(), buffer, sizeof(buffer));
+  __ push(rbx);
+  __ push(rcx);
+  __ push(rdx);
+  __ push(rdi);
+  __ push(rsi);
+  __ movq(rax, Immediate(1));
+  __ movq(rbx, Immediate(2));
+  __ movq(rcx, Immediate(3));
+  __ movq(rdx, Immediate(4));
+  __ movq(rdi, Immediate(5));
+  __ movq(rsi, Immediate(6));
+  for (int i = 0; i < 16; i++) {
+    int before = assm.pc_offset();
+    __ Nop(i);
+    CHECK_EQ(assm.pc_offset() - before, i);
+  }
+
+  Label fail;
+  __ cmpq(rax, Immediate(1));
+  __ j(not_equal, &fail);
+  __ cmpq(rbx, Immediate(2));
+  __ j(not_equal, &fail);
+  __ cmpq(rcx, Immediate(3));
+  __ j(not_equal, &fail);
+  __ cmpq(rdx, Immediate(4));
+  __ j(not_equal, &fail);
+  __ cmpq(rdi, Immediate(5));
+  __ j(not_equal, &fail);
+  __ cmpq(rsi, Immediate(6));
+  __ j(not_equal, &fail);
+  __ movq(rax, Immediate(42));
+  __ pop(rsi);
+  __ pop(rdi);
+  __ pop(rdx);
+  __ pop(rcx);
+  __ pop(rbx);
+  __ ret(0);
+  __ bind(&fail);
+  __ movq(rax, Immediate(13));
+  __ pop(rsi);
+  __ pop(rdi);
+  __ pop(rdx);
+  __ pop(rcx);
+  __ pop(rbx);
+  __ ret(0);
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Code* code = Code::cast(HEAP->CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      v8::internal::Handle<v8::internal::Object>(
+          HEAP->undefined_value()))->ToObjectChecked());
+  CHECK(code->IsCode());
+
+  F0 f = FUNCTION_CAST<F0>(code->entry());
+  int res = f();
+  CHECK_EQ(42, res);
+}
+
+
+
 
 #undef __

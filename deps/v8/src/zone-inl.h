@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,31 +29,60 @@
 #define V8_ZONE_INL_H_
 
 #include "zone.h"
+
+#include "counters.h"
+#include "isolate.h"
+#include "utils.h"
 #include "v8-counters.h"
 
 namespace v8 {
 namespace internal {
 
 
+AssertNoZoneAllocation::AssertNoZoneAllocation()
+    : prev_(Isolate::Current()->zone_allow_allocation()) {
+  Isolate::Current()->set_zone_allow_allocation(false);
+}
+
+
+AssertNoZoneAllocation::~AssertNoZoneAllocation() {
+  Isolate::Current()->set_zone_allow_allocation(prev_);
+}
+
+
 inline void* Zone::New(int size) {
-  ASSERT(AssertNoZoneAllocation::allow_allocation());
+  ASSERT(Isolate::Current()->zone_allow_allocation());
   ASSERT(ZoneScope::nesting() > 0);
   // Round up the requested size to fit the alignment.
   size = RoundUp(size, kAlignment);
 
+  // If the allocation size is divisible by 8 then we return an 8-byte aligned
+  // address.
+  if (kPointerSize == 4 && kAlignment == 4) {
+    position_ += ((~size) & 4) & (reinterpret_cast<intptr_t>(position_) & 4);
+  } else {
+    ASSERT(kAlignment >= kPointerSize);
+  }
+
   // Check if the requested size is available without expanding.
   Address result = position_;
-  if ((position_ += size) > limit_) result = NewExpand(size);
+
+  if (size > limit_ - position_) {
+     result = NewExpand(size);
+  } else {
+     position_ += size;
+  }
 
   // Check that the result has the proper alignment and return it.
   ASSERT(IsAddressAligned(result, kAlignment, 0));
+  allocation_size_ += size;
   return reinterpret_cast<void*>(result);
 }
 
 
 template <typename T>
 T* Zone::NewArray(int length) {
-  return static_cast<T*>(Zone::New(length * sizeof(T)));
+  return static_cast<T*>(New(length * sizeof(T)));
 }
 
 
@@ -64,7 +93,7 @@ bool Zone::excess_allocation() {
 
 void Zone::adjust_segment_bytes_allocated(int delta) {
   segment_bytes_allocated_ += delta;
-  Counters::zone_segment_bytes.Set(segment_bytes_allocated_);
+  isolate_->counters()->zone_segment_bytes()->Set(segment_bytes_allocated_);
 }
 
 
@@ -74,6 +103,51 @@ ZoneSplayTree<Config>::~ZoneSplayTree() {
   // in the destructor.  For a zone-allocated tree, nodes will be
   // freed by the Zone.
   SplayTree<Config, ZoneListAllocationPolicy>::ResetRoot();
+}
+
+
+// TODO(isolates): for performance reasons, this should be replaced with a new
+//                 operator that takes the zone in which the object should be
+//                 allocated.
+void* ZoneObject::operator new(size_t size) {
+  return ZONE->New(static_cast<int>(size));
+}
+
+void* ZoneObject::operator new(size_t size, Zone* zone) {
+  return zone->New(static_cast<int>(size));
+}
+
+
+inline void* ZoneListAllocationPolicy::New(int size) {
+  return ZONE->New(size);
+}
+
+
+template <typename T>
+void* ZoneList<T>::operator new(size_t size) {
+  return ZONE->New(static_cast<int>(size));
+}
+
+
+template <typename T>
+void* ZoneList<T>::operator new(size_t size, Zone* zone) {
+  return zone->New(static_cast<int>(size));
+}
+
+
+ZoneScope::ZoneScope(Isolate* isolate, ZoneScopeMode mode)
+    : isolate_(isolate), mode_(mode) {
+  isolate_->zone()->scope_nesting_++;
+}
+
+
+bool ZoneScope::ShouldDeleteOnExit() {
+  return isolate_->zone()->scope_nesting_ == 1 && mode_ == DELETE_ON_EXIT;
+}
+
+
+int ZoneScope::nesting() {
+  return Isolate::Current()->zone()->scope_nesting_;
 }
 
 

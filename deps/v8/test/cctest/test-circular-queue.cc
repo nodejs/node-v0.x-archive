@@ -6,8 +6,6 @@
 #include "circular-queue-inl.h"
 #include "cctest.h"
 
-namespace i = v8::internal;
-
 using i::SamplingCircularQueue;
 
 
@@ -88,7 +86,8 @@ class ProducerThread: public i::Thread {
                  int records_per_chunk,
                  Record value,
                  i::Semaphore* finished)
-      : scq_(scq),
+      : Thread("producer"),
+        scq_(scq),
         records_per_chunk_(records_per_chunk),
         value_(value),
         finished_(finished) { }

@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -32,6 +32,17 @@ assertFalse(delete tmp);  // should be DONT_DELETE
 assertTrue("tmp" in this);
 function f() { return 1; }
 assertFalse(delete f);  // should be DONT_DELETE
-assertEquals(1, f());  
+assertEquals(1, f());
 
-/* Perhaps related to bugs/11? */
+// Check that deleting and reintroducing global variables works.
+// Get into the IC case for storing to a deletable global property.
+function introduce_x() { x = 42; }
+for (var i = 0; i < 10; i++) introduce_x();
+// Check that the property has been introduced.
+assertTrue(this.hasOwnProperty('x'));
+// Check that deletion works.
+delete x;
+assertFalse(this.hasOwnProperty('x'));
+// Check that reintroduction works.
+introduce_x();
+assertTrue(this.hasOwnProperty('x'));

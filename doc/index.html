@@ -1,288 +1,234 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+<!doctype html>
+<html lang="en">
   <head>
-    <style type="text/css">
+  <meta charset="utf-8">
+    <style>
     ul {
       padding: 0;
       margin: 0;
     }
     </style>
-    <script type="text/javascript" src="sh_main.js"></script>
-    <script type="text/javascript" src="sh_javascript.min.js"></script>
-    <link type="text/css" rel="stylesheet" href="pipe.css" />
-    <link type="text/css" rel="stylesheet" href="sh_vim-dark.css" />
-    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <link type="image/x-icon" rel="icon" href="favicon.ico">
+    <link type="image/x-icon" rel="shortcut icon" href="favicon.ico">
+    <link rel="stylesheet" href="pipe.css">
+    <link rel="stylesheet" href="sh_vim-dark.css">
+    <link rel="alternate"
+          type="application/rss+xml"
+          title="node blog"
+          href="http://feeds.feedburner.com/nodejs/123123123">
     <title>node.js</title>
   </head>
-  <body onload="sh_highlightDocument();">
-    <div id="toc">
-      <ol>
-        <li><a href="#download">Download</a></li>
-        <li><a href="changelog.html">ChangeLog</a></li>
-        <li><a href="#build">Build</a></li>
-        <li><a href="#about">About</a></li>
-        <li><a href="#links">Links</a></li>
-        <li><a href="#contributing">Contributing</a></li>
-        <li><a href="api.html">Documentation</a></li>
-      </ol>
+  <body id="front">
+    <div id="intro">
+        <img id="logo" src="logo.png" alt="node.js">
+
+        <p>Node.js is a platform built on <a
+        href="http://code.google.com/p/v8/">Chrome's JavaScript runtime</a>
+        for easily building fast, scalable network applications.  Node.js
+        uses an event-driven, non-blocking I/O model that makes it
+        lightweight and efficient, perfect for data-intensive real-time
+        applications that run across distributed devices.</p>
+
+        <a href="#download" class="button" id="downloadbutton">Download</a>
+        <a href="http://nodejs.org/docs/latest/api/index.html" class="button" id="docsbutton">Docs</a>
+        <p class="version">v0.7.3</p> 
     </div>
-    <div id="content">
+    <div id="quotes" class="clearfix">
+        <h2>Node.js in the Industry</h2>
+        <ul>
+            <li class="microsoft"><img src="microsoft-logo.png">
+            <p>Node gives Azure users the first end-to-end JavaScript
+            experience for the development of a whole new class of real-time
+            applications.
+            <br>
+            <a href="http://blogs.msdn.com/b/interoperability/">Claudio Caldato</a>
+            <br>
+            <span>Principal Program Manager, Interoperability Strategy</span></p></li>
 
-      <!-- <h1><a href="http://nodejs.org/">Node</a></h1> -->
-      <img id="logo" src="logo.png" alt="node.js"/>
+            <li class="ebay"><img src="ebay-logo.png">
+            <p>Node’s evented I/O model freed us from worrying about locking
+            and concurrency issues that are common with multithreaded async
+            I/O.
+            <br>
+            <a href="http://www.ebaytechblog.com/2011/11/30/announcing-ql-io/">Subbu Allamarju</a>
+            <br>
+            <span>Principal Member, Technical Staff</span></p></li>
 
-      <p id="introduction">
-        Evented I/O for
-        <a href="http://code.google.com/p/v8/">V8 JavaScript</a>.
-      </p>
+            <li class="linkedin"><img src="linkedin-logo.png">
+            <p>On the server side, our entire mobile software stack is
+            completely built in Node. One reason was scale. The second is
+            Node showed us huge performance gains.
+            <br>
+            <a href="http://venturebeat.com/2011/08/16/linkedin-node/">Kiran Prasad</a>
+            <br>
+            <span>Director of Engineering, Mobile</span></p></li>
 
-      <p>
-        An example of a web server written in Node which responds with
-        "Hello World" for every request.
-      </p>
+            <li class="yahoo"><img src="yahoo-logo.png">
+            <p>Node.js is the execution core of Manhattan. Allowing
+            developers to build one code base using one language – that is
+            the nirvana for developers.
+            <br>
+            <a href="http://developer.yahoo.com/blogs/ydn/posts/2011/11/yahoo-announces-cocktails-%E2%80%93-shaken-not-stirred/">Renaud Waldura</a>
+            <br>
+            <span>Sr. Product Manger, Cocktail</span></p></li>
+        </ul>
+    </div>
 
-      <pre>
+    <div id="download">
+        <a href="#" id="download-close">X</a>
+        <img id="download-logo" src="download-logo.png" alt="node.js">
+        <ul id="installers" class="clearfix">
+            <li><a href="http://nodejs.org/dist/v0.7.3/node-v0.7.3.msi">Windows Installer</a><br>node-v0.7.3.msi</li>
+            <li><a href="http://nodejs.org/dist/v0.7.3/node-v0.7.3.pkg">Macintosh Installer</a><br>node-v0.7.3.pkg</li>
+            <li id="source"><a href="http://nodejs.org/dist/v0.7.3/node-v0.7.3.tar.gz">Source Code</a><br>node-v0.7.3.tar.gz</li>
+        </ul>
+        <ul id="documentation">
+            <li><a href="https://raw.github.com/joyent/node/v0.7.3/ChangeLog">Change Log</a></li>
+            <li><a href="http://nodejs.org/docs/v0.7.3/api/index.html">Documentation</a></li>
+            <li><a href="http://nodejs.org/dist/v0.7.3">Other release files</a></li>
+            <li><a href="https://raw.github.com/joyent/node/v0.7.3/LICENSE">License</a></li>
+            <li><a href="https://github.com/joyent/node">Git Repository</a></li>
+            <li><a href="https://github.com/joyent/node/wiki/Installing-Node.js-via-package-manager">Installing
+            with a Package Manager</a>
+        </ul>
+    </div>
+
+    <script>;(function() {
+      // attach as soon as the required elements are in the DOM.
+      // don't need to wait for entire document to be ready, since we're
+      // not adding any *new* nodes to the <body>, so there's no threat
+      // of 'Invalid operation' errors in old MSIE 6.
+      document.getElementById('downloadbutton').onclick = function(e) {
+        e = e || window.event;
+        e.stopPropagation && e.stopPropagation();
+        e.cancelBubble = true;
+        // need to give the hash a tick to update
+        setTimeout(downloadDialogUpdate, 0);
+      };
+
+      document.getElementById('download-close').onclick =
+      document.documentElement.onclick = function(e) {
+        e = e || window.event;
+        if (location.hash === '#download') location.hash = '';
+        downloadDialogUpdate();
+      };
+
+      document.getElementById('download').onclick = function(e) {
+        e = e || window.event;
+        e.stopPropagation && e.stopPropagation();
+        e.cancelBubble = true;
+      };
+
+      // I keep expecting <Esc> to close the dialog...
+      document.documentElement.onkeydown = function(e) {
+        e = e || window.event;
+        var k = e.which || e.keyCode || e.keyIdentifier;
+        if (typeof k === 'string') k = k.charCodeAt(0);
+        if (k === 27) document.documentElement.onclick(e);
+      };
+
+      // hacky workaround for old ie browsers that don't support :target css.
+      function downloadDialogUpdate () {
+        var div = document.getElementById('download');
+        if (!div) return;
+        var expect = location.hash === '#download' ? 'block' : 'none';
+        var actual = div.currentStyle ? div.currentStyle.display
+                   : window.getComputedStyle
+                     ? document.defaultView.getComputedStyle(div, null).getPropertyValue('display')
+                   : null;
+
+        // it looks like a string, but it might not actually be a string.
+        // explicitly cast for MSIE 6 and 7.
+        actual = '' + actual;
+        expect = '' + expect;
+        if (actual !== expect) {
+          div.style.display = expect;
+        }
+      }
+      downloadDialogUpdate();
+    })();</script>
+
+    <div id="content" class="clearfix">
+            <div id="column1">
+                <h2>An example: Webserver</h2>
+                <p>This simple web server written in Node responds with "Hello World" for every request.</p>
+              <pre>
 var http = require('http');
 http.createServer(function (req, res) {
   res.writeHead(200, {'Content-Type': 'text/plain'});
   res.end('Hello World\n');
-}).listen(8124, "127.0.0.1");
-console.log('Server running at http://127.0.0.1:8124/');
-</pre>
+}).listen(1337, "127.0.0.1");
+console.log('Server running at http://127.0.0.1:1337/');</pre>
 
-      <p>
-        To run the server, put the code into a file
-        <code>example.js</code> and execute it with the <code>node</code>
-        program:
-      </p>
-      <pre class="sh_none">
+              <p>To run the server, put the code into a file <code>example.js</code> and execute it with the <code>node</code> program:</p>
+              <pre class="sh_none">
 % node example.js
-Server running at http://127.0.0.1:8124/</pre>
+Server running at http://127.0.0.1:1337/</pre>
 
-      <p>
-        Here is an example of a simple TCP server which listens on port 8124
-        and echoes whatever you send it:
-      </p>
+                <p>Here is an example of a simple TCP server which listens on port 1337 and echoes whatever you send it:</p>
 
-      <pre>
+                <pre>
 var net = require('net');
-net.createServer(function (socket) {
-  socket.setEncoding("utf8");
+
+var server = net.createServer(function (socket) {
   socket.write("Echo server\r\n");
-  socket.on("data", function (data) {
-    socket.write(data);
-  });
-  socket.on("end", function () {
-    socket.end();
-  });
-}).listen(8124, "127.0.0.1");
-</pre>
+  socket.pipe(socket);
+});
 
-      <p>
-        See the <a href="api.html">API documentation</a> for more
-        examples.
-      </p>
+server.listen(1337, "127.0.0.1");</pre>
 
-      <h2 id="download">Download</h2>
+                <!-- <p>Ready to dig in? <a href="">Download the latest version</a> of node.js or learn how other organizations are <a href="">using the technology</a>.</p> -->
+        </div>
+        <div id="column2">
+            <h2>Featured</h2>
+            <a href="http://www.youtube.com/watch?v=jo_B4LTHi3I"><img src="ryan-speaker.jpg"></a>
+            A guided introduction to Node
 
-      <p>
-        <a href="http://github.com/ry/node/tree/master">git repo</a>
-      </p>
-      <p>
-        2010.08.20
-        <a href="http://nodejs.org/dist/node-v0.2.0.tar.gz">node-v0.2.0.tar.gz</a>
-      </p>
-
-      <p>Historical: <a href="http://nodejs.org/dist">versions</a>, <a href="http://nodejs.org/docs">docs</a></p>
-
-      <h2 id="build">Build</h2>
-
-      <p>
-        Node is tested on <b>Linux</b>, <b>Macintosh</b>, and
-        <b>Solaris</b>. It also runs on <b>Windows/Cygwin</b>,
-        <b>FreeBSD</b>, and <b>OpenBSD</b>. The build system requires Python
-        2.4 or better.  V8, on which Node is built, supports only IA-32,
-        x64, and ARM processors. V8 is included in the Node distribution.
-        To use TLS, OpenSSL is required.  There are no other dependencies.
-      </p>
-
-      <pre class="sh_none">
-./configure
-make
-make install</pre>
-
-      <p>
-        Then have a look at the <a href="api.html">API documentation</a>.
-      </p>
-
-      <p>To run the tests</p>
-
-      <pre class="sh_none">make test</pre>
-
-      <h2 id="about">About</h2>
-
-      <p>
-        Node's goal is to provide an easy way to build scalable network
-        programs. In the "hello world" web server example above, many
-        client connections can be handled concurrently.  Node tells the
-        operating system (through <code>epoll</code>, <code>kqueue</code>,
-        <code class="sh_none">/dev/poll</code>, or <code>select</code>)
-        that it should be notified when a new connection is made, and 
-        then it goes to sleep. If someone new connects, then it executes
-        the callback.  Each connection is only a small heap allocation.
-      </p>
-
-      <p>
-        This is in contrast to today's more common concurrency model where
-        OS threads are employed. Thread-based networking is relatively 
-        inefficient and very difficult to use.  See:
-        <a href="http://www.kegel.com/c10k.html">this</a> and 
-        <a href="http://bulk.fefe.de/scalable-networking.pdf">this.</a>
-
-        Node will show much better memory efficiency under high-loads
-        <!-- TODO benchmark -->
-        than systems which allocate 2mb thread stacks for each connection.
-
-        Furthermore, users of Node are free from worries of dead-locking
-        the process&mdash;there are no locks.  Almost no function in Node
-        directly performs I/O, so the process never blocks. Because
-        nothing blocks, less-than-expert programmers are able to develop
-        fast systems.
-      </p>
-
-      <p>
-        Node is similar in design to and influenced by systems like Ruby's <a
-        href="http://rubyeventmachine.com/">Event Machine</a> or Python's <a
-        href="http://twistedmatrix.com/">Twisted</a>.  Node takes the event
-        model a bit further&mdash;it presents the event loop as a language
-        construct instead of as a library. In other systems there is always
-        a blocking call to start the event-loop.  Typically one defines
-        behavior through callbacks at the beginning of a script and at the
-        end starts a server through a blocking call like
-        <code>EventMachine::run()</code>. In Node there is no such
-        start-the-event-loop call.  Node simply enters the event loop after
-        executing the input script. Node exits the event loop when there are
-        no more callbacks to perform.  This behavior is like browser
-        javascript&mdash;the event loop is hidden from the user.
-      </p>
-
-      <p>
-        HTTP is a first class protocol in Node.  Node's HTTP library has
-        grown out of the author's experiences developing and working with
-        web servers. For example, streaming data through most web frameworks
-        is impossible.  Node attempts to correct these problems in its HTTP
-        <a href="http://github.com/ry/http-parser/tree/master">parser</a>
-        and API. Coupled with Node's purely evented infrastructure, it makes
-        a good foundation for web libraries or frameworks.
-      </p>
-
-      <p>
-        <i>
-        But what about multiple-processor concurrency? Aren't threads
-        necessary to scale programs to multi-core computers?
-        </i>
-        Processes are necessary to scale to multi-core computers, not
-        memory-sharing threads. The fundamentals of scalable systems are
-        fast networking and non-blocking design&mdash;the rest is message
-        passing.  In future versions, Node will be able to fork new
-        processes (using the <a
-        href="http://www.whatwg.org/specs/web-workers/current-work/"> Web
-        Workers API </a>) which fits well into the current design.
-      </p>
-
-      <p>
-        See also:
-        <ul>
-          <li><a href="http://s3.amazonaws.com/four.livejournal/20091117/jsconf.pdf">slides</a> from JSConf 2009</li>
-          <li><a href="http://nodejs.org/jsconf2010.pdf">slides</a> from JSConf 2010</li>
-          <li><a href="http://www.yuiblog.com/blog/2010/05/20/video-dahl/">video</a> from a talk at Yahoo in May 2010</li>
-        </ul>
-      </p>
-
-
-      <h2 id="links">Links</h2>
-
-      <ul>
-
-      <li>
-        A chat room <b>demo</b> is running at <a
-          href="http://chat.nodejs.org">chat.nodejs.org</a>. The
-        source code for the chat room is at <a
-          href="http://github.com/ry/node_chat/tree/master">http://github.com/ry/node_chat</a>.
-        The chat room is not stable and might occasionally be down.
-      </li>
-
-      <li>
-        For help and discussion, subscribe to the mailing list at
-        <a href="http://groups.google.com/group/nodejs">http://groups.google.com/group/nodejs</a>
-        or send an email to <a href="mailto:nodejs+subscribe@googlegroups.com">nodejs+subscribe@googlegroups.com</a>.
-        For real-time discussion, check irc.freenode.net <code>#node.js</code>.
-      </li>
-
-      <li>
-        <a href="http://nodejs.debuggable.com/">IRC logs</a>
-      </li>
-
-      <li>
-        <a href="http://wiki.github.com/ry/node">Projects/libraries which are using/for Node.js</a>
-      </li>
-
-      <li>
-        <a href="http://buildbot.nodejs.org:8010/">Node.js buildbot</a>
-      </li>
-
-      </ul>
-
-      <h2 id="contributing">Contributing</h2>
-      <p>
-        Patches are welcome. The process is simple:
-      </p>
-
-      <pre class="sh_none">
-git clone git://github.com/ry/node.git
-cd node
-(make your changes)
-./configure --debug
-make test-all # Check your patch with both debug and release builds
-git commit -m "Good description of what your patch does"
-git format-patch HEAD^
-</pre>
-
-      <p>
-        Be sure the your patch includes your full name and your valid email
-        address. Git can be configured to do this like so:
-<pre class="sh_none">
-git config --global user.email "ry@tinyclouds.org"
-git config --global user.name "Ryan Dahl"
-</pre>
-      </p>
-
-      <p>
-        Before your code your code can be accepted you have to sign the
-        <a href="http://nodejs.org/cla.html">contributor license agreement</a>.
-      </p>
-
-      <p>
-        The best way for your patch to get noticed is to submit it to the
-       <a href="http://groups.google.com/group/nodejs">mailing list</a> in form
-       of a <a href="http://gist.github.com/">gists</a> or file attachement.
-      </p>
-
-      <p>
-        You should ask the mailing list if a new feature is wanted before
-        working on a patch.
-      </p>
-
+            <h2>Explore Node.js</h2>
+            <ul id="explore">
+                <li><a href="about/" class="explore">About</a><br><span>Technical overview</span></li>
+                <li><a href="http://search.npmjs.org/" class="explore">npm Registry</a><br><span>Modules, resources and more</span></li>
+                <li><a href="http://nodejs.org/docs/latest/api/index.html" class="explore">Documentation</a><br><span>API Specifications</span></li>
+                <li><a href="http://blog.nodejs.org" class="explore">Node.js Blog</a><br><span>Insight, perspective and events</span></li>
+                <li><a href="community/" class="explore">Community</a><br><span>Mailing lists, blogs, and more</span></li>
+                <li><a href="logos/" class="explore">Logos</a><br><span>Logo and desktop background</span></li>
+                <li><a href="http://jobs.nodejs.org/" class="explore">Jobs</a><br><ol class="jobs"><!-- JOBS --><!-- JOBS --></ol></li>
+            </ul>
     </div>
-    <script type="text/javascript">
+</div>
+
+    <div id="footer">
+        <ul class="clearfix">
+            <li><a href="/">Node.js</a></li>
+            <li><a href="/#download">Download</a></li>
+            <li><a href="/about/">About</a></li>
+            <li><a href="http://search.npmjs.org/">npm Registry</a></li>
+            <li><a href="http://nodejs.org/docs/latest/api/index.html">Docs</a></li>
+            <li><a href="http://blog.nodejs.org">Blog</a></li>
+            <li><a href="/community/">Community</a></li>
+            <li><a href="/logos/">Logos</a></li>
+            <li><a href="http://jobs.nodejs.org/">Jobs</a></li>
+            <!-- <li><a hrfe="http://twitter.com/nodejs" class="twitter">@nodejs</a></li> -->
+        </ul>
+
+        <p>Copyright 2010 <a href="http://joyent.com">Joyent, Inc</a>, Node.js is a <a href="/trademark-policy.pdf">trademark</a> of Joyent, Inc. View <a href="https://raw.github.com/joyent/node/v0.7.3/LICENSE">license</a>.</p>
+    </div>
+
+
+    <script src="sh_main.js"></script>
+    <script src="sh_javascript.min.js"></script>
+    <script>highlight(undefined, undefined, 'pre');</script>
+
+    <script>
       var gaJsHost = (("https:" == document.location.protocol) ?
       "https://ssl." : "http://www.");
       document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
     </script>
-    <script type="text/javascript">
+    <script>
       try {
         var pageTracker = _gat._getTracker("UA-10874194-2");
         pageTracker._trackPageview();
-        } catch(err) {}</script>
+      } catch(err) {}
+    </script>
   </body>
 </html>

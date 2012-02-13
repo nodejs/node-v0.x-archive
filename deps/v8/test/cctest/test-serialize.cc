@@ -83,7 +83,7 @@ static int* counter_function(const char* name) {
 
 template <class T>
 static Address AddressOf(T id) {
-  return ExternalReference(id).address();
+  return ExternalReference(id, i::Isolate::Current()).address();
 }
 
 
@@ -99,69 +99,70 @@ static int make_code(TypeCode type, int id) {
 
 
 TEST(ExternalReferenceEncoder) {
-  StatsTable::SetCounterFunction(counter_function);
-  Heap::Setup(false);
+  Isolate* isolate = i::Isolate::Current();
+  isolate->stats_table()->SetCounterFunction(counter_function);
+  v8::V8::Initialize();
+
   ExternalReferenceEncoder encoder;
-  CHECK_EQ(make_code(BUILTIN, Builtins::ArrayCode),
-           Encode(encoder, Builtins::ArrayCode));
-  CHECK_EQ(make_code(RUNTIME_FUNCTION, Runtime::kAbort),
+  CHECK_EQ(make_code(BUILTIN, Builtins::kArrayCode),
+           Encode(encoder, Builtins::kArrayCode));
+  CHECK_EQ(make_code(v8::internal::RUNTIME_FUNCTION, Runtime::kAbort),
            Encode(encoder, Runtime::kAbort));
   CHECK_EQ(make_code(IC_UTILITY, IC::kLoadCallbackProperty),
            Encode(encoder, IC_Utility(IC::kLoadCallbackProperty)));
   ExternalReference keyed_load_function_prototype =
-      ExternalReference(&Counters::keyed_load_function_prototype);
+      ExternalReference(isolate->counters()->keyed_load_function_prototype());
   CHECK_EQ(make_code(STATS_COUNTER, Counters::k_keyed_load_function_prototype),
            encoder.Encode(keyed_load_function_prototype.address()));
-  ExternalReference the_hole_value_location =
-      ExternalReference::the_hole_value_location();
-  CHECK_EQ(make_code(UNCLASSIFIED, 2),
-           encoder.Encode(the_hole_value_location.address()));
   ExternalReference stack_limit_address =
-      ExternalReference::address_of_stack_limit();
+      ExternalReference::address_of_stack_limit(isolate);
   CHECK_EQ(make_code(UNCLASSIFIED, 4),
            encoder.Encode(stack_limit_address.address()));
   ExternalReference real_stack_limit_address =
-      ExternalReference::address_of_real_stack_limit();
+      ExternalReference::address_of_real_stack_limit(isolate);
   CHECK_EQ(make_code(UNCLASSIFIED, 5),
            encoder.Encode(real_stack_limit_address.address()));
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  CHECK_EQ(make_code(UNCLASSIFIED, 15),
-           encoder.Encode(ExternalReference::debug_break().address()));
+  CHECK_EQ(make_code(UNCLASSIFIED, 16),
+           encoder.Encode(ExternalReference::debug_break(isolate).address()));
 #endif  // ENABLE_DEBUGGER_SUPPORT
   CHECK_EQ(make_code(UNCLASSIFIED, 10),
-           encoder.Encode(ExternalReference::new_space_start().address()));
+           encoder.Encode(
+               ExternalReference::new_space_start(isolate).address()));
   CHECK_EQ(make_code(UNCLASSIFIED, 3),
-           encoder.Encode(ExternalReference::roots_address().address()));
+           encoder.Encode(
+               ExternalReference::roots_array_start(isolate).address()));
 }
 
 
 TEST(ExternalReferenceDecoder) {
-  StatsTable::SetCounterFunction(counter_function);
-  Heap::Setup(false);
+  Isolate* isolate = i::Isolate::Current();
+  isolate->stats_table()->SetCounterFunction(counter_function);
+  v8::V8::Initialize();
+
   ExternalReferenceDecoder decoder;
-  CHECK_EQ(AddressOf(Builtins::ArrayCode),
-           decoder.Decode(make_code(BUILTIN, Builtins::ArrayCode)));
+  CHECK_EQ(AddressOf(Builtins::kArrayCode),
+           decoder.Decode(make_code(BUILTIN, Builtins::kArrayCode)));
   CHECK_EQ(AddressOf(Runtime::kAbort),
-           decoder.Decode(make_code(RUNTIME_FUNCTION, Runtime::kAbort)));
+           decoder.Decode(make_code(v8::internal::RUNTIME_FUNCTION,
+                                    Runtime::kAbort)));
   CHECK_EQ(AddressOf(IC_Utility(IC::kLoadCallbackProperty)),
            decoder.Decode(make_code(IC_UTILITY, IC::kLoadCallbackProperty)));
   ExternalReference keyed_load_function =
-      ExternalReference(&Counters::keyed_load_function_prototype);
+      ExternalReference(isolate->counters()->keyed_load_function_prototype());
   CHECK_EQ(keyed_load_function.address(),
            decoder.Decode(
                make_code(STATS_COUNTER,
                          Counters::k_keyed_load_function_prototype)));
-  CHECK_EQ(ExternalReference::the_hole_value_location().address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 2)));
-  CHECK_EQ(ExternalReference::address_of_stack_limit().address(),
+  CHECK_EQ(ExternalReference::address_of_stack_limit(isolate).address(),
            decoder.Decode(make_code(UNCLASSIFIED, 4)));
-  CHECK_EQ(ExternalReference::address_of_real_stack_limit().address(),
+  CHECK_EQ(ExternalReference::address_of_real_stack_limit(isolate).address(),
            decoder.Decode(make_code(UNCLASSIFIED, 5)));
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  CHECK_EQ(ExternalReference::debug_break().address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 15)));
+  CHECK_EQ(ExternalReference::debug_break(isolate).address(),
+           decoder.Decode(make_code(UNCLASSIFIED, 16)));
 #endif  // ENABLE_DEBUGGER_SUPPORT
-  CHECK_EQ(ExternalReference::new_space_start().address(),
+  CHECK_EQ(ExternalReference::new_space_start(isolate).address(),
            decoder.Decode(make_code(UNCLASSIFIED, 10)));
 }
 
@@ -216,6 +217,7 @@ void FileByteSink::WriteSpaceUsed(
   Vector<char> name = Vector<char>::New(file_name_length + 1);
   OS::SNPrintF(name, "%s.size", file_name_);
   FILE* fp = OS::FOpen(name.start(), "w");
+  name.Dispose();
   fprintf(fp, "new %d\n", new_space_used);
   fprintf(fp, "pointer %d\n", pointer_space_used);
   fprintf(fp, "data %d\n", data_space_used);
@@ -274,12 +276,12 @@ static void Deserialize() {
 static void SanityCheck() {
   v8::HandleScope scope;
 #ifdef DEBUG
-  Heap::Verify();
+  HEAP->Verify();
 #endif
-  CHECK(Top::global()->IsJSObject());
-  CHECK(Top::global_context()->IsContext());
-  CHECK(Heap::symbol_table()->IsSymbolTable());
-  CHECK(!Factory::LookupAsciiSymbol("Empty")->IsFailure());
+  CHECK(Isolate::Current()->global()->IsJSObject());
+  CHECK(Isolate::Current()->global_context()->IsContext());
+  CHECK(HEAP->symbol_table()->IsSymbolTable());
+  CHECK(!FACTORY->LookupAsciiSymbol("Empty")->IsFailure());
 }
 
 
@@ -289,7 +291,6 @@ DEPENDENT_TEST(Deserialize, Serialize) {
   // serialize a snapshot in a VM that is booted from a snapshot.
   if (!Snapshot::IsEnabled()) {
     v8::HandleScope scope;
-
     Deserialize();
 
     v8::Persistent<v8::Context> env = v8::Context::New();
@@ -303,7 +304,6 @@ DEPENDENT_TEST(Deserialize, Serialize) {
 DEPENDENT_TEST(DeserializeFromSecondSerialization, SerializeTwice) {
   if (!Snapshot::IsEnabled()) {
     v8::HandleScope scope;
-
     Deserialize();
 
     v8::Persistent<v8::Context> env = v8::Context::New();
@@ -317,7 +317,6 @@ DEPENDENT_TEST(DeserializeFromSecondSerialization, SerializeTwice) {
 DEPENDENT_TEST(DeserializeAndRunScript2, Serialize) {
   if (!Snapshot::IsEnabled()) {
     v8::HandleScope scope;
-
     Deserialize();
 
     v8::Persistent<v8::Context> env = v8::Context::New();
@@ -335,7 +334,6 @@ DEPENDENT_TEST(DeserializeFromSecondSerializationAndRunScript2,
                SerializeTwice) {
   if (!Snapshot::IsEnabled()) {
     v8::HandleScope scope;
-
     Deserialize();
 
     v8::Persistent<v8::Context> env = v8::Context::New();
@@ -359,11 +357,11 @@ TEST(PartialSerialization) {
   // Make sure all builtin scripts are cached.
   { HandleScope scope;
     for (int i = 0; i < Natives::GetBuiltinsCount(); i++) {
-      Bootstrapper::NativesSourceLookup(i);
+      Isolate::Current()->bootstrapper()->NativesSourceLookup(i);
     }
   }
-  Heap::CollectAllGarbage(true);
-  Heap::CollectAllGarbage(true);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
 
   Object* raw_foo;
   {
@@ -381,6 +379,7 @@ TEST(PartialSerialization) {
   env.Dispose();
 
   FileByteSink startup_sink(startup_name.start());
+  startup_name.Dispose();
   StartupSerializer startup_serializer(&startup_sink);
   startup_serializer.SerializeStrongReferences();
 
@@ -403,6 +402,7 @@ static void ReserveSpaceForPartialSnapshot(const char* file_name) {
   Vector<char> name = Vector<char>::New(file_name_length + 1);
   OS::SNPrintF(name, "%s.size", file_name);
   FILE* fp = OS::FOpen(name.start(), "r");
+  name.Dispose();
   int new_size, pointer_size, data_size, code_size, map_size, cell_size;
   int large_size;
 #ifdef _MSC_VER
@@ -421,7 +421,7 @@ static void ReserveSpaceForPartialSnapshot(const char* file_name) {
 #undef fscanf
 #endif
   fclose(fp);
-  Heap::ReserveSpace(new_size,
+  HEAP->ReserveSpace(new_size,
                      pointer_size,
                      data_size,
                      code_size,
@@ -438,6 +438,7 @@ DEPENDENT_TEST(PartialDeserialization, PartialSerialization) {
     OS::SNPrintF(startup_name, "%s.startup", FLAG_testing_serialization_file);
 
     CHECK(Snapshot::Initialize(startup_name.start()));
+    startup_name.Dispose();
 
     const char* file_name = FLAG_testing_serialization_file;
     ReserveSpaceForPartialSnapshot(file_name);
@@ -453,7 +454,9 @@ DEPENDENT_TEST(PartialDeserialization, PartialSerialization) {
       CHECK(root->IsString());
     }
     v8::HandleScope handle_scope;
-    Handle<Object>root_handle(root);
+    Handle<Object> root_handle(root);
+
+    ReserveSpaceForPartialSnapshot(file_name);
 
     Object* root2;
     {
@@ -477,12 +480,12 @@ TEST(ContextSerialization) {
   // Make sure all builtin scripts are cached.
   { HandleScope scope;
     for (int i = 0; i < Natives::GetBuiltinsCount(); i++) {
-      Bootstrapper::NativesSourceLookup(i);
+      Isolate::Current()->bootstrapper()->NativesSourceLookup(i);
     }
   }
   // If we don't do this then we end up with a stray root pointing at the
   // context even after we have disposed of env.
-  Heap::CollectAllGarbage(true);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
 
   int file_name_length = StrLength(FLAG_testing_serialization_file) + 10;
   Vector<char> startup_name = Vector<char>::New(file_name_length + 1);
@@ -495,6 +498,7 @@ TEST(ContextSerialization) {
   env.Dispose();
 
   FileByteSink startup_sink(startup_name.start());
+  startup_name.Dispose();
   StartupSerializer startup_serializer(&startup_sink);
   startup_serializer.SerializeStrongReferences();
 
@@ -519,6 +523,7 @@ DEPENDENT_TEST(ContextDeserialization, ContextSerialization) {
     OS::SNPrintF(startup_name, "%s.startup", FLAG_testing_serialization_file);
 
     CHECK(Snapshot::Initialize(startup_name.start()));
+    startup_name.Dispose();
 
     const char* file_name = FLAG_testing_serialization_file;
     ReserveSpaceForPartialSnapshot(file_name);
@@ -534,7 +539,9 @@ DEPENDENT_TEST(ContextDeserialization, ContextSerialization) {
       CHECK(root->IsContext());
     }
     v8::HandleScope handle_scope;
-    Handle<Object>root_handle(root);
+    Handle<Object> root_handle(root);
+
+    ReserveSpaceForPartialSnapshot(file_name);
 
     Object* root2;
     {
@@ -551,16 +558,19 @@ DEPENDENT_TEST(ContextDeserialization, ContextSerialization) {
 TEST(LinearAllocation) {
   v8::V8::Initialize();
   int new_space_max = 512 * KB;
+  int paged_space_max = Page::kMaxHeapObjectSize;
 
   for (int size = 1000; size < 5 * MB; size += size >> 1) {
+    size &= ~8;  // Round.
     int new_space_size = (size < new_space_max) ? size : new_space_max;
-    Heap::ReserveSpace(
+    int paged_space_size = (size < paged_space_max) ? size : paged_space_max;
+    HEAP->ReserveSpace(
         new_space_size,
-        size,              // Old pointer space.
-        size,              // Old data space.
-        size,              // Code space.
-        size,              // Map space.
-        size,              // Cell space.
+        paged_space_size,  // Old pointer space.
+        paged_space_size,  // Old data space.
+        HEAP->code_space()->RoundSizeDownToObjectAlignment(paged_space_size),
+        HEAP->map_space()->RoundSizeDownToObjectAlignment(paged_space_size),
+        HEAP->cell_space()->RoundSizeDownToObjectAlignment(paged_space_size),
         size);             // Large object space.
     LinearAllocationScope linear_allocation_scope;
     const int kSmallFixedArrayLength = 4;
@@ -576,7 +586,8 @@ TEST(LinearAllocation) {
     for (int i = 0;
          i + kSmallFixedArraySize <= new_space_size;
          i += kSmallFixedArraySize) {
-      Object* obj = Heap::AllocateFixedArray(kSmallFixedArrayLength);
+      Object* obj =
+          HEAP->AllocateFixedArray(kSmallFixedArrayLength)->ToObjectChecked();
       if (new_last != NULL) {
         CHECK(reinterpret_cast<char*>(obj) ==
               reinterpret_cast<char*>(new_last) + kSmallFixedArraySize);
@@ -586,9 +597,10 @@ TEST(LinearAllocation) {
 
     Object* pointer_last = NULL;
     for (int i = 0;
-         i + kSmallFixedArraySize <= size;
+         i + kSmallFixedArraySize <= paged_space_size;
          i += kSmallFixedArraySize) {
-      Object* obj = Heap::AllocateFixedArray(kSmallFixedArrayLength, TENURED);
+      Object* obj = HEAP->AllocateFixedArray(kSmallFixedArrayLength,
+                                             TENURED)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kSmallFixedArraySize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
@@ -604,8 +616,11 @@ TEST(LinearAllocation) {
     }
 
     Object* data_last = NULL;
-    for (int i = 0; i + kSmallStringSize <= size; i += kSmallStringSize) {
-      Object* obj = Heap::AllocateRawAsciiString(kSmallStringLength, TENURED);
+    for (int i = 0;
+         i + kSmallStringSize <= paged_space_size;
+         i += kSmallStringSize) {
+      Object* obj = HEAP->AllocateRawAsciiString(kSmallStringLength,
+                                                 TENURED)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kSmallStringSize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
@@ -621,8 +636,9 @@ TEST(LinearAllocation) {
     }
 
     Object* map_last = NULL;
-    for (int i = 0; i + kMapSize <= size; i += kMapSize) {
-      Object* obj = Heap::AllocateMap(JS_OBJECT_TYPE, 42 * kPointerSize);
+    for (int i = 0; i + kMapSize <= paged_space_size; i += kMapSize) {
+      Object* obj = HEAP->AllocateMap(JS_OBJECT_TYPE,
+                                      42 * kPointerSize)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kMapSize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
@@ -643,8 +659,8 @@ TEST(LinearAllocation) {
       AlwaysAllocateScope always;
       int large_object_array_length =
           (size - FixedArray::kHeaderSize) / kPointerSize;
-      Object* obj = Heap::AllocateFixedArray(large_object_array_length,
-                                             TENURED);
+      Object* obj = HEAP->AllocateFixedArray(large_object_array_length,
+                                             TENURED)->ToObjectChecked();
       CHECK(!obj->IsFailure());
     }
   }

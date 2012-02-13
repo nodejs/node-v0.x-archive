@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2008 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -42,6 +42,8 @@ import pickle
 import re
 import sys
 import subprocess
+import multiprocessing
+from subprocess import PIPE
 
 # Disabled LINT rules and reason.
 # build/include_what_you_use: Started giving false positives for variables
@@ -88,7 +90,6 @@ whitespace/blank_line
 whitespace/braces
 whitespace/comma
 whitespace/comments
-whitespace/end_of_line
 whitespace/ending_newline
 whitespace/indent
 whitespace/labels
@@ -99,6 +100,33 @@ whitespace/parens
 whitespace/tab
 whitespace/todo
 """.split()
+
+
+LINT_OUTPUT_PATTERN = re.compile(r'^.+[:(]\d+[:)]|^Done processing')
+
+
+def CppLintWorker(command):
+  try:
+    process = subprocess.Popen(command, stderr=subprocess.PIPE)
+    process.wait()
+    out_lines = ""
+    error_count = -1
+    while True:
+      out_line = process.stderr.readline()
+      if out_line == '' and process.poll() != None:
+        break
+      m = LINT_OUTPUT_PATTERN.match(out_line)
+      if m:
+        out_lines += out_line
+        error_count += 1
+    sys.stderr.write(out_lines)
+    return error_count
+  except KeyboardInterrupt:
+    process.kill()
+  except:
+    print('Error running cpplint.py. Please make sure you have depot_tools' +
+          ' in your $PATH. Lint check skipped.')
+    process.kill()
 
 
 class FileContentsCache(object):
@@ -195,7 +223,7 @@ class CppLintProcessor(SourceFileProcessor):
               or (name in CppLintProcessor.IGNORE_LINT))
 
   def GetPathsToSearch(self):
-    return ['src', 'public', 'samples', join('test', 'cctest')]
+    return ['src', 'preparser', 'include', 'samples', join('test', 'cctest')]
 
   def ProcessFiles(self, files, path):
     good_files_cache = FileContentsCache('.cpplint-cache')
@@ -206,24 +234,28 @@ class CppLintProcessor(SourceFileProcessor):
       return True
 
     filt = '-,' + ",".join(['+' + n for n in ENABLED_LINT_RULES])
-    command = ['cpplint.py', '--filter', filt] + join(files)
+    command = ['cpplint.py', '--filter', filt]
     local_cpplint = join(path, "tools", "cpplint.py")
     if exists(local_cpplint):
-      command = ['python', local_cpplint, '--filter', filt] + join(files)
+      command = ['python', local_cpplint, '--filter', filt]
 
-    process = subprocess.Popen(command, stderr=subprocess.PIPE)
-    LINT_ERROR_PATTERN = re.compile(r'^(.+)[:(]\d+[:)]')
-    while True:
-      out_line = process.stderr.readline()
-      if out_line == '' and process.poll() != None:
-        break
-      sys.stderr.write(out_line)
-      m = LINT_ERROR_PATTERN.match(out_line)
-      if m:
-        good_files_cache.RemoveFile(m.group(1))
+    commands = join([command + [file] for file in files])
+    count = multiprocessing.cpu_count()
+    pool = multiprocessing.Pool(count)
+    try:
+      results = pool.map_async(CppLintWorker, commands).get(999999)
+    except KeyboardInterrupt:
+      print "\nCaught KeyboardInterrupt, terminating workers."
+      sys.exit(1)
 
+    for i in range(len(files)):
+      if results[i] > 0:
+        good_files_cache.RemoveFile(files[i])
+
+    total_errors = sum(results)
+    print "Total errors found: %d" % total_errors
     good_files_cache.Save()
-    return process.returncode == 0
+    return total_errors == 0
 
 
 COPYRIGHT_HEADER_PATTERN = re.compile(
@@ -231,11 +263,29 @@ COPYRIGHT_HEADER_PATTERN = re.compile(
 
 class SourceProcessor(SourceFileProcessor):
   """
-  Check that all files include a copyright notice.
+  Check that all files include a copyright notice and no trailing whitespaces.
   """
 
   RELEVANT_EXTENSIONS = ['.js', '.cc', '.h', '.py', '.c', 'SConscript',
-      'SConstruct', '.status']
+      'SConstruct', '.status', '.gyp', '.gypi']
+
+  # Overwriting the one in the parent class.
+  def FindFilesIn(self, path):
+    if os.path.exists(path+'/.git'):
+      output = subprocess.Popen('git ls-files --full-name',
+                                stdout=PIPE, cwd=path, shell=True)
+      result = []
+      for file in output.stdout.read().split():
+        for dir_part in os.path.dirname(file).split(os.sep):
+          if self.IgnoreDir(dir_part):
+            break
+        else:
+          if self.IsRelevant(file) and not self.IgnoreFile(file):
+            result.append(join(path, file))
+      if output.wait() == 0:
+        return result
+    return super(SourceProcessor, self).FindFilesIn(path)
+
   def IsRelevant(self, name):
     for ext in SourceProcessor.RELEVANT_EXTENSIONS:
       if name.endswith(ext):
@@ -248,12 +298,19 @@ class SourceProcessor(SourceFileProcessor):
   def IgnoreDir(self, name):
     return (super(SourceProcessor, self).IgnoreDir(name)
               or (name == 'third_party')
+              or (name == 'gyp')
+              or (name == 'out')
               or (name == 'obj'))
 
-  IGNORE_COPYRIGHTS = ['earley-boyer.js', 'raytrace.js', 'crypto.js',
-      'libraries.cc', 'libraries-empty.cc', 'jsmin.py', 'regexp-pcre.js']
-  IGNORE_TABS = IGNORE_COPYRIGHTS + ['unicode-test.js',
-      'html-comments.js']
+  IGNORE_COPYRIGHTS = ['cpplint.py',
+                       'earley-boyer.js',
+                       'raytrace.js',
+                       'crypto.js',
+                       'libraries.cc',
+                       'libraries-empty.cc',
+                       'jsmin.py',
+                       'regexp-pcre.js']
+  IGNORE_TABS = IGNORE_COPYRIGHTS + ['unicode-test.js', 'html-comments.js']
 
   def ProcessContents(self, name, contents):
     result = True
@@ -266,17 +323,37 @@ class SourceProcessor(SourceFileProcessor):
       if not COPYRIGHT_HEADER_PATTERN.search(contents):
         print "%s is missing a correct copyright header." % name
         result = False
+    ext = base.split('.').pop()
+    if ' \n' in contents or contents.endswith(' '):
+      line = 0
+      lines = []
+      parts = contents.split(' \n')
+      if not contents.endswith(' '):
+        parts.pop()
+      for part in parts:
+        line += part.count('\n') + 1
+        lines.append(str(line))
+      linenumbers = ', '.join(lines)
+      if len(lines) > 1:
+        print "%s has trailing whitespaces in lines %s." % (name, linenumbers)
+      else:
+        print "%s has trailing whitespaces in line %s." % (name, linenumbers)
+      result = False
     return result
 
   def ProcessFiles(self, files, path):
     success = True
+    violations = 0
     for file in files:
       try:
         handle = open(file)
         contents = handle.read()
-        success = self.ProcessContents(file, contents) and success
+        if not self.ProcessContents(file, contents):
+          success = False
+          violations += 1
       finally:
         handle.close()
+    print "Total violating files: %s" % violations
     return success
 
 
@@ -292,8 +369,10 @@ def Main():
   parser = GetOptions()
   (options, args) = parser.parse_args()
   success = True
+  print "Running C++ lint check..."
   if not options.no_lint:
     success = CppLintProcessor().Run(workspace) and success
+  print "Running copyright header and trailing whitespaces check..."
   success = SourceProcessor().Run(workspace) and success
   if success:
     return 0

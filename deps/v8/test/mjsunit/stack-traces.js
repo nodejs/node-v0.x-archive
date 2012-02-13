@@ -63,6 +63,16 @@ function testNestedEval() {
   eval("function Outer() { eval('function Inner() { eval(x); }'); Inner(); }; Outer();");
 }
 
+function testEvalWithSourceURL() {
+  eval("function Doo() { FAIL; }; Doo();\n//@ sourceURL=res://name");
+}
+
+function testNestedEvalWithSourceURL() {
+  var x = "FAIL";
+  var innerEval = 'function Inner() { eval(x); }\n//@ sourceURL=res://inner-eval';
+  eval("function Outer() { eval(innerEval); Inner(); }; Outer();\n//@ sourceURL=res://outer-eval");
+}
+
 function testValue() {
   Number.prototype.causeError = function () { FAIL; };
   (1).causeError();
@@ -110,7 +120,7 @@ function testTrace(name, fun, expected, unexpected) {
   } catch (e) {
     for (var i = 0; i < expected.length; i++) {
       assertTrue(e.stack.indexOf(expected[i]) != -1,
-                 name + " doesn't contain expected[" + i + "]");
+                 name + " doesn't contain expected[" + i + "] stack = " + e.stack);
     }
     if (unexpected) {
       for (var i = 0; i < unexpected.length; i++) {
@@ -184,12 +194,57 @@ function testErrorsDuringFormatting() {
 }
 
 
+// Poisonous object that throws a reference error if attempted converted to
+// a primitive values.
+var thrower = { valueOf: function() { FAIL; },
+                toString: function() { FAIL; } };
+
+// Tests that a native constructor function is included in the
+// stack trace.
+function testTraceNativeConstructor(nativeFunc) {
+  var nativeFuncName = nativeFunc.name;
+  try {
+    new nativeFunc(thrower);
+    assertUnreachable(nativeFuncName);
+  } catch (e) {
+    assertTrue(e.stack.indexOf(nativeFuncName) >= 0, nativeFuncName);
+  }
+}
+
+// Tests that a native conversion function is included in the
+// stack trace.
+function testTraceNativeConversion(nativeFunc) {
+  var nativeFuncName = nativeFunc.name;
+  try {
+    nativeFunc(thrower);
+    assertUnreachable(nativeFuncName);
+  } catch (e) {
+    assertTrue(e.stack.indexOf(nativeFuncName) >= 0, nativeFuncName);
+  }
+}
+
+
+function testOmittedBuiltin(throwing, omitted) {
+  try {
+    throwing();
+    assertUnreachable(omitted);
+  } catch (e) {
+    assertTrue(e.stack.indexOf(omitted) < 0, omitted);
+  }
+}
+
+
 testTrace("testArrayNative", testArrayNative, ["Array.map (native)"]);
 testTrace("testNested", testNested, ["at one", "at two", "at three"]);
 testTrace("testMethodNameInference", testMethodNameInference, ["at Foo.bar"]);
 testTrace("testImplicitConversion", testImplicitConversion, ["at Nirk.valueOf"]);
 testTrace("testEval", testEval, ["at Doo (eval at testEval"]);
 testTrace("testNestedEval", testNestedEval, ["eval at Inner (eval at Outer"]);
+testTrace("testEvalWithSourceURL", testEvalWithSourceURL,
+    [ "at Doo (res://name:1:18)" ]);
+testTrace("testNestedEvalWithSourceURL", testNestedEvalWithSourceURL,
+    [" at Inner (res://inner-eval:1:20)",
+     " at Outer (res://outer-eval:1:37)"]);
 testTrace("testValue", testValue, ["at Number.causeError"]);
 testTrace("testConstructor", testConstructor, ["new Plonk"]);
 testTrace("testRenamedMethod", testRenamedMethod, ["Wookie.a$b$c$d [as d]"]);
@@ -202,3 +257,21 @@ testTrace("testStrippedCustomError", testStrippedCustomError, ["hep-hey"],
 testCallerCensorship();
 testUnintendedCallerCensorship();
 testErrorsDuringFormatting();
+
+testTraceNativeConversion(String);  // Does ToString on argument.
+testTraceNativeConversion(Number);  // Does ToNumber on argument.
+testTraceNativeConversion(RegExp);  // Does ToString on argument.
+
+testTraceNativeConstructor(String);  // Does ToString on argument.
+testTraceNativeConstructor(Number);  // Does ToNumber on argument.
+testTraceNativeConstructor(RegExp);  // Does ToString on argument.
+testTraceNativeConstructor(Date);    // Does ToNumber on argument.
+
+// Omitted because QuickSort has builtins object as receiver, and is non-native
+// builtin.
+testOmittedBuiltin(function(){ [thrower, 2].sort(function (a,b) {
+                                                     (b < a) - (a < b); });
+                   }, "QuickSort");
+
+// Omitted because ADD from runtime.js is non-native builtin.
+testOmittedBuiltin(function(){ thrower + 2; }, "ADD");

@@ -1,88 +1,222 @@
-WAF=python tools/waf-light
+-include config.mk
 
-all:
-	@$(WAF) build
+BUILDTYPE ?= Release
+PYTHON ?= python
 
-all-progress:
-	@$(WAF) -p build
+# BUILDTYPE=Debug builds both release and debug builds. If you want to compile
+# just the debug build, run `make -C out BUILDTYPE=Debug` instead.
+ifeq ($(BUILDTYPE),Release)
+all: out/Makefile node
+else
+all: out/Makefile node node_g
+endif
 
-install:
-	@$(WAF) install
+# The .PHONY is needed to ensure that we recursively use the out/Makefile
+# to check for changes.
+.PHONY: node node_g
+
+node: config.gypi
+	$(MAKE) -C out BUILDTYPE=Release
+	ln -fs out/Release/node node
+
+node_g: config.gypi
+	$(MAKE) -C out BUILDTYPE=Debug
+	ln -fs out/Debug/node node_g
+
+config.gypi: configure
+	./configure
+
+out/Debug/node:
+	$(MAKE) -C out BUILDTYPE=Debug
+
+out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
+	tools/gyp_node -f make
+
+install: all
+	out/Release/node tools/installer.js ./config.gypi install
 
 uninstall:
-	@$(WAF) uninstall
+	out/Release/node tools/installer.js ./config.gypi uninstall
+
+clean:
+	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node
+	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
+
+distclean:
+	-rm -rf out
+	-rm config.gypi
 
 test: all
-	python tools/test.py --mode=release simple message
+	$(PYTHON) tools/test.py --mode=release simple message
+
+test-http1: all
+	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
+
+test-valgrind: all
+	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
 test-all: all
 	python tools/test.py --mode=debug,release
+	$(MAKE) test-npm
+
+test-all-http1: all
+	$(PYTHON) tools/test.py --mode=debug,release --use-http1
+
+test-all-valgrind: all
+	$(PYTHON) tools/test.py --mode=debug,release --valgrind
 
 test-release: all
-	python tools/test.py --mode=release
+	$(PYTHON) tools/test.py --mode=release
 
 test-debug: all
-	python tools/test.py --mode=debug
+	$(PYTHON) tools/test.py --mode=debug
 
 test-message: all
-	python tools/test.py message
+	$(PYTHON) tools/test.py message
 
 test-simple: all
-	python tools/test.py simple
-     
+	$(PYTHON) tools/test.py simple
+
 test-pummel: all
-	python tools/test.py pummel
-	
+	$(PYTHON) tools/test.py pummel
+
 test-internet: all
-	python tools/test.py internet
+	$(PYTHON) tools/test.py internet
 
-benchmark: all
-	build/default/node benchmark/run.js
+test-npm: node
+	./node deps/npm/test/run.js
 
-# http://rtomayko.github.com/ronn
-# gem install ronn
-doc: doc/node.1 doc/api.html doc/index.html doc/changelog.html
+test-npm-publish: node
+	npm_package_config_publishtest=true ./node deps/npm/test/run.js
 
-## HACK to give the ronn-generated page a TOC
-doc/api.html: all doc/api.markdown doc/api_header.html doc/api_footer.html
-	build/default/node tools/ronnjs/bin/ronn.js --fragment doc/api.markdown \
-	| sed "s/<h2>\(.*\)<\/h2>/<h2 id=\"\1\">\1<\/h2>/g" \
-	| cat doc/api_header.html - doc/api_footer.html > doc/api.html
+apidoc_sources = $(wildcard doc/api/*.markdown)
+apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html))
 
-doc/changelog.html: ChangeLog doc/changelog_header.html doc/changelog_footer.html
-	cat doc/changelog_header.html ChangeLog doc/changelog_footer.html > doc/changelog.html
+apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets out/doc/about out/doc/community out/doc/logos
 
-doc/node.1: doc/api.markdown all
-	build/default/node tools/ronnjs/bin/ronn.js --roff doc/api.markdown > doc/node.1
+apiassets = $(subst api_assets,api/assets,$(addprefix out/,$(wildcard doc/api_assets/*)))
+
+website_files = \
+	out/doc/index.html    \
+	out/doc/v0.4_announcement.html   \
+	out/doc/cla.html      \
+	out/doc/sh_main.js    \
+	out/doc/sh_javascript.min.js \
+	out/doc/sh_vim-dark.css \
+	out/doc/sh.css \
+	out/doc/logo.png      \
+	out/doc/favicon.ico   \
+	out/doc/pipe.css \
+	out/doc/about/index.html \
+	out/doc/close-downloads.png \
+	out/doc/community/index.html \
+	out/doc/community/not-invented-here.png \
+	out/doc/logos/index.html \
+	out/doc/microsoft-logo.png \
+	out/doc/ryan-speaker.jpg \
+	out/doc/download-logo.png \
+	out/doc/ebay-logo.png \
+	out/doc/footer-logo-alt.png \
+	out/doc/footer-logo.png \
+	out/doc/icons-interior.png \
+	out/doc/icons.png \
+	out/doc/home-icons.png \
+	out/doc/joyent-logo_orange_nodeorg-01.png \
+	out/doc/linkedin-logo.png \
+	out/doc/logo-light.png \
+	out/doc/mac_osx_nodejs_installer_logo.png \
+	out/doc/microsoft-logo.png \
+	out/doc/platform-icons.png \
+	out/doc/sponsored.png \
+	out/doc/twitter-bird.png \
+	out/doc/community-icons.png \
+	out/doc/yahoo-logo.png
+
+doc: node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
+
+$(apidoc_dirs):
+	mkdir -p $@
+
+out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
+	cp $< $@
+
+out/doc/%: doc/%
+	cp $< $@
+
+out/doc/api/%.html: doc/api/%.markdown node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
+	out/Release/node tools/doctool/doctool.js doc/template.html $< > $@
+
+out/doc/%:
 
 website-upload: doc
-	scp doc/* ryan@nodejs.org:~/web/nodejs.org/
+	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
+
+docopen: out/doc/api/all.html
+	-google-chrome out/doc/api/all.html
 
 docclean:
-	@-rm -f doc/node.1 doc/api.html doc/changelog.html
+	-rm -rf out/doc
 
-clean:
-	@$(WAF) clean
-	@-find tools -name "*.pyc" | xargs rm -f
-
-distclean: docclean
-	@-find tools -name "*.pyc" | xargs rm -f
-	@-rm -rf build/ node node_g
-
-check:
-	@tools/waf-light check
-
-VERSION=$(shell git describe)
+VERSION=v$(shell $(PYTHON) tools/getnodeversion.py)
 TARNAME=node-$(VERSION)
+TARBALL=$(TARNAME).tar.gz
+PKG=out/$(TARNAME).pkg
+packagemaker=/Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
 
-dist: doc/node.1 doc/api.html
+dist: doc $(TARBALL) $(PKG)
+
+PKGDIR=out/dist-osx
+
+pkg: $(PKG)
+
+$(PKG):
+	-rm -rf $(PKGDIR)
+	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot
+	$(MAKE) install
+	$(packagemaker) \
+		--id "org.nodejs.NodeJS-$(VERSION)" \
+		--doc tools/osx-pkg.pmdoc \
+		--out $(PKG)
+
+$(TARBALL): node out/doc
+	@if [ $(shell ./node --version) = "$(VERSION)" ]; then \
+		exit 0; \
+	else \
+	  echo "" >&2 ; \
+		echo "$(shell ./node --version) doesn't match $(VERSION)." >&2 ; \
+	  echo "Did you remember to update src/node_version.cc?" >&2 ; \
+	  echo "" >&2 ; \
+		exit 1 ; \
+	fi
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
-	cp doc/api.html $(TARNAME)/doc/api.html
+	cp -r out/doc/api $(TARNAME)/doc/api
 	rm -rf $(TARNAME)/deps/v8/test # too big
+	rm -rf $(TARNAME)/doc/logos # too big
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
 	gzip -f -9 $(TARNAME).tar
 
-.PHONY: benchmark clean docclean dist distclean check uninstall install all test test-all website-upload
+dist-upload: $(TARBALL) $(PKG)
+	ssh node@nodejs.org mkdir -p web/nodejs.org/dist/$(VERSION)
+	scp $(TARBALL) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARBALL)
+	scp $(PKG) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARNAME).pkg
+
+bench:
+	 benchmark/http_simple_bench.sh
+
+bench-idle:
+	./node benchmark/idle_server.js &
+	sleep 1
+	./node benchmark/idle_clients.js &
+
+jslint:
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/ --exclude_files lib/punycode.js
+
+cpplint:
+	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
+
+lint: jslint cpplint
+
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload pkg

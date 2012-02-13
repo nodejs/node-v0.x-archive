@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,9 +27,13 @@
 
 #include <math.h>
 
-#include "v8.h"
+#include "../include/v8stdint.h"
+#include "checks.h"
+#include "utils.h"
+
 #include "dtoa.h"
 
+#include "bignum-dtoa.h"
 #include "double.h"
 #include "fast-dtoa.h"
 #include "fixed-dtoa.h"
@@ -37,7 +41,19 @@
 namespace v8 {
 namespace internal {
 
-bool DoubleToAscii(double v, DtoaMode mode, int requested_digits,
+static BignumDtoaMode DtoaToBignumDtoaMode(DtoaMode dtoa_mode) {
+  switch (dtoa_mode) {
+    case DTOA_SHORTEST:  return BIGNUM_DTOA_SHORTEST;
+    case DTOA_FIXED:     return BIGNUM_DTOA_FIXED;
+    case DTOA_PRECISION: return BIGNUM_DTOA_PRECISION;
+    default:
+      UNREACHABLE();
+      return BIGNUM_DTOA_SHORTEST;  // To silence compiler.
+  }
+}
+
+
+void DoubleToAscii(double v, DtoaMode mode, int requested_digits,
                    Vector<char> buffer, int* sign, int* length, int* point) {
   ASSERT(!Double(v).IsSpecial());
   ASSERT(mode == DTOA_SHORTEST || requested_digits >= 0);
@@ -54,24 +70,37 @@ bool DoubleToAscii(double v, DtoaMode mode, int requested_digits,
     buffer[1] = '\0';
     *length = 1;
     *point = 1;
-    return true;
+    return;
   }
 
   if (mode == DTOA_PRECISION && requested_digits == 0) {
     buffer[0] = '\0';
     *length = 0;
-    return true;
+    return;
   }
 
+  bool fast_worked;
   switch (mode) {
     case DTOA_SHORTEST:
-      return FastDtoa(v, buffer, length, point);
-    case DTOA_FIXED:
-      return FastFixedDtoa(v, requested_digits, buffer, length, point);
-    default:
+      fast_worked = FastDtoa(v, FAST_DTOA_SHORTEST, 0, buffer, length, point);
       break;
+    case DTOA_FIXED:
+      fast_worked = FastFixedDtoa(v, requested_digits, buffer, length, point);
+      break;
+    case DTOA_PRECISION:
+      fast_worked = FastDtoa(v, FAST_DTOA_PRECISION, requested_digits,
+                             buffer, length, point);
+      break;
+    default:
+      UNREACHABLE();
+      fast_worked = false;
   }
-  return false;
+  if (fast_worked) return;
+
+  // If the fast dtoa didn't succeed use the slower bignum version.
+  BignumDtoaMode bignum_mode = DtoaToBignumDtoaMode(mode);
+  BignumDtoa(v, bignum_mode, requested_digits, buffer, length, point);
+  buffer[*length] = '\0';
 }
 
 } }  // namespace v8::internal

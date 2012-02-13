@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,6 +27,12 @@
 
 #ifndef V8_X64_REGEXP_MACRO_ASSEMBLER_X64_H_
 #define V8_X64_REGEXP_MACRO_ASSEMBLER_X64_H_
+
+#include "x64/assembler-x64.h"
+#include "x64/assembler-x64-inl.h"
+#include "macro-assembler.h"
+#include "code.h"
+#include "x64/macro-assembler-x64.h"
 
 namespace v8 {
 namespace internal {
@@ -75,7 +81,7 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
   virtual bool CheckSpecialCharacterClass(uc16 type,
                                           Label* on_no_match);
   virtual void Fail();
-  virtual Handle<Object> GetCode(Handle<String> source);
+  virtual Handle<HeapObject> GetCode(Handle<String> source);
   virtual void GoTo(Label* label);
   virtual void IfRegisterGE(int reg, int comparand, Label* if_ge);
   virtual void IfRegisterLT(int reg, int comparand, Label* if_lt);
@@ -93,6 +99,7 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
                             StackCheckFlag check_stack_limit);
   virtual void ReadCurrentPositionFromRegister(int reg);
   virtual void ReadStackPointerFromRegister(int reg);
+  virtual void SetCurrentPositionFromEnd(int by);
   virtual void SetRegister(int register_index, int to);
   virtual void Succeed();
   virtual void WriteCurrentPositionToRegister(int reg, int cp_offset);
@@ -103,7 +110,8 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
                       Handle<String> subject,
                       int* offsets_vector,
                       int offsets_vector_length,
-                      int previous_index);
+                      int previous_index,
+                      Isolate* isolate);
 
   static Result Execute(Code* code,
                         String* input,
@@ -141,6 +149,7 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
   static const int kStackHighEnd = kRegisterOutput + kPointerSize;
   // DirectCall is passed as 32 bit int (values 0 or 1).
   static const int kDirectCall = kStackHighEnd + kPointerSize;
+  static const int kIsolate = kDirectCall + kPointerSize;
 #else
   // In AMD64 ABI Calling Convention, the first six integer parameters
   // are passed as registers, and caller must allocate space on the stack
@@ -152,6 +161,7 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
   static const int kRegisterOutput = kInputEnd - kPointerSize;
   static const int kStackHighEnd = kRegisterOutput - kPointerSize;
   static const int kDirectCall = kFrameAlign;
+  static const int kIsolate = kDirectCall + kPointerSize;
 #endif
 
 #ifdef _WIN64
@@ -214,7 +224,7 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
   void BranchOrBacktrack(Condition condition, Label* to);
 
   void MarkPositionForCodeRelativeFixup() {
-    code_relative_fixup_positions_.Add(masm_->pc_offset());
+    code_relative_fixup_positions_.Add(masm_.pc_offset());
   }
 
   void FixupCodeRelativePositions();
@@ -246,7 +256,8 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
   // Increments the stack pointer (rcx) by a word size.
   inline void Drop();
 
-  MacroAssembler* masm_;
+  MacroAssembler masm_;
+  MacroAssembler::NoRootArrayScope no_root_array_scope_;
 
   ZoneList<int> code_relative_fixup_positions_;
 

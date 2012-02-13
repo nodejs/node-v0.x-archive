@@ -25,6 +25,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Flags: --allow-natives-syntax
+
 /**
  * @fileoverview Check all sorts of borderline cases for charCodeAt.
  */
@@ -153,6 +155,19 @@ TestStringType(Slice16End, true);
 TestStringType(Flat16, true);
 TestStringType(NotAString16, true);
 
+
+function ConsNotSmiIndex() {
+  var str = Cons();
+  assertTrue(isNaN(str.charCodeAt(0x7fffffff)));
+}
+
+for (var i = 0; i < 5; i++) {
+  ConsNotSmiIndex();
+}
+%OptimizeFunctionOnNextCall(ConsNotSmiIndex);
+ConsNotSmiIndex();
+
+
 for (var i = 0; i != 10; i++) {
   assertEquals(101, Cons16().charCodeAt(1.1));
   assertEquals('e', Cons16().charAt(1.1));
@@ -194,3 +209,25 @@ assertTrue(isNaN(long.charCodeAt(-1)), 35);
 assertEquals(49, long.charCodeAt(0), 36);
 assertEquals(56, long.charCodeAt(65535), 37);
 assertTrue(isNaN(long.charCodeAt(65536)), 38);
+
+
+// Test crankshaft code when the function is set directly on the
+// string prototype object instead of the hidden prototype object.
+// See http://code.google.com/p/v8/issues/detail?id=1070
+
+String.prototype.x = String.prototype.charCodeAt;
+
+function directlyOnPrototype() {
+  assertEquals(97, "a".x(0));
+  assertEquals(98, "b".x(0));
+  assertEquals(99, "c".x(0));
+  assertEquals(97, "a".x(0));
+  assertEquals(98, "b".x(0));
+  assertEquals(99, "c".x(0));
+}
+
+for (var i = 0; i < 5; i++) {
+  directlyOnPrototype();
+}
+%OptimizeFunctionOnNextCall(directlyOnPrototype);
+directlyOnPrototype();
