@@ -1,5 +1,5 @@
 var common = require("../common");
-var assert = common.assert;
+var assert = require('assert');
 var http = require("http");
 
 var test_res_body = "other stuff!\n";
@@ -17,16 +17,19 @@ server.listen(common.PORT);
 
 
 server.addListener("listening", function() {
-  var client = http.createClient(common.PORT);
-  req = client.request("GET", "/", {});
-  req.end();
-  req.addListener('response', function (res) {
+  var options = {
+    port: common.PORT,
+    path: "/",
+    method: "GET"
+  }
+  var req = http.request(options, function (res) {
     assert.ok("date" in res.headers, 
       "Response headers didn't contain a Date."
     );
     res.addListener('end', function () {
       server.close();
       process.exit();
-    });
+    });    
   });
+  req.end();
 });
