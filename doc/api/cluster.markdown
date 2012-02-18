@@ -51,7 +51,7 @@ If the `process.env.NODE_UNIQUE_ID` is set to a value different efined
 ### Event: 'fork'
 
 When a new worker is forked the cluster module will emit a 'fork' event.
-This can be used to log worker activity, and create you own timeout.
+This can be used to log worker activity, or to create your own timeout.
 
     var timeouts = [];
     var errorMsg = function () {
@@ -71,10 +71,10 @@ This can be used to log worker activity, and create you own timeout.
 
 ### Event: 'online'
 
-After forking a new worker, the worker should respond with a online message.
-When the master receives a online message it will emit such event.
-The difference between 'fork' and 'online' is that fork is emitted when the
-master tries to fork a worker, and 'online' is emitted when the worker is being
+After forking a new worker, the worker responds with a 'online' message.
+When the master receives the 'online' message it will emit such an event.
+The difference between 'fork' and 'online' is that 'fork' is emitted when the
+master tries to fork a worker, whereas 'online' is emitted when the worker is being
 executed.
 
     cluster.on('online', function (worker) {
@@ -84,7 +84,7 @@ executed.
 ### Event: 'listening'
 
 When calling `listen()` from a worker, a 'listening' event is automatically assigned
-to the server instance. When the server is listening a message is send to the master
+to the server instance. When the server is listening a message is sent to the master
 where the 'listening' event is emitted.
 
     cluster.on('listening', function (worker) {
@@ -103,12 +103,12 @@ This can be used to restart the worker by calling `fork()` again.
 
 ### Event 'setup'
 
-When the `.setupMaster()` function has been executed this event emits. If `.setupMaster()`
-was not executed before `fork()` this function will call `.setupMaster()` with no arguments.
+When the `.setupMaster()` function has been executed, the 'setup' event is emitted. If `.setupMaster()`
+was not executed before `fork()`, the `.setupMaster()` function is called with no arguments.
 
 ### cluster.setupMaster([options])
 
-The `setupMaster` is used to change the default 'fork' behavior. It takes one option
+The `setupMaster` is used to change the default 'fork' behavior. It takes a single option
 object argument.
 
 Example:
@@ -123,9 +123,9 @@ Example:
 
 The options argument can contain 3 different properties.
 
-- `exec` are the file path to the worker file, by default this is the same file as the master.
-- `args` are a array of arguments send along with the worker, by default this is `process.argv.slice(2)`.
-- `silent`, if this option is true the output of a worker won't propagate to the master, by default this is false.
+- `exec` is the file path to the worker file, by default this is the same file as the master.
+- `args` is an array of arguments to start the worker with - by default this is `process.argv.slice(2)`.
+- `silent`, if this option is true the output of a worker won't propagate to the master - by default this is false.
 
 ### cluster.settings
 
@@ -142,7 +142,7 @@ will be added to the process environment in the worker.
 
 ### cluster.workers
 
-In the cluster all living worker objects are stored in this object by there
+In the cluster, all living worker objects are stored in this object with their
 `uniqueID` as the key. This makes it easy to loop through all living workers.
 
     // Go through all workers
@@ -164,23 +164,23 @@ the worker's uniqueID is the easiest way to find the worker.
 
 ## Worker
 
-This object contains all public information and method about a worker.
-In the master it can be obtained using `cluster.workers`. In a worker
+This object contains all public information and methods for a worker.
+In the master it can be obtained from `cluster.workers`. In a worker
 it can be obtained using `cluster.worker`.
 
 ### Worker.uniqueID
 
-Each new worker is given its own unique id, this id is stored in the `uniqueID`.
+Each new worker is given its own unique id, which is stored in the `uniqueID` property.
 
 ### Worker.process
 
 All workers are created using `child_process.fork()`, the returned object from this
-function is stored in process.
+function is stored in the `process` property.
 
 ### Worker.send(message, [sendHandle])
 
-This function is equal to the send methods provided by `child_process.fork()`.
-In the master you should use this function to send a message to a specific worker.
+This function is the same as the send methods provided by `child_process.fork()`.
+In the master you can use this function to send a message to a specific worker.
 However in a worker you can also use `process.send(message)`, since this is the same
 function.
 
@@ -198,8 +198,8 @@ This example will echo back all messages from the master:
 
 ### Worker.destroy()
 
-This function will kill the worker, and inform the master to not spawn a new worker.
-To know the difference between suicide and accidentally death a suicide boolean is set to true.
+This function will kill the worker and inform the master to not spawn a new worker.
+To know the difference between suicide and accidental death, the `suicide` property is set to true.
 
     cluster.on('death', function (worker) {
       if (worker.suicide === true) {
@@ -213,7 +213,7 @@ To know the difference between suicide and accidentally death a suicide boolean 
 ### Worker.suicide
 
 This property is a boolean. It is set when a worker dies, until then it is `undefined`.
-It is true if the worker was killed using the `.destroy()` method, and false otherwise.
+It will be true if the worker was killed using the `.destroy()` method, and false otherwise.
 
 ### Event: message
 
@@ -262,7 +262,7 @@ in the master process using the message system:
 
 ### Event: online
 
-Same as the `cluster.on('online')` event, but emits only when the state change
+Same as the `cluster.on('online')` event, but emits only when the state changes
 on the specified worker.
 
     cluster.fork().on('online', function (worker) {
@@ -271,7 +271,7 @@ on the specified worker.
 
 ### Event: listening
 
-Same as the `cluster.on('listening')` event, but emits only when the state change
+Same as the `cluster.on('listening')` event, but emits only when the state changes
 on the specified worker.
 
     cluster.fork().on('listening', function (worker) {
@@ -280,7 +280,7 @@ on the specified worker.
 
 ### Event: death
 
-Same as the `cluster.on('death')` event, but emits only when the state change
+Same as the `cluster.on('death')` event, but emits only when the state changes
 on the specified worker.
 
     cluster.fork().on('death', function (worker) {
