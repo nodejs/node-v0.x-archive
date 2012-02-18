@@ -83,6 +83,7 @@ static Persistent<String> unsubscribe_sym;
 static Persistent<String> unknown_method_sym;
 
 static Persistent<String> method_sym;
+static Persistent<String> boundary_sym;
 static Persistent<String> status_code_sym;
 static Persistent<String> http_version_sym;
 static Persistent<String> version_major_sym;
@@ -314,6 +315,9 @@ public:
     if (parser_.type == HTTP_RESPONSE) {
       message_info->Set(status_code_sym, Integer::New(parser_.status_code));
     }
+
+    // BOUNDARY
+    message_info->Set(boundary_sym, Integer::New(parser_.boundary));
 
     // VERSION
     message_info->Set(version_major_sym, Integer::New(parser_.http_major));
@@ -636,6 +640,7 @@ void InitHttpParser(Handle<Object> target) {
   unknown_method_sym = NODE_PSYMBOL("UNKNOWN_METHOD");
 
   method_sym = NODE_PSYMBOL("method");
+  boundary_sym = NODE_PSYMBOL("boundary");
   status_code_sym = NODE_PSYMBOL("statusCode");
   http_version_sym = NODE_PSYMBOL("httpVersion");
   version_major_sym = NODE_PSYMBOL("versionMajor");

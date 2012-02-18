@@ -96,6 +96,7 @@ function expectBody(expected) {
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'GET');
     assert.equal(info.url || parser.url, '/hello');
+    assert.equal(info.boundary, request.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
   });
@@ -135,6 +136,7 @@ function expectBody(expected) {
 
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, undefined);
+    assert.equal(info.boundary, request.length - 4); // - 'pong'.length
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
     assert.equal(info.statusCode, 200);
@@ -162,6 +164,7 @@ function expectBody(expected) {
 
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, undefined);
+    assert.equal(info.boundary, request.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 0);
     assert.equal(info.statusCode, 200);
@@ -176,10 +179,13 @@ function expectBody(expected) {
 // Trailing headers.
 //
 (function() {
-  var request = Buffer(
+  var headers =
     'POST /it HTTP/1.1' + CRLF +
     'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
+    CRLF;
+
+  var request = Buffer(
+    headers +
     '4' + CRLF +
     'ping' + CRLF +
     '0' + CRLF +
@@ -201,6 +207,7 @@ function expectBody(expected) {
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'POST');
     assert.equal(info.url || parser.url, '/it');
+    assert.equal(info.boundary, headers.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
     // expect to see trailing headers now
@@ -233,6 +240,7 @@ function expectBody(expected) {
 
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'GET');
+    assert.equal(info.boundary, request.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 0);
     assert.deepEqual(info.headers || parser.headers,
@@ -264,6 +272,7 @@ function expectBody(expected) {
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'GET');
     assert.equal(info.url || parser.url, '/foo/bar/baz?quux=42#1337');
+    assert.equal(info.boundary, request.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 0);
 
@@ -297,6 +306,7 @@ function expectBody(expected) {
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'POST');
     assert.equal(info.url || parser.url, '/it');
+    assert.equal(info.boundary, request.length - 15); // - 'foo=42&bar=1337'.length
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
   });
@@ -314,11 +324,14 @@ function expectBody(expected) {
 // Test chunked request body
 //
 (function() {
-  var request = Buffer(
+  var headers =
     'POST /it HTTP/1.1' + CRLF +
     'Content-Type: text/plain' + CRLF +
     'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
+    CRLF;
+
+  var request = Buffer(
+    headers +
     '3' + CRLF +
     '123' + CRLF +
     '6' + CRLF +
@@ -333,6 +346,7 @@ function expectBody(expected) {
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'POST');
     assert.equal(info.url || parser.url, '/it');
+    assert.equal(info.boundary, headers.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
   });
@@ -353,11 +367,14 @@ function expectBody(expected) {
 // Test chunked request body spread over multiple buffers (packets)
 //
 (function() {
-  var request = Buffer(
+  var headers =
     'POST /it HTTP/1.1' + CRLF +
     'Content-Type: text/plain' + CRLF +
     'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
+    CRLF;
+
+  var request = Buffer(
+    headers +
     '3' + CRLF +
     '123' + CRLF +
     '6' + CRLF +
@@ -369,6 +386,7 @@ function expectBody(expected) {
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'POST');
     assert.equal(info.url || parser.url, '/it');
+    assert.equal(info.boundary, headers.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
   });
@@ -403,11 +421,14 @@ function expectBody(expected) {
 // Stress test.
 //
 (function() {
-  var request = Buffer(
+  var headers =
     'POST /helpme HTTP/1.1' + CRLF +
     'Content-Type: text/plain' + CRLF +
     'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
+    CRLF;
+
+  var request = Buffer(
+    headers +
     '3' + CRLF +
     '123' + CRLF +
     '6' + CRLF +
@@ -427,6 +448,7 @@ function expectBody(expected) {
     parser.onHeadersComplete = mustCall(function(info) {
       assert.equal(info.method, 'POST');
       assert.equal(info.url || parser.url, '/helpme');
+      assert.equal(info.boundary, headers.length);
       assert.equal(info.versionMajor, 1);
       assert.equal(info.versionMinor, 1);
     });
@@ -459,11 +481,14 @@ function expectBody(expected) {
 // Byte by byte test.
 //
 (function() {
-  var request = Buffer(
+  var headers =
     'POST /it HTTP/1.1' + CRLF +
     'Content-Type: text/plain' + CRLF +
     'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
+    CRLF;
+
+  var request = Buffer(
+    headers +
     '3' + CRLF +
     '123' + CRLF +
     '6' + CRLF +
@@ -482,6 +507,7 @@ function expectBody(expected) {
   parser.onHeadersComplete = mustCall(function(info) {
     assert.equal(info.method, 'POST');
     assert.equal(info.url || parser.url, '/it');
+    assert.equal(info.boundary, headers.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
     assert.deepEqual(info.headers || parser.headers,
@@ -509,27 +535,34 @@ function expectBody(expected) {
 // Test parser reinit sequence.
 //
 (function() {
-  var req1 = Buffer(
+  var headers1 =
     'PUT /this HTTP/1.1' + CRLF +
     'Content-Type: text/plain' + CRLF +
     'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
+    CRLF;
+
+  var req1 = Buffer(
+    headers1 +
     '4' + CRLF +
     'ping' + CRLF +
     '0' + CRLF
   );
 
-  var req2 = Buffer(
+  var headers2 =
     'POST /that HTTP/1.0' + CRLF +
     'Content-Type: text/plain' + CRLF +
     'Content-Length: 4' + CRLF +
-    CRLF +
+    CRLF;
+
+  var req2 = Buffer(
+    headers2 +
     'pong'
   );
 
   function onHeadersComplete1(info) {
     assert.equal(info.method, 'PUT');
     assert.equal(info.url, '/this');
+    assert.equal(info.boundary, headers1.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
     assert.deepEqual(info.headers,
@@ -540,6 +573,7 @@ function expectBody(expected) {
   function onHeadersComplete2(info) {
     assert.equal(info.method, 'POST');
     assert.equal(info.url, '/that');
+    assert.equal(info.boundary, headers2.length);
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 0);
     assert.deepEqual(info.headers,
