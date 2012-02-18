@@ -47,7 +47,7 @@ function test1(){
 	putIn.write = function (data) {
 		if (data.length) {
 			// inspect output matches repl output
-			assert.equal(data, util.inspect(require('fs'), null, null, true) + '\n');
+			assert.equal(data, util.inspect(require('fs'), null, null, false) + '\n');
 			// globally added lib matches required lib
 			assert.equal(global.fs, require('fs'));
 			test2();
@@ -69,3 +69,4 @@ function test2(){
 	global.url = val;
 	putIn.run(['url']);
 }
+
