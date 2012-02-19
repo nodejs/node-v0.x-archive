@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -1033,19 +1033,32 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ lw(t0, FieldMemOperand(a0, String::kHashFieldOffset));
   __ sra(at, t0, String::kHashShift);
   __ xor_(a3, a3, at);
-  __ And(a3, a3, Operand(KeyedLookupCache::kCapacityMask));
+  int mask = KeyedLookupCache::kCapacityMask & KeyedLookupCache::kHashMask;
+  __ And(a3, a3, Operand(mask));
 
   // Load the key (consisting of map and symbol) from the cache and
   // check for match.
+  Label load_in_object_property;
+  static const int kEntriesPerBucket = KeyedLookupCache::kEntriesPerBucket;
+  Label hit_on_nth_entry[kEntriesPerBucket];
   ExternalReference cache_keys =
       ExternalReference::keyed_lookup_cache_keys(isolate);
   __ li(t0, Operand(cache_keys));
   __ sll(at, a3, kPointerSizeLog2 + 1);
   __ addu(t0, t0, at);
-  __ lw(t1, MemOperand(t0));  // Move t0 to symbol.
-  __ Addu(t0, t0, Operand(kPointerSize));
+
+  for (int i = 0; i < kEntriesPerBucket - 1; i++) {
+    Label try_next_entry;
+    __ lw(t1, MemOperand(t0, kPointerSize * i * 2));
+    __ Branch(&try_next_entry, ne, a2, Operand(t1));
+    __ lw(t1, MemOperand(t0, kPointerSize * (i * 2 + 1)));
+    __ Branch(&hit_on_nth_entry[i], eq, a0, Operand(t1));
+    __ bind(&try_next_entry);
+  }
+
+  __ lw(t1, MemOperand(t0, kPointerSize * (kEntriesPerBucket - 1) * 2));
   __ Branch(&slow, ne, a2, Operand(t1));
-  __ lw(t1, MemOperand(t0));
+  __ lw(t1, MemOperand(t0, kPointerSize * ((kEntriesPerBucket - 1) * 2 + 1)));
   __ Branch(&slow, ne, a0, Operand(t1));
 
   // Get field offset.
@@ -1055,15 +1068,24 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // a3     : lookup cache index
   ExternalReference cache_field_offsets =
       ExternalReference::keyed_lookup_cache_field_offsets(isolate);
-  __ li(t0, Operand(cache_field_offsets));
-  __ sll(at, a3, kPointerSizeLog2);
-  __ addu(at, t0, at);
-  __ lw(t1, MemOperand(at));
-  __ lbu(t2, FieldMemOperand(a2, Map::kInObjectPropertiesOffset));
-  __ Subu(t1, t1, t2);
-  __ Branch(&property_array_property, ge, t1, Operand(zero_reg));
+
+  // Hit on nth entry.
+  for (int i = kEntriesPerBucket - 1; i >= 0; i--) {
+    __ bind(&hit_on_nth_entry[i]);
+    __ li(t0, Operand(cache_field_offsets));
+    __ sll(at, a3, kPointerSizeLog2);
+    __ addu(at, t0, at);
+    __ lw(t1, MemOperand(at, kPointerSize * i));
+    __ lbu(t2, FieldMemOperand(a2, Map::kInObjectPropertiesOffset));
+    __ Subu(t1, t1, t2);
+    __ Branch(&property_array_property, ge, t1, Operand(zero_reg));
+    if (i != 0) {
+      __ Branch(&load_in_object_property);
+    }
+  }
 
   // Load in-object property.
+  __ bind(&load_in_object_property);
   __ lbu(t2, FieldMemOperand(a2, Map::kInstanceSizeOffset));
   __ addu(t2, t2, t1);  // Index from start of object.
   __ Subu(a1, a1, Operand(kHeapObjectTag));  // Remove the heap tag.
@@ -1176,14 +1198,16 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   Label slow, array, extra, check_if_double_array;
   Label fast_object_with_map_check, fast_object_without_map_check;
   Label fast_double_with_map_check, fast_double_without_map_check;
+  Label transition_smi_elements, finish_object_store, non_double_value;
+  Label transition_double_elements;
 
   // Register usage.
   Register value = a0;
   Register key = a1;
   Register receiver = a2;
-  Register elements = a3;  // Elements array of the receiver.
+  Register receiver_map = a3;
   Register elements_map = t2;
-  Register receiver_map = t3;
+  Register elements = t3;  // Elements array of the receiver.
   // t0 and t1 are used as general scratch registers.
 
   // Check that the key is a smi.
@@ -1276,9 +1300,11 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   __ mov(v0, value);
 
   __ bind(&non_smi_value);
-  // Escape to slow case when writing non-smi into smi-only array.
-  __ CheckFastObjectElements(receiver_map, scratch_value, &slow);
+  // Escape to elements kind transition case.
+  __ CheckFastObjectElements(receiver_map, scratch_value,
+                             &transition_smi_elements);
   // Fast elements array, store the value to the elements backing store.
+  __ bind(&finish_object_store);
   __ Addu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ sll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(address, address, scratch_value);
@@ -1304,13 +1330,57 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
                                  key,
                                  receiver,
                                  elements,
+                                 a3,
                                  t0,
                                  t1,
                                  t2,
-                                 t3,
-                                 &slow);
+                                 &transition_double_elements);
   __ Ret(USE_DELAY_SLOT);
   __ mov(v0, value);
+
+  __ bind(&transition_smi_elements);
+  // Transition the array appropriately depending on the value type.
+  __ lw(t0, FieldMemOperand(value, HeapObject::kMapOffset));
+  __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+  __ Branch(&non_double_value, ne, t0, Operand(at));
+
+  // Value is a double. Transition FAST_SMI_ONLY_ELEMENTS ->
+  // FAST_DOUBLE_ELEMENTS and complete the store.
+  __ LoadTransitionedArrayMapConditional(FAST_SMI_ONLY_ELEMENTS,
+                                         FAST_DOUBLE_ELEMENTS,
+                                         receiver_map,
+                                         t0,
+                                         &slow);
+  ASSERT(receiver_map.is(a3));  // Transition code expects map in a3
+  ElementsTransitionGenerator::GenerateSmiOnlyToDouble(masm, &slow);
+  __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  __ jmp(&fast_double_without_map_check);
+
+  __ bind(&non_double_value);
+  // Value is not a double, FAST_SMI_ONLY_ELEMENTS -> FAST_ELEMENTS
+  __ LoadTransitionedArrayMapConditional(FAST_SMI_ONLY_ELEMENTS,
+                                         FAST_ELEMENTS,
+                                         receiver_map,
+                                         t0,
+                                         &slow);
+  ASSERT(receiver_map.is(a3));  // Transition code expects map in a3
+  ElementsTransitionGenerator::GenerateSmiOnlyToObject(masm);
+  __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  __ jmp(&finish_object_store);
+
+  __ bind(&transition_double_elements);
+  // Elements are FAST_DOUBLE_ELEMENTS, but value is an Object that's not a
+  // HeapNumber. Make sure that the receiver is a Array with FAST_ELEMENTS and
+  // transition array from FAST_DOUBLE_ELEMENTS to FAST_ELEMENTS
+  __ LoadTransitionedArrayMapConditional(FAST_DOUBLE_ELEMENTS,
+                                         FAST_ELEMENTS,
+                                         receiver_map,
+                                         t0,
+                                         &slow);
+  ASSERT(receiver_map.is(a3));  // Transition code expects map in a3
+  ElementsTransitionGenerator::GenerateDoubleToObject(masm, &slow);
+  __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  __ jmp(&finish_object_store);
 }
 
 

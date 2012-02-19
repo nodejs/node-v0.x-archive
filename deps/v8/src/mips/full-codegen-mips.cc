@@ -125,7 +125,7 @@ class JumpPatchSite BASE_EMBEDDED {
 // function.
 //
 // The live registers are:
-//   o a1: the JS function object being called (ie, ourselves)
+//   o a1: the JS function object being called (i.e. ourselves)
 //   o cp: our context
 //   o fp: our caller's frame pointer
 //   o sp: stack pointer
@@ -1017,7 +1017,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ lw(a1, FieldMemOperand(a1, DescriptorArray::kEnumerationIndexOffset));
   __ lw(a2, FieldMemOperand(a1, DescriptorArray::kEnumCacheBridgeCacheOffset));
 
-  // Setup the four remaining stack slots.
+  // Set up the four remaining stack slots.
   __ push(v0);  // Map.
   __ lw(a1, FieldMemOperand(a2, FixedArray::kLengthOffset));
   __ li(a0, Operand(Smi::FromInt(0)));
@@ -2403,9 +2403,22 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   __ li(a0, Operand(arg_count));
   __ lw(a1, MemOperand(sp, arg_count * kPointerSize));
 
-  Handle<Code> construct_builtin =
-      isolate()->builtins()->JSConstructCall();
-  __ Call(construct_builtin, RelocInfo::CONSTRUCT_CALL);
+  // Record call targets in unoptimized code, but not in the snapshot.
+  CallFunctionFlags flags;
+  if (!Serializer::enabled()) {
+    flags = RECORD_CALL_TARGET;
+    Handle<Object> uninitialized =
+       TypeFeedbackCells::UninitializedSentinel(isolate());
+    Handle<JSGlobalPropertyCell> cell =
+        isolate()->factory()->NewJSGlobalPropertyCell(uninitialized);
+    RecordTypeFeedbackCell(expr->id(), cell);
+    __ li(a2, Operand(cell));
+  } else {
+    flags = NO_CALL_FUNCTION_FLAGS;
+  }
+
+  CallConstructStub stub(flags);
+  __ Call(stub.GetCode(), RelocInfo::CONSTRUCT_CALL);
   context()->Plug(v0);
 }
 
@@ -3655,7 +3668,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
 
   // One-character separator case.
   __ bind(&one_char_separator);
-  // Replace separator with its ascii character value.
+  // Replace separator with its ASCII character value.
   __ lbu(separator, FieldMemOperand(separator, SeqAsciiString::kHeaderSize));
   // Jump into the loop after the code that copies the separator, so the first
   // element is not preceded by a separator.
@@ -3666,7 +3679,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   //   result_pos: the position to which we are currently copying characters.
   //   element: Current array element.
   //   elements_end: Array end.
-  //   separator: Single separator ascii char (in lower byte).
+  //   separator: Single separator ASCII char (in lower byte).
 
   // Copy the separator character to the result.
   __ sb(separator, MemOperand(result_pos));

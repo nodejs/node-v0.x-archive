@@ -125,7 +125,7 @@ class Registers {
 
   struct RegisterAlias {
     int reg;
-    const char *name;
+    const char* name;
   };
 
   static const int32_t kMaxValue = 0x7fffffff;
@@ -147,7 +147,7 @@ class FPURegisters {
 
   struct RegisterAlias {
     int creg;
-    const char *name;
+    const char* name;
   };
 
  private:
@@ -747,7 +747,7 @@ class Instruction {
 
   // Say if the instruction should not be used in a branch delay slot.
   bool IsForbiddenInBranchDelay() const;
-  // Say if the instruction 'links'. eg: jal, bal.
+  // Say if the instruction 'links'. e.g. jal, bal.
   bool IsLinkingInstruction() const;
   // Say if the instruction is a break or a trap.
   bool IsTrap() const;

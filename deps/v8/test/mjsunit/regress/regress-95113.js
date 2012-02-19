@@ -32,7 +32,7 @@ function get_double_array() {
   var i = 0;
   while (!%HasFastDoubleElements(a)) {
     a[i] = i;
-    i++;
+    i += 0.5;
   }
   assertTrue(%HasFastDoubleElements(a));
   a.length = 1;

@@ -71,7 +71,7 @@ TypeFeedbackOracle::TypeFeedbackOracle(Handle<Code> code,
 
 Handle<Object> TypeFeedbackOracle::GetInfo(unsigned ast_id) {
   int entry = dictionary_->FindEntry(ast_id);
-  return entry != NumberDictionary::kNotFound
+  return entry != UnseededNumberDictionary::kNotFound
       ? Handle<Object>(dictionary_->ValueAt(entry))
       : Handle<Object>::cast(isolate_->factory()->undefined_value());
 }
@@ -137,6 +137,12 @@ bool TypeFeedbackOracle::StoreIsMegamorphicWithTypeInfo(Expression* expr) {
 bool TypeFeedbackOracle::CallIsMonomorphic(Call* expr) {
   Handle<Object> value = GetInfo(expr->id());
   return value->IsMap() || value->IsSmi() || value->IsJSFunction();
+}
+
+
+bool TypeFeedbackOracle::CallNewIsMonomorphic(CallNew* expr) {
+  Handle<Object> value = GetInfo(expr->id());
+  return value->IsJSFunction();
 }
 
 
@@ -541,6 +547,7 @@ void TypeFeedbackOracle::BuildDictionary(Handle<Code> code) {
   GetRelocInfos(code, &infos);
   CreateDictionary(code, &infos);
   ProcessRelocInfos(&infos);
+  ProcessTypeFeedbackCells(code);
   // Allocate handle in the parent scope.
   dictionary_ = scope.CloseAndEscape(dictionary_);
 }
@@ -558,8 +565,9 @@ void TypeFeedbackOracle::GetRelocInfos(Handle<Code> code,
 void TypeFeedbackOracle::CreateDictionary(Handle<Code> code,
                                           ZoneList<RelocInfo>* infos) {
   DisableAssertNoAllocation allocation_allowed;
+  int length = infos->length() + code->type_feedback_cells()->CellCount();
   byte* old_start = code->instruction_start();
-  dictionary_ = FACTORY->NewNumberDictionary(infos->length());
+  dictionary_ = FACTORY->NewUnseededNumberDictionary(length);
   byte* new_start = code->instruction_start();
   RelocateRelocInfos(infos, old_start, new_start);
 }
@@ -619,18 +627,6 @@ void TypeFeedbackOracle::ProcessRelocInfos(ZoneList<RelocInfo>* infos) {
         SetInfo(ast_id, target);
         break;
 
-      case Code::STUB:
-        if (target->major_key() == CodeStub::CallFunction &&
-            target->has_function_cache()) {
-          Object* value = CallFunctionStub::GetCachedValue(reloc_entry.pc());
-          if (value->IsJSFunction() &&
-              !CanRetainOtherContext(JSFunction::cast(value),
-                                     *global_context_)) {
-            SetInfo(ast_id, value);
-          }
-        }
-        break;
-
       default:
         break;
     }
@@ -638,8 +634,22 @@ void TypeFeedbackOracle::ProcessRelocInfos(ZoneList<RelocInfo>* infos) {
 }
 
 
+void TypeFeedbackOracle::ProcessTypeFeedbackCells(Handle<Code> code) {
+  Handle<TypeFeedbackCells> cache(code->type_feedback_cells());
+  for (int i = 0; i < cache->CellCount(); i++) {
+    unsigned ast_id = cache->AstId(i)->value();
+    Object* value = cache->Cell(i)->value();
+    if (value->IsJSFunction() &&
+        !CanRetainOtherContext(JSFunction::cast(value),
+                               *global_context_)) {
+      SetInfo(ast_id, value);
+    }
+  }
+}
+
+
 void TypeFeedbackOracle::SetInfo(unsigned ast_id, Object* target) {
-  ASSERT(dictionary_->FindEntry(ast_id) == NumberDictionary::kNotFound);
+  ASSERT(dictionary_->FindEntry(ast_id) == UnseededNumberDictionary::kNotFound);
   MaybeObject* maybe_result = dictionary_->AtNumberPut(ast_id, target);
   USE(maybe_result);
 #ifdef DEBUG

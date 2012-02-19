@@ -30,19 +30,27 @@
 
 // The original source code covered by the above license above has been
 // modified significantly by Google Inc.
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 
 #ifndef V8_ASSEMBLER_H_
 #define V8_ASSEMBLER_H_
 
+#include "v8.h"
+
 #include "allocation.h"
+#include "builtins.h"
 #include "gdb-jit.h"
+#include "isolate.h"
 #include "runtime.h"
 #include "token.h"
 
 namespace v8 {
+
+class ApiFunction;
+
 namespace internal {
 
+struct StatsCounter;
 const unsigned kNoASTId = -1;
 // -----------------------------------------------------------------------------
 // Platform independent assembler base class.
@@ -271,7 +279,7 @@ class RelocInfo BASE_EMBEDDED {
   INLINE(void apply(intptr_t delta));
 
   // Is the pointer this relocation info refers to coded like a plain pointer
-  // or is it strange in some way (eg relative or patched into a series of
+  // or is it strange in some way (e.g. relative or patched into a series of
   // instructions).
   bool IsCodedSpecially();
 
@@ -371,7 +379,7 @@ class RelocInfo BASE_EMBEDDED {
   // routines expect to access these pointers indirectly. The following
   // location provides a place for these pointers to exist natually
   // when accessed via the Iterator.
-  Object *reconstructed_obj_ptr_;
+  Object* reconstructed_obj_ptr_;
   // External-reference pointers are also split across instruction-pairs
   // in mips, but are accessed via indirect pointers. This location
   // provides a place for that pointer to exist naturally. Its address

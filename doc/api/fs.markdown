@@ -259,16 +259,28 @@ An exception occurs if the file does not exist.
 * `'w'` - Open file for writing.
 The file is created (if it does not exist) or truncated (if it exists).
 
+* `'wx'` - Like `'w'` but opens the file in exclusive mode.
+
 * `'w+'` - Open file for reading and writing.
 The file is created (if it does not exist) or truncated (if it exists).
+
+* `'wx+'` - Like `'w+'` but opens the file in exclusive mode.
 
 * `'a'` - Open file for appending.
 The file is created if it does not exist.
 
+* `'ax'` - Like `'a'` but opens the file in exclusive mode.
+
 * `'a+'` - Open file for reading and appending.
 The file is created if it does not exist.
 
+* `'ax+'` - Like `'a+'` but opens the file in exclusive mode.
+
 `mode` defaults to `0666`. The callback gets two arguments `(err, fd)`.
+
+Exclusive mode (`O_EXCL`) ensures that `path` is newly created. `fs.open()`
+fails if a file by that name already exists. On POSIX systems, symlinks are
+not followed. Exclusive mode may or may not work with network file systems.
 
 ### fs.openSync(path, flags, [mode])
 
@@ -387,6 +399,23 @@ Example:
 
 The synchronous version of `fs.writeFile`.
 
+### fs.appendFile(filename, data, encoding='utf8', [callback])
+
+Asynchronously append data to a file, creating the file if it not yet exists.
+`data` can be a string or a buffer. The `encoding` argument is ignored if
+`data` is a buffer.
+
+Example:
+
+    fs.appendFile('message.txt', 'data to append', function (err) {
+      if (err) throw err;
+      console.log('The "data to append" was appended to file!');
+    });
+
+### fs.appendFileSync(filename, data, encoding='utf8')
+
+The synchronous version of `fs.appendFile`.
+
 ### fs.watchFile(filename, [options], listener)
 
 Watch for changes on `filename`. The callback `listener` will be called each
@@ -446,6 +475,20 @@ callback, and have some fallback logic if it is null.
 	    console.log('filename not provided');
 	  }
     });
+
+### fs.exists(p, [callback])
+
+Test whether or not the given path exists by checking with the file system.
+Then call the `callback` argument with either true or false.  Example:
+
+    fs.exists('/etc/passwd', function (exists) {
+      util.debug(exists ? "it's there" : "no passwd!");
+    });
+
+
+### fs.existsSync(p)
+
+Synchronous version of `fs.exists`.
 
 ## fs.Stats
 

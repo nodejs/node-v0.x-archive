@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -46,6 +46,8 @@ namespace internal {
 
 // Optimization sampler constants.
 static const int kSamplerFrameCount = 2;
+
+// Constants for statistical profiler.
 static const int kSamplerFrameWeight[kSamplerFrameCount] = { 2, 1 };
 
 static const int kSamplerTicksBetweenThresholdAdjustment = 32;
@@ -58,6 +60,16 @@ static const int kSamplerThresholdSizeFactorInit = 3;
 
 static const int kSizeLimit = 1500;
 
+// Constants for counter based profiler.
+
+// Number of times a function has to be seen on the stack before it is
+// optimized.
+static const int kProfilerTicksBeforeOptimization = 2;
+
+// Maximum size in bytes of generated code for a function to be optimized
+// the very first time it is seen on the stack.
+static const int kMaxSizeEarlyOpt = 500;
+
 
 Atomic32 RuntimeProfiler::state_ = 0;
 // TODO(isolates): Create the semaphore lazily and clean it up when no
@@ -65,7 +77,7 @@ Atomic32 RuntimeProfiler::state_ = 0;
 Semaphore* RuntimeProfiler::semaphore_ = OS::CreateSemaphore(0);
 
 #ifdef DEBUG
-bool RuntimeProfiler::has_been_globally_setup_ = false;
+bool RuntimeProfiler::has_been_globally_set_up_ = false;
 #endif
 bool RuntimeProfiler::enabled_ = false;
 
@@ -82,21 +94,21 @@ RuntimeProfiler::RuntimeProfiler(Isolate* isolate)
 
 
 void RuntimeProfiler::GlobalSetup() {
-  ASSERT(!has_been_globally_setup_);
+  ASSERT(!has_been_globally_set_up_);
   enabled_ = V8::UseCrankshaft() && FLAG_opt;
 #ifdef DEBUG
-  has_been_globally_setup_ = true;
+  has_been_globally_set_up_ = true;
 #endif
 }
 
 
-void RuntimeProfiler::Optimize(JSFunction* function) {
+void RuntimeProfiler::Optimize(JSFunction* function, const char* reason) {
   ASSERT(function->IsOptimizable());
   if (FLAG_trace_opt) {
     PrintF("[marking ");
     function->PrintName();
     PrintF(" 0x%" V8PRIxPTR, reinterpret_cast<intptr_t>(function->address()));
-    PrintF(" for recompilation");
+    PrintF(" for recompilation, reason: %s", reason);
     PrintF("]\n");
   }
 
@@ -192,17 +204,19 @@ void RuntimeProfiler::OptimizeNow() {
     JavaScriptFrame* frame = it.frame();
     JSFunction* function = JSFunction::cast(frame->function());
 
-    // Adjust threshold each time we have processed
-    // a certain number of ticks.
-    if (sampler_ticks_until_threshold_adjustment_ > 0) {
-      sampler_ticks_until_threshold_adjustment_--;
-      if (sampler_ticks_until_threshold_adjustment_ <= 0) {
-        // If the threshold is not already at the minimum
-        // modify and reset the ticks until next adjustment.
-        if (sampler_threshold_ > kSamplerThresholdMin) {
-          sampler_threshold_ -= kSamplerThresholdDelta;
-          sampler_ticks_until_threshold_adjustment_ =
-              kSamplerTicksBetweenThresholdAdjustment;
+    if (!FLAG_watch_ic_patching) {
+      // Adjust threshold each time we have processed
+      // a certain number of ticks.
+      if (sampler_ticks_until_threshold_adjustment_ > 0) {
+        sampler_ticks_until_threshold_adjustment_--;
+        if (sampler_ticks_until_threshold_adjustment_ <= 0) {
+          // If the threshold is not already at the minimum
+          // modify and reset the ticks until next adjustment.
+          if (sampler_threshold_ > kSamplerThresholdMin) {
+            sampler_threshold_ -= kSamplerThresholdDelta;
+            sampler_ticks_until_threshold_adjustment_ =
+                kSamplerTicksBetweenThresholdAdjustment;
+          }
         }
       }
     }
@@ -217,25 +231,55 @@ void RuntimeProfiler::OptimizeNow() {
 
     // Do not record non-optimizable functions.
     if (!function->IsOptimizable()) continue;
-    samples[sample_count++] = function;
 
-    int function_size = function->shared()->SourceSize();
-    int threshold_size_factor = (function_size > kSizeLimit)
-        ? sampler_threshold_size_factor_
-        : 1;
+    if (FLAG_watch_ic_patching) {
+      int ticks = function->shared()->profiler_ticks();
 
-    int threshold = sampler_threshold_ * threshold_size_factor;
+      if (ticks >= kProfilerTicksBeforeOptimization) {
+        // If this particular function hasn't had any ICs patched for enough
+        // ticks, optimize it now.
+        Optimize(function, "hot and stable");
+      } else if (!any_ic_changed_ &&
+          function->shared()->code()->instruction_size() < kMaxSizeEarlyOpt) {
+        // If no IC was patched since the last tick and this function is very
+        // small, optimistically optimize it now.
+        Optimize(function, "small function");
+      } else if (!code_generated_ &&
+          !any_ic_changed_ &&
+          total_code_generated_ > 0 &&
+          total_code_generated_ < 2000) {
+        // If no code was generated and no IC was patched since the last tick,
+        // but a little code has already been generated since last Reset(),
+        // then type info might already be stable and we can optimize now.
+        Optimize(function, "stable on startup");
+      } else {
+        function->shared()->set_profiler_ticks(ticks + 1);
+      }
+    } else {  // !FLAG_counting_profiler
+      samples[sample_count++] = function;
 
-    if (LookupSample(function) >= threshold) {
-      Optimize(function);
+      int function_size = function->shared()->SourceSize();
+      int threshold_size_factor = (function_size > kSizeLimit)
+          ? sampler_threshold_size_factor_
+          : 1;
+
+      int threshold = sampler_threshold_ * threshold_size_factor;
+
+      if (LookupSample(function) >= threshold) {
+        Optimize(function, "sampler window lookup");
+      }
     }
   }
-
-  // Add the collected functions as samples. It's important not to do
-  // this as part of collecting them because this will interfere with
-  // the sample lookup in case of recursive functions.
-  for (int i = 0; i < sample_count; i++) {
-    AddSample(samples[i], kSamplerFrameWeight[i]);
+  if (FLAG_watch_ic_patching) {
+    any_ic_changed_ = false;
+    code_generated_ = false;
+  } else {  // !FLAG_counting_profiler
+    // Add the collected functions as samples. It's important not to do
+    // this as part of collecting them because this will interfere with
+    // the sample lookup in case of recursive functions.
+    for (int i = 0; i < sample_count; i++) {
+      AddSample(samples[i], kSamplerFrameWeight[i]);
+    }
   }
 }
 
@@ -245,9 +289,11 @@ void RuntimeProfiler::NotifyTick() {
 }
 
 
-void RuntimeProfiler::Setup() {
-  ASSERT(has_been_globally_setup_);
-  ClearSampleBuffer();
+void RuntimeProfiler::SetUp() {
+  ASSERT(has_been_globally_set_up_);
+  if (!FLAG_watch_ic_patching) {
+    ClearSampleBuffer();
+  }
   // If the ticker hasn't already started, make sure to do so to get
   // the ticks for the runtime profiler.
   if (IsEnabled()) isolate_->logger()->EnsureTickerStarted();
@@ -255,10 +301,14 @@ void RuntimeProfiler::Setup() {
 
 
 void RuntimeProfiler::Reset() {
-  sampler_threshold_ = kSamplerThresholdInit;
-  sampler_threshold_size_factor_ = kSamplerThresholdSizeFactorInit;
-  sampler_ticks_until_threshold_adjustment_ =
-      kSamplerTicksBetweenThresholdAdjustment;
+  if (FLAG_watch_ic_patching) {
+    total_code_generated_ = 0;
+  } else {  // !FLAG_counting_profiler
+    sampler_threshold_ = kSamplerThresholdInit;
+    sampler_threshold_size_factor_ = kSamplerThresholdSizeFactorInit;
+    sampler_ticks_until_threshold_adjustment_ =
+        kSamplerTicksBetweenThresholdAdjustment;
+  }
 }
 
 

@@ -41,8 +41,9 @@ extern "C" {
 #   define UV_EXTERN /* nothing */
 #   define CARES_STATICLIB 1
 # endif
+#elif __GNUC__ >= 4
+# define UV_EXTERN __attribute__((visibility("default")))
 #else
-  /* Unix. TODO: symbol hiding */
 # define UV_EXTERN /* nothing */
 #endif
 
@@ -115,7 +116,11 @@ typedef intptr_t ssize_t;
   XX( 45, EAISOCKTYPE, "") \
   XX( 46, ESHUTDOWN, "") \
   XX( 47, EEXIST, "file already exists") \
-  XX( 48, ESRCH, "no such process")
+  XX( 48, ESRCH, "no such process") \
+  XX( 49, ENAMETOOLONG, "name too long") \
+  XX( 50, EPERM, "operation not permitted") \
+  XX( 51, ELOOP, "too many symbolic links encountered") \
+  XX( 52, EXDEV, "cross-device link not permitted")
 
 
 #define UV_ERRNO_GEN(val, name, s) UV_##name = val,
@@ -202,6 +207,9 @@ typedef struct uv_work_s uv_work_t;
 UV_EXTERN uv_loop_t* uv_loop_new(void);
 UV_EXTERN void uv_loop_delete(uv_loop_t*);
 
+/* This is a debugging tool. It's NOT part of the official API. */
+UV_EXTERN int uv_loop_refcount(const uv_loop_t*);
+
 
 /*
  * Returns the default loop.
@@ -231,15 +239,27 @@ UV_EXTERN int64_t uv_now(uv_loop_t*);
 
 
 /*
- * The status parameter is 0 if the request completed successfully,
- * and should be -1 if the request was cancelled or failed.
- * Error details can be obtained by calling uv_last_error().
+ * Should return a buffer that libuv can use to read data into.
  *
- * In the case of uv_read_cb the uv_buf_t returned should be freed by the
- * user.
+ * `suggested_size` is a hint. Returning a buffer that is smaller is perfectly
+ * okay as long as `buf.len > 0`.
  */
 typedef uv_buf_t (*uv_alloc_cb)(uv_handle_t* handle, size_t suggested_size);
+
+/*
+ * `nread` is > 0 if there is data available, 0 if libuv is done reading for now
+ * or -1 on error.
+ *
+ * Error details can be obtained by calling uv_last_error(). UV_EOF indicates
+ * that the stream has been closed.
+ *
+ * The callee is responsible for closing the stream when an error happens.
+ * Trying to read from the stream again is undefined.
+ *
+ * The callee is responsible for freeing the buffer, libuv does not reuse it.
+ */
 typedef void (*uv_read_cb)(uv_stream_t* stream, ssize_t nread, uv_buf_t buf);
+
 /*
  * Just like the uv_read_cb except that if the pending parameter is true
  * then you can use uv_accept() to pull the new handle into the process.
@@ -247,6 +267,7 @@ typedef void (*uv_read_cb)(uv_stream_t* stream, ssize_t nread, uv_buf_t buf);
  */
 typedef void (*uv_read2_cb)(uv_pipe_t* pipe, ssize_t nread, uv_buf_t buf,
     uv_handle_type pending);
+
 typedef void (*uv_write_cb)(uv_write_t* req, int status);
 typedef void (*uv_connect_cb)(uv_connect_t* req, int status);
 typedef void (*uv_shutdown_cb)(uv_shutdown_t* req, int status);
@@ -485,6 +506,13 @@ struct uv_write_s {
 };
 
 
+/*
+ * Used to determine whether a stream is readable or writable.
+ * TODO: export in v0.8.
+ */
+/* UV_EXTERN */ int uv_is_readable(uv_stream_t* handle);
+/* UV_EXTERN */ int uv_is_writable(uv_stream_t* handle);
+
 
 /*
  * uv_tcp_t is a subclass of uv_stream_t
@@ -649,6 +677,59 @@ UV_EXTERN int uv_udp_getsockname(uv_udp_t* handle, struct sockaddr* name,
 UV_EXTERN int uv_udp_set_membership(uv_udp_t* handle,
     const char* multicast_addr, const char* interface_addr,
     uv_membership membership);
+
+/*
+ * Set IP multicast loop flag. Makes multicast packets loop back to
+ * local sockets.
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  on                  1 for on, 0 for off
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_multicast_loop(uv_udp_t* handle, int on);
+
+/*
+ * Set the multicast ttl
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  ttl                 1 through 255
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl);
+
+/*
+ * Set broadcast on or off
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  on                  1 for on, 0 for off
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_broadcast(uv_udp_t* handle, int on);
+
+/*
+ * Set the time to live
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  ttl                 1 through 255
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_ttl(uv_udp_t* handle, int ttl);
 
 /*
  * Send data. If the socket has not previously been bound with `uv_udp_bind`
@@ -1313,7 +1394,8 @@ UV_EXTERN uv_err_t uv_dlopen(const char* filename, uv_lib_t* library);
 UV_EXTERN uv_err_t uv_dlclose(uv_lib_t library);
 
 /*
- * Retrieves a data pointer from a dynamic library.
+ * Retrieves a data pointer from a dynamic library. It is legal for a symbol to
+ * map to NULL.
  */
 UV_EXTERN uv_err_t uv_dlsym(uv_lib_t library, const char* name, void** ptr);
 
@@ -1348,7 +1430,6 @@ UV_EXTERN void uv_once(uv_once_t* guard, void (*callback)(void));
 UV_EXTERN int uv_thread_create(uv_thread_t *tid,
     void (*entry)(void *arg), void *arg);
 UV_EXTERN int uv_thread_join(uv_thread_t *tid);
-UV_EXTERN uv_thread_t uv_thread_self(void);
 
 /* the presence of these unions force similar struct layout */
 union uv_any_handle {

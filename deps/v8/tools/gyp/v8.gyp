@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -32,6 +32,7 @@
       'targets': [
         {
           'target_name': 'v8',
+          'dependencies_traverse': 1,
           'conditions': [
             ['want_separate_host_toolset==1', {
               'toolsets': ['host', 'target'],
@@ -684,7 +685,22 @@
                 ],
               }
             ],
+            ['OS=="netbsd"', {
+                'link_settings': {
+                  'libraries': [
+                    '-L/usr/pkg/lib -Wl,-R/usr/pkg/lib -lexecinfo',
+                ]},
+                'sources': [
+                  '../../src/platform-openbsd.cc',
+                  '../../src/platform-posix.cc'
+                ],
+              }
+            ],
             ['OS=="solaris"', {
+                'link_settings': {
+                  'libraries': [
+                    '-lsocket -lnsl',
+                ]},
                 'sources': [
                   '../../src/platform-solaris.cc',
                   '../../src/platform-posix.cc',
@@ -713,6 +729,11 @@
                 'BUILDING_V8_SHARED',
                 'V8_SHARED',
               ],
+            }],
+            ['v8_postmortem_support=="true"', {
+              'sources': [
+                '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+              ]
             }],
           ],
         },
@@ -788,6 +809,34 @@
               ],
             },
           ],
+        },
+        {
+          'target_name': 'postmortem-metadata',
+          'type': 'none',
+          'variables': {
+            'heapobject_files': [
+                '../../src/objects.h',
+                '../../src/objects-inl.h',
+            ],
+          },
+          'actions': [
+              {
+                'action_name': 'gen-postmortem-metadata',
+                'inputs': [
+                  '../../tools/gen-postmortem-metadata.py',
+                  '<@(heapobject_files)',
+                ],
+                'outputs': [
+                  '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+                ],
+                'action': [
+                  'python',
+                  '../../tools/gen-postmortem-metadata.py',
+                  '<@(_outputs)',
+                  '<@(heapobject_files)'
+                ]
+              }
+           ]
         },
         {
           'target_name': 'mksnapshot',

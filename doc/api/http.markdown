@@ -66,6 +66,24 @@ request body.
 Note that when this event is emitted and handled, the `request` event will
 not be emitted.
 
+### Event: 'connect'
+
+`function (request, socket, head) { }`
+
+Emitted each time a client requests a http CONNECT method. If this event isn't
+listened for, then clients requesting a CONNECT method will have their
+connections closed.
+
+* `request` is the arguments for the http request, as it is in the request
+  event.
+* `socket` is the network socket between the server and client.
+* `head` is an instance of Buffer, the first packet of the tunneling stream,
+  this may be empty.
+
+After this event is emitted, the request's socket will not have a `data`
+event listener, meaning you will need to bind to it in order to handle data
+sent to the server on that socket.
+
 ### Event: 'upgrade'
 
 `function (request, socket, head) { }`
@@ -74,9 +92,11 @@ Emitted each time a client requests a http upgrade. If this event isn't
 listened for, then clients requesting an upgrade will have their connections
 closed.
 
-* `request` is the arguments for the http request, as it is in the request event.
+* `request` is the arguments for the http request, as it is in the request
+  event.
 * `socket` is the network socket between the server and client.
-* `head` is an instance of Buffer, the first packet of the upgraded stream, this may be empty.
+* `head` is an instance of Buffer, the first packet of the upgraded stream,
+  this may be empty.
 
 After this event is emitted, the request's socket will not have a `data`
 event listener, meaning you will need to bind to it in order to handle data
@@ -117,10 +137,16 @@ a listener for the ['listening'](net.html#event_listening_) event.
 See also [net.Server.listen()](net.html#server.listen).
 
 
-### server.close()
+### server.close([cb])
 
 Stops the server from accepting new connections.
 See [net.Server.close()](net.html#server.close).
+
+
+### server.maxHeadersCount
+
+Limits maximum incoming headers count, equal to 1000 by default. If set to 0 -
+no limit will be applied.
 
 
 ## http.ServerRequest
@@ -128,18 +154,19 @@ See [net.Server.close()](net.html#server.close).
 This object is created internally by a HTTP server -- not by
 the user -- and passed as the first argument to a `'request'` listener.
 
-This is an `EventEmitter` with the following events:
+The request implements the [Readable Stream](streams.html#readable_Stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event: 'data'
 
 `function (chunk) { }`
 
-Emitted when a piece of the message body is received.
+Emitted when a piece of the message body is received. The chunk is a string if
+an encoding has been set with `request.setEncoding()`, otherwise it's a
+[Buffer](buffers.html).
 
-Example: A chunk of the body is given as the single
-argument. The transfer-encoding has been decoded.  The
-body chunk is a string.  The body encoding is set with
-`request.setEncoding()`.
+Note that the __data will be lost__ if there is no listener when a
+`ServerRequest` emits a `'data'` event.
 
 ### Event: 'end'
 
@@ -245,7 +272,17 @@ authentication details.
 ## http.ServerResponse
 
 This object is created internally by a HTTP server--not by the user. It is
-passed as the second parameter to the `'request'` event. It is a `Writable Stream`.
+passed as the second parameter to the `'request'` event.
+
+The response implements the [Writable  Stream](streams.html#writable_Stream)
+interface. This is an `EventEmitter` with the following events:
+
+### Event: 'close'
+
+`function () { }`
+
+Indicates that the underlaying connection was terminated before
+`response.end()` was called or able to flush.
 
 ### response.writeContinue()
 
@@ -307,6 +344,13 @@ or
 
     response.setHeader("Set-Cookie", ["type=ninja", "language=javascript"]);
 
+### response.sendDate
+
+When true, the Date header will be automatically generated and sent in 
+the response if it is not already present in the headers. Defaults to true.
+
+This should only be disabled for testing; HTTP requires the Date header
+in responses.
 
 ### response.getHeader(name)
 
@@ -568,11 +612,11 @@ event, the entire body will be caught.
       }, 10);
     });
 
-This is a `Writable Stream`.
 Note: Node does not check whether Content-Length and the length of the body
 which has been transmitted are equal or not.
 
-This is an `EventEmitter` with the following events:
+The request implements the [Writable  Stream](streams.html#writable_Stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event 'response'
 
@@ -593,6 +637,69 @@ Options:
 
 Emitted after a socket is assigned to this request.
 
+### Event: 'connect'
+
+`function (response, socket, head) { }`
+
+Emitted each time a server responds to a request with a CONNECT method. If this
+event isn't being listened for, clients receiving a CONNECT method will have
+their connections closed.
+
+A client server pair that show you how to listen for the `connect` event.
+
+    var http = require('http');
+    var net = require('net');
+    var url = require('url');
+
+    // Create an HTTP tunneling proxy
+    var proxy = http.createServer(function (req, res) {
+      res.writeHead(200, {'Content-Type': 'text/plain'});
+      res.end('okay');
+    });
+    proxy.on('connect', function(req, cltSocket, head) {
+      // connect to an origin server
+      var srvUrl = url.parse('http://' + req.url);
+      var srvSocket = net.connect(srvUrl.port, srvUrl.hostname, function() {
+        cltSocket.write('HTTP/1.1 200 Connection Established\r\n' +
+                        'Proxy-agent: Node-Proxy\r\n' +
+                        '\r\n');
+        srvSocket.write(head);
+        srvSocket.pipe(cltSocket);
+        cltSocket.pipe(srvSocket);
+      });
+    });
+
+    // now that proxy is running
+    proxy.listen(1337, '127.0.0.1', function() {
+
+      // make a request to a tunneling proxy
+      var options = {
+        port: 1337,
+        host: '127.0.0.1',
+        method: 'CONNECT',
+        path: 'www.google.com:80'
+      };
+
+      var req = http.request(options);
+      req.end();
+
+      req.on('connect', function(res, socket, head) {
+        console.log('got connected!');
+
+        // make a request over an HTTP tunnel
+        socket.write('GET / HTTP/1.1\r\n' +
+                     'Host: www.google.com:80\r\n' +
+                     'Connection: close\r\n' +
+                     '\r\n');
+        socket.on('data', function(chunk) {
+          console.log(chunk.toString());
+        });
+        socket.on('end', function() {
+          proxy.close();
+        });
+      });
+    });
+
 ### Event: 'upgrade'
 
 `function (response, socket, head) { }`
@@ -601,25 +708,22 @@ Emitted each time a server responds to a request with an upgrade. If this
 event isn't being listened for, clients receiving an upgrade header will have
 their connections closed.
 
-A client server pair that show you how to listen for the `upgrade` event using `http.getAgent`:
+A client server pair that show you how to listen for the `upgrade` event.
 
     var http = require('http');
-    var net = require('net');
 
     // Create an HTTP server
     var srv = http.createServer(function (req, res) {
       res.writeHead(200, {'Content-Type': 'text/plain'});
       res.end('okay');
     });
-    srv.on('upgrade', function(req, socket, upgradeHead) {
+    srv.on('upgrade', function(req, socket, head) {
       socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
                    'Upgrade: WebSocket\r\n' +
                    'Connection: Upgrade\r\n' +
-                   '\r\n\r\n');
+                   '\r\n');
 
-      socket.ondata = function(data, start, end) {
-        socket.write(data.toString('utf8', start, end), 'utf8'); // echo back
-      };
+      socket.pipe(socket); // echo back
     });
 
     // now that server is running
@@ -704,13 +808,18 @@ will be called.
 This object is created when making a request with `http.request()`. It is
 passed to the `'response'` event of the request object.
 
-The response implements the `Readable Stream` interface.
+The response implements the [Readable Stream](streams.html#readable_Stream)
+interface. This is an `EventEmitter` with the following events:
+
 
 ### Event: 'data'
 
 `function (chunk) { }`
 
 Emitted when a piece of the message body is received.
+
+Note that the __data will be lost__ if there is no listener when a
+`ClientResponse` emits a `'data'` event.
 
 
 ### Event: 'end'
@@ -752,7 +861,7 @@ The response trailers object. Only populated after the 'end' event.
 
 Set the encoding for the response body. Either `'utf8'`, `'ascii'`, or
 `'base64'`. Defaults to `null`, which means that the `'data'` event will emit
-a `Buffer` object..
+a `Buffer` object.
 
 ### response.pause()
 

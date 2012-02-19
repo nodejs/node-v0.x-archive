@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -252,10 +252,13 @@ class BitField {
 // ----------------------------------------------------------------------------
 // Hash function.
 
+static const uint32_t kZeroHashSeed = 0;
+
 // Thomas Wang, Integer Hash Functions.
 // http://www.concentric.net/~Ttwang/tech/inthash.htm
-inline uint32_t ComputeIntegerHash(uint32_t key) {
+inline uint32_t ComputeIntegerHash(uint32_t key, uint32_t seed) {
   uint32_t hash = key;
+  hash = hash ^ seed;
   hash = ~hash + (hash << 15);  // hash = (hash << 15) - hash - 1;
   hash = hash ^ (hash >> 12);
   hash = hash + (hash << 2);
@@ -280,7 +283,8 @@ inline uint32_t ComputeLongHash(uint64_t key) {
 
 inline uint32_t ComputePointerHash(void* ptr) {
   return ComputeIntegerHash(
-      static_cast<uint32_t>(reinterpret_cast<intptr_t>(ptr)));
+      static_cast<uint32_t>(reinterpret_cast<intptr_t>(ptr)),
+      v8::internal::kZeroHashSeed);
 }
 
 
@@ -927,9 +931,17 @@ class EnumSet {
   explicit EnumSet(T bits = 0) : bits_(bits) {}
   bool IsEmpty() const { return bits_ == 0; }
   bool Contains(E element) const { return (bits_ & Mask(element)) != 0; }
+  bool ContainsAnyOf(const EnumSet& set) const {
+    return (bits_ & set.bits_) != 0;
+  }
   void Add(E element) { bits_ |= Mask(element); }
+  void Add(const EnumSet& set) { bits_ |= set.bits_; }
   void Remove(E element) { bits_ &= ~Mask(element); }
+  void Remove(const EnumSet& set) { bits_ &= ~set.bits_; }
+  void RemoveAll() { bits_ = 0; }
+  void Intersect(const EnumSet& set) { bits_ &= set.bits_; }
   T ToIntegral() const { return bits_; }
+  bool operator==(const EnumSet& set) { return bits_ == set.bits_; }
 
  private:
   T Mask(E element) const {

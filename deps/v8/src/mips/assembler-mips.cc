@@ -301,7 +301,7 @@ Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
     own_buffer_ = false;
   }
 
-  // Setup buffer pointers.
+  // Set up buffer pointers.
   ASSERT(buffer_ != NULL);
   pc_ = buffer_;
   reloc_info_writer.Reposition(buffer_ + buffer_size, pc_);
@@ -337,7 +337,7 @@ Assembler::~Assembler() {
 
 void Assembler::GetCode(CodeDesc* desc) {
   ASSERT(pc_ <= reloc_info_writer.pos());  // No overlap.
-  // Setup code descriptor.
+  // Set up code descriptor.
   desc->buffer = buffer_;
   desc->buffer_size = buffer_size_;
   desc->instr_size = pc_offset();
@@ -1245,6 +1245,7 @@ void Assembler::and_(Register rd, Register rs, Register rt) {
 
 
 void Assembler::andi(Register rt, Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(ANDI, rs, rt, j);
 }
 
@@ -1255,6 +1256,7 @@ void Assembler::or_(Register rd, Register rs, Register rt) {
 
 
 void Assembler::ori(Register rt, Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(ORI, rs, rt, j);
 }
 
@@ -1265,6 +1267,7 @@ void Assembler::xor_(Register rd, Register rs, Register rt) {
 
 
 void Assembler::xori(Register rt, Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(XORI, rs, rt, j);
 }
 
@@ -1445,6 +1448,7 @@ void Assembler::swr(Register rd, const MemOperand& rs) {
 
 
 void Assembler::lui(Register rd, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(LUI, zero_reg, rd, j);
 }
 
@@ -1970,7 +1974,7 @@ void Assembler::GrowBuffer() {
   }
   CHECK_GT(desc.buffer_size, 0);  // No overflow.
 
-  // Setup new buffer.
+  // Set up new buffer.
   desc.buffer = NewArray<byte>(desc.buffer_size);
 
   desc.instr_size = pc_offset();

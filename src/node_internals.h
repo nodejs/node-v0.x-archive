@@ -24,13 +24,6 @@
 
 namespace node {
 
-// This function starts an Isolate. This function is defined in node.cc
-// currently so that we minimize the diff between master and v0.6 for easy
-// merging. In the future, when v0.6 is extinct, StartThread should be moved
-// to node_isolate.cc.
-class Isolate;
-void StartThread(Isolate* isolate, int argc, char** argv);
-
 #ifndef offset_of
 // g++ in strict mode complains loudly about the system offsetof() macro
 // because it uses NULL as the base address.
@@ -46,60 +39,6 @@ void StartThread(Isolate* isolate, int argc, char** argv);
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
 #endif
-
-//
-// isolates support
-//
-#if HAVE_ISOLATES
-
-# if _WIN32
-#  define THREAD __declspec(thread)
-# else
-#  define THREAD __thread
-# endif
-
-# define TLS(type, name)      THREAD type* __tls_##name
-# define VAR(name)            (*__tls_##name)
-# define EMPTY(name)          (__tls_##name == NULL)
-# define ASSIGN(name, val)    ((__tls_##name) = P(val))
-
-# define LAZY_ASSIGN(name, val) \
-  do if (!__tls_##name) ((__tls_##name) = P(val)); while (0)
-
-template <class T> inline v8::Persistent<T>* P(v8::Handle<T> v)
-{
-  return new v8::Persistent<T>(v8::Persistent<T>::New(v));
-}
-
-inline v8::Persistent<v8::String>* P(const char* symbol)
-{
-  return new v8::Persistent<v8::String>(
-    v8::Persistent<v8::String>::New(
-      v8::String::NewSymbol(symbol)));
-}
-
-#else // !HAVE_ISOLATES
-
-# define THREAD             /* nothing */
-# define TLS(type, name)    type name
-# define VAR(name)          (name)
-# define EMPTY(name)        ((name).IsEmpty())
-# define ASSIGN(name, val)  ((name) = P(val))
-
-# define LAZY_ASSIGN(name, val) \
-  do if ((name).IsEmpty()) (name) = P(val); while (0)
-
-template <class T> inline v8::Persistent<T> P(v8::Handle<T> v)
-{
-  return v8::Persistent<T>(v);
-}
-
-inline v8::Persistent<v8::String> P(const char* symbol)
-{
-  return v8::Persistent<v8::String>::New(
-    v8::String::NewSymbol(symbol));
-}
-#endif // HAVE_ISOLATES
 
 } // namespace node
 

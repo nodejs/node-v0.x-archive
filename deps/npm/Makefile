@@ -27,12 +27,9 @@ mandocs = $(api_mandocs) $(cli_mandocs)
 
 htmldocs = $(api_htmldocs) $(cli_htmldocs)
 
-all: submodules doc
+all: doc
 
-submodules:
-	! [ -d .git ] || git submodule update --init --recursive
-
-latest: submodules
+latest:
 	@echo "Installing latest published npm"
 	@echo "Use 'make install' or 'make link' to install the code"
 	@echo "in this folder that you're looking at right now."
@@ -51,7 +48,7 @@ clean: doc-clean uninstall
 	rm npmrc
 	node cli.js cache clean
 
-uninstall: submodules
+uninstall:
 	node cli.js rm npm -g -f
 
 doc: $(mandocs) $(htmldocs)
@@ -94,32 +91,44 @@ html/api/%.html: doc/api/%.md html/dochead.html html/docfoot.html scripts/doc-bu
 doc/cli/index.md: $(markdowns) scripts/index-build.js scripts/doc-build.sh package.json
 	node scripts/index-build.js > $@
 
-node_modules/ronn:
+node_modules/.bin/ronn:
 	node cli.js install https://github.com/isaacs/ronnjs/tarball/master
 
 doc: man
 
 man: $(cli_docs) $(api_docs)
 
-test: submodules
+test:
 	node cli.js test
 
 version: link
 	git add package.json &&\
 	git ci -m v$(shell npm -v)
 
-publish: link
+publish: link doc
+	@git tag -d v$(shell npm -v) || true
+	@git push origin :v$(shell npm -v) || true
+	@npm unpublish npm@$(shell npm -v) || true
+	git clean -fd
 	git tag -s -m v$(shell npm -v) v$(shell npm -v) &&\
 	git push origin --tags &&\
 	npm publish &&\
-	make doc-publish
+	npm tag npm@$(shell npm -v) $(shell npm -v | awk -F. '{print $$1 "." $$2}') &&\
+	make doc-publish &&\
+	make zip-publish
 
 docpublish: doc-publish
 doc-publish: doc
 	rsync -vazu --stats --no-implied-dirs --delete html/doc/ npmjs.org:/var/www/npmjs.org/public/doc
 	rsync -vazu --stats --no-implied-dirs --delete html/api/ npmjs.org:/var/www/npmjs.org/public/api
 
+zip-publish: release
+	scp release/*.zip npmjs.org:/var/www/npmjs.org/public/dist/
+
+release:
+	@bash scripts/release.sh
+
 sandwich:
 	@[ $$(whoami) = "root" ] && (echo "ok"; echo "ham" > sandwich) || echo "make it yourself"
 
-.PHONY: all latest install dev link doc clean uninstall test man doc-publish doc-clean docclean docpublish
+.PHONY: all latest install dev link doc clean uninstall test man doc-publish doc-clean docclean docpublish release zip-publish

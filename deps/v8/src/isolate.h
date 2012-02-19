@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -106,15 +106,28 @@ class Simulator;
 // of handles to the actual constants.
 typedef ZoneList<Handle<Object> > ZoneObjectList;
 
-#define RETURN_IF_SCHEDULED_EXCEPTION(isolate)    \
-  if (isolate->has_scheduled_exception())         \
-      return isolate->PromoteScheduledException()
+#define RETURN_IF_SCHEDULED_EXCEPTION(isolate)            \
+  do {                                                    \
+    Isolate* __isolate__ = (isolate);                     \
+    if (__isolate__->has_scheduled_exception()) {         \
+      return __isolate__->PromoteScheduledException();    \
+    }                                                     \
+  } while (false)
 
 #define RETURN_IF_EMPTY_HANDLE_VALUE(isolate, call, value) \
-  if (call.is_null()) {                                    \
-    ASSERT(isolate->has_pending_exception());              \
-    return value;                                          \
-  }
+  do {                                                     \
+    if ((call).is_null()) {                                \
+      ASSERT((isolate)->has_pending_exception());          \
+      return (value);                                      \
+    }                                                      \
+  } while (false)
+
+#define CHECK_NOT_EMPTY_HANDLE(isolate, call)     \
+  do {                                            \
+    ASSERT(!(isolate)->has_pending_exception());  \
+    CHECK(!(call).is_null());                     \
+    CHECK(!(isolate)->has_pending_exception());   \
+  } while (false)
 
 #define RETURN_IF_EMPTY_HANDLE(isolate, call)                       \
   RETURN_IF_EMPTY_HANDLE_VALUE(isolate, call, Failure::Exception())
@@ -245,7 +258,7 @@ class ThreadLocalTop BASE_EMBEDDED {
 #endif
 #endif  // USE_SIMULATOR
 
-  Address js_entry_sp_;  // the stack pointer of the bottom js entry frame
+  Address js_entry_sp_;  // the stack pointer of the bottom JS entry frame
   Address external_callback_;  // the external callback we're currently in
   StateTag current_vm_state_;
 
@@ -349,7 +362,7 @@ typedef List<HeapObject*, PreallocatedStorage> DebugObjectCache;
   /* Serializer state. */                                                      \
   V(ExternalReferenceTable*, external_reference_table, NULL)                   \
   /* AstNode state. */                                                         \
-  V(unsigned, ast_node_id, 0)                                                  \
+  V(int, ast_node_id, 0)                                                       \
   V(unsigned, ast_node_count, 0)                                               \
   /* SafeStackFrameIterator activations count. */                              \
   V(int, safe_stack_iterator_counter, 0)                                       \
@@ -472,7 +485,7 @@ class Isolate {
   bool IsDefaultIsolate() const { return this == default_isolate_; }
 
   // Ensures that process-wide resources and the default isolate have been
-  // allocated. It is only necessary to call this method in rare casses, for
+  // allocated. It is only necessary to call this method in rare cases, for
   // example if you are using V8 from within the body of a static initializer.
   // Safe to call multiple times.
   static void EnsureDefaultIsolate();
@@ -622,7 +635,7 @@ class Isolate {
   void* formal_count_address() { return &thread_local_top_.formal_count_; }
 
   // Returns the global object of the current context. It could be
-  // a builtin object, or a js global object.
+  // a builtin object, or a JS global object.
   Handle<GlobalObject> global() {
     return Handle<GlobalObject>(context()->global());
   }
@@ -690,6 +703,8 @@ class Isolate {
       int frame_limit,
       StackTrace::StackTraceOptions options);
 
+  void CaptureAndSetCurrentStackTraceFor(Handle<JSObject> error_object);
+
   // Returns if the top context may access the given global object. If
   // the result is false, the pending exception is guaranteed to be
   // set.
@@ -716,7 +731,7 @@ class Isolate {
 
   // Promote a scheduled exception to pending. Asserts has_scheduled_exception.
   Failure* PromoteScheduledException();
-  void DoThrow(MaybeObject* exception, MessageLocation* location);
+  void DoThrow(Object* exception, MessageLocation* location);
   // Checks if exception should be reported and finds out if it's
   // caught externally.
   bool ShouldReportException(bool* can_be_caught_externally,
@@ -1010,6 +1025,17 @@ class Isolate {
     thread_local_top_.top_lookup_result_ = top;
   }
 
+  bool context_exit_happened() {
+    return context_exit_happened_;
+  }
+  void set_context_exit_happened(bool context_exit_happened) {
+    context_exit_happened_ = context_exit_happened;
+  }
+
+  double time_millis_since_init() {
+    return OS::TimeCurrentMillis() - time_millis_at_init_;
+  }
+
  private:
   Isolate();
 
@@ -1051,6 +1077,7 @@ class Isolate {
     Isolate* previous_isolate;
     EntryStackItem* previous_item;
 
+   private:
     DISALLOW_COPY_AND_ASSIGN(EntryStackItem);
   };
 
@@ -1116,6 +1143,10 @@ class Isolate {
 
   void InitializeDebugger();
 
+  // Traverse prototype chain to find out whether the object is derived from
+  // the Error object.
+  bool IsErrorObject(Handle<Object> obj);
+
   int stack_trace_nesting_level_;
   StringStream* incomplete_message_;
   // The preallocated memory thread singleton.
@@ -1174,6 +1205,13 @@ class Isolate {
   RegExpStack* regexp_stack_;
   unibrow::Mapping<unibrow::Ecma262Canonicalize> interp_canonicalize_mapping_;
   void* embedder_data_;
+
+  // The garbage collector should be a little more aggressive when it knows
+  // that a context was recently exited.
+  bool context_exit_happened_;
+
+  // Time stamp at initialization.
+  double time_millis_at_init_;
 
 #if defined(V8_TARGET_ARCH_ARM) && !defined(__arm__) || \
     defined(V8_TARGET_ARCH_MIPS) && !defined(__mips__)

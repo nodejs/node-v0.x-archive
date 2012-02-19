@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -50,16 +50,6 @@ class JumpTarget;
 // trying to update gp register for position-independent-code. Whenever
 // MIPS generated code calls C code, it must be via t9 register.
 
-
-// Register aliases.
-// cp is assumed to be a callee saved register.
-const Register lithiumScratchReg = s3;  // Scratch register.
-const Register lithiumScratchReg2 = s4;  // Scratch register.
-const Register condReg = s5;  // Simulated (partial) condition code for mips.
-const Register roots = s6;  // Roots array pointer.
-const Register cp = s7;     // JavaScript context pointer.
-const Register fp = s8_fp;  // Alias for fp.
-const DoubleRegister lithiumScratchDouble = f30;  // Double scratch register.
 
 // Flags used for the AllocateInNewSpace functions.
 enum AllocationFlags {
@@ -264,6 +254,14 @@ class MacroAssembler: public Assembler {
 
   void LoadHeapObject(Register dst, Handle<HeapObject> object);
 
+  void LoadObject(Register result, Handle<Object> object) {
+    if (object->IsHeapObject()) {
+      LoadHeapObject(result, Handle<HeapObject>::cast(object));
+    } else {
+      li(result, object);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // GC Support
 
@@ -332,7 +330,7 @@ class MacroAssembler: public Assembler {
                       Register scratch3,
                       Label* object_is_white_and_not_data);
 
-  // Detects conservatively whether an object is data-only, ie it does need to
+  // Detects conservatively whether an object is data-only, i.e. it does need to
   // be scanned by the garbage collector.
   void JumpIfDataObject(Register value,
                         Register scratch,
@@ -397,6 +395,7 @@ class MacroAssembler: public Assembler {
                               Register scratch,
                               Label* miss);
 
+  void GetNumberHash(Register reg0, Register scratch);
 
   void LoadFromNumberDictionary(Label* miss,
                                 Register elements,
@@ -412,7 +411,7 @@ class MacroAssembler: public Assembler {
   }
 
   // Check if the given instruction is a 'type' marker.
-  // ie. check if it is a sll zero_reg, zero_reg, <type> (referenced as
+  // i.e. check if it is a sll zero_reg, zero_reg, <type> (referenced as
   // nop(type)). These instructions are generated to mark special location in
   // the code, like some special IC code.
   static inline bool IsMarkedCode(Instr instr, int type) {
@@ -773,6 +772,22 @@ class MacroAssembler: public Assembler {
 
   void LoadContext(Register dst, int context_chain_length);
 
+  // Conditionally load the cached Array transitioned map of type
+  // transitioned_kind from the global context if the map in register
+  // map_in_out is the cached Array map in the global context of
+  // expected_kind.
+  void LoadTransitionedArrayMapConditional(
+      ElementsKind expected_kind,
+      ElementsKind transitioned_kind,
+      Register map_in_out,
+      Register scratch,
+      Label* no_map_match);
+
+  // Load the initial map for new Arrays from a JSFunction.
+  void LoadInitialArrayMap(Register function_in,
+                           Register scratch,
+                           Register map_out);
+
   void LoadGlobalFunction(int index, Register function);
 
   // Load the initial map from the global function. The registers
@@ -781,11 +796,16 @@ class MacroAssembler: public Assembler {
                                     Register map,
                                     Register scratch);
 
+  void InitializeRootRegister() {
+    ExternalReference roots_array_start =
+        ExternalReference::roots_array_start(isolate());
+    li(kRootRegister, Operand(roots_array_start));
+  }
 
   // -------------------------------------------------------------------------
   // JavaScript invokes.
 
-  // Setup call kind marking in t1. The method takes t1 as an
+  // Set up call kind marking in t1. The method takes t1 as an
   // explicit first parameter to make the code more readable at the
   // call sites.
   void SetCallKind(Register dst, CallKind kind);
@@ -816,6 +836,7 @@ class MacroAssembler: public Assembler {
   void InvokeFunction(Handle<JSFunction> function,
                       const ParameterCount& actual,
                       InvokeFlag flag,
+                      const CallWrapper& call_wrapper,
                       CallKind call_kind);
 
 
@@ -844,9 +865,7 @@ class MacroAssembler: public Assembler {
   // Exception handling.
 
   // Push a new try handler and link into try handler chain.
-  void PushTryHandler(CodeLocation try_location,
-                      HandlerType type,
-                      int handler_index);
+  void PushTryHandler(StackHandler::Kind kind, int handler_index);
 
   // Unlink the stack handler on top of the stack from the try handler chain.
   // Must preserve the result register.
@@ -926,15 +945,29 @@ class MacroAssembler: public Assembler {
                                    Register scratch4,
                                    Label* fail);
 
-  // Check if the map of an object is equal to a specified map (either
-  // given directly or as an index into the root list) and branch to
-  // label if not. Skip the smi check if not required (object is known
-  // to be a heap object).
+  // Compare an object's map with the specified map and its transitioned
+  // elements maps if mode is ALLOW_ELEMENT_TRANSITION_MAPS. Jumps to
+  // "branch_to" if the result of the comparison is "cond". If multiple map
+  // compares are required, the compare sequences branches to early_success.
+  void CompareMapAndBranch(Register obj,
+                           Register scratch,
+                           Handle<Map> map,
+                           Label* early_success,
+                           Condition cond,
+                           Label* branch_to,
+                           CompareMapMode mode = REQUIRE_EXACT_MAP);
+
+  // Check if the map of an object is equal to a specified map and branch to
+  // label if not. Skip the smi check if not required (object is known to be a
+  // heap object). If mode is ALLOW_ELEMENT_TRANSITION_MAPS, then also match
+  // against maps that are ElementsKind transition maps of the specificed map.
   void CheckMap(Register obj,
                 Register scratch,
                 Handle<Map> map,
                 Label* fail,
-                SmiCheckType smi_check_type);
+                SmiCheckType smi_check_type,
+                CompareMapMode mode = REQUIRE_EXACT_MAP);
+
 
   void CheckMap(Register obj,
                 Register scratch,
@@ -1118,7 +1151,7 @@ class MacroAssembler: public Assembler {
 
   // Calls an API function.  Allocates HandleScope, extracts returned value
   // from handle and propagates exceptions.  Restores context.  stack_space
-  // - space to be unwound on exit (includes the call js arguments space and
+  // - space to be unwound on exit (includes the call JS arguments space and
   // the additional space allocated for the fast call).
   void CallApiFunctionAndReturn(ExternalReference function, int stack_space);
 
@@ -1198,24 +1231,13 @@ class MacroAssembler: public Assembler {
   // -------------------------------------------------------------------------
   // Smi utilities.
 
-  // Try to convert int32 to smi. If the value is to large, preserve
-  // the original value and jump to not_a_smi. Destroys scratch and
-  // sets flags.
-  // This is only used by crankshaft atm so it is unimplemented on MIPS.
-  void TrySmiTag(Register reg, Label* not_a_smi, Register scratch) {
-    UNIMPLEMENTED_MIPS();
-  }
-
   void SmiTag(Register reg) {
     Addu(reg, reg, reg);
   }
 
   // Test for overflow < 0: use BranchOnOverflow() or BranchOnNoOverflow().
-  void SmiTagCheckOverflow(Register reg, Register overflow) {
-    mov(overflow, reg);  // Save original value.
-    addu(reg, reg, reg);
-    xor_(overflow, overflow, reg);  // Overflow if (value ^ 2 * value) < 0.
-  }
+  void SmiTagCheckOverflow(Register reg, Register overflow);
+  void SmiTagCheckOverflow(Register dst, Register src, Register overflow);
 
   void SmiTag(Register dst, Register src) {
     Addu(dst, src, src);
@@ -1229,22 +1251,25 @@ class MacroAssembler: public Assembler {
     sra(dst, src, kSmiTagSize);
   }
 
+  // Untag the source value into destination and jump if source is a smi.
+  // Souce and destination can be the same register.
+  void UntagAndJumpIfSmi(Register dst, Register src, Label* smi_case);
+
+  // Untag the source value into destination and jump if source is not a smi.
+  // Souce and destination can be the same register.
+  void UntagAndJumpIfNotSmi(Register dst, Register src, Label* non_smi_case);
+
   // Jump the register contains a smi.
-  inline void JumpIfSmi(Register value, Label* smi_label,
-                        Register scratch = at,
-                        BranchDelaySlot bd = PROTECT) {
-    ASSERT_EQ(0, kSmiTag);
-    andi(scratch, value, kSmiTagMask);
-    Branch(bd, smi_label, eq, scratch, Operand(zero_reg));
-  }
+  void JumpIfSmi(Register value,
+                 Label* smi_label,
+                 Register scratch = at,
+                 BranchDelaySlot bd = PROTECT);
 
   // Jump if the register contains a non-smi.
-  inline void JumpIfNotSmi(Register value, Label* not_smi_label,
-                           Register scratch = at) {
-    ASSERT_EQ(0, kSmiTag);
-    andi(scratch, value, kSmiTagMask);
-    Branch(not_smi_label, ne, scratch, Operand(zero_reg));
-  }
+  void JumpIfNotSmi(Register value,
+                    Label* not_smi_label,
+                    Register scratch = at,
+                    BranchDelaySlot bd = PROTECT);
 
   // Jump if either of the registers contain a non-smi.
   void JumpIfNotBothSmi(Register reg1, Register reg2, Label* on_not_both_smi);
@@ -1323,6 +1348,10 @@ class MacroAssembler: public Assembler {
   void PatchRelocatedValue(Register li_location,
                            Register scratch,
                            Register new_value);
+  // Get the relocatad value (loaded data) from the lui/ori pair.
+  void GetRelocatedValue(Register li_location,
+                         Register value,
+                         Register scratch);
 
  private:
   void CallCFunctionHelper(Register function,
@@ -1355,6 +1384,7 @@ class MacroAssembler: public Assembler {
                       Handle<Code> code_constant,
                       Register code_reg,
                       Label* done,
+                      bool* definitely_mismatches,
                       InvokeFlag flag,
                       const CallWrapper& call_wrapper,
                       CallKind call_kind);

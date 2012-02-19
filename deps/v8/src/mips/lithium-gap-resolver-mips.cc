@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -33,8 +33,7 @@
 namespace v8 {
 namespace internal {
 
-static const Register kSavedValueRegister = lithiumScratchReg;
-static const DoubleRegister kSavedDoubleValueRegister = lithiumScratchDouble;
+static const Register kSavedValueRegister = kLithiumScratchReg;
 
 LGapResolver::LGapResolver(LCodeGen* owner)
     : cgen_(owner),
@@ -175,9 +174,9 @@ void LGapResolver::BreakCycle(int index) {
   } else if (source->IsStackSlot()) {
     __ lw(kSavedValueRegister, cgen_->ToMemOperand(source));
   } else if (source->IsDoubleRegister()) {
-    __ mov_d(kSavedDoubleValueRegister, cgen_->ToDoubleRegister(source));
+    __ mov_d(kLithiumScratchDouble, cgen_->ToDoubleRegister(source));
   } else if (source->IsDoubleStackSlot()) {
-    __ ldc1(kSavedDoubleValueRegister, cgen_->ToMemOperand(source));
+    __ ldc1(kLithiumScratchDouble, cgen_->ToMemOperand(source));
   } else {
     UNREACHABLE();
   }
@@ -190,16 +189,16 @@ void LGapResolver::RestoreValue() {
   ASSERT(in_cycle_);
   ASSERT(saved_destination_ != NULL);
 
-  // Spilled value is in kSavedValueRegister or kSavedDoubleValueRegister.
+  // Spilled value is in kSavedValueRegister or kLithiumScratchDouble.
   if (saved_destination_->IsRegister()) {
     __ mov(cgen_->ToRegister(saved_destination_), kSavedValueRegister);
   } else if (saved_destination_->IsStackSlot()) {
     __ sw(kSavedValueRegister, cgen_->ToMemOperand(saved_destination_));
   } else if (saved_destination_->IsDoubleRegister()) {
     __ mov_d(cgen_->ToDoubleRegister(saved_destination_),
-            kSavedDoubleValueRegister);
+            kLithiumScratchDouble);
   } else if (saved_destination_->IsDoubleStackSlot()) {
-    __ sdc1(kSavedDoubleValueRegister,
+    __ sdc1(kLithiumScratchDouble,
             cgen_->ToMemOperand(saved_destination_));
   } else {
     UNREACHABLE();
@@ -239,8 +238,8 @@ void LGapResolver::EmitMove(int index) {
           // Therefore we can't use 'at'.  It is OK if the read from the source
           // destroys 'at', since that happens before the value is read.
           // This uses only a single reg of the double reg-pair.
-          __ lwc1(kSavedDoubleValueRegister, source_operand);
-          __ swc1(kSavedDoubleValueRegister, destination_operand);
+          __ lwc1(kLithiumScratchDouble, source_operand);
+          __ swc1(kLithiumScratchDouble, destination_operand);
         } else {
           __ lw(at, source_operand);
           __ sw(at, destination_operand);
@@ -252,14 +251,24 @@ void LGapResolver::EmitMove(int index) {
     }
 
   } else if (source->IsConstantOperand()) {
-    Operand source_operand = cgen_->ToOperand(source);
+    LConstantOperand* constant_source = LConstantOperand::cast(source);
     if (destination->IsRegister()) {
-      __ li(cgen_->ToRegister(destination), source_operand);
+      Register dst = cgen_->ToRegister(destination);
+      if (cgen_->IsInteger32(constant_source)) {
+        __ li(dst, Operand(cgen_->ToInteger32(constant_source)));
+      } else {
+        __ LoadObject(dst, cgen_->ToHandle(constant_source));
+      }
     } else {
       ASSERT(destination->IsStackSlot());
       ASSERT(!in_cycle_);  // Constant moves happen after all cycles are gone.
-      MemOperand destination_operand = cgen_->ToMemOperand(destination);
-      __ li(kSavedValueRegister, source_operand);
+      if (cgen_->IsInteger32(constant_source)) {
+        __ li(kSavedValueRegister,
+              Operand(cgen_->ToInteger32(constant_source)));
+      } else {
+        __ LoadObject(kSavedValueRegister,
+                      cgen_->ToHandle(constant_source));
+      }
       __ sw(kSavedValueRegister, cgen_->ToMemOperand(destination));
     }
 
@@ -281,7 +290,7 @@ void LGapResolver::EmitMove(int index) {
       ASSERT(destination->IsDoubleStackSlot());
       MemOperand destination_operand = cgen_->ToMemOperand(destination);
       if (in_cycle_) {
-        // kSavedDoubleValueRegister was used to break the cycle,
+        // kLithiumScratchDouble was used to break the cycle,
         // but kSavedValueRegister is free.
         MemOperand source_high_operand =
             cgen_->ToHighMemOperand(source);
@@ -292,8 +301,8 @@ void LGapResolver::EmitMove(int index) {
         __ lw(kSavedValueRegister, source_high_operand);
         __ sw(kSavedValueRegister, destination_high_operand);
       } else {
-        __ ldc1(kSavedDoubleValueRegister, source_operand);
-        __ sdc1(kSavedDoubleValueRegister, destination_operand);
+        __ ldc1(kLithiumScratchDouble, source_operand);
+        __ sdc1(kLithiumScratchDouble, destination_operand);
       }
     }
   } else {

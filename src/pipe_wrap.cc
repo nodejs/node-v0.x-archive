@@ -21,7 +21,6 @@
 
 #include <node.h>
 #include <node_buffer.h>
-#include <node_vars.h>
 #include <req_wrap.h>
 #include <handle_wrap.h>
 #include <stream_wrap.h>
@@ -54,6 +53,7 @@ using v8::TryCatch;
 using v8::Context;
 using v8::Arguments;
 using v8::Integer;
+using v8::Boolean;
 
 Persistent<Function> pipeConstructor;
 
@@ -124,7 +124,7 @@ Handle<Value> PipeWrap::New(const Arguments& args) {
 
 PipeWrap::PipeWrap(Handle<Object> object, bool ipc)
     : StreamWrap(object, (uv_stream_t*) &handle_) {
-  int r = uv_pipe_init(Loop(), &handle_, ipc);
+  int r = uv_pipe_init(uv_default_loop(), &handle_, ipc);
   assert(r == 0); // How do we proxy this error up to javascript?
                   // Suggestion: uv_pipe_init() returns void.
   handle_.data = reinterpret_cast<void*>(this);
@@ -142,7 +142,7 @@ Handle<Value> PipeWrap::Bind(const Arguments& args) {
   int r = uv_pipe_bind(&wrap->handle_, *name);
 
   // Error starting the pipe.
-  if (r) SetErrno(uv_last_error(Loop()));
+  if (r) SetErrno(uv_last_error(uv_default_loop()));
 
   return scope.Close(Integer::New(r));
 }
@@ -173,7 +173,7 @@ Handle<Value> PipeWrap::Listen(const Arguments& args) {
   int r = uv_listen((uv_stream_t*)&wrap->handle_, backlog, OnConnection);
 
   // Error starting the pipe.
-  if (r) SetErrno(uv_last_error(Loop()));
+  if (r) SetErrno(uv_last_error(uv_default_loop()));
 
   return scope.Close(Integer::New(r));
 }
@@ -204,10 +204,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   PipeWrap* client_wrap =
       static_cast<PipeWrap*>(client_obj->GetPointerFromInternalField(0));
 
-  int r = uv_accept(handle, (uv_stream_t*)&client_wrap->handle_);
-
-  // uv_accept should always work.
-  assert(r == 0);
+  if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
 
   // Successful accept. Call the onconnection callback in JavaScript land.
   Local<Value> argv[1] = { client_obj };
@@ -225,17 +222,25 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
   assert(req_wrap->object_.IsEmpty() == false);
   assert(wrap->object_.IsEmpty() == false);
 
+  bool readable, writable;
+
   if (status) {
-    SetErrno(uv_last_error(Loop()));
+    SetErrno(uv_last_error(uv_default_loop()));
+    readable = writable = 0;
+  } else {
+    readable = uv_is_readable(req->handle) != 0;
+    writable = uv_is_writable(req->handle) != 0;
   }
 
-  Local<Value> argv[3] = {
+  Local<Value> argv[5] = {
     Integer::New(status),
     Local<Value>::New(wrap->object_),
-    Local<Value>::New(req_wrap->object_)
+    Local<Value>::New(req_wrap->object_),
+    Local<Value>::New(Boolean::New(readable)),
+    Local<Value>::New(Boolean::New(writable))
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 3, argv);
+  MakeCallback(req_wrap->object_, "oncomplete", 5, argv);
 
   delete req_wrap;
 }

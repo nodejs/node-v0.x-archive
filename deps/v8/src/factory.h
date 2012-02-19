@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -54,7 +54,11 @@ class Factory {
       int size,
       PretenureFlag pretenure = NOT_TENURED);
 
-  Handle<NumberDictionary> NewNumberDictionary(int at_least_space_for);
+  Handle<SeededNumberDictionary> NewSeededNumberDictionary(
+      int at_least_space_for);
+
+  Handle<UnseededNumberDictionary> NewUnseededNumberDictionary(
+      int at_least_space_for);
 
   Handle<StringDictionary> NewStringDictionary(int at_least_space_for);
 
@@ -69,6 +73,8 @@ class Factory {
   Handle<DeoptimizationOutputData> NewDeoptimizationOutputData(
       int deopt_entry_count,
       PretenureFlag pretenure);
+  // Allocates a pre-tenured empty AccessorPair.
+  Handle<AccessorPair> NewAccessorPair();
 
   Handle<String> LookupSymbol(Vector<const char> str);
   Handle<String> LookupSymbol(Handle<String> str);
@@ -227,7 +233,7 @@ class Factory {
   Handle<FixedDoubleArray> CopyFixedDoubleArray(
       Handle<FixedDoubleArray> array);
 
-  // Numbers (eg, literals) are pretenured by the parser.
+  // Numbers (e.g. literals) are pretenured by the parser.
   Handle<Object> NewNumber(double value,
                            PretenureFlag pretenure = NOT_TENURED);
 
@@ -256,10 +262,12 @@ class Factory {
 
   // JS arrays are pretenured when allocated by the parser.
   Handle<JSArray> NewJSArray(int capacity,
+                             ElementsKind elements_kind = FAST_ELEMENTS,
                              PretenureFlag pretenure = NOT_TENURED);
 
   Handle<JSArray> NewJSArrayWithElements(
       Handle<FixedArrayBase> elements,
+      ElementsKind elements_kind = FAST_ELEMENTS,
       PretenureFlag pretenure = NOT_TENURED);
 
   void SetElementsCapacityAndLength(Handle<JSArray> array,
@@ -430,8 +438,13 @@ class Factory {
       Handle<Object> stack_trace,
       Handle<Object> stack_frames);
 
-  Handle<NumberDictionary> DictionaryAtNumberPut(
-      Handle<NumberDictionary>,
+  Handle<SeededNumberDictionary> DictionaryAtNumberPut(
+      Handle<SeededNumberDictionary>,
+      uint32_t key,
+      Handle<Object> value);
+
+  Handle<UnseededNumberDictionary> DictionaryAtNumberPut(
+      Handle<UnseededNumberDictionary>,
       uint32_t key,
       Handle<Object> value);
 

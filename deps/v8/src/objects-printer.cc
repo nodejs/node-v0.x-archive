@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -569,7 +569,11 @@ void FixedDoubleArray::FixedDoubleArrayPrint(FILE* out) {
   HeapObject::PrintHeader(out, "FixedDoubleArray");
   PrintF(out, " - length: %d", length());
   for (int i = 0; i < length(); i++) {
-    PrintF(out, "\n  [%d]: %g", i, get_scalar(i));
+    if (is_the_hole(i)) {
+      PrintF(out, "\n  [%d]: <the hole>", i);
+    } else {
+      PrintF(out, "\n  [%d]: %g", i, get_scalar(i));
+    }
   }
   PrintF(out, "\n");
 }
@@ -627,7 +631,7 @@ void String::StringPrint(FILE* out) {
 
 
 // This method is only meant to be called from gdb for debugging purposes.
-// Since the string can also be in two-byte encoding, non-ascii characters
+// Since the string can also be in two-byte encoding, non-ASCII characters
 // will be ignored in the output.
 char* String::ToAsciiArray() {
   // Static so that subsequent calls frees previously allocated space.
@@ -783,6 +787,15 @@ void AccessorInfo::AccessorInfoPrint(FILE* out) {
   data()->ShortPrint(out);
   PrintF(out, "\n - flag: ");
   flag()->ShortPrint(out);
+}
+
+
+void AccessorPair::AccessorPairPrint(FILE* out) {
+  HeapObject::PrintHeader(out, "AccessorPair");
+  PrintF(out, "\n - getter: ");
+  getter()->ShortPrint(out);
+  PrintF(out, "\n - setter: ");
+  setter()->ShortPrint(out);
 }
 
 

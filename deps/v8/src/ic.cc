@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -289,6 +289,31 @@ Failure* IC::ReferenceError(const char* type, Handle<String> name) {
   Handle<Object> error = isolate()->factory()->NewReferenceError(
       type, HandleVector(&name, 1));
   return isolate()->Throw(*error);
+}
+
+
+void IC::PostPatching() {
+  if (FLAG_watch_ic_patching) {
+    Isolate::Current()->runtime_profiler()->NotifyICChanged();
+    // We do not want to optimize until the ICs have settled down,
+    // so when they are patched, we postpone optimization for the
+    // current function and the functions above it on the stack that
+    // might want to inline this one.
+    StackFrameIterator it;
+    if (it.done()) return;
+    it.Advance();
+    static const int kStackFramesToMark = Compiler::kMaxInliningLevels - 1;
+    for (int i = 0; i < kStackFramesToMark; ++i) {
+      if (it.done()) return;
+      StackFrame* raw_frame = it.frame();
+      if (raw_frame->is_java_script()) {
+        JSFunction* function =
+            JSFunction::cast(JavaScriptFrame::cast(raw_frame)->function());
+        function->shared()->set_profiler_ticks(0);
+      }
+      it.Advance();
+    }
+  }
 }
 
 
@@ -860,7 +885,7 @@ MaybeObject* LoadIC::Load(State state,
   }
 
   PropertyAttributes attr;
-  if (lookup.IsProperty() &&
+  if (lookup.IsFound() &&
       (lookup.type() == INTERCEPTOR || lookup.type() == HANDLER)) {
     // Get the property.
     Handle<Object> result =
@@ -1083,7 +1108,7 @@ MaybeObject* KeyedLoadIC::Load(State state,
     }
 
     PropertyAttributes attr;
-    if (lookup.IsProperty() && lookup.type() == INTERCEPTOR) {
+    if (lookup.IsFound() && lookup.type() == INTERCEPTOR) {
       // Get the property.
       Handle<Object> result =
           Object::GetProperty(object, object, &lookup, name, &attr);
@@ -1206,10 +1231,12 @@ void KeyedLoadIC::UpdateCaches(LookupResult* lookup,
 
 static bool StoreICableLookup(LookupResult* lookup) {
   // Bail out if we didn't find a result.
-  if (!lookup->IsPropertyOrTransition() || !lookup->IsCacheable()) return false;
+  if (!lookup->IsFound() || lookup->type() == NULL_DESCRIPTOR) return false;
 
-  // If the property is read-only, we leave the IC in its current
-  // state.
+  // Bail out if inline caching is not allowed.
+  if (!lookup->IsCacheable()) return false;
+
+  // If the property is read-only, we leave the IC in its current state.
   if (lookup->IsReadOnly()) return false;
 
   return true;
@@ -1267,7 +1294,8 @@ MaybeObject* StoreIC::Store(State state,
   // Check if the given name is an array index.
   uint32_t index;
   if (name->AsArrayIndex(&index)) {
-    Handle<Object> result = SetElement(receiver, index, value, strict_mode);
+    Handle<Object> result =
+        JSObject::SetElement(receiver, index, value, strict_mode);
     RETURN_IF_EMPTY_HANDLE(isolate(), result);
     return *value;
   }
@@ -1644,7 +1672,8 @@ MaybeObject* KeyedStoreIC::Store(State state,
     // Check if the given name is an array index.
     uint32_t index;
     if (name->AsArrayIndex(&index)) {
-      Handle<Object> result = SetElement(receiver, index, value, strict_mode);
+      Handle<Object> result =
+          JSObject::SetElement(receiver, index, value, strict_mode);
       RETURN_IF_EMPTY_HANDLE(isolate(), result);
       return *value;
     }

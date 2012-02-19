@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -77,11 +77,21 @@ Handle<StringDictionary> Factory::NewStringDictionary(int at_least_space_for) {
 }
 
 
-Handle<NumberDictionary> Factory::NewNumberDictionary(int at_least_space_for) {
+Handle<SeededNumberDictionary> Factory::NewSeededNumberDictionary(
+    int at_least_space_for) {
   ASSERT(0 <= at_least_space_for);
   CALL_HEAP_FUNCTION(isolate(),
-                     NumberDictionary::Allocate(at_least_space_for),
-                     NumberDictionary);
+                     SeededNumberDictionary::Allocate(at_least_space_for),
+                     SeededNumberDictionary);
+}
+
+
+Handle<UnseededNumberDictionary> Factory::NewUnseededNumberDictionary(
+    int at_least_space_for) {
+  ASSERT(0 <= at_least_space_for);
+  CALL_HEAP_FUNCTION(isolate(),
+                     UnseededNumberDictionary::Allocate(at_least_space_for),
+                     UnseededNumberDictionary);
 }
 
 
@@ -128,6 +138,13 @@ Handle<DeoptimizationOutputData> Factory::NewDeoptimizationOutputData(
                      DeoptimizationOutputData::Allocate(deopt_entry_count,
                                                         pretenure),
                      DeoptimizationOutputData);
+}
+
+
+Handle<AccessorPair> Factory::NewAccessorPair() {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->AllocateAccessorPair(),
+                     AccessorPair);
 }
 
 
@@ -468,8 +485,9 @@ Handle<Map> Factory::CopyMapDropTransitions(Handle<Map> src) {
 Handle<Map> Factory::GetElementsTransitionMap(
     Handle<JSObject> src,
     ElementsKind elements_kind) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     src->GetElementsTransitionMap(elements_kind),
+  Isolate* i = isolate();
+  CALL_HEAP_FUNCTION(i,
+                     src->GetElementsTransitionMap(i, elements_kind),
                      Map);
 }
 
@@ -698,7 +716,7 @@ Handle<JSFunction> Factory::NewFunction(Handle<String> name,
   // Allocate the function
   Handle<JSFunction> function = NewFunction(name, the_hole_value());
 
-  // Setup the code pointer in both the shared function info and in
+  // Set up the code pointer in both the shared function info and in
   // the function itself.
   function->shared()->set_code(*code);
   function->set_code(*code);
@@ -729,7 +747,7 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
   // Allocate the function.
   Handle<JSFunction> function = NewFunction(name, prototype);
 
-  // Setup the code pointer in both the shared function info and in
+  // Set up the code pointer in both the shared function info and in
   // the function itself.
   function->shared()->set_code(*code);
   function->set_code(*code);
@@ -737,12 +755,9 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
   if (force_initial_map ||
       type != JS_OBJECT_TYPE ||
       instance_size != JSObject::kHeaderSize) {
-    ElementsKind default_elements_kind = FLAG_smi_only_arrays
-        ? FAST_SMI_ONLY_ELEMENTS
-        : FAST_ELEMENTS;
     Handle<Map> initial_map = NewMap(type,
                                      instance_size,
-                                     default_elements_kind);
+                                     FAST_SMI_ONLY_ELEMENTS);
     function->set_initial_map(*initial_map);
     initial_map->set_constructor(*function);
   }
@@ -751,7 +766,10 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
   // property that refers to the function.
   SetPrototypeProperty(function, prototype);
   // Currently safe because it is only invoked from Genesis.
-  SetLocalPropertyNoThrow(prototype, constructor_symbol(), function, DONT_ENUM);
+  CHECK_NOT_EMPTY_HANDLE(isolate(),
+                         JSObject::SetLocalPropertyIgnoreAttributes(
+                             prototype, constructor_symbol(),
+                             function, DONT_ENUM));
   return function;
 }
 
@@ -918,22 +936,28 @@ Handle<JSObject> Factory::NewJSObjectFromMap(Handle<Map> map) {
 
 
 Handle<JSArray> Factory::NewJSArray(int capacity,
+                                    ElementsKind elements_kind,
                                     PretenureFlag pretenure) {
-  Handle<JSObject> obj = NewJSObject(isolate()->array_function(), pretenure);
   CALL_HEAP_FUNCTION(isolate(),
-                     Handle<JSArray>::cast(obj)->Initialize(capacity),
+                     isolate()->heap()->AllocateJSArrayAndStorage(
+                         elements_kind,
+                         0,
+                         capacity,
+                         INITIALIZE_ARRAY_ELEMENTS_WITH_HOLE,
+                         pretenure),
                      JSArray);
 }
 
 
 Handle<JSArray> Factory::NewJSArrayWithElements(Handle<FixedArrayBase> elements,
+                                                ElementsKind elements_kind,
                                                 PretenureFlag pretenure) {
-  Handle<JSArray> result =
-      Handle<JSArray>::cast(NewJSObject(isolate()->array_function(),
-                                        pretenure));
-  result->set_length(Smi::FromInt(0));
-  SetContent(result, elements);
-  return result;
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateJSArrayWithElements(*elements,
+                                                     elements_kind,
+                                                     pretenure),
+      JSArray);
 }
 
 
@@ -1061,13 +1085,23 @@ Handle<String> Factory::Uint32ToString(uint32_t value) {
 }
 
 
-Handle<NumberDictionary> Factory::DictionaryAtNumberPut(
-    Handle<NumberDictionary> dictionary,
+Handle<SeededNumberDictionary> Factory::DictionaryAtNumberPut(
+    Handle<SeededNumberDictionary> dictionary,
     uint32_t key,
     Handle<Object> value) {
   CALL_HEAP_FUNCTION(isolate(),
                      dictionary->AtNumberPut(key, *value),
-                     NumberDictionary);
+                     SeededNumberDictionary);
+}
+
+
+Handle<UnseededNumberDictionary> Factory::DictionaryAtNumberPut(
+    Handle<UnseededNumberDictionary> dictionary,
+    uint32_t key,
+    Handle<Object> value) {
+  CALL_HEAP_FUNCTION(isolate(),
+                     dictionary->AtNumberPut(key, *value),
+                     UnseededNumberDictionary);
 }
 
 

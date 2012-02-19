@@ -71,7 +71,8 @@ intptr_t OS::MaxVirtualMemory() {
 
 
 intptr_t OS::CommitPageSize() {
-  return 4096;
+  static intptr_t page_size = getpagesize();
+  return page_size;
 }
 
 
@@ -460,7 +461,7 @@ bool POSIXSocket::SetReuseAddress(bool reuse_address) {
 }
 
 
-bool Socket::Setup() {
+bool Socket::SetUp() {
   // Nothing to do on POSIX.
   return true;
 }

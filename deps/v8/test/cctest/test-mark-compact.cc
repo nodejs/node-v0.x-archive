@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -526,12 +526,25 @@ static intptr_t MemoryInUse() {
 
 TEST(BootUpMemoryUse) {
   intptr_t initial_memory = MemoryInUse();
+  FLAG_crankshaft = false;  // Avoid flakiness.
   // Only Linux has the proc filesystem and only if it is mapped.  If it's not
   // there we just skip the test.
   if (initial_memory >= 0) {
     InitializeVM();
     intptr_t booted_memory = MemoryInUse();
-    CHECK_LE(booted_memory - initial_memory, 16 * 1024 * 1024);
+    if (sizeof(initial_memory) == 8) {
+      if (v8::internal::Snapshot::IsEnabled()) {
+        CHECK_LE(booted_memory - initial_memory, 6686 * 1024);  // 6476.
+      } else {
+        CHECK_LE(booted_memory - initial_memory, 6809 * 1024);  // 6628.
+      }
+    } else {
+      if (v8::internal::Snapshot::IsEnabled()) {
+        CHECK_LE(booted_memory - initial_memory, 6532 * 1024);  // 6388.
+      } else {
+        CHECK_LE(booted_memory - initial_memory, 6686 * 1024);  // 6456
+      }
+    }
   }
 }
 

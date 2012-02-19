@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -83,15 +83,18 @@ class FullCodeGenerator: public AstVisitor {
         scope_(NULL),
         nesting_stack_(NULL),
         loop_depth_(0),
+        global_count_(0),
         context_(NULL),
         bailout_entries_(0),
-        stack_checks_(2) {  // There's always at least one.
+        stack_checks_(2),  // There's always at least one.
+        type_feedback_cells_(0) {
   }
 
   static bool MakeCode(CompilationInfo* info);
 
   void Generate(CompilationInfo* info);
   void PopulateDeoptimizationData(Handle<Code> code);
+  void PopulateTypeFeedbackCells(Handle<Code> code);
 
   Handle<FixedArray> handler_table() { return handler_table_; }
 
@@ -142,11 +145,13 @@ class FullCodeGenerator: public AstVisitor {
       return previous_;
     }
 
- protected:
+   protected:
     MacroAssembler* masm() { return codegen_->masm(); }
 
     FullCodeGenerator* codegen_;
     NestedStatement* previous_;
+
+   private:
     DISALLOW_COPY_AND_ASSIGN(NestedStatement);
   };
 
@@ -392,6 +397,10 @@ class FullCodeGenerator: public AstVisitor {
   void PrepareForBailout(Expression* node, State state);
   void PrepareForBailoutForId(unsigned id, State state);
 
+  // Cache cell support.  This associates AST ids with global property cells
+  // that will be cleared during GC and collected by the type-feedback oracle.
+  void RecordTypeFeedbackCell(unsigned id, Handle<JSGlobalPropertyCell> cell);
+
   // Record a call's return site offset, used to rebuild the frame if the
   // called function was inlined at the site.
   void RecordJSReturnSite(Call* call);
@@ -408,10 +417,10 @@ class FullCodeGenerator: public AstVisitor {
 
   // Platform-specific code for a variable, constant, or function
   // declaration.  Functions have an initial value.
+  // Increments global_count_ for unallocated variables.
   void EmitDeclaration(VariableProxy* proxy,
                        VariableMode mode,
-                       FunctionLiteral* function,
-                       int* global_count);
+                       FunctionLiteral* function);
 
   // Platform-specific code for checking the stack limit at the back edge of
   // a loop.
@@ -571,6 +580,11 @@ class FullCodeGenerator: public AstVisitor {
     unsigned pc_and_state;
   };
 
+  struct TypeFeedbackCellEntry {
+    unsigned ast_id;
+    Handle<JSGlobalPropertyCell> cell;
+  };
+
 
   class ExpressionContext BASE_EMBEDDED {
    public:
@@ -618,8 +632,8 @@ class FullCodeGenerator: public AstVisitor {
                              Label** if_false,
                              Label** fall_through) const = 0;
 
-    // Returns true if we are evaluating only for side effects (ie if the result
-    // will be discarded).
+    // Returns true if we are evaluating only for side effects (i.e. if the
+    // result will be discarded).
     virtual bool IsEffect() const { return false; }
 
     // Returns true if we are evaluating for the value (in accu/on stack).
@@ -754,9 +768,11 @@ class FullCodeGenerator: public AstVisitor {
   Label return_label_;
   NestedStatement* nesting_stack_;
   int loop_depth_;
+  int global_count_;
   const ExpressionContext* context_;
   ZoneList<BailoutEntry> bailout_entries_;
   ZoneList<BailoutEntry> stack_checks_;
+  ZoneList<TypeFeedbackCellEntry> type_feedback_cells_;
   Handle<FixedArray> handler_table_;
 
   friend class NestedStatement;

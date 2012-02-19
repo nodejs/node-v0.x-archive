@@ -1,3 +1,164 @@
+2012-02-09: Version 3.9.5
+
+        Removed unused command line flags.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-08: Version 3.9.4
+
+        Properly initialize element-transitioning array literals on ARM.
+        (issue 1930)
+
+        Bug fixes on all platforms.
+
+
+2012-02-07: Version 3.9.3
+
+        When rethrowing an exception, print the stack trace of its original
+        site instead of rethrow site (Chromium issue 60240).
+
+        Increased size of small stacks from 32k to 64k to avoid hitting limits
+        in Chromium (Chromium issue 112843).
+
+
+2012-02-06: Version 3.9.2
+
+        Add timestamp to --trace-gc output. (issue 1932)
+
+        Heap profiler reports implicit references.
+
+        Optionally export metadata with libv8 to enable debuggers to inspect V8
+        state.
+
+
+2012-02-02: Version 3.9.1
+
+        Fixed memory leak in NativeObjectsExplorer::FindOrAddGroupInfo
+        (Chromium issue 112315).
+
+        Fixed a crash in dev tools (Chromium issue 107996).
+
+        Added 'dependencies_traverse': 1 to v8 GYP target.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-01: Version 3.9.0
+
+        Reduce memory use immediately after starting V8.
+
+        Stability fixes and performance improvements on all platforms.
+
+
+2012-01-26: Version 3.8.9
+
+        Flush number string cache on GC (issue 1605).
+
+        Provide access to function inferred name with
+	v8::Function::GetInferredName in V8 public API.
+
+        Fix building with Clang (issue 1912).
+
+        Reduce the space used by the stack for the profiling thread.
+
+        Fix misleading documentation of v8::Locker (issue 542).
+
+        Introduce readbinary function in d8 to read binary files.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-01-23: Version 3.8.8
+
+        Limited number of loop iterations in Heap::ReserveSpace
+        (Chromium issue 99027).
+
+        Fixed solaris build (VirtualMemory) (issue 1761).
+
+        Fixed strict vs. non-strict handling of function proxies in
+        higher-order array and string methods.
+
+        Enabled asynchronous remote debugging with d8 (issue 1691).
+
+        Stability and performance improvements on all platforms.
+
+
+2012-01-19: Version 3.8.7
+
+        Ensure that LRandom restores rsi after call to the C function on x64.
+        (Chromium issue http://crbug.com/110509)
+
+        Fixing include issues on *bsd when building with scons.
+        (issue 1897)
+
+        Provide a switch to specify -fno-strict-aliasing
+        (issue 1887)
+
+        Move WIN32 define from standalone.gypi to common.gypi
+        (issue 1760)
+
+        Fix corner-case in heap size estimation.
+        (issue 1893)
+
+        Fix and enable NEW_NON_STRICT_FAST ArgumentsAccess stub on x64.
+        (issue 1903)
+
+        Performance improvements and bug fixes.
+
+
+2012-01-16: Version 3.8.6
+
+        Add primitive WebGL array support to d8.
+
+        Improve heap size estimation (issue 1893).
+
+        Hash collision DOS workaround extended from string keys
+        to numeric keys.
+
+        Provide an API for iterating through all external strings referenced
+        from the JS heap.
+
+        Adjust position recorded for call expressions. http://crbug.com/109195
+
+        Fix GC crash related to instanceof. http://crbug.com/109448
+
+        Performance improvements and bug fixes.
+
+
+2012-01-05: Version 3.8.5
+
+        Fix broken test that assumes that no GC can clear the regexp cache (GC
+        can happen at any time due to Crankshaft).
+
+        Fix handling of bogus receivers for Harmony collections. (issue 1884)
+
+        Add netbsd support to gyp build.
+
+        Determine page size at runtime on posix platforms.
+
+        Ensure that store buffer filtering hash sets are cleared after
+        StoreBuffer::Filter.
+
+        Randomize the seed used for string hashing.  This helps guard against
+        CPU-eating DOS attacks against node.js servers.  Based on code from
+        Bert Belder.  This version only solves the issue for those that compile
+        V8 themselves or those that do not use snapshots.  A snapshot-based
+        precompiled V8 will still have predictable string hash codes.
+
+        Implement callback when script finishes running in V8 API.
+
+        Improve performance of Math.min and Math.max for the case of two
+        arguments. (issue 1325)
+
+
+2012-01-02: Version 3.8.4
+
+        Performance improvements for large Smi-only arrays.
+
+        Fixed InternalArrays construction. (issue 1878)
+
+
 2011-12-27: Version 3.8.3
 
         Avoid embedding new space objects into code objects in the lithium gap

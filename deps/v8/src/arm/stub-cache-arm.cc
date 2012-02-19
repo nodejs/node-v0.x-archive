@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -45,6 +45,7 @@ static void ProbeTable(Isolate* isolate,
                        StubCache::Table table,
                        Register name,
                        Register offset,
+                       int offset_shift_bits,
                        Register scratch,
                        Register scratch2) {
   ExternalReference key_offset(isolate->stub_cache()->key_reference(table));
@@ -63,23 +64,34 @@ static void ProbeTable(Isolate* isolate,
 
   // Check that the key in the entry matches the name.
   __ mov(offsets_base_addr, Operand(key_offset));
-  __ ldr(ip, MemOperand(offsets_base_addr, offset, LSL, 1));
+  __ ldr(ip, MemOperand(offsets_base_addr, offset, LSL, 1 + offset_shift_bits));
   __ cmp(name, ip);
   __ b(ne, &miss);
 
   // Get the code entry from the cache.
   __ add(offsets_base_addr, offsets_base_addr,
          Operand(value_off_addr - key_off_addr));
-  __ ldr(scratch2, MemOperand(offsets_base_addr, offset, LSL, 1));
+  __ ldr(scratch2,
+         MemOperand(offsets_base_addr, offset, LSL, 1 + offset_shift_bits));
 
   // Check that the flags match what we're looking for.
   __ ldr(scratch2, FieldMemOperand(scratch2, Code::kFlagsOffset));
-  __ bic(scratch2, scratch2, Operand(Code::kFlagsNotUsedInLookup));
-  __ cmp(scratch2, Operand(flags));
+  // It's a nice optimization if this constant is encodable in the bic insn.
+
+  uint32_t mask = Code::kFlagsNotUsedInLookup;
+  ASSERT(__ ImmediateFitsAddrMode1Instruction(mask));
+  __ bic(scratch2, scratch2, Operand(mask));
+  // Using cmn and the negative instead of cmp means we can use movw.
+  if (flags < 0) {
+    __ cmn(scratch2, Operand(-flags));
+  } else {
+    __ cmp(scratch2, Operand(flags));
+  }
   __ b(ne, &miss);
 
   // Re-load code entry from cache.
-  __ ldr(offset, MemOperand(offsets_base_addr, offset, LSL, 1));
+  __ ldr(offset,
+         MemOperand(offsets_base_addr, offset, LSL, 1 + offset_shift_bits));
 
   // Jump to the first instruction in the code stub.
   __ add(offset, offset, Operand(Code::kHeaderSize - kHeapObjectTag));
@@ -189,23 +201,41 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   __ ldr(scratch, FieldMemOperand(name, String::kHashFieldOffset));
   __ ldr(ip, FieldMemOperand(receiver, HeapObject::kMapOffset));
   __ add(scratch, scratch, Operand(ip));
-  __ eor(scratch, scratch, Operand(flags));
-  __ and_(scratch,
-          scratch,
-          Operand((kPrimaryTableSize - 1) << kHeapObjectTagSize));
+  uint32_t mask = (kPrimaryTableSize - 1) << kHeapObjectTagSize;
+  // Mask down the eor argument to the minimum to keep the immediate
+  // ARM-encodable.
+  __ eor(scratch, scratch, Operand(flags & mask));
+  // Prefer and_ to ubfx here because ubfx takes 2 cycles.
+  __ and_(scratch, scratch, Operand(mask));
+  __ mov(scratch, Operand(scratch, LSR, 1));
 
   // Probe the primary table.
-  ProbeTable(isolate, masm, flags, kPrimary, name, scratch, extra, extra2);
+  ProbeTable(isolate,
+             masm,
+             flags,
+             kPrimary,
+             name,
+             scratch,
+             1,
+             extra,
+             extra2);
 
   // Primary miss: Compute hash for secondary probe.
-  __ sub(scratch, scratch, Operand(name));
-  __ add(scratch, scratch, Operand(flags));
-  __ and_(scratch,
-          scratch,
-          Operand((kSecondaryTableSize - 1) << kHeapObjectTagSize));
+  __ sub(scratch, scratch, Operand(name, LSR, 1));
+  uint32_t mask2 = (kSecondaryTableSize - 1) << (kHeapObjectTagSize - 1);
+  __ add(scratch, scratch, Operand((flags >> 1) & mask2));
+  __ and_(scratch, scratch, Operand(mask2));
 
   // Probe the secondary table.
-  ProbeTable(isolate, masm, flags, kSecondary, name, scratch, extra, extra2);
+  ProbeTable(isolate,
+             masm,
+             flags,
+             kSecondary,
+             name,
+             scratch,
+             1,
+             extra,
+             extra2);
 
   // Cache miss: Fall-through and let caller handle the miss by
   // entering the runtime system.
@@ -376,13 +406,9 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
   // r0 : value
   Label exit;
 
-  // Check that the receiver isn't a smi.
-  __ JumpIfSmi(receiver_reg, miss_label);
-
-  // Check that the map of the receiver hasn't changed.
-  __ ldr(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
-  __ cmp(scratch, Operand(Handle<Map>(object->map())));
-  __ b(ne, miss_label);
+  // Check that the map of the object hasn't changed.
+  __ CheckMap(receiver_reg, scratch, Handle<Map>(object->map()), miss_label,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
@@ -566,11 +592,11 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
                                       int argc) {
   // ----------- S t a t e -------------
   //  -- sp[0]              : holder (set by CheckPrototypes)
-  //  -- sp[4]              : callee js function
+  //  -- sp[4]              : callee JS function
   //  -- sp[8]              : call data
-  //  -- sp[12]             : last js argument
+  //  -- sp[12]             : last JS argument
   //  -- ...
-  //  -- sp[(argc + 3) * 4] : first js argument
+  //  -- sp[(argc + 3) * 4] : first JS argument
   //  -- sp[(argc + 4) * 4] : receiver
   // -----------------------------------
   // Get the function and setup the context.
@@ -587,7 +613,7 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   } else {
     __ Move(r6, call_data);
   }
-  // Store js function and call data.
+  // Store JS function and call data.
   __ stm(ib, sp, r5.bit() | r6.bit());
 
   // r2 points to call data as expected by Arguments
@@ -742,7 +768,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
           ? CALL_AS_FUNCTION
           : CALL_AS_METHOD;
       __ InvokeFunction(optimization.constant_function(), arguments_,
-                        JUMP_FUNCTION, call_kind);
+                        JUMP_FUNCTION, NullCallWrapper(), call_kind);
     }
 
     // Deferred code for fast API call case---clean preallocated space.
@@ -1019,10 +1045,9 @@ Register StubCompiler::CheckPrototypes(Handle<JSObject> object,
       __ ldr(reg, FieldMemOperand(scratch1, Map::kPrototypeOffset));
     } else {
       Handle<Map> current_map(current->map());
-      __ ldr(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
-      __ cmp(scratch1, Operand(current_map));
-      // Branch on the result of the map check.
-      __ b(ne, miss);
+      __ CheckMap(reg, scratch1, current_map, miss, DONT_DO_SMI_CHECK,
+                  ALLOW_ELEMENT_TRANSITION_MAPS);
+
       // Check access rights to the global object.  This has to happen after
       // the map check so that we know that the object is actually a global
       // object.
@@ -1053,9 +1078,8 @@ Register StubCompiler::CheckPrototypes(Handle<JSObject> object,
   LOG(masm()->isolate(), IntEvent("check-maps-depth", depth + 1));
 
   // Check the holder map.
-  __ ldr(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
-  __ cmp(scratch1, Operand(Handle<Map>(current->map())));
-  __ b(ne, miss);
+  __ CheckMap(reg, scratch1, Handle<Map>(current->map()), miss,
+              DONT_DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform security check for access to the global object.
   ASSERT(holder->IsJSGlobalProxy() || !holder->IsAccessCheckNeeded());
@@ -1150,7 +1174,7 @@ void StubCompiler::GenerateLoadCallback(Handle<JSObject> object,
   __ EnterExitFrame(false, kApiStackSpace);
 
   // Create AccessorInfo instance on the stack above the exit frame with
-  // scratch2 (internal::Object **args_) as the data.
+  // scratch2 (internal::Object** args_) as the data.
   __ str(scratch2, MemOperand(sp, 1 * kPointerSize));
   __ add(r1, sp, Operand(1 * kPointerSize));  // r1 = AccessorInfo&
 
@@ -1185,7 +1209,7 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
   // and CALLBACKS, so inline only them, other cases may be added
   // later.
   bool compile_followup_inline = false;
-  if (lookup->IsProperty() && lookup->IsCacheable()) {
+  if (lookup->IsFound() && lookup->IsCacheable()) {
     if (lookup->type() == FIELD) {
       compile_followup_inline = true;
     } else if (lookup->type() == CALLBACKS &&
@@ -1451,20 +1475,22 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
     __ Ret();
   } else {
     Label call_builtin;
-    Register elements = r3;
-    Register end_elements = r5;
-    // Get the elements array of the object.
-    __ ldr(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
-
-    // Check that the elements are in fast mode and writable.
-    __ CheckMap(elements,
-                r0,
-                Heap::kFixedArrayMapRootIndex,
-                &call_builtin,
-                DONT_DO_SMI_CHECK);
 
     if (argc == 1) {  // Otherwise fall through to call the builtin.
       Label attempt_to_grow_elements;
+
+      Register elements = r6;
+      Register end_elements = r5;
+      // Get the elements array of the object.
+      __ ldr(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
+
+      // Check that the elements are in fast mode and writable.
+      __ CheckMap(elements,
+                  r0,
+                  Heap::kFixedArrayMapRootIndex,
+                  &call_builtin,
+                  DONT_DO_SMI_CHECK);
+
 
       // Get the array's length into r0 and calculate new length.
       __ ldr(r0, FieldMemOperand(receiver, JSArray::kLengthOffset));
@@ -1472,7 +1498,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       STATIC_ASSERT(kSmiTag == 0);
       __ add(r0, r0, Operand(Smi::FromInt(argc)));
 
-      // Get the element's length.
+      // Get the elements' length.
       __ ldr(r4, FieldMemOperand(elements, FixedArray::kLengthOffset));
 
       // Check if we could survive without allocation.
@@ -1487,7 +1513,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       // Save new length.
       __ str(r0, FieldMemOperand(receiver, JSArray::kLengthOffset));
 
-      // Push the element.
+      // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       __ add(end_elements, elements,
@@ -1502,13 +1528,33 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
 
       __ bind(&with_write_barrier);
 
-      __ ldr(r6, FieldMemOperand(receiver, HeapObject::kMapOffset));
-      __ CheckFastObjectElements(r6, r6, &call_builtin);
+      __ ldr(r3, FieldMemOperand(receiver, HeapObject::kMapOffset));
+
+      if (FLAG_smi_only_arrays  && !FLAG_trace_elements_transitions) {
+        Label fast_object, not_fast_object;
+        __ CheckFastObjectElements(r3, r7, &not_fast_object);
+        __ jmp(&fast_object);
+        // In case of fast smi-only, convert to fast object, otherwise bail out.
+        __ bind(&not_fast_object);
+        __ CheckFastSmiOnlyElements(r3, r7, &call_builtin);
+        // edx: receiver
+        // r3: map
+        __ LoadTransitionedArrayMapConditional(FAST_SMI_ONLY_ELEMENTS,
+                                               FAST_ELEMENTS,
+                                               r3,
+                                               r7,
+                                               &call_builtin);
+        __ mov(r2, receiver);
+        ElementsTransitionGenerator::GenerateSmiOnlyToObject(masm());
+        __ bind(&fast_object);
+      } else {
+        __ CheckFastObjectElements(r3, r3, &call_builtin);
+      }
 
       // Save new length.
       __ str(r0, FieldMemOperand(receiver, JSArray::kLengthOffset));
 
-      // Push the element.
+      // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       __ add(end_elements, elements,
@@ -1554,25 +1600,25 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
              Operand(r0, LSL, kPointerSizeLog2 - kSmiTagSize));
       __ add(end_elements, end_elements, Operand(kEndElementsOffset));
       __ mov(r7, Operand(new_space_allocation_top));
-      __ ldr(r6, MemOperand(r7));
-      __ cmp(end_elements, r6);
+      __ ldr(r3, MemOperand(r7));
+      __ cmp(end_elements, r3);
       __ b(ne, &call_builtin);
 
       __ mov(r9, Operand(new_space_allocation_limit));
       __ ldr(r9, MemOperand(r9));
-      __ add(r6, r6, Operand(kAllocationDelta * kPointerSize));
-      __ cmp(r6, r9);
+      __ add(r3, r3, Operand(kAllocationDelta * kPointerSize));
+      __ cmp(r3, r9);
       __ b(hi, &call_builtin);
 
       // We fit and could grow elements.
       // Update new_space_allocation_top.
-      __ str(r6, MemOperand(r7));
+      __ str(r3, MemOperand(r7));
       // Push the argument.
       __ str(r2, MemOperand(end_elements));
       // Fill the rest with holes.
-      __ LoadRoot(r6, Heap::kTheHoleValueRootIndex);
+      __ LoadRoot(r3, Heap::kTheHoleValueRootIndex);
       for (int i = 1; i < kAllocationDelta; i++) {
-        __ str(r6, MemOperand(end_elements, i * kPointerSize));
+        __ str(r3, MemOperand(end_elements, i * kPointerSize));
       }
 
       // Update elements' and array's sizes.
@@ -1910,7 +1956,8 @@ Handle<Code> CallStubCompiler::CompileStringFromCharCodeCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function,  arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -1989,7 +2036,7 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ vmrs(r3);
   // Set custom FPCSR:
   //  - Set rounding mode to "Round towards Minus Infinity"
-  //    (ie bits [23:22] = 0b10).
+  //    (i.e. bits [23:22] = 0b10).
   //  - Clear vfp cumulative exception flags (bits [3:0]).
   //  - Make sure Flush-to-zero mode control bit is unset (bit 22).
   __ bic(r9, r3,
@@ -2055,7 +2102,8 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ bind(&slow);
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -2153,7 +2201,8 @@ Handle<Code> CallStubCompiler::CompileMathAbsCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -2331,7 +2380,8 @@ Handle<Code> CallStubCompiler::CompileCallConstant(Handle<Object> object,
   CallKind call_kind = CallICBase::Contextual::decode(extra_state_)
       ? CALL_AS_FUNCTION
       : CALL_AS_METHOD;
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, call_kind);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), call_kind);
 
   // Handle call cache miss.
   __ bind(&miss);
@@ -2411,7 +2461,7 @@ Handle<Code> CallStubCompiler::CompileCallGlobal(
     __ str(r3, MemOperand(sp, argc * kPointerSize));
   }
 
-  // Setup the context (function already in r1).
+  // Set up the context (function already in r1).
   __ ldr(cp, FieldMemOperand(r1, JSFunction::kContextOffset));
 
   // Jump to the cached code (tail call).
@@ -2472,13 +2522,9 @@ Handle<Code> StoreStubCompiler::CompileStoreCallback(
   // -----------------------------------
   Label miss;
 
-  // Check that the object isn't a smi.
-  __ JumpIfSmi(r1, &miss);
-
   // Check that the map of the object hasn't changed.
-  __ ldr(r3, FieldMemOperand(r1, HeapObject::kMapOffset));
-  __ cmp(r3, Operand(Handle<Map>(object->map())));
-  __ b(ne, &miss);
+  __ CheckMap(r1, r3, Handle<Map>(object->map()), &miss,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
@@ -2520,13 +2566,9 @@ Handle<Code> StoreStubCompiler::CompileStoreInterceptor(
   // -----------------------------------
   Label miss;
 
-  // Check that the object isn't a smi.
-  __ JumpIfSmi(r1, &miss);
-
   // Check that the map of the object hasn't changed.
-  __ ldr(r3, FieldMemOperand(r1, HeapObject::kMapOffset));
-  __ cmp(r3, Operand(Handle<Map>(receiver->map())));
-  __ b(ne, &miss);
+  __ CheckMap(r1, r3, Handle<Map>(receiver->map()), &miss,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (receiver->IsJSGlobalProxy()) {

@@ -24,7 +24,6 @@
 
 #include <node.h>
 #include <node_buffer.h>
-#include <node_vars.h>
 #include <node_root_certs.h>
 
 #include <string.h>
@@ -64,33 +63,28 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_SEP_MULTILINE
                                  | XN_FLAG_FN_SN;
 
-
-#include <node_vars.h>
-// We do the following to minimize the detal between v0.6 branch. We want to
-// use the variables as they were being used before.
-#define on_headers_sym NODE_VAR(on_headers_sym)
-#define errno_symbol NODE_VAR(errno_symbol)
-#define syscall_symbol NODE_VAR(syscall_symbol)
-#define subject_symbol NODE_VAR(subject_symbol)
-#define subjectaltname_symbol NODE_VAR(subjectaltname_symbol)
-#define modulus_symbol NODE_VAR(modulus_symbol)
-#define exponent_symbol NODE_VAR(exponent_symbol)
-#define issuer_symbol NODE_VAR(issuer_symbol)
-#define valid_from_symbol NODE_VAR(valid_from_symbol)
-#define valid_to_symbol NODE_VAR(valid_to_symbol)
-#define fingerprint_symbol NODE_VAR(fingerprint_symbol)
-#define name_symbol NODE_VAR(name_symbol)
-#define version_symbol NODE_VAR(version_symbol)
-#define ext_key_usage_symbol NODE_VAR(ext_key_usage_symbol)
-#define secure_context_constructor NODE_VAR(secure_context_constructor)
-
-
 namespace node {
 namespace crypto {
 
-static uv_rwlock_t* locks;
-
 using namespace v8;
+
+static Persistent<String> errno_symbol;
+static Persistent<String> syscall_symbol;
+static Persistent<String> subject_symbol;
+static Persistent<String> subjectaltname_symbol;
+static Persistent<String> modulus_symbol;
+static Persistent<String> exponent_symbol;
+static Persistent<String> issuer_symbol;
+static Persistent<String> valid_from_symbol;
+static Persistent<String> valid_to_symbol;
+static Persistent<String> fingerprint_symbol;
+static Persistent<String> name_symbol;
+static Persistent<String> version_symbol;
+static Persistent<String> ext_key_usage_symbol;
+
+static Persistent<FunctionTemplate> secure_context_constructor;
+
+static uv_rwlock_t* locks;
 
 
 static unsigned long crypto_id_cb(void) {
@@ -151,7 +145,6 @@ void SecureContext::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "addRootCerts", SecureContext::AddRootCerts);
   NODE_SET_PROTOTYPE_METHOD(t, "setCiphers", SecureContext::SetCiphers);
   NODE_SET_PROTOTYPE_METHOD(t, "setOptions", SecureContext::SetOptions);
-  NODE_SET_PROTOTYPE_METHOD(t, "clearOptions", SecureContext::ClearOptions);
   NODE_SET_PROTOTYPE_METHOD(t, "setSessionIdContext",
                                SecureContext::SetSessionIdContext);
   NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
@@ -526,23 +519,21 @@ Handle<Value> SecureContext::SetCiphers(const Arguments& args) {
   return True();
 }
 
-#define X(name, fn)                                                           \
-  Handle<Value> name(const Arguments& args) {                                 \
-    HandleScope scope;                                                        \
-    SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());     \
-    if (args.Length() != 1 || !args[0]->IsInt32()) {                          \
-      return ThrowException(                                                  \
-          Exception::TypeError(String::New("Bad parameter")));                \
-    }                                                                         \
-    fn(sc->ctx_, args[0]->Int32Value());                                      \
-    return True();                                                            \
+Handle<Value> SecureContext::SetOptions(const Arguments& args) {
+  HandleScope scope;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  if (args.Length() != 1 || !args[0]->IsUint32()) {
+    return ThrowException(Exception::TypeError(String::New("Bad parameter")));
   }
 
-// can't use templates, SSL_CTX_set_options and SSL_CTX_clear_options are macros
-X(SecureContext::SetOptions,   SSL_CTX_set_options)
-X(SecureContext::ClearOptions, SSL_CTX_clear_options)
+  unsigned int opts = args[0]->Uint32Value();
 
-#undef X
+  SSL_CTX_set_options(sc->ctx_, opts);
+
+  return True();
+}
 
 Handle<Value> SecureContext::SetSessionIdContext(const Arguments& args) {
   HandleScope scope;
@@ -595,6 +586,7 @@ int Connection::HandleBIOError(BIO *bio, const char* func, int rv) {
   if (rv >= 0) return rv;
 
   int retry = BIO_should_retry(bio);
+  (void) retry; // unused if !defined(SSL_PRINT_DEBUG)
 
   if (BIO_should_write(bio)) {
     DEBUG_PRINT("[%p] BIO: %s want write. should retry %d\n", ssl_, func, retry);
@@ -916,6 +908,8 @@ Handle<Value> Connection::New(const Arguments& args) {
 
   SSL_set_app_data(p->ssl_, p);
 
+  if (is_server) SSL_set_info_callback(p->ssl_, SSLInfoCallback);
+
 #ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
@@ -975,6 +969,20 @@ Handle<Value> Connection::New(const Arguments& args) {
   }
 
   return args.This();
+}
+
+
+void Connection::SSLInfoCallback(const SSL *ssl, int where, int ret) {
+  if (where & SSL_CB_HANDSHAKE_START) {
+    HandleScope scope;
+    Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
+    MakeCallback(c->handle_, "onhandshakestart", 0, NULL);
+  }
+  if (where & SSL_CB_HANDSHAKE_DONE) {
+    HandleScope scope;
+    Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
+    MakeCallback(c->handle_, "onhandshakedone", 0, NULL);
+  }
 }
 
 
@@ -1885,6 +1893,7 @@ class Cipher : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "init", CipherInit);
     NODE_SET_PROTOTYPE_METHOD(t, "initiv", CipherInitIv);
     NODE_SET_PROTOTYPE_METHOD(t, "update", CipherUpdate);
+    NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
     NODE_SET_PROTOTYPE_METHOD(t, "final", CipherFinal);
 
     target->Set(String::NewSymbol("Cipher"), t->GetFunction());
@@ -1948,7 +1957,6 @@ class Cipher : public ObjectWrap {
     return true;
   }
 
-
   int CipherUpdate(char* data, int len, unsigned char** out, int* out_len) {
     if (!initialised_) return 0;
     *out_len=len+EVP_CIPHER_CTX_block_size(&ctx);
@@ -1958,19 +1966,24 @@ class Cipher : public ObjectWrap {
     return 1;
   }
 
+  int SetAutoPadding(bool auto_padding) {
+    if (!initialised_) return 0;
+    return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
+  }
+
   int CipherFinal(unsigned char** out, int *out_len) {
     if (!initialised_) return 0;
     *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
-    EVP_CipherFinal_ex(&ctx,*out,out_len);
+    int r = EVP_CipherFinal_ex(&ctx,*out, out_len);
     EVP_CIPHER_CTX_cleanup(&ctx);
     initialised_ = false;
-    return 1;
+    return r;
   }
 
 
  protected:
 
-  static Handle<Value> New (const Arguments& args) {
+  static Handle<Value> New(const Arguments& args) {
     HandleScope scope;
 
     Cipher *cipher = new Cipher();
@@ -2158,6 +2171,15 @@ class Cipher : public ObjectWrap {
     return scope.Close(outString);
   }
 
+  static Handle<Value> SetAutoPadding(const Arguments& args) {
+    HandleScope scope;
+    Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
+
+    cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
+
+    return Undefined();
+  }
+
   static Handle<Value> CipherFinal(const Arguments& args) {
     Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
 
@@ -2172,10 +2194,18 @@ class Cipher : public ObjectWrap {
     int r = cipher->CipherFinal(&out_value, &out_len);
 
     assert(out_value != NULL);
-    assert(out_len != -1);
+    assert(out_len != -1 || r == 0);
 
     if (out_len == 0 || r == 0) {
-      return scope.Close(String::New(""));
+      // out_value always get allocated.
+      delete[] out_value;
+      if (r == 0) {
+        Local<Value> exception = Exception::TypeError(
+          String::New("CipherFinal fail"));
+        return ThrowException(exception);
+      } else {
+        return scope.Close(String::New(""));
+      }
     }
 
     enum encoding enc = ParseEncoding(args[0], BINARY);
@@ -2250,7 +2280,9 @@ class Decipher : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "initiv", DecipherInitIv);
     NODE_SET_PROTOTYPE_METHOD(t, "update", DecipherUpdate);
     NODE_SET_PROTOTYPE_METHOD(t, "final", DecipherFinal<false>);
+    // This is completely undocumented:
     NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinal<true>);
+    NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
 
     target->Set(String::NewSymbol("Decipher"), t->GetFunction());
   }
@@ -2333,9 +2365,16 @@ class Decipher : public ObjectWrap {
     return 1;
   }
 
+  int SetAutoPadding(bool auto_padding) {
+    if (!initialised_) return 0;
+    return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
+  }
+
   // coverity[alloc_arg]
   template <bool TOLERATE_PADDING>
   int DecipherFinal(unsigned char** out, int *out_len) {
+    int r;
+
     if (!initialised_) {
       *out_len = 0;
       *out = NULL;
@@ -2344,13 +2383,13 @@ class Decipher : public ObjectWrap {
 
     *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
     if (TOLERATE_PADDING) {
-      local_EVP_DecryptFinal_ex(&ctx,*out,out_len);
+      r = local_EVP_DecryptFinal_ex(&ctx,*out,out_len);
     } else {
-      EVP_CipherFinal_ex(&ctx,*out,out_len);
+      r = EVP_CipherFinal_ex(&ctx,*out,out_len);
     }
     EVP_CIPHER_CTX_cleanup(&ctx);
     initialised_ = false;
-    return 1;
+    return r;
   }
 
 
@@ -2583,6 +2622,15 @@ class Decipher : public ObjectWrap {
 
   }
 
+  static Handle<Value> SetAutoPadding(const Arguments& args) {
+    HandleScope scope;
+    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+
+    cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
+
+    return Undefined();
+  }
+
   template <bool TOLERATE_PADDING>
   static Handle<Value> DecipherFinal(const Arguments& args) {
     HandleScope scope;
@@ -2599,8 +2647,14 @@ class Decipher : public ObjectWrap {
     assert(out_len != -1);
 
     if (out_len == 0 || r == 0) {
-      delete[] out_value;
-      return scope.Close(String::New(""));
+      delete [] out_value; // allocated even if out_len == 0
+      if (r == 0) {
+        Local<Value> exception = Exception::TypeError(
+          String::New("DecipherFinal fail"));
+        return ThrowException(exception);
+      } else {
+        return scope.Close(String::New(""));
+      }
     }
 
     if (args.Length() == 0 || !args[0]->IsString()) {
@@ -4121,8 +4175,7 @@ PBKDF2(const Arguments& args) {
 
   req = new uv_work_t();
   req->data = request;
-  uv_queue_work(Loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
-
+  uv_queue_work(uv_default_loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
   return Undefined();
 
 err:
@@ -4244,7 +4297,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     Local<Function> callback_v = Local<Function>(Function::Cast(*args[1]));
     req->callback_ = Persistent<Function>::New(callback_v);
 
-    uv_queue_work(Loop(),
+    uv_queue_work(uv_default_loop(),
                   &req->work_req_,
                   RandomBytesWork<generator>,
                   RandomBytesAfter<generator>);

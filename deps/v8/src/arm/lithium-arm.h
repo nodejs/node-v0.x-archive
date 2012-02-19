@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -141,6 +141,7 @@ class LCodeGen;
   V(Parameter)                                  \
   V(Power)                                      \
   V(PushArgument)                               \
+  V(Random)                                     \
   V(RegExpLiteral)                              \
   V(Return)                                     \
   V(ShiftI)                                     \
@@ -1023,6 +1024,17 @@ class LPower: public LTemplateInstruction<1, 2, 0> {
 
   DECLARE_CONCRETE_INSTRUCTION(Power, "power")
   DECLARE_HYDROGEN_ACCESSOR(Power)
+};
+
+
+class LRandom: public LTemplateInstruction<1, 1, 0> {
+ public:
+  explicit LRandom(LOperand* global_object) {
+    inputs_[0] = global_object;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(Random, "random")
+  DECLARE_HYDROGEN_ACCESSOR(Random)
 };
 
 
@@ -2149,7 +2161,6 @@ class LChunkBuilder BASE_EMBEDDED {
   void Abort(const char* format, ...);
 
   // Methods for getting operands for Use / Define / Temp.
-  LRegister* ToOperand(Register reg);
   LUnallocated* ToUnallocated(Register reg);
   LUnallocated* ToUnallocated(DoubleRegister reg);
 
@@ -2199,8 +2210,6 @@ class LChunkBuilder BASE_EMBEDDED {
   template<int I, int T>
       LInstruction* Define(LTemplateInstruction<1, I, T>* instr,
                            LUnallocated* result);
-  template<int I, int T>
-      LInstruction* Define(LTemplateInstruction<1, I, T>* instr);
   template<int I, int T>
       LInstruction* DefineAsRegister(LTemplateInstruction<1, I, T>* instr);
   template<int I, int T>

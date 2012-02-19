@@ -22,6 +22,7 @@
 
 NODE_EXT_LIST_START
 NODE_EXT_LIST_ITEM(node_buffer)
+NODE_EXT_LIST_ITEM(node_typed_array)
 #if HAVE_OPENSSL
 NODE_EXT_LIST_ITEM(node_crypto)
 #endif
@@ -33,10 +34,6 @@ NODE_EXT_LIST_ITEM(node_signal_watcher)
 #endif
 NODE_EXT_LIST_ITEM(node_os)
 NODE_EXT_LIST_ITEM(node_zlib)
-
-#if defined(HAVE_ISOLATES) && HAVE_ISOLATES
-NODE_EXT_LIST_ITEM(node_isolates)
-#endif
 
 // libuv rewrite
 NODE_EXT_LIST_ITEM(node_timer_wrap)

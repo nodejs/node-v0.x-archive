@@ -178,7 +178,9 @@ class ScriptCache : private HashMap {
 
  private:
   // Calculate the hash value from the key (script id).
-  static uint32_t Hash(int key) { return ComputeIntegerHash(key); }
+  static uint32_t Hash(int key) {
+    return ComputeIntegerHash(key, v8::internal::kZeroHashSeed);
+  }
 
   // Scripts match if their keys (script id) match.
   static bool ScriptMatch(void* key1, void* key2) { return key1 == key2; }
@@ -222,7 +224,7 @@ class DebugInfoListNode {
 // DebugInfo.
 class Debug {
  public:
-  void Setup(bool create_heap_objects);
+  void SetUp(bool create_heap_objects);
   bool Load();
   void Unload();
   bool IsLoaded() { return !debug_context_.is_null(); }
@@ -400,9 +402,11 @@ class Debug {
   static void GenerateStoreICDebugBreak(MacroAssembler* masm);
   static void GenerateKeyedLoadICDebugBreak(MacroAssembler* masm);
   static void GenerateKeyedStoreICDebugBreak(MacroAssembler* masm);
-  static void GenerateConstructCallDebugBreak(MacroAssembler* masm);
   static void GenerateReturnDebugBreak(MacroAssembler* masm);
   static void GenerateCallFunctionStubDebugBreak(MacroAssembler* masm);
+  static void GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm);
+  static void GenerateCallConstructStubDebugBreak(MacroAssembler* masm);
+  static void GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm);
   static void GenerateSlotDebugBreak(MacroAssembler* masm);
   static void GeneratePlainReturnLiveEdit(MacroAssembler* masm);
 

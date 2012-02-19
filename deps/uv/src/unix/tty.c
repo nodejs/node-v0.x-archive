@@ -76,8 +76,8 @@ int uv_tty_set_mode(uv_tty_t* tty, int mode) {
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
 
-    /* Put terminal in raw mode after flushing */
-    if (tcsetattr(fd, TCSAFLUSH, &raw)) {
+    /* Put terminal in raw mode after draining */
+    if (tcsetattr(fd, TCSADRAIN, &raw)) {
       goto fatal;
     }
 
@@ -120,8 +120,7 @@ uv_handle_type uv_guess_handle(uv_file file) {
   struct stat s;
 
   if (file < 0) {
-    uv__set_sys_error(NULL, EINVAL); /* XXX Need loop? */
-    return -1;
+    return UV_UNKNOWN_HANDLE;
   }
 
   if (isatty(file)) {
@@ -129,8 +128,7 @@ uv_handle_type uv_guess_handle(uv_file file) {
   }
 
   if (fstat(file, &s)) {
-    uv__set_sys_error(NULL, errno); /* XXX Need loop? */
-    return -1;
+    return UV_UNKNOWN_HANDLE;
   }
 
   if (!S_ISSOCK(s.st_mode) && !S_ISFIFO(s.st_mode)) {

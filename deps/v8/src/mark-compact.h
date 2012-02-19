@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -198,7 +198,7 @@ class MarkingDeque {
     ASSERT(object->IsHeapObject());
     if (IsFull()) {
       Marking::BlackToGrey(object);
-      MemoryChunk::IncrementLiveBytes(object->address(), -object->Size());
+      MemoryChunk::IncrementLiveBytesFromGC(object->address(), -object->Size());
       SetOverflowed();
     } else {
       array_[top_] = object;
@@ -374,7 +374,7 @@ class SlotsBuffer {
   static const int kNumberOfElements = 1021;
 
  private:
-  static const int kChainLengthThreshold = 6;
+  static const int kChainLengthThreshold = 15;
 
   intptr_t idx_;
   intptr_t chain_length_;
@@ -407,7 +407,7 @@ class MarkCompactCollector {
   // object from the forwarding address of the previous live object in the
   // page as input, and is updated to contain the offset to be used for the
   // next live object in the same page.  For spaces using a different
-  // encoding (ie, contiguous spaces), the offset parameter is ignored.
+  // encoding (i.e., contiguous spaces), the offset parameter is ignored.
   typedef void (*EncodingFunction)(Heap* heap,
                                    HeapObject* old_object,
                                    int object_size,
@@ -441,7 +441,12 @@ class MarkCompactCollector {
   // Performs a global garbage collection.
   void CollectGarbage();
 
-  bool StartCompaction();
+  enum CompactionMode {
+    INCREMENTAL_COMPACTION,
+    NON_INCREMENTAL_COMPACTION
+  };
+
+  bool StartCompaction(CompactionMode mode);
 
   void AbortCompaction();
 
@@ -572,6 +577,8 @@ class MarkCompactCollector {
   // heap.
   bool sweep_precisely_;
 
+  bool reduce_memory_footprint_;
+
   // True if we are collecting slots to perform evacuation from evacuation
   // candidates.
   bool compacting_;
@@ -579,6 +586,8 @@ class MarkCompactCollector {
   bool was_marked_incrementally_;
 
   bool collect_maps_;
+
+  bool flush_monomorphic_ics_;
 
   // A pointer to the current stack-allocated GC tracer object during a full
   // collection (NULL before and after).
@@ -622,9 +631,18 @@ class MarkCompactCollector {
 
   void AfterMarking();
 
+  // Marks the object black and pushes it on the marking stack.
+  // This is for non-incremental marking.
   INLINE(void MarkObject(HeapObject* obj, MarkBit mark_bit));
 
+  INLINE(bool MarkObjectWithoutPush(HeapObject* object));
+  INLINE(void MarkObjectAndPush(HeapObject* value));
+
+  // Marks the object black.  This is for non-incremental marking.
   INLINE(void SetMark(HeapObject* obj, MarkBit mark_bit));
+
+  // Clears the cache of ICs related to this map.
+  INLINE(void ClearCacheOnMap(Map* map));
 
   void ProcessNewlyMarkedObject(HeapObject* obj);
 
@@ -637,6 +655,7 @@ class MarkCompactCollector {
 
   // Mark a Map and its DescriptorArray together, skipping transitions.
   void MarkMapContents(Map* map);
+  void MarkAccessorPairSlot(HeapObject* accessors, int offset);
   void MarkDescriptorArray(DescriptorArray* descriptors);
 
   // Mark the heap roots and all objects reachable from them.
@@ -684,6 +703,8 @@ class MarkCompactCollector {
   // Map transitions from a live map to a dead map must be killed.
   // We replace them with a null descriptor, with the same key.
   void ClearNonLiveTransitions();
+  void ClearNonLivePrototypeTransitions(Map* map);
+  void ClearNonLiveMapTransitions(Map* map, MarkBit map_mark);
 
   // Marking detaches initial maps from SharedFunctionInfo objects
   // to make this reference weak. We need to reattach initial maps

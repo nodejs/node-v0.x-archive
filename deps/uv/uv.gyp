@@ -115,7 +115,7 @@
             'src/ares/config_win32'
           ],
           'defines': [
-            '_WIN32_WINNT=0x0502',
+            '_WIN32_WINNT=0x0600',
             'EIO_STACKSIZE=262144',
             '_GNU_SOURCE',
           ],
@@ -250,6 +250,11 @@
             'EV_CONFIG_H="config_freebsd.h"',
             'EIO_CONFIG_H="config_freebsd.h"',
           ],
+          'direct_dependent_settings': {
+            'libraries': [
+              '-lkvm',
+            ],
+          },
         }],
         [ 'OS=="openbsd"', {
           'include_dirs': [ 'src/ares/config_openbsd' ],
@@ -284,6 +289,7 @@
         'test/test-connection-fail.c',
         'test/test-cwd-and-chdir.c',
         'test/test-delayed-accept.c',
+        'test/test-eio-overflow.c',
         'test/test-fail-always.c',
         'test/test-fs.c',
         'test/test-fs-event.c',
@@ -325,9 +331,11 @@
         'test/test-tty.c',
         'test/test-udp-dgram-too-big.c',
         'test/test-udp-ipv6.c',
+        'test/test-udp-options.c',
         'test/test-udp-send-and-recv.c',
         'test/test-udp-multicast-join.c',
         'test/test-counters-init.c',
+        'test/test-udp-multicast-ttl.c',
       ],
       'conditions': [
         [ 'OS=="win"', {

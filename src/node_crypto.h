@@ -66,7 +66,6 @@ class SecureContext : ObjectWrap {
   static v8::Handle<v8::Value> AddRootCerts(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetCiphers(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetOptions(const v8::Arguments& args);
-  static v8::Handle<v8::Value> ClearOptions(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetSessionIdContext(const v8::Arguments& args);
   static v8::Handle<v8::Value> Close(const v8::Arguments& args);
 
@@ -191,6 +190,8 @@ class Connection : ObjectWrap {
   }
 
  private:
+  static void SSLInfoCallback(const SSL *ssl, int where, int ret);
+
   BIO *bio_read_;
   BIO *bio_write_;
   SSL *ssl_;

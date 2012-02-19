@@ -15,7 +15,7 @@ event.
     { allowHalfOpen: false
     }
 
-If `allowHalfOpen` is `true`, then the socket won't automatically send FIN
+If `allowHalfOpen` is `true`, then the socket won't automatically send a FIN
 packet when the other end of the socket sends a FIN packet. The socket becomes
 non-readable, but still writable. You should call the `end()` method explicitly.
 See ['end'](#event_end_) event for more information.
@@ -49,25 +49,29 @@ Use `nc` to connect to a UNIX domain socket server:
 
     nc -U /tmp/echo.sock
 
-### net.connect(arguments...)
-### net.createConnection(arguments...)
+### net.connect(options, [cnnectionListener])
+### net.createConnection(options, [cnnectionListener])
 
-Construct a new socket object and opens a socket to the given location. When
-the socket is established the ['connect'](#event_connect_) event will be
+Constructs a new socket object and opens the socket to the given location.
+When the socket is established, the ['connect'](#event_connect_) event will be
 emitted.
 
-The arguments for these methods change the type of connection:
+For TCP sockets, `options` argument should be an object which specifies:
 
-* `net.connect(port, [host], [connectListener])`
-* `net.createConnection(port, [host], [connectListener])`
+  - `port`: Port the client should connect to (Required).
 
-  Creates a TCP connection to `port` on `host`. If `host` is omitted,
-  `'localhost'` will be assumed.
+  - `host`: Host the client should connect to. Defaults to `'localhost'`.
 
-* `net.connect(path, [connectListener])`
-* `net.createConnection(path, [connectListener])`
+For UNIX domain sockets, `options` argument should be an object which specifies:
 
-  Creates unix socket connection to `path`.
+  - `path`: Path the client should connect to (Required).
+
+Common options are:
+
+  - `allowHalfOpen`: if `true`, the socket won't automatically send
+    a FIN packet when the other end of the socket sends a FIN packet. 
+    Defaults to `false`.
+    See ['end'](#event_end_) event for more information.
 
 The `connectListener` parameter will be added as an listener for the
 ['connect'](#event_connect_) event.
@@ -75,7 +79,8 @@ The `connectListener` parameter will be added as an listener for the
 Here is an example of a client of echo server as described previously:
 
     var net = require('net');
-    var client = net.connect(8124, function() { //'connect' listener
+    var client = net.connect({port: 8124},
+        function() { //'connect' listener
       console.log('client connected');
       client.write('world!\r\n');
     });
@@ -90,7 +95,22 @@ Here is an example of a client of echo server as described previously:
 To connect on the socket `/tmp/echo.sock` the second line would just be
 changed to
 
-    var client = net.connect('/tmp/echo.sock', function() { //'connect' listener
+    var client = net.connect({path: '/tmp/echo.sock'},
+
+### net.connect(port, [host], [connectListener])
+### net.createConnection(port, [host], [connectListener])
+
+Creates a TCP connection to `port` on `host`. If `host` is omitted,
+`'localhost'` will be assumed.
+The `connectListener` parameter will be added as an listener for the
+['connect'](#event_connect_) event.
+
+### net.connect(path, [connectListener])
+### net.createConnection(path, [connectListener])
+
+Creates unix socket connection to `path`.
+The `connectListener` parameter will be added as an listener for the
+['connect'](#event_connect_) event.
 
 ---
 
@@ -131,9 +151,10 @@ would be to wait a second and then try again. This can be done with
 
 Start a UNIX socket server listening for connections on the given `path`.
 
-This function is asynchronous. The last parameter `listeningListener` will be
-called when the server has been bound.
-See also ['listening'](#event_listening_) event.
+This function is asynchronous.  When the server has been bound,
+['listening'](#event_listening_) event will be emitted.
+the last parameter `listeningListener` will be added as an listener for the
+['listening'](#event_listening_) event.
 
 #### server.pause(msecs)
 
@@ -141,11 +162,11 @@ Stop accepting connections for the given number of milliseconds (default is
 one second).  This could be useful for throttling new connections against
 DoS attacks or other oversubscription.
 
-#### server.close()
+#### server.close([cb])
 
 Stops the server from accepting new connections. This function is
 asynchronous, the server is finally closed when the server emits a `'close'`
-event.
+event. Optionally, you can pass a callback to listen for the `'close'` event.
 
 
 #### server.address()
@@ -166,6 +187,7 @@ Example:
       console.log("opened server on %j", address);
     });
 
+Don't call `server.address()` until the `'listening'` event has been emitted.
 
 #### server.maxConnections
 
@@ -393,6 +415,9 @@ Emitted when data is received.  The argument `data` will be a `Buffer` or
 `String`.  Encoding of data is set by `socket.setEncoding()`.
 (See the [Readable Stream](streams.html#readable_Stream) section for more
 information.)
+
+Note that the __data will be lost__ if there is no listener when a `Socket`
+emits a `'data'` event.
 
 #### Event: 'end'
 

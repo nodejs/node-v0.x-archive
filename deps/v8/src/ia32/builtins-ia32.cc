@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -74,50 +74,14 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
 }
 
 
-void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
+static void Generate_JSConstructStubHelper(MacroAssembler* masm,
+                                           bool is_api_function,
+                                           bool count_constructions) {
   // ----------- S t a t e -------------
   //  -- eax: number of arguments
   //  -- edi: constructor function
   // -----------------------------------
 
-  Label slow, non_function_call;
-  // Check that function is not a smi.
-  __ JumpIfSmi(edi, &non_function_call);
-  // Check that function is a JSFunction.
-  __ CmpObjectType(edi, JS_FUNCTION_TYPE, ecx);
-  __ j(not_equal, &slow);
-
-  // Jump to the function-specific construct stub.
-  __ mov(ebx, FieldOperand(edi, JSFunction::kSharedFunctionInfoOffset));
-  __ mov(ebx, FieldOperand(ebx, SharedFunctionInfo::kConstructStubOffset));
-  __ lea(ebx, FieldOperand(ebx, Code::kHeaderSize));
-  __ jmp(ebx);
-
-  // edi: called object
-  // eax: number of arguments
-  // ecx: object map
-  Label do_call;
-  __ bind(&slow);
-  __ CmpInstanceType(ecx, JS_FUNCTION_PROXY_TYPE);
-  __ j(not_equal, &non_function_call);
-  __ GetBuiltinEntry(edx, Builtins::CALL_FUNCTION_PROXY_AS_CONSTRUCTOR);
-  __ jmp(&do_call);
-
-  __ bind(&non_function_call);
-  __ GetBuiltinEntry(edx, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
-  __ bind(&do_call);
-  // Set expected number of arguments to zero (not changing eax).
-  __ Set(ebx, Immediate(0));
-  Handle<Code> arguments_adaptor =
-      masm->isolate()->builtins()->ArgumentsAdaptorTrampoline();
-  __ SetCallKind(ecx, CALL_AS_METHOD);
-  __ jmp(arguments_adaptor, RelocInfo::CODE_TARGET);
-}
-
-
-static void Generate_JSConstructStubHelper(MacroAssembler* masm,
-                                           bool is_api_function,
-                                           bool count_constructions) {
   // Should never count constructions for api objects.
   ASSERT(!is_api_function || !count_constructions);
 
@@ -333,7 +297,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ push(ebx);
     __ push(ebx);
 
-    // Setup pointer to last argument.
+    // Set up pointer to last argument.
     __ lea(ebx, Operand(ebp, StandardFrameConstants::kCallerSPOffset));
 
     // Copy arguments and receiver to the expression stack.
@@ -454,8 +418,8 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
 
     // Invoke the code.
     if (is_construct) {
-      __ call(masm->isolate()->builtins()->JSConstructCall(),
-              RelocInfo::CODE_TARGET);
+      CallConstructStub stub(NO_CALL_FUNCTION_FLAGS);
+      __ CallStub(&stub);
     } else {
       ParameterCount actual(eax);
       __ InvokeFunction(edi, actual, CALL_FUNCTION,
@@ -537,7 +501,7 @@ static void Generate_NotifyDeoptimizedHelper(MacroAssembler* masm,
   {
     FrameScope scope(masm, StackFrame::INTERNAL);
 
-    // Pass the function and deoptimization type to the runtime system.
+    // Pass deoptimization type to the runtime system.
     __ push(Immediate(Smi::FromInt(static_cast<int>(type))));
     __ CallRuntime(Runtime::kNotifyDeoptimized, 1);
 
@@ -929,9 +893,8 @@ static void AllocateEmptyJSArray(MacroAssembler* masm,
                                  Label* gc_required) {
   const int initial_capacity = JSArray::kPreallocatedArrayElements;
   STATIC_ASSERT(initial_capacity >= 0);
-  // Load the initial map from the array function.
-  __ mov(scratch1, FieldOperand(array_function,
-                                JSFunction::kPrototypeOrInitialMapOffset));
+
+  __ LoadInitialArrayMap(array_function, scratch2, scratch1);
 
   // Allocate the JSArray object together with space for a fixed array with the
   // requested elements.
@@ -1034,10 +997,7 @@ static void AllocateJSArray(MacroAssembler* masm,
   ASSERT(!fill_with_hole || array_size.is(ecx));  // rep stos count
   ASSERT(!fill_with_hole || !result.is(eax));  // result is never eax
 
-  // Load the initial map from the array function.
-  __ mov(elements_array,
-         FieldOperand(array_function,
-                      JSFunction::kPrototypeOrInitialMapOffset));
+  __ LoadInitialArrayMap(array_function, scratch, elements_array);
 
   // Allocate the JSArray object together with space for a FixedArray with the
   // requested elements.
@@ -1297,6 +1257,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
   __ bind(&has_non_smi_element);
   // Throw away the array that's only been partially constructed.
   __ pop(eax);
+  __ UndoAllocationInNewSpace(eax);
 
   // Restore argc and constructor before running the generic code.
   __ bind(&prepare_generic_code_call);
@@ -1305,6 +1266,40 @@ static void ArrayNativeCode(MacroAssembler* masm,
     __ pop(edi);
   }
   __ jmp(call_generic_code);
+}
+
+
+void Builtins::Generate_InternalArrayCode(MacroAssembler* masm) {
+  // ----------- S t a t e -------------
+  //  -- eax : argc
+  //  -- esp[0] : return address
+  //  -- esp[4] : last argument
+  // -----------------------------------
+  Label generic_array_code;
+
+  // Get the InternalArray function.
+  __ LoadGlobalFunction(Context::INTERNAL_ARRAY_FUNCTION_INDEX, edi);
+
+  if (FLAG_debug_code) {
+    // Initial map for the builtin InternalArray function should be a map.
+    __ mov(ebx, FieldOperand(edi, JSFunction::kPrototypeOrInitialMapOffset));
+    // Will both indicate a NULL and a Smi.
+    __ test(ebx, Immediate(kSmiTagMask));
+    __ Assert(not_zero, "Unexpected initial map for InternalArray function");
+    __ CmpObjectType(ebx, MAP_TYPE, ecx);
+    __ Assert(equal, "Unexpected initial map for InternalArray function");
+  }
+
+  // Run the native code for the InternalArray function called as a normal
+  // function.
+  ArrayNativeCode(masm, false, &generic_array_code);
+
+  // Jump to the generic internal array code in case the specialized code cannot
+  // handle the construction.
+  __ bind(&generic_array_code);
+  Handle<Code> array_code =
+      masm->isolate()->builtins()->InternalArrayCodeGeneric();
+  __ jmp(array_code, RelocInfo::CODE_TARGET);
 }
 
 
@@ -1320,7 +1315,7 @@ void Builtins::Generate_ArrayCode(MacroAssembler* masm) {
   __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, edi);
 
   if (FLAG_debug_code) {
-    // Initial map for the builtin Array function shoud be a map.
+    // Initial map for the builtin Array function should be a map.
     __ mov(ebx, FieldOperand(edi, JSFunction::kPrototypeOrInitialMapOffset));
     // Will both indicate a NULL and a Smi.
     __ test(ebx, Immediate(kSmiTagMask));
@@ -1609,6 +1604,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   __ mov(edi, Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
   __ call(edx);
 
+  masm->isolate()->heap()->SetArgumentsAdaptorDeoptPCOffset(masm->pc_offset());
   // Leave frame and return.
   LeaveArgumentsAdaptorFrame(masm);
   __ ret(0);

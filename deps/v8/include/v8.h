@@ -1732,6 +1732,14 @@ class Function : public Object {
   V8EXPORT Handle<Value> GetName() const;
 
   /**
+   * Name inferred from variable or property assignment of this function.
+   * Used to facilitate debugging and profiling of JavaScript code written
+   * in an OO style, where many functions are anonymous but are assigned
+   * to object properties.
+   */
+  V8EXPORT Handle<Value> GetInferredName() const;
+
+  /**
    * Returns zero based line number of function body and
    * kLineOffsetNotFound if no information available.
    */
@@ -2635,6 +2643,9 @@ typedef void (*MemoryAllocationCallback)(ObjectSpace space,
                                          AllocationAction action,
                                          int size);
 
+// --- Leave Script Callback ---
+typedef void (*CallCompletedCallback)();
+
 // --- Failed Access Check Callback ---
 typedef void (*FailedAccessCheckCallback)(Local<Object> target,
                                           AccessType type,
@@ -2714,7 +2725,7 @@ class RetainedObjectInfo;
  * default isolate is implicitly created and entered.  The embedder
  * can create additional isolates and use them in parallel in multiple
  * threads.  An isolate can be entered by at most one thread at any
- * given time.  The Locker/Unlocker API can be used to synchronize.
+ * given time.  The Locker/Unlocker API must be used to synchronize.
  */
 class V8EXPORT Isolate {
  public:
@@ -2844,6 +2855,17 @@ class V8EXPORT StartupDataDecompressor {  // NOLINT
  * of entropy.
  */
 typedef bool (*EntropySource)(unsigned char* buffer, size_t length);
+
+
+/**
+ * Interface for iterating though all external resources in the heap.
+ */
+class V8EXPORT ExternalResourceVisitor {  // NOLINT
+ public:
+  virtual ~ExternalResourceVisitor() {}
+  virtual void VisitExternalString(Handle<String> string) {}
+};
+
 
 /**
  * Container class for static utility functions.
@@ -3033,10 +3055,23 @@ class V8EXPORT V8 {
                                           AllocationAction action);
 
   /**
-   * This function removes callback which was installed by
-   * AddMemoryAllocationCallback function.
+   * Removes callback that was installed by AddMemoryAllocationCallback.
    */
   static void RemoveMemoryAllocationCallback(MemoryAllocationCallback callback);
+
+  /**
+   * Adds a callback to notify the host application when a script finished
+   * running.  If a script re-enters the runtime during executing, the
+   * CallCompletedCallback is only invoked when the outer-most script
+   * execution ends.  Executing scripts inside the callback do not trigger
+   * further callbacks.
+   */
+  static void AddCallCompletedCallback(CallCompletedCallback callback);
+
+  /**
+   * Removes callback that was installed by AddCallCompletedCallback.
+   */
+  static void RemoveCallCompletedCallback(CallCompletedCallback callback);
 
   /**
    * Allows the host application to group objects together. If one
@@ -3186,6 +3221,13 @@ class V8EXPORT V8 {
    * Get statistics about the heap memory usage.
    */
   static void GetHeapStatistics(HeapStatistics* heap_statistics);
+
+  /**
+   * Iterates through all external resources referenced from current isolate
+   * heap. This method is not expected to be used except for debugging purposes
+   * and may be quite slow.
+   */
+  static void VisitExternalResources(ExternalResourceVisitor* visitor);
 
   /**
    * Optional notification that the embedder is idle.
@@ -3497,6 +3539,12 @@ class V8EXPORT Context {
   void AllowCodeGenerationFromStrings(bool allow);
 
   /**
+   * Returns true if code generation from strings is allowed for the context.
+   * For more details see AllowCodeGenerationFromStrings(bool) documentation.
+   */
+  bool IsCodeGenerationFromStringsAllowed();
+
+  /**
    * Stack-allocated class which sets the execution context for all
    * operations executed within a local scope.
    */
@@ -3525,7 +3573,9 @@ class V8EXPORT Context {
  * accessing handles or holding onto object pointers obtained
  * from V8 handles while in the particular V8 isolate.  It is up
  * to the user of V8 to ensure (perhaps with locking) that this
- * constraint is not violated.
+ * constraint is not violated.  In addition to any other synchronization
+ * mechanism that may be used, the v8::Locker and v8::Unlocker classes
+ * must be used to signal thead switches to V8.
  *
  * v8::Locker is a scoped lock object. While it's
  * active (i.e. between its construction and destruction) the current thread is
@@ -3800,7 +3850,7 @@ class Internals {
   static const int kFullStringRepresentationMask = 0x07;
   static const int kExternalTwoByteRepresentationTag = 0x02;
 
-  static const int kJSObjectType = 0xa6;
+  static const int kJSObjectType = 0xa7;
   static const int kFirstNonstringType = 0x80;
   static const int kForeignType = 0x85;
 

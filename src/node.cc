@@ -20,8 +20,6 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <node.h>
-#include <node_isolate.h>
-#include <node_internals.h>
 
 #include <uv.h>
 
@@ -92,66 +90,81 @@ using namespace v8;
 extern char **environ;
 # endif
 
-
-#include <node_vars.h>
-
-// We do the following to minimize the detal between v0.6 branch. We want to
-// use the variables as they were being used before.
-#define check_tick_watcher NODE_VAR(check_tick_watcher)
-#define code_symbol NODE_VAR(code_symbol)
-#define emit_symbol NODE_VAR(emit_symbol)
-#define errno_symbol NODE_VAR(errno_symbol)
-#define errpath_symbol NODE_VAR(errpath_symbol)
-#define gc_check NODE_VAR(gc_check)
-#define gc_idle NODE_VAR(gc_idle)
-#define gc_timer NODE_VAR(gc_timer)
-#define getbuf NODE_VAR(getbuf)
-#define heap_total_symbol NODE_VAR(heap_total_symbol)
-#define heap_used_symbol NODE_VAR(heap_used_symbol)
-#define listeners_symbol NODE_VAR(listeners_symbol)
-#define need_tick_cb NODE_VAR(need_tick_cb)
-#define prepare_tick_watcher NODE_VAR(prepare_tick_watcher)
-#define process NODE_VAR(process)
-#define rss_symbol NODE_VAR(rss_symbol)
-#define syscall_symbol NODE_VAR(syscall_symbol)
-#define tick_callback_sym NODE_VAR(tick_callback_sym)
-#define tick_spinner NODE_VAR(tick_spinner)
-#define tick_time_head NODE_VAR(tick_time_head)
-#define tick_times NODE_VAR(tick_times)
-#define uncaught_exception_symbol NODE_VAR(uncaught_exception_symbol)
-#define use_npn NODE_VAR(use_npn)
-#define use_sni NODE_VAR(use_sni)
-#define uncaught_exception_counter NODE_VAR(uncaught_exception_counter)
-#define debug_watcher NODE_VAR(debug_watcher)
-#define binding_cache NODE_VAR(binding_cache)
-#define module_load_list NODE_VAR(module_load_list)
-#define node_isolate NODE_VAR(node_isolate)
-#define debugger_running NODE_VAR(debugger_running)
-#define prog_start_time NODE_VAR(prog_start_time)
-
 namespace node {
 
-#define TICK_TIME(n) tick_times[(tick_time_head - (n)) % RPM_SAMPLES]
 
-static int option_end_index;
-static unsigned long max_stack_size;
-static unsigned short debug_port = 5858;
-static bool debug_wait_connect;
-static bool use_debug_agent;
-static const char* eval_string;
-static bool print_eval;
+static Persistent<Object> process;
+
+static Persistent<String> errno_symbol;
+static Persistent<String> syscall_symbol;
+static Persistent<String> errpath_symbol;
+static Persistent<String> code_symbol;
+
+static Persistent<String> rss_symbol;
+static Persistent<String> heap_total_symbol;
+static Persistent<String> heap_used_symbol;
+
+static Persistent<String> listeners_symbol;
+static Persistent<String> uncaught_exception_symbol;
+static Persistent<String> emit_symbol;
+
+
+static bool print_eval = false;
+static char *eval_string = NULL;
+static int option_end_index = 0;
+static bool use_debug_agent = false;
+static bool debug_wait_connect = false;
+static int debug_port=5858;
+static int max_stack_size = 0;
+
+static uv_check_t check_tick_watcher;
+static uv_prepare_t prepare_tick_watcher;
+static uv_idle_t tick_spinner;
+static bool need_tick_cb;
+static Persistent<String> tick_callback_sym;
+
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+static bool use_npn = true;
+#else
+static bool use_npn = false;
+#endif
+
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+static bool use_sni = true;
+#else
+static bool use_sni = false;
+#endif
+
+#ifdef __POSIX__
+// Buffer for getpwnam_r(), getgrpam_r() and other misc callers; keep this
+// scoped at file-level rather than method-level to avoid excess stack usage.
+static char getbuf[PATH_MAX + 1];
+#endif
+
+// We need to notify V8 when we're idle so that it can run the garbage
+// collector. The interface to this is V8::IdleNotification(). It returns
+// true if the heap hasn't be fully compacted, and needs to be run again.
+// Returning false means that it doesn't have anymore work to do.
+//
+// A rather convoluted algorithm has been devised to determine when Node is
+// idle. You'll have to figure it out for yourself.
+static uv_check_t gc_check;
+static uv_idle_t gc_idle;
+static uv_timer_t gc_timer;
+bool need_gc;
+
+// process-relative uptime base, initialized at start-up
+static double prog_start_time;
+
+#define FAST_TICK 700.
+#define GC_WAIT_TIME 5000.
+#define RPM_SAMPLES 100
+#define TICK_TIME(n) tick_times[(tick_time_head - (n)) % RPM_SAMPLES]
+static int64_t tick_times[RPM_SAMPLES];
+static int tick_time_head;
 
 static void CheckStatus(uv_timer_t* watcher, int status);
-
-
-uv_loop_t* Loop() {
-#if defined(HAVE_ISOLATES) && HAVE_ISOLATES
-  return Isolate::GetCurrent()->GetLoop();
-#else
-  return uv_default_loop();
-#endif
-}
-
 
 static void StartGCTimer () {
   if (!uv_is_active((uv_handle_t*) &gc_timer)) {
@@ -179,7 +192,7 @@ static void Idle(uv_idle_t* watcher, int status) {
 static void Check(uv_check_t* watcher, int status) {
   assert(watcher == &gc_check);
 
-  tick_times[tick_time_head] = uv_now(Loop());
+  tick_times[tick_time_head] = uv_now(uv_default_loop());
   tick_time_head = (tick_time_head + 1) % RPM_SAMPLES;
 
   StartGCTimer();
@@ -209,7 +222,7 @@ static void Tick(void) {
   need_tick_cb = false;
   if (uv_is_active((uv_handle_t*) &tick_spinner)) {
     uv_idle_stop(&tick_spinner);
-    uv_unref(Loop());
+    uv_unref(uv_default_loop());
   }
 
   HandleScope scope;
@@ -251,7 +264,7 @@ static Handle<Value> NeedTickCallback(const Arguments& args) {
   // tick_spinner to keep the event loop alive long enough to handle it.
   if (!uv_is_active((uv_handle_t*) &tick_spinner)) {
     uv_idle_start(&tick_spinner, Spin);
-    uv_ref(Loop());
+    uv_ref(uv_default_loop());
   }
   return Undefined();
 }
@@ -1055,6 +1068,10 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
+  if (encoding == BINARY && Buffer::HasInstance(val)) {
+    return Buffer::Length(val->ToObject());
+  }
+
   Local<String> str = val->ToString();
 
   if (encoding == UTF8) return str->Utf8Length();
@@ -1273,76 +1290,6 @@ static Handle<Value> Cwd(const Arguments& args) {
 }
 
 
-#ifdef _WIN32
-static Handle<Value> CwdForDrive(const Arguments& args) {
-  HandleScope scope;
-
-  if (args.Length() < 1) {
-    Local<Value> exception = Exception::Error(
-        String::New("process._cwdForDrive takes exactly 1 argument."));
-    return ThrowException(exception);
-  }
-
-  Local<String> driveLetter = args[0]->ToString();
-  if (driveLetter->Length() != 1) {
-    Local<Value> exception = Exception::Error(
-        String::New("Drive name should be 1 character."));
-    return ThrowException(exception);
-  }
-
-  char drive;
-
-  driveLetter->WriteAscii(&drive, 0, 1, 0);
-  if (drive >= 'a' && drive <= 'z') {
-    // Convert to uppercase
-    drive += 'A' - 'a';
-  } else if (drive < 'A' || drive > 'Z') {
-    // Not a letter
-    Local<Value> exception = Exception::Error(
-        String::New("Drive name should be a letter."));
-    return ThrowException(exception);
-  }
-
-  WCHAR env_key[] = L"=X:";
-  env_key[1] = (WCHAR) drive;
-
-  DWORD len = GetEnvironmentVariableW(env_key, NULL, 0);
-  if (len == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-    // There is no current directory for that drive. Default to drive + ":\".
-    Local<String> cwd = String::Concat(String::New(&drive, 1),
-                                       String::New(":\\"));
-    return scope.Close(cwd);
-
-  } else if (len == 0) {
-    // Error
-    Local<Value> exception = Exception::Error(
-      String::New(winapi_strerror(GetLastError())));
-    return ThrowException(exception);
-  }
-
-  WCHAR* buffer = new WCHAR[len];
-  if (buffer == NULL) {
-    Local<Value> exception = Exception::Error(
-        String::New("Out of memory."));
-    return ThrowException(exception);
-  }
-
-  DWORD len2 = GetEnvironmentVariableW(env_key, buffer, len);
-  if (len2 == 0 || len2 >= len) {
-    // Error
-    delete[] buffer;
-    Local<Value> exception = Exception::Error(
-      String::New(winapi_strerror(GetLastError())));
-    return ThrowException(exception);
-  }
-
-  Local<String> cwd = String::New(reinterpret_cast<uint16_t*>(buffer), len2);
-  delete[] buffer;
-  return scope.Close(cwd);
-}
-#endif
-
-
 static Handle<Value> Umask(const Arguments& args) {
   HandleScope scope;
   unsigned int old;
@@ -1503,7 +1450,7 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
     }
   }
 
-  double d = uv_now(Loop()) - TICK_TIME(3);
+  double d = uv_now(uv_default_loop()) - TICK_TIME(3);
 
   //printfb("timer d = %f\n", d);
 
@@ -1532,7 +1479,7 @@ static Handle<Value> Uptime(const Arguments& args) {
 v8::Handle<v8::Value> UVCounters(const v8::Arguments& args) {
   HandleScope scope;
 
-  uv_counters_t* c = &Loop()->counters;
+  uv_counters_t* c = &uv_default_loop()->counters;
 
   Local<Object> obj = Object::New();
 
@@ -1727,6 +1674,7 @@ static void OnFatalError(const char* location, const char* message) {
   exit(1);
 }
 
+static int uncaught_exception_counter = 0;
 
 void FatalException(TryCatch &try_catch) {
   HandleScope scope;
@@ -1779,27 +1727,15 @@ void FatalException(TryCatch &try_catch) {
 }
 
 
-static void DebugMessageCallback(uv_async_t* watcher, int status) {
-  HandleScope scope;
-  assert(watcher == &debug_watcher);
-  v8::Debug::ProcessDebugMessages();
-}
-
-static void DebugMessageDispatch(void) {
-  // This function is called from V8's debug thread when a debug TCP client
-  // has sent a message.
-
-  // Send a signal to our main thread saying that it should enter V8 to
-  // handle the message.
-  uv_async_send(&debug_watcher);
-}
-
 static void DebugBreakMessageHandler(const v8::Debug::Message& message) {
   // do nothing with debug messages.
   // The message handler will get changed by DebuggerAgent::CreateSession in
   // debug-agent.cc of v8/src when a new session is created
 }
 
+
+Persistent<Object> binding_cache;
+Persistent<Array> module_load_list;
 
 static Handle<Value> Binding(const Arguments& args) {
   HandleScope scope;
@@ -1877,12 +1813,28 @@ static void ProcessTitleSetter(Local<String> property,
 
 static Handle<Value> EnvGetter(Local<String> property,
                                const AccessorInfo& info) {
+  HandleScope scope;
+#ifdef __POSIX__
   String::Utf8Value key(property);
   const char* val = getenv(*key);
   if (val) {
-    HandleScope scope;
     return scope.Close(String::New(val));
   }
+#else  // _WIN32
+  String::Value key(property);
+  WCHAR buffer[32767]; // The maximum size allowed for environment variables.
+  DWORD result = GetEnvironmentVariableW(reinterpret_cast<WCHAR*>(*key),
+                                         buffer,
+                                         ARRAY_SIZE(buffer));
+  // If result >= sizeof buffer the buffer was too small. That should never
+  // happen. If result == 0 and result != ERROR_SUCCESS the variable was not
+  // not found.
+  if ((result > 0 || GetLastError() == ERROR_SUCCESS) &&
+      result < ARRAY_SIZE(buffer)) {
+    return scope.Close(String::New(reinterpret_cast<uint16_t*>(buffer), result));
+  }
+#endif
+  // Not found
   return Undefined();
 }
 
@@ -1891,66 +1843,82 @@ static Handle<Value> EnvSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
   HandleScope scope;
+#ifdef __POSIX__
   String::Utf8Value key(property);
   String::Utf8Value val(value);
-
-#ifdef __POSIX__
   setenv(*key, *val, 1);
-#else  // __WIN32__
-  int n = key.length() + val.length() + 2;
-  char* pair = new char[n];
-  snprintf(pair, n, "%s=%s", *key, *val);
-  int r = _putenv(pair);
-  if (r) {
-    fprintf(stderr, "error putenv: '%s'\n", pair);
+#else  // _WIN32
+  String::Value key(property);
+  String::Value val(value);
+  WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
+  // Environment variables that start with '=' are read-only.
+  if (key_ptr[0] != L'=') {
+    SetEnvironmentVariableW(key_ptr, reinterpret_cast<WCHAR*>(*val));
   }
-  delete [] pair;
 #endif
-
-  return value;
+  // Whether it worked or not, always return rval.
+  return scope.Close(value);
 }
 
 
 static Handle<Integer> EnvQuery(Local<String> property,
                                 const AccessorInfo& info) {
+  HandleScope scope;
+#ifdef __POSIX__
   String::Utf8Value key(property);
   if (getenv(*key)) {
-    HandleScope scope;
     return scope.Close(Integer::New(None));
   }
-  return Handle<Integer>();
+#else  // _WIN32
+  String::Value key(property);
+  WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
+  if (GetEnvironmentVariableW(key_ptr, NULL, 0) > 0 ||
+      GetLastError() == ERROR_SUCCESS) {
+    if (key_ptr[0] == L'=') {
+      // Environment variables that start with '=' are hidden and read-only.
+      return scope.Close(Integer::New(v8::ReadOnly ||
+                                      v8::DontDelete ||
+                                      v8::DontEnum));
+    } else {
+      return scope.Close(Integer::New(None));
+    }
+  }
+#endif
+  // Not found
+  return scope.Close(Handle<Integer>());
 }
 
 
 static Handle<Boolean> EnvDeleter(Local<String> property,
                                   const AccessorInfo& info) {
   HandleScope scope;
-
-  String::Utf8Value key(property);
-
-  if (getenv(*key)) {
 #ifdef __POSIX__
-    unsetenv(*key);	// prototyped as `void unsetenv(const char*)` on some platforms
+  String::Utf8Value key(property);
+  // prototyped as `void unsetenv(const char*)` on some platforms
+  if (unsetenv(*key) < 0) {
+    // Deletion failed. Return true if the key wasn't there in the first place,
+    // false if it is still there.
+    return scope.Close(Boolean::New(getenv(*key) == NULL));
+  };
 #else
-    int n = key.length() + 2;
-    char* pair = new char[n];
-    snprintf(pair, n, "%s=", *key);
-    int r = _putenv(pair);
-    if (r) {
-      fprintf(stderr, "error unsetenv: '%s'\n", pair);
-    }
-    delete [] pair;
-#endif
-    return True();
+  String::Value key(property);
+  WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
+  if (key_ptr[0] == L'=' || !SetEnvironmentVariableW(key_ptr, NULL)) {
+    // Deletion failed. Return true if the key wasn't there in the first place,
+    // false if it is still there.
+    bool rv = GetEnvironmentVariableW(key_ptr, NULL, NULL) == 0 &&
+              GetLastError() != ERROR_SUCCESS;
+    return scope.Close(Boolean::New(rv));
   }
-
-  return False();
+#endif
+  // It worked
+  return v8::True();
 }
 
 
 static Handle<Array> EnvEnumerator(const AccessorInfo& info) {
   HandleScope scope;
-
+#ifdef __POSIX__
   int size = 0;
   while (environ[size]) size++;
 
@@ -1962,7 +1930,32 @@ static Handle<Array> EnvEnumerator(const AccessorInfo& info) {
     const int length = s ? s - var : strlen(var);
     env->Set(i, String::New(var, length));
   }
-
+#else  // _WIN32
+  WCHAR* environment = GetEnvironmentStringsW();
+  if (environment == NULL) {
+    // This should not happen.
+    return scope.Close(Handle<Array>());
+  }
+  Local<Array> env = Array::New();
+  WCHAR* p = environment;
+  int i = 0;
+  while (*p != NULL) {
+    WCHAR *s;
+    if (*p == L'=') {
+      // If the key starts with '=' it is a hidden environment variable.
+      p += wcslen(p) + 1;
+      continue;
+    } else {
+      s = wcschr(p, L'=');
+    }
+    if (!s) {
+      s = p + wcslen(p);
+    }
+    env->Set(i++, String::New(reinterpret_cast<uint16_t*>(p), s - p));
+    p = s + wcslen(s) + 1;
+  }
+  FreeEnvironmentStringsW(environment);
+#endif
   return scope.Close(env);
 }
 
@@ -1986,21 +1979,28 @@ static Handle<Object> GetFeatures() {
   obj->Set(String::NewSymbol("tls"),
       Boolean::New(get_builtin_module("crypto") != NULL));
 
-
-  obj->Set(String::NewSymbol("isolates"),
-#if HAVE_ISOLATES
-    True()
-#else
-    False()
-#endif
-  );
-
   return scope.Close(obj);
+}
+
+
+static Handle<Value> DebugPortGetter(Local<String> property,
+                                     const AccessorInfo& info) {
+  HandleScope scope;
+  return scope.Close(Integer::NewFromUnsigned(debug_port));
+}
+
+
+static void DebugPortSetter(Local<String> property,
+                            Local<Value> value,
+                            const AccessorInfo& info) {
+  HandleScope scope;
+  debug_port = value->NumberValue();
 }
 
 
 static Handle<Value> DebugProcess(const Arguments& args);
 static Handle<Value> DebugPause(const Arguments& args);
+static Handle<Value> DebugEnd(const Arguments& args);
 
 Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   HandleScope scope;
@@ -2010,6 +2010,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   Local<FunctionTemplate> process_template = FunctionTemplate::New();
 
   process = Persistent<Object>::New(process_template->GetFunction()->NewInstance());
+
 
   process->SetAccessor(String::New("title"),
                        ProcessTitleGetter,
@@ -2101,6 +2102,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   }
   delete [] execPath;
 
+  process->SetAccessor(String::New("debugPort"),
+                       DebugPortGetter,
+                       DebugPortSetter);
+
 
   // define various internal methods
   NODE_SET_METHOD(process, "_needTickCallback", NeedTickCallback);
@@ -2108,10 +2113,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "abort", Abort);
   NODE_SET_METHOD(process, "chdir", Chdir);
   NODE_SET_METHOD(process, "cwd", Cwd);
-
-#ifdef _WIN32
-  NODE_SET_METHOD(process, "_cwdForDrive", CwdForDrive);
-#endif
 
   NODE_SET_METHOD(process, "umask", Umask);
 
@@ -2127,6 +2128,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
   NODE_SET_METHOD(process, "_debugPause", DebugPause);
+  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
 
   NODE_SET_METHOD(process, "dlopen", DLOpen);
 
@@ -2304,6 +2306,9 @@ static void ParseArgs(int argc, char **argv) {
 }
 
 
+static Isolate* node_isolate = NULL;
+static volatile bool debugger_running = false;
+
 static void EnableDebug(bool wait_connect) {
   // If we're called from another thread, make sure to enter the right
   // v8 isolate.
@@ -2334,7 +2339,6 @@ static void EnableDebug(bool wait_connect) {
 
 
 #ifdef __POSIX__
-// FIXME this is positively unsafe with isolates/threads
 static void EnableDebugSignalHandler(int signal) {
   // Break once process will return execution to v8
   v8::Debug::DebugBreak(node_isolate);
@@ -2395,13 +2399,14 @@ DWORD WINAPI EnableDebugThreadProc(void* arg) {
 }
 
 
-static int GetDebugSignalHandlerMappingName(DWORD pid, char* buf, size_t buf_len) {
-  return snprintf(buf, buf_len, "node-debug-handler-%u", pid);
+static int GetDebugSignalHandlerMappingName(DWORD pid, wchar_t* buf,
+    size_t buf_len) {
+  return _snwprintf(buf, buf_len, L"node-debug-handler-%u", pid);
 }
 
 
 static int RegisterDebugSignalHandler() {
-  char mapping_name[32];
+  wchar_t mapping_name[32];
   HANDLE mapping_handle;
   DWORD pid;
   LPTHREAD_START_ROUTINE* handler;
@@ -2410,11 +2415,11 @@ static int RegisterDebugSignalHandler() {
 
   if (GetDebugSignalHandlerMappingName(pid,
                                        mapping_name,
-                                       sizeof mapping_name) < 0) {
+                                       ARRAY_SIZE(mapping_name)) < 0) {
     return -1;
   }
 
-  mapping_handle = CreateFileMappingA(INVALID_HANDLE_VALUE,
+  mapping_handle = CreateFileMappingW(INVALID_HANDLE_VALUE,
                                       NULL,
                                       PAGE_READWRITE,
                                       0,
@@ -2424,11 +2429,12 @@ static int RegisterDebugSignalHandler() {
     return -1;
   }
 
-  handler = (LPTHREAD_START_ROUTINE*) MapViewOfFile(mapping_handle,
-                                                    FILE_MAP_ALL_ACCESS,
-                                                    0,
-                                                    0,
-                                                    sizeof *handler);
+  handler = reinterpret_cast<LPTHREAD_START_ROUTINE*>(
+      MapViewOfFile(mapping_handle,
+                    FILE_MAP_ALL_ACCESS,
+                    0,
+                    0,
+                    sizeof *handler));
   if (handler == NULL) {
     CloseHandle(mapping_handle);
     return -1;
@@ -2446,10 +2452,10 @@ static Handle<Value> DebugProcess(const Arguments& args) {
   HandleScope scope;
   Handle<Value> rv = Undefined();
   DWORD pid;
-  HANDLE process_l = NULL;
+  HANDLE process = NULL;
   HANDLE thread = NULL;
   HANDLE mapping = NULL;
-  char mapping_name[32];
+  wchar_t mapping_name[32];
   LPTHREAD_START_ROUTINE* handler = NULL;
 
   if (args.Length() != 1) {
@@ -2459,40 +2465,42 @@ static Handle<Value> DebugProcess(const Arguments& args) {
 
   pid = (DWORD) args[0]->IntegerValue();
 
-  process_l = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
+  process = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
                             PROCESS_VM_OPERATION | PROCESS_VM_WRITE |
                             PROCESS_VM_READ,
                         FALSE,
                         pid);
-  if (process_l == NULL) {
+  if (process == NULL) {
     rv = ThrowException(WinapiErrnoException(GetLastError(), "OpenProcess"));
     goto out;
   }
 
   if (GetDebugSignalHandlerMappingName(pid,
                                        mapping_name,
-                                       sizeof mapping_name) < 0) {
+                                       ARRAY_SIZE(mapping_name)) < 0) {
     rv = ThrowException(ErrnoException(errno, "sprintf"));
     goto out;
   }
 
-  mapping = OpenFileMapping(FILE_MAP_READ, FALSE, mapping_name);
+  mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, mapping_name);
   if (mapping == NULL) {
-    rv = ThrowException(WinapiErrnoException(GetLastError(), "sprintf"));
+    rv = ThrowException(WinapiErrnoException(GetLastError(),
+                                             "OpenFileMappingW"));
     goto out;
   }
 
-  handler = (LPTHREAD_START_ROUTINE*) MapViewOfFile(mapping,
-                                                    FILE_MAP_READ,
-                                                    0,
-                                                    0,
-                                                    sizeof *handler);
+  handler = reinterpret_cast<LPTHREAD_START_ROUTINE*>(
+      MapViewOfFile(mapping,
+                    FILE_MAP_READ,
+                    0,
+                    0,
+                    sizeof *handler));
   if (handler == NULL || *handler == NULL) {
     rv = ThrowException(WinapiErrnoException(GetLastError(), "MapViewOfFile"));
     goto out;
   }
 
-  thread = CreateRemoteThread(process_l,
+  thread = CreateRemoteThread(process,
                               NULL,
                               0,
                               *handler,
@@ -2513,8 +2521,8 @@ static Handle<Value> DebugProcess(const Arguments& args) {
   }
 
  out:
-  if (process_l != NULL) {
-   CloseHandle(process_l);
+  if (process != NULL) {
+   CloseHandle(process);
   }
   if (thread != NULL) {
     CloseHandle(thread);
@@ -2537,7 +2545,20 @@ static Handle<Value> DebugPause(const Arguments& args) {
 }
 
 
-char** ProcessInit(int argc, char *argv[]) {
+static Handle<Value> DebugEnd(const Arguments& args) {
+  if (debugger_running) {
+    v8::Debug::DisableAgent();
+    debugger_running = false;
+  }
+
+  return Undefined();
+}
+
+
+char** Init(int argc, char *argv[]) {
+  // Initialize prog_start_time to get relative uptime.
+  uv_uptime(&prog_start_time);
+
   // Hack aroung with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
 
@@ -2577,10 +2598,47 @@ char** ProcessInit(int argc, char *argv[]) {
 #ifdef __POSIX__
   // Ignore SIGPIPE
   RegisterSignalHandler(SIGPIPE, SIG_IGN);
-  // TODO decide whether to handle these signals per-process or per-thread
   RegisterSignalHandler(SIGINT, SignalExit);
   RegisterSignalHandler(SIGTERM, SignalExit);
 #endif // __POSIX__
+
+  uv_prepare_init(uv_default_loop(), &prepare_tick_watcher);
+  uv_prepare_start(&prepare_tick_watcher, PrepareTick);
+  uv_unref(uv_default_loop());
+
+  uv_check_init(uv_default_loop(), &check_tick_watcher);
+  uv_check_start(&check_tick_watcher, node::CheckTick);
+  uv_unref(uv_default_loop());
+
+  uv_idle_init(uv_default_loop(), &tick_spinner);
+  uv_unref(uv_default_loop());
+
+  uv_check_init(uv_default_loop(), &gc_check);
+  uv_check_start(&gc_check, node::Check);
+  uv_unref(uv_default_loop());
+
+  uv_idle_init(uv_default_loop(), &gc_idle);
+  uv_unref(uv_default_loop());
+
+  uv_timer_init(uv_default_loop(), &gc_timer);
+  uv_unref(uv_default_loop());
+
+  V8::SetFatalErrorHandler(node::OnFatalError);
+
+  // Fetch a reference to the main isolate, so we have a reference to it
+  // even when we need it to access it from another (debugger) thread.
+  node_isolate = Isolate::GetCurrent();
+
+  // If the --debug flag was specified then initialize the debug thread.
+  if (use_debug_agent) {
+    EnableDebug(debug_wait_connect);
+  } else {
+#ifdef _WIN32
+    RegisterDebugSignalHandler();
+#else // Posix
+    RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
+#endif // __POSIX__
+  }
 
   return argv;
 }
@@ -2600,112 +2658,39 @@ void EmitExit(v8::Handle<v8::Object> process_l) {
 }
 
 
-// Create a new isolate with node::Isolate::New() before you call this function
-void StartThread(node::Isolate* isolate,
-                 int argc,
-                 char** argv) {
-  HandleScope scope;
-
-  assert(node::Isolate::GetCurrent() == isolate);
-
-  uv_loop_t* loop = isolate->GetLoop();
-  uv_prepare_init(loop, &prepare_tick_watcher);
-  uv_prepare_start(&prepare_tick_watcher, PrepareTick);
-  uv_unref(loop);
-
-  uv_check_init(loop, &check_tick_watcher);
-  uv_check_start(&check_tick_watcher, node::CheckTick);
-  uv_unref(loop);
-
-  uv_idle_init(loop, &tick_spinner);
-  uv_unref(loop);
-
-  uv_check_init(loop, &gc_check);
-  uv_check_start(&gc_check, node::Check);
-  uv_unref(loop);
-
-  uv_idle_init(loop, &gc_idle);
-  uv_unref(loop);
-
-  uv_timer_init(loop, &gc_timer);
-  uv_unref(loop);
-
-  V8::SetFatalErrorHandler(node::OnFatalError);
-
-  // Set the callback DebugMessageDispatch which is called from the debug
-  // thread.
-  v8::Debug::SetDebugMessageDispatchHandler(node::DebugMessageDispatch);
-
-  // Initialize the async watcher. DebugMessageCallback() is called from the
-  // main thread to execute a random bit of javascript - which will give V8
-  // control so it can handle whatever new message had been received on the
-  // debug thread.
-  uv_async_init(loop, &debug_watcher, node::DebugMessageCallback);
-  // unref it so that we exit the event loop despite it being active.
-  uv_unref(loop);
-
-  // Fetch a reference to the main isolate, so we have a reference to it
-  // even when we need it to access it from another (debugger) thread.
-  node_isolate = v8::Isolate::GetCurrent();
-
-  // If the --debug flag was specified then initialize the debug thread.
-  if (use_debug_agent) {
-    EnableDebug(debug_wait_connect);
-  } else {
-#ifdef _WIN32
-    RegisterDebugSignalHandler();
-#else // Posix
-    RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
-#endif // __POSIX__
-  }
-
-  Handle<Object> process_l = SetupProcessObject(argc, argv);
-
-  process_l->Set(String::NewSymbol("tid"),
-                 Integer::NewFromUnsigned(isolate->id_));
-
-  // FIXME crashes with "CHECK(heap->isolate() == Isolate::Current()) failed"
-  //v8_typed_array::AttachBindings(v8::Context::GetCurrent()->Global());
-
-  // Initialize prog_start_time to get relative uptime.
-  uv_uptime(&prog_start_time);
-
-  // Create all the objects, load modules, do everything.
-  // so your next reading stop should be node::Load()!
-  Load(process_l);
-
-  // All our arguments are loaded. We've evaluated all of the scripts. We
-  // might even have created TCP servers. Now we enter the main eventloop. If
-  // there are no watchers on the loop (except for the ones that were
-  // uv_unref'd) then this function exits. As long as there are active
-  // watchers, it blocks.
-  uv_run(loop);
-
-  EmitExit(process_l);
-}
-
-
 int Start(int argc, char *argv[]) {
   // This needs to run *before* V8::Initialize()
-  argv = ProcessInit(argc, argv);
+  argv = Init(argc, argv);
 
-  v8::V8::Initialize();
-  v8::HandleScope handle_scope;
+  V8::Initialize();
+  Persistent<Context> context;
+  {
+    Locker locker;
+    HandleScope handle_scope;
 
-  // Get the id of the this, the main, thread.
-  uv_thread_t tid = uv_thread_self();
+    // Create the one and only Context.
+    Persistent<Context> context = Context::New();
+    Context::Scope context_scope(context);
 
-  // Create the main node::Isolate object
-  node::Isolate::Initialize();
-  Isolate* isolate = new node::Isolate();
-  isolate->tid_ = tid;
-  isolate->Enter();
-  StartThread(isolate, argc, argv);
-  isolate->Dispose();
+    Handle<Object> process_l = SetupProcessObject(argc, argv);
+    v8_typed_array::AttachBindings(context->Global());
 
-  // The main thread/isolate is done. Wait for all other thread/isolates to
-  // finish.
-  node::Isolate::JoinAll();
+    // Create all the objects, load modules, do everything.
+    // so your next reading stop should be node::Load()!
+    Load(process_l);
+
+    // All our arguments are loaded. We've evaluated all of the scripts. We
+    // might even have created TCP servers. Now we enter the main eventloop. If
+    // there are no watchers on the loop (except for the ones that were
+    // uv_unref'd) then this function exits. As long as there are active
+    // watchers, it blocks.
+    uv_run(uv_default_loop());
+
+    EmitExit(process_l);
+#ifndef NDEBUG
+    context.Dispose();
+#endif
+  }
 
 #ifndef NDEBUG
   // Clean up.

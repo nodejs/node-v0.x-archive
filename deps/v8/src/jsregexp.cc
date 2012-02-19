@@ -704,7 +704,7 @@ Handle<Object> RegExpImpl::IrregexpExec(Handle<JSRegExp> jsregexp,
 //   the virtualized backtrack stack and some register changes.  When a node is
 //   to be emitted it can flush the Trace or update it.  Flushing the Trace
 //   will emit code to bring the actual state into line with the virtual state.
-//   Avoiding flushing the state can postpone some work (eg updates of capture
+//   Avoiding flushing the state can postpone some work (e.g. updates of capture
 //   registers).  Postponing work can save time when executing the regular
 //   expression since it may be found that the work never has to be done as a
 //   failure to match can occur.  In addition it is much faster to jump to a
@@ -2636,7 +2636,7 @@ void TextNode::MakeCaseIndependent(bool is_ascii) {
     TextElement elm = elms_->at(i);
     if (elm.type == TextElement::CHAR_CLASS) {
       RegExpCharacterClass* cc = elm.data.u_char_class;
-      // None of the standard character classses is different in the case
+      // None of the standard character classes is different in the case
       // independent case and it slows us down if we don't know that.
       if (cc->is_standard()) continue;
       ZoneList<CharacterRange>* ranges = cc->ranges();

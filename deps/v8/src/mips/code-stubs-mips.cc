@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -157,21 +157,19 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
   // Load the function from the stack.
   __ lw(a3, MemOperand(sp, 0));
 
-  // Setup the object header.
-  __ LoadRoot(a2, Heap::kFunctionContextMapRootIndex);
-  __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
+  // Set up the object header.
+  __ LoadRoot(a1, Heap::kFunctionContextMapRootIndex);
   __ li(a2, Operand(Smi::FromInt(length)));
   __ sw(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
+  __ sw(a1, FieldMemOperand(v0, HeapObject::kMapOffset));
 
-  // Setup the fixed slots.
+  // Set up the fixed slots, copy the global object from the previous context.
+  __ lw(a2, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
   __ li(a1, Operand(Smi::FromInt(0)));
   __ sw(a3, MemOperand(v0, Context::SlotOffset(Context::CLOSURE_INDEX)));
   __ sw(cp, MemOperand(v0, Context::SlotOffset(Context::PREVIOUS_INDEX)));
   __ sw(a1, MemOperand(v0, Context::SlotOffset(Context::EXTENSION_INDEX)));
-
-  // Copy the global object from the previous context.
-  __ lw(a1, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
-  __ sw(a1, MemOperand(v0, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  __ sw(a2, MemOperand(v0, Context::SlotOffset(Context::GLOBAL_INDEX)));
 
   // Initialize the rest of the slots to undefined.
   __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
@@ -208,7 +206,7 @@ void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
   // Load the serialized scope info from the stack.
   __ lw(a1, MemOperand(sp, 1 * kPointerSize));
 
-  // Setup the object header.
+  // Set up the object header.
   __ LoadRoot(a2, Heap::kBlockContextMapRootIndex);
   __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
   __ li(a2, Operand(Smi::FromInt(length)));
@@ -229,14 +227,12 @@ void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
   __ lw(a3, ContextOperand(a3, Context::CLOSURE_INDEX));
   __ bind(&after_sentinel);
 
-  // Setup the fixed slots.
+  // Set up the fixed slots, copy the global object from the previous context.
+  __ lw(a2, ContextOperand(cp, Context::GLOBAL_INDEX));
   __ sw(a3, ContextOperand(v0, Context::CLOSURE_INDEX));
   __ sw(cp, ContextOperand(v0, Context::PREVIOUS_INDEX));
   __ sw(a1, ContextOperand(v0, Context::EXTENSION_INDEX));
-
-  // Copy the global object from the previous context.
-  __ lw(a1, ContextOperand(cp, Context::GLOBAL_INDEX));
-  __ sw(a1, ContextOperand(v0, Context::GLOBAL_INDEX));
+  __ sw(a2, ContextOperand(v0, Context::GLOBAL_INDEX));
 
   // Initialize the rest of the slots to the hole value.
   __ LoadRoot(a1, Heap::kTheHoleValueRootIndex);
@@ -592,7 +588,9 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
 
   Label is_smi, done;
 
-  __ JumpIfSmi(object, &is_smi);
+  // Smi-check
+  __ UntagAndJumpIfSmi(scratch1, object, &is_smi);
+  // Heap number check
   __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_number);
 
   // Handle loading a double from a heap number.
@@ -619,7 +617,6 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // Convert smi to double using FPU instructions.
-    __ SmiUntag(scratch1, object);
     __ mtc1(scratch1, dst);
     __ cvt_d_w(dst, dst);
     if (destination == kCoreRegisters) {
@@ -654,11 +651,10 @@ void FloatingPointHelper::ConvertNumberToInt32(MacroAssembler* masm,
                            Heap::kHeapNumberMapRootIndex,
                            "HeapNumberMap register clobbered.");
   }
-  Label is_smi;
   Label done;
   Label not_in_int32_range;
 
-  __ JumpIfSmi(object, &is_smi);
+  __ UntagAndJumpIfSmi(dst, object, &done);
   __ lw(scratch1, FieldMemOperand(object, HeapNumber::kMapOffset));
   __ Branch(not_number, ne, scratch1, Operand(heap_number_map));
   __ ConvertToInt32(object,
@@ -678,10 +674,6 @@ void FloatingPointHelper::ConvertNumberToInt32(MacroAssembler* masm,
                                  scratch2,
                                  scratch3);
 
-  __ jmp(&done);
-
-  __ bind(&is_smi);
-  __ SmiUntag(dst, object);
   __ bind(&done);
 }
 
@@ -726,7 +718,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
     __ Subu(int_scratch, zero_reg, int_scratch);
     __ bind(&skip_sub);
 
-    // Get mantisssa[51:20].
+    // Get mantissa[51:20].
 
     // Get the position of the first set bit.
     __ clz(dst1, int_scratch);
@@ -863,10 +855,7 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
 
   Label done;
 
-  // Untag the object into the destination register.
-  __ SmiUntag(dst, object);
-  // Just return if the object is a smi.
-  __ JumpIfSmi(object, &done);
+  __ UntagAndJumpIfSmi(dst, object, &done);
 
   if (FLAG_debug_code) {
     __ AbortIfNotRootValue(heap_number_map,
@@ -971,7 +960,7 @@ void FloatingPointHelper::DoubleIs32BitInteger(MacroAssembler* masm,
   // non zero bits left. So we need the (30 - exponent) last bits of the
   // 31 higher bits of the mantissa to be null.
   // Because bits [21:0] are null, we can check instead that the
-  // (32 - exponent) last bits of the 32 higher bits of the mantisssa are null.
+  // (32 - exponent) last bits of the 32 higher bits of the mantissa are null.
 
   // Get the 32 higher bits of the mantissa in dst.
   __ Ext(dst,
@@ -3605,7 +3594,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
   const Register scratch = t5;
   const Register scratch2 = t3;
 
-  Label call_runtime, done, exponent_not_smi, int_exponent;
+  Label call_runtime, done, int_exponent;
   if (exponent_type_ == ON_STACK) {
     Label base_is_smi, unpack_exponent;
     // The exponent and base are supplied as arguments on the stack.
@@ -3616,7 +3605,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
 
     __ LoadRoot(heapnumbermap, Heap::kHeapNumberMapRootIndex);
 
-    __ JumpIfSmi(base, &base_is_smi);
+    __ UntagAndJumpIfSmi(scratch, base, &base_is_smi);
     __ lw(scratch, FieldMemOperand(base, JSObject::kMapOffset));
     __ Branch(&call_runtime, ne, scratch, Operand(heapnumbermap));
 
@@ -3624,27 +3613,20 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ jmp(&unpack_exponent);
 
     __ bind(&base_is_smi);
-    __ SmiUntag(base);
-    __ mtc1(base, single_scratch);
+    __ mtc1(scratch, single_scratch);
     __ cvt_d_w(double_base, single_scratch);
     __ bind(&unpack_exponent);
 
-    __ JumpIfNotSmi(exponent, &exponent_not_smi);
-    __ SmiUntag(exponent);
-    __ jmp(&int_exponent);
+    __ UntagAndJumpIfSmi(scratch, exponent, &int_exponent);
 
-    __ bind(&exponent_not_smi);
     __ lw(scratch, FieldMemOperand(exponent, JSObject::kMapOffset));
     __ Branch(&call_runtime, ne, scratch, Operand(heapnumbermap));
     __ ldc1(double_exponent,
             FieldMemOperand(exponent, HeapNumber::kValueOffset));
   } else if (exponent_type_ == TAGGED) {
     // Base is already in double_base.
-    __ JumpIfNotSmi(exponent, &exponent_not_smi);
-    __ SmiUntag(exponent);
-    __ jmp(&int_exponent);
+    __ UntagAndJumpIfSmi(scratch, exponent, &int_exponent);
 
-    __ bind(&exponent_not_smi);
     __ ldc1(double_exponent,
             FieldMemOperand(exponent, HeapNumber::kValueOffset));
   }
@@ -3724,13 +3706,20 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ jmp(&done);
 
     __ bind(&int_exponent_convert);
-    __ mfc1(exponent, single_scratch);
+    __ mfc1(scratch, single_scratch);
   }
 
   // Calculate power with integer exponent.
   __ bind(&int_exponent);
 
-  __ mov(scratch, exponent);  // Back up exponent.
+  // Get two copies of exponent in the registers scratch and exponent.
+  if (exponent_type_ == INTEGER) {
+    __ mov(scratch, exponent);
+  } else {
+    // Exponent has previously been stored into scratch as untagged integer.
+    __ mov(exponent, scratch);
+  }
+
   __ mov_d(double_scratch, double_base);  // Back up base.
   __ Move(double_result, 1.0);
 
@@ -4005,7 +3994,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   FrameScope scope(masm, StackFrame::MANUAL);
   __ EnterExitFrame(save_doubles_);
 
-  // Setup argc and the builtin function in callee-saved registers.
+  // Set up argc and the builtin function in callee-saved registers.
   __ mov(s0, a0);
   __ mov(s2, a1);
 
@@ -4061,7 +4050,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Registers:
   // a0: entry address
   // a1: function
-  // a2: reveiver
+  // a2: receiver
   // a3: argc
   //
   // Stack:
@@ -4097,13 +4086,13 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
                                       isolate)));
   __ lw(t0, MemOperand(t0));
   __ Push(t3, t2, t1, t0);
-  // Setup frame pointer for the frame to be pushed.
+  // Set up frame pointer for the frame to be pushed.
   __ addiu(fp, sp, -EntryFrameConstants::kCallerFPOffset);
 
   // Registers:
   // a0: entry_address
   // a1: function
-  // a2: reveiver_pointer
+  // a2: receiver_pointer
   // a3: argc
   // s0: argv
   //
@@ -4151,7 +4140,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Invoke: Link this frame into the handler chain.  There's only one
   // handler block in this code object, so its index is 0.
   __ bind(&invoke);
-  __ PushTryHandler(IN_JS_ENTRY, JS_ENTRY_HANDLER, 0);
+  __ PushTryHandler(StackHandler::JS_ENTRY, 0);
   // If an exception not caught by another handler occurs, this handler
   // returns control to the code after the bal(&invoke) above, which
   // restores all kCalleeSaved registers (including cp and fp) to their
@@ -4170,7 +4159,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Registers:
   // a0: entry_address
   // a1: function
-  // a2: reveiver_pointer
+  // a2: receiver_pointer
   // a3: argc
   // s0: argv
   //
@@ -4252,7 +4241,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   const Register inline_site = t5;
   const Register scratch = a2;
 
-  const int32_t kDeltaToLoadBoolResult = 4 * kPointerSize;
+  const int32_t kDeltaToLoadBoolResult = 5 * kPointerSize;
 
   Label slow, loop, is_instance, is_not_instance, not_js_object;
 
@@ -4296,11 +4285,12 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
     // Patch the (relocated) inlined map check.
 
     // The offset was stored in t0 safepoint slot.
-    // (See LCodeGen::DoDeferredLInstanceOfKnownGlobal)
+    // (See LCodeGen::DoDeferredLInstanceOfKnownGlobal).
     __ LoadFromSafepointRegisterSlot(scratch, t0);
     __ Subu(inline_site, ra, scratch);
-    // Patch the relocated value to map.
-    __ PatchRelocatedValue(inline_site, scratch, map);
+    // Get the map location in scratch and patch it.
+    __ GetRelocatedValue(inline_site, scratch, v1);  // v1 used as scratch.
+    __ sw(map, FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
   }
 
   // Register mapping: a3 is object map and t0 is function prototype.
@@ -4584,7 +4574,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
     __ sw(a3, FieldMemOperand(v0, i));
   }
 
-  // Setup the callee in-object property.
+  // Set up the callee in-object property.
   STATIC_ASSERT(Heap::kArgumentsCalleeIndex == 1);
   __ lw(a3, MemOperand(sp, 2 * kPointerSize));
   const int kCalleeOffset = JSObject::kHeaderSize +
@@ -4597,7 +4587,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
       Heap::kArgumentsLengthIndex * kPointerSize;
   __ sw(a2, FieldMemOperand(v0, kLengthOffset));
 
-  // Setup the elements pointer in the allocated arguments object.
+  // Set up the elements pointer in the allocated arguments object.
   // If we allocated a parameter map, t0 will point there, otherwise
   // it will point to the backing store.
   __ Addu(t0, v0, Operand(Heap::kArgumentsObjectSize));
@@ -4699,7 +4689,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ Ret();
 
   // Do the runtime call to allocate the arguments object.
-  // a2 = argument count (taggged)
+  // a2 = argument count (tagged)
   __ bind(&runtime);
   __ sw(a2, MemOperand(sp, 0 * kPointerSize));  // Patch argument count.
   __ TailCallRuntime(Runtime::kNewArgumentsFast, 3, 1);
@@ -4774,7 +4764,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   // Get the parameters pointer from the stack.
   __ lw(a2, MemOperand(sp, 1 * kPointerSize));
 
-  // Setup the elements pointer in the allocated arguments object and
+  // Set up the elements pointer in the allocated arguments object and
   // initialize the header in the elements fixed array.
   __ Addu(t0, v0, Operand(Heap::kArgumentsObjectSizeStrict));
   __ sw(t0, FieldMemOperand(v0, JSObject::kElementsOffset));
@@ -4786,7 +4776,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
 
   // Copy the fixed array slots.
   Label loop;
-  // Setup t0 to point to the first array slot.
+  // Set up t0 to point to the first array slot.
   __ Addu(t0, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ bind(&loop);
   // Pre-decrement a2 with kPointerSize on each iteration.
@@ -5006,9 +4996,9 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   STATIC_ASSERT(kAsciiStringTag == 4);
   STATIC_ASSERT(kTwoByteStringTag == 0);
   // Find the code object based on the assumptions above.
-  __ And(a0, a0, Operand(kStringEncodingMask));  // Non-zero for ascii.
+  __ And(a0, a0, Operand(kStringEncodingMask));  // Non-zero for ASCII.
   __ lw(t9, FieldMemOperand(regexp_data, JSRegExp::kDataAsciiCodeOffset));
-  __ sra(a3, a0, 2);  // a3 is 1 for ascii, 0 for UC16 (usyed below).
+  __ sra(a3, a0, 2);  // a3 is 1 for ASCII, 0 for UC16 (used below).
   __ lw(t1, FieldMemOperand(regexp_data, JSRegExp::kDataUC16CodeOffset));
   __ movz(t9, t1, a0);  // If UC16 (a0 is 0), replace t9 w/kDataUC16CodeOffset.
 
@@ -5297,11 +5287,11 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
 
   // Set input, index and length fields from arguments.
   __ lw(a1, MemOperand(sp, kPointerSize * 0));
+  __ lw(a2, MemOperand(sp, kPointerSize * 1));
+  __ lw(t2, MemOperand(sp, kPointerSize * 2));
   __ sw(a1, FieldMemOperand(v0, JSRegExpResult::kInputOffset));
-  __ lw(a1, MemOperand(sp, kPointerSize * 1));
-  __ sw(a1, FieldMemOperand(v0, JSRegExpResult::kIndexOffset));
-  __ lw(a1, MemOperand(sp, kPointerSize * 2));
-  __ sw(a1, FieldMemOperand(v0, JSArray::kLengthOffset));
+  __ sw(a2, FieldMemOperand(v0, JSRegExpResult::kIndexOffset));
+  __ sw(t2, FieldMemOperand(v0, JSArray::kLengthOffset));
 
   // Fill out the elements FixedArray.
   // v0: JSArray, tagged.
@@ -5340,24 +5330,49 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
 }
 
 
-void CallFunctionStub::FinishCode(Handle<Code> code) {
-  code->set_has_function_cache(false);
-}
+static void GenerateRecordCallTarget(MacroAssembler* masm) {
+  // Cache the called function in a global property cell.  Cache states
+  // are uninitialized, monomorphic (indicated by a JSFunction), and
+  // megamorphic.
+  // a1 : the function to call
+  // a2 : cache cell for call target
+  Label done;
 
+  ASSERT_EQ(*TypeFeedbackCells::MegamorphicSentinel(masm->isolate()),
+            masm->isolate()->heap()->undefined_value());
+  ASSERT_EQ(*TypeFeedbackCells::UninitializedSentinel(masm->isolate()),
+            masm->isolate()->heap()->the_hole_value());
 
-void CallFunctionStub::Clear(Heap* heap, Address address) {
-  UNREACHABLE();
-}
+  // Load the cache state into a3.
+  __ lw(a3, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
 
+  // A monomorphic cache hit or an already megamorphic state: invoke the
+  // function without changing the state.
+  __ Branch(&done, eq, a3, Operand(a1));
+  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+  __ Branch(&done, eq, a3, Operand(at));
 
-Object* CallFunctionStub::GetCachedValue(Address address) {
-  UNREACHABLE();
-  return NULL;
+  // A monomorphic miss (i.e, here the cache is not uninitialized) goes
+  // megamorphic.
+  __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+  __ Branch(&done, eq, a3, Operand(at));
+  // MegamorphicSentinel is an immortal immovable object (undefined) so no
+  // write-barrier is needed.
+  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+  __ sw(at, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  __ Branch(&done);
+
+  // An uninitialized cache is patched with the function.
+  __ sw(a1, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  // No need for a write barrier here - cells are rescanned.
+
+  __ bind(&done);
 }
 
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
   // a1 : the function to call
+  // a2 : cache cell for call target
   Label slow, non_function;
 
   // The receiver might implicitly be the global object. This is
@@ -5425,9 +5440,51 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   // of the original receiver from the call site).
   __ bind(&non_function);
   __ sw(a1, MemOperand(sp, argc_ * kPointerSize));
-  __ li(a0, Operand(argc_));  // Setup the number of arguments.
+  __ li(a0, Operand(argc_));  // Set up the number of arguments.
   __ mov(a2, zero_reg);
   __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
+  __ SetCallKind(t1, CALL_AS_METHOD);
+  __ Jump(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
+          RelocInfo::CODE_TARGET);
+}
+
+
+void CallConstructStub::Generate(MacroAssembler* masm) {
+  // a0 : number of arguments
+  // a1 : the function to call
+  // a2 : cache cell for call target
+  Label slow, non_function_call;
+
+  // Check that the function is not a smi.
+  __ JumpIfSmi(a1, &non_function_call);
+  // Check that the function is a JSFunction.
+  __ GetObjectType(a1, a3, a3);
+  __ Branch(&slow, ne, a3, Operand(JS_FUNCTION_TYPE));
+
+  if (RecordCallTarget()) {
+    GenerateRecordCallTarget(masm);
+  }
+
+  // Jump to the function-specific construct stub.
+  __ lw(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+  __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kConstructStubOffset));
+  __ Addu(at, a2, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ Jump(at);
+
+  // a0: number of arguments
+  // a1: called object
+  // a3: object type
+  Label do_call;
+  __ bind(&slow);
+  __ Branch(&non_function_call, ne, a3, Operand(JS_FUNCTION_PROXY_TYPE));
+  __ GetBuiltinEntry(a3, Builtins::CALL_FUNCTION_PROXY_AS_CONSTRUCTOR);
+  __ jmp(&do_call);
+
+  __ bind(&non_function_call);
+  __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
+  __ bind(&do_call);
+  // Set expected number of arguments to zero (not changing r0).
+  __ li(a2, Operand(0, RelocInfo::NONE));
   __ SetCallKind(t1, CALL_AS_METHOD);
   __ Jump(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
           RelocInfo::CODE_TARGET);
@@ -5924,11 +5981,15 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
 
 
 void StringHelper::GenerateHashInit(MacroAssembler* masm,
-                                      Register hash,
-                                      Register character) {
-  // hash = character + (character << 10);
-  __ sll(hash, character, 10);
+                                    Register hash,
+                                    Register character) {
+  // hash = seed + character + ((seed + character) << 10);
+  __ LoadRoot(hash, Heap::kHashSeedRootIndex);
+  // Untag smi seed and add the character.
+  __ SmiUntag(hash);
   __ addu(hash, hash, character);
+  __ sll(at, hash, 10);
+  __ addu(hash, hash, at);
   // hash ^= hash >> 6;
   __ srl(at, hash, 6);
   __ xor_(hash, hash, at);
@@ -5936,8 +5997,8 @@ void StringHelper::GenerateHashInit(MacroAssembler* masm,
 
 
 void StringHelper::GenerateHashAddCharacter(MacroAssembler* masm,
-                                              Register hash,
-                                              Register character) {
+                                            Register hash,
+                                            Register character) {
   // hash += character;
   __ addu(hash, hash, character);
   // hash += hash << 10;
@@ -5950,7 +6011,7 @@ void StringHelper::GenerateHashAddCharacter(MacroAssembler* masm,
 
 
 void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
-                                         Register hash) {
+                                       Register hash) {
   // hash += hash << 3;
   __ sll(at, hash, 3);
   __ addu(hash, hash, at);
@@ -5961,12 +6022,11 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
   __ sll(at, hash, 15);
   __ addu(hash, hash, at);
 
-  uint32_t kHashShiftCutOffMask = (1 << (32 - String::kHashShift)) - 1;
-  __ li(at, Operand(kHashShiftCutOffMask));
+  __ li(at, Operand(String::kHashBitMask));
   __ and_(hash, hash, at);
 
   // if (hash == 0) hash = 27;
-  __ ori(at, zero_reg, 27);
+  __ ori(at, zero_reg, StringHasher::kZeroHash);
   __ movz(hash, at, hash);
 }
 
@@ -5998,10 +6058,8 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // Utilize delay slots. SmiUntag doesn't emit a jump, everything else is
   // safe in this case.
-  __ JumpIfSmi(a2, &runtime, at, USE_DELAY_SLOT);
-  __ SmiUntag(a2);
-  __ JumpIfSmi(a3, &runtime, at, USE_DELAY_SLOT);
-  __ SmiUntag(a3);
+  __ UntagAndJumpIfSmi(a2, a2, &runtime);
+  __ UntagAndJumpIfSmi(a3, a3, &runtime);
 
   // Both a2 and a3 are untagged integers.
 
@@ -6030,7 +6088,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
 
   Label result_longer_than_two;
-  // Check for special case of two character ascii string, in which case
+  // Check for special case of two character ASCII string, in which case
   // we do a lookup in the symbol table first.
   __ li(t0, 2);
   __ Branch(&result_longer_than_two, gt, a2, Operand(t0));
@@ -6085,10 +6143,10 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   __ bind(&sliced_string);
   // Sliced string.  Fetch parent and correct start index by offset.
-  __ lw(t1, FieldMemOperand(v0, SlicedString::kOffsetOffset));
-  __ sra(t1, t1, 1);
-  __ Addu(a3, a3, t1);
+  __ lw(t0, FieldMemOperand(v0, SlicedString::kOffsetOffset));
   __ lw(t1, FieldMemOperand(v0, SlicedString::kParentOffset));
+  __ sra(t0, t0, 1);  // Add offset to index.
+  __ Addu(a3, a3, t0);
   // Update instance type.
   __ lw(a1, FieldMemOperand(t1, HeapObject::kMapOffset));
   __ lbu(a1, FieldMemOperand(a1, Map::kInstanceTypeOffset));
@@ -6161,7 +6219,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ And(t0, a1, Operand(kStringEncodingMask));
   __ Branch(&two_byte_sequential, eq, t0, Operand(zero_reg));
 
-  // Allocate and copy the resulting ascii string.
+  // Allocate and copy the resulting ASCII string.
   __ AllocateAsciiString(v0, a2, t0, t2, t3, &runtime);
 
   // Locate first character of substring to copy.
@@ -6488,7 +6546,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ bind(&longer_than_two);
   // Check if resulting string will be flat.
   __ Branch(&string_add_flat_result, lt, t2,
-           Operand(String::kMinNonFlatLength));
+           Operand(ConsString::kMinLength));
   // Handle exceptionally long strings in the runtime system.
   STATIC_ASSERT((String::kMaxLength & 0x80000000) == 0);
   ASSERT(IsPowerOf2(String::kMaxLength + 1));
@@ -6505,7 +6563,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   }
   Label non_ascii, allocated, ascii_data;
   STATIC_ASSERT(kTwoByteStringTag == 0);
-  // Branch to non_ascii if either string-encoding field is zero (non-ascii).
+  // Branch to non_ascii if either string-encoding field is zero (non-ASCII).
   __ And(t4, t0, Operand(t1));
   __ And(t4, t4, Operand(kStringEncodingMask));
   __ Branch(&non_ascii, eq, t4, Operand(zero_reg));
@@ -6540,7 +6598,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ Branch(&allocated);
 
   // We cannot encounter sliced strings or cons strings here since:
-  STATIC_ASSERT(SlicedString::kMinLength >= String::kMinNonFlatLength);
+  STATIC_ASSERT(SlicedString::kMinLength >= ConsString::kMinLength);
   // Handle creating a flat result from either external or sequential strings.
   // Locate the first characters' locations.
   // a0: first string

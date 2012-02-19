@@ -93,20 +93,27 @@ if (cmd === 'install') {
   copy([
     'deps/uv/include/ares.h',
     'deps/uv/include/ares_version.h'
-  ], 'include/node/c-ares/');
+  ], 'include/node/');
 
   // Copy binary file
   copy('out/Release/node', 'bin/node');
 
+  // Install node-waf
+  if (variables.node_install_waf == 'true') {
+    copy('tools/wafadmin', 'lib/node/');
+    copy('tools/node-waf', 'bin/node-waf');
+  }
+
   // Install npm (eventually)
   if (variables.node_install_npm == 'true') {
     copy('deps/npm', 'lib/node_modules/npm');
-    queue.push('ln -sF ../lib/node_modules/npm/bin/npm-cli.js ' +
+    queue.push('ln -sf ../lib/node_modules/npm/bin/npm-cli.js ' +
                path.join(node_prefix, 'bin/npm'));
   }
 } else {
   remove([
-     'bin/node', 'bin/npm', 'include/node/*', 'lib/node_modules'
+     'bin/node', 'bin/npm', 'bin/node-waf',
+     'include/node/*', 'lib/node_modules', 'lib/node'
   ]);
 }
 

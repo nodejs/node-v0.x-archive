@@ -1,22 +1,30 @@
-BUILDTYPE ?= Release
+-include config.mk
 
+BUILDTYPE ?= Release
+PYTHON ?= python
+
+# BUILDTYPE=Debug builds both release and debug builds. If you want to compile
+# just the debug build, run `make -C out BUILDTYPE=Debug` instead.
 ifeq ($(BUILDTYPE),Release)
 all: out/Makefile node
 else
-all: out/Makefile node_g
+all: out/Makefile node node_g
 endif
 
 # The .PHONY is needed to ensure that we recursively use the out/Makefile
 # to check for changes.
 .PHONY: node node_g
 
-node:
+node: config.gypi
 	$(MAKE) -C out BUILDTYPE=Release
 	ln -fs out/Release/node node
 
-node_g:
+node_g: config.gypi
 	$(MAKE) -C out BUILDTYPE=Debug
 	ln -fs out/Debug/node node_g
+
+config.gypi: configure
+	./configure
 
 out/Debug/node:
 	$(MAKE) -C out BUILDTYPE=Debug
@@ -31,48 +39,51 @@ uninstall:
 	out/Release/node tools/installer.js ./config.gypi uninstall
 
 clean:
-	-rm -rf out/Makefile node node_g out/**/*.o  out/**/*.a out/$(BUILDTYPE)/node
+	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node
+	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
 
 distclean:
 	-rm -rf out
-	-rm config.gypi
+	-rm -f config.gypi
+	-rm -f config.mk
 
 test: all
-	python tools/test.py --mode=release simple message
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
+	$(PYTHON) tools/test.py --mode=release simple message
 
 test-http1: all
-	python tools/test.py --mode=release --use-http1 simple message
+	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
 
 test-valgrind: all
-	python tools/test.py --mode=release --valgrind simple message
+	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
 test-all: all
 	python tools/test.py --mode=debug,release
 	$(MAKE) test-npm
 
 test-all-http1: all
-	python tools/test.py --mode=debug,release --use-http1
+	$(PYTHON) tools/test.py --mode=debug,release --use-http1
 
 test-all-valgrind: all
-	python tools/test.py --mode=debug,release --valgrind
+	$(PYTHON) tools/test.py --mode=debug,release --valgrind
 
 test-release: all
-	python tools/test.py --mode=release
+	$(PYTHON) tools/test.py --mode=release
 
 test-debug: all
-	python tools/test.py --mode=debug
+	$(PYTHON) tools/test.py --mode=debug
 
 test-message: all
-	python tools/test.py message
+	$(PYTHON) tools/test.py message
 
 test-simple: all
-	python tools/test.py simple
+	$(PYTHON) tools/test.py simple
 
 test-pummel: all
-	python tools/test.py pummel
+	$(PYTHON) tools/test.py pummel
 
 test-internet: all
-	python tools/test.py internet
+	$(PYTHON) tools/test.py internet
 
 test-npm: node
 	./node deps/npm/test/run.js
@@ -83,9 +94,11 @@ test-npm-publish: node
 apidoc_sources = $(wildcard doc/api/*.markdown)
 apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html))
 
-apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets out/doc/about out/doc/community out/doc/logos
+apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets out/doc/about out/doc/community out/doc/logos out/doc/images
 
 apiassets = $(subst api_assets,api/assets,$(addprefix out/,$(wildcard doc/api_assets/*)))
+
+doc_images = $(addprefix out/,$(wildcard doc/images/* doc/*.jpg doc/*.png))
 
 website_files = \
 	out/doc/index.html    \
@@ -94,26 +107,15 @@ website_files = \
 	out/doc/sh_main.js    \
 	out/doc/sh_javascript.min.js \
 	out/doc/sh_vim-dark.css \
-	out/doc/logo.png      \
-	out/doc/sponsored.png \
+	out/doc/sh.css \
 	out/doc/favicon.ico   \
 	out/doc/pipe.css \
 	out/doc/about/index.html \
-	out/doc/close-downloads.png \
 	out/doc/community/index.html \
-	out/doc/community/not-invented-here.png \
-	out/doc/download-logo.png \
-	out/doc/ebay-logo.png \
-	out/doc/footer-logo.png \
-	out/doc/icons.png \
-	out/doc/linkedin-logo.png \
 	out/doc/logos/index.html \
-	out/doc/microsoft-logo.png \
-	out/doc/platform-icons.png \
-	out/doc/ryan-speaker.jpg \
-	out/doc/yahoo-logo.png
+	$(doc_images)
 
-doc: out/Release/node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
+doc: node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -122,9 +124,9 @@ out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
 
 out/doc/%: doc/%
-	cp $< $@
+	cp -r $< $@
 
-out/doc/api/%.html: doc/api/%.markdown out/Release/node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
+out/doc/api/%.html: doc/api/%.markdown node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
 	out/Release/node tools/doctool/doctool.js doc/template.html $< > $@
 
 out/doc/%:
@@ -138,20 +140,51 @@ docopen: out/doc/api/all.html
 docclean:
 	-rm -rf out/doc
 
-VERSION=$(shell git describe)
+VERSION=v$(shell $(PYTHON) tools/getnodeversion.py)
 TARNAME=node-$(VERSION)
+TARBALL=$(TARNAME).tar.gz
+PKG=out/$(TARNAME).pkg
+packagemaker=/Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
 
-#dist: doc/node.1 doc/api
-dist: doc
+dist: doc $(TARBALL) $(PKG)
+
+PKGDIR=out/dist-osx
+
+pkg: $(PKG)
+
+$(PKG):
+	-rm -rf $(PKGDIR)
+	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot
+	$(MAKE) install
+	$(packagemaker) \
+		--id "org.nodejs.NodeJS-$(VERSION)" \
+		--doc tools/osx-pkg.pmdoc \
+		--out $(PKG)
+
+$(TARBALL): node out/doc
+	@if [ $(shell ./node --version) = "$(VERSION)" ]; then \
+		exit 0; \
+	else \
+	  echo "" >&2 ; \
+		echo "$(shell ./node --version) doesn't match $(VERSION)." >&2 ; \
+	  echo "Did you remember to update src/node_version.cc?" >&2 ; \
+	  echo "" >&2 ; \
+		exit 1 ; \
+	fi
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
 	cp -r out/doc/api $(TARNAME)/doc/api
 	rm -rf $(TARNAME)/deps/v8/test # too big
-	rm -rf $(TARNAME)/doc/logos # too big
+	rm -rf $(TARNAME)/doc/images # too big
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
 	gzip -f -9 $(TARNAME).tar
+
+dist-upload: $(TARBALL) $(PKG)
+	ssh node@nodejs.org mkdir -p web/nodejs.org/dist/$(VERSION)
+	scp $(TARBALL) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARBALL)
+	scp $(PKG) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARNAME).pkg
 
 bench:
 	 benchmark/http_simple_bench.sh
@@ -162,11 +195,11 @@ bench-idle:
 	./node benchmark/idle_clients.js &
 
 jslint:
-	PYTHONPATH=tools/closure_linter/ python tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/ --exclude_files lib/punycode.js
 
 cpplint:
-	@python tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
+	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload pkg

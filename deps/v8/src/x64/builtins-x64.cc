@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -73,49 +73,14 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
 }
 
 
-void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
+static void Generate_JSConstructStubHelper(MacroAssembler* masm,
+                                           bool is_api_function,
+                                           bool count_constructions) {
   // ----------- S t a t e -------------
   //  -- rax: number of arguments
   //  -- rdi: constructor function
   // -----------------------------------
 
-  Label slow, non_function_call;
-  // Check that function is not a smi.
-  __ JumpIfSmi(rdi, &non_function_call);
-  // Check that function is a JSFunction.
-  __ CmpObjectType(rdi, JS_FUNCTION_TYPE, rcx);
-  __ j(not_equal, &slow);
-
-  // Jump to the function-specific construct stub.
-  __ movq(rbx, FieldOperand(rdi, JSFunction::kSharedFunctionInfoOffset));
-  __ movq(rbx, FieldOperand(rbx, SharedFunctionInfo::kConstructStubOffset));
-  __ lea(rbx, FieldOperand(rbx, Code::kHeaderSize));
-  __ jmp(rbx);
-
-  // rdi: called object
-  // rax: number of arguments
-  // rcx: object map
-  Label do_call;
-  __ bind(&slow);
-  __ CmpInstanceType(rcx, JS_FUNCTION_PROXY_TYPE);
-  __ j(not_equal, &non_function_call);
-  __ GetBuiltinEntry(rdx, Builtins::CALL_FUNCTION_PROXY_AS_CONSTRUCTOR);
-  __ jmp(&do_call);
-
-  __ bind(&non_function_call);
-  __ GetBuiltinEntry(rdx, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
-  __ bind(&do_call);
-  // Set expected number of arguments to zero (not changing rax).
-  __ Set(rbx, 0);
-  __ SetCallKind(rcx, CALL_AS_METHOD);
-  __ Jump(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
-          RelocInfo::CODE_TARGET);
-}
-
-
-static void Generate_JSConstructStubHelper(MacroAssembler* masm,
-                                           bool is_api_function,
-                                           bool count_constructions) {
   // Should never count constructions for api objects.
   ASSERT(!is_api_function || !count_constructions);
 
@@ -337,7 +302,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ push(rbx);
     __ push(rbx);
 
-    // Setup pointer to last argument.
+    // Set up pointer to last argument.
     __ lea(rbx, Operand(rbp, StandardFrameConstants::kCallerSPOffset));
 
     // Copy arguments and receiver to the expression stack.
@@ -515,8 +480,8 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // Invoke the code.
     if (is_construct) {
       // Expects rdi to hold function pointer.
-      __ Call(masm->isolate()->builtins()->JSConstructCall(),
-              RelocInfo::CODE_TARGET);
+      CallConstructStub stub(NO_CALL_FUNCTION_FLAGS);
+      __ CallStub(&stub);
     } else {
       ParameterCount actual(rax);
       // Function must be in rdi.
@@ -1007,9 +972,7 @@ static void AllocateEmptyJSArray(MacroAssembler* masm,
   const int initial_capacity = JSArray::kPreallocatedArrayElements;
   STATIC_ASSERT(initial_capacity >= 0);
 
-  // Load the initial map from the array function.
-  __ movq(scratch1, FieldOperand(array_function,
-                                 JSFunction::kPrototypeOrInitialMapOffset));
+  __ LoadInitialArrayMap(array_function, scratch2, scratch1);
 
   // Allocate the JSArray object together with space for a fixed array with the
   // requested elements.
@@ -1108,10 +1071,7 @@ static void AllocateJSArray(MacroAssembler* masm,
                             Register scratch,
                             bool fill_with_hole,
                             Label* gc_required) {
-  // Load the initial map from the array function.
-  __ movq(elements_array,
-          FieldOperand(array_function,
-                       JSFunction::kPrototypeOrInitialMapOffset));
+  __ LoadInitialArrayMap(array_function, scratch, elements_array);
 
   if (FLAG_debug_code) {  // Assert that array size is not zero.
     __ testq(array_size, array_size);
@@ -1198,8 +1158,9 @@ static void AllocateJSArray(MacroAssembler* masm,
 // Both registers are preserved by this code so no need to differentiate between
 // a construct call and a normal call.
 static void ArrayNativeCode(MacroAssembler* masm,
-                            Label *call_generic_code) {
-  Label argc_one_or_more, argc_two_or_more, empty_array, not_empty_array;
+                            Label* call_generic_code) {
+  Label argc_one_or_more, argc_two_or_more, empty_array, not_empty_array,
+      has_non_smi_element;
 
   // Check for array construction with zero arguments.
   __ testq(rax, rax);
@@ -1306,7 +1267,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
   __ bind(&loop);
   __ movq(kScratchRegister, Operand(r9, rcx, times_pointer_size, 0));
   if (FLAG_smi_only_arrays) {
-    __ JumpIfNotSmi(kScratchRegister, call_generic_code);
+    __ JumpIfNotSmi(kScratchRegister, &has_non_smi_element);
   }
   __ movq(Operand(rdx, 0), kScratchRegister);
   __ addq(rdx, Immediate(kPointerSize));
@@ -1324,6 +1285,45 @@ static void ArrayNativeCode(MacroAssembler* masm,
   __ push(rcx);
   __ movq(rax, rbx);
   __ ret(0);
+
+  __ bind(&has_non_smi_element);
+  __ UndoAllocationInNewSpace(rbx);
+  __ jmp(call_generic_code);
+}
+
+
+void Builtins::Generate_InternalArrayCode(MacroAssembler* masm) {
+  // ----------- S t a t e -------------
+  //  -- rax : argc
+  //  -- rsp[0] : return address
+  //  -- rsp[8] : last argument
+  // -----------------------------------
+  Label generic_array_code;
+
+  // Get the InternalArray function.
+  __ LoadGlobalFunction(Context::INTERNAL_ARRAY_FUNCTION_INDEX, rdi);
+
+  if (FLAG_debug_code) {
+    // Initial map for the builtin InternalArray functions should be maps.
+    __ movq(rbx, FieldOperand(rdi, JSFunction::kPrototypeOrInitialMapOffset));
+    // Will both indicate a NULL and a Smi.
+    STATIC_ASSERT(kSmiTag == 0);
+    Condition not_smi = NegateCondition(masm->CheckSmi(rbx));
+    __ Check(not_smi, "Unexpected initial map for InternalArray function");
+    __ CmpObjectType(rbx, MAP_TYPE, rcx);
+    __ Check(equal, "Unexpected initial map for InternalArray function");
+  }
+
+  // Run the native code for the InternalArray function called as a normal
+  // function.
+  ArrayNativeCode(masm, &generic_array_code);
+
+  // Jump to the generic array code in case the specialized code cannot handle
+  // the construction.
+  __ bind(&generic_array_code);
+  Handle<Code> array_code =
+      masm->isolate()->builtins()->InternalArrayCodeGeneric();
+  __ Jump(array_code, RelocInfo::CODE_TARGET);
 }
 
 
@@ -1507,6 +1507,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   __ bind(&invoke);
   __ call(rdx);
 
+  masm->isolate()->heap()->SetArgumentsAdaptorDeoptPCOffset(masm->pc_offset());
   // Leave frame and return.
   LeaveArgumentsAdaptorFrame(masm);
   __ ret(0);

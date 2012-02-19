@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,34 +25,36 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
-
 #include "api.h"
 
-#include "arguments.h"
+#include <math.h>  // For isnan.
+#include <string.h>  // For memcpy, strlen.
+#include "../include/v8-debug.h"
+#include "../include/v8-profiler.h"
+#include "../include/v8-testing.h"
 #include "bootstrapper.h"
 #include "compiler.h"
+#include "conversions-inl.h"
+#include "counters.h"
 #include "debug.h"
 #include "deoptimizer.h"
 #include "execution.h"
-#include "flags.h"
 #include "global-handles.h"
 #include "heap-profiler.h"
 #include "messages.h"
-#include "natives.h"
 #include "parser.h"
 #include "platform.h"
 #include "profile-generator-inl.h"
+#include "property-details.h"
+#include "property.h"
 #include "runtime-profiler.h"
 #include "scanner-character-streams.h"
-#include "serialize.h"
 #include "snapshot.h"
+#include "unicode-inl.h"
 #include "v8threads.h"
 #include "version.h"
 #include "vm-state-inl.h"
 
-#include "../include/v8-profiler.h"
-#include "../include/v8-testing.h"
 
 #define LOG_API(isolate, expr) LOG(isolate, ApiEntryCall(expr))
 
@@ -78,7 +80,7 @@ namespace v8 {
   bool has_pending_exception = false
 
 
-#define EXCEPTION_BAILOUT_CHECK(isolate, value)                                \
+#define EXCEPTION_BAILOUT_CHECK_GENERIC(isolate, value, do_callback)           \
   do {                                                                         \
     i::HandleScopeImplementer* handle_scope_implementer =                      \
         (isolate)->handle_scope_implementer();                                 \
@@ -91,9 +93,20 @@ namespace v8 {
       }                                                                        \
       bool call_depth_is_zero = handle_scope_implementer->CallDepthIsZero();   \
       (isolate)->OptionalRescheduleException(call_depth_is_zero);              \
+      do_callback                                                              \
       return value;                                                            \
     }                                                                          \
+    do_callback                                                                \
   } while (false)
+
+
+#define EXCEPTION_BAILOUT_CHECK_DO_CALLBACK(isolate, value)                    \
+  EXCEPTION_BAILOUT_CHECK_GENERIC(                                             \
+      isolate, value, i::V8::FireCallCompletedCallback(isolate);)
+
+
+#define EXCEPTION_BAILOUT_CHECK(isolate, value)                                \
+  EXCEPTION_BAILOUT_CHECK_GENERIC(isolate, value, ;)
 
 
 #define API_ENTRY_CHECK(isolate, msg)                                          \
@@ -730,6 +743,7 @@ void Context::Exit() {
   i::Context* last_context =
       isolate->handle_scope_implementer()->RestoreContext();
   isolate->set_context(last_context);
+  isolate->set_context_exit_happened(true);
 }
 
 
@@ -1568,7 +1582,7 @@ Local<Value> Script::Run() {
         isolate->context()->global_proxy(), isolate);
     i::Handle<i::Object> result =
         i::Execution::Call(fun, receiver, 0, NULL, &has_pending_exception);
-    EXCEPTION_BAILOUT_CHECK(isolate, Local<Value>());
+    EXCEPTION_BAILOUT_CHECK_DO_CALLBACK(isolate, Local<Value>());
     raw_result = *result;
   }
   i::Handle<i::Object> result(raw_result, isolate);
@@ -2154,6 +2168,11 @@ bool Value::IsInt32() const {
   if (obj->IsSmi()) return true;
   if (obj->IsNumber()) {
     double value = obj->Number();
+    static const i::DoubleRepresentation minus_zero(-0.0);
+    i::DoubleRepresentation rep(value);
+    if (rep.bits == minus_zero.bits) {
+      return false;
+    }
     return i::FastI2D(i::FastD2I(value)) == value;
   }
   return false;
@@ -2166,6 +2185,11 @@ bool Value::IsUint32() const {
   if (obj->IsSmi()) return i::Smi::cast(*obj)->value() >= 0;
   if (obj->IsNumber()) {
     double value = obj->Number();
+    static const i::DoubleRepresentation minus_zero(-0.0);
+    i::DoubleRepresentation rep(value);
+    if (rep.bits == minus_zero.bits) {
+      return false;
+    }
     return i::FastUI2D(i::FastD2UI(value)) == value;
   }
   return false;
@@ -2728,7 +2752,7 @@ bool v8::Object::Set(uint32_t index, v8::Handle<Value> value) {
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::Object> value_obj = Utils::OpenHandle(*value);
   EXCEPTION_PREAMBLE(isolate);
-  i::Handle<i::Object> obj = i::SetElement(
+  i::Handle<i::Object> obj = i::JSObject::SetElement(
       self,
       index,
       value_obj,
@@ -2834,7 +2858,7 @@ Local<Value> v8::Object::GetPrototype() {
              return Local<v8::Value>());
   ENTER_V8(isolate);
   i::Handle<i::Object> self = Utils::OpenHandle(this);
-  i::Handle<i::Object> result = i::GetPrototype(self);
+  i::Handle<i::Object> result(self->GetPrototype());
   return Utils::ToLocal(result);
 }
 
@@ -2988,7 +3012,7 @@ bool v8::Object::Delete(v8::Handle<String> key) {
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
-  return i::DeleteProperty(self, key_obj)->IsTrue();
+  return i::JSObject::DeleteProperty(self, key_obj)->IsTrue();
 }
 
 
@@ -3009,7 +3033,7 @@ bool v8::Object::Delete(uint32_t index) {
   ENTER_V8(isolate);
   HandleScope scope;
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
-  return i::DeleteElement(self, index)->IsTrue();
+  return i::JSObject::DeleteElement(self, index)->IsTrue();
 }
 
 
@@ -3214,7 +3238,7 @@ int v8::Object::GetIdentityHash() {
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
-  return i::GetIdentityHash(self);
+  return i::JSObject::GetIdentityHash(self);
 }
 
 
@@ -3227,7 +3251,8 @@ bool v8::Object::SetHiddenValue(v8::Handle<v8::String> key,
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
   i::Handle<i::Object> value_obj = Utils::OpenHandle(*value);
-  i::Handle<i::Object> result = i::SetHiddenProperty(self, key_obj, value_obj);
+  i::Handle<i::Object> result =
+      i::JSObject::SetHiddenProperty(self, key_obj, value_obj);
   return *result == *self;
 }
 
@@ -3494,7 +3519,7 @@ Local<v8::Value> Object::CallAsFunction(v8::Handle<v8::Object> recv,
   EXCEPTION_PREAMBLE(isolate);
   i::Handle<i::Object> returned =
       i::Execution::Call(fun, recv_obj, argc, args, &has_pending_exception);
-  EXCEPTION_BAILOUT_CHECK(isolate, Local<Value>());
+  EXCEPTION_BAILOUT_CHECK_DO_CALLBACK(isolate, Local<Value>());
   return Utils::ToLocal(scope.CloseAndEscape(returned));
 }
 
@@ -3515,7 +3540,7 @@ Local<v8::Value> Object::CallAsConstructor(int argc,
     EXCEPTION_PREAMBLE(isolate);
     i::Handle<i::Object> returned =
         i::Execution::New(fun, argc, args, &has_pending_exception);
-    EXCEPTION_BAILOUT_CHECK(isolate, Local<v8::Object>());
+    EXCEPTION_BAILOUT_CHECK_DO_CALLBACK(isolate, Local<v8::Object>());
     return Utils::ToLocal(scope.CloseAndEscape(
         i::Handle<i::JSObject>::cast(returned)));
   }
@@ -3528,7 +3553,7 @@ Local<v8::Value> Object::CallAsConstructor(int argc,
     EXCEPTION_PREAMBLE(isolate);
     i::Handle<i::Object> returned =
         i::Execution::Call(fun, obj, argc, args, &has_pending_exception);
-    EXCEPTION_BAILOUT_CHECK(isolate, Local<v8::Object>());
+    EXCEPTION_BAILOUT_CHECK_DO_CALLBACK(isolate, Local<v8::Object>());
     ASSERT(!delegate->IsUndefined());
     return Utils::ToLocal(scope.CloseAndEscape(returned));
   }
@@ -3555,7 +3580,7 @@ Local<v8::Object> Function::NewInstance(int argc,
   EXCEPTION_PREAMBLE(isolate);
   i::Handle<i::Object> returned =
       i::Execution::New(function, argc, args, &has_pending_exception);
-  EXCEPTION_BAILOUT_CHECK(isolate, Local<v8::Object>());
+  EXCEPTION_BAILOUT_CHECK_DO_CALLBACK(isolate, Local<v8::Object>());
   return scope.Close(Utils::ToLocal(i::Handle<i::JSObject>::cast(returned)));
 }
 
@@ -3576,7 +3601,7 @@ Local<v8::Value> Function::Call(v8::Handle<v8::Object> recv, int argc,
     EXCEPTION_PREAMBLE(isolate);
     i::Handle<i::Object> returned =
         i::Execution::Call(fun, recv_obj, argc, args, &has_pending_exception);
-    EXCEPTION_BAILOUT_CHECK(isolate, Local<Object>());
+    EXCEPTION_BAILOUT_CHECK_DO_CALLBACK(isolate, Local<Object>());
     raw_result = *returned;
   }
   i::Handle<i::Object> result(raw_result);
@@ -3596,6 +3621,12 @@ void Function::SetName(v8::Handle<v8::String> name) {
 Handle<Value> Function::GetName() const {
   i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
   return Utils::ToLocal(i::Handle<i::Object>(func->shared()->name()));
+}
+
+
+Handle<Value> Function::GetInferredName() const {
+  i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
+  return Utils::ToLocal(i::Handle<i::Object>(func->shared()->inferred_name()));
 }
 
 
@@ -4027,6 +4058,13 @@ void v8::V8::GetHeapStatistics(HeapStatistics* heap_statistics) {
 }
 
 
+void v8::V8::VisitExternalResources(ExternalResourceVisitor* visitor) {
+  i::Isolate* isolate = i::Isolate::Current();
+  IsDeadCheck(isolate, "v8::V8::VisitExternalResources");
+  isolate->heap()->VisitExternalResources(visitor);
+}
+
+
 bool v8::V8::IdleNotification(int hint) {
   // Returning true tells the caller that it need not
   // continue to call IdleNotification.
@@ -4039,7 +4077,7 @@ bool v8::V8::IdleNotification(int hint) {
 void v8::V8::LowMemoryNotification() {
   i::Isolate* isolate = i::Isolate::Current();
   if (isolate == NULL || !isolate->IsInitialized()) return;
-  isolate->heap()->CollectAllAvailableGarbage();
+  isolate->heap()->CollectAllAvailableGarbage("low memory notification");
 }
 
 
@@ -4272,6 +4310,20 @@ void Context::AllowCodeGenerationFromStrings(bool allow) {
       i::Handle<i::Context>::cast(i::Handle<i::Object>(ctx));
   context->set_allow_code_gen_from_strings(
       allow ? isolate->heap()->true_value() : isolate->heap()->false_value());
+}
+
+
+bool Context::IsCodeGenerationFromStringsAllowed() {
+  i::Isolate* isolate = i::Isolate::Current();
+  if (IsDeadCheck(isolate,
+                  "v8::Context::IsCodeGenerationFromStringsAllowed()")) {
+    return false;
+  }
+  ENTER_V8(isolate);
+  i::Object** ctx = reinterpret_cast<i::Object**>(this);
+  i::Handle<i::Context> context =
+      i::Handle<i::Context>::cast(i::Handle<i::Object>(ctx));
+  return !context->allow_code_gen_from_strings()->IsFalse();
 }
 
 
@@ -5045,6 +5097,21 @@ void V8::RemoveMemoryAllocationCallback(MemoryAllocationCallback callback) {
 }
 
 
+void V8::AddCallCompletedCallback(CallCompletedCallback callback) {
+  if (callback == NULL) return;
+  i::Isolate* isolate = i::Isolate::Current();
+  if (IsDeadCheck(isolate, "v8::V8::AddLeaveScriptCallback()")) return;
+  i::V8::AddCallCompletedCallback(callback);
+}
+
+
+void V8::RemoveCallCompletedCallback(CallCompletedCallback callback) {
+  i::Isolate* isolate = i::Isolate::Current();
+  if (IsDeadCheck(isolate, "v8::V8::RemoveLeaveScriptCallback()")) return;
+  i::V8::RemoveCallCompletedCallback(callback);
+}
+
+
 void V8::PauseProfiler() {
   i::Isolate* isolate = i::Isolate::Current();
   isolate->logger()->PauseProfiler();
@@ -5516,7 +5583,7 @@ void Debug::DisableAgent() {
 
 
 void Debug::ProcessDebugMessages() {
-  i::Execution::ProcessDebugMesssages(true);
+  i::Execution::ProcessDebugMessages(true);
 }
 
 Local<Context> Debug::GetDebugContext() {
@@ -6021,9 +6088,7 @@ static void SetFlagsFromString(const char* flags) {
 
 void Testing::PrepareStressRun(int run) {
   static const char* kLazyOptimizations =
-      "--prepare-always-opt --nolimit-inlining "
-      "--noalways-opt --noopt-eagerly";
-  static const char* kEagerOptimizations = "--opt-eagerly";
+      "--prepare-always-opt --nolimit-inlining --noalways-opt";
   static const char* kForcedOptimizations = "--always-opt";
 
   // If deoptimization stressed turn on frequent deoptimization. If no value
@@ -6040,15 +6105,12 @@ void Testing::PrepareStressRun(int run) {
   if (run == GetStressRuns() - 1) {
     SetFlagsFromString(kForcedOptimizations);
   } else {
-    SetFlagsFromString(kEagerOptimizations);
     SetFlagsFromString(kLazyOptimizations);
   }
 #else
   if (run == GetStressRuns() - 1) {
     SetFlagsFromString(kForcedOptimizations);
-  } else if (run == GetStressRuns() - 2) {
-    SetFlagsFromString(kEagerOptimizations);
-  } else {
+  } else if (run != GetStressRuns() - 2) {
     SetFlagsFromString(kLazyOptimizations);
   }
 #endif

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -221,6 +221,22 @@ class MacroAssembler: public Assembler {
   // Find the function context up the context chain.
   void LoadContext(Register dst, int context_chain_length);
 
+  // Conditionally load the cached Array transitioned map of type
+  // transitioned_kind from the global context if the map in register
+  // map_in_out is the cached Array map in the global context of
+  // expected_kind.
+  void LoadTransitionedArrayMapConditional(
+      ElementsKind expected_kind,
+      ElementsKind transitioned_kind,
+      Register map_in_out,
+      Register scratch,
+      Label* no_map_match);
+
+  // Load the initial map for new Arrays from a JSFunction.
+  void LoadInitialArrayMap(Register function_in,
+                           Register scratch,
+                           Register map_out);
+
   // Load the global function with the given index.
   void LoadGlobalFunction(int index, Register function);
 
@@ -251,7 +267,7 @@ class MacroAssembler: public Assembler {
   // ---------------------------------------------------------------------------
   // JavaScript invokes
 
-  // Setup call kind marking in ecx. The method takes ecx as an
+  // Set up call kind marking in ecx. The method takes ecx as an
   // explicit first parameter to make the code more readable at the
   // call sites.
   void SetCallKind(Register dst, CallKind kind);
@@ -356,13 +372,24 @@ class MacroAssembler: public Assembler {
                                    Label* fail,
                                    bool specialize_for_processor);
 
+  // Compare an object's map with the specified map and its transitioned
+  // elements maps if mode is ALLOW_ELEMENT_TRANSITION_MAPS. FLAGS are set with
+  // result of map compare. If multiple map compares are required, the compare
+  // sequences branches to early_success.
+  void CompareMap(Register obj,
+                  Handle<Map> map,
+                  Label* early_success,
+                  CompareMapMode mode = REQUIRE_EXACT_MAP);
+
   // Check if the map of an object is equal to a specified map and branch to
   // label if not. Skip the smi check if not required (object is known to be a
-  // heap object)
+  // heap object). If mode is ALLOW_ELEMENT_TRANSITION_MAPS, then also match
+  // against maps that are ElementsKind transition maps of the specified map.
   void CheckMap(Register obj,
                 Handle<Map> map,
                 Label* fail,
-                SmiCheckType smi_check_type);
+                SmiCheckType smi_check_type,
+                CompareMapMode mode = REQUIRE_EXACT_MAP);
 
   // Check if the map of an object is equal to a specified map and branch to a
   // specified target if equal. Skip the smi check if not required (object is
@@ -464,9 +491,7 @@ class MacroAssembler: public Assembler {
   // Exception handling
 
   // Push a new try handler and link it into try handler chain.
-  void PushTryHandler(CodeLocation try_location,
-                      HandlerType type,
-                      int handler_index);
+  void PushTryHandler(StackHandler::Kind kind, int handler_index);
 
   // Unlink the stack handler on top of the stack from the try handler chain.
   void PopTryHandler();
@@ -486,6 +511,7 @@ class MacroAssembler: public Assembler {
                               Register scratch,
                               Label* miss);
 
+  void GetNumberHash(Register r0, Register scratch);
 
   void LoadFromNumberDictionary(Label* miss,
                                 Register elements,
@@ -779,7 +805,7 @@ class MacroAssembler: public Assembler {
   // ---------------------------------------------------------------------------
   // String utilities.
 
-  // Check whether the instance type represents a flat ascii string. Jump to the
+  // Check whether the instance type represents a flat ASCII string. Jump to the
   // label if not. If the instance type can be scratched specify same register
   // for both instance type and scratch.
   void JumpIfInstanceTypeIsNotSequentialAscii(Register instance_type,
@@ -815,6 +841,7 @@ class MacroAssembler: public Assembler {
                       Handle<Code> code_constant,
                       const Operand& code_operand,
                       Label* done,
+                      bool* definitely_mismatches,
                       InvokeFlag flag,
                       Label::Distance done_distance,
                       const CallWrapper& call_wrapper = NullCallWrapper(),

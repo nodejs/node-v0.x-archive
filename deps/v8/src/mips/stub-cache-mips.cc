@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -377,13 +377,9 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
                                       Label* miss_label) {
   // a0 : value.
   Label exit;
-
-  // Check that the receiver isn't a smi.
-  __ JumpIfSmi(receiver_reg, miss_label, scratch);
-
-  // Check that the map of the receiver hasn't changed.
-  __ lw(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
-  __ Branch(miss_label, ne, scratch, Operand(Handle<Map>(object->map())));
+  // Check that the map of the object hasn't changed.
+  __ CheckMap(receiver_reg, scratch, Handle<Map>(object->map()), miss_label,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
@@ -565,11 +561,11 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
                                       int argc) {
   // ----------- S t a t e -------------
   //  -- sp[0]              : holder (set by CheckPrototypes)
-  //  -- sp[4]              : callee js function
+  //  -- sp[4]              : callee JS function
   //  -- sp[8]              : call data
-  //  -- sp[12]             : last js argument
+  //  -- sp[12]             : last JS argument
   //  -- ...
-  //  -- sp[(argc + 3) * 4] : first js argument
+  //  -- sp[(argc + 3) * 4] : first JS argument
   //  -- sp[(argc + 4) * 4] : receiver
   // -----------------------------------
   // Get the function and setup the context.
@@ -587,7 +583,7 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
     __ li(t2, call_data);
   }
 
-  // Store js function and call data.
+  // Store JS function and call data.
   __ sw(t1, MemOperand(sp, 1 * kPointerSize));
   __ sw(t2, MemOperand(sp, 2 * kPointerSize));
 
@@ -747,7 +743,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
           ? CALL_AS_FUNCTION
           : CALL_AS_METHOD;
       __ InvokeFunction(optimization.constant_function(), arguments_,
-                        JUMP_FUNCTION, call_kind);
+                        JUMP_FUNCTION, NullCallWrapper(), call_kind);
     }
 
     // Deferred code for fast API call case---clean preallocated space.
@@ -1037,9 +1033,8 @@ Register StubCompiler::CheckPrototypes(Handle<JSObject> object,
       __ lw(reg, FieldMemOperand(scratch1, Map::kPrototypeOffset));
     } else {
       Handle<Map> current_map(current->map());
-      __ lw(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
-      // Branch on the result of the map check.
-      __ Branch(miss, ne, scratch1, Operand(current_map));
+      __ CheckMap(reg, scratch1, current_map, miss, DONT_DO_SMI_CHECK,
+                  ALLOW_ELEMENT_TRANSITION_MAPS);
       // Check access rights to the global object.  This has to happen after
       // the map check so that we know that the object is actually a global
       // object.
@@ -1070,8 +1065,8 @@ Register StubCompiler::CheckPrototypes(Handle<JSObject> object,
   LOG(masm()->isolate(), IntEvent("check-maps-depth", depth + 1));
 
   // Check the holder map.
-  __ lw(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
-  __ Branch(miss, ne, scratch1, Operand(Handle<Map>(current->map())));
+  __ CheckMap(reg, scratch1, Handle<Map>(current->map()), miss,
+              DONT_DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform security check for access to the global object.
   ASSERT(holder->IsJSGlobalProxy() || !holder->IsAccessCheckNeeded());
@@ -1173,7 +1168,7 @@ void StubCompiler::GenerateLoadCallback(Handle<JSObject> object,
   __ EnterExitFrame(false, kApiStackSpace);
 
   // Create AccessorInfo instance on the stack above the exit frame with
-  // scratch2 (internal::Object **args_) as the data.
+  // scratch2 (internal::Object** args_) as the data.
   __ sw(a2, MemOperand(sp, kPointerSize));
   // a2 (second argument - see note above) = AccessorInfo&
   __ Addu(a2, sp, kPointerSize);
@@ -1209,7 +1204,7 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
   // and CALLBACKS, so inline only them, other cases may be added
   // later.
   bool compile_followup_inline = false;
-  if (lookup->IsProperty() && lookup->IsCacheable()) {
+  if (lookup->IsFound() && lookup->IsCacheable()) {
     if (lookup->type() == FIELD) {
       compile_followup_inline = true;
     } else if (lookup->type() == CALLBACKS &&
@@ -1473,20 +1468,20 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
     __ Ret();
   } else {
     Label call_builtin;
-    Register elements = a3;
-    Register end_elements = t1;
-    // Get the elements array of the object.
-    __ lw(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
-
-    // Check that the elements are in fast mode and writable.
-    __ CheckMap(elements,
-                v0,
-                Heap::kFixedArrayMapRootIndex,
-                &call_builtin,
-                DONT_DO_SMI_CHECK);
-
     if (argc == 1) {  // Otherwise fall through to call the builtin.
       Label attempt_to_grow_elements;
+
+      Register elements = t2;
+      Register end_elements = t1;
+      // Get the elements array of the object.
+      __ lw(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
+
+      // Check that the elements are in fast mode and writable.
+      __ CheckMap(elements,
+                  v0,
+                  Heap::kFixedArrayMapRootIndex,
+                  &call_builtin,
+                  DONT_DO_SMI_CHECK);
 
       // Get the array's length into v0 and calculate new length.
       __ lw(v0, FieldMemOperand(receiver, JSArray::kLengthOffset));
@@ -1494,7 +1489,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       STATIC_ASSERT(kSmiTag == 0);
       __ Addu(v0, v0, Operand(Smi::FromInt(argc)));
 
-      // Get the element's length.
+      // Get the elements' length.
       __ lw(t0, FieldMemOperand(elements, FixedArray::kLengthOffset));
 
       // Check if we could survive without allocation.
@@ -1508,7 +1503,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       // Save new length.
       __ sw(v0, FieldMemOperand(receiver, JSArray::kLengthOffset));
 
-      // Push the element.
+      // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       __ sll(end_elements, v0, kPointerSizeLog2 - kSmiTagSize);
@@ -1524,13 +1519,33 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
 
       __ bind(&with_write_barrier);
 
-      __ lw(t2, FieldMemOperand(receiver, HeapObject::kMapOffset));
-      __ CheckFastObjectElements(t2, t2, &call_builtin);
+      __ lw(a3, FieldMemOperand(receiver, HeapObject::kMapOffset));
+
+      if (FLAG_smi_only_arrays  && !FLAG_trace_elements_transitions) {
+        Label fast_object, not_fast_object;
+        __ CheckFastObjectElements(a3, t3, &not_fast_object);
+        __ jmp(&fast_object);
+        // In case of fast smi-only, convert to fast object, otherwise bail out.
+        __ bind(&not_fast_object);
+        __ CheckFastSmiOnlyElements(a3, t3, &call_builtin);
+        // edx: receiver
+        // r3: map
+        __ LoadTransitionedArrayMapConditional(FAST_SMI_ONLY_ELEMENTS,
+                                               FAST_ELEMENTS,
+                                               a3,
+                                               t3,
+                                               &call_builtin);
+        __ mov(a2, receiver);
+        ElementsTransitionGenerator::GenerateSmiOnlyToObject(masm());
+        __ bind(&fast_object);
+      } else {
+        __ CheckFastObjectElements(a3, a3, &call_builtin);
+      }
 
       // Save new length.
       __ sw(v0, FieldMemOperand(receiver, JSArray::kLengthOffset));
 
-      // Push the element.
+      // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       __ sll(end_elements, v0, kPointerSizeLog2 - kSmiTagSize);
@@ -1578,23 +1593,23 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       __ Addu(end_elements, elements, end_elements);
       __ Addu(end_elements, end_elements, Operand(kEndElementsOffset));
       __ li(t3, Operand(new_space_allocation_top));
-      __ lw(t2, MemOperand(t3));
-      __ Branch(&call_builtin, ne, end_elements, Operand(t2));
+      __ lw(a3, MemOperand(t3));
+      __ Branch(&call_builtin, ne, end_elements, Operand(a3));
 
       __ li(t5, Operand(new_space_allocation_limit));
       __ lw(t5, MemOperand(t5));
-      __ Addu(t2, t2, Operand(kAllocationDelta * kPointerSize));
-      __ Branch(&call_builtin, hi, t2, Operand(t5));
+      __ Addu(a3, a3, Operand(kAllocationDelta * kPointerSize));
+      __ Branch(&call_builtin, hi, a3, Operand(t5));
 
       // We fit and could grow elements.
       // Update new_space_allocation_top.
-      __ sw(t2, MemOperand(t3));
+      __ sw(a3, MemOperand(t3));
       // Push the argument.
       __ sw(a2, MemOperand(end_elements));
       // Fill the rest with holes.
-      __ LoadRoot(t2, Heap::kTheHoleValueRootIndex);
+      __ LoadRoot(a3, Heap::kTheHoleValueRootIndex);
       for (int i = 1; i < kAllocationDelta; i++) {
-        __ sw(t2, MemOperand(end_elements, i * kPointerSize));
+        __ sw(a3, MemOperand(end_elements, i * kPointerSize));
       }
 
       // Update elements' and array's sizes.
@@ -1934,7 +1949,8 @@ Handle<Code> CallStubCompiler::CompileStringFromCharCodeCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // a2: function name.
@@ -2067,7 +2083,8 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ bind(&slow);
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // a2: function name.
@@ -2167,7 +2184,8 @@ Handle<Code> CallStubCompiler::CompileMathAbsCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // a2: function name.
@@ -2346,7 +2364,8 @@ Handle<Code> CallStubCompiler::CompileCallConstant(Handle<Object> object,
   CallKind call_kind = CallICBase::Contextual::decode(extra_state_)
       ? CALL_AS_FUNCTION
       : CALL_AS_METHOD;
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, call_kind);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), call_kind);
 
   // Handle call cache miss.
   __ bind(&miss);
@@ -2430,7 +2449,7 @@ Handle<Code> CallStubCompiler::CompileCallGlobal(
     __ sw(a3, MemOperand(sp, argc * kPointerSize));
   }
 
-  // Setup the context (function already in r1).
+  // Set up the context (function already in r1).
   __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
 
   // Jump to the cached code (tail call).
@@ -2493,12 +2512,9 @@ Handle<Code> StoreStubCompiler::CompileStoreCallback(
   // -----------------------------------
   Label miss;
 
-  // Check that the object isn't a smi.
-  __ JumpIfSmi(a1, &miss);
-
   // Check that the map of the object hasn't changed.
-  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
-  __ Branch(&miss, ne, a3, Operand(Handle<Map>(object->map())));
+  __ CheckMap(a1, a3, Handle<Map>(object->map()), &miss,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
@@ -2540,12 +2556,9 @@ Handle<Code> StoreStubCompiler::CompileStoreInterceptor(
   // -----------------------------------
   Label miss;
 
-  // Check that the object isn't a smi.
-  __ JumpIfSmi(a1, &miss);
-
   // Check that the map of the object hasn't changed.
-  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
-  __ Branch(&miss, ne, a3, Operand(Handle<Map>(receiver->map())));
+  __ CheckMap(a1, a3, Handle<Map>(receiver->map()), &miss,
+              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
 
   // Perform global security token check if needed.
   if (receiver->IsJSGlobalProxy()) {
