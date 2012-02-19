@@ -1,3 +1,74 @@
+2012-02-09: Version 3.9.5
+
+        Removed unused command line flags.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-08: Version 3.9.4
+
+        Properly initialize element-transitioning array literals on ARM.
+        (issue 1930)
+
+        Bug fixes on all platforms.
+
+
+2012-02-07: Version 3.9.3
+
+        When rethrowing an exception, print the stack trace of its original
+        site instead of rethrow site (Chromium issue 60240).
+
+        Increased size of small stacks from 32k to 64k to avoid hitting limits
+        in Chromium (Chromium issue 112843).
+
+
+2012-02-06: Version 3.9.2
+
+        Add timestamp to --trace-gc output. (issue 1932)
+
+        Heap profiler reports implicit references.
+
+        Optionally export metadata with libv8 to enable debuggers to inspect V8
+        state.
+
+
+2012-02-02: Version 3.9.1
+
+        Fixed memory leak in NativeObjectsExplorer::FindOrAddGroupInfo
+        (Chromium issue 112315).
+
+        Fixed a crash in dev tools (Chromium issue 107996).
+
+        Added 'dependencies_traverse': 1 to v8 GYP target.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-01: Version 3.9.0
+
+        Reduce memory use immediately after starting V8.
+
+        Stability fixes and performance improvements on all platforms.
+
+
+2012-01-26: Version 3.8.9
+
+        Flush number string cache on GC (issue 1605).
+
+        Provide access to function inferred name with
+	v8::Function::GetInferredName in V8 public API.
+
+        Fix building with Clang (issue 1912).
+
+        Reduce the space used by the stack for the profiling thread.
+
+        Fix misleading documentation of v8::Locker (issue 542).
+
+        Introduce readbinary function in d8 to read binary files.
+
+        Performance and stability improvements on all platforms.
+
+
 2012-01-23: Version 3.8.8
 
         Limited number of loop iterations in Heap::ReserveSpace

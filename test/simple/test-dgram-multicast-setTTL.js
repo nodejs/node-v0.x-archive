@@ -30,12 +30,12 @@ socket.setMulticastTTL(16);
 
 //Try to set an invalid TTL (valid ttl is > 0 and < 256)
 try {
-    socket.setMulticastTTL(1000);
+  socket.setMulticastTTL(1000);
 } catch (e) {
-    thrown = true;
+  thrown = true;
 }
 
-assert(thrown, 'Setting an invalid mutlicast TTL should throw some error');
+assert(thrown, 'Setting an invalid multicast TTL should throw some error');
 
 //close the socket
 socket.close();

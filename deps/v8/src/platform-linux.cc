@@ -720,15 +720,8 @@ class Thread::PlatformData : public Malloced {
 
 Thread::Thread(const Options& options)
     : data_(new PlatformData()),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData()),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -951,6 +944,38 @@ typedef struct ucontext {
 } ucontext_t;
 enum ArmRegisters {R15 = 15, R13 = 13, R11 = 11};
 
+#elif !defined(__GLIBC__) && defined(__mips__)
+// MIPS version of sigcontext, for Android bionic.
+struct sigcontext {
+  uint32_t regmask;
+  uint32_t status;
+  uint64_t pc;
+  uint64_t gregs[32];
+  uint64_t fpregs[32];
+  uint32_t acx;
+  uint32_t fpc_csr;
+  uint32_t fpc_eir;
+  uint32_t used_math;
+  uint32_t dsp;
+  uint64_t mdhi;
+  uint64_t mdlo;
+  uint32_t hi1;
+  uint32_t lo1;
+  uint32_t hi2;
+  uint32_t lo2;
+  uint32_t hi3;
+  uint32_t lo3;
+};
+typedef uint32_t __sigset_t;
+typedef struct sigcontext mcontext_t;
+typedef struct ucontext {
+  uint32_t uc_flags;
+  struct ucontext* uc_link;
+  stack_t uc_stack;
+  mcontext_t uc_mcontext;
+  __sigset_t uc_sigmask;
+} ucontext_t;
+
 #endif
 
 
@@ -1035,8 +1060,10 @@ class SignalSender : public Thread {
     FULL_INTERVAL
   };
 
+  static const int kSignalSenderStackSize = 64 * KB;
+
   explicit SignalSender(int interval)
-      : Thread("SignalSender"),
+      : Thread(Thread::Options("SignalSender", kSignalSenderStackSize)),
         vm_tgid_(getpid()),
         interval_(interval) {}
 

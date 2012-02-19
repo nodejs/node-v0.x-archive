@@ -126,6 +126,7 @@ class HBasicBlock: public ZoneObject {
   int PredecessorIndexOf(HBasicBlock* predecessor) const;
   void AddSimulate(int ast_id) { AddInstruction(CreateSimulate(ast_id)); }
   void AssignCommonDominator(HBasicBlock* other);
+  void AssignLoopSuccessorDominators();
 
   void FinishExitWithDeoptimization(HDeoptimize::UseEnvironment has_uses) {
     FinishExit(CreateDeoptimize(has_uses));
@@ -148,6 +149,13 @@ class HBasicBlock: public ZoneObject {
 
   bool IsDeoptimizing() const { return is_deoptimizing_; }
   void MarkAsDeoptimizing() { is_deoptimizing_ = true; }
+
+  bool IsLoopSuccessorDominator() const {
+    return dominates_loop_successors_;
+  }
+  void MarkAsLoopSuccessorDominator() {
+    dominates_loop_successors_ = true;
+  }
 
   inline Zone* zone();
 
@@ -182,6 +190,22 @@ class HBasicBlock: public ZoneObject {
   HBasicBlock* parent_loop_header_;
   bool is_inline_return_target_;
   bool is_deoptimizing_;
+  bool dominates_loop_successors_;
+};
+
+
+class HPredecessorIterator BASE_EMBEDDED {
+ public:
+  explicit HPredecessorIterator(HBasicBlock* block)
+      : predecessor_list_(block->predecessors()), current_(0) { }
+
+  bool Done() { return current_ >= predecessor_list_->length(); }
+  HBasicBlock* Current() { return predecessor_list_->at(current_); }
+  void Advance() { current_++; }
+
+ private:
+  const ZoneList<HBasicBlock*>* predecessor_list_;
+  int current_;
 };
 
 
@@ -343,6 +367,17 @@ class HEnvironment: public ZoneObject {
                Scope* scope,
                Handle<JSFunction> closure);
 
+  bool is_arguments_adaptor() const {
+    return arguments_adaptor_;
+  }
+
+  HEnvironment* DiscardInlined(bool drop_extra) {
+    HEnvironment* outer = outer_->is_arguments_adaptor() ?
+        outer_->outer_ : outer_;
+    if (drop_extra) outer->Drop(1);
+    return outer;
+  }
+
   // Simple accessors.
   Handle<JSFunction> closure() const { return closure_; }
   const ZoneList<HValue*>* values() const { return &values_; }
@@ -427,6 +462,7 @@ class HEnvironment: public ZoneObject {
   // environment is the outer environment but the top expression stack
   // elements are moved to an inner environment as parameters.
   HEnvironment* CopyForInlining(Handle<JSFunction> target,
+                                int arguments,
                                 FunctionLiteral* function,
                                 HConstant* undefined,
                                 CallKind call_kind) const;
@@ -449,6 +485,10 @@ class HEnvironment: public ZoneObject {
 
  private:
   explicit HEnvironment(const HEnvironment* other);
+
+  // Create an argument adaptor environment.
+  HEnvironment(HEnvironment* outer, Handle<JSFunction> closure, int arguments);
+
 
   // True if index is included in the expression stack part of the environment.
   bool HasExpressionAt(int index) const;
@@ -478,6 +518,7 @@ class HEnvironment: public ZoneObject {
   int pop_count_;
   int push_count_;
   int ast_id_;
+  bool arguments_adaptor_;
 };
 
 
@@ -756,6 +797,12 @@ class HGraphBuilder: public AstVisitor {
   static const int kMaxInlinedSize = 196;
   static const int kMaxSourceSize = 600;
 
+  // Even in the 'unlimited' case we have to have some limit in order not to
+  // overflow the stack.
+  static const int kUnlimitedMaxInlinedNodes = 1000;
+  static const int kUnlimitedMaxInlinedSize = 1000;
+  static const int kUnlimitedMaxSourceSize = 600;
+
   // Simple accessors.
   void set_function_state(FunctionState* state) { function_state_ = state; }
 
@@ -792,9 +839,9 @@ class HGraphBuilder: public AstVisitor {
   INLINE_RUNTIME_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_DECLARATION)
 #undef INLINE_FUNCTION_GENERATOR_DECLARATION
 
-  void HandleDeclaration(VariableProxy* proxy,
-                         VariableMode mode,
-                         FunctionLiteral* function);
+  void HandleVariableDeclaration(VariableProxy* proxy,
+                                 VariableMode mode,
+                                 FunctionLiteral* function);
 
   void VisitDelete(UnaryOperation* expr);
   void VisitVoid(UnaryOperation* expr);
@@ -895,10 +942,11 @@ class HGraphBuilder: public AstVisitor {
   bool TryCallApply(Call* expr);
 
   bool TryInline(Call* expr, bool drop_extra = false);
-  bool TryInlineBuiltinFunction(Call* expr,
+  bool TryInlineBuiltinMethodCall(Call* expr,
                                 HValue* receiver,
                                 Handle<Map> receiver_map,
                                 CheckType check_type);
+  bool TryInlineBuiltinFunctionCall(Call* expr, bool drop_extra);
 
   // If --trace-inlining, print a line of the inlining trace.  Inlining
   // succeeded if the reason string is NULL and failed if there is a

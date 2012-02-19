@@ -421,7 +421,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
 #define UV_FS_PRIVATE_FIELDS              \
   wchar_t* pathw;                         \
   int flags;                              \
-  int last_error;                         \
+  DWORD sys_errno_;                       \
   struct _stati64 stat;                   \
   void* arg0;                             \
   union {                                 \
@@ -449,11 +449,6 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   wchar_t* short_filew;                   \
   wchar_t* dirw;                          \
   char* buffer;
-
-#define UV_STREAM_INFO_PRIVATE_FIELDS     \
-  union {                                 \
-    WSAPROTOCOL_INFOW socket_info;        \
-  };
 
 int uv_utf16_to_utf8(const wchar_t* utf16Buffer, size_t utf16Size,
     char* utf8Buffer, size_t utf8Size);

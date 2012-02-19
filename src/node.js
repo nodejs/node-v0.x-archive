@@ -46,8 +46,6 @@
 
     startup.processChannel();
 
-    startup.removedMethods();
-
     startup.resolveArgv0();
 
     // There are various modes that Node can run in. The most common two
@@ -120,23 +118,6 @@
         });
       }
     }
-
-    if (process.tid === 1) return;
-
-    // isolate initialization
-    process.send = function(msg) {
-      if (typeof msg === 'undefined') throw new TypeError('Bad argument.');
-      msg = JSON.stringify(msg);
-      msg = new Buffer(msg);
-      return process._send(msg);
-    };
-
-    process._onmessage = function(msg) {
-      msg = JSON.parse('' + msg);
-      process.emit('message', msg);
-    };
-
-    process.exit = process._exit;
   }
 
   startup.globalVariables = function() {
@@ -297,8 +278,9 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = createWritableStdioStream(1);
-      stdout.end = stdout.destroy = stdout.destroySoon = function() {
-        throw new Error('process.stdout cannot be closed');
+      stdout.destroy = stdout.destroySoon = function(er) {
+        er = er || new Error('process.stdout cannot be closed.');
+        stdout.emit('error', er);
       };
       return stdout;
     });
@@ -306,8 +288,9 @@
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = createWritableStdioStream(2);
-      stderr.end = stderr.destroy = stderr.destroySoon = function() {
-        throw new Error('process.stderr cannot be closed');
+      stderr.destroy = stderr.destroySoon = function(er) {
+        er = er || new Error('process.stderr cannot be closed.');
+        stderr.emit('error', er);
       };
       return stderr;
     });
@@ -439,43 +422,12 @@
       // Load tcp_wrap to avoid situation where we might immediately receive
       // a message.
       // FIXME is this really necessary?
-      process.binding('tcp_wrap')
+      process.binding('tcp_wrap');
 
       cp._forkChild();
       assert(process.send);
     }
   }
-
-  startup._removedProcessMethods = {
-    'assert': 'process.assert() use require("assert").ok() instead',
-    'debug': 'process.debug() use console.error() instead',
-    'error': 'process.error() use console.error() instead',
-    'watchFile': 'process.watchFile() has moved to fs.watchFile()',
-    'unwatchFile': 'process.unwatchFile() has moved to fs.unwatchFile()',
-    'mixin': 'process.mixin() has been removed.',
-    'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
-    'inherits': 'process.inherits() has moved to util.inherits()',
-    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
-  };
-
-  startup.removedMethods = function() {
-    var desc = {
-      configurable: true,
-      writable: true,
-      enumerable: false
-    };
-    for (var method in startup._removedProcessMethods) {
-      var reason = startup._removedProcessMethods[method];
-      desc.value = startup._removedMethod(reason);
-      Object.defineProperty(process, method, desc);
-    }
-  };
-
-  startup._removedMethod = function(reason) {
-    return function() {
-      throw new Error(reason);
-    };
-  };
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();

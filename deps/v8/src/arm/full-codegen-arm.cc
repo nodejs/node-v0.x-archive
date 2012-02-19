@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -139,6 +139,27 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
   }
 #endif
 
+  // We can optionally optimize based on counters rather than statistical
+  // sampling.
+  if (info->ShouldSelfOptimize()) {
+    if (FLAG_trace_opt) {
+      PrintF("[adding self-optimization header to %s]\n",
+             *info->function()->debug_name()->ToCString());
+    }
+    MaybeObject* maybe_cell = isolate()->heap()->AllocateJSGlobalPropertyCell(
+        Smi::FromInt(Compiler::kCallsUntilPrimitiveOpt));
+    JSGlobalPropertyCell* cell;
+    if (maybe_cell->To(&cell)) {
+      __ mov(r2, Operand(Handle<JSGlobalPropertyCell>(cell)));
+      __ ldr(r3, FieldMemOperand(r2, JSGlobalPropertyCell::kValueOffset));
+      __ sub(r3, r3, Operand(Smi::FromInt(1)), SetCC);
+      __ str(r3, FieldMemOperand(r2, JSGlobalPropertyCell::kValueOffset));
+      Handle<Code> compile_stub(
+          isolate()->builtins()->builtin(Builtins::kLazyRecompile));
+      __ Jump(compile_stub, RelocInfo::CODE_TARGET, eq);
+    }
+  }
+
   // Strict mode functions and builtins need to replace the receiver
   // with undefined when called as functions (without an explicit
   // receiver object). r5 is zero for method calls and non-zero for
@@ -265,11 +286,11 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
       // For named function expressions, declare the function name as a
       // constant.
       if (scope()->is_function_scope() && scope()->function() != NULL) {
-        int ignored = 0;
         VariableProxy* proxy = scope()->function();
         ASSERT(proxy->var()->mode() == CONST ||
                proxy->var()->mode() == CONST_HARMONY);
-        EmitDeclaration(proxy, proxy->var()->mode(), NULL, &ignored);
+        ASSERT(proxy->var()->location() != Variable::UNALLOCATED);
+        EmitDeclaration(proxy, proxy->var()->mode(), NULL);
       }
       VisitDeclarations(scope()->declarations());
     }
@@ -706,8 +727,7 @@ void FullCodeGenerator::PrepareForBailoutBeforeSplit(Expression* expr,
 
 void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
                                         VariableMode mode,
-                                        FunctionLiteral* function,
-                                        int* global_count) {
+                                        FunctionLiteral* function) {
   // If it was not possible to allocate the variable at compile time, we
   // need to "declare" it at runtime to make sure it actually exists in the
   // local context.
@@ -716,7 +736,7 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
       (mode == CONST || mode == CONST_HARMONY || mode == LET);
   switch (variable->location()) {
     case Variable::UNALLOCATED:
-      ++(*global_count);
+      ++global_count_;
       break;
 
     case Variable::PARAMETER:
@@ -799,9 +819,6 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
     }
   }
 }
-
-
-void FullCodeGenerator::VisitDeclaration(Declaration* decl) { }
 
 
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
@@ -1820,7 +1837,7 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ mov(ip, Operand(scratch1, ASR, 31));
       __ cmp(ip, Operand(scratch2));
       __ b(ne, &stub_call);
-      __ tst(scratch1, Operand(scratch1));
+      __ cmp(scratch1, Operand(0));
       __ mov(right, Operand(scratch1), LeaveCC, ne);
       __ b(ne, &done);
       __ add(scratch2, right, Operand(left), SetCC);
@@ -2379,9 +2396,22 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   __ mov(r0, Operand(arg_count));
   __ ldr(r1, MemOperand(sp, arg_count * kPointerSize));
 
-  Handle<Code> construct_builtin =
-      isolate()->builtins()->JSConstructCall();
-  __ Call(construct_builtin, RelocInfo::CONSTRUCT_CALL);
+  // Record call targets in unoptimized code, but not in the snapshot.
+  CallFunctionFlags flags;
+  if (!Serializer::enabled()) {
+    flags = RECORD_CALL_TARGET;
+    Handle<Object> uninitialized =
+        TypeFeedbackCells::UninitializedSentinel(isolate());
+    Handle<JSGlobalPropertyCell> cell =
+        isolate()->factory()->NewJSGlobalPropertyCell(uninitialized);
+    RecordTypeFeedbackCell(expr->id(), cell);
+    __ mov(r2, Operand(cell));
+  } else {
+    flags = NO_CALL_FUNCTION_FLAGS;
+  }
+
+  CallConstructStub stub(flags);
+  __ Call(stub.GetCode(), RelocInfo::CONSTRUCT_CALL);
   context()->Plug(r0);
 }
 

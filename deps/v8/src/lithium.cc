@@ -36,6 +36,7 @@ void LOperand::PrintTo(StringStream* stream) {
   LUnallocated* unalloc = NULL;
   switch (kind()) {
     case INVALID:
+      stream->Add("(0)");
       break;
     case UNALLOCATED:
       unalloc = LUnallocated::cast(this);
@@ -70,9 +71,6 @@ void LOperand::PrintTo(StringStream* stream) {
         case LUnallocated::ANY:
           stream->Add("(-)");
           break;
-        case LUnallocated::IGNORE:
-          stream->Add("(0)");
-          break;
       }
       break;
     case CONSTANT_OPERAND:
@@ -94,12 +92,6 @@ void LOperand::PrintTo(StringStream* stream) {
       stream->Add("[arg:%d]", index());
       break;
   }
-}
-
-
-int LOperand::VirtualRegister() {
-  LUnallocated* unalloc = LUnallocated::cast(this);
-  return unalloc->virtual_register();
 }
 
 

@@ -19,43 +19,34 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var assert = require('assert');
 var common = require('../common');
+var assert = require('assert');
 
-if (process.argv[2] === 'child') {
-  process.exit(0);
-} else if (process.argv[2] === 'testcase') {
+var exceptions = 0;
+var timer1 = 0;
+var timer2 = 0;
 
-  // testcase
-  var fork = require('child_process').fork;
-  var child = fork(process.argv[1], ['child'], {thread: true});
+// the first timer throws...
+setTimeout(function() {
+  timer1++;
+  throw new Error('BAM!');
+}, 100);
 
-  process.on('exit', function () {
-    process.stdout.write('exit\n');
-  });
-} else {
-  // we need this to check that process.on('exit') fires
+// ...but the second one should still run
+setTimeout(function() {
+  assert.equal(timer1, 1);
+  timer2++;
+}, 100);
 
-  var spawn = require('child_process').spawn;
-  var child = spawn(process.execPath, [process.argv[1], 'testcase']);
-
-  // pipe stderr and stdin
-  child.stderr.pipe(process.stderr);
-  process.stdin.pipe(child.stdin);
-
-  var missing = true;
-  child.stdout.on('data', function(chunk) {
-    if (missing) {
-        missing = chunk.toString() !== 'exit\n';
-    }
-    process.stdout.write(chunk);
-  });
-
-  child.on('exit', function(code) {
-    process.exit(code);
-  });
-
-  process.on('exit', function() {
-    assert.equal(missing, false);
-  });
+function uncaughtException(err) {
+  assert.equal(err.message, 'BAM!');
+  exceptions++;
 }
+process.on('uncaughtException', uncaughtException);
+
+process.on('exit', function() {
+  process.removeListener('uncaughtException', uncaughtException);
+  assert.equal(exceptions, 1);
+  assert.equal(timer1, 1);
+  assert.equal(timer2, 1);
+});

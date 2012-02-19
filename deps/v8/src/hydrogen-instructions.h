@@ -186,6 +186,7 @@ class LChunkBuilder;
   V(InobjectFields)                            \
   V(BackingStoreFields)                        \
   V(ElementsKind)                              \
+  V(ElementsPointer)                           \
   V(ArrayElements)                             \
   V(DoubleArrayElements)                       \
   V(SpecializedArrayElements)                  \
@@ -569,6 +570,7 @@ class HValue: public ZoneObject {
 
   HBasicBlock* block() const { return block_; }
   void SetBlock(HBasicBlock* block);
+  int LoopWeight() const;
 
   int id() const { return id_; }
   void set_id(int id) { id_ = id; }
@@ -643,6 +645,18 @@ class HValue: public ZoneObject {
   }
   bool HasObservableSideEffects() const {
     return gvn_flags_.ContainsAnyOf(AllObservableSideEffectsFlagSet());
+  }
+
+  GVNFlagSet DependsOnFlags() const {
+    GVNFlagSet result = gvn_flags_;
+    result.Intersect(AllDependsOnFlagSet());
+    return result;
+  }
+
+  GVNFlagSet SideEffectFlags() const {
+    GVNFlagSet result = gvn_flags_;
+    result.Intersect(AllSideEffectsFlagSet());
+    return result;
   }
 
   GVNFlagSet ChangesFlags() const {
@@ -721,6 +735,15 @@ class HValue: public ZoneObject {
     representation_ = r;
   }
 
+  static GVNFlagSet AllDependsOnFlagSet() {
+    GVNFlagSet result;
+    // Create changes mask.
+#define ADD_FLAG(type) result.Add(kDependsOn##type);
+  GVN_FLAG_LIST(ADD_FLAG)
+#undef ADD_FLAG
+    return result;
+  }
+
   static GVNFlagSet AllChangesFlagSet() {
     GVNFlagSet result;
     // Create changes mask.
@@ -742,6 +765,8 @@ class HValue: public ZoneObject {
   static GVNFlagSet AllObservableSideEffectsFlagSet() {
     GVNFlagSet result = AllChangesFlagSet();
     result.Remove(kChangesElementsKind);
+    result.Remove(kChangesElementsPointer);
+    result.Remove(kChangesMaps);
     return result;
   }
 
@@ -764,6 +789,7 @@ class HValue: public ZoneObject {
   int flags_;
   GVNFlagSet gvn_flags_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(HValue);
 };
 
@@ -1340,9 +1366,11 @@ class HStackCheck: public HTemplateInstruction<1> {
 class HEnterInlined: public HTemplateInstruction<0> {
  public:
   HEnterInlined(Handle<JSFunction> closure,
+                int arguments_count,
                 FunctionLiteral* function,
                 CallKind call_kind)
       : closure_(closure),
+        arguments_count_(arguments_count),
         function_(function),
         call_kind_(call_kind) {
   }
@@ -1350,6 +1378,7 @@ class HEnterInlined: public HTemplateInstruction<0> {
   virtual void PrintDataTo(StringStream* stream);
 
   Handle<JSFunction> closure() const { return closure_; }
+  int arguments_count() const { return arguments_count_; }
   FunctionLiteral* function() const { return function_; }
   CallKind call_kind() const { return call_kind_; }
 
@@ -1361,6 +1390,7 @@ class HEnterInlined: public HTemplateInstruction<0> {
 
  private:
   Handle<JSFunction> closure_;
+  int arguments_count_;
   FunctionLiteral* function_;
   CallKind call_kind_;
 };
@@ -1914,8 +1944,7 @@ class HLoadElements: public HUnaryOperation {
   explicit HLoadElements(HValue* value) : HUnaryOperation(value) {
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
-    SetGVNFlag(kDependsOnMaps);
-    SetGVNFlag(kDependsOnElementsKind);
+    SetGVNFlag(kDependsOnElementsPointer);
   }
 
   virtual Representation RequiredInputRepresentation(int index) {
@@ -1966,6 +1995,11 @@ class HCheckMap: public HTemplateInstruction<2> {
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
     SetGVNFlag(kDependsOnMaps);
+    // If the map to check doesn't have the untransitioned elements, it must not
+    // be hoisted above TransitionElements instructions.
+    if (mode == REQUIRE_EXACT_MAP || !map->has_fast_smi_only_elements()) {
+      SetGVNFlag(kDependsOnElementsKind);
+    }
     has_element_transitions_ =
         map->LookupElementsTransitionMap(FAST_DOUBLE_ELEMENTS, NULL) != NULL ||
         map->LookupElementsTransitionMap(FAST_ELEMENTS, NULL) != NULL;
@@ -3844,6 +3878,8 @@ class HLoadKeyedSpecializedArrayElement: public HTemplateInstruction<2> {
   HValue* key() { return OperandAt(1); }
   ElementsKind elements_kind() const { return elements_kind_; }
 
+  virtual Range* InferRange();
+
   DECLARE_CONCRETE_INSTRUCTION(LoadKeyedSpecializedArrayElement)
 
  protected:
@@ -4127,7 +4163,17 @@ class HTransitionElementsKind: public HTemplateInstruction<1> {
         transitioned_map_(transitioned_map) {
     SetOperandAt(0, object);
     SetFlag(kUseGVN);
+    SetGVNFlag(kDependsOnMaps);
     SetGVNFlag(kChangesElementsKind);
+    if (original_map->has_fast_double_elements()) {
+      SetGVNFlag(kChangesElementsPointer);
+      SetGVNFlag(kDependsOnElementsPointer);
+      SetGVNFlag(kDependsOnDoubleArrayElements);
+    } else if (transitioned_map->has_fast_double_elements()) {
+      SetGVNFlag(kChangesElementsPointer);
+      SetGVNFlag(kDependsOnElementsPointer);
+      SetGVNFlag(kDependsOnArrayElements);
+    }
     set_representation(Representation::Tagged());
   }
 

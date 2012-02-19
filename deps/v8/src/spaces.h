@@ -1589,50 +1589,8 @@ class PagedSpace : public Space {
   Page* FirstPage() { return anchor_.next_page(); }
   Page* LastPage() { return anchor_.prev_page(); }
 
-  // Returns zero for pages that have so little fragmentation that it is not
-  // worth defragmenting them.  Otherwise a positive integer that gives an
-  // estimate of fragmentation on an arbitrary scale.
-  int Fragmentation(Page* p) {
-    FreeList::SizeStats sizes;
-    free_list_.CountFreeListItems(p, &sizes);
-
-    intptr_t ratio;
-    intptr_t ratio_threshold;
-    if (identity() == CODE_SPACE) {
-      ratio = (sizes.medium_size_ * 10 + sizes.large_size_ * 2) * 100 /
-          Page::kObjectAreaSize;
-      ratio_threshold = 10;
-    } else {
-      ratio = (sizes.small_size_ * 5 + sizes.medium_size_) * 100 /
-          Page::kObjectAreaSize;
-      ratio_threshold = 15;
-    }
-
-    if (FLAG_trace_fragmentation) {
-      PrintF("%p [%d]: %d (%.2f%%) %d (%.2f%%) %d (%.2f%%) %d (%.2f%%) %s\n",
-             reinterpret_cast<void*>(p),
-             identity(),
-             static_cast<int>(sizes.small_size_),
-             static_cast<double>(sizes.small_size_ * 100) /
-                 Page::kObjectAreaSize,
-             static_cast<int>(sizes.medium_size_),
-             static_cast<double>(sizes.medium_size_ * 100) /
-                 Page::kObjectAreaSize,
-             static_cast<int>(sizes.large_size_),
-             static_cast<double>(sizes.large_size_ * 100) /
-                 Page::kObjectAreaSize,
-             static_cast<int>(sizes.huge_size_),
-             static_cast<double>(sizes.huge_size_ * 100) /
-                 Page::kObjectAreaSize,
-             (ratio > ratio_threshold) ? "[fragmented]" : "");
-    }
-
-    if (FLAG_always_compact && sizes.Total() != Page::kObjectAreaSize) {
-      return 1;
-    }
-    if (ratio <= ratio_threshold) return 0;  // Not fragmented.
-
-    return static_cast<int>(ratio - ratio_threshold);
+  void CountFreeListItems(Page* p, FreeList::SizeStats* sizes) {
+    free_list_.CountFreeListItems(p, sizes);
   }
 
   void EvictEvacuationCandidatesFromFreeLists();
@@ -1834,7 +1792,7 @@ class SemiSpace : public Space {
       current_page_(NULL) { }
 
   // Sets up the semispace using the given chunk.
-  bool SetUp(Address start, int initial_capacity, int maximum_capacity);
+  void SetUp(Address start, int initial_capacity, int maximum_capacity);
 
   // Tear down the space.  Heap memory was not allocated by the space, so it
   // is not deallocated here.
@@ -2406,12 +2364,9 @@ class FixedSpace : public PagedSpace {
 class MapSpace : public FixedSpace {
  public:
   // Creates a map space object with a maximum capacity.
-  MapSpace(Heap* heap,
-           intptr_t max_capacity,
-           int max_map_space_pages,
-           AllocationSpace id)
+  MapSpace(Heap* heap, intptr_t max_capacity, AllocationSpace id)
       : FixedSpace(heap, max_capacity, id, Map::kSize, "map"),
-        max_map_space_pages_(max_map_space_pages) {
+        max_map_space_pages_(kMaxMapPageIndex - 1) {
   }
 
   // Given an index, returns the page address.

@@ -45,7 +45,7 @@
 # define close _close
 #endif
 
-#define TOO_LONG_NAME_LENGTH 8192
+#define TOO_LONG_NAME_LENGTH 65536
 
 typedef struct {
   const char* path;
@@ -184,6 +184,13 @@ static void chown_cb(uv_fs_t* req) {
   uv_fs_req_cleanup(req);
 }
 
+static void chown_root_cb(uv_fs_t* req) {
+  ASSERT(req->fs_type == UV_FS_CHOWN);
+  ASSERT(req->result == -1);
+  ASSERT(req->errorno == UV_EPERM);
+  chown_cb_count++;
+  uv_fs_req_cleanup(req);
+}
 
 static void unlink_cb(uv_fs_t* req) {
   ASSERT(req == &unlink_req);
@@ -425,6 +432,14 @@ static void open_nametoolong_cb(uv_fs_t* req) {
   uv_fs_req_cleanup(req);
 }
 
+static void open_loop_cb(uv_fs_t* req) {
+  ASSERT(req->fs_type == UV_FS_OPEN);
+  ASSERT(req->errorno == UV_ELOOP);
+  ASSERT(req->result == -1);
+  open_cb_count++;
+  uv_fs_req_cleanup(req);
+}
+
 
 TEST_IMPL(fs_file_noent) {
   uv_fs_t req;
@@ -472,6 +487,34 @@ TEST_IMPL(fs_file_nametoolong) {
   ASSERT(open_cb_count == 0);
   uv_run(loop);
   ASSERT(open_cb_count == 1);
+
+  return 0;
+}
+
+TEST_IMPL(fs_file_loop) {
+  uv_fs_t req;
+  int r;
+
+  loop = uv_default_loop();
+
+  unlink("test_symlink");
+  uv_fs_symlink(loop, &req, "test_symlink", "test_symlink", 0, NULL);
+  uv_fs_req_cleanup(&req);
+
+  r = uv_fs_open(loop, &req, "test_symlink", O_RDONLY, 0, NULL);
+  ASSERT(r == -1);
+  ASSERT(req.result == -1);
+  ASSERT(uv_last_error(loop).code == UV_ELOOP);
+  uv_fs_req_cleanup(&req);
+
+  r = uv_fs_open(loop, &req, "test_symlink", O_RDONLY, 0, open_loop_cb);
+  ASSERT(r == 0);
+
+  ASSERT(open_cb_count == 0);
+  uv_run(loop);
+  ASSERT(open_cb_count == 1);
+
+  unlink("test_symlink");
 
   return 0;
 }
@@ -1018,6 +1061,12 @@ TEST_IMPL(fs_chown) {
   uv_run(loop);
   ASSERT(chown_cb_count == 1);
 
+  /* chown to root (fail) */
+  chown_cb_count = 0;
+  r = uv_fs_chown(loop, &req, "test_file", 0, 0, chown_root_cb);
+  uv_run(loop);
+  ASSERT(chown_cb_count == 1);
+
   /* async fchown */
   r = uv_fs_fchown(loop, &req, file, -1, -1, fchown_cb);
   ASSERT(r == 0);
@@ -1292,6 +1341,22 @@ TEST_IMPL(fs_utime) {
 TEST_IMPL(fs_stat_root) {
   int r;
   uv_loop_t* loop = uv_default_loop();
+
+  r = uv_fs_stat(loop, &stat_req, "\\", NULL);
+  ASSERT(r == 0);
+
+  r = uv_fs_stat(loop, &stat_req, "..\\..\\..\\..\\..\\..\\..", NULL);
+  ASSERT(r == 0);
+
+  r = uv_fs_stat(loop, &stat_req, "..", NULL);
+  ASSERT(r == 0);
+
+  r = uv_fs_stat(loop, &stat_req, "..\\", NULL);
+  ASSERT(r == 0);
+
+  /* stats the current directory on c: */
+  r = uv_fs_stat(loop, &stat_req, "c:", NULL);
+  ASSERT(r == 0);
 
   r = uv_fs_stat(loop, &stat_req, "c:\\", NULL);
   ASSERT(r == 0);

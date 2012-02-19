@@ -1,4 +1,69 @@
-2012.01.23, Version 0.7.1 (unstable)
+2012.02.14, Version 0.7.4 (unstable)
+
+* Upgrade V8 to 3.9.5
+
+* Upgrade npm to 1.1.1
+
+* build: Detect host_arch better (Karl Skomski)
+
+* debugger: export `debug_port` to `process` (Fedor Indutny)
+
+* api docs: CSS bug fixes (isaacs)
+
+* build: use -fPIC for native addons on UNIX (Nathan Rajlich)
+
+* Re-add top-level v8::Locker (Marcel Laverdet)
+
+* Move images out of the dist tarballs (isaacs)
+
+* libuv: Remove uv_export and uv_import (Ben Noordhuis)
+
+* build: Support x64 build on Windows (Igor Zinkovsky)
+
+
+2012.02.07, Version 0.7.3 (unstable), 99059aad8d654acda4abcfaa68df182b50f2ec90
+
+* Upgrade V8 to 3.9.2
+
+* Revert support for isolates. (Ben Noordhuis)
+
+* cluster: Cleanup docs, event handling, and process.disconnect (Andreas Madsen)
+
+* gyp_addon: link with node.lib on Windows (Nathan Rajlich)
+
+* http: fix case where http-parser is freed twice (koichik)
+
+* Windows: disable RTTI and exceptions (Bert Belder)
+
+
+2012.02.01, Version 0.7.2 (unstable), ec79acb3a6166e30f0bf271fbbfda1fb575b3321
+
+* Update V8 to 3.8.9
+
+* Support for sharing streams across Isolates (Igor Zinkovsky)
+
+* #2636 - Fix case where http_parsers are freed too early (koichik)
+
+* url: Support for IPv6 addresses in URLs (Łukasz Walukiewicz)
+
+* child_process: Add disconnect() method to child processes (Andreas Madsen)
+
+* fs: add O_EXCL support, exclusive open file (Ben Noordhuis)
+
+* fs: more specific error messages (Tj Holowaychuk)
+
+* tty: emit 'unknown' key event if key sequence not found (Dan VerWeire, Nathan Rajlich)
+
+* build: compile release build too if BUILDTYPE=Debug (Ben Noordhuis)
+
+* module: fix --debug-brk on symlinked scripts (Fedor Indutny)
+
+* zlib: fix `Failed to set dictionary` issue (Fedor Indutny)
+
+* waf: predict target arch for OS X (Fedor Indutny)
+
+
+2012.01.23, Version 0.7.1 (unstable), a74354735ab5d5b0fa35a1e4ff7e653757d2069b
 
 * Update V8 to 3.8.8
 
@@ -30,6 +95,87 @@
 * Use isolates for internal debugger (Fedor Indutny)
 
 * Bug fixes
+
+
+2012.02.17 Version 0.6.11 (stable), 1eb1fe32250fc88cb5b0a97cddf3e02be02e3f4a
+
+* http: allow multiple WebSocket RFC6455 headers (Einar Otto Stangvik)
+
+* http: allow multiple WWW-Authenticate headers (Ben Noordhuis)
+
+* windows: support unicode argv and environment variables (Bert Belder)
+
+* tls: mitigate session renegotiation attacks (Ben Noordhuis)
+
+* tcp, pipe: don't assert on uv_accept() errors (Ben Noordhuis)
+
+* tls: Allow establishing secure connection on the existing socket (koichik)
+
+* dgram: handle close of dgram socket before DNS lookup completes (Seth Fitzsimmons)
+
+* windows: Support half-duplex pipes (Igor Zinkovsky)
+
+* build: disable omit-frame-pointer on solaris systems (Dave Pacheco)
+
+* debugger: fix --debug-brk (Ben Noordhuis)
+
+* net: fix large file downloads failing (koichik)
+
+* fs: fix ReadStream failure to read from existing fd (Christopher Jeffrey)
+
+* net: destroy socket on DNS error (Stefan Rusu)
+
+* dtrace: add missing translator (Dave Pacheco)
+
+* unix: don't flush tty on switch to raw mode (Ben Noordhuis)
+
+* windows: reset brightness when reverting to default text color (Bert Belder)
+
+* npm: update to 1.1.1
+  - Update which, fstream, mkdirp, request, and rimraf
+  - Fix #2123 Set path properly for lifecycle scripts on windows
+  - Mark the root as seen, so we don't recurse into it. Fixes #1838. (Martin Cooper)
+
+
+2012.02.02, Version 0.6.10 (stable), 051908e023f87894fa68f5b64d0b99a19a7db01e
+
+* Update V8 to 3.6.6.20
+
+* Add npm msysgit bash shim to msi installer (isaacs)
+
+* buffers: fix intermittent out of bounds error (Ben Noordhuis)
+
+* buffers: honor length argument in base64 decoder (Ben Noordhuis)
+
+* windows: Fix path.exists regression (Bert Belder)
+
+* Make QueryString.parse run faster (Philip Tellis)
+
+* http: avoid freeing http-parser objects too early (koichik)
+
+* timers: add v0.4 compatibility hack (Ben Noordhuis)
+
+* Proper EPERM error code support (Igor Zinkovsky, Brandon Philips)
+
+* dgram: Implement udp multicast methods on windows (Bert Belder)
+
+
+2012.01.27, Version 0.6.9 (stable), f19e20d33f57c4d2853aaea7d2724d44f3b0012f
+
+* dgram: Bring back missing functionality for Unix (Dan VerWeire, Roman Shtylman, Ben Noordhuis)
+  - Note: Windows UDP support not yet complete.
+
+* http: Fix parser memory leak (koichik)
+
+* zlib: Fix #2365 crashes on invalid input (Nicolas LaCasse)
+
+* module: fix --debug-brk on symlinked scripts (Fedor Indutny)
+
+* Documentation Restyling (Matthew Fitzsimmons)
+
+* Update npm to 1.1.0-3 (isaacs)
+
+* Windows: fix regression in stat() calls to C:\ (Bert Belder)
 
 
 2012.01.19, Version 0.6.8 (stable), d18cebaf8a7ac701dabd71a3aa4eb0571db6a645

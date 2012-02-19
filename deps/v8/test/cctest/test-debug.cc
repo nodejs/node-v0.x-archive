@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -856,7 +856,7 @@ static void DebugEventRemoveBreakPoint(v8::DebugEvent event,
 
   if (event == v8::Break) {
     break_point_hit_count++;
-    v8::Handle<v8::Function> fun(v8::Handle<v8::Function>::Cast(data));
+    CHECK(data->IsFunction());
     ClearBreakPoint(debug_event_remove_break_point);
   }
 }
@@ -1447,8 +1447,7 @@ TEST(BreakPointSurviveGC) {
 
   // Test IC store break point with garbage collection.
   {
-    v8::Local<v8::Function> bar(
-        CompileFunction(&env, "function foo(){}", "foo"));
+    CompileFunction(&env, "function foo(){}", "foo");
     foo = CompileFunction(&env, "function foo(){bar=0;}", "foo");
     SetBreakPoint(foo, 0);
   }
@@ -1456,8 +1455,7 @@ TEST(BreakPointSurviveGC) {
 
   // Test IC load break point with garbage collection.
   {
-    v8::Local<v8::Function> bar(
-        CompileFunction(&env, "function foo(){}", "foo"));
+    CompileFunction(&env, "function foo(){}", "foo");
     foo = CompileFunction(&env, "bar=1;function foo(){var x=bar;}", "foo");
     SetBreakPoint(foo, 0);
   }
@@ -1465,8 +1463,7 @@ TEST(BreakPointSurviveGC) {
 
   // Test IC call break point with garbage collection.
   {
-    v8::Local<v8::Function> bar(
-        CompileFunction(&env, "function foo(){}", "foo"));
+    CompileFunction(&env, "function foo(){}", "foo");
     foo = CompileFunction(&env,
                           "function bar(){};function foo(){bar();}",
                           "foo");
@@ -1476,8 +1473,7 @@ TEST(BreakPointSurviveGC) {
 
   // Test return break point with garbage collection.
   {
-    v8::Local<v8::Function> bar(
-        CompileFunction(&env, "function foo(){}", "foo"));
+    CompileFunction(&env, "function foo(){}", "foo");
     foo = CompileFunction(&env, "function foo(){}", "foo");
     SetBreakPoint(foo, 0);
   }
@@ -1485,8 +1481,7 @@ TEST(BreakPointSurviveGC) {
 
   // Test non IC break point with garbage collection.
   {
-    v8::Local<v8::Function> bar(
-        CompileFunction(&env, "function foo(){}", "foo"));
+    CompileFunction(&env, "function foo(){}", "foo");
     foo = CompileFunction(&env, "function foo(){var bar=0;}", "foo");
     SetBreakPoint(foo, 0);
   }
@@ -3751,8 +3746,7 @@ TEST(BreakOnException) {
   v8::internal::Isolate::Current()->TraceException(false);
 
   // Create functions for testing break on exception.
-  v8::Local<v8::Function> throws(
-      CompileFunction(&env, "function throws(){throw 1;}", "throws"));
+  CompileFunction(&env, "function throws(){throw 1;}", "throws");
   v8::Local<v8::Function> caught =
       CompileFunction(&env,
                       "function caught(){try {throws();} catch(e) {};}",
@@ -5549,8 +5543,6 @@ TEST(DebuggerUnload) {
     // Get the test functions again.
     v8::Local<v8::Function> foo(v8::Local<v8::Function>::Cast(
         env->Global()->Get(v8::String::New("foo"))));
-    v8::Local<v8::Function> bar(v8::Local<v8::Function>::Cast(
-        env->Global()->Get(v8::String::New("foo"))));
 
     foo->Call(env->Global(), 0, NULL);
     CHECK_EQ(0, break_point_hit_count);
@@ -6028,6 +6020,8 @@ TEST(DebugGetLoadedScripts) {
   EmptyExternalStringResource source_ext_str;
   v8::Local<v8::String> source = v8::String::NewExternal(&source_ext_str);
   v8::Handle<v8::Script> evil_script(v8::Script::Compile(source));
+  // "use" evil_script to make the compiler happy.
+  (void) evil_script;
   Handle<i::ExternalTwoByteString> i_source(
       i::ExternalTwoByteString::cast(*v8::Utils::OpenHandle(*source)));
   // This situation can happen if source was an external string disposed
@@ -6675,7 +6669,7 @@ static void BreakMessageHandler(const v8::Debug::Message& message) {
     break_point_hit_count++;
 
     v8::HandleScope scope;
-    v8::Handle<v8::String> json(message.GetJSON());
+    message.GetJSON();
 
     SendContinueCommand();
   } else if (message.IsEvent() && message.GetEvent() == v8::AfterCompile) {
@@ -6686,7 +6680,7 @@ static void BreakMessageHandler(const v8::Debug::Message& message) {
     isolate->stack_guard()->DebugBreak();
 
     // Force serialization to trigger some internal JS execution.
-    v8::Handle<v8::String> json(message.GetJSON());
+    message.GetJSON();
 
     // Restore previous state.
     if (is_debug_break) {
@@ -7289,6 +7283,67 @@ TEST(DebugBreakLoop) {
   // Get rid of the debug event listener.
   v8::Debug::SetDebugEventListener(NULL);
   CheckDebuggerUnloaded();
+}
+
+
+v8::Local<v8::Script> inline_script;
+
+static void DebugBreakInlineListener(v8::DebugEvent event,
+                                     v8::Handle<v8::Object> exec_state,
+                                     v8::Handle<v8::Object> event_data,
+                                     v8::Handle<v8::Value> data) {
+  if (event != v8::Break) return;
+
+  int expected_frame_count = 4;
+  int expected_line_number[] = {1, 4, 7, 12};
+
+  i::Handle<i::Object> compiled_script = v8::Utils::OpenHandle(*inline_script);
+  i::Handle<i::Script> source_script = i::Handle<i::Script>(i::Script::cast(
+      i::JSFunction::cast(*compiled_script)->shared()->script()));
+
+  int break_id = v8::internal::Isolate::Current()->debug()->break_id();
+  char script[128];
+  i::Vector<char> script_vector(script, sizeof(script));
+  OS::SNPrintF(script_vector, "%%GetFrameCount(%d)", break_id);
+  v8::Local<v8::Value> result = CompileRun(script);
+
+  int frame_count = result->Int32Value();
+  CHECK_EQ(expected_frame_count, frame_count);
+
+  for (int i = 0; i < frame_count; i++) {
+    // The 5. element in the returned array of GetFrameDetails contains the
+    // source position of that frame.
+    OS::SNPrintF(script_vector, "%%GetFrameDetails(%d, %d)[5]", break_id, i);
+    v8::Local<v8::Value> result = CompileRun(script);
+    CHECK_EQ(expected_line_number[i],
+             i::GetScriptLineNumber(source_script, result->Int32Value()));
+  }
+  v8::Debug::SetDebugEventListener(NULL);
+  v8::V8::TerminateExecution();
+}
+
+
+TEST(DebugBreakInline) {
+  i::FLAG_allow_natives_syntax = true;
+  v8::HandleScope scope;
+  DebugLocalContext env;
+  const char* source =
+      "function debug(b) {             \n"
+      "  if (b) debugger;              \n"
+      "}                               \n"
+      "function f(b) {                 \n"
+      "  debug(b)                      \n"
+      "};                              \n"
+      "function g(b) {                 \n"
+      "  f(b);                         \n"
+      "};                              \n"
+      "g(false);                       \n"
+      "g(false);                       \n"
+      "%OptimizeFunctionOnNextCall(g); \n"
+      "g(true);";
+  v8::Debug::SetDebugEventListener(DebugBreakInlineListener);
+  inline_script = v8::Script::Compile(v8::String::New(source));
+  inline_script->Run();
 }
 
 

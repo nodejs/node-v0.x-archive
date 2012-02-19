@@ -137,7 +137,7 @@ a listener for the ['listening'](net.html#event_listening_) event.
 See also [net.Server.listen()](net.html#server.listen).
 
 
-### server.close()
+### server.close([cb])
 
 Stops the server from accepting new connections.
 See [net.Server.close()](net.html#server.close).
@@ -154,18 +154,19 @@ no limit will be applied.
 This object is created internally by a HTTP server -- not by
 the user -- and passed as the first argument to a `'request'` listener.
 
-This is an `EventEmitter` with the following events:
+The request implements the [Readable Stream](streams.html#readable_Stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event: 'data'
 
 `function (chunk) { }`
 
-Emitted when a piece of the message body is received.
+Emitted when a piece of the message body is received. The chunk is a string if
+an encoding has been set with `request.setEncoding()`, otherwise it's a
+[Buffer](buffers.html).
 
-Example: A chunk of the body is given as the single
-argument. The transfer-encoding has been decoded.  The
-body chunk is a string.  The body encoding is set with
-`request.setEncoding()`.
+Note that the __data will be lost__ if there is no listener when a
+`ServerRequest` emits a `'data'` event.
 
 ### Event: 'end'
 
@@ -271,7 +272,10 @@ authentication details.
 ## http.ServerResponse
 
 This object is created internally by a HTTP server--not by the user. It is
-passed as the second parameter to the `'request'` event. It is a `Writable Stream`.
+passed as the second parameter to the `'request'` event.
+
+The response implements the [Writable  Stream](streams.html#writable_Stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event: 'close'
 
@@ -340,6 +344,13 @@ or
 
     response.setHeader("Set-Cookie", ["type=ninja", "language=javascript"]);
 
+### response.sendDate
+
+When true, the Date header will be automatically generated and sent in 
+the response if it is not already present in the headers. Defaults to true.
+
+This should only be disabled for testing; HTTP requires the Date header
+in responses.
 
 ### response.getHeader(name)
 
@@ -601,11 +612,11 @@ event, the entire body will be caught.
       }, 10);
     });
 
-This is a `Writable Stream`.
 Note: Node does not check whether Content-Length and the length of the body
 which has been transmitted are equal or not.
 
-This is an `EventEmitter` with the following events:
+The request implements the [Writable  Stream](streams.html#writable_Stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event 'response'
 
@@ -797,13 +808,18 @@ will be called.
 This object is created when making a request with `http.request()`. It is
 passed to the `'response'` event of the request object.
 
-The response implements the `Readable Stream` interface.
+The response implements the [Readable Stream](streams.html#readable_Stream)
+interface. This is an `EventEmitter` with the following events:
+
 
 ### Event: 'data'
 
 `function (chunk) { }`
 
 Emitted when a piece of the message body is received.
+
+Note that the __data will be lost__ if there is no listener when a
+`ClientResponse` emits a `'data'` event.
 
 
 ### Event: 'end'

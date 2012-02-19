@@ -15,15 +15,14 @@
       'Debug': {
         'defines': [ 'DEBUG', '_DEBUG' ],
         'cflags': [ '-g', '-O0' ],
+        'conditions': [
+          ['target_arch=="x64"', {
+            'msvs_configuration_platform': 'x64',
+          }],
+        ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'target_conditions': [
-              ['library=="static_library"', {
-                'RuntimeLibrary': 1, # static debug
-              }, {
-                'RuntimeLibrary': 3, # DLL debug
-              }],
-            ],
+            'RuntimeLibrary': 1, # static debug
             'Optimization': 0, # /Od, no optimization
             'MinimalRebuild': 'true',
             'OmitFramePointers': 'false',
@@ -35,17 +34,21 @@
         },
       },
       'Release': {
+        'conditions': [
+          [ 'OS!="solaris"', {
+            'cflags': [ '-fomit-frame-pointer' ]
+          }],
+        ],
         # 'defines': [ 'NDEBUG' ],
-        'cflags': [ '-O3', '-fomit-frame-pointer', '-fdata-sections', '-ffunction-sections' ],
+        'cflags': [ '-O3', '-fdata-sections', '-ffunction-sections' ],
+        'conditions': [
+          ['target_arch=="x64"', {
+            'msvs_configuration_platform': 'x64',
+          }],
+        ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'target_conditions': [
-              ['library=="static_library"', {
-                'RuntimeLibrary': 0, # static release
-              }, {
-                'RuntimeLibrary': 2, # debug release
-              }],
-            ],
+            'RuntimeLibrary': 0, # static release
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favour speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible
@@ -53,6 +56,8 @@
             'OmitFramePointers': 'true',
             'EnableFunctionLevelLinking': 'true',
             'EnableIntrinsicFunctions': 'true',
+            'RuntimeTypeInfo': 'false',
+            'ExceptionHandling': '0',
             'AdditionalOptions': [
               '/MP', # compile across multiple CPUs
             ],
@@ -84,6 +89,11 @@
       'VCLibrarianTool': {
       },
       'VCLinkerTool': {
+        'conditions': [
+          ['target_arch=="x64"', {
+            'TargetMachine' : 17 # /MACHINE:X64
+          }],
+        ],
         'GenerateDebugInformation': 'true',
         'RandomizedBaseAddress': 2, # enable ASLR
         'DataExecutionPrevention': 2, # enable DEP

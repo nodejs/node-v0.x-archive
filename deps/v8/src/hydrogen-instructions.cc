@@ -67,6 +67,14 @@ const char* Representation::Mnemonic() const {
 }
 
 
+int HValue::LoopWeight() const {
+  const int w = FLAG_loop_weight;
+  static const int weights[] = { 1, w, w*w, w*w*w, w*w*w*w };
+  return weights[Min(block()->LoopNestingDepth(),
+                     static_cast<int>(ARRAY_SIZE(weights)-1))];
+}
+
+
 void HValue::AssumeRepresentation(Representation r) {
   if (CheckFlag(kFlexibleRepresentation)) {
     ChangeRepresentation(r);
@@ -885,6 +893,13 @@ void HCheckInstanceType::GetCheckMaskAndTag(uint8_t* mask, uint8_t* tag) {
 void HCheckMap::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
   stream->Add(" %p", *map());
+  if (mode() == REQUIRE_EXACT_MAP) {
+    stream->Add(" [EXACT]");
+  } else if (!has_element_transitions_) {
+    stream->Add(" [EXACT*]");
+  } else {
+    stream->Add(" [MATCH ELEMENTS]");
+  }
 }
 
 
@@ -1139,7 +1154,7 @@ void HPhi::InitRealUses(int phi_id) {
     HValue* value = it.value();
     if (!value->IsPhi()) {
       Representation rep = value->RequiredInputRepresentation(it.index());
-      ++non_phi_uses_[rep.kind()];
+      non_phi_uses_[rep.kind()] += value->LoopWeight();
     }
   }
 }
@@ -1338,6 +1353,23 @@ Range* HShl::InferRange() {
   return HValue::InferRange();
 }
 
+
+Range* HLoadKeyedSpecializedArrayElement::InferRange() {
+  switch (elements_kind()) {
+    case EXTERNAL_PIXEL_ELEMENTS:
+      return new Range(0, 255);
+    case EXTERNAL_BYTE_ELEMENTS:
+      return new Range(-128, 127);
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+      return new Range(0, 255);
+    case EXTERNAL_SHORT_ELEMENTS:
+      return new Range(-32768, 32767);
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+      return new Range(0, 65535);
+    default:
+      return HValue::InferRange();
+  }
+}
 
 
 void HCompareGeneric::PrintDataTo(StringStream* stream) {

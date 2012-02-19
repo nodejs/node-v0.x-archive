@@ -59,8 +59,8 @@ class LOperand: public ZoneObject {
   bool IsDoubleRegister() const { return kind() == DOUBLE_REGISTER; }
   bool IsArgument() const { return kind() == ARGUMENT; }
   bool IsUnallocated() const { return kind() == UNALLOCATED; }
+  bool IsIgnored() const { return kind() == INVALID; }
   bool Equals(LOperand* other) const { return value_ == other->value_; }
-  int VirtualRegister();
 
   void PrintTo(StringStream* stream);
   void ConvertTo(Kind kind, int index) {
@@ -89,8 +89,7 @@ class LUnallocated: public LOperand {
     FIXED_SLOT,
     MUST_HAVE_REGISTER,
     WRITABLE_REGISTER,
-    SAME_AS_FIRST_INPUT,
-    IGNORE
+    SAME_AS_FIRST_INPUT
   };
 
   // Lifetime of operand inside the instruction.
@@ -121,9 +120,9 @@ class LUnallocated: public LOperand {
 
   // The superclass has a KindField.  Some policies have a signed fixed
   // index in the upper bits.
-  static const int kPolicyWidth = 4;
+  static const int kPolicyWidth = 3;
   static const int kLifetimeWidth = 1;
-  static const int kVirtualRegisterWidth = 17;
+  static const int kVirtualRegisterWidth = 18;
 
   static const int kPolicyShift = kKindFieldWidth;
   static const int kLifetimeShift = kPolicyShift + kPolicyWidth;
@@ -143,12 +142,10 @@ class LUnallocated: public LOperand {
                         kVirtualRegisterWidth> {
   };
 
-  static const int kMaxVirtualRegisters = 1 << (kVirtualRegisterWidth + 1);
+  static const int kMaxVirtualRegisters = 1 << kVirtualRegisterWidth;
   static const int kMaxFixedIndex = 63;
   static const int kMinFixedIndex = -64;
 
-  bool HasIgnorePolicy() const { return policy() == IGNORE; }
-  bool HasNoPolicy() const { return policy() == NONE; }
   bool HasAnyPolicy() const {
     return policy() == ANY;
   }
@@ -171,7 +168,7 @@ class LUnallocated: public LOperand {
     return static_cast<int>(value_) >> kFixedIndexShift;
   }
 
-  unsigned virtual_register() const {
+  int virtual_register() const {
     return VirtualRegisterField::decode(value_);
   }
 
@@ -234,9 +231,7 @@ class LMoveOperands BASE_EMBEDDED {
   }
 
   bool IsIgnored() const {
-    return destination_ != NULL &&
-        destination_->IsUnallocated() &&
-        LUnallocated::cast(destination_)->HasIgnorePolicy();
+    return destination_ != NULL && destination_->IsIgnored();
   }
 
   // We clear both operands to indicate move that's been eliminated.
@@ -443,12 +438,14 @@ class LPointerMap: public ZoneObject {
 class LEnvironment: public ZoneObject {
  public:
   LEnvironment(Handle<JSFunction> closure,
+               bool is_arguments_adaptor,
                int ast_id,
                int parameter_count,
                int argument_count,
                int value_count,
                LEnvironment* outer)
       : closure_(closure),
+        is_arguments_adaptor_(is_arguments_adaptor),
         arguments_stack_height_(argument_count),
         deoptimization_index_(Safepoint::kNoDeoptimizationIndex),
         translation_index_(-1),
@@ -456,7 +453,7 @@ class LEnvironment: public ZoneObject {
         parameter_count_(parameter_count),
         pc_offset_(-1),
         values_(value_count),
-        representations_(value_count),
+        is_tagged_(value_count),
         spilled_registers_(NULL),
         spilled_double_registers_(NULL),
         outer_(outer) {
@@ -478,11 +475,13 @@ class LEnvironment: public ZoneObject {
 
   void AddValue(LOperand* operand, Representation representation) {
     values_.Add(operand);
-    representations_.Add(representation);
+    if (representation.IsTagged()) {
+      is_tagged_.Add(values_.length() - 1);
+    }
   }
 
   bool HasTaggedValueAt(int index) const {
-    return representations_[index].IsTagged();
+    return is_tagged_.Contains(index);
   }
 
   void Register(int deoptimization_index,
@@ -505,8 +504,11 @@ class LEnvironment: public ZoneObject {
 
   void PrintTo(StringStream* stream);
 
+  bool is_arguments_adaptor() const { return is_arguments_adaptor_; }
+
  private:
   Handle<JSFunction> closure_;
+  bool is_arguments_adaptor_;
   int arguments_stack_height_;
   int deoptimization_index_;
   int translation_index_;
@@ -514,7 +516,7 @@ class LEnvironment: public ZoneObject {
   int parameter_count_;
   int pc_offset_;
   ZoneList<LOperand*> values_;
-  ZoneList<Representation> representations_;
+  BitVector is_tagged_;
 
   // Allocation index indexed arrays of spill slot operands for registers
   // that are also in spill slots at an OSR entry.  NULL for environments
