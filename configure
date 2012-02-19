@@ -148,16 +148,17 @@ def uname(switch):
 
 def host_arch():
   """Host architecture. One of arm, ia32 or x64."""
-  arch   = uname('-p')
+  arch   = uname('-m')
   arches = {
     'arm': 'arm',
     'x86': 'ia32',
     'i386': 'ia32',
+    'i686': 'ia32',
     'x86_64': 'x64',
   }
 
   if arches.get(arch) == None:
-    arch = uname('-m')
+    arch = uname('-p')
 
   return arches.get(arch, 'ia32')
 
