@@ -1131,6 +1131,7 @@ const char* HeapEntry::TypeAsString() {
     case kRegExp: return "/regexp/";
     case kHeapNumber: return "/number/";
     case kNative: return "/native/";
+    case kSynthetic: return "/synthetic/";
     default: return "???";
   }
 }
@@ -1308,19 +1309,6 @@ HeapEntry* HeapSnapshot::AddGcSubrootEntry(int tag,
 }
 
 
-HeapEntry* HeapSnapshot::AddNativesRootEntry(int children_count,
-                                                 int retainers_count) {
-  ASSERT(natives_root_entry_ == NULL);
-  return (natives_root_entry_ = AddEntry(
-      HeapEntry::kObject,
-      "(Native objects)",
-      HeapObjectsMap::kNativesRootObjectId,
-      0,
-      children_count,
-      retainers_count));
-}
-
-
 HeapEntry* HeapSnapshot::AddEntry(HeapEntry::Type type,
                                   const char* name,
                                   uint64_t id,
@@ -1402,10 +1390,8 @@ void HeapSnapshot::Print(int max_depth) {
 const uint64_t HeapObjectsMap::kInternalRootObjectId = 1;
 const uint64_t HeapObjectsMap::kGcRootsObjectId =
     HeapObjectsMap::kInternalRootObjectId + HeapObjectsMap::kObjectIdStep;
-const uint64_t HeapObjectsMap::kNativesRootObjectId =
-    HeapObjectsMap::kGcRootsObjectId + HeapObjectsMap::kObjectIdStep;
 const uint64_t HeapObjectsMap::kGcRootsFirstSubrootId =
-    HeapObjectsMap::kNativesRootObjectId + HeapObjectsMap::kObjectIdStep;
+    HeapObjectsMap::kGcRootsObjectId + HeapObjectsMap::kObjectIdStep;
 const uint64_t HeapObjectsMap::kFirstAvailableObjectId =
     HeapObjectsMap::kGcRootsFirstSubrootId +
     VisitorSynchronization::kNumberOfSyncTags * HeapObjectsMap::kObjectIdStep;
@@ -1577,7 +1563,8 @@ void HeapSnapshotsCollection::RemoveSnapshot(HeapSnapshot* snapshot) {
 
 Handle<HeapObject> HeapSnapshotsCollection::FindHeapObjectById(uint64_t id) {
   // First perform a full GC in order to avoid dead objects.
-  HEAP->CollectAllGarbage(Heap::kMakeHeapIterableMask);
+  HEAP->CollectAllGarbage(Heap::kMakeHeapIterableMask,
+                          "HeapSnapshotsCollection::FindHeapObjectById");
   AssertNoAllocation no_allocation;
   HeapObject* object = NULL;
   HeapIterator iterator(HeapIterator::kFilterUnreachable);
@@ -2712,9 +2699,43 @@ class GlobalHandlesExtractor : public ObjectVisitor {
   NativeObjectsExplorer* explorer_;
 };
 
-HeapThing const NativeObjectsExplorer::kNativesRootObject =
-    reinterpret_cast<HeapThing>(
-        static_cast<intptr_t>(HeapObjectsMap::kNativesRootObjectId));
+
+class BasicHeapEntriesAllocator : public HeapEntriesAllocator {
+ public:
+  BasicHeapEntriesAllocator(
+      HeapSnapshot* snapshot,
+      HeapEntry::Type entries_type)
+    : snapshot_(snapshot),
+      collection_(snapshot_->collection()),
+      entries_type_(entries_type) {
+  }
+  virtual HeapEntry* AllocateEntry(
+      HeapThing ptr, int children_count, int retainers_count);
+ private:
+  HeapSnapshot* snapshot_;
+  HeapSnapshotsCollection* collection_;
+  HeapEntry::Type entries_type_;
+};
+
+
+HeapEntry* BasicHeapEntriesAllocator::AllocateEntry(
+    HeapThing ptr, int children_count, int retainers_count) {
+  v8::RetainedObjectInfo* info = reinterpret_cast<v8::RetainedObjectInfo*>(ptr);
+  intptr_t elements = info->GetElementCount();
+  intptr_t size = info->GetSizeInBytes();
+  return snapshot_->AddEntry(
+      entries_type_,
+      elements != -1 ?
+          collection_->names()->GetFormatted(
+              "%s / %" V8_PTR_PREFIX "d entries",
+              info->GetLabel(),
+              info->GetElementCount()) :
+          collection_->names()->GetCopy(info->GetLabel()),
+      HeapObjectsMap::GenerateId(info),
+      size != -1 ? static_cast<int>(size) : 0,
+      children_count,
+      retainers_count);
+}
 
 
 NativeObjectsExplorer::NativeObjectsExplorer(
@@ -2724,7 +2745,12 @@ NativeObjectsExplorer::NativeObjectsExplorer(
       progress_(progress),
       embedder_queried_(false),
       objects_by_info_(RetainedInfosMatch),
+      native_groups_(StringsMatch),
       filler_(NULL) {
+  synthetic_entries_allocator_ =
+      new BasicHeapEntriesAllocator(snapshot, HeapEntry::kSynthetic);
+  native_entries_allocator_ =
+      new BasicHeapEntriesAllocator(snapshot, HeapEntry::kNative);
 }
 
 
@@ -2739,37 +2765,15 @@ NativeObjectsExplorer::~NativeObjectsExplorer() {
         reinterpret_cast<List<HeapObject*>* >(p->value);
     delete objects;
   }
-}
-
-
-HeapEntry* NativeObjectsExplorer::AllocateEntry(
-    HeapThing ptr, int children_count, int retainers_count) {
-  if (ptr == kNativesRootObject) {
-    return snapshot_->AddNativesRootEntry(children_count, retainers_count);
-  } else {
+  for (HashMap::Entry* p = native_groups_.Start();
+       p != NULL;
+       p = native_groups_.Next(p)) {
     v8::RetainedObjectInfo* info =
-        reinterpret_cast<v8::RetainedObjectInfo*>(ptr);
-    intptr_t elements = info->GetElementCount();
-    intptr_t size = info->GetSizeInBytes();
-    return snapshot_->AddEntry(
-        HeapEntry::kNative,
-        elements != -1 ?
-            collection_->names()->GetFormatted(
-                "%s / %" V8_PTR_PREFIX "d entries",
-                info->GetLabel(),
-                info->GetElementCount()) :
-                collection_->names()->GetCopy(info->GetLabel()),
-        HeapObjectsMap::GenerateId(info),
-        size != -1 ? static_cast<int>(size) : 0,
-        children_count,
-        retainers_count);
+        reinterpret_cast<v8::RetainedObjectInfo*>(p->value);
+    info->Dispose();
   }
-}
-
-
-void NativeObjectsExplorer::AddRootEntries(SnapshotFillerInterface* filler) {
-  if (EstimateObjectsCount() <= 0) return;
-  filler->AddEntry(kNativesRootObject, this);
+  delete synthetic_entries_allocator_;
+  delete native_entries_allocator_;
 }
 
 
@@ -2804,6 +2808,29 @@ void NativeObjectsExplorer::FillRetainedObjects() {
   embedder_queried_ = true;
 }
 
+void NativeObjectsExplorer::FillImplicitReferences() {
+  Isolate* isolate = Isolate::Current();
+  List<ImplicitRefGroup*>* groups =
+      isolate->global_handles()->implicit_ref_groups();
+  for (int i = 0; i < groups->length(); ++i) {
+    ImplicitRefGroup* group = groups->at(i);
+    HeapObject* parent = *group->parent_;
+    HeapEntry* parent_entry =
+        filler_->FindOrAddEntry(parent, native_entries_allocator_);
+    ASSERT(parent_entry != NULL);
+    Object*** children = group->children_;
+    for (size_t j = 0; j < group->length_; ++j) {
+      Object* child = *children[j];
+      HeapEntry* child_entry =
+          filler_->FindOrAddEntry(child, native_entries_allocator_);
+      filler_->SetNamedReference(
+          HeapGraphEdge::kInternal,
+          parent, parent_entry,
+          "native",
+          child, child_entry);
+    }
+  }
+}
 
 List<HeapObject*>* NativeObjectsExplorer::GetListMaybeDisposeInfo(
     v8::RetainedObjectInfo* info) {
@@ -2820,34 +2847,82 @@ List<HeapObject*>* NativeObjectsExplorer::GetListMaybeDisposeInfo(
 
 bool NativeObjectsExplorer::IterateAndExtractReferences(
     SnapshotFillerInterface* filler) {
-  if (EstimateObjectsCount() <= 0) return true;
   filler_ = filler;
   FillRetainedObjects();
-  for (HashMap::Entry* p = objects_by_info_.Start();
-       p != NULL;
-       p = objects_by_info_.Next(p)) {
-    v8::RetainedObjectInfo* info =
-        reinterpret_cast<v8::RetainedObjectInfo*>(p->key);
-    SetNativeRootReference(info);
-    List<HeapObject*>* objects =
-        reinterpret_cast<List<HeapObject*>* >(p->value);
-    for (int i = 0; i < objects->length(); ++i) {
-      SetWrapperNativeReferences(objects->at(i), info);
+  FillImplicitReferences();
+  if (EstimateObjectsCount() > 0) {
+    for (HashMap::Entry* p = objects_by_info_.Start();
+         p != NULL;
+         p = objects_by_info_.Next(p)) {
+      v8::RetainedObjectInfo* info =
+          reinterpret_cast<v8::RetainedObjectInfo*>(p->key);
+      SetNativeRootReference(info);
+      List<HeapObject*>* objects =
+          reinterpret_cast<List<HeapObject*>* >(p->value);
+      for (int i = 0; i < objects->length(); ++i) {
+        SetWrapperNativeReferences(objects->at(i), info);
+      }
     }
+    SetRootNativeRootsReference();
   }
-  SetRootNativesRootReference();
   filler_ = NULL;
   return true;
 }
 
 
+class NativeGroupRetainedObjectInfo : public v8::RetainedObjectInfo {
+ public:
+  explicit NativeGroupRetainedObjectInfo(const char* label)
+      : disposed_(false),
+        hash_(reinterpret_cast<intptr_t>(label)),
+        label_(label) {
+  }
+
+  virtual ~NativeGroupRetainedObjectInfo() {}
+  virtual void Dispose() {
+    CHECK(!disposed_);
+    disposed_ = true;
+    delete this;
+  }
+  virtual bool IsEquivalent(RetainedObjectInfo* other) {
+    return hash_ == other->GetHash() && !strcmp(label_, other->GetLabel());
+  }
+  virtual intptr_t GetHash() { return hash_; }
+  virtual const char* GetLabel() { return label_; }
+
+ private:
+  bool disposed_;
+  intptr_t hash_;
+  const char* label_;
+};
+
+
+NativeGroupRetainedObjectInfo* NativeObjectsExplorer::FindOrAddGroupInfo(
+    const char* label) {
+  const char* label_copy = collection_->names()->GetCopy(label);
+  uint32_t hash = HashSequentialString(label_copy,
+                                       static_cast<int>(strlen(label_copy)),
+                                       HEAP->HashSeed());
+  HashMap::Entry* entry = native_groups_.Lookup(const_cast<char*>(label_copy),
+                                                hash, true);
+  if (entry->value == NULL)
+    entry->value = new NativeGroupRetainedObjectInfo(label);
+  return static_cast<NativeGroupRetainedObjectInfo*>(entry->value);
+}
+
+
 void NativeObjectsExplorer::SetNativeRootReference(
     v8::RetainedObjectInfo* info) {
-  HeapEntry* child_entry = filler_->FindOrAddEntry(info, this);
+  HeapEntry* child_entry =
+      filler_->FindOrAddEntry(info, native_entries_allocator_);
   ASSERT(child_entry != NULL);
-  filler_->SetIndexedAutoIndexReference(
-      HeapGraphEdge::kElement,
-      kNativesRootObject, snapshot_->natives_root(),
+  NativeGroupRetainedObjectInfo* group_info =
+      FindOrAddGroupInfo(info->GetGroupLabel());
+  HeapEntry* group_entry =
+      filler_->FindOrAddEntry(group_info, synthetic_entries_allocator_);
+  filler_->SetNamedAutoIndexReference(
+      HeapGraphEdge::kInternal,
+      group_info, group_entry,
       info, child_entry);
 }
 
@@ -2856,7 +2931,8 @@ void NativeObjectsExplorer::SetWrapperNativeReferences(
     HeapObject* wrapper, v8::RetainedObjectInfo* info) {
   HeapEntry* wrapper_entry = filler_->FindEntry(wrapper);
   ASSERT(wrapper_entry != NULL);
-  HeapEntry* info_entry = filler_->FindOrAddEntry(info, this);
+  HeapEntry* info_entry =
+      filler_->FindOrAddEntry(info, native_entries_allocator_);
   ASSERT(info_entry != NULL);
   filler_->SetNamedReference(HeapGraphEdge::kInternal,
                              wrapper, wrapper_entry,
@@ -2868,11 +2944,20 @@ void NativeObjectsExplorer::SetWrapperNativeReferences(
 }
 
 
-void NativeObjectsExplorer::SetRootNativesRootReference() {
-  filler_->SetIndexedAutoIndexReference(
-      HeapGraphEdge::kElement,
-      V8HeapExplorer::kInternalRootObject, snapshot_->root(),
-      kNativesRootObject, snapshot_->natives_root());
+void NativeObjectsExplorer::SetRootNativeRootsReference() {
+  for (HashMap::Entry* entry = native_groups_.Start();
+       entry;
+       entry = native_groups_.Next(entry)) {
+    NativeGroupRetainedObjectInfo* group_info =
+        static_cast<NativeGroupRetainedObjectInfo*>(entry->value);
+    HeapEntry* group_entry =
+        filler_->FindOrAddEntry(group_info, native_entries_allocator_);
+    ASSERT(group_entry != NULL);
+    filler_->SetIndexedAutoIndexReference(
+        HeapGraphEdge::kElement,
+        V8HeapExplorer::kInternalRootObject, snapshot_->root(),
+        group_info, group_entry);
+  }
 }
 
 
@@ -3026,8 +3111,12 @@ bool HeapSnapshotGenerator::GenerateSnapshot() {
   // full GC is reachable from the root when computing dominators.
   // This is not true for weakly reachable objects.
   // As a temporary solution we call GC twice.
-  Isolate::Current()->heap()->CollectAllGarbage(Heap::kMakeHeapIterableMask);
-  Isolate::Current()->heap()->CollectAllGarbage(Heap::kMakeHeapIterableMask);
+  Isolate::Current()->heap()->CollectAllGarbage(
+      Heap::kMakeHeapIterableMask,
+      "HeapSnapshotGenerator::GenerateSnapshot");
+  Isolate::Current()->heap()->CollectAllGarbage(
+      Heap::kMakeHeapIterableMask,
+      "HeapSnapshotGenerator::GenerateSnapshot");
 
 #ifdef DEBUG
   Heap* debug_heap = Isolate::Current()->heap();
@@ -3107,7 +3196,6 @@ void HeapSnapshotGenerator::SetProgressTotal(int iterations_count) {
 bool HeapSnapshotGenerator::CountEntriesAndReferences() {
   SnapshotCounter counter(&entries_);
   v8_heap_explorer_.AddRootEntries(&counter);
-  dom_explorer_.AddRootEntries(&counter);
   return
       v8_heap_explorer_.IterateAndExtractReferences(&counter) &&
       dom_explorer_.IterateAndExtractReferences(&counter);
@@ -3490,7 +3578,8 @@ void HeapSnapshotJSONSerializer::SerializeNodes() {
             "," JSON_S("closure")
             "," JSON_S("regexp")
             "," JSON_S("number")
-            "," JSON_S("native"))
+            "," JSON_S("native")
+            "," JSON_S("synthetic"))
         "," JSON_S("string")
         "," JSON_S("number")
         "," JSON_S("number")

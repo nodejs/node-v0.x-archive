@@ -764,8 +764,7 @@ void MacroAssembler::LeaveApiExitFrame() {
 }
 
 
-void MacroAssembler::PushTryHandler(CodeLocation try_location,
-                                    HandlerType type,
+void MacroAssembler::PushTryHandler(StackHandler::Kind kind,
                                     int handler_index) {
   // Adjust this code if not the case.
   STATIC_ASSERT(StackHandlerConstants::kSize == 5 * kPointerSize);
@@ -776,25 +775,21 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
   STATIC_ASSERT(StackHandlerConstants::kFPOffset == 4 * kPointerSize);
 
   // We will build up the handler from the bottom by pushing on the stack.
-  // First compute the state and push the frame pointer and context.
-  unsigned state = StackHandler::OffsetField::encode(handler_index);
-  if (try_location == IN_JAVASCRIPT) {
-    push(ebp);
-    push(esi);
-    state |= (type == TRY_CATCH_HANDLER)
-        ? StackHandler::KindField::encode(StackHandler::TRY_CATCH)
-        : StackHandler::KindField::encode(StackHandler::TRY_FINALLY);
-  } else {
-    ASSERT(try_location == IN_JS_ENTRY);
+  // First push the frame pointer and context.
+  if (kind == StackHandler::JS_ENTRY) {
     // The frame pointer does not point to a JS frame so we save NULL for
     // ebp. We expect the code throwing an exception to check ebp before
     // dereferencing it to restore the context.
     push(Immediate(0));  // NULL frame pointer.
     push(Immediate(Smi::FromInt(0)));  // No context.
-    state |= StackHandler::KindField::encode(StackHandler::ENTRY);
+  } else {
+    push(ebp);
+    push(esi);
   }
-
   // Push the state and the code object.
+  unsigned state =
+      StackHandler::IndexField::encode(handler_index) |
+      StackHandler::KindField::encode(kind);
   push(Immediate(state));
   Push(CodeObject());
 
@@ -904,7 +899,7 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
   mov(esp, Operand(esp, StackHandlerConstants::kNextOffset));
 
   bind(&check_kind);
-  STATIC_ASSERT(StackHandler::ENTRY == 0);
+  STATIC_ASSERT(StackHandler::JS_ENTRY == 0);
   test(Operand(esp, StackHandlerConstants::kStateOffset),
        Immediate(StackHandler::KindField::kMask));
   j(not_zero, &fetch_next);
@@ -2165,6 +2160,46 @@ void MacroAssembler::LoadContext(Register dst, int context_chain_length) {
         isolate()->factory()->with_context_map());
     Check(not_equal, "Variable resolved to with context.");
   }
+}
+
+
+void MacroAssembler::LoadTransitionedArrayMapConditional(
+    ElementsKind expected_kind,
+    ElementsKind transitioned_kind,
+    Register map_in_out,
+    Register scratch,
+    Label* no_map_match) {
+  // Load the global or builtins object from the current context.
+  mov(scratch, Operand(esi, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  mov(scratch, FieldOperand(scratch, GlobalObject::kGlobalContextOffset));
+
+  // Check that the function's map is the same as the expected cached map.
+  int expected_index =
+      Context::GetContextMapIndexFromElementsKind(expected_kind);
+  cmp(map_in_out, Operand(scratch, Context::SlotOffset(expected_index)));
+  j(not_equal, no_map_match);
+
+  // Use the transitioned cached map.
+  int trans_index =
+      Context::GetContextMapIndexFromElementsKind(transitioned_kind);
+  mov(map_in_out, Operand(scratch, Context::SlotOffset(trans_index)));
+}
+
+
+void MacroAssembler::LoadInitialArrayMap(
+    Register function_in, Register scratch, Register map_out) {
+  ASSERT(!function_in.is(map_out));
+  Label done;
+  mov(map_out, FieldOperand(function_in,
+                            JSFunction::kPrototypeOrInitialMapOffset));
+  if (!FLAG_smi_only_arrays) {
+    LoadTransitionedArrayMapConditional(FAST_SMI_ONLY_ELEMENTS,
+                                        FAST_ELEMENTS,
+                                        map_out,
+                                        scratch,
+                                        &done);
+  }
+  bind(&done);
 }
 
 

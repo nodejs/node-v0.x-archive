@@ -46,8 +46,6 @@
 
     startup.processChannel();
 
-    startup.removedMethods();
-
     startup.resolveArgv0();
 
     // There are various modes that Node can run in. The most common two
@@ -120,33 +118,6 @@
         });
       }
     }
-
-    if (process.tid === 1) return;
-
-    var net = NativeModule.require('net');
-
-    // isolate initialization
-    process.send = function(msg, sendHandle) {
-      if (typeof msg === 'undefined') throw new TypeError('Bad argument.');
-      msg = JSON.stringify(msg);
-      msg = new Buffer(msg);
-
-      // Update simultaneous accepts on Windows
-      net._setSimultaneousAccepts(sendHandle);
-
-      return process._send(msg, sendHandle);
-    };
-
-    process._onmessage = function(msg, recvHandle) {
-      msg = JSON.parse('' + msg);
-
-      // Update simultaneous accepts on Windows
-      net._setSimultaneousAccepts(recvHandle);
-
-      process.emit('message', msg, recvHandle);
-    };
-
-    process.exit = process._exit;
   }
 
   startup.globalVariables = function() {
@@ -455,44 +426,8 @@
 
       cp._forkChild();
       assert(process.send);
-    } else if (process.tid !== 1) {
-      // Load tcp_wrap to avoid situation where we might immediately receive
-      // a message.
-      // FIXME is this really necessary?
-      process.binding('tcp_wrap');
     }
   }
-
-  startup._removedProcessMethods = {
-    'assert': 'process.assert() use require("assert").ok() instead',
-    'debug': 'process.debug() use console.error() instead',
-    'error': 'process.error() use console.error() instead',
-    'watchFile': 'process.watchFile() has moved to fs.watchFile()',
-    'unwatchFile': 'process.unwatchFile() has moved to fs.unwatchFile()',
-    'mixin': 'process.mixin() has been removed.',
-    'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
-    'inherits': 'process.inherits() has moved to util.inherits()',
-    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
-  };
-
-  startup.removedMethods = function() {
-    var desc = {
-      configurable: true,
-      writable: true,
-      enumerable: false
-    };
-    for (var method in startup._removedProcessMethods) {
-      var reason = startup._removedProcessMethods[method];
-      desc.value = startup._removedMethod(reason);
-      Object.defineProperty(process, method, desc);
-    }
-  };
-
-  startup._removedMethod = function(reason) {
-    return function() {
-      throw new Error(reason);
-    };
-  };
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();

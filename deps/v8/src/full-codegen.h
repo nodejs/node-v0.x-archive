@@ -83,15 +83,18 @@ class FullCodeGenerator: public AstVisitor {
         scope_(NULL),
         nesting_stack_(NULL),
         loop_depth_(0),
+        global_count_(0),
         context_(NULL),
         bailout_entries_(0),
-        stack_checks_(2) {  // There's always at least one.
+        stack_checks_(2),  // There's always at least one.
+        type_feedback_cells_(0) {
   }
 
   static bool MakeCode(CompilationInfo* info);
 
   void Generate(CompilationInfo* info);
   void PopulateDeoptimizationData(Handle<Code> code);
+  void PopulateTypeFeedbackCells(Handle<Code> code);
 
   Handle<FixedArray> handler_table() { return handler_table_; }
 
@@ -394,6 +397,10 @@ class FullCodeGenerator: public AstVisitor {
   void PrepareForBailout(Expression* node, State state);
   void PrepareForBailoutForId(unsigned id, State state);
 
+  // Cache cell support.  This associates AST ids with global property cells
+  // that will be cleared during GC and collected by the type-feedback oracle.
+  void RecordTypeFeedbackCell(unsigned id, Handle<JSGlobalPropertyCell> cell);
+
   // Record a call's return site offset, used to rebuild the frame if the
   // called function was inlined at the site.
   void RecordJSReturnSite(Call* call);
@@ -410,10 +417,10 @@ class FullCodeGenerator: public AstVisitor {
 
   // Platform-specific code for a variable, constant, or function
   // declaration.  Functions have an initial value.
+  // Increments global_count_ for unallocated variables.
   void EmitDeclaration(VariableProxy* proxy,
                        VariableMode mode,
-                       FunctionLiteral* function,
-                       int* global_count);
+                       FunctionLiteral* function);
 
   // Platform-specific code for checking the stack limit at the back edge of
   // a loop.
@@ -571,6 +578,11 @@ class FullCodeGenerator: public AstVisitor {
   struct BailoutEntry {
     unsigned id;
     unsigned pc_and_state;
+  };
+
+  struct TypeFeedbackCellEntry {
+    unsigned ast_id;
+    Handle<JSGlobalPropertyCell> cell;
   };
 
 
@@ -756,9 +768,11 @@ class FullCodeGenerator: public AstVisitor {
   Label return_label_;
   NestedStatement* nesting_stack_;
   int loop_depth_;
+  int global_count_;
   const ExpressionContext* context_;
   ZoneList<BailoutEntry> bailout_entries_;
   ZoneList<BailoutEntry> stack_checks_;
+  ZoneList<TypeFeedbackCellEntry> type_feedback_cells_;
   Handle<FixedArray> handler_table_;
 
   friend class NestedStatement;

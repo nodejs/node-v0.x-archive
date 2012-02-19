@@ -1188,8 +1188,7 @@ void MacroAssembler::DebugBreak() {
 #endif
 
 
-void MacroAssembler::PushTryHandler(CodeLocation try_location,
-                                    HandlerType type,
+void MacroAssembler::PushTryHandler(StackHandler::Kind kind,
                                     int handler_index) {
   // Adjust this code if not the case.
   STATIC_ASSERT(StackHandlerConstants::kSize == 5 * kPointerSize);
@@ -1201,28 +1200,20 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
 
   // For the JSEntry handler, we must preserve r0-r4, r5-r7 are available.
   // We will build up the handler from the bottom by pushing on the stack.
-  // First compute the state.
-  unsigned state = StackHandler::OffsetField::encode(handler_index);
-  if (try_location == IN_JAVASCRIPT) {
-    state |= (type == TRY_CATCH_HANDLER)
-        ? StackHandler::KindField::encode(StackHandler::TRY_CATCH)
-        : StackHandler::KindField::encode(StackHandler::TRY_FINALLY);
-  } else {
-    ASSERT(try_location == IN_JS_ENTRY);
-    state |= StackHandler::KindField::encode(StackHandler::ENTRY);
-  }
-
   // Set up the code object (r5) and the state (r6) for pushing.
+  unsigned state =
+      StackHandler::IndexField::encode(handler_index) |
+      StackHandler::KindField::encode(kind);
   mov(r5, Operand(CodeObject()));
   mov(r6, Operand(state));
 
   // Push the frame pointer, context, state, and code object.
-  if (try_location == IN_JAVASCRIPT) {
-    stm(db_w, sp, r5.bit() | r6.bit() | cp.bit() | fp.bit());
-  } else {
+  if (kind == StackHandler::JS_ENTRY) {
     mov(r7, Operand(Smi::FromInt(0)));  // Indicates no context.
     mov(ip, Operand(0, RelocInfo::NONE));  // NULL frame pointer.
     stm(db_w, sp, r5.bit() | r6.bit() | r7.bit() | ip.bit());
+  } else {
+    stm(db_w, sp, r5.bit() | r6.bit() | cp.bit() | fp.bit());
   }
 
   // Link the current handler as the next handler.
@@ -1330,7 +1321,7 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
   ldr(sp, MemOperand(sp, StackHandlerConstants::kNextOffset));
 
   bind(&check_kind);
-  STATIC_ASSERT(StackHandler::ENTRY == 0);
+  STATIC_ASSERT(StackHandler::JS_ENTRY == 0);
   ldr(r2, MemOperand(sp, StackHandlerConstants::kStateOffset));
   tst(r2, Operand(StackHandler::KindField::kMask));
   b(ne, &fetch_next);
@@ -2879,6 +2870,47 @@ void MacroAssembler::LoadContext(Register dst, int context_chain_length) {
 }
 
 
+void MacroAssembler::LoadTransitionedArrayMapConditional(
+    ElementsKind expected_kind,
+    ElementsKind transitioned_kind,
+    Register map_in_out,
+    Register scratch,
+    Label* no_map_match) {
+  // Load the global or builtins object from the current context.
+  ldr(scratch, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  ldr(scratch, FieldMemOperand(scratch, GlobalObject::kGlobalContextOffset));
+
+  // Check that the function's map is the same as the expected cached map.
+  int expected_index =
+      Context::GetContextMapIndexFromElementsKind(expected_kind);
+  ldr(ip, MemOperand(scratch, Context::SlotOffset(expected_index)));
+  cmp(map_in_out, ip);
+  b(ne, no_map_match);
+
+  // Use the transitioned cached map.
+  int trans_index =
+      Context::GetContextMapIndexFromElementsKind(transitioned_kind);
+  ldr(map_in_out, MemOperand(scratch, Context::SlotOffset(trans_index)));
+}
+
+
+void MacroAssembler::LoadInitialArrayMap(
+    Register function_in, Register scratch, Register map_out) {
+  ASSERT(!function_in.is(map_out));
+  Label done;
+  ldr(map_out, FieldMemOperand(function_in,
+                               JSFunction::kPrototypeOrInitialMapOffset));
+  if (!FLAG_smi_only_arrays) {
+    LoadTransitionedArrayMapConditional(FAST_SMI_ONLY_ELEMENTS,
+                                        FAST_ELEMENTS,
+                                        map_out,
+                                        scratch,
+                                        &done);
+  }
+  bind(&done);
+}
+
+
 void MacroAssembler::LoadGlobalFunction(int index, Register function) {
   // Load the global or builtins object from the current context.
   ldr(function, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
@@ -2936,6 +2968,22 @@ void MacroAssembler::JumpIfNotBothSmi(Register reg1,
   tst(reg1, Operand(kSmiTagMask));
   tst(reg2, Operand(kSmiTagMask), eq);
   b(ne, on_not_both_smi);
+}
+
+
+void MacroAssembler::UntagAndJumpIfSmi(
+    Register dst, Register src, Label* smi_case) {
+  STATIC_ASSERT(kSmiTag == 0);
+  mov(dst, Operand(src, ASR, kSmiTagSize), SetCC);
+  b(cc, smi_case);  // Shifter carry is not set for a smi.
+}
+
+
+void MacroAssembler::UntagAndJumpIfNotSmi(
+    Register dst, Register src, Label* non_smi_case) {
+  STATIC_ASSERT(kSmiTag == 0);
+  mov(dst, Operand(src, ASR, kSmiTagSize), SetCC);
+  b(cs, non_smi_case);  // Shifter carry is set for a non-smi.
 }
 
 

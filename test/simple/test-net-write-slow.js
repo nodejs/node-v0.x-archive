@@ -19,43 +19,49 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var assert = require('assert');
 var common = require('../common');
+var assert = require('assert');
+var net = require('net');
 
-if (process.argv[2] === 'child') {
-  process.exit(0);
-} else if (process.argv[2] === 'testcase') {
+var SIZE = 2E5;
+var N = 10;
+var flushed = 0;
+var received = 0;
+var buf = new Buffer(SIZE);
+buf.fill(0x61); // 'a'
 
-  // testcase
-  var fork = require('child_process').fork;
-  var child = fork(process.argv[1], ['child'], {thread: true});
-
-  process.on('exit', function () {
-    process.stdout.write('exit\n');
-  });
-} else {
-  // we need this to check that process.on('exit') fires
-
-  var spawn = require('child_process').spawn;
-  var child = spawn(process.execPath, [process.argv[1], 'testcase']);
-
-  // pipe stderr and stdin
-  child.stderr.pipe(process.stderr);
-  process.stdin.pipe(child.stdin);
-
-  var missing = true;
-  child.stdout.on('data', function(chunk) {
-    if (missing) {
-        missing = chunk.toString() !== 'exit\n';
-    }
-    process.stdout.write(chunk);
+var server = net.createServer(function(socket) {
+  socket.setNoDelay();
+  socket.setTimeout(200);
+  socket.on('timeout', function() {
+    assert.fail('flushed: ' + flushed +
+                ', received: ' + received + '/' + SIZE * N);
   });
 
-  child.on('exit', function(code) {
-    process.exit(code);
-  });
+  for (var i = 0; i < N; ++i) {
+    socket.write(buf, function() {
+      ++flushed;
+      if (flushed === N) {
+        socket.setTimeout(0);
+      }
+    });
+  }
+  socket.end();
 
-  process.on('exit', function() {
-    assert.equal(missing, false);
+}).listen(common.PORT, function() {
+  var conn = net.connect(common.PORT);
+  conn.on('data', function(buf) {
+    received += buf.length;
+    conn.pause();
+    setTimeout(function() {
+      conn.resume();
+    }, 20);
   });
-}
+  conn.on('end', function() {
+    server.close();
+  });
+});
+
+process.on('exit', function() {
+  assert.equal(received, SIZE * N);
+});

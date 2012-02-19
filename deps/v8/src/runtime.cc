@@ -165,7 +165,7 @@ MUST_USE_RESULT static MaybeObject* DeepCopyBoilerplate(Isolate* isolate,
     }
   } else {
     { MaybeObject* maybe_result =
-          heap->AllocateFixedArray(copy->NumberOfLocalProperties(NONE));
+          heap->AllocateFixedArray(copy->NumberOfLocalProperties());
       if (!maybe_result->ToObject(&result)) return maybe_result;
     }
     FixedArray* names = FixedArray::cast(result);
@@ -273,45 +273,43 @@ static Handle<Map> ComputeObjectLiteralMap(
   Isolate* isolate = context->GetIsolate();
   int properties_length = constant_properties->length();
   int number_of_properties = properties_length / 2;
-  if (FLAG_canonicalize_object_literal_maps) {
-    // Check that there are only symbols and array indices among keys.
-    int number_of_symbol_keys = 0;
-    for (int p = 0; p != properties_length; p += 2) {
-      Object* key = constant_properties->get(p);
-      uint32_t element_index = 0;
-      if (key->IsSymbol()) {
-        number_of_symbol_keys++;
-      } else if (key->ToArrayIndex(&element_index)) {
-        // An index key does not require space in the property backing store.
-        number_of_properties--;
-      } else {
-        // Bail out as a non-symbol non-index key makes caching impossible.
-        // ASSERT to make sure that the if condition after the loop is false.
-        ASSERT(number_of_symbol_keys != number_of_properties);
-        break;
-      }
+  // Check that there are only symbols and array indices among keys.
+  int number_of_symbol_keys = 0;
+  for (int p = 0; p != properties_length; p += 2) {
+    Object* key = constant_properties->get(p);
+    uint32_t element_index = 0;
+    if (key->IsSymbol()) {
+      number_of_symbol_keys++;
+    } else if (key->ToArrayIndex(&element_index)) {
+      // An index key does not require space in the property backing store.
+      number_of_properties--;
+    } else {
+      // Bail out as a non-symbol non-index key makes caching impossible.
+      // ASSERT to make sure that the if condition after the loop is false.
+      ASSERT(number_of_symbol_keys != number_of_properties);
+      break;
     }
-    // If we only have symbols and array indices among keys then we can
-    // use the map cache in the global context.
-    const int kMaxKeys = 10;
-    if ((number_of_symbol_keys == number_of_properties) &&
-        (number_of_symbol_keys < kMaxKeys)) {
-      // Create the fixed array with the key.
-      Handle<FixedArray> keys =
-          isolate->factory()->NewFixedArray(number_of_symbol_keys);
-      if (number_of_symbol_keys > 0) {
-        int index = 0;
-        for (int p = 0; p < properties_length; p += 2) {
-          Object* key = constant_properties->get(p);
-          if (key->IsSymbol()) {
-            keys->set(index++, key);
-          }
+  }
+  // If we only have symbols and array indices among keys then we can
+  // use the map cache in the global context.
+  const int kMaxKeys = 10;
+  if ((number_of_symbol_keys == number_of_properties) &&
+      (number_of_symbol_keys < kMaxKeys)) {
+    // Create the fixed array with the key.
+    Handle<FixedArray> keys =
+        isolate->factory()->NewFixedArray(number_of_symbol_keys);
+    if (number_of_symbol_keys > 0) {
+      int index = 0;
+      for (int p = 0; p < properties_length; p += 2) {
+        Object* key = constant_properties->get(p);
+        if (key->IsSymbol()) {
+          keys->set(index++, key);
         }
-        ASSERT(index == number_of_symbol_keys);
       }
-      *is_result_from_cache = true;
-      return isolate->factory()->ObjectLiteralMapFromCache(context, keys);
+      ASSERT(index == number_of_symbol_keys);
     }
+    *is_result_from_cache = true;
+    return isolate->factory()->ObjectLiteralMapFromCache(context, keys);
   }
   *is_result_from_cache = false;
   return isolate->factory()->CopyMap(
@@ -428,6 +426,23 @@ static Handle<Object> CreateObjectLiteralBoilerplate(
 }
 
 
+MaybeObject* TransitionElements(Handle<Object> object,
+                                ElementsKind to_kind,
+                                Isolate* isolate) {
+  HandleScope scope(isolate);
+  if (!object->IsJSObject()) return isolate->ThrowIllegalOperation();
+  ElementsKind from_kind =
+      Handle<JSObject>::cast(object)->map()->elements_kind();
+  if (Map::IsValidElementsTransition(from_kind, to_kind)) {
+    Handle<Object> result = JSObject::TransitionElementsKind(
+        Handle<JSObject>::cast(object), to_kind);
+    if (result.is_null()) return isolate->ThrowIllegalOperation();
+    return *result;
+  }
+  return isolate->ThrowIllegalOperation();
+}
+
+
 static const int kSmiOnlyLiteralMinimumLength = 1024;
 
 
@@ -446,25 +461,13 @@ Handle<Object> Runtime::CreateArrayLiteralBoilerplate(
   Handle<FixedArrayBase> constant_elements_values(
       FixedArrayBase::cast(elements->get(1)));
 
-  ASSERT(FLAG_smi_only_arrays || constant_elements_kind == FAST_ELEMENTS ||
-         constant_elements_kind == FAST_SMI_ONLY_ELEMENTS);
-  bool allow_literal_kind_transition = FLAG_smi_only_arrays &&
-      constant_elements_kind > object->GetElementsKind();
-
-  if (!FLAG_smi_only_arrays &&
-      constant_elements_values->length() > kSmiOnlyLiteralMinimumLength &&
-      constant_elements_kind != object->GetElementsKind()) {
-    allow_literal_kind_transition = true;
-  }
-
-  // If the ElementsKind of the constant values of the array literal are less
-  // specific than the ElementsKind of the boilerplate array object, change the
-  // boilerplate array object's map to reflect that kind.
-  if (allow_literal_kind_transition) {
-    Handle<Map> transitioned_array_map =
-        isolate->factory()->GetElementsTransitionMap(object,
-                                                     constant_elements_kind);
-    object->set_map(*transitioned_array_map);
+  Context* global_context = isolate->context()->global_context();
+  if (constant_elements_kind == FAST_SMI_ONLY_ELEMENTS) {
+    object->set_map(Map::cast(global_context->smi_js_array_map()));
+  } else if (constant_elements_kind == FAST_DOUBLE_ELEMENTS) {
+    object->set_map(Map::cast(global_context->double_js_array_map()));
+  } else {
+    object->set_map(Map::cast(global_context->object_js_array_map()));
   }
 
   Handle<FixedArrayBase> copied_elements_values;
@@ -509,6 +512,16 @@ Handle<Object> Runtime::CreateArrayLiteralBoilerplate(
   }
   object->set_elements(*copied_elements_values);
   object->set_length(Smi::FromInt(copied_elements_values->length()));
+
+  //  Ensure that the boilerplate object has FAST_ELEMENTS, unless the flag is
+  //  on or the object is larger than the threshold.
+  if (!FLAG_smi_only_arrays &&
+      constant_elements_values->length() < kSmiOnlyLiteralMinimumLength) {
+    if (object->GetElementsKind() != FAST_ELEMENTS) {
+      CHECK(!TransitionElements(object, FAST_ELEMENTS, isolate)->IsFailure());
+    }
+  }
+
   return object;
 }
 
@@ -1988,11 +2001,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionGetScript) {
 
 
 RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionGetSourceCode) {
-  NoHandleAllocation ha;
+  HandleScope scope(isolate);
   ASSERT(args.length() == 1);
 
-  CONVERT_CHECKED(JSFunction, f, args[0]);
-  return f->shared()->GetSourceCode();
+  CONVERT_ARG_CHECKED(JSFunction, f, 0);
+  Handle<SharedFunctionInfo> shared(f->shared());
+  return *shared->GetSourceCode();
 }
 
 
@@ -4202,23 +4216,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetProperty) {
 }
 
 
-MaybeObject* TransitionElements(Handle<Object> object,
-                                ElementsKind to_kind,
-                                Isolate* isolate) {
-  HandleScope scope(isolate);
-  if (!object->IsJSObject()) return isolate->ThrowIllegalOperation();
-  ElementsKind from_kind =
-      Handle<JSObject>::cast(object)->map()->elements_kind();
-  if (Map::IsValidElementsTransition(from_kind, to_kind)) {
-    Handle<Object> result = JSObject::TransitionElementsKind(
-        Handle<JSObject>::cast(object), to_kind);
-    if (result.is_null()) return isolate->ThrowIllegalOperation();
-    return *result;
-  }
-  return isolate->ThrowIllegalOperation();
-}
-
-
 // KeyedStringGetProperty is called from KeyedLoadIC::GenerateGeneric.
 RUNTIME_FUNCTION(MaybeObject*, Runtime_KeyedGetProperty) {
   NoHandleAllocation ha;
@@ -5012,7 +5009,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetLocalPropertyNames) {
       return *isolate->factory()->NewJSArray(0);
     }
     int n;
-    n = jsproto->NumberOfLocalProperties(static_cast<PropertyAttributes>(NONE));
+    n = jsproto->NumberOfLocalProperties();
     local_property_count[i] = n;
     total_property_count += n;
     if (i < length - 1) {
@@ -8421,6 +8418,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LazyRecompile) {
   ASSERT(args.length() == 1);
   Handle<JSFunction> function = args.at<JSFunction>(0);
 
+  function->shared()->set_profiler_ticks(0);
+
   // If the function is not compiled ignore the lazy
   // recompilation. This can happen if the debugger is activated and
   // the function is returned to the not compiled state.
@@ -10236,7 +10235,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_MoveArrayContents) {
   } else {
     elements_kind = DICTIONARY_ELEMENTS;
   }
-  maybe_new_map = to->GetElementsTransitionMap(elements_kind);
+  maybe_new_map = to->GetElementsTransitionMap(isolate, elements_kind);
   Object* new_map;
   if (!maybe_new_map->ToObject(&new_map)) return maybe_new_map;
   to->set_map(Map::cast(new_map));
@@ -10749,6 +10748,11 @@ class FrameInspector {
         ? deoptimized_frame_->GetExpression(index)
         : frame_->GetExpression(index);
   }
+  int GetSourcePosition() {
+    return is_optimized_
+        ? deoptimized_frame_->GetSourcePosition()
+        : frame_->LookupCode()->SourcePosition(frame_->pc());
+  }
 
   // To inspect all the provided arguments the frame might need to be
   // replaced with the arguments frame.
@@ -10854,9 +10858,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
   // Get the frame id.
   Handle<Object> frame_id(WrapFrameId(it.frame()->id()), isolate);
 
-  // Find source position.
-  int position =
-      it.frame()->LookupCode()->SourcePosition(it.frame()->pc());
+  // Find source position in unoptimized code.
+  int position = frame_inspector.GetSourcePosition();
 
   // Check for constructor frame. Inlined frames cannot be construct calls.
   bool inlined_frame = is_optimized && inlined_jsframe_index != 0;
@@ -12443,7 +12446,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugReferencedBy) {
   ASSERT(args.length() == 3);
 
   // First perform a full GC in order to avoid references from dead objects.
-  isolate->heap()->CollectAllGarbage(Heap::kMakeHeapIterableMask);
+  isolate->heap()->CollectAllGarbage(Heap::kMakeHeapIterableMask,
+                                     "%DebugReferencedBy");
   // The heap iterator reserves the right to do a GC to make the heap iterable.
   // Due to the GC above we know it won't need to do that, but it seems cleaner
   // to get the heap iterator constructed before we start having unprotected
@@ -12534,7 +12538,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugConstructedBy) {
   ASSERT(args.length() == 2);
 
   // First perform a full GC in order to avoid dead objects.
-  isolate->heap()->CollectAllGarbage(Heap::kMakeHeapIterableMask);
+  isolate->heap()->CollectAllGarbage(Heap::kMakeHeapIterableMask,
+                                     "%DebugConstructedBy");
 
   // Check parameters.
   CONVERT_CHECKED(JSFunction, constructor, args[0]);
@@ -12932,7 +12937,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetFlags) {
 // Performs a GC.
 // Presently, it only does a full GC.
 RUNTIME_FUNCTION(MaybeObject*, Runtime_CollectGarbage) {
-  isolate->heap()->CollectAllGarbage(true);
+  isolate->heap()->CollectAllGarbage(true, "%CollectGarbage");
   return isolate->heap()->undefined_value();
 }
 
@@ -13259,9 +13264,10 @@ static bool ShowFrameInStackTrace(StackFrame* raw_frame,
 // element segments each containing a receiver, function, code and
 // native code offset.
 RUNTIME_FUNCTION(MaybeObject*, Runtime_CollectStackTrace) {
-  ASSERT_EQ(args.length(), 2);
-  Handle<Object> caller = args.at<Object>(0);
-  CONVERT_NUMBER_CHECKED(int32_t, limit, Int32, args[1]);
+  ASSERT_EQ(args.length(), 3);
+  CONVERT_ARG_CHECKED(JSObject, error_object, 0);
+  Handle<Object> caller = args.at<Object>(1);
+  CONVERT_NUMBER_CHECKED(int32_t, limit, Int32, args[2]);
 
   HandleScope scope(isolate);
   Factory* factory = isolate->factory();
@@ -13311,6 +13317,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CollectStackTrace) {
     iter.Advance();
   }
   Handle<JSArray> result = factory->NewJSArrayWithElements(elements);
+  // Capture and attach a more detailed stack trace if necessary.
+  isolate->CaptureAndSetCurrentStackTraceFor(error_object);
   result->set_length(Smi::FromInt(cursor));
   return *result;
 }
@@ -13643,12 +13651,14 @@ void Runtime::PerformGC(Object* result) {
     }
     // Try to do a garbage collection; ignore it if it fails. The C
     // entry stub will throw an out-of-memory exception in that case.
-    isolate->heap()->CollectGarbage(failure->allocation_space());
+    isolate->heap()->CollectGarbage(failure->allocation_space(),
+                                    "Runtime::PerformGC");
   } else {
     // Handle last resort GC and make sure to allow future allocations
     // to grow the heap without causing GCs (if possible).
     isolate->counters()->gc_last_resort_from_js()->Increment();
-    isolate->heap()->CollectAllGarbage(Heap::kNoGCFlags);
+    isolate->heap()->CollectAllGarbage(Heap::kNoGCFlags,
+                                       "Runtime::PerformGC");
   }
 }
 
