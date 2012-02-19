@@ -19,20 +19,17 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// test uncompressing invalid input
+// Ensure that if a dgram socket is closed before the DNS lookup completes, it
+// won't crash.
 
-var common = require('../common.js'),
-    assert = require('assert'),
-    zlib = require('zlib');
+var assert = require('assert'),
+    common = require('../common'),
+    dgram = require('dgram');
 
-var nonStringInputs = [1, true, {a: 1}, ['a']];
+var buf = new Buffer(1024);
+buf.fill(42);
 
-nonStringInputs.forEach(function(input) {
-  // zlib.gunzip should not throw an error when called with bad input.
-  assert.doesNotThrow(function() {
-    zlib.gunzip(input, function(err, buffer) {
-      // zlib.gunzip should pass the error to the callback.
-      assert.ok(err);
-    });
-  });
-});
+var socket = dgram.createSocket('udp4');
+
+socket.send(buf, 0, buf.length, common.port, 'localhost');
+socket.close();
