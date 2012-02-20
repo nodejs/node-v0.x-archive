@@ -100,3 +100,62 @@ assert.doesNotThrow(function() {
 // GH-2225
 var x = { inspect: util.inspect };
 assert.ok(util.inspect(x).indexOf('inspect') != -1);
+
+
+// Constructor detection and formatting
+function ctor(){}
+assert.equal(util.inspect(ctor), '[Function: ctor]');
+assert.equal(util.inspect(ctor.prototype, true), '{ [constructor]: [Function: ctor] }');
+ctor.prototype.p = 1;
+assert.equal(util.inspect(ctor), '[Constructor: ctor]');
+// check redundent constructor is hidden
+assert.equal(util.inspect(ctor, true), '{ [Constructor: ctor] [prototype]: { p: 1 } }');
+
+
+// Complex quoting
+assert.equal(util.inspect('""'), '\'""\'');
+assert.equal(util.inspect("''"), "\"''\"");
+assert.equal(util.inspect('""\''), '"\\"\\"\'"');
+assert.equal(util.inspect("''\""), '"\'\'\\""');
+assert.equal(util.inspect('\\'), "'\\\\'");
+
+// Property name quoting
+assert.equal(util.inspect({ $: 1 }), '{ $: 1 }');
+assert.equal(util.inspect({ '$^': 1 }), "{ '$^': 1 }");
+assert.equal(util.inspect({ '0': 1 }), "{ '0': 1 }");
+assert.equal(util.inspect({ "'q'": 1 }), "{ \"'q'\": 1 }");
+assert.equal(util.inspect({ '"q"': 1 }), "{ '\"q\"': 1 }");
+
+
+// RegExp formatting
+assert.equal(util.inspect(new RegExp), '/(?:)/');
+var regexp = util.inspect(new RegExp, true);
+assert.ok(regexp.indexOf('/(?:)/') != -1);
+assert.ok(regexp.indexOf('[lastIndex]') != -1);
+assert.ok(regexp.indexOf('[multiline]') != -1);
+assert.ok(regexp.indexOf('[global]') != -1);
+assert.ok(regexp.indexOf('[source]') != -1);
+assert.ok(regexp.indexOf('[ignoreCase]') != -1);
+
+
+// Accessor formatting
+var getter = { get p(){} }
+assert.equal(util.inspect(getter), '{ p: \u00ABGetter\u00BB }');
+var setter = { set p(){} }
+assert.equal(util.inspect(setter), '{ p: \u00ABSetter\u00BB }');
+var accessor = { get p(){},	set p(v){} };
+assert.equal(util.inspect(accessor), '{ p: \u00ABGetter/Setter\u00BB }');
+
+
+// Circular references
+var circular = {};
+circular.p = circular;
+assert.equal(util.inspect(circular), '{ p: \u00ABCircular\u00BB }');
+
+
+// Recurse limit
+var depth = { p1: { p2: { p3: { p4: {} } } } };
+
+assert.equal(util.inspect(depth), '{ p1: { p2: { p3: \u00ABMore\u00BB } } }');
+assert.equal(util.inspect(depth, null, 3), '{ p1: { p2: { p3: { p4: \u00ABMore\u00BB } } } }');
+assert.equal(util.inspect(depth, null, 4), '{ p1: { p2: { p3: { p4: {} } } } }');
