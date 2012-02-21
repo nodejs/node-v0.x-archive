@@ -158,7 +158,7 @@ v8::Local<v8::Object> BuildStatsObject(NODE_STAT_STRUCT *s);
  * @param args The arguments object passed to your constructor.
  * @see v8::Arguments::IsConstructCall
  */
-v8::Handle<v8::Value> FromConstructorTemplate(
+NODE_EXTERN v8::Handle<v8::Value> FromConstructorTemplate(
     v8::Persistent<v8::FunctionTemplate>& constructorTemplate,
     const v8::Arguments& args);
 
