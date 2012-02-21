@@ -78,3 +78,10 @@ Take a parsed URL object, and return a formatted URL string.
 ### url.resolve(from, to)
 
 Take a base URL, and a href URL, and resolve them as a browser would for an anchor tag.
+The pathname returned has ./ and ../ resolved to an absolute path.
+
+### url.resolveObject(from, to)
+
+Take a base URL, and a href URL, and resolve them as a browser would for an anchor tag.
+The to and from parameters should be parsed objects representing URLs, and not strings.
+The pathname returned has ./ and ../ resolved to an absolute path.
