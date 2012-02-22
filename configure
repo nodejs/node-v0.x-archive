@@ -208,7 +208,7 @@ def configure_v8(o):
     o['libraries'] += ['-L%s' % options.shared_v8_libpath]
   if options.shared_v8_libname:
     o['libraries'] += ['-l%s' % options.shared_v8_libname]
-  else:
+  elif options.shared_v8:
     o['libraries'] += ['-lv8']
   if options.shared_v8_includes:
     o['include_dirs'] += [options.shared_v8_includes]
