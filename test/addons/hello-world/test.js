@@ -1,6 +1,6 @@
 var assert = require('assert');
 var binding;
-if (process.platform == 'win32')
+if (process.platform == 'win32') {
   binding = require('./Release/binding');
 } else {
   binding = require('./out/Release/binding');
