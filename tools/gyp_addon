@@ -22,6 +22,12 @@ if __name__ == '__main__':
   args.extend(['-Dnode_root_dir=%s' % node_root])
   args.extend(['--depth=.']);
 
+  # Tell gyp to write the Makefiles into output_dir
+  args.extend(['--generator-output', 'out'])
+
+  # Tell make to write its output into the same dir
+  args.extend(['-Goutput_dir=.'])
+
   gyp_args = list(args)
   rc = gyp.main(gyp_args)
   if rc != 0:
