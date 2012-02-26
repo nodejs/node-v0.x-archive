@@ -139,6 +139,10 @@
             'cflags': [ '-ansi' ],
             'ldflags': [ '-rdynamic' ],
           }],
+          [ 'OS=="solaris"', {
+            'cflags!': [ '-pthread' ],
+            'ldflags!': [ '-pthread' ],
+          }],
         ],
       }],
       ['OS=="mac"', {
