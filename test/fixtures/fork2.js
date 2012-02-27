@@ -3,7 +3,7 @@ var net = require('net');
 
 var connections = 0;
 
-process.on('message', function(m, serverHandle) {
+process.on('message', function(m, namespace, serverHandle) {
   console.log('CHILD got message:', m);
   assert.ok(m.hello);
 

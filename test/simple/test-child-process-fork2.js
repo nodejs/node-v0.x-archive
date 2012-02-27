@@ -41,7 +41,7 @@ server._backlog = 9;
 
 server.listen(common.PORT, function() {
   console.log('PARENT send child server handle');
-  n.send({ hello: 'world' }, server._handle);
+  n.send({ hello: 'world' }, null, server._handle);
 });
 
 function makeConnections() {

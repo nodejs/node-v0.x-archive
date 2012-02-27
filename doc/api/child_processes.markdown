@@ -210,8 +210,11 @@ leaner than `child_process.exec`. It has the same options.
 This is a special case of the `spawn()` functionality for spawning Node
 processes. In addition to having all the methods in a normal ChildProcess
 instance, the returned object has a communication channel built-in. The
-channel is written to with `child.send(message, [sendHandle])` and messages
-are received by a `'message'` event on the child.
+channel is written to with `child.send(message, [namespace], [sendHandle])`
+and messages are received by a `'message'` event on the child.
+
+The `namespace` option is used to avoid conflict with other parts of you
+program there may also use this child channel.
 
 For example:
 
@@ -219,19 +222,23 @@ For example:
 
     var n = cp.fork(__dirname + '/sub.js');
 
-    n.on('message', function(m) {
-      console.log('PARENT got message:', m);
+    n.on('message', function(m, key) {
+      if (key === 'halloWorldApp') {
+        console.log('PARENT got message:', m);
+      }
     });
 
-    n.send({ hello: 'world' });
+    n.send({ hello: 'world' }, 'halloWorldApp');
 
 And then the child script, `'sub.js'` might look like this:
 
-    process.on('message', function(m) {
-      console.log('CHILD got message:', m);
+    process.on('message', function(m, key) {
+      if (key === 'halloWorldApp') {
+        console.log('CHILD got message:', m);
+      }
     });
 
-    process.send({ foo: 'bar' });
+    process.send({ foo: 'bar' }, 'halloWorldApp');
 
 In the child the `process` object will have a `send()` method, and `process`
 will emit objects each time it receives a message on its channel.
