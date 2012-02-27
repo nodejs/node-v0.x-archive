@@ -198,8 +198,17 @@
       }
     };
 
+    var pSlice = Array.prototype.slice;
+
     process.nextTick = function(callback) {
-      nextTickQueue.push(callback);
+      if (arguments.length == 1) {
+        nextTickQueue.push(callback);
+      } else {
+        var args = pSlice.call(arguments, 1);
+        nextTickQueue.push(function() {
+          callback.apply(null, args);
+        });
+      }
       process._needTickCallback();
     };
   };

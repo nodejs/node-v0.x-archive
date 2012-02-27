@@ -333,11 +333,11 @@ This will generate:
 `heapTotal` and `heapUsed` refer to V8's memory usage.
 
 
-### process.nextTick(callback)
+### process.nextTick(callback, [args], [...])
 
-On the next loop around the event loop call this callback.
-This is *not* a simple alias to `setTimeout(fn, 0)`, it's much more
-efficient.
+On the next loop around the event loop call this callback. Optionally, you
+can also pass arguments to the callback. This is *not* a simple alias to 
+`setTimeout(fn, 0)`, it's much more efficient.
 
     process.nextTick(function () {
       console.log('nextTick callback');
