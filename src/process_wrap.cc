@@ -169,6 +169,8 @@ class ProcessWrap : public HandleWrap {
       options.stderr_stream = stderr_wrap->UVHandle();
     }
 
+    options.detached = js_options->Get(String::NewSymbol("detached"))->IsTrue();
+
     // options.windows_verbatim_arguments
 #if defined(_WIN32)
     options.windows_verbatim_arguments = js_options->
