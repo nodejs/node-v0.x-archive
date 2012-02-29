@@ -589,6 +589,7 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
 
   bool ret = true;
   char *pass = "";
+  bool passAllocated = false;
 
   SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
 
@@ -607,6 +608,7 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
                           String::New("Bad password")));
           }
           pass = new char[passlen];
+          passAllocated = true;
           int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
 
           assert(pass_written == passlen);
@@ -688,7 +690,10 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
   if (cert) { 
         X509_free(cert);
   }
-  delete[] pass;
+
+  if(passAllocated){
+    delete[] pass;
+  }
 
   return ret ? True() : False();
 }
