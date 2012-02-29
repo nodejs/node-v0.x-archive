@@ -598,49 +598,50 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
                   String::New("Bad parameter")));
   }
 
-  if(args.Length() >= 2){
-          ASSERT_IS_STRING_OR_BUFFER(args[1]);
+  if (args.Length() >= 2) {
+    ASSERT_IS_STRING_OR_BUFFER(args[1]);
 
-          int passlen = DecodeBytes(args[1], BINARY);
+    int passlen = DecodeBytes(args[1], BINARY);
 
-          if (passlen < 0) {
-              return ThrowException(Exception::TypeError(
+    if (passlen < 0) {
+      return ThrowException(Exception::TypeError(
                           String::New("Bad password")));
-          }
-          pass = new char[passlen];
-          passAllocated = true;
-          int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
+    }
+    pass = new char[passlen];
+    passAllocated = true;
+    int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
 
-          assert(pass_written == passlen);
-
+    assert(pass_written == passlen);
   }
 
   bio_in = LoadBIO(args[0]);
-
+  if (bio_in == NULL) {
+    ret = false;
+    goto cleanup;
+  }
     
-  if(d2i_PKCS12_bio(bio_in, &p12)) {
+  if (d2i_PKCS12_bio(bio_in, &p12)) {
 
-    if(PKCS12_parse(p12, pass, &pkey, &cert, &ca)) {
+    if (PKCS12_parse(p12, pass, &pkey, &cert, &ca)) {
 
       BIO *bio_out = BIO_new(BIO_s_mem());
-      if(!bio_out){
+      if (bio_out == NULL) {
         ret = false;
         goto cleanup;
       }
 
       if (PEM_write_bio_X509(bio_out, cert)) {
 
-        if(!SSL_CTX_use_certificate_chain(sc->ctx_, bio_out)){
+        if (!SSL_CTX_use_certificate_chain(sc->ctx_, bio_out)) {
             ret = false;
             BIO_free(bio_out);
             goto cleanup;
         }
-
       }
       BIO_free(bio_out);
 
       bio_out = BIO_new(BIO_s_mem());
-      if(!bio_out){
+      if (bio_out == NULL) {
         ret = false;
         goto cleanup;
       }
@@ -652,12 +653,13 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
       BIO_free(bio_out);
 
       bool newCAStore = false;
-      if (!sc->ca_store_) {
+
+      if (sc->ca_store_ == NULL) {
           sc->ca_store_ = X509_STORE_new();
           newCAStore = true;
       }
 
-      while(true) {
+      while (true) {
         X509* aCA = sk_X509_pop(ca);
         if (!aCA) break;
                 
@@ -666,9 +668,11 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
 
         X509_free(aCA);
       }
-      if(ca) {
+
+      if (ca) {
           sk_X509_free(ca);
       } 
+
       if (newCAStore) {
           SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
       }
@@ -680,18 +684,18 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
   cleanup:
 
   if (bio_in) {
-        BIO_free(bio_in);
+    BIO_free(bio_in);
   }
     
   if (pkey) {
-        EVP_PKEY_free(pkey);
+    EVP_PKEY_free(pkey);
   }
     
   if (cert) { 
-        X509_free(cert);
+    X509_free(cert);
   }
 
-  if(passAllocated){
+  if (passAllocated) {
     delete[] pass;
   }
 
