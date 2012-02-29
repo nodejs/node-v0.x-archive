@@ -38,12 +38,19 @@ var path = require('path');
 // Test Certificates
 var caPem = fs.readFileSync(common.fixturesDir + '/test_ca.pem', 'ascii');
 var certPem = fs.readFileSync(common.fixturesDir + '/test_cert.pem', 'ascii');
+var certPfx = fs.readFileSync(common.fixturesDir + '/test_cert.pfx', 'ascii');
 var keyPem = fs.readFileSync(common.fixturesDir + '/test_key.pem', 'ascii');
 var rsaPubPem = fs.readFileSync(common.fixturesDir + '/test_rsa_pubkey.pem',
     'ascii');
 var rsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_rsa_privkey.pem',
     'ascii');
 
+try {
+  var credentials = crypto.createCredentials( {pfx : certPfx, passphrase : 'sample'});
+} catch (e) {
+  console.log('Not compiled with OPENSSL support.');
+  process.exit();
+}
 try {
   var credentials = crypto.createCredentials(
                                              {key: keyPem,
