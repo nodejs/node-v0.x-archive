@@ -53,6 +53,7 @@ using v8::TryCatch;
 using v8::Context;
 using v8::Arguments;
 using v8::Integer;
+using v8::Boolean;
 
 Persistent<Function> pipeConstructor;
 
@@ -203,10 +204,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   PipeWrap* client_wrap =
       static_cast<PipeWrap*>(client_obj->GetPointerFromInternalField(0));
 
-  int r = uv_accept(handle, (uv_stream_t*)&client_wrap->handle_);
-
-  // uv_accept should always work.
-  assert(r == 0);
+  if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
 
   // Successful accept. Call the onconnection callback in JavaScript land.
   Local<Value> argv[1] = { client_obj };
@@ -224,17 +222,25 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
   assert(req_wrap->object_.IsEmpty() == false);
   assert(wrap->object_.IsEmpty() == false);
 
+  bool readable, writable;
+
   if (status) {
     SetErrno(uv_last_error(uv_default_loop()));
+    readable = writable = 0;
+  } else {
+    readable = uv_is_readable(req->handle) != 0;
+    writable = uv_is_writable(req->handle) != 0;
   }
 
-  Local<Value> argv[3] = {
+  Local<Value> argv[5] = {
     Integer::New(status),
     Local<Value>::New(wrap->object_),
-    Local<Value>::New(req_wrap->object_)
+    Local<Value>::New(req_wrap->object_),
+    Local<Value>::New(Boolean::New(readable)),
+    Local<Value>::New(Boolean::New(writable))
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 3, argv);
+  MakeCallback(req_wrap->object_, "oncomplete", 5, argv);
 
   delete req_wrap;
 }
