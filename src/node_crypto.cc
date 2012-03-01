@@ -584,18 +584,22 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
   PKCS12 * p12 = NULL;
   EVP_PKEY * pkey = NULL;
   X509 * cert = NULL;
-  STACK_OF(X509) * ca = NULL;
   BIO * bio_in = NULL;
 
-  bool ret = true;
-  char *pass = "";
-  bool passAllocated = false;
+  bool ret = false;
+  char *pass = NULL;
 
   SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
 
   if (args.Length() < 1) {
-      return ThrowException(Exception::TypeError(
-                  String::New("Bad parameter")));
+    return ThrowException(Exception::TypeError(
+          String::New("Bad parameter")));
+  }
+
+  bio_in = LoadBIO(args[0]);
+  if (bio_in == NULL) {
+    return ThrowException(Exception::Error(
+          String::New("Unable to Load Bio")));
   }
 
   if (args.Length() >= 2) {
@@ -605,101 +609,71 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
 
     if (passlen < 0) {
       return ThrowException(Exception::TypeError(
-                          String::New("Bad password")));
+            String::New("Bad password")));
     }
     pass = new char[passlen];
-    passAllocated = true;
     int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
 
+    pass[passlen] = '\0';
     assert(pass_written == passlen);
   }
 
-  bio_in = LoadBIO(args[0]);
-  if (bio_in == NULL) {
-    ret = false;
-    goto cleanup;
-  }
-    
-  if (d2i_PKCS12_bio(bio_in, &p12)) {
 
-    if (PKCS12_parse(p12, pass, &pkey, &cert, &ca)) {
+  if (d2i_PKCS12_bio(bio_in, &p12)) {
+    if (PKCS12_parse(p12, pass, &pkey, &cert, NULL)) {
+
+      /*Discarding additional certificates*/
 
       BIO *bio_out = BIO_new(BIO_s_mem());
       if (bio_out == NULL) {
-        ret = false;
         goto cleanup;
       }
 
       if (PEM_write_bio_X509(bio_out, cert)) {
-
-        if (!SSL_CTX_use_certificate_chain(sc->ctx_, bio_out)) {
-            ret = false;
-            BIO_free(bio_out);
-            goto cleanup;
+        if (SSL_CTX_use_certificate_chain(sc->ctx_, bio_out) != 1) {
+          BIO_free(bio_out);
+          goto cleanup;
         }
       }
       BIO_free(bio_out);
 
       bio_out = BIO_new(BIO_s_mem());
       if (bio_out == NULL) {
-        ret = false;
         goto cleanup;
       }
-            
+
       if (PEM_write_bio_PrivateKey(bio_out, pkey, NULL, NULL, 0, 0, NULL)) {
-        SSL_CTX_use_PrivateKey(sc->ctx_, pkey);
-        EVP_PKEY_free(pkey);
+        if(SSL_CTX_use_PrivateKey(sc->ctx_, pkey) != 1){
+          BIO_free(bio_out);
+          goto cleanup;
+        }
       }
       BIO_free(bio_out);
 
-      bool newCAStore = false;
+      ret = true;
 
-      if (sc->ca_store_ == NULL) {
-          sc->ca_store_ = X509_STORE_new();
-          newCAStore = true;
-      }
-
-      while (true) {
-        X509* aCA = sk_X509_pop(ca);
-        if (!aCA) break;
-                
-        X509_STORE_add_cert(sc->ca_store_, aCA);
-        SSL_CTX_add_client_CA(sc->ctx_, aCA);
-
-        X509_free(aCA);
-      }
-
-      if (ca) {
-          sk_X509_free(ca);
-      } 
-
-      if (newCAStore) {
-          SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
-      }
-
-      PKCS12_free(p12);
+cleanup:
+      EVP_PKEY_free(pkey);
+      X509_free(cert);
     }
+    PKCS12_free(p12);
   }
-
-  cleanup:
 
   if (bio_in) {
     BIO_free(bio_in);
   }
-    
-  if (pkey) {
-    EVP_PKEY_free(pkey);
-  }
-    
-  if (cert) { 
-    X509_free(cert);
-  }
 
-  if (passAllocated) {
+  if (pass) {
     delete[] pass;
   }
 
-  return ret ? True() : False();
+  if(!ret){
+    unsigned long err = ERR_get_error();
+    const char *str = ERR_reason_error_string(err);
+
+    return ThrowException(Exception::Error(String::New(str)));
+  }
+  return True();
 }
 
 

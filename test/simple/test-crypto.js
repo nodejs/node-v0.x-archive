@@ -38,19 +38,39 @@ var path = require('path');
 // Test Certificates
 var caPem = fs.readFileSync(common.fixturesDir + '/test_ca.pem', 'ascii');
 var certPem = fs.readFileSync(common.fixturesDir + '/test_cert.pem', 'ascii');
-var certPfx = fs.readFileSync(common.fixturesDir + '/test_cert.pfx', 'ascii');
+//read into buffer
+var certPfx = fs.readFileSync(common.fixturesDir + '/test_cert.pfx');
 var keyPem = fs.readFileSync(common.fixturesDir + '/test_key.pem', 'ascii');
 var rsaPubPem = fs.readFileSync(common.fixturesDir + '/test_rsa_pubkey.pem',
     'ascii');
 var rsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_rsa_privkey.pem',
     'ascii');
 
+//pfx tests
 try {
   var credentials = crypto.createCredentials( {pfx : certPfx, passphrase : 'sample'});
 } catch (e) {
-  console.log('Not compiled with OPENSSL support.');
-  process.exit();
+  assert.fail();
 }
+
+try {
+  var credentials = crypto.createCredentials( {pfx : certPfx});
+} catch (e) {
+  assert.equal(e.message, "mac verify failure");
+}
+
+try {
+  var credentials = crypto.createCredentials( {pfx : certPfx, passphrase : 'test'});
+} catch (e) {
+  assert.equal(e.message, "mac verify failure");
+}
+
+try {
+  var credentials = crypto.createCredentials( {pfx : 'sample', passphrase : 'test'});
+} catch (e) {
+  assert.equal(e.message, "not enough data");
+}
+
 try {
   var credentials = crypto.createCredentials(
                                              {key: keyPem,
