@@ -611,13 +611,12 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
       return ThrowException(Exception::TypeError(
             String::New("Bad password")));
     }
-    pass = new char[passlen];
+    pass = new char[passlen + 1];
     int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
 
     pass[passlen] = '\0';
     assert(pass_written == passlen);
   }
-
 
   if (d2i_PKCS12_bio(bio_in, &p12)) {
     if (PKCS12_parse(p12, pass, &pkey, &cert, NULL)) {
@@ -649,10 +648,10 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
         }
       }
       BIO_free(bio_out);
-
       ret = true;
 
 cleanup:
+
       EVP_PKEY_free(pkey);
       X509_free(cert);
     }
@@ -667,7 +666,7 @@ cleanup:
     delete[] pass;
   }
 
-  if(!ret){
+  if (!ret) {
     unsigned long err = ERR_get_error();
     const char *str = ERR_reason_error_string(err);
 
