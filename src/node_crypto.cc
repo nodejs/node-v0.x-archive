@@ -584,7 +584,8 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
   PKCS12 * p12 = NULL;
   EVP_PKEY * pkey = NULL;
   X509 * cert = NULL;
-  BIO * bio_in = NULL;
+  BIO * in = NULL;
+  STACK_OF(X509) *extraCerts = NULL;
 
   bool ret = false;
   char *pass = NULL;
@@ -596,8 +597,8 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
           String::New("Bad parameter")));
   }
 
-  bio_in = LoadBIO(args[0]);
-  if (bio_in == NULL) {
+  in = LoadBIO(args[0]);
+  if (in == NULL) {
     return ThrowException(Exception::Error(
           String::New("Unable to Load Bio")));
   }
@@ -613,37 +614,51 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
     }
     pass = new char[passlen + 1];
     int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
+
     assert(pass_written == passlen);
 
     pass[passlen] = '\0';
   }
 
-  if (d2i_PKCS12_bio(bio_in, &p12)) {
+  if (d2i_PKCS12_bio(in, &p12)) {
 
-    //Discarding additional certificates
-    if (PKCS12_parse(p12, pass, &pkey, &cert, NULL)) {
+    if (PKCS12_parse(p12, pass, &pkey, &cert, &extraCerts)) {
 
-      BIO *bio_out = BIO_new(BIO_s_mem());
-      if (bio_out) {
-        if (PEM_write_bio_X509(bio_out, cert)) {
-          //set cert
-          if (SSL_CTX_use_certificate_chain(sc->ctx_, bio_out)) {
-            //set key
-            if (SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
-              ret = true;
+      //set cert
+      if (SSL_CTX_use_certificate(sc->ctx_, cert)) {
+
+        //set key
+        if (SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
+    
+          //set extra certs
+          while (true) {
+            X509 *extraCert = sk_X509_pop(extraCerts);
+            
+            if (!extraCert) break;
+            
+            if (!SSL_CTX_add_extra_chain_cert(sc->ctx_, extraCert)) {
+                goto cleanup;
             }
           }
+          ret = true;
         }
-        BIO_free(bio_out);
       }
-      EVP_PKEY_free(pkey);
-      X509_free(cert);
+cleanup:
+      if (pkey) {
+        EVP_PKEY_free(pkey);
+      }
+      if (cert) {
+        X509_free(cert);
+      }
+      if (extraCerts) {
+        sk_X509_free(extraCerts);
+      }
     }
     PKCS12_free(p12);
   }
 
-  if (bio_in) {
-    BIO_free(bio_in);
+  if (in) {
+    BIO_free(in);
   }
 
   if (pass) {
