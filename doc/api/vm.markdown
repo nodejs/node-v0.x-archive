@@ -62,8 +62,8 @@ These globals are contained in the sandbox.
     // { animal: 'cat', count: 3, name: 'kitty' }
 
 Note that running untrusted code is a tricky business requiring great care.  To prevent accidental
-global variable leakage, `vm.runInNewContext` is quite useful, but safely running untrusted code
-requires a separate process.
+global variable leakage, `vm.runInNewContext` is quite useful for trivial purposes, but safely running
+untrusted code is not possible.
 
 In case of syntax error in `code`, `vm.runInNewContext` emits the syntax error to stderr
 and throws an exception.
@@ -96,8 +96,8 @@ Note that `createContext` will perform a shallow clone of the supplied sandbox o
 initialise the global object of the freshly constructed context.
 
 Note that running untrusted code is a tricky business requiring great care.  To prevent accidental
-global variable leakage, `vm.runInContext` is quite useful, but safely running untrusted code
-requires a separate process.
+global variable leakage, `vm.runInContext` is quite useful for trivial purposes, but safely running
+untrusted code is not possible.
 
 In case of syntax error in `code`, `vm.runInContext` emits the syntax error to stderr
 and throws an exception.
@@ -176,5 +176,5 @@ These globals are contained in the sandbox.
     // { animal: 'cat', count: 12, name: 'kitty' }
 
 Note that running untrusted code is a tricky business requiring great care.  To prevent accidental
-global variable leakage, `script.runInNewContext` is quite useful, but safely running untrusted code
-requires a separate process.
+global variable leakage, `script.runInNewContext` is quite useful for trivial purposes, but safely running
+untrusted code is not possible.
