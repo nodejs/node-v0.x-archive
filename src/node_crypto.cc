@@ -624,23 +624,18 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
     if (PKCS12_parse(p12, pass, &pkey, &cert, NULL)) {
 
       BIO *bio_out = BIO_new(BIO_s_mem());
-      if (bio_out == NULL) {
-        goto cleanup;
-      }
-
-      if (PEM_write_bio_X509(bio_out, cert)) {
-        //set cert
-        if (SSL_CTX_use_certificate_chain(sc->ctx_, bio_out)) {
-          //set key
-          if (SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
-            ret = true;
+      if (bio_out) {
+        if (PEM_write_bio_X509(bio_out, cert)) {
+          //set cert
+          if (SSL_CTX_use_certificate_chain(sc->ctx_, bio_out)) {
+            //set key
+            if (SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
+              ret = true;
+            }
           }
         }
+        BIO_free(bio_out);
       }
-      BIO_free(bio_out);
-
-cleanup:
-
       EVP_PKEY_free(pkey);
       X509_free(cert);
     }
