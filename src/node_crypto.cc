@@ -613,14 +613,14 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
     }
     pass = new char[passlen + 1];
     int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
+    assert(pass_written == passlen);
 
     pass[passlen] = '\0';
-    assert(pass_written == passlen);
   }
 
   if (d2i_PKCS12_bio(bio_in, &p12)) {
 
-    /*Discarding additional certificates*/
+    //Discarding additional certificates
     if (PKCS12_parse(p12, pass, &pkey, &cert, NULL)) {
 
       BIO *bio_out = BIO_new(BIO_s_mem());
@@ -629,26 +629,15 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
       }
 
       if (PEM_write_bio_X509(bio_out, cert)) {
-        if (SSL_CTX_use_certificate_chain(sc->ctx_, bio_out) != 1) {
-          BIO_free(bio_out);
-          goto cleanup;
+        //set cert
+        if (SSL_CTX_use_certificate_chain(sc->ctx_, bio_out)) {
+          //set key
+          if (SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
+            ret = true;
+          }
         }
       }
       BIO_free(bio_out);
-
-      bio_out = BIO_new(BIO_s_mem());
-      if (bio_out == NULL) {
-        goto cleanup;
-      }
-
-      if (PEM_write_bio_PrivateKey(bio_out, pkey, NULL, NULL, 0, 0, NULL)) {
-        if(SSL_CTX_use_PrivateKey(sc->ctx_, pkey) != 1){
-          BIO_free(bio_out);
-          goto cleanup;
-        }
-      }
-      BIO_free(bio_out);
-      ret = true;
 
 cleanup:
 
