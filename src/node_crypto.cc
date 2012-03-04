@@ -629,17 +629,29 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
 
         //set key
         if (SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
-    
+          bool newCAStore = false;
+          if (!sc->ca_store_) {
+            sc->ca_store_ = X509_STORE_new();
+            newCAStore = true;
+          }
+
           //set extra certs
           while (true) {
-            X509 *extraCert = sk_X509_pop(extraCerts);
+            X509 *x509 = sk_X509_pop(extraCerts);
             
-            if (!extraCert) break;
-            
-            if (!SSL_CTX_add_extra_chain_cert(sc->ctx_, extraCert)) {
-                goto cleanup;
-            }
+            if (!x509) break;
+
+            X509_STORE_add_cert(sc->ca_store_, x509);
+
+            SSL_CTX_add_client_CA(sc->ctx_, x509);
+
+            X509_free(x509);
           }
+
+          if (newCAStore) {
+            SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
+          }
+
           ret = true;
         }
       }
