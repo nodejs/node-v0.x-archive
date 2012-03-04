@@ -1,5 +1,7 @@
 # Child Process
 
+    Stability: 3 - Stable
+
 Node provides a tri-directional `popen(3)` facility through the
 `child_process` module.
 
@@ -106,6 +108,7 @@ process may not actually kill it.  `kill` really just sends a signal to a proces
 
 See `kill(2)`
 
+
 ### child.send(message, [sendHandle])
 
 * `message` {Object}
@@ -133,14 +136,11 @@ If omitted, `args` defaults to an empty Array.
 The third argument is used to specify additional options, which defaults to:
 
     { cwd: undefined,
-      env: process.env,
-      setsid: false
+      env: process.env
     }
 
 `cwd` allows you to specify the working directory from which the process is spawned.
 Use `env` to specify environment variables that will be visible to the new process.
-
-`setsid`, if set true, will cause the subprocess to be run in a new session.
 
 Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit code:
 
@@ -397,4 +397,3 @@ there is no IPC channel keeping it alive. When calling this method the
 `disconnect` event will be emitted in both parent and child, and the
 `connected` flag will be set to `false`. Please note that you can also call
 `process.disconnect()` in the child process.
-

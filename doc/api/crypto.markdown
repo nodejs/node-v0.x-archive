@@ -1,5 +1,7 @@
 # Crypto
 
+    Stability: 3 - Stable
+
 Use `require('crypto')` to access this module.
 
 The crypto module requires OpenSSL to be available on the underlying platform.
@@ -12,10 +14,12 @@ It also offers a set of wrappers for OpenSSL's hash, hmac, cipher, decipher, sig
 
 Creates a credentials object, with the optional details being a dictionary with keys:
 
-* `key` : a string holding the PEM encoded private key
-* `cert` : a string holding the PEM encoded certificate
-* `ca` : either a string or list of strings of PEM encoded CA certificates to trust.
-* `ciphers`: a string describing the ciphers to use or exclude. Consult
+* `key` : A string holding the PEM encoded private key
+* `passphrase` : A string of passphrase for the private key
+* `cert` : A string holding the PEM encoded certificate
+* `ca` : Either a string or list of strings of PEM encoded CA certificates to trust.
+* `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate Revocation List)
+* `ciphers`: A string describing the ciphers to use or exclude. Consult
   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for details
   on the format.
 
@@ -185,7 +189,6 @@ Note: `decipher` object can not be used after `final()` method been called.
 You can disable auto padding if the data has been encrypted without standard block padding to prevent
 `decipher.final` from checking and removing it. Can only work if the input data's length is a multiple of the
 ciphers block size. You must call this before streaming data to `decipher.update`.
-
 
 ## crypto.createSign(algorithm)
 
