@@ -1563,7 +1563,7 @@ Handle<Value> Kill(const Arguments& args) {
 // Hrtime exposes libuv's uv_hrtime() high-resolution timer.
 // The value returned by uv_hrtime() is a 64-bit int representing nanoseconds,
 // so this function instead returns an Array with 2 entries representing seconds
-// and nanoseconds, to avoid any interger overflow possibility.
+// and nanoseconds, to avoid any integer overflow possibility.
 Handle<Value> Hrtime(const v8::Arguments& args) {
   HandleScope scope;
 
