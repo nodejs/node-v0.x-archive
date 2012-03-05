@@ -19,9 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-
-
 if (!process.versions.openssl) {
   console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
@@ -29,46 +26,72 @@ if (!process.versions.openssl) {
 
 var common = require('../common');
 var assert = require('assert');
-
-var fs = require('fs');
-var exec = require('child_process').exec;
-
 var https = require('https');
+var fs = require('fs');
+var path = require('path');
 
 var options = {
-  pfx: fs.readFileSync(common.fixturesDir + '/keys/agent2.pfx')
+  key: fs.readFileSync(path.join(common.fixturesDir, 'keys/agent1-key.pem')),
+  cert: fs.readFileSync(path.join(common.fixturesDir, 'keys/agent1-cert.pem'))
 };
 
 var reqCount = 0;
-var body = 'hello world\n';
 
 var server = https.createServer(options, function(req, res) {
-  reqCount++;
-  console.log('got request');
-  res.writeHead(200, { 'content-type': 'text/plain' });
-  res.end(body);
+  ++reqCount;
+  res.writeHead(200);
+  res.end();
+}).listen(common.PORT, function() {
+  unauthorized();
 });
 
-
-server.listen(common.PORT, function() {
-  var cmd = 'curl --insecure https://127.0.0.1:' + common.PORT + '/';
-  console.error('executing %j', cmd);
-  exec(cmd, function(err, stdout, stderr) {
-    if (err) throw err;
-    common.error(common.inspect(stdout));
-    assert.equal(body, stdout);
-
-    // Do the same thing now without --insecure
-    // The connection should not be accepted.
-    var cmd = 'curl https://127.0.0.1:' + common.PORT + '/';
-    console.error('executing %j', cmd);
-    exec(cmd, function(err, stdout, stderr) {
-      assert.ok(err);
-      server.close();
-    });
+function unauthorized() {
+  var req = https.request({
+    port: common.PORT
+  }, function(res) {
+    assert(!req.socket.authorized);
+    rejectUnauthorized();
   });
-});
+  req.on('error', function(err) {
+    assert(false);
+  });
+  req.end();
+}
+
+function rejectUnauthorized() {
+  var options = {
+    port: common.PORT,
+    rejectUnauthorized: true
+  };
+  options.agent = new https.Agent(options);
+  var req = https.request(options, function(res) {
+    assert(false);
+  });
+  req.on('error', function(err) {
+    authorized();
+  });
+  req.end();
+}
+
+function authorized() {
+  var options = {
+    port: common.PORT,
+    rejectUnauthorized: true,
+    pfx: fs.readFileSync(path.join(common.fixturesDir, 'keys/agent2-ca1.pfx')),
+    //ca :[fs.readFileSync(path.join(common.fixturesDir, 'keys/ca1-cert.pem'))]
+  };
+  options.agent = new https.Agent(options);
+  var req = https.request(options, function(res) {
+    assert(req.socket.authorized);
+    server.close();
+  });
+  req.on('error', function(err) {
+    console.log(err);
+    assert(false);
+  });
+  req.end();
+}
 
 process.on('exit', function() {
-  assert.equal(1, reqCount);
+  assert.equal(reqCount, 2);
 });

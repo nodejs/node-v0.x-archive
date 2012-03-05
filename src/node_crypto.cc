@@ -655,7 +655,6 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
           ret = true;
         }
       }
-cleanup:
       if (pkey) {
         EVP_PKEY_free(pkey);
       }
