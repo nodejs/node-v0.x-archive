@@ -1570,8 +1570,8 @@ Handle<Value> Hrtime(const v8::Arguments& args) {
   uint64_t t = uv_hrtime();
 
   Local<Array> tuple = Array::New(2);
-  tuple->Set(Number::New(0), Integer::New(t / NANOS_PER_SEC));
-  tuple->Set(Number::New(1), Integer::New(t % NANOS_PER_SEC));
+  tuple->Set(0, Integer::New(t / NANOS_PER_SEC));
+  tuple->Set(1, Integer::New(t % NANOS_PER_SEC));
 
   return scope.Close(tuple);
 }
