@@ -32,10 +32,14 @@ var error_desc = {
 
 var dlerror_msg = error_desc[process.platform];
 
-if(dlerror_msg){
-  try {
-    require('../fixtures/module-loading-error.node');
-  } catch (e){
-    assert.equal(true, e.toString().indexOf(dlerror_msg) > -1);
-  }
+if (!dlerror_msg) {
+  console.error('Skipping test, platform not supported.');
+  process.exit();
 }
+
+try {
+  require('../fixtures/module-loading-error.node');
+} catch (e) {
+  assert.notEqual(e.toString().indexOf(dlerror_msg), -1);
+}
+
