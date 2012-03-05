@@ -1557,6 +1557,25 @@ Handle<Value> Kill(const Arguments& args) {
   return Undefined();
 }
 
+// used in Hrtime() below
+#define NANOS_PER_SEC 1000000000
+
+// Hrtime exposes libuv's uv_hrtime() high-resolution timer.
+// The value returned by uv_hrtime() is a 64-bit int representing nanoseconds,
+// so this function instead returns an Array with 2 entries representing seconds
+// and nanoseconds, to avoid any interger overflow possibility.
+Handle<Value> Hrtime(const v8::Arguments& args) {
+  HandleScope scope;
+
+  uint64_t t = uv_hrtime();
+
+  Local<Array> tuple = Array::New(2);
+  tuple->Set(Number::New(0), Integer::New(t / NANOS_PER_SEC));
+  tuple->Set(Number::New(1), Integer::New(t % NANOS_PER_SEC));
+
+  return scope.Close(tuple);
+}
+
 
 typedef void (UV_DYNAMIC* extInit)(Handle<Object> exports);
 
@@ -2125,6 +2144,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
   NODE_SET_METHOD(process, "_debugPause", DebugPause);
   NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+
+  NODE_SET_METHOD(process, "hrtime", Hrtime);
 
   NODE_SET_METHOD(process, "dlopen", DLOpen);
 

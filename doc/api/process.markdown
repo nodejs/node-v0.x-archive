@@ -359,3 +359,15 @@ given, otherwise returns the current mask.
 ## process.uptime()
 
 Number of seconds Node has been running.
+
+
+## process.hrtime()
+
+Returns the current high-resolution real time in a `[seconds, nanoseconds]`
+tuple Array. It is relative to an arbitrary time in the past. It is not
+related to the time of day and therefore not subject to clock drift. The
+primary use is for measuring performance between intervals.
+
+Example output looks like:
+
+    [ 1800216, 927643717 ]
