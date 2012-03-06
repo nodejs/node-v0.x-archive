@@ -103,6 +103,20 @@ var testCases =
          { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
        ]
      },
+     { pfx: 'agent2-ca12',
+       servers: [
+         { ok: true, key: 'agent1-key', cert: 'agent1-cert' },
+         { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+       ]
+     },
+     { pfx: 'agent2-ca12',
+       servers: [
+         { ok: true, key: 'agent1-key', cert: 'agent1-cert' },
+         { ok: false, pfx : 'agent2'},
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+       ]
+     },
     ]
 
 var common = require('../common');
