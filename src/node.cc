@@ -2662,26 +2662,48 @@ void EmitExit(v8::Handle<v8::Object> process_l) {
   }
 }
 
+static char **copy_argv(int argc, char **argv) {
+  size_t strlen_sum;
+  char **argv_copy;
+  char *argv_data;
+  size_t len;
+  int i;
+
+  strlen_sum = 0;
+  for(i = 0; i < argc; i++) {
+    strlen_sum += strlen(argv[i]) + 1;
+  }
+
+  argv_copy = (char **) malloc(sizeof(char *) * (argc + 1) + strlen_sum);
+  if (!argv_copy) {
+    return NULL;
+  }
+
+  argv_data = (char *) argv_copy + sizeof(char *) * (argc + 1);
+
+  for(i = 0; i < argc; i++) {
+    argv_copy[i] = argv_data;
+    len = strlen(argv[i]) + 1;
+    memcpy(argv_data, argv[i], len);
+    argv_data += len;
+  }
+
+  argv_copy[argc] = NULL;
+
+  return argv_copy;
+}
 
 int Start(int argc, char *argv[]) {
   // Logic to duplicate argv as Init() modifies arguments
   // that are passed into it.
-  char **argv_copy = new char*[argc];
-
-  for (int i = 0; i < argc; i++) {
-    // Rare edge case that argv[0] is inaccessible.
-    if (argv[i] == NULL) {
-      argv_copy[i] = NULL;
-    } else {
-      argv_copy[i] = (char *) malloc ( strlen(argv[i]) );
-      strcpy (argv_copy[i], argv[i]);
-    }
-  }
-
+  char **argv_copy = copy_argv(argc, argv);
 
   // This needs to run *before* V8::Initialize()
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
+
+  // Clean up the copy:
+  free(argv_copy);
 
   V8::Initialize();
   Persistent<Context> context;
