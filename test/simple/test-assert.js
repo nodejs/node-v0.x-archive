@@ -283,3 +283,12 @@ testAssertionMessage({a: undefined, b: null}, '{"a":"undefined","b":null}');
 testAssertionMessage({a: NaN, b: Infinity, c: -Infinity},
     '{"a":"NaN","b":"Infinity","c":"-Infinity"}');
 
+
+assert.doesNotThrow(makeBlock(a.defined, 'a'));
+assert.throws(makeBlock(a.defined, undefined));
+assert.doesNotThrow(makeBlock(a.undefined, undefined));
+assert.throws(makeBlock(a.undefined, 'a'));
+assert.doesNotThrow(makeBlock(a.null, null));
+assert.throws(makeBlock(a.null, 'a'));
+assert.doesNotThrow(makeBlock(a.notNull, 'a'));
+assert.throws(makeBlock(a.notNull, null));
