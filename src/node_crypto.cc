@@ -616,12 +616,10 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
     int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
 
     assert(pass_written == passlen);
-
     pass[passlen] = '\0';
   }
 
   if (d2i_PKCS12_bio(in, &p12)) {
-
     if (PKCS12_parse(p12, pass, &pkey, &cert, &extraCerts)) {
 
       //set cert
@@ -629,11 +627,8 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
 
         //set key
         if (SSL_CTX_use_PrivateKey(sc->ctx_, pkey)) {
+
           bool newCAStore = false;
-          if (!sc->ca_store_) {
-            sc->ca_store_ = X509_STORE_new();
-            newCAStore = true;
-          }
 
           //set extra certs
           while (true) {
@@ -641,36 +636,28 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
             
             if (!x509) break;
 
+            if (!sc->ca_store_) {
+              sc->ca_store_ = X509_STORE_new();
+              newCAStore = true;
+            }
+
             X509_STORE_add_cert(sc->ca_store_, x509);
-
             SSL_CTX_add_client_CA(sc->ctx_, x509);
-
-            X509_free(x509);
           }
 
           if (newCAStore) {
             SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
           }
-
           ret = true;
         }
       }
-      if (pkey) {
-        EVP_PKEY_free(pkey);
-      }
-      if (cert) {
-        X509_free(cert);
-      }
-      if (extraCerts) {
-        sk_X509_free(extraCerts);
-      }
+      EVP_PKEY_free(pkey);
+      X509_free(cert);
+      sk_X509_free(extraCerts);
     }
     PKCS12_free(p12);
   }
-
-  if (in) {
-    BIO_free(in);
-  }
+  BIO_free(in);
 
   if (pass) {
     delete[] pass;
