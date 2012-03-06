@@ -658,10 +658,7 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
     PKCS12_free(p12);
   }
   BIO_free(in);
-
-  if (pass) {
-    delete[] pass;
-  }
+  delete[] pass;
 
   if (!ret) {
     unsigned long err = ERR_get_error();
