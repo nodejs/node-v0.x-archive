@@ -1564,14 +1564,23 @@ Handle<Value> Kill(const Arguments& args) {
 // The value returned by uv_hrtime() is a 64-bit int representing nanoseconds,
 // so this function instead returns an Array with 2 entries representing seconds
 // and nanoseconds, to avoid any integer overflow possibility.
+// Pass in an Array from a previous hrtime() call to instead get a time diff.
 Handle<Value> Hrtime(const v8::Arguments& args) {
   HandleScope scope;
 
   uint64_t t = uv_hrtime();
 
+  if (args.Length() > 0) {
+    // return a time diff tuple
+    Local<Array> inArray = Local<Array>::Cast(args[0]);
+    uint64_t seconds = inArray->Get(0)->Uint32Value();
+    uint64_t nanos = inArray->Get(1)->Uint32Value();
+    t -= (seconds * NANOS_PER_SEC) + nanos;
+  }
+
   Local<Array> tuple = Array::New(2);
-  tuple->Set(0, Integer::New(t / NANOS_PER_SEC));
-  tuple->Set(1, Integer::New(t % NANOS_PER_SEC));
+  tuple->Set(0, Integer::NewFromUnsigned(t / NANOS_PER_SEC));
+  tuple->Set(1, Integer::NewFromUnsigned(t % NANOS_PER_SEC));
 
   return scope.Close(tuple);
 }
