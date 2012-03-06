@@ -2702,9 +2702,6 @@ int Start(int argc, char *argv[]) {
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
 
-  // Clean up the copy:
-  free(argv_copy);
-
   V8::Initialize();
   Persistent<Context> context;
   {
@@ -2740,6 +2737,9 @@ int Start(int argc, char *argv[]) {
   // Clean up.
   V8::Dispose();
 #endif  // NDEBUG
+
+  // Clean up the copy:
+  free(argv_copy);
 
   return 0;
 }
