@@ -368,6 +368,16 @@ tuple Array. It is relative to an arbitrary time in the past. It is not
 related to the time of day and therefore not subject to clock drift. The
 primary use is for measuring performance between intervals.
 
-Example output looks like:
+You may pass in the result of a previous call to `process.hrtime()` to get
+a diff reading, useful for benchmarks and measuring intervals:
 
-    [ 1800216, 927643717 ]
+    var t = process.hrtime();
+    // [ 1800216, 927643717 ]
+
+    setTimeout(function () {
+      t = process.hrtime(t);
+      // [ 1, 6962306 ]
+
+      console.log('benchmark took %d seconds and %d nanoseconds', t[0], t[1]);
+      // benchmark took 1 seconds and 6962306 nanoseconds
+    }, 1000);
