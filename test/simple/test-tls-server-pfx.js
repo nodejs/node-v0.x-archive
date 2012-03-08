@@ -35,11 +35,11 @@ var testCases =
        ]
      },
      { ca  : ['ca2-cert'],
-       pfx: 'agent2',
+       pfx: 'agent2-ca2',
        clients: [
          { ok: false, key: 'agent1-key', cert: 'agent1-cert' },
          { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
-        // { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
        ]
      },
      { ca  : ['ca1-cert', 'ca2-cert'],
@@ -47,7 +47,7 @@ var testCases =
        clients: [
          { ok: true, key: 'agent1-key', cert: 'agent1-cert' },
          { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
-      //   { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
        ]
      },
      { pfx: 'agent2-ca1',
@@ -61,7 +61,7 @@ var testCases =
        clients: [
          { ok: false, key: 'agent1-key', cert: 'agent1-cert' },
          { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
-        // { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
        ]
      },
      { pfx: 'agent2-ca1',
@@ -75,21 +75,21 @@ var testCases =
        clients: [
          { ok: false, key: 'agent1-key', cert: 'agent1-cert' },
          { ok: false, pfx : 'agent2'},
-         //{ ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
        ]
      },
      { pfx: 'agent2-ca12',
        clients: [
          { ok: true, key: 'agent1-key', cert: 'agent1-cert' },
          { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
-         //{ ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
        ]
      },
      { pfx: 'agent2-ca12',
        clients: [
          { ok: true, key: 'agent1-key', cert: 'agent1-cert' },
          { ok: false, pfx : 'agent2'},
-         //{ ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
        ]
      },
     ]
@@ -145,9 +145,6 @@ function testClients(index, clients, serverOptions, cb) {
 
   var server = tls.createServer(serverOptions, function(s) {
     console.error('expected: ' + ok + ' authed: ' + s.authorized);
-    if (!s.authorized){
-      console.log(s.authorizationError);
-    }
     assert.equal(ok, s.authorized);
     s.end('hello world\n');
   });
@@ -169,7 +166,7 @@ function testClients(index, clients, serverOptions, cb) {
     });
 
     client.on('close', function() {
-      testClients(index + 1, clients, clientOptions, cb);
+      testClients(index + 1, clients, serverOptions, cb);
     });
   });
 }
@@ -181,7 +178,9 @@ function runTest(testIndex) {
 
   var serverOptions = {
     port: common.PORT,
-    pfx: loadPFX(tcase.pfx),
+    pfx: tcase.pfx ? loadPFX(tcase.pfx) : null,
+    key: tcase.key ? loadPEM(tcase.key) : null,
+    cert: tcase.cert ? loadPEM(tcase.cert) : null,
     ca: tcase.ca ? tcase.ca.map(loadPEM) : [],
     passphrase : tcase.passphrase
   };
