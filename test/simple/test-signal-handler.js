@@ -18,17 +18,25 @@
 // DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-
-// SIGUSR1 and SIGHUP are not supported on Windows
-if (process.platform === 'win32') {
-  process.exit(0);
-}
-
 var common = require('../common');
 var assert = require('assert');
 
 console.log('process.pid: ' + process.pid);
+
+// SIGINT is not yet supported on Windows.
+if (process.platform === 'win32') {
+  var errmsg = 'Signal Event: SIGINT is not yet supported on Windows.';
+  assert.throws(function() {
+    process.on('SIGINT', function() {});
+  }, function(err) {
+    if (err instanceof Error) {
+      assert.strictEqual(err.message, errmsg);
+      return true;
+    }
+  });
+  // Rest of tests are not supported on Windows.
+  process.exit(0);
+}
 
 var first = 0,
     second = 0;

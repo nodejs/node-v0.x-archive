@@ -384,6 +384,10 @@
     process.on = process.addListener = function(type, listener) {
       var ret = addListener.apply(this, arguments);
       if (isSignal(type)) {
+        if (process.platform === 'win32') {
+          throw new Error('Signal Event: ' + type + ' is not yet supported on Windows.');
+        }
+        
         if (!signalWatchers.hasOwnProperty(type)) {
           var b = process.binding('signal_watcher');
           var w = new b.SignalWatcher(startup.lazyConstants()[type]);
