@@ -53,6 +53,8 @@ stay running forever, `uncaughtException` can be a useful safety mechanism.
 <!--type=event-->
 <!--name=SIGINT, SIGUSR1, etc.-->
 
+**This does not work on Windows.**
+
 Emitted when the processes receives a signal. See sigaction(2) for a list of
 standard POSIX signal names such as SIGINT, SIGUSR1, etc.
 
