@@ -14,7 +14,7 @@
         'libraries': [ '-undefined dynamic_lookup' ],
       }],
       [ 'OS=="win"', {
-        'libraries': [ '-l<(node_root_dir)/$(Configuration)/node.lib' ],
+        'libraries': [ '-l<(node_root_dir)/$(ConfigurationName)/node.lib' ],
       }],
       [ 'OS=="freebsd" or OS=="openbsd" or OS=="solaris" or (OS=="linux" and target_arch!="ia32")', {
         'cflags': [ '-fPIC' ],
