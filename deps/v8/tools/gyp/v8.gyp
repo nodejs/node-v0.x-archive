@@ -32,6 +32,7 @@
       'targets': [
         {
           'target_name': 'v8',
+          'dependencies_traverse': 1,
           'conditions': [
             ['want_separate_host_toolset==1', {
               'toolsets': ['host', 'target'],
@@ -324,7 +325,6 @@
             '../../src/handles-inl.h',
             '../../src/handles.cc',
             '../../src/handles.h',
-            '../../src/hashmap.cc',
             '../../src/hashmap.h',
             '../../src/heap-inl.h',
             '../../src/heap.cc',
@@ -729,6 +729,11 @@
                 'V8_SHARED',
               ],
             }],
+            ['v8_postmortem_support=="true"', {
+              'sources': [
+                '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+              ]
+            }],
           ],
         },
         {
@@ -803,6 +808,34 @@
               ],
             },
           ],
+        },
+        {
+          'target_name': 'postmortem-metadata',
+          'type': 'none',
+          'variables': {
+            'heapobject_files': [
+                '../../src/objects.h',
+                '../../src/objects-inl.h',
+            ],
+          },
+          'actions': [
+              {
+                'action_name': 'gen-postmortem-metadata',
+                'inputs': [
+                  '../../tools/gen-postmortem-metadata.py',
+                  '<@(heapobject_files)',
+                ],
+                'outputs': [
+                  '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+                ],
+                'action': [
+                  'python',
+                  '../../tools/gen-postmortem-metadata.py',
+                  '<@(_outputs)',
+                  '<@(heapobject_files)'
+                ]
+              }
+           ]
         },
         {
           'target_name': 'mksnapshot',
@@ -889,7 +922,6 @@
             '../../src/fixed-dtoa.cc',
             '../../src/fixed-dtoa.h',
             '../../src/globals.h',
-            '../../src/hashmap.cc',
             '../../src/hashmap.h',
             '../../src/list-inl.h',
             '../../src/list.h',

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -145,6 +145,13 @@ Handle<AccessorPair> Factory::NewAccessorPair() {
   CALL_HEAP_FUNCTION(isolate(),
                      isolate()->heap()->AllocateAccessorPair(),
                      AccessorPair);
+}
+
+
+Handle<TypeFeedbackInfo> Factory::NewTypeFeedbackInfo() {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->AllocateTypeFeedbackInfo(),
+                     TypeFeedbackInfo);
 }
 
 
@@ -485,8 +492,9 @@ Handle<Map> Factory::CopyMapDropTransitions(Handle<Map> src) {
 Handle<Map> Factory::GetElementsTransitionMap(
     Handle<JSObject> src,
     ElementsKind elements_kind) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     src->GetElementsTransitionMap(elements_kind),
+  Isolate* i = isolate();
+  CALL_HEAP_FUNCTION(i,
+                     src->GetElementsTransitionMap(i, elements_kind),
                      Map);
 }
 
@@ -539,11 +547,7 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
                     context->global_context());
     }
     result->set_literals(*literals);
-  } else {
-    result->set_function_bindings(isolate()->heap()->empty_fixed_array());
   }
-  result->set_next_function_link(isolate()->heap()->undefined_value());
-
   if (V8::UseCrankshaft() &&
       FLAG_always_opt &&
       result->is_compiled() &&
@@ -754,12 +758,9 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
   if (force_initial_map ||
       type != JS_OBJECT_TYPE ||
       instance_size != JSObject::kHeaderSize) {
-    ElementsKind default_elements_kind = FLAG_smi_only_arrays
-        ? FAST_SMI_ONLY_ELEMENTS
-        : FAST_ELEMENTS;
     Handle<Map> initial_map = NewMap(type,
                                      instance_size,
-                                     default_elements_kind);
+                                     FAST_SMI_ONLY_ELEMENTS);
     function->set_initial_map(*initial_map);
     initial_map->set_constructor(*function);
   }
@@ -867,7 +868,7 @@ Handle<DescriptorArray> Factory::CopyAppendCallbackDescriptors(
   // Copy the descriptors from the array.
   for (int i = 0; i < array->number_of_descriptors(); i++) {
     if (!array->IsNullDescriptor(i)) {
-      result->CopyFrom(descriptor_count++, *array, i, witness);
+      DescriptorArray::CopyFrom(result, descriptor_count++, array, i, witness);
     }
   }
 
@@ -901,7 +902,7 @@ Handle<DescriptorArray> Factory::CopyAppendCallbackDescriptors(
     Handle<DescriptorArray> new_result =
         NewDescriptorArray(number_of_descriptors);
     for (int i = 0; i < number_of_descriptors; i++) {
-      new_result->CopyFrom(i, *result, i, witness);
+      DescriptorArray::CopyFrom(new_result, i, result, i, witness);
     }
     result = new_result;
   }
@@ -938,22 +939,28 @@ Handle<JSObject> Factory::NewJSObjectFromMap(Handle<Map> map) {
 
 
 Handle<JSArray> Factory::NewJSArray(int capacity,
+                                    ElementsKind elements_kind,
                                     PretenureFlag pretenure) {
-  Handle<JSObject> obj = NewJSObject(isolate()->array_function(), pretenure);
   CALL_HEAP_FUNCTION(isolate(),
-                     Handle<JSArray>::cast(obj)->Initialize(capacity),
+                     isolate()->heap()->AllocateJSArrayAndStorage(
+                         elements_kind,
+                         0,
+                         capacity,
+                         INITIALIZE_ARRAY_ELEMENTS_WITH_HOLE,
+                         pretenure),
                      JSArray);
 }
 
 
 Handle<JSArray> Factory::NewJSArrayWithElements(Handle<FixedArrayBase> elements,
+                                                ElementsKind elements_kind,
                                                 PretenureFlag pretenure) {
-  Handle<JSArray> result =
-      Handle<JSArray>::cast(NewJSObject(isolate()->array_function(),
-                                        pretenure));
-  result->set_length(Smi::FromInt(0));
-  SetContent(result, elements);
-  return result;
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateJSArrayWithElements(*elements,
+                                                     elements_kind,
+                                                     pretenure),
+      JSArray);
 }
 
 

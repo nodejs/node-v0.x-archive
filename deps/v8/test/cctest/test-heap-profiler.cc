@@ -147,6 +147,43 @@ TEST(HeapSnapshotObjectSizes) {
 }
 
 
+TEST(BoundFunctionInSnapshot) {
+  v8::HandleScope scope;
+  LocalContext env;
+  CompileRun(
+      "function myFunction(a, b) { this.a = a; this.b = b; }\n"
+      "function AAAAA() {}\n"
+      "boundFunction = myFunction.bind(new AAAAA(), 20, new Number(12)); \n");
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("sizes"));
+  const v8::HeapGraphNode* global = GetGlobalObject(snapshot);
+  const v8::HeapGraphNode* f =
+      GetProperty(global, v8::HeapGraphEdge::kShortcut, "boundFunction");
+  CHECK(f);
+  CHECK_EQ(v8::String::New("native_bind"), f->GetName());
+  const v8::HeapGraphNode* bindings =
+      GetProperty(f, v8::HeapGraphEdge::kInternal, "bindings");
+  CHECK_NE(NULL, bindings);
+  CHECK_EQ(v8::HeapGraphNode::kArray, bindings->GetType());
+  CHECK_EQ(4, bindings->GetChildrenCount());
+
+  const v8::HeapGraphNode* bound_this = GetProperty(
+      f, v8::HeapGraphEdge::kShortcut, "bound_this");
+  CHECK(bound_this);
+  CHECK_EQ(v8::HeapGraphNode::kObject, bound_this->GetType());
+
+  const v8::HeapGraphNode* bound_function = GetProperty(
+      f, v8::HeapGraphEdge::kShortcut, "bound_function");
+  CHECK(bound_function);
+  CHECK_EQ(v8::HeapGraphNode::kClosure, bound_function->GetType());
+
+  const v8::HeapGraphNode* bound_argument = GetProperty(
+      f, v8::HeapGraphEdge::kShortcut, "bound_argument_1");
+  CHECK(bound_argument);
+  CHECK_EQ(v8::HeapGraphNode::kObject, bound_argument->GetType());
+}
+
+
 TEST(HeapSnapshotEntryChildren) {
   v8::HandleScope scope;
   LocalContext env;
@@ -640,7 +677,7 @@ TEST(TakeHeapSnapshotAborting) {
   LocalContext env;
 
   const int snapshots_count = v8::HeapProfiler::GetSnapshotsCount();
-  TestActivityControl aborting_control(3);
+  TestActivityControl aborting_control(1);
   const v8::HeapSnapshot* no_snapshot =
       v8::HeapProfiler::TakeSnapshot(v8_str("abort"),
                                      v8::HeapSnapshot::kFull,
@@ -666,11 +703,13 @@ namespace {
 class TestRetainedObjectInfo : public v8::RetainedObjectInfo {
  public:
   TestRetainedObjectInfo(int hash,
+                         const char* group_label,
                          const char* label,
                          intptr_t element_count = -1,
                          intptr_t size = -1)
       : disposed_(false),
         hash_(hash),
+        group_label_(group_label),
         label_(label),
         element_count_(element_count),
         size_(size) {
@@ -685,6 +724,7 @@ class TestRetainedObjectInfo : public v8::RetainedObjectInfo {
     return GetHash() == other->GetHash();
   }
   virtual intptr_t GetHash() { return hash_; }
+  virtual const char* GetGroupLabel() { return group_label_; }
   virtual const char* GetLabel() { return label_; }
   virtual intptr_t GetElementCount() { return element_count_; }
   virtual intptr_t GetSizeInBytes() { return size_; }
@@ -696,15 +736,15 @@ class TestRetainedObjectInfo : public v8::RetainedObjectInfo {
       if (wrapper->IsString()) {
         v8::String::AsciiValue ascii(wrapper);
         if (strcmp(*ascii, "AAA") == 0)
-          return new TestRetainedObjectInfo(1, "aaa", 100);
+          return new TestRetainedObjectInfo(1, "aaa-group", "aaa", 100);
         else if (strcmp(*ascii, "BBB") == 0)
-          return new TestRetainedObjectInfo(1, "aaa", 100);
+          return new TestRetainedObjectInfo(1, "aaa-group", "aaa", 100);
       }
     } else if (class_id == 2) {
       if (wrapper->IsString()) {
         v8::String::AsciiValue ascii(wrapper);
         if (strcmp(*ascii, "CCC") == 0)
-          return new TestRetainedObjectInfo(2, "ccc");
+          return new TestRetainedObjectInfo(2, "ccc-group", "ccc");
       }
     }
     CHECK(false);
@@ -717,6 +757,7 @@ class TestRetainedObjectInfo : public v8::RetainedObjectInfo {
   bool disposed_;
   int category_;
   int hash_;
+  const char* group_label_;
   const char* label_;
   intptr_t element_count_;
   intptr_t size_;
@@ -769,18 +810,21 @@ TEST(HeapSnapshotRetainedObjectInfo) {
     delete TestRetainedObjectInfo::instances[i];
   }
 
-  const v8::HeapGraphNode* natives = GetNode(
-      snapshot->GetRoot(), v8::HeapGraphNode::kObject, "(Native objects)");
-  CHECK_NE(NULL, natives);
-  CHECK_EQ(2, natives->GetChildrenCount());
+  const v8::HeapGraphNode* native_group_aaa = GetNode(
+      snapshot->GetRoot(), v8::HeapGraphNode::kSynthetic, "aaa-group");
+  CHECK_NE(NULL, native_group_aaa);
+  CHECK_EQ(1, native_group_aaa->GetChildrenCount());
   const v8::HeapGraphNode* aaa = GetNode(
-      natives, v8::HeapGraphNode::kNative, "aaa / 100 entries");
+      native_group_aaa, v8::HeapGraphNode::kNative, "aaa / 100 entries");
   CHECK_NE(NULL, aaa);
+  CHECK_EQ(2, aaa->GetChildrenCount());
+
+  const v8::HeapGraphNode* native_group_ccc = GetNode(
+      snapshot->GetRoot(), v8::HeapGraphNode::kSynthetic, "ccc-group");
   const v8::HeapGraphNode* ccc = GetNode(
-      natives, v8::HeapGraphNode::kNative, "ccc");
+      native_group_ccc, v8::HeapGraphNode::kNative, "ccc");
   CHECK_NE(NULL, ccc);
 
-  CHECK_EQ(2, aaa->GetChildrenCount());
   const v8::HeapGraphNode* n_AAA = GetNode(
       aaa, v8::HeapGraphNode::kString, "AAA");
   CHECK_NE(NULL, n_AAA);
@@ -795,6 +839,75 @@ TEST(HeapSnapshotRetainedObjectInfo) {
   CHECK_EQ(aaa, GetProperty(n_AAA, v8::HeapGraphEdge::kInternal, "native"));
   CHECK_EQ(aaa, GetProperty(n_BBB, v8::HeapGraphEdge::kInternal, "native"));
   CHECK_EQ(ccc, GetProperty(n_CCC, v8::HeapGraphEdge::kInternal, "native"));
+}
+
+
+class GraphWithImplicitRefs {
+ public:
+  static const int kObjectsCount = 4;
+  explicit GraphWithImplicitRefs(LocalContext* env) {
+    CHECK_EQ(NULL, instance_);
+    instance_ = this;
+    for (int i = 0; i < kObjectsCount; i++) {
+      objects_[i] = v8::Persistent<v8::Object>::New(v8::Object::New());
+    }
+    (*env)->Global()->Set(v8_str("root_object"), objects_[0]);
+  }
+  ~GraphWithImplicitRefs() {
+    instance_ = NULL;
+  }
+
+  static void gcPrologue() {
+    instance_->AddImplicitReferences();
+  }
+
+ private:
+  void AddImplicitReferences() {
+    // 0 -> 1
+    v8::V8::AddImplicitReferences(
+        v8::Persistent<v8::Object>::Cast(objects_[0]), &objects_[1], 1);
+    // Adding two more references(note length=2 in params): 1 -> 2, 1 -> 3
+    v8::V8::AddImplicitReferences(
+        v8::Persistent<v8::Object>::Cast(objects_[1]), &objects_[2], 2);
+  }
+
+  v8::Persistent<v8::Value> objects_[kObjectsCount];
+  static GraphWithImplicitRefs* instance_;
+};
+
+GraphWithImplicitRefs* GraphWithImplicitRefs::instance_ = NULL;
+
+
+TEST(HeapSnapshotImplicitReferences) {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  GraphWithImplicitRefs graph(&env);
+  v8::V8::SetGlobalGCPrologueCallback(&GraphWithImplicitRefs::gcPrologue);
+
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("implicit_refs"));
+
+  const v8::HeapGraphNode* global_object = GetGlobalObject(snapshot);
+  // Use kShortcut type to skip intermediate JSGlobalPropertyCell
+  const v8::HeapGraphNode* obj0 = GetProperty(
+      global_object, v8::HeapGraphEdge::kShortcut, "root_object");
+  CHECK(obj0);
+  CHECK_EQ(v8::HeapGraphNode::kObject, obj0->GetType());
+  const v8::HeapGraphNode* obj1 = GetProperty(
+      obj0, v8::HeapGraphEdge::kInternal, "native");
+  CHECK(obj1);
+  int implicit_targets_count = 0;
+  for (int i = 0, count = obj1->GetChildrenCount(); i < count; ++i) {
+    const v8::HeapGraphEdge* prop = obj1->GetChild(i);
+    v8::String::AsciiValue prop_name(prop->GetName());
+    if (prop->GetType() == v8::HeapGraphEdge::kInternal &&
+        strcmp("native", *prop_name) == 0) {
+      ++implicit_targets_count;
+    }
+  }
+  CHECK_EQ(2, implicit_targets_count);
+  v8::V8::SetGlobalGCPrologueCallback(NULL);
 }
 
 

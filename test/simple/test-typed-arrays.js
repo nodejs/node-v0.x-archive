@@ -25,6 +25,7 @@
  * verify Buffer can used in Typed Arrays
  */
 
+var common = require('../common');
 var assert = require('assert');
 var SlowBuffer = process.binding('buffer').SlowBuffer;
 var ArrayBuffer = process.binding('typed_array').ArrayBuffer;
@@ -89,7 +90,7 @@ function test(clazz) {
   assert(0xF678, v4[0]);
 
   // test set with typed array and []
-  v2.set([ 1, 2, 3, 4 ], 2);
+  v2.set([1, 2, 3, 4], 2);
   assert(0x1234, v1[0]);
 
   var sub = new Int32Array(4);

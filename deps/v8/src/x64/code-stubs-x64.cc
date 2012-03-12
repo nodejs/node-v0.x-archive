@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -3054,7 +3054,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ Throw(rax);
 
   __ bind(&termination_exception);
-  __ ThrowUncatchable(TERMINATION, rax);
+  __ ThrowUncatchable(rax);
 
   // External string.  Short external strings have already been ruled out.
   // rdi: subject string (expected to be external)
@@ -3579,24 +3579,52 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 }
 
 
-void CallFunctionStub::FinishCode(Handle<Code> code) {
-  code->set_has_function_cache(false);
+void InterruptStub::Generate(MacroAssembler* masm) {
+  __ TailCallRuntime(Runtime::kInterrupt, 0, 1);
 }
 
 
-void CallFunctionStub::Clear(Heap* heap, Address address) {
-  UNREACHABLE();
-}
+static void GenerateRecordCallTarget(MacroAssembler* masm) {
+  // Cache the called function in a global property cell.  Cache states
+  // are uninitialized, monomorphic (indicated by a JSFunction), and
+  // megamorphic.
+  // rbx : cache cell for call target
+  // rdi : the function to call
+  Isolate* isolate = masm->isolate();
+  Label initialize, done;
 
+  // Load the cache state into rcx.
+  __ movq(rcx, FieldOperand(rbx, JSGlobalPropertyCell::kValueOffset));
 
-Object* CallFunctionStub::GetCachedValue(Address address) {
-  UNREACHABLE();
-  return NULL;
+  // A monomorphic cache hit or an already megamorphic state: invoke the
+  // function without changing the state.
+  __ cmpq(rcx, rdi);
+  __ j(equal, &done, Label::kNear);
+  __ Cmp(rcx, TypeFeedbackCells::MegamorphicSentinel(isolate));
+  __ j(equal, &done, Label::kNear);
+
+  // A monomorphic miss (i.e, here the cache is not uninitialized) goes
+  // megamorphic.
+  __ Cmp(rcx, TypeFeedbackCells::UninitializedSentinel(isolate));
+  __ j(equal, &initialize, Label::kNear);
+  // MegamorphicSentinel is an immortal immovable object (undefined) so no
+  // write-barrier is needed.
+  __ Move(FieldOperand(rbx, JSGlobalPropertyCell::kValueOffset),
+          TypeFeedbackCells::MegamorphicSentinel(isolate));
+  __ jmp(&done, Label::kNear);
+
+  // An uninitialized cache is patched with the function.
+  __ bind(&initialize);
+  __ movq(FieldOperand(rbx, JSGlobalPropertyCell::kValueOffset), rdi);
+  // No need for a write barrier here - cells are rescanned.
+
+  __ bind(&done);
 }
 
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
   // rdi : the function to call
+  // rbx : cache cell for call target
   Label slow, non_function;
 
   // The receiver might implicitly be the global object. This is
@@ -3675,6 +3703,49 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 }
 
 
+void CallConstructStub::Generate(MacroAssembler* masm) {
+  // rax : number of arguments
+  // rbx : cache cell for call target
+  // rdi : constructor function
+  Label slow, non_function_call;
+
+  // Check that function is not a smi.
+  __ JumpIfSmi(rdi, &non_function_call);
+  // Check that function is a JSFunction.
+  __ CmpObjectType(rdi, JS_FUNCTION_TYPE, rcx);
+  __ j(not_equal, &slow);
+
+  if (RecordCallTarget()) {
+    GenerateRecordCallTarget(masm);
+  }
+
+  // Jump to the function-specific construct stub.
+  __ movq(rbx, FieldOperand(rdi, JSFunction::kSharedFunctionInfoOffset));
+  __ movq(rbx, FieldOperand(rbx, SharedFunctionInfo::kConstructStubOffset));
+  __ lea(rbx, FieldOperand(rbx, Code::kHeaderSize));
+  __ jmp(rbx);
+
+  // rdi: called object
+  // rax: number of arguments
+  // rcx: object map
+  Label do_call;
+  __ bind(&slow);
+  __ CmpInstanceType(rcx, JS_FUNCTION_PROXY_TYPE);
+  __ j(not_equal, &non_function_call);
+  __ GetBuiltinEntry(rdx, Builtins::CALL_FUNCTION_PROXY_AS_CONSTRUCTOR);
+  __ jmp(&do_call);
+
+  __ bind(&non_function_call);
+  __ GetBuiltinEntry(rdx, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
+  __ bind(&do_call);
+  // Set expected number of arguments to zero (not changing rax).
+  __ Set(rbx, 0);
+  __ SetCallKind(rcx, CALL_AS_METHOD);
+  __ Jump(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
+          RelocInfo::CODE_TARGET);
+}
+
+
 bool CEntryStub::NeedsImmovableCode() {
   return false;
 }
@@ -3706,12 +3777,6 @@ void CEntryStub::GenerateAheadOfTime() {
   stub.GetCode()->set_is_pregenerated(true);
   CEntryStub save_doubles(1, kSaveFPRegs);
   save_doubles.GetCode()->set_is_pregenerated(true);
-}
-
-
-void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
-  // Throw exception in eax.
-  __ Throw(rax);
 }
 
 
@@ -3855,12 +3920,6 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 }
 
 
-void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
-                                          UncatchableExceptionType type) {
-  __ ThrowUncatchable(type, rax);
-}
-
-
 void CEntryStub::Generate(MacroAssembler* masm) {
   // rax: number of arguments including receiver
   // rbx: pointer to C function  (C callee-saved)
@@ -3924,13 +3983,25 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                true);
 
   __ bind(&throw_out_of_memory_exception);
-  GenerateThrowUncatchable(masm, OUT_OF_MEMORY);
+  // Set external caught exception to false.
+  Isolate* isolate = masm->isolate();
+  ExternalReference external_caught(Isolate::kExternalCaughtExceptionAddress,
+                                    isolate);
+  __ Set(rax, static_cast<int64_t>(false));
+  __ Store(external_caught, rax);
+
+  // Set pending exception and rax to out of memory exception.
+  ExternalReference pending_exception(Isolate::kPendingExceptionAddress,
+                                      isolate);
+  __ movq(rax, Failure::OutOfMemoryException(), RelocInfo::NONE);
+  __ Store(pending_exception, rax);
+  // Fall through to the next label.
 
   __ bind(&throw_termination_exception);
-  GenerateThrowUncatchable(masm, TERMINATION);
+  __ ThrowUncatchable(rax);
 
   __ bind(&throw_normal_exception);
-  GenerateThrowTOS(masm);
+  __ Throw(rax);
 }
 
 
@@ -4011,7 +4082,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Invoke: Link this frame into the handler chain.  There's only one
   // handler block in this code object, so its index is 0.
   __ bind(&invoke);
-  __ PushTryHandler(IN_JS_ENTRY, JS_ENTRY_HANDLER, 0);
+  __ PushTryHandler(StackHandler::JS_ENTRY, 0);
 
   // Clear any pending exceptions.
   __ LoadRoot(rax, Heap::kTheHoleValueRootIndex);
@@ -5900,11 +5971,13 @@ struct AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   // KeyedStoreIC::GenerateGeneric.
   { rbx, rdx, rcx, EMIT_REMEMBERED_SET},
   // KeyedStoreStubCompiler::GenerateStoreFastElement.
-  { rdi, rdx, rcx, EMIT_REMEMBERED_SET},
+  { rdi, rbx, rcx, EMIT_REMEMBERED_SET},
+  { rdx, rdi, rbx, EMIT_REMEMBERED_SET},
   // ElementsTransitionGenerator::GenerateSmiOnlyToObject
   // and ElementsTransitionGenerator::GenerateSmiOnlyToObject
   // and ElementsTransitionGenerator::GenerateDoubleToObject
   { rdx, rbx, rdi, EMIT_REMEMBERED_SET},
+  { rdx, rbx, rdi, OMIT_REMEMBERED_SET},
   // ElementsTransitionGenerator::GenerateSmiOnlyToDouble
   // and ElementsTransitionGenerator::GenerateDoubleToObject
   { rdx, r11, r15, EMIT_REMEMBERED_SET},

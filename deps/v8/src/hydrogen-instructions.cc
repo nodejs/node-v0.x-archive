@@ -67,6 +67,14 @@ const char* Representation::Mnemonic() const {
 }
 
 
+int HValue::LoopWeight() const {
+  const int w = FLAG_loop_weight;
+  static const int weights[] = { 1, w, w*w, w*w*w, w*w*w*w };
+  return weights[Min(block()->LoopNestingDepth(),
+                     static_cast<int>(ARRAY_SIZE(weights)-1))];
+}
+
+
 void HValue::AssumeRepresentation(Representation r) {
   if (CheckFlag(kFlexibleRepresentation)) {
     ChangeRepresentation(r);
@@ -268,6 +276,15 @@ bool HValue::IsDefinedAfter(HBasicBlock* other) const {
 }
 
 
+HUseListNode* HUseListNode::tail() {
+  // Skip and remove dead items in the use list.
+  while (tail_ != NULL && tail_->value()->CheckFlag(HValue::kIsDead)) {
+    tail_ = tail_->tail_;
+  }
+  return tail_;
+}
+
+
 HUseIterator::HUseIterator(HUseListNode* head) : next_(head) {
   Advance();
 }
@@ -366,7 +383,7 @@ void HValue::DeleteAndReplaceWith(HValue* other) {
   // We replace all uses first, so Delete can assert that there are none.
   if (other != NULL) ReplaceAllUsesWith(other);
   ASSERT(HasNoUses());
-  ClearOperands();
+  Kill();
   DeleteFromGraph();
 }
 
@@ -384,9 +401,17 @@ void HValue::ReplaceAllUsesWith(HValue* other) {
 }
 
 
-void HValue::ClearOperands() {
+void HValue::Kill() {
+  // Instead of going through the entire use list of each operand, we only
+  // check the first item in each use list and rely on the tail() method to
+  // skip dead items, removing them lazily next time we traverse the list.
+  SetFlag(kIsDead);
   for (int i = 0; i < OperandCount(); ++i) {
-    SetOperandAt(i, NULL);
+    HValue* operand = OperandAt(i);
+    HUseListNode* first = operand->use_list_;
+    if (first != NULL && first->value() == this && first->index() == i) {
+      operand->use_list_ = first->tail();
+    }
   }
 }
 
@@ -778,6 +803,33 @@ void HTypeofIsAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
+void HCheckMapValue::PrintDataTo(StringStream* stream) {
+  value()->PrintNameTo(stream);
+  stream->Add(" ");
+  map()->PrintNameTo(stream);
+}
+
+
+void HForInPrepareMap::PrintDataTo(StringStream* stream) {
+  enumerable()->PrintNameTo(stream);
+}
+
+
+void HForInCacheArray::PrintDataTo(StringStream* stream) {
+  enumerable()->PrintNameTo(stream);
+  stream->Add(" ");
+  map()->PrintNameTo(stream);
+  stream->Add("[%d]", idx_);
+}
+
+
+void HLoadFieldByIndex::PrintDataTo(StringStream* stream) {
+  object()->PrintNameTo(stream);
+  stream->Add(" ");
+  index()->PrintNameTo(stream);
+}
+
+
 HValue* HConstant::Canonicalize() {
   return HasNoUses() && !IsBlockEntry() ? NULL : this;
 }
@@ -885,6 +937,13 @@ void HCheckInstanceType::GetCheckMaskAndTag(uint8_t* mask, uint8_t* tag) {
 void HCheckMap::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
   stream->Add(" %p", *map());
+  if (mode() == REQUIRE_EXACT_MAP) {
+    stream->Add(" [EXACT]");
+  } else if (!has_element_transitions_) {
+    stream->Add(" [EXACT*]");
+  } else {
+    stream->Add(" [MATCH ELEMENTS]");
+  }
 }
 
 
@@ -1139,7 +1198,7 @@ void HPhi::InitRealUses(int phi_id) {
     HValue* value = it.value();
     if (!value->IsPhi()) {
       Representation rep = value->RequiredInputRepresentation(it.index());
-      ++non_phi_uses_[rep.kind()];
+      non_phi_uses_[rep.kind()] += value->LoopWeight();
     }
   }
 }
@@ -1339,6 +1398,23 @@ Range* HShl::InferRange() {
 }
 
 
+Range* HLoadKeyedSpecializedArrayElement::InferRange() {
+  switch (elements_kind()) {
+    case EXTERNAL_PIXEL_ELEMENTS:
+      return new Range(0, 255);
+    case EXTERNAL_BYTE_ELEMENTS:
+      return new Range(-128, 127);
+    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+      return new Range(0, 255);
+    case EXTERNAL_SHORT_ELEMENTS:
+      return new Range(-32768, 32767);
+    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+      return new Range(0, 65535);
+    default:
+      return HValue::InferRange();
+  }
+}
+
 
 void HCompareGeneric::PrintDataTo(StringStream* stream) {
   stream->Add(Token::Name(token()));
@@ -1487,10 +1563,15 @@ void HLoadKeyedFastElement::PrintDataTo(StringStream* stream) {
 
 
 bool HLoadKeyedFastElement::RequiresHoleCheck() {
+  if (hole_check_mode_ == OMIT_HOLE_CHECK) {
+    return false;
+  }
+
   for (HUseIterator it(uses()); !it.Done(); it.Advance()) {
     HValue* use = it.value();
     if (!use->IsChange()) return true;
   }
+
   return false;
 }
 
@@ -1508,6 +1589,39 @@ void HLoadKeyedGeneric::PrintDataTo(StringStream* stream) {
   stream->Add("[");
   key()->PrintNameTo(stream);
   stream->Add("]");
+}
+
+
+HValue* HLoadKeyedGeneric::Canonicalize() {
+  // Recognize generic keyed loads that use property name generated
+  // by for-in statement as a key and rewrite them into fast property load
+  // by index.
+  if (key()->IsLoadKeyedFastElement()) {
+    HLoadKeyedFastElement* key_load = HLoadKeyedFastElement::cast(key());
+    if (key_load->object()->IsForInCacheArray()) {
+      HForInCacheArray* names_cache =
+          HForInCacheArray::cast(key_load->object());
+
+      if (names_cache->enumerable() == object()) {
+        HForInCacheArray* index_cache =
+            names_cache->index_cache();
+        HCheckMapValue* map_check =
+            new(block()->zone()) HCheckMapValue(object(), names_cache->map());
+        HInstruction* index = new(block()->zone()) HLoadKeyedFastElement(
+            index_cache,
+            key_load->key(),
+            HLoadKeyedFastElement::OMIT_HOLE_CHECK);
+        HLoadFieldByIndex* load = new(block()->zone()) HLoadFieldByIndex(
+            object(), index);
+        map_check->InsertBefore(this);
+        index->InsertBefore(this);
+        load->InsertBefore(this);
+        return load;
+      }
+    }
+  }
+
+  return this;
 }
 
 
@@ -1809,17 +1923,18 @@ HType HStringCharFromCode::CalculateInferredType() {
 }
 
 
+HType HFastLiteral::CalculateInferredType() {
+  // TODO(mstarzinger): Be smarter, could also be JSArray here.
+  return HType::JSObject();
+}
+
+
 HType HArrayLiteral::CalculateInferredType() {
   return HType::JSArray();
 }
 
 
-HType HObjectLiteralFast::CalculateInferredType() {
-  return HType::JSObject();
-}
-
-
-HType HObjectLiteralGeneric::CalculateInferredType() {
+HType HObjectLiteral::CalculateInferredType() {
   return HType::JSObject();
 }
 

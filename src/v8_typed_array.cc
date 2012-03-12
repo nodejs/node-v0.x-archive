@@ -22,24 +22,16 @@
 #include <stdlib.h>  // calloc, etc
 #include <string.h>  // memmove
 
-#include <v8.h>
-
 #include "v8_typed_array.h"
 #include "node_buffer.h"
+#include "node.h"
+#include "v8.h"
 
 namespace {
 
-v8::Handle<v8::Value> ThrowError(const char* msg) {
-  return v8::ThrowException(v8::Exception::Error(v8::String::New(msg)));
-}
-
-v8::Handle<v8::Value> ThrowTypeError(const char* msg) {
-  return v8::ThrowException(v8::Exception::TypeError(v8::String::New(msg)));
-}
-
-v8::Handle<v8::Value> ThrowRangeError(const char* msg) {
-  return v8::ThrowException(v8::Exception::RangeError(v8::String::New(msg)));
-}
+using node::ThrowRangeError;
+using node::ThrowTypeError;
+using node::ThrowError;
 
 struct BatchedMethods {
   const char* name;
@@ -99,6 +91,10 @@ class ArrayBuffer {
     }
 
     size_t num_bytes = args[0]->Uint32Value();
+    if (num_bytes > node::Buffer::kMaxLength) {
+      return ThrowRangeError("length > kMaxLength");
+    }
+
     void* buf = calloc(num_bytes, 1);
     if (!buf)
       return ThrowError("Unable to allocate ArrayBuffer.");
@@ -232,6 +228,7 @@ class TypedArray {
           v8::Integer::NewFromUnsigned(length * TBytes)};
       buffer = ArrayBuffer::GetTemplate()->
                  GetFunction()->NewInstance(1, argv);
+      if (buffer.IsEmpty()) return v8::Undefined(); // constructor failed
 
       void* buf = buffer->GetPointerFromInternalField(0);
       args.This()->SetIndexedPropertiesToExternalArrayData(
@@ -260,8 +257,9 @@ class TypedArray {
 
       buffer = ArrayBuffer::GetTemplate()->
                  GetFunction()->NewInstance(1, argv);
-      void* buf = buffer->GetPointerFromInternalField(0);
+      if (buffer.IsEmpty()) return v8::Undefined(); // constructor failed
 
+      void* buf = buffer->GetPointerFromInternalField(0);
       args.This()->SetIndexedPropertiesToExternalArrayData(
           buf, TEAType, length);
       // TODO(deanm): check for failure.
@@ -345,11 +343,6 @@ class TypedArray {
       v8::Handle<v8::Object> obj = v8::Handle<v8::Object>::Cast(args[0]);
 
       if (TypedArray<TBytes, TEAType>::HasInstance(obj)) {  // ArrayBufferView.
-        v8::Handle<v8::Object> src_buffer = v8::Handle<v8::Object>::Cast(
-            obj->Get(v8::String::New("buffer")));
-        v8::Handle<v8::Object> dst_buffer = v8::Handle<v8::Object>::Cast(
-            args.This()->Get(v8::String::New("buffer")));
-
         if (args[1]->Int32Value() < 0)
           return ThrowRangeError("Offset may not be negative.");
 

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -40,26 +40,6 @@ namespace v8 {
 namespace internal {
 
 // ----------------------------------------------------------------------------
-// A Zone allocator for use with LocalsMap.
-
-// TODO(isolates): It is probably worth it to change the Allocator class to
-//                 take a pointer to an isolate.
-class ZoneAllocator: public Allocator {
- public:
-  /* nothing to do */
-  virtual ~ZoneAllocator()  {}
-
-  virtual void* New(size_t size)  { return ZONE->New(static_cast<int>(size)); }
-
-  /* ignored - Zone is freed in one fell swoop */
-  virtual void Delete(void* p)  {}
-};
-
-
-static ZoneAllocator* LocalsMapAllocator = ::new ZoneAllocator();
-
-
-// ----------------------------------------------------------------------------
 // Implementation of LocalsMap
 //
 // Note: We are storing the handle locations as key values in the hash map.
@@ -77,7 +57,7 @@ static bool Match(void* key1, void* key2) {
 }
 
 
-VariableMap::VariableMap() : HashMap(Match, LocalsMapAllocator, 8) {}
+VariableMap::VariableMap() : ZoneHashMap(Match, 8) {}
 VariableMap::~VariableMap() {}
 
 
@@ -88,7 +68,7 @@ Variable* VariableMap::Declare(
     bool is_valid_lhs,
     Variable::Kind kind,
     InitializationFlag initialization_flag) {
-  HashMap::Entry* p = HashMap::Lookup(name.location(), name->Hash(), true);
+  Entry* p = ZoneHashMap::Lookup(name.location(), name->Hash(), true);
   if (p->value == NULL) {
     // The variable has not been declared yet -> insert it.
     ASSERT(p->key == name.location());
@@ -104,7 +84,7 @@ Variable* VariableMap::Declare(
 
 
 Variable* VariableMap::Lookup(Handle<String> name) {
-  HashMap::Entry* p = HashMap::Lookup(name.location(), name->Hash(), false);
+  Entry* p = ZoneHashMap::Lookup(name.location(), name->Hash(), false);
   if (p != NULL) {
     ASSERT(*reinterpret_cast<String**>(p->key) == *name);
     ASSERT(p->value != NULL);
@@ -149,12 +129,10 @@ Scope::Scope(Scope* inner_scope,
   SetDefaults(type, NULL, scope_info);
   if (!scope_info.is_null()) {
     num_heap_slots_ = scope_info_->ContextLength();
-    if (*scope_info != ScopeInfo::Empty()) {
-      language_mode_ = scope_info->language_mode();
-    }
-  } else if (is_with_scope()) {
-    num_heap_slots_ = Context::MIN_CONTEXT_SLOTS;
   }
+  // Ensure at least MIN_CONTEXT_SLOTS to indicate a materialized context.
+  num_heap_slots_ = Max(num_heap_slots_,
+                        static_cast<int>(Context::MIN_CONTEXT_SLOTS));
   AddInnerScope(inner_scope);
 }
 
@@ -274,8 +252,11 @@ bool Scope::Analyze(CompilationInfo* info) {
     top = top->outer_scope();
   }
 
-  // Allocated the variables.
-  top->AllocateVariables(info->global_scope());
+  // Allocate the variables.
+  {
+    AstNodeFactory<AstNullVisitor> ast_node_factory(info->isolate());
+    top->AllocateVariables(info->global_scope(), &ast_node_factory);
+  }
 
 #ifdef DEBUG
   if (info->isolate()->bootstrapper()->IsActive()
@@ -417,7 +398,8 @@ Variable* Scope::LocalLookup(Handle<String> name) {
 }
 
 
-Variable* Scope::LookupFunctionVar(Handle<String> name) {
+Variable* Scope::LookupFunctionVar(Handle<String> name,
+                                   AstNodeFactory<AstNullVisitor>* factory) {
   if (function_ != NULL && function_->name().is_identical_to(name)) {
     return function_->var();
   } else if (!scope_info_.is_null()) {
@@ -425,7 +407,7 @@ Variable* Scope::LookupFunctionVar(Handle<String> name) {
     VariableMode mode;
     int index = scope_info_->FunctionContextSlotIndex(*name, &mode);
     if (index < 0) return NULL;
-    Variable* var = DeclareFunctionVar(name, mode);
+    Variable* var = DeclareFunctionVar(name, mode, factory);
     var->AllocateTo(Variable::CONTEXT, index);
     return var;
   } else {
@@ -442,15 +424,6 @@ Variable* Scope::Lookup(Handle<String> name) {
     if (var != NULL) return var;
   }
   return NULL;
-}
-
-
-Variable* Scope::DeclareFunctionVar(Handle<String> name, VariableMode mode) {
-  ASSERT(is_function_scope() && function_ == NULL);
-  Variable* function_var = new Variable(
-      this, name, mode, true, Variable::NORMAL, kCreatedInitialized);
-  function_ = new(isolate_->zone()) VariableProxy(isolate_, function_var);
-  return function_var;
 }
 
 
@@ -488,18 +461,6 @@ Variable* Scope::DeclareGlobal(Handle<String> name) {
                             true,
                             Variable::NORMAL,
                             kCreatedInitialized);
-}
-
-
-VariableProxy* Scope::NewUnresolved(Handle<String> name, int position) {
-  // Note that we must not share the unresolved variables with
-  // the same name because they may be removed selectively via
-  // RemoveUnresolved().
-  ASSERT(!already_resolved());
-  VariableProxy* proxy = new(isolate_->zone()) VariableProxy(
-      isolate_, name, false, position);
-  unresolved_.Add(proxy);
-  return proxy;
 }
 
 
@@ -625,7 +586,8 @@ void Scope::CollectStackAndContextLocals(ZoneList<Variable*>* stack_locals,
 }
 
 
-void Scope::AllocateVariables(Scope* global_scope) {
+void Scope::AllocateVariables(Scope* global_scope,
+                              AstNodeFactory<AstNullVisitor>* factory) {
   // 1) Propagate scope information.
   bool outer_scope_calls_non_strict_eval = false;
   if (outer_scope_ != NULL) {
@@ -636,7 +598,7 @@ void Scope::AllocateVariables(Scope* global_scope) {
   PropagateScopeInfo(outer_scope_calls_non_strict_eval);
 
   // 2) Resolve variables.
-  ResolveVariablesRecursively(global_scope);
+  ResolveVariablesRecursively(global_scope, factory);
 
   // 3) Allocate variables.
   AllocateVariablesRecursively();
@@ -722,6 +684,7 @@ static const char* Header(ScopeType type) {
   switch (type) {
     case EVAL_SCOPE: return "eval";
     case FUNCTION_SCOPE: return "function";
+    case MODULE_SCOPE: return "module";
     case GLOBAL_SCOPE: return "global";
     case CATCH_SCOPE: return "catch";
     case BLOCK_SCOPE: return "block";
@@ -899,7 +862,8 @@ Variable* Scope::NonLocal(Handle<String> name, VariableMode mode) {
 
 
 Variable* Scope::LookupRecursive(Handle<String> name,
-                                 BindingKind* binding_kind) {
+                                 BindingKind* binding_kind,
+                                 AstNodeFactory<AstNullVisitor>* factory) {
   ASSERT(binding_kind != NULL);
   // Try to find the variable in this scope.
   Variable* var = LocalLookup(name);
@@ -916,11 +880,11 @@ Variable* Scope::LookupRecursive(Handle<String> name,
   // if any. We can do this for all scopes, since the function variable is
   // only present - if at all - for function scopes.
   *binding_kind = UNBOUND;
-  var = LookupFunctionVar(name);
+  var = LookupFunctionVar(name, factory);
   if (var != NULL) {
     *binding_kind = BOUND;
   } else if (outer_scope_ != NULL) {
-    var = outer_scope_->LookupRecursive(name, binding_kind);
+    var = outer_scope_->LookupRecursive(name, binding_kind, factory);
     if (*binding_kind == BOUND && (is_function_scope() || is_with_scope())) {
       var->ForceContextAllocation();
     }
@@ -953,7 +917,8 @@ Variable* Scope::LookupRecursive(Handle<String> name,
 
 
 void Scope::ResolveVariable(Scope* global_scope,
-                            VariableProxy* proxy) {
+                            VariableProxy* proxy,
+                            AstNodeFactory<AstNullVisitor>* factory) {
   ASSERT(global_scope == NULL || global_scope->is_global_scope());
 
   // If the proxy is already resolved there's nothing to do
@@ -962,7 +927,7 @@ void Scope::ResolveVariable(Scope* global_scope,
 
   // Otherwise, try to resolve the variable.
   BindingKind binding_kind;
-  Variable* var = LookupRecursive(proxy->name(), &binding_kind);
+  Variable* var = LookupRecursive(proxy->name(), &binding_kind, factory);
   switch (binding_kind) {
     case BOUND:
       // We found a variable binding.
@@ -1003,17 +968,19 @@ void Scope::ResolveVariable(Scope* global_scope,
 }
 
 
-void Scope::ResolveVariablesRecursively(Scope* global_scope) {
+void Scope::ResolveVariablesRecursively(
+    Scope* global_scope,
+    AstNodeFactory<AstNullVisitor>* factory) {
   ASSERT(global_scope == NULL || global_scope->is_global_scope());
 
   // Resolve unresolved variables for this scope.
   for (int i = 0; i < unresolved_.length(); i++) {
-    ResolveVariable(global_scope, unresolved_[i]);
+    ResolveVariable(global_scope, unresolved_[i], factory);
   }
 
   // Resolve unresolved variables for inner scopes.
   for (int i = 0; i < inner_scopes_.length(); i++) {
-    inner_scopes_[i]->ResolveVariablesRecursively(global_scope);
+    inner_scopes_[i]->ResolveVariablesRecursively(global_scope, factory);
   }
 }
 

@@ -77,26 +77,32 @@ class FullCodeGenerator: public AstVisitor {
     TOS_REG
   };
 
-  explicit FullCodeGenerator(MacroAssembler* masm)
+  FullCodeGenerator(MacroAssembler* masm, CompilationInfo* info)
       : masm_(masm),
-        info_(NULL),
-        scope_(NULL),
+        info_(info),
+        scope_(info->scope()),
         nesting_stack_(NULL),
         loop_depth_(0),
+        global_count_(0),
         context_(NULL),
-        bailout_entries_(0),
-        stack_checks_(2) {  // There's always at least one.
-  }
+        bailout_entries_(info->HasDeoptimizationSupport()
+                         ? info->function()->ast_node_count() : 0),
+        stack_checks_(2),  // There's always at least one.
+        type_feedback_cells_(info->HasDeoptimizationSupport()
+                             ? info->function()->ast_node_count() : 0),
+        ic_total_count_(0),
+        has_self_optimization_header_(false) { }
 
   static bool MakeCode(CompilationInfo* info);
 
-  void Generate(CompilationInfo* info);
-  void PopulateDeoptimizationData(Handle<Code> code);
+  // Returns the platform-specific size in bytes of the self-optimization
+  // header.
+  static int self_optimization_header_size();
 
-  Handle<FixedArray> handler_table() { return handler_table_; }
-
-  class StateField : public BitField<State, 0, 8> { };
-  class PcField    : public BitField<unsigned, 8, 32-8> { };
+  // Encode state and pc-offset as a BitField<type, start, size>.
+  // Only use 30 bits because we encode the result as a smi.
+  class StateField : public BitField<State, 0, 1> { };
+  class PcField    : public BitField<unsigned, 1, 30-1> { };
 
   static const char* State2String(State state) {
     switch (state) {
@@ -394,6 +400,10 @@ class FullCodeGenerator: public AstVisitor {
   void PrepareForBailout(Expression* node, State state);
   void PrepareForBailoutForId(unsigned id, State state);
 
+  // Cache cell support.  This associates AST ids with global property cells
+  // that will be cleared during GC and collected by the type-feedback oracle.
+  void RecordTypeFeedbackCell(unsigned id, Handle<JSGlobalPropertyCell> cell);
+
   // Record a call's return site offset, used to rebuild the frame if the
   // called function was inlined at the site.
   void RecordJSReturnSite(Call* call);
@@ -410,14 +420,17 @@ class FullCodeGenerator: public AstVisitor {
 
   // Platform-specific code for a variable, constant, or function
   // declaration.  Functions have an initial value.
+  // Increments global_count_ for unallocated variables.
   void EmitDeclaration(VariableProxy* proxy,
                        VariableMode mode,
-                       FunctionLiteral* function,
-                       int* global_count);
+                       FunctionLiteral* function);
 
   // Platform-specific code for checking the stack limit at the back edge of
   // a loop.
-  void EmitStackCheck(IterationStatement* stmt);
+  // This is meant to be called at loop back edges, |back_edge_target| is
+  // the jump target of the back edge and is used to approximate the amount
+  // of code inside the loop.
+  void EmitStackCheck(IterationStatement* stmt, Label* back_edge_target);
   // Record the OSR AST id corresponding to a stack check in the code.
   void RecordStackCheck(unsigned osr_ast_id);
   // Emit a table of stack check ids and pcs into the code stream.  Return
@@ -487,7 +500,7 @@ class FullCodeGenerator: public AstVisitor {
 
   // Assign to the given expression as if via '='. The right-hand-side value
   // is expected in the accumulator.
-  void EmitAssignment(Expression* expr, int bailout_ast_id);
+  void EmitAssignment(Expression* expr);
 
   // Complete a variable assignment.  The right-hand-side value is expected
   // in the accumulator.
@@ -502,6 +515,10 @@ class FullCodeGenerator: public AstVisitor {
   // expected on top of the stack and the right-hand-side value in the
   // accumulator.
   void EmitKeyedPropertyAssignment(Assignment* expr);
+
+  void CallIC(Handle<Code> code,
+              RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
+              unsigned ast_id = kNoASTId);
 
   void SetFunctionPosition(FunctionLiteral* fun);
   void SetReturnPosition(FunctionLiteral* fun);
@@ -568,9 +585,21 @@ class FullCodeGenerator: public AstVisitor {
 
   void VisitForTypeofValue(Expression* expr);
 
+  void Generate();
+  void PopulateDeoptimizationData(Handle<Code> code);
+  void PopulateTypeFeedbackInfo(Handle<Code> code);
+  void PopulateTypeFeedbackCells(Handle<Code> code);
+
+  Handle<FixedArray> handler_table() { return handler_table_; }
+
   struct BailoutEntry {
     unsigned id;
     unsigned pc_and_state;
+  };
+
+  struct TypeFeedbackCellEntry {
+    unsigned ast_id;
+    Handle<JSGlobalPropertyCell> cell;
   };
 
 
@@ -756,10 +785,15 @@ class FullCodeGenerator: public AstVisitor {
   Label return_label_;
   NestedStatement* nesting_stack_;
   int loop_depth_;
+  int global_count_;
   const ExpressionContext* context_;
   ZoneList<BailoutEntry> bailout_entries_;
   ZoneList<BailoutEntry> stack_checks_;
+  ZoneList<TypeFeedbackCellEntry> type_feedback_cells_;
+  int ic_total_count_;
+  bool has_self_optimization_header_;
   Handle<FixedArray> handler_table_;
+  Handle<JSGlobalPropertyCell> profiling_counter_;
 
   friend class NestedStatement;
 

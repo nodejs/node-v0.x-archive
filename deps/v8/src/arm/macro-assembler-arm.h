@@ -491,6 +491,22 @@ class MacroAssembler: public Assembler {
 
   void LoadContext(Register dst, int context_chain_length);
 
+  // Conditionally load the cached Array transitioned map of type
+  // transitioned_kind from the global context if the map in register
+  // map_in_out is the cached Array map in the global context of
+  // expected_kind.
+  void LoadTransitionedArrayMapConditional(
+      ElementsKind expected_kind,
+      ElementsKind transitioned_kind,
+      Register map_in_out,
+      Register scratch,
+      Label* no_map_match);
+
+  // Load the initial map for new Arrays from a JSFunction.
+  void LoadInitialArrayMap(Register function_in,
+                           Register scratch,
+                           Register map_out);
+
   void LoadGlobalFunction(int index, Register function);
 
   // Load the initial map from the global function. The registers
@@ -566,20 +582,18 @@ class MacroAssembler: public Assembler {
   // Exception handling
 
   // Push a new try handler and link into try handler chain.
-  void PushTryHandler(CodeLocation try_location,
-                      HandlerType type,
-                      int handler_index);
+  void PushTryHandler(StackHandler::Kind kind, int handler_index);
 
   // Unlink the stack handler on top of the stack from the try handler chain.
   // Must preserve the result register.
   void PopTryHandler();
 
-  // Passes thrown value (in r0) to the handler of top of the try handler chain.
+  // Passes thrown value to the handler of top of the try handler chain.
   void Throw(Register value);
 
   // Propagates an uncatchable exception to the top of the current JS stack's
   // handler chain.
-  void ThrowUncatchable(UncatchableExceptionType type, Register value);
+  void ThrowUncatchable(Register value);
 
   // ---------------------------------------------------------------------------
   // Inline caching support
@@ -787,7 +801,8 @@ class MacroAssembler: public Assembler {
 
   // Check to see if maybe_number can be stored as a double in
   // FastDoubleElements. If it can, store it at the index specified by key in
-  // the FastDoubleElements array elements, otherwise jump to fail.
+  // the FastDoubleElements array elements. Otherwise jump to fail, in which
+  // case scratch2, scratch3 and scratch4 are unmodified.
   void StoreNumberToDoubleElements(Register value_reg,
                                    Register key_reg,
                                    Register receiver_reg,
@@ -1144,6 +1159,14 @@ class MacroAssembler: public Assembler {
     mov(dst, Operand(src, ASR, kSmiTagSize), s);
   }
 
+  // Untag the source value into destination and jump if source is a smi.
+  // Souce and destination can be the same register.
+  void UntagAndJumpIfSmi(Register dst, Register src, Label* smi_case);
+
+  // Untag the source value into destination and jump if source is not a smi.
+  // Souce and destination can be the same register.
+  void UntagAndJumpIfNotSmi(Register dst, Register src, Label* non_smi_case);
+
   // Jump the register contains a smi.
   inline void JumpIfSmi(Register value, Label* smi_label) {
     tst(value, Operand(kSmiTagMask));
@@ -1235,6 +1258,10 @@ class MacroAssembler: public Assembler {
   // Activation support.
   void EnterFrame(StackFrame::Type type);
   void LeaveFrame(StackFrame::Type type);
+
+  // Expects object in r0 and returns map with validated enum cache
+  // in r0.  Assumes that any other register can be used as a scratch.
+  void CheckEnumCache(Register null_value, Label* call_runtime);
 
  private:
   void CallCFunctionHelper(Register function,

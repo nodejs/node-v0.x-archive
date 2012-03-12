@@ -41,7 +41,8 @@ namespace internal {
 Scanner::Scanner(UnicodeCache* unicode_cache)
     : unicode_cache_(unicode_cache),
       octal_pos_(Location::invalid()),
-      harmony_scoping_(false) { }
+      harmony_scoping_(false),
+      harmony_modules_(false) { }
 
 
 void Scanner::Initialize(UC16CharacterStream* source) {
@@ -830,7 +831,8 @@ uc32 Scanner::ScanIdentifierUnicodeEscape() {
   KEYWORD_GROUP('e')                                                \
   KEYWORD("else", Token::ELSE)                                      \
   KEYWORD("enum", Token::FUTURE_RESERVED_WORD)                      \
-  KEYWORD("export", Token::FUTURE_RESERVED_WORD)                    \
+  KEYWORD("export", harmony_modules                                 \
+                    ? Token::EXPORT : Token::FUTURE_RESERVED_WORD)  \
   KEYWORD("extends", Token::FUTURE_RESERVED_WORD)                   \
   KEYWORD_GROUP('f')                                                \
   KEYWORD("false", Token::FALSE_LITERAL)                            \
@@ -840,7 +842,8 @@ uc32 Scanner::ScanIdentifierUnicodeEscape() {
   KEYWORD_GROUP('i')                                                \
   KEYWORD("if", Token::IF)                                          \
   KEYWORD("implements", Token::FUTURE_STRICT_RESERVED_WORD)         \
-  KEYWORD("import", Token::FUTURE_RESERVED_WORD)                    \
+  KEYWORD("import", harmony_modules                                 \
+                    ? Token::IMPORT : Token::FUTURE_RESERVED_WORD)  \
   KEYWORD("in", Token::IN)                                          \
   KEYWORD("instanceof", Token::INSTANCEOF)                          \
   KEYWORD("interface", Token::FUTURE_STRICT_RESERVED_WORD)          \
@@ -879,7 +882,8 @@ uc32 Scanner::ScanIdentifierUnicodeEscape() {
 
 static Token::Value KeywordOrIdentifierToken(const char* input,
                                              int input_length,
-                                             bool harmony_scoping) {
+                                             bool harmony_scoping,
+                                             bool harmony_modules) {
   ASSERT(input_length >= 1);
   const int kMinLength = 2;
   const int kMaxLength = 10;
@@ -955,7 +959,8 @@ Token::Value Scanner::ScanIdentifierOrKeyword() {
     Vector<const char> chars = next_.literal_chars->ascii_literal();
     return KeywordOrIdentifierToken(chars.start(),
                                     chars.length(),
-                                    harmony_scoping_);
+                                    harmony_scoping_,
+                                    harmony_modules_);
   }
 
   return Token::IDENTIFIER;

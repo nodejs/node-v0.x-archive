@@ -4,11 +4,11 @@
     # Turn off -Werror in V8
     # See http://codereview.chromium.org/8159015
     'werror': '',
-    'target_arch': 'ia32',
     'node_use_dtrace': 'false',
+    'node_shared_v8%': 'false',
+    'node_shared_zlib%': 'false',
     'node_use_openssl%': 'true',
     'node_use_system_openssl%': 'false',
-    'node_use_isolates%': 'true',
     'library_files': [
       'src/node.js',
       'lib/_debugger.js',
@@ -56,9 +56,7 @@
 
       'dependencies': [
         'deps/http_parser/http_parser.gyp:http_parser',
-        'deps/v8/tools/gyp/v8.gyp:v8',
         'deps/uv/uv.gyp:uv',
-        'deps/zlib/zlib.gyp:zlib',
         'node_js2c#host',
       ],
 
@@ -73,9 +71,7 @@
         'src/cares_wrap.cc',
         'src/handle_wrap.cc',
         'src/node.cc',
-        'src/node_vars.cc',
         'src/node_buffer.cc',
-        'src/node_isolate.cc',
         'src/node_constants.cc',
         'src/node_extensions.cc',
         'src/node_file.cc',
@@ -95,12 +91,9 @@
         'src/v8_typed_array.cc',
         'src/udp_wrap.cc',
         # headers to make for a more pleasant IDE experience
-        'src/ngx-queue.h',
         'src/handle_wrap.h',
         'src/node.h',
-        'src/node_vars.h',
         'src/node_buffer.h',
-        'src/node_isolate.h',
         'src/node_constants.h',
         'src/node_crypto.h',
         'src/node_extensions.h',
@@ -117,8 +110,6 @@
         'src/stream_wrap.h',
         'src/v8_typed_array.h',
         'deps/http_parser/http_parser.h',
-        'deps/v8/include/v8.h',
-        'deps/v8/include/v8-debug.h',
         '<(SHARED_INTERMEDIATE_DIR)/node_natives.h',
         # javascript files to make for an even more pleasant IDE experience
         '<@(library_files)',
@@ -133,12 +124,6 @@
       ],
 
       'conditions': [
-        [ 'node_use_isolates=="true"', {
-          'defines': [ 'HAVE_ISOLATES=1' ],
-        }, {
-          'defines': [ 'HAVE_ISOLATES=0' ],
-        }],
-
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [ 'src/node_crypto.cc' ],
@@ -160,6 +145,23 @@
           ],
         }],
 
+        [ 'node_shared_v8=="true"', {
+          'sources': [
+            '<(node_shared_v8_includes)/v8.h',
+            '<(node_shared_v8_includes)/v8-debug.h',
+          ],
+        }, {
+          'sources': [
+            'deps/v8/include/v8.h',
+            'deps/v8/include/v8-debug.h',
+          ],
+          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+        }],
+
+        [ 'node_shared_zlib=="false"', {
+          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+        }],
+
         [ 'OS=="win"', {
           'sources': [
             'tools/msvs/res/node.rc',
@@ -168,6 +170,7 @@
             'FD_SETSIZE=1024',
             # we need to use node's preferred "win32" rather than gyp's preferred "win"
             'PLATFORM="win32"',
+            '_UNICODE=1',
           ],
           'libraries': [ '-lpsapi.lib' ]
         },{ # POSIX
@@ -186,12 +189,6 @@
           'defines': [
             # we need to use node's preferred "darwin" rather than gyp's preferred "mac"
             'PLATFORM="darwin"',
-          ],
-        }],
-        [ 'OS=="linux"', {
-          'libraries': [
-            '-ldl',
-            '-lutil' # needed for openpty
           ],
         }],
         [ 'OS=="freebsd"', {

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -119,6 +119,11 @@ class JumpPatchSite BASE_EMBEDDED {
 };
 
 
+int FullCodeGenerator::self_optimization_header_size() {
+  return 0;  // TODO(jkummerow): determine correct value.
+}
+
+
 // Generate code for a JS function.  On entry to the function the receiver
 // and arguments have been pushed on the stack left to right.  The actual
 // argument count matches the formal parameter count expected by the
@@ -133,14 +138,35 @@ class JumpPatchSite BASE_EMBEDDED {
 //
 // The function builds a JS frame.  Please see JavaScriptFrameConstants in
 // frames-mips.h for its layout.
-void FullCodeGenerator::Generate(CompilationInfo* info) {
-  ASSERT(info_ == NULL);
-  info_ = info;
-  scope_ = info->scope();
+void FullCodeGenerator::Generate() {
+  CompilationInfo* info = info_;
   handler_table_ =
       isolate()->factory()->NewFixedArray(function()->handler_count(), TENURED);
   SetFunctionPosition(function());
   Comment cmnt(masm_, "[ function compiled by full code generator");
+
+  // We can optionally optimize based on counters rather than statistical
+  // sampling.
+  if (info->ShouldSelfOptimize()) {
+    if (FLAG_trace_opt_verbose) {
+      PrintF("[adding self-optimization header to %s]\n",
+             *info->function()->debug_name()->ToCString());
+    }
+    has_self_optimization_header_ = true;
+    MaybeObject* maybe_cell = isolate()->heap()->AllocateJSGlobalPropertyCell(
+        Smi::FromInt(Compiler::kCallsUntilPrimitiveOpt));
+    JSGlobalPropertyCell* cell;
+    if (maybe_cell->To(&cell)) {
+      __ li(a2, Handle<JSGlobalPropertyCell>(cell));
+      __ lw(a3, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+      __ Subu(a3, a3, Operand(Smi::FromInt(1)));
+      __ sw(a3, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+      Handle<Code> compile_stub(
+          isolate()->builtins()->builtin(Builtins::kLazyRecompile));
+      __ Jump(compile_stub, RelocInfo::CODE_TARGET, eq, a3, Operand(zero_reg));
+      ASSERT(masm_->pc_offset() == self_optimization_header_size());
+    }
+  }
 
 #ifdef DEBUG
   if (strlen(FLAG_stop_at) > 0 &&
@@ -274,11 +300,11 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
       // For named function expressions, declare the function name as a
       // constant.
       if (scope()->is_function_scope() && scope()->function() != NULL) {
-        int ignored = 0;
         VariableProxy* proxy = scope()->function();
         ASSERT(proxy->var()->mode() == CONST ||
                proxy->var()->mode() == CONST_HARMONY);
-        EmitDeclaration(proxy, proxy->var()->mode(), NULL, &ignored);
+        ASSERT(proxy->var()->location() != Variable::UNALLOCATED);
+        EmitDeclaration(proxy, proxy->var()->mode(), NULL);
       }
       VisitDeclarations(scope()->declarations());
     }
@@ -315,7 +341,8 @@ void FullCodeGenerator::ClearAccumulator() {
 }
 
 
-void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt) {
+void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt,
+                                       Label* back_edge_target) {
   // The generated code is used in Deoptimizer::PatchStackCheckCodeAt so we need
   // to make sure it is constant. Branch may emit a skip-or-jump sequence
   // instead of the normal Branch. It seems that the "skip" part of that
@@ -716,8 +743,7 @@ void FullCodeGenerator::PrepareForBailoutBeforeSplit(Expression* expr,
 
 void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
                                         VariableMode mode,
-                                        FunctionLiteral* function,
-                                        int* global_count) {
+                                        FunctionLiteral* function) {
   // If it was not possible to allocate the variable at compile time, we
   // need to "declare" it at runtime to make sure it actually exists in the
   // local context.
@@ -726,7 +752,7 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
       (mode == CONST || mode == CONST_HARMONY || mode == LET);
   switch (variable->location()) {
     case Variable::UNALLOCATED:
-      ++(*global_count);
+      ++global_count_;
       break;
 
     case Variable::PARAMETER:
@@ -812,9 +838,6 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
     }
   }
 }
-
-
-void FullCodeGenerator::VisitDeclaration(Declaration* decl) { }
 
 
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
@@ -1098,7 +1121,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ Addu(a0, a0, Operand(Smi::FromInt(1)));
   __ push(a0);
 
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &loop);
   __ Branch(&loop);
 
   // Remove the pointers stored on the stack.
@@ -1516,7 +1539,9 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
                            Smi::FromInt(0)));
         __ push(a1);
         VisitForStackValue(value);
-        __ CallRuntime(Runtime::kDefineAccessor, 4);
+        __ li(a0, Operand(Smi::FromInt(NONE)));
+        __ push(a0);
+        __ CallRuntime(Runtime::kDefineOrRedefineAccessorProperty, 5);
         break;
     }
   }
@@ -2403,9 +2428,22 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   __ li(a0, Operand(arg_count));
   __ lw(a1, MemOperand(sp, arg_count * kPointerSize));
 
-  Handle<Code> construct_builtin =
-      isolate()->builtins()->JSConstructCall();
-  __ Call(construct_builtin, RelocInfo::CONSTRUCT_CALL);
+  // Record call targets in unoptimized code, but not in the snapshot.
+  CallFunctionFlags flags;
+  if (!Serializer::enabled()) {
+    flags = RECORD_CALL_TARGET;
+    Handle<Object> uninitialized =
+       TypeFeedbackCells::UninitializedSentinel(isolate());
+    Handle<JSGlobalPropertyCell> cell =
+        isolate()->factory()->NewJSGlobalPropertyCell(uninitialized);
+    RecordTypeFeedbackCell(expr->id(), cell);
+    __ li(a2, Operand(cell));
+  } else {
+    flags = NO_CALL_FUNCTION_FLAGS;
+  }
+
+  CallConstructStub stub(flags);
+  __ Call(stub.GetCode(), RelocInfo::CONSTRUCT_CALL);
   context()->Plug(v0);
 }
 

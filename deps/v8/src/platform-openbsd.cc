@@ -458,6 +458,12 @@ bool VirtualMemory::Uncommit(void* address, size_t size) {
 }
 
 
+bool VirtualMemory::Guard(void* address) {
+  OS::Guard(address, OS::CommitPageSize());
+  return true;
+}
+
+
 void* VirtualMemory::ReserveRegion(size_t size) {
   void* result = mmap(GetRandomMmapAddr(),
                       size,
@@ -512,15 +518,8 @@ class Thread::PlatformData : public Malloced {
 
 Thread::Thread(const Options& options)
     : data_(new PlatformData()),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData()),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -789,8 +788,10 @@ class SignalSender : public Thread {
     FULL_INTERVAL
   };
 
+  static const int kSignalSenderStackSize = 64 * KB;
+
   explicit SignalSender(int interval)
-      : Thread("SignalSender"),
+      : Thread(Thread::Options("SignalSender", kSignalSenderStackSize)),
         vm_tgid_(getpid()),
         interval_(interval) {}
 

@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -36,9 +36,6 @@ regress/regress-1119: FAIL
 
 ##############################################################################
 
-# Issue 1845: http://code.google.com/p/v8/issues/detail?id=1845
-harmony/proxies-example-membrane: SKIP
-
 # NewGC: BUG(1719) slow to collect arrays over several contexts.
 regress/regress-524: SKIP
 
@@ -67,6 +64,16 @@ regress/regress-524: (PASS || TIMEOUT), SKIP if $mode == debug
 # Stack manipulations in LiveEdit are buggy - see bug 915
 debug-liveedit-check-stack: SKIP
 debug-liveedit-patch-positions-replace: SKIP
+
+# Test Crankshaft compilation time.  Expected to take too long in debug mode.
+regress/regress-1969: PASS, SKIP if $mode == debug
+
+##############################################################################
+[ $isolates ]
+
+# This test sets the umask on a per-process basis and hence cannot be
+# used in multi-threaded runs.
+d8-os: SKIP
 
 ##############################################################################
 [ $arch == arm ]

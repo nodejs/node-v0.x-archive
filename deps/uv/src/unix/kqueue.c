@@ -31,6 +31,7 @@
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #include <sys/event.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
 
@@ -68,11 +69,12 @@ static void uv__fs_event(EV_P_ ev_io* w, int revents) {
 
   handle->cb(handle, NULL, events, 0);
 
-  uv__fs_event_stop(handle);
+  if (handle->fd == -1)
+    return;
 
   /* File watcher operates in one-shot mode, re-arm it. */
-  if (handle->fd != -1)
-    uv__fs_event_start(handle);
+  uv__fs_event_stop(handle);
+  uv__fs_event_start(handle);
 }
 
 
@@ -140,13 +142,13 @@ int uv_fs_event_init(uv_loop_t* loop,
 
 
 void uv__fs_event_destroy(uv_fs_event_t* handle) {
-  assert(0 && "unreachable");
+  UNREACHABLE();
 }
 
 
 /* Called by libev, don't touch. */
 void uv__kqueue_hack(EV_P_ int fflags, ev_io *w) {
-  assert(0 && "unreachable");
+  UNREACHABLE();
 }
 
 #endif /* HAVE_KQUEUE */

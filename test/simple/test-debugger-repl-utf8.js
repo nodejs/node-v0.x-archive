@@ -25,9 +25,11 @@ var assert = require('assert');
 var spawn = require('child_process').spawn;
 var debug = require('_debugger');
 
+var port = common.PORT + 1337;
+
 var script = common.fixturesDir + '/breakpoints_utf8.js';
 
-var child = spawn(process.execPath, ['debug', script]);
+var child = spawn(process.execPath, ['debug', '--port=' + port, script]);
 
 var buffer = '';
 child.stdout.setEncoding('utf-8');
@@ -76,19 +78,12 @@ function addTest(input, output) {
 }
 
 // Initial lines
-if (process.features.isolates) {
-  addTest(null, [
-    /break in .*:1/,
-    /1/, /2/, /3/
-  ]);
-} else {
-  addTest(null, [
-    /listening on port 5858/,
-    /connecting... ok/,
-    /break in .*:1/,
-    /1/, /2/, /3/
-  ]);
-}
+addTest(null, [
+  /listening on port \d+/,
+  /connecting... ok/,
+  /break in .*:1/,
+  /1/, /2/, /3/
+]);
 
 // Next
 addTest('n', [

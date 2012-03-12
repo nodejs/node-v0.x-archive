@@ -1,9 +1,11 @@
-## HTTPS
+# HTTPS
+
+    Stability: 3 - Stable
 
 HTTPS is the HTTP protocol over TLS/SSL. In Node this is implemented as a
 separate module.
 
-## https.Server
+## Class: https.Server
 
 This class is a subclass of `tls.Server` and emits events same as
 `http.Server`. See `http.Server` for more information.
@@ -94,6 +96,9 @@ specified. However, a [globalAgent](#https.globalAgent) silently ignores these.
 - `cert`: Public x509 certificate to use. Default `null`.
 - `ca`: An authority certificate or array of authority certificates to check
   the remote host against.
+- `ciphers`: A string describing the ciphers to use or exclude. Consult
+  <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for
+  details on the format.
 - `rejectUnauthorized`: If `true`, the server certificate is verified against
   the list of supplied CAs. An `'error'` event is emitted if verification
   fails. Verification happens at the connection level, *before* the HTTP
@@ -156,7 +161,7 @@ Example:
     });
 
 
-## https.Agent
+## Class: https.Agent
 
 An Agent object for HTTPS similar to [http.Agent](http.html#http.Agent).
 See [https.request()](#https.request) for more information.

@@ -374,7 +374,7 @@ class SlotsBuffer {
   static const int kNumberOfElements = 1021;
 
  private:
-  static const int kChainLengthThreshold = 6;
+  static const int kChainLengthThreshold = 15;
 
   intptr_t idx_;
   intptr_t chain_length_;
@@ -441,7 +441,12 @@ class MarkCompactCollector {
   // Performs a global garbage collection.
   void CollectGarbage();
 
-  bool StartCompaction();
+  enum CompactionMode {
+    INCREMENTAL_COMPACTION,
+    NON_INCREMENTAL_COMPACTION
+  };
+
+  bool StartCompaction(CompactionMode mode);
 
   void AbortCompaction();
 
@@ -572,6 +577,8 @@ class MarkCompactCollector {
   // heap.
   bool sweep_precisely_;
 
+  bool reduce_memory_footprint_;
+
   // True if we are collecting slots to perform evacuation from evacuation
   // candidates.
   bool compacting_;
@@ -628,6 +635,9 @@ class MarkCompactCollector {
   // This is for non-incremental marking.
   INLINE(void MarkObject(HeapObject* obj, MarkBit mark_bit));
 
+  INLINE(bool MarkObjectWithoutPush(HeapObject* object));
+  INLINE(void MarkObjectAndPush(HeapObject* value));
+
   // Marks the object black.  This is for non-incremental marking.
   INLINE(void SetMark(HeapObject* obj, MarkBit mark_bit));
 
@@ -645,6 +655,7 @@ class MarkCompactCollector {
 
   // Mark a Map and its DescriptorArray together, skipping transitions.
   void MarkMapContents(Map* map);
+  void MarkAccessorPairSlot(HeapObject* accessors, int offset);
   void MarkDescriptorArray(DescriptorArray* descriptors);
 
   // Mark the heap roots and all objects reachable from them.
@@ -692,6 +703,8 @@ class MarkCompactCollector {
   // Map transitions from a live map to a dead map must be killed.
   // We replace them with a null descriptor, with the same key.
   void ClearNonLiveTransitions();
+  void ClearNonLivePrototypeTransitions(Map* map);
+  void ClearNonLiveMapTransitions(Map* map, MarkBit map_mark);
 
   // Marking detaches initial maps from SharedFunctionInfo objects
   // to make this reference weak. We need to reattach initial maps

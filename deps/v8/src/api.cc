@@ -25,34 +25,39 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
-
 #include "api.h"
 
-#include "arguments.h"
+#include <math.h>  // For isnan.
+#include <string.h>  // For memcpy, strlen.
+#include "../include/v8-debug.h"
+#include "../include/v8-profiler.h"
+#include "../include/v8-testing.h"
 #include "bootstrapper.h"
 #include "compiler.h"
+#include "conversions-inl.h"
+#include "counters.h"
 #include "debug.h"
 #include "deoptimizer.h"
 #include "execution.h"
-#include "flags.h"
 #include "global-handles.h"
 #include "heap-profiler.h"
 #include "messages.h"
+#ifdef COMPRESS_STARTUP_DATA_BZ2
 #include "natives.h"
+#endif
 #include "parser.h"
 #include "platform.h"
 #include "profile-generator-inl.h"
+#include "property-details.h"
+#include "property.h"
 #include "runtime-profiler.h"
 #include "scanner-character-streams.h"
-#include "serialize.h"
 #include "snapshot.h"
+#include "unicode-inl.h"
 #include "v8threads.h"
 #include "version.h"
 #include "vm-state-inl.h"
 
-#include "../include/v8-profiler.h"
-#include "../include/v8-testing.h"
 
 #define LOG_API(isolate, expr) LOG(isolate, ApiEntryCall(expr))
 
@@ -355,6 +360,7 @@ int StartupDataDecompressor::Decompress() {
     compressed_data[i].data = decompressed;
   }
   V8::SetDecompressedStartupData(compressed_data);
+  i::DeleteArray(compressed_data);
   return 0;
 }
 
@@ -2754,6 +2760,7 @@ bool v8::Object::Set(uint32_t index, v8::Handle<Value> value) {
       self,
       index,
       value_obj,
+      NONE,
       i::kNonStrictMode);
   has_pending_exception = obj.is_null();
   EXCEPTION_BAILOUT_CHECK(isolate, false);
@@ -3622,6 +3629,12 @@ Handle<Value> Function::GetName() const {
 }
 
 
+Handle<Value> Function::GetInferredName() const {
+  i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
+  return Utils::ToLocal(i::Handle<i::Object>(func->shared()->inferred_name()));
+}
+
+
 ScriptOrigin Function::GetScriptOrigin() const {
   i::Handle<i::JSFunction> func = Utils::OpenHandle(this);
   if (func->shared()->script()->IsScript()) {
@@ -4069,7 +4082,7 @@ bool v8::V8::IdleNotification(int hint) {
 void v8::V8::LowMemoryNotification() {
   i::Isolate* isolate = i::Isolate::Current();
   if (isolate == NULL || !isolate->IsInitialized()) return;
-  isolate->heap()->CollectAllAvailableGarbage();
+  isolate->heap()->CollectAllAvailableGarbage("low memory notification");
 }
 
 
@@ -4302,6 +4315,20 @@ void Context::AllowCodeGenerationFromStrings(bool allow) {
       i::Handle<i::Context>::cast(i::Handle<i::Object>(ctx));
   context->set_allow_code_gen_from_strings(
       allow ? isolate->heap()->true_value() : isolate->heap()->false_value());
+}
+
+
+bool Context::IsCodeGenerationFromStringsAllowed() {
+  i::Isolate* isolate = i::Isolate::Current();
+  if (IsDeadCheck(isolate,
+                  "v8::Context::IsCodeGenerationFromStringsAllowed()")) {
+    return false;
+  }
+  ENTER_V8(isolate);
+  i::Object** ctx = reinterpret_cast<i::Object**>(this);
+  i::Handle<i::Context> context =
+      i::Handle<i::Context>::cast(i::Handle<i::Object>(ctx));
+  return !context->allow_code_gen_from_strings()->IsFalse();
 }
 
 
@@ -6066,9 +6093,7 @@ static void SetFlagsFromString(const char* flags) {
 
 void Testing::PrepareStressRun(int run) {
   static const char* kLazyOptimizations =
-      "--prepare-always-opt --nolimit-inlining "
-      "--noalways-opt --noopt-eagerly";
-  static const char* kEagerOptimizations = "--opt-eagerly";
+      "--prepare-always-opt --nolimit-inlining --noalways-opt";
   static const char* kForcedOptimizations = "--always-opt";
 
   // If deoptimization stressed turn on frequent deoptimization. If no value
@@ -6085,15 +6110,12 @@ void Testing::PrepareStressRun(int run) {
   if (run == GetStressRuns() - 1) {
     SetFlagsFromString(kForcedOptimizations);
   } else {
-    SetFlagsFromString(kEagerOptimizations);
     SetFlagsFromString(kLazyOptimizations);
   }
 #else
   if (run == GetStressRuns() - 1) {
     SetFlagsFromString(kForcedOptimizations);
-  } else if (run == GetStressRuns() - 2) {
-    SetFlagsFromString(kEagerOptimizations);
-  } else {
+  } else if (run != GetStressRuns() - 2) {
     SetFlagsFromString(kLazyOptimizations);
   }
 #endif

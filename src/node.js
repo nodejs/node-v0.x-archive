@@ -27,10 +27,8 @@
 (function(process) {
   global = this;
 
-  var EventEmitter;
-
   function startup() {
-    EventEmitter = NativeModule.require('events').EventEmitter;
+    var EventEmitter = NativeModule.require('events').EventEmitter;
     process.__proto__ = EventEmitter.prototype;
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
@@ -45,8 +43,6 @@
     startup.processSignalHandlers();
 
     startup.processChannel();
-
-    startup.removedMethods();
 
     startup.resolveArgv0();
 
@@ -120,23 +116,6 @@
         });
       }
     }
-
-    if (process.tid === 1) return;
-
-    // isolate initialization
-    process.send = function(msg) {
-      if (typeof msg === 'undefined') throw new TypeError('Bad argument.');
-      msg = JSON.stringify(msg);
-      msg = new Buffer(msg);
-      return process._send(msg);
-    };
-
-    process._onmessage = function(msg) {
-      msg = JSON.parse('' + msg);
-      process.emit('message', msg);
-    };
-
-    process.exit = process._exit;
   }
 
   startup.globalVariables = function() {
@@ -297,8 +276,9 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = createWritableStdioStream(1);
-      stdout.end = stdout.destroy = stdout.destroySoon = function() {
-        throw new Error('process.stdout cannot be closed');
+      stdout.destroy = stdout.destroySoon = function(er) {
+        er = er || new Error('process.stdout cannot be closed.');
+        stdout.emit('error', er);
       };
       return stdout;
     });
@@ -306,8 +286,9 @@
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = createWritableStdioStream(2);
-      stderr.end = stderr.destroy = stderr.destroySoon = function() {
-        throw new Error('process.stderr cannot be closed');
+      stderr.destroy = stderr.destroySoon = function(er) {
+        er = er || new Error('process.stderr cannot be closed.');
+        stderr.emit('error', er);
       };
       return stderr;
     });
@@ -342,6 +323,10 @@
 
       // For supporting legacy API we put the FD here.
       stdin.fd = fd;
+
+      // stdin starts out life in a paused state, but node doesn't
+      // know yet.  Call pause() explicitly to unref() it.
+      stdin.pause();
 
       return stdin;
     });
@@ -439,37 +424,12 @@
       // Load tcp_wrap to avoid situation where we might immediately receive
       // a message.
       // FIXME is this really necessary?
-      process.binding('tcp_wrap')
+      process.binding('tcp_wrap');
 
       cp._forkChild();
       assert(process.send);
     }
   }
-
-  startup._removedProcessMethods = {
-    'assert': 'process.assert() use require("assert").ok() instead',
-    'debug': 'process.debug() use console.error() instead',
-    'error': 'process.error() use console.error() instead',
-    'watchFile': 'process.watchFile() has moved to fs.watchFile()',
-    'unwatchFile': 'process.unwatchFile() has moved to fs.unwatchFile()',
-    'mixin': 'process.mixin() has been removed.',
-    'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
-    'inherits': 'process.inherits() has moved to util.inherits()',
-    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
-  };
-
-  startup.removedMethods = function() {
-    for (var method in startup._removedProcessMethods) {
-      var reason = startup._removedProcessMethods[method];
-      process[method] = startup._removedMethod(reason);
-    }
-  };
-
-  startup._removedMethod = function(reason) {
-    return function() {
-      throw new Error(reason);
-    };
-  };
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();
@@ -533,7 +493,7 @@
   }
 
   NativeModule.exists = function(id) {
-    return (id in NativeModule._source);
+    return NativeModule._source.hasOwnProperty(id);
   }
 
   NativeModule.getSource = function(id) {
@@ -561,6 +521,35 @@
 
   NativeModule.prototype.cache = function() {
     NativeModule._cache[this.id] = this;
+  };
+
+  // Wrap a core module's method in a wrapper that will warn on first use
+  // and then return the result of invoking the original function. After
+  // first being called the original method is restored.
+  NativeModule.prototype.deprecate = function(method, message) {
+    var original = this.exports[method];
+    var self = this;
+    var warned = false;
+    message = message || '';
+
+    Object.defineProperty(this.exports, method, {
+      enumerable: false,
+      value: function() {
+        if (!warned) {
+          warned = true;
+          message = self.id + '.' + method + ' is deprecated. ' + message;
+
+          var moduleIdCheck = new RegExp('\\b' + self.id + '\\b');
+          if (moduleIdCheck.test(process.env.NODE_DEBUG))
+            console.trace(message);
+          else
+            console.error(message);
+
+          self.exports[method] = original;
+        }
+        return original.apply(this, arguments);
+      }
+    });
   };
 
   startup();

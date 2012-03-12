@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,6 +29,11 @@
 #define V8_ZONE_H_
 
 #include "allocation.h"
+#include "checks.h"
+#include "hashmap.h"
+#include "globals.h"
+#include "list.h"
+#include "splay-tree.h"
 
 namespace v8 {
 namespace internal {
@@ -42,6 +47,7 @@ enum ZoneScopeMode {
 };
 
 class Segment;
+class Isolate;
 
 // The Zone supports very fast allocation of small chunks of
 // memory. The chunks cannot be deallocated individually, but instead
@@ -158,15 +164,6 @@ class ZoneObject {
 };
 
 
-class AssertNoZoneAllocation {
- public:
-  inline AssertNoZoneAllocation();
-  inline ~AssertNoZoneAllocation();
- private:
-  bool prev_;
-};
-
-
 // The ZoneListAllocationPolicy is used to specialize the GenericList
 // implementation to allocate ZoneLists and their elements in the
 // Zone.
@@ -242,6 +239,8 @@ class ZoneSplayTree: public SplayTree<Config, ZoneListAllocationPolicy> {
   ~ZoneSplayTree();
 };
 
+
+typedef TemplateHashMap<ZoneListAllocationPolicy> ZoneHashMap;
 
 } }  // namespace v8::internal
 

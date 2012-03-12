@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -61,7 +61,7 @@ CompilationInfo::CompilationInfo(Handle<Script> script)
       extension_(NULL),
       pre_parse_data_(NULL),
       osr_ast_id_(AstNode::kNoNumber) {
-  Initialize(NONOPT);
+  Initialize(BASE);
 }
 
 
@@ -107,6 +107,19 @@ void CompilationInfo::DisableOptimization() {
     !scope_->outer_scope_calls_non_strict_eval() &&
     !scope_->inside_with();
   SetMode(is_optimizable_closure ? BASE : NONOPT);
+}
+
+
+// Primitive functions are unlikely to be picked up by the stack-walking
+// profiler, so they trigger their own optimization when they're called
+// for the SharedFunctionInfo::kCallsUntilPrimitiveOptimization-th time.
+bool CompilationInfo::ShouldSelfOptimize() {
+  return FLAG_self_optimization &&
+      FLAG_crankshaft &&
+      !Serializer::enabled() &&
+      !function()->flags()->Contains(kDontSelfOptimize) &&
+      !function()->flags()->Contains(kDontOptimize) &&
+      (shared_info().is_null() || !shared_info()->optimization_disabled());
 }
 
 
@@ -170,10 +183,8 @@ static void FinishOptimization(Handle<JSFunction> function, int64_t start) {
 static bool MakeCrankshaftCode(CompilationInfo* info) {
   // Test if we can optimize this function when asked to. We can only
   // do this after the scopes are computed.
-  if (!info->AllowOptimize()) {
+  if (!V8::UseCrankshaft()) {
     info->DisableOptimization();
-  } else if (info->IsOptimizable()) {
-    info->EnableDeoptimizationSupport();
   }
 
   // In case we are not optimizing simply return the code from
@@ -194,7 +205,7 @@ static bool MakeCrankshaftCode(CompilationInfo* info) {
   // Fall back to using the full code generator if it's not possible
   // to use the Hydrogen-based optimizing compiler. We already have
   // generated code for this from the shared function object.
-  if (AlwaysFullCompiler() || !FLAG_use_hydrogen) {
+  if (AlwaysFullCompiler()) {
     info->SetCode(code);
     return true;
   }
@@ -205,8 +216,7 @@ static bool MakeCrankshaftCode(CompilationInfo* info) {
       FLAG_deopt_every_n_times == 0 ? Compiler::kDefaultMaxOptCount : 1000;
   if (info->shared_info()->opt_count() > kMaxOptCount) {
     info->AbortOptimization();
-    Handle<JSFunction> closure = info->closure();
-    info->shared_info()->DisableOptimization(*closure);
+    info->shared_info()->DisableOptimization();
     // True indicates the compilation pipeline is still going, not
     // necessarily that we optimized the code.
     return true;
@@ -226,8 +236,7 @@ static bool MakeCrankshaftCode(CompilationInfo* info) {
       (info->osr_ast_id() != AstNode::kNoNumber &&
        scope->num_parameters() + 1 + scope->num_stack_slots() > locals_limit)) {
     info->AbortOptimization();
-    Handle<JSFunction> closure = info->closure();
-    info->shared_info()->DisableOptimization(*closure);
+    info->shared_info()->DisableOptimization();
     // True indicates the compilation pipeline is still going, not
     // necessarily that we optimized the code.
     return true;
@@ -291,7 +300,7 @@ static bool MakeCrankshaftCode(CompilationInfo* info) {
     return false;
   }
 
-  if (graph != NULL && FLAG_build_lithium) {
+  if (graph != NULL) {
     Handle<Code> optimized_code = graph->Compile(info);
     if (!optimized_code.is_null()) {
       info->SetCode(optimized_code);
@@ -305,8 +314,7 @@ static bool MakeCrankshaftCode(CompilationInfo* info) {
   if (!builder.inline_bailout()) {
     // Mark the shared code as unoptimizable unless it was an inlined
     // function that bailed out.
-    Handle<JSFunction> closure = info->closure();
-    info->shared_info()->DisableOptimization(*closure);
+    info->shared_info()->DisableOptimization();
   }
   // True indicates the compilation pipeline is still going, not necessarily
   // that we optimized the code.
@@ -490,13 +498,6 @@ Handle<SharedFunctionInfo> Compiler::Compile(Handle<String> source,
     // for small sources, odds are that there aren't many functions
     // that would be compiled lazily anyway, so we skip the preparse step
     // in that case too.
-    int flags = kNoParsingFlags;
-    if ((natives == NATIVES_CODE) || FLAG_allow_natives_syntax) {
-      flags |= kAllowNativesSyntax;
-    }
-    if (natives != NATIVES_CODE && FLAG_harmony_scoping) {
-      flags |= EXTENDED_MODE;
-    }
 
     // Create a script object describing the script to be compiled.
     Handle<Script> script = FACTORY->NewScript(source);
@@ -517,6 +518,7 @@ Handle<SharedFunctionInfo> Compiler::Compile(Handle<String> source,
     info.MarkAsGlobal();
     info.SetExtension(extension);
     info.SetPreParseData(pre_data);
+    if (FLAG_use_strict) info.SetLanguageMode(STRICT_MODE);
     result = MakeFunctionInfo(&info);
     if (extension == NULL && !result.is_null()) {
       compilation_cache->PutScript(source, result);
@@ -561,6 +563,10 @@ Handle<SharedFunctionInfo> Compiler::CompileEval(Handle<String> source,
     info.SetCallingContext(context);
     result = MakeFunctionInfo(&info);
     if (!result.is_null()) {
+      // Explicitly disable optimization for eval code. We're not yet prepared
+      // to handle eval-code in the optimizing compiler.
+      result->DisableOptimization();
+
       // If caller is strict mode, the result must be in strict mode or
       // extended mode as well, but not the other way around. Consider:
       // eval("'use strict'; ...");
@@ -652,8 +658,13 @@ bool Compiler::CompileLazy(CompilationInfo* info) {
         // Check the function has compiled code.
         ASSERT(shared->is_compiled());
         shared->set_code_age(0);
+        shared->set_dont_optimize(lit->flags()->Contains(kDontOptimize));
+        shared->set_dont_inline(lit->flags()->Contains(kDontInline));
+        shared->set_ast_node_count(lit->ast_node_count());
 
-        if (info->AllowOptimize() && !shared->optimization_disabled()) {
+        if (V8::UseCrankshaft()&&
+            !function.is_null() &&
+            !shared->optimization_disabled()) {
           // If we're asked to always optimize, we compile the optimized
           // version of the function right away - unless the debugger is
           // active as it makes no sense to compile optimized code then.
@@ -750,6 +761,10 @@ void Compiler::SetFunctionInfo(Handle<SharedFunctionInfo> function_info,
   function_info->set_language_mode(lit->language_mode());
   function_info->set_uses_arguments(lit->scope()->arguments() != NULL);
   function_info->set_has_duplicate_parameters(lit->has_duplicate_parameters());
+  function_info->set_ast_node_count(lit->ast_node_count());
+  function_info->set_is_function(lit->is_function());
+  function_info->set_dont_optimize(lit->flags()->Contains(kDontOptimize));
+  function_info->set_dont_inline(lit->flags()->Contains(kDontInline));
 }
 
 

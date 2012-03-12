@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -76,22 +76,15 @@ Handle<String> Bootstrapper::NativesSourceLookup(int index) {
   Factory* factory = isolate->factory();
   Heap* heap = isolate->heap();
   if (heap->natives_source_cache()->get(index)->IsUndefined()) {
-    if (!Snapshot::IsEnabled() || FLAG_new_snapshot) {
-      // We can use external strings for the natives.
-      Vector<const char> source = Natives::GetRawScriptSource(index);
-      NativesExternalStringResource* resource =
-          new NativesExternalStringResource(this,
-                                            source.start(),
-                                            source.length());
-      Handle<String> source_code =
-          factory->NewExternalStringFromAscii(resource);
-      heap->natives_source_cache()->set(index, *source_code);
-    } else {
-      // Old snapshot code can't cope with external strings at all.
-      Handle<String> source_code =
-        factory->NewStringFromAscii(Natives::GetRawScriptSource(index));
-      heap->natives_source_cache()->set(index, *source_code);
-    }
+    // We can use external strings for the natives.
+    Vector<const char> source = Natives::GetRawScriptSource(index);
+    NativesExternalStringResource* resource =
+        new NativesExternalStringResource(this,
+                                          source.start(),
+                                          source.length());
+    Handle<String> source_code =
+        factory->NewExternalStringFromAscii(resource);
+    heap->natives_source_cache()->set(index, *source_code);
   }
   Handle<Object> cached_source(heap->natives_source_cache()->get(index));
   return Handle<String>::cast(cached_source);
@@ -179,6 +172,10 @@ class Genesis BASE_EMBEDDED {
   Handle<JSFunction> GetThrowTypeErrorFunction();
 
   void CreateStrictModeFunctionMaps(Handle<JSFunction> empty);
+
+  // Make the "arguments" and "caller" properties throw a TypeError on access.
+  void PoisonArgumentsAndCaller(Handle<Map> map);
+
   // Creates the global objects using the global and the template passed in
   // through the API.  We call this regardless of whether we are building a
   // context from scratch or using a deserialized one from the partial snapshot
@@ -199,7 +196,7 @@ class Genesis BASE_EMBEDDED {
   // detached from the other objects in the snapshot.
   void HookUpInnerGlobal(Handle<GlobalObject> inner_global);
   // New context initialization.  Used for creating a context from scratch.
-  void InitializeGlobal(Handle<GlobalObject> inner_global,
+  bool InitializeGlobal(Handle<GlobalObject> inner_global,
                         Handle<JSFunction> empty_function);
   void InitializeExperimentalGlobal();
   // Installs the contents of the native .js files on the global objects.
@@ -217,13 +214,12 @@ class Genesis BASE_EMBEDDED {
   };
 
   class ExtensionStates {
-  public:
+   public:
     ExtensionStates();
     ExtensionTraversalState get_state(RegisteredExtension* extension);
     void set_state(RegisteredExtension* extension,
                    ExtensionTraversalState state);
-  private:
-    Allocator allocator_;
+   private:
     HashMap map_;
     DISALLOW_COPY_AND_ASSIGN(ExtensionStates);
   };
@@ -263,14 +259,10 @@ class Genesis BASE_EMBEDDED {
 
   Handle<Map> CreateStrictModeFunctionMap(
       PrototypePropertyMode prototype_mode,
-      Handle<JSFunction> empty_function,
-      Handle<AccessorPair> arguments_callbacks,
-      Handle<AccessorPair> caller_callbacks);
+      Handle<JSFunction> empty_function);
 
   Handle<DescriptorArray> ComputeStrictFunctionInstanceDescriptor(
-      PrototypePropertyMode propertyMode,
-      Handle<AccessorPair> arguments,
-      Handle<AccessorPair> caller);
+      PrototypePropertyMode propertyMode);
 
   static bool CompileBuiltin(Isolate* isolate, int index);
   static bool CompileExperimentalBuiltin(Isolate* isolate, int index);
@@ -391,44 +383,40 @@ static Handle<JSFunction> InstallFunction(Handle<JSObject> target,
 
 Handle<DescriptorArray> Genesis::ComputeFunctionInstanceDescriptor(
     PrototypePropertyMode prototypeMode) {
-  Handle<DescriptorArray> descriptors =
-      factory()->NewDescriptorArray(prototypeMode == DONT_ADD_PROTOTYPE
-                                    ? 4
-                                    : 5);
-  PropertyAttributes attributes =
-      static_cast<PropertyAttributes>(DONT_ENUM | DONT_DELETE | READ_ONLY);
+  int size = (prototypeMode == DONT_ADD_PROTOTYPE) ? 4 : 5;
+  Handle<DescriptorArray> descriptors(factory()->NewDescriptorArray(size));
+  PropertyAttributes attribs = static_cast<PropertyAttributes>(
+      DONT_ENUM | DONT_DELETE | READ_ONLY);
 
   DescriptorArray::WhitenessWitness witness(*descriptors);
 
   {  // Add length.
-    Handle<Foreign> foreign = factory()->NewForeign(&Accessors::FunctionLength);
-    CallbacksDescriptor d(*factory()->length_symbol(), *foreign, attributes);
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionLength));
+    CallbacksDescriptor d(*factory()->length_symbol(), *f, attribs);
     descriptors->Set(0, &d, witness);
   }
   {  // Add name.
-    Handle<Foreign> foreign = factory()->NewForeign(&Accessors::FunctionName);
-    CallbacksDescriptor d(*factory()->name_symbol(), *foreign, attributes);
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionName));
+    CallbacksDescriptor d(*factory()->name_symbol(), *f, attribs);
     descriptors->Set(1, &d, witness);
   }
   {  // Add arguments.
-    Handle<Foreign> foreign =
-        factory()->NewForeign(&Accessors::FunctionArguments);
-    CallbacksDescriptor d(*factory()->arguments_symbol(), *foreign, attributes);
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionArguments));
+    CallbacksDescriptor d(*factory()->arguments_symbol(), *f, attribs);
     descriptors->Set(2, &d, witness);
   }
   {  // Add caller.
-    Handle<Foreign> foreign = factory()->NewForeign(&Accessors::FunctionCaller);
-    CallbacksDescriptor d(*factory()->caller_symbol(), *foreign, attributes);
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionCaller));
+    CallbacksDescriptor d(*factory()->caller_symbol(), *f, attribs);
     descriptors->Set(3, &d, witness);
   }
   if (prototypeMode != DONT_ADD_PROTOTYPE) {
     // Add prototype.
     if (prototypeMode == ADD_WRITEABLE_PROTOTYPE) {
-      attributes = static_cast<PropertyAttributes>(attributes & ~READ_ONLY);
+      attribs = static_cast<PropertyAttributes>(attribs & ~READ_ONLY);
     }
-    Handle<Foreign> foreign =
-        factory()->NewForeign(&Accessors::FunctionPrototype);
-    CallbacksDescriptor d(*factory()->prototype_symbol(), *foreign, attributes);
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionPrototype));
+    CallbacksDescriptor d(*factory()->prototype_symbol(), *f, attribs);
     descriptors->Set(4, &d, witness);
   }
   descriptors->Sort(witness);
@@ -539,47 +527,42 @@ Handle<JSFunction> Genesis::CreateEmptyFunction(Isolate* isolate) {
 
 
 Handle<DescriptorArray> Genesis::ComputeStrictFunctionInstanceDescriptor(
-    PrototypePropertyMode prototypeMode,
-    Handle<AccessorPair> arguments,
-    Handle<AccessorPair> caller) {
-  Handle<DescriptorArray> descriptors =
-      factory()->NewDescriptorArray(prototypeMode == DONT_ADD_PROTOTYPE
-                                    ? 4
-                                    : 5);
-  PropertyAttributes attributes = static_cast<PropertyAttributes>(
+    PrototypePropertyMode prototypeMode) {
+  int size = (prototypeMode == DONT_ADD_PROTOTYPE) ? 4 : 5;
+  Handle<DescriptorArray> descriptors(factory()->NewDescriptorArray(size));
+  PropertyAttributes attribs = static_cast<PropertyAttributes>(
       DONT_ENUM | DONT_DELETE);
 
   DescriptorArray::WhitenessWitness witness(*descriptors);
 
-  {  // length
-    Handle<Foreign> foreign = factory()->NewForeign(&Accessors::FunctionLength);
-    CallbacksDescriptor d(*factory()->length_symbol(), *foreign, attributes);
+  {  // Add length.
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionLength));
+    CallbacksDescriptor d(*factory()->length_symbol(), *f, attribs);
     descriptors->Set(0, &d, witness);
   }
-  {  // name
-    Handle<Foreign> foreign = factory()->NewForeign(&Accessors::FunctionName);
-    CallbacksDescriptor d(*factory()->name_symbol(), *foreign, attributes);
+  {  // Add name.
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionName));
+    CallbacksDescriptor d(*factory()->name_symbol(), *f, attribs);
     descriptors->Set(1, &d, witness);
   }
-  {  // arguments
-    CallbacksDescriptor d(*factory()->arguments_symbol(),
-                          *arguments,
-                          attributes);
+  {  // Add arguments.
+    Handle<AccessorPair> arguments(factory()->NewAccessorPair());
+    CallbacksDescriptor d(*factory()->arguments_symbol(), *arguments, attribs);
     descriptors->Set(2, &d, witness);
   }
-  {  // caller
-    CallbacksDescriptor d(*factory()->caller_symbol(), *caller, attributes);
+  {  // Add caller.
+    Handle<AccessorPair> caller(factory()->NewAccessorPair());
+    CallbacksDescriptor d(*factory()->caller_symbol(), *caller, attribs);
     descriptors->Set(3, &d, witness);
   }
 
-  // prototype
   if (prototypeMode != DONT_ADD_PROTOTYPE) {
+    // Add prototype.
     if (prototypeMode != ADD_WRITEABLE_PROTOTYPE) {
-      attributes = static_cast<PropertyAttributes>(attributes | READ_ONLY);
+      attribs = static_cast<PropertyAttributes>(attribs | READ_ONLY);
     }
-    Handle<Foreign> foreign =
-        factory()->NewForeign(&Accessors::FunctionPrototype);
-    CallbacksDescriptor d(*factory()->prototype_symbol(), *foreign, attributes);
+    Handle<Foreign> f(factory()->NewForeign(&Accessors::FunctionPrototype));
+    CallbacksDescriptor d(*factory()->prototype_symbol(), *f, attribs);
     descriptors->Set(4, &d, witness);
   }
 
@@ -610,14 +593,10 @@ Handle<JSFunction> Genesis::GetThrowTypeErrorFunction() {
 
 Handle<Map> Genesis::CreateStrictModeFunctionMap(
     PrototypePropertyMode prototype_mode,
-    Handle<JSFunction> empty_function,
-    Handle<AccessorPair> arguments_callbacks,
-    Handle<AccessorPair> caller_callbacks) {
+    Handle<JSFunction> empty_function) {
   Handle<Map> map = factory()->NewMap(JS_FUNCTION_TYPE, JSFunction::kSize);
   Handle<DescriptorArray> descriptors =
-      ComputeStrictFunctionInstanceDescriptor(prototype_mode,
-                                              arguments_callbacks,
-                                              caller_callbacks);
+      ComputeStrictFunctionInstanceDescriptor(prototype_mode);
   map->set_instance_descriptors(*descriptors);
   map->set_function_with_prototype(prototype_mode != DONT_ADD_PROTOTYPE);
   map->set_prototype(*empty_function);
@@ -626,23 +605,15 @@ Handle<Map> Genesis::CreateStrictModeFunctionMap(
 
 
 void Genesis::CreateStrictModeFunctionMaps(Handle<JSFunction> empty) {
-  // Create the callbacks arrays for ThrowTypeError functions.
-  // The get/set callacks are filled in after the maps are created below.
-  Factory* factory = empty->GetIsolate()->factory();
-  Handle<AccessorPair> arguments(factory->NewAccessorPair());
-  Handle<AccessorPair> caller(factory->NewAccessorPair());
-
   // Allocate map for the strict mode function instances.
   Handle<Map> strict_mode_function_instance_map =
-      CreateStrictModeFunctionMap(
-          ADD_WRITEABLE_PROTOTYPE, empty, arguments, caller);
+      CreateStrictModeFunctionMap(ADD_WRITEABLE_PROTOTYPE, empty);
   global_context()->set_strict_mode_function_instance_map(
       *strict_mode_function_instance_map);
 
   // Allocate map for the prototype-less strict mode instances.
   Handle<Map> strict_mode_function_without_prototype_map =
-      CreateStrictModeFunctionMap(
-          DONT_ADD_PROTOTYPE, empty, arguments, caller);
+      CreateStrictModeFunctionMap(DONT_ADD_PROTOTYPE, empty);
   global_context()->set_strict_mode_function_without_prototype_map(
       *strict_mode_function_without_prototype_map);
 
@@ -650,26 +621,38 @@ void Genesis::CreateStrictModeFunctionMaps(Handle<JSFunction> empty) {
   // only for processing of builtins.
   // Later the map is replaced with writable prototype map, allocated below.
   Handle<Map> strict_mode_function_map =
-      CreateStrictModeFunctionMap(
-          ADD_READONLY_PROTOTYPE, empty, arguments, caller);
+      CreateStrictModeFunctionMap(ADD_READONLY_PROTOTYPE, empty);
   global_context()->set_strict_mode_function_map(
       *strict_mode_function_map);
 
   // The final map for the strict mode functions. Writeable prototype.
   // This map is installed in MakeFunctionInstancePrototypeWritable.
   strict_mode_function_instance_map_writable_prototype_ =
-      CreateStrictModeFunctionMap(
-          ADD_WRITEABLE_PROTOTYPE, empty, arguments, caller);
-
-  // Create the ThrowTypeError function instance.
-  Handle<JSFunction> throw_function =
-      GetThrowTypeErrorFunction();
+      CreateStrictModeFunctionMap(ADD_WRITEABLE_PROTOTYPE, empty);
 
   // Complete the callbacks.
-  arguments->set_getter(*throw_function);
-  arguments->set_setter(*throw_function);
-  caller->set_getter(*throw_function);
-  caller->set_setter(*throw_function);
+  PoisonArgumentsAndCaller(strict_mode_function_instance_map);
+  PoisonArgumentsAndCaller(strict_mode_function_without_prototype_map);
+  PoisonArgumentsAndCaller(strict_mode_function_map);
+  PoisonArgumentsAndCaller(
+      strict_mode_function_instance_map_writable_prototype_);
+}
+
+
+static void SetAccessors(Handle<Map> map,
+                         Handle<String> name,
+                         Handle<JSFunction> func) {
+  DescriptorArray* descs = map->instance_descriptors();
+  int number = descs->Search(*name);
+  AccessorPair* accessors = AccessorPair::cast(descs->GetValue(number));
+  accessors->set_getter(*func);
+  accessors->set_setter(*func);
+}
+
+
+void Genesis::PoisonArgumentsAndCaller(Handle<Map> map) {
+  SetAccessors(map, factory()->arguments_symbol(), GetThrowTypeErrorFunction());
+  SetAccessors(map, factory()->caller_symbol(), GetThrowTypeErrorFunction());
 }
 
 
@@ -844,7 +827,7 @@ void Genesis::HookUpInnerGlobal(Handle<GlobalObject> inner_global) {
 
 // This is only called if we are not using snapshots.  The equivalent
 // work in the snapshot case is done in HookUpInnerGlobal.
-void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
+bool Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
                                Handle<JSFunction> empty_function) {
   // --- G l o b a l   C o n t e x t ---
   // Use the empty function as closure (no scope info).
@@ -894,15 +877,12 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
             factory->NewForeign(&Accessors::ArrayLength),
             static_cast<PropertyAttributes>(DONT_ENUM | DONT_DELETE));
 
-    // Cache the fast JavaScript array map
-    global_context()->set_js_array_map(array_function->initial_map());
-    global_context()->js_array_map()->set_instance_descriptors(
-        *array_descriptors);
     // array_function is used internally. JS code creating array object should
     // search for the 'Array' property on the global object and use that one
     // as the constructor. 'Array' property on a global object can be
     // overwritten by JS code.
     global_context()->set_array_function(*array_function);
+    array_function->initial_map()->set_instance_descriptors(*array_descriptors);
   }
 
   {  // --- N u m b e r ---
@@ -1051,7 +1031,10 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
     Handle<String> name = factory->NewStringFromAscii(CStrVector("JSON"));
     Handle<JSFunction> cons = factory->NewFunction(name,
                                                    factory->the_hole_value());
-    cons->SetInstancePrototype(global_context()->initial_object_prototype());
+    { MaybeObject* result = cons->SetInstancePrototype(
+        global_context()->initial_object_prototype());
+      if (result->IsFailure()) return false;
+    }
     cons->SetInstanceClassName(*name);
     Handle<JSObject> json_object = factory->NewJSObject(cons, TENURED);
     ASSERT(json_object->IsJSObject());
@@ -1262,6 +1245,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
     global_context()->set_random_seed(*zeroed_byte_array);
     memset(zeroed_byte_array->GetDataStartAddress(), 0, kRandomStateSize);
   }
+  return true;
 }
 
 
@@ -1646,7 +1630,7 @@ bool Genesis::InstallNatives() {
     MaybeObject* maybe_map =
         array_function->initial_map()->CopyDropTransitions();
     Map* new_map;
-    if (!maybe_map->To<Map>(&new_map)) return maybe_map;
+    if (!maybe_map->To<Map>(&new_map)) return false;
     new_map->set_elements_kind(FAST_ELEMENTS);
     array_function->set_initial_map(new_map);
 
@@ -1745,17 +1729,17 @@ bool Genesis::InstallNatives() {
     initial_map->set_prototype(*array_prototype);
 
     // Update map with length accessor from Array and add "index" and "input".
-    Handle<Map> array_map(global_context()->js_array_map());
-    Handle<DescriptorArray> array_descriptors(
-        array_map->instance_descriptors());
-    ASSERT_EQ(1, array_descriptors->number_of_descriptors());
-
     Handle<DescriptorArray> reresult_descriptors =
         factory()->NewDescriptorArray(3);
-
     DescriptorArray::WhitenessWitness witness(*reresult_descriptors);
 
-    reresult_descriptors->CopyFrom(0, *array_descriptors, 0, witness);
+    JSFunction* array_function = global_context()->array_function();
+    Handle<DescriptorArray> array_descriptors(
+        array_function->initial_map()->instance_descriptors());
+    int index = array_descriptors->SearchWithCache(heap()->length_symbol());
+    MaybeObject* copy_result =
+        reresult_descriptors->CopyFrom(0, *array_descriptors, index, witness);
+    if (copy_result->IsFailure()) return false;
 
     int enum_index = 0;
     {
@@ -1976,9 +1960,7 @@ static bool MatchRegisteredExtensions(void* key1, void* key2) {
 }
 
 Genesis::ExtensionStates::ExtensionStates()
-  : allocator_(),
-    map_(MatchRegisteredExtensions, &allocator_, 8)
-  {}
+  : map_(MatchRegisteredExtensions, 8) { }
 
 Genesis::ExtensionTraversalState Genesis::ExtensionStates::get_state(
     RegisteredExtension* extension) {
@@ -2333,7 +2315,7 @@ Genesis::Genesis(Isolate* isolate,
     Handle<JSGlobalProxy> global_proxy =
         CreateNewGlobals(global_template, global_object, &inner_global);
     HookUpGlobalProxy(inner_global, global_proxy);
-    InitializeGlobal(inner_global, empty_function);
+    if (!InitializeGlobal(inner_global, empty_function)) return;
     InstallJSFunctionResultCaches();
     InitializeNormalizedMapCaches();
     if (!InstallNatives()) return;

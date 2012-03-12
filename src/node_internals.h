@@ -22,14 +22,9 @@
 #ifndef SRC_NODE_INTERNALS_H_
 #define SRC_NODE_INTERNALS_H_
 
-namespace node {
+#include "v8.h"
 
-// This function starts an Isolate. This function is defined in node.cc
-// currently so that we minimize the diff between master and v0.6 for easy
-// merging. In the future, when v0.6 is extinct, StartThread should be moved
-// to node_isolate.cc.
-class Isolate;
-void StartThread(Isolate* isolate, int argc, char** argv);
+namespace node {
 
 #ifndef offset_of
 // g++ in strict mode complains loudly about the system offsetof() macro
@@ -47,13 +42,26 @@ void StartThread(Isolate* isolate, int argc, char** argv);
 #define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
 #endif
 
-#define DISALLOW_COPY_AND_ASSIGN(TypeName)        \
-  TypeName(const TypeName&);                      \
-  void operator=(const TypeName&)
+// this would have been a template function were it not for the fact that g++
+// sometimes fails to resolve it...
+#define THROW_ERROR(fun)                                                      \
+  do {                                                                        \
+    v8::HandleScope scope;                                                    \
+    return v8::ThrowException(fun(v8::String::New(errmsg)));                  \
+  }                                                                           \
+  while (0)
 
-#define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName)  \
-  TypeName();                                     \
-  DISALLOW_COPY_AND_ASSIGN(TypeName)
+inline static v8::Handle<v8::Value> ThrowError(const char* errmsg) {
+  THROW_ERROR(v8::Exception::Error);
+}
+
+inline static v8::Handle<v8::Value> ThrowTypeError(const char* errmsg) {
+  THROW_ERROR(v8::Exception::TypeError);
+}
+
+inline static v8::Handle<v8::Value> ThrowRangeError(const char* errmsg) {
+  THROW_ERROR(v8::Exception::RangeError);
+}
 
 } // namespace node
 

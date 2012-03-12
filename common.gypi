@@ -1,5 +1,6 @@
 {
   'variables': {
+    'strict_aliasing%': 'false',     # turn on/off -fstrict-aliasing
     'visibility%': 'hidden',         # V8's visibility setting
     'target_arch%': 'ia32',          # set v8's target architecture
     'host_arch%': 'ia32',            # set v8's host architecture
@@ -10,20 +11,19 @@
   },
 
   'target_defaults': {
-    'default_configuration': 'Debug',
+    'default_configuration': 'Release',
     'configurations': {
       'Debug': {
         'defines': [ 'DEBUG', '_DEBUG' ],
         'cflags': [ '-g', '-O0' ],
+        'conditions': [
+          ['target_arch=="x64"', {
+            'msvs_configuration_platform': 'x64',
+          }],
+        ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'target_conditions': [
-              ['library=="static_library"', {
-                'RuntimeLibrary': 1, # static debug
-              }, {
-                'RuntimeLibrary': 3, # DLL debug
-              }],
-            ],
+            'RuntimeLibrary': 1, # static debug
             'Optimization': 0, # /Od, no optimization
             'MinimalRebuild': 'true',
             'OmitFramePointers': 'false',
@@ -35,17 +35,21 @@
         },
       },
       'Release': {
-        # 'defines': [ 'NDEBUG' ],
-        'cflags': [ '-O3', '-fomit-frame-pointer', '-fdata-sections', '-ffunction-sections' ],
+        'cflags': [ '-O3', '-fdata-sections', '-ffunction-sections' ],
+        'conditions': [
+          ['target_arch=="x64"', {
+            'msvs_configuration_platform': 'x64',
+          }],
+          ['OS=="solaris"', {
+            'cflags': [ '-fno-omit-frame-pointer' ],
+          }],
+          ['strict_aliasing!="true"', {
+            'cflags': [ '-fno-strict-aliasing' ],
+          }],
+        ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'target_conditions': [
-              ['library=="static_library"', {
-                'RuntimeLibrary': 0, # static release
-              }, {
-                'RuntimeLibrary': 2, # debug release
-              }],
-            ],
+            'RuntimeLibrary': 0, # static release
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favour speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible
@@ -53,6 +57,8 @@
             'OmitFramePointers': 'true',
             'EnableFunctionLevelLinking': 'true',
             'EnableIntrinsicFunctions': 'true',
+            'RuntimeTypeInfo': 'false',
+            'ExceptionHandling': '0',
             'AdditionalOptions': [
               '/MP', # compile across multiple CPUs
             ],
@@ -84,6 +90,11 @@
       'VCLibrarianTool': {
       },
       'VCLinkerTool': {
+        'conditions': [
+          ['target_arch=="x64"', {
+            'TargetMachine' : 17 # /MACHINE:X64
+          }],
+        ],
         'GenerateDebugInformation': 'true',
         'RandomizedBaseAddress': 2, # enable ASLR
         'DataExecutionPrevention': 2, # enable DEP
@@ -129,6 +140,12 @@
             'cflags': [ '-ansi' ],
             'ldflags': [ '-rdynamic' ],
           }],
+          [ 'OS=="solaris"', {
+            'cflags': [ '-pthreads' ],
+            'ldflags': [ '-pthreads' ],
+            'cflags!': [ '-pthread' ],
+            'ldflags!': [ '-pthread' ],
+          }],
         ],
       }],
       ['OS=="mac"', {
@@ -143,7 +160,6 @@
           'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
           'GCC_VERSION': '4.2',
           'GCC_WARN_ABOUT_MISSING_NEWLINE': 'YES',  # -Wnewline-eof
-          'MACOSX_DEPLOYMENT_TARGET': '10.4',       # -mmacosx-version-min=10.4
           'PREBINDING': 'NO',                       # No -Wl,-prebind
           'USE_HEADERMAP': 'NO',
           'OTHER_CFLAGS': [
@@ -159,6 +175,14 @@
         'target_conditions': [
           ['_type!="static_library"', {
             'xcode_settings': {'OTHER_LDFLAGS': ['-Wl,-search_paths_first']},
+          }],
+        ],
+        'conditions': [
+          ['target_arch=="ia32"', {
+            'xcode_settings': {'ARCHS': ['i386']},
+          }],
+          ['target_arch=="x64"', {
+            'xcode_settings': {'ARCHS': ['x86_64']},
           }],
         ],
       }],

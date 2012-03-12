@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -65,8 +65,9 @@ TEST(ScanKeywords) {
     {
       i::Utf8ToUC16CharacterStream stream(keyword, length);
       i::Scanner scanner(&unicode_cache);
-      // The scanner should parse 'let' as Token::LET for this test.
+      // The scanner should parse Harmony keywords for this test.
       scanner.SetHarmonyScoping(true);
+      scanner.SetHarmonyModules(true);
       scanner.Initialize(&stream);
       CHECK_EQ(key_token.token, scanner.Next());
       CHECK_EQ(i::Token::EOS, scanner.Next());
@@ -230,7 +231,7 @@ TEST(Preparsing) {
   CHECK_EQ(11, error_location.end_pos);
   // Should not crash.
   const char* message = pre_impl->BuildMessage();
-  i::Vector<const char*> args(pre_impl->BuildArgs());
+  pre_impl->BuildArgs();
   CHECK_GT(strlen(message), 0);
 }
 

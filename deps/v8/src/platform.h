@@ -356,6 +356,9 @@ class VirtualMemory {
   // Uncommit real memory.  Returns whether the operation succeeded.
   bool Uncommit(void* address, size_t size);
 
+  // Creates a single guard page at the given address.
+  bool Guard(void* address);
+
   void Release() {
     ASSERT(IsReserved());
     // Notice: Order is important here. The VirtualMemory object might live
@@ -412,16 +415,22 @@ class Thread {
     LOCAL_STORAGE_KEY_MAX_VALUE = kMaxInt
   };
 
-  struct Options {
-    Options() : name("v8:<unknown>"), stack_size(0) {}
+  class Options {
+   public:
+    Options() : name_("v8:<unknown>"), stack_size_(0) {}
+    Options(const char* name, int stack_size = 0)
+        : name_(name), stack_size_(stack_size) {}
 
-    const char* name;
-    int stack_size;
+    const char* name() const { return name_; }
+    int stack_size() const { return stack_size_; }
+
+   private:
+    const char* name_;
+    int stack_size_;
   };
 
   // Create new thread.
   explicit Thread(const Options& options);
-  explicit Thread(const char* name);
   virtual ~Thread();
 
   // Start new thread by calling the Run() method in the new thread.

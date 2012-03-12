@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,7 @@
 #ifndef V8_PREPARSER_H
 #define V8_PREPARSER_H
 
+#include "hashmap.h"
 #include "token.h"
 #include "scanner.h"
 
@@ -115,7 +116,8 @@ class PreParser {
             i::ParserRecorder* log,
             uintptr_t stack_limit,
             bool allow_lazy,
-            bool allow_natives_syntax)
+            bool allow_natives_syntax,
+            bool allow_modules)
       : scanner_(scanner),
         log_(log),
         scope_(NULL),
@@ -124,6 +126,7 @@ class PreParser {
         strict_mode_violation_type_(NULL),
         stack_overflow_(false),
         allow_lazy_(allow_lazy),
+        allow_modules_(allow_modules),
         allow_natives_syntax_(allow_natives_syntax),
         parenthesized_function_(false),
         harmony_scoping_(scanner->HarmonyScoping()) { }
@@ -140,8 +143,9 @@ class PreParser {
                                         uintptr_t stack_limit) {
     bool allow_lazy = (flags & i::kAllowLazy) != 0;
     bool allow_natives_syntax = (flags & i::kAllowNativesSyntax) != 0;
-    return PreParser(scanner, log, stack_limit,
-                     allow_lazy, allow_natives_syntax).PreParse();
+    bool allow_modules = (flags & i::kAllowModules) != 0;
+    return PreParser(scanner, log, stack_limit, allow_lazy,
+                     allow_natives_syntax, allow_modules).PreParse();
   }
 
   // Parses a single function literal, from the opening parentheses before
@@ -647,6 +651,7 @@ class PreParser {
   const char* strict_mode_violation_type_;
   bool stack_overflow_;
   bool allow_lazy_;
+  bool allow_modules_;
   bool allow_natives_syntax_;
   bool parenthesized_function_;
   bool harmony_scoping_;

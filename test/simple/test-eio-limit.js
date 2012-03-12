@@ -19,6 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+var common = require('../common');
 var assert = require('assert'),
     zlib = require('zlib'),
     started = 0,
@@ -26,7 +27,7 @@ var assert = require('assert'),
 
 function repeat(fn) {
   if (started != 0) {
-    assert.ok(started - done < 100)
+    assert.ok(started - done < 100);
   }
 
   process.nextTick(function() {

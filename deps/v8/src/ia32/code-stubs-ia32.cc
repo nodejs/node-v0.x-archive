@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -3922,7 +3922,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ Throw(eax);
 
   __ bind(&throw_termination_exception);
-  __ ThrowUncatchable(TERMINATION, eax);
+  __ ThrowUncatchable(eax);
 
   __ bind(&failure);
   // For failure to match, return null.
@@ -4573,30 +4573,51 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 }
 
 
-void CallFunctionStub::FinishCode(Handle<Code> code) {
-  code->set_has_function_cache(RecordCallTarget());
+void InterruptStub::Generate(MacroAssembler* masm) {
+  __ TailCallRuntime(Runtime::kInterrupt, 0, 1);
 }
 
 
-void CallFunctionStub::Clear(Heap* heap, Address address) {
-  ASSERT(Memory::uint8_at(address + kPointerSize) == Assembler::kTestEaxByte);
-  // 1 ~ size of the test eax opcode.
-  Object* cell = Memory::Object_at(address + kPointerSize + 1);
-  // Low-level because clearing happens during GC.
-  reinterpret_cast<JSGlobalPropertyCell*>(cell)->set_value(
-      RawUninitializedSentinel(heap));
-}
+static void GenerateRecordCallTarget(MacroAssembler* masm) {
+  // Cache the called function in a global property cell.  Cache states
+  // are uninitialized, monomorphic (indicated by a JSFunction), and
+  // megamorphic.
+  // ebx : cache cell for call target
+  // edi : the function to call
+  Isolate* isolate = masm->isolate();
+  Label initialize, done;
 
+  // Load the cache state into ecx.
+  __ mov(ecx, FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset));
 
-Object* CallFunctionStub::GetCachedValue(Address address) {
-  ASSERT(Memory::uint8_at(address + kPointerSize) == Assembler::kTestEaxByte);
-  // 1 ~ size of the test eax opcode.
-  Object* cell = Memory::Object_at(address + kPointerSize + 1);
-  return JSGlobalPropertyCell::cast(cell)->value();
+  // A monomorphic cache hit or an already megamorphic state: invoke the
+  // function without changing the state.
+  __ cmp(ecx, edi);
+  __ j(equal, &done, Label::kNear);
+  __ cmp(ecx, Immediate(TypeFeedbackCells::MegamorphicSentinel(isolate)));
+  __ j(equal, &done, Label::kNear);
+
+  // A monomorphic miss (i.e, here the cache is not uninitialized) goes
+  // megamorphic.
+  __ cmp(ecx, Immediate(TypeFeedbackCells::UninitializedSentinel(isolate)));
+  __ j(equal, &initialize, Label::kNear);
+  // MegamorphicSentinel is an immortal immovable object (undefined) so no
+  // write-barrier is needed.
+  __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
+         Immediate(TypeFeedbackCells::MegamorphicSentinel(isolate)));
+  __ jmp(&done, Label::kNear);
+
+  // An uninitialized cache is patched with the function.
+  __ bind(&initialize);
+  __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset), edi);
+  // No need for a write barrier here - cells are rescanned.
+
+  __ bind(&done);
 }
 
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
+  // ebx : cache cell for call target
   // edi : the function to call
   Isolate* isolate = masm->isolate();
   Label slow, non_function;
@@ -4613,9 +4634,9 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     __ cmp(eax, isolate->factory()->the_hole_value());
     __ j(not_equal, &receiver_ok, Label::kNear);
     // Patch the receiver on the stack with the global receiver object.
-    __ mov(ebx, GlobalObjectOperand());
-    __ mov(ebx, FieldOperand(ebx, GlobalObject::kGlobalReceiverOffset));
-    __ mov(Operand(esp, (argc_ + 1) * kPointerSize), ebx);
+    __ mov(ecx, GlobalObjectOperand());
+    __ mov(ecx, FieldOperand(ecx, GlobalObject::kGlobalReceiverOffset));
+    __ mov(Operand(esp, (argc_ + 1) * kPointerSize), ecx);
     __ bind(&receiver_ok);
   }
 
@@ -4626,38 +4647,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ j(not_equal, &slow);
 
   if (RecordCallTarget()) {
-    // Cache the called function in a global property cell in the
-    // instruction stream after the call.  Cache states are uninitialized,
-    // monomorphic (indicated by a JSFunction), and megamorphic.
-    Label initialize, call;
-    // Load the cache cell address into ebx and the cache state into ecx.
-    __ mov(ebx, Operand(esp, 0));  // Return address.
-    __ mov(ebx, Operand(ebx, 1));  // 1 ~ sizeof 'test eax' opcode in bytes.
-    __ mov(ecx, FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset));
-
-    // A monomorphic cache hit or an already megamorphic state: invoke the
-    // function without changing the state.
-    __ cmp(ecx, edi);
-    __ j(equal, &call, Label::kNear);
-    __ cmp(ecx, Immediate(MegamorphicSentinel(isolate)));
-    __ j(equal, &call, Label::kNear);
-
-    // A monomorphic miss (i.e, here the cache is not uninitialized) goes
-    // megamorphic.
-    __ cmp(ecx, Immediate(UninitializedSentinel(isolate)));
-    __ j(equal, &initialize, Label::kNear);
-    // MegamorphicSentinel is an immortal immovable object (undefined) so no
-    // write-barrier is needed.
-    __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
-           Immediate(MegamorphicSentinel(isolate)));
-    __ jmp(&call, Label::kNear);
-
-    // An uninitialized cache is patched with the function.
-    __ bind(&initialize);
-    __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset), edi);
-    // No need for a write barrier here - cells are rescanned.
-
-    __ bind(&call);
+    GenerateRecordCallTarget(masm);
   }
 
   // Fast-case: Just invoke the function.
@@ -4684,13 +4674,10 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ bind(&slow);
   if (RecordCallTarget()) {
     // If there is a call target cache, mark it megamorphic in the
-    // non-function case.
-    __ mov(ebx, Operand(esp, 0));
-    __ mov(ebx, Operand(ebx, 1));
-    // MegamorphicSentinel is an immortal immovable object (undefined) so no
-    // write barrier is needed.
+    // non-function case.  MegamorphicSentinel is an immortal immovable
+    // object (undefined) so no write barrier is needed.
     __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
-           Immediate(MegamorphicSentinel(isolate)));
+           Immediate(TypeFeedbackCells::MegamorphicSentinel(isolate)));
   }
   // Check for function proxy.
   __ CmpInstanceType(ecx, JS_FUNCTION_PROXY_TYPE);
@@ -4717,6 +4704,50 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ GetBuiltinEntry(edx, Builtins::CALL_NON_FUNCTION);
   Handle<Code> adaptor = isolate->builtins()->ArgumentsAdaptorTrampoline();
   __ jmp(adaptor, RelocInfo::CODE_TARGET);
+}
+
+
+void CallConstructStub::Generate(MacroAssembler* masm) {
+  // eax : number of arguments
+  // ebx : cache cell for call target
+  // edi : constructor function
+  Label slow, non_function_call;
+
+  // Check that function is not a smi.
+  __ JumpIfSmi(edi, &non_function_call);
+  // Check that function is a JSFunction.
+  __ CmpObjectType(edi, JS_FUNCTION_TYPE, ecx);
+  __ j(not_equal, &slow);
+
+  if (RecordCallTarget()) {
+    GenerateRecordCallTarget(masm);
+  }
+
+  // Jump to the function-specific construct stub.
+  __ mov(ebx, FieldOperand(edi, JSFunction::kSharedFunctionInfoOffset));
+  __ mov(ebx, FieldOperand(ebx, SharedFunctionInfo::kConstructStubOffset));
+  __ lea(ebx, FieldOperand(ebx, Code::kHeaderSize));
+  __ jmp(ebx);
+
+  // edi: called object
+  // eax: number of arguments
+  // ecx: object map
+  Label do_call;
+  __ bind(&slow);
+  __ CmpInstanceType(ecx, JS_FUNCTION_PROXY_TYPE);
+  __ j(not_equal, &non_function_call);
+  __ GetBuiltinEntry(edx, Builtins::CALL_FUNCTION_PROXY_AS_CONSTRUCTOR);
+  __ jmp(&do_call);
+
+  __ bind(&non_function_call);
+  __ GetBuiltinEntry(edx, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
+  __ bind(&do_call);
+  // Set expected number of arguments to zero (not changing eax).
+  __ Set(ebx, Immediate(0));
+  Handle<Code> arguments_adaptor =
+      masm->isolate()->builtins()->ArgumentsAdaptorTrampoline();
+  __ SetCallKind(ecx, CALL_AS_METHOD);
+  __ jmp(arguments_adaptor, RelocInfo::CODE_TARGET);
 }
 
 
@@ -4751,11 +4782,6 @@ void CEntryStub::GenerateAheadOfTime() {
   CEntryStub stub(1, kDontSaveFPRegs);
   Handle<Code> code = stub.GetCode();
   code->set_is_pregenerated(true);
-}
-
-
-void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
-  __ Throw(eax);
 }
 
 
@@ -4877,12 +4903,6 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 }
 
 
-void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
-                                          UncatchableExceptionType type) {
-  __ ThrowUncatchable(type, eax);
-}
-
-
 void CEntryStub::Generate(MacroAssembler* masm) {
   // eax: number of arguments including receiver
   // ebx: pointer to C function  (C callee-saved)
@@ -4936,13 +4956,24 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                true);
 
   __ bind(&throw_out_of_memory_exception);
-  GenerateThrowUncatchable(masm, OUT_OF_MEMORY);
+  // Set external caught exception to false.
+  Isolate* isolate = masm->isolate();
+  ExternalReference external_caught(Isolate::kExternalCaughtExceptionAddress,
+                                    isolate);
+  __ mov(Operand::StaticVariable(external_caught), Immediate(false));
+
+  // Set pending exception and eax to out of memory exception.
+  ExternalReference pending_exception(Isolate::kPendingExceptionAddress,
+                                      isolate);
+  __ mov(eax, reinterpret_cast<int32_t>(Failure::OutOfMemoryException()));
+  __ mov(Operand::StaticVariable(pending_exception), eax);
+  // Fall through to the next label.
 
   __ bind(&throw_termination_exception);
-  GenerateThrowUncatchable(masm, TERMINATION);
+  __ ThrowUncatchable(eax);
 
   __ bind(&throw_normal_exception);
-  GenerateThrowTOS(masm);
+  __ Throw(eax);
 }
 
 
@@ -4996,7 +5027,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Invoke: Link this frame into the handler chain.  There's only one
   // handler block in this code object, so its index is 0.
   __ bind(&invoke);
-  __ PushTryHandler(IN_JS_ENTRY, JS_ENTRY_HANDLER, 0);
+  __ PushTryHandler(StackHandler::JS_ENTRY, 0);
 
   // Clear any pending exceptions.
   __ mov(edx, Immediate(masm->isolate()->factory()->the_hole_value()));
@@ -7015,11 +7046,13 @@ struct AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   // KeyedStoreIC::GenerateGeneric.
   { ebx, edx, ecx, EMIT_REMEMBERED_SET},
   // KeyedStoreStubCompiler::GenerateStoreFastElement.
-  { edi, edx, ecx, EMIT_REMEMBERED_SET},
+  { edi, ebx, ecx, EMIT_REMEMBERED_SET},
+  { edx, edi, ebx, EMIT_REMEMBERED_SET},
   // ElementsTransitionGenerator::GenerateSmiOnlyToObject
   // and ElementsTransitionGenerator::GenerateSmiOnlyToDouble
   // and ElementsTransitionGenerator::GenerateDoubleToObject
   { edx, ebx, edi, EMIT_REMEMBERED_SET},
+  { edx, ebx, edi, OMIT_REMEMBERED_SET},
   // ElementsTransitionGenerator::GenerateDoubleToObject
   { eax, edx, esi, EMIT_REMEMBERED_SET},
   { edx, eax, edi, EMIT_REMEMBERED_SET},

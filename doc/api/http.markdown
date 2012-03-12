@@ -1,4 +1,6 @@
-## HTTP
+# HTTP
+
+    Stability: 3 - Stable
 
 To use the HTTP server and client one must `require('http')`.
 
@@ -23,7 +25,14 @@ parsing only. It parses a message into headers and body but it does not
 parse the actual headers or the body.
 
 
-## http.Server
+## http.createServer([requestListener])
+
+Returns a new web server object.
+
+The `requestListener` is a function which is automatically
+added to the `'request'` event.
+
+## Class: http.Server
 
 This is an `EventEmitter` with the following events:
 
@@ -108,13 +117,6 @@ sent to the server on that socket.
 
 If a client connection emits an 'error' event - it will forwarded here.
 
-### http.createServer([requestListener])
-
-Returns a new web server object.
-
-The `requestListener` is a function which is automatically
-added to the `'request'` event.
-
 ### server.listen(port, [hostname], [callback])
 
 Begin accepting connections on the specified port and hostname.  If the
@@ -137,7 +139,7 @@ a listener for the ['listening'](net.html#event_listening_) event.
 See also [net.Server.listen()](net.html#server.listen).
 
 
-### server.close()
+### server.close([cb])
 
 Stops the server from accepting new connections.
 See [net.Server.close()](net.html#server.close).
@@ -149,23 +151,24 @@ Limits maximum incoming headers count, equal to 1000 by default. If set to 0 -
 no limit will be applied.
 
 
-## http.ServerRequest
+## Class: http.ServerRequest
 
 This object is created internally by a HTTP server -- not by
 the user -- and passed as the first argument to a `'request'` listener.
 
-This is an `EventEmitter` with the following events:
+The request implements the [Readable Stream](stream.html#readable_stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event: 'data'
 
 `function (chunk) { }`
 
-Emitted when a piece of the message body is received.
+Emitted when a piece of the message body is received. The chunk is a string if
+an encoding has been set with `request.setEncoding()`, otherwise it's a
+[Buffer](buffer.html).
 
-Example: A chunk of the body is given as the single
-argument. The transfer-encoding has been decoded.  The
-body chunk is a string.  The body encoding is set with
-`request.setEncoding()`.
+Note that the __data will be lost__ if there is no listener when a
+`ServerRequest` emits a `'data'` event.
 
 ### Event: 'end'
 
@@ -268,10 +271,13 @@ authentication details.
 
 
 
-## http.ServerResponse
+## Class: http.ServerResponse
 
 This object is created internally by a HTTP server--not by the user. It is
-passed as the second parameter to the `'request'` event. It is a `Writable Stream`.
+passed as the second parameter to the `'request'` event.
+
+The response implements the [Writable  Stream](stream.html#writable_stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event: 'close'
 
@@ -340,6 +346,13 @@ or
 
     response.setHeader("Set-Cookie", ["type=ninja", "language=javascript"]);
 
+### response.sendDate
+
+When true, the Date header will be automatically generated and sent in 
+the response if it is not already present in the headers. Defaults to true.
+
+This should only be disabled for testing; HTTP requires the Date header
+in responses.
 
 ### response.getHeader(name)
 
@@ -423,6 +436,7 @@ Options:
   Defaults to `'localhost'`.
 - `hostname`: To support `url.parse()` `hostname` is preferred over `host`
 - `port`: Port of remote server. Defaults to 80.
+- `localAddress`: Local interface to bind for network connections.
 - `socketPath`: Unix Domain Socket (use one of host:port or socketPath)
 - `method`: A string specifying the HTTP request method. Defaults to `'GET'`.
 - `path`: Request path. Defaults to `'/'`. Should include query string if any.
@@ -513,7 +527,7 @@ Example:
     });
 
 
-## http.Agent
+## Class: http.Agent
 
 In node 0.5.3+ there is a new implementation of the HTTP Agent which is used
 for pooling sockets used in HTTP client requests.
@@ -544,10 +558,6 @@ Alternatively, you could just opt out of pooling entirely using `agent:false`:
       // Do stuff
     })
 
-## http.globalAgent
-
-Global instance of Agent which is used as the default for all http client requests.
-
 ### agent.maxSockets
 
 By default set to 5. Determines how many concurrent sockets the agent can have 
@@ -563,8 +573,13 @@ modify.
 An object which contains queues of requests that have not yet been assigned to 
 sockets. Do not modify.
 
+## http.globalAgent
 
-## http.ClientRequest
+Global instance of Agent which is used as the default for all http client
+requests.
+
+
+## Class: http.ClientRequest
 
 This object is created internally and returned from `http.request()`.  It
 represents an _in-progress_ request whose header has already been queued.  The
@@ -601,11 +616,11 @@ event, the entire body will be caught.
       }, 10);
     });
 
-This is a `Writable Stream`.
 Note: Node does not check whether Content-Length and the length of the body
 which has been transmitted are equal or not.
 
-This is an `EventEmitter` with the following events:
+The request implements the [Writable  Stream](stream.html#writable_stream)
+interface. This is an `EventEmitter` with the following events:
 
 ### Event 'response'
 
@@ -754,8 +769,7 @@ server--in that case it is suggested to use the
 `['Transfer-Encoding', 'chunked']` header line when
 creating the request.
 
-The `chunk` argument should be an array of integers
-or a string.
+The `chunk` argument should be a [buffer](buffer.html) or a string.
 
 The `encoding` argument is optional and only applies when `chunk` is a string.
 Defaults to `'utf8'`.
@@ -797,13 +811,18 @@ will be called.
 This object is created when making a request with `http.request()`. It is
 passed to the `'response'` event of the request object.
 
-The response implements the `Readable Stream` interface.
+The response implements the [Readable Stream](stream.html#readable_stream)
+interface. This is an `EventEmitter` with the following events:
+
 
 ### Event: 'data'
 
 `function (chunk) { }`
 
 Emitted when a piece of the message body is received.
+
+Note that the __data will be lost__ if there is no listener when a
+`ClientResponse` emits a `'data'` event.
 
 
 ### Event: 'end'

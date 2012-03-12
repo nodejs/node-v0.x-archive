@@ -38,6 +38,7 @@
 #include "frames.h"
 #include "global-handles.h"
 #include "handles.h"
+#include "hashmap.h"
 #include "heap.h"
 #include "regexp-stack.h"
 #include "runtime-profiler.h"
@@ -280,23 +281,6 @@ class ThreadLocalTop BASE_EMBEDDED {
   Address try_catch_handler_address_;
 };
 
-#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
-
-#define ISOLATE_PLATFORM_INIT_LIST(V)                                          \
-  /* VirtualFrame::SpilledScope state */                                       \
-  V(bool, is_virtual_frame_in_spilled_scope, false)                            \
-  /* CodeGenerator::EmitNamedStore state */                                    \
-  V(int, inlined_write_barrier_size, -1)
-
-#if !defined(__arm__) && !defined(__mips__)
-class HashMap;
-#endif
-
-#else
-
-#define ISOLATE_PLATFORM_INIT_LIST(V)
-
-#endif
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
 
@@ -333,8 +317,6 @@ class HashMap;
 typedef List<HeapObject*, PreallocatedStorage> DebugObjectCache;
 
 #define ISOLATE_INIT_LIST(V)                                                   \
-  /* AssertNoZoneAllocation state. */                                          \
-  V(bool, zone_allow_allocation, true)                                         \
   /* SerializerDeserializer state. */                                          \
   V(int, serialize_partial_snapshot_cache_length, 0)                           \
   /* Assembler state. */                                                       \
@@ -362,14 +344,13 @@ typedef List<HeapObject*, PreallocatedStorage> DebugObjectCache;
   /* Serializer state. */                                                      \
   V(ExternalReferenceTable*, external_reference_table, NULL)                   \
   /* AstNode state. */                                                         \
-  V(unsigned, ast_node_id, 0)                                                  \
+  V(int, ast_node_id, 0)                                                       \
   V(unsigned, ast_node_count, 0)                                               \
   /* SafeStackFrameIterator activations count. */                              \
   V(int, safe_stack_iterator_counter, 0)                                       \
   V(uint64_t, enabled_cpu_features, 0)                                         \
   V(CpuProfiler*, cpu_profiler, NULL)                                          \
   V(HeapProfiler*, heap_profiler, NULL)                                        \
-  ISOLATE_PLATFORM_INIT_LIST(V)                                                \
   ISOLATE_DEBUGGER_INIT_LIST(V)
 
 class Isolate {
@@ -703,6 +684,8 @@ class Isolate {
       int frame_limit,
       StackTrace::StackTraceOptions options);
 
+  void CaptureAndSetCurrentStackTraceFor(Handle<JSObject> error_object);
+
   // Returns if the top context may access the given global object. If
   // the result is false, the pending exception is guaranteed to be
   // set.
@@ -729,7 +712,7 @@ class Isolate {
 
   // Promote a scheduled exception to pending. Asserts has_scheduled_exception.
   Failure* PromoteScheduledException();
-  void DoThrow(MaybeObject* exception, MessageLocation* location);
+  void DoThrow(Object* exception, MessageLocation* location);
   // Checks if exception should be reported and finds out if it's
   // caught externally.
   bool ShouldReportException(bool* can_be_caught_externally,
@@ -1030,6 +1013,10 @@ class Isolate {
     context_exit_happened_ = context_exit_happened;
   }
 
+  double time_millis_since_init() {
+    return OS::TimeCurrentMillis() - time_millis_at_init_;
+  }
+
  private:
   Isolate();
 
@@ -1137,6 +1124,10 @@ class Isolate {
 
   void InitializeDebugger();
 
+  // Traverse prototype chain to find out whether the object is derived from
+  // the Error object.
+  bool IsErrorObject(Handle<Object> obj);
+
   int stack_trace_nesting_level_;
   StringStream* incomplete_message_;
   // The preallocated memory thread singleton.
@@ -1199,6 +1190,9 @@ class Isolate {
   // The garbage collector should be a little more aggressive when it knows
   // that a context was recently exited.
   bool context_exit_happened_;
+
+  // Time stamp at initialization.
+  double time_millis_at_init_;
 
 #if defined(V8_TARGET_ARCH_ARM) && !defined(__arm__) || \
     defined(V8_TARGET_ARCH_MIPS) && !defined(__mips__)

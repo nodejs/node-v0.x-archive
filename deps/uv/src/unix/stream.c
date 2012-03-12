@@ -22,14 +22,17 @@
 #include "uv.h"
 #include "internal.h"
 
-#include <assert.h>
-#include <errno.h>
-#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/uio.h>
+#include <assert.h>
+#include <errno.h>
 
-#include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 
 static void uv__stream_connect(uv_stream_t*);
@@ -513,6 +516,28 @@ static void uv__write_callbacks(uv_stream_t* stream) {
 }
 
 
+static uv_handle_type uv__handle_type(int fd) {
+  struct sockaddr_storage ss;
+  socklen_t len;
+
+  memset(&ss, 0, sizeof(ss));
+  len = sizeof(ss);
+
+  if (getsockname(fd, (struct sockaddr*)&ss, &len))
+    return UV_UNKNOWN_HANDLE;
+
+  switch (ss.ss_family) {
+  case AF_UNIX:
+    return UV_NAMED_PIPE;
+  case AF_INET:
+  case AF_INET6:
+    return UV_TCP;
+  }
+
+  return UV_UNKNOWN_HANDLE;
+}
+
+
 static void uv__read(uv_stream_t* stream) {
   uv_buf_t buf;
   ssize_t nread;
@@ -633,7 +658,8 @@ static void uv__read(uv_stream_t* stream) {
 
 
         if (stream->accepted_fd >= 0) {
-          stream->read2_cb((uv_pipe_t*)stream, nread, buf, UV_TCP);
+          stream->read2_cb((uv_pipe_t*)stream, nread, buf,
+              uv__handle_type(stream->accepted_fd));
         } else {
           stream->read2_cb((uv_pipe_t*)stream, nread, buf, UV_UNKNOWN_HANDLE);
         }
@@ -802,6 +828,8 @@ int uv__connect(uv_connect_t* req, uv_stream_t* stream, struct sockaddr* addr,
       /* If we get a ECONNREFUSED wait until the next tick to report the
        * error. Solaris wants to report immediately--other unixes want to
        * wait.
+       *
+       * XXX: do the same for ECONNABORTED?
        */
       case ECONNREFUSED:
         stream->delayed_error = errno;
@@ -966,3 +994,11 @@ int uv_read_stop(uv_stream_t* stream) {
 }
 
 
+int uv_is_readable(uv_stream_t* stream) {
+  return stream->flags & UV_READABLE;
+}
+
+
+int uv_is_writable(uv_stream_t* stream) {
+  return stream->flags & UV_WRITABLE;
+}

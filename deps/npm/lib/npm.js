@@ -112,6 +112,7 @@ var commandCache = {}
               , "unstar": "star" // same function
               , "apihelp" : "help"
               , "login": "adduser"
+              , "add-user": "adduser"
               }
 
   , aliasNames = Object.keys(aliases)
@@ -138,6 +139,7 @@ var commandCache = {}
               , "unpublish"
               , "owner"
               , "deprecate"
+              , "shrinkwrap"
 
               , "help"
               , "help-search"

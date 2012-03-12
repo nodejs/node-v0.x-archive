@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,27 +28,18 @@
 #ifndef V8_ZONE_INL_H_
 #define V8_ZONE_INL_H_
 
-#include "isolate.h"
 #include "zone.h"
+
+#include "counters.h"
+#include "isolate.h"
+#include "utils.h"
 #include "v8-counters.h"
 
 namespace v8 {
 namespace internal {
 
 
-AssertNoZoneAllocation::AssertNoZoneAllocation()
-    : prev_(Isolate::Current()->zone_allow_allocation()) {
-  Isolate::Current()->set_zone_allow_allocation(false);
-}
-
-
-AssertNoZoneAllocation::~AssertNoZoneAllocation() {
-  Isolate::Current()->set_zone_allow_allocation(prev_);
-}
-
-
 inline void* Zone::New(int size) {
-  ASSERT(Isolate::Current()->zone_allow_allocation());
   ASSERT(ZoneScope::nesting() > 0);
   // Round up the requested size to fit the alignment.
   size = RoundUp(size, kAlignment);

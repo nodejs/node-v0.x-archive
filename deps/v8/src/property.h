@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -70,6 +70,8 @@ class Descriptor BASE_EMBEDDED {
     ASSERT(PropertyDetails::IsValidIndex(index));
     details_ = PropertyDetails(details_.attributes(), details_.type(), index);
   }
+
+  bool ContainsTransition();
 
  private:
   String* key_;
@@ -262,7 +264,7 @@ class LookupResult BASE_EMBEDDED {
   // Is the result is a property excluding transitions and the null
   // descriptor?
   bool IsProperty() {
-    return IsFound() && GetPropertyDetails().IsProperty();
+    return IsFound() && IsRealProperty(GetPropertyDetails().type());
   }
 
   bool IsCacheable() { return cacheable_; }
@@ -290,7 +292,9 @@ class LookupResult BASE_EMBEDDED {
 
   Map* GetTransitionMap() {
     ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
-    ASSERT(IsTransitionType(type()));
+    ASSERT(type() == MAP_TRANSITION ||
+           type() == ELEMENTS_TRANSITION ||
+           type() == CONSTANT_TRANSITION);
     return Map::cast(GetValue());
   }
 

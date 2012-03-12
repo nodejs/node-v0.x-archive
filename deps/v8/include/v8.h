@@ -1198,7 +1198,7 @@ class String : public Primitive {
    * passed in as parameters.
    */
   V8EXPORT static Local<String> Concat(Handle<String> left,
-                                       Handle<String>right);
+                                       Handle<String> right);
 
   /**
    * Creates a new external string using the data defined in the given
@@ -1730,6 +1730,14 @@ class Function : public Object {
                              Handle<Value> argv[]);
   V8EXPORT void SetName(Handle<String> name);
   V8EXPORT Handle<Value> GetName() const;
+
+  /**
+   * Name inferred from variable or property assignment of this function.
+   * Used to facilitate debugging and profiling of JavaScript code written
+   * in an OO style, where many functions are anonymous but are assigned
+   * to object properties.
+   */
+  V8EXPORT Handle<Value> GetInferredName() const;
 
   /**
    * Returns zero based line number of function body and
@@ -2717,7 +2725,7 @@ class RetainedObjectInfo;
  * default isolate is implicitly created and entered.  The embedder
  * can create additional isolates and use them in parallel in multiple
  * threads.  An isolate can be entered by at most one thread at any
- * given time.  The Locker/Unlocker API can be used to synchronize.
+ * given time.  The Locker/Unlocker API must be used to synchronize.
  */
 class V8EXPORT Isolate {
  public:
@@ -3531,6 +3539,12 @@ class V8EXPORT Context {
   void AllowCodeGenerationFromStrings(bool allow);
 
   /**
+   * Returns true if code generation from strings is allowed for the context.
+   * For more details see AllowCodeGenerationFromStrings(bool) documentation.
+   */
+  bool IsCodeGenerationFromStringsAllowed();
+
+  /**
    * Stack-allocated class which sets the execution context for all
    * operations executed within a local scope.
    */
@@ -3559,7 +3573,9 @@ class V8EXPORT Context {
  * accessing handles or holding onto object pointers obtained
  * from V8 handles while in the particular V8 isolate.  It is up
  * to the user of V8 to ensure (perhaps with locking) that this
- * constraint is not violated.
+ * constraint is not violated.  In addition to any other synchronization
+ * mechanism that may be used, the v8::Locker and v8::Unlocker classes
+ * must be used to signal thead switches to V8.
  *
  * v8::Locker is a scoped lock object. While it's
  * active (i.e. between its construction and destruction) the current thread is
@@ -3834,7 +3850,7 @@ class Internals {
   static const int kFullStringRepresentationMask = 0x07;
   static const int kExternalTwoByteRepresentationTag = 0x02;
 
-  static const int kJSObjectType = 0xa7;
+  static const int kJSObjectType = 0xa9;
   static const int kFirstNonstringType = 0x80;
   static const int kForeignType = 0x85;
 

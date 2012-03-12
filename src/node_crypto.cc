@@ -19,13 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_crypto.h>
-#include <v8.h>
+#include "node_crypto.h"
+#include "node_crypto_groups.h"
+#include "v8.h"
 
-#include <node.h>
-#include <node_buffer.h>
-#include <node_vars.h>
-#include <node_root_certs.h>
+#include "node.h"
+#include "node_buffer.h"
+#include "node_root_certs.h"
 
 #include <string.h>
 #ifdef _MSC_VER
@@ -64,33 +64,28 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_SEP_MULTILINE
                                  | XN_FLAG_FN_SN;
 
-
-#include <node_vars.h>
-// We do the following to minimize the detal between v0.6 branch. We want to
-// use the variables as they were being used before.
-#define on_headers_sym NODE_VAR(on_headers_sym)
-#define errno_symbol NODE_VAR(errno_symbol)
-#define syscall_symbol NODE_VAR(syscall_symbol)
-#define subject_symbol NODE_VAR(subject_symbol)
-#define subjectaltname_symbol NODE_VAR(subjectaltname_symbol)
-#define modulus_symbol NODE_VAR(modulus_symbol)
-#define exponent_symbol NODE_VAR(exponent_symbol)
-#define issuer_symbol NODE_VAR(issuer_symbol)
-#define valid_from_symbol NODE_VAR(valid_from_symbol)
-#define valid_to_symbol NODE_VAR(valid_to_symbol)
-#define fingerprint_symbol NODE_VAR(fingerprint_symbol)
-#define name_symbol NODE_VAR(name_symbol)
-#define version_symbol NODE_VAR(version_symbol)
-#define ext_key_usage_symbol NODE_VAR(ext_key_usage_symbol)
-#define secure_context_constructor NODE_VAR(secure_context_constructor)
-
-
 namespace node {
 namespace crypto {
 
-static uv_rwlock_t* locks;
-
 using namespace v8;
+
+static Persistent<String> errno_symbol;
+static Persistent<String> syscall_symbol;
+static Persistent<String> subject_symbol;
+static Persistent<String> subjectaltname_symbol;
+static Persistent<String> modulus_symbol;
+static Persistent<String> exponent_symbol;
+static Persistent<String> issuer_symbol;
+static Persistent<String> valid_from_symbol;
+static Persistent<String> valid_to_symbol;
+static Persistent<String> fingerprint_symbol;
+static Persistent<String> name_symbol;
+static Persistent<String> version_symbol;
+static Persistent<String> ext_key_usage_symbol;
+
+static Persistent<FunctionTemplate> secure_context_constructor;
+
+static uv_rwlock_t* locks;
 
 
 static unsigned long crypto_id_cb(void) {
@@ -914,6 +909,8 @@ Handle<Value> Connection::New(const Arguments& args) {
 
   SSL_set_app_data(p->ssl_, p);
 
+  if (is_server) SSL_set_info_callback(p->ssl_, SSLInfoCallback);
+
 #ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
@@ -973,6 +970,20 @@ Handle<Value> Connection::New(const Arguments& args) {
   }
 
   return args.This();
+}
+
+
+void Connection::SSLInfoCallback(const SSL *ssl, int where, int ret) {
+  if (where & SSL_CB_HANDSHAKE_START) {
+    HandleScope scope;
+    Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
+    MakeCallback(c->handle_, "onhandshakestart", 0, NULL);
+  }
+  if (where & SSL_CB_HANDSHAKE_DONE) {
+    HandleScope scope;
+    Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
+    MakeCallback(c->handle_, "onhandshakedone", 0, NULL);
+  }
 }
 
 
@@ -3525,6 +3536,18 @@ class DiffieHellman : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "setPrivateKey", SetPrivateKey);
 
     target->Set(String::NewSymbol("DiffieHellman"), t->GetFunction());
+
+    Local<FunctionTemplate> t2 = FunctionTemplate::New(DiffieHellmanGroup);
+    t2->InstanceTemplate()->SetInternalFieldCount(1);
+
+    NODE_SET_PROTOTYPE_METHOD(t2, "generateKeys", GenerateKeys);
+    NODE_SET_PROTOTYPE_METHOD(t2, "computeSecret", ComputeSecret);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPrime", GetPrime);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getGenerator", GetGenerator);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPublicKey", GetPublicKey);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPrivateKey", GetPrivateKey);
+
+    target->Set(String::NewSymbol("DiffieHellmanGroup"), t2->GetFunction());
   }
 
   bool Init(int primeLength) {
@@ -3547,7 +3570,48 @@ class DiffieHellman : public ObjectWrap {
     return true;
   }
 
+  bool Init(unsigned char* p, int p_len, unsigned char* g, int g_len) {
+    dh = DH_new();
+    dh->p = BN_bin2bn(p, p_len, 0);
+    dh->g = BN_bin2bn(g, g_len, 0);
+    initialised_ = true;
+    return true;
+  }
+
  protected:
+  static Handle<Value> DiffieHellmanGroup(const Arguments& args) {
+    HandleScope scope;
+
+    DiffieHellman* diffieHellman = new DiffieHellman();
+
+    if (args.Length() != 1 || !args[0]->IsString()) {
+      return ThrowException(Exception::Error(
+          String::New("No group name given")));
+    }
+
+    String::Utf8Value group_name(args[0]->ToString());
+
+    modp_group* it = modp_groups;
+
+    while(it->name != NULL) {
+      if (!strcasecmp(*group_name, it->name))
+          break;
+      it++;
+    }
+
+    if (it->name != NULL) {
+      diffieHellman->Init(it->prime, it->prime_size,
+              it->gen, it->gen_size);
+    } else {
+      return ThrowException(Exception::Error(
+          String::New("Unknown group")));
+    }
+
+    diffieHellman->Wrap(args.This());
+
+    return args.This();
+  }
+
   static Handle<Value> New(const Arguments& args) {
     HandleScope scope;
 
@@ -4165,8 +4229,7 @@ PBKDF2(const Arguments& args) {
 
   req = new uv_work_t();
   req->data = request;
-  uv_queue_work(Loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
-
+  uv_queue_work(uv_default_loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
   return Undefined();
 
 err:
@@ -4288,7 +4351,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     Local<Function> callback_v = Local<Function>(Function::Cast(*args[1]));
     req->callback_ = Persistent<Function>::New(callback_v);
 
-    uv_queue_work(Loop(),
+    uv_queue_work(uv_default_loop(),
                   &req->work_req_,
                   RandomBytesWork<generator>,
                   RandomBytesAfter<generator>);
@@ -4366,4 +4429,3 @@ void InitCrypto(Handle<Object> target) {
 }  // namespace node
 
 NODE_MODULE(node_crypto, node::crypto::InitCrypto)
-

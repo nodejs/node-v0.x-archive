@@ -41,8 +41,9 @@ extern "C" {
 #   define UV_EXTERN /* nothing */
 #   define CARES_STATICLIB 1
 # endif
+#elif __GNUC__ >= 4
+# define UV_EXTERN __attribute__((visibility("default")))
 #else
-  /* Unix. TODO: symbol hiding */
 # define UV_EXTERN /* nothing */
 #endif
 
@@ -79,7 +80,7 @@ typedef intptr_t ssize_t;
   XX(  7, EAFNOSUPPORT, "") \
   XX(  8, EALREADY, "") \
   XX(  9, EBADF, "bad file descriptor") \
-  XX( 10, EBUSY, "mount device busy") \
+  XX( 10, EBUSY, "resource busy or locked") \
   XX( 11, ECONNABORTED, "software caused connection abort") \
   XX( 12, ECONNREFUSED, "connection refused") \
   XX( 13, ECONNRESET, "connection reset by peer") \
@@ -115,7 +116,12 @@ typedef intptr_t ssize_t;
   XX( 45, EAISOCKTYPE, "") \
   XX( 46, ESHUTDOWN, "") \
   XX( 47, EEXIST, "file already exists") \
-  XX( 48, ESRCH, "no such process")
+  XX( 48, ESRCH, "no such process") \
+  XX( 49, ENAMETOOLONG, "name too long") \
+  XX( 50, EPERM, "operation not permitted") \
+  XX( 51, ELOOP, "too many symbolic links encountered") \
+  XX( 52, EXDEV, "cross-device link not permitted") \
+  XX( 53, ENOTEMPTY, "directory not empty")
 
 
 #define UV_ERRNO_GEN(val, name, s) UV_##name = val,
@@ -234,15 +240,27 @@ UV_EXTERN int64_t uv_now(uv_loop_t*);
 
 
 /*
- * The status parameter is 0 if the request completed successfully,
- * and should be -1 if the request was cancelled or failed.
- * Error details can be obtained by calling uv_last_error().
+ * Should return a buffer that libuv can use to read data into.
  *
- * In the case of uv_read_cb the uv_buf_t returned should be freed by the
- * user.
+ * `suggested_size` is a hint. Returning a buffer that is smaller is perfectly
+ * okay as long as `buf.len > 0`.
  */
 typedef uv_buf_t (*uv_alloc_cb)(uv_handle_t* handle, size_t suggested_size);
+
+/*
+ * `nread` is > 0 if there is data available, 0 if libuv is done reading for now
+ * or -1 on error.
+ *
+ * Error details can be obtained by calling uv_last_error(). UV_EOF indicates
+ * that the stream has been closed.
+ *
+ * The callee is responsible for closing the stream when an error happens.
+ * Trying to read from the stream again is undefined.
+ *
+ * The callee is responsible for freeing the buffer, libuv does not reuse it.
+ */
 typedef void (*uv_read_cb)(uv_stream_t* stream, ssize_t nread, uv_buf_t buf);
+
 /*
  * Just like the uv_read_cb except that if the pending parameter is true
  * then you can use uv_accept() to pull the new handle into the process.
@@ -250,6 +268,7 @@ typedef void (*uv_read_cb)(uv_stream_t* stream, ssize_t nread, uv_buf_t buf);
  */
 typedef void (*uv_read2_cb)(uv_pipe_t* pipe, ssize_t nread, uv_buf_t buf,
     uv_handle_type pending);
+
 typedef void (*uv_write_cb)(uv_write_t* req, int status);
 typedef void (*uv_connect_cb)(uv_connect_t* req, int status);
 typedef void (*uv_shutdown_cb)(uv_shutdown_t* req, int status);
@@ -488,6 +507,13 @@ struct uv_write_s {
 };
 
 
+/*
+ * Used to determine whether a stream is readable or writable.
+ * TODO: export in v0.8.
+ */
+/* UV_EXTERN */ int uv_is_readable(uv_stream_t* handle);
+/* UV_EXTERN */ int uv_is_writable(uv_stream_t* handle);
+
 
 /*
  * uv_tcp_t is a subclass of uv_stream_t
@@ -654,6 +680,20 @@ UV_EXTERN int uv_udp_set_membership(uv_udp_t* handle,
     uv_membership membership);
 
 /*
+ * Set IP multicast loop flag. Makes multicast packets loop back to
+ * local sockets.
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  on                  1 for on, 0 for off
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_multicast_loop(uv_udp_t* handle, int on);
+
+/*
  * Set the multicast ttl
  *
  * Arguments:
@@ -664,7 +704,7 @@ UV_EXTERN int uv_udp_set_membership(uv_udp_t* handle,
  * Returns:
  *  0 on success, -1 on error.
  */
-int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl);
+UV_EXTERN int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl);
 
 /*
  * Set broadcast on or off
@@ -677,7 +717,20 @@ int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl);
  * Returns:
  *  0 on success, -1 on error.
  */
-int uv_udp_set_broadcast(uv_udp_t* handle, int on);
+UV_EXTERN int uv_udp_set_broadcast(uv_udp_t* handle, int on);
+
+/*
+ * Set the time to live
+ *
+ * Arguments:
+ *  handle              UDP handle. Should have been initialized with
+ *                      `uv_udp_init`.
+ *  ttl                 1 through 255
+ *
+ * Returns:
+ *  0 on success, -1 on error.
+ */
+UV_EXTERN int uv_udp_set_ttl(uv_udp_t* handle, int ttl);
 
 /*
  * Send data. If the socket has not previously been bound with `uv_udp_bind`
@@ -1335,7 +1388,7 @@ UV_EXTERN extern uint64_t uv_hrtime(void);
 
 
 /*
- * Opens a shared library. The filename is in utf-8. On success, -1 is
+ * Opens a shared library. The filename is in utf-8. On success, -1 is returned
  * and the variable pointed by library receives a handle to the library.
  */
 UV_EXTERN uv_err_t uv_dlopen(const char* filename, uv_lib_t* library);
@@ -1346,6 +1399,12 @@ UV_EXTERN uv_err_t uv_dlclose(uv_lib_t library);
  * map to NULL.
  */
 UV_EXTERN uv_err_t uv_dlsym(uv_lib_t library, const char* name, void** ptr);
+
+/*
+ * Retrieves and frees an error message of dynamic linking loaders.
+ */
+UV_EXTERN const char *uv_dlerror(uv_lib_t library);
+UV_EXTERN void uv_dlerror_free(uv_lib_t library, const char *msg);
 
 /*
  * The mutex functions return 0 on success, -1 on error
@@ -1452,6 +1511,8 @@ struct uv_loop_s {
 #undef UV_FS_REQ_PRIVATE_FIELDS
 #undef UV_WORK_PRIVATE_FIELDS
 #undef UV_FS_EVENT_PRIVATE_FIELDS
+#undef UV_LOOP_PRIVATE_FIELDS
+#undef UV_LOOP_PRIVATE_PLATFORM_FIELDS
 
 #ifdef __cplusplus
 }

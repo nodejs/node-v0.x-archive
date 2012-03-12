@@ -525,7 +525,8 @@ class HeapEntry BASE_EMBEDDED {
     kClosure = v8::HeapGraphNode::kClosure,
     kRegExp = v8::HeapGraphNode::kRegExp,
     kHeapNumber = v8::HeapGraphNode::kHeapNumber,
-    kNative = v8::HeapGraphNode::kNative
+    kNative = v8::HeapGraphNode::kNative,
+    kSynthetic = v8::HeapGraphNode::kSynthetic
   };
 
   HeapEntry() { }
@@ -963,6 +964,10 @@ class V8HeapExplorer : public HeapEntriesAllocator {
                            HeapEntry* parent,
                            String* reference_name,
                            Object* child);
+  void SetNativeBindReference(HeapObject* parent_obj,
+                              HeapEntry* parent,
+                              const char* reference_name,
+                              Object* child);
   void SetElementReference(HeapObject* parent_obj,
                            HeapEntry* parent,
                            int index,
@@ -1027,23 +1032,25 @@ class V8HeapExplorer : public HeapEntriesAllocator {
 };
 
 
+class NativeGroupRetainedObjectInfo;
+
+
 // An implementation of retained native objects extractor.
-class NativeObjectsExplorer : public HeapEntriesAllocator {
+class NativeObjectsExplorer {
  public:
   NativeObjectsExplorer(HeapSnapshot* snapshot,
                       SnapshottingProgressReportingInterface* progress);
   virtual ~NativeObjectsExplorer();
-  virtual HeapEntry* AllocateEntry(
-      HeapThing ptr, int children_count, int retainers_count);
   void AddRootEntries(SnapshotFillerInterface* filler);
   int EstimateObjectsCount();
   bool IterateAndExtractReferences(SnapshotFillerInterface* filler);
 
  private:
   void FillRetainedObjects();
+  void FillImplicitReferences();
   List<HeapObject*>* GetListMaybeDisposeInfo(v8::RetainedObjectInfo* info);
   void SetNativeRootReference(v8::RetainedObjectInfo* info);
-  void SetRootNativesRootReference();
+  void SetRootNativeRootsReference();
   void SetWrapperNativeReferences(HeapObject* wrapper,
                                       v8::RetainedObjectInfo* info);
   void VisitSubtreeWrapper(Object** p, uint16_t class_id);
@@ -1057,6 +1064,12 @@ class NativeObjectsExplorer : public HeapEntriesAllocator {
         (reinterpret_cast<v8::RetainedObjectInfo*>(key1))->IsEquivalent(
             reinterpret_cast<v8::RetainedObjectInfo*>(key2));
   }
+  INLINE(static bool StringsMatch(void* key1, void* key2)) {
+    return strcmp(reinterpret_cast<char*>(key1),
+                  reinterpret_cast<char*>(key2)) == 0;
+  }
+
+  NativeGroupRetainedObjectInfo* FindOrAddGroupInfo(const char* label);
 
   HeapSnapshot* snapshot_;
   HeapSnapshotsCollection* collection_;
@@ -1065,6 +1078,9 @@ class NativeObjectsExplorer : public HeapEntriesAllocator {
   HeapObjectsSet in_groups_;
   // RetainedObjectInfo* -> List<HeapObject*>*
   HashMap objects_by_info_;
+  HashMap native_groups_;
+  HeapEntriesAllocator* synthetic_entries_allocator_;
+  HeapEntriesAllocator* native_entries_allocator_;
   // Used during references extraction.
   SnapshotFillerInterface* filler_;
 
@@ -1085,7 +1101,7 @@ class HeapSnapshotGenerator : public SnapshottingProgressReportingInterface {
  private:
   bool ApproximateRetainedSizes();
   bool BuildDominatorTree(const Vector<HeapEntry*>& entries,
-                          Vector<HeapEntry*>* dominators);
+                          Vector<int>* dominators);
   bool CountEntriesAndReferences();
   bool FillReferences();
   void FillReversePostorderIndexes(Vector<HeapEntry*>* entries);

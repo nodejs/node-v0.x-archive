@@ -46,6 +46,7 @@ MarkBit Marking::MarkBitFrom(Address addr) {
 
 void MarkCompactCollector::SetFlags(int flags) {
   sweep_precisely_ = ((flags & Heap::kMakeHeapIterableMask) != 0);
+  reduce_memory_footprint_ = ((flags & Heap::kReduceMemoryFootprintMask) != 0);
 }
 
 
@@ -63,6 +64,19 @@ void MarkCompactCollector::MarkObject(HeapObject* obj, MarkBit mark_bit) {
     MemoryChunk::IncrementLiveBytesFromGC(obj->address(), obj->Size());
     ProcessNewlyMarkedObject(obj);
   }
+}
+
+
+bool MarkCompactCollector::MarkObjectWithoutPush(HeapObject* object) {
+  MarkBit mark = Marking::MarkBitFrom(object);
+  bool old_mark = mark.Get();
+  if (!old_mark) SetMark(object, mark);
+  return old_mark;
+}
+
+
+void MarkCompactCollector::MarkObjectAndPush(HeapObject* object) {
+  if (!MarkObjectWithoutPush(object)) marking_deque_.PushBlack(object);
 }
 
 

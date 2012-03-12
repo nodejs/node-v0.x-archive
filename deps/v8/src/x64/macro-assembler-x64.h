@@ -949,6 +949,10 @@ class MacroAssembler: public Assembler {
   void AbortIfNotSmi(Register object);
   void AbortIfNotSmi(const Operand& object);
 
+  // Abort execution if a 64 bit register containing a 32 bit payload does not
+  // have zeros in the top 32 bits.
+  void AbortIfNotZeroExtended(Register reg);
+
   // Abort execution if argument is a string. Used in debug code.
   void AbortIfNotString(Register object);
 
@@ -961,9 +965,7 @@ class MacroAssembler: public Assembler {
   // Exception handling
 
   // Push a new try handler and link it into try handler chain.
-  void PushTryHandler(CodeLocation try_location,
-                      HandlerType type,
-                      int handler_index);
+  void PushTryHandler(StackHandler::Kind kind, int handler_index);
 
   // Unlink the stack handler on top of the stack from the try handler chain.
   void PopTryHandler();
@@ -973,7 +975,7 @@ class MacroAssembler: public Assembler {
   void Throw(Register value);
 
   // Propagate an uncatchable exception out of the current JS stack.
-  void ThrowUncatchable(UncatchableExceptionType type, Register value);
+  void ThrowUncatchable(Register value);
 
   // ---------------------------------------------------------------------------
   // Inline caching support
@@ -1122,6 +1124,22 @@ class MacroAssembler: public Assembler {
 
   // Find the function context up the context chain.
   void LoadContext(Register dst, int context_chain_length);
+
+  // Conditionally load the cached Array transitioned map of type
+  // transitioned_kind from the global context if the map in register
+  // map_in_out is the cached Array map in the global context of
+  // expected_kind.
+  void LoadTransitionedArrayMapConditional(
+      ElementsKind expected_kind,
+      ElementsKind transitioned_kind,
+      Register map_in_out,
+      Register scratch,
+      Label* no_map_match);
+
+  // Load the initial map for new Arrays from a JSFunction.
+  void LoadInitialArrayMap(Register function_in,
+                           Register scratch,
+                           Register map_out);
 
   // Load the global function with the given index.
   void LoadGlobalFunction(int index, Register function);
@@ -1280,6 +1298,11 @@ class MacroAssembler: public Assembler {
   // Activation support.
   void EnterFrame(StackFrame::Type type);
   void LeaveFrame(StackFrame::Type type);
+
+  // Expects object in rax and returns map with validated enum cache
+  // in rax.  Assumes that any other register can be used as a scratch.
+  void CheckEnumCache(Register null_value,
+                      Label* call_runtime);
 
  private:
   // Order general registers are pushed by Pushad.

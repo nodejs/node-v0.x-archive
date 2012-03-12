@@ -25,6 +25,8 @@
 #include "uv-common.h"
 #include "uv-eio.h"
 
+#include <assert.h>
+#include <stdlib.h> /* abort */
 #include <stddef.h> /* offsetof */
 
 #if __STRICT_ANSI__
@@ -133,13 +135,20 @@ inline static int sys_accept4(int fd,
 #define container_of(ptr, type, member) \
   ((type *) ((char *) (ptr) - offsetof(type, member)))
 
-#define SAVE_ERRNO(block) \
-  do { \
-    int _saved_errno = errno; \
-    do { block; } while (0); \
-    errno = _saved_errno; \
-  } \
-  while (0);
+#define UNREACHABLE()                                                         \
+  do {                                                                        \
+    assert(0 && "unreachable code");                                          \
+    abort();                                                                  \
+  }                                                                           \
+  while (0)
+
+#define SAVE_ERRNO(block)                                                     \
+  do {                                                                        \
+    int _saved_errno = errno;                                                 \
+    do { block; } while (0);                                                  \
+    errno = _saved_errno;                                                     \
+  }                                                                           \
+  while (0)
 
 /* flags */
 enum {
@@ -151,7 +160,9 @@ enum {
   UV_READABLE      = 0x20,   /* The stream is readable */
   UV_WRITABLE      = 0x40,   /* The stream is writable */
   UV_TCP_NODELAY   = 0x080,  /* Disable Nagle. */
-  UV_TCP_KEEPALIVE = 0x100   /* Turn on keep-alive. */
+  UV_TCP_KEEPALIVE = 0x100,  /* Turn on keep-alive. */
+  UV_TIMER_ACTIVE  = 0x080,
+  UV_TIMER_REPEAT  = 0x100
 };
 
 /* core */
@@ -159,6 +170,7 @@ void uv__handle_init(uv_loop_t* loop, uv_handle_t* handle, uv_handle_type type);
 int uv__nonblock(int fd, int set) __attribute__((unused));
 int uv__cloexec(int fd, int set) __attribute__((unused));
 int uv__socket(int domain, int type, int protocol);
+int uv__dup(int fd);
 
 /* We used to handle EINTR in uv__close() but linux 2.6 will have closed the
  * file descriptor anyway, even on EINTR. Retrying in that case isn't merely
@@ -206,5 +218,15 @@ void uv__fs_event_destroy(uv_fs_event_t* handle);
 #define UV__F_NONBLOCK   (1 << 1)
 int uv__make_socketpair(int fds[2], int flags);
 int uv__make_pipe(int fds[2], int flags);
+
+#if __linux__
+void uv__inotify_loop_init(uv_loop_t* loop);
+void uv__inotify_loop_delete(uv_loop_t* loop);
+# define uv__loop_platform_init(loop)   uv__inotify_loop_init(loop)
+# define uv__loop_platform_delete(loop) uv__inotify_loop_delete(loop)
+#else
+# define uv__loop_platform_init(loop)
+# define uv__loop_platform_delete(loop)
+#endif
 
 #endif /* UV_UNIX_INTERNAL_H_ */

@@ -1,3 +1,143 @@
+2012-02-27: Version 3.9.11
+
+        Make 'module' a context-sensitive keyword (V8 issue 1957).
+
+
+2012-02-24: Version 3.9.10
+
+        Fixed V8 issues 1322, 1772 and 1969.
+
+        Conformance improvements.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-23: Version 3.9.9
+
+        Supported fast case for-in in Crankshaft.
+
+        Sped up heap snapshot serialization and dominators construction.
+
+        Randomized allocation addresses on windows. (Chromium issue 115151)
+
+        Fixed compilation with MinGW-w64. (issue 1943)
+
+        Fixed incorrect value of assignments to non-extensible properties.
+
+        Fixed a crash bug in generated code on ia32.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-21: Version 3.9.8
+
+        Fixed memory leak and missing #include in StartupDataDecompressor
+        (issue 1960).
+
+        Renamed static methods to avoid shadowing virtual methods and fix Clang
+        C++11 compile error.
+
+        Fixed sequence of element access in array builtins (issue 1790).
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-16: Version 3.9.7
+
+        Fixed V8 issues 1322, 1878, 1942, 1945 and Chromium issue 113924.
+
+        Fixed GCC-4.7 warnings.
+
+        Added Navier-Stokes benchmark.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-14: Version 3.9.6
+
+        Fix template-related linker error. (issue 1936)
+
+        Allow inlining of functions containing object literals.  (issue 1322)
+
+        Add --call-graph-size option to tickprocessor.  (issue 1937)
+
+        Heap Snapshot maximum size limit is too low for really big apps. At the
+        moment the limit is 256MB.  (Chromium issue 113015)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-09: Version 3.9.5
+
+        Removed unused command line flags.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-08: Version 3.9.4
+
+        Properly initialize element-transitioning array literals on ARM.
+        (issue 1930)
+
+        Bug fixes on all platforms.
+
+
+2012-02-07: Version 3.9.3
+
+        When rethrowing an exception, print the stack trace of its original
+        site instead of rethrow site (Chromium issue 60240).
+
+        Increased size of small stacks from 32k to 64k to avoid hitting limits
+        in Chromium (Chromium issue 112843).
+
+
+2012-02-06: Version 3.9.2
+
+        Add timestamp to --trace-gc output. (issue 1932)
+
+        Heap profiler reports implicit references.
+
+        Optionally export metadata with libv8 to enable debuggers to inspect V8
+        state.
+
+
+2012-02-02: Version 3.9.1
+
+        Fixed memory leak in NativeObjectsExplorer::FindOrAddGroupInfo
+        (Chromium issue 112315).
+
+        Fixed a crash in dev tools (Chromium issue 107996).
+
+        Added 'dependencies_traverse': 1 to v8 GYP target.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-01: Version 3.9.0
+
+        Reduce memory use immediately after starting V8.
+
+        Stability fixes and performance improvements on all platforms.
+
+
+2012-01-26: Version 3.8.9
+
+        Flush number string cache on GC (issue 1605).
+
+        Provide access to function inferred name with
+	v8::Function::GetInferredName in V8 public API.
+
+        Fix building with Clang (issue 1912).
+
+        Reduce the space used by the stack for the profiling thread.
+
+        Fix misleading documentation of v8::Locker (issue 542).
+
+        Introduce readbinary function in d8 to read binary files.
+
+        Performance and stability improvements on all platforms.
+
+
 2012-01-23: Version 3.8.8
 
         Limited number of loop iterations in Heap::ReserveSpace

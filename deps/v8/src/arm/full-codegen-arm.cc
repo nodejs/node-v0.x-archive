@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -109,6 +109,11 @@ class JumpPatchSite BASE_EMBEDDED {
 };
 
 
+int FullCodeGenerator::self_optimization_header_size() {
+  return 24;
+}
+
+
 // Generate code for a JS function.  On entry to the function the receiver
 // and arguments have been pushed on the stack left to right.  The actual
 // argument count matches the formal parameter count expected by the
@@ -123,14 +128,35 @@ class JumpPatchSite BASE_EMBEDDED {
 //
 // The function builds a JS frame.  Please see JavaScriptFrameConstants in
 // frames-arm.h for its layout.
-void FullCodeGenerator::Generate(CompilationInfo* info) {
-  ASSERT(info_ == NULL);
-  info_ = info;
-  scope_ = info->scope();
+void FullCodeGenerator::Generate() {
+  CompilationInfo* info = info_;
   handler_table_ =
       isolate()->factory()->NewFixedArray(function()->handler_count(), TENURED);
   SetFunctionPosition(function());
   Comment cmnt(masm_, "[ function compiled by full code generator");
+
+  // We can optionally optimize based on counters rather than statistical
+  // sampling.
+  if (info->ShouldSelfOptimize()) {
+    if (FLAG_trace_opt_verbose) {
+      PrintF("[adding self-optimization header to %s]\n",
+             *info->function()->debug_name()->ToCString());
+    }
+    has_self_optimization_header_ = true;
+    MaybeObject* maybe_cell = isolate()->heap()->AllocateJSGlobalPropertyCell(
+        Smi::FromInt(Compiler::kCallsUntilPrimitiveOpt));
+    JSGlobalPropertyCell* cell;
+    if (maybe_cell->To(&cell)) {
+      __ mov(r2, Operand(Handle<JSGlobalPropertyCell>(cell)));
+      __ ldr(r3, FieldMemOperand(r2, JSGlobalPropertyCell::kValueOffset));
+      __ sub(r3, r3, Operand(Smi::FromInt(1)), SetCC);
+      __ str(r3, FieldMemOperand(r2, JSGlobalPropertyCell::kValueOffset));
+      Handle<Code> compile_stub(
+          isolate()->builtins()->builtin(Builtins::kLazyRecompile));
+      __ Jump(compile_stub, RelocInfo::CODE_TARGET, eq);
+      ASSERT(masm_->pc_offset() == self_optimization_header_size());
+    }
+  }
 
 #ifdef DEBUG
   if (strlen(FLAG_stop_at) > 0 &&
@@ -265,11 +291,11 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
       // For named function expressions, declare the function name as a
       // constant.
       if (scope()->is_function_scope() && scope()->function() != NULL) {
-        int ignored = 0;
         VariableProxy* proxy = scope()->function();
         ASSERT(proxy->var()->mode() == CONST ||
                proxy->var()->mode() == CONST_HARMONY);
-        EmitDeclaration(proxy, proxy->var()->mode(), NULL, &ignored);
+        ASSERT(proxy->var()->location() != Variable::UNALLOCATED);
+        EmitDeclaration(proxy, proxy->var()->mode(), NULL);
       }
       VisitDeclarations(scope()->declarations());
     }
@@ -310,7 +336,8 @@ void FullCodeGenerator::ClearAccumulator() {
 }
 
 
-void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt) {
+void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt,
+                                       Label* back_edge_target) {
   Comment cmnt(masm_, "[ Stack check");
   Label ok;
   __ LoadRoot(ip, Heap::kStackLimitRootIndex);
@@ -706,8 +733,7 @@ void FullCodeGenerator::PrepareForBailoutBeforeSplit(Expression* expr,
 
 void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
                                         VariableMode mode,
-                                        FunctionLiteral* function,
-                                        int* global_count) {
+                                        FunctionLiteral* function) {
   // If it was not possible to allocate the variable at compile time, we
   // need to "declare" it at runtime to make sure it actually exists in the
   // local context.
@@ -716,7 +742,7 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
       (mode == CONST || mode == CONST_HARMONY || mode == LET);
   switch (variable->location()) {
     case Variable::UNALLOCATED:
-      ++(*global_count);
+      ++global_count_;
       break;
 
     case Variable::PARAMETER:
@@ -799,9 +825,6 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
     }
   }
 }
-
-
-void FullCodeGenerator::VisitDeclaration(Declaration* decl) { }
 
 
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
@@ -918,6 +941,8 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ cmp(r0, null_value);
   __ b(eq, &exit);
 
+  PrepareForBailoutForId(stmt->PrepareId(), TOS_REG);
+
   // Convert the object to a JS object.
   Label convert, done_convert;
   __ JumpIfSmi(r0, &convert);
@@ -939,48 +964,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   // the JSObject::IsSimpleEnum cache validity checks. If we cannot
   // guarantee cache validity, call the runtime system to check cache
   // validity or get the property names in a fixed array.
-  Label next;
-  // Preload a couple of values used in the loop.
-  Register  empty_fixed_array_value = r6;
-  __ LoadRoot(empty_fixed_array_value, Heap::kEmptyFixedArrayRootIndex);
-  Register empty_descriptor_array_value = r7;
-  __ LoadRoot(empty_descriptor_array_value,
-              Heap::kEmptyDescriptorArrayRootIndex);
-  __ mov(r1, r0);
-  __ bind(&next);
-
-  // Check that there are no elements.  Register r1 contains the
-  // current JS object we've reached through the prototype chain.
-  __ ldr(r2, FieldMemOperand(r1, JSObject::kElementsOffset));
-  __ cmp(r2, empty_fixed_array_value);
-  __ b(ne, &call_runtime);
-
-  // Check that instance descriptors are not empty so that we can
-  // check for an enum cache.  Leave the map in r2 for the subsequent
-  // prototype load.
-  __ ldr(r2, FieldMemOperand(r1, HeapObject::kMapOffset));
-  __ ldr(r3, FieldMemOperand(r2, Map::kInstanceDescriptorsOrBitField3Offset));
-  __ JumpIfSmi(r3, &call_runtime);
-
-  // Check that there is an enum cache in the non-empty instance
-  // descriptors (r3).  This is the case if the next enumeration
-  // index field does not contain a smi.
-  __ ldr(r3, FieldMemOperand(r3, DescriptorArray::kEnumerationIndexOffset));
-  __ JumpIfSmi(r3, &call_runtime);
-
-  // For all objects but the receiver, check that the cache is empty.
-  Label check_prototype;
-  __ cmp(r1, r0);
-  __ b(eq, &check_prototype);
-  __ ldr(r3, FieldMemOperand(r3, DescriptorArray::kEnumCacheBridgeCacheOffset));
-  __ cmp(r3, empty_fixed_array_value);
-  __ b(ne, &call_runtime);
-
-  // Load the prototype from the map and loop if non-null.
-  __ bind(&check_prototype);
-  __ ldr(r1, FieldMemOperand(r2, Map::kPrototypeOffset));
-  __ cmp(r1, null_value);
-  __ b(ne, &next);
+  __ CheckEnumCache(null_value, &call_runtime);
 
   // The enum cache is valid.  Load the map of the object being
   // iterated over and use the cache for the iteration.
@@ -1033,6 +1017,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ Push(r1, r0);  // Fixed array length (as smi) and initial index.
 
   // Generate code for doing the condition check.
+  PrepareForBailoutForId(stmt->BodyId(), NO_REGISTERS);
   __ bind(&loop);
   // Load the current count to r0, load the length to r1.
   __ Ldrd(r0, r1, MemOperand(sp, 0 * kPointerSize));
@@ -1076,7 +1061,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ mov(result_register(), r3);
   // Perform the assignment as if via '='.
   { EffectContext context(this);
-    EmitAssignment(stmt->each(), stmt->AssignmentId());
+    EmitAssignment(stmt->each());
   }
 
   // Generate code for the body of the loop.
@@ -1089,7 +1074,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ add(r0, r0, Operand(Smi::FromInt(1)));
   __ push(r0);
 
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &loop);
   __ b(&loop);
 
   // Remove the pointers stored on the stack.
@@ -1097,6 +1082,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ Drop(5);
 
   // Exit and decrement the loop depth.
+  PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
   __ bind(&exit);
   decrement_loop_depth();
 }
@@ -1507,7 +1493,9 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
                            Smi::FromInt(0)));
         __ push(r1);
         VisitForStackValue(value);
-        __ CallRuntime(Runtime::kDefineAccessor, 4);
+        __ mov(r0, Operand(Smi::FromInt(NONE)));
+        __ push(r0);
+        __ CallRuntime(Runtime::kDefineOrRedefineAccessorProperty, 5);
         break;
     }
   }
@@ -1820,7 +1808,7 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ mov(ip, Operand(scratch1, ASR, 31));
       __ cmp(ip, Operand(scratch2));
       __ b(ne, &stub_call);
-      __ tst(scratch1, Operand(scratch1));
+      __ cmp(scratch1, Operand(0));
       __ mov(right, Operand(scratch1), LeaveCC, ne);
       __ b(ne, &done);
       __ add(scratch2, right, Operand(left), SetCC);
@@ -1858,7 +1846,7 @@ void FullCodeGenerator::EmitBinaryOp(BinaryOperation* expr,
 }
 
 
-void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
+void FullCodeGenerator::EmitAssignment(Expression* expr) {
   // Invalid left-hand sides are rewritten to have a 'throw
   // ReferenceError' on the left-hand side.
   if (!expr->IsValidLeftHandSide()) {
@@ -1910,7 +1898,6 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
       break;
     }
   }
-  PrepareForBailoutForId(bailout_ast_id, TOS_REG);
   context()->Plug(r0);
 }
 
@@ -2379,9 +2366,22 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   __ mov(r0, Operand(arg_count));
   __ ldr(r1, MemOperand(sp, arg_count * kPointerSize));
 
-  Handle<Code> construct_builtin =
-      isolate()->builtins()->JSConstructCall();
-  __ Call(construct_builtin, RelocInfo::CONSTRUCT_CALL);
+  // Record call targets in unoptimized code, but not in the snapshot.
+  CallFunctionFlags flags;
+  if (!Serializer::enabled()) {
+    flags = RECORD_CALL_TARGET;
+    Handle<Object> uninitialized =
+        TypeFeedbackCells::UninitializedSentinel(isolate());
+    Handle<JSGlobalPropertyCell> cell =
+        isolate()->factory()->NewJSGlobalPropertyCell(uninitialized);
+    RecordTypeFeedbackCell(expr->id(), cell);
+    __ mov(r2, Operand(cell));
+  } else {
+    flags = NO_CALL_FUNCTION_FLAGS;
+  }
+
+  CallConstructStub stub(flags);
+  __ Call(stub.GetCode(), RelocInfo::CONSTRUCT_CALL);
   context()->Plug(r0);
 }
 

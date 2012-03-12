@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -554,6 +554,21 @@ void PolymorphicCodeCache::PolymorphicCodeCachePrint(FILE* out) {
 }
 
 
+void TypeFeedbackInfo::TypeFeedbackInfoPrint(FILE* out) {
+  HeapObject::PrintHeader(out, "TypeFeedbackInfo");
+  PrintF(out, "\n - ic_total_count: %d, ic_with_typeinfo_count: %d",
+         ic_total_count(), ic_with_typeinfo_count());
+  PrintF(out, "\n - type_feedback_cells: ");
+  type_feedback_cells()->FixedArrayPrint(out);
+}
+
+
+void AliasedArgumentsEntry::AliasedArgumentsEntryPrint(FILE* out) {
+  HeapObject::PrintHeader(out, "AliasedArgumentsEntry");
+  PrintF(out, "\n - aliased_context_slot: %d", aliased_context_slot());
+}
+
+
 void FixedArray::FixedArrayPrint(FILE* out) {
   HeapObject::PrintHeader(out, "FixedArray");
   PrintF(out, " - length: %d", length());
@@ -569,7 +584,11 @@ void FixedDoubleArray::FixedDoubleArrayPrint(FILE* out) {
   HeapObject::PrintHeader(out, "FixedDoubleArray");
   PrintF(out, " - length: %d", length());
   for (int i = 0; i < length(); i++) {
-    PrintF(out, "\n  [%d]: %g", i, get_scalar(i));
+    if (is_the_hole(i)) {
+      PrintF(out, "\n  [%d]: <the hole>", i);
+    } else {
+      PrintF(out, "\n  [%d]: %g", i, get_scalar(i));
+    }
   }
   PrintF(out, "\n");
 }

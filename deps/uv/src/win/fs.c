@@ -38,7 +38,6 @@
 #define UV_FS_FREE_ARG1          0x0004
 #define UV_FS_FREE_PTR           0x0008
 #define UV_FS_CLEANEDUP          0x0010
-#define UV_FS_LAST_ERROR_SET     0x0020
 
 
 #define UTF8_TO_UTF16(s, t)                                                 \
@@ -88,33 +87,30 @@
   uv_ref((loop));
 
 #define SET_UV_LAST_ERROR_FROM_REQ(req)                                     \
-  if (req->flags & UV_FS_LAST_ERROR_SET) {                                  \
-    uv__set_sys_error(req->loop, req->last_error);                          \
-  } else if (req->result == -1) {                                           \
-    uv__set_error(req->loop, (uv_err_code)req->errorno, req->last_error);   \
-  }
-
-#define SET_REQ_LAST_ERROR(req, error)                                      \
-  req->last_error = error;                                                  \
-  req->flags |= UV_FS_LAST_ERROR_SET;
+  uv__set_error(req->loop, req->errorno, req->sys_errno_);
 
 #define SET_REQ_RESULT(req, result_value)                                   \
   req->result = (result_value);                                             \
   if (req->result == -1) {                                                  \
-    req->last_error = _doserrno;                                            \
-    req->errorno = uv_translate_sys_error(req->last_error);                 \
+    req->sys_errno_ = _doserrno;                                            \
+    req->errorno = uv_translate_sys_error(req->sys_errno_);                 \
   }
 
-#define SET_REQ_RESULT_WIN32_ERROR(req, sys_errno)                          \
+#define SET_REQ_WIN32_ERROR(req, sys_errno)                                 \
   req->result = -1;                                                         \
-  req->errorno = uv_translate_sys_error(sys_errno);                         \
-  SET_REQ_LAST_ERROR(req, sys_errno);
+  req->sys_errno_ = (sys_errno);                                            \
+  req->errorno = uv_translate_sys_error(req->sys_errno_);
+
+#define SET_REQ_UV_ERROR(req, uv_errno, sys_errno)                          \
+  req->result = -1;                                                         \
+  req->sys_errno_ = (sys_errno);                                            \
+  req->errorno = (uv_errno);
 
 #define VERIFY_UV_FILE(file, req)                                           \
   if (file == -1) {                                                         \
     req->result = -1;                                                       \
     req->errorno = UV_EBADF;                                                \
-    req->last_error = ERROR_SUCCESS;                                        \
+    req->sys_errno_ = ERROR_SUCCESS;                                        \
     return;                                                                 \
   }
 
@@ -137,7 +133,7 @@ static void uv_fs_req_init_async(uv_loop_t* loop, uv_fs_t* req,
   req->path = path ? strdup(path) : NULL;
   req->pathw = (wchar_t*)pathw;
   req->errorno = 0;
-  req->last_error = 0;
+  req->sys_errno_ = 0;
   memset(&req->overlapped, 0, sizeof(req->overlapped));
 }
 
@@ -266,7 +262,15 @@ void fs__open(uv_fs_t* req, const wchar_t* path, int flags, int mode) {
                      attributes,
                      NULL);
   if (file == INVALID_HANDLE_VALUE) {
-    SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+    DWORD error = GetLastError();
+    if (error == ERROR_FILE_EXISTS && (flags & _O_CREAT) &&
+        !(flags & _O_EXCL)) {
+      /* Special case: when ERROR_FILE_EXISTS happens and O_CREAT was */
+      /* specified, it means the path referred to a directory. */
+      SET_REQ_UV_ERROR(req, UV_EISDIR, error);
+    } else {
+      SET_REQ_WIN32_ERROR(req, GetLastError());
+    }
     return;
   }
   result = _open_osfhandle((intptr_t)file, flags);
@@ -290,6 +294,7 @@ void fs__read(uv_fs_t* req, uv_file file, void *buf, size_t length,
   OVERLAPPED overlapped, *overlapped_ptr;
   LARGE_INTEGER offset_;
   DWORD bytes;
+  DWORD error;
 
   VERIFY_UV_FILE(file, req);
 
@@ -300,7 +305,7 @@ void fs__read(uv_fs_t* req, uv_file file, void *buf, size_t length,
   }
 
   if (length > INT_MAX) {
-    SET_REQ_ERROR(req, ERROR_INSUFFICIENT_BUFFER);
+    SET_REQ_WIN32_ERROR(req, ERROR_INSUFFICIENT_BUFFER);
     return;
   }
 
@@ -319,7 +324,12 @@ void fs__read(uv_fs_t* req, uv_file file, void *buf, size_t length,
   if (ReadFile(handle, buf, length, &bytes, overlapped_ptr)) {
     SET_REQ_RESULT(req, bytes);
   } else {
-    SET_REQ_ERROR(req, GetLastError());
+    error = GetLastError();
+    if (error == ERROR_HANDLE_EOF) {
+      SET_REQ_RESULT(req, bytes);
+    } else {
+      SET_REQ_WIN32_ERROR(req, error);
+    }
   }
 }
 
@@ -340,7 +350,7 @@ void fs__write(uv_fs_t* req, uv_file file, void *buf, size_t length,
   }
 
   if (length > INT_MAX) {
-    SET_REQ_ERROR(req, ERROR_INSUFFICIENT_BUFFER);
+    SET_REQ_WIN32_ERROR(req, ERROR_INSUFFICIENT_BUFFER);
     return;
   }
 
@@ -359,7 +369,7 @@ void fs__write(uv_fs_t* req, uv_file file, void *buf, size_t length,
   if (WriteFile(handle, buf, length, &bytes, overlapped_ptr)) {
     SET_REQ_RESULT(req, bytes);
   } else {
-    SET_REQ_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
   }
 }
 
@@ -398,7 +408,7 @@ void fs__readdir(uv_fs_t* req, const wchar_t* path, int flags) {
   if (!(GetFileAttributesW(path) & FILE_ATTRIBUTE_DIRECTORY)) {
     req->result = -1;
     req->errorno = UV_ENOTDIR;
-    req->last_error = ERROR_SUCCESS;
+    req->sys_errno_ = ERROR_SUCCESS;
     return;
   }
 
@@ -416,7 +426,7 @@ void fs__readdir(uv_fs_t* req, const wchar_t* path, int flags) {
   free(path2);
 
   if(dir == INVALID_HANDLE_VALUE) {
-    SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     return;
   }
 
@@ -460,7 +470,7 @@ void fs__readdir(uv_fs_t* req, const wchar_t* path, int flags) {
     /* Convert result to UTF8. */
     size = uv_utf16_to_utf8(buf, buf_char_len, NULL, 0);
     if (!size) {
-      SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+      SET_REQ_WIN32_ERROR(req, GetLastError());
       return;
     }
 
@@ -474,7 +484,7 @@ void fs__readdir(uv_fs_t* req, const wchar_t* path, int flags) {
       free(buf);
       free(req->ptr);
       req->ptr = NULL;
-      SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+      SET_REQ_WIN32_ERROR(req, GetLastError());
       return;
     }
     free(buf);
@@ -489,70 +499,61 @@ void fs__readdir(uv_fs_t* req, const wchar_t* path, int flags) {
 }
 
 
-void fs__stat(uv_fs_t* req, const wchar_t* path) {
-  HANDLE file;
-  WIN32_FIND_DATAW ent;
-  int result;
+static void fs__stat(uv_fs_t* req, const wchar_t* path) {
+  HANDLE handle;
+  BY_HANDLE_FILE_INFORMATION info;
 
   req->ptr = NULL;
 
-  file = FindFirstFileExW(path, FindExInfoStandard, &ent,
-    FindExSearchNameMatch, NULL, 0);
-
-  if (file == INVALID_HANDLE_VALUE) {
-    SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+  handle = CreateFileW(path,
+                       FILE_READ_ATTRIBUTES,
+                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       NULL,
+                       OPEN_EXISTING,
+                       FILE_FLAG_BACKUP_SEMANTICS,
+                       NULL);
+  if (handle == INVALID_HANDLE_VALUE) {
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     return;
   }
 
-  FindClose(file);
-
-  if (ent.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT &&
-      ent.dwReserved0 == IO_REPARSE_TAG_SYMLINK) {
-    fs__open(req, path, _O_RDONLY, 0);
-    if (req->result != -1) {
-      result = _fstati64(req->result, &req->stat);
-      _close(req->result);
-
-      if (result != -1) {
-        req->ptr = &req->stat;
-      }
-    
-      SET_REQ_RESULT(req, result);
-    }
-
+  if (!GetFileInformationByHandle(handle, &info)) {
+    SET_REQ_WIN32_ERROR(req, GetLastError());
+    CloseHandle(handle);
     return;
   }
 
-  req->stat.st_ino = 0;
-  req->stat.st_uid = 0;
-  req->stat.st_gid = 0;
-  req->stat.st_mode = 0;
-  req->stat.st_rdev = 0;
-  req->stat.st_dev = 0;
-  req->stat.st_nlink = 1;
+  memset(&req->stat, 0, sizeof req->stat);
 
-  if (ent.dwFileAttributes & FILE_ATTRIBUTE_READONLY ) {
+  /* TODO: set st_dev and st_ino? */
+
+  if (info.dwFileAttributes & FILE_ATTRIBUTE_READONLY) {
     req->stat.st_mode |= (_S_IREAD + (_S_IREAD >> 3) + (_S_IREAD >> 6));
   } else {
     req->stat.st_mode |= ((_S_IREAD|_S_IWRITE) + ((_S_IREAD|_S_IWRITE) >> 3) +
       ((_S_IREAD|_S_IWRITE) >> 6));
   }
 
-  if (ent.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+  if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
     req->stat.st_mode |= _S_IFDIR;
   } else {
     req->stat.st_mode |= _S_IFREG;
   }
 
-  uv_filetime_to_time_t(&ent.ftLastWriteTime, &(req->stat.st_mtime));
-  uv_filetime_to_time_t(&ent.ftLastAccessTime, &(req->stat.st_atime));
-  uv_filetime_to_time_t(&ent.ftCreationTime, &(req->stat.st_ctime));
+  uv_filetime_to_time_t(&info.ftLastWriteTime, &(req->stat.st_mtime));
+  uv_filetime_to_time_t(&info.ftLastAccessTime, &(req->stat.st_atime));
+  uv_filetime_to_time_t(&info.ftCreationTime, &(req->stat.st_ctime));
 
-  req->stat.st_size = ((int64_t)ent.nFileSizeHigh << 32) +
-    (int64_t)ent.nFileSizeLow;
+  req->stat.st_size = ((int64_t) info.nFileSizeHigh << 32) +
+                      (int64_t) info.nFileSizeLow;
+
+  req->stat.st_nlink = (info.nNumberOfLinks <= SHRT_MAX) ?
+                       (short) info.nNumberOfLinks : SHRT_MAX;
 
   req->ptr = &req->stat;
   req->result = 0;
+
+  CloseHandle(handle);
 }
 
 
@@ -574,7 +575,7 @@ void fs__fstat(uv_fs_t* req, uv_file file) {
 
 void fs__rename(uv_fs_t* req, const wchar_t* path, const wchar_t* new_path) {
   if (!MoveFileExW(path, new_path, MOVEFILE_REPLACE_EXISTING)) {
-    SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     return;
   }
 
@@ -589,7 +590,7 @@ void fs__fsync(uv_fs_t* req, uv_file file) {
 
   result = FlushFileBuffers((HANDLE)_get_osfhandle(file)) ? 0 : -1;
   if (result == -1) {
-    SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
   } else {
     SET_REQ_RESULT(req, result);
   }
@@ -720,7 +721,7 @@ void fs__futime(uv_fs_t* req, uv_file file, double atime, double mtime) {
 void fs__link(uv_fs_t* req, const wchar_t* path, const wchar_t* new_path) {
   int result = CreateHardLinkW(new_path, path, NULL) ? 0 : -1;
   if (result == -1) {
-    SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
   } else {
     SET_REQ_RESULT(req, result);
   }
@@ -735,13 +736,11 @@ void fs__symlink(uv_fs_t* req, const wchar_t* path, const wchar_t* new_path,
                                   path,
                                   flags & UV_FS_SYMLINK_DIR ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0) ? 0 : -1;
     if (result == -1) {
-      SET_REQ_RESULT_WIN32_ERROR(req, GetLastError());
+      SET_REQ_WIN32_ERROR(req, GetLastError());
       return;
     }
   } else {
-    req->result = -1;
-    req->errorno = UV_ENOTSUP;
-    req->last_error = ERROR_SUCCESS;
+    SET_REQ_UV_ERROR(req, UV_ENOSYS, ERROR_NOT_SUPPORTED);
     return;
   }
 
@@ -770,7 +769,7 @@ void fs__readlink(uv_fs_t* req, const wchar_t* path) {
 
   if (INVALID_HANDLE_VALUE == symlink) {
     result = -1;
-    SET_REQ_LAST_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     goto done;
   }
 
@@ -790,7 +789,7 @@ void fs__readlink(uv_fs_t* req, const wchar_t* path) {
 
   if (!rv) {
     result = -1;
-    SET_REQ_LAST_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     goto done;
   }
 
@@ -798,7 +797,7 @@ void fs__readlink(uv_fs_t* req, const wchar_t* path) {
   if (reparse_data->ReparseTag != IO_REPARSE_TAG_SYMLINK) {
     result = -1;
     /* something is seriously wrong */
-    SET_REQ_LAST_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     goto done;
   }
 
@@ -819,7 +818,7 @@ void fs__readlink(uv_fs_t* req, const wchar_t* path) {
                               0);
   if (!utf8size) {
     result = -1;
-    SET_REQ_LAST_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     goto done;
   }
 
@@ -834,7 +833,7 @@ void fs__readlink(uv_fs_t* req, const wchar_t* path) {
                               utf8size);
   if (!utf8size) {
     result = -1;
-    SET_REQ_LAST_ERROR(req, GetLastError());
+    SET_REQ_WIN32_ERROR(req, GetLastError());
     goto done;
   }
 

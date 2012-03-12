@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 
 #include <stdlib.h>
 
@@ -612,7 +612,7 @@ TEST(ObjectProperties) {
   CHECK(!obj->HasLocalProperty(*second));
 
   // check string and symbol match
-  static const char* string1 = "fisk";
+  const char* string1 = "fisk";
   Handle<String> s1 = FACTORY->NewStringFromAscii(CStrVector(string1));
   obj->SetProperty(
       *s1, Smi::FromInt(1), NONE, kNonStrictMode)->ToObjectChecked();
@@ -620,7 +620,7 @@ TEST(ObjectProperties) {
   CHECK(obj->HasLocalProperty(*s1_symbol));
 
   // check symbol and string match
-  static const char* string2 = "fugl";
+  const char* string2 = "fugl";
   Handle<String> s2_symbol = FACTORY->LookupAsciiSymbol(string2);
   obj->SetProperty(
       *s2_symbol, Smi::FromInt(1), NONE, kNonStrictMode)->ToObjectChecked();
@@ -676,7 +676,7 @@ TEST(JSArray) {
   CHECK(array->HasFastTypeElements());
 
   // array[length] = name.
-  array->SetElement(0, *name, kNonStrictMode, true)->ToObjectChecked();
+  array->SetElement(0, *name, NONE, kNonStrictMode)->ToObjectChecked();
   CHECK_EQ(Smi::FromInt(1), array->length());
   CHECK_EQ(array->GetElement(0), *name);
 
@@ -691,7 +691,7 @@ TEST(JSArray) {
   CHECK(array->HasDictionaryElements());  // Must be in slow mode.
 
   // array[length] = name.
-  array->SetElement(int_length, *name, kNonStrictMode, true)->ToObjectChecked();
+  array->SetElement(int_length, *name, NONE, kNonStrictMode)->ToObjectChecked();
   uint32_t new_int_length = 0;
   CHECK(array->length()->ToArrayIndex(&new_int_length));
   CHECK_EQ(static_cast<double>(int_length), new_int_length - 1);
@@ -718,8 +718,8 @@ TEST(JSObjectCopy) {
   obj->SetProperty(
       *second, Smi::FromInt(2), NONE, kNonStrictMode)->ToObjectChecked();
 
-  obj->SetElement(0, *first, kNonStrictMode, true)->ToObjectChecked();
-  obj->SetElement(1, *second, kNonStrictMode, true)->ToObjectChecked();
+  obj->SetElement(0, *first, NONE, kNonStrictMode)->ToObjectChecked();
+  obj->SetElement(1, *second, NONE, kNonStrictMode)->ToObjectChecked();
 
   // Make the clone.
   Handle<JSObject> clone = Copy(obj);
@@ -737,8 +737,8 @@ TEST(JSObjectCopy) {
   clone->SetProperty(
       *second, Smi::FromInt(1), NONE, kNonStrictMode)->ToObjectChecked();
 
-  clone->SetElement(0, *second, kNonStrictMode, true)->ToObjectChecked();
-  clone->SetElement(1, *first, kNonStrictMode, true)->ToObjectChecked();
+  clone->SetElement(0, *second, NONE, kNonStrictMode)->ToObjectChecked();
+  clone->SetElement(1, *first, NONE, kNonStrictMode)->ToObjectChecked();
 
   CHECK_EQ(obj->GetElement(1), clone->GetElement(0));
   CHECK_EQ(obj->GetElement(0), clone->GetElement(1));
@@ -811,7 +811,7 @@ TEST(Iteration) {
 
   // Allocate a JS array to OLD_POINTER_SPACE and NEW_SPACE
   objs[next_objs_index++] = FACTORY->NewJSArray(10);
-  objs[next_objs_index++] = FACTORY->NewJSArray(10, TENURED);
+  objs[next_objs_index++] = FACTORY->NewJSArray(10, FAST_ELEMENTS, TENURED);
 
   // Allocate a small string to OLD_DATA_SPACE and NEW_SPACE
   objs[next_objs_index++] =
@@ -820,7 +820,7 @@ TEST(Iteration) {
       FACTORY->NewStringFromAscii(CStrVector("abcdefghij"), TENURED);
 
   // Allocate a large string (for large object space).
-  int large_size = HEAP->MaxObjectSizeInPagedSpace() + 1;
+  int large_size = Page::kMaxNonCodeHeapObjectSize + 1;
   char* str = new char[large_size];
   for (int i = 0; i < large_size - 1; ++i) str[i] = 'a';
   str[large_size - 1] = '\0';
@@ -1328,35 +1328,6 @@ TEST(CollectingAllAvailableGarbageShrinksNewSpace) {
   CHECK(old_capacity == new_capacity);
 }
 
-// This just checks the contract of the IdleNotification() function,
-// and does not verify that it does reasonable work.
-TEST(IdleNotificationAdvancesIncrementalMarking) {
-  if (!FLAG_incremental_marking || !FLAG_incremental_marking_steps) return;
-  InitializeVM();
-  v8::HandleScope scope;
-  const char* source = "function binom(n, m) {"
-                       "  var C = [[1]];"
-                       "  for (var i = 1; i <= n; ++i) {"
-                       "    C[i] = [1];"
-                       "    for (var j = 1; j < i; ++j) {"
-                       "      C[i][j] = C[i-1][j-1] + C[i-1][j];"
-                       "    }"
-                       "    C[i][i] = 1;"
-                       "  }"
-                       "  return C[n][m];"
-                       "};"
-                       "binom(1000, 500)";
-  {
-    AlwaysAllocateScope aa_scope;
-    CompileRun(source);
-  }
-  intptr_t old_size = HEAP->SizeOfObjects();
-  bool no_idle_work = v8::V8::IdleNotification(900);
-  while (!v8::V8::IdleNotification(900)) ;
-  intptr_t new_size = HEAP->SizeOfObjects();
-  CHECK(no_idle_work || new_size < old_size);
-}
-
 
 static int NumberOfGlobalObjects() {
   int count = 0;
@@ -1611,7 +1582,7 @@ TEST(PrototypeTransitionClearing) {
   Handle<JSObject> prototype;
   PagedSpace* space = HEAP->old_pointer_space();
   do {
-    prototype = FACTORY->NewJSArray(32 * KB, TENURED);
+    prototype = FACTORY->NewJSArray(32 * KB, FAST_ELEMENTS, TENURED);
   } while (space->FirstPage() == space->LastPage() ||
       !space->LastPage()->Contains(prototype->address()));
 
