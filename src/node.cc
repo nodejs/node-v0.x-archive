@@ -55,7 +55,7 @@ typedef int mode_t;
 #endif
 #include <errno.h>
 #include <sys/types.h>
-#include <zlib.h>
+#include "zlib.h"
 
 #ifdef __POSIX__
 # include <pwd.h> /* getpwnam() */
