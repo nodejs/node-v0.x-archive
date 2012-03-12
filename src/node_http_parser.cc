@@ -634,6 +634,7 @@ void InitHttpParser(Handle<Object> target) {
   merge_sym = NODE_PSYMBOL("MERGE");
   msearch_sym = NODE_PSYMBOL("M-SEARCH");
   notify_sym = NODE_PSYMBOL("NOTIFY");
+  search_sym = NODE_PSYMBOL("SEARCH");
   subscribe_sym = NODE_PSYMBOL("SUBSCRIBE");
   unsubscribe_sym = NODE_PSYMBOL("UNSUBSCRIBE");;
   unknown_method_sym = NODE_PSYMBOL("UNKNOWN_METHOD");
