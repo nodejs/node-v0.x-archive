@@ -77,6 +77,7 @@ static Persistent<String> checkout_sym;
 static Persistent<String> merge_sym;
 static Persistent<String> msearch_sym;
 static Persistent<String> notify_sym;
+static Persistent<String> search_sym;
 static Persistent<String> subscribe_sym;
 static Persistent<String> unsubscribe_sym;
 static Persistent<String> unknown_method_sym;
@@ -144,6 +145,7 @@ method_to_str(unsigned short m) {
     case HTTP_MERGE:      return merge_sym;
     case HTTP_MSEARCH:    return msearch_sym;
     case HTTP_NOTIFY:     return notify_sym;
+    case HTTP_SEARCH:     return search_sym;
     case HTTP_SUBSCRIBE:  return subscribe_sym;
     case HTTP_UNSUBSCRIBE:return unsubscribe_sym;
     default:              return unknown_method_sym;
@@ -632,6 +634,7 @@ void InitHttpParser(Handle<Object> target) {
   merge_sym = NODE_PSYMBOL("MERGE");
   msearch_sym = NODE_PSYMBOL("M-SEARCH");
   notify_sym = NODE_PSYMBOL("NOTIFY");
+  search_sym = NODE_PSYMBOL("SEARCH");
   subscribe_sym = NODE_PSYMBOL("SUBSCRIBE");
   unsubscribe_sym = NODE_PSYMBOL("UNSUBSCRIBE");;
   unknown_method_sym = NODE_PSYMBOL("UNKNOWN_METHOD");
