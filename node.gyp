@@ -129,7 +129,10 @@
           'sources': [ 'src/node_crypto.cc' ],
           'conditions': [
             [ 'node_use_system_openssl=="false"', {
+              'defines': [ 'NODE_SHARED_OPENSSL=0' ],
               'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
+            }, {
+              'defines': [ 'NODE_SHARED_OPENSSL=1' ],
             }]]
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
@@ -146,11 +149,13 @@
         }],
 
         [ 'node_shared_v8=="true"', {
+          'defines': [ 'NODE_SHARED_V8=1' ],
           'sources': [
             '<(node_shared_v8_includes)/v8.h',
             '<(node_shared_v8_includes)/v8-debug.h',
           ],
         }, {
+          'defines': [ 'NODE_SHARED_V8=0' ],
           'sources': [
             'deps/v8/include/v8.h',
             'deps/v8/include/v8-debug.h',
@@ -159,7 +164,10 @@
         }],
 
         [ 'node_shared_zlib=="false"', {
+          'defines': [ 'NODE_SHARED_ZLIB=0' ],
           'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+        }, {
+          'defines': [ 'NODE_SHARED_ZLIB=1' ],
         }],
 
         [ 'OS=="win"', {

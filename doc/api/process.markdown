@@ -256,6 +256,17 @@ Will output:
       ev: '4.4',
       openssl: '1.0.0e-fips' }
 
+## proces.shared
+
+A property exposing how node's dependencies were compiled against the
+current node executable. For example, if node was compiled with `--shared-zlib`,
+then `process.shared` will look like:
+
+    { http_parser: false,
+      v8: false,
+      uv: false,
+      zlib: true,
+      openssl: false }
 
 ## process.installPrefix
 

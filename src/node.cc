@@ -2109,6 +2109,20 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 #endif
 
 
+  // process.shared
+  Local<Object> shared = Object::New();
+  process->Set(String::NewSymbol("shared"), shared);
+  // can't build node with shared http_parser
+  shared->Set(String::NewSymbol("http_parser"), Boolean::New(false));
+  shared->Set(String::NewSymbol("v8"), Boolean::New(NODE_SHARED_V8));
+  // can't build node with shared libuv
+  shared->Set(String::NewSymbol("uv"), Boolean::New(false));
+  shared->Set(String::NewSymbol("zlib"), Boolean::New(NODE_SHARED_ZLIB));
+#if HAVE_OPENSSL
+  shared->Set(String::NewSymbol("openssl"), Boolean::New(NODE_SHARED_OPENSSL));
+#endif
+
+
 
   // process.arch
   process->Set(String::NewSymbol("arch"), String::New(ARCH));
