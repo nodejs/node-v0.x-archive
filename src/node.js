@@ -37,6 +37,7 @@
     startup.globalConsole();
 
     startup.processAssert();
+    startup.processConfig();
     startup.processNextTick();
     startup.processStdio();
     startup.processKillAndExit();
@@ -176,6 +177,15 @@
       if (!x) throw new Error(msg || 'assertion error');
     };
   };
+
+  startup.processConfig = function() {
+    config = config.split('\n').slice(1).join('\n').replace(/'/g, '"');
+    process.config = JSON.parse(config, function(key, value) {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return value;
+    });
+  }
 
   startup.processNextTick = function() {
     var nextTickQueue = [];
@@ -466,6 +476,10 @@
 
   NativeModule._source = process.binding('natives');
   NativeModule._cache = {};
+
+  // used for `process.config`, but not a real module
+  var config = NativeModule._source.config;
+  delete NativeModule._source.config;
 
   NativeModule.require = function(id) {
     if (id == 'native_module') {
