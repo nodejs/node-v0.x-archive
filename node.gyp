@@ -39,6 +39,7 @@
       'lib/stream.js',
       'lib/string_decoder.js',
       'lib/sys.js',
+      'lib/this.js',
       'lib/timers.js',
       'lib/tls.js',
       'lib/tty.js',
