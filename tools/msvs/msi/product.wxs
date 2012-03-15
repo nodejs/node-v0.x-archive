@@ -11,7 +11,7 @@
            Manufacturer="Joyent, Inc"
            UpgradeCode="1d60944c-b9ce-4a71-a7c0-0384eb884baa">
 
-    <Package InstallerVersion="200" Compressed="yes" Platform="x86" />
+    <Package InstallerVersion="200" Compressed="yes" Platform="x86" InstallScope="perMachine" />
 
     <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" />
 
@@ -54,6 +54,16 @@
             <File Id="filenodepdb" KeyPath="yes" Source="$(var.sourcedir)\node.pdb" />
           </Component>
           <?endif?>
+          <Component Id="noderegistry" Guid="35379DFF-1437-4DE2-98D0-16483480DD44" >
+            <RegistryKey Root="HKMU" Key="Software" Action="none" >
+              <RegistryKey Key="Joyent" Action="create" >
+                <RegistryKey Key="node.js" Action="create">
+                  <RegistryValue Name="Path" Type="string" Value="[NodeRoot]" KeyPath="yes" />
+                  <RegistryValue Name="Version" Type="string" Value="$(var.ProductVersion)" />
+                </RegistryKey>
+              </RegistryKey>
+            </RegistryKey>
+          </Component>
         </Directory>
       </Directory>
       <Directory Id="AppDataFolder">
@@ -79,6 +89,7 @@
       <?if $(var.Configuration) = Debug ?>
       <ComponentRef Id="nodepdb"/>
       <?endif?>
+      <ComponentRef Id="noderegistry"/>
     </ComponentGroup>
 
     <Feature Id="nodejs" Title="node.js engine" Level="1" Description="evented I/O for V8 javascript">
