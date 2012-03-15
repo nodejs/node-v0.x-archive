@@ -1999,7 +1999,7 @@ class Cipher : public ObjectWrap {
 
     cipher->incomplete_base64=NULL;
 
-    if (args.Length() <= 1 || !args[0]->IsString() || !args[1]->IsString()) {
+    if (args.Length() <= 1 || !args[0]->IsString() || (!args[1]->IsString() && !Buffer::HasInstance(args[1]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key")));
     }
@@ -2012,15 +2012,22 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_buf_len];
-    ssize_t key_written = DecodeWrite(key_buf, key_buf_len, args[1], BINARY);
-    assert(key_written == key_buf_len);
+    char* key_buf;
+    if (Buffer::HasInstance(args[1])) {
+      Local<Object> buffer_key = args[1]->ToObject();
+      key_buf = Buffer::Data(buffer_key);
+      key_buf_len = Buffer::Length(buffer_key);
+    } else {
+      key_buf = new char[key_buf_len];
+      ssize_t key_written = DecodeWrite(key_buf, key_buf_len, args[1], BINARY);
+      assert(key_written == key_buf_len);
+    }
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->CipherInit(*cipherType, key_buf, key_buf_len);
 
-    delete [] key_buf;
+    if (args[1]->IsString()) delete [] key_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInit error")));

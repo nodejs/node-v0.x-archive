@@ -417,6 +417,13 @@ var ciph = cipher.update(plaintext, 'utf8', 'hex');
 // Only use binary or hex, not base64.
 ciph += cipher.final('hex');
 
+var key_buf = new Buffer('4d795365637265744b6579313233', 'hex'); //MySecretKey123
+var buf_cipher = crypto.createCipher('aes192', key_buf);
+
+var buf_ciph = buf_cipher.update(plaintext, 'utf8', 'hex') + buf_cipher.final('hex');
+
+assert.equal(ciph, buf_ciph, 'key as string and buffer');
+
 var decipher = crypto.createDecipher('aes192', 'MySecretKey123');
 var txt = decipher.update(ciph, 'hex', 'utf8');
 txt += decipher.final('utf8');
