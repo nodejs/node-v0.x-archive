@@ -2037,7 +2037,7 @@ class Cipher : public ObjectWrap {
 
     cipher->incomplete_base64=NULL;
 
-    if (args.Length() <= 2 || !args[0]->IsString() || !args[1]->IsString() || !args[2]->IsString()) {
+    if (args.Length() <= 2 || !args[0]->IsString() || (!args[1]->IsString() && !Buffer::HasInstance(args[1])) || (!args[2]->IsString() && !Buffer::HasInstance(args[2]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key, and iv as argument")));
     }
@@ -2058,20 +2058,34 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_len];
-    ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
-    assert(key_written == key_len);
+    char* key_buf;
+    if (Buffer::HasInstance(args[1])) {
+      Local<Object> buffer_key = args[1]->ToObject();
+      key_buf = Buffer::Data(buffer_key);
+      key_len = Buffer::Length(buffer_key);
+    } else {
+      key_buf = new char[key_len];
+      ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
+      assert(key_written == key_len);
+    }
 
-    char* iv_buf = new char[iv_len];
-    ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
-    assert(iv_written == iv_len);
+    char* iv_buf;
+    if (Buffer::HasInstance(args[2])) {
+      Local<Object> buffer_iv = args[2]->ToObject();
+      iv_buf = Buffer::Data(buffer_iv);
+      iv_len = Buffer::Length(buffer_iv);
+    } else {
+      iv_buf = new char[iv_len];
+      ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
+      assert(iv_written == iv_len);
+    }
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
-    delete [] key_buf;
-    delete [] iv_buf;
+    if (args[1]->IsString()) delete [] key_buf;
+    if (args[2]->IsString()) delete [] iv_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInitIv error")));
