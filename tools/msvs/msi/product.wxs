@@ -11,7 +11,7 @@
            Manufacturer="Joyent, Inc"
            UpgradeCode="1d60944c-b9ce-4a71-a7c0-0384eb884baa">
 
-    <Package InstallerVersion="200" Compressed="yes" Platform="x86" InstallScope="perMachine" />
+    <Package InstallerVersion="200" Compressed="yes" Platform="x86" />
 
     <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" />
 
@@ -31,10 +31,9 @@
           <Component Id="nodeexe" Guid="AEC0F08E-89B3-4C35-A286-8DB8598597F2">
             <File Id="filenodeexe" KeyPath="yes" Source="$(var.sourcedir)\node.exe" />
             <Environment Id="npm_env"
-                         Action="set"             
+                         Action="set" 
                          Name="PATH" 
                          Part="last" 
-                         System="yes" 
                          Value="[AppDataFolder]npm" />
             <Environment Id="node_env"
                          Action="set"             
