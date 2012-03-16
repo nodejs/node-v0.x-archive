@@ -463,7 +463,8 @@ txt += decipher.final('utf8');
 
 assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
 
-var encryption_key_buf = new Buffer('303132333435363738396162636430313233343536373839', 'hex'); //0123456789abcd0123456789
+var encryption_key_buf = //0123456789abcd0123456789
+    new Buffer('303132333435363738396162636430313233343536373839', 'hex');
 var iv_buf = new Buffer('3132333435363738', 'hex'); //12345678
 
 var cipher = crypto.createCipheriv('des-ede3-cbc', encryption_key_buf, iv_buf);
