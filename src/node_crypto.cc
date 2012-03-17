@@ -1882,6 +1882,20 @@ int local_EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx,
 }
 
 
+bool RetrieveData(const Local<Value> arg, const enum encoding enc, char** buf, ssize_t* len) {
+  if (Buffer::HasInstance(arg)) {
+    Local<Object> buffer = arg->ToObject();
+    *buf = Buffer::Data(buffer);
+    *len = Buffer::Length(buffer);
+    return false;
+  } else {
+    *buf = new char[*len];
+    ssize_t written = DecodeWrite(*buf, *len, arg, enc);
+    assert(written == *len);
+    return true;
+  }
+}
+
 class Cipher : public ObjectWrap {
  public:
   static void Initialize (v8::Handle<v8::Object> target) {
@@ -2014,21 +2028,13 @@ class Cipher : public ObjectWrap {
     }
 
     char* key_buf;
-    if (Buffer::HasInstance(args[1])) {
-      Local<Object> buffer_key = args[1]->ToObject();
-      key_buf = Buffer::Data(buffer_key);
-      key_buf_len = Buffer::Length(buffer_key);
-    } else {
-      key_buf = new char[key_buf_len];
-      ssize_t key_written = DecodeWrite(key_buf, key_buf_len, args[1], BINARY);
-      assert(key_written == key_buf_len);
-    }
+    bool key_buf_clean = RetrieveData(args[1], BINARY, &key_buf, &key_buf_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->CipherInit(*cipherType, key_buf, key_buf_len);
 
-    if (args[1]->IsString()) delete [] key_buf;
+    if (key_buf_clean) delete [] key_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInit error")));
@@ -2068,34 +2074,16 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf;
-    if (Buffer::HasInstance(args[1])) {
-      Local<Object> buffer_key = args[1]->ToObject();
-      key_buf = Buffer::Data(buffer_key);
-      key_len = Buffer::Length(buffer_key);
-    } else {
-      key_buf = new char[key_len];
-      ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
-      assert(key_written == key_len);
-    }
-
-    char* iv_buf;
-    if (Buffer::HasInstance(args[2])) {
-      Local<Object> buffer_iv = args[2]->ToObject();
-      iv_buf = Buffer::Data(buffer_iv);
-      iv_len = Buffer::Length(buffer_iv);
-    } else {
-      iv_buf = new char[iv_len];
-      ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
-      assert(iv_written == iv_len);
-    }
+    char *key_buf, *iv_buf;
+    bool key_clean = RetrieveData(args[1], BINARY, &key_buf, &key_len);
+    bool iv_clean = RetrieveData(args[2], BINARY, &iv_buf, &iv_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
-    if (args[1]->IsString()) delete [] key_buf;
-    if (args[2]->IsString()) delete [] iv_buf;
+    if (key_clean) delete [] key_buf;
+    if (iv_clean) delete [] iv_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInitIv error")));
@@ -2120,20 +2108,12 @@ class Cipher : public ObjectWrap {
     }
 
     unsigned char *out=0;
-    int out_len=0, r;
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
+    int out_len=0;
+    char* buf;
+    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
+    int r = cipher->CipherUpdate(buf, len,&out,&out_len);
 
-      r = cipher->CipherUpdate(buffer_data, buffer_length, &out, &out_len);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = cipher->CipherUpdate(buf, len,&out,&out_len);
-      delete [] buf;
-    }
+    if (buf_clean) delete [] buf;
 
     if (!r) {
       delete [] out;
@@ -2532,20 +2512,7 @@ class Decipher : public ObjectWrap {
 
     char* buf;
     // if alloc_buf then buf must be deleted later
-    bool alloc_buf = false;
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      buf = buffer_data;
-      len = buffer_length;
-    } else {
-      alloc_buf = true;
-      buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], BINARY);
-      assert(written == len);
-    }
+    bool alloc_buf = RetrieveData(args[0], BINARY, &buf, &len);
 
     char* ciphertext;
     int ciphertext_len;
@@ -2808,23 +2775,11 @@ class Hmac : public ObjectWrap {
 
     String::Utf8Value hashType(args[0]->ToString());
 
-    bool r;
+    char* buf;
+    bool buf_clean = RetrieveData(args[1], BINARY, &buf, &len);
+    bool r = hmac->HmacInit(*hashType, buf, len);
 
-    if( Buffer::HasInstance(args[1])) {
-      Local<Object> buffer_obj = args[1]->ToObject();
-      char* buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
-      assert(written == len);
-
-      r = hmac->HmacInit(*hashType, buf, len);
-
-      delete [] buf;
-    }
+    if (buf_clean) delete [] buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("hmac error")));
@@ -2847,21 +2802,11 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
+    char* buf;
+    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
+    int r = hmac->HmacUpdate(buf, len);
 
-    if( Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = hmac->HmacUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = hmac->HmacUpdate(buf, len);
-      delete [] buf;
-    }
+    if (buf_clean) delete [] buf;
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("HmacUpdate fail"));
@@ -2997,20 +2942,11 @@ class Hash : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
+    char* buf;
+    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
+    int r = hash->HashUpdate(buf, len);
 
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-      r = hash->HashUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = hash->HashUpdate(buf, len);
-      delete[] buf;
-    }
+    if (buf_clean) delete[] buf;
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("HashUpdate fail"));
@@ -3188,21 +3124,11 @@ class Sign : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
+    char* buf;
+    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
+    int r = sign->SignUpdate(buf, len);
 
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = sign->SignUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = sign->SignUpdate(buf, len);
-      delete [] buf;
-    }
+    if (buf_clean) delete [] buf;
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("SignUpdate fail"));
@@ -3440,21 +3366,11 @@ class Verify : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
+    char* buf;
+    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
+    int r = verify->VerifyUpdate(buf, len);
 
-    if(Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = verify->VerifyUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = verify->VerifyUpdate(buf, len);
-      delete [] buf;
-    }
+    if (buf_clean) delete [] buf;
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("VerifyUpdate fail"));
