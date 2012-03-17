@@ -62,8 +62,9 @@ Returned by `crypto.createHash`.
 
 ### hash.update(data, [input_encoding])
 
-Updates the hash content with the given `data`, the encoding of which is given
-in `input_encoding` and can be `'utf8'`, `'ascii'` or `'binary'`.
+Updates the hash content with the given `data`, which can be a string or a
+buffer. If `data` is a string, its encoding is given in `input_encoding`
+and can be `'utf8'`, `'ascii'` or `'binary'`.
 Defaults to `'binary'`.
 This can be called many times with new data as it is streamed.
 
@@ -110,16 +111,18 @@ Creates and returns a cipher object, with the given algorithm and password.
 `algorithm` is dependent on OpenSSL, examples are `'aes192'`, etc.
 On recent releases, `openssl list-cipher-algorithms` will display the
 available cipher algorithms.
-`password` is used to derive key and IV, which must be `'binary'` encoded
-string (See the [Buffer section](buffer.html) for more information).
+`password` is used to derive key and IV, and must be a buffer or a
+`'binary'` encoded string (See the [Buffer section](buffer.html) for
+more information).
 
 ## crypto.createCipheriv(algorithm, key, iv)
 
 Creates and returns a cipher object, with the given algorithm, key and iv.
 
-`algorithm` is the same as the `createCipher()`. `key` is a raw key used in
-algorithm. `iv` is an Initialization vector. `key` and `iv` must be `'binary'`
-encoded string (See the [Buffer section](buffer.html) for more information).
+`algorithm` is the same as the `createCipher()`. `key` is a raw
+key used in algorithm. `iv` is an Initialization vector. `key` and
+`iv` must be buffers or `'binary'` encoded strings (See the [Buffer
+section](buffer.html) for more information).
 
 ## Class: Cipher
 
@@ -129,8 +132,9 @@ Returned by `crypto.createCipher` and `crypto.createCipheriv`.
 
 ### cipher.update(data, [input_encoding], [output_encoding])
 
-Updates the cipher with `data`, the encoding of which is given in
-`input_encoding` and can be `'utf8'`, `'ascii'` or `'binary'`.
+Updates the cipher with `data`, which can be a string or a buffer. If
+`data` is a string its encoding is given in `input_encoding` and can be
+`'utf8'`, `'ascii'` or `'binary'`.
 Defaults to `'binary'`.
 
 The `output_encoding` specifies the output format of the enciphered data,
@@ -170,8 +174,9 @@ Returned by `crypto.createDecipher` and `crypto.createDecipheriv`.
 
 ### decipher.update(data, [input_encoding], [output_encoding])
 
-Updates the decipher with `data`, which is encoded in `'binary'`, `'base64'`
-or `'hex'`. Defaults to `'binary'`.
+Updates the decipher with `data`, which can be a string or a buffer. If
+`data` is a string its encoding is given in `input_encoding` and can be
+`'binary'`, `'base64'` or `'hex'`. Defaults to `'binary'`.
 
 The `output_decoding` specifies in what format to return the deciphered
 plaintext: `'binary'`, `'ascii'` or `'utf8'`. Defaults to `'binary'`.
@@ -253,7 +258,8 @@ given bit length. The generator used is `2`.
 ## crypto.createDiffieHellman(prime, [encoding])
 
 Creates a Diffie-Hellman key exchange object using the supplied prime. The
-generator used is `2`. Encoding can be `'binary'`, `'hex'`, or `'base64'`.
+generator used is `2`. `prime` can be a buffer or string encoded in
+`'binary'`, `'hex'`, or `'base64'`.
 Defaults to `'binary'`.
 
 ## Class: DiffieHellman
@@ -271,12 +277,14 @@ Defaults to `'binary'`.
 
 ### diffieHellman.computeSecret(other_public_key, [input_encoding], [output_encoding])
 
-Computes the shared secret using `other_public_key` as the other party's
-public key and returns the computed shared secret. Supplied key is
-interpreted using specified `input_encoding`, and secret is encoded using
-specified `output_encoding`. Encodings can be `'binary'`, `'hex'`, or
+Computes the shared secret using `other_public_key` as the other
+party's public key and returns the computed shared secret. Supplied
+key can be a string or a buffer. If it is a string it is interpreted
+using specified `input_encoding`. Secret is encoded using specified
+`output_encoding`. Encodings can be `'binary'`, `'hex'`, or
 `'base64'`. The input encoding defaults to `'binary'`.
-If no output encoding is given, the input encoding is used as output encoding.
+If no output encoding is given, the input encoding is used as output
+encoding.
 
 ### diffieHellman.getPrime([encoding])
 
@@ -300,13 +308,13 @@ be `'binary'`, `'hex'`, or `'base64'`. Defaults to `'binary'`.
 
 ### diffieHellman.setPublicKey(public_key, [encoding])
 
-Sets the Diffie-Hellman public key. Key encoding can be `'binary'`, `'hex'`,
-or `'base64'`. Defaults to `'binary'`.
+Sets the Diffie-Hellman public key. Key can be a buffer or a string
+encoded in `'binary'`, `'hex'`, or `'base64'`. Defaults to `'binary'`.
 
 ### diffieHellman.setPrivateKey(public_key, [encoding])
 
-Sets the Diffie-Hellman private key. Key encoding can be `'binary'`, `'hex'`,
-or `'base64'`. Defaults to `'binary'`.
+Sets the Diffie-Hellman private key. Key can be a buffer or a string
+encoded in `'binary'`, `'hex'`, or `'base64'`. Defaults to `'binary'`.
 
 ## crypto.getDiffieHellman(group_name)
 
