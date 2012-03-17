@@ -45,6 +45,11 @@ is a string representation of a IP v4 or v6 address. The `family` argument
 is either the integer 4 or 6 and denotes the family of `address` (not
 necessarily the value initially passed to `lookup`).
 
+On error, `err` is an `Error` object. Keep in mind that
+`err.errno` will be set to ENOENT not only when the domain does not exist
+but also when the lookup fails in other ways such as no available file
+descriptors.
+
 
 ## dns.resolve(domain, [rrtype], callback)
 
@@ -58,7 +63,7 @@ The callback has arguments `(err, addresses)`.  The type of each item
 in `addresses` is determined by the record type, and described in the
 documentation for the corresponding lookup methods below.
 
-On error, `err` would be an instanceof `Error` object, where `err.errno` is
+On error, `err` is an `Error` object, where `err.errno` is
 one of the error codes listed below and `err.message` is a string describing
 the error in English.
 
