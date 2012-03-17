@@ -116,13 +116,16 @@ website_files = \
 	out/doc/logos/index.html \
 	$(doc_images)
 
-doc: node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/
+doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/
 
 $(apidoc_dirs):
 	mkdir -p $@
 
 out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
+
+out/doc/%.html: doc/%.html
+	cat $< | sed -e 's|__VERSION__|'$(VERSION)'|g' > $@
 
 out/doc/%: doc/%
 	cp -r $< $@
