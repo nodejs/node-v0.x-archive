@@ -107,10 +107,11 @@ class ProcessWrap : public HandleWrap {
 
     // options.file
     Local<Value> file_v = js_options->Get(String::New("file"));
-    if (!file_v.IsEmpty() && file_v->IsString()) {
-      String::Utf8Value file(file_v->ToString());
-      options.file = strdup(*file);
-    }
+    //if (!file_v.IsEmpty() && file_v->IsString()) {
+      String::Utf8Value file(file_v->IsString() ? file_v : Local<Value>());
+      if (file.length() > 0)
+      options.file = *file;
+    //}
 
     // options.args
     Local<Value> argv_v = js_options->Get(String::New("args"));
@@ -128,12 +129,13 @@ class ProcessWrap : public HandleWrap {
 
     // options.cwd
     Local<Value> cwd_v = js_options->Get(String::New("cwd"));
-    if (!cwd_v.IsEmpty() && cwd_v->IsString()) {
-      String::Utf8Value cwd(cwd_v->ToString());
+    //if (!cwd_v.IsEmpty() && cwd_v->IsString()) {
+      String::Utf8Value cwd(cwd_v->IsString() ? cwd_v : Local<Value>());
+
       if (cwd.length() > 0) {
-        options.cwd = strdup(*cwd);
+        options.cwd = *cwd;
       }
-    }
+    //}
 
     // options.env
     Local<Value> env_v = js_options->Get(String::New("envPairs"));
@@ -190,9 +192,6 @@ class ProcessWrap : public HandleWrap {
       for (int i = 0; options.args[i]; i++) free(options.args[i]);
       delete [] options.args;
     }
-
-    free(options.cwd);
-    free((void*)options.file);
 
     if (options.env) {
       for (int i = 0; options.env[i]; i++) free(options.env[i]);

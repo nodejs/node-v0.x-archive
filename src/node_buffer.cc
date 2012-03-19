@@ -33,6 +33,7 @@
 # include <arpa/inet.h> // htons, htonl
 #endif
 
+#include <vector>
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
@@ -308,7 +309,8 @@ Handle<Value> Buffer::Base64Slice(const Arguments &args) {
 
   int n = end - start;
   int out_len = (n + 2 - ((n + 2) % 3)) / 3 * 4;
-  char *out = new char[out_len];
+  std::vector<char> os(out_len, 0);
+  char *out = &os[0];
 
   uint8_t bitbuf[3];
   int i = start; // data() index
@@ -368,7 +370,7 @@ Handle<Value> Buffer::Base64Slice(const Arguments &args) {
   }
 
   Local<String> string = String::New(out, out_len);
-  delete [] out;
+  //delete [] out;
   return scope.Close(string);
 }
 

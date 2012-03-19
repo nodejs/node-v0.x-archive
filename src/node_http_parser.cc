@@ -1,4 +1,5 @@
-// Copyright Joyent, Inc. and other Node contributors.
+
+
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
@@ -32,6 +33,7 @@
 #define strcasecmp _stricmp
 #endif
 #include <stdlib.h>  /* free() */
+#include <string>
 
 // This is a binding to http_parser (https://github.com/joyent/http-parser)
 // The goal is to decouple sockets from parsing for more javascript-level
@@ -111,7 +113,6 @@ method_to_str(unsigned short m) {
 // helper class for the Parser
 struct StringPtr {
   StringPtr() {
-    on_heap_ = false;
     Reset();
   }
 
@@ -121,6 +122,7 @@ struct StringPtr {
   }
 
 
+  /*
   // If str_ does not point to a heap string yet, this function makes it do
   // so. This is called at the end of each http_parser_execute() so as not
   // to leak references. See issue #2438 and test-http-parser-bad-ref.js.
@@ -131,52 +133,26 @@ struct StringPtr {
       str_ = s;
       on_heap_ = true;
     }
-  }
+  }*/
 
 
   void Reset() {
-    if (on_heap_) {
-      delete[] str_;
-      on_heap_ = false;
-    }
-
-    str_ = NULL;
-    size_ = 0;
+    str_.clear();
   }
 
 
-  void Update(const char* str, size_t size) {
-    if (str_ == NULL)
-      str_ = str;
-    else if (on_heap_ || str_ + size != str) {
-      // Non-consecutive input, make a copy on the heap.
-      // TODO Use slab allocation, O(n) allocs is bad.
-      char* s = new char[size_ + size];
-      memcpy(s, str_, size_);
-      memcpy(s + size_, str, size);
-
-      if (on_heap_)
-        delete[] str_;
-      else
-        on_heap_ = true;
-
-      str_ = s;
-    }
-    size_ += size;
+  inline void Update(const char* str, size_t size) {
+    str_.append(str, size);
   }
 
 
   Handle<String> ToString() const {
-    if (str_)
-      return String::New(str_, size_);
+    if (!str_.empty())
+      return String::New(&str_[0], str_.size());
     else
       return String::Empty();
   }
-
-
-  const char* str_;
-  bool on_heap_;
-  size_t size_;
+  std::string str_;
 };
 
 
@@ -359,6 +335,7 @@ public:
   }
 
 
+  /*
   void Save() {
     url_.Save();
 
@@ -369,7 +346,7 @@ public:
     for (int i = 0; i < num_values_; i++) {
       values_[i].Save();
     }
-  }
+  }*/
 
 
   // var bytesParsed = parser->execute(buffer, off, len);
@@ -418,7 +395,7 @@ public:
     size_t nparsed =
       http_parser_execute(&parser->parser_, &settings, buffer_data + off, len);
 
-    parser->Save();
+    //parser->Save();
 
     // Unassign the 'buffer_' variable
     assert(current_buffer);
