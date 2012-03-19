@@ -82,6 +82,8 @@ typedef int mode_t;
 #include "node_script.h"
 #include "v8_typed_array.h"
 
+#include <vector>
+
 using namespace v8;
 
 # ifdef __APPLE__
@@ -951,15 +953,13 @@ Handle<Value> FromConstructorTemplate(Persistent<FunctionTemplate>& t,
   HandleScope scope;
 
   const int argc = args.Length();
-  Local<Value>* argv = new Local<Value>[argc];
+  std::vector<Local<Value> > argv(argc);
 
   for (int i = 0; i < argc; ++i) {
     argv[i] = args[i];
   }
 
-  Local<Object> instance = t->GetFunction()->NewInstance(argc, argv);
-
-  delete[] argv;
+  Local<Object> instance = t->GetFunction()->NewInstance(argc, &argv[0]);
 
   return scope.Close(instance);
 }
@@ -1057,13 +1057,14 @@ Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
 
   if (encoding == BINARY) {
     const unsigned char *cbuf = static_cast<const unsigned char*>(buf);
-    uint16_t * twobytebuf = new uint16_t[len];
+    std::vector<uint16_t> bs(len, 0);
+    uint16_t * twobytebuf = &bs[0];
     for (size_t i = 0; i < len; i++) {
       // XXX is the following line platform independent?
       twobytebuf[i] = cbuf[i];
     }
     Local<String> chunk = String::New(twobytebuf, len);
-    delete [] twobytebuf; // TODO use ExternalTwoByteString?
+    //delete [] twobytebuf; // TODO use ExternalTwoByteString?
     return scope.Close(chunk);
   }
 
@@ -1136,7 +1137,9 @@ ssize_t DecodeWrite(char *buf,
 
   assert(encoding == BINARY);
 
-  uint16_t * twobytebuf = new uint16_t[buflen];
+  
+  std::vector<uint16_t> bs(buflen, 0);
+  uint16_t * twobytebuf = &bs[0];
 
   str->Write(twobytebuf, 0, buflen, String::HINT_MANY_WRITES_EXPECTED);
 
@@ -1144,8 +1147,6 @@ ssize_t DecodeWrite(char *buf,
     unsigned char *b = reinterpret_cast<unsigned char*>(&twobytebuf[i]);
     buf[i] = b[0];
   }
-
-  delete [] twobytebuf;
 
   return buflen;
 }
@@ -2156,14 +2157,14 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   }
 
   size_t size = 2*PATH_MAX;
-  char* execPath = new char[size];
+  std::vector<char> e(size, 0);
+  char* execPath = &e[0];
   if (uv_exepath(execPath, &size) != 0) {
     // as a last ditch effort, fallback on argv[0] ?
     process->Set(String::NewSymbol("execPath"), String::New(argv[0]));
   } else {
     process->Set(String::NewSymbol("execPath"), String::New(execPath, size));
   }
-  delete [] execPath;
 
   process->SetAccessor(String::New("debugPort"),
                        DebugPortGetter,

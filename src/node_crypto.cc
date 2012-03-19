@@ -44,6 +44,8 @@
 # include <pthread.h>
 #endif
 
+#include <vector>
+
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 # define OPENSSL_CONST const
 #else
@@ -1316,11 +1318,10 @@ Handle<Value> Connection::GetSession(const Arguments& args) {
   assert(slen > 0);
 
   if (slen > 0) {
-    unsigned char* sbuf = new unsigned char[slen];
-    unsigned char* p = sbuf;
+    std::vector<unsigned char> sbuf(slen, 0);
+    unsigned char* p = &sbuf[0];
     i2d_SSL_SESSION(sess, &p);
-    Local<Value> s = Encode(sbuf, slen, BINARY);
-    delete[] sbuf;
+    Local<Value> s = Encode(&sbuf[0], slen, BINARY);
     return scope.Close(s);
   }
 
@@ -1345,19 +1346,19 @@ Handle<Value> Connection::SetSession(const Arguments& args) {
     return ThrowException(exception);
   }
 
-  char* sbuf = new char[slen];
+  std::vector<char> sbuf(slen, 0);
+  //char* sbuf = new char[slen];
 
-  ssize_t wlen = DecodeWrite(sbuf, slen, args[0], BINARY);
+  ssize_t wlen = DecodeWrite(&sbuf[0], slen, args[0], BINARY);
   assert(wlen == slen);
 
-  const unsigned char* p = (unsigned char*) sbuf;
+  const unsigned char* p = (unsigned char*)&sbuf[0];
   SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, wlen);
 
-  delete [] sbuf;
+  //delete [] sbuf;
 
   if (!sess)
     return Undefined();
-
   int r = SSL_set_session(ss->ssl_, sess);
   SSL_SESSION_free(sess);
 
@@ -2012,15 +2013,14 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_buf_len];
+    std::vector<char> key_string(key_buf_len, 0);
+    char* key_buf = &key_string[0];
     ssize_t key_written = DecodeWrite(key_buf, key_buf_len, args[1], BINARY);
     assert(key_written == key_buf_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->CipherInit(*cipherType, key_buf, key_buf_len);
-
-    delete [] key_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInit error")));
@@ -2058,20 +2058,19 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_len];
+    std::vector<char> key_string(key_len, 0);
+    char* key_buf = &key_string[0];
     ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
     assert(key_written == key_len);
 
-    char* iv_buf = new char[iv_len];
+    std::vector<char> iv_string(iv_len, 0);
+    char* iv_buf = &iv_string[0];
     ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
     assert(iv_written == iv_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
-
-    delete [] key_buf;
-    delete [] iv_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInitIv error")));
@@ -2104,11 +2103,11 @@ class Cipher : public ObjectWrap {
 
       r = cipher->CipherUpdate(buffer_data, buffer_length, &out, &out_len);
     } else {
-      char* buf = new char[len];
+      std::vector<char> b(len, 0);
+      char* buf = &b[0];
       ssize_t written = DecodeWrite(buf, len, args[0], enc);
       assert(written == len);
       r = cipher->CipherUpdate(buf, len,&out,&out_len);
-      delete [] buf;
     }
 
     if (!r) {
@@ -2425,15 +2424,14 @@ class Decipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_len];
+    std::vector<char> key_string(key_len, 0);
+    char* key_buf = &key_string[0];
     ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
     assert(key_written == key_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->DecipherInit(*cipherType, key_buf,key_len);
-
-    delete [] key_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("DecipherInit error")));
@@ -2471,20 +2469,19 @@ class Decipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_len];
+    std::vector<char> key_string(key_len, 0);
+    char* key_buf = &key_string[0];
     ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
     assert(key_written == key_len);
 
-    char* iv_buf = new char[iv_len];
+    std::vector<char> iv_string(iv_len, 0);
+    char* iv_buf = &iv_string[0];
     ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
     assert(iv_written == iv_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
     bool r = cipher->DecipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
-
-    delete [] key_buf;
-    delete [] iv_buf;
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("DecipherInitIv error")));
@@ -2665,7 +2662,8 @@ class Decipher : public ObjectWrap {
       if (enc == UTF8) {
         // See if we have any overhang from last utf8 partial ending
         if (cipher->incomplete_utf8!=NULL) {
-          char* complete_out = new char[cipher->incomplete_utf8_len + out_len];
+          std::vector<char> complete_string(cipher->incomplete_utf8_len + out_len, 0);
+          char* complete_out = &complete_string[0];
           memcpy(complete_out, cipher->incomplete_utf8, cipher->incomplete_utf8_len);
           memcpy((char *)complete_out+cipher->incomplete_utf8_len, out_value, out_len);
 
@@ -2673,7 +2671,6 @@ class Decipher : public ObjectWrap {
           cipher->incomplete_utf8=NULL;
 
           outString = Encode(complete_out, cipher->incomplete_utf8_len+out_len, enc);
-          delete [] complete_out;
         } else {
           outString = Encode(out_value, out_len, enc);
         }
@@ -2793,13 +2790,12 @@ class Hmac : public ObjectWrap {
 
       r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
     } else {
-      char* buf = new char[len];
+      std::vector<char> b(len, 0);
+      char* buf = &b[0];
       ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
       assert(written == len);
 
       r = hmac->HmacInit(*hashType, buf, len);
-
-      delete [] buf;
     }
 
     if (!r) {
@@ -2832,11 +2828,11 @@ class Hmac : public ObjectWrap {
 
       r = hmac->HmacUpdate(buffer_data, buffer_length);
     } else {
-      char* buf = new char[len];
+      std::vector<char> b(len, 0);
+      char* buf = &b[0];
       ssize_t written = DecodeWrite(buf, len, args[0], enc);
       assert(written == len);
       r = hmac->HmacUpdate(buf, len);
-      delete [] buf;
     }
 
     if (!r) {
@@ -2981,11 +2977,11 @@ class Hash : public ObjectWrap {
       size_t buffer_length = Buffer::Length(buffer_obj);
       r = hash->HashUpdate(buffer_data, buffer_length);
     } else {
-      char* buf = new char[len];
+      std::vector<char> b(len, 0);
+      char* buf = &b[0];
       ssize_t written = DecodeWrite(buf, len, args[0], enc);
       assert(written == len);
       r = hash->HashUpdate(buf, len);
-      delete[] buf;
     }
 
     if (!r) {
@@ -3173,11 +3169,11 @@ class Sign : public ObjectWrap {
 
       r = sign->SignUpdate(buffer_data, buffer_length);
     } else {
-      char* buf = new char[len];
+      std::vector<char> b(len, 0);
+      char* buf = &b[0];
       ssize_t written = DecodeWrite(buf, len, args[0], enc);
       assert(written == len);
       r = sign->SignUpdate(buf, len);
-      delete [] buf;
     }
 
     if (!r) {
@@ -3200,27 +3196,25 @@ class Sign : public ObjectWrap {
     Local<Value> outString;
 
     md_len = 8192; // Maximum key size is 8192 bits
-    md_value = new unsigned char[md_len];
+    std::vector<unsigned char> md_string(md_len, 0);
+    md_value = &md_string[0];
 
     ASSERT_IS_STRING_OR_BUFFER(args[0]);
     ssize_t len = DecodeBytes(args[0], BINARY);
 
     if (len < 0) {
-      delete [] md_value;
       Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
       return ThrowException(exception);
     }
 
-    char* buf = new char[len];
+    std::vector<char> b(len, 0);
+    char* buf = &b[0];
     ssize_t written = DecodeWrite(buf, len, args[0], BINARY);
     assert(written == len);
 
     int r = sign->SignFinal(&md_value, &md_len, buf, len);
 
-    delete [] buf;
-
     if (md_len == 0 || r == 0) {
-      delete [] md_value;
       return scope.Close(String::New(""));
     }
 
@@ -3242,7 +3236,6 @@ class Sign : public ObjectWrap {
                       "can be binary, hex or base64\n");
     }
 
-    delete [] md_value;
     return scope.Close(outString);
   }
 
@@ -3425,11 +3418,11 @@ class Verify : public ObjectWrap {
 
       r = verify->VerifyUpdate(buffer_data, buffer_length);
     } else {
-      char* buf = new char[len];
+      std::vector<char> b(len, 0);
+      char* buf = &b[0];
       ssize_t written = DecodeWrite(buf, len, args[0], enc);
       assert(written == len);
       r = verify->VerifyUpdate(buf, len);
-      delete [] buf;
     }
 
     if (!r) {
@@ -3454,7 +3447,8 @@ class Verify : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* kbuf = new char[klen];
+    std::vector<char> k(klen, 0);
+    char *kbuf = &k[0];
     ssize_t kwritten = DecodeWrite(kbuf, klen, args[0], BINARY);
     assert(kwritten == klen);
 
@@ -3462,12 +3456,13 @@ class Verify : public ObjectWrap {
     ssize_t hlen = DecodeBytes(args[1], BINARY);
 
     if (hlen < 0) {
-      delete [] kbuf;
+      //delete [] kbuf;
       Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
       return ThrowException(exception);
     }
 
-    unsigned char* hbuf = new unsigned char[hlen];
+    std::vector<unsigned char> u(hlen, 0);
+    unsigned char *hbuf = &u[0];
     ssize_t hwritten = DecodeWrite((char *)hbuf, hlen, args[1], BINARY);
     assert(hwritten == hlen);
     unsigned char* dbuf;
@@ -3493,8 +3488,8 @@ class Verify : public ObjectWrap {
                       "can be binary, hex or base64\n");
     }
 
-    delete [] kbuf;
-    delete [] hbuf;
+    //delete [] kbuf;
+    //delete [] hbuf;
 
     return Boolean::New(r && r != -1);
   }
@@ -3678,7 +3673,8 @@ class DiffieHellman : public ObjectWrap {
     Local<Value> outString;
 
     int dataSize = BN_num_bytes(diffieHellman->dh->pub_key);
-    char* data = new char[dataSize];
+    std::vector<char> d(dataSize, 0);
+    char *data = &d[0];
     BN_bn2bin(diffieHellman->dh->pub_key,
         reinterpret_cast<unsigned char*>(data));
 
@@ -3687,7 +3683,6 @@ class DiffieHellman : public ObjectWrap {
     } else {
       outString = Encode(data, dataSize, BINARY);
     }
-    delete[] data;
 
     return scope.Close(outString);
   }
@@ -3703,7 +3698,8 @@ class DiffieHellman : public ObjectWrap {
     }
 
     int dataSize = BN_num_bytes(diffieHellman->dh->p);
-    char* data = new char[dataSize];
+    std::vector<char> d(dataSize, 0);
+    char* data = &d[0];
     BN_bn2bin(diffieHellman->dh->p, reinterpret_cast<unsigned char*>(data));
 
     Local<Value> outString;
@@ -3713,8 +3709,6 @@ class DiffieHellman : public ObjectWrap {
     } else {
       outString = Encode(data, dataSize, BINARY);
     }
-
-    delete[] data;
 
     return scope.Close(outString);
   }
@@ -3730,7 +3724,8 @@ class DiffieHellman : public ObjectWrap {
     }
 
     int dataSize = BN_num_bytes(diffieHellman->dh->g);
-    char* data = new char[dataSize];
+    std::vector<char> d(dataSize, 0);
+    char* data = &d[0];
     BN_bn2bin(diffieHellman->dh->g, reinterpret_cast<unsigned char*>(data));
 
     Local<Value> outString;
@@ -3740,8 +3735,6 @@ class DiffieHellman : public ObjectWrap {
     } else {
       outString = Encode(data, dataSize, BINARY);
     }
-
-    delete[] data;
 
     return scope.Close(outString);
   }
@@ -3762,7 +3755,8 @@ class DiffieHellman : public ObjectWrap {
     }
 
     int dataSize = BN_num_bytes(diffieHellman->dh->pub_key);
-    char* data = new char[dataSize];
+    std::vector<char> d(dataSize, 0);
+    char* data = &d[0];
     BN_bn2bin(diffieHellman->dh->pub_key,
         reinterpret_cast<unsigned char*>(data));
 
@@ -3773,8 +3767,6 @@ class DiffieHellman : public ObjectWrap {
     } else {
       outString = Encode(data, dataSize, BINARY);
     }
-
-    delete[] data;
 
     return scope.Close(outString);
   }
@@ -3795,7 +3787,8 @@ class DiffieHellman : public ObjectWrap {
     }
 
     int dataSize = BN_num_bytes(diffieHellman->dh->priv_key);
-    char* data = new char[dataSize];
+    std::vector<char> d(dataSize, 0);
+    char* data = &d[0];
     BN_bn2bin(diffieHellman->dh->priv_key,
         reinterpret_cast<unsigned char*>(data));
 
@@ -3806,8 +3799,6 @@ class DiffieHellman : public ObjectWrap {
     } else {
       outString = Encode(data, dataSize, BINARY);
     }
-
-    delete[] data;
 
     return scope.Close(outString);
   }
@@ -3855,7 +3846,8 @@ class DiffieHellman : public ObjectWrap {
     }
 
     int dataSize = DH_size(diffieHellman->dh);
-    char* data = new char[dataSize];
+    std::vector<char> d(dataSize, 0);
+    char* data = &d[0];
 
     int size = DH_compute_key(reinterpret_cast<unsigned char*>(data),
       key, diffieHellman->dh);
@@ -3890,7 +3882,7 @@ class DiffieHellman : public ObjectWrap {
       }
     }
 
-    delete[] data;
+    //delete[] data;
     return scope.Close(outString);
   }
 
