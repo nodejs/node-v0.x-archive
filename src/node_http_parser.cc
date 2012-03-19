@@ -148,7 +148,7 @@ struct StringPtr {
 
   Handle<String> ToString() const {
     if (!str_.empty())
-      return String::New(&str_[0], str_.size());
+      return String::New(str_.c_str(), str_.size());
     else
       return String::Empty();
   }
