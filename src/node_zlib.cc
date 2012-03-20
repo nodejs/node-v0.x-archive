@@ -393,7 +393,7 @@ class ZCtx : public ObjectWrap {
 };
 
 
-#define NODE_ZLIB_CLASS(mode, name)   \
+#define NODE_ZLIB_CLASS(name)   \
   { \
     Local<FunctionTemplate> z = FunctionTemplate::New(ZCtx::New); \
     z->InstanceTemplate()->SetInternalFieldCount(1); \
@@ -407,13 +407,13 @@ class ZCtx : public ObjectWrap {
 void InitZlib(Handle<Object> target) {
   HandleScope scope;
 
-  NODE_ZLIB_CLASS(INFLATE, "Inflate")
-  NODE_ZLIB_CLASS(DEFLATE, "Deflate")
-  NODE_ZLIB_CLASS(INFLATERAW, "InflateRaw")
-  NODE_ZLIB_CLASS(DEFLATERAW, "DeflateRaw")
-  NODE_ZLIB_CLASS(GZIP, "Gzip")
-  NODE_ZLIB_CLASS(GUNZIP, "Gunzip")
-  NODE_ZLIB_CLASS(UNZIP, "Unzip")
+  NODE_ZLIB_CLASS("Inflate")
+  NODE_ZLIB_CLASS("Deflate")
+  NODE_ZLIB_CLASS("InflateRaw")
+  NODE_ZLIB_CLASS("DeflateRaw")
+  NODE_ZLIB_CLASS("Gzip")
+  NODE_ZLIB_CLASS("Gunzip")
+  NODE_ZLIB_CLASS("Unzip")
 
   callback_sym = NODE_PSYMBOL("callback");
 
