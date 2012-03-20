@@ -100,7 +100,12 @@
       // If stdin is a TTY.
       if (NativeModule.require('tty').isatty(0)) {
         // REPL
-        var repl = Module.requireRepl().start('> ', null, null, true);
+        var repl = Module.requireRepl().start({
+          prompt: '> ',
+          enabled: !parseInt(process.env['NODE_NO_READLINE'], 10),
+          useGlobal: true,
+          ignoreUndefined: false
+        });
         repl.on('exit', function() {
           process.exit();
         });
