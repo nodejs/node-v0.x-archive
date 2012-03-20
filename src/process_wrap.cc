@@ -107,7 +107,7 @@ class ProcessWrap : public HandleWrap {
 
     // options.file
     Local<Value> file_v = js_options->Get(String::New("file"));
-    String::Utf8Value file(!file_v.IsEmpty() && file_v->IsString() ? file_v : Local<Value>());
+    String::Utf8Value file(file_v->IsString() ? file_v : Local<Value>());
     if (file.length() > 0) {
       options.file = *file;
     }
@@ -128,7 +128,7 @@ class ProcessWrap : public HandleWrap {
 
     // options.cwd
     Local<Value> cwd_v = js_options->Get(String::New("cwd"));
-    String::Utf8Value cwd(!cwd_v.IsEmpty() && cwd_v->IsString() ? cwd_v : Local<Value>());
+    String::Utf8Value cwd( cwd_v->IsString() ? cwd_v : Local<Value>());
     if (cwd.length() > 0) {
       options.cwd = *cwd;
     }
