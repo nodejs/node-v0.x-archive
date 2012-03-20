@@ -92,7 +92,7 @@ var parseTests = {
     'path': '/'
   },
   'http://x.com/path?that\'s#all, folks' : {
-    'href': 'http://x.com/path?that%27s#all,',
+    'href': 'http://x.com/path?that%27s#all, folks',
     'protocol': 'http:',
     'slashes': true,
     'host': 'x.com',
@@ -100,7 +100,7 @@ var parseTests = {
     'search': '?that%27s',
     'query': 'that%27s',
     'pathname': '/path',
-    'hash': '#all,',
+    'hash': '#all, folks',
     'path': '/path?that%27s'
   },
   'HTTP://X.COM/Y' : {
@@ -114,7 +114,7 @@ var parseTests = {
   },
   // an unexpected invalid char in the hostname.
   'HtTp://x.y.cOm*a/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*a/b/c?d=e#f',
+    'href': 'http://x.y.com/*a/b/c?d=e#f g<h>i',
     'protocol': 'http:',
     'slashes': true,
     'host': 'x.y.com',
@@ -122,12 +122,12 @@ var parseTests = {
     'pathname': '/*a/b/c',
     'search': '?d=e',
     'query': 'd=e',
-    'hash': '#f',
+    'hash': '#f g<h>i',
     'path': '/*a/b/c?d=e'
   },
   // make sure that we don't accidentally lcast the path parts.
   'HtTp://x.y.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*A/b/c?d=e#f',
+    'href': 'http://x.y.com/*A/b/c?d=e#f g<h>i',
     'protocol': 'http:',
     'slashes': true,
     'host': 'x.y.com',
@@ -135,7 +135,7 @@ var parseTests = {
     'pathname': '/*A/b/c',
     'search': '?d=e',
     'query': 'd=e',
-    'hash': '#f',
+    'hash': '#f g<h>i',
     'path': '/*A/b/c?d=e'
   },
   'http://x...y...#p': {
@@ -425,7 +425,7 @@ var parseTests = {
     'path': '/'
   },
   'http://www.Äffchen.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://www.xn--ffchen-9ta.com/*A/b/c?d=e#f',
+    'href': 'http://www.xn--ffchen-9ta.com/*A/b/c?d=e#f g<h>i',
     'protocol': 'http:',
     'slashes': true,
     'host': 'www.xn--ffchen-9ta.com',
@@ -433,7 +433,7 @@ var parseTests = {
     'pathname': '/*A/b/c',
     'search': '?d=e',
     'query': 'd=e',
-    'hash': '#f',
+    'hash': '#f g<h>i',
     'path': '/*A/b/c?d=e'
   },
   'http://SÉLIER.COM/' : {
