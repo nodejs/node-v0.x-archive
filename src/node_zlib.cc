@@ -200,24 +200,15 @@ class ZCtx : public ObjectWrap {
 
   static Handle<Value> New(const Arguments& args) {
     HandleScope scope;
-    String::AsciiValue className(args.Callee()->GetName());
-    node_zlib_mode mode;
-
-    if (!strcmp(*className, "Inflate")) {
-      mode = INFLATE;
-    } else if (!strcmp(*className, "Deflate")) {
-      mode = DEFLATE;
-    } else if (!strcmp(*className, "InflateRaw")) {
-      mode = INFLATERAW;
-    } else if (!strcmp(*className, "DeflateRaw")) {
-      mode = DEFLATERAW;
-    } else if (!strcmp(*className, "Gzip")) {
-      mode = GZIP;
-    } else if (!strcmp(*className, "Gunzip")) {
-      mode = GUNZIP;
-    } else if (!strcmp(*className, "Unzip")) {
-      mode = UNZIP;
+    if (args.Length() < 1 || !args[0]->IsInt32()) {
+      return ThrowException(Exception::TypeError(String::New("Bad argument"))); 
     }
+    node_zlib_mode mode = (node_zlib_mode) args[0]->Int32Value();
+
+    if (mode < DEFLATE || mode > UNZIP) {
+      return ThrowException(Exception::TypeError(String::New("Bad argument"))); 
+    }
+
     ZCtx *ctx = new ZCtx(mode);
     ctx->Wrap(args.This());
     return args.This();
@@ -407,13 +398,7 @@ class ZCtx : public ObjectWrap {
 void InitZlib(Handle<Object> target) {
   HandleScope scope;
 
-  NODE_ZLIB_CLASS("Inflate")
-  NODE_ZLIB_CLASS("Deflate")
-  NODE_ZLIB_CLASS("InflateRaw")
-  NODE_ZLIB_CLASS("DeflateRaw")
-  NODE_ZLIB_CLASS("Gzip")
-  NODE_ZLIB_CLASS("Gunzip")
-  NODE_ZLIB_CLASS("Unzip")
+  NODE_ZLIB_CLASS("Zlib")
 
   callback_sym = NODE_PSYMBOL("callback");
 
@@ -442,6 +427,14 @@ void InitZlib(Handle<Object> target) {
   NODE_DEFINE_CONSTANT(target, Z_FIXED);
   NODE_DEFINE_CONSTANT(target, Z_DEFAULT_STRATEGY);
   NODE_DEFINE_CONSTANT(target, ZLIB_VERNUM);
+
+  NODE_DEFINE_CONSTANT(target, DEFLATE);
+  NODE_DEFINE_CONSTANT(target, INFLATE);
+  NODE_DEFINE_CONSTANT(target, GZIP);
+  NODE_DEFINE_CONSTANT(target, GUNZIP);
+  NODE_DEFINE_CONSTANT(target, DEFLATERAW);
+  NODE_DEFINE_CONSTANT(target, INFLATERAW);
+  NODE_DEFINE_CONSTANT(target, UNZIP);
 
   target->Set(String::NewSymbol("ZLIB_VERSION"), String::New(ZLIB_VERSION));
 }
