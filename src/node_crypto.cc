@@ -1882,19 +1882,32 @@ int local_EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx,
 }
 
 
-bool RetrieveData(const Local<Value> arg, const enum encoding enc, char** buf, ssize_t* len) {
-  if (Buffer::HasInstance(arg)) {
-    Local<Object> buffer = arg->ToObject();
-    *buf = Buffer::Data(buffer);
-    *len = Buffer::Length(buffer);
-    return false;
-  } else {
-    *buf = new char[*len];
-    ssize_t written = DecodeWrite(*buf, *len, arg, enc);
-    assert(written == *len);
-    return true;
+class BinaryData {
+ public:
+  char* buf;
+  ssize_t buf_len;
+
+  BinaryData(const Local<Value> arg, const enum encoding enc, ssize_t len)
+      : buf_len(len),
+        clean(false) {
+    if (Buffer::HasInstance(arg)) {
+      Local<Object> buffer = arg->ToObject();
+      buf = Buffer::Data(buffer);
+      buf_len = Buffer::Length(buffer);
+    } else {
+      buf = new char[len];
+      ssize_t written = DecodeWrite(buf, len, arg, enc);
+      assert(written == len);
+      clean = true;
+    }
   }
-}
+
+  ~BinaryData() {
+    if (clean) delete [] buf;
+  }
+ private:
+  bool clean;
+};
 
 class Cipher : public ObjectWrap {
  public:
@@ -2027,14 +2040,11 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf;
-    bool key_buf_clean = RetrieveData(args[1], BINARY, &key_buf, &key_buf_len);
+    BinaryData key = BinaryData(args[1], BINARY, key_buf_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
-    bool r = cipher->CipherInit(*cipherType, key_buf, key_buf_len);
-
-    if (key_buf_clean) delete [] key_buf;
+    bool r = cipher->CipherInit(*cipherType, key.buf, key.buf_len);
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInit error")));
@@ -2074,16 +2084,14 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char *key_buf, *iv_buf;
-    bool key_clean = RetrieveData(args[1], BINARY, &key_buf, &key_len);
-    bool iv_clean = RetrieveData(args[2], BINARY, &iv_buf, &iv_len);
+    BinaryData key = BinaryData(args[1], BINARY, key_len);
+    BinaryData iv = BinaryData(args[2], BINARY, iv_len);
 
     String::Utf8Value cipherType(args[0]->ToString());
 
-    bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
-
-    if (key_clean) delete [] key_buf;
-    if (iv_clean) delete [] iv_buf;
+    bool r = cipher->CipherInitIv(*cipherType,
+                                  key.buf, key.buf_len,
+                                  iv.buf, iv.buf_len);
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInitIv error")));
@@ -2107,13 +2115,11 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    unsigned char *out=0;
-    int out_len=0;
-    char* buf;
-    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
-    int r = cipher->CipherUpdate(buf, len,&out,&out_len);
+    unsigned char *out = 0;
+    int out_len = 0;
+    BinaryData data = BinaryData(args[0], enc, len);
 
-    if (buf_clean) delete [] buf;
+    int r = cipher->CipherUpdate(data.buf, data.buf_len, &out, &out_len);
 
     if (!r) {
       delete [] out;
@@ -2510,9 +2516,12 @@ class Decipher : public ObjectWrap {
             "node`DecodeBytes() failed")));
     }
 
-    char* buf;
     // if alloc_buf then buf must be deleted later
-    bool alloc_buf = RetrieveData(args[0], BINARY, &buf, &len);
+    bool alloc_buf = false;
+
+    BinaryData data = BinaryData(args[0], BINARY, len);
+    char* buf = data.buf;
+    len = data.buf_len;
 
     char* ciphertext;
     int ciphertext_len;
@@ -2525,10 +2534,7 @@ class Decipher : public ObjectWrap {
         char* complete_hex = new char[len+2];
         memcpy(complete_hex, &cipher->incomplete_hex, 1);
         memcpy(complete_hex+1, buf, len);
-        if (alloc_buf) {
-          delete [] buf;
-          alloc_buf = false;
-        }
+        alloc_buf = true;
         buf = complete_hex;
         len += 1;
       }
@@ -2550,9 +2556,6 @@ class Decipher : public ObjectWrap {
 
     } else if (enc == BASE64) {
       unbase64((unsigned char*)buf, len, (char **)&ciphertext, &ciphertext_len);
-      if (alloc_buf) {
-        delete [] buf;
-      }
       buf = ciphertext;
       len = ciphertext_len;
       alloc_buf = true;
@@ -2775,11 +2778,8 @@ class Hmac : public ObjectWrap {
 
     String::Utf8Value hashType(args[0]->ToString());
 
-    char* buf;
-    bool buf_clean = RetrieveData(args[1], BINARY, &buf, &len);
-    bool r = hmac->HmacInit(*hashType, buf, len);
-
-    if (buf_clean) delete [] buf;
+    BinaryData key = BinaryData(args[1], BINARY, len);
+    bool r = hmac->HmacInit(*hashType, key.buf, key.buf_len);
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("hmac error")));
@@ -2802,11 +2802,8 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* buf;
-    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
-    int r = hmac->HmacUpdate(buf, len);
-
-    if (buf_clean) delete [] buf;
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = hmac->HmacUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("HmacUpdate fail"));
@@ -2942,11 +2939,8 @@ class Hash : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* buf;
-    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
-    int r = hash->HashUpdate(buf, len);
-
-    if (buf_clean) delete[] buf;
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = hash->HashUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("HashUpdate fail"));
@@ -3124,11 +3118,8 @@ class Sign : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* buf;
-    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
-    int r = sign->SignUpdate(buf, len);
-
-    if (buf_clean) delete [] buf;
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = sign->SignUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("SignUpdate fail"));
@@ -3366,11 +3357,8 @@ class Verify : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* buf;
-    bool buf_clean = RetrieveData(args[0], enc, &buf, &len);
-    int r = verify->VerifyUpdate(buf, len);
-
-    if (buf_clean) delete [] buf;
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = verify->VerifyUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("VerifyUpdate fail"));
