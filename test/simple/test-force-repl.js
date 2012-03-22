@@ -21,28 +21,24 @@
 
 var common = require('../common');
 var assert = require('assert');
+var spawn = require('child_process').spawn;
 
-// TODO: merge with test-typed-arrays.js some time in the future.
-// That file only exists in master right now.
-[
-  'ArrayBuffer',
-  'Int8Array',
-  'Uint8Array',
-  'Int16Array',
-  'Uint16Array',
-  'Int32Array',
-  'Uint32Array',
-  'Float32Array',
-  'Float64Array'
-].forEach(function(name) {
-  var expected = '[object ' + name + ']';
-  var clazz = global[name];
-  var obj = new clazz(1);
+// spawn a node child process in "interactive" mode (force the repl)
+var cp = spawn(process.execPath, ['-i']);
+var gotToEnd = false;
+var timeoutId = setTimeout(function() {
+  throw new Error('timeout!');
+}, 1000); // give node + the repl 1 second to boot up
 
-  assert.equal(obj.toString(), expected);
-  assert.equal(Object.prototype.toString.call(obj), expected);
+cp.stdout.setEncoding('utf8');
 
-  obj = new DataView(obj);
-  assert.equal(obj.toString(), '[object DataView]');
-  assert.equal(Object.prototype.toString.call(obj), '[object DataView]');
+cp.stdout.once('data', function(b) {
+  clearTimeout(timeoutId);
+  assert.equal(b, '> ');
+  gotToEnd = true;
+  cp.kill();
+});
+
+process.on('exit', function() {
+  assert(gotToEnd);
 });
