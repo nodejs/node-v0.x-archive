@@ -347,6 +347,12 @@ for (var i = 0, l = rfc2202_sha1.length; i < l; i++) {
                'Test HMAC-SHA1 : Test case ' + (i + 1) + ' rfc 2202');
 }
 
+var db = crypto.createHmac('md5', rfc2202_md5[0]['key'])
+    .update(rfc2202_md5[0]['data'])
+    .digest(null);
+assert.ok(Buffer.isBuffer(db));
+assert.equal(rfc2202_md5[0]['hmac'], db.toString('hex'), 'hmac digest buffer');
+
 // Test hashing
 var a0 = crypto.createHash('sha1').update('Test123').digest('hex');
 var a1 = crypto.createHash('md5').update('Test123').digest('binary');
@@ -382,6 +388,9 @@ fileStream.on('close', function() {
                '22723e553129a336ad96e10f6aecdf0f45e4149e',
                'Test SHA1 of sample.png');
 });
+var db = crypto.createHash('sha1').update(new Buffer('Test123')).digest(null);
+assert.ok(Buffer.isBuffer(db));
+assert.equal(h1, db.toString('hex'), 'hash digest buffer');
 
 // Issue #2227: unknown digest method should throw an error.
 assert.throws(function() {
@@ -426,11 +435,37 @@ buf_ciph += buf_cipher.final('hex');
 
 assert.equal(ciph, buf_ciph, 'key as string and buffer');
 
+cipher = crypto.createCipher('aes192', 'MySecretKey123');
+var ctb1 = cipher.update(plaintext, 'utf8', null);
+var ctb2 = cipher.final(null);
+
+assert.ok(Buffer.isBuffer(ctb1));
+assert.ok(Buffer.isBuffer(ctb2));
+
+var ctb = new Buffer(ctb1.length + ctb2.length);
+ctb1.copy(ctb);
+ctb2.copy(ctb, ctb1.length);
+
+assert.equal(ciph, ctb.toString('hex'), 'cipher output as buffer');
+
 var decipher = crypto.createDecipher('aes192', 'MySecretKey123');
 var txt = decipher.update(ciph, 'hex', 'utf8');
 txt += decipher.final('utf8');
 
 assert.equal(txt, plaintext, 'encryption and decryption');
+
+decipher = crypto.createDecipher('aes192', 'MySecretKey123');
+var ptb1 = decipher.update(ciph, 'hex', null);
+var ptb2 = decipher.final(null);
+
+assert.ok(Buffer.isBuffer(ptb1));
+assert.ok(Buffer.isBuffer(ptb2));
+
+var ptb = new Buffer(ptb1.length + ptb2.length);
+ptb1.copy(ptb);
+ptb2.copy(ptb, ptb1.length);
+
+assert.equal(txt, ptb.toString('utf8'), 'decipher output as buffer');
 
 // encryption and decryption with Base64
 // reported in https://github.com/joyent/node/issues/738
@@ -500,10 +535,14 @@ var privkey1 = dh1.getPrivateKey();
 dh3.setPublicKey(key1);
 dh3.setPrivateKey(privkey1);
 
-assert.equal(dh1.getPrime(), dh3.getPrime());
-assert.equal(dh1.getGenerator(), dh3.getGenerator());
-assert.equal(dh1.getPublicKey(), dh3.getPublicKey());
-assert.equal(dh1.getPrivateKey(), dh3.getPrivateKey());
+assert.equal(dh1.getPrime(null).toString('binary'), dh3.getPrime());
+assert.equal(dh1.getGenerator(), dh3.getGenerator(null).toString('binary'));
+assert.equal(dh1.getPublicKey(null).toString('base64'), dh3.getPublicKey(null).toString('base64'));
+assert.equal(dh1.getPrivateKey(null).toString('binary'), dh3.getPrivateKey());
+assert.ok(Buffer.isBuffer(dh1.getPrime(null)));
+assert.ok(Buffer.isBuffer(dh1.getGenerator(null)));
+assert.ok(Buffer.isBuffer(dh1.getPublicKey(null)));
+assert.ok(Buffer.isBuffer(dh1.getPrivateKey(null)));
 
 var secret3 = dh3.computeSecret(key2, 'hex', 'base64');
 
@@ -517,6 +556,21 @@ dh4.setPrivateKey(privkey1);
 var secret4 = dh4.computeSecret(new Buffer(key2, 'hex'), null, 'base64');
 
 assert.equal(secret1, secret4);
+
+// Test Diffie-Hellman outputing buffers
+var dh5 = crypto.createDiffieHellman(256);
+var p2 = dh5.getPrime(null);
+var dh6 = crypto.createDiffieHellman(p2, null);
+var key5 = dh5.generateKeys(null);
+var key6 = dh6.generateKeys('base64');
+var secret5 = dh5.computeSecret(key6, 'base64', null);
+var secret6 = dh6.computeSecret(key5, null, null);
+
+assert.ok(Buffer.isBuffer(key5));
+assert.ok(Buffer.isBuffer(p2));
+assert.ok(Buffer.isBuffer(secret5));
+assert.ok(Buffer.isBuffer(secret6));
+assert.equal(secret5.toString('hex'), secret6.toString('hex'));
 
 // https://github.com/joyent/node/issues/2338
 assert.throws(function() {
