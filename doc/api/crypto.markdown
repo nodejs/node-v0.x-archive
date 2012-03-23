@@ -71,7 +71,8 @@ This can be called many times with new data as it is streamed.
 ### hash.digest([encoding])
 
 Calculates the digest of all of the passed data to be hashed.
-The `encoding` can be `'hex'`, `'binary'` or `'base64'`.
+The `encoding` can be `'hex'`, `'binary'`, `'base64'` or `null` for returning
+a buffer.
 Defaults to `'binary'`.
 
 Note: `hash` object can not be used after `digest()` method been called.
@@ -98,7 +99,8 @@ This can be called many times with new data as it is streamed.
 ### hmac.digest([encoding])
 
 Calculates the digest of all of the passed data to the hmac.
-The `encoding` can be `'hex'`, `'binary'` or `'base64'`.
+The `encoding` can be `'hex'`, `'binary'`, `'base64'` or `null` for returning
+a buffer.
 Defaults to `'binary'`.
 
 Note: `hmac` object can not be used after `digest()` method been called.
@@ -137,15 +139,18 @@ Updates the cipher with `data`, which can be a string or a buffer. If
 `'utf8'`, `'ascii'` or `'binary'`.
 Defaults to `'binary'`.
 
-The `output_encoding` specifies the output format of the enciphered data,
-and can be `'binary'`, `'base64'` or `'hex'`. Defaults to `'binary'`.
+The `output_encoding` specifies the output format of the enciphered data, and
+can be `'binary'`, `'base64'`, `'hex'` or `null`. If `null`, the enciphered
+data will be returned as a buffer. Defaults to `'binary'`.
 
-Returns the enciphered contents, and can be called many times with new data as it is streamed.
+Returns the enciphered contents, and can be called many times with new data
+as it is streamed.
 
 ### cipher.final([output_encoding])
 
-Returns any remaining enciphered contents, with `output_encoding` being one of:
-`'binary'`, `'base64'` or `'hex'`. Defaults to `'binary'`.
+Returns any remaining enciphered contents, with `output_encoding` being one
+of: `'binary'`, `'base64'`, `'hex'` or `null`. If `null`, the result will
+be a buffer. Defaults to `'binary'`.
 
 Note: `cipher` object can not be used after `final()` method been called.
 
@@ -179,13 +184,14 @@ Updates the decipher with `data`, which can be a string or a buffer. If
 `'binary'`, `'base64'` or `'hex'`. Defaults to `'binary'`.
 
 The `output_decoding` specifies in what format to return the deciphered
-plaintext: `'binary'`, `'ascii'` or `'utf8'`. Defaults to `'binary'`.
+plaintext: `'binary'`, `'ascii'`, `'utf8'` or `null`. If `null`, the plaintext
+will be returned as a buffer. Defaults to `'binary'`.
 
 ### decipher.final([output_encoding])
 
-Returns any remaining plaintext which is deciphered,
-with `output_encoding` being one of: `'binary'`, `'ascii'` or `'utf8'`.
-Defaults to `'binary'`.
+Returns any remaining plaintext which is deciphered, with `output_encoding`
+being one of: `'binary'`, `'ascii'`, `'utf8'` or `null`. If `null`, the
+plaintext will be returned as a buffer.  Defaults to `'binary'`.
 
 Note: `decipher` object can not be used after `final()` method been called.
 
@@ -212,13 +218,14 @@ Returned by `crypto.createSign`.
 Updates the signer object with data.
 This can be called many times with new data as it is streamed.
 
-### signer.sign(private_key, [output_format])
+### signer.sign(private_key, [output_encoding])
 
 Calculates the signature on all the updated data passed through the signer.
 `private_key` is a string containing the PEM encoded private key for signing.
 
-Returns the signature in `output_format` which can be `'binary'`, `'hex'` or
-`'base64'`. Defaults to `'binary'`.
+Returns the signature in `output_encoding` which can be `'binary'`, `'hex'`,
+`'base64'` or `null`. If `null`, the signature will be returned as a
+buffer. Defaults to `'binary'`.
 
 Note: `signer` object can not be used after `sign()` method been called.
 
@@ -238,13 +245,13 @@ Returned by `crypto.createVerify`.
 Updates the verifier object with data.
 This can be called many times with new data as it is streamed.
 
-### verifier.verify(object, signature, [signature_format])
+### verifier.verify(object, signature, [encoding])
 
 Verifies the signed data by using the `object` and `signature`. `object` is  a
 string containing a PEM encoded object, which can be one of RSA public key,
 DSA public key, or X.509 certificate. `signature` is the previously calculated
-signature for the data, in the `signature_format` which can be `'binary'`,
-`'hex'` or `'base64'`. Defaults to `'binary'`.
+signature for the data; it can be a buffer or a string in the `encoding`
+which can be `'binary'`, `'hex'` or `'base64'`. Defaults to `'binary'`.
 
 Returns true or false depending on the validity of the signature for the data and public key.
 
@@ -272,8 +279,8 @@ Returned by `crypto.createDiffieHellman`.
 
 Generates private and public Diffie-Hellman key values, and returns the
 public key in the specified encoding. This key should be transferred to the
-other party. Encoding can be `'binary'`, `'hex'`, or `'base64'`.
-Defaults to `'binary'`.
+other party. Encoding can be `'binary'`, `'hex'`, `'base64'` or `null`. If
+`null`, the public key will be returned as a buffer.  Defaults to `'binary'`.
 
 ### diffieHellman.computeSecret(other_public_key, [input_encoding], [output_encoding])
 
@@ -281,30 +288,34 @@ Computes the shared secret using `other_public_key` as the other
 party's public key and returns the computed shared secret. Supplied
 key can be a string or a buffer. If it is a string it is interpreted
 using specified `input_encoding`. Secret is encoded using specified
-`output_encoding`. Encodings can be `'binary'`, `'hex'`, or
-`'base64'`. The input encoding defaults to `'binary'`.
+`output_encoding`. Encodings can be `'binary'`, `'hex'`, `'base64'` or `null`
+for buffers. The input encoding defaults to `'binary'`.
 If no output encoding is given, the input encoding is used as output
 encoding.
 
 ### diffieHellman.getPrime([encoding])
 
-Returns the Diffie-Hellman prime in the specified encoding, which can be
-`'binary'`, `'hex'`, or `'base64'`. Defaults to `'binary'`.
+Returns the Diffie-Hellman prime in the specified encoding, which can
+be `'binary'`, `'hex'`, `'base64'` or `null`. If `null`, a buffer is
+returned. Defaults to `'binary'`.
 
 ### diffieHellman.getGenerator([encoding])
 
-Returns the Diffie-Hellman prime in the specified encoding, which can be
-`'binary'`, `'hex'`, or `'base64'`. Defaults to `'binary'`.
+Returns the Diffie-Hellman generator in the specified encoding, which can
+be `'binary'`, `'hex'`, `'base64'` or `null`. If `null`, a buffer is
+returned. Defaults to `'binary'`.
 
 ### diffieHellman.getPublicKey([encoding])
 
 Returns the Diffie-Hellman public key in the specified encoding, which can
-be `'binary'`, `'hex'`, or `'base64'`. Defaults to `'binary'`.
+be `'binary'`, `'hex'`, `'base64'` or `null`. If `null`, a buffer is
+returned. Defaults to `'binary'`.
 
 ### diffieHellman.getPrivateKey([encoding])
 
 Returns the Diffie-Hellman private key in the specified encoding, which can
-be `'binary'`, `'hex'`, or `'base64'`. Defaults to `'binary'`.
+be `'binary'`, `'hex'`, `'base64'` or `null`. If `null`, a buffer is
+returned. Defaults to `'binary'`.
 
 ### diffieHellman.setPublicKey(public_key, [encoding])
 
