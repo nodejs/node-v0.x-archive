@@ -3156,7 +3156,7 @@ class Sign : public ObjectWrap {
     unsigned int md_len;
     char* md_hexdigest;
     int md_hex_len;
-    Local<Value> outString;
+    Handle<Value> output;
 
     md_len = 8192; // Maximum key size is 8192 bits
     md_value = new unsigned char[md_len];
@@ -3183,26 +3183,30 @@ class Sign : public ObjectWrap {
       return scope.Close(String::New(""));
     }
 
-    enum encoding enc = ParseEncoding(args[1], BINARY);
-    if (enc == HEX) {
-      // Hex encoding
-      HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BASE64) {
-      base64(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(md_value, md_len, BINARY);
+    if (args[1]->IsNull()) {
+      output = Buffer::New((char*) md_value, md_len)->handle_;
     } else {
-      outString = String::New("");
-      fprintf(stderr, "node-crypto : Sign .sign encoding "
-                      "can be binary, hex or base64\n");
+      enum encoding enc = ParseEncoding(args[1], BINARY);
+      if (enc == HEX) {
+        // Hex encoding
+        HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BASE64) {
+        base64(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BINARY) {
+        output = Encode(md_value, md_len, BINARY);
+      } else {
+        output = String::New("");
+        fprintf(stderr, "node-crypto : Sign .sign encoding "
+                        "can be binary, hex or base64\n");
+      }
     }
 
     delete [] md_value;
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   Sign () : ObjectWrap () {
@@ -3413,34 +3417,32 @@ class Verify : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    unsigned char* hbuf = new unsigned char[hlen];
-    ssize_t hwritten = DecodeWrite((char *)hbuf, hlen, args[1], BINARY);
-    assert(hwritten == hlen);
     unsigned char* dbuf;
     int dlen;
+
+    BinaryData signature = BinaryData(args[1], BINARY, hlen);
 
     int r=-1;
 
     enum encoding enc = ParseEncoding(args[2], BINARY);
     if (enc == HEX) {
       // Hex encoding
-      HexDecode(hbuf, hlen, (char **)&dbuf, &dlen);
+      HexDecode((unsigned char*) signature.buf, signature.buf_len, (char **)&dbuf, &dlen);
       r = verify->VerifyFinal(kbuf, klen, dbuf, dlen);
       delete [] dbuf;
     } else if (enc == BASE64) {
       // Base64 encoding
-      unbase64(hbuf, hlen, (char **)&dbuf, &dlen);
+      unbase64((unsigned char*) signature.buf, signature.buf_len, (char **)&dbuf, &dlen);
       r = verify->VerifyFinal(kbuf, klen, dbuf, dlen);
       delete [] dbuf;
-    } else if (enc == BINARY) {
-      r = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
+    } else if (enc == BINARY || Buffer::HasInstance(args[1])) {
+      r = verify->VerifyFinal(kbuf, klen, (unsigned char*) signature.buf, signature.buf_len);
     } else {
       fprintf(stderr, "node-crypto : Verify .verify encoding "
                       "can be binary, hex or base64\n");
     }
 
     delete [] kbuf;
-    delete [] hbuf;
 
     return Boolean::New(r && r != -1);
   }

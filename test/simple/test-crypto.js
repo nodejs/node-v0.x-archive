@@ -599,6 +599,16 @@ assert.equal(rsaSignature,
 rsaVerify.update(rsaPubPem);
 assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 
+var bufSign = crypto.createSign('RSA-SHA1');
+var bufVerify = crypto.createVerify('RSA-SHA1');
+
+bufSign.update(rsaPubPem);
+var bufSignature = bufSign.sign(rsaKeyPem, null);
+assert.ok(Buffer.isBuffer(bufSignature));
+assert.equal(rsaSignature, bufSignature.toString('hex'));
+
+bufVerify.update(rsaPubPem);
+assert.strictEqual(bufVerify.verify(rsaPubPem, bufSignature), true);
 
 //
 // Test RSA signing and verification
