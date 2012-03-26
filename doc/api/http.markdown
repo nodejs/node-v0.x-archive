@@ -290,7 +290,7 @@ Indicates that the underlaying connection was terminated before
 
 `function () { }`
 
-Indicates that the `response.end()` was called and executed properly.
+Indicates that `response.end()` was called and executed properly.
 
 ### response.writeContinue()
 
