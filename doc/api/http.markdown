@@ -286,6 +286,12 @@ interface. This is an `EventEmitter` with the following events:
 Indicates that the underlaying connection was terminated before
 `response.end()` was called or able to flush.
 
+### Event: 'finish'
+
+`function () { }`
+
+Indicates that the `response.end()` was called and executed properly.
+
 ### response.writeContinue()
 
 Sends a HTTP/1.1 100 Continue message to the client, indicating that
