@@ -456,8 +456,7 @@ class TypedArray {
 
 class Int8Array : public TypedArray<1, v8::kExternalByteArray> { };
 class Uint8Array : public TypedArray<1, v8::kExternalUnsignedByteArray> { };
-class Uint8ClampedArray : public TypedArray<1,
-v8::kExternalPixelArray> { };
+class Uint8ClampedArray : public TypedArray<1, v8::kExternalPixelArray> { };
 class Int16Array : public TypedArray<2, v8::kExternalShortArray> { };
 class Uint16Array : public TypedArray<2, v8::kExternalUnsignedShortArray> { };
 class Int32Array : public TypedArray<4, v8::kExternalIntArray> { };
