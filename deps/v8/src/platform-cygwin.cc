@@ -1,4 +1,4 @@
-// Copyright 2006-2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -61,7 +61,7 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-void OS::Setup() {
+void OS::SetUp() {
   // Seed the random number generator.
   // Convert the current time to a 64-bit integer first, before converting it
   // to an unsigned. Going directly can cause an overflow and the seed to be
@@ -114,7 +114,7 @@ double OS::LocalTimeOffset() {
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -290,7 +290,7 @@ void OS::LogSharedLibraryAddresses() {
       }
       LOG(isolate, SharedLibraryEvent(lib_name, start, end));
     } else {
-      // Entry not describing executable data. Skip to end of line to setup
+      // Entry not describing executable data. Skip to end of line to set up
       // reading the next entry.
       do {
         c = getc(fp);
@@ -355,6 +355,17 @@ bool VirtualMemory::Uncommit(void* address, size_t size) {
 }
 
 
+bool VirtualMemory::Guard(void* address) {
+  if (NULL == VirtualAlloc(address,
+                           OS::CommitPageSize(),
+                           MEM_COMMIT,
+                           PAGE_READONLY | PAGE_GUARD)) {
+    return false;
+  }
+  return true;
+}
+
+
 class Thread::PlatformData : public Malloced {
  public:
   PlatformData() : thread_(kNoThread) {}
@@ -365,16 +376,9 @@ class Thread::PlatformData : public Malloced {
 
 
 Thread::Thread(const Options& options)
-    : data_(new PlatformData),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData),
-      stack_size_(0) {
-  set_name(name);
+    : data_(new PlatformData()),
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -617,12 +621,14 @@ class Sampler::PlatformData : public Malloced {
 
 class SamplerThread : public Thread {
  public:
+  static const int kSamplerThreadStackSize = 64 * KB;
+
   explicit SamplerThread(int interval)
-      : Thread("SamplerThread"),
+      : Thread(Thread::Options("SamplerThread", kSamplerThreadStackSize)),
         interval_(interval) {}
 
   static void AddActiveSampler(Sampler* sampler) {
-    ScopedLock lock(mutex_);
+    ScopedLock lock(mutex_.Pointer());
     SamplerRegistry::AddActiveSampler(sampler);
     if (instance_ == NULL) {
       instance_ = new SamplerThread(sampler->interval());
@@ -633,7 +639,7 @@ class SamplerThread : public Thread {
   }
 
   static void RemoveActiveSampler(Sampler* sampler) {
-    ScopedLock lock(mutex_);
+    ScopedLock lock(mutex_.Pointer());
     SamplerRegistry::RemoveActiveSampler(sampler);
     if (SamplerRegistry::GetState() == SamplerRegistry::HAS_NO_SAMPLERS) {
       RuntimeProfiler::StopRuntimeProfilerThreadBeforeShutdown(instance_);
@@ -719,14 +725,15 @@ class SamplerThread : public Thread {
   RuntimeProfilerRateLimiter rate_limiter_;
 
   // Protects the process wide state below.
-  static Mutex* mutex_;
+  static LazyMutex mutex_;
   static SamplerThread* instance_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SamplerThread);
 };
 
 
-Mutex* SamplerThread::mutex_ = OS::CreateMutex();
+LazyMutex SamplerThread::mutex_ = LAZY_MUTEX_INITIALIZER;
 SamplerThread* SamplerThread::instance_ = NULL;
 
 

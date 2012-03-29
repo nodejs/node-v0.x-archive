@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,6 +27,14 @@
 
 #include <stdlib.h>
 
+#ifdef __linux__
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#endif
+
 #include "v8.h"
 
 #include "global-handles.h"
@@ -44,21 +52,21 @@ static void InitializeVM() {
 }
 
 
-TEST(MarkingStack) {
+TEST(MarkingDeque) {
   int mem_size = 20 * kPointerSize;
   byte* mem = NewArray<byte>(20*kPointerSize);
   Address low = reinterpret_cast<Address>(mem);
   Address high = low + mem_size;
-  MarkingStack s;
+  MarkingDeque s;
   s.Initialize(low, high);
 
   Address address = NULL;
-  while (!s.is_full()) {
-    s.Push(HeapObject::FromAddress(address));
+  while (!s.IsFull()) {
+    s.PushBlack(HeapObject::FromAddress(address));
     address += kPointerSize;
   }
 
-  while (!s.is_empty()) {
+  while (!s.IsEmpty()) {
     Address value = s.Pop()->address();
     address -= kPointerSize;
     CHECK_EQ(address, value);
@@ -78,7 +86,7 @@ TEST(Promotion) {
   // from new space.
   FLAG_gc_global = true;
   FLAG_always_compact = true;
-  HEAP->ConfigureHeap(2*256*KB, 4*MB, 4*MB);
+  HEAP->ConfigureHeap(2*256*KB, 8*MB, 8*MB);
 
   InitializeVM();
 
@@ -86,7 +94,7 @@ TEST(Promotion) {
 
   // Allocate a fixed array in the new space.
   int array_size =
-      (HEAP->MaxObjectSizeInPagedSpace() - FixedArray::kHeaderSize) /
+      (Page::kMaxNonCodeHeapObjectSize - FixedArray::kHeaderSize) /
       (kPointerSize * 4);
   Object* obj = HEAP->AllocateFixedArray(array_size)->ToObjectChecked();
 
@@ -104,7 +112,7 @@ TEST(Promotion) {
 
 
 TEST(NoPromotion) {
-  HEAP->ConfigureHeap(2*256*KB, 4*MB, 4*MB);
+  HEAP->ConfigureHeap(2*256*KB, 8*MB, 8*MB);
 
   // Test the situation that some objects in new space are promoted to
   // the old space
@@ -116,9 +124,12 @@ TEST(NoPromotion) {
   HEAP->CollectGarbage(OLD_POINTER_SPACE);
 
   // Allocate a big Fixed array in the new space.
-  int size = (HEAP->MaxObjectSizeInPagedSpace() - FixedArray::kHeaderSize) /
-      kPointerSize;
-  Object* obj = HEAP->AllocateFixedArray(size)->ToObjectChecked();
+  int max_size =
+      Min(Page::kMaxNonCodeHeapObjectSize, HEAP->MaxObjectSizeInNewSpace());
+
+  int length = (max_size - FixedArray::kHeaderSize) / (2*kPointerSize);
+  Object* obj = i::Isolate::Current()->heap()->AllocateFixedArray(length)->
+      ToObjectChecked();
 
   Handle<FixedArray> array(FixedArray::cast(obj));
 
@@ -139,9 +150,6 @@ TEST(NoPromotion) {
 
   // Call mark compact GC, and it should pass.
   HEAP->CollectGarbage(OLD_POINTER_SPACE);
-
-  // array should not be promoted because the old space is full.
-  CHECK(HEAP->InSpace(*array, NEW_SPACE));
 }
 
 
@@ -228,6 +236,8 @@ TEST(MarkCompactCollector) {
 }
 
 
+// TODO(1600): compaction of map space is temporary removed from GC.
+#if 0
 static Handle<Map> CreateMap() {
   return FACTORY->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
 }
@@ -252,11 +262,11 @@ TEST(MapCompact) {
   // be able to trigger map compaction.
   // To give an additional chance to fail, try to force compaction which
   // should be impossible right now.
-  HEAP->CollectAllGarbage(true);
+  HEAP->CollectAllGarbage(Heap::kForceCompactionMask);
   // And now map pointers should be encodable again.
   CHECK(HEAP->map_space()->MapPointersEncodable());
 }
-
+#endif
 
 static int gc_starts = 0;
 static int gc_ends = 0;
@@ -442,3 +452,100 @@ TEST(EmptyObjectGroups) {
   global_handles->AddImplicitReferences(
         Handle<HeapObject>::cast(object).location(), NULL, 0);
 }
+
+
+// Here is a memory use test that uses /proc, and is therefore Linux-only.  We
+// do not care how much memory the simulator uses, since it is only there for
+// debugging purposes.
+#if defined(__linux__) && !defined(USE_SIMULATOR)
+
+
+static uintptr_t ReadLong(char* buffer, intptr_t* position, int base) {
+  char* end_address = buffer + *position;
+  uintptr_t result = strtoul(buffer + *position, &end_address, base);
+  CHECK(result != ULONG_MAX || errno != ERANGE);
+  CHECK(end_address > buffer + *position);
+  *position = end_address - buffer;
+  return result;
+}
+
+
+static intptr_t MemoryInUse() {
+  intptr_t memory_use = 0;
+
+  int fd = open("/proc/self/maps", O_RDONLY);
+  if (fd < 0) return -1;
+
+  const int kBufSize = 10000;
+  char buffer[kBufSize];
+  int length = read(fd, buffer, kBufSize);
+  intptr_t line_start = 0;
+  CHECK_LT(length, kBufSize);  // Make the buffer bigger.
+  CHECK_GT(length, 0);  // We have to find some data in the file.
+  while (line_start < length) {
+    if (buffer[line_start] == '\n') {
+      line_start++;
+      continue;
+    }
+    intptr_t position = line_start;
+    uintptr_t start = ReadLong(buffer, &position, 16);
+    CHECK_EQ(buffer[position++], '-');
+    uintptr_t end = ReadLong(buffer, &position, 16);
+    CHECK_EQ(buffer[position++], ' ');
+    CHECK(buffer[position] == '-' || buffer[position] == 'r');
+    bool read_permission = (buffer[position++] == 'r');
+    CHECK(buffer[position] == '-' || buffer[position] == 'w');
+    bool write_permission = (buffer[position++] == 'w');
+    CHECK(buffer[position] == '-' || buffer[position] == 'x');
+    bool execute_permission = (buffer[position++] == 'x');
+    CHECK(buffer[position] == '-' || buffer[position] == 'p');
+    bool private_mapping = (buffer[position++] == 'p');
+    CHECK_EQ(buffer[position++], ' ');
+    uintptr_t offset = ReadLong(buffer, &position, 16);
+    USE(offset);
+    CHECK_EQ(buffer[position++], ' ');
+    uintptr_t major = ReadLong(buffer, &position, 16);
+    USE(major);
+    CHECK_EQ(buffer[position++], ':');
+    uintptr_t minor = ReadLong(buffer, &position, 16);
+    USE(minor);
+    CHECK_EQ(buffer[position++], ' ');
+    uintptr_t inode = ReadLong(buffer, &position, 10);
+    while (position < length && buffer[position] != '\n') position++;
+    if ((read_permission || write_permission || execute_permission) &&
+        private_mapping && inode == 0) {
+      memory_use += (end - start);
+    }
+
+    line_start = position;
+  }
+  close(fd);
+  return memory_use;
+}
+
+
+TEST(BootUpMemoryUse) {
+  intptr_t initial_memory = MemoryInUse();
+  FLAG_crankshaft = false;  // Avoid flakiness.
+  // Only Linux has the proc filesystem and only if it is mapped.  If it's not
+  // there we just skip the test.
+  if (initial_memory >= 0) {
+    InitializeVM();
+    intptr_t booted_memory = MemoryInUse();
+    if (sizeof(initial_memory) == 8) {
+      if (v8::internal::Snapshot::IsEnabled()) {
+        CHECK_LE(booted_memory - initial_memory, 6686 * 1024);  // 6476.
+      } else {
+        CHECK_LE(booted_memory - initial_memory, 6809 * 1024);  // 6628.
+      }
+    } else {
+      if (v8::internal::Snapshot::IsEnabled()) {
+        CHECK_LE(booted_memory - initial_memory, 6532 * 1024);  // 6388.
+      } else {
+        CHECK_LE(booted_memory - initial_memory, 6940 * 1024);  // 6456
+      }
+    }
+  }
+}
+
+#endif  // __linux__ and !USE_SIMULATOR

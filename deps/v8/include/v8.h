@@ -1021,6 +1021,14 @@ class String : public Primitive {
   V8EXPORT int Utf8Length() const;
 
   /**
+   * A fast conservative check for non-ASCII characters.  May
+   * return true even for ASCII strings, but if it returns
+   * false you can be sure that all characters are in the range
+   * 0-127.
+   */
+  V8EXPORT bool MayContainNonAscii() const;
+
+  /**
    * Write the contents of the string to an external buffer.
    * If no arguments are given, expects the buffer to be large
    * enough to hold the entire string and NULL terminator. Copies
@@ -1171,7 +1179,8 @@ class String : public Primitive {
    * Get the ExternalAsciiStringResource for an external ASCII string.
    * Returns NULL if IsExternalAscii() doesn't return true.
    */
-  V8EXPORT ExternalAsciiStringResource* GetExternalAsciiStringResource() const;
+  V8EXPORT const ExternalAsciiStringResource* GetExternalAsciiStringResource()
+      const;
 
   static inline String* Cast(v8::Value* obj);
 
@@ -1197,7 +1206,7 @@ class String : public Primitive {
    * passed in as parameters.
    */
   V8EXPORT static Local<String> Concat(Handle<String> left,
-                                       Handle<String>right);
+                                       Handle<String> right);
 
   /**
    * Creates a new external string using the data defined in the given
@@ -1731,13 +1740,28 @@ class Function : public Object {
   V8EXPORT Handle<Value> GetName() const;
 
   /**
+   * Name inferred from variable or property assignment of this function.
+   * Used to facilitate debugging and profiling of JavaScript code written
+   * in an OO style, where many functions are anonymous but are assigned
+   * to object properties.
+   */
+  V8EXPORT Handle<Value> GetInferredName() const;
+
+  /**
    * Returns zero based line number of function body and
    * kLineOffsetNotFound if no information available.
    */
   V8EXPORT int GetScriptLineNumber() const;
+  /**
+   * Returns zero based column number of function body and
+   * kLineOffsetNotFound if no information available.
+   */
+  V8EXPORT int GetScriptColumnNumber() const;
+  V8EXPORT Handle<Value> GetScriptId() const;
   V8EXPORT ScriptOrigin GetScriptOrigin() const;
   static inline Function* Cast(Value* obj);
   V8EXPORT static const int kLineOffsetNotFound;
+
  private:
   V8EXPORT Function();
   V8EXPORT static void CheckCast(Value* obj);
@@ -2451,24 +2475,42 @@ class V8EXPORT TypeSwitch : public Data {
 
 // --- Extensions ---
 
+class V8EXPORT ExternalAsciiStringResourceImpl
+    : public String::ExternalAsciiStringResource {
+ public:
+  ExternalAsciiStringResourceImpl() : data_(0), length_(0) {}
+  ExternalAsciiStringResourceImpl(const char* data, size_t length)
+      : data_(data), length_(length) {}
+  const char* data() const { return data_; }
+  size_t length() const { return length_; }
+
+ private:
+  const char* data_;
+  size_t length_;
+};
 
 /**
  * Ignore
  */
 class V8EXPORT Extension {  // NOLINT
  public:
+  // Note that the strings passed into this constructor must live as long
+  // as the Extension itself.
   Extension(const char* name,
             const char* source = 0,
             int dep_count = 0,
-            const char** deps = 0);
+            const char** deps = 0,
+            int source_length = -1);
   virtual ~Extension() { }
   virtual v8::Handle<v8::FunctionTemplate>
       GetNativeFunction(v8::Handle<v8::String> name) {
     return v8::Handle<v8::FunctionTemplate>();
   }
 
-  const char* name() { return name_; }
-  const char* source() { return source_; }
+  const char* name() const { return name_; }
+  size_t source_length() const { return source_length_; }
+  const String::ExternalAsciiStringResource* source() const {
+    return &source_; }
   int dependency_count() { return dep_count_; }
   const char** dependencies() { return deps_; }
   void set_auto_enable(bool value) { auto_enable_ = value; }
@@ -2476,7 +2518,8 @@ class V8EXPORT Extension {  // NOLINT
 
  private:
   const char* name_;
-  const char* source_;
+  size_t source_length_;  // expected to initialize before source_
+  ExternalAsciiStringResourceImpl source_;
   int dep_count_;
   const char** deps_;
   bool auto_enable_;
@@ -2608,6 +2651,9 @@ typedef void (*MemoryAllocationCallback)(ObjectSpace space,
                                          AllocationAction action,
                                          int size);
 
+// --- Leave Script Callback ---
+typedef void (*CallCompletedCallback)();
+
 // --- Failed Access Check Callback ---
 typedef void (*FailedAccessCheckCallback)(Local<Object> target,
                                           AccessType type,
@@ -2687,7 +2733,7 @@ class RetainedObjectInfo;
  * default isolate is implicitly created and entered.  The embedder
  * can create additional isolates and use them in parallel in multiple
  * threads.  An isolate can be entered by at most one thread at any
- * given time.  The Locker/Unlocker API can be used to synchronize.
+ * given time.  The Locker/Unlocker API must be used to synchronize.
  */
 class V8EXPORT Isolate {
  public:
@@ -2817,6 +2863,31 @@ class V8EXPORT StartupDataDecompressor {  // NOLINT
  * of entropy.
  */
 typedef bool (*EntropySource)(unsigned char* buffer, size_t length);
+
+
+/**
+ * ReturnAddressLocationResolver is used as a callback function when v8 is
+ * resolving the location of a return address on the stack. Profilers that
+ * change the return address on the stack can use this to resolve the stack
+ * location to whereever the profiler stashed the original return address.
+ * When invoked, return_addr_location will point to a location on stack where
+ * a machine return address resides, this function should return either the
+ * same pointer, or a pointer to the profiler's copy of the original return
+ * address.
+ */
+typedef uintptr_t (*ReturnAddressLocationResolver)(
+    uintptr_t return_addr_location);
+
+
+/**
+ * Interface for iterating though all external resources in the heap.
+ */
+class V8EXPORT ExternalResourceVisitor {  // NOLINT
+ public:
+  virtual ~ExternalResourceVisitor() {}
+  virtual void VisitExternalString(Handle<String> string) {}
+};
+
 
 /**
  * Container class for static utility functions.
@@ -3006,10 +3077,23 @@ class V8EXPORT V8 {
                                           AllocationAction action);
 
   /**
-   * This function removes callback which was installed by
-   * AddMemoryAllocationCallback function.
+   * Removes callback that was installed by AddMemoryAllocationCallback.
    */
   static void RemoveMemoryAllocationCallback(MemoryAllocationCallback callback);
+
+  /**
+   * Adds a callback to notify the host application when a script finished
+   * running.  If a script re-enters the runtime during executing, the
+   * CallCompletedCallback is only invoked when the outer-most script
+   * execution ends.  Executing scripts inside the callback do not trigger
+   * further callbacks.
+   */
+  static void AddCallCompletedCallback(CallCompletedCallback callback);
+
+  /**
+   * Removes callback that was installed by AddCallCompletedCallback.
+   */
+  static void RemoveCallCompletedCallback(CallCompletedCallback callback);
 
   /**
    * Allows the host application to group objects together. If one
@@ -3047,6 +3131,13 @@ class V8EXPORT V8 {
    * as a source of entropy for random number generators.
    */
   static void SetEntropySource(EntropySource source);
+
+  /**
+   * Allows the host application to provide a callback that allows v8 to
+   * cooperate with a profiler that rewrites return addresses on stack.
+   */
+  static void SetReturnAddressLocationResolver(
+      ReturnAddressLocationResolver return_address_resolver);
 
   /**
    * Adjusts the amount of registered external memory.  Used to give
@@ -3161,14 +3252,25 @@ class V8EXPORT V8 {
   static void GetHeapStatistics(HeapStatistics* heap_statistics);
 
   /**
+   * Iterates through all external resources referenced from current isolate
+   * heap. This method is not expected to be used except for debugging purposes
+   * and may be quite slow.
+   */
+  static void VisitExternalResources(ExternalResourceVisitor* visitor);
+
+  /**
    * Optional notification that the embedder is idle.
    * V8 uses the notification to reduce memory footprint.
    * This call can be used repeatedly if the embedder remains idle.
    * Returns true if the embedder should stop calling IdleNotification
    * until real work has been done.  This indicates that V8 has done
    * as much cleanup as it will be able to do.
+   *
+   * The hint argument specifies the amount of work to be done in the function
+   * on scale from 1 to 1000. There is no guarantee that the actual work will
+   * match the hint.
    */
-  static bool IdleNotification();
+  static bool IdleNotification(int hint = 1000);
 
   /**
    * Optional notification that the system is running low on memory.
@@ -3466,6 +3568,12 @@ class V8EXPORT Context {
   void AllowCodeGenerationFromStrings(bool allow);
 
   /**
+   * Returns true if code generation from strings is allowed for the context.
+   * For more details see AllowCodeGenerationFromStrings(bool) documentation.
+   */
+  bool IsCodeGenerationFromStringsAllowed();
+
+  /**
    * Stack-allocated class which sets the execution context for all
    * operations executed within a local scope.
    */
@@ -3494,13 +3602,15 @@ class V8EXPORT Context {
  * accessing handles or holding onto object pointers obtained
  * from V8 handles while in the particular V8 isolate.  It is up
  * to the user of V8 to ensure (perhaps with locking) that this
- * constraint is not violated.
+ * constraint is not violated.  In addition to any other synchronization
+ * mechanism that may be used, the v8::Locker and v8::Unlocker classes
+ * must be used to signal thead switches to V8.
  *
  * v8::Locker is a scoped lock object. While it's
  * active (i.e. between its construction and destruction) the current thread is
- * allowed to use the locked isolate. V8 guarantees that an isolate can be locked
- * by at most one thread at any time. In other words, the scope of a v8::Locker is
- * a critical section.
+ * allowed to use the locked isolate. V8 guarantees that an isolate can be
+ * locked by at most one thread at any time. In other words, the scope of a
+ * v8::Locker is a critical section.
  *
  * Sample usage:
 * \code
@@ -3602,8 +3712,8 @@ class V8EXPORT Locker {
   static void StopPreemption();
 
   /**
-   * Returns whether or not the locker for a given isolate, or default isolate if NULL is given,
-   * is locked by the current thread.
+   * Returns whether or not the locker for a given isolate, or default isolate
+   * if NULL is given, is locked by the current thread.
    */
   static bool IsLocked(Isolate* isolate = NULL);
 
@@ -3677,8 +3787,8 @@ class V8EXPORT ActivityControl {  // NOLINT
 
 namespace internal {
 
-static const int kApiPointerSize = sizeof(void*);  // NOLINT
-static const int kApiIntSize = sizeof(int);  // NOLINT
+const int kApiPointerSize = sizeof(void*);  // NOLINT
+const int kApiIntSize = sizeof(int);  // NOLINT
 
 // Tag information for HeapObject.
 const int kHeapObjectTag = 1;
@@ -3769,7 +3879,7 @@ class Internals {
   static const int kFullStringRepresentationMask = 0x07;
   static const int kExternalTwoByteRepresentationTag = 0x02;
 
-  static const int kJSObjectType = 0xa3;
+  static const int kJSObjectType = 0xaa;
   static const int kFirstNonstringType = 0x80;
   static const int kForeignType = 0x85;
 

@@ -25,10 +25,19 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Flags: --allow-natives-syntax
 // See http://code.google.com/p/v8/issues/detail?id=397
 
-assertEquals("Infinity", String(Math.pow(Infinity, 0.5)));
-assertEquals(0, Math.pow(Infinity, -0.5));
 
-assertEquals("Infinity", String(Math.pow(-Infinity, 0.5)));
-assertEquals(0, Math.pow(-Infinity, -0.5));
+function test() {
+  assertEquals("Infinity", String(Math.pow(Infinity, 0.5)));
+  assertEquals(0, Math.pow(Infinity, -0.5));
+
+  assertEquals("Infinity", String(Math.pow(-Infinity, 0.5)));
+  assertEquals(0, Math.pow(-Infinity, -0.5));
+}
+
+test();
+test();
+%OptimizeFunctionOnNextCall(test);
+test();

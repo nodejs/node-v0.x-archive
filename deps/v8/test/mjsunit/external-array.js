@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -42,6 +42,50 @@ f(a);
 
 assertEquals(0, a[0]);
 assertEquals(0, a[1]);
+
+// No-parameter constructor should fail right now.
+function abfunc1() {
+  return new ArrayBuffer();
+}
+assertThrows(abfunc1);
+
+// Test derivation from an ArrayBuffer
+var ab = new ArrayBuffer(12);
+var derived_uint8 = new Uint8Array(ab);
+assertEquals(12, derived_uint8.length);
+var derived_uint32 = new Uint32Array(ab);
+assertEquals(3, derived_uint32.length);
+var derived_uint32_2 = new Uint32Array(ab,4);
+assertEquals(2, derived_uint32_2.length);
+var derived_uint32_3 = new Uint32Array(ab,4,1);
+assertEquals(1, derived_uint32_3.length);
+
+// If a given byteOffset and length references an area beyond the end of the
+// ArrayBuffer an exception is raised.
+function abfunc3() {
+  new Uint32Array(ab,4,3);
+}
+assertThrows(abfunc3);
+function abfunc4() {
+  new Uint32Array(ab,16);
+}
+assertThrows(abfunc4);
+
+// The given byteOffset must be a multiple of the element size of the specific
+// type, otherwise an exception is raised.
+function abfunc5() {
+  new Uint32Array(ab,5);
+}
+assertThrows(abfunc5);
+
+// If length is not explicitly specified, the length of the ArrayBuffer minus
+// the byteOffset must be a multiple of the element size of the specific type,
+// or an exception is raised.
+var ab2 = new ArrayBuffer(13);
+function abfunc6() {
+  new Uint32Array(ab2,4);
+}
+assertThrows(abfunc6);
 
 // Test the correct behavior of the |BYTES_PER_ELEMENT| property (which is
 // "constant", but not read-only).
@@ -273,3 +317,37 @@ for (var t = 0; t < types.length; t++) {
   %DeoptimizeFunction(array_load_set_smi_check2);
   gc();  // Makes V8 forget about type information for array_load_set_smi_check.
 }
+
+// Check handling of undefined in 32- and 64-bit external float arrays.
+
+function store_float32_undefined(ext_array) {
+  ext_array[0] = undefined;
+}
+
+var float32_array = new Float32Array(1);
+// Make sure runtime does it right
+store_float32_undefined(float32_array);
+assertTrue(isNaN(float32_array[0]));
+// Make sure the ICs do it right
+store_float32_undefined(float32_array);
+assertTrue(isNaN(float32_array[0]));
+// Make sure that Cranskshft does it right.
+%OptimizeFunctionOnNextCall(store_float32_undefined);
+store_float32_undefined(float32_array);
+assertTrue(isNaN(float32_array[0]));
+
+function store_float64_undefined(ext_array) {
+  ext_array[0] = undefined;
+}
+
+var float64_array = new Float64Array(1);
+// Make sure runtime does it right
+store_float64_undefined(float64_array);
+assertTrue(isNaN(float64_array[0]));
+// Make sure the ICs do it right
+store_float64_undefined(float64_array);
+assertTrue(isNaN(float64_array[0]));
+// Make sure that Cranskshft does it right.
+%OptimizeFunctionOnNextCall(store_float64_undefined);
+store_float64_undefined(float64_array);
+assertTrue(isNaN(float64_array[0]));

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -75,7 +75,7 @@ extern "C" {
 namespace v8 {
 namespace internal {
 
-// 0 is never a valid thread id on MacOSX since a ptread_t is
+// 0 is never a valid thread id on MacOSX since a pthread_t is
 // a pointer.
 static const pthread_t kNoThread = (pthread_t) 0;
 
@@ -93,13 +93,9 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-void OS::Setup() {
-  // Seed the random number generator.
-  // Convert the current time to a 64-bit integer first, before converting it
-  // to an unsigned. Going directly will cause an overflow and the seed to be
-  // set to all ones. The seed will be identical for different instances that
-  // call this setup code within the same millisecond.
-  uint64_t seed = static_cast<uint64_t>(TimeCurrentMillis());
+void OS::SetUp() {
+  // Seed the random number generator. We preserve microsecond resolution.
+  uint64_t seed = Ticks() ^ (getpid() << 16);
   srandom(static_cast<unsigned int>(seed));
   limit_mutex = CreateMutex();
 }
@@ -107,7 +103,7 @@ void OS::Setup() {
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -148,9 +144,12 @@ void* OS::Allocate(const size_t requested,
                    bool is_executable) {
   const size_t msize = RoundUp(requested, getpagesize());
   int prot = PROT_READ | PROT_WRITE | (is_executable ? PROT_EXEC : 0);
-  void* mbase = mmap(NULL, msize, prot,
+  void* mbase = mmap(OS::GetRandomMmapAddr(),
+                     msize,
+                     prot,
                      MAP_PRIVATE | MAP_ANON,
-                     kMmapFd, kMmapFdOffset);
+                     kMmapFd,
+                     kMmapFdOffset);
   if (mbase == MAP_FAILED) {
     LOG(Isolate::Current(), StringEvent("OS::Allocate", "mmap failed"));
     return NULL;
@@ -207,7 +206,12 @@ OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name) {
   int size = ftell(file);
 
   void* memory =
-      mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+      mmap(OS::GetRandomMmapAddr(),
+           size,
+           PROT_READ | PROT_WRITE,
+           MAP_SHARED,
+           fileno(file),
+           0);
   return new PosixMemoryMappedFile(file, memory, size);
 }
 
@@ -222,13 +226,18 @@ OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name, int size,
     return NULL;
   }
   void* memory =
-      mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+      mmap(OS::GetRandomMmapAddr(),
+          size,
+          PROT_READ | PROT_WRITE,
+          MAP_SHARED,
+          fileno(file),
+          0);
   return new PosixMemoryMappedFile(file, memory, size);
 }
 
 
 PosixMemoryMappedFile::~PosixMemoryMappedFile() {
-  if (memory_) munmap(memory_, size_);
+  if (memory_) OS::Free(memory_, size_);
   fclose(file_);
 }
 
@@ -334,33 +343,108 @@ int OS::StackWalk(Vector<StackFrame> frames) {
 }
 
 
+VirtualMemory::VirtualMemory() : address_(NULL), size_(0) { }
 
 
-VirtualMemory::VirtualMemory(size_t size) {
-  address_ = mmap(NULL, size, PROT_NONE,
-                  MAP_PRIVATE | MAP_ANON | MAP_NORESERVE,
-                  kMmapFd, kMmapFdOffset);
-  size_ = size;
+VirtualMemory::VirtualMemory(size_t size)
+    : address_(ReserveRegion(size)), size_(size) { }
+
+
+VirtualMemory::VirtualMemory(size_t size, size_t alignment)
+    : address_(NULL), size_(0) {
+  ASSERT(IsAligned(alignment, static_cast<intptr_t>(OS::AllocateAlignment())));
+  size_t request_size = RoundUp(size + alignment,
+                                static_cast<intptr_t>(OS::AllocateAlignment()));
+  void* reservation = mmap(OS::GetRandomMmapAddr(),
+                           request_size,
+                           PROT_NONE,
+                           MAP_PRIVATE | MAP_ANON | MAP_NORESERVE,
+                           kMmapFd,
+                           kMmapFdOffset);
+  if (reservation == MAP_FAILED) return;
+
+  Address base = static_cast<Address>(reservation);
+  Address aligned_base = RoundUp(base, alignment);
+  ASSERT_LE(base, aligned_base);
+
+  // Unmap extra memory reserved before and after the desired block.
+  if (aligned_base != base) {
+    size_t prefix_size = static_cast<size_t>(aligned_base - base);
+    OS::Free(base, prefix_size);
+    request_size -= prefix_size;
+  }
+
+  size_t aligned_size = RoundUp(size, OS::AllocateAlignment());
+  ASSERT_LE(aligned_size, request_size);
+
+  if (aligned_size != request_size) {
+    size_t suffix_size = request_size - aligned_size;
+    OS::Free(aligned_base + aligned_size, suffix_size);
+    request_size -= suffix_size;
+  }
+
+  ASSERT(aligned_size == request_size);
+
+  address_ = static_cast<void*>(aligned_base);
+  size_ = aligned_size;
 }
 
 
 VirtualMemory::~VirtualMemory() {
   if (IsReserved()) {
-    if (0 == munmap(address(), size())) address_ = MAP_FAILED;
+    bool result = ReleaseRegion(address(), size());
+    ASSERT(result);
+    USE(result);
   }
 }
 
 
+void VirtualMemory::Reset() {
+  address_ = NULL;
+  size_ = 0;
+}
+
+
+void* VirtualMemory::ReserveRegion(size_t size) {
+  void* result = mmap(OS::GetRandomMmapAddr(),
+                      size,
+                      PROT_NONE,
+                      MAP_PRIVATE | MAP_ANON | MAP_NORESERVE,
+                      kMmapFd,
+                      kMmapFdOffset);
+
+  if (result == MAP_FAILED) return NULL;
+
+  return result;
+}
+
+
 bool VirtualMemory::IsReserved() {
-  return address_ != MAP_FAILED;
+  return address_ != NULL;
 }
 
 
 bool VirtualMemory::Commit(void* address, size_t size, bool is_executable) {
+  return CommitRegion(address, size, is_executable);
+}
+
+
+bool VirtualMemory::Guard(void* address) {
+  OS::Guard(address, OS::CommitPageSize());
+  return true;
+}
+
+
+bool VirtualMemory::CommitRegion(void* address,
+                                 size_t size,
+                                 bool is_executable) {
   int prot = PROT_READ | PROT_WRITE | (is_executable ? PROT_EXEC : 0);
-  if (MAP_FAILED == mmap(address, size, prot,
+  if (MAP_FAILED == mmap(address,
+                         size,
+                         prot,
                          MAP_PRIVATE | MAP_ANON | MAP_FIXED,
-                         kMmapFd, kMmapFdOffset)) {
+                         kMmapFd,
+                         kMmapFdOffset)) {
     return false;
   }
 
@@ -370,9 +454,22 @@ bool VirtualMemory::Commit(void* address, size_t size, bool is_executable) {
 
 
 bool VirtualMemory::Uncommit(void* address, size_t size) {
-  return mmap(address, size, PROT_NONE,
+  return UncommitRegion(address, size);
+}
+
+
+bool VirtualMemory::UncommitRegion(void* address, size_t size) {
+  return mmap(address,
+              size,
+              PROT_NONE,
               MAP_PRIVATE | MAP_ANON | MAP_NORESERVE | MAP_FIXED,
-              kMmapFd, kMmapFdOffset) != MAP_FAILED;
+              kMmapFd,
+              kMmapFdOffset) != MAP_FAILED;
+}
+
+
+bool VirtualMemory::ReleaseRegion(void* address, size_t size) {
+  return munmap(address, size) == 0;
 }
 
 
@@ -382,17 +479,11 @@ class Thread::PlatformData : public Malloced {
   pthread_t thread_;  // Thread handle for pthread.
 };
 
+
 Thread::Thread(const Options& options)
     : data_(new PlatformData),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -645,14 +736,17 @@ class Sampler::PlatformData : public Malloced {
   thread_act_t profiled_thread_;
 };
 
+
 class SamplerThread : public Thread {
  public:
+  static const int kSamplerThreadStackSize = 64 * KB;
+
   explicit SamplerThread(int interval)
-      : Thread("SamplerThread"),
+      : Thread(Thread::Options("SamplerThread", kSamplerThreadStackSize)),
         interval_(interval) {}
 
   static void AddActiveSampler(Sampler* sampler) {
-    ScopedLock lock(mutex_);
+    ScopedLock lock(mutex_.Pointer());
     SamplerRegistry::AddActiveSampler(sampler);
     if (instance_ == NULL) {
       instance_ = new SamplerThread(sampler->interval());
@@ -663,7 +757,7 @@ class SamplerThread : public Thread {
   }
 
   static void RemoveActiveSampler(Sampler* sampler) {
-    ScopedLock lock(mutex_);
+    ScopedLock lock(mutex_.Pointer());
     SamplerRegistry::RemoveActiveSampler(sampler);
     if (SamplerRegistry::GetState() == SamplerRegistry::HAS_NO_SAMPLERS) {
       RuntimeProfiler::StopRuntimeProfilerThreadBeforeShutdown(instance_);
@@ -760,16 +854,17 @@ class SamplerThread : public Thread {
   RuntimeProfilerRateLimiter rate_limiter_;
 
   // Protects the process wide state below.
-  static Mutex* mutex_;
+  static LazyMutex mutex_;
   static SamplerThread* instance_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SamplerThread);
 };
 
 #undef REGISTER_FIELD
 
 
-Mutex* SamplerThread::mutex_ = OS::CreateMutex();
+LazyMutex SamplerThread::mutex_ = LAZY_MUTEX_INITIALIZER;
 SamplerThread* SamplerThread::instance_ = NULL;
 
 

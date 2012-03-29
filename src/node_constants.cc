@@ -19,9 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_constants.h>
+#include "node_constants.h"
 
-#include <uv.h>
+#include "uv.h"
 
 #include <errno.h>
 #if !defined(_MSC_VER)
@@ -31,10 +31,6 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#if defined(__MINGW32__) || defined(_MSC_VER)
-# include <platform_win32.h>
-#endif
 
 #if HAVE_OPENSSL
 # include <openssl/ssl.h>

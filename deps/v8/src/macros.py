@@ -26,7 +26,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Dictionary that is passed as defines for js2c.py.
-# Used for defines that must be defined for all native js files.
+# Used for defines that must be defined for all native JS files.
 
 const NONE        = 0;
 const READ_ONLY   = 1;
@@ -82,8 +82,6 @@ const kMinYear  = -1000000;
 const kMaxYear  = 1000000;
 const kMinMonth = -10000000;
 const kMaxMonth = 10000000;
-const kMinDate  = -100000000;
-const kMaxDate  = 100000000;
 
 # Native cache ids.
 const STRING_TO_REGEXP_CACHE_ID = 0;
@@ -103,6 +101,9 @@ macro IS_OBJECT(arg)            = (%_IsObject(arg));
 macro IS_ARRAY(arg)             = (%_IsArray(arg));
 macro IS_FUNCTION(arg)          = (%_IsFunction(arg));
 macro IS_REGEXP(arg)            = (%_IsRegExp(arg));
+macro IS_SET(arg)               = (%_ClassOf(arg) === 'Set');
+macro IS_MAP(arg)               = (%_ClassOf(arg) === 'Map');
+macro IS_WEAKMAP(arg)           = (%_ClassOf(arg) === 'WeakMap');
 macro IS_DATE(arg)              = (%_ClassOf(arg) === 'Date');
 macro IS_NUMBER_WRAPPER(arg)    = (%_ClassOf(arg) === 'Number');
 macro IS_STRING_WRAPPER(arg)    = (%_ClassOf(arg) === 'String');
@@ -127,6 +128,11 @@ macro IS_SPEC_OBJECT(arg)   = (%_IsSpecObject(arg));
 # proxy. That ignores host objects with [[Call]] methods, but in most situations
 # we cannot handle those anyway.
 macro IS_SPEC_FUNCTION(arg) = (%_ClassOf(arg) === 'Function');
+
+# Indices in bound function info retrieved by %BoundFunctionGetBindings(...).
+const kBoundFunctionIndex = 0;
+const kBoundThisIndex = 1;
+const kBoundArgumentsStartIndex = 2;
 
 # Inline macros. Use %IS_VAR to make sure arg is evaluated only once.
 macro NUMBER_IS_NAN(arg) = (!%_IsSmi(%IS_VAR(arg)) && !(arg == arg));
@@ -158,16 +164,36 @@ const MAX_TIME_BEFORE_UTC = 8640002592000000;
 
 # Gets the value of a Date object. If arg is not a Date object
 # a type error is thrown.
-macro DATE_VALUE(arg) = (%_ClassOf(arg) === 'Date' ? %_ValueOf(arg) : ThrowDateTypeError());
-macro DAY(time) = ($floor(time / 86400000));
-macro NAN_OR_DATE_FROM_TIME(time) = (NUMBER_IS_NAN(time) ? time : DateFromTime(time));
-macro HOUR_FROM_TIME(time) = (Modulo($floor(time / 3600000), 24));
-macro MIN_FROM_TIME(time) = (Modulo($floor(time / 60000), 60));
-macro NAN_OR_MIN_FROM_TIME(time) = (NUMBER_IS_NAN(time) ? time : MIN_FROM_TIME(time));
-macro SEC_FROM_TIME(time) = (Modulo($floor(time / 1000), 60));
-macro NAN_OR_SEC_FROM_TIME(time) = (NUMBER_IS_NAN(time) ? time : SEC_FROM_TIME(time));
-macro MS_FROM_TIME(time) = (Modulo(time, 1000));
-macro NAN_OR_MS_FROM_TIME(time) = (NUMBER_IS_NAN(time) ? time : MS_FROM_TIME(time));
+macro CHECK_DATE(arg) = if (%_ClassOf(arg) !== 'Date') ThrowDateTypeError();
+macro LOCAL_DATE_VALUE(arg) = (%_DateField(arg, 0) + %_DateField(arg, 21));
+macro UTC_DATE_VALUE(arg)    = (%_DateField(arg, 0));
+
+macro LOCAL_YEAR(arg)        = (%_DateField(arg, 1));
+macro LOCAL_MONTH(arg)       = (%_DateField(arg, 2));
+macro LOCAL_DAY(arg)         = (%_DateField(arg, 3));
+macro LOCAL_WEEKDAY(arg)     = (%_DateField(arg, 4));
+macro LOCAL_HOUR(arg)        = (%_DateField(arg, 5));
+macro LOCAL_MIN(arg)         = (%_DateField(arg, 6));
+macro LOCAL_SEC(arg)         = (%_DateField(arg, 7));
+macro LOCAL_MS(arg)          = (%_DateField(arg, 8));
+macro LOCAL_DAYS(arg)        = (%_DateField(arg, 9));
+macro LOCAL_TIME_IN_DAY(arg) = (%_DateField(arg, 10));
+
+macro UTC_YEAR(arg)        = (%_DateField(arg, 11));
+macro UTC_MONTH(arg)       = (%_DateField(arg, 12));
+macro UTC_DAY(arg)         = (%_DateField(arg, 13));
+macro UTC_WEEKDAY(arg)     = (%_DateField(arg, 14));
+macro UTC_HOUR(arg)        = (%_DateField(arg, 15));
+macro UTC_MIN(arg)         = (%_DateField(arg, 16));
+macro UTC_SEC(arg)         = (%_DateField(arg, 17));
+macro UTC_MS(arg)          = (%_DateField(arg, 18));
+macro UTC_DAYS(arg)        = (%_DateField(arg, 19));
+macro UTC_TIME_IN_DAY(arg) = (%_DateField(arg, 20));
+
+macro TIMEZONE_OFFSET(arg)   = (%_DateField(arg, 21));
+
+macro SET_UTC_DATE_VALUE(arg, value) = (%DateSetValue(arg, value, 1));
+macro SET_LOCAL_DATE_VALUE(arg, value) = (%DateSetValue(arg, value, 0));
 
 # Last input and last subject of regexp matches.
 macro LAST_SUBJECT(array) = ((array)[1]);

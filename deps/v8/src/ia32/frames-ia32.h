@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -34,37 +34,37 @@ namespace internal {
 
 // Register lists
 // Note that the bit values must match those used in actual instruction encoding
-static const int kNumRegs = 8;
+const int kNumRegs = 8;
 
 
 // Caller-saved registers
-static const RegList kJSCallerSaved =
+const RegList kJSCallerSaved =
   1 << 0 |  // eax
   1 << 1 |  // ecx
   1 << 2 |  // edx
   1 << 3 |  // ebx - used as a caller-saved register in JavaScript code
   1 << 7;   // edi - callee function
 
-static const int kNumJSCallerSaved = 5;
+const int kNumJSCallerSaved = 5;
 
 typedef Object* JSCallerSavedBuffer[kNumJSCallerSaved];
 
 
 // Number of registers for which space is reserved in safepoints.
-static const int kNumSafepointRegisters = 8;
+const int kNumSafepointRegisters = 8;
 
 // ----------------------------------------------------
 
 
 class StackHandlerConstants : public AllStatic {
  public:
-  static const int kNextOffset    = 0 * kPointerSize;
-  static const int kContextOffset = 1 * kPointerSize;
-  static const int kFPOffset      = 2 * kPointerSize;
-  static const int kStateOffset   = 3 * kPointerSize;
-  static const int kPCOffset      = 4 * kPointerSize;
+  static const int kNextOffset     = 0 * kPointerSize;
+  static const int kCodeOffset     = 1 * kPointerSize;
+  static const int kStateOffset    = 2 * kPointerSize;
+  static const int kContextOffset  = 3 * kPointerSize;
+  static const int kFPOffset       = 4 * kPointerSize;
 
-  static const int kSize = kPCOffset + kPointerSize;
+  static const int kSize = kFPOffset + kPointerSize;
 };
 
 
@@ -95,9 +95,11 @@ class ExitFrameConstants : public AllStatic {
 
 class StandardFrameConstants : public AllStatic {
  public:
+  // Fixed part of the frame consists of return address, caller fp,
+  // context and function.
   // StandardFrame::IterateExpressions assumes that kContextOffset is the last
   // object pointer.
-  static const int kFixedFrameSize    =  4;  // Currently unused.
+  static const int kFixedFrameSize    =  4 * kPointerSize;
   static const int kExpressionsOffset = -3 * kPointerSize;
   static const int kMarkerOffset      = -2 * kPointerSize;
   static const int kContextOffset     = -1 * kPointerSize;
@@ -123,6 +125,8 @@ class JavaScriptFrameConstants : public AllStatic {
 class ArgumentsAdaptorFrameConstants : public AllStatic {
  public:
   static const int kLengthOffset = StandardFrameConstants::kExpressionsOffset;
+  static const int kFrameSize =
+      StandardFrameConstants::kFixedFrameSize + kPointerSize;
 };
 
 

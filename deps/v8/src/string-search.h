@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -242,9 +242,9 @@ int StringSearch<PatternChar, SubjectChar>::SingleCharSearch(
 
 
 template <typename PatternChar, typename SubjectChar>
-static inline bool CharCompare(const PatternChar* pattern,
-                               const SubjectChar* subject,
-                               int length) {
+inline bool CharCompare(const PatternChar* pattern,
+                        const SubjectChar* subject,
+                        int length) {
   ASSERT(length > 0);
   int pos = 0;
   do {
@@ -368,6 +368,10 @@ void StringSearch<PatternChar, SubjectChar>::PopulateBoyerMooreTable() {
   }
   shift_table[pattern_length] = 1;
   suffix_table[pattern_length] = pattern_length + 1;
+
+  if (pattern_length <= start) {
+    return;
+  }
 
   // Find suffixes.
   PatternChar last_char = pattern[pattern_length - 1];
@@ -555,10 +559,10 @@ int StringSearch<PatternChar, SubjectChar>::InitialSearch(
 // object should be constructed once and the Search function then called
 // for each search.
 template <typename SubjectChar, typename PatternChar>
-static int SearchString(Isolate* isolate,
-                        Vector<const SubjectChar> subject,
-                        Vector<const PatternChar> pattern,
-                        int start_index) {
+int SearchString(Isolate* isolate,
+                 Vector<const SubjectChar> subject,
+                 Vector<const PatternChar> pattern,
+                 int start_index) {
   StringSearch<PatternChar, SubjectChar> search(isolate, pattern);
   return search.Search(subject, start_index);
 }

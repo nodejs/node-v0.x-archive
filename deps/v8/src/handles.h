@@ -167,18 +167,6 @@ class HandleScope {
 // an object of expected type, or the handle is an error if running out
 // of space or encountering an internal error.
 
-void NormalizeProperties(Handle<JSObject> object,
-                         PropertyNormalizationMode mode,
-                         int expected_additional_properties);
-Handle<SeededNumberDictionary> NormalizeElements(Handle<JSObject> object);
-void TransformToFastProperties(Handle<JSObject> object,
-                               int unused_property_fields);
-MUST_USE_RESULT Handle<SeededNumberDictionary> SeededNumberDictionarySet(
-    Handle<SeededNumberDictionary> dictionary,
-    uint32_t index,
-    Handle<Object> value,
-    PropertyDetails details);
-
 // Flattens a string.
 void FlattenString(Handle<String> str);
 
@@ -186,11 +174,7 @@ void FlattenString(Handle<String> str);
 // string.
 Handle<String> FlattenGetString(Handle<String> str);
 
-Handle<Object> SetProperty(Handle<JSReceiver> object,
-                           Handle<String> key,
-                           Handle<Object> value,
-                           PropertyAttributes attributes,
-                           StrictModeFlag strict_mode);
+int Utf8Length(Handle<String> str);
 
 Handle<Object> SetProperty(Handle<Object> object,
                            Handle<Object> key,
@@ -203,42 +187,8 @@ Handle<Object> ForceSetProperty(Handle<JSObject> object,
                                 Handle<Object> value,
                                 PropertyAttributes attributes);
 
-Handle<Object> SetNormalizedProperty(Handle<JSObject> object,
-                                     Handle<String> key,
-                                     Handle<Object> value,
-                                     PropertyDetails details);
-
 Handle<Object> ForceDeleteProperty(Handle<JSObject> object,
                                    Handle<Object> key);
-
-Handle<Object> SetLocalPropertyIgnoreAttributes(
-    Handle<JSObject> object,
-    Handle<String> key,
-    Handle<Object> value,
-    PropertyAttributes attributes);
-
-// Used to set local properties on the object we totally control
-// and which therefore has no accessors and alikes.
-void SetLocalPropertyNoThrow(Handle<JSObject> object,
-                             Handle<String> key,
-                             Handle<Object> value,
-                             PropertyAttributes attributes = NONE);
-
-Handle<Object> SetPropertyWithInterceptor(Handle<JSObject> object,
-                                          Handle<String> key,
-                                          Handle<Object> value,
-                                          PropertyAttributes attributes,
-                                          StrictModeFlag strict_mode);
-
-MUST_USE_RESULT Handle<Object> SetElement(Handle<JSObject> object,
-                                          uint32_t index,
-                                          Handle<Object> value,
-                                          StrictModeFlag strict_mode);
-
-Handle<Object> SetOwnElement(Handle<JSObject> object,
-                             uint32_t index,
-                             Handle<Object> value,
-                             StrictModeFlag strict_mode);
 
 Handle<Object> GetProperty(Handle<JSReceiver> obj,
                            const char* name);
@@ -246,34 +196,12 @@ Handle<Object> GetProperty(Handle<JSReceiver> obj,
 Handle<Object> GetProperty(Handle<Object> obj,
                            Handle<Object> key);
 
-Handle<Object> GetProperty(Handle<JSReceiver> obj,
-                           Handle<String> name,
-                           LookupResult* result);
-
-
-Handle<Object> GetElement(Handle<Object> obj,
-                          uint32_t index);
-
 Handle<Object> GetPropertyWithInterceptor(Handle<JSObject> receiver,
                                           Handle<JSObject> holder,
                                           Handle<String> name,
                                           PropertyAttributes* attributes);
 
-Handle<Object> GetPrototype(Handle<Object> obj);
-
 Handle<Object> SetPrototype(Handle<JSObject> obj, Handle<Object> value);
-
-// Return the object's hidden properties object. If the object has no hidden
-// properties and HiddenPropertiesFlag::ALLOW_CREATION is passed, then a new
-// hidden property object will be allocated. Otherwise Heap::undefined_value
-// is returned.
-Handle<Object> GetHiddenProperties(Handle<JSObject> obj,
-                                   JSObject::HiddenPropertiesFlag flag);
-
-int GetIdentityHash(Handle<JSObject> obj);
-
-Handle<Object> DeleteElement(Handle<JSObject> obj, uint32_t index);
-Handle<Object> DeleteProperty(Handle<JSObject> obj, Handle<String> prop);
 
 Handle<Object> LookupSingleCharacterStringFromCode(uint32_t index);
 
@@ -298,21 +226,23 @@ Handle<FixedArray> CalculateLineEnds(Handle<String> string,
 int GetScriptLineNumber(Handle<Script> script, int code_position);
 // The safe version does not make heap allocations but may work much slower.
 int GetScriptLineNumberSafe(Handle<Script> script, int code_position);
+int GetScriptColumnNumber(Handle<Script> script, int code_position);
 
 // Computes the enumerable keys from interceptors. Used for debug mirrors and
 // by GetKeysInFixedArrayFor below.
-v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSObject> receiver,
+v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSReceiver> receiver,
                                                  Handle<JSObject> object);
-v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSObject> receiver,
+v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSReceiver> receiver,
                                                    Handle<JSObject> object);
 
 enum KeyCollectionType { LOCAL_ONLY, INCLUDE_PROTOS };
 
 // Computes the enumerable keys for a JSObject. Used for implementing
 // "for (n in object) { }".
-Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSObject> object,
-                                          KeyCollectionType type);
-Handle<JSArray> GetKeysFor(Handle<JSObject> object);
+Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSReceiver> object,
+                                          KeyCollectionType type,
+                                          bool* threw);
+Handle<JSArray> GetKeysFor(Handle<JSReceiver> object, bool* threw);
 Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
                                        bool cache_result);
 
@@ -325,7 +255,6 @@ Handle<String> SubString(Handle<String> str,
                          int start,
                          int end,
                          PretenureFlag pretenure = NOT_TENURED);
-
 
 // Sets the expected number of properties for the function's instances.
 void SetExpectedNofProperties(Handle<JSFunction> func, int nof);
@@ -345,27 +274,15 @@ Handle<JSGlobalProxy> ReinitializeJSGlobalProxy(
 Handle<Object> SetPrototype(Handle<JSFunction> function,
                             Handle<Object> prototype);
 
-Handle<Object> PreventExtensions(Handle<JSObject> object);
+Handle<ObjectHashSet> ObjectHashSetAdd(Handle<ObjectHashSet> table,
+                                       Handle<Object> key);
+
+Handle<ObjectHashSet> ObjectHashSetRemove(Handle<ObjectHashSet> table,
+                                          Handle<Object> key);
 
 Handle<ObjectHashTable> PutIntoObjectHashTable(Handle<ObjectHashTable> table,
-                                               Handle<JSObject> key,
+                                               Handle<Object> key,
                                                Handle<Object> value);
-
-// Does lazy compilation of the given function. Returns true on success and
-// false if the compilation resulted in a stack overflow.
-enum ClearExceptionFlag { KEEP_EXCEPTION, CLEAR_EXCEPTION };
-
-bool EnsureCompiled(Handle<SharedFunctionInfo> shared,
-                    ClearExceptionFlag flag);
-
-bool CompileLazyShared(Handle<SharedFunctionInfo> shared,
-                       ClearExceptionFlag flag);
-
-bool CompileLazy(Handle<JSFunction> function, ClearExceptionFlag flag);
-
-bool CompileOptimized(Handle<JSFunction> function,
-                      int osr_ast_id,
-                      ClearExceptionFlag flag);
 
 class NoHandleAllocation BASE_EMBEDDED {
  public:

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -51,7 +51,37 @@ void BreakableStatementChecker::Check(Expression* expr) {
 }
 
 
-void BreakableStatementChecker::VisitDeclaration(Declaration* decl) {
+void BreakableStatementChecker::VisitVariableDeclaration(
+    VariableDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitFunctionDeclaration(
+    FunctionDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitModuleDeclaration(
+    ModuleDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitImportDeclaration(
+    ImportDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitExportDeclaration(
+    ExportDeclaration* decl) {
+}
+
+
+void BreakableStatementChecker::VisitModuleLiteral(ModuleLiteral* module) {
+}
+
+void BreakableStatementChecker::VisitModuleVariable(ModuleVariable* module) {
+}
+
+void BreakableStatementChecker::VisitModulePath(ModulePath* module) {
+}
+
+void BreakableStatementChecker::VisitModuleUrl(ModuleUrl* module) {
 }
 
 
@@ -244,11 +274,6 @@ void BreakableStatementChecker::VisitBinaryOperation(BinaryOperation* expr) {
 }
 
 
-void BreakableStatementChecker::VisitCompareToNull(CompareToNull* expr) {
-  Visit(expr->expression());
-}
-
-
 void BreakableStatementChecker::VisitCompareOperation(CompareOperation* expr) {
   Visit(expr->left());
   Visit(expr->right());
@@ -278,8 +303,8 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   masm.positions_recorder()->StartGDBJITLineInfoRecording();
 #endif
 
-  FullCodeGenerator cgen(&masm);
-  cgen.Generate(info);
+  FullCodeGenerator cgen(&masm, info);
+  cgen.Generate();
   if (cgen.HasStackOverflow()) {
     ASSERT(!isolate->has_pending_exception());
     return false;
@@ -288,15 +313,26 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
 
   Code::Flags flags = Code::ComputeFlags(Code::FUNCTION);
   Handle<Code> code = CodeGenerator::MakeCodeEpilogue(&masm, flags, info);
-  code->set_optimizable(info->IsOptimizable());
+  code->set_optimizable(info->IsOptimizable() &&
+                        !info->function()->flags()->Contains(kDontOptimize));
+  code->set_self_optimization_header(cgen.has_self_optimization_header_);
   cgen.PopulateDeoptimizationData(code);
+  cgen.PopulateTypeFeedbackInfo(code);
+  cgen.PopulateTypeFeedbackCells(code);
   code->set_has_deoptimization_support(info->HasDeoptimizationSupport());
+  code->set_handler_table(*cgen.handler_table());
+#ifdef ENABLE_DEBUGGER_SUPPORT
   code->set_has_debug_break_slots(
       info->isolate()->debugger()->IsDebuggerActive());
+  code->set_compiled_optimizable(info->IsOptimizable());
+#endif  // ENABLE_DEBUGGER_SUPPORT
   code->set_allow_osr_at_loop_nesting_level(0);
   code->set_stack_check_table_offset(table_offset);
   CodeGenerator::PrintCode(code, info);
-  info->SetCode(code);  // may be an empty handle.
+  info->SetCode(code);  // May be an empty handle.
+  if (!code.is_null()) {
+    isolate->runtime_profiler()->NotifyCodeGenerated(code->instruction_size());
+  }
 #ifdef ENABLE_GDB_JIT_INTERFACE
   if (FLAG_gdbjit && !code.is_null()) {
     GDBJITLineInfo* lineinfo =
@@ -330,8 +366,7 @@ void FullCodeGenerator::PopulateDeoptimizationData(Handle<Code> code) {
   ASSERT(info_->HasDeoptimizationSupport() || bailout_entries_.is_empty());
   if (!info_->HasDeoptimizationSupport()) return;
   int length = bailout_entries_.length();
-  Handle<DeoptimizationOutputData> data =
-      isolate()->factory()->
+  Handle<DeoptimizationOutputData> data = isolate()->factory()->
       NewDeoptimizationOutputData(length, TENURED);
   for (int i = 0; i < length; i++) {
     data->SetAstId(i, Smi::FromInt(bailout_entries_[i].id));
@@ -339,6 +374,30 @@ void FullCodeGenerator::PopulateDeoptimizationData(Handle<Code> code) {
   }
   code->set_deoptimization_data(*data);
 }
+
+
+void FullCodeGenerator::PopulateTypeFeedbackInfo(Handle<Code> code) {
+  Handle<TypeFeedbackInfo> info = isolate()->factory()->NewTypeFeedbackInfo();
+  info->set_ic_total_count(ic_total_count_);
+  ASSERT(!isolate()->heap()->InNewSpace(*info));
+  code->set_type_feedback_info(*info);
+}
+
+
+void FullCodeGenerator::PopulateTypeFeedbackCells(Handle<Code> code) {
+  if (type_feedback_cells_.is_empty()) return;
+  int length = type_feedback_cells_.length();
+  int array_size = TypeFeedbackCells::LengthOfFixedArray(length);
+  Handle<TypeFeedbackCells> cache = Handle<TypeFeedbackCells>::cast(
+      isolate()->factory()->NewFixedArray(array_size, TENURED));
+  for (int i = 0; i < length; i++) {
+    cache->SetAstId(i, Smi::FromInt(type_feedback_cells_[i].ast_id));
+    cache->SetCell(i, *type_feedback_cells_[i].cell);
+  }
+  TypeFeedbackInfo::cast(code->type_feedback_info())->set_type_feedback_cells(
+      *cache);
+}
+
 
 
 void FullCodeGenerator::PrepareForBailout(Expression* node, State state) {
@@ -363,20 +422,23 @@ void FullCodeGenerator::RecordJSReturnSite(Call* call) {
 }
 
 
-void FullCodeGenerator::PrepareForBailoutForId(int id, State state) {
+void FullCodeGenerator::PrepareForBailoutForId(unsigned id, State state) {
   // There's no need to prepare this code for bailouts from already optimized
   // code or code that can't be optimized.
-  if (!FLAG_deopt || !info_->HasDeoptimizationSupport()) return;
+  if (!info_->HasDeoptimizationSupport()) return;
   unsigned pc_and_state =
       StateField::encode(state) | PcField::encode(masm_->pc_offset());
+  ASSERT(Smi::IsValid(pc_and_state));
   BailoutEntry entry = { id, pc_and_state };
 #ifdef DEBUG
-  // Assert that we don't have multiple bailout entries for the same node.
-  for (int i = 0; i < bailout_entries_.length(); i++) {
-    if (bailout_entries_.at(i).id == entry.id) {
-      AstPrinter printer;
-      PrintF("%s", printer.PrintProgram(info_->function()));
-      UNREACHABLE();
+  if (FLAG_enable_slow_asserts) {
+    // Assert that we don't have multiple bailout entries for the same node.
+    for (int i = 0; i < bailout_entries_.length(); i++) {
+      if (bailout_entries_.at(i).id == entry.id) {
+        AstPrinter printer;
+        PrintF("%s", printer.PrintProgram(info_->function()));
+        UNREACHABLE();
+      }
     }
   }
 #endif  // DEBUG
@@ -384,10 +446,18 @@ void FullCodeGenerator::PrepareForBailoutForId(int id, State state) {
 }
 
 
-void FullCodeGenerator::RecordStackCheck(int ast_id) {
+void FullCodeGenerator::RecordTypeFeedbackCell(
+    unsigned id, Handle<JSGlobalPropertyCell> cell) {
+  TypeFeedbackCellEntry entry = { id, cell };
+  type_feedback_cells_.Add(entry);
+}
+
+
+void FullCodeGenerator::RecordStackCheck(unsigned ast_id) {
   // The pc offset does not need to be encoded and packed together with a
   // state.
-  BailoutEntry entry = { ast_id, masm_->pc_offset() };
+  ASSERT(masm_->pc_offset() > 0);
+  BailoutEntry entry = { ast_id, static_cast<unsigned>(masm_->pc_offset()) };
   stack_checks_.Add(entry);
 }
 
@@ -412,27 +482,24 @@ void FullCodeGenerator::AccumulatorValueContext::Plug(Register reg) const {
 
 void FullCodeGenerator::StackValueContext::Plug(Register reg) const {
   __ push(reg);
-  codegen()->increment_stack_height();
 }
 
 
 void FullCodeGenerator::TestContext::Plug(Register reg) const {
   // For simplicity we always test the accumulator register.
   __ Move(result_register(), reg);
-  codegen()->PrepareForBailoutBeforeSplit(TOS_REG, false, NULL, NULL);
+  codegen()->PrepareForBailoutBeforeSplit(condition(), false, NULL, NULL);
   codegen()->DoTest(this);
 }
 
 
 void FullCodeGenerator::EffectContext::PlugTOS() const {
   __ Drop(1);
-  codegen()->decrement_stack_height();
 }
 
 
 void FullCodeGenerator::AccumulatorValueContext::PlugTOS() const {
   __ pop(result_register());
-  codegen()->decrement_stack_height();
 }
 
 
@@ -443,8 +510,7 @@ void FullCodeGenerator::StackValueContext::PlugTOS() const {
 void FullCodeGenerator::TestContext::PlugTOS() const {
   // For simplicity we always test the accumulator register.
   __ pop(result_register());
-  codegen()->decrement_stack_height();
-  codegen()->PrepareForBailoutBeforeSplit(TOS_REG, false, NULL, NULL);
+  codegen()->PrepareForBailoutBeforeSplit(condition(), false, NULL, NULL);
   codegen()->DoTest(this);
 }
 
@@ -505,33 +571,33 @@ void FullCodeGenerator::DoTest(const TestContext* context) {
 
 void FullCodeGenerator::VisitDeclarations(
     ZoneList<Declaration*>* declarations) {
-  int length = declarations->length();
-  int global_count = 0;
-  for (int i = 0; i < length; i++) {
-    Declaration* decl = declarations->at(i);
-    EmitDeclaration(decl->proxy(), decl->mode(), decl->fun(), &global_count);
-  }
+  int save_global_count = global_count_;
+  global_count_ = 0;
+
+  AstVisitor::VisitDeclarations(declarations);
 
   // Batch declare global functions and variables.
-  if (global_count > 0) {
+  if (global_count_ > 0) {
     Handle<FixedArray> array =
-        isolate()->factory()->NewFixedArray(2 * global_count, TENURED);
+       isolate()->factory()->NewFixedArray(2 * global_count_, TENURED);
+    int length = declarations->length();
     for (int j = 0, i = 0; i < length; i++) {
       Declaration* decl = declarations->at(i);
       Variable* var = decl->proxy()->var();
 
       if (var->IsUnallocated()) {
         array->set(j++, *(var->name()));
-        if (decl->fun() == NULL) {
-          if (var->mode() == Variable::CONST) {
-            // In case this is const property use the hole.
+        FunctionDeclaration* fun_decl = decl->AsFunctionDeclaration();
+        if (fun_decl == NULL) {
+          if (var->binding_needs_init()) {
+            // In case this binding needs initialization use the hole.
             array->set_the_hole(j++);
           } else {
             array->set_undefined(j++);
           }
         } else {
           Handle<SharedFunctionInfo> function =
-              Compiler::BuildFunctionInfo(decl->fun(), script());
+              Compiler::BuildFunctionInfo(fun_decl->fun(), script());
           // Check for stack-overflow exception.
           if (function.is_null()) {
             SetStackOverflow();
@@ -545,15 +611,61 @@ void FullCodeGenerator::VisitDeclarations(
     // declaration the global functions and variables.
     DeclareGlobals(array);
   }
+
+  global_count_ = save_global_count;
+}
+
+
+void FullCodeGenerator::VisitVariableDeclaration(VariableDeclaration* decl) {
+  EmitDeclaration(decl->proxy(), decl->mode(), NULL);
+}
+
+
+void FullCodeGenerator::VisitFunctionDeclaration(FunctionDeclaration* decl) {
+  EmitDeclaration(decl->proxy(), decl->mode(), decl->fun());
+}
+
+
+void FullCodeGenerator::VisitModuleDeclaration(ModuleDeclaration* decl) {
+  EmitDeclaration(decl->proxy(), decl->mode(), NULL);
+}
+
+
+void FullCodeGenerator::VisitImportDeclaration(ImportDeclaration* decl) {
+  EmitDeclaration(decl->proxy(), decl->mode(), NULL);
+}
+
+
+void FullCodeGenerator::VisitExportDeclaration(ExportDeclaration* decl) {
+  // TODO(rossberg)
+}
+
+
+void FullCodeGenerator::VisitModuleLiteral(ModuleLiteral* module) {
+  // TODO(rossberg)
+}
+
+
+void FullCodeGenerator::VisitModuleVariable(ModuleVariable* module) {
+  // TODO(rossberg)
+}
+
+
+void FullCodeGenerator::VisitModulePath(ModulePath* module) {
+  // TODO(rossberg)
+}
+
+
+void FullCodeGenerator::VisitModuleUrl(ModuleUrl* decl) {
+  // TODO(rossberg)
 }
 
 
 int FullCodeGenerator::DeclareGlobalsFlags() {
-  int flags = 0;
-  if (is_eval()) flags |= kDeclareGlobalsEvalFlag;
-  if (is_strict_mode()) flags |= kDeclareGlobalsStrictModeFlag;
-  if (is_native()) flags |= kDeclareGlobalsNativeFlag;
-  return flags;
+  ASSERT(DeclareGlobalsLanguageMode::is_valid(language_mode()));
+  return DeclareGlobalsEvalFlag::encode(is_eval()) |
+      DeclareGlobalsNativeFlag::encode(is_native()) |
+      DeclareGlobalsLanguageMode::encode(language_mode());
 }
 
 
@@ -659,14 +771,13 @@ FullCodeGenerator::InlineFunctionGenerator
 }
 
 
-void FullCodeGenerator::EmitInlineRuntimeCall(CallRuntime* node) {
-  ZoneList<Expression*>* args = node->arguments();
-  const Runtime::Function* function = node->function();
+void FullCodeGenerator::EmitInlineRuntimeCall(CallRuntime* expr) {
+  const Runtime::Function* function = expr->function();
   ASSERT(function != NULL);
   ASSERT(function->intrinsic_type == Runtime::INLINE);
   InlineFunctionGenerator generator =
       FindInlineFunctionGenerator(function->function_id);
-  ((*this).*(generator))(args);
+  ((*this).*(generator))(expr);
 }
 
 
@@ -683,11 +794,25 @@ void FullCodeGenerator::VisitBinaryOperation(BinaryOperation* expr) {
 }
 
 
+void FullCodeGenerator::VisitInDuplicateContext(Expression* expr) {
+  if (context()->IsEffect()) {
+    VisitForEffect(expr);
+  } else if (context()->IsAccumulatorValue()) {
+    VisitForAccumulatorValue(expr);
+  } else if (context()->IsStackValue()) {
+    VisitForStackValue(expr);
+  } else if (context()->IsTest()) {
+    const TestContext* test = TestContext::cast(context());
+    VisitForControl(expr, test->true_label(), test->false_label(),
+                    test->fall_through());
+  }
+}
+
+
 void FullCodeGenerator::VisitComma(BinaryOperation* expr) {
   Comment cmnt(masm_, "[ Comma");
   VisitForEffect(expr->left());
-  if (context()->IsTest()) ForwardBailoutToChild(expr);
-  VisitInCurrentContext(expr->right());
+  VisitInDuplicateContext(expr->right());
 }
 
 
@@ -709,7 +834,6 @@ void FullCodeGenerator::VisitLogicalExpression(BinaryOperation* expr) {
     }
     PrepareForBailoutForId(right_id, NO_REGISTERS);
     __ bind(&eval_right);
-    ForwardBailoutToChild(expr);
 
   } else if (context()->IsAccumulatorValue()) {
     VisitForAccumulatorValue(left);
@@ -717,7 +841,6 @@ void FullCodeGenerator::VisitLogicalExpression(BinaryOperation* expr) {
     // case we need it.
     __ push(result_register());
     Label discard, restore;
-    PrepareForBailoutBeforeSplit(TOS_REG, false, NULL, NULL);
     if (is_logical_and) {
       DoTest(left, &discard, &restore, &restore);
     } else {
@@ -736,7 +859,6 @@ void FullCodeGenerator::VisitLogicalExpression(BinaryOperation* expr) {
     // case we need it.
     __ push(result_register());
     Label discard;
-    PrepareForBailoutBeforeSplit(TOS_REG, false, NULL, NULL);
     if (is_logical_and) {
       DoTest(left, &discard, &done, &discard);
     } else {
@@ -758,7 +880,7 @@ void FullCodeGenerator::VisitLogicalExpression(BinaryOperation* expr) {
     __ bind(&eval_right);
   }
 
-  VisitInCurrentContext(right);
+  VisitInDuplicateContext(right);
   __ bind(&done);
 }
 
@@ -785,34 +907,6 @@ void FullCodeGenerator::VisitArithmeticExpression(BinaryOperation* expr) {
 }
 
 
-void FullCodeGenerator::ForwardBailoutToChild(Expression* expr) {
-  if (!info_->HasDeoptimizationSupport()) return;
-  ASSERT(context()->IsTest());
-  ASSERT(expr == forward_bailout_stack_->expr());
-  forward_bailout_pending_ = forward_bailout_stack_;
-}
-
-
-void FullCodeGenerator::VisitInCurrentContext(Expression* expr) {
-  if (context()->IsTest()) {
-    ForwardBailoutStack stack(expr, forward_bailout_pending_);
-    ForwardBailoutStack* saved = forward_bailout_stack_;
-    forward_bailout_pending_ = NULL;
-    forward_bailout_stack_ = &stack;
-    Visit(expr);
-    forward_bailout_stack_ = saved;
-  } else {
-    ASSERT(forward_bailout_pending_ == NULL);
-    Visit(expr);
-    State state = context()->IsAccumulatorValue() ? TOS_REG : NO_REGISTERS;
-    PrepareForBailout(expr, state);
-    // Forwarding bailouts to children is a one shot operation. It should have
-    // been processed at this point.
-    ASSERT(forward_bailout_pending_ == NULL);
-  }
-}
-
-
 void FullCodeGenerator::VisitBlock(Block* stmt) {
   Comment cmnt(masm_, "[ Block");
   NestedBlock nested_block(this, stmt);
@@ -823,9 +917,18 @@ void FullCodeGenerator::VisitBlock(Block* stmt) {
   if (stmt->block_scope() != NULL) {
     { Comment cmnt(masm_, "[ Extend block context");
       scope_ = stmt->block_scope();
-      __ Push(scope_->GetSerializedScopeInfo());
+      Handle<ScopeInfo> scope_info = scope_->GetScopeInfo();
+      int heap_slots = scope_info->ContextLength() - Context::MIN_CONTEXT_SLOTS;
+      __ Push(scope_info);
       PushFunctionArgumentForContextAllocation();
-      __ CallRuntime(Runtime::kPushBlockContext, 2);
+      if (heap_slots <= FastNewBlockContextStub::kMaximumSlots) {
+        FastNewBlockContextStub stub(heap_slots);
+        __ CallStub(&stub);
+      } else {
+        __ CallRuntime(Runtime::kPushBlockContext, 2);
+      }
+
+      // Replace the context stored in the frame.
       StoreToFrameField(StandardFrameConstants::kContextOffset,
                         context_register());
     }
@@ -972,7 +1075,6 @@ void FullCodeGenerator::VisitWithStatement(WithStatement* stmt) {
   VisitForStackValue(stmt->expression());
   PushFunctionArgumentForContextAllocation();
   __ CallRuntime(Runtime::kPushWithContext, 2);
-  decrement_stack_height();
   StoreToFrameField(StandardFrameConstants::kContextOffset, context_register());
 
   { WithOrCatch body(this);
@@ -1010,7 +1112,7 @@ void FullCodeGenerator::VisitDoWhileStatement(DoWhileStatement* stmt) {
   // Check stack before looping.
   PrepareForBailoutForId(stmt->BackEdgeId(), NO_REGISTERS);
   __ bind(&stack_check);
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &body);
   __ jmp(&body);
 
   PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
@@ -1039,7 +1141,7 @@ void FullCodeGenerator::VisitWhileStatement(WhileStatement* stmt) {
   SetStatementPosition(stmt);
 
   // Check stack before looping.
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &body);
 
   __ bind(&test);
   VisitForControl(stmt->cond(),
@@ -1058,6 +1160,10 @@ void FullCodeGenerator::VisitForStatement(ForStatement* stmt) {
   Label test, body;
 
   Iteration loop_statement(this, stmt);
+
+  // Set statement position for a break slot before entering the for-body.
+  SetStatementPosition(stmt);
+
   if (stmt->init() != NULL) {
     Visit(stmt->init());
   }
@@ -1072,7 +1178,6 @@ void FullCodeGenerator::VisitForStatement(ForStatement* stmt) {
 
   PrepareForBailoutForId(stmt->ContinueId(), NO_REGISTERS);
   __ bind(loop_statement.continue_label());
-  SetStatementPosition(stmt);
   if (stmt->next() != NULL) {
     Visit(stmt->next());
   }
@@ -1082,7 +1187,7 @@ void FullCodeGenerator::VisitForStatement(ForStatement* stmt) {
   SetStatementPosition(stmt);
 
   // Check stack before looping.
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &body);
 
   __ bind(&test);
   if (stmt->cond() != NULL) {
@@ -1103,20 +1208,17 @@ void FullCodeGenerator::VisitForStatement(ForStatement* stmt) {
 void FullCodeGenerator::VisitTryCatchStatement(TryCatchStatement* stmt) {
   Comment cmnt(masm_, "[ TryCatchStatement");
   SetStatementPosition(stmt);
-  // The try block adds a handler to the exception handler chain
-  // before entering, and removes it again when exiting normally.
-  // If an exception is thrown during execution of the try block,
-  // control is passed to the handler, which also consumes the handler.
-  // At this point, the exception is in a register, and store it in
-  // the temporary local variable (prints as ".catch-var") before
-  // executing the catch block. The catch block has been rewritten
-  // to introduce a new scope to bind the catch variable and to remove
-  // that scope again afterwards.
+  // The try block adds a handler to the exception handler chain before
+  // entering, and removes it again when exiting normally.  If an exception
+  // is thrown during execution of the try block, the handler is consumed
+  // and control is passed to the catch block with the exception in the
+  // result register.
 
-  Label try_handler_setup, done;
-  __ Call(&try_handler_setup);
-  // Try handler code, exception in result register.
-
+  Label try_entry, handler_entry, exit;
+  __ jmp(&try_entry);
+  __ bind(&handler_entry);
+  handler_table()->set(stmt->index(), Smi::FromInt(handler_entry.pos()));
+  // Exception handler code, the exception is in the result register.
   // Extend the context before executing the catch block.
   { Comment cmnt(masm_, "[ Extend catch context");
     __ Push(stmt->variable()->name());
@@ -1130,27 +1232,23 @@ void FullCodeGenerator::VisitTryCatchStatement(TryCatchStatement* stmt) {
   Scope* saved_scope = scope();
   scope_ = stmt->scope();
   ASSERT(scope_->declarations()->is_empty());
-  { WithOrCatch body(this);
+  { WithOrCatch catch_body(this);
     Visit(stmt->catch_block());
   }
   // Restore the context.
   LoadContextField(context_register(), Context::PREVIOUS_INDEX);
   StoreToFrameField(StandardFrameConstants::kContextOffset, context_register());
   scope_ = saved_scope;
-  __ jmp(&done);
+  __ jmp(&exit);
 
   // Try block code. Sets up the exception handler chain.
-  __ bind(&try_handler_setup);
-  {
-    const int delta = StackHandlerConstants::kSize / kPointerSize;
-    TryCatch try_block(this);
-    __ PushTryHandler(IN_JAVASCRIPT, TRY_CATCH_HANDLER);
-    increment_stack_height(delta);
+  __ bind(&try_entry);
+  __ PushTryHandler(StackHandler::CATCH, stmt->index());
+  { TryCatch try_body(this);
     Visit(stmt->try_block());
-    __ PopTryHandler();
-    decrement_stack_height(delta);
   }
-  __ bind(&done);
+  __ PopTryHandler();
+  __ bind(&exit);
 }
 
 
@@ -1162,12 +1260,12 @@ void FullCodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* stmt) {
   //
   // The try-finally construct can enter the finally block in three ways:
   // 1. By exiting the try-block normally. This removes the try-handler and
-  //      calls the finally block code before continuing.
+  //    calls the finally block code before continuing.
   // 2. By exiting the try-block with a function-local control flow transfer
   //    (break/continue/return). The site of the, e.g., break removes the
   //    try handler and calls the finally block code before continuing
   //    its outward control transfer.
-  // 3. by exiting the try-block with a thrown exception.
+  // 3. By exiting the try-block with a thrown exception.
   //    This can happen in nested function calls. It traverses the try-handler
   //    chain and consumes the try-handler entry before jumping to the
   //    handler code. The handler code then calls the finally-block before
@@ -1178,49 +1276,39 @@ void FullCodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* stmt) {
   // exception) in the result register (rax/eax/r0), both of which must
   // be preserved. The return address isn't GC-safe, so it should be
   // cooked before GC.
-  Label finally_entry;
-  Label try_handler_setup;
-  const int original_stack_height = stack_height();
+  Label try_entry, handler_entry, finally_entry;
 
-  // Setup the try-handler chain. Use a call to
-  // Jump to try-handler setup and try-block code. Use call to put try-handler
-  // address on stack.
-  __ Call(&try_handler_setup);
-  // Try handler code. Return address of call is pushed on handler stack.
-  {
-    // This code is only executed during stack-handler traversal when an
-    // exception is thrown. The exception is in the result register, which
-    // is retained by the finally block.
-    // Call the finally block and then rethrow the exception if it returns.
-    __ Call(&finally_entry);
-    __ push(result_register());
-    __ CallRuntime(Runtime::kReThrow, 1);
-  }
+  // Jump to try-handler setup and try-block code.
+  __ jmp(&try_entry);
+  __ bind(&handler_entry);
+  handler_table()->set(stmt->index(), Smi::FromInt(handler_entry.pos()));
+  // Exception handler code.  This code is only executed when an exception
+  // is thrown.  The exception is in the result register, and must be
+  // preserved by the finally block.  Call the finally block and then
+  // rethrow the exception if it returns.
+  __ Call(&finally_entry);
+  __ push(result_register());
+  __ CallRuntime(Runtime::kReThrow, 1);
 
+  // Finally block implementation.
   __ bind(&finally_entry);
-  {
-    // Finally block implementation.
-    Finally finally_block(this);
-    EnterFinallyBlock();
-    set_stack_height(original_stack_height + Finally::kElementCount);
+  EnterFinallyBlock();
+  { Finally finally_body(this);
     Visit(stmt->finally_block());
-    ExitFinallyBlock();  // Return to the calling code.
   }
+  ExitFinallyBlock();  // Return to the calling code.
 
-  __ bind(&try_handler_setup);
-  {
-    // Setup try handler (stack pointer registers).
-    const int delta = StackHandlerConstants::kSize / kPointerSize;
-    TryFinally try_block(this, &finally_entry);
-    __ PushTryHandler(IN_JAVASCRIPT, TRY_FINALLY_HANDLER);
-    set_stack_height(original_stack_height + delta);
+  // Set up try handler.
+  __ bind(&try_entry);
+  __ PushTryHandler(StackHandler::FINALLY, stmt->index());
+  { TryFinally try_body(this, &finally_entry);
     Visit(stmt->try_block());
-    __ PopTryHandler();
-    set_stack_height(original_stack_height);
   }
+  __ PopTryHandler();
   // Execute the finally block on the way out.  Clobber the unpredictable
-  // value in the accumulator with one that's safe for GC.  The finally
-  // block will unconditionally preserve the accumulator on the stack.
+  // value in the result register with one that's safe for GC because the
+  // finally block will unconditionally preserve the result register on the
+  // stack.
   ClearAccumulator();
   __ Call(&finally_entry);
 }
@@ -1246,7 +1334,6 @@ void FullCodeGenerator::VisitConditional(Conditional* expr) {
   __ bind(&true_case);
   SetExpressionPosition(expr->then_expression(),
                         expr->then_expression_position());
-  int start_stack_height = stack_height();
   if (context()->IsTest()) {
     const TestContext* for_test = TestContext::cast(context());
     VisitForControl(expr->then_expression(),
@@ -1254,17 +1341,15 @@ void FullCodeGenerator::VisitConditional(Conditional* expr) {
                     for_test->false_label(),
                     NULL);
   } else {
-    VisitInCurrentContext(expr->then_expression());
+    VisitInDuplicateContext(expr->then_expression());
     __ jmp(&done);
   }
 
   PrepareForBailoutForId(expr->ElseId(), NO_REGISTERS);
   __ bind(&false_case);
-  set_stack_height(start_stack_height);
-  if (context()->IsTest()) ForwardBailoutToChild(expr);
   SetExpressionPosition(expr->else_expression(),
                         expr->else_expression_position());
-  VisitInCurrentContext(expr->else_expression());
+  VisitInDuplicateContext(expr->else_expression());
   // If control flow falls through Visit, merge it with true case here.
   if (!context()->IsTest()) {
     __ bind(&done);
@@ -1301,11 +1386,8 @@ void FullCodeGenerator::VisitSharedFunctionInfoLiteral(
 
 void FullCodeGenerator::VisitThrow(Throw* expr) {
   Comment cmnt(masm_, "[ Throw");
-  // Throw has no effect on the stack height or the current expression context.
-  // Usually the expression context is null, because throw is a statement.
   VisitForStackValue(expr->exception());
   __ CallRuntime(Runtime::kThrow, 1);
-  decrement_stack_height();
   // Never returns here.
 }
 
@@ -1321,19 +1403,21 @@ FullCodeGenerator::NestedStatement* FullCodeGenerator::TryCatch::Exit(
 }
 
 
-bool FullCodeGenerator::TryLiteralCompare(CompareOperation* compare,
-                                          Label* if_true,
-                                          Label* if_false,
-                                          Label* fall_through) {
-  Expression *expr;
+bool FullCodeGenerator::TryLiteralCompare(CompareOperation* expr) {
+  Expression* sub_expr;
   Handle<String> check;
-  if (compare->IsLiteralCompareTypeof(&expr, &check)) {
-    EmitLiteralCompareTypeof(expr, check, if_true, if_false, fall_through);
+  if (expr->IsLiteralCompareTypeof(&sub_expr, &check)) {
+    EmitLiteralCompareTypeof(expr, sub_expr, check);
     return true;
   }
 
-  if (compare->IsLiteralCompareUndefined(&expr)) {
-    EmitLiteralCompareUndefined(expr, if_true, if_false, fall_through);
+  if (expr->IsLiteralCompareUndefined(&sub_expr)) {
+    EmitLiteralCompareNil(expr, sub_expr, kUndefinedValue);
+    return true;
+  }
+
+  if (expr->IsLiteralCompareNull(&sub_expr)) {
+    EmitLiteralCompareNil(expr, sub_expr, kNullValue);
     return true;
   }
 

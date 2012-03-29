@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -27,11 +27,14 @@
 
 
 # Variable default definitions. Override them by exporting them in your shell.
-CXX ?= "g++"  # For distcc: export CXX="distcc g++"
-LINK ?= "g++"
+CXX ?= g++
+LINK ?= g++
 OUTDIR ?= out
 TESTJOBS ?= -j16
 GYPFLAGS ?=
+TESTFLAGS ?=
+ANDROID_NDK_ROOT ?=
+ANDROID_TOOL_PREFIX = $(ANDROID_NDK_ROOT)/toolchain/bin/arm-linux-androideabi
 
 # Special build flags. Use them like this: "make library=shared"
 
@@ -49,6 +52,10 @@ endif
 # disassembler=on
 ifeq ($(disassembler), on)
   GYPFLAGS += -Dv8_enable_disassembler=1
+endif
+# objectprint=on
+ifeq ($(objectprint), on)
+  GYPFLAGS += -Dv8_object_print=1
 endif
 # snapshot=off
 ifeq ($(snapshot), off)
@@ -68,9 +75,25 @@ ifeq ($(vfp3), off)
 else
   GYPFLAGS += -Dv8_can_use_vfp_instructions=true
 endif
+# debuggersupport=off
+ifeq ($(debuggersupport), off)
+  GYPFLAGS += -Dv8_enable_debugger_support=0
+endif
 # soname_version=1.2.3
 ifdef soname_version
   GYPFLAGS += -Dsoname_version=$(soname_version)
+endif
+# werror=no
+ifeq ($(werror), no)
+  GYPFLAGS += -Dwerror=''
+endif
+# presubmit=no
+ifeq ($(presubmit), no)
+  TESTFLAGS += --no-presubmit
+endif
+# strictaliasing=off (workaround for GCC-4.5)
+ifeq ($(strictaliasing), off)
+  GYPFLAGS += -Dv8_no_strict_aliasing=1
 endif
 
 # ----------------- available targets: --------------------
@@ -78,8 +101,10 @@ endif
 # - any arch listed in ARCHES (see below)
 # - any mode listed in MODES
 # - every combination <arch>.<mode>, e.g. "ia32.release"
+# - "native": current host's architecture, release mode
 # - any of the above with .check appended, e.g. "ia32.release.check"
-# - default (no target specified): build all ARCHES and MODES
+# - "android": cross-compile for Android/ARM (release mode)
+# - default (no target specified): build all DEFAULT_ARCHES and MODES
 # - "check": build all targets and run all tests
 # - "<arch>.clean" for any <arch> in ARCHES
 # - "clean": clean all ARCHES
@@ -88,7 +113,8 @@ endif
 
 # Architectures and modes to be compiled. Consider these to be internal
 # variables, don't override them (use the targets instead).
-ARCHES = ia32 x64 arm
+ARCHES = ia32 x64 arm mips
+DEFAULT_ARCHES = ia32 x64 arm
 MODES = release debug
 
 # List of files that trigger Makefile regeneration:
@@ -103,16 +129,17 @@ CHECKS = $(addsuffix .check,$(BUILDS))
 # File where previously used GYPFLAGS are stored.
 ENVFILE = $(OUTDIR)/environment
 
-.PHONY: all check clean dependencies $(ENVFILE).new \
+.PHONY: all check clean dependencies $(ENVFILE).new native \
         $(ARCHES) $(MODES) $(BUILDS) $(CHECKS) $(addsuffix .clean,$(ARCHES)) \
-        $(addsuffix .check,$(MODES)) $(addsuffix .check,$(ARCHES))
+        $(addsuffix .check,$(MODES)) $(addsuffix .check,$(ARCHES)) \
+        must-set-ANDROID_NDK_ROOT
 
 # Target definitions. "all" is the default.
 all: $(MODES)
 
 # Compile targets. MODES and ARCHES are convenience targets.
 .SECONDEXPANSION:
-$(MODES): $(addsuffix .$$@,$(ARCHES))
+$(MODES): $(addsuffix .$$@,$(DEFAULT_ARCHES))
 
 $(ARCHES): $(addprefix $$@.,$(MODES))
 
@@ -124,21 +151,44 @@ $(BUILDS): $(OUTDIR)/Makefile-$$(basename $$@)
 	                     python -c "print raw_input().capitalize()") \
 	         builddir="$(shell pwd)/$(OUTDIR)/$@"
 
+native: $(OUTDIR)/Makefile-native
+	@$(MAKE) -C "$(OUTDIR)" -f Makefile-native \
+	         CXX="$(CXX)" LINK="$(LINK)" BUILDTYPE=Release \
+	         builddir="$(shell pwd)/$(OUTDIR)/$@"
+
+# TODO(jkummerow): add "android.debug" when we need it.
+android android.release: $(OUTDIR)/Makefile-android
+	@$(MAKE) -C "$(OUTDIR)" -f Makefile-android \
+	        CXX="$(ANDROID_TOOL_PREFIX)-g++" \
+	        AR="$(ANDROID_TOOL_PREFIX)-ar" \
+	        RANLIB="$(ANDROID_TOOL_PREFIX)-ranlib" \
+	        CC="$(ANDROID_TOOL_PREFIX)-gcc" \
+	        LD="$(ANDROID_TOOL_PREFIX)-ld" \
+	        LINK="$(ANDROID_TOOL_PREFIX)-g++" \
+	        BUILDTYPE=Release \
+	        builddir="$(shell pwd)/$(OUTDIR)/android.release"
+
 # Test targets.
 check: all
-	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR)
+	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR) \
+	    --arch=$(shell echo $(DEFAULT_ARCHES) | sed -e 's/ /,/g') \
+	    $(TESTFLAGS)
 
 $(addsuffix .check,$(MODES)): $$(basename $$@)
 	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR) \
-	    --mode=$(basename $@)
+	    --mode=$(basename $@) $(TESTFLAGS)
 
 $(addsuffix .check,$(ARCHES)): $$(basename $$@)
 	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR) \
-	    --arch=$(basename $@)
+	    --arch=$(basename $@) $(TESTFLAGS)
 
 $(CHECKS): $$(basename $$@)
 	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR) \
-	    --arch-and-mode=$(basename $@)
+	    --arch-and-mode=$(basename $@) $(TESTFLAGS)
+
+native.check: native
+	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR)/native \
+	    --arch-and-mode=. $(TESTFLAGS)
 
 # Clean targets. You can clean each architecture individually, or everything.
 $(addsuffix .clean,$(ARCHES)):
@@ -147,7 +197,17 @@ $(addsuffix .clean,$(ARCHES)):
 	rm -rf $(OUTDIR)/$(basename $@).debug
 	find $(OUTDIR) -regex '.*\(host\|target\)-$(basename $@)\.mk' -delete
 
-clean: $(addsuffix .clean,$(ARCHES))
+native.clean:
+	rm -f $(OUTDIR)/Makefile-native
+	rm -rf $(OUTDIR)/native
+	find $(OUTDIR) -regex '.*\(host\|target\)-native\.mk' -delete
+
+android.clean:
+	rm -f $(OUTDIR)/Makefile-android
+	rm -rf $(OUTDIR)/android.release
+	find $(OUTDIR) -regex '.*\(host\|target\)-android\.mk' -delete
+
+clean: $(addsuffix .clean,$(ARCHES)) native.clean
 
 # GYP file generation targets.
 $(OUTDIR)/Makefile-ia32: $(GYPFILES) $(ENVFILE)
@@ -160,10 +220,31 @@ $(OUTDIR)/Makefile-x64: $(GYPFILES) $(ENVFILE)
 	              -Ibuild/standalone.gypi --depth=. -Dtarget_arch=x64 \
 	              -S-x64 $(GYPFLAGS)
 
-$(OUTDIR)/Makefile-arm: $(GYPFILES) $(ENVFILE)
+$(OUTDIR)/Makefile-arm: $(GYPFILES) $(ENVFILE) build/armu.gypi
 	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
 	              -Ibuild/standalone.gypi --depth=. -Ibuild/armu.gypi \
 	              -S-arm $(GYPFLAGS)
+
+$(OUTDIR)/Makefile-mips: $(GYPFILES) $(ENVFILE) build/mipsu.gypi
+	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
+	              -Ibuild/standalone.gypi --depth=. -Ibuild/mipsu.gypi \
+	              -S-mips $(GYPFLAGS)
+
+$(OUTDIR)/Makefile-native: $(GYPFILES) $(ENVFILE)
+	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
+	              -Ibuild/standalone.gypi --depth=. -S-native $(GYPFLAGS)
+
+$(OUTDIR)/Makefile-android: $(GYPFILES) $(ENVFILE) build/android.gypi \
+                            must-set-ANDROID_NDK_ROOT
+	CC="${ANDROID_TOOL_PREFIX}-gcc" \
+	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
+	              -Ibuild/standalone.gypi --depth=. -Ibuild/android.gypi \
+	              -S-android $(GYPFLAGS)
+
+must-set-ANDROID_NDK_ROOT:
+ifndef ANDROID_NDK_ROOT
+	  $(error ANDROID_NDK_ROOT is not set)
+endif
 
 # Replaces the old with the new environment file if they're different, which
 # will trigger GYP to regenerate Makefiles.

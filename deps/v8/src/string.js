@@ -1,4 +1,4 @@
-// Copyright 2006-2009 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,8 +28,8 @@
 
 // This file relies on the fact that the following declaration has been made
 // in runtime.js:
-// const $String = global.String;
-// const $NaN = 0/0;
+// var $String = global.String;
+// var $NaN = 0/0;
 
 
 // Set the String function and constructor.
@@ -46,16 +46,18 @@
 
 // ECMA-262 section 15.5.4.2
 function StringToString() {
-  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this))
+  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this)) {
     throw new $TypeError('String.prototype.toString is not generic');
+  }
   return %_ValueOf(this);
 }
 
 
 // ECMA-262 section 15.5.4.3
 function StringValueOf() {
-  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this))
+  if (!IS_STRING(this) && !IS_STRING_WRAPPER(this)) {
     throw new $TypeError('String.prototype.valueOf is not generic');
+  }
   return %_ValueOf(this);
 }
 
@@ -91,7 +93,8 @@ function StringCharCodeAt(pos) {
 // ECMA-262, section 15.5.4.6
 function StringConcat() {
   if (IS_NULL_OR_UNDEFINED(this) && !IS_UNDETECTABLE(this)) {
-    throw MakeTypeError("called_on_null_or_undefined", ["String.prototype.concat"]);
+    throw MakeTypeError("called_on_null_or_undefined",
+                        ["String.prototype.concat"]);
   }
   var len = %_ArgumentsLength();
   var this_as_string = TO_STRING_INLINE(this);
@@ -241,6 +244,15 @@ function StringReplace(search, replace) {
 
   // Convert the search argument to a string and search for it.
   search = TO_STRING_INLINE(search);
+  if (search.length == 1 &&
+      subject.length > 0xFF &&
+      IS_STRING(replace) &&
+      %StringIndexOf(replace, '$', 0) < 0) {
+    // Searching by traversing a cons string tree and replace with cons of
+    // slices works only when the replaced string is a single character, being
+    // replaced by a simple string and only pays off for long strings.
+    return %StringReplaceOneCharWithString(subject, search, replace);
+  }
   var start = %StringIndexOf(subject, search, 0);
   if (start < 0) return subject;
   var end = start + search.length;
@@ -358,7 +370,7 @@ function ExpandReplacement(string, subject, matchInfo, builder) {
       builder_elements.push(SubString(string, position, next));
     }
   }
-};
+}
 
 
 // Compute the string of a given regular expression capture.
@@ -371,7 +383,7 @@ function CaptureString(string, lastCaptureInfo, index) {
   if (start < 0) return;
   var end = lastCaptureInfo[CAPTURE(scaled + 1)];
   return SubString(string, start, end);
-};
+}
 
 
 // Add the string of a given regular expression capture to the
@@ -384,7 +396,7 @@ function addCaptureString(builder, matchInfo, index) {
   if (start < 0) return;
   var end = matchInfo[CAPTURE(scaled + 1)];
   builder.addSpecialSlice(start, end);
-};
+}
 
 // TODO(lrn): This array will survive indefinitely if replace is never
 // called again. However, it will be empty, since the contents are cleared
@@ -531,32 +543,37 @@ function StringSlice(start, end) {
   var s_len = s.length;
   var start_i = TO_INTEGER(start);
   var end_i = s_len;
-  if (end !== void 0)
+  if (end !== void 0) {
     end_i = TO_INTEGER(end);
+  }
 
   if (start_i < 0) {
     start_i += s_len;
-    if (start_i < 0)
+    if (start_i < 0) {
       start_i = 0;
+    }
   } else {
-    if (start_i > s_len)
-      start_i = s_len;
+    if (start_i > s_len) {
+      return '';
+    }
   }
 
   if (end_i < 0) {
     end_i += s_len;
-    if (end_i < 0)
-      end_i = 0;
+    if (end_i < 0) {
+      return '';
+    }
   } else {
-    if (end_i > s_len)
+    if (end_i > s_len) {
       end_i = s_len;
+    }
   }
 
-  var num_c = end_i - start_i;
-  if (num_c < 0)
-    num_c = 0;
+  if (end_i <= start_i) {
+    return '';
+  }
 
-  return SubString(s, start_i, start_i + num_c);
+  return SubString(s, start_i, end_i);
 }
 
 
@@ -568,20 +585,19 @@ function StringSplit(separator, limit) {
   }
   var subject = TO_STRING_INLINE(this);
   limit = (IS_UNDEFINED(limit)) ? 0xffffffff : TO_UINT32(limit);
-  if (limit === 0) return [];
 
   // ECMA-262 says that if separator is undefined, the result should
-  // be an array of size 1 containing the entire string.  SpiderMonkey
-  // and KJS have this behavior only when no separator is given.  If
-  // undefined is explicitly given, they convert it to a string and
-  // use that.  We do as SpiderMonkey and KJS.
-  if (%_ArgumentsLength() === 0) {
+  // be an array of size 1 containing the entire string.
+  if (IS_UNDEFINED(separator)) {
     return [subject];
   }
 
   var length = subject.length;
   if (!IS_REGEXP(separator)) {
     separator = TO_STRING_INLINE(separator);
+
+    if (limit === 0) return [];
+
     var separator_length = separator.length;
 
     // If the separator string is empty then return the elements in the subject.
@@ -592,6 +608,14 @@ function StringSplit(separator, limit) {
     return result;
   }
 
+  if (limit === 0) return [];
+
+  // Separator is a regular expression.
+  return StringSplitOnRegExp(subject, separator, limit, length);
+}
+
+
+function StringSplitOnRegExp(subject, separator, limit, length) {
   %_Log('regexp', 'regexp-split,%0S,%1r', [subject, separator]);
 
   if (length === 0) {
@@ -688,7 +712,7 @@ function StringSubstring(start, end) {
     }
   }
 
-  return (start_i + 1 == end_i
+  return ((start_i + 1 == end_i)
           ? %_StringCharAt(s, start_i)
           : %_SubString(s, start_i, end_i));
 }
@@ -732,7 +756,7 @@ function StringSubstr(start, n) {
   var end = start + len;
   if (end > s.length) end = s.length;
 
-  return (start + 1 == end
+  return ((start + 1 == end)
           ? %_StringCharAt(s, start)
           : %_SubString(s, start, end));
 }
@@ -832,7 +856,7 @@ function HtmlEscape(str) {
                               .replace(/>/g, "&gt;")
                               .replace(/"/g, "&quot;")
                               .replace(/'/g, "&#039;");
-};
+}
 
 
 // Compatibility support for KJS.
@@ -953,7 +977,7 @@ function SetUpString() {
 
 
   // Set up the non-enumerable functions on the String prototype object.
-  InstallFunctionsOnHiddenPrototype($String.prototype, DONT_ENUM, $Array(
+  InstallFunctions($String.prototype, DONT_ENUM, $Array(
     "valueOf", StringValueOf,
     "toString", StringToString,
     "charAt", StringCharAt,

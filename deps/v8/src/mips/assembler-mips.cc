@@ -30,7 +30,7 @@
 
 // The original source code covered by the above license above has been
 // modified significantly by Google Inc.
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 
 
 #include "v8.h"
@@ -74,7 +74,9 @@ static uint64_t CpuFeaturesImpliedByCompiler() {
 
 
 void CpuFeatures::Probe() {
-  ASSERT(!initialized_);
+  unsigned standard_features = (OS::CpuFeaturesImpliedByPlatform() |
+                                CpuFeaturesImpliedByCompiler());
+  ASSERT(supported_ == 0 || supported_ == standard_features);
 #ifdef DEBUG
   initialized_ = true;
 #endif
@@ -82,8 +84,7 @@ void CpuFeatures::Probe() {
   // Get the features implied by the OS and the compiler settings. This is the
   // minimal set of features which is also allowed for generated code in the
   // snapshot.
-  supported_ |= OS::CpuFeaturesImpliedByPlatform();
-  supported_ |= CpuFeaturesImpliedByCompiler();
+  supported_ |= standard_features;
 
   if (Serializer::enabled()) {
     // No probing for features if we might serialize (generate snapshot).
@@ -300,7 +301,7 @@ Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
     own_buffer_ = false;
   }
 
-  // Setup buffer pointers.
+  // Set up buffer pointers.
   ASSERT(buffer_ != NULL);
   pc_ = buffer_;
   reloc_info_writer.Reposition(buffer_ + buffer_size, pc_);
@@ -336,7 +337,7 @@ Assembler::~Assembler() {
 
 void Assembler::GetCode(CodeDesc* desc) {
   ASSERT(pc_ <= reloc_info_writer.pos());  // No overlap.
-  // Setup code descriptor.
+  // Set up code descriptor.
   desc->buffer = buffer_;
   desc->buffer_size = buffer_size_;
   desc->instr_size = pc_offset();
@@ -849,7 +850,6 @@ bool Assembler::MustUseReg(RelocInfo::Mode rmode) {
   return rmode != RelocInfo::NONE;
 }
 
-
 void Assembler::GenInstrRegister(Opcode opcode,
                                  Register rs,
                                  Register rt,
@@ -1244,6 +1244,7 @@ void Assembler::and_(Register rd, Register rs, Register rt) {
 
 
 void Assembler::andi(Register rt, Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(ANDI, rs, rt, j);
 }
 
@@ -1254,6 +1255,7 @@ void Assembler::or_(Register rd, Register rs, Register rt) {
 
 
 void Assembler::ori(Register rt, Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(ORI, rs, rt, j);
 }
 
@@ -1264,6 +1266,7 @@ void Assembler::xor_(Register rd, Register rs, Register rt) {
 
 
 void Assembler::xori(Register rt, Register rs, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(XORI, rs, rt, j);
 }
 
@@ -1315,7 +1318,7 @@ void Assembler::srav(Register rd, Register rt, Register rs) {
 void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
   // Should be called via MacroAssembler::Ror.
   ASSERT(rd.is_valid() && rt.is_valid() && is_uint5(sa));
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   Instr instr = SPECIAL | (1 << kRsShift) | (rt.code() << kRtShift)
       | (rd.code() << kRdShift) | (sa << kSaShift) | SRL;
   emit(instr);
@@ -1325,7 +1328,7 @@ void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
 void Assembler::rotrv(Register rd, Register rt, Register rs) {
   // Should be called via MacroAssembler::Ror.
   ASSERT(rd.is_valid() && rt.is_valid() && rs.is_valid() );
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   Instr instr = SPECIAL | (rs.code() << kRsShift) | (rt.code() << kRtShift)
      | (rd.code() << kRdShift) | (1 << kSaShift) | SRLV;
   emit(instr);
@@ -1444,6 +1447,7 @@ void Assembler::swr(Register rd, const MemOperand& rs) {
 
 
 void Assembler::lui(Register rd, int32_t j) {
+  ASSERT(is_uint16(j));
   GenInstrImmediate(LUI, zero_reg, rd, j);
 }
 
@@ -1599,7 +1603,7 @@ void Assembler::clz(Register rd, Register rs) {
 void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ins.
   // Ins instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, INS);
 }
 
@@ -1607,7 +1611,7 @@ void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
 void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ext.
   // Ext instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
 }
 
@@ -1767,25 +1771,25 @@ void Assembler::ceil_w_d(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_L_S);
 }
 
 
 void Assembler::cvt_l_d(FPURegister fd, FPURegister fs) {
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, D, f0, fs, fd, CVT_L_D);
 }
 
 
 void Assembler::trunc_l_s(FPURegister fd, FPURegister fs) {
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_L_S);
 }
 
 
 void Assembler::trunc_l_d(FPURegister fd, FPURegister fs) {
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_L_D);
 }
 
@@ -1826,7 +1830,7 @@ void Assembler::cvt_s_w(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_s_l(FPURegister fd, FPURegister fs) {
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, L, f0, fs, fd, CVT_S_L);
 }
 
@@ -1842,7 +1846,7 @@ void Assembler::cvt_d_w(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_d_l(FPURegister fd, FPURegister fs) {
-  ASSERT(mips32r2);
+  ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, L, f0, fs, fd, CVT_D_L);
 }
 
@@ -1969,7 +1973,7 @@ void Assembler::GrowBuffer() {
   }
   CHECK_GT(desc.buffer_size, 0);  // No overflow.
 
-  // Setup new buffer.
+  // Set up new buffer.
   desc.buffer = NewArray<byte>(desc.buffer_size);
 
   desc.instr_size = pc_offset();
@@ -2018,7 +2022,8 @@ void Assembler::dd(uint32_t data) {
 
 
 void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
-  RelocInfo rinfo(pc_, rmode, data);  // We do not try to reuse pool constants.
+  // We do not try to reuse pool constants.
+  RelocInfo rinfo(pc_, rmode, data, NULL);
   if (rmode >= RelocInfo::JS_RETURN && rmode <= RelocInfo::DEBUG_BREAK_SLOT) {
     // Adjust code for new modes.
     ASSERT(RelocInfo::IsDebugBreakSlot(rmode)
@@ -2041,7 +2046,7 @@ void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
     }
     ASSERT(buffer_space() >= kMaxRelocSize);  // Too late to grow buffer here.
     if (rmode == RelocInfo::CODE_TARGET_WITH_ID) {
-      RelocInfo reloc_info_with_ast_id(pc_, rmode, RecordedAstId());
+      RelocInfo reloc_info_with_ast_id(pc_, rmode, RecordedAstId(), NULL);
       ClearRecordedAstId();
       reloc_info_writer.Write(&reloc_info_with_ast_id);
     } else {

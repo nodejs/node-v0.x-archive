@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -26,15 +26,16 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "v8.h"
-
 #include "accessors.h"
-#include "ast.h"
+
+#include "contexts.h"
 #include "deoptimizer.h"
 #include "execution.h"
 #include "factory.h"
+#include "frames-inl.h"
+#include "isolate.h"
 #include "list-inl.h"
-#include "safepoint-table.h"
-#include "scopeinfo.h"
+#include "property-details.h"
 
 namespace v8 {
 namespace internal {
@@ -486,16 +487,6 @@ MaybeObject* Accessors::FunctionSetPrototype(JSObject* object,
                                                     NONE);
   }
 
-  if (function->has_initial_map()) {
-    // If the function has allocated the initial map
-    // replace it with a copy containing the new prototype.
-    Object* new_map;
-    { MaybeObject* maybe_new_map =
-          function->initial_map()->CopyDropTransitions();
-      if (!maybe_new_map->ToObject(&new_map)) return maybe_new_map;
-    }
-    function->set_initial_map(Map::cast(new_map));
-  }
   Object* prototype;
   { MaybeObject* maybe_prototype = function->SetPrototype(value);
     if (!maybe_prototype->ToObject(&prototype)) return maybe_prototype;
@@ -527,7 +518,9 @@ MaybeObject* Accessors::FunctionGetLength(Object* object, void*) {
     // correctly yet. Compile it now and return the right length.
     HandleScope scope;
     Handle<JSFunction> handle(function);
-    if (!CompileLazy(handle, KEEP_EXCEPTION)) return Failure::Exception();
+    if (!JSFunction::CompileLazy(handle, KEEP_EXCEPTION)) {
+      return Failure::Exception();
+    }
     return Smi::FromInt(handle->shared()->length());
   } else {
     return Smi::FromInt(function->shared()->length());
@@ -572,11 +565,12 @@ static MaybeObject* ConstructArgumentsObjectForInlinedFunction(
     Handle<JSFunction> inlined_function,
     int inlined_frame_index) {
   Factory* factory = Isolate::Current()->factory();
-  int args_count = inlined_function->shared()->formal_parameter_count();
-  ScopedVector<SlotRef> args_slots(args_count);
-  SlotRef::ComputeSlotMappingForArguments(frame,
-                                          inlined_frame_index,
-                                          &args_slots);
+  Vector<SlotRef> args_slots =
+      SlotRef::ComputeSlotMappingForArguments(
+          frame,
+          inlined_frame_index,
+          inlined_function->shared()->formal_parameter_count());
+  int args_count = args_slots.length();
   Handle<JSObject> arguments =
       factory->NewArgumentsObject(inlined_function, args_count);
   Handle<FixedArray> array = factory->NewFixedArray(args_count);
@@ -585,6 +579,7 @@ static MaybeObject* ConstructArgumentsObjectForInlinedFunction(
     array->set(i, *value);
   }
   arguments->set_elements(*array);
+  args_slots.Dispose();
 
   // Return the freshly allocated arguments object.
   return *arguments;
@@ -619,8 +614,9 @@ MaybeObject* Accessors::FunctionGetArguments(Object* object, void*) {
 
       if (!frame->is_optimized()) {
         // If there is an arguments variable in the stack, we return that.
-        Handle<SerializedScopeInfo> info(function->shared()->scope_info());
-        int index = info->StackSlotIndex(isolate->heap()->arguments_symbol());
+        Handle<ScopeInfo> scope_info(function->shared()->scope_info());
+        int index = scope_info->StackSlotIndex(
+            isolate->heap()->arguments_symbol());
         if (index >= 0) {
           Handle<Object> arguments(frame->GetExpression(index), isolate);
           if (!arguments->IsArgumentsMarker()) return *arguments;
@@ -672,7 +668,7 @@ static MaybeObject* CheckNonStrictCallerOrThrow(
     Isolate* isolate,
     JSFunction* caller) {
   DisableAssertNoAllocation enable_allocation;
-  if (caller->shared()->strict_mode()) {
+  if (!caller->shared()->is_classic_mode()) {
     return isolate->Throw(
         *isolate->factory()->NewTypeError("strict_caller",
                                           HandleVector<Object>(NULL, 0)));
@@ -759,7 +755,12 @@ MaybeObject* Accessors::FunctionGetCaller(Object* object, void*) {
     caller = potential_caller;
     potential_caller = it.next();
   }
-
+  // If caller is bound, return null. This is compatible with JSC, and
+  // allows us to make bound functions use the strict function map
+  // and its associated throwing caller and arguments.
+  if (caller->shared()->bound()) {
+    return isolate->heap()->null_value();
+  }
   return CheckNonStrictCallerOrThrow(isolate, caller);
 }
 

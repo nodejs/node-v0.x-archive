@@ -114,10 +114,6 @@ TEST(ExternalReferenceEncoder) {
       ExternalReference(isolate->counters()->keyed_load_function_prototype());
   CHECK_EQ(make_code(STATS_COUNTER, Counters::k_keyed_load_function_prototype),
            encoder.Encode(keyed_load_function_prototype.address()));
-  ExternalReference the_hole_value_location =
-      ExternalReference::the_hole_value_location(isolate);
-  CHECK_EQ(make_code(UNCLASSIFIED, 2),
-           encoder.Encode(the_hole_value_location.address()));
   ExternalReference stack_limit_address =
       ExternalReference::address_of_stack_limit(isolate);
   CHECK_EQ(make_code(UNCLASSIFIED, 4),
@@ -127,14 +123,15 @@ TEST(ExternalReferenceEncoder) {
   CHECK_EQ(make_code(UNCLASSIFIED, 5),
            encoder.Encode(real_stack_limit_address.address()));
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  CHECK_EQ(make_code(UNCLASSIFIED, 15),
+  CHECK_EQ(make_code(UNCLASSIFIED, 16),
            encoder.Encode(ExternalReference::debug_break(isolate).address()));
 #endif  // ENABLE_DEBUGGER_SUPPORT
   CHECK_EQ(make_code(UNCLASSIFIED, 10),
            encoder.Encode(
                ExternalReference::new_space_start(isolate).address()));
   CHECK_EQ(make_code(UNCLASSIFIED, 3),
-           encoder.Encode(ExternalReference::roots_address(isolate).address()));
+           encoder.Encode(
+               ExternalReference::roots_array_start(isolate).address()));
 }
 
 
@@ -157,15 +154,13 @@ TEST(ExternalReferenceDecoder) {
            decoder.Decode(
                make_code(STATS_COUNTER,
                          Counters::k_keyed_load_function_prototype)));
-  CHECK_EQ(ExternalReference::the_hole_value_location(isolate).address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 2)));
   CHECK_EQ(ExternalReference::address_of_stack_limit(isolate).address(),
            decoder.Decode(make_code(UNCLASSIFIED, 4)));
   CHECK_EQ(ExternalReference::address_of_real_stack_limit(isolate).address(),
            decoder.Decode(make_code(UNCLASSIFIED, 5)));
 #ifdef ENABLE_DEBUGGER_SUPPORT
   CHECK_EQ(ExternalReference::debug_break(isolate).address(),
-           decoder.Decode(make_code(UNCLASSIFIED, 15)));
+           decoder.Decode(make_code(UNCLASSIFIED, 16)));
 #endif  // ENABLE_DEBUGGER_SUPPORT
   CHECK_EQ(ExternalReference::new_space_start(isolate).address(),
            decoder.Decode(make_code(UNCLASSIFIED, 10)));
@@ -365,8 +360,8 @@ TEST(PartialSerialization) {
       Isolate::Current()->bootstrapper()->NativesSourceLookup(i);
     }
   }
-  HEAP->CollectAllGarbage(true);
-  HEAP->CollectAllGarbage(true);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
 
   Object* raw_foo;
   {
@@ -490,7 +485,7 @@ TEST(ContextSerialization) {
   }
   // If we don't do this then we end up with a stray root pointing at the
   // context even after we have disposed of env.
-  HEAP->CollectAllGarbage(true);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
 
   int file_name_length = StrLength(FLAG_testing_serialization_file) + 10;
   Vector<char> startup_name = Vector<char>::New(file_name_length + 1);
@@ -563,16 +558,20 @@ DEPENDENT_TEST(ContextDeserialization, ContextSerialization) {
 TEST(LinearAllocation) {
   v8::V8::Initialize();
   int new_space_max = 512 * KB;
+  int paged_space_max = Page::kMaxNonCodeHeapObjectSize;
+  int code_space_max = HEAP->code_space()->AreaSize();
 
   for (int size = 1000; size < 5 * MB; size += size >> 1) {
+    size &= ~8;  // Round.
     int new_space_size = (size < new_space_max) ? size : new_space_max;
+    int paged_space_size = (size < paged_space_max) ? size : paged_space_max;
     HEAP->ReserveSpace(
         new_space_size,
-        size,              // Old pointer space.
-        size,              // Old data space.
-        size,              // Code space.
-        size,              // Map space.
-        size,              // Cell space.
+        paged_space_size,  // Old pointer space.
+        paged_space_size,  // Old data space.
+        HEAP->code_space()->RoundSizeDownToObjectAlignment(code_space_max),
+        HEAP->map_space()->RoundSizeDownToObjectAlignment(paged_space_size),
+        HEAP->cell_space()->RoundSizeDownToObjectAlignment(paged_space_size),
         size);             // Large object space.
     LinearAllocationScope linear_allocation_scope;
     const int kSmallFixedArrayLength = 4;
@@ -599,14 +598,14 @@ TEST(LinearAllocation) {
 
     Object* pointer_last = NULL;
     for (int i = 0;
-         i + kSmallFixedArraySize <= size;
+         i + kSmallFixedArraySize <= paged_space_size;
          i += kSmallFixedArraySize) {
       Object* obj = HEAP->AllocateFixedArray(kSmallFixedArrayLength,
                                              TENURED)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kSmallFixedArraySize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
-          page_fullness > Page::kObjectAreaSize) {
+          page_fullness > HEAP->old_pointer_space()->AreaSize()) {
         i = RoundUp(i, Page::kPageSize);
         pointer_last = NULL;
       }
@@ -618,13 +617,15 @@ TEST(LinearAllocation) {
     }
 
     Object* data_last = NULL;
-    for (int i = 0; i + kSmallStringSize <= size; i += kSmallStringSize) {
+    for (int i = 0;
+         i + kSmallStringSize <= paged_space_size;
+         i += kSmallStringSize) {
       Object* obj = HEAP->AllocateRawAsciiString(kSmallStringLength,
                                                  TENURED)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kSmallStringSize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
-          page_fullness > Page::kObjectAreaSize) {
+          page_fullness > HEAP->old_data_space()->AreaSize()) {
         i = RoundUp(i, Page::kPageSize);
         data_last = NULL;
       }
@@ -636,13 +637,13 @@ TEST(LinearAllocation) {
     }
 
     Object* map_last = NULL;
-    for (int i = 0; i + kMapSize <= size; i += kMapSize) {
+    for (int i = 0; i + kMapSize <= paged_space_size; i += kMapSize) {
       Object* obj = HEAP->AllocateMap(JS_OBJECT_TYPE,
                                       42 * kPointerSize)->ToObjectChecked();
       int old_page_fullness = i % Page::kPageSize;
       int page_fullness = (i + kMapSize) % Page::kPageSize;
       if (page_fullness < old_page_fullness ||
-          page_fullness > Page::kObjectAreaSize) {
+          page_fullness > HEAP->map_space()->AreaSize()) {
         i = RoundUp(i, Page::kPageSize);
         map_last = NULL;
       }
@@ -653,7 +654,7 @@ TEST(LinearAllocation) {
       map_last = obj;
     }
 
-    if (size > Page::kObjectAreaSize) {
+    if (size > Page::kMaxNonCodeHeapObjectSize) {
       // Support for reserving space in large object space is not there yet,
       // but using an always-allocate scope is fine for now.
       AlwaysAllocateScope always;

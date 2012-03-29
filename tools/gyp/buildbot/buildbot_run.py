@@ -1,5 +1,5 @@
-#!/usr/bin/python
-# Copyright (c) 2011 Google Inc. All rights reserved.
+#!/usr/bin/env python
+# Copyright (c) 2012 Google Inc. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -13,7 +13,19 @@ import subprocess
 import sys
 
 
-def GypTestFormat(title, format, msvs_version=None):
+if sys.platform in ['win32', 'cygwin']:
+  EXE_SUFFIX = '.exe'
+else:
+  EXE_SUFFIX = ''
+
+
+BUILDBOT_DIR = os.path.dirname(os.path.abspath(__file__))
+TRUNK_DIR = os.path.dirname(BUILDBOT_DIR)
+ROOT_DIR = os.path.dirname(TRUNK_DIR)
+OUT_DIR = os.path.join(TRUNK_DIR, 'out')
+
+
+def GypTestFormat(title, format=None, msvs_version=None):
   """Run the gyp tests for a given format, emitting annotator tags.
 
   See annotator docs at:
@@ -23,12 +35,16 @@ def GypTestFormat(title, format, msvs_version=None):
   Returns:
     0 for sucesss, 1 for failure.
   """
+  if not format:
+    format = title
+
   print '@@@BUILD_STEP ' + title + '@@@'
   sys.stdout.flush()
-  buildbot_dir = os.path.dirname(os.path.abspath(__file__))
-  trunk_dir = os.path.dirname(buildbot_dir)
-  root_dir = os.path.dirname(trunk_dir)
   env = os.environ.copy()
+  # TODO(bradnelson): remove this when this issue is resolved:
+  #     http://code.google.com/p/chromium/issues/detail?id=108251
+  if format == 'ninja':
+    env['NOGOLD'] = '1'
   if msvs_version:
     env['GYP_MSVS_VERSION'] = msvs_version
   retcode = subprocess.call(' '.join(
@@ -38,7 +54,7 @@ def GypTestFormat(title, format, msvs_version=None):
        '--format', format,
        '--chdir', 'trunk',
        '--path', '../scons']),
-      cwd=root_dir, env=env, shell=True)
+      cwd=ROOT_DIR, env=env, shell=True)
   if retcode:
     # Emit failure tag, and keep going.
     print '@@@STEP_FAILURE@@@'
@@ -49,17 +65,19 @@ def GypTestFormat(title, format, msvs_version=None):
 def GypBuild():
   # Dump out/ directory.
   print '@@@BUILD_STEP cleanup@@@'
-  print 'Removing out/ ...'
-  shutil.rmtree('out', ignore_errors=True)
+  print 'Removing %s...' % OUT_DIR
+  shutil.rmtree(OUT_DIR, ignore_errors=True)
   print 'Done.'
 
   retcode = 0
   if sys.platform.startswith('linux'):
-    retcode += GypTestFormat('scons', format='scons')
-    retcode += GypTestFormat('make', format='make')
+    retcode += GypTestFormat('ninja')
+    retcode += GypTestFormat('scons')
+    retcode += GypTestFormat('make')
   elif sys.platform == 'darwin':
-    retcode += GypTestFormat('xcode', format='xcode')
-    retcode += GypTestFormat('make', format='make')
+    retcode += GypTestFormat('ninja')
+    retcode += GypTestFormat('xcode')
+    retcode += GypTestFormat('make')
   elif sys.platform == 'win32':
     retcode += GypTestFormat('msvs-2008', format='msvs', msvs_version='2008')
     if os.environ['BUILDBOT_BUILDERNAME'] == 'gyp-win64':

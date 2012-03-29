@@ -1,39 +1,55 @@
+-include config.mk
+
+BUILDTYPE ?= Release
 PYTHON ?= python
-WAF    = $(PYTHON) tools/waf-light
 
-web_root = node@nodejs.org:~/web/nodejs.org/
+# BUILDTYPE=Debug builds both release and debug builds. If you want to compile
+# just the debug build, run `make -C out BUILDTYPE=Debug` instead.
+ifeq ($(BUILDTYPE),Release)
+all: out/Makefile node
+else
+all: out/Makefile node node_g
+endif
 
-#
-# Because we recursively call make from waf we need to make sure that we are
-# using the correct make. Not all makes are GNU Make, but this likely only
-# works with gnu make. To deal with this we remember how the user invoked us
-# via a make builtin variable and use that in all subsequent operations
-#
-export NODE_MAKE := $(MAKE)
+# The .PHONY is needed to ensure that we recursively use the out/Makefile
+# to check for changes.
+.PHONY: node node_g
 
-all: program
-	@-[ -f out/Release/node ] && ls -lh out/Release/node
+node: config.gypi
+	$(MAKE) -C out BUILDTYPE=Release
+	ln -fs out/Release/node node
 
-all-progress:
-	@$(WAF) -p build
+node_g: config.gypi
+	$(MAKE) -C out BUILDTYPE=Debug
+	ln -fs out/Debug/node node_g
 
-program:
-	@$(WAF) --product-type=program build
+config.gypi: configure
+	./configure
 
-staticlib:
-	@$(WAF) --product-type=cstaticlib build
+out/Debug/node:
+	$(MAKE) -C out BUILDTYPE=Debug
 
-dynamiclib:
-	@$(WAF) --product-type=cshlib build
+out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
+	tools/gyp_node -f make
 
-install:
-	@$(WAF) install
+install: all
+	out/Release/node tools/installer.js install
 
 uninstall:
-	@$(WAF) uninstall
+	out/Release/node tools/installer.js uninstall
+
+clean:
+	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node
+	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
+
+distclean:
+	-rm -rf out
+	-rm -f config.gypi
+	-rm -f config.mk
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 test-http1: all
 	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
@@ -42,8 +58,8 @@ test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
 test-all: all
-	$(PYTHON) tools/test.py --mode=debug,release
-	make test-npm
+	python tools/test.py --mode=debug,release
+	$(MAKE) test-npm
 
 test-all-http1: all
 	$(PYTHON) tools/test.py --mode=debug,release --use-http1
@@ -69,13 +85,11 @@ test-pummel: all
 test-internet: all
 	$(PYTHON) tools/test.py internet
 
-test-npm: all
+test-npm: node
 	./node deps/npm/test/run.js
 
-test-npm-publish: all
+test-npm-publish: node
 	npm_package_config_publishtest=true ./node deps/npm/test/run.js
-
-out/Release/node: all
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
 apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html)) \
@@ -110,6 +124,9 @@ $(apidoc_dirs):
 out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
 
+out/doc/%.html: doc/%.html
+	cat $< | sed -e 's|__VERSION__|'$(VERSION)'|g' > $@
+
 out/doc/%: doc/%
 	cp -r $< $@
 
@@ -118,8 +135,6 @@ out/doc/api/%.json: doc/api/%.markdown
 
 out/doc/api/%.html: doc/api/%.markdown
 	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
-
-out/doc/%:
 
 website-upload: doc
 	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
@@ -130,41 +145,26 @@ docopen: out/doc/api/all.html
 docclean:
 	-rm -rf out/doc
 
-clean:
-	$(WAF) clean
-	-find tools -name "*.pyc" | xargs rm -f
-
-distclean: docclean
-	-find tools -name "*.pyc" | xargs rm -f
-	-rm -rf dist-osx
-	-rm -rf out/ node node_g
-
-check:
-	@tools/waf-light check
-
 VERSION=v$(shell $(PYTHON) tools/getnodeversion.py)
 TARNAME=node-$(VERSION)
 TARBALL=$(TARNAME).tar.gz
 PKG=out/$(TARNAME).pkg
-
 packagemaker=/Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
 
-#dist: doc/node.1 doc/api
-dist: $(TARBALL) $(PKG)
+dist: doc $(TARBALL) $(PKG)
 
 PKGDIR=out/dist-osx
 
 pkg: $(PKG)
 
 $(PKG):
-	-rm -rf $(PKGDIR)
-	# Need to remove deps between architecture changes.
-	rm -rf out/*/deps
-	$(WAF) configure --prefix=/usr/local --without-snapshot --dest-cpu=ia32
-	CFLAGS=-m32 DESTDIR=$(PKGDIR)/32 $(WAF) install
-	rm -rf out/*/deps
-	$(WAF) configure --prefix=/usr/local --without-snapshot --dest-cpu=x64
-	CFLAGS=-m64 DESTDIR=$(PKGDIR) $(WAF) install
+	rm -rf $(PKGDIR)
+	rm -rf out/deps out/Release
+	./configure --prefix=$(PKGDIR)/32/usr/local --without-snapshot --dest-cpu=ia32
+	$(MAKE) install
+	rm -rf out/deps out/Release
+	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot --dest-cpu=x64
+	$(MAKE) install
 	lipo $(PKGDIR)/32/usr/local/bin/node \
 		$(PKGDIR)/usr/local/bin/node \
 		-output $(PKGDIR)/usr/local/bin/node-universal \
@@ -176,7 +176,16 @@ $(PKG):
 		--doc tools/osx-pkg.pmdoc \
 		--out $(PKG)
 
-$(TARBALL): out/doc
+$(TARBALL): node out/doc
+	@if [ $(shell ./node --version) = "$(VERSION)" ]; then \
+		exit 0; \
+	else \
+	  echo "" >&2 ; \
+		echo "$(shell ./node --version) doesn't match $(VERSION)." >&2 ; \
+	  echo "Did you remember to update src/node_version.cc?" >&2 ; \
+	  echo "" >&2 ; \
+		exit 1 ; \
+	fi
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc
 	cp doc/node.1 $(TARNAME)/doc/node.1
@@ -208,4 +217,4 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean dist-upload check uninstall install all program staticlib dynamiclib test test-all website-upload
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload pkg

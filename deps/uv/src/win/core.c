@@ -59,6 +59,7 @@ static void uv_init(void) {
 
 
 static void uv_loop_init(uv_loop_t* loop) {
+  loop->uv_ares_handles_ = NULL;
   /* Create an I/O completion port */
   loop->iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 1);
   if (loop->iocp == NULL) {
@@ -86,6 +87,9 @@ static void uv_loop_init(uv_loop_t* loop) {
   loop->ares_active_sockets = 0;
   loop->ares_chan = NULL;
 
+  loop->active_tcp_streams = 0;
+  loop->active_udp_streams = 0;
+
   loop->last_err = uv_ok_;
 }
 
@@ -106,13 +110,26 @@ uv_loop_t* uv_default_loop(void) {
 
 
 uv_loop_t* uv_loop_new(void) {
-  assert(0 && "implement me");
-  return NULL;
+  uv_loop_t* loop;
+
+  /* Initialize libuv itself first */
+  uv_once(&uv_init_guard_, uv_init);
+
+  loop = (uv_loop_t*)malloc(sizeof(uv_loop_t));
+
+  if (!loop) {
+    uv_fatal_error(ERROR_OUTOFMEMORY, "malloc");
+  }
+
+  uv_loop_init(loop);
+  return loop;
 }
 
 
 void uv_loop_delete(uv_loop_t* loop) {
-  assert(0 && "implement me");
+  if (loop != &uv_default_loop_) {
+    free(loop);
+  }
 }
 
 
@@ -181,7 +198,7 @@ static void uv_poll_ex(uv_loop_t* loop, int block) {
 
   success = pGetQueuedCompletionStatusEx(loop->iocp,
                                          overlappeds,
-                                         COUNTOF(overlappeds),
+                                         ARRAY_SIZE(overlappeds),
                                          &count,
                                          timeout,
                                          FALSE);
@@ -197,9 +214,8 @@ static void uv_poll_ex(uv_loop_t* loop, int block) {
   }
 }
 
-
-#define UV_LOOP(loop, poll)                                                   \
-  while ((loop)->refs > 0) {                                                  \
+#define UV_LOOP_ONCE(loop, poll)                                              \
+  do {                                                                        \
     uv_update_time((loop));                                                   \
     uv_process_timers((loop));                                                \
                                                                               \
@@ -224,7 +240,22 @@ static void uv_poll_ex(uv_loop_t* loop, int block) {
                  (loop)->refs > 0);                                           \
                                                                               \
     uv_check_invoke((loop));                                                  \
+  } while (0);
+
+#define UV_LOOP(loop, poll)                                                   \
+  while ((loop)->refs > 0) {                                                  \
+    UV_LOOP_ONCE(loop, poll)                                                  \
   }
+
+
+int uv_run_once(uv_loop_t* loop) {
+  if (pGetQueuedCompletionStatusEx) {
+    UV_LOOP_ONCE(loop, uv_poll_ex);
+  } else {
+    UV_LOOP_ONCE(loop, uv_poll);
+  }
+  return 0;
+}
 
 
 int uv_run(uv_loop_t* loop) {

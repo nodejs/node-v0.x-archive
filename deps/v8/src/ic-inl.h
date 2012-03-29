@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,6 +29,8 @@
 #define V8_IC_INL_H_
 
 #include "ic.h"
+
+#include "compiler.h"
 #include "debug.h"
 #include "macro-assembler.h"
 
@@ -36,7 +38,7 @@ namespace v8 {
 namespace internal {
 
 
-Address IC::address() {
+Address IC::address() const {
   // Get the address of the call.
   Address result = pc() - Assembler::kCallTargetAddressOffset;
 
@@ -77,16 +79,20 @@ Code* IC::GetTargetAtAddress(Address address) {
 
 void IC::SetTargetAtAddress(Address address, Code* target) {
   ASSERT(target->is_inline_cache_stub() || target->is_compare_ic_stub());
+  Code* old_target = GetTargetAtAddress(address);
 #ifdef DEBUG
   // STORE_IC and KEYED_STORE_IC use Code::extra_ic_state() to mark
   // ICs as strict mode. The strict-ness of the IC must be preserved.
-  Code* old_target = GetTargetAtAddress(address);
   if (old_target->kind() == Code::STORE_IC ||
       old_target->kind() == Code::KEYED_STORE_IC) {
-    ASSERT(old_target->extra_ic_state() == target->extra_ic_state());
+    ASSERT(Code::GetStrictMode(old_target->extra_ic_state()) ==
+           Code::GetStrictMode(target->extra_ic_state()));
   }
 #endif
   Assembler::set_target_address_at(address, target->instruction_start());
+  target->GetHeap()->incremental_marking()->RecordCodeTargetPatch(address,
+                                                                  target);
+  PostPatching(address, target, old_target);
 }
 
 

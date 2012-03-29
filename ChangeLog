@@ -1,4 +1,179 @@
-2012.03.15 Version 0.6.13 (stable)
+2012.03.13, Version 0.7.6 (unstable)
+
+* Upgrade v8 to 3.9.17
+
+* Upgrade npm to 1.1.8
+  - Add support for os/cpu fields in package.json (Adam Blackburn)
+  - Automatically node-gyp packages containing a binding.gyp
+  - Fix failures unpacking in UNC shares
+  - Never create un-listable directories
+  - Handle cases where an optionalDependency fails to build
+
+* events: newListener emit correct fn when using 'once' (Roly Fentanes)
+
+* url: Ignore empty port component (Łukasz Walukiewicz)
+
+* module: replace 'children' array (isaacs)
+
+* tls: parse multiple values of a key in ssl certificate (Sambasiva Suda)
+
+* cluster: support passing of named pipes (Ben Noordhuis)
+
+* Windows: include syscall in fs errors (Bert Belder)
+
+* http: #2888 Emit end event only once (Igor Zinkovsky)
+
+* readline: add multiline support (Rlidwka)
+
+* process: add `process.hrtime()` (Nathan Rajlich)
+
+* net, http, https: add localAddress option (Dmitry Nizovtsev)
+
+* addon improvements (Nathan Rajlich)
+
+* build improvements (Ben Noordhuis, Sadique Ali, T.C. Hollingsworth, Nathan Rajlich)
+
+* add support for "SEARCH" request methods (Nathan Rajlich)
+
+* expose the zlib and http_parser version in process.versions (Nathan Rajlich)
+
+
+2012.02.23, Version 0.7.5 (unstable), d384b8b0d2ab7f05465f0a3e15fe20b4e25b5f86
+
+* startup speed improvements (Maciej Małecki)
+
+* crypto: add function getDiffieHellman() (Tomasz Buchert)
+
+* buffer: support decoding of URL-safe base64 (Ben Noordhuis)
+
+* Make QueryString.parse() even faster (Brian White)
+
+* url: decode url entities in auth section (Ben Noordhuis)
+
+* http: support PURGE request method (Ben Noordhuis)
+
+* http: Generate Date headers on responses (Mark Nottingham)
+
+* Fix #2762: Add callback to close function. (Mikeal Rogers)
+
+* dgram: fix out-of-bound memory read (Ben Noordhuis)
+
+* repl: add automatic loading of built-in libs (Brandon Benvie)
+
+* repl: remove double calls where possible (Fedor Indutny)
+
+* Readline improvements. Related: #2737 #2756 (Colton Baker)
+
+* build: disable -fomit-frame-pointer on solaris (Dave Pacheco)
+
+* build: arch detection improvements (Nathan Rajlich)
+
+* build: Make a fat binary for the OS X `make pkg`. (Nathan Rajlich)
+
+* jslint src/ and lib/ on 'make test' (isaacs)
+
+
+
+2012.02.14, Version 0.7.4 (unstable), de21de920cf93ec40736ada3792a7f85f3eadeda
+
+* Upgrade V8 to 3.9.5
+
+* Upgrade npm to 1.1.1
+
+* build: Detect host_arch better (Karl Skomski)
+
+* debugger: export `debug_port` to `process` (Fedor Indutny)
+
+* api docs: CSS bug fixes (isaacs)
+
+* build: use -fPIC for native addons on UNIX (Nathan Rajlich)
+
+* Re-add top-level v8::Locker (Marcel Laverdet)
+
+* Move images out of the dist tarballs (isaacs)
+
+* libuv: Remove uv_export and uv_import (Ben Noordhuis)
+
+* build: Support x64 build on Windows (Igor Zinkovsky)
+
+
+2012.02.07, Version 0.7.3 (unstable), 99059aad8d654acda4abcfaa68df182b50f2ec90
+
+* Upgrade V8 to 3.9.2
+
+* Revert support for isolates. (Ben Noordhuis)
+
+* cluster: Cleanup docs, event handling, and process.disconnect (Andreas Madsen)
+
+* gyp_addon: link with node.lib on Windows (Nathan Rajlich)
+
+* http: fix case where http-parser is freed twice (koichik)
+
+* Windows: disable RTTI and exceptions (Bert Belder)
+
+
+2012.02.01, Version 0.7.2 (unstable), ec79acb3a6166e30f0bf271fbbfda1fb575b3321
+
+* Update V8 to 3.8.9
+
+* Support for sharing streams across Isolates (Igor Zinkovsky)
+
+* #2636 - Fix case where http_parsers are freed too early (koichik)
+
+* url: Support for IPv6 addresses in URLs (Łukasz Walukiewicz)
+
+* child_process: Add disconnect() method to child processes (Andreas Madsen)
+
+* fs: add O_EXCL support, exclusive open file (Ben Noordhuis)
+
+* fs: more specific error messages (Tj Holowaychuk)
+
+* tty: emit 'unknown' key event if key sequence not found (Dan VerWeire, Nathan Rajlich)
+
+* build: compile release build too if BUILDTYPE=Debug (Ben Noordhuis)
+
+* module: fix --debug-brk on symlinked scripts (Fedor Indutny)
+
+* zlib: fix `Failed to set dictionary` issue (Fedor Indutny)
+
+* waf: predict target arch for OS X (Fedor Indutny)
+
+
+2012.01.23, Version 0.7.1 (unstable), a74354735ab5d5b0fa35a1e4ff7e653757d2069b
+
+* Update V8 to 3.8.8
+
+* Install node-waf by default (Fedor Indutny)
+
+* crypto: Add ability to turn off PKCS padding (Ingmar Runge)
+
+* v8: implement VirtualMemory class on SunOS (Ben Noordhuis)
+
+* Add cluster.setupMaster (Andreas Madsen)
+
+* move `path.exists*` to `fs.exists*` (Maciej Małecki)
+
+* typed arrays: set class name (Ben Noordhuis)
+
+* libuv bug fixes (Igor Zinkovsky, Ben Noordhuis, Dan VerWeire)
+
+
+2012.01.16, Version 0.7.0 (unstable), 9cc55dca6f67a6096c858b841c677b0593404321
+
+* Upgrade V8 to 3.8.6
+
+* Use GYP build system on unix (Ben Noordhuis)
+
+* Experimenetal isolates support (Ben Noordhuis)
+
+* Improvements to Cluster API (Andreas Madsen)
+
+* Use isolates for internal debugger (Fedor Indutny)
+
+* Bug fixes
+
+
+2012.03.15 Version 0.6.13 (stable), 9f7f86b534f8556290eb8cad915984ff4ca54996
 
 * Windows: Many libuv test fixes (Bert Belder)
 

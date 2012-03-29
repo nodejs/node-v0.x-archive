@@ -20,18 +20,14 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <node.h>
-#include <node_buffer.h>
+#include "node.h"
+#include "node_buffer.h"
 
-#include <v8.h>
+#include "v8.h"
 
 #include <assert.h>
 #include <stdlib.h> // malloc, free
 #include <string.h> // memcpy
-
-#ifdef __MINGW32__
-# include "platform.h"
-#endif
 
 #ifdef __POSIX__
 # include <arpa/inet.h> // htons, htonl
@@ -175,14 +171,14 @@ Handle<Value> Buffer::New(const Arguments &args) {
 
   HandleScope scope;
 
-  Buffer *buffer;
-  if (args[0]->IsInt32()) {
-    // var buffer = new Buffer(1024);
-    size_t length = args[0]->Uint32Value();
-    buffer = new Buffer(args.This(), length);
-  } else {
-    return ThrowException(Exception::TypeError(String::New("Bad argument")));
+  if (!args[0]->IsUint32()) return ThrowTypeError("Bad argument");
+
+  size_t length = args[0]->Uint32Value();
+  if (length > Buffer::kMaxLength) {
+    return ThrowRangeError("length > kMaxLength");
   }
+  new Buffer(args.This(), length);
+
   return args.This();
 }
 
@@ -282,13 +278,15 @@ Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
 static const char *base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                   "abcdefghijklmnopqrstuvwxyz"
                                   "0123456789+/";
+
+// supports regular and URL-safe base64
 static const int unbase64_table[] =
   {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-2,-1,-1,-2,-1,-1
   ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
-  ,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63
+  ,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,62,-1,63
   ,52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-1,-1,-1
   ,-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14
-  ,15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1
+  ,15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,63
   ,-1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40
   ,41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1
   ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
@@ -591,7 +589,7 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
             "Argument must be a string")));
   }
 
-  String::AsciiValue s(args[0]->ToString());
+  String::AsciiValue s(args[0]);
   size_t offset = args[1]->Int32Value();
   size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
                                              : args[2]->Uint32Value();

@@ -221,6 +221,10 @@ class Simulator {
   // Pop an address from the JS stack.
   uintptr_t PopAddress();
 
+  // Debugger input.
+  void set_last_debugger_input(char* input);
+  char* last_debugger_input() { return last_debugger_input_; }
+
   // ICache checking.
   static void FlushICache(v8::internal::HashMap* i_cache, void* start,
                           size_t size);
@@ -305,6 +309,14 @@ class Simulator {
   void InstructionDecode(Instruction* instr);
   // Execute one instruction placed in a branch delay slot.
   void BranchDelayInstructionDecode(Instruction* instr) {
+    if (instr->InstructionBits() == nopInstr) {
+      // Short-cut generic nop instructions. They are always valid and they
+      // never change the simulator state.
+      set_register(pc, reinterpret_cast<int32_t>(instr) +
+                       Instruction::kInstrSize);
+      return;
+    }
+
     if (instr->IsForbiddenInBranchDelay()) {
       V8_Fatal(__FILE__, __LINE__,
                "Eror:Unexpected %i opcode in a branch delay slot.",
@@ -357,6 +369,9 @@ class Simulator {
   bool pc_modified_;
   int icount_;
   int break_count_;
+
+  // Debugger input.
+  char* last_debugger_input_;
 
   // Icache simulation.
   v8::internal::HashMap* i_cache_;

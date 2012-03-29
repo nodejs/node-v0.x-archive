@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -51,26 +51,20 @@ extern "C" void V8_Fatal(const char* file, int line, const char* format, ...);
 #endif
 
 
-// Used by the CHECK macro -- should not be called directly.
-static inline void CheckHelper(const char* file,
-                               int line,
-                               const char* source,
-                               bool condition) {
-  if (!condition)
-    V8_Fatal(file, line, "CHECK(%s) failed", source);
-}
-
-
 // The CHECK macro checks that the given condition is true; if not, it
 // prints a message to stderr and aborts.
-#define CHECK(condition) CheckHelper(__FILE__, __LINE__, #condition, condition)
+#define CHECK(condition) do {                                       \
+    if (!(condition)) {                                             \
+      V8_Fatal(__FILE__, __LINE__, "CHECK(%s) failed", #condition); \
+    }                                                               \
+  } while (0)
 
 
 // Helper function used by the CHECK_EQ function when given int
 // arguments.  Should not be called directly.
-static inline void CheckEqualsHelper(const char* file, int line,
-                                     const char* expected_source, int expected,
-                                     const char* value_source, int value) {
+inline void CheckEqualsHelper(const char* file, int line,
+                              const char* expected_source, int expected,
+                              const char* value_source, int value) {
   if (expected != value) {
     V8_Fatal(file, line,
              "CHECK_EQ(%s, %s) failed\n#   Expected: %i\n#   Found: %i",
@@ -81,11 +75,11 @@ static inline void CheckEqualsHelper(const char* file, int line,
 
 // Helper function used by the CHECK_EQ function when given int64_t
 // arguments.  Should not be called directly.
-static inline void CheckEqualsHelper(const char* file, int line,
-                                     const char* expected_source,
-                                     int64_t expected,
-                                     const char* value_source,
-                                     int64_t value) {
+inline void CheckEqualsHelper(const char* file, int line,
+                              const char* expected_source,
+                              int64_t expected,
+                              const char* value_source,
+                              int64_t value) {
   if (expected != value) {
     // Print int64_t values in hex, as two int32s,
     // to avoid platform-dependencies.
@@ -103,12 +97,12 @@ static inline void CheckEqualsHelper(const char* file, int line,
 
 // Helper function used by the CHECK_NE function when given int
 // arguments.  Should not be called directly.
-static inline void CheckNonEqualsHelper(const char* file,
-                                        int line,
-                                        const char* unexpected_source,
-                                        int unexpected,
-                                        const char* value_source,
-                                        int value) {
+inline void CheckNonEqualsHelper(const char* file,
+                                 int line,
+                                 const char* unexpected_source,
+                                 int unexpected,
+                                 const char* value_source,
+                                 int value) {
   if (unexpected == value) {
     V8_Fatal(file, line, "CHECK_NE(%s, %s) failed\n#   Value: %i",
              unexpected_source, value_source, value);
@@ -118,12 +112,12 @@ static inline void CheckNonEqualsHelper(const char* file,
 
 // Helper function used by the CHECK function when given string
 // arguments.  Should not be called directly.
-static inline void CheckEqualsHelper(const char* file,
-                                     int line,
-                                     const char* expected_source,
-                                     const char* expected,
-                                     const char* value_source,
-                                     const char* value) {
+inline void CheckEqualsHelper(const char* file,
+                              int line,
+                              const char* expected_source,
+                              const char* expected,
+                              const char* value_source,
+                              const char* value) {
   if ((expected == NULL && value != NULL) ||
       (expected != NULL && value == NULL) ||
       (expected != NULL && value != NULL && strcmp(expected, value) != 0)) {
@@ -134,12 +128,12 @@ static inline void CheckEqualsHelper(const char* file,
 }
 
 
-static inline void CheckNonEqualsHelper(const char* file,
-                                        int line,
-                                        const char* expected_source,
-                                        const char* expected,
-                                        const char* value_source,
-                                        const char* value) {
+inline void CheckNonEqualsHelper(const char* file,
+                                 int line,
+                                 const char* expected_source,
+                                 const char* expected,
+                                 const char* value_source,
+                                 const char* value) {
   if (expected == value ||
       (expected != NULL && value != NULL && strcmp(expected, value) == 0)) {
     V8_Fatal(file, line, "CHECK_NE(%s, %s) failed\n#   Value: %s",
@@ -150,12 +144,12 @@ static inline void CheckNonEqualsHelper(const char* file,
 
 // Helper function used by the CHECK function when given pointer
 // arguments.  Should not be called directly.
-static inline void CheckEqualsHelper(const char* file,
-                                     int line,
-                                     const char* expected_source,
-                                     const void* expected,
-                                     const char* value_source,
-                                     const void* value) {
+inline void CheckEqualsHelper(const char* file,
+                              int line,
+                              const char* expected_source,
+                              const void* expected,
+                              const char* value_source,
+                              const void* value) {
   if (expected != value) {
     V8_Fatal(file, line,
              "CHECK_EQ(%s, %s) failed\n#   Expected: %p\n#   Found: %p",
@@ -165,12 +159,12 @@ static inline void CheckEqualsHelper(const char* file,
 }
 
 
-static inline void CheckNonEqualsHelper(const char* file,
-                                        int line,
-                                        const char* expected_source,
-                                        const void* expected,
-                                        const char* value_source,
-                                        const void* value) {
+inline void CheckNonEqualsHelper(const char* file,
+                                 int line,
+                                 const char* expected_source,
+                                 const void* expected,
+                                 const char* value_source,
+                                 const void* value) {
   if (expected == value) {
     V8_Fatal(file, line, "CHECK_NE(%s, %s) failed\n#   Value: %p",
              expected_source, value_source, value);
@@ -180,12 +174,12 @@ static inline void CheckNonEqualsHelper(const char* file,
 
 // Helper function used by the CHECK function when given floating
 // point arguments.  Should not be called directly.
-static inline void CheckEqualsHelper(const char* file,
-                                     int line,
-                                     const char* expected_source,
-                                     double expected,
-                                     const char* value_source,
-                                     double value) {
+inline void CheckEqualsHelper(const char* file,
+                              int line,
+                              const char* expected_source,
+                              double expected,
+                              const char* value_source,
+                              double value) {
   // Force values to 64 bit memory to truncate 80 bit precision on IA32.
   volatile double* exp = new double[1];
   *exp = expected;
@@ -201,12 +195,12 @@ static inline void CheckEqualsHelper(const char* file,
 }
 
 
-static inline void CheckNonEqualsHelper(const char* file,
-                                     int line,
-                                     const char* expected_source,
-                                     double expected,
-                                     const char* value_source,
-                                     double value) {
+inline void CheckNonEqualsHelper(const char* file,
+                                 int line,
+                                 const char* expected_source,
+                                 double expected,
+                                 const char* value_source,
+                                 double value) {
   // Force values to 64 bit memory to truncate 80 bit precision on IA32.
   volatile double* exp = new double[1];
   *exp = expected;
@@ -257,25 +251,22 @@ template <int> class StaticAssertionHelper { };
     SEMI_STATIC_JOIN(__StaticAssertTypedef__, __LINE__)
 
 
-namespace v8 { namespace internal {
+extern bool FLAG_enable_slow_asserts;
 
-bool EnableSlowAsserts();
-
-} }  // namespace v8::internal
 
 // The ASSERT macro is equivalent to CHECK except that it only
 // generates code in debug builds.
 #ifdef DEBUG
-#define ASSERT_RESULT(expr)  CHECK(expr)
-#define ASSERT(condition)    CHECK(condition)
-#define ASSERT_EQ(v1, v2)    CHECK_EQ(v1, v2)
-#define ASSERT_NE(v1, v2)    CHECK_NE(v1, v2)
-#define ASSERT_GE(v1, v2)    CHECK_GE(v1, v2)
-#define ASSERT_LT(v1, v2)    CHECK_LT(v1, v2)
-#define ASSERT_LE(v1, v2)    CHECK_LE(v1, v2)
-#define SLOW_ASSERT(condition) if (EnableSlowAsserts()) CHECK(condition)
+#define ASSERT_RESULT(expr)    CHECK(expr)
+#define ASSERT(condition)      CHECK(condition)
+#define ASSERT_EQ(v1, v2)      CHECK_EQ(v1, v2)
+#define ASSERT_NE(v1, v2)      CHECK_NE(v1, v2)
+#define ASSERT_GE(v1, v2)      CHECK_GE(v1, v2)
+#define ASSERT_LT(v1, v2)      CHECK_LT(v1, v2)
+#define ASSERT_LE(v1, v2)      CHECK_LE(v1, v2)
+#define SLOW_ASSERT(condition) CHECK(!FLAG_enable_slow_asserts || (condition))
 #else
-#define ASSERT_RESULT(expr)     (expr)
+#define ASSERT_RESULT(expr)    (expr)
 #define ASSERT(condition)      ((void) 0)
 #define ASSERT_EQ(v1, v2)      ((void) 0)
 #define ASSERT_NE(v1, v2)      ((void) 0)

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -46,24 +46,43 @@ enum ContextLookupFlags {
 
 // ES5 10.2 defines lexical environments with mutable and immutable bindings.
 // Immutable bindings have two states, initialized and uninitialized, and
-// their state is changed by the InitializeImmutableBinding method.
+// their state is changed by the InitializeImmutableBinding method. The
+// BindingFlags enum represents information if a binding has definitely been
+// initialized. A mutable binding does not need to be checked and thus has
+// the BindingFlag MUTABLE_IS_INITIALIZED.
+//
+// There are two possibilities for immutable bindings
+//  * 'const' declared variables. They are initialized when evaluating the
+//    corresponding declaration statement. They need to be checked for being
+//    initialized and thus get the flag IMMUTABLE_CHECK_INITIALIZED.
+//  * The function name of a named function literal. The binding is immediately
+//    initialized when entering the function and thus does not need to be
+//    checked. it gets the BindingFlag IMMUTABLE_IS_INITIALIZED.
+// Accessing an uninitialized binding produces the undefined value.
 //
 // The harmony proposal for block scoped bindings also introduces the
-// uninitialized state for mutable bindings. A 'let' declared variable
-// is a mutable binding that is created uninitalized upon activation of its
-// lexical environment and it is initialized when evaluating its declaration
-// statement. Var declared variables are mutable bindings that are
-// immediately initialized upon creation. The BindingFlags enum represents
-// information if a binding has definitely been initialized. 'const' declared
-// variables are created as uninitialized immutable bindings.
-
-// In harmony mode accessing an uninitialized binding produces a reference
-// error.
+// uninitialized state for mutable bindings.
+//  * A 'let' declared variable. They are initialized when evaluating the
+//    corresponding declaration statement. They need to be checked for being
+//    initialized and thus get the flag MUTABLE_CHECK_INITIALIZED.
+//  * A 'var' declared variable. It is initialized immediately upon creation
+//    and thus doesn't need to be checked. It gets the flag
+//    MUTABLE_IS_INITIALIZED.
+//  * Catch bound variables, function parameters and variables introduced by
+//    function declarations are initialized immediately and do not need to be
+//    checked. Thus they get the flag MUTABLE_IS_INITIALIZED.
+// Immutable bindings in harmony mode get the _HARMONY flag variants. Accessing
+// an uninitialized binding produces a reference error.
+//
+// In V8 uninitialized bindings are set to the hole value upon creation and set
+// to a different value upon initialization.
 enum BindingFlags {
   MUTABLE_IS_INITIALIZED,
   MUTABLE_CHECK_INITIALIZED,
   IMMUTABLE_IS_INITIALIZED,
   IMMUTABLE_CHECK_INITIALIZED,
+  IMMUTABLE_IS_INITIALIZED_HARMONY,
+  IMMUTABLE_CHECK_INITIALIZED_HARMONY,
   MISSING_BINDING
 };
 
@@ -85,7 +104,11 @@ enum BindingFlags {
   V(STRING_FUNCTION_INDEX, JSFunction, string_function) \
   V(STRING_FUNCTION_PROTOTYPE_MAP_INDEX, Map, string_function_prototype_map) \
   V(OBJECT_FUNCTION_INDEX, JSFunction, object_function) \
+  V(INTERNAL_ARRAY_FUNCTION_INDEX, JSFunction, internal_array_function) \
   V(ARRAY_FUNCTION_INDEX, JSFunction, array_function) \
+  V(SMI_JS_ARRAY_MAP_INDEX, Object, smi_js_array_map) \
+  V(DOUBLE_JS_ARRAY_MAP_INDEX, Object, double_js_array_map) \
+  V(OBJECT_JS_ARRAY_MAP_INDEX, Object, object_js_array_map) \
   V(DATE_FUNCTION_INDEX, JSFunction, date_function) \
   V(JSON_OBJECT_INDEX, JSObject, json_object) \
   V(REGEXP_FUNCTION_INDEX, JSFunction, regexp_function) \
@@ -109,7 +132,6 @@ enum BindingFlags {
   V(FUNCTION_INSTANCE_MAP_INDEX, Map, function_instance_map) \
   V(STRICT_MODE_FUNCTION_INSTANCE_MAP_INDEX, Map, \
     strict_mode_function_instance_map) \
-  V(JS_ARRAY_MAP_INDEX, Map, js_array_map)\
   V(REGEXP_RESULT_MAP_INDEX, Map, regexp_result_map)\
   V(ARGUMENTS_BOILERPLATE_INDEX, JSObject, arguments_boilerplate) \
   V(ALIASED_ARGUMENTS_BOILERPLATE_INDEX, JSObject, \
@@ -134,9 +156,13 @@ enum BindingFlags {
   V(MAP_CACHE_INDEX, Object, map_cache) \
   V(CONTEXT_DATA_INDEX, Object, data) \
   V(ALLOW_CODE_GEN_FROM_STRINGS_INDEX, Object, allow_code_gen_from_strings) \
+  V(TO_COMPLETE_PROPERTY_DESCRIPTOR_INDEX, JSFunction, \
+    to_complete_property_descriptor) \
   V(DERIVED_HAS_TRAP_INDEX, JSFunction, derived_has_trap) \
   V(DERIVED_GET_TRAP_INDEX, JSFunction, derived_get_trap) \
-  V(DERIVED_SET_TRAP_INDEX, JSFunction, derived_set_trap)
+  V(DERIVED_SET_TRAP_INDEX, JSFunction, derived_set_trap) \
+  V(PROXY_ENUMERATE, JSFunction, proxy_enumerate) \
+  V(RANDOM_SEED_INDEX, ByteArray, random_seed)
 
 // JSFunctions are pairs (context, function code), sometimes also called
 // closures. A Context object is used to represent function contexts and
@@ -192,7 +218,8 @@ class Context: public FixedArray {
     PREVIOUS_INDEX,
     // The extension slot is used for either the global object (in global
     // contexts), eval extension object (function contexts), subject of with
-    // (with contexts), or the variable name (catch contexts).
+    // (with contexts), or the variable name (catch contexts), the serialized
+    // scope info (block contexts).
     EXTENSION_INDEX,
     GLOBAL_INDEX,
     MIN_CONTEXT_SLOTS,
@@ -206,7 +233,6 @@ class Context: public FixedArray {
     ARGUMENTS_BOILERPLATE_INDEX,
     ALIASED_ARGUMENTS_BOILERPLATE_INDEX,
     STRICT_MODE_ARGUMENTS_BOILERPLATE_INDEX,
-    JS_ARRAY_MAP_INDEX,
     REGEXP_RESULT_MAP_INDEX,
     FUNCTION_MAP_INDEX,
     STRICT_MODE_FUNCTION_MAP_INDEX,
@@ -220,7 +246,11 @@ class Context: public FixedArray {
     STRING_FUNCTION_INDEX,
     STRING_FUNCTION_PROTOTYPE_MAP_INDEX,
     OBJECT_FUNCTION_INDEX,
+    INTERNAL_ARRAY_FUNCTION_INDEX,
     ARRAY_FUNCTION_INDEX,
+    SMI_JS_ARRAY_MAP_INDEX,
+    DOUBLE_JS_ARRAY_MAP_INDEX,
+    OBJECT_JS_ARRAY_MAP_INDEX,
     DATE_FUNCTION_INDEX,
     JSON_OBJECT_INDEX,
     REGEXP_FUNCTION_INDEX,
@@ -252,9 +282,12 @@ class Context: public FixedArray {
     OUT_OF_MEMORY_INDEX,
     CONTEXT_DATA_INDEX,
     ALLOW_CODE_GEN_FROM_STRINGS_INDEX,
+    TO_COMPLETE_PROPERTY_DESCRIPTOR_INDEX,
     DERIVED_HAS_TRAP_INDEX,
     DERIVED_GET_TRAP_INDEX,
     DERIVED_SET_TRAP_INDEX,
+    PROXY_ENUMERATE,
+    RANDOM_SEED_INDEX,
 
     // Properties from here are treated as weak references by the full GC.
     // Scavenge treats them as strong references.
@@ -323,6 +356,10 @@ class Context: public FixedArray {
     Map* map = this->map();
     return map == map->GetHeap()->block_context_map();
   }
+  bool IsModuleContext() {
+    Map* map = this->map();
+    return map == map->GetHeap()->module_context_map();
+  }
 
   // Tells whether the global context is marked with out of memory.
   inline bool has_out_of_memory();
@@ -330,17 +367,23 @@ class Context: public FixedArray {
   // Mark the global context with out of memory.
   inline void mark_out_of_memory();
 
-  // The exception holder is the object used as a with object in
-  // the implementation of a catch block.
-  bool is_exception_holder(Object* object) {
-    return IsCatchContext() && extension() == object;
-  }
-
   // A global context hold a list of all functions which have been optimized.
   void AddOptimizedFunction(JSFunction* function);
   void RemoveOptimizedFunction(JSFunction* function);
   Object* OptimizedFunctionsListHead();
   void ClearOptimizedFunctions();
+
+  static int GetContextMapIndexFromElementsKind(
+      ElementsKind elements_kind) {
+    if (elements_kind == FAST_DOUBLE_ELEMENTS) {
+      return Context::DOUBLE_JS_ARRAY_MAP_INDEX;
+    } else if (elements_kind == FAST_ELEMENTS) {
+      return Context::OBJECT_JS_ARRAY_MAP_INDEX;
+    } else {
+      ASSERT(elements_kind == FAST_SMI_ONLY_ELEMENTS);
+      return Context::SMI_JS_ARRAY_MAP_INDEX;
+    }
+  }
 
 #define GLOBAL_CONTEXT_FIELD_ACCESSORS(index, type, name) \
   void  set_##name(type* value) {                         \
@@ -355,45 +398,27 @@ class Context: public FixedArray {
 #undef GLOBAL_CONTEXT_FIELD_ACCESSORS
 
   // Lookup the the slot called name, starting with the current context.
-  // There are 4 possible outcomes:
+  // There are three possibilities:
   //
-  // 1) index_ >= 0 && result->IsContext():
-  //    most common case, the result is a Context, and index is the
-  //    context slot index, and the slot exists.
-  //    attributes == READ_ONLY for the function name variable, NONE otherwise.
+  // 1) result->IsContext():
+  //    The binding was found in a context.  *index is always the
+  //    non-negative slot index.  *attributes is NONE for var and let
+  //    declarations, READ_ONLY for const declarations (never ABSENT).
   //
-  // 2) index_ >= 0 && result->IsJSObject():
-  //    the result is the JSObject arguments object, the index is the parameter
-  //    index, i.e., key into the arguments object, and the property exists.
-  //    attributes != ABSENT.
+  // 2) result->IsJSObject():
+  //    The binding was found as a named property in a context extension
+  //    object (i.e., was introduced via eval), as a property on the subject
+  //    of with, or as a property of the global object.  *index is -1 and
+  //    *attributes is not ABSENT.
   //
-  // 3) index_ < 0 && result->IsJSObject():
-  //    the result is the JSObject extension context or the global object,
-  //    and the name is the property name, and the property exists.
-  //    attributes != ABSENT.
-  //
-  // 4) index_ < 0 && result.is_null():
-  //    there was no context found with the corresponding property.
-  //    attributes == ABSENT.
+  // 3) result.is_null():
+  //    There was no binding found, *index is always -1 and *attributes is
+  //    always ABSENT.
   Handle<Object> Lookup(Handle<String> name,
                         ContextLookupFlags flags,
-                        int* index_,
+                        int* index,
                         PropertyAttributes* attributes,
                         BindingFlags* binding_flags);
-
-  // Determine if a local variable with the given name exists in a
-  // context.  Do not consider context extension objects.  This is
-  // used for compiling code using eval.  If the context surrounding
-  // the eval call does not have a local variable with this name and
-  // does not contain a with statement the property is global unless
-  // it is shadowed by a property in an extension object introduced by
-  // eval.
-  bool GlobalIfNotShadowedByEval(Handle<String> name);
-
-  // Determine if any function scope in the context call eval and if
-  // any of those calls are in non-strict mode.
-  void ComputeEvalScopeInfo(bool* outer_scope_calls_eval,
-                            bool* outer_scope_calls_non_strict_eval);
 
   // Code generation support.
   static int SlotOffset(int index) {

@@ -411,7 +411,7 @@ int FlagList::SetFlagsFromCommandLine(int* argc,
           for (int k = i; k < *argc; k++) {
             js_argv[k - start_pos] = StrDup(argv[k]);
           }
-          *flag->args_variable() = JSArguments(js_argc, js_argv);
+          *flag->args_variable() = JSArguments::Create(js_argc, js_argv);
           i = *argc;  // Consume all arguments
           break;
         }
@@ -534,18 +534,10 @@ void FlagList::PrintHelp() {
   }
 }
 
-JSArguments::JSArguments()
-    : argc_(0), argv_(NULL) {}
-JSArguments::JSArguments(int argc, const char** argv)
-    : argc_(argc), argv_(argv) {}
-int JSArguments::argc() const { return argc_; }
-const char** JSArguments::argv() { return argv_; }
-const char*& JSArguments::operator[](int idx) { return argv_[idx]; }
-JSArguments& JSArguments::operator=(JSArguments args) {
-    argc_ = args.argc_;
-    argv_ = args.argv_;
-    return *this;
-}
 
+void FlagList::EnforceFlagImplications() {
+#define FLAG_MODE_DEFINE_IMPLICATIONS
+#include "flag-definitions.h"
+}
 
 } }  // namespace v8::internal

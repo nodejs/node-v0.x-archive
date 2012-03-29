@@ -82,13 +82,30 @@ assert.throws(makeBlock(a.deepEqual, new Date(), new Date(2000, 3, 14)),
               'deepEqual date');
 
 // 7.3
+assert.doesNotThrow(makeBlock(a.deepEqual, /a/, /a/));
+assert.doesNotThrow(makeBlock(a.deepEqual, /a/g, /a/g));
+assert.doesNotThrow(makeBlock(a.deepEqual, /a/i, /a/i));
+assert.doesNotThrow(makeBlock(a.deepEqual, /a/m, /a/m));
+assert.doesNotThrow(makeBlock(a.deepEqual, /a/igm, /a/igm));
+assert.throws(makeBlock(a.deepEqual, /ab/, /a/));
+assert.throws(makeBlock(a.deepEqual, /a/g, /a/));
+assert.throws(makeBlock(a.deepEqual, /a/i, /a/));
+assert.throws(makeBlock(a.deepEqual, /a/m, /a/));
+assert.throws(makeBlock(a.deepEqual, /a/igm, /a/im));
+
+var re1 = /a/;
+re1.lastIndex = 3;
+assert.throws(makeBlock(a.deepEqual, re1, /a/));
+
+
+// 7.4
 assert.doesNotThrow(makeBlock(a.deepEqual, 4, '4'), 'deepEqual == check');
 assert.doesNotThrow(makeBlock(a.deepEqual, true, 1), 'deepEqual == check');
 assert.throws(makeBlock(a.deepEqual, 4, '5'),
               a.AssertionError,
               'deepEqual == check');
 
-// 7.4
+// 7.5
 // having the same number of owned properties && the same set of keys
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4}, {a: 4}));
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
@@ -197,7 +214,7 @@ threw = false;
 try {
   assert.throws(
       function() {
-        throw {};
+        throw ({});
       },
       Array
   );

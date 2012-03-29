@@ -19,13 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
+#include "node.h"
 
-#include <uv.h>
+#include "uv.h"
 
-#include <v8-debug.h>
+#include "v8-debug.h"
 #ifdef HAVE_DTRACE
-# include <node_dtrace.h>
+# include "node_dtrace.h"
 #endif
 
 #include <locale.h>
@@ -55,36 +55,32 @@ typedef int mode_t;
 #endif
 #include <errno.h>
 #include <sys/types.h>
-
-#if defined(__MINGW32__) || defined(_MSC_VER)
-# include <platform_win32.h> /* winapi_perror() */
-#endif
+#include "zlib.h"
 
 #ifdef __POSIX__
 # include <pwd.h> /* getpwnam() */
 # include <grp.h> /* getgrnam() */
 #endif
 
-#include "platform.h"
-#include <node_buffer.h>
+#include "node_buffer.h"
 #ifdef __POSIX__
-# include <node_io_watcher.h>
+# include "node_io_watcher.h"
 #endif
-#include <node_file.h>
-#include <node_http_parser.h>
+#include "node_file.h"
+#include "node_http_parser.h"
 #ifdef __POSIX__
-# include <node_signal_watcher.h>
-# include <node_stat_watcher.h>
+# include "node_signal_watcher.h"
+# include "node_stat_watcher.h"
 #endif
-#include <node_constants.h>
-#include <node_javascript.h>
-#include <node_version.h>
-#include <node_string.h>
+#include "node_constants.h"
+#include "node_javascript.h"
+#include "node_version.h"
+#include "node_string.h"
 #if HAVE_OPENSSL
-# include <node_crypto.h>
+# include "node_crypto.h"
 #endif
-#include <node_script.h>
-#include <v8_typed_array.h>
+#include "node_script.h"
+#include "v8_typed_array.h"
 
 using namespace v8;
 
@@ -96,6 +92,7 @@ extern char **environ;
 # endif
 
 namespace node {
+
 
 static Persistent<Object> process;
 
@@ -114,6 +111,7 @@ static Persistent<String> emit_symbol;
 
 
 static bool print_eval = false;
+static bool force_repl = false;
 static char *eval_string = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
@@ -158,6 +156,8 @@ static uv_idle_t gc_idle;
 static uv_timer_t gc_timer;
 bool need_gc;
 
+// process-relative uptime base, initialized at start-up
+static double prog_start_time;
 
 #define FAST_TICK 700.
 #define GC_WAIT_TIME 5000.
@@ -816,6 +816,20 @@ static const char* get_uv_errno_message(int errorno) {
 }
 
 
+static bool get_uv_dlerror_message(uv_lib_t lib, char* error_msg, int size) {
+  int r;
+  const char *msg;
+  if ((msg = uv_dlerror(lib)) == NULL) {
+    r = snprintf(error_msg, size, "%s", "Unable to load shared library ");
+  } else {
+    r = snprintf(error_msg, size, "%s", msg);
+    uv_dlerror_free(lib, msg);
+  }
+  // return bool if the error message be written correctly
+  return (0 < r && r < size);
+}
+
+
 // hack alert! copy of ErrnoException, tuned for uv errors
 Local<Value> UVException(int errorno,
                          const char *syscall,
@@ -873,6 +887,30 @@ Local<Value> UVException(int errorno,
 
 
 #ifdef _WIN32
+// Does about the same as strerror(),
+// but supports all windows error messages
+static const char *winapi_strerror(const int errorno) {
+  char *errmsg = NULL;
+
+  FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+      FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errorno,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
+
+  if (errmsg) {
+    // Remove trailing newlines
+    for (int i = strlen(errmsg) - 1;
+        i >= 0 && (errmsg[i] == '\n' || errmsg[i] == '\r'); i--) {
+      errmsg[i] = '\0';
+    }
+
+    return errmsg;
+  } else {
+    // FormatMessage failed
+    return "Unknown error";
+  }
+}
+
+
 Local<Value> WinapiErrnoException(int errorno,
                                   const char* syscall,
                                   const char* msg,
@@ -982,7 +1020,7 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
 
   if (!encoding_v->IsString()) return _default;
 
-  String::Utf8Value encoding(encoding_v->ToString());
+  String::Utf8Value encoding(encoding_v);
 
   if (strcasecmp(*encoding, "utf8") == 0) {
     return UTF8;
@@ -1193,8 +1231,8 @@ static void ReportException(TryCatch &try_catch, bool show_line) {
       fprintf(stderr, "%s: ", *name);
     }
 
-    String::Utf8Value msg(!isErrorObject ? er->ToString()
-                         : er->ToObject()->Get(String::New("message"))->ToString());
+    String::Utf8Value msg(!isErrorObject ? er
+                         : er->ToObject()->Get(String::New("message")));
     fprintf(stderr, "%s\n", *msg);
   }
 
@@ -1222,6 +1260,12 @@ Local<Value> ExecuteString(Handle<String> source, Handle<Value> filename) {
 }
 
 
+static Handle<Value> Abort(const Arguments& args) {
+  abort();
+  return Undefined();
+}
+
+
 static Handle<Value> Chdir(const Arguments& args) {
   HandleScope scope;
 
@@ -1229,7 +1273,7 @@ static Handle<Value> Chdir(const Arguments& args) {
     return ThrowException(Exception::Error(String::New("Bad argument.")));
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
 
   uv_err_t r = uv_chdir(*path);
 
@@ -1304,7 +1348,6 @@ static Handle<Value> Umask(const Arguments& args) {
 
 static Handle<Value> GetUid(const Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
   int uid = getuid();
   return scope.Close(Integer::New(uid));
 }
@@ -1312,7 +1355,6 @@ static Handle<Value> GetUid(const Arguments& args) {
 
 static Handle<Value> GetGid(const Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
   int gid = getgid();
   return scope.Close(Integer::New(gid));
 }
@@ -1331,7 +1373,7 @@ static Handle<Value> SetGid(const Arguments& args) {
   if (args[0]->IsNumber()) {
     gid = args[0]->Int32Value();
   } else if (args[0]->IsString()) {
-    String::Utf8Value grpnam(args[0]->ToString());
+    String::Utf8Value grpnam(args[0]);
     struct group grp, *grpp = NULL;
     int err;
 
@@ -1371,7 +1413,7 @@ static Handle<Value> SetUid(const Arguments& args) {
   if (args[0]->IsNumber()) {
     uid = args[0]->Int32Value();
   } else if (args[0]->IsString()) {
-    String::Utf8Value pwnam(args[0]->ToString());
+    String::Utf8Value pwnam(args[0]);
     struct passwd pwd, *pwdp = NULL;
     int err;
 
@@ -1432,17 +1474,18 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
   }
 }
 
+
 static Handle<Value> Uptime(const Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
+  double uptime;
 
-  double uptime =  Platform::GetUptime(true);
+  uv_err_t err = uv_uptime(&uptime);
 
-  if (uptime < 0) {
+  if (err.code != UV_OK) {
     return Undefined();
   }
 
-  return scope.Close(Number::New(uptime));
+  return scope.Close(Number::New(uptime - prog_start_time));
 }
 
 
@@ -1480,14 +1523,13 @@ v8::Handle<v8::Value> UVCounters(const v8::Arguments& args) {
 
 v8::Handle<v8::Value> MemoryUsage(const v8::Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
 
   size_t rss;
 
-  int r = Platform::GetMemory(&rss);
+  uv_err_t err = uv_resident_set_memory(&rss);
 
-  if (r != 0) {
-    return ThrowException(Exception::Error(String::New(strerror(errno))));
+  if (err.code != UV_OK) {
+    return ThrowException(UVException(err.code, "uv_resident_set_memory"));
   }
 
   Local<Object> info = Object::New();
@@ -1531,6 +1573,34 @@ Handle<Value> Kill(const Arguments& args) {
   return Undefined();
 }
 
+// used in Hrtime() below
+#define NANOS_PER_SEC 1000000000
+
+// Hrtime exposes libuv's uv_hrtime() high-resolution timer.
+// The value returned by uv_hrtime() is a 64-bit int representing nanoseconds,
+// so this function instead returns an Array with 2 entries representing seconds
+// and nanoseconds, to avoid any integer overflow possibility.
+// Pass in an Array from a previous hrtime() call to instead get a time diff.
+Handle<Value> Hrtime(const v8::Arguments& args) {
+  HandleScope scope;
+
+  uint64_t t = uv_hrtime();
+
+  if (args.Length() > 0) {
+    // return a time diff tuple
+    Local<Array> inArray = Local<Array>::Cast(args[0]);
+    uint64_t seconds = inArray->Get(0)->Uint32Value();
+    uint64_t nanos = inArray->Get(1)->Uint32Value();
+    t -= (seconds * NANOS_PER_SEC) + nanos;
+  }
+
+  Local<Array> tuple = Array::New(2);
+  tuple->Set(0, Integer::NewFromUnsigned(t / NANOS_PER_SEC));
+  tuple->Set(1, Integer::NewFromUnsigned(t % NANOS_PER_SEC));
+
+  return scope.Close(tuple);
+}
+
 
 typedef void (UV_DYNAMIC* extInit)(Handle<Object> exports);
 
@@ -1550,18 +1620,28 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
     return ThrowException(exception);
   }
 
-  String::Utf8Value filename(args[0]->ToString()); // Cast
+  String::Utf8Value filename(args[0]); // Cast
   Local<Object> target = args[1]->ToObject(); // Cast
 
   err = uv_dlopen(*filename, &lib);
   if (err.code != UV_OK) {
+    // Retrieve uv_dlerror() message and throw exception with it
+    char dlerror_msg[1024];
+    if (!get_uv_dlerror_message(lib, dlerror_msg, sizeof dlerror_msg)) {
+      Local<Value> exception = Exception::Error(
+          String::New("Cannot retrieve an error message in process.dlopen"));
+      return ThrowException(exception);
+    }
+#ifdef __POSIX__
+    Local<Value> exception = Exception::Error(String::New(dlerror_msg));
+#else  // Windows needs to add the filename into the error message
     Local<Value> exception = Exception::Error(
-        String::Concat(String::New("Unable to load shared library "),
-        args[0]->ToString()));
+        String::Concat(String::New(dlerror_msg), args[0]->ToString()));
+#endif
     return ThrowException(exception);
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
   base = *path;
 
   /* Find the shared library filename within the full path. */
@@ -1697,24 +1777,7 @@ void FatalException(TryCatch &try_catch) {
 }
 
 
-static uv_async_t debug_watcher;
-
-static void DebugMessageCallback(uv_async_t* watcher, int status) {
-  HandleScope scope;
-  assert(watcher == &debug_watcher);
-  Debug::ProcessDebugMessages();
-}
-
-static void DebugMessageDispatch(void) {
-  // This function is called from V8's debug thread when a debug TCP client
-  // has sent a message.
-
-  // Send a signal to our main thread saying that it should enter V8 to
-  // handle the message.
-  uv_async_send(&debug_watcher);
-}
-
-static void DebugBreakMessageHandler(const Debug::Message& message) {
+static void DebugBreakMessageHandler(const v8::Debug::Message& message) {
   // do nothing with debug messages.
   // The message handler will get changed by DebuggerAgent::CreateSession in
   // debug-agent.cc of v8/src when a new session is created
@@ -1782,9 +1845,9 @@ static Handle<Value> Binding(const Arguments& args) {
 static Handle<Value> ProcessTitleGetter(Local<String> property,
                                         const AccessorInfo& info) {
   HandleScope scope;
-  int len;
-  const char *s = Platform::GetProcessTitle(&len);
-  return scope.Close(s ? String::New(s, len) : String::Empty());
+  char buffer[512];
+  uv_get_process_title(buffer, sizeof(buffer));
+  return scope.Close(String::New(buffer));
 }
 
 
@@ -1792,8 +1855,9 @@ static void ProcessTitleSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
   HandleScope scope;
-  String::Utf8Value title(value->ToString());
-  Platform::SetProcessTitle(*title);
+  String::Utf8Value title(value);
+  // TODO: protect with a lock
+  uv_set_process_title(*title);
 }
 
 
@@ -1969,7 +2033,24 @@ static Handle<Object> GetFeatures() {
 }
 
 
+static Handle<Value> DebugPortGetter(Local<String> property,
+                                     const AccessorInfo& info) {
+  HandleScope scope;
+  return scope.Close(Integer::NewFromUnsigned(debug_port));
+}
+
+
+static void DebugPortSetter(Local<String> property,
+                            Local<Value> value,
+                            const AccessorInfo& info) {
+  HandleScope scope;
+  debug_port = value->NumberValue();
+}
+
+
 static Handle<Value> DebugProcess(const Arguments& args);
+static Handle<Value> DebugPause(const Arguments& args);
+static Handle<Value> DebugEnd(const Arguments& args);
 
 Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   HandleScope scope;
@@ -1997,15 +2078,20 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   module_load_list = Persistent<Array>::New(Array::New());
   process->Set(String::NewSymbol("moduleLoadList"), module_load_list);
 
+  // process.versions
   Local<Object> versions = Object::New();
-  char buf[20];
   process->Set(String::NewSymbol("versions"), versions);
+  versions->Set(String::NewSymbol("http_parser"), String::New(
+               NODE_STRINGIFY(HTTP_PARSER_VERSION_MAJOR) "."
+               NODE_STRINGIFY(HTTP_PARSER_VERSION_MINOR)));
   // +1 to get rid of the leading 'v'
   versions->Set(String::NewSymbol("node"), String::New(NODE_VERSION+1));
   versions->Set(String::NewSymbol("v8"), String::New(V8::GetVersion()));
   versions->Set(String::NewSymbol("ares"), String::New(ARES_VERSION_STR));
-  snprintf(buf, 20, "%d.%d", UV_VERSION_MAJOR, UV_VERSION_MINOR);
-  versions->Set(String::NewSymbol("uv"), String::New(buf));
+  versions->Set(String::NewSymbol("uv"), String::New(
+               NODE_STRINGIFY(UV_VERSION_MAJOR) "."
+               NODE_STRINGIFY(UV_VERSION_MINOR)));
+  versions->Set(String::NewSymbol("zlib"), String::New(ZLIB_VERSION));
 #if HAVE_OPENSSL
   // Stupid code to slice out the version string.
   int c, l = strlen(OPENSSL_VERSION_TEXT);
@@ -2041,6 +2127,15 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   // assign it
   process->Set(String::NewSymbol("argv"), arguments);
 
+  // process.execArgv
+  Local<Array> execArgv = Array::New(option_end_index - 1);
+  for (j = 1, i = 0; j < option_end_index; j++, i++) {
+    execArgv->Set(Integer::New(i), String::New(argv[j]));
+  }
+  // assign it
+  process->Set(String::NewSymbol("execArgv"), execArgv);
+
+
   // create process.env
   Local<ObjectTemplate> envTemplate = ObjectTemplate::New();
   envTemplate->SetNamedPropertyHandler(EnvGetter,
@@ -2061,6 +2156,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
     process->Set(String::NewSymbol("_print_eval"), Boolean::New(print_eval));
   }
 
+  if (force_repl) {
+    process->Set(String::NewSymbol("_forceRepl"), True());
+  }
+
   size_t size = 2*PATH_MAX;
   char* execPath = new char[size];
   if (uv_exepath(execPath, &size) != 0) {
@@ -2071,10 +2170,15 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   }
   delete [] execPath;
 
+  process->SetAccessor(String::New("debugPort"),
+                       DebugPortGetter,
+                       DebugPortSetter);
+
 
   // define various internal methods
   NODE_SET_METHOD(process, "_needTickCallback", NeedTickCallback);
   NODE_SET_METHOD(process, "reallyExit", Exit);
+  NODE_SET_METHOD(process, "abort", Abort);
   NODE_SET_METHOD(process, "chdir", Chdir);
   NODE_SET_METHOD(process, "cwd", Cwd);
 
@@ -2091,6 +2195,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "_kill", Kill);
 
   NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
+  NODE_SET_METHOD(process, "_debugPause", DebugPause);
+  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+
+  NODE_SET_METHOD(process, "hrtime", Hrtime);
 
   NODE_SET_METHOD(process, "dlopen", DLOpen);
 
@@ -2196,6 +2304,8 @@ static void PrintHelp() {
          "  -v, --version        print node's version\n"
          "  -e, --eval script    evaluate script\n"
          "  -p, --print          print result of --eval\n"
+         "  -i, --interactive    always enter the REPL even if stdin\n"
+         "                       does not appear to be a terminal\n"
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
@@ -2257,6 +2367,9 @@ static void ParseArgs(int argc, char **argv) {
     } else if (strcmp(arg, "--print") == 0 || strcmp(arg, "-p") == 0) {
       print_eval = true;
       argv[i] = const_cast<char*>("");
+    } else if (strcmp(arg, "--interactive") == 0 || strcmp(arg, "-i") == 0) {
+      force_repl = true;
+      argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--v8-options") == 0) {
       argv[i] = const_cast<char*>("--help");
     } else if (argv[i][0] != '-') {
@@ -2277,15 +2390,9 @@ static void EnableDebug(bool wait_connect) {
   node_isolate->Enter();
 
   // Start the debug thread and it's associated TCP server on port 5858.
-  bool r = Debug::EnableAgent("node " NODE_VERSION, debug_port);
-
-  if (wait_connect) {
-    // Set up an empty handler so v8 will not continue until a debugger
-    // attaches. This is the same behavior as Debug::EnableAgent(_,_,true)
-    // except we don't break at the beginning of the script.
-    // see Debugger::StartAgent in debug.cc of v8/src
-    Debug::SetMessageHandler2(node::DebugBreakMessageHandler);
-  }
+  bool r = v8::Debug::EnableAgent("node " NODE_VERSION,
+                                  debug_port,
+                                  wait_connect);
 
   // Crappy check that everything went well. FIXME
   assert(r);
@@ -2501,9 +2608,25 @@ static Handle<Value> DebugProcess(const Arguments& args) {
 #endif // _WIN32
 
 
+static Handle<Value> DebugPause(const Arguments& args) {
+  v8::Debug::DebugBreak(node_isolate);
+  return Undefined();
+}
+
+
+static Handle<Value> DebugEnd(const Arguments& args) {
+  if (debugger_running) {
+    v8::Debug::DisableAgent();
+    debugger_running = false;
+  }
+
+  return Undefined();
+}
+
+
 char** Init(int argc, char *argv[]) {
-  // Hack aroung with the argv pointer. Used for process.title = "blah".
-  argv = node::Platform::SetupArgs(argc, argv);
+  // Initialize prog_start_time to get relative uptime.
+  uv_uptime(&prog_start_time);
 
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);
@@ -2568,20 +2691,6 @@ char** Init(int argc, char *argv[]) {
 
   V8::SetFatalErrorHandler(node::OnFatalError);
 
-
-  // Set the callback DebugMessageDispatch which is called from the debug
-  // thread.
-  Debug::SetDebugMessageDispatchHandler(node::DebugMessageDispatch);
-
-  // Initialize the async watcher. DebugMessageCallback() is called from the
-  // main thread to execute a random bit of javascript - which will give V8
-  // control so it can handle whatever new message had been received on the
-  // debug thread.
-  uv_async_init(uv_default_loop(), &node::debug_watcher,
-      node::DebugMessageCallback);
-  // unref it so that we exit the event loop despite it being active.
-  uv_unref(uv_default_loop());
-
   // Fetch a reference to the main isolate, so we have a reference to it
   // even when we need it to access it from another (debugger) thread.
   node_isolate = Isolate::GetCurrent();
@@ -2614,39 +2723,87 @@ void EmitExit(v8::Handle<v8::Object> process_l) {
   }
 }
 
+static char **copy_argv(int argc, char **argv) {
+  size_t strlen_sum;
+  char **argv_copy;
+  char *argv_data;
+  size_t len;
+  int i;
+
+  strlen_sum = 0;
+  for(i = 0; i < argc; i++) {
+    strlen_sum += strlen(argv[i]) + 1;
+  }
+
+  argv_copy = (char **) malloc(sizeof(char *) * (argc + 1) + strlen_sum);
+  if (!argv_copy) {
+    return NULL;
+  }
+
+  argv_data = (char *) argv_copy + sizeof(char *) * (argc + 1);
+
+  for(i = 0; i < argc; i++) {
+    argv_copy[i] = argv_data;
+    len = strlen(argv[i]) + 1;
+    memcpy(argv_data, argv[i], len);
+    argv_data += len;
+  }
+
+  argv_copy[argc] = NULL;
+
+  return argv_copy;
+}
 
 int Start(int argc, char *argv[]) {
+  // Hack aroung with the argv pointer. Used for process.title = "blah".
+  argv = uv_setup_args(argc, argv);
+
+  // Logic to duplicate argv as Init() modifies arguments
+  // that are passed into it.
+  char **argv_copy = copy_argv(argc, argv);
+
   // This needs to run *before* V8::Initialize()
-  argv = Init(argc, argv);
+  // Use copy here as to not modify the original argv:
+  Init(argc, argv_copy);
 
-  v8::V8::Initialize();
-  v8::HandleScope handle_scope;
+  V8::Initialize();
+  Persistent<Context> context;
+  {
+    Locker locker;
+    HandleScope handle_scope;
 
-  // Create the one and only Context.
-  Persistent<v8::Context> context = v8::Context::New();
-  v8::Context::Scope context_scope(context);
+    // Create the one and only Context.
+    Persistent<Context> context = Context::New();
+    Context::Scope context_scope(context);
 
-  Handle<Object> process_l = SetupProcessObject(argc, argv);
-  v8_typed_array::AttachBindings(context->Global());
+    // Use original argv, as we're just copying values out of it.
+    Handle<Object> process_l = SetupProcessObject(argc, argv);
+    v8_typed_array::AttachBindings(context->Global());
 
-  // Create all the objects, load modules, do everything.
-  // so your next reading stop should be node::Load()!
-  Load(process_l);
+    // Create all the objects, load modules, do everything.
+    // so your next reading stop should be node::Load()!
+    Load(process_l);
 
-  // All our arguments are loaded. We've evaluated all of the scripts. We
-  // might even have created TCP servers. Now we enter the main eventloop. If
-  // there are no watchers on the loop (except for the ones that were
-  // uv_unref'd) then this function exits. As long as there are active
-  // watchers, it blocks.
-  uv_run(uv_default_loop());
+    // All our arguments are loaded. We've evaluated all of the scripts. We
+    // might even have created TCP servers. Now we enter the main eventloop. If
+    // there are no watchers on the loop (except for the ones that were
+    // uv_unref'd) then this function exits. As long as there are active
+    // watchers, it blocks.
+    uv_run(uv_default_loop());
 
-  EmitExit(process_l);
+    EmitExit(process_l);
+#ifndef NDEBUG
+    context.Dispose();
+#endif
+  }
 
 #ifndef NDEBUG
   // Clean up.
-  context.Dispose();
   V8::Dispose();
 #endif  // NDEBUG
+
+  // Clean up the copy:
+  free(argv_copy);
 
   return 0;
 }

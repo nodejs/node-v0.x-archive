@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -46,7 +46,7 @@ class RuntimeProfiler {
   static void GlobalSetup();
 
   static inline bool IsEnabled() {
-    ASSERT(has_been_globally_setup_);
+    ASSERT(has_been_globally_set_up_);
     return enabled_;
   }
 
@@ -54,12 +54,21 @@ class RuntimeProfiler {
 
   void NotifyTick();
 
-  void Setup();
+  void SetUp();
   void Reset();
   void TearDown();
 
   Object** SamplerWindowAddress();
   int SamplerWindowSize();
+
+  void NotifyICChanged() { any_ic_changed_ = true; }
+
+  void NotifyCodeGenerated(int generated_code_size) {
+    if (FLAG_watch_ic_patching) {
+      code_generated_ = true;
+      total_code_generated_ += generated_code_size;
+    }
+  }
 
   // Rate limiting support.
 
@@ -92,14 +101,14 @@ class RuntimeProfiler {
   void RemoveDeadSamples();
   void UpdateSamplesAfterCompact(ObjectVisitor* visitor);
 
+  void AttemptOnStackReplacement(JSFunction* function);
+
  private:
   static const int kSamplerWindowSize = 16;
 
   static void HandleWakeUp(Isolate* isolate);
 
-  void Optimize(JSFunction* function);
-
-  void AttemptOnStackReplacement(JSFunction* function);
+  void Optimize(JSFunction* function, const char* reason);
 
   void ClearSampleBuffer();
 
@@ -119,14 +128,17 @@ class RuntimeProfiler {
   int sampler_window_position_;
   int sampler_window_weight_[kSamplerWindowSize];
 
+  bool any_ic_changed_;
+  bool code_generated_;
+  int total_code_generated_;
+
   // Possible state values:
   //   -1            => the profiler thread is waiting on the semaphore
   //   0 or positive => the number of isolates running JavaScript code.
   static Atomic32 state_;
-  static Semaphore* semaphore_;
 
 #ifdef DEBUG
-  static bool has_been_globally_setup_;
+  static bool has_been_globally_set_up_;
 #endif
   static bool enabled_;
 };

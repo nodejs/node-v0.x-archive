@@ -38,6 +38,8 @@ static int maybe_run_test(int argc, char **argv);
 int main(int argc, char **argv) {
   platform_init(argc, argv);
 
+  argv = uv_setup_args(argc, argv);
+
   switch (argc) {
   case 1: return run_tests(TEST_TIMEOUT, 0);
   case 2: return maybe_run_test(argc, argv);
@@ -202,8 +204,8 @@ static int stdio_over_pipes_helper() {
     "\n"
   };
 
-  uv_write_t write_req[COUNTOF(buffers)];
-  uv_buf_t buf[COUNTOF(buffers)];
+  uv_write_t write_req[ARRAY_SIZE(buffers)];
+  uv_buf_t buf[ARRAY_SIZE(buffers)];
   int r, i;
   uv_loop_t* loop = uv_default_loop();
 
@@ -222,11 +224,11 @@ static int stdio_over_pipes_helper() {
   uv_unref(loop);
   uv_unref(loop);
 
-  for (i = 0; i < COUNTOF(buffers); i++) {
+  for (i = 0; i < ARRAY_SIZE(buffers); i++) {
     buf[i] = uv_buf_init((char*)buffers[i], strlen(buffers[i]));
   }
 
-  for (i = 0; i < COUNTOF(buffers); i++) {
+  for (i = 0; i < ARRAY_SIZE(buffers); i++) {
     r = uv_write(&write_req[i], (uv_stream_t*)&stdout_pipe, &buf[i], 1,
       after_pipe_write);
     ASSERT(r == 0);
@@ -267,6 +269,11 @@ static int maybe_run_test(int argc, char **argv) {
 
   if (strcmp(argv[1], "ipc_helper_listen_after_write") == 0) {
     return ipc_helper(1);
+  }
+
+  if (strcmp(argv[1], "ipc_send_recv_helper") == 0) {
+    int ipc_send_recv_helper(void); /* See test-ipc-send-recv.c */
+    return ipc_send_recv_helper();
   }
 
   if (strcmp(argv[1], "stdio_over_pipes_helper") == 0) {

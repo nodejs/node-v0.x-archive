@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,14 +29,17 @@
 #define V8_JSREGEXP_H_
 
 #include "allocation.h"
+#include "assembler.h"
 #include "zone-inl.h"
 
 namespace v8 {
 namespace internal {
 
-
+class NodeVisitor;
+class RegExpCompiler;
 class RegExpMacroAssembler;
-
+class RegExpNode;
+class RegExpTree;
 
 class RegExpImpl {
  public:
@@ -388,7 +391,7 @@ class DispatchTable : public ZoneObject {
     typedef uc16 Key;
     typedef Entry Value;
     static const uc16 kNoKey;
-    static const Entry kNoValue;
+    static const Entry NoValue() { return Value(); }
     static inline int Compare(uc16 a, uc16 b) {
       if (a == b)
         return 0;
@@ -633,7 +636,7 @@ class RegExpNode: public ZoneObject {
   static const int kNodeIsTooComplexForGreedyLoops = -1;
   virtual int GreedyLoopTextLength() { return kNodeIsTooComplexForGreedyLoops; }
   Label* label() { return &label_; }
-  // If non-generic code is generated for a node (ie the node is not at the
+  // If non-generic code is generated for a node (i.e. the node is not at the
   // start of the trace) then it cannot be reused.  This variable sets a limit
   // on how often we allow that to happen before we insist on starting a new
   // trace and generating generic code for a node that can be reused by flushing
@@ -1463,12 +1466,12 @@ class RegExpEngine: public AllStatic {
 
 class OffsetsVector {
  public:
-  explicit inline OffsetsVector(int num_registers)
+  inline OffsetsVector(int num_registers, Isolate* isolate)
       : offsets_vector_length_(num_registers) {
     if (offsets_vector_length_ > Isolate::kJSRegexpStaticOffsetsVectorSize) {
       vector_ = NewArray<int>(offsets_vector_length_);
     } else {
-      vector_ = Isolate::Current()->jsregexp_static_offsets_vector();
+      vector_ = isolate->jsregexp_static_offsets_vector();
     }
   }
   inline ~OffsetsVector() {

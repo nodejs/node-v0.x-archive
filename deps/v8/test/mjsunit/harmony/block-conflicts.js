@@ -25,9 +25,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-block-scoping
+// Flags: --harmony-scoping
 
 // Test for conflicting variable bindings.
+
+// TODO(ES6): properly activate extended mode
+"use strict";
 
 function CheckException(e) {
   var string = e.toString();
@@ -80,6 +83,11 @@ var letbinds = [ "let x",
                  "let x = function() {}",
                  "let x, y",
                  "let y, x",
+                 "const x = 0",
+                 "const x = undefined",
+                 "const x = function() {}",
+                 "const x = 2, y = 3",
+                 "const y = 4, x = 5",
                  ];
 var varbinds = [ "var x",
                  "var x = 0",
@@ -122,5 +130,5 @@ for (var v = 0; v < varbinds.length; ++v) {
 
 // Test conflicting parameter/var bindings.
 for (var v = 0; v < varbinds.length; ++v) {
-  TestConflict('(function (x) { ' + varbinds[v] + '; })()');
+  TestNoConflict('(function (x) { ' + varbinds[v] + '; })()');
 }

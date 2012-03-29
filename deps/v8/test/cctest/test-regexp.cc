@@ -449,6 +449,7 @@ static bool IsWhiteSpace(uc16 c) {
     case 0xA0:
     case 0x2028:
     case 0x2029:
+    case 0xFEFF:
       return true;
     default:
       return unibrow::Space::Is(c);
@@ -530,7 +531,7 @@ class TestConfig {
   typedef int Key;
   typedef int Value;
   static const int kNoKey;
-  static const int kNoValue;
+  static int NoValue() { return 0; }
   static inline int Compare(int a, int b) {
     if (a < b)
       return -1;
@@ -543,7 +544,6 @@ class TestConfig {
 
 
 const int TestConfig::kNoKey = 0;
-const int TestConfig::kNoValue = 0;
 
 
 static unsigned PseudoRandom(int i, int j) {
@@ -837,7 +837,8 @@ TEST(MacroAssemblerNativeSimpleUC16) {
   Handle<Code> code = Handle<Code>::cast(code_object);
 
   int captures[4] = {42, 37, 87, 117};
-  const uc16 input_data[6] = {'f', 'o', 'o', 'f', 'o', '\xa0'};
+  const uc16 input_data[6] = {'f', 'o', 'o', 'f', 'o',
+                              static_cast<uc16>('\xa0')};
   Handle<String> input =
       factory->NewStringFromTwoByte(Vector<const uc16>(input_data, 6));
   Handle<SeqTwoByteString> seq_input = Handle<SeqTwoByteString>::cast(input);
@@ -857,7 +858,8 @@ TEST(MacroAssemblerNativeSimpleUC16) {
   CHECK_EQ(-1, captures[2]);
   CHECK_EQ(-1, captures[3]);
 
-  const uc16 input_data2[9] = {'b', 'a', 'r', 'b', 'a', 'r', 'b', 'a', '\xa0'};
+  const uc16 input_data2[9] = {'b', 'a', 'r', 'b', 'a', 'r', 'b', 'a',
+                               static_cast<uc16>('\xa0')};
   input = factory->NewStringFromTwoByte(Vector<const uc16>(input_data2, 9));
   seq_input = Handle<SeqTwoByteString>::cast(input);
   start_adr = seq_input->GetCharsAddress();

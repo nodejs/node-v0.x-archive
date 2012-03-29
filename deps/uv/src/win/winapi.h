@@ -4323,10 +4323,17 @@ typedef NTSTATUS (NTAPI *sNtSetInformationFile)
 /*
  * Kernel32 headers
  */
-#define FILE_SKIP_COMPLETION_PORT_ON_SUCCESS    0x1
-#define FILE_SKIP_SET_EVENT_ON_HANDLE           0x2
+#ifndef FILE_SKIP_COMPLETION_PORT_ON_SUCCESS
+# define FILE_SKIP_COMPLETION_PORT_ON_SUCCESS 0x1
+#endif
 
-#define SYMBOLIC_LINK_FLAG_DIRECTORY            0x1
+#ifdef FILE_SKIP_SET_EVENT_ON_HANDLE
+# define FILE_SKIP_SET_EVENT_ON_HANDLE 0x2
+#endif
+
+#ifndef SYMBOLIC_LINK_FLAG_DIRECTORY
+# define SYMBOLIC_LINK_FLAG_DIRECTORY 0x1
+#endif
 
 #ifdef __MINGW32__
   typedef struct _OVERLAPPED_ENTRY {
@@ -4367,6 +4374,27 @@ typedef BOOLEAN (WINAPI* sCreateSymbolicLinkW)
                  LPCWSTR lpTargetFileName,
                  DWORD dwFlags);
 
+typedef VOID (WINAPI* sInitializeSRWLock)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sAcquireSRWLockShared)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sAcquireSRWLockExclusive)
+             (PSRWLOCK SRWLock);
+
+typedef BOOL (WINAPI* sTryAcquireSRWLockShared)
+             (PSRWLOCK SRWLock);
+
+typedef BOOL (WINAPI* sTryAcquireSRWLockExclusive)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sReleaseSRWLockShared)
+             (PSRWLOCK SRWLock);
+
+typedef VOID (WINAPI* sReleaseSRWLockExclusive)
+             (PSRWLOCK SRWLock);
+
 
 
 /* Ntapi function pointers */
@@ -4380,5 +4408,12 @@ extern sNtSetInformationFile pNtSetInformationFile;
 extern sGetQueuedCompletionStatusEx pGetQueuedCompletionStatusEx;
 extern sSetFileCompletionNotificationModes pSetFileCompletionNotificationModes;
 extern sCreateSymbolicLinkW pCreateSymbolicLinkW;
+extern sInitializeSRWLock pInitializeSRWLock;
+extern sAcquireSRWLockShared pAcquireSRWLockShared;
+extern sAcquireSRWLockExclusive pAcquireSRWLockExclusive;
+extern sTryAcquireSRWLockShared pTryAcquireSRWLockShared;
+extern sTryAcquireSRWLockExclusive pTryAcquireSRWLockExclusive;
+extern sReleaseSRWLockShared pReleaseSRWLockShared;
+extern sReleaseSRWLockExclusive pReleaseSRWLockExclusive;
 
 #endif /* UV_WIN_WINAPI_H_ */

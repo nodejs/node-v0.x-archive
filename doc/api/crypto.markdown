@@ -14,10 +14,12 @@ It also offers a set of wrappers for OpenSSL's hash, hmac, cipher, decipher, sig
 
 Creates a credentials object, with the optional details being a dictionary with keys:
 
-* `key` : a string holding the PEM encoded private key
-* `cert` : a string holding the PEM encoded certificate
-* `ca` : either a string or list of strings of PEM encoded CA certificates to trust.
-* `ciphers`: a string describing the ciphers to use or exclude. Consult
+* `key` : A string holding the PEM encoded private key
+* `passphrase` : A string of passphrase for the private key
+* `cert` : A string holding the PEM encoded certificate
+* `ca` : Either a string or list of strings of PEM encoded CA certificates to trust.
+* `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate Revocation List)
+* `ciphers`: A string describing the ciphers to use or exclude. Consult
   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for details
   on the format.
 
@@ -143,6 +145,12 @@ Returns any remaining enciphered contents, with `output_encoding` being one of:
 
 Note: `cipher` object can not be used after `final()` method been called.
 
+### cipher.setAutoPadding(auto_padding=true)
+
+You can disable automatic padding of the input data to block size. If `auto_padding` is false,
+the length of the entire input data must be a multiple of the cipher's block size or `final` will fail.
+Useful for non-standard padding, e.g. using `0x0` instead of PKCS padding. You must call this before `cipher.final`.
+
 
 ## crypto.createDecipher(algorithm, password)
 
@@ -176,6 +184,11 @@ Defaults to `'binary'`.
 
 Note: `decipher` object can not be used after `final()` method been called.
 
+### decipher.setAutoPadding(auto_padding=true)
+
+You can disable auto padding if the data has been encrypted without standard block padding to prevent
+`decipher.final` from checking and removing it. Can only work if the input data's length is a multiple of the
+ciphers block size. You must call this before streaming data to `decipher.update`.
 
 ## crypto.createSign(algorithm)
 
@@ -294,6 +307,36 @@ or `'base64'`. Defaults to `'binary'`.
 
 Sets the Diffie-Hellman private key. Key encoding can be `'binary'`, `'hex'`,
 or `'base64'`. Defaults to `'binary'`.
+
+## crypto.getDiffieHellman(group_name)
+
+Creates a predefined Diffie-Hellman key exchange object.
+The supported groups are: `'modp1'`, `'modp2'`, `'modp5'`
+(defined in [RFC 2412](http://www.rfc-editor.org/rfc/rfc2412.txt ))
+and `'modp14'`, `'modp15'`, `'modp16'`, `'modp17'`, `'modp18'`
+(defined in [RFC 3526](http://www.rfc-editor.org/rfc/rfc3526.txt )).
+The returned object mimics the interface of objects created by
+[crypto.createDiffieHellman()](#crypto.createDiffieHellman) above, but
+will not allow to change the keys (with
+[diffieHellman.setPublicKey()](#diffieHellman.setPublicKey) for example).
+The advantage of using this routine is that the parties don't have to
+generate nor exchange group modulus beforehand, saving both processor and
+communication time.
+
+Example (obtaining a shared secret):
+
+    var crypto = require('crypto');
+    var alice = crypto.getDiffieHellman('modp5');
+    var bob = crypto.getDiffieHellman('modp5');
+
+    alice.generateKeys();
+    bob.generateKeys();
+
+    var alice_secret = alice.computeSecret(bob.getPublicKey(), 'binary', 'hex');
+    var bob_secret = bob.computeSecret(alice.getPublicKey(), 'binary', 'hex');
+
+    /* alice_secret and bob_secret should be the same */
+    console.log(alice_secret == bob_secret);
 
 ## crypto.pbkdf2(password, salt, iterations, keylen, callback)
 

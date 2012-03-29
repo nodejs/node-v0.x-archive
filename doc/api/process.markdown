@@ -144,6 +144,11 @@ Example:
     /usr/local/bin/node
 
 
+## process.abort()
+
+This causes node to emit an abort. This will cause node to exit and
+generate a core file.
+
 ## process.chdir(directory)
 
 Changes the current working directory of the process or throws an exception if that fails.
@@ -251,6 +256,33 @@ Will output:
       ev: '4.4',
       openssl: '1.0.0e-fips' }
 
+## process.config
+
+An Object containing the JavaScript representation of the configure options
+that were used to compile the current node executable. This is the same as
+the "config.gypi" file that was produced when running the `./configure` script.
+
+An example of the possible output looks like:
+
+    { target_defaults:
+       { cflags: [],
+         default_configuration: 'Release',
+         defines: [],
+         include_dirs: [],
+         libraries: [] },
+      variables:
+       { host_arch: 'x64',
+         node_install_npm: 'true',
+         node_install_waf: 'true',
+         node_prefix: '',
+         node_shared_v8: 'false',
+         node_shared_zlib: 'false',
+         node_use_dtrace: 'false',
+         node_use_openssl: 'true',
+         node_use_system_openssl: 'false',
+         strict_aliasing: 'true',
+         target_arch: 'x64',
+         v8_use_snapshot: 'true' } }
 
 ## process.installPrefix
 
@@ -354,3 +386,25 @@ given, otherwise returns the current mask.
 ## process.uptime()
 
 Number of seconds Node has been running.
+
+
+## process.hrtime()
+
+Returns the current high-resolution real time in a `[seconds, nanoseconds]`
+tuple Array. It is relative to an arbitrary time in the past. It is not
+related to the time of day and therefore not subject to clock drift. The
+primary use is for measuring performance between intervals.
+
+You may pass in the result of a previous call to `process.hrtime()` to get
+a diff reading, useful for benchmarks and measuring intervals:
+
+    var t = process.hrtime();
+    // [ 1800216, 927643717 ]
+
+    setTimeout(function () {
+      t = process.hrtime(t);
+      // [ 1, 6962306 ]
+
+      console.log('benchmark took %d seconds and %d nanoseconds', t[0], t[1]);
+      // benchmark took 1 seconds and 6962306 nanoseconds
+    }, 1000);

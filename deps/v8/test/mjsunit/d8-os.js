@@ -54,6 +54,8 @@ function str_error(str) {
 
 
 if (this.os && os.system) {
+  // Ensure that we have a valid working directory.
+  os.chdir("/tmp");
   try {
     // Delete the dir if it is lying around from last time.
     os.system("ls", [TEST_DIR]);
@@ -61,52 +63,53 @@ if (this.os && os.system) {
   } catch (e) {
   }
   os.mkdirp(TEST_DIR);
-  os.chdir(TEST_DIR);
   try {
     // Check the chdir worked.
     os.system('ls', [TEST_DIR]);
     // Simple create dir.
-    os.mkdirp("dir");
+    os.mkdirp(TEST_DIR + "/dir");
     // Create dir in dir.
-    os.mkdirp("dir/foo");
+    os.mkdirp(TEST_DIR + "/dir/foo");
     // Check that they are there.
-    os.system('ls', ['dir/foo']);
+    os.system('ls', [TEST_DIR + '/dir/foo']);
     // Check that we can detect when something is not there.
-    assertThrows("os.system('ls', ['dir/bar']);", "dir not there");
+    assertThrows("os.system('ls', [TEST_DIR + '/dir/bar']);", "dir not there");
     // Check that mkdirp makes intermediate directories.
-    os.mkdirp("dir2/foo");
-    os.system("ls", ["dir2/foo"]);
+    os.mkdirp(TEST_DIR + "/dir2/foo");
+    os.system("ls", [TEST_DIR + "/dir2/foo"]);
     // Check that mkdirp doesn't mind if the dir is already there.
-    os.mkdirp("dir2/foo");
-    os.mkdirp("dir2/foo/");
+    os.mkdirp(TEST_DIR + "/dir2/foo");
+    os.mkdirp(TEST_DIR + "/dir2/foo/");
     // Check that mkdirp can cope with trailing /
-    os.mkdirp("dir3/");
-    os.system("ls", ["dir3"]);
+    os.mkdirp(TEST_DIR + "/dir3/");
+    os.system("ls", [TEST_DIR + "/dir3"]);
     // Check that we get an error if the name is taken by a file.
-    os.system("sh", ["-c", "echo foo > file1"]);
-    os.system("ls", ["file1"]);
-    assertThrows("os.mkdirp('file1');", "mkdir over file1");
-    assertThrows("os.mkdirp('file1/foo');", "mkdir over file2");
-    assertThrows("os.mkdirp('file1/');", "mkdir over file3");
-    assertThrows("os.mkdirp('file1/foo/');", "mkdir over file4");
+    os.system("sh", ["-c", "echo foo > " + TEST_DIR + "/file1"]);
+    os.system("ls", [TEST_DIR + "/file1"]);
+    assertThrows("os.mkdirp(TEST_DIR + '/file1');", "mkdir over file1");
+    assertThrows("os.mkdirp(TEST_DIR + '/file1/foo');", "mkdir over file2");
+    assertThrows("os.mkdirp(TEST_DIR + '/file1/');", "mkdir over file3");
+    assertThrows("os.mkdirp(TEST_DIR + '/file1/foo/');", "mkdir over file4");
     // Create a dir we cannot read.
-    os.mkdirp("dir4", 0);
+    os.mkdirp(TEST_DIR + "/dir4", 0);
     // This test fails if you are root since root can read any dir.
-    assertThrows("os.chdir('dir4');", "chdir dir4 I");
-    os.rmdir("dir4");
-    assertThrows("os.chdir('dir4');", "chdir dir4 II");
-    // Set umask.
+    assertThrows("os.chdir(TEST_DIR + '/dir4');", "chdir dir4 I");
+    os.rmdir(TEST_DIR + "/dir4");
+    assertThrows("os.chdir(TEST_DIR + '/dir4');", "chdir dir4 II");
+
+    // Set umask.  This changes the umask for the whole process and is
+    // the reason why the test cannot be run multi-threaded.
     var old_umask = os.umask(0777);
     // Create a dir we cannot read.
-    os.mkdirp("dir5");
+    os.mkdirp(TEST_DIR + "/dir5");
     // This test fails if you are root since root can read any dir.
-    assertThrows("os.chdir('dir5');", "cd dir5 I");
-    os.rmdir("dir5");
-    assertThrows("os.chdir('dir5');", "chdir dir5 II");
+    assertThrows("os.chdir(TEST_DIR + '/dir5');", "cd dir5 I");
+    os.rmdir(TEST_DIR + "/dir5");
+    assertThrows("os.chdir(TEST_DIR + '/dir5');", "chdir dir5 II");
     os.umask(old_umask);
 
-    os.mkdirp("hest/fisk/../fisk/ged");
-    os.system("ls", ["hest/fisk/ged"]);
+    os.mkdirp(TEST_DIR + "/hest/fisk/../fisk/ged");
+    os.system("ls", [TEST_DIR + "/hest/fisk/ged"]);
 
     os.setenv("FOO", "bar");
     var environment = os.system("printenv");
@@ -143,42 +146,43 @@ if (this.os && os.system) {
       assertEquals("baz\n", os.system("echo", ["baz"]));
       //}
     }
+
+    // Too few args.
+    arg_error("os.umask();");
+    arg_error("os.system();");
+    arg_error("os.mkdirp();");
+    arg_error("os.chdir();");
+    arg_error("os.setenv();");
+    arg_error("os.rmdir();");
+
+    // Too many args.
+    arg_error("os.setenv('FOO=bar');");
+    arg_error("os.umask(0, 0);");
+    arg_error("os.system('ls', [], -1, -1, -1);");
+    arg_error("os.mkdirp('foo', 0, 0)");
+    arg_error("os.chdir('foo', 'bar')");
+    arg_error("os.rmdir('foo', 'bar');");
+
+    // Wrong kind of args.
+    arg_error("os.umask([]);");
+    arg_error("os.system('ls', 'foo');");
+    arg_error("os.system('ls', 123);");
+    arg_error("os.system('ls', [], 'foo');");
+    arg_error("os.system('ls', [], -1, 'foo');");
+    arg_error("os.mkdirp('foo', 'bar');");
+
+    // Test broken toString().
+    str_error("os.system(e);");
+    str_error("os.system('ls', [e]);");
+    str_error("os.system('ls', ['.', e]);");
+    str_error("os.system('ls', [e, '.']);");
+    str_error("os.mkdirp(e);");
+    str_error("os.setenv(e, 'goo');");
+    str_error("os.setenv('goo', e);");
+    str_error("os.chdir(e);");
+    str_error("os.rmdir(e);");
+
   } finally {
     os.system("rm", ["-r", TEST_DIR]);
   }
-
-  // Too few args.
-  arg_error("os.umask();");
-  arg_error("os.system();");
-  arg_error("os.mkdirp();");
-  arg_error("os.chdir();");
-  arg_error("os.setenv();");
-  arg_error("os.rmdir();");
-
-  // Too many args.
-  arg_error("os.setenv('FOO=bar');");
-  arg_error("os.umask(0, 0);");
-  arg_error("os.system('ls', [], -1, -1, -1);");
-  arg_error("os.mkdirp('foo', 0, 0)");
-  arg_error("os.chdir('foo', 'bar')");
-  arg_error("os.rmdir('foo', 'bar');");
-
-  // Wrong kind of args.
-  arg_error("os.umask([]);");
-  arg_error("os.system('ls', 'foo');");
-  arg_error("os.system('ls', 123);");
-  arg_error("os.system('ls', [], 'foo');");
-  arg_error("os.system('ls', [], -1, 'foo');");
-  arg_error("os.mkdirp('foo', 'bar');");
-
-  // Test broken toString().
-  str_error("os.system(e);");
-  str_error("os.system('ls', [e]);");
-  str_error("os.system('ls', ['.', e]);");
-  str_error("os.system('ls', [e, '.']);");
-  str_error("os.mkdirp(e);");
-  str_error("os.setenv(e, 'goo');");
-  str_error("os.setenv('goo', e);");
-  str_error("os.chdir(e);");
-  str_error("os.rmdir(e);");
 }

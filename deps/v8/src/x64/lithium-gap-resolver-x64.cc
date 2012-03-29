@@ -198,16 +198,18 @@ void LGapResolver::EmitMove(int index) {
       if (cgen_->IsInteger32Constant(constant_source)) {
         __ movl(dst, Immediate(cgen_->ToInteger32(constant_source)));
       } else {
-        __ Move(dst, cgen_->ToHandle(constant_source));
+        __ LoadObject(dst, cgen_->ToHandle(constant_source));
       }
     } else {
       ASSERT(destination->IsStackSlot());
       Operand dst = cgen_->ToOperand(destination);
       if (cgen_->IsInteger32Constant(constant_source)) {
-        // Allow top 32 bits of an untagged Integer32 to be arbitrary.
-        __ movl(dst, Immediate(cgen_->ToInteger32(constant_source)));
+        // Zero top 32 bits of a 64 bit spill slot that holds a 32 bit untagged
+        // value.
+        __ movq(dst, Immediate(cgen_->ToInteger32(constant_source)));
       } else {
-        __ Move(dst, cgen_->ToHandle(constant_source));
+        __ LoadObject(kScratchRegister, cgen_->ToHandle(constant_source));
+        __ movq(dst, kScratchRegister);
       }
     }
 

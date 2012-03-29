@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,15 +29,15 @@
 // Keep reference to original values of some global properties.  This
 // has the added benefit that the code in this file is isolated from
 // changes to these properties.
-const $floor = MathFloor;
-const $random = MathRandom;
-const $abs = MathAbs;
+var $floor = MathFloor;
+var $random = MathRandom;
+var $abs = MathAbs;
 
 // Instance class name can only be set on functions. That is the only
 // purpose for MathConstructor.
 function MathConstructor() {}
 %FunctionSetInstanceClassName(MathConstructor, 'Math');
-const $Math = new MathConstructor();
+var $Math = new MathConstructor();
 $Math.__proto__ = $Object.prototype;
 %SetProperty(global, "Math", $Math, DONT_ENUM);
 
@@ -119,6 +119,19 @@ function MathLog(x) {
 // ECMA 262 - 15.8.2.11
 function MathMax(arg1, arg2) {  // length == 2
   var length = %_ArgumentsLength();
+  if (length == 2) {
+    if (!IS_NUMBER(arg1)) arg1 = NonNumberToNumber(arg1);
+    if (!IS_NUMBER(arg2)) arg2 = NonNumberToNumber(arg2);
+    if (arg2 > arg1) return arg2;
+    if (arg1 > arg2) return arg1;
+    if (arg1 == arg2) {
+      // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can be
+      // a Smi or a heap number.
+      return (arg1 == 0 && !%_IsSmi(arg1) && 1 / arg1 < 0) ? arg2 : arg1;
+    }
+    // All comparisons failed, one of the arguments must be NaN.
+    return 0/0;  // Compiler constant-folds this to NaN.
+  }
   if (length == 0) {
     return -1/0;  // Compiler constant-folds this to -Infinity.
   }
@@ -131,7 +144,7 @@ function MathMax(arg1, arg2) {  // length == 2
     if (NUMBER_IS_NAN(n)) return n;
     // Make sure +0 is considered greater than -0.  -0 is never a Smi, +0 can be
     // a Smi or heap number.
-    if (n > r || (r === 0 && n === 0 && !%_IsSmi(r) && 1 / r < 0)) r = n;
+    if (n > r || (r == 0 && n == 0 && !%_IsSmi(r) && 1 / r < 0)) r = n;
   }
   return r;
 }
@@ -139,6 +152,19 @@ function MathMax(arg1, arg2) {  // length == 2
 // ECMA 262 - 15.8.2.12
 function MathMin(arg1, arg2) {  // length == 2
   var length = %_ArgumentsLength();
+  if (length == 2) {
+    if (!IS_NUMBER(arg1)) arg1 = NonNumberToNumber(arg1);
+    if (!IS_NUMBER(arg2)) arg2 = NonNumberToNumber(arg2);
+    if (arg2 > arg1) return arg1;
+    if (arg1 > arg2) return arg2;
+    if (arg1 == arg2) {
+      // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can be
+      // a Smi or a heap number.
+      return (arg1 == 0 && !%_IsSmi(arg1) && 1 / arg1 < 0) ? arg1 : arg2;
+    }
+    // All comparisons failed, one of the arguments must be NaN.
+    return 0/0;  // Compiler constant-folds this to NaN.
+  }
   if (length == 0) {
     return 1/0;  // Compiler constant-folds this to Infinity.
   }
@@ -149,9 +175,9 @@ function MathMin(arg1, arg2) {  // length == 2
     var n = %_Arguments(i);
     if (!IS_NUMBER(n)) n = NonNumberToNumber(n);
     if (NUMBER_IS_NAN(n)) return n;
-    // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can b a
+    // Make sure -0 is considered less than +0.  -0 is never a Smi, +0 can be a
     // Smi or a heap number.
-    if (n < r || (r === 0 && n === 0 && !%_IsSmi(n) && 1 / n < 0)) r = n;
+    if (n < r || (r == 0 && n == 0 && !%_IsSmi(n) && 1 / n < 0)) r = n;
   }
   return r;
 }
@@ -189,7 +215,7 @@ function MathSqrt(x) {
 // ECMA 262 - 15.8.2.18
 function MathTan(x) {
   if (!IS_NUMBER(x)) x = NonNumberToNumber(x);
-  return %Math_tan(x);
+  return %_MathTan(x);
 }
 
 
@@ -239,7 +265,7 @@ function SetUpMath() {
 
   // Set up non-enumerable functions of the Math object and
   // set their names.
-  InstallFunctionsOnHiddenPrototype($Math, DONT_ENUM, $Array(
+  InstallFunctions($Math, DONT_ENUM, $Array(
     "random", MathRandom,
     "abs", MathAbs,
     "acos", MathAcos,

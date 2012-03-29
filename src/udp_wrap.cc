@@ -19,11 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
-#include <node_buffer.h>
+#include "node.h"
+#include "node_buffer.h"
 
-#include <req_wrap.h>
-#include <handle_wrap.h>
+#include "req_wrap.h"
+#include "handle_wrap.h"
 
 #include <stdlib.h>
 
@@ -185,7 +185,7 @@ Handle<Value> UDPWrap::DoBind(const Arguments& args, int family) {
   // bind(ip, port, flags)
   assert(args.Length() == 3);
 
-  String::Utf8Value address(args[0]->ToString());
+  String::Utf8Value address(args[0]);
   const int port = args[1]->Uint32Value();
   const int flags = args[2]->Uint32Value();
 
@@ -244,15 +244,15 @@ Handle<Value> UDPWrap::SetMembership(const Arguments& args,
 
   assert(args.Length() == 2);
 
-  String::Utf8Value address(args[0]->ToString());
-  String::Utf8Value interface(args[1]->ToString());
+  String::Utf8Value address(args[0]);
+  String::Utf8Value iface(args[1]);
 
-  const char* interface_cstr = *interface;
+  const char* iface_cstr = *iface;
   if (args[1]->IsUndefined() || args[1]->IsNull()) {
-      interface_cstr = NULL;
+      iface_cstr = NULL;
   }
 
-  int r = uv_udp_set_membership(&wrap->handle_, *address, interface_cstr,
+  int r = uv_udp_set_membership(&wrap->handle_, *address, iface_cstr,
                                 membership);
 
   if (r)
@@ -286,6 +286,8 @@ Handle<Value> UDPWrap::DoSend(const Arguments& args, int family) {
 
   size_t offset = args[1]->Uint32Value();
   size_t length = args[2]->Uint32Value();
+  assert(offset < Buffer::Length(buffer_obj));
+  assert(length <= Buffer::Length(buffer_obj) - offset);
 
   SendWrap* req_wrap = new SendWrap();
   req_wrap->object_->SetHiddenValue(buffer_sym, buffer_obj);
@@ -294,7 +296,7 @@ Handle<Value> UDPWrap::DoSend(const Arguments& args, int family) {
                              length);
 
   const unsigned short port = args[3]->Uint32Value();
-  String::Utf8Value address(args[4]->ToString());
+  String::Utf8Value address(args[4]);
 
   switch (family) {
   case AF_INET:

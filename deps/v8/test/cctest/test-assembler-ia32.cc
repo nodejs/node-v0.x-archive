@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -93,15 +93,15 @@ TEST(AssemblerIa321) {
   Label L, C;
 
   __ mov(edx, Operand(esp, 4));
-  __ xor_(eax, Operand(eax));  // clear eax
+  __ xor_(eax, eax);  // clear eax
   __ jmp(&C);
 
   __ bind(&L);
-  __ add(eax, Operand(edx));
-  __ sub(Operand(edx), Immediate(1));
+  __ add(eax, edx);
+  __ sub(edx, Immediate(1));
 
   __ bind(&C);
-  __ test(edx, Operand(edx));
+  __ test(edx, edx);
   __ j(not_zero, &L);
   __ ret(0);
 
@@ -135,11 +135,11 @@ TEST(AssemblerIa322) {
   __ jmp(&C);
 
   __ bind(&L);
-  __ imul(eax, Operand(edx));
-  __ sub(Operand(edx), Immediate(1));
+  __ imul(eax, edx);
+  __ sub(edx, Immediate(1));
 
   __ bind(&C);
-  __ test(edx, Operand(edx));
+  __ test(edx, edx);
   __ j(not_zero, &L);
   __ ret(0);
 
@@ -275,10 +275,10 @@ TEST(AssemblerIa326) {
   __ subsd(xmm0, xmm1);
   __ divsd(xmm0, xmm1);
   // Copy xmm0 to st(0) using eight bytes of stack.
-  __ sub(Operand(esp), Immediate(8));
+  __ sub(esp, Immediate(8));
   __ movdbl(Operand(esp, 0), xmm0);
   __ fld_d(Operand(esp, 0));
-  __ add(Operand(esp), Immediate(8));
+  __ add(esp, Immediate(8));
   __ ret(0);
 
   CodeDesc desc;
@@ -314,12 +314,12 @@ TEST(AssemblerIa328) {
   v8::internal::byte buffer[256];
   Assembler assm(Isolate::Current(), buffer, sizeof buffer);
   __ mov(eax, Operand(esp, 4));
-  __ cvtsi2sd(xmm0, Operand(eax));
+  __ cvtsi2sd(xmm0, eax);
   // Copy xmm0 to st(0) using eight bytes of stack.
-  __ sub(Operand(esp), Immediate(8));
+  __ sub(esp, Immediate(8));
   __ movdbl(Operand(esp, 0), xmm0);
   __ fld_d(Operand(esp, 0));
-  __ add(Operand(esp), Immediate(8));
+  __ add(esp, Immediate(8));
   __ ret(0);
   CodeDesc desc;
   assm.GetCode(&desc);
@@ -407,5 +407,73 @@ TEST(AssemblerIa3210) {
   __ bind(&target);
   __ nop();
 }
+
+
+TEST(AssemblerMultiByteNop) {
+  InitializeVM();
+  v8::HandleScope scope;
+  v8::internal::byte buffer[1024];
+  Assembler assm(Isolate::Current(), buffer, sizeof(buffer));
+  __ push(ebx);
+  __ push(ecx);
+  __ push(edx);
+  __ push(edi);
+  __ push(esi);
+  __ mov(eax, 1);
+  __ mov(ebx, 2);
+  __ mov(ecx, 3);
+  __ mov(edx, 4);
+  __ mov(edi, 5);
+  __ mov(esi, 6);
+  for (int i = 0; i < 16; i++) {
+    int before = assm.pc_offset();
+    __ Nop(i);
+    CHECK_EQ(assm.pc_offset() - before, i);
+  }
+
+  Label fail;
+  __ cmp(eax, 1);
+  __ j(not_equal, &fail);
+  __ cmp(ebx, 2);
+  __ j(not_equal, &fail);
+  __ cmp(ecx, 3);
+  __ j(not_equal, &fail);
+  __ cmp(edx, 4);
+  __ j(not_equal, &fail);
+  __ cmp(edi, 5);
+  __ j(not_equal, &fail);
+  __ cmp(esi, 6);
+  __ j(not_equal, &fail);
+  __ mov(eax, 42);
+  __ pop(esi);
+  __ pop(edi);
+  __ pop(edx);
+  __ pop(ecx);
+  __ pop(ebx);
+  __ ret(0);
+  __ bind(&fail);
+  __ mov(eax, 13);
+  __ pop(esi);
+  __ pop(edi);
+  __ pop(edx);
+  __ pop(ecx);
+  __ pop(ebx);
+  __ ret(0);
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Code* code = Code::cast(HEAP->CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(HEAP->undefined_value()))->ToObjectChecked());
+  CHECK(code->IsCode());
+
+  F0 f = FUNCTION_CAST<F0>(code->entry());
+  int res = f();
+  CHECK_EQ(42, res);
+}
+
+
+
 
 #undef __

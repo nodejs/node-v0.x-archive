@@ -24,7 +24,7 @@ var assert = require('assert');
 
 var HTTPParser = process.binding('http_parser').HTTPParser;
 
-var CRLF = "\r\n";
+var CRLF = '\r\n';
 var REQUEST = HTTPParser.REQUEST;
 var RESPONSE = HTTPParser.RESPONSE;
 
@@ -87,9 +87,8 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'GET /hello HTTP/1.1' + CRLF +
-    CRLF
-  );
+      'GET /hello HTTP/1.1' + CRLF +
+      CRLF);
 
   var parser = newParser(REQUEST);
 
@@ -124,12 +123,11 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'HTTP/1.1 200 OK' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    'Content-Length: 4' + CRLF +
-    CRLF +
-    'pong'
-  );
+      'HTTP/1.1 200 OK' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      'Content-Length: 4' + CRLF +
+      CRLF +
+      'pong');
 
   var parser = newParser(RESPONSE);
 
@@ -150,27 +148,48 @@ function expectBody(expected) {
 
 
 //
+// Response with no headers.
+//
+(function() {
+  var request = Buffer(
+      'HTTP/1.0 200 Connection established' + CRLF +
+      CRLF);
+
+  var parser = newParser(RESPONSE);
+
+  parser.onHeadersComplete = mustCall(function(info) {
+    assert.equal(info.method, undefined);
+    assert.equal(info.versionMajor, 1);
+    assert.equal(info.versionMinor, 0);
+    assert.equal(info.statusCode, 200);
+    assert.deepEqual(info.headers || parser.headers, []);
+  });
+
+  parser.execute(request, 0, request.length);
+})();
+
+
+//
 // Trailing headers.
 //
 (function() {
   var request = Buffer(
-    'POST /it HTTP/1.1' + CRLF +
-    'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
-    '4' + CRLF +
-    'ping' + CRLF +
-    '0' + CRLF +
-    'Vary: *' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    CRLF
-  );
+      'POST /it HTTP/1.1' + CRLF +
+      'Transfer-Encoding: chunked' + CRLF +
+      CRLF +
+      '4' + CRLF +
+      'ping' + CRLF +
+      '0' + CRLF +
+      'Vary: *' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      CRLF);
 
   var seen_body = false;
 
   function onHeaders(headers, url) {
     assert.ok(seen_body); // trailers should come after the body
     assert.deepEqual(headers,
-      ['Vary', '*', 'Content-Type', 'text/plain']);
+        ['Vary', '*', 'Content-Type', 'text/plain']);
   }
 
   var parser = newParser(REQUEST);
@@ -199,12 +218,11 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'GET / HTTP/1.0' + CRLF +
-    'X-Filler: 1337' + CRLF +
-    'X-Filler:   42' + CRLF +
-    'X-Filler2:  42' + CRLF +
-    CRLF
-  );
+      'GET / HTTP/1.0' + CRLF +
+      'X-Filler: 1337' + CRLF +
+      'X-Filler:   42' + CRLF +
+      'X-Filler2:  42' + CRLF +
+      CRLF);
 
   var parser = newParser(REQUEST);
 
@@ -213,9 +231,9 @@ function expectBody(expected) {
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 0);
     assert.deepEqual(info.headers || parser.headers,
-      ['X-Filler', '1337',
-       'X-Filler', '42',
-       'X-Filler2', '42']);
+        ['X-Filler', '1337',
+         'X-Filler', '42',
+         'X-Filler2', '42']);
   });
 
   parser.execute(request, 0, request.length);
@@ -231,10 +249,9 @@ function expectBody(expected) {
   for (var i = 0; i < 8; ++i) lots_of_headers += lots_of_headers;
 
   var request = Buffer(
-    'GET /foo/bar/baz?quux=42#1337 HTTP/1.0' + CRLF +
-    lots_of_headers +
-    CRLF
-  );
+      'GET /foo/bar/baz?quux=42#1337 HTTP/1.0' + CRLF +
+      lots_of_headers +
+      CRLF);
 
   var parser = newParser(REQUEST);
 
@@ -262,12 +279,11 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'POST /it HTTP/1.1' + CRLF +
-    'Content-Type: application/x-www-form-urlencoded' + CRLF +
-    'Content-Length: 15' + CRLF +
-    CRLF +
-    'foo=42&bar=1337'
-  );
+      'POST /it HTTP/1.1' + CRLF +
+      'Content-Type: application/x-www-form-urlencoded' + CRLF +
+      'Content-Length: 15' + CRLF +
+      CRLF +
+      'foo=42&bar=1337');
 
   var parser = newParser(REQUEST);
 
@@ -292,18 +308,17 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'POST /it HTTP/1.1' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
-    '3' + CRLF +
-    '123' + CRLF +
-    '6' + CRLF +
-    '123456' + CRLF +
-    'A' + CRLF +
-    '1234567890' + CRLF +
-    '0' + CRLF
-  );
+      'POST /it HTTP/1.1' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      'Transfer-Encoding: chunked' + CRLF +
+      CRLF +
+      '3' + CRLF +
+      '123' + CRLF +
+      '6' + CRLF +
+      '123456' + CRLF +
+      'A' + CRLF +
+      '1234567890' + CRLF +
+      '0' + CRLF);
 
   var parser = newParser(REQUEST);
 
@@ -314,7 +329,8 @@ function expectBody(expected) {
     assert.equal(info.versionMinor, 1);
   });
 
-  var body_part = 0, body_parts = ['123', '123456', '1234567890'];
+  var body_part = 0,
+      body_parts = ['123', '123456', '1234567890'];
 
   function onBody(buf, start, len) {
     var body = '' + buf.slice(start, start + len);
@@ -331,15 +347,14 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'POST /it HTTP/1.1' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
-    '3' + CRLF +
-    '123' + CRLF +
-    '6' + CRLF +
-    '123456' + CRLF
-  );
+      'POST /it HTTP/1.1' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      'Transfer-Encoding: chunked' + CRLF +
+      CRLF +
+      '3' + CRLF +
+      '123' + CRLF +
+      '6' + CRLF +
+      '123456' + CRLF);
 
   var parser = newParser(REQUEST);
 
@@ -350,9 +365,10 @@ function expectBody(expected) {
     assert.equal(info.versionMinor, 1);
   });
 
-  var body_part = 0, body_parts = [
-    '123', '123456', '123456789',
-    '123456789ABC', '123456789ABCDEF' ];
+  var body_part = 0,
+      body_parts = [
+        '123', '123456', '123456789',
+        '123456789ABC', '123456789ABCDEF'];
 
   function onBody(buf, start, len) {
     var body = '' + buf.slice(start, start + len);
@@ -363,14 +379,13 @@ function expectBody(expected) {
   parser.execute(request, 0, request.length);
 
   request = Buffer(
-    '9' + CRLF +
-    '123456789' + CRLF +
-    'C' + CRLF +
-    '123456789ABC' + CRLF +
-    'F' + CRLF +
-    '123456789ABCDEF' + CRLF +
-    '0' + CRLF
-  );
+      '9' + CRLF +
+      '123456789' + CRLF +
+      'C' + CRLF +
+      '123456789ABC' + CRLF +
+      'F' + CRLF +
+      '123456789ABCDEF' + CRLF +
+      '0' + CRLF);
 
   parser.execute(request, 0, request.length);
 })();
@@ -381,22 +396,21 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'POST /helpme HTTP/1.1' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
-    '3' + CRLF +
-    '123' + CRLF +
-    '6' + CRLF +
-    '123456' + CRLF +
-    '9' + CRLF +
-    '123456789' + CRLF +
-    'C' + CRLF +
-    '123456789ABC' + CRLF +
-    'F' + CRLF +
-    '123456789ABCDEF' + CRLF +
-    '0' + CRLF
-  );
+      'POST /helpme HTTP/1.1' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      'Transfer-Encoding: chunked' + CRLF +
+      CRLF +
+      '3' + CRLF +
+      '123' + CRLF +
+      '6' + CRLF +
+      '123456' + CRLF +
+      '9' + CRLF +
+      '123456789' + CRLF +
+      'C' + CRLF +
+      '123456789ABC' + CRLF +
+      'F' + CRLF +
+      '123456789ABCDEF' + CRLF +
+      '0' + CRLF);
 
   function test(a, b) {
     var parser = newParser(REQUEST);
@@ -424,9 +438,11 @@ function expectBody(expected) {
 
   for (var i = 1; i < request.length - 1; ++i) {
     var a = request.slice(0, i);
-    console.error("request.slice(0, " + i + ") = ", JSON.stringify(a.toString()));
+    console.error('request.slice(0, ' + i + ') = ',
+                  JSON.stringify(a.toString()));
     var b = request.slice(i);
-    console.error("request.slice(" + i + ") = ", JSON.stringify(b.toString()));
+    console.error('request.slice(' + i + ') = ',
+                  JSON.stringify(b.toString()));
     test(a, b);
   }
 })();
@@ -437,22 +453,21 @@ function expectBody(expected) {
 //
 (function() {
   var request = Buffer(
-    'POST /it HTTP/1.1' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
-    '3' + CRLF +
-    '123' + CRLF +
-    '6' + CRLF +
-    '123456' + CRLF +
-    '9' + CRLF +
-    '123456789' + CRLF +
-    'C' + CRLF +
-    '123456789ABC' + CRLF +
-    'F' + CRLF +
-    '123456789ABCDEF' + CRLF +
-    '0' + CRLF
-  );
+      'POST /it HTTP/1.1' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      'Transfer-Encoding: chunked' + CRLF +
+      CRLF +
+      '3' + CRLF +
+      '123' + CRLF +
+      '6' + CRLF +
+      '123456' + CRLF +
+      '9' + CRLF +
+      '123456789' + CRLF +
+      'C' + CRLF +
+      '123456789ABC' + CRLF +
+      'F' + CRLF +
+      '123456789ABCDEF' + CRLF +
+      '0' + CRLF);
 
   var parser = newParser(REQUEST);
 
@@ -462,8 +477,8 @@ function expectBody(expected) {
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
     assert.deepEqual(info.headers || parser.headers,
-      ['Content-Type', 'text/plain',
-       'Transfer-Encoding','chunked']);
+        ['Content-Type', 'text/plain',
+         'Transfer-Encoding', 'chunked']);
   });
 
   var expected_body = '123123456123456789123456789ABC123456789ABCDEF';
@@ -483,26 +498,24 @@ function expectBody(expected) {
 
 
 //
-//
+// Test parser reinit sequence.
 //
 (function() {
   var req1 = Buffer(
-    'PUT /this HTTP/1.1' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    'Transfer-Encoding: chunked' + CRLF +
-    CRLF +
-    '4' + CRLF +
-    'ping' + CRLF +
-    '0' + CRLF
-  );
+      'PUT /this HTTP/1.1' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      'Transfer-Encoding: chunked' + CRLF +
+      CRLF +
+      '4' + CRLF +
+      'ping' + CRLF +
+      '0' + CRLF);
 
   var req2 = Buffer(
-    'POST /that HTTP/1.0' + CRLF +
-    'Content-Type: text/plain' + CRLF +
-    'Content-Length: 4' + CRLF +
-    CRLF +
-    'pong'
-  );
+      'POST /that HTTP/1.0' + CRLF +
+      'Content-Type: text/plain' + CRLF +
+      'Content-Length: 4' + CRLF +
+      CRLF +
+      'pong');
 
   function onHeadersComplete1(info) {
     assert.equal(info.method, 'PUT');
@@ -510,8 +523,8 @@ function expectBody(expected) {
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 1);
     assert.deepEqual(info.headers,
-      ['Content-Type', 'text/plain',
-       'Transfer-Encoding', 'chunked']);
+        ['Content-Type', 'text/plain',
+         'Transfer-Encoding', 'chunked']);
   };
 
   function onHeadersComplete2(info) {
@@ -520,8 +533,8 @@ function expectBody(expected) {
     assert.equal(info.versionMajor, 1);
     assert.equal(info.versionMinor, 0);
     assert.deepEqual(info.headers,
-      ['Content-Type', 'text/plain',
-       'Content-Length', '4']);
+        ['Content-Type', 'text/plain',
+         'Content-Length', '4']);
   };
 
   var parser = newParser(REQUEST);

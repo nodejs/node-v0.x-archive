@@ -109,7 +109,7 @@ class PartialSnapshotSink : public i::SnapshotByteSink {
       if (j != 0) {
         fprintf(fp, ",");
       }
-      fprintf(fp, "%d", at(j));
+      fprintf(fp, "%u", static_cast<unsigned char>(at(j)));
     }
   }
   char at(int i) { return data_[i]; }
@@ -312,7 +312,7 @@ int main(int argc, char** argv) {
   }
   // If we don't do this then we end up with a stray root pointing at the
   // context even after we have disposed of the context.
-  HEAP->CollectAllGarbage(true);
+  HEAP->CollectAllGarbage(i::Heap::kNoGCFlags, "mksnapshot");
   i::Object* raw_context = *(v8::Utils::OpenHandle(*context));
   context.Dispose();
   CppByteSink sink(argv[1]);

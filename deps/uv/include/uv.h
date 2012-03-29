@@ -41,8 +41,9 @@ extern "C" {
 #   define UV_EXTERN /* nothing */
 #   define CARES_STATICLIB 1
 # endif
+#elif __GNUC__ >= 4
+# define UV_EXTERN __attribute__((visibility("default")))
 #else
-  /* Unix. TODO: symbol hiding */
 # define UV_EXTERN /* nothing */
 #endif
 
@@ -182,6 +183,8 @@ typedef struct uv_async_s uv_async_t;
 typedef struct uv_getaddrinfo_s uv_getaddrinfo_t;
 typedef struct uv_process_s uv_process_t;
 typedef struct uv_counters_s uv_counters_t;
+typedef struct uv_cpu_info_s uv_cpu_info_t;
+typedef struct uv_interface_address_s uv_interface_address_t;
 /* Request types */
 typedef struct uv_req_s uv_req_t;
 typedef struct uv_shutdown_s uv_shutdown_t;
@@ -221,6 +224,11 @@ UV_EXTERN uv_loop_t* uv_default_loop(void);
 UV_EXTERN int uv_run (uv_loop_t*);
 
 /*
+ * This function polls for new events without blocking.
+ */
+UV_EXTERN int uv_run_once (uv_loop_t*);
+
+/*
  * Manually modify the event loop's reference count. Useful if the user wants
  * to have a handle or timeout that doesn't keep the loop alive.
  */
@@ -232,15 +240,27 @@ UV_EXTERN int64_t uv_now(uv_loop_t*);
 
 
 /*
- * The status parameter is 0 if the request completed successfully,
- * and should be -1 if the request was cancelled or failed.
- * Error details can be obtained by calling uv_last_error().
+ * Should return a buffer that libuv can use to read data into.
  *
- * In the case of uv_read_cb the uv_buf_t returned should be freed by the
- * user.
+ * `suggested_size` is a hint. Returning a buffer that is smaller is perfectly
+ * okay as long as `buf.len > 0`.
  */
 typedef uv_buf_t (*uv_alloc_cb)(uv_handle_t* handle, size_t suggested_size);
+
+/*
+ * `nread` is > 0 if there is data available, 0 if libuv is done reading for now
+ * or -1 on error.
+ *
+ * Error details can be obtained by calling uv_last_error(). UV_EOF indicates
+ * that the stream has been closed.
+ *
+ * The callee is responsible for closing the stream when an error happens.
+ * Trying to read from the stream again is undefined.
+ *
+ * The callee is responsible for freeing the buffer, libuv does not reuse it.
+ */
 typedef void (*uv_read_cb)(uv_stream_t* stream, ssize_t nread, uv_buf_t buf);
+
 /*
  * Just like the uv_read_cb except that if the pending parameter is true
  * then you can use uv_accept() to pull the new handle into the process.
@@ -248,6 +268,7 @@ typedef void (*uv_read_cb)(uv_stream_t* stream, ssize_t nread, uv_buf_t buf);
  */
 typedef void (*uv_read2_cb)(uv_pipe_t* pipe, ssize_t nread, uv_buf_t buf,
     uv_handle_type pending);
+
 typedef void (*uv_write_cb)(uv_write_t* req, int status);
 typedef void (*uv_connect_cb)(uv_connect_t* req, int status);
 typedef void (*uv_shutdown_cb)(uv_shutdown_t* req, int status);
@@ -375,6 +396,21 @@ UV_EXTERN void uv_close(uv_handle_t* handle, uv_close_cb close_cb);
  * freeing base after the uv_buf_t is done. Return struct passed by value.
  */
 UV_EXTERN uv_buf_t uv_buf_init(char* base, size_t len);
+
+
+/*
+ * Utility function. Copies up to `size` characters from `src` to `dst`
+ * and ensures that `dst` is properly NUL terminated unless `size` is zero.
+ */
+UV_EXTERN size_t uv_strlcpy(char* dst, const char* src, size_t size);
+
+/*
+ * Utility function. Appends `src` to `dst` and ensures that `dst` is
+ * properly NUL terminated unless `size` is zero or `dst` does not
+ * contain a NUL byte. `size` is the total length of `dst` so at most
+ * `size - strlen(dst) - 1` characters will be copied from `src`.
+ */
+UV_EXTERN size_t uv_strlcat(char* dst, const char* src, size_t size);
 
 
 #define UV_STREAM_FIELDS \
@@ -1084,7 +1120,48 @@ UV_EXTERN int uv_queue_work(uv_loop_t* loop, uv_work_t* req,
     uv_work_cb work_cb, uv_after_work_cb after_work_cb);
 
 
+struct uv_cpu_info_s {
+  char* model;
+  int speed;
+  struct uv_cpu_times_s {
+    uint64_t user;
+    uint64_t nice;
+    uint64_t sys;
+    uint64_t idle;
+    uint64_t irq;
+  } cpu_times;
+};
 
+struct uv_interface_address_s {
+  char* name;
+  int is_internal;
+  union {
+    struct sockaddr_in address4;
+    struct sockaddr_in6 address6;
+  } address;
+};
+
+UV_EXTERN char** uv_setup_args(int argc, char** argv);
+UV_EXTERN uv_err_t uv_get_process_title(char* buffer, size_t size);
+UV_EXTERN uv_err_t uv_set_process_title(const char* title);
+UV_EXTERN uv_err_t uv_resident_set_memory(size_t* rss);
+UV_EXTERN uv_err_t uv_uptime(double* uptime);
+
+/*
+ * This allocates cpu_infos array, and sets count.  The array
+ * is freed using uv_free_cpu_info().
+ */
+UV_EXTERN uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count);
+UV_EXTERN void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count);
+
+/*
+ * This allocates addresses array, and sets count.  The array
+ * is freed using uv_free_interface_addresses().
+ */
+UV_EXTERN uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
+  int* count);
+UV_EXTERN void uv_free_interface_addresses(uv_interface_address_t* addresses,
+  int count);
 
 /*
  * File System Methods.
@@ -1311,7 +1388,7 @@ UV_EXTERN extern uint64_t uv_hrtime(void);
 
 
 /*
- * Opens a shared library. The filename is in utf-8. On success, -1 is
+ * Opens a shared library. The filename is in utf-8. On success, -1 is returned
  * and the variable pointed by library receives a handle to the library.
  */
 UV_EXTERN uv_err_t uv_dlopen(const char* filename, uv_lib_t* library);
@@ -1323,6 +1400,43 @@ UV_EXTERN uv_err_t uv_dlclose(uv_lib_t library);
  */
 UV_EXTERN uv_err_t uv_dlsym(uv_lib_t library, const char* name, void** ptr);
 
+/*
+ * Retrieves and frees an error message of dynamic linking loaders.
+ */
+UV_EXTERN const char *uv_dlerror(uv_lib_t library);
+UV_EXTERN void uv_dlerror_free(uv_lib_t library, const char *msg);
+
+/*
+ * The mutex functions return 0 on success, -1 on error
+ * (unless the return type is void, of course).
+ */
+UV_EXTERN int uv_mutex_init(uv_mutex_t* handle);
+UV_EXTERN void uv_mutex_destroy(uv_mutex_t* handle);
+UV_EXTERN void uv_mutex_lock(uv_mutex_t* handle);
+UV_EXTERN int uv_mutex_trylock(uv_mutex_t* handle);
+UV_EXTERN void uv_mutex_unlock(uv_mutex_t* handle);
+
+/*
+ * Same goes for the read/write lock functions.
+ */
+UV_EXTERN int uv_rwlock_init(uv_rwlock_t* rwlock);
+UV_EXTERN void uv_rwlock_destroy(uv_rwlock_t* rwlock);
+UV_EXTERN void uv_rwlock_rdlock(uv_rwlock_t* rwlock);
+UV_EXTERN int uv_rwlock_tryrdlock(uv_rwlock_t* rwlock);
+UV_EXTERN void uv_rwlock_rdunlock(uv_rwlock_t* rwlock);
+UV_EXTERN void uv_rwlock_wrlock(uv_rwlock_t* rwlock);
+UV_EXTERN int uv_rwlock_trywrlock(uv_rwlock_t* rwlock);
+UV_EXTERN void uv_rwlock_wrunlock(uv_rwlock_t* rwlock);
+
+/* Runs a function once and only once. Concurrent calls to uv_once() with the
+ * same guard will block all callers except one (it's unspecified which one).
+ * The guard should be initialized statically with the UV_ONCE_INIT macro.
+ */
+UV_EXTERN void uv_once(uv_once_t* guard, void (*callback)(void));
+
+UV_EXTERN int uv_thread_create(uv_thread_t *tid,
+    void (*entry)(void *arg), void *arg);
+UV_EXTERN int uv_thread_join(uv_thread_t *tid);
 
 /* the presence of these unions force similar struct layout */
 union uv_any_handle {
@@ -1397,6 +1511,8 @@ struct uv_loop_s {
 #undef UV_FS_REQ_PRIVATE_FIELDS
 #undef UV_WORK_PRIVATE_FIELDS
 #undef UV_FS_EVENT_PRIVATE_FIELDS
+#undef UV_LOOP_PRIVATE_FIELDS
+#undef UV_LOOP_PRIVATE_PLATFORM_FIELDS
 
 #ifdef __cplusplus
 }

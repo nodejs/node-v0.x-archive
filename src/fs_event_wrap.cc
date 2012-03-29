@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
-#include <handle_wrap.h>
+#include "node.h"
+#include "handle_wrap.h"
 
 #include <stdlib.h>
 
@@ -107,7 +107,7 @@ Handle<Value> FSEventWrap::Start(const Arguments& args) {
     return ThrowException(Exception::TypeError(String::New("Bad arguments")));
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
 
   int r = uv_fs_event_init(uv_default_loop(), &wrap->handle_, *path, OnEvent, 0);
   if (r == 0) {

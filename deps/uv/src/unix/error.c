@@ -92,7 +92,5 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ENOTEMPTY: return UV_ENOTEMPTY;
     default: return UV_UNKNOWN;
   }
-
-  assert(0 && "unreachable");
-  return -1;
+  UNREACHABLE();
 }

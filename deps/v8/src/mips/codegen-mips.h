@@ -31,7 +31,6 @@
 
 
 #include "ast.h"
-#include "code-stubs-mips.h"
 #include "ic-inl.h"
 
 namespace v8 {
@@ -71,25 +70,25 @@ class CodeGenerator: public AstVisitor {
                               int pos,
                               bool right_here = false);
 
-  // Constants related to patching of inlined load/store.
-  static int GetInlinedKeyedLoadInstructionsAfterPatch() {
-    // This is in correlation with the padding in MacroAssembler::Abort.
-    return FLAG_debug_code ? 45 : 20;
-  }
-
-  static const int kInlinedKeyedStoreInstructionsAfterPatch = 13;
-
-  static int GetInlinedNamedStoreInstructionsAfterPatch() {
-    ASSERT(Isolate::Current()->inlined_write_barrier_size() != -1);
-    // Magic number 5: instruction count after patched map load:
-    //  li: 2 (liu & ori), Branch : 2 (bne & nop), sw : 1
-    return Isolate::Current()->inlined_write_barrier_size() + 5;
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(CodeGenerator);
 };
 
+
+class StringCharLoadGenerator : public AllStatic {
+ public:
+  // Generates the code for handling different string types and loading the
+  // indexed character into |result|.  We expect |index| as untagged input and
+  // |result| as untagged output.
+  static void Generate(MacroAssembler* masm,
+                       Register string,
+                       Register index,
+                       Register result,
+                       Label* call_runtime);
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(StringCharLoadGenerator);
+};
 
 } }  // namespace v8::internal
 

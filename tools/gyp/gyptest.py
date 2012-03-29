@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (c) 2011 Google Inc. All rights reserved.
+# Copyright (c) 2012 Google Inc. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -209,10 +209,10 @@ def main(argv=None):
       'freebsd7': ['make'],
       'freebsd8': ['make'],
       'cygwin':   ['msvs'],
-      'win32':    ['msvs'],
+      'win32':    ['msvs', 'ninja'],
       'linux2':   ['make', 'ninja'],
       'linux3':   ['make', 'ninja'],
-      'darwin':   ['make', 'xcode'],
+      'darwin':   ['make', 'ninja', 'xcode'],
     }[sys.platform]
 
   for format in format_list:

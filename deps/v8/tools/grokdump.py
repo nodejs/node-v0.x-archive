@@ -52,6 +52,7 @@ Examples:
   $ %prog 12345678-1234-1234-1234-123456789abcd-full.dmp
 """
 
+
 DEBUG=False
 
 
@@ -233,6 +234,80 @@ MINIDUMP_CONTEXT_X86 = Descriptor([
                 MD_CONTEXT_X86_EXTENDED_REGISTERS))
 ])
 
+MD_CONTEXT_AMD64 = 0x00100000
+MD_CONTEXT_AMD64_CONTROL = (MD_CONTEXT_AMD64 | 0x00000001)
+MD_CONTEXT_AMD64_INTEGER = (MD_CONTEXT_AMD64 | 0x00000002)
+MD_CONTEXT_AMD64_SEGMENTS = (MD_CONTEXT_AMD64 | 0x00000004)
+MD_CONTEXT_AMD64_FLOATING_POINT = (MD_CONTEXT_AMD64 | 0x00000008)
+MD_CONTEXT_AMD64_DEBUG_REGISTERS = (MD_CONTEXT_AMD64 | 0x00000010)
+
+MINIDUMP_CONTEXT_AMD64 = Descriptor([
+  ("p1_home", ctypes.c_uint64),
+  ("p2_home", ctypes.c_uint64),
+  ("p3_home", ctypes.c_uint64),
+  ("p4_home", ctypes.c_uint64),
+  ("p5_home", ctypes.c_uint64),
+  ("p6_home", ctypes.c_uint64),
+  ("context_flags", ctypes.c_uint32),
+  ("mx_csr", ctypes.c_uint32),
+  # MD_CONTEXT_AMD64_CONTROL.
+  ("cs", EnableOnFlag(ctypes.c_uint16, MD_CONTEXT_AMD64_CONTROL)),
+  # MD_CONTEXT_AMD64_SEGMENTS
+  ("ds", EnableOnFlag(ctypes.c_uint16, MD_CONTEXT_AMD64_SEGMENTS)),
+  ("es", EnableOnFlag(ctypes.c_uint16, MD_CONTEXT_AMD64_SEGMENTS)),
+  ("fs", EnableOnFlag(ctypes.c_uint16, MD_CONTEXT_AMD64_SEGMENTS)),
+  ("gs", EnableOnFlag(ctypes.c_uint16, MD_CONTEXT_AMD64_SEGMENTS)),
+  # MD_CONTEXT_AMD64_CONTROL.
+  ("ss", EnableOnFlag(ctypes.c_uint16, MD_CONTEXT_AMD64_CONTROL)),
+  ("eflags", EnableOnFlag(ctypes.c_uint32, MD_CONTEXT_AMD64_CONTROL)),
+  # MD_CONTEXT_AMD64_DEBUG_REGISTERS.
+  ("dr0", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("dr1", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("dr2", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("dr3", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("dr6", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("dr7", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  # MD_CONTEXT_AMD64_INTEGER.
+  ("rax", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("rcx", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("rdx", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("rbx", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  # MD_CONTEXT_AMD64_CONTROL.
+  ("rsp", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_CONTROL)),
+  # MD_CONTEXT_AMD64_INTEGER.
+  ("rbp", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("rsi", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("rdi", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r8", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r9", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r10", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r11", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r12", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r13", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r14", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  ("r15", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_INTEGER)),
+  # MD_CONTEXT_AMD64_CONTROL.
+  ("rip", EnableOnFlag(ctypes.c_uint64, MD_CONTEXT_AMD64_CONTROL)),
+  # MD_CONTEXT_AMD64_FLOATING_POINT
+  ("sse_registers", EnableOnFlag(ctypes.c_uint8 * (16 * 26),
+                                 MD_CONTEXT_AMD64_FLOATING_POINT)),
+  ("vector_registers", EnableOnFlag(ctypes.c_uint8 * (16 * 26),
+                                    MD_CONTEXT_AMD64_FLOATING_POINT)),
+  ("vector_control", EnableOnFlag(ctypes.c_uint64,
+                                  MD_CONTEXT_AMD64_FLOATING_POINT)),
+  # MD_CONTEXT_AMD64_DEBUG_REGISTERS.
+  ("debug_control", EnableOnFlag(ctypes.c_uint64,
+                                 MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("last_branch_to_rip", EnableOnFlag(ctypes.c_uint64,
+                                      MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("last_branch_from_rip", EnableOnFlag(ctypes.c_uint64,
+                                        MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("last_exception_to_rip", EnableOnFlag(ctypes.c_uint64,
+                                         MD_CONTEXT_AMD64_DEBUG_REGISTERS)),
+  ("last_exception_from_rip", EnableOnFlag(ctypes.c_uint64,
+                                           MD_CONTEXT_AMD64_DEBUG_REGISTERS))
+])
+
 MINIDUMP_MEMORY_DESCRIPTOR = Descriptor([
   ("start", ctypes.c_uint64),
   ("memory", MINIDUMP_LOCATION_DESCRIPTOR.ctype)
@@ -269,6 +344,12 @@ MINIDUMP_THREAD_LIST = Descriptor([
   ("threads", lambda t: MINIDUMP_THREAD.ctype * t.thread_count)
 ])
 
+MINIDUMP_RAW_SYSTEM_INFO = Descriptor([
+  ("processor_architecture", ctypes.c_uint16)
+])
+
+MD_CPU_ARCHITECTURE_X86 = 0
+MD_CPU_ARCHITECTURE_AMD64 = 9
 
 class MinidumpReader(object):
   """Minidump (.dmp) reader."""
@@ -288,20 +369,34 @@ class MinidumpReader(object):
     for _ in xrange(self.header.stream_count):
       directories.append(MINIDUMP_DIRECTORY.Read(self.minidump, offset))
       offset += MINIDUMP_DIRECTORY.size
+    self.arch = None
     self.exception = None
     self.exception_context = None
     self.memory_list = None
     self.memory_list64 = None
     self.thread_map = {}
+
+    # Find MDRawSystemInfo stream and determine arch.
+    for d in directories:
+      if d.stream_type == MD_SYSTEM_INFO_STREAM:
+        system_info = MINIDUMP_RAW_SYSTEM_INFO.Read(
+            self.minidump, d.location.rva)
+        self.arch = system_info.processor_architecture
+        assert self.arch in [MD_CPU_ARCHITECTURE_AMD64, MD_CPU_ARCHITECTURE_X86]
+    assert not self.arch is None
+
     for d in directories:
       DebugPrint(d)
-      # TODO(vitalyr): extract system info including CPU features.
       if d.stream_type == MD_EXCEPTION_STREAM:
         self.exception = MINIDUMP_EXCEPTION_STREAM.Read(
           self.minidump, d.location.rva)
         DebugPrint(self.exception)
-        self.exception_context = MINIDUMP_CONTEXT_X86.Read(
-          self.minidump, self.exception.thread_context.rva)
+        if self.arch == MD_CPU_ARCHITECTURE_X86:
+          self.exception_context = MINIDUMP_CONTEXT_X86.Read(
+              self.minidump, self.exception.thread_context.rva)
+        elif self.arch == MD_CPU_ARCHITECTURE_AMD64:
+          self.exception_context = MINIDUMP_CONTEXT_AMD64.Read(
+              self.minidump, self.exception.thread_context.rva)
         DebugPrint(self.exception_context)
       elif d.stream_type == MD_THREAD_LIST_STREAM:
         thread_list = MINIDUMP_THREAD_LIST.Read(self.minidump, d.location.rva)
@@ -335,6 +430,16 @@ class MinidumpReader(object):
     location = self.FindLocation(address)
     return ctypes.c_uint32.from_buffer(self.minidump, location).value
 
+  def ReadU64(self, address):
+    location = self.FindLocation(address)
+    return ctypes.c_uint64.from_buffer(self.minidump, location).value
+
+  def ReadUIntPtr(self, address):
+    if self.arch == MD_CPU_ARCHITECTURE_AMD64:
+      return self.ReadU64(address)
+    elif self.arch == MD_CPU_ARCHITECTURE_X86:
+      return self.ReadU32(address)
+
   def ReadBytes(self, address, size):
     location = self.FindLocation(address)
     return self.minidump[location:location + size]
@@ -355,10 +460,15 @@ class MinidumpReader(object):
   def GetDisasmLines(self, address, size):
     location = self.FindLocation(address)
     if location is None: return []
+    arch = None
+    if self.arch == MD_CPU_ARCHITECTURE_X86:
+      arch = "ia32"
+    elif self.arch == MD_CPU_ARCHITECTURE_AMD64:
+      arch = "x64"
     return disasm.GetDisasmLines(self.minidump_name,
                                  location,
                                  size,
-                                 "ia32",
+                                 arch,
                                  False)
 
 
@@ -366,13 +476,40 @@ class MinidumpReader(object):
     self.minidump.close()
     self.minidump_file.close()
 
+  def ExceptionIP(self):
+    if self.arch == MD_CPU_ARCHITECTURE_AMD64:
+      return self.exception_context.rip
+    elif self.arch == MD_CPU_ARCHITECTURE_X86:
+      return self.exception_context.eip
+
+  def ExceptionSP(self):
+    if self.arch == MD_CPU_ARCHITECTURE_AMD64:
+      return self.exception_context.rsp
+    elif self.arch == MD_CPU_ARCHITECTURE_X86:
+      return self.exception_context.esp
+
+  def FormatIntPtr(self, value):
+    if self.arch == MD_CPU_ARCHITECTURE_AMD64:
+      return "%016x" % value
+    elif self.arch == MD_CPU_ARCHITECTURE_X86:
+      return "%08x" % value
+
+  def PointerSize(self):
+    if self.arch == MD_CPU_ARCHITECTURE_AMD64:
+      return 8
+    elif self.arch == MD_CPU_ARCHITECTURE_X86:
+      return 4
+
+  def Register(self, name):
+    return self.exception_context.__getattribute__(name)
+
 
 # List of V8 instance types. Obtained by adding the code below to any .cc file.
 #
-# #define DUMP_TYPE(T) printf("%d: \"%s\",\n", T, #T);
+# #define DUMP_TYPE(T) printf("  %d: \"%s\",\n", T, #T);
 # struct P {
 #   P() {
-#     printf("{\n");
+#     printf("INSTANCE_TYPES = {\n");
 #     INSTANCE_TYPE_LIST(DUMP_TYPE)
 #     printf("}\n");
 #   }
@@ -386,13 +523,20 @@ INSTANCE_TYPES = {
   66: "EXTERNAL_SYMBOL_TYPE",
   74: "EXTERNAL_SYMBOL_WITH_ASCII_DATA_TYPE",
   70: "EXTERNAL_ASCII_SYMBOL_TYPE",
+  82: "SHORT_EXTERNAL_SYMBOL_TYPE",
+  90: "SHORT_EXTERNAL_SYMBOL_WITH_ASCII_DATA_TYPE",
+  86: "SHORT_EXTERNAL_ASCII_SYMBOL_TYPE",
   0: "STRING_TYPE",
   4: "ASCII_STRING_TYPE",
   1: "CONS_STRING_TYPE",
   5: "CONS_ASCII_STRING_TYPE",
+  3: "SLICED_STRING_TYPE",
   2: "EXTERNAL_STRING_TYPE",
   10: "EXTERNAL_STRING_WITH_ASCII_DATA_TYPE",
   6: "EXTERNAL_ASCII_STRING_TYPE",
+  18: "SHORT_EXTERNAL_STRING_TYPE",
+  26: "SHORT_EXTERNAL_STRING_WITH_ASCII_DATA_TYPE",
+  22: "SHORT_EXTERNAL_ASCII_STRING_TYPE",
   6: "PRIVATE_EXTERNAL_ASCII_STRING_TYPE",
   128: "MAP_TYPE",
   129: "CODE_TYPE",
@@ -401,43 +545,46 @@ INSTANCE_TYPES = {
   132: "HEAP_NUMBER_TYPE",
   133: "FOREIGN_TYPE",
   134: "BYTE_ARRAY_TYPE",
-  135: "EXTERNAL_BYTE_ARRAY_TYPE",
-  136: "EXTERNAL_UNSIGNED_BYTE_ARRAY_TYPE",
-  137: "EXTERNAL_SHORT_ARRAY_TYPE",
-  138: "EXTERNAL_UNSIGNED_SHORT_ARRAY_TYPE",
-  139: "EXTERNAL_INT_ARRAY_TYPE",
-  140: "EXTERNAL_UNSIGNED_INT_ARRAY_TYPE",
-  141: "EXTERNAL_FLOAT_ARRAY_TYPE",
-  143: "EXTERNAL_PIXEL_ARRAY_TYPE",
-  145: "FILLER_TYPE",
-  146: "ACCESSOR_INFO_TYPE",
-  147: "ACCESS_CHECK_INFO_TYPE",
-  148: "INTERCEPTOR_INFO_TYPE",
-  149: "CALL_HANDLER_INFO_TYPE",
-  150: "FUNCTION_TEMPLATE_INFO_TYPE",
-  151: "OBJECT_TEMPLATE_INFO_TYPE",
-  152: "SIGNATURE_INFO_TYPE",
-  153: "TYPE_SWITCH_INFO_TYPE",
-  154: "SCRIPT_TYPE",
-  155: "CODE_CACHE_TYPE",
-  156: "POLYMORPHIC_CODE_CACHE_TYPE",
-  159: "FIXED_ARRAY_TYPE",
-  160: "SHARED_FUNCTION_INFO_TYPE",
-  161: "JS_MESSAGE_OBJECT_TYPE",
-  162: "JS_VALUE_TYPE",
-  163: "JS_OBJECT_TYPE",
-  164: "JS_CONTEXT_EXTENSION_OBJECT_TYPE",
-  165: "JS_GLOBAL_OBJECT_TYPE",
-  166: "JS_BUILTINS_OBJECT_TYPE",
-  167: "JS_GLOBAL_PROXY_TYPE",
-  168: "JS_ARRAY_TYPE",
-  169: "JS_PROXY_TYPE",
-  170: "JS_WEAK_MAP_TYPE",
-  171: "JS_REGEXP_TYPE",
-  172: "JS_FUNCTION_TYPE",
-  173: "JS_FUNCTION_PROXY_TYPE",
-  157: "DEBUG_INFO_TYPE",
-  158: "BREAK_POINT_INFO_TYPE",
+  135: "FREE_SPACE_TYPE",
+  136: "EXTERNAL_BYTE_ARRAY_TYPE",
+  137: "EXTERNAL_UNSIGNED_BYTE_ARRAY_TYPE",
+  138: "EXTERNAL_SHORT_ARRAY_TYPE",
+  139: "EXTERNAL_UNSIGNED_SHORT_ARRAY_TYPE",
+  140: "EXTERNAL_INT_ARRAY_TYPE",
+  141: "EXTERNAL_UNSIGNED_INT_ARRAY_TYPE",
+  142: "EXTERNAL_FLOAT_ARRAY_TYPE",
+  144: "EXTERNAL_PIXEL_ARRAY_TYPE",
+  146: "FILLER_TYPE",
+  147: "ACCESSOR_INFO_TYPE",
+  148: "ACCESSOR_PAIR_TYPE",
+  149: "ACCESS_CHECK_INFO_TYPE",
+  150: "INTERCEPTOR_INFO_TYPE",
+  151: "CALL_HANDLER_INFO_TYPE",
+  152: "FUNCTION_TEMPLATE_INFO_TYPE",
+  153: "OBJECT_TEMPLATE_INFO_TYPE",
+  154: "SIGNATURE_INFO_TYPE",
+  155: "TYPE_SWITCH_INFO_TYPE",
+  156: "SCRIPT_TYPE",
+  157: "CODE_CACHE_TYPE",
+  158: "POLYMORPHIC_CODE_CACHE_TYPE",
+  161: "FIXED_ARRAY_TYPE",
+  145: "FIXED_DOUBLE_ARRAY_TYPE",
+  162: "SHARED_FUNCTION_INFO_TYPE",
+  163: "JS_MESSAGE_OBJECT_TYPE",
+  166: "JS_VALUE_TYPE",
+  167: "JS_OBJECT_TYPE",
+  168: "JS_CONTEXT_EXTENSION_OBJECT_TYPE",
+  169: "JS_GLOBAL_OBJECT_TYPE",
+  170: "JS_BUILTINS_OBJECT_TYPE",
+  171: "JS_GLOBAL_PROXY_TYPE",
+  172: "JS_ARRAY_TYPE",
+  165: "JS_PROXY_TYPE",
+  175: "JS_WEAK_MAP_TYPE",
+  176: "JS_REGEXP_TYPE",
+  177: "JS_FUNCTION_TYPE",
+  164: "JS_FUNCTION_PROXY_TYPE",
+  159: "DEBUG_INFO_TYPE",
+  160: "BREAK_POINT_INFO_TYPE",
 }
 
 
@@ -501,34 +648,36 @@ class HeapObject(object):
     p.Print(str(self))
 
   def __str__(self):
-    return "HeapObject(%08x, %s)" % (self.address,
-                                     INSTANCE_TYPES[self.map.instance_type])
+    return "HeapObject(%s, %s)" % (self.heap.reader.FormatIntPtr(self.address),
+                                   INSTANCE_TYPES[self.map.instance_type])
 
   def ObjectField(self, offset):
-    field_value = self.heap.reader.ReadU32(self.address + offset)
+    field_value = self.heap.reader.ReadUIntPtr(self.address + offset)
     return self.heap.FindObjectOrSmi(field_value)
 
   def SmiField(self, offset):
-    field_value = self.heap.reader.ReadU32(self.address + offset)
+    field_value = self.heap.reader.ReadUIntPtr(self.address + offset)
     assert (field_value & 1) == 0
     return field_value / 2
 
 
 class Map(HeapObject):
-  INSTANCE_TYPE_OFFSET = 8
+  def InstanceTypeOffset(self):
+    return self.heap.PointerSize() + self.heap.IntSize()
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
     self.instance_type = \
-        heap.reader.ReadU8(self.address + Map.INSTANCE_TYPE_OFFSET)
+        heap.reader.ReadU8(self.address + self.InstanceTypeOffset())
 
 
 class String(HeapObject):
-  LENGTH_OFFSET = 4
+  def LengthOffset(self):
+    return self.heap.PointerSize()
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
-    self.length = self.SmiField(String.LENGTH_OFFSET)
+    self.length = self.SmiField(self.LengthOffset())
 
   def GetChars(self):
     return "?string?"
@@ -541,11 +690,12 @@ class String(HeapObject):
 
 
 class SeqString(String):
-  CHARS_OFFSET = 12
+  def CharsOffset(self):
+    return self.heap.PointerSize() * 3
 
   def __init__(self, heap, map, address):
     String.__init__(self, heap, map, address)
-    self.chars = heap.reader.ReadBytes(self.address + SeqString.CHARS_OFFSET,
+    self.chars = heap.reader.ReadBytes(self.address + self.CharsOffset(),
                                        self.length)
 
   def GetChars(self):
@@ -553,6 +703,7 @@ class SeqString(String):
 
 
 class ExternalString(String):
+  # TODO(vegorov) fix ExternalString for X64 architecture
   RESOURCE_OFFSET = 12
 
   WEBKIT_RESOUCE_STRING_IMPL_OFFSET = 4
@@ -582,24 +733,28 @@ class ExternalString(String):
 
 
 class ConsString(String):
-  LEFT_OFFSET = 12
-  RIGHT_OFFSET = 16
+  def LeftOffset(self):
+    return self.heap.PointerSize() * 3
+
+  def RightOffset(self):
+    return self.heap.PointerSize() * 4
 
   def __init__(self, heap, map, address):
     String.__init__(self, heap, map, address)
-    self.left = self.ObjectField(ConsString.LEFT_OFFSET)
-    self.right = self.ObjectField(ConsString.RIGHT_OFFSET)
+    self.left = self.ObjectField(self.LeftOffset())
+    self.right = self.ObjectField(self.RightOffset())
 
   def GetChars(self):
     return self.left.GetChars() + self.right.GetChars()
 
 
 class Oddball(HeapObject):
-  TO_STRING_OFFSET = 4
+  def ToStringOffset(self):
+    return self.heap.PointerSize()
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
-    self.to_string = self.ObjectField(Oddball.TO_STRING_OFFSET)
+    self.to_string = self.ObjectField(self.ToStringOffset())
 
   def Print(self, p):
     p.Print(str(self))
@@ -609,19 +764,23 @@ class Oddball(HeapObject):
 
 
 class FixedArray(HeapObject):
-  LENGTH_OFFSET = 4
-  ELEMENTS_OFFSET = 8
+  def LengthOffset(self):
+    return self.heap.PointerSize()
+
+  def ElementsOffset(self):
+    return self.heap.PointerSize() * 2
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
-    self.length = self.SmiField(FixedArray.LENGTH_OFFSET)
+    self.length = self.SmiField(self.LengthOffset())
 
   def Print(self, p):
-    p.Print("FixedArray(%08x) {" % self.address)
+    p.Print("FixedArray(%s) {" % self.heap.reader.FormatIntPtr(self.address))
     p.Indent()
     p.Print("length: %d" % self.length)
+    base_offset = self.ElementsOffset()
     for i in xrange(self.length):
-      offset = FixedArray.ELEMENTS_OFFSET + 4 * i
+      offset = base_offset + 4 * i
       p.Print("[%08d] = %s" % (i, self.ObjectField(offset)))
     p.Dedent()
     p.Print("}")
@@ -631,19 +790,22 @@ class FixedArray(HeapObject):
 
 
 class JSFunction(HeapObject):
-  CODE_ENTRY_OFFSET = 12
-  SHARED_OFFSET = 20
+  def CodeEntryOffset(self):
+    return 3 * self.heap.PointerSize()
+
+  def SharedOffset(self):
+    return 5 * self.heap.PointerSize()
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
     code_entry = \
-        heap.reader.ReadU32(self.address + JSFunction.CODE_ENTRY_OFFSET)
-    self.code = heap.FindObject(code_entry - Code.ENTRY_OFFSET + 1)
-    self.shared = self.ObjectField(JSFunction.SHARED_OFFSET)
+        heap.reader.ReadU32(self.address + self.CodeEntryOffset())
+    self.code = heap.FindObject(code_entry - Code.HeaderSize(heap) + 1)
+    self.shared = self.ObjectField(self.SharedOffset())
 
   def Print(self, p):
     source = "\n".join("  %s" % line for line in self._GetSource().split("\n"))
-    p.Print("JSFunction(%08x) {" % self.address)
+    p.Print("JSFunction(%s) {" % self.heap.reader.FormatIntPtr(self.address))
     p.Indent()
     p.Print("inferred name: %s" % self.shared.inferred_name)
     if self.shared.script.Is(Script) and self.shared.script.name.Is(String):
@@ -662,7 +824,8 @@ class JSFunction(HeapObject):
     inferred_name = ""
     if self.shared.Is(SharedFunctionInfo):
       inferred_name = self.shared.inferred_name
-    return "JSFunction(%08x, %s)" % (self.address, inferred_name)
+    return "JSFunction(%s, %s)" % \
+          (self.heap.reader.FormatIntPtr(self.address), inferred_name)
 
   def _GetSource(self):
     source = "?source?"
@@ -675,47 +838,75 @@ class JSFunction(HeapObject):
 
 
 class SharedFunctionInfo(HeapObject):
-  CODE_OFFSET = 2 * 4
-  SCRIPT_OFFSET = 7 * 4
-  INFERRED_NAME_OFFSET = 9 * 4
-  START_POSITION_AND_TYPE_OFFSET = 17 * 4
-  END_POSITION_OFFSET = 18 * 4
+  def CodeOffset(self):
+    return 2 * self.heap.PointerSize()
+
+  def ScriptOffset(self):
+    return 7 * self.heap.PointerSize()
+
+  def InferredNameOffset(self):
+    return 9 * self.heap.PointerSize()
+
+  def EndPositionOffset(self):
+    return 12 * self.heap.PointerSize() + 4 * self.heap.IntSize()
+
+  def StartPositionAndTypeOffset(self):
+    return 12 * self.heap.PointerSize() + 5 * self.heap.IntSize()
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
-    self.code = self.ObjectField(SharedFunctionInfo.CODE_OFFSET)
-    self.script = self.ObjectField(SharedFunctionInfo.SCRIPT_OFFSET)
-    self.inferred_name = \
-        self.ObjectField(SharedFunctionInfo.INFERRED_NAME_OFFSET)
-    start_position_and_type = \
-        self.SmiField(SharedFunctionInfo.START_POSITION_AND_TYPE_OFFSET)
-    self.start_position = start_position_and_type >> 2
-    self.end_position = self.SmiField(SharedFunctionInfo.END_POSITION_OFFSET)
+    self.code = self.ObjectField(self.CodeOffset())
+    self.script = self.ObjectField(self.ScriptOffset())
+    self.inferred_name = self.ObjectField(self.InferredNameOffset())
+    if heap.PointerSize() == 8:
+      start_position_and_type = \
+          heap.reader.ReadU32(self.StartPositionAndTypeOffset())
+      self.start_position = start_position_and_type >> 2
+      pseudo_smi_end_position = \
+          heap.reader.ReadU32(self.EndPositionOffset())
+      self.end_position = pseudo_smi_end_position >> 2
+    else:
+      start_position_and_type = \
+          self.SmiField(self.StartPositionAndTypeOffset())
+      self.start_position = start_position_and_type >> 2
+      self.end_position = \
+          self.SmiField(self.EndPositionOffset())
 
 
 class Script(HeapObject):
-  SOURCE_OFFSET = 4
-  NAME_OFFSET = 8
+  def SourceOffset(self):
+    return self.heap.PointerSize()
+
+  def NameOffset(self):
+    return self.SourceOffset() + self.heap.PointerSize()
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
-    self.source = self.ObjectField(Script.SOURCE_OFFSET)
-    self.name = self.ObjectField(Script.NAME_OFFSET)
+    self.source = self.ObjectField(self.SourceOffset())
+    self.name = self.ObjectField(self.NameOffset())
 
 
 class Code(HeapObject):
-  INSTRUCTION_SIZE_OFFSET = 4
-  ENTRY_OFFSET = 32
+  CODE_ALIGNMENT_MASK = (1 << 5) - 1
+
+  def InstructionSizeOffset(self):
+    return self.heap.PointerSize()
+
+  @staticmethod
+  def HeaderSize(heap):
+    return (heap.PointerSize() + heap.IntSize() + \
+        4 * heap.PointerSize() + 3 * heap.IntSize() + \
+        Code.CODE_ALIGNMENT_MASK) & ~Code.CODE_ALIGNMENT_MASK
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
-    self.entry = self.address + Code.ENTRY_OFFSET
+    self.entry = self.address + Code.HeaderSize(heap)
     self.instruction_size = \
-        heap.reader.ReadU32(self.address + Code.INSTRUCTION_SIZE_OFFSET)
+        heap.reader.ReadU32(self.address + self.InstructionSizeOffset())
 
   def Print(self, p):
     lines = self.heap.reader.GetDisasmLines(self.entry, self.instruction_size)
-    p.Print("Code(%08x) {" % self.address)
+    p.Print("Code(%s) {" % self.heap.reader.FormatIntPtr(self.address))
     p.Indent()
     p.Print("instruction_size: %d" % self.instruction_size)
     p.PrintLines(self._FormatLine(line) for line in lines)
@@ -735,6 +926,9 @@ class V8Heap(object):
     "EXTERNAL_SYMBOL_TYPE": ExternalString,
     "EXTERNAL_SYMBOL_WITH_ASCII_DATA_TYPE": ExternalString,
     "EXTERNAL_ASCII_SYMBOL_TYPE": ExternalString,
+    "SHORT_EXTERNAL_SYMBOL_TYPE": ExternalString,
+    "SHORT_EXTERNAL_SYMBOL_WITH_ASCII_DATA_TYPE": ExternalString,
+    "SHORT_EXTERNAL_ASCII_SYMBOL_TYPE": ExternalString,
     "STRING_TYPE": SeqString,
     "ASCII_STRING_TYPE": SeqString,
     "CONS_STRING_TYPE": ConsString,
@@ -764,10 +958,10 @@ class V8Heap(object):
   def FindObject(self, tagged_address):
     if tagged_address in self.objects:
       return self.objects[tagged_address]
-    if (tagged_address & 1) != 1: return None
+    if (tagged_address & self.ObjectAlignmentMask()) != 1: return None
     address = tagged_address - 1
     if not self.reader.IsValidAddress(address): return None
-    map_tagged_address = self.reader.ReadU32(address)
+    map_tagged_address = self.reader.ReadUIntPtr(address)
     if tagged_address == map_tagged_address:
       # Meta map?
       meta_map = Map(self, None, address)
@@ -776,7 +970,7 @@ class V8Heap(object):
       meta_map.map = meta_map
       object = meta_map
     else:
-      map = self.FindObject(map_tagged_address)
+      map = self.FindMap(map_tagged_address)
       if map is None: return None
       instance_type_name = INSTANCE_TYPES.get(map.instance_type)
       if instance_type_name is None: return None
@@ -785,9 +979,37 @@ class V8Heap(object):
     self.objects[tagged_address] = object
     return object
 
+  def FindMap(self, tagged_address):
+    if (tagged_address & self.MapAlignmentMask()) != 1: return None
+    address = tagged_address - 1
+    if not self.reader.IsValidAddress(address): return None
+    object = Map(self, None, address)
+    return object
+
+  def IntSize(self):
+    return 4
+
+  def PointerSize(self):
+    return self.reader.PointerSize()
+
+  def ObjectAlignmentMask(self):
+    return self.PointerSize() - 1
+
+  def MapAlignmentMask(self):
+    if self.reader.arch == MD_CPU_ARCHITECTURE_AMD64:
+      return (1 << 4) - 1
+    elif self.reader.arch == MD_CPU_ARCHITECTURE_X86:
+      return (1 << 5) - 1
+
 
 EIP_PROXIMITY = 64
 
+CONTEXT_FOR_ARCH = {
+    MD_CPU_ARCHITECTURE_AMD64:
+      ['rax', 'rbx', 'rcx', 'rdx', 'rdi', 'rsi', 'rbp', 'rsp', 'rip'],
+    MD_CPU_ARCHITECTURE_X86:
+      ['eax', 'ebx', 'ecx', 'edx', 'edi', 'esi', 'ebp', 'esp', 'eip']
+}
 
 def AnalyzeMinidump(options, minidump_name):
   reader = MinidumpReader(options, minidump_name)
@@ -800,40 +1022,35 @@ def AnalyzeMinidump(options, minidump_name):
   print "  thread id: %d" % exception_thread.id
   print "  code: %08X" % reader.exception.exception.code
   print "  context:"
-  print "    eax: %08x" % reader.exception_context.eax
-  print "    ebx: %08x" % reader.exception_context.ebx
-  print "    ecx: %08x" % reader.exception_context.ecx
-  print "    edx: %08x" % reader.exception_context.edx
-  print "    edi: %08x" % reader.exception_context.edi
-  print "    esi: %08x" % reader.exception_context.esi
-  print "    ebp: %08x" % reader.exception_context.ebp
-  print "    esp: %08x" % reader.exception_context.esp
-  print "    eip: %08x" % reader.exception_context.eip
+  for r in CONTEXT_FOR_ARCH[reader.arch]:
+    print "    %s: %s" % (r, reader.FormatIntPtr(reader.Register(r)))
   # TODO(vitalyr): decode eflags.
   print "    eflags: %s" % bin(reader.exception_context.eflags)[2:]
   print
 
+  stack_top = reader.ExceptionSP()
   stack_bottom = exception_thread.stack.start + \
       exception_thread.stack.memory.data_size
-  stack_map = {reader.exception_context.eip: -1}
-  for slot in xrange(reader.exception_context.esp, stack_bottom, 4):
-    maybe_address = reader.ReadU32(slot)
+  stack_map = {reader.ExceptionIP(): -1}
+  for slot in xrange(stack_top, stack_bottom, reader.PointerSize()):
+    maybe_address = reader.ReadUIntPtr(slot)
     if not maybe_address in stack_map:
       stack_map[maybe_address] = slot
   heap = V8Heap(reader, stack_map)
 
   print "Disassembly around exception.eip:"
-  start = reader.exception_context.eip - EIP_PROXIMITY
+  start = reader.ExceptionIP() - EIP_PROXIMITY
   lines = reader.GetDisasmLines(start, 2 * EIP_PROXIMITY)
   for line in lines:
     print FormatDisasmLine(start, heap, line)
   print
 
   print "Annotated stack (from exception.esp to bottom):"
-  for slot in xrange(reader.exception_context.esp, stack_bottom, 4):
-    maybe_address = reader.ReadU32(slot)
+  for slot in xrange(stack_top, stack_bottom, reader.PointerSize()):
+    maybe_address = reader.ReadUIntPtr(slot)
     heap_object = heap.FindObject(maybe_address)
-    print "%08x: %08x" % (slot, maybe_address)
+    print "%s: %s" % (reader.FormatIntPtr(slot),
+                      reader.FormatIntPtr(maybe_address))
     if heap_object:
       heap_object.Print(Printer())
       print

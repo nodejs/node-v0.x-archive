@@ -95,12 +95,23 @@ CodeEntry* ProfileGenerator::EntryForVMState(StateTag tag) {
 }
 
 
-uint64_t HeapEntry::id() {
-  union {
-    Id stored_id;
-    uint64_t returned_id;
-  } id_adaptor = {id_};
-  return id_adaptor.returned_id;
+SnapshotObjectId HeapObjectsMap::GetNthGcSubrootId(int delta) {
+  return kGcRootsFirstSubrootId + delta * kObjectIdStep;
+}
+
+
+HeapObject* V8HeapExplorer::GetNthGcSubrootObject(int delta) {
+  return reinterpret_cast<HeapObject*>(
+      reinterpret_cast<char*>(kFirstGcSubrootObject) +
+      delta * HeapObjectsMap::kObjectIdStep);
+}
+
+
+int V8HeapExplorer::GetGcSubrootOrder(HeapObject* subroot) {
+  return static_cast<int>(
+      (reinterpret_cast<char*>(subroot) -
+       reinterpret_cast<char*>(kFirstGcSubrootObject)) /
+      HeapObjectsMap::kObjectIdStep);
 }
 
 } }  // namespace v8::internal

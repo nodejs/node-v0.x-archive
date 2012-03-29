@@ -29,7 +29,7 @@
 
 #include "uv.h"
 
-#define COUNTOF(a) (sizeof(a) / sizeof(a[0]))
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 
 struct uv_ares_task_s {
@@ -51,9 +51,9 @@ int uv_ares_handles_empty(uv_loop_t* loop);
 extern const uv_err_t uv_ok_;
 
 uv_err_code uv_translate_sys_error(int sys_errno);
-void uv__set_error(uv_loop_t* loop, uv_err_code code, int sys_error);
-void uv__set_sys_error(uv_loop_t* loop, int sys_error);
-void uv__set_artificial_error(uv_loop_t* loop, uv_err_code code);
+int uv__set_error(uv_loop_t* loop, uv_err_code code, int sys_error);
+int uv__set_sys_error(uv_loop_t* loop, int sys_error);
+int uv__set_artificial_error(uv_loop_t* loop, uv_err_code code);
 uv_err_t uv__new_sys_error(int sys_error);
 uv_err_t uv__new_artificial_error(uv_err_code code);
 

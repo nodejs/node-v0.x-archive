@@ -73,6 +73,8 @@ def BuildOptions():
       choices=PROGRESS_INDICATORS, default="mono")
   result.add_option("--report", help="Print a summary of the tests to be run",
       default=False, action="store_true")
+  result.add_option("--download-data", help="Download missing test suite data",
+      default=False, action="store_true")
   result.add_option("-s", "--suite", help="A test suite",
       default=[], action="append")
   result.add_option("-t", "--timeout", help="Timeout in seconds",
@@ -131,18 +133,22 @@ def BuildOptions():
 
 
 def ProcessOptions(options):
-  if options.arch_and_mode != None and options.arch_and_mode != "":
-    tokens = options.arch_and_mode.split(".")
-    options.arch = tokens[0]
-    options.mode = tokens[1]
-  options.mode = options.mode.split(',')
+  if options.arch_and_mode == ".":
+    options.arch = []
+    options.mode = []
+  else:
+    if options.arch_and_mode != None and options.arch_and_mode != "":
+      tokens = options.arch_and_mode.split(".")
+      options.arch = tokens[0]
+      options.mode = tokens[1]
+    options.mode = options.mode.split(',')
+    options.arch = options.arch.split(',')
   for mode in options.mode:
     if not mode in ['debug', 'release']:
       print "Unknown mode %s" % mode
       return False
-  options.arch = options.arch.split(',')
   for arch in options.arch:
-    if not arch in ['ia32', 'x64', 'arm']:
+    if not arch in ['ia32', 'x64', 'arm', 'mips']:
       print "Unknown architecture %s" % arch
       return False
 
@@ -157,6 +163,8 @@ def PassOnOptions(options):
     result += ['--progress=' + options.progress]
   if options.report:
     result += ['--report']
+  if options.download_data:
+    result += ['--download-data']
   if options.suite != []:
     for suite in options.suite:
       result += ['--suite=../../test/' + suite]
@@ -165,7 +173,7 @@ def PassOnOptions(options):
   if options.snapshot:
     result += ['--snapshot']
   if options.special_command:
-    result += ['--special-command=' + options.special_command]
+    result += ['--special-command="%s"' % options.special_command]
   if options.valgrind:
     result += ['--valgrind']
   if options.cat:
@@ -189,9 +197,9 @@ def PassOnOptions(options):
   if options.crankshaft:
     result += ['--crankshaft']
   if options.shard_count != 1:
-    result += ['--shard_count=%s' % options.shard_count]
+    result += ['--shard-count=%s' % options.shard_count]
   if options.shard_run != 1:
-    result += ['--shard_run=%s' % options.shard_run]
+    result += ['--shard-run=%s' % options.shard_run]
   if options.noprof:
     result += ['--noprof']
   return result
@@ -231,6 +239,18 @@ def Main():
                                cwd=workspace,
                                env=env)
       returncodes += child.wait()
+
+  if len(options.mode) == 0 and len(options.arch) == 0:
+    print ">>> running tests"
+    shellpath = workspace + '/' + options.outdir
+    env['LD_LIBRARY_PATH'] = shellpath + '/lib.target'
+    shell = shellpath + '/d8'
+    child = subprocess.Popen(' '.join(args_for_children +
+                                      ['--shell=' + shell]),
+                             shell=True,
+                             cwd=workspace,
+                             env=env)
+    returncodes = child.wait()
 
   return returncodes
 

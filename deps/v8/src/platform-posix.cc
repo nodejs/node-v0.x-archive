@@ -46,13 +46,14 @@
 
 #undef MAP_TYPE
 
-#if defined(ANDROID)
+#if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
 #define LOG_TAG "v8"
-#include <utils/Log.h>  // LOG_PRI_VA
+#include <android/log.h>
 #endif
 
 #include "v8.h"
 
+#include "codegen.h"
 #include "platform.h"
 
 namespace v8 {
@@ -70,6 +71,12 @@ intptr_t OS::MaxVirtualMemory() {
 }
 
 
+intptr_t OS::CommitPageSize() {
+  static intptr_t page_size = getpagesize();
+  return page_size;
+}
+
+
 #ifndef __CYGWIN__
 // Get rid of writable permission on code allocations.
 void OS::ProtectCode(void* address, const size_t size) {
@@ -84,12 +91,61 @@ void OS::Guard(void* address, const size_t size) {
 #endif  // __CYGWIN__
 
 
+void* OS::GetRandomMmapAddr() {
+  Isolate* isolate = Isolate::UncheckedCurrent();
+  // Note that the current isolate isn't set up in a call path via
+  // CpuFeatures::Probe. We don't care about randomization in this case because
+  // the code page is immediately freed.
+  if (isolate != NULL) {
+#ifdef V8_TARGET_ARCH_X64
+    uint64_t rnd1 = V8::RandomPrivate(isolate);
+    uint64_t rnd2 = V8::RandomPrivate(isolate);
+    uint64_t raw_addr = (rnd1 << 32) ^ rnd2;
+    // Currently available CPUs have 48 bits of virtual addressing.  Truncate
+    // the hint address to 46 bits to give the kernel a fighting chance of
+    // fulfilling our placement request.
+    raw_addr &= V8_UINT64_C(0x3ffffffff000);
+#else
+    uint32_t raw_addr = V8::RandomPrivate(isolate);
+    // The range 0x20000000 - 0x60000000 is relatively unpopulated across a
+    // variety of ASLR modes (PAE kernel, NX compat mode, etc) and on macos
+    // 10.6 and 10.7.
+    raw_addr &= 0x3ffff000;
+    raw_addr += 0x20000000;
+#endif
+    return reinterpret_cast<void*>(raw_addr);
+  }
+  return NULL;
+}
+
+
 // ----------------------------------------------------------------------------
 // Math functions
 
 double modulo(double x, double y) {
   return fmod(x, y);
 }
+
+
+#define UNARY_MATH_FUNCTION(name, generator)             \
+static UnaryMathFunction fast_##name##_function = NULL;  \
+V8_DECLARE_ONCE(fast_##name##_init_once);                \
+void init_fast_##name##_function() {                     \
+  fast_##name##_function = generator;                    \
+}                                                        \
+double fast_##name(double x) {                           \
+  CallOnce(&fast_##name##_init_once,                     \
+           &init_fast_##name##_function);                \
+  return (*fast_##name##_function)(x);                   \
+}
+
+UNARY_MATH_FUNCTION(sin, CreateTranscendentalFunction(TranscendentalCache::SIN))
+UNARY_MATH_FUNCTION(cos, CreateTranscendentalFunction(TranscendentalCache::COS))
+UNARY_MATH_FUNCTION(tan, CreateTranscendentalFunction(TranscendentalCache::TAN))
+UNARY_MATH_FUNCTION(log, CreateTranscendentalFunction(TranscendentalCache::LOG))
+UNARY_MATH_FUNCTION(sqrt, CreateSqrtFunction())
+
+#undef MATH_FUNCTION
 
 
 double OS::nan_value() {
@@ -182,7 +238,7 @@ void OS::Print(const char* format, ...) {
 
 void OS::VPrint(const char* format, va_list args) {
 #if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
-  LOG_PRI_VA(ANDROID_LOG_INFO, LOG_TAG, format, args);
+  __android_log_vprint(ANDROID_LOG_INFO, LOG_TAG, format, args);
 #else
   vprintf(format, args);
 #endif
@@ -199,7 +255,7 @@ void OS::FPrint(FILE* out, const char* format, ...) {
 
 void OS::VFPrint(FILE* out, const char* format, va_list args) {
 #if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
-  LOG_PRI_VA(ANDROID_LOG_INFO, LOG_TAG, format, args);
+  __android_log_vprint(ANDROID_LOG_INFO, LOG_TAG, format, args);
 #else
   vfprintf(out, format, args);
 #endif
@@ -216,7 +272,7 @@ void OS::PrintError(const char* format, ...) {
 
 void OS::VPrintError(const char* format, va_list args) {
 #if defined(ANDROID) && !defined(V8_ANDROID_LOG_STDOUT)
-  LOG_PRI_VA(ANDROID_LOG_ERROR, LOG_TAG, format, args);
+  __android_log_vprint(ANDROID_LOG_ERROR, LOG_TAG, format, args);
 #else
   vfprintf(stderr, format, args);
 #endif
@@ -249,14 +305,14 @@ int OS::VSNPrintF(Vector<char> str,
 
 #if defined(V8_TARGET_ARCH_IA32)
 static OS::MemCopyFunction memcopy_function = NULL;
-static Mutex* memcopy_function_mutex = OS::CreateMutex();
+static LazyMutex memcopy_function_mutex = LAZY_MUTEX_INITIALIZER;
 // Defined in codegen-ia32.cc.
 OS::MemCopyFunction CreateMemCopyFunction();
 
 // Copy memory area to disjoint memory area.
 void OS::MemCopy(void* dest, const void* src, size_t size) {
   if (memcopy_function == NULL) {
-    ScopedLock lock(memcopy_function_mutex);
+    ScopedLock lock(memcopy_function_mutex.Pointer());
     if (memcopy_function == NULL) {
       OS::MemCopyFunction temp = CreateMemCopyFunction();
       MemoryBarrier();
@@ -427,7 +483,7 @@ bool POSIXSocket::SetReuseAddress(bool reuse_address) {
 }
 
 
-bool Socket::Setup() {
+bool Socket::SetUp() {
   // Nothing to do on POSIX.
   return true;
 }

@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -35,27 +35,36 @@
     'msvs_multi_core_compile%': '1',
     'variables': {
       'variables': {
-        'conditions': [
-          [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd"', {
-            # This handles the Linux platforms we generally deal with. Anything
-            # else gets passed through, which probably won't work very well; such
-            # hosts should pass an explicit target_arch to gyp.
-            'host_arch%':
-              '<!(uname -m | sed -e "s/i.86/ia32/;s/x86_64/x64/;s/amd64/x64/;s/arm.*/arm/")',
-          }, {  # OS!="linux" and OS!="freebsd" and OS!="openbsd"
-            'host_arch%': 'ia32',
-          }],
-        ],
+        'variables': {
+          'conditions': [
+            ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
+              # This handles the Linux platforms we generally deal with.
+              # Anything else gets passed through, which probably won't work
+              # very well; such hosts should pass an explicit target_arch
+              # to gyp.
+              'host_arch%':
+                '<!(uname -m | sed -e "s/i.86/ia32/;\
+                  s/x86_64/x64/;s/amd64/x64/;s/arm.*/arm/;s/mips.*/mips/")',
+            }, {
+              # OS!="linux" and OS!="freebsd" and OS!="openbsd" and OS!="netbsd"
+              'host_arch%': 'ia32',
+            }],
+          ],
+        },
+        'host_arch%': '<(host_arch)',
+        'target_arch%': '<(host_arch)',
       },
       'host_arch%': '<(host_arch)',
-      'target_arch%': '<(host_arch)',
+      'target_arch%': '<(target_arch)',
       'v8_target_arch%': '<(target_arch)',
     },
     'host_arch%': '<(host_arch)',
     'target_arch%': '<(target_arch)',
     'v8_target_arch%': '<(v8_target_arch)',
+    'werror%': '-Werror',
     'conditions': [
       ['(v8_target_arch=="arm" and host_arch!="arm") or \
+        (v8_target_arch=="mips" and host_arch!="mips") or \
         (v8_target_arch=="x64" and host_arch!="x64")', {
         'want_separate_host_toolset': 1,
       }, {
@@ -72,9 +81,10 @@
     },
   },
   'conditions': [
-    [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
+    ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris" \
+       or OS=="netbsd"', {
       'target_defaults': {
-        'cflags': [ '-Wall', '-Werror', '-W', '-Wno-unused-parameter',
+        'cflags': [ '-Wall', '<(werror)', '-W', '-Wno-unused-parameter',
                     '-Wnon-virtual-dtor', '-pthread', '-fno-rtti',
                     '-fno-exceptions', '-pedantic' ],
         'ldflags': [ '-pthread', ],
@@ -90,11 +100,12 @@
           }],
         ],
       },
-    }],  # 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"'
+    }],
+    # 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"
+    #  or OS=="netbsd"'
     ['OS=="win"', {
       'target_defaults': {
         'defines': [
-          'WIN32',
           '_CRT_SECURE_NO_DEPRECATE',
           '_CRT_NONSTDC_NO_DEPRECATE',
         ],

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -62,28 +62,15 @@ void CodeGenerator::MakeCodePrologue(CompilationInfo* info) {
 #ifdef DEBUG
   bool print_source = false;
   bool print_ast = false;
-  bool print_json_ast = false;
   const char* ftype;
 
   if (Isolate::Current()->bootstrapper()->IsActive()) {
     print_source = FLAG_print_builtin_source;
     print_ast = FLAG_print_builtin_ast;
-    print_json_ast = FLAG_print_builtin_json_ast;
     ftype = "builtin";
   } else {
     print_source = FLAG_print_source;
     print_ast = FLAG_print_ast;
-    print_json_ast = FLAG_print_json_ast;
-    Vector<const char> filter = CStrVector(FLAG_hydrogen_filter);
-    if (print_source && !filter.is_empty()) {
-      print_source = info->function()->name()->IsEqualTo(filter);
-    }
-    if (print_ast && !filter.is_empty()) {
-      print_ast = info->function()->name()->IsEqualTo(filter);
-    }
-    if (print_json_ast && !filter.is_empty()) {
-      print_json_ast = info->function()->name()->IsEqualTo(filter);
-    }
     ftype = "user-defined";
   }
 
@@ -101,11 +88,6 @@ void CodeGenerator::MakeCodePrologue(CompilationInfo* info) {
   if (print_ast) {
     PrintF("--- AST ---\n%s\n",
            AstPrinter().PrintProgram(info->function()));
-  }
-
-  if (print_json_ast) {
-    JsonAstBuilder builder;
-    PrintF("%s", builder.BuildProgram(info->function()));
   }
 #endif  // DEBUG
 }
@@ -135,11 +117,9 @@ void CodeGenerator::PrintCode(Handle<Code> code, CompilationInfo* info) {
   bool print_code = Isolate::Current()->bootstrapper()->IsActive()
       ? FLAG_print_builtin_code
       : (FLAG_print_code || (info->IsOptimizing() && FLAG_print_opt_code));
-  Vector<const char> filter = CStrVector(FLAG_hydrogen_filter);
-  FunctionLiteral* function = info->function();
-  bool match = filter.is_empty() || function->debug_name()->IsEqualTo(filter);
-  if (print_code && match) {
+  if (print_code) {
     // Print the source code if available.
+    FunctionLiteral* function = info->function();
     Handle<Script> script = info->script();
     if (!script->IsUndefined() && !script->source()->IsUndefined()) {
       PrintF("--- Raw source ---\n");
@@ -218,8 +198,8 @@ void ArgumentsAccessStub::Generate(MacroAssembler* masm) {
 
 
 int CEntryStub::MinorKey() {
+  int result = (save_doubles_ == kSaveFPRegs) ? 1 : 0;
   ASSERT(result_size_ == 1 || result_size_ == 2);
-  int result = save_doubles_ ? 1 : 0;
 #ifdef _WIN64
   return result | ((result_size_ == 1) ? 0 : 2);
 #else

@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,6 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifdef ENABLE_DEBUGGER_SUPPORT
 
 #include "d8.h"
 #include "d8-debug.h"
@@ -168,7 +169,7 @@ void RemoteDebugger::Run() {
   bool ok;
 
   // Make sure that socket support is initialized.
-  ok = i::Socket::Setup();
+  ok = i::Socket::SetUp();
   if (!ok) {
     printf("Unable to initialize socket support %d\n", i::Socket::LastError());
     return;
@@ -309,9 +310,7 @@ void RemoteDebugger::HandleKeyboardCommand(char* command) {
   Handle<Value> request =
       Shell::DebugCommandToJSONRequest(String::New(command));
   if (try_catch.HasCaught()) {
-    v8::String::Utf8Value exception(try_catch.Exception());
-    const char* exception_string = Shell::ToCString(exception);
-    printf("%s\n", exception_string);
+    Shell::ReportException(&try_catch);
     PrintPrompt();
     return;
   }
@@ -367,3 +366,5 @@ void KeyboardThread::Run() {
 
 
 }  // namespace v8
+
+#endif  // ENABLE_DEBUGGER_SUPPORT

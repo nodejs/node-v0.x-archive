@@ -190,7 +190,11 @@ static int ExpectedNofPropertiesFromEstimate(int estimate) {
 
   // Inobject slack tracking will reclaim redundant inobject space later,
   // so we can afford to adjust the estimate generously.
-  return estimate + 8;
+  if (FLAG_clever_optimizations) {
+    return estimate + 8;
+  } else {
+    return estimate + 3;
+  }
 }
 
 
@@ -201,42 +205,6 @@ void SetExpectedNofPropertiesFromEstimate(Handle<SharedFunctionInfo> shared,
 
   shared->set_expected_nof_properties(
       ExpectedNofPropertiesFromEstimate(estimate));
-}
-
-
-void NormalizeProperties(Handle<JSObject> object,
-                         PropertyNormalizationMode mode,
-                         int expected_additional_properties) {
-  CALL_HEAP_FUNCTION_VOID(object->GetIsolate(),
-                          object->NormalizeProperties(
-                              mode,
-                              expected_additional_properties));
-}
-
-
-Handle<SeededNumberDictionary> NormalizeElements(Handle<JSObject> object) {
-  CALL_HEAP_FUNCTION(object->GetIsolate(),
-                     object->NormalizeElements(),
-                     SeededNumberDictionary);
-}
-
-
-void TransformToFastProperties(Handle<JSObject> object,
-                               int unused_property_fields) {
-  CALL_HEAP_FUNCTION_VOID(
-      object->GetIsolate(),
-      object->TransformToFastProperties(unused_property_fields));
-}
-
-
-Handle<SeededNumberDictionary> SeededNumberDictionarySet(
-    Handle<SeededNumberDictionary> dictionary,
-    uint32_t index,
-    Handle<Object> value,
-    PropertyDetails details) {
-  CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
-                     dictionary->Set(index, *value, details),
-                     SeededNumberDictionary);
 }
 
 
@@ -257,17 +225,6 @@ Handle<Object> SetPrototype(Handle<JSFunction> function,
                      Accessors::FunctionSetPrototype(*function,
                                                      *prototype,
                                                      NULL),
-                     Object);
-}
-
-
-Handle<Object> SetProperty(Handle<JSReceiver> object,
-                           Handle<String> key,
-                           Handle<Object> value,
-                           PropertyAttributes attributes,
-                           StrictModeFlag strict_mode) {
-  CALL_HEAP_FUNCTION(object->GetIsolate(),
-                     object->SetProperty(*key, *value, attributes, strict_mode),
                      Object);
 }
 
@@ -299,46 +256,12 @@ Handle<Object> ForceSetProperty(Handle<JSObject> object,
 }
 
 
-Handle<Object> SetNormalizedProperty(Handle<JSObject> object,
-                                     Handle<String> key,
-                                     Handle<Object> value,
-                                     PropertyDetails details) {
-  CALL_HEAP_FUNCTION(object->GetIsolate(),
-                     object->SetNormalizedProperty(*key, *value, details),
-                     Object);
-}
-
-
 Handle<Object> ForceDeleteProperty(Handle<JSObject> object,
                                    Handle<Object> key) {
   Isolate* isolate = object->GetIsolate();
   CALL_HEAP_FUNCTION(isolate,
                      Runtime::ForceDeleteObjectProperty(isolate, object, key),
                      Object);
-}
-
-
-Handle<Object> SetLocalPropertyIgnoreAttributes(
-    Handle<JSObject> object,
-    Handle<String> key,
-    Handle<Object> value,
-    PropertyAttributes attributes) {
-  CALL_HEAP_FUNCTION(
-    object->GetIsolate(),
-    object->SetLocalPropertyIgnoreAttributes(*key, *value, attributes),
-    Object);
-}
-
-
-void SetLocalPropertyNoThrow(Handle<JSObject> object,
-                             Handle<String> key,
-                             Handle<Object> value,
-                             PropertyAttributes attributes) {
-  Isolate* isolate = object->GetIsolate();
-  ASSERT(!isolate->has_pending_exception());
-  CHECK(!SetLocalPropertyIgnoreAttributes(
-        object, key, value, attributes).is_null());
-  CHECK(!isolate->has_pending_exception());
 }
 
 
@@ -372,24 +295,6 @@ Handle<Object> GetProperty(Handle<Object> obj,
 }
 
 
-Handle<Object> GetProperty(Handle<JSReceiver> obj,
-                           Handle<String> name,
-                           LookupResult* result) {
-  PropertyAttributes attributes;
-  Isolate* isolate = Isolate::Current();
-  CALL_HEAP_FUNCTION(isolate,
-                     obj->GetProperty(*obj, result, *name, &attributes),
-                     Object);
-}
-
-
-Handle<Object> GetElement(Handle<Object> obj,
-                          uint32_t index) {
-  Isolate* isolate = Isolate::Current();
-  CALL_HEAP_FUNCTION(isolate, Runtime::GetElement(obj, index), Object);
-}
-
-
 Handle<Object> GetPropertyWithInterceptor(Handle<JSObject> receiver,
                                           Handle<JSObject> holder,
                                           Handle<String> name,
@@ -403,53 +308,10 @@ Handle<Object> GetPropertyWithInterceptor(Handle<JSObject> receiver,
 }
 
 
-Handle<Object> GetPrototype(Handle<Object> obj) {
-  Handle<Object> result(obj->GetPrototype());
-  return result;
-}
-
-
 Handle<Object> SetPrototype(Handle<JSObject> obj, Handle<Object> value) {
   const bool skip_hidden_prototypes = false;
   CALL_HEAP_FUNCTION(obj->GetIsolate(),
                      obj->SetPrototype(*value, skip_hidden_prototypes), Object);
-}
-
-
-Handle<Object> PreventExtensions(Handle<JSObject> object) {
-  CALL_HEAP_FUNCTION(object->GetIsolate(), object->PreventExtensions(), Object);
-}
-
-
-Handle<Object> GetHiddenProperties(Handle<JSObject> obj,
-                                   JSObject::HiddenPropertiesFlag flag) {
-  CALL_HEAP_FUNCTION(obj->GetIsolate(),
-                     obj->GetHiddenProperties(flag),
-                     Object);
-}
-
-
-int GetIdentityHash(Handle<JSObject> obj) {
-  CALL_AND_RETRY(obj->GetIsolate(),
-                 obj->GetIdentityHash(JSObject::ALLOW_CREATION),
-                 return Smi::cast(__object__)->value(),
-                 return 0);
-}
-
-
-Handle<Object> DeleteElement(Handle<JSObject> obj,
-                             uint32_t index) {
-  CALL_HEAP_FUNCTION(obj->GetIsolate(),
-                     obj->DeleteElement(index, JSObject::NORMAL_DELETION),
-                     Object);
-}
-
-
-Handle<Object> DeleteProperty(Handle<JSObject> obj,
-                              Handle<String> prop) {
-  CALL_HEAP_FUNCTION(obj->GetIsolate(),
-                     obj->DeleteProperty(*prop, JSObject::NORMAL_DELETION),
-                     Object);
 }
 
 
@@ -467,35 +329,6 @@ Handle<String> SubString(Handle<String> str,
                          PretenureFlag pretenure) {
   CALL_HEAP_FUNCTION(str->GetIsolate(),
                      str->SubString(start, end, pretenure), String);
-}
-
-
-Handle<Object> SetElement(Handle<JSObject> object,
-                          uint32_t index,
-                          Handle<Object> value,
-                          StrictModeFlag strict_mode) {
-  if (object->HasExternalArrayElements()) {
-    if (!value->IsSmi() && !value->IsHeapNumber() && !value->IsUndefined()) {
-      bool has_exception;
-      Handle<Object> number = Execution::ToNumber(value, &has_exception);
-      if (has_exception) return Handle<Object>();
-      value = number;
-    }
-  }
-  CALL_HEAP_FUNCTION(object->GetIsolate(),
-                     object->SetElement(index, *value, strict_mode, true),
-                     Object);
-}
-
-
-Handle<Object> SetOwnElement(Handle<JSObject> object,
-                             uint32_t index,
-                             Handle<Object> value,
-                             StrictModeFlag strict_mode) {
-  ASSERT(!object->HasExternalArrayElements());
-  CALL_HEAP_FUNCTION(object->GetIsolate(),
-                     object->SetElement(index, *value, strict_mode, false),
-                     Object);
 }
 
 
@@ -521,8 +354,9 @@ static void ClearWrapperCache(Persistent<v8::Value> handle, void*) {
   Handle<Object> cache = Utils::OpenHandle(*handle);
   JSValue* wrapper = JSValue::cast(*cache);
   Foreign* foreign = Script::cast(wrapper->value())->wrapper();
-  ASSERT(foreign->address() == reinterpret_cast<Address>(cache.location()));
-  foreign->set_address(0);
+  ASSERT(foreign->foreign_address() ==
+         reinterpret_cast<Address>(cache.location()));
+  foreign->set_foreign_address(0);
   Isolate* isolate = Isolate::Current();
   isolate->global_handles()->Destroy(cache.location());
   isolate->counters()->script_wrappers()->Decrement();
@@ -530,10 +364,10 @@ static void ClearWrapperCache(Persistent<v8::Value> handle, void*) {
 
 
 Handle<JSValue> GetScriptWrapper(Handle<Script> script) {
-  if (script->wrapper()->address() != NULL) {
+  if (script->wrapper()->foreign_address() != NULL) {
     // Return the script wrapper directly from the cache.
     return Handle<JSValue>(
-        reinterpret_cast<JSValue**>(script->wrapper()->address()));
+        reinterpret_cast<JSValue**>(script->wrapper()->foreign_address()));
   }
   Isolate* isolate = Isolate::Current();
   // Construct a new script wrapper.
@@ -549,7 +383,8 @@ Handle<JSValue> GetScriptWrapper(Handle<Script> script) {
   Handle<Object> handle = isolate->global_handles()->Create(*result);
   isolate->global_handles()->MakeWeak(handle.location(), NULL,
                                       &ClearWrapperCache);
-  script->wrapper()->set_address(reinterpret_cast<Address>(handle.location()));
+  script->wrapper()->set_foreign_address(
+      reinterpret_cast<Address>(handle.location()));
   return result;
 }
 
@@ -665,6 +500,19 @@ int GetScriptLineNumber(Handle<Script> script, int code_pos) {
   return right + script->line_offset()->value();
 }
 
+// Convert code position into column number.
+int GetScriptColumnNumber(Handle<Script> script, int code_pos) {
+  int line_number = GetScriptLineNumber(script, code_pos);
+  if (line_number == -1) return -1;
+
+  AssertNoAllocation no_allocation;
+  FixedArray* line_ends_array = FixedArray::cast(script->line_ends());
+  line_number = line_number - script->line_offset()->value();
+  if (line_number == 0) return code_pos + script->column_offset()->value();
+  int prev_line_end_pos =
+      Smi::cast(line_ends_array->get(line_number - 1))->value();
+  return code_pos - (prev_line_end_pos + 1);
+}
 
 int GetScriptLineNumberSafe(Handle<Script> script, int code_pos) {
   AssertNoAllocation no_allocation;
@@ -696,7 +544,7 @@ void CustomArguments::IterateInstance(ObjectVisitor* v) {
 
 
 // Compute the property keys from the interceptor.
-v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSObject> receiver,
+v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSReceiver> receiver,
                                                  Handle<JSObject> object) {
   Isolate* isolate = receiver->GetIsolate();
   Handle<InterceptorInfo> interceptor(object->GetNamedInterceptor());
@@ -718,7 +566,7 @@ v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSObject> receiver,
 
 
 // Compute the element keys from the interceptor.
-v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSObject> receiver,
+v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSReceiver> receiver,
                                                    Handle<JSObject> object) {
   Isolate* isolate = receiver->GetIsolate();
   Handle<InterceptorInfo> interceptor(object->GetIndexedInterceptor());
@@ -749,8 +597,9 @@ static bool ContainsOnlyValidKeys(Handle<FixedArray> array) {
 }
 
 
-Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSObject> object,
-                                          KeyCollectionType type) {
+Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSReceiver> object,
+                                          KeyCollectionType type,
+                                          bool* threw) {
   USE(ContainsOnlyValidKeys);
   Isolate* isolate = object->GetIsolate();
   Handle<FixedArray> content = isolate->factory()->empty_fixed_array();
@@ -765,6 +614,16 @@ Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSObject> object,
   for (Handle<Object> p = object;
        *p != isolate->heap()->null_value();
        p = Handle<Object>(p->GetPrototype(), isolate)) {
+    if (p->IsJSProxy()) {
+      Handle<JSProxy> proxy(JSProxy::cast(*p), isolate);
+      Handle<Object> args[] = { proxy };
+      Handle<Object> names = Execution::Call(
+          isolate->proxy_enumerate(), object, ARRAY_SIZE(args), args, threw);
+      if (*threw) return content;
+      content = AddKeysFromJSArray(content, Handle<JSArray>::cast(names));
+      break;
+    }
+
     Handle<JSObject> current(JSObject::cast(*p), isolate);
 
     // Check access rights if required.
@@ -831,11 +690,11 @@ Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSObject> object,
 }
 
 
-Handle<JSArray> GetKeysFor(Handle<JSObject> object) {
+Handle<JSArray> GetKeysFor(Handle<JSReceiver> object, bool* threw) {
   Isolate* isolate = object->GetIsolate();
   isolate->counters()->for_in()->Increment();
-  Handle<FixedArray> elements = GetKeysInFixedArrayFor(object,
-                                                       INCLUDE_PROTOS);
+  Handle<FixedArray> elements =
+      GetKeysInFixedArrayFor(object, INCLUDE_PROTOS, threw);
   return isolate->factory()->NewJSArrayWithElements(elements);
 }
 
@@ -852,31 +711,62 @@ Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
                                 isolate);
     }
     isolate->counters()->enum_cache_misses()->Increment();
-    int num_enum = object->NumberOfEnumProperties();
+    Handle<Map> map(object->map());
+    int num_enum = object->NumberOfLocalProperties(DONT_ENUM);
+
     Handle<FixedArray> storage = isolate->factory()->NewFixedArray(num_enum);
     Handle<FixedArray> sort_array = isolate->factory()->NewFixedArray(num_enum);
+
+    Handle<FixedArray> indices;
+    Handle<FixedArray> sort_array2;
+
+    if (cache_result) {
+      indices = isolate->factory()->NewFixedArray(num_enum);
+      sort_array2 = isolate->factory()->NewFixedArray(num_enum);
+    }
+
     Handle<DescriptorArray> descs =
         Handle<DescriptorArray>(object->map()->instance_descriptors(), isolate);
+
     for (int i = 0; i < descs->number_of_descriptors(); i++) {
       if (descs->IsProperty(i) && !descs->IsDontEnum(i)) {
-        (*storage)->set(index, descs->GetKey(i));
+        storage->set(index, descs->GetKey(i));
         PropertyDetails details(descs->GetDetails(i));
-        (*sort_array)->set(index, Smi::FromInt(details.index()));
+        sort_array->set(index, Smi::FromInt(details.index()));
+        if (!indices.is_null()) {
+          if (details.type() != FIELD) {
+            indices = Handle<FixedArray>();
+            sort_array2 = Handle<FixedArray>();
+          } else {
+            int field_index = Descriptor::IndexFromValue(descs->GetValue(i));
+            if (field_index >= map->inobject_properties()) {
+              field_index = -(field_index - map->inobject_properties() + 1);
+            }
+            indices->set(index, Smi::FromInt(field_index));
+            sort_array2->set(index, Smi::FromInt(details.index()));
+          }
+        }
         index++;
       }
     }
-    (*storage)->SortPairs(*sort_array, sort_array->length());
+    storage->SortPairs(*sort_array, sort_array->length());
+    if (!indices.is_null()) {
+      indices->SortPairs(*sort_array2, sort_array2->length());
+    }
     if (cache_result) {
       Handle<FixedArray> bridge_storage =
           isolate->factory()->NewFixedArray(
               DescriptorArray::kEnumCacheBridgeLength);
       DescriptorArray* desc = object->map()->instance_descriptors();
-      desc->SetEnumCache(*bridge_storage, *storage);
+      desc->SetEnumCache(*bridge_storage,
+                         *storage,
+                         indices.is_null() ? Object::cast(Smi::FromInt(0))
+                                           : Object::cast(*indices));
     }
     ASSERT(storage->length() == index);
     return storage;
   } else {
-    int num_enum = object->NumberOfEnumProperties();
+    int num_enum = object->NumberOfLocalProperties(DONT_ENUM);
     Handle<FixedArray> storage = isolate->factory()->NewFixedArray(num_enum);
     Handle<FixedArray> sort_array = isolate->factory()->NewFixedArray(num_enum);
     object->property_dictionary()->CopyEnumKeysTo(*storage, *sort_array);
@@ -885,8 +775,24 @@ Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
 }
 
 
+Handle<ObjectHashSet> ObjectHashSetAdd(Handle<ObjectHashSet> table,
+                                       Handle<Object> key) {
+  CALL_HEAP_FUNCTION(table->GetIsolate(),
+                     table->Add(*key),
+                     ObjectHashSet);
+}
+
+
+Handle<ObjectHashSet> ObjectHashSetRemove(Handle<ObjectHashSet> table,
+                                          Handle<Object> key) {
+  CALL_HEAP_FUNCTION(table->GetIsolate(),
+                     table->Remove(*key),
+                     ObjectHashSet);
+}
+
+
 Handle<ObjectHashTable> PutIntoObjectHashTable(Handle<ObjectHashTable> table,
-                                               Handle<JSObject> key,
+                                               Handle<Object> key,
                                                Handle<Object> value) {
   CALL_HEAP_FUNCTION(table->GetIsolate(),
                      table->Put(*key, *value),
@@ -894,53 +800,162 @@ Handle<ObjectHashTable> PutIntoObjectHashTable(Handle<ObjectHashTable> table,
 }
 
 
-bool EnsureCompiled(Handle<SharedFunctionInfo> shared,
-                    ClearExceptionFlag flag) {
-  return shared->is_compiled() || CompileLazyShared(shared, flag);
-}
+// This method determines the type of string involved and then gets the UTF8
+// length of the string.  It doesn't flatten the string and has log(n) recursion
+// for a string of length n.  If the failure flag gets set, then we have to
+// flatten the string and retry.  Failures are caused by surrogate pairs in deep
+// cons strings.
 
+// Single surrogate characters that are encountered in the UTF-16 character
+// sequence of the input string get counted as 3 UTF-8 bytes, because that
+// is the way that WriteUtf8 will encode them.  Surrogate pairs are counted and
+// encoded as one 4-byte UTF-8 sequence.
 
-static bool CompileLazyHelper(CompilationInfo* info,
-                              ClearExceptionFlag flag) {
-  // Compile the source information to a code object.
-  ASSERT(info->IsOptimizing() || !info->shared_info()->is_compiled());
-  ASSERT(!info->isolate()->has_pending_exception());
-  bool result = Compiler::CompileLazy(info);
-  ASSERT(result != Isolate::Current()->has_pending_exception());
-  if (!result && flag == CLEAR_EXCEPTION) {
-    info->isolate()->clear_pending_exception();
+// This function conceptually uses recursion on the two halves of cons strings.
+// However, in order to avoid the recursion going too deep it recurses on the
+// second string of the cons, but iterates on the first substring (by manually
+// eliminating it as a tail recursion).  This means it counts the UTF-8 length
+// from the end to the start, which makes no difference to the total.
+
+// Surrogate pairs are recognized even if they are split across two sides of a
+// cons, which complicates the implementation somewhat.  Therefore, too deep
+// recursion cannot always be avoided.  This case is detected, and the failure
+// flag is set, a signal to the caller that the string should be flattened and
+// the operation retried.
+int Utf8LengthHelper(String* input,
+                     int from,
+                     int to,
+                     bool followed_by_surrogate,
+                     int max_recursion,
+                     bool* failure,
+                     bool* starts_with_surrogate) {
+  if (from == to) return 0;
+  int total = 0;
+  bool dummy;
+  while (true) {
+    if (input->IsAsciiRepresentation()) {
+      *starts_with_surrogate = false;
+      return total + to - from;
+    }
+    switch (StringShape(input).representation_tag()) {
+      case kConsStringTag: {
+        ConsString* str = ConsString::cast(input);
+        String* first = str->first();
+        String* second = str->second();
+        int first_length = first->length();
+        if (first_length - from > to - first_length) {
+          if (first_length < to) {
+            // Right hand side is shorter.  No need to check the recursion depth
+            // since this can only happen log(n) times.
+            bool right_starts_with_surrogate = false;
+            total += Utf8LengthHelper(second,
+                                      0,
+                                      to - first_length,
+                                      followed_by_surrogate,
+                                      max_recursion - 1,
+                                      failure,
+                                      &right_starts_with_surrogate);
+            if (*failure) return 0;
+            followed_by_surrogate = right_starts_with_surrogate;
+            input = first;
+            to = first_length;
+          } else {
+            // We only need the left hand side.
+            input = first;
+          }
+        } else {
+          if (first_length > from) {
+            // Left hand side is shorter.
+            if (first->IsAsciiRepresentation()) {
+              total += first_length - from;
+              *starts_with_surrogate = false;
+              starts_with_surrogate = &dummy;
+              input = second;
+              from = 0;
+              to -= first_length;
+            } else if (second->IsAsciiRepresentation()) {
+              followed_by_surrogate = false;
+              total += to - first_length;
+              input = first;
+              to = first_length;
+            } else if (max_recursion > 0) {
+              bool right_starts_with_surrogate = false;
+              // Recursing on the long one.  This may fail.
+              total += Utf8LengthHelper(second,
+                                        0,
+                                        to - first_length,
+                                        followed_by_surrogate,
+                                        max_recursion - 1,
+                                        failure,
+                                        &right_starts_with_surrogate);
+              if (*failure) return 0;
+              input = first;
+              to = first_length;
+              followed_by_surrogate = right_starts_with_surrogate;
+            } else {
+              *failure = true;
+              return 0;
+            }
+          } else {
+            // We only need the right hand side.
+            input = second;
+            from = 0;
+            to -= first_length;
+          }
+        }
+        continue;
+      }
+      case kExternalStringTag:
+      case kSeqStringTag: {
+        Vector<const uc16> vector = input->GetFlatContent().ToUC16Vector();
+        const uc16* p = vector.start();
+        int previous = unibrow::Utf16::kNoPreviousCharacter;
+        for (int i = from; i < to; i++) {
+          uc16 c = p[i];
+          total += unibrow::Utf8::Length(c, previous);
+          previous = c;
+        }
+        if (to - from > 0) {
+          if (unibrow::Utf16::IsLeadSurrogate(previous) &&
+              followed_by_surrogate) {
+            total -= unibrow::Utf8::kBytesSavedByCombiningSurrogates;
+          }
+          if (unibrow::Utf16::IsTrailSurrogate(p[from])) {
+            *starts_with_surrogate = true;
+          }
+        }
+        return total;
+      }
+      case kSlicedStringTag: {
+        SlicedString* str = SlicedString::cast(input);
+        int offset = str->offset();
+        input = str->parent();
+        from += offset;
+        to += offset;
+        continue;
+      }
+      default:
+        break;
+    }
+    UNREACHABLE();
+    return 0;
   }
-  return result;
+  return 0;
 }
 
 
-bool CompileLazyShared(Handle<SharedFunctionInfo> shared,
-                       ClearExceptionFlag flag) {
-  CompilationInfo info(shared);
-  return CompileLazyHelper(&info, flag);
-}
-
-
-bool CompileLazy(Handle<JSFunction> function, ClearExceptionFlag flag) {
-  bool result = true;
-  if (function->shared()->is_compiled()) {
-    function->ReplaceCode(function->shared()->code());
-    function->shared()->set_code_age(0);
-  } else {
-    CompilationInfo info(function);
-    result = CompileLazyHelper(&info, flag);
-    ASSERT(!result || function->is_compiled());
-  }
-  return result;
-}
-
-
-bool CompileOptimized(Handle<JSFunction> function,
-                      int osr_ast_id,
-                      ClearExceptionFlag flag) {
-  CompilationInfo info(function);
-  info.SetOptimizing(osr_ast_id);
-  return CompileLazyHelper(&info, flag);
+int Utf8Length(Handle<String> str) {
+  bool dummy;
+  bool failure;
+  int len;
+  const int kRecursionBudget = 100;
+  do {
+    failure = false;
+    len = Utf8LengthHelper(
+        *str, 0, str->length(), false, kRecursionBudget, &failure, &dummy);
+    if (failure) FlattenString(str);
+  } while (failure);
+  return len;
 }
 
 } }  // namespace v8::internal

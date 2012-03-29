@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -86,8 +86,8 @@ class DeoptimizerData {
 #endif
 
  private:
-  LargeObjectChunk* eager_deoptimization_entry_code_;
-  LargeObjectChunk* lazy_deoptimization_entry_code_;
+  MemoryChunk* eager_deoptimization_entry_code_;
+  MemoryChunk* lazy_deoptimization_entry_code_;
   Deoptimizer* current_;
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
@@ -119,6 +119,9 @@ class Deoptimizer : public Malloced {
 
   int output_count() const { return output_count_; }
 
+  // Number of created JS frames. Not all created frames are necessarily JS.
+  int jsframe_count() const { return jsframe_count_; }
+
   static Deoptimizer* New(JSFunction* function,
                           BailoutType type,
                           unsigned bailout_id,
@@ -131,7 +134,7 @@ class Deoptimizer : public Malloced {
   // The returned object with information on the optimized frame needs to be
   // freed before another one can be generated.
   static DeoptimizedFrameInfo* DebuggerInspectableFrame(JavaScriptFrame* frame,
-                                                        int frame_index,
+                                                        int jsframe_index,
                                                         Isolate* isolate);
   static void DeleteDebuggerInspectableFrame(DeoptimizedFrameInfo* info,
                                              Isolate* isolate);
@@ -173,7 +176,8 @@ class Deoptimizer : public Malloced {
 
   // Patch stack guard check at instruction before pc_after in
   // the unoptimized code to unconditionally call replacement_code.
-  static void PatchStackCheckCodeAt(Address pc_after,
+  static void PatchStackCheckCodeAt(Code* unoptimized_code,
+                                    Address pc_after,
                                     Code* check_code,
                                     Code* replacement_code);
 
@@ -185,7 +189,8 @@ class Deoptimizer : public Malloced {
 
   // Change all patched stack guard checks in the unoptimized code
   // back to a normal stack guard check.
-  static void RevertStackCheckCodeAt(Address pc_after,
+  static void RevertStackCheckCodeAt(Code* unoptimized_code,
+                                     Address pc_after,
                                      Code* check_code,
                                      Code* replacement_code);
 
@@ -194,7 +199,11 @@ class Deoptimizer : public Malloced {
   void MaterializeHeapNumbers();
 #ifdef ENABLE_DEBUGGER_SUPPORT
   void MaterializeHeapNumbersForDebuggerInspectableFrame(
-      Address top, uint32_t size, DeoptimizedFrameInfo* info);
+      Address parameters_top,
+      uint32_t parameters_size,
+      Address expressions_top,
+      uint32_t expressions_size,
+      DeoptimizedFrameInfo* info);
 #endif
 
   static void ComputeOutputFrames(Deoptimizer* deoptimizer);
@@ -250,8 +259,10 @@ class Deoptimizer : public Malloced {
     int count_;
   };
 
+  int ConvertJSFrameIndexToFrameIndex(int jsframe_index);
+
  private:
-  static const int kNumberOfEntries = 4096;
+  static const int kNumberOfEntries = 16384;
 
   Deoptimizer(Isolate* isolate,
               JSFunction* function,
@@ -264,7 +275,11 @@ class Deoptimizer : public Malloced {
 
   void DoComputeOutputFrames();
   void DoComputeOsrOutputFrame();
-  void DoComputeFrame(TranslationIterator* iterator, int frame_index);
+  void DoComputeJSFrame(TranslationIterator* iterator, int frame_index);
+  void DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
+                                      int frame_index);
+  void DoComputeConstructStubFrame(TranslationIterator* iterator,
+                                   int frame_index);
   void DoTranslateCommand(TranslationIterator* iterator,
                           int frame_index,
                           unsigned output_offset);
@@ -285,7 +300,7 @@ class Deoptimizer : public Malloced {
 
   void AddDoubleValue(intptr_t slot_address, double value);
 
-  static LargeObjectChunk* CreateCode(BailoutType type);
+  static MemoryChunk* CreateCode(BailoutType type);
   static void GenerateDeoptimizationEntries(
       MacroAssembler* masm, int count, BailoutType type);
 
@@ -312,6 +327,8 @@ class Deoptimizer : public Malloced {
   FrameDescription* input_;
   // Number of output frames.
   int output_count_;
+  // Number of output js frames.
+  int jsframe_count_;
   // Array of output frame descriptions.
   FrameDescription** output_;
 
@@ -351,14 +368,27 @@ class FrameDescription {
 
   JSFunction* GetFunction() const { return function_; }
 
-  unsigned GetOffsetFromSlotIndex(Deoptimizer* deoptimizer, int slot_index);
+  unsigned GetOffsetFromSlotIndex(int slot_index);
 
   intptr_t GetFrameSlot(unsigned offset) {
     return *GetFrameSlotPointer(offset);
   }
 
   double GetDoubleFrameSlot(unsigned offset) {
-    return *reinterpret_cast<double*>(GetFrameSlotPointer(offset));
+    intptr_t* ptr = GetFrameSlotPointer(offset);
+#if V8_TARGET_ARCH_MIPS
+    // Prevent gcc from using load-double (mips ldc1) on (possibly)
+    // non-64-bit aligned double. Uses two lwc1 instructions.
+    union conversion {
+      double d;
+      uint32_t u[2];
+    } c;
+    c.u[0] = *reinterpret_cast<uint32_t*>(ptr);
+    c.u[1] = *(reinterpret_cast<uint32_t*>(ptr) + 1);
+    return c.d;
+#else
+    return *reinterpret_cast<double*>(ptr);
+#endif
   }
 
   void SetFrameSlot(unsigned offset, intptr_t value) {
@@ -394,27 +424,28 @@ class FrameDescription {
   intptr_t GetFp() const { return fp_; }
   void SetFp(intptr_t fp) { fp_ = fp; }
 
+  intptr_t GetContext() const { return context_; }
+  void SetContext(intptr_t context) { context_ = context; }
+
   Smi* GetState() const { return state_; }
   void SetState(Smi* state) { state_ = state; }
 
   void SetContinuation(intptr_t pc) { continuation_ = pc; }
 
-#ifdef DEBUG
-  Code::Kind GetKind() const { return kind_; }
-  void SetKind(Code::Kind kind) { kind_ = kind; }
-#endif
+  StackFrame::Type GetFrameType() const { return type_; }
+  void SetFrameType(StackFrame::Type type) { type_ = type; }
 
   // Get the incoming arguments count.
   int ComputeParametersCount();
 
   // Get a parameter value for an unoptimized frame.
-  Object* GetParameter(Deoptimizer* deoptimizer, int index);
+  Object* GetParameter(int index);
 
   // Get the expression stack height for a unoptimized frame.
-  unsigned GetExpressionCount(Deoptimizer* deoptimizer);
+  unsigned GetExpressionCount();
 
   // Get the expression stack value for an unoptimized frame.
-  Object* GetExpression(Deoptimizer* deoptimizer, int index);
+  Object* GetExpression(int index);
 
   static int registers_offset() {
     return OFFSET_OF(FrameDescription, registers_);
@@ -457,6 +488,8 @@ class FrameDescription {
   intptr_t top_;
   intptr_t pc_;
   intptr_t fp_;
+  intptr_t context_;
+  StackFrame::Type type_;
   Smi* state_;
 #ifdef DEBUG
   Code::Kind kind_;
@@ -475,6 +508,8 @@ class FrameDescription {
     return reinterpret_cast<intptr_t*>(
         reinterpret_cast<Address>(this) + frame_content_offset() + offset);
   }
+
+  int ComputeFixedSize();
 };
 
 
@@ -517,7 +552,9 @@ class Translation BASE_EMBEDDED {
  public:
   enum Opcode {
     BEGIN,
-    FRAME,
+    JS_FRAME,
+    CONSTRUCT_STUB_FRAME,
+    ARGUMENTS_ADAPTOR_FRAME,
     REGISTER,
     INT32_REGISTER,
     DOUBLE_REGISTER,
@@ -532,17 +569,20 @@ class Translation BASE_EMBEDDED {
     DUPLICATE
   };
 
-  Translation(TranslationBuffer* buffer, int frame_count)
+  Translation(TranslationBuffer* buffer, int frame_count, int jsframe_count)
       : buffer_(buffer),
         index_(buffer->CurrentIndex()) {
     buffer_->Add(BEGIN);
     buffer_->Add(frame_count);
+    buffer_->Add(jsframe_count);
   }
 
   int index() const { return index_; }
 
   // Commands.
-  void BeginFrame(int node_id, int literal_id, unsigned height);
+  void BeginJSFrame(int node_id, int literal_id, unsigned height);
+  void BeginArgumentsAdaptorFrame(int literal_id, unsigned height);
+  void BeginConstructStubFrame(int literal_id, unsigned height);
   void StoreRegister(Register reg);
   void StoreInt32Register(Register reg);
   void StoreDoubleRegister(DoubleRegister reg);
@@ -632,9 +672,10 @@ class SlotRef BASE_EMBEDDED {
     }
   }
 
-  static void ComputeSlotMappingForArguments(JavaScriptFrame* frame,
-                                             int inlined_frame_index,
-                                             Vector<SlotRef>* args_slots);
+  static Vector<SlotRef> ComputeSlotMappingForArguments(
+      JavaScriptFrame* frame,
+      int inlined_frame_index,
+      int formal_parameter_count);
 
  private:
   Address addr_;
@@ -654,6 +695,12 @@ class SlotRef BASE_EMBEDDED {
   static SlotRef ComputeSlotForNextArgument(TranslationIterator* iterator,
                                             DeoptimizationInputData* data,
                                             JavaScriptFrame* frame);
+
+  static void ComputeSlotsForArguments(
+      Vector<SlotRef>* args_slots,
+      TranslationIterator* iterator,
+      DeoptimizationInputData* data,
+      JavaScriptFrame* frame);
 };
 
 
@@ -662,9 +709,14 @@ class SlotRef BASE_EMBEDDED {
 // needs to inspect a frame that is part of an optimized frame. The
 // internally used FrameDescription objects are not GC safe so for use
 // by the debugger frame information is copied to an object of this type.
+// Represents parameters in unadapted form so their number might mismatch
+// formal parameter count.
 class DeoptimizedFrameInfo : public Malloced {
  public:
-  DeoptimizedFrameInfo(Deoptimizer* deoptimizer, int frame_index);
+  DeoptimizedFrameInfo(Deoptimizer* deoptimizer,
+                       int frame_index,
+                       bool has_arguments_adaptor,
+                       bool has_construct_stub);
   virtual ~DeoptimizedFrameInfo();
 
   // GC support.
@@ -681,6 +733,12 @@ class DeoptimizedFrameInfo : public Malloced {
     return function_;
   }
 
+  // Check if this frame is preceded by construct stub frame.  The bottom-most
+  // inlined frame might still be called by an uninlined construct stub.
+  bool HasConstructStub() {
+    return has_construct_stub_;
+  }
+
   // Get an incoming argument.
   Object* GetParameter(int index) {
     ASSERT(0 <= index && index < parameters_count());
@@ -693,12 +751,11 @@ class DeoptimizedFrameInfo : public Malloced {
     return expression_stack_[index];
   }
 
- private:
-  // Set the frame function.
-  void SetFunction(JSFunction* function) {
-    function_ = function;
+  int GetSourcePosition() {
+    return source_position_;
   }
 
+ private:
   // Set an incoming argument.
   void SetParameter(int index, Object* obj) {
     ASSERT(0 <= index && index < parameters_count());
@@ -712,10 +769,12 @@ class DeoptimizedFrameInfo : public Malloced {
   }
 
   JSFunction* function_;
+  bool has_construct_stub_;
   int parameters_count_;
   int expression_count_;
   Object** parameters_;
   Object** expression_stack_;
+  int source_position_;
 
   friend class Deoptimizer;
 };

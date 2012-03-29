@@ -30,7 +30,7 @@
 
 // The original source code covered by the above license above has been
 // modified significantly by Google Inc.
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 
 
 #ifndef V8_MIPS_ASSEMBLER_MIPS_H_
@@ -182,12 +182,7 @@ struct FPURegister {
       kNumReservedRegisters;
 
 
-  static int ToAllocationIndex(FPURegister reg) {
-    ASSERT(reg.code() % 2 == 0);
-    ASSERT(reg.code() / 2 < kNumAllocatableRegisters);
-    ASSERT(reg.is_valid());
-    return (reg.code() / 2);
-  }
+  inline static int ToAllocationIndex(FPURegister reg);
 
   static FPURegister FromAllocationIndex(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
@@ -302,7 +297,15 @@ const FPURegister f29 = { 29 };
 const FPURegister f30 = { 30 };
 const FPURegister f31 = { 31 };
 
-const FPURegister kDoubleRegZero = f28;
+// Register aliases.
+// cp is assumed to be a callee saved register.
+static const Register& kLithiumScratchReg = s3;  // Scratch register.
+static const Register& kLithiumScratchReg2 = s4;  // Scratch register.
+static const Register& kRootRegister = s6;  // Roots array pointer.
+static const Register& cp = s7;     // JavaScript context pointer.
+static const Register& fp = s8_fp;  // Alias for fp.
+static const DoubleRegister& kLithiumScratchDouble = f30;
+static const FPURegister& kDoubleRegZero = f28;
 
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.
@@ -550,10 +553,13 @@ class Assembler : public AssemblerBase {
   static void JumpLabelToJumpRegister(Address pc);
 
   // This sets the branch destination (which gets loaded at the call address).
-  // This is for calls and branches within generated code.
-  inline static void set_target_at(Address instruction_payload,
-                                   Address target) {
-    set_target_address_at(instruction_payload, target);
+  // This is for calls and branches within generated code.  The serializer
+  // has already deserialized the lui/ori instructions etc.
+  inline static void deserialization_set_special_target_at(
+      Address instruction_payload, Address target) {
+    set_target_address_at(
+        instruction_payload - kInstructionsFor32BitConstant * kInstrSize,
+        target);
   }
 
   // This sets the branch destination.
@@ -575,8 +581,7 @@ class Assembler : public AssemblerBase {
   // are split across two consecutive instructions and don't exist separately
   // in the code, so the serializer should not step forwards in memory after
   // a target is resolved and written.
-  static const int kCallTargetSize = 0 * kInstrSize;
-  static const int kExternalTargetSize = 0 * kInstrSize;
+  static const int kSpecialTargetSize = 0;
 
   // Number of consecutive instructions used to store 32bit constant.
   // Before jump-optimizations, this constant was used in
@@ -667,7 +672,7 @@ class Assembler : public AssemblerBase {
   // Never use the int16_t b(l)cond version with a branch offset
   // instead of using the Label* version.
 
-  // Jump targets must be in the current 256 MB-aligned region. ie 28 bits.
+  // Jump targets must be in the current 256 MB-aligned region. i.e. 28 bits.
   void j(int32_t target);
   void jal(int32_t target);
   void jalr(Register rs, Register rd = ra);

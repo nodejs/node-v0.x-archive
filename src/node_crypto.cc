@@ -19,12 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_crypto.h>
-#include <v8.h>
+#include "node_crypto.h"
+#include "node_crypto_groups.h"
+#include "v8.h"
 
-#include <node.h>
-#include <node_buffer.h>
-#include <node_root_certs.h>
+#include "node.h"
+#include "node_buffer.h"
+#include "node_root_certs.h"
 
 #include <string.h>
 #ifdef _MSC_VER
@@ -56,10 +57,8 @@
 
 static const char PUBLIC_KEY_PFX[] =  "-----BEGIN PUBLIC KEY-----";
 static const int PUBLIC_KEY_PFX_LEN = sizeof(PUBLIC_KEY_PFX) - 1;
-
 static const char PUBRSA_KEY_PFX[] =  "-----BEGIN RSA PUBLIC KEY-----";
 static const int PUBRSA_KEY_PFX_LEN = sizeof(PUBRSA_KEY_PFX) - 1;
-
 static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | ASN1_STRFLGS_ESC_MSB
                                  | XN_FLAG_SEP_MULTILINE
@@ -86,67 +85,48 @@ static Persistent<String> ext_key_usage_symbol;
 
 static Persistent<FunctionTemplate> secure_context_constructor;
 
-#ifdef _WIN32
-
-static HANDLE* locks;
-
-
-static void crypto_lock_init(void) {
-  int i, n;
-
-  n = CRYPTO_num_locks();
-  locks = new HANDLE[n];
-
-  for (i = 0; i < n; i++)
-    if (!(locks[i] = CreateMutex(NULL, FALSE, NULL)))
-      abort();
-}
-
-
-static void crypto_lock_cb(int mode, int n, const char* file, int line) {
-  if (mode & CRYPTO_LOCK)
-    WaitForSingleObject(locks[n], INFINITE);
-  else
-    ReleaseMutex(locks[n]);
-}
+static uv_rwlock_t* locks;
 
 
 static unsigned long crypto_id_cb(void) {
+#ifdef _WIN32
   return (unsigned long) GetCurrentThreadId();
-}
-
 #else /* !_WIN32 */
-
-static pthread_rwlock_t* locks;
+  return (unsigned long) pthread_self();
+#endif /* !_WIN32 */
+}
 
 
 static void crypto_lock_init(void) {
   int i, n;
 
   n = CRYPTO_num_locks();
-  locks = new pthread_rwlock_t[n];
+  locks = new uv_rwlock_t[n];
 
   for (i = 0; i < n; i++)
-    if (pthread_rwlock_init(locks + i, NULL))
+    if (uv_rwlock_init(locks + i))
       abort();
 }
 
 
 static void crypto_lock_cb(int mode, int n, const char* file, int line) {
+  assert((mode & CRYPTO_LOCK) || (mode & CRYPTO_UNLOCK));
+  assert((mode & CRYPTO_READ) || (mode & CRYPTO_WRITE));
+
   if (mode & CRYPTO_LOCK) {
-    if (mode & CRYPTO_READ) pthread_rwlock_rdlock(locks + n);
-    if (mode & CRYPTO_WRITE) pthread_rwlock_wrlock(locks + n);
+    if (mode & CRYPTO_READ)
+      uv_rwlock_rdlock(locks + n);
+    else
+      uv_rwlock_wrlock(locks + n);
   } else {
-    pthread_rwlock_unlock(locks + n);
+    if (mode & CRYPTO_READ)
+      uv_rwlock_rdunlock(locks + n);
+    else
+      uv_rwlock_wrunlock(locks + n);
   }
 }
 
 
-static unsigned long crypto_id_cb(void) {
-  return (unsigned long) pthread_self();
-}
-
-#endif /* !_WIN32 */
 
 
 void SecureContext::Initialize(Handle<Object> target) {
@@ -190,7 +170,7 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
   OPENSSL_CONST SSL_METHOD *method = SSLv23_method();
 
   if (args.Length() == 1 && args[0]->IsString()) {
-    String::Utf8Value sslmethod(args[0]->ToString());
+    String::Utf8Value sslmethod(args[0]);
 
     if (strcmp(*sslmethod, "SSLv2_method") == 0) {
 #ifndef OPENSSL_NO_SSL2
@@ -254,7 +234,7 @@ static BIO* LoadBIO (Handle<Value> v) {
   int r = -1;
 
   if (v->IsString()) {
-    String::Utf8Value s(v->ToString());
+    String::Utf8Value s(v);
     r = BIO_write(bio, *s, s.length());
   } else if (Buffer::HasInstance(v)) {
     Local<Object> buffer_obj = v->ToObject();
@@ -307,7 +287,7 @@ Handle<Value> SecureContext::SetKey(const Arguments& args) {
   BIO *bio = LoadBIO(args[0]);
   if (!bio) return False();
 
-  String::Utf8Value passphrase(args[1]->ToString());
+  String::Utf8Value passphrase(args[1]);
 
   EVP_PKEY* key = PEM_read_bio_PrivateKey(bio, NULL, NULL,
                                           len == 1 ? NULL : *passphrase);
@@ -534,7 +514,7 @@ Handle<Value> SecureContext::SetCiphers(const Arguments& args) {
     return ThrowException(Exception::TypeError(String::New("Bad parameter")));
   }
 
-  String::Utf8Value ciphers(args[0]->ToString());
+  String::Utf8Value ciphers(args[0]);
   SSL_CTX_set_cipher_list(sc->ctx_, *ciphers);
 
   return True();
@@ -565,7 +545,7 @@ Handle<Value> SecureContext::SetSessionIdContext(const Arguments& args) {
     return ThrowException(Exception::TypeError(String::New("Bad parameter")));
   }
 
-  String::Utf8Value sessionIdContext(args[0]->ToString());
+  String::Utf8Value sessionIdContext(args[0]);
   const unsigned char* sid_ctx = (const unsigned char*) *sessionIdContext;
   unsigned int sid_ctx_len = sessionIdContext.length();
 
@@ -950,7 +930,7 @@ Handle<Value> Connection::New(const Arguments& args) {
   if (is_server) {
     SSL_CTX_set_tlsext_servername_callback(sc->ctx_, SelectSNIContextCallback_);
   } else {
-    String::Utf8Value servername(args[2]->ToString());
+    String::Utf8Value servername(args[2]);
     SSL_set_tlsext_host_name(p->ssl_, *servername);
   }
 #endif
@@ -1914,6 +1894,7 @@ class Cipher : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "init", CipherInit);
     NODE_SET_PROTOTYPE_METHOD(t, "initiv", CipherInitIv);
     NODE_SET_PROTOTYPE_METHOD(t, "update", CipherUpdate);
+    NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
     NODE_SET_PROTOTYPE_METHOD(t, "final", CipherFinal);
 
     target->Set(String::NewSymbol("Cipher"), t->GetFunction());
@@ -1977,7 +1958,6 @@ class Cipher : public ObjectWrap {
     return true;
   }
 
-
   int CipherUpdate(char* data, int len, unsigned char** out, int* out_len) {
     if (!initialised_) return 0;
     *out_len=len+EVP_CIPHER_CTX_block_size(&ctx);
@@ -1987,19 +1967,24 @@ class Cipher : public ObjectWrap {
     return 1;
   }
 
+  int SetAutoPadding(bool auto_padding) {
+    if (!initialised_) return 0;
+    return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
+  }
+
   int CipherFinal(unsigned char** out, int *out_len) {
     if (!initialised_) return 0;
     *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
-    EVP_CipherFinal_ex(&ctx,*out,out_len);
+    int r = EVP_CipherFinal_ex(&ctx,*out, out_len);
     EVP_CIPHER_CTX_cleanup(&ctx);
     initialised_ = false;
-    return 1;
+    return r;
   }
 
 
  protected:
 
-  static Handle<Value> New (const Arguments& args) {
+  static Handle<Value> New(const Arguments& args) {
     HandleScope scope;
 
     Cipher *cipher = new Cipher();
@@ -2031,7 +2016,7 @@ class Cipher : public ObjectWrap {
     ssize_t key_written = DecodeWrite(key_buf, key_buf_len, args[1], BINARY);
     assert(key_written == key_buf_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->CipherInit(*cipherType, key_buf, key_buf_len);
 
@@ -2081,7 +2066,7 @@ class Cipher : public ObjectWrap {
     ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
     assert(iv_written == iv_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
@@ -2187,21 +2172,41 @@ class Cipher : public ObjectWrap {
     return scope.Close(outString);
   }
 
+  static Handle<Value> SetAutoPadding(const Arguments& args) {
+    HandleScope scope;
+    Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
+
+    cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
+
+    return Undefined();
+  }
+
   static Handle<Value> CipherFinal(const Arguments& args) {
     Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
 
     HandleScope scope;
 
-    unsigned char* out_value;
-    int out_len;
+    unsigned char* out_value = NULL;
+    int out_len = -1;
     char* out_hexdigest;
     int out_hex_len;
     Local<Value> outString ;
 
     int r = cipher->CipherFinal(&out_value, &out_len);
 
+    assert(out_value != NULL);
+    assert(out_len != -1 || r == 0);
+
     if (out_len == 0 || r == 0) {
-      return scope.Close(String::New(""));
+      // out_value always get allocated.
+      delete[] out_value;
+      if (r == 0) {
+        Local<Value> exception = Exception::TypeError(
+          String::New("CipherFinal fail"));
+        return ThrowException(exception);
+      } else {
+        return scope.Close(String::New(""));
+      }
     }
 
     enum encoding enc = ParseEncoding(args[0], BINARY);
@@ -2276,7 +2281,9 @@ class Decipher : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "initiv", DecipherInitIv);
     NODE_SET_PROTOTYPE_METHOD(t, "update", DecipherUpdate);
     NODE_SET_PROTOTYPE_METHOD(t, "final", DecipherFinal<false>);
+    // This is completely undocumented:
     NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinal<true>);
+    NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
 
     target->Set(String::NewSymbol("Decipher"), t->GetFunction());
   }
@@ -2359,9 +2366,16 @@ class Decipher : public ObjectWrap {
     return 1;
   }
 
+  int SetAutoPadding(bool auto_padding) {
+    if (!initialised_) return 0;
+    return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
+  }
+
   // coverity[alloc_arg]
   template <bool TOLERATE_PADDING>
   int DecipherFinal(unsigned char** out, int *out_len) {
+    int r;
+
     if (!initialised_) {
       *out_len = 0;
       *out = NULL;
@@ -2370,13 +2384,13 @@ class Decipher : public ObjectWrap {
 
     *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
     if (TOLERATE_PADDING) {
-      local_EVP_DecryptFinal_ex(&ctx,*out,out_len);
+      r = local_EVP_DecryptFinal_ex(&ctx,*out,out_len);
     } else {
-      EVP_CipherFinal_ex(&ctx,*out,out_len);
+      r = EVP_CipherFinal_ex(&ctx,*out,out_len);
     }
     EVP_CIPHER_CTX_cleanup(&ctx);
     initialised_ = false;
-    return 1;
+    return r;
   }
 
 
@@ -2415,7 +2429,7 @@ class Decipher : public ObjectWrap {
     ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
     assert(key_written == key_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->DecipherInit(*cipherType, key_buf,key_len);
 
@@ -2465,7 +2479,7 @@ class Decipher : public ObjectWrap {
     ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
     assert(iv_written == iv_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->DecipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
@@ -2609,21 +2623,39 @@ class Decipher : public ObjectWrap {
 
   }
 
+  static Handle<Value> SetAutoPadding(const Arguments& args) {
+    HandleScope scope;
+    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+
+    cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
+
+    return Undefined();
+  }
+
   template <bool TOLERATE_PADDING>
   static Handle<Value> DecipherFinal(const Arguments& args) {
     HandleScope scope;
 
     Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
 
-    unsigned char* out_value;
-    int out_len;
+    unsigned char* out_value = NULL;
+    int out_len = -1;
     Local<Value> outString;
 
     int r = cipher->DecipherFinal<TOLERATE_PADDING>(&out_value, &out_len);
 
+    assert(out_value != NULL);
+    assert(out_len != -1);
+
     if (out_len == 0 || r == 0) {
-      delete[] out_value;
-      return scope.Close(String::New(""));
+      delete [] out_value; // allocated even if out_len == 0
+      if (r == 0) {
+        Local<Value> exception = Exception::TypeError(
+          String::New("DecipherFinal fail"));
+        return ThrowException(exception);
+      } else {
+        return scope.Close(String::New(""));
+      }
     }
 
     if (args.Length() == 0 || !args[0]->IsString()) {
@@ -2750,7 +2782,7 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    String::Utf8Value hashType(args[0]->ToString());
+    String::Utf8Value hashType(args[0]);
 
     bool r;
 
@@ -2820,13 +2852,16 @@ class Hmac : public ObjectWrap {
 
     HandleScope scope;
 
-    unsigned char* md_value;
-    unsigned int md_len;
+    unsigned char* md_value = NULL;
+    unsigned int md_len = -1;
     char* md_hexdigest;
     int md_hex_len;
     Local<Value> outString ;
 
     int r = hmac->HmacDigest(&md_value, &md_len);
+
+    assert(md_value != NULL);
+    assert(md_len != -1);
 
     if (md_len == 0 || r == 0) {
       return scope.Close(String::New(""));
@@ -2887,10 +2922,7 @@ class Hash : public ObjectWrap {
 
   bool HashInit (const char* hashType) {
     md = EVP_get_digestbyname(hashType);
-    if(!md) {
-      fprintf(stderr, "node-crypto : Unknown message digest %s\n", hashType);
-      return false;
-    }
+    if(!md) return false;
     EVP_MD_CTX_init(&mdctx);
     EVP_DigestInit_ex(&mdctx, md, NULL);
     initialised_ = true;
@@ -2914,13 +2946,16 @@ class Hash : public ObjectWrap {
         "Must give hashtype string as argument")));
     }
 
+    String::Utf8Value hashType(args[0]);
+
     Hash *hash = new Hash();
+    if (!hash->HashInit(*hashType)) {
+      delete hash;
+      return ThrowException(Exception::Error(String::New(
+        "Digest method not supported")));
+    }
+
     hash->Wrap(args.This());
-
-    String::Utf8Value hashType(args[0]->ToString());
-
-    hash->HashInit(*hashType);
-
     return args.This();
   }
 
@@ -3104,7 +3139,7 @@ class Sign : public ObjectWrap {
         "Must give signtype string as argument")));
     }
 
-    String::Utf8Value signType(args[0]->ToString());
+    String::Utf8Value signType(args[0]);
 
     bool r = sign->SignInit(*signType);
 
@@ -3355,7 +3390,7 @@ class Verify : public ObjectWrap {
         "Must give verifytype string as argument")));
     }
 
-    String::Utf8Value verifyType(args[0]->ToString());
+    String::Utf8Value verifyType(args[0]);
 
     bool r = verify->VerifyInit(*verifyType);
 
@@ -3501,6 +3536,18 @@ class DiffieHellman : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "setPrivateKey", SetPrivateKey);
 
     target->Set(String::NewSymbol("DiffieHellman"), t->GetFunction());
+
+    Local<FunctionTemplate> t2 = FunctionTemplate::New(DiffieHellmanGroup);
+    t2->InstanceTemplate()->SetInternalFieldCount(1);
+
+    NODE_SET_PROTOTYPE_METHOD(t2, "generateKeys", GenerateKeys);
+    NODE_SET_PROTOTYPE_METHOD(t2, "computeSecret", ComputeSecret);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPrime", GetPrime);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getGenerator", GetGenerator);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPublicKey", GetPublicKey);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPrivateKey", GetPrivateKey);
+
+    target->Set(String::NewSymbol("DiffieHellmanGroup"), t2->GetFunction());
   }
 
   bool Init(int primeLength) {
@@ -3523,7 +3570,48 @@ class DiffieHellman : public ObjectWrap {
     return true;
   }
 
+  bool Init(unsigned char* p, int p_len, unsigned char* g, int g_len) {
+    dh = DH_new();
+    dh->p = BN_bin2bn(p, p_len, 0);
+    dh->g = BN_bin2bn(g, g_len, 0);
+    initialised_ = true;
+    return true;
+  }
+
  protected:
+  static Handle<Value> DiffieHellmanGroup(const Arguments& args) {
+    HandleScope scope;
+
+    DiffieHellman* diffieHellman = new DiffieHellman();
+
+    if (args.Length() != 1 || !args[0]->IsString()) {
+      return ThrowException(Exception::Error(
+          String::New("No group name given")));
+    }
+
+    String::Utf8Value group_name(args[0]);
+
+    modp_group* it = modp_groups;
+
+    while(it->name != NULL) {
+      if (!strcasecmp(*group_name, it->name))
+          break;
+      it++;
+    }
+
+    if (it->name != NULL) {
+      diffieHellman->Init(it->prime, it->prime_size,
+              it->gen, it->gen_size);
+    } else {
+      return ThrowException(Exception::Error(
+          String::New("Unknown group")));
+    }
+
+    diffieHellman->Wrap(args.This());
+
+    return args.This();
+  }
+
   static Handle<Value> New(const Arguments& args) {
     HandleScope scope;
 
@@ -4341,4 +4429,3 @@ void InitCrypto(Handle<Object> target) {
 }  // namespace node
 
 NODE_MODULE(node_crypto, node::crypto::InitCrypto)
-

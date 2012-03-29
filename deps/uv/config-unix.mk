@@ -33,6 +33,7 @@ OBJS += src/unix/fs.o
 OBJS += src/unix/cares.o
 OBJS += src/unix/udp.o
 OBJS += src/unix/error.o
+OBJS += src/unix/thread.o
 OBJS += src/unix/process.o
 OBJS += src/unix/tcp.o
 OBJS += src/unix/pipe.o
@@ -61,15 +62,15 @@ EV_CONFIG=config_linux.h
 EIO_CONFIG=config_linux.h
 CSTDFLAG += -D_GNU_SOURCE
 CPPFLAGS += -Isrc/ares/config_linux
-LINKFLAGS+=-lrt
-OBJS += src/unix/linux.o
+LINKFLAGS+=-ldl -lrt
+OBJS += src/unix/linux/core.o src/unix/linux/inotify.o
 endif
 
 ifeq (FreeBSD,$(uname_S))
 EV_CONFIG=config_freebsd.h
 EIO_CONFIG=config_freebsd.h
 CPPFLAGS += -Isrc/ares/config_freebsd
-LINKFLAGS+=
+LINKFLAGS+=-lkvm
 OBJS += src/unix/freebsd.o
 OBJS += src/unix/kqueue.o
 endif

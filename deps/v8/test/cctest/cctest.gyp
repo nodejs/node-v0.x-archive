@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -57,6 +57,7 @@
         'test-conversions.cc',
         'test-cpu-profiler.cc',
         'test-dataflow.cc',
+        'test-date.cc',
         'test-debug.cc',
         'test-decls.cc',
         'test-deoptimization.cc',
@@ -68,6 +69,7 @@
         'test-fixed-dtoa.cc',
         'test-flags.cc',
         'test-func-name-inference.cc',
+        'test-hashing.cc',
         'test-hashmap.cc',
         'test-heap.cc',
         'test-heap-profiler.cc',
@@ -80,6 +82,7 @@
         'test-parsing.cc',
         'test-platform-tls.cc',
         'test-profile-generator.cc',
+        'test-random.cc',
         'test-regexp.cc',
         'test-reloc-info.cc',
         'test-serialize.cc',
@@ -91,7 +94,8 @@
         'test-threads.cc',
         'test-unbound-queue.cc',
         'test-utils.cc',
-        'test-version.cc'
+        'test-version.cc',
+        'test-weakmaps.cc'
       ],
       'conditions': [
         ['v8_target_arch=="ia32"', {
@@ -134,6 +138,12 @@
           'sources': [
             'test-platform-win32.cc',
           ],
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              # MSVS wants this for gay-{precision,shortest}.cc.
+              'AdditionalOptions': ['/bigobj'],
+            },
+          },
         }],
         ['component=="shared_library"', {
           # cctest can't be built against a shared library, so we need to

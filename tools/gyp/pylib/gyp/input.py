@@ -1,6 +1,4 @@
-#!/usr/bin/python
-
-# Copyright (c) 2011 The Chromium Authors. All rights reserved.
+# Copyright (c) 2011 Google Inc. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -1360,6 +1358,13 @@ class DependencyGraphNode(object):
       # True) and this target won't be linked.
       return dependencies
 
+    # Don't traverse 'none' targets if explicitly excluded.
+    if (target_type == 'none' and
+        not targets[self.ref].get('dependencies_traverse', True)):
+      if self.ref not in dependencies:
+        dependencies.append(self.ref)
+      return dependencies
+
     # Executables and loadable modules are already fully and finally linked.
     # Nothing else can be a link dependency of them, there can only be
     # dependencies in the sense that a dependent target might run an
@@ -2060,6 +2065,25 @@ def ProcessListFiltersInList(name, the_list):
       ProcessListFiltersInList(name, item)
 
 
+def ValidateTargetType(target, target_dict):
+  """Ensures the 'type' field on the target is one of the known types.
+
+  Arguments:
+    target: string, name of target.
+    target_dict: dict, target spec.
+
+  Raises an exception on error.
+  """
+  VALID_TARGET_TYPES = ('executable', 'loadable_module',
+                        'static_library', 'shared_library',
+                        'none')
+  target_type = target_dict.get('type', None)
+  if target_type not in VALID_TARGET_TYPES:
+    raise Exception("Target %s has an invalid target type '%s'.  "
+                    "Must be one of %s." %
+                    (target, target_type, '/'.join(VALID_TARGET_TYPES)))
+
+
 def ValidateRulesInTarget(target, target_dict, extra_sources_for_rules):
   """Ensures that the rules sections in target_dict are valid and consistent,
   and determines which sources they apply to.
@@ -2344,6 +2368,7 @@ def Load(build_files, variables, includes, depth, generator_input_info, check,
   for target in flat_list:
     target_dict = targets[target]
     build_file = gyp.common.BuildFile(target)
+    ValidateTargetType(target, target_dict)
     ValidateRulesInTarget(target, target_dict, extra_sources_for_rules)
     ValidateRunAsInTarget(target, target_dict, build_file)
     ValidateActionsInTarget(target, target_dict, build_file)

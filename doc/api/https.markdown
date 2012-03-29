@@ -13,8 +13,8 @@ This class is a subclass of `tls.Server` and emits events same as
 ## https.createServer(options, [requestListener])
 
 Returns a new HTTPS web server object. The `options` is similar to
-`tls.createServer()`. The `requestListener` is a function which is
-automatically added to the `'request'` event.
+[tls.createServer()](tls.html#tls.createServer).  The `requestListener` is
+a function which is automatically added to the `'request'` event.
 
 Example:
 
@@ -96,6 +96,13 @@ specified. However, a [globalAgent](#https.globalAgent) silently ignores these.
 - `cert`: Public x509 certificate to use. Default `null`.
 - `ca`: An authority certificate or array of authority certificates to check
   the remote host against.
+- `ciphers`: A string describing the ciphers to use or exclude. Consult
+  <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for
+  details on the format.
+- `rejectUnauthorized`: If `true`, the server certificate is verified against
+  the list of supplied CAs. An `'error'` event is emitted if verification
+  fails. Verification happens at the connection level, *before* the HTTP
+  request is sent. Default `false`.
 
 In order to specify these options, use a custom `Agent`.
 

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -50,7 +50,7 @@ class Factory {
       PretenureFlag pretenure = NOT_TENURED);
 
   // Allocate a new uninitialized fixed double array.
-  Handle<FixedArray> NewFixedDoubleArray(
+  Handle<FixedDoubleArray> NewFixedDoubleArray(
       int size,
       PretenureFlag pretenure = NOT_TENURED);
 
@@ -62,6 +62,8 @@ class Factory {
 
   Handle<StringDictionary> NewStringDictionary(int at_least_space_for);
 
+  Handle<ObjectHashSet> NewObjectHashSet(int at_least_space_for);
+
   Handle<ObjectHashTable> NewObjectHashTable(int at_least_space_for);
 
   Handle<DescriptorArray> NewDescriptorArray(int number_of_descriptors);
@@ -71,6 +73,10 @@ class Factory {
   Handle<DeoptimizationOutputData> NewDeoptimizationOutputData(
       int deopt_entry_count,
       PretenureFlag pretenure);
+  // Allocates a pre-tenured empty AccessorPair.
+  Handle<AccessorPair> NewAccessorPair();
+
+  Handle<TypeFeedbackInfo> NewTypeFeedbackInfo();
 
   Handle<String> LookupSymbol(Vector<const char> str);
   Handle<String> LookupSymbol(Handle<String> str);
@@ -149,9 +155,9 @@ class Factory {
   // not make sense to have a UTF-8 factory function for external strings,
   // because we cannot change the underlying buffer.
   Handle<String> NewExternalStringFromAscii(
-      ExternalAsciiString::Resource* resource);
+      const ExternalAsciiString::Resource* resource);
   Handle<String> NewExternalStringFromTwoByte(
-      ExternalTwoByteString::Resource* resource);
+      const ExternalTwoByteString::Resource* resource);
 
   // Create a global (but otherwise uninitialized) context.
   Handle<Context> NewGlobalContext();
@@ -174,7 +180,7 @@ class Factory {
   // Create a 'block' context.
   Handle<Context> NewBlockContext(Handle<JSFunction> function,
                                   Handle<Context> previous,
-                                  Handle<SerializedScopeInfo> scope_info);
+                                  Handle<ScopeInfo> scope_info);
 
   // Return the Symbol matching the passed in string.
   Handle<String> SymbolFromString(Handle<String> value);
@@ -207,7 +213,9 @@ class Factory {
   Handle<JSGlobalPropertyCell> NewJSGlobalPropertyCell(
       Handle<Object> value);
 
-  Handle<Map> NewMap(InstanceType type, int instance_size);
+  Handle<Map> NewMap(InstanceType type,
+                     int instance_size,
+                     ElementsKind elements_kind = FAST_ELEMENTS);
 
   Handle<JSObject> NewFunctionPrototype(Handle<JSFunction> function);
 
@@ -219,22 +227,22 @@ class Factory {
 
   Handle<Map> CopyMapDropTransitions(Handle<Map> map);
 
-  Handle<Map> GetFastElementsMap(Handle<Map> map);
-
-  Handle<Map> GetSlowElementsMap(Handle<Map> map);
-
-  Handle<Map> GetElementsTransitionMap(Handle<Map> map,
-                                       ElementsKind elements_kind,
-                                       bool safe_to_add_transition);
+  Handle<Map> GetElementsTransitionMap(Handle<JSObject> object,
+                                       ElementsKind elements_kind);
 
   Handle<FixedArray> CopyFixedArray(Handle<FixedArray> array);
 
-  // Numbers (eg, literals) are pretenured by the parser.
+  Handle<FixedDoubleArray> CopyFixedDoubleArray(
+      Handle<FixedDoubleArray> array);
+
+  // Numbers (e.g. literals) are pretenured by the parser.
   Handle<Object> NewNumber(double value,
                            PretenureFlag pretenure = NOT_TENURED);
 
-  Handle<Object> NewNumberFromInt(int value);
-  Handle<Object> NewNumberFromUint(uint32_t value);
+  Handle<Object> NewNumberFromInt(int32_t value,
+                                  PretenureFlag pretenure = NOT_TENURED);
+  Handle<Object> NewNumberFromUint(uint32_t value,
+                                  PretenureFlag pretenure = NOT_TENURED);
 
   // These objects are used by the api to create env-independent data
   // structures in the heap.
@@ -256,11 +264,24 @@ class Factory {
 
   // JS arrays are pretenured when allocated by the parser.
   Handle<JSArray> NewJSArray(int capacity,
+                             ElementsKind elements_kind = FAST_ELEMENTS,
                              PretenureFlag pretenure = NOT_TENURED);
 
   Handle<JSArray> NewJSArrayWithElements(
-      Handle<FixedArray> elements,
+      Handle<FixedArrayBase> elements,
+      ElementsKind elements_kind = FAST_ELEMENTS,
       PretenureFlag pretenure = NOT_TENURED);
+
+  void SetElementsCapacityAndLength(Handle<JSArray> array,
+                                    int capacity,
+                                    int length);
+
+  void SetContent(Handle<JSArray> array, Handle<FixedArrayBase> elements);
+
+  void EnsureCanContainHeapObjectElements(Handle<JSArray> array);
+  void EnsureCanContainElements(Handle<JSArray> array,
+                                Handle<FixedArrayBase> elements,
+                                EnsureElementsMode mode);
 
   Handle<JSProxy> NewJSProxy(Handle<Object> handler, Handle<Object> prototype);
 
@@ -268,12 +289,14 @@ class Factory {
   void BecomeJSObject(Handle<JSReceiver> object);
   void BecomeJSFunction(Handle<JSReceiver> object);
 
+  void SetIdentityHash(Handle<JSObject> object, Object* hash);
+
   Handle<JSFunction> NewFunction(Handle<String> name,
                                  Handle<Object> prototype);
 
   Handle<JSFunction> NewFunctionWithoutPrototype(
       Handle<String> name,
-      StrictModeFlag strict_mode);
+      LanguageMode language_mode);
 
   Handle<JSFunction> NewFunction(Handle<Object> super, bool is_global);
 
@@ -287,7 +310,7 @@ class Factory {
       Handle<Context> context,
       PretenureFlag pretenure = TENURED);
 
-  Handle<SerializedScopeInfo> NewSerializedScopeInfo(int length);
+  Handle<ScopeInfo> NewScopeInfo(int length);
 
   Handle<Code> NewCode(const CodeDesc& desc,
                        Code::Flags flags,
@@ -360,6 +383,7 @@ class Factory {
       PropertyAttributes attributes);
 
   Handle<String> NumberToString(Handle<Object> number);
+  Handle<String> Uint32ToString(uint32_t value);
 
   enum ApiInstanceType {
     JavaScriptObject,
@@ -404,7 +428,7 @@ class Factory {
       Handle<String> name,
       int number_of_literals,
       Handle<Code> code,
-      Handle<SerializedScopeInfo> scope_info);
+      Handle<ScopeInfo> scope_info);
   Handle<SharedFunctionInfo> NewSharedFunctionInfo(Handle<String> name);
 
   Handle<JSMessageObject> NewJSMessageObject(
@@ -451,6 +475,14 @@ class Factory {
                              JSRegExp::Flags flags,
                              int capture_count);
 
+  // Returns the value for a known global constant (a property of the global
+  // object which is neither configurable nor writable) like 'undefined'.
+  // Returns a null handle when the given name is unknown.
+  Handle<Object> GlobalConstantFor(Handle<String> name);
+
+  // Converts the given boolean condition to JavaScript boolean value.
+  Handle<Object> ToBoolean(bool value);
+
  private:
   Isolate* isolate() { return reinterpret_cast<Isolate*>(this); }
 
@@ -459,7 +491,7 @@ class Factory {
 
   Handle<JSFunction> NewFunctionWithoutPrototypeHelper(
       Handle<String> name,
-      StrictModeFlag strict_mode);
+      LanguageMode language_mode);
 
   Handle<DescriptorArray> CopyAppendCallbackDescriptors(
       Handle<DescriptorArray> array,

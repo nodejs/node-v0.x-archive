@@ -192,8 +192,12 @@ out:
   }
 
   /* Show error and output from processes if the test failed. */
-  if (status != 0) {
-    LOGF("\n`%s` failed: %s\n", test, errmsg);
+  if (status != 0 || task->show_output) {
+    if (status != 0) {
+      LOGF("\n`%s` failed: %s\n", test, errmsg);
+    } else {
+      LOGF("\n");
+    }
 
     for (i = 0; i < process_count; i++) {
       switch (process_output_size(&processes[i])) {

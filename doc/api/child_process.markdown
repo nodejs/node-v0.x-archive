@@ -35,7 +35,22 @@ normally, `code` is the final exit code of the process, otherwise `null`. If
 the process terminated due to receipt of a signal, `signal` is the string name
 of the signal, otherwise `null`.
 
+Note that the child process stdio streams might still be open.
+
 See `waitpid(2)`.
+
+### Event: 'close'
+
+This event is emitted when the stdio streams of a child process have all
+terminated.  This is distinct from 'exit', since multiple processes
+might share the same stdio streams.
+
+### Event: 'disconnect'
+
+This event is emitted after using the `.disconnect()` method in the parent or
+in the child. After disconnecting it is no longer possible to send messages.
+An alternative way to check if you can send messages is to see if the
+`child.connected` property is `true`.
 
 ### child.stdin
 
@@ -100,6 +115,7 @@ Note that while the function is called `kill`, the signal delivered to the child
 process may not actually kill it.  `kill` really just sends a signal to a process.
 
 See `kill(2)`
+
 
 ### child.send(message, [sendHandle])
 
@@ -348,8 +364,15 @@ And then the child script, `'sub.js'` might look like this:
 In the child the `process` object will have a `send()` method, and `process`
 will emit objects each time it receives a message on its channel.
 
-By default the spawned Node process will have the stdin, stdout, stderr
-associated with the parent's.
+There is a special case when sending a `{cmd: 'NODE_foo'}` message. All messages
+containing a `NODE_` prefix in its `cmd` property will not be emitted in
+the `message` event, since they are internal messages used by node core.
+Messages containing the prefix are emitted in the `internalMessage` event, you
+should by all means avoid using this feature, it may change without warranty.
+
+By default the spawned Node process will have the stdout, stderr associated
+with the parent's. To change this behavior set the `silent` property in the
+`options` object to `true`.
 
 These child Nodes are still whole new instances of V8. Assume at least 30ms
 startup and 10mb memory for each new Node. That is, you cannot create many
@@ -376,5 +399,9 @@ processes:
       }
     });
 
-
-
+To close the IPC connection between parent and child use the
+`child.disconnect()` method. This allows the child to exit gracefully since
+there is no IPC channel keeping it alive. When calling this method the
+`disconnect` event will be emitted in both parent and child, and the
+`connected` flag will be set to `false`. Please note that you can also call
+`process.disconnect()` in the child process.

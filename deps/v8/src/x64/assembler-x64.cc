@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -47,7 +47,7 @@ uint64_t CpuFeatures::found_by_runtime_probing_ = 0;
 
 
 void CpuFeatures::Probe() {
-  ASSERT(!initialized_);
+  ASSERT(supported_ == CpuFeatures::kDefaultCpuFeatures);
 #ifdef DEBUG
   initialized_ = true;
 #endif
@@ -383,7 +383,7 @@ Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
   }
 #endif
 
-  // Setup buffer pointers.
+  // Set up buffer pointers.
   ASSERT(buffer_ != NULL);
   pc_ = buffer_;
   reloc_info_writer.Reposition(buffer_ + buffer_size, pc_);
@@ -412,7 +412,7 @@ void Assembler::GetCode(CodeDesc* desc) {
   // Finalize code (at this point overflow() may be true, but the gap ensures
   // that we are still not overlapping instructions and relocation info).
   ASSERT(pc_ <= reloc_info_writer.pos());  // No overlap.
-  // Setup code descriptor.
+  // Set up code descriptor.
   desc->buffer = buffer_;
   desc->buffer_size = buffer_size_;
   desc->instr_size = pc_offset();
@@ -426,18 +426,21 @@ void Assembler::GetCode(CodeDesc* desc) {
 void Assembler::Align(int m) {
   ASSERT(IsPowerOf2(m));
   int delta = (m - (pc_offset() & (m - 1))) & (m - 1);
-  while (delta >= 9) {
-    nop(9);
-    delta -= 9;
-  }
-  if (delta > 0) {
-    nop(delta);
-  }
+  Nop(delta);
 }
 
 
 void Assembler::CodeTargetAlign() {
   Align(16);  // Preferred alignment of jump targets on x64.
+}
+
+
+bool Assembler::IsNop(Address addr) {
+  Address a = addr;
+  while (*a == 0x66) a++;
+  if (*a == 0x90) return true;
+  if (a[0] == 0xf && a[1] == 0x1f) return true;
+  return false;
 }
 
 
@@ -499,7 +502,7 @@ void Assembler::GrowBuffer() {
     V8::FatalProcessOutOfMemory("Assembler::GrowBuffer");
   }
 
-  // Setup new buffer.
+  // Set up new buffer.
   desc.buffer = NewArray<byte>(desc.buffer_size);
   desc.instr_size = pc_offset();
   desc.reloc_size =
@@ -772,7 +775,7 @@ void Assembler::immediate_arithmetic_op_8(byte subcode,
                                           Register dst,
                                           Immediate src) {
   EnsureSpace ensure_space(this);
-  if (dst.code() > 3) {
+  if (!dst.is_byte_register()) {
     // Use 64-bit mode byte registers.
     emit_rex_64(dst);
   }
@@ -1056,7 +1059,7 @@ void Assembler::decl(const Operand& dst) {
 
 void Assembler::decb(Register dst) {
   EnsureSpace ensure_space(this);
-  if (dst.code() > 3) {
+  if (!dst.is_byte_register()) {
     // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
     emit_rex_32(dst);
   }
@@ -1384,7 +1387,7 @@ void Assembler::leave() {
 
 void Assembler::movb(Register dst, const Operand& src) {
   EnsureSpace ensure_space(this);
-  if (dst.code() > 3) {
+  if (!dst.is_byte_register()) {
     // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
     emit_rex_32(dst, src);
   } else {
@@ -1397,7 +1400,7 @@ void Assembler::movb(Register dst, const Operand& src) {
 
 void Assembler::movb(Register dst, Immediate imm) {
   EnsureSpace ensure_space(this);
-  if (dst.code() > 3) {
+  if (!dst.is_byte_register()) {
     emit_rex_32(dst);
   }
   emit(0xB0 + dst.low_bits());
@@ -1407,7 +1410,7 @@ void Assembler::movb(Register dst, Immediate imm) {
 
 void Assembler::movb(const Operand& dst, Register src) {
   EnsureSpace ensure_space(this);
-  if (src.code() > 3) {
+  if (!src.is_byte_register()) {
     emit_rex_32(src, dst);
   } else {
     emit_optional_rex_32(src, dst);
@@ -1637,6 +1640,8 @@ void Assembler::movsxlq(Register dst, const Operand& src) {
 
 void Assembler::movzxbq(Register dst, const Operand& src) {
   EnsureSpace ensure_space(this);
+  // 32 bit operations zero the top 32 bits of 64 bit registers.  Therefore
+  // there is no need to make this a 64 bit operation.
   emit_optional_rex_32(dst, src);
   emit(0x0F);
   emit(0xB6);
@@ -1763,7 +1768,7 @@ void Assembler::notl(Register dst) {
 }
 
 
-void Assembler::nop(int n) {
+void Assembler::Nop(int n) {
   // The recommended muti-byte sequences of NOP instructions from the Intel 64
   // and IA-32 Architectures Software Developer's Manual.
   //
@@ -1778,73 +1783,64 @@ void Assembler::nop(int n) {
   // 9 bytes  66 NOP DWORD ptr [EAX + EAX*1 +         66 0F 1F 84 00 00 00 00
   //          00000000H]                              00H
 
-  ASSERT(1 <= n);
-  ASSERT(n <= 9);
   EnsureSpace ensure_space(this);
-  switch (n) {
-  case 1:
-    emit(0x90);
-    return;
-  case 2:
-    emit(0x66);
-    emit(0x90);
-    return;
-  case 3:
-    emit(0x0f);
-    emit(0x1f);
-    emit(0x00);
-    return;
-  case 4:
-    emit(0x0f);
-    emit(0x1f);
-    emit(0x40);
-    emit(0x00);
-    return;
-  case 5:
-    emit(0x0f);
-    emit(0x1f);
-    emit(0x44);
-    emit(0x00);
-    emit(0x00);
-    return;
-  case 6:
-    emit(0x66);
-    emit(0x0f);
-    emit(0x1f);
-    emit(0x44);
-    emit(0x00);
-    emit(0x00);
-    return;
-  case 7:
-    emit(0x0f);
-    emit(0x1f);
-    emit(0x80);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    return;
-  case 8:
-    emit(0x0f);
-    emit(0x1f);
-    emit(0x84);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    return;
-  case 9:
-    emit(0x66);
-    emit(0x0f);
-    emit(0x1f);
-    emit(0x84);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    emit(0x00);
-    return;
+  while (n > 0) {
+    switch (n) {
+      case 2:
+        emit(0x66);
+      case 1:
+        emit(0x90);
+        return;
+      case 3:
+        emit(0x0f);
+        emit(0x1f);
+        emit(0x00);
+        return;
+      case 4:
+        emit(0x0f);
+        emit(0x1f);
+        emit(0x40);
+        emit(0x00);
+        return;
+      case 6:
+        emit(0x66);
+      case 5:
+        emit(0x0f);
+        emit(0x1f);
+        emit(0x44);
+        emit(0x00);
+        emit(0x00);
+        return;
+      case 7:
+        emit(0x0f);
+        emit(0x1f);
+        emit(0x80);
+        emit(0x00);
+        emit(0x00);
+        emit(0x00);
+        emit(0x00);
+        return;
+      default:
+      case 11:
+        emit(0x66);
+        n--;
+      case 10:
+        emit(0x66);
+        n--;
+      case 9:
+        emit(0x66);
+        n--;
+      case 8:
+        emit(0x0f);
+        emit(0x1f);
+        emit(0x84);
+        emit(0x00);
+        emit(0x00);
+        emit(0x00);
+        emit(0x00);
+        emit(0x00);
+        n -= 8;
+    }
   }
 }
 
@@ -1937,7 +1933,7 @@ void Assembler::setcc(Condition cc, Register reg) {
   }
   EnsureSpace ensure_space(this);
   ASSERT(is_uint4(cc));
-  if (reg.code() > 3) {  // Use x64 byte registers, where different.
+  if (!reg.is_byte_register()) {  // Use x64 byte registers, where different.
     emit_rex_32(reg);
   }
   emit(0x0F);
@@ -2002,7 +1998,7 @@ void Assembler::testb(Register dst, Register src) {
     emit(0x84);
     emit_modrm(src, dst);
   } else {
-    if (dst.code() > 3 || src.code() > 3) {
+    if (!dst.is_byte_register() || !src.is_byte_register()) {
       // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
       emit_rex_32(dst, src);
     }
@@ -2019,7 +2015,7 @@ void Assembler::testb(Register reg, Immediate mask) {
     emit(0xA8);
     emit(mask.value_);  // Low byte emitted.
   } else {
-    if (reg.code() > 3) {
+    if (!reg.is_byte_register()) {
       // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
       emit_rex_32(reg);
     }
@@ -2042,7 +2038,7 @@ void Assembler::testb(const Operand& op, Immediate mask) {
 
 void Assembler::testb(const Operand& op, Register reg) {
   EnsureSpace ensure_space(this);
-  if (reg.code() > 3) {
+  if (!reg.is_byte_register()) {
     // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
     emit_rex_32(reg, op);
   } else {
@@ -2299,10 +2295,38 @@ void Assembler::fsin() {
 }
 
 
+void Assembler::fptan() {
+  EnsureSpace ensure_space(this);
+  emit(0xD9);
+  emit(0xF2);
+}
+
+
 void Assembler::fyl2x() {
   EnsureSpace ensure_space(this);
   emit(0xD9);
   emit(0xF1);
+}
+
+
+void Assembler::f2xm1() {
+  EnsureSpace ensure_space(this);
+  emit(0xD9);
+  emit(0xF0);
+}
+
+
+void Assembler::fscale() {
+  EnsureSpace ensure_space(this);
+  emit(0xD9);
+  emit(0xFD);
+}
+
+
+void Assembler::fninit() {
+  EnsureSpace ensure_space(this);
+  emit(0xDB);
+  emit(0xE3);
 }
 
 
@@ -2565,7 +2589,8 @@ void Assembler::movdqa(XMMRegister dst, const Operand& src) {
 
 
 void Assembler::extractps(Register dst, XMMRegister src, byte imm8) {
-  ASSERT(is_uint2(imm8));
+  ASSERT(CpuFeatures::IsSupported(SSE4_1));
+  ASSERT(is_uint8(imm8));
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(dst, src);
@@ -2983,7 +3008,7 @@ void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
       return;
     }
   }
-  RelocInfo rinfo(pc_, rmode, data);
+  RelocInfo rinfo(pc_, rmode, data, NULL);
   reloc_info_writer.Write(&rinfo);
 }
 
@@ -3019,8 +3044,6 @@ bool RelocInfo::IsCodedSpecially() {
   // by branch instructions.
   return (1 << rmode_) & kApplyMask;
 }
-
-
 
 } }  // namespace v8::internal
 

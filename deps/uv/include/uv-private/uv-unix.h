@@ -34,6 +34,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <termios.h>
+#include <pthread.h>
 
 /* Note: May be cast to struct iovec. See writev(2). */
 typedef struct {
@@ -43,9 +44,28 @@ typedef struct {
 
 typedef int uv_file;
 
+#define UV_ONCE_INIT PTHREAD_ONCE_INIT
+
+typedef pthread_once_t uv_once_t;
+typedef pthread_t uv_thread_t;
+typedef pthread_mutex_t uv_mutex_t;
+typedef pthread_rwlock_t uv_rwlock_t;
+
 /* Platform-specific definitions for uv_dlopen support. */
 typedef void* uv_lib_t;
 #define UV_DYNAMIC /* empty */
+
+#if __linux__
+# define UV_LOOP_PRIVATE_PLATFORM_FIELDS              \
+  /* RB_HEAD(uv__inotify_watchers, uv_fs_event_s) */  \
+  struct uv__inotify_watchers {                       \
+    struct uv_fs_event_s* rbh_root;                   \
+  } inotify_watchers;                                 \
+  ev_io inotify_read_watcher;                         \
+  int inotify_fd;
+#else
+# define UV_LOOP_PRIVATE_PLATFORM_FIELDS
+#endif
 
 #define UV_LOOP_PRIVATE_FIELDS \
   ares_channel channel; \
@@ -55,7 +75,10 @@ typedef void* uv_lib_t;
    * definition of ares_timeout(). \
    */ \
   ev_timer timer; \
-  struct ev_loop* ev;
+  /* Poll result queue */ \
+  eio_channel uv_eio_channel; \
+  struct ev_loop* ev; \
+  UV_LOOP_PRIVATE_PLATFORM_FIELDS
 
 #define UV_REQ_BUFSML_SIZE (4)
 
@@ -185,9 +208,16 @@ typedef void* uv_lib_t;
 /* UV_FS_EVENT_PRIVATE_FIELDS */
 #if defined(__linux__)
 
-#define UV_FS_EVENT_PRIVATE_FIELDS \
-  ev_io read_watcher; \
-  uv_fs_event_cb cb; \
+#define UV_FS_EVENT_PRIVATE_FIELDS    \
+  /* RB_ENTRY(fs_event_s) node; */    \
+  struct {                            \
+    struct uv_fs_event_s* rbe_left;   \
+    struct uv_fs_event_s* rbe_right;  \
+    struct uv_fs_event_s* rbe_parent; \
+    int rbe_color;                    \
+  } node;                             \
+  ev_io read_watcher;                 \
+  uv_fs_event_cb cb;
 
 #elif (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060) \
   || defined(__FreeBSD__) \

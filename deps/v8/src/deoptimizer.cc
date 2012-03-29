@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -52,11 +52,13 @@ DeoptimizerData::DeoptimizerData() {
 
 DeoptimizerData::~DeoptimizerData() {
   if (eager_deoptimization_entry_code_ != NULL) {
-    eager_deoptimization_entry_code_->Free(EXECUTABLE);
+    Isolate::Current()->memory_allocator()->Free(
+        eager_deoptimization_entry_code_);
     eager_deoptimization_entry_code_ = NULL;
   }
   if (lazy_deoptimization_entry_code_ != NULL) {
-    lazy_deoptimization_entry_code_->Free(EXECUTABLE);
+    Isolate::Current()->memory_allocator()->Free(
+        lazy_deoptimization_entry_code_);
     lazy_deoptimization_entry_code_ = NULL;
   }
 }
@@ -71,6 +73,8 @@ void DeoptimizerData::Iterate(ObjectVisitor* v) {
 #endif
 
 
+// We rely on this function not causing a GC.  It is called from generated code
+// without having a real stack frame in place.
 Deoptimizer* Deoptimizer::New(JSFunction* function,
                               BailoutType type,
                               unsigned bailout_id,
@@ -100,10 +104,27 @@ Deoptimizer* Deoptimizer::Grab(Isolate* isolate) {
   return result;
 }
 
+
+int Deoptimizer::ConvertJSFrameIndexToFrameIndex(int jsframe_index) {
+  if (jsframe_index == 0) return 0;
+
+  int frame_index = 0;
+  while (jsframe_index >= 0) {
+    FrameDescription* frame = output_[frame_index];
+    if (frame->GetFrameType() == StackFrame::JAVA_SCRIPT) {
+      jsframe_index--;
+    }
+    frame_index++;
+  }
+
+  return frame_index - 1;
+}
+
+
 #ifdef ENABLE_DEBUGGER_SUPPORT
 DeoptimizedFrameInfo* Deoptimizer::DebuggerInspectableFrame(
     JavaScriptFrame* frame,
-    int frame_index,
+    int jsframe_index,
     Isolate* isolate) {
   ASSERT(isolate == Isolate::Current());
   ASSERT(frame->is_optimized());
@@ -139,22 +160,48 @@ DeoptimizedFrameInfo* Deoptimizer::DebuggerInspectableFrame(
 
   // Create the GC safe output frame information and register it for GC
   // handling.
-  ASSERT_LT(frame_index, deoptimizer->output_count());
-  DeoptimizedFrameInfo* info =
-      new DeoptimizedFrameInfo(deoptimizer, frame_index);
+  ASSERT_LT(jsframe_index, deoptimizer->jsframe_count());
+
+  // Convert JS frame index into frame index.
+  int frame_index = deoptimizer->ConvertJSFrameIndexToFrameIndex(jsframe_index);
+
+  bool has_arguments_adaptor =
+      frame_index > 0 &&
+      deoptimizer->output_[frame_index - 1]->GetFrameType() ==
+      StackFrame::ARGUMENTS_ADAPTOR;
+
+  int construct_offset = has_arguments_adaptor ? 2 : 1;
+  bool has_construct_stub =
+      frame_index >= construct_offset &&
+      deoptimizer->output_[frame_index - construct_offset]->GetFrameType() ==
+      StackFrame::CONSTRUCT;
+
+  DeoptimizedFrameInfo* info = new DeoptimizedFrameInfo(deoptimizer,
+                                                        frame_index,
+                                                        has_arguments_adaptor,
+                                                        has_construct_stub);
   isolate->deoptimizer_data()->deoptimized_frame_info_ = info;
 
   // Get the "simulated" top and size for the requested frame.
-  Address top =
-      reinterpret_cast<Address>(deoptimizer->output_[frame_index]->GetTop());
-  uint32_t size = deoptimizer->output_[frame_index]->GetFrameSize();
+  FrameDescription* parameters_frame =
+      deoptimizer->output_[
+          has_arguments_adaptor ? (frame_index - 1) : frame_index];
+
+  uint32_t parameters_size = (info->parameters_count() + 1) * kPointerSize;
+  Address parameters_top = reinterpret_cast<Address>(
+      parameters_frame->GetTop() + (parameters_frame->GetFrameSize() -
+                                    parameters_size));
+
+  uint32_t expressions_size = info->expression_count() * kPointerSize;
+  Address expressions_top = reinterpret_cast<Address>(
+      deoptimizer->output_[frame_index]->GetTop());
 
   // Done with the GC-unsafe frame descriptions. This re-enables allocation.
   deoptimizer->DeleteFrameDescriptions();
 
   // Allocate a heap number for the doubles belonging to this frame.
   deoptimizer->MaterializeHeapNumbersForDebuggerInspectableFrame(
-      top, size, info);
+      parameters_top, parameters_size, expressions_top, expressions_size, info);
 
   // Finished using the deoptimizer instance.
   delete deoptimizer;
@@ -260,11 +307,16 @@ void Deoptimizer::VisitAllOptimizedFunctions(
   AssertNoAllocation no_allocation;
 
   // Run through the list of all global contexts and deoptimize.
-  Object* global = Isolate::Current()->heap()->global_contexts_list();
-  while (!global->IsUndefined()) {
-    VisitAllOptimizedFunctionsForGlobalObject(Context::cast(global)->global(),
-                                              visitor);
-    global = Context::cast(global)->get(Context::NEXT_CONTEXT_LINK);
+  Object* context = Isolate::Current()->heap()->global_contexts_list();
+  while (!context->IsUndefined()) {
+    // GC can happen when the context is not fully initialized,
+    // so the global field of the context can be undefined.
+    Object* global = Context::cast(context)->get(Context::GLOBAL_INDEX);
+    if (!global->IsUndefined()) {
+      VisitAllOptimizedFunctionsForGlobalObject(JSObject::cast(global),
+                                                visitor);
+    }
+    context = Context::cast(context)->get(Context::NEXT_CONTEXT_LINK);
   }
 }
 
@@ -304,6 +356,7 @@ Deoptimizer::Deoptimizer(Isolate* isolate,
       fp_to_sp_delta_(fp_to_sp_delta),
       input_(NULL),
       output_count_(0),
+      jsframe_count_(0),
       output_(NULL),
       deferred_heap_numbers_(0) {
   if (FLAG_trace_deopt && type != OSR) {
@@ -329,6 +382,26 @@ Deoptimizer::Deoptimizer(Isolate* isolate,
   if (type == EAGER) {
     ASSERT(from == NULL);
     optimized_code_ = function_->code();
+    if (FLAG_trace_deopt && FLAG_code_comments) {
+      // Print instruction associated with this bailout.
+      const char* last_comment = NULL;
+      int mask = RelocInfo::ModeMask(RelocInfo::COMMENT)
+          | RelocInfo::ModeMask(RelocInfo::RUNTIME_ENTRY);
+      for (RelocIterator it(optimized_code_, mask); !it.done(); it.next()) {
+        RelocInfo* info = it.rinfo();
+        if (info->rmode() == RelocInfo::COMMENT) {
+          last_comment = reinterpret_cast<const char*>(info->data());
+        }
+        if (info->rmode() == RelocInfo::RUNTIME_ENTRY) {
+          unsigned id = Deoptimizer::GetDeoptimizationId(
+              info->target_address(), Deoptimizer::EAGER);
+          if (id == bailout_id && last_comment != NULL) {
+            PrintF("            %s\n", last_comment);
+            break;
+          }
+        }
+      }
+    }
   } else if (type == LAZY) {
     optimized_code_ = FindDeoptimizingCodeFromAddress(from);
     ASSERT(optimized_code_ != NULL);
@@ -346,9 +419,7 @@ Deoptimizer::Deoptimizer(Isolate* isolate,
   ASSERT(HEAP->allow_allocation(false));
   unsigned size = ComputeInputFrameSize();
   input_ = new(size) FrameDescription(size, function);
-#ifdef DEBUG
-  input_->SetKind(Code::OPTIMIZED_FUNCTION);
-#endif
+  input_->SetFrameType(StackFrame::JAVA_SCRIPT);
 }
 
 
@@ -372,7 +443,7 @@ void Deoptimizer::DeleteFrameDescriptions() {
 Address Deoptimizer::GetDeoptimizationEntry(int id, BailoutType type) {
   ASSERT(id >= 0);
   if (id >= kNumberOfEntries) return NULL;
-  LargeObjectChunk* base = NULL;
+  MemoryChunk* base = NULL;
   DeoptimizerData* data = Isolate::Current()->deoptimizer_data();
   if (type == EAGER) {
     if (data->eager_deoptimization_entry_code_ == NULL) {
@@ -386,12 +457,12 @@ Address Deoptimizer::GetDeoptimizationEntry(int id, BailoutType type) {
     base = data->lazy_deoptimization_entry_code_;
   }
   return
-      static_cast<Address>(base->GetStartAddress()) + (id * table_entry_size_);
+      static_cast<Address>(base->area_start()) + (id * table_entry_size_);
 }
 
 
 int Deoptimizer::GetDeoptimizationId(Address addr, BailoutType type) {
-  LargeObjectChunk* base = NULL;
+  MemoryChunk* base = NULL;
   DeoptimizerData* data = Isolate::Current()->deoptimizer_data();
   if (type == EAGER) {
     base = data->eager_deoptimization_entry_code_;
@@ -399,14 +470,14 @@ int Deoptimizer::GetDeoptimizationId(Address addr, BailoutType type) {
     base = data->lazy_deoptimization_entry_code_;
   }
   if (base == NULL ||
-      addr < base->GetStartAddress() ||
-      addr >= base->GetStartAddress() +
+      addr < base->area_start() ||
+      addr >= base->area_start() +
           (kNumberOfEntries * table_entry_size_)) {
     return kNotDeoptimizationEntry;
   }
   ASSERT_EQ(0,
-      static_cast<int>(addr - base->GetStartAddress()) % table_entry_size_);
-  return static_cast<int>(addr - base->GetStartAddress()) / table_entry_size_;
+      static_cast<int>(addr - base->area_start()) % table_entry_size_);
+  return static_cast<int>(addr - base->area_start()) / table_entry_size_;
 }
 
 
@@ -448,6 +519,8 @@ int Deoptimizer::GetDeoptimizedCodeCount(Isolate* isolate) {
 }
 
 
+// We rely on this function not causing a GC.  It is called from generated code
+// without having a real stack frame in place.
 void Deoptimizer::DoComputeOutputFrames() {
   if (bailout_type_ == OSR) {
     DoComputeOsrOutputFrame();
@@ -482,6 +555,7 @@ void Deoptimizer::DoComputeOutputFrames() {
   // Read the number of output frames and allocate an array for their
   // descriptions.
   int count = iterator.Next();
+  iterator.Next();  // Drop JS frames count.
   ASSERT(output_ == NULL);
   output_ = new FrameDescription*[count];
   for (int i = 0; i < count; ++i) {
@@ -491,7 +565,24 @@ void Deoptimizer::DoComputeOutputFrames() {
 
   // Translate each output frame.
   for (int i = 0; i < count; ++i) {
-    DoComputeFrame(&iterator, i);
+    // Read the ast node id, function, and frame height for this output frame.
+    Translation::Opcode opcode =
+        static_cast<Translation::Opcode>(iterator.Next());
+    switch (opcode) {
+      case Translation::JS_FRAME:
+        DoComputeJSFrame(&iterator, i);
+        jsframe_count_++;
+        break;
+      case Translation::ARGUMENTS_ADAPTOR_FRAME:
+        DoComputeArgumentsAdaptorFrame(&iterator, i);
+        break;
+      case Translation::CONSTRUCT_STUB_FRAME:
+        DoComputeConstructStubFrame(&iterator, i);
+        break;
+      default:
+        UNREACHABLE();
+        break;
+    }
   }
 
   // Print some helpful diagnostic information.
@@ -532,39 +623,52 @@ void Deoptimizer::MaterializeHeapNumbers() {
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
 void Deoptimizer::MaterializeHeapNumbersForDebuggerInspectableFrame(
-    Address top, uint32_t size, DeoptimizedFrameInfo* info) {
+    Address parameters_top,
+    uint32_t parameters_size,
+    Address expressions_top,
+    uint32_t expressions_size,
+    DeoptimizedFrameInfo* info) {
   ASSERT_EQ(DEBUGGER, bailout_type_);
+  Address parameters_bottom = parameters_top + parameters_size;
+  Address expressions_bottom = expressions_top + expressions_size;
   for (int i = 0; i < deferred_heap_numbers_.length(); i++) {
     HeapNumberMaterializationDescriptor d = deferred_heap_numbers_[i];
 
     // Check of the heap number to materialize actually belong to the frame
     // being extracted.
     Address slot = d.slot_address();
-    if (top <= slot && slot < top + size) {
+    if (parameters_top <= slot && slot < parameters_bottom) {
       Handle<Object> num = isolate_->factory()->NewNumber(d.value());
-      // Calculate the index with the botton of the expression stack
-      // at index 0, and the fixed part (including incoming arguments)
-      // at negative indexes.
-      int index = static_cast<int>(
-          info->expression_count_ - (slot - top) / kPointerSize - 1);
+
+      int index = (info->parameters_count() - 1) -
+          static_cast<int>(slot - parameters_top) / kPointerSize;
+
       if (FLAG_trace_deopt) {
         PrintF("Materializing a new heap number %p [%e] in slot %p"
-               "for stack index %d\n",
+               "for parameter slot #%d\n",
                reinterpret_cast<void*>(*num),
                d.value(),
                d.slot_address(),
                index);
       }
-      if (index >=0) {
-        info->SetExpression(index, *num);
-      } else {
-        // Calculate parameter index subtracting one for the receiver.
-        int parameter_index =
-            index +
-            static_cast<int>(size) / kPointerSize -
-            info->expression_count_ - 1;
-        info->SetParameter(parameter_index, *num);
+
+      info->SetParameter(index, *num);
+    } else if (expressions_top <= slot && slot < expressions_bottom) {
+      Handle<Object> num = isolate_->factory()->NewNumber(d.value());
+
+      int index = info->expression_count() - 1 -
+          static_cast<int>(slot - expressions_top) / kPointerSize;
+
+      if (FLAG_trace_deopt) {
+        PrintF("Materializing a new heap number %p [%e] in slot %p"
+               "for expression slot #%d\n",
+               reinterpret_cast<void*>(*num),
+               d.value(),
+               d.slot_address(),
+               index);
       }
+
+      info->SetExpression(index, *num);
     }
   }
 }
@@ -589,7 +693,9 @@ void Deoptimizer::DoTranslateCommand(TranslationIterator* iterator,
 
   switch (opcode) {
     case Translation::BEGIN:
-    case Translation::FRAME:
+    case Translation::JS_FRAME:
+    case Translation::ARGUMENTS_ADAPTOR_FRAME:
+    case Translation::CONSTRUCT_STUB_FRAME:
     case Translation::DUPLICATE:
       UNREACHABLE();
       return;
@@ -599,11 +705,13 @@ void Deoptimizer::DoTranslateCommand(TranslationIterator* iterator,
       intptr_t input_value = input_->GetRegister(input_reg);
       if (FLAG_trace_deopt) {
         PrintF(
-            "    0x%08" V8PRIxPTR ": [top + %d] <- 0x%08" V8PRIxPTR " ; %s\n",
+            "    0x%08" V8PRIxPTR ": [top + %d] <- 0x%08" V8PRIxPTR " ; %s ",
             output_[frame_index]->GetTop() + output_offset,
             output_offset,
             input_value,
             converter.NameOfCPURegister(input_reg));
+        reinterpret_cast<Object*>(input_value)->ShortPrint();
+        PrintF("\n");
       }
       output_[frame_index]->SetFrameSlot(output_offset, input_value);
       return;
@@ -656,15 +764,17 @@ void Deoptimizer::DoTranslateCommand(TranslationIterator* iterator,
     case Translation::STACK_SLOT: {
       int input_slot_index = iterator->Next();
       unsigned input_offset =
-          input_->GetOffsetFromSlotIndex(this, input_slot_index);
+          input_->GetOffsetFromSlotIndex(input_slot_index);
       intptr_t input_value = input_->GetFrameSlot(input_offset);
       if (FLAG_trace_deopt) {
         PrintF("    0x%08" V8PRIxPTR ": ",
                output_[frame_index]->GetTop() + output_offset);
-        PrintF("[top + %d] <- 0x%08" V8PRIxPTR " ; [esp + %d]\n",
+        PrintF("[top + %d] <- 0x%08" V8PRIxPTR " ; [esp + %d] ",
                output_offset,
                input_value,
                input_offset);
+        reinterpret_cast<Object*>(input_value)->ShortPrint();
+        PrintF("\n");
       }
       output_[frame_index]->SetFrameSlot(output_offset, input_value);
       return;
@@ -673,7 +783,7 @@ void Deoptimizer::DoTranslateCommand(TranslationIterator* iterator,
     case Translation::INT32_STACK_SLOT: {
       int input_slot_index = iterator->Next();
       unsigned input_offset =
-          input_->GetOffsetFromSlotIndex(this, input_slot_index);
+          input_->GetOffsetFromSlotIndex(input_slot_index);
       intptr_t value = input_->GetFrameSlot(input_offset);
       bool is_smi = Smi::IsValid(value);
       if (FLAG_trace_deopt) {
@@ -702,7 +812,7 @@ void Deoptimizer::DoTranslateCommand(TranslationIterator* iterator,
     case Translation::DOUBLE_STACK_SLOT: {
       int input_slot_index = iterator->Next();
       unsigned input_offset =
-          input_->GetOffsetFromSlotIndex(this, input_slot_index);
+          input_->GetOffsetFromSlotIndex(input_slot_index);
       double value = input_->GetDoubleFrameSlot(input_offset);
       if (FLAG_trace_deopt) {
         PrintF("    0x%08" V8PRIxPTR ": [top + %d] <- %e ; [esp + %d]\n",
@@ -735,7 +845,6 @@ void Deoptimizer::DoTranslateCommand(TranslationIterator* iterator,
     case Translation::ARGUMENTS_OBJECT: {
       // Use the arguments marker value as a sentinel and fill in the arguments
       // object after the deoptimized frame is built.
-      ASSERT(frame_index == 0);  // Only supported for first frame.
       if (FLAG_trace_deopt) {
         PrintF("    0x%08" V8PRIxPTR ": [top + %d] <- ",
                output_[frame_index]->GetTop() + output_offset,
@@ -771,7 +880,9 @@ bool Deoptimizer::DoOsrTranslateCommand(TranslationIterator* iterator,
 
   switch (opcode) {
     case Translation::BEGIN:
-    case Translation::FRAME:
+    case Translation::JS_FRAME:
+    case Translation::ARGUMENTS_ADAPTOR_FRAME:
+    case Translation::CONSTRUCT_STUB_FRAME:
     case Translation::DUPLICATE:
       UNREACHABLE();  // Malformed input.
        return false;
@@ -834,12 +945,14 @@ bool Deoptimizer::DoOsrTranslateCommand(TranslationIterator* iterator,
     case Translation::STACK_SLOT: {
       int output_index = iterator->Next();
       unsigned output_offset =
-          output->GetOffsetFromSlotIndex(this, output_index);
+          output->GetOffsetFromSlotIndex(output_index);
       if (FLAG_trace_osr) {
-        PrintF("    [sp + %d] <- 0x%08" V8PRIxPTR " ; [sp + %d]\n",
+        PrintF("    [sp + %d] <- 0x%08" V8PRIxPTR " ; [sp + %d] ",
                output_offset,
                input_value,
                *input_offset);
+        reinterpret_cast<Object*>(input_value)->ShortPrint();
+        PrintF("\n");
       }
       output->SetFrameSlot(output_offset, input_value);
       break;
@@ -851,7 +964,7 @@ bool Deoptimizer::DoOsrTranslateCommand(TranslationIterator* iterator,
 
       int output_index = iterator->Next();
       unsigned output_offset =
-          output->GetOffsetFromSlotIndex(this, output_index);
+          output->GetOffsetFromSlotIndex(output_index);
       int int32_value = input_object->IsSmi()
           ? Smi::cast(input_object)->value()
           : DoubleToInt32(input_object->Number());
@@ -883,7 +996,7 @@ bool Deoptimizer::DoOsrTranslateCommand(TranslationIterator* iterator,
 
       int output_index = iterator->Next();
       unsigned output_offset =
-          output->GetOffsetFromSlotIndex(this, output_index);
+          output->GetOffsetFromSlotIndex(output_index);
       double double_value = input_object->Number();
       uint64_t int_value = BitCast<uint64_t, double>(double_value);
       int32_t lower = static_cast<int32_t>(int_value);
@@ -939,7 +1052,10 @@ void Deoptimizer::PatchStackCheckCode(Code* unoptimized_code,
   for (uint32_t i = 0; i < table_length; ++i) {
     uint32_t pc_offset = Memory::uint32_at(stack_check_cursor + kIntSize);
     Address pc_after = unoptimized_code->instruction_start() + pc_offset;
-    PatchStackCheckCodeAt(pc_after, check_code, replacement_code);
+    PatchStackCheckCodeAt(unoptimized_code,
+                          pc_after,
+                          check_code,
+                          replacement_code);
     stack_check_cursor += 2 * kIntSize;
   }
 }
@@ -958,7 +1074,10 @@ void Deoptimizer::RevertStackCheckCode(Code* unoptimized_code,
   for (uint32_t i = 0; i < table_length; ++i) {
     uint32_t pc_offset = Memory::uint32_at(stack_check_cursor + kIntSize);
     Address pc_after = unoptimized_code->instruction_start() + pc_offset;
-    RevertStackCheckCodeAt(pc_after, check_code, replacement_code);
+    RevertStackCheckCodeAt(unoptimized_code,
+                           pc_after,
+                           check_code,
+                           replacement_code);
     stack_check_cursor += 2 * kIntSize;
   }
 }
@@ -988,8 +1107,8 @@ unsigned Deoptimizer::ComputeInputFrameSize() const {
 unsigned Deoptimizer::ComputeFixedSize(JSFunction* function) const {
   // The fixed part of the frame consists of the return address, frame
   // pointer, function, context, and all the incoming arguments.
-  static const unsigned kFixedSlotSize = 4 * kPointerSize;
-  return ComputeIncomingArgumentSize(function) + kFixedSlotSize;
+  return ComputeIncomingArgumentSize(function) +
+      StandardFrameConstants::kFixedFrameSize;
 }
 
 
@@ -1025,7 +1144,7 @@ void Deoptimizer::AddDoubleValue(intptr_t slot_address,
 }
 
 
-LargeObjectChunk* Deoptimizer::CreateCode(BailoutType type) {
+MemoryChunk* Deoptimizer::CreateCode(BailoutType type) {
   // We cannot run this if the serializer is enabled because this will
   // cause us to emit relocation information for the external
   // references. This is fine because the deoptimizer's code section
@@ -1039,12 +1158,16 @@ LargeObjectChunk* Deoptimizer::CreateCode(BailoutType type) {
   masm.GetCode(&desc);
   ASSERT(desc.reloc_size == 0);
 
-  LargeObjectChunk* chunk = LargeObjectChunk::New(desc.instr_size, EXECUTABLE);
+  MemoryChunk* chunk =
+      Isolate::Current()->memory_allocator()->AllocateChunk(desc.instr_size,
+                                                            EXECUTABLE,
+                                                            NULL);
+  ASSERT(chunk->area_size() >= desc.instr_size);
   if (chunk == NULL) {
     V8::FatalProcessOutOfMemory("Not enough memory for deoptimization table");
   }
-  memcpy(chunk->GetStartAddress(), desc.buffer, desc.instr_size);
-  CPU::FlushICache(chunk->GetStartAddress(), desc.instr_size);
+  memcpy(chunk->area_start(), desc.buffer, desc.instr_size);
+  CPU::FlushICache(chunk->area_start(), desc.instr_size);
   return chunk;
 }
 
@@ -1093,7 +1216,8 @@ FrameDescription::FrameDescription(uint32_t frame_size,
       function_(function),
       top_(kZapUint32),
       pc_(kZapUint32),
-      fp_(kZapUint32) {
+      fp_(kZapUint32),
+      context_(kZapUint32) {
   // Zap all the registers.
   for (int r = 0; r < Register::kNumRegisters; r++) {
     SetRegister(r, kZapUint32);
@@ -1106,49 +1230,62 @@ FrameDescription::FrameDescription(uint32_t frame_size,
 }
 
 
-unsigned FrameDescription::GetOffsetFromSlotIndex(Deoptimizer* deoptimizer,
-                                                  int slot_index) {
+int FrameDescription::ComputeFixedSize() {
+  return StandardFrameConstants::kFixedFrameSize +
+      (ComputeParametersCount() + 1) * kPointerSize;
+}
+
+
+unsigned FrameDescription::GetOffsetFromSlotIndex(int slot_index) {
   if (slot_index >= 0) {
     // Local or spill slots. Skip the fixed part of the frame
     // including all arguments.
-    unsigned base =
-        GetFrameSize() - deoptimizer->ComputeFixedSize(GetFunction());
+    unsigned base = GetFrameSize() - ComputeFixedSize();
     return base - ((slot_index + 1) * kPointerSize);
   } else {
     // Incoming parameter.
-    unsigned base = GetFrameSize() -
-        deoptimizer->ComputeIncomingArgumentSize(GetFunction());
+    int arg_size = (ComputeParametersCount() + 1) * kPointerSize;
+    unsigned base = GetFrameSize() - arg_size;
     return base - ((slot_index + 1) * kPointerSize);
   }
 }
 
 
 int FrameDescription::ComputeParametersCount() {
-  return function_->shared()->formal_parameter_count();
+  switch (type_) {
+    case StackFrame::JAVA_SCRIPT:
+      return function_->shared()->formal_parameter_count();
+    case StackFrame::ARGUMENTS_ADAPTOR: {
+      // Last slot contains number of incomming arguments as a smi.
+      // Can't use GetExpression(0) because it would cause infinite recursion.
+      return reinterpret_cast<Smi*>(*GetFrameSlotPointer(0))->value();
+    }
+    default:
+      UNREACHABLE();
+      return 0;
+  }
 }
 
 
-Object* FrameDescription::GetParameter(Deoptimizer* deoptimizer, int index) {
-  ASSERT_EQ(Code::FUNCTION, kind_);
+Object* FrameDescription::GetParameter(int index) {
   ASSERT(index >= 0);
   ASSERT(index < ComputeParametersCount());
   // The slot indexes for incoming arguments are negative.
-  unsigned offset = GetOffsetFromSlotIndex(deoptimizer,
-                                           index - ComputeParametersCount());
+  unsigned offset = GetOffsetFromSlotIndex(index - ComputeParametersCount());
   return reinterpret_cast<Object*>(*GetFrameSlotPointer(offset));
 }
 
 
-unsigned FrameDescription::GetExpressionCount(Deoptimizer* deoptimizer) {
-  ASSERT_EQ(Code::FUNCTION, kind_);
-  unsigned size = GetFrameSize() - deoptimizer->ComputeFixedSize(GetFunction());
+unsigned FrameDescription::GetExpressionCount() {
+  ASSERT_EQ(StackFrame::JAVA_SCRIPT, type_);
+  unsigned size = GetFrameSize() - ComputeFixedSize();
   return size / kPointerSize;
 }
 
 
-Object* FrameDescription::GetExpression(Deoptimizer* deoptimizer, int index) {
-  ASSERT_EQ(Code::FUNCTION, kind_);
-  unsigned offset = GetOffsetFromSlotIndex(deoptimizer, index);
+Object* FrameDescription::GetExpression(int index) {
+  ASSERT_EQ(StackFrame::JAVA_SCRIPT, type_);
+  unsigned offset = GetOffsetFromSlotIndex(index);
   return reinterpret_cast<Object*>(*GetFrameSlotPointer(offset));
 }
 
@@ -1194,8 +1331,22 @@ Handle<ByteArray> TranslationBuffer::CreateByteArray() {
 }
 
 
-void Translation::BeginFrame(int node_id, int literal_id, unsigned height) {
-  buffer_->Add(FRAME);
+void Translation::BeginConstructStubFrame(int literal_id, unsigned height) {
+  buffer_->Add(CONSTRUCT_STUB_FRAME);
+  buffer_->Add(literal_id);
+  buffer_->Add(height);
+}
+
+
+void Translation::BeginArgumentsAdaptorFrame(int literal_id, unsigned height) {
+  buffer_->Add(ARGUMENTS_ADAPTOR_FRAME);
+  buffer_->Add(literal_id);
+  buffer_->Add(height);
+}
+
+
+void Translation::BeginJSFrame(int node_id, int literal_id, unsigned height) {
+  buffer_->Add(JS_FRAME);
   buffer_->Add(node_id);
   buffer_->Add(literal_id);
   buffer_->Add(height);
@@ -1259,7 +1410,6 @@ int Translation::NumberOfOperandsFor(Opcode opcode) {
     case ARGUMENTS_OBJECT:
     case DUPLICATE:
       return 0;
-    case BEGIN:
     case REGISTER:
     case INT32_REGISTER:
     case DOUBLE_REGISTER:
@@ -1268,7 +1418,11 @@ int Translation::NumberOfOperandsFor(Opcode opcode) {
     case DOUBLE_STACK_SLOT:
     case LITERAL:
       return 1;
-    case FRAME:
+    case BEGIN:
+    case ARGUMENTS_ADAPTOR_FRAME:
+    case CONSTRUCT_STUB_FRAME:
+      return 2;
+    case JS_FRAME:
       return 3;
   }
   UNREACHABLE();
@@ -1282,8 +1436,12 @@ const char* Translation::StringFor(Opcode opcode) {
   switch (opcode) {
     case BEGIN:
       return "BEGIN";
-    case FRAME:
-      return "FRAME";
+    case JS_FRAME:
+      return "JS_FRAME";
+    case ARGUMENTS_ADAPTOR_FRAME:
+      return "ARGUMENTS_ADAPTOR_FRAME";
+    case CONSTRUCT_STUB_FRAME:
+      return "CONSTRUCT_STUB_FRAME";
     case REGISTER:
       return "REGISTER";
     case INT32_REGISTER:
@@ -1337,7 +1495,9 @@ SlotRef SlotRef::ComputeSlotForNextArgument(TranslationIterator* iterator,
 
   switch (opcode) {
     case Translation::BEGIN:
-    case Translation::FRAME:
+    case Translation::JS_FRAME:
+    case Translation::ARGUMENTS_ADAPTOR_FRAME:
+    case Translation::CONSTRUCT_STUB_FRAME:
       // Peeled off before getting here.
       break;
 
@@ -1383,9 +1543,27 @@ SlotRef SlotRef::ComputeSlotForNextArgument(TranslationIterator* iterator,
 }
 
 
-void SlotRef::ComputeSlotMappingForArguments(JavaScriptFrame* frame,
-                                             int inlined_frame_index,
-                                             Vector<SlotRef>* args_slots) {
+void SlotRef::ComputeSlotsForArguments(Vector<SlotRef>* args_slots,
+                                       TranslationIterator* it,
+                                       DeoptimizationInputData* data,
+                                       JavaScriptFrame* frame) {
+  // Process the translation commands for the arguments.
+
+  // Skip the translation command for the receiver.
+  it->Skip(Translation::NumberOfOperandsFor(
+      static_cast<Translation::Opcode>(it->Next())));
+
+  // Compute slots for arguments.
+  for (int i = 0; i < args_slots->length(); ++i) {
+    (*args_slots)[i] = ComputeSlotForNextArgument(it, data, frame);
+  }
+}
+
+
+Vector<SlotRef> SlotRef::ComputeSlotMappingForArguments(
+    JavaScriptFrame* frame,
+    int inlined_jsframe_index,
+    int formal_parameter_count) {
   AssertNoAllocation no_gc;
   int deopt_index = AstNode::kNoNumber;
   DeoptimizationInputData* data =
@@ -1394,51 +1572,81 @@ void SlotRef::ComputeSlotMappingForArguments(JavaScriptFrame* frame,
                          data->TranslationIndex(deopt_index)->value());
   Translation::Opcode opcode = static_cast<Translation::Opcode>(it.Next());
   ASSERT(opcode == Translation::BEGIN);
-  int frame_count = it.Next();
-  USE(frame_count);
-  ASSERT(frame_count > inlined_frame_index);
-  int frames_to_skip = inlined_frame_index;
+  it.Next();  // Drop frame count.
+  int jsframe_count = it.Next();
+  USE(jsframe_count);
+  ASSERT(jsframe_count > inlined_jsframe_index);
+  int jsframes_to_skip = inlined_jsframe_index;
   while (true) {
     opcode = static_cast<Translation::Opcode>(it.Next());
-    // Skip over operands to advance to the next opcode.
-    it.Skip(Translation::NumberOfOperandsFor(opcode));
-    if (opcode == Translation::FRAME) {
-      if (frames_to_skip == 0) {
+    if (opcode == Translation::ARGUMENTS_ADAPTOR_FRAME) {
+      if (jsframes_to_skip == 0) {
+        ASSERT(Translation::NumberOfOperandsFor(opcode) == 2);
+
+        it.Skip(1);  // literal id
+        int height = it.Next();
+
+        // We reached the arguments adaptor frame corresponding to the
+        // inlined function in question.  Number of arguments is height - 1.
+        Vector<SlotRef> args_slots =
+            Vector<SlotRef>::New(height - 1);  // Minus receiver.
+        ComputeSlotsForArguments(&args_slots, &it, data, frame);
+        return args_slots;
+      }
+    } else if (opcode == Translation::JS_FRAME) {
+      if (jsframes_to_skip == 0) {
+        // Skip over operands to advance to the next opcode.
+        it.Skip(Translation::NumberOfOperandsFor(opcode));
+
         // We reached the frame corresponding to the inlined function
         // in question.  Process the translation commands for the
-        // arguments.
-        //
-        // Skip the translation command for the receiver.
-        it.Skip(Translation::NumberOfOperandsFor(
-            static_cast<Translation::Opcode>(it.Next())));
-        // Compute slots for arguments.
-        for (int i = 0; i < args_slots->length(); ++i) {
-          (*args_slots)[i] = ComputeSlotForNextArgument(&it, data, frame);
-        }
-        return;
+        // arguments.  Number of arguments is equal to the number of
+        // format parameter count.
+        Vector<SlotRef> args_slots =
+            Vector<SlotRef>::New(formal_parameter_count);
+        ComputeSlotsForArguments(&args_slots, &it, data, frame);
+        return args_slots;
       }
-      frames_to_skip--;
+      jsframes_to_skip--;
     }
+
+    // Skip over operands to advance to the next opcode.
+    it.Skip(Translation::NumberOfOperandsFor(opcode));
   }
 
   UNREACHABLE();
+  return Vector<SlotRef>();
 }
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
 
-DeoptimizedFrameInfo::DeoptimizedFrameInfo(
-    Deoptimizer* deoptimizer, int frame_index) {
+DeoptimizedFrameInfo::DeoptimizedFrameInfo(Deoptimizer* deoptimizer,
+                                           int frame_index,
+                                           bool has_arguments_adaptor,
+                                           bool has_construct_stub) {
   FrameDescription* output_frame = deoptimizer->output_[frame_index];
-  SetFunction(output_frame->GetFunction());
-  expression_count_ = output_frame->GetExpressionCount(deoptimizer);
+  function_ = output_frame->GetFunction();
+  has_construct_stub_ = has_construct_stub;
+  expression_count_ = output_frame->GetExpressionCount();
+  expression_stack_ = new Object*[expression_count_];
+  // Get the source position using the unoptimized code.
+  Address pc = reinterpret_cast<Address>(output_frame->GetPc());
+  Code* code = Code::cast(Isolate::Current()->heap()->FindCodeObject(pc));
+  source_position_ = code->SourcePosition(pc);
+
+  for (int i = 0; i < expression_count_; i++) {
+    SetExpression(i, output_frame->GetExpression(i));
+  }
+
+  if (has_arguments_adaptor) {
+    output_frame = deoptimizer->output_[frame_index - 1];
+    ASSERT(output_frame->GetFrameType() == StackFrame::ARGUMENTS_ADAPTOR);
+  }
+
   parameters_count_ = output_frame->ComputeParametersCount();
   parameters_ = new Object*[parameters_count_];
   for (int i = 0; i < parameters_count_; i++) {
-    SetParameter(i, output_frame->GetParameter(deoptimizer, i));
-  }
-  expression_stack_ = new Object*[expression_count_];
-  for (int i = 0; i < expression_count_; i++) {
-    SetExpression(i, output_frame->GetExpression(deoptimizer, i));
+    SetParameter(i, output_frame->GetParameter(i));
   }
 }
 
@@ -1447,6 +1655,7 @@ DeoptimizedFrameInfo::~DeoptimizedFrameInfo() {
   delete[] expression_stack_;
   delete[] parameters_;
 }
+
 
 void DeoptimizedFrameInfo::Iterate(ObjectVisitor* v) {
   v->VisitPointer(BitCast<Object**>(&function_));

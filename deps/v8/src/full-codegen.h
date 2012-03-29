@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -77,27 +77,32 @@ class FullCodeGenerator: public AstVisitor {
     TOS_REG
   };
 
-  explicit FullCodeGenerator(MacroAssembler* masm)
+  FullCodeGenerator(MacroAssembler* masm, CompilationInfo* info)
       : masm_(masm),
-        info_(NULL),
-        scope_(NULL),
+        info_(info),
+        scope_(info->scope()),
         nesting_stack_(NULL),
         loop_depth_(0),
-        stack_height_(0),
+        global_count_(0),
         context_(NULL),
-        bailout_entries_(0),
+        bailout_entries_(info->HasDeoptimizationSupport()
+                         ? info->function()->ast_node_count() : 0),
         stack_checks_(2),  // There's always at least one.
-        forward_bailout_stack_(NULL),
-        forward_bailout_pending_(NULL) {
-  }
+        type_feedback_cells_(info->HasDeoptimizationSupport()
+                             ? info->function()->ast_node_count() : 0),
+        ic_total_count_(0),
+        has_self_optimization_header_(false) { }
 
   static bool MakeCode(CompilationInfo* info);
 
-  void Generate(CompilationInfo* info);
-  void PopulateDeoptimizationData(Handle<Code> code);
+  // Returns the platform-specific size in bytes of the self-optimization
+  // header.
+  static int self_optimization_header_size();
 
-  class StateField : public BitField<State, 0, 8> { };
-  class PcField    : public BitField<unsigned, 8, 32-8> { };
+  // Encode state and pc-offset as a BitField<type, start, size>.
+  // Only use 30 bits because we encode the result as a smi.
+  class StateField : public BitField<State, 0, 1> { };
+  class PcField    : public BitField<unsigned, 1, 30-1> { };
 
   static const char* State2String(State state) {
     switch (state) {
@@ -143,11 +148,13 @@ class FullCodeGenerator: public AstVisitor {
       return previous_;
     }
 
- protected:
+   protected:
     MacroAssembler* masm() { return codegen_->masm(); }
 
     FullCodeGenerator* codegen_;
     NestedStatement* previous_;
+
+   private:
     DISALLOW_COPY_AND_ASSIGN(NestedStatement);
   };
 
@@ -276,27 +283,8 @@ class FullCodeGenerator: public AstVisitor {
     }
   };
 
-  // The forward bailout stack keeps track of the expressions that can
-  // bail out to just before the control flow is split in a child
-  // node. The stack elements are linked together through the parent
-  // link when visiting expressions in test contexts after requesting
-  // bailout in child forwarding.
-  class ForwardBailoutStack BASE_EMBEDDED {
-   public:
-    ForwardBailoutStack(Expression* expr, ForwardBailoutStack* parent)
-        : expr_(expr), parent_(parent) { }
-
-    Expression* expr() const { return expr_; }
-    ForwardBailoutStack* parent() const { return parent_; }
-
-   private:
-    Expression* const expr_;
-    ForwardBailoutStack* const parent_;
-  };
-
   // Type of a member function that generates inline code for a native function.
-  typedef void (FullCodeGenerator::*InlineFunctionGenerator)
-      (ZoneList<Expression*>*);
+  typedef void (FullCodeGenerator::*InlineFunctionGenerator)(CallRuntime* expr);
 
   static const InlineFunctionGenerator kInlineFunctionGenerators[];
 
@@ -357,23 +345,22 @@ class FullCodeGenerator: public AstVisitor {
   // need the write barrier if location is CONTEXT.
   MemOperand VarOperand(Variable* var, Register scratch);
 
-  // Forward the bailout responsibility for the given expression to
-  // the next child visited (which must be in a test context).
-  void ForwardBailoutToChild(Expression* expr);
-
   void VisitForEffect(Expression* expr) {
     EffectContext context(this);
-    VisitInCurrentContext(expr);
+    Visit(expr);
+    PrepareForBailout(expr, NO_REGISTERS);
   }
 
   void VisitForAccumulatorValue(Expression* expr) {
     AccumulatorValueContext context(this);
-    VisitInCurrentContext(expr);
+    Visit(expr);
+    PrepareForBailout(expr, TOS_REG);
   }
 
   void VisitForStackValue(Expression* expr) {
     StackValueContext context(this);
-    VisitInCurrentContext(expr);
+    Visit(expr);
+    PrepareForBailout(expr, NO_REGISTERS);
   }
 
   void VisitForControl(Expression* expr,
@@ -381,8 +368,13 @@ class FullCodeGenerator: public AstVisitor {
                        Label* if_false,
                        Label* fall_through) {
     TestContext context(this, expr, if_true, if_false, fall_through);
-    VisitInCurrentContext(expr);
+    Visit(expr);
+    // For test contexts, we prepare for bailout before branching, not at
+    // the end of the entire expression.  This happens as part of visiting
+    // the expression.
   }
+
+  void VisitInDuplicateContext(Expression* expr);
 
   void VisitDeclarations(ZoneList<Declaration*>* declarations);
   void DeclareGlobals(Handle<FixedArray> pairs);
@@ -391,29 +383,26 @@ class FullCodeGenerator: public AstVisitor {
   // Try to perform a comparison as a fast inlined literal compare if
   // the operands allow it.  Returns true if the compare operations
   // has been matched and all code generated; false otherwise.
-  bool TryLiteralCompare(CompareOperation* compare,
-                         Label* if_true,
-                         Label* if_false,
-                         Label* fall_through);
+  bool TryLiteralCompare(CompareOperation* compare);
 
   // Platform-specific code for comparing the type of a value with
   // a given literal string.
   void EmitLiteralCompareTypeof(Expression* expr,
-                                Handle<String> check,
-                                Label* if_true,
-                                Label* if_false,
-                                Label* fall_through);
+                                Expression* sub_expr,
+                                Handle<String> check);
 
-  // Platform-specific code for strict equality comparison with
-  // the undefined value.
-  void EmitLiteralCompareUndefined(Expression* expr,
-                                   Label* if_true,
-                                   Label* if_false,
-                                   Label* fall_through);
+  // Platform-specific code for equality comparison with a nil-like value.
+  void EmitLiteralCompareNil(CompareOperation* expr,
+                             Expression* sub_expr,
+                             NilValue nil);
 
   // Bailout support.
   void PrepareForBailout(Expression* node, State state);
-  void PrepareForBailoutForId(int id, State state);
+  void PrepareForBailoutForId(unsigned id, State state);
+
+  // Cache cell support.  This associates AST ids with global property cells
+  // that will be cleared during GC and collected by the type-feedback oracle.
+  void RecordTypeFeedbackCell(unsigned id, Handle<JSGlobalPropertyCell> cell);
 
   // Record a call's return site offset, used to rebuild the frame if the
   // called function was inlined at the site.
@@ -424,26 +413,32 @@ class FullCodeGenerator: public AstVisitor {
   // canonical JS true value so we will insert a (dead) test against true at
   // the actual bailout target from the optimized code. If not
   // should_normalize, the true and false labels are ignored.
-  void PrepareForBailoutBeforeSplit(State state,
+  void PrepareForBailoutBeforeSplit(Expression* expr,
                                     bool should_normalize,
                                     Label* if_true,
                                     Label* if_false);
 
   // Platform-specific code for a variable, constant, or function
   // declaration.  Functions have an initial value.
+  // Increments global_count_ for unallocated variables.
   void EmitDeclaration(VariableProxy* proxy,
-                       Variable::Mode mode,
-                       FunctionLiteral* function,
-                       int* global_count);
+                       VariableMode mode,
+                       FunctionLiteral* function);
 
   // Platform-specific code for checking the stack limit at the back edge of
   // a loop.
-  void EmitStackCheck(IterationStatement* stmt);
+  // This is meant to be called at loop back edges, |back_edge_target| is
+  // the jump target of the back edge and is used to approximate the amount
+  // of code inside the loop.
+  void EmitStackCheck(IterationStatement* stmt, Label* back_edge_target);
   // Record the OSR AST id corresponding to a stack check in the code.
-  void RecordStackCheck(int osr_ast_id);
+  void RecordStackCheck(unsigned osr_ast_id);
   // Emit a table of stack check ids and pcs into the code stream.  Return
   // the offset of the start of the table.
   unsigned EmitStackCheckTable();
+
+  void EmitProfilingCounterDecrement(int delta);
+  void EmitProfilingCounterReset();
 
   // Platform-specific return sequence
   void EmitReturnSequence();
@@ -459,7 +454,7 @@ class FullCodeGenerator: public AstVisitor {
   void EmitInlineRuntimeCall(CallRuntime* expr);
 
 #define EMIT_INLINE_RUNTIME_CALL(name, x, y) \
-  void Emit##name(ZoneList<Expression*>* arguments);
+  void Emit##name(CallRuntime* expr);
   INLINE_FUNCTION_LIST(EMIT_INLINE_RUNTIME_CALL)
   INLINE_RUNTIME_FUNCTION_LIST(EMIT_INLINE_RUNTIME_CALL)
 #undef EMIT_INLINE_RUNTIME_CALL
@@ -475,13 +470,10 @@ class FullCodeGenerator: public AstVisitor {
                                  Label* done);
   void EmitVariableLoad(VariableProxy* proxy);
 
-  enum ResolveEvalFlag {
-    SKIP_CONTEXT_LOOKUP,
-    PERFORM_CONTEXT_LOOKUP
-  };
+  void EmitAccessor(Expression* expression);
 
   // Expects the arguments and the function already pushed.
-  void EmitResolvePossiblyDirectEval(ResolveEvalFlag flag, int arg_count);
+  void EmitResolvePossiblyDirectEval(int arg_count);
 
   // Platform-specific support for allocating a new closure based on
   // the given function info.
@@ -513,7 +505,7 @@ class FullCodeGenerator: public AstVisitor {
 
   // Assign to the given expression as if via '='. The right-hand-side value
   // is expected in the accumulator.
-  void EmitAssignment(Expression* expr, int bailout_ast_id);
+  void EmitAssignment(Expression* expr);
 
   // Complete a variable assignment.  The right-hand-side value is expected
   // in the accumulator.
@@ -528,6 +520,10 @@ class FullCodeGenerator: public AstVisitor {
   // expected on top of the stack and the right-hand-side value in the
   // accumulator.
   void EmitKeyedPropertyAssignment(Assignment* expr);
+
+  void CallIC(Handle<Code> code,
+              RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
+              unsigned ast_id = kNoASTId);
 
   void SetFunctionPosition(FunctionLiteral* fun);
   void SetReturnPosition(FunctionLiteral* fun);
@@ -548,35 +544,6 @@ class FullCodeGenerator: public AstVisitor {
     loop_depth_--;
   }
 
-#if defined(V8_TARGET_ARCH_IA32)
-  int stack_height() { return stack_height_; }
-  void set_stack_height(int depth) { stack_height_ = depth; }
-  void increment_stack_height() { stack_height_++; }
-  void increment_stack_height(int delta) { stack_height_ += delta; }
-  void decrement_stack_height() {
-    if (FLAG_verify_stack_height) {
-      ASSERT(stack_height_ > 0);
-    }
-    stack_height_--;
-  }
-  void decrement_stack_height(int delta) {
-    stack_height_-= delta;
-    if (FLAG_verify_stack_height) {
-      ASSERT(stack_height_ >= 0);
-    }
-  }
-  // Call this function only if FLAG_verify_stack_height is true.
-  void verify_stack_height();  // Generates a runtime check of esp - ebp.
-#else
-  int stack_height() { return 0; }
-  void set_stack_height(int depth) {}
-  void increment_stack_height() {}
-  void increment_stack_height(int delta) {}
-  void decrement_stack_height() {}
-  void decrement_stack_height(int delta) {}
-  void verify_stack_height() {}
-#endif  // V8_TARGET_ARCH_IA32
-
   MacroAssembler* masm() { return masm_; }
 
   class ExpressionContext;
@@ -586,9 +553,11 @@ class FullCodeGenerator: public AstVisitor {
   Handle<Script> script() { return info_->script(); }
   bool is_eval() { return info_->is_eval(); }
   bool is_native() { return info_->is_native(); }
-  bool is_strict_mode() { return function()->strict_mode(); }
-  StrictModeFlag strict_mode_flag() {
-    return is_strict_mode() ? kStrictMode : kNonStrictMode;
+  bool is_classic_mode() {
+    return language_mode() == CLASSIC_MODE;
+  }
+  LanguageMode language_mode() {
+    return function()->language_mode();
   }
   FunctionLiteral* function() { return info_->function(); }
   Scope* scope() { return scope_; }
@@ -618,13 +587,24 @@ class FullCodeGenerator: public AstVisitor {
   void VisitComma(BinaryOperation* expr);
   void VisitLogicalExpression(BinaryOperation* expr);
   void VisitArithmeticExpression(BinaryOperation* expr);
-  void VisitInCurrentContext(Expression* expr);
 
   void VisitForTypeofValue(Expression* expr);
+
+  void Generate();
+  void PopulateDeoptimizationData(Handle<Code> code);
+  void PopulateTypeFeedbackInfo(Handle<Code> code);
+  void PopulateTypeFeedbackCells(Handle<Code> code);
+
+  Handle<FixedArray> handler_table() { return handler_table_; }
 
   struct BailoutEntry {
     unsigned id;
     unsigned pc_and_state;
+  };
+
+  struct TypeFeedbackCellEntry {
+    unsigned ast_id;
+    Handle<JSGlobalPropertyCell> cell;
   };
 
 
@@ -637,10 +617,6 @@ class FullCodeGenerator: public AstVisitor {
 
     virtual ~ExpressionContext() {
       codegen_->set_new_context(old_);
-      if (FLAG_verify_stack_height) {
-        ASSERT_EQ(expected_stack_height_, codegen()->stack_height());
-        codegen()->verify_stack_height();
-      }
     }
 
     Isolate* isolate() const { return codegen_->isolate(); }
@@ -678,8 +654,8 @@ class FullCodeGenerator: public AstVisitor {
                              Label** if_false,
                              Label** fall_through) const = 0;
 
-    // Returns true if we are evaluating only for side effects (ie if the result
-    // will be discarded).
+    // Returns true if we are evaluating only for side effects (i.e. if the
+    // result will be discarded).
     virtual bool IsEffect() const { return false; }
 
     // Returns true if we are evaluating for the value (in accu/on stack).
@@ -694,7 +670,6 @@ class FullCodeGenerator: public AstVisitor {
     FullCodeGenerator* codegen() const { return codegen_; }
     MacroAssembler* masm() const { return masm_; }
     MacroAssembler* masm_;
-    int expected_stack_height_;  // The expected stack height esp - ebp on exit.
 
    private:
     const ExpressionContext* old_;
@@ -704,9 +679,7 @@ class FullCodeGenerator: public AstVisitor {
   class AccumulatorValueContext : public ExpressionContext {
    public:
     explicit AccumulatorValueContext(FullCodeGenerator* codegen)
-        : ExpressionContext(codegen) {
-      expected_stack_height_ = codegen->stack_height();
-    }
+        : ExpressionContext(codegen) { }
 
     virtual void Plug(bool flag) const;
     virtual void Plug(Register reg) const;
@@ -727,9 +700,7 @@ class FullCodeGenerator: public AstVisitor {
   class StackValueContext : public ExpressionContext {
    public:
     explicit StackValueContext(FullCodeGenerator* codegen)
-        : ExpressionContext(codegen) {
-      expected_stack_height_ = codegen->stack_height() + 1;
-    }
+        : ExpressionContext(codegen) { }
 
     virtual void Plug(bool flag) const;
     virtual void Plug(Register reg) const;
@@ -758,9 +729,7 @@ class FullCodeGenerator: public AstVisitor {
           condition_(condition),
           true_label_(true_label),
           false_label_(false_label),
-          fall_through_(fall_through) {
-      expected_stack_height_ = codegen->stack_height();
-    }
+          fall_through_(fall_through) { }
 
     static const TestContext* cast(const ExpressionContext* context) {
       ASSERT(context->IsTest());
@@ -797,10 +766,7 @@ class FullCodeGenerator: public AstVisitor {
   class EffectContext : public ExpressionContext {
    public:
     explicit EffectContext(FullCodeGenerator* codegen)
-        : ExpressionContext(codegen) {
-      expected_stack_height_ = codegen->stack_height();
-    }
-
+        : ExpressionContext(codegen) { }
 
     virtual void Plug(bool flag) const;
     virtual void Plug(Register reg) const;
@@ -824,16 +790,41 @@ class FullCodeGenerator: public AstVisitor {
   Label return_label_;
   NestedStatement* nesting_stack_;
   int loop_depth_;
-  int stack_height_;
+  int global_count_;
   const ExpressionContext* context_;
   ZoneList<BailoutEntry> bailout_entries_;
   ZoneList<BailoutEntry> stack_checks_;
-  ForwardBailoutStack* forward_bailout_stack_;
-  ForwardBailoutStack* forward_bailout_pending_;
+  ZoneList<TypeFeedbackCellEntry> type_feedback_cells_;
+  int ic_total_count_;
+  bool has_self_optimization_header_;
+  Handle<FixedArray> handler_table_;
+  Handle<JSGlobalPropertyCell> profiling_counter_;
 
   friend class NestedStatement;
 
   DISALLOW_COPY_AND_ASSIGN(FullCodeGenerator);
+};
+
+
+// A map from property names to getter/setter pairs allocated in the zone.
+class AccessorTable: public TemplateHashMap<Literal,
+                                            ObjectLiteral::Accessors,
+                                            ZoneListAllocationPolicy> {
+ public:
+  explicit AccessorTable(Zone* zone) :
+      TemplateHashMap<Literal,
+                      ObjectLiteral::Accessors,
+                      ZoneListAllocationPolicy>(Literal::Match),
+      zone_(zone) { }
+
+  Iterator lookup(Literal* literal) {
+    Iterator it = find(literal, true);
+    if (it->second == NULL) it->second = new(zone_) ObjectLiteral::Accessors();
+    return it;
+  }
+
+ private:
+  Zone* zone_;
 };
 
 

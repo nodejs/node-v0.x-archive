@@ -87,22 +87,21 @@ namespace v8 {
 namespace internal {
 
 // Constant pool marker.
-static const int kConstantPoolMarkerMask = 0xffe00000;
-static const int kConstantPoolMarker = 0x0c000000;
-static const int kConstantPoolLengthMask = 0x001ffff;
+const int kConstantPoolMarkerMask = 0xffe00000;
+const int kConstantPoolMarker = 0x0c000000;
+const int kConstantPoolLengthMask = 0x001ffff;
 
 // Number of registers in normal ARM mode.
-static const int kNumRegisters = 16;
+const int kNumRegisters = 16;
 
 // VFP support.
-static const int kNumVFPSingleRegisters = 32;
-static const int kNumVFPDoubleRegisters = 16;
-static const int kNumVFPRegisters =
-    kNumVFPSingleRegisters + kNumVFPDoubleRegisters;
+const int kNumVFPSingleRegisters = 32;
+const int kNumVFPDoubleRegisters = 16;
+const int kNumVFPRegisters = kNumVFPSingleRegisters + kNumVFPDoubleRegisters;
 
 // PC is register 15.
-static const int kPCRegister = 15;
-static const int kNoRegister = -1;
+const int kPCRegister = 15;
+const int kNoRegister = -1;
 
 // -----------------------------------------------------------------------------
 // Conditions.
@@ -371,9 +370,9 @@ enum SoftwareInterruptCodes {
   // stop
   kStopCode = 1 << 23
 };
-static const uint32_t kStopCodeMask = kStopCode - 1;
-static const uint32_t kMaxStopCode = kStopCode - 1;
-static const int32_t  kDefaultStopCode = -1;
+const uint32_t kStopCodeMask = kStopCode - 1;
+const uint32_t kMaxStopCode = kStopCode - 1;
+const int32_t  kDefaultStopCode = -1;
 
 
 // Type of VFP register. Determines register encoding.
@@ -391,17 +390,17 @@ enum VFPConversionMode {
 
 // This mask does not include the "inexact" or "input denormal" cumulative
 // exceptions flags, because we usually don't want to check for it.
-static const uint32_t kVFPExceptionMask = 0xf;
-static const uint32_t kVFPInvalidOpExceptionBit = 1 << 0;
-static const uint32_t kVFPOverflowExceptionBit = 1 << 2;
-static const uint32_t kVFPUnderflowExceptionBit = 1 << 3;
-static const uint32_t kVFPInexactExceptionBit = 1 << 4;
-static const uint32_t kVFPFlushToZeroMask = 1 << 24;
+const uint32_t kVFPExceptionMask = 0xf;
+const uint32_t kVFPInvalidOpExceptionBit = 1 << 0;
+const uint32_t kVFPOverflowExceptionBit = 1 << 2;
+const uint32_t kVFPUnderflowExceptionBit = 1 << 3;
+const uint32_t kVFPInexactExceptionBit = 1 << 4;
+const uint32_t kVFPFlushToZeroMask = 1 << 24;
 
-static const uint32_t kVFPNConditionFlagBit = 1 << 31;
-static const uint32_t kVFPZConditionFlagBit = 1 << 30;
-static const uint32_t kVFPCConditionFlagBit = 1 << 29;
-static const uint32_t kVFPVConditionFlagBit = 1 << 28;
+const uint32_t kVFPNConditionFlagBit = 1 << 31;
+const uint32_t kVFPZConditionFlagBit = 1 << 30;
+const uint32_t kVFPCConditionFlagBit = 1 << 29;
+const uint32_t kVFPVConditionFlagBit = 1 << 28;
 
 
 // VFP rounding modes. See ARM DDI 0406B Page A2-29.
@@ -418,7 +417,7 @@ enum VFPRoundingMode {
   kRoundToZero = RZ
 };
 
-static const uint32_t kVFPRoundingModeMask = 3 << 22;
+const uint32_t kVFPRoundingModeMask = 3 << 22;
 
 enum CheckForInexactConversion {
   kCheckForInexactConversion,
@@ -574,13 +573,13 @@ class Instruction {
   // The naming of these accessor corresponds to figure A3-1.
   //
   // Two kind of accessors are declared:
-  // - <Name>Field() will return the raw field, ie the field's bits at their
+  // - <Name>Field() will return the raw field, i.e. the field's bits at their
   //   original place in the instruction encoding.
-  //   eg. if instr is the 'addgt r0, r1, r2' instruction, encoded as 0xC0810002
-  //   ConditionField(instr) will return 0xC0000000.
+  //   e.g. if instr is the 'addgt r0, r1, r2' instruction, encoded as
+  //   0xC0810002 ConditionField(instr) will return 0xC0000000.
   // - <Name>Value() will return the field value, shifted back to bit 0.
-  //   eg. if instr is the 'addgt r0, r1, r2' instruction, encoded as 0xC0810002
-  //   ConditionField(instr) will return 0xC.
+  //   e.g. if instr is the 'addgt r0, r1, r2' instruction, encoded as
+  //   0xC0810002 ConditionField(instr) will return 0xC.
 
 
   // Generally applicable fields

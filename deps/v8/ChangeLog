@@ -1,3 +1,647 @@
+2012-03-23: Version 3.9.24
+
+        Activated count-based profiler for ARM.
+
+        Fixed use of proxies as f.prototype properties. (issue 2021)
+
+        Enabled snapshots on MIPS.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-21: Version 3.9.23
+
+        Use correct arguments adaptation environment when inlining function
+        containing arguments. (Issue 2014)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-20: Version 3.9.22
+
+        Enabled count-based profiler by default.
+
+        Implemented a hash based look-up to speed up address checks
+        in large object space (issue 853).
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-19: Version 3.9.21
+
+        Fixed push-to-trunk script (and re-push).
+
+        Added API call that identifies strings that are guaranteed only to
+        contain ASCII characters.
+
+
+2012-03-19: Version 3.9.20
+
+        Fixed declarations escaping global strict eval. (Issue 1624)
+
+        Fixed wrapping of receiver for non-strict callbacks. (Issue 1973)
+
+        Fixed function declarations overwriting read-only global properties.
+        (Chromium issue 115452)
+
+        Fixed --use-strict flag in combination with --harmony[-scoping].
+
+        Debugger: naive implementation of "step into Function.prototype.bind".
+
+        Debugger: added ability to set script source from within OnBeforeCompile
+
+        Added flag to always call DebugBreak on abort.
+
+        Re-enabled constructor inlining and inline === comparison with boolean
+        constants. (Issue 2009)
+
+        Don't use an explicit s0 in ClampDoubleToUint8. (Issue 2004)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-14: Version 3.9.19
+
+        Ensure there is a smi check of the receiver for global load and call
+        ICs (Chromium issue 117794).
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-13: Version 3.9.18
+
+        Ensure consistency of Math.sqrt on Intel platforms.
+
+        Remove static initializers in v8. (issue 1859)
+
+        Add explicit dependency on v8_base in the GYP-based build.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-12: Version 3.9.17
+
+        Fixed VFP detection through compiler defines. (issue 1996)
+
+        Add Code-related fields to postmortem metadata.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-09: Version 3.9.16
+
+        Added basic interface inference for modules (behind the --harmony flag).
+
+        Added Object.is, Number.isFinite, Number.isNaN.
+
+        Updated the Unicode tables to Unicode version 6.1.0.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-06: Version 3.9.15
+
+        Fix the heap profiler crash caused by memory layout changes between
+        passes.
+
+        Fix Error.prototype.toString to throw TypeError. (issue 1980)
+
+        Fix double-rounding in strtod for MinGW. (issue 1062)
+
+        Fix corrupted snapshot serializaton on ia32. (Chromium issue v8/1985)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-03-01: Version 3.9.14
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-29: Version 3.9.13
+
+        Added code kind check before preparing for OSR. (issue 1900, 115073)
+
+        Fixed issue 1802: Pass zone explicitly to zone-allocation on x64 and
+        ARM.
+
+        Ported string construct stub to x64. (issue 849)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-28: Version 3.9.12
+
+        Fixed the negative lookup stub to handle deleted entries in a
+        dictionary. (issue 1964)
+
+        Added a new API where the host can supply a callback function. The
+        callback function can resolve the location of a return address on stack
+        to the location where a return-address rewriting profiler stashed the
+        original return address.
+
+        Fixed Chromium issue http://crbug.com/115646: When compiling for-in
+        pass correct context value to the increment instruction.
+
+        Fixed issue 1853: Update breakpoints set with partial file name after
+        compile.
+
+
+2012-02-27: Version 3.9.11
+
+        Made 'module' a context-sensitive keyword (V8 issue 1957).
+
+
+2012-02-24: Version 3.9.10
+
+        Fixed V8 issues 1322, 1772 and 1969.
+
+        Conformance improvements.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-23: Version 3.9.9
+
+        Supported fast case for-in in Crankshaft.
+
+        Sped up heap snapshot serialization and dominators construction.
+
+        Randomized allocation addresses on windows. (Chromium issue 115151)
+
+        Fixed compilation with MinGW-w64. (issue 1943)
+
+        Fixed incorrect value of assignments to non-extensible properties.
+
+        Fixed a crash bug in generated code on ia32.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-21: Version 3.9.8
+
+        Fixed memory leak and missing #include in StartupDataDecompressor
+        (issue 1960).
+
+        Renamed static methods to avoid shadowing virtual methods and fix Clang
+        C++11 compile error.
+
+        Fixed sequence of element access in array builtins (issue 1790).
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-16: Version 3.9.7
+
+        Fixed V8 issues 1322, 1878, 1942, 1945 and Chromium issue 113924.
+
+        Fixed GCC-4.7 warnings.
+
+        Added Navier-Stokes benchmark.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-14: Version 3.9.6
+
+        Fixed template-related linker error. (issue 1936)
+
+        Allowed inlining of functions containing object literals.  (issue 1322)
+
+        Added --call-graph-size option to tickprocessor.  (issue 1937)
+
+        Heap Snapshot maximum size limit is too low for really big apps. At the
+        moment the limit is 256MB.  (Chromium issue 113015)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-09: Version 3.9.5
+
+        Removed unused command line flags.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-08: Version 3.9.4
+
+        Properly initialize element-transitioning array literals on ARM.
+        (issue 1930)
+
+        Bug fixes on all platforms.
+
+
+2012-02-07: Version 3.9.3
+
+        When rethrowing an exception, print the stack trace of its original
+        site instead of rethrow site (Chromium issue 60240).
+
+        Increased size of small stacks from 32k to 64k to avoid hitting limits
+        in Chromium (Chromium issue 112843).
+
+
+2012-02-06: Version 3.9.2
+
+        Added timestamp to --trace-gc output. (issue 1932)
+
+        Heap profiler reports implicit references.
+
+        Optionally export metadata with libv8 to enable debuggers to inspect V8
+        state.
+
+
+2012-02-02: Version 3.9.1
+
+        Fixed memory leak in NativeObjectsExplorer::FindOrAddGroupInfo
+        (Chromium issue 112315).
+
+        Fixed a crash in dev tools (Chromium issue 107996).
+
+        Added 'dependencies_traverse': 1 to v8 GYP target.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-02-01: Version 3.9.0
+
+        Reduced memory use immediately after starting V8.
+
+        Stability fixes and performance improvements on all platforms.
+
+
+2012-01-26: Version 3.8.9
+
+        Flush number string cache on GC (issue 1605).
+
+        Provide access to function inferred name with
+	v8::Function::GetInferredName in V8 public API.
+
+        Fix building with Clang (issue 1912).
+
+        Reduce the space used by the stack for the profiling thread.
+
+        Fix misleading documentation of v8::Locker (issue 542).
+
+        Introduce readbinary function in d8 to read binary files.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-01-23: Version 3.8.8
+
+        Limited number of loop iterations in Heap::ReserveSpace
+        (Chromium issue 99027).
+
+        Fixed solaris build (VirtualMemory) (issue 1761).
+
+        Fixed strict vs. non-strict handling of function proxies in
+        higher-order array and string methods.
+
+        Enabled asynchronous remote debugging with d8 (issue 1691).
+
+        Stability and performance improvements on all platforms.
+
+
+2012-01-19: Version 3.8.7
+
+        Ensure that LRandom restores rsi after call to the C function on x64.
+        (Chromium issue http://crbug.com/110509)
+
+        Fixing include issues on *bsd when building with scons.
+        (issue 1897)
+
+        Provide a switch to specify -fno-strict-aliasing
+        (issue 1887)
+
+        Move WIN32 define from standalone.gypi to common.gypi
+        (issue 1760)
+
+        Fix corner-case in heap size estimation.
+        (issue 1893)
+
+        Fix and enable NEW_NON_STRICT_FAST ArgumentsAccess stub on x64.
+        (issue 1903)
+
+        Performance improvements and bug fixes.
+
+
+2012-01-16: Version 3.8.6
+
+        Add primitive WebGL array support to d8.
+
+        Improve heap size estimation (issue 1893).
+
+        Hash collision DOS workaround extended from string keys
+        to numeric keys.
+
+        Provide an API for iterating through all external strings referenced
+        from the JS heap.
+
+        Adjust position recorded for call expressions. http://crbug.com/109195
+
+        Fix GC crash related to instanceof. http://crbug.com/109448
+
+        Performance improvements and bug fixes.
+
+
+2012-01-05: Version 3.8.5
+
+        Fix broken test that assumes that no GC can clear the regexp cache (GC
+        can happen at any time due to Crankshaft).
+
+        Fix handling of bogus receivers for Harmony collections. (issue 1884)
+
+        Add netbsd support to gyp build.
+
+        Determine page size at runtime on posix platforms.
+
+        Ensure that store buffer filtering hash sets are cleared after
+        StoreBuffer::Filter.
+
+        Randomize the seed used for string hashing.  This helps guard against
+        CPU-eating DOS attacks against node.js servers.  Based on code from
+        Bert Belder.  This version only solves the issue for those that compile
+        V8 themselves or those that do not use snapshots.  A snapshot-based
+        precompiled V8 will still have predictable string hash codes.
+
+        Implement callback when script finishes running in V8 API.
+
+        Improve performance of Math.min and Math.max for the case of two
+        arguments. (issue 1325)
+
+
+2012-01-02: Version 3.8.4
+
+        Performance improvements for large Smi-only arrays.
+
+        Fixed InternalArrays construction. (issue 1878)
+
+
+2011-12-27: Version 3.8.3
+
+        Avoid embedding new space objects into code objects in the lithium gap
+        resolver. (chromium:108296)
+
+        Bug fixes and performance optimizations on all platforms.
+
+
+2011-12-21: Version 3.8.2
+
+        Add max optimization flag to v8 gyp build to ensure V8 is always built 
+        fully optimized in Chrome.
+
+        MIPS: Bring MIPS to parity with other platforms.
+
+        Optimizations and stability improvements on all platforms.
+
+
+2011-12-19: Version 3.8.1
+
+        Fixed GCC 4.7 warnings. Patch from Tobias Burnus.
+
+        Stability improvements on all platforms.
+
+
+2011-12-13: Version 3.8.0
+
+        Fixed handling of arrays in DefineOwnProperty. (issue 1756)
+
+        Sync parser and preparser on do-while and return statements. 
+        (issue 1856)
+
+        Fixed another corner case for DefineOwnProperty on arrays (issue 1756).
+
+        Stability and performance improvements on all platforms.
+
+
+2011-12-01: Version 3.7.12
+
+        Increase tick interval for the android platform.
+
+        Fix a bug in the register allocator. (chromium:105112)
+
+        Fix handling of recompiling code. (chromium:105375, v8:1782)
+
+        Start incremental marking on idle notification. (v8:1458)
+
+        Build fixes for various platforms.
+
+        Various performance improvements.
+
+
+2011-11-29: Version 3.7.11
+
+        Fixed bug when generating padding to ensure space for lazy
+        deoptimization.
+        (issue 1846)
+
+        Further reduced pause times due to GC.
+
+        Stability and performance improvements on all platforms.
+
+
+2011-11-23: Version 3.7.10
+
+        Set maximum length of FixedArray in terms of elements instead an
+        absolute number of bytes.
+        (Chromium issue 103103)
+
+        Stability and performance improvements on all platforms.
+
+
+2011-11-21: Version 3.7.9
+
+        Removed exit-time destructors.
+
+        Stability and performance improvements on all platforms.
+
+
+2011-11-17: Version 3.7.8
+
+        Removed hidden prototype from builtins, i.e., deleting an overridden
+        function on builtins will not make the original function reappear.
+
+        Added NetBSD support for scons build.
+
+        Performance improvements on all platforms.
+
+
+2011-11-14: Version 3.7.7
+
+        Fix missing fast property accessors in heap snapshots.
+        (issue 1818)
+
+
+2011-11-11: Version 3.7.6
+
+        Fixed filtering of store buffer for large object pages.
+        (issue 1817)
+
+        Fixed generated hash function on all platforms.
+        (issue 1808)
+
+        Fixed Heap::Shrink to ensure that it does not free pages that are
+        still in use.
+        (Chromium issue 100414)
+
+        Stability and performance improvements on all platforms.
+
+
+2011-11-10: Version 3.7.5
+
+        Added initial gyp infrastructure for MIPS.
+
+        Implemented performance improvements to the incremental garbage
+        collector.
+
+        Added optimizations and stability improvements on all platforms.
+
+
+2011-11-07: Version 3.7.4
+
+        Proper "libv8.so.3.7.4" SONAME for Linux shared library (issue 1786).
+
+        Fix Harmony sets and maps to allow null and undefined as keys
+        (still hidden behind --harmony flag) (issue 1622).
+
+        Implement VirtualMemory on FreeBSD to fix build (issue 1807).
+
+        Enable VFP instructions for Android.
+
+        Fix error handling in Date.prototype.toISOString (issue 1792).
+
+        Bug fixes and performance improvements for all platforms.
+
+        Not officially supported but noteworthy: Crankshaft for MIPS :-)
+
+
+2011-10-28: Version 3.7.3
+
+        Slight deoptimization as a workaround for issue with jslint: Issue
+        1789.
+
+
+2011-10-27: Version 3.7.2
+
+        Fix bug in deoptimization.  Known issue with jslint: Issue 1789.
+
+
+2011-10-26: Version 3.7.1
+
+        Achieved 33% speedup in debug-mode tests.
+
+        Removed special casing of calls to RegExp test and exec methods with no
+        argument.  Now matches new JSC behaviour.  crbug.com/75740.
+
+        Return the empty string on cyclic references in toString (ES5
+        conformance).
+
+        Fixed bug triggered by JSBeautifier.  crbug.com/100409.
+
+        Made Math.random state per-context instead of per-process (issue 864).
+
+        Fixed stack traces to skip native functions.
+
+        Make snapshots (new contexts) smaller and faster.
+
+        Fixed handling of Function.apply for non-array arguments.
+
+        Fixed evaluation order in defineProperties to match FireFox.
+
+        Fixed handling of non-object receivers for array builtins,
+        crbug.com/100702.
+
+        Multiple fixes to improve compliance with test262.
+
+        Fixed compatibility with older Android releases.
+
+        Fixed compilation with gcc-4.5.3.
+
+        Improved performance of WriteUtf8, issue 1665.
+
+        Made native syntax an early error in the preparser.
+
+        Fixed issues 793 and 893 relating to Function.prototype.bind.
+
+        Improved let, const, Set and Map support and other Harmony features
+        (behind the --harmony flag).
+
+        Changed evaluation order for > and <= to match ES5 instead of ES3.
+
+        Bug fixes and performance improvements on all platforms.
+
+
+2011-10-13: Version 3.7.0
+
+        Fixed array handling for Object.defineOwnProperty (ES5 conformance).
+
+        Fixed issue 1757 (string slices of external strings).
+
+        Fixed issue 1759 (ARM).
+
+        Added flag --noclever-optimizations to disable some things that
+        caused trouble in the past.
+
+        Added flag --stress-compaction for testing.
+
+        Added flag --harmony to activate all experimental Harmony features.
+
+
+2011-10-10: Version 3.6.6
+
+        Added a GC pause visualization tool.
+
+        Added presubmit=no and werror=no flags to Makefile.
+
+        ES5/Test262 conformance improvements.
+
+        Fixed compilation issues with GCC 4.5.x (issue 1743).
+
+        Bug fixes and performance improvements on all platforms.
+
+
+2011-10-05: Version 3.6.5
+
+        New incremental garbage collector.
+
+        Removed the hard heap size limit (soft heap size limit is still
+        700/1400Mbytes by default).
+
+        Implemented ES5 generic Array.prototype.toString (Issue 1361).
+
+        V8 now allows surrogate pair codes in decodeURIComponent (Issue 1415).
+
+        Fixed x64 RegExp start-of-string bug (Issues 1746, 1748).
+
+        Fixed propertyIsEnumerable for numeric properties (Issue 1692).
+
+        Fixed the MinGW and Windows 2000 builds.
+
+        Fixed "Prototype chain is not searched if named property handler does
+        not set a property" (Issue 1636).
+
+        Made the RegExp.prototype object be a RegExp object (Issue 1217).
+
+        Disallowed future reserved words as labels in strict mode.
+
+        Fixed string split to correctly coerce the separator to a string
+        (Issue 1711).
+
+        API: Added an optional source length field to the Extension
+        constructor.
+
+        API: Added Debug::DisableAgent to match existing Debug::EnableAgent
+        (Issue 1573).
+
+        Added "native" target to Makefile for the benefit of Linux distros.
+
+        Fixed: debugger stops stepping outside evaluate (Issue 1639).
+
+        More work on ES-Harmony proxies.  Still hidden behind a flag.
+
+        Bug fixes and performance improvements on all platforms.
+
+
 2011-09-15: Version 3.6.4
 
         Fixed d8's broken readline history.
@@ -194,7 +838,7 @@
 
         Fix the debugger for strict-mode functions. (Chromium issue 89236)
 
-        Add GetPropertyAttribute method for Object in the API. (Patch by 
+        Add GetPropertyAttribute method for Object in the API. (Patch by
         Peter Varga)
 
         Fix -Wunused-but-set-variable for gcc-4.6 on x64. (Issue 1291)

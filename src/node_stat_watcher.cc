@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_stat_watcher.h>
+#include "node_stat_watcher.h"
 
 #include <assert.h>
 #include <string.h>
@@ -78,7 +78,7 @@ Handle<Value> StatWatcher::Start(const Arguments& args) {
   }
 
   StatWatcher *handler = ObjectWrap::Unwrap<StatWatcher>(args.Holder());
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
 
   assert(handler->path_ == NULL);
   handler->path_ = strdup(*path);

@@ -1,4 +1,4 @@
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -377,13 +377,16 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     // Isolate.
     __ li(a3, Operand(ExternalReference::isolate_address()));
 
-    ExternalReference function =
-        ExternalReference::re_case_insensitive_compare_uc16(masm_->isolate());
-    __ CallCFunction(function, argument_count);
+    {
+      AllowExternalCallThatCantCauseGC scope(masm_);
+      ExternalReference function =
+          ExternalReference::re_case_insensitive_compare_uc16(masm_->isolate());
+      __ CallCFunction(function, argument_count);
+    }
 
     // Restore regexp engine registers.
     __ MultiPop(regexp_registers_to_retain);
-    __ li(code_pointer(), Operand(masm_->CodeObject()));
+    __ li(code_pointer(), Operand(masm_->CodeObject()), CONSTANT_SIZE);
     __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
 
     // Check if function returned non-zero for success or zero for failure.
@@ -607,6 +610,12 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
 
     // Entry code:
     __ bind(&entry_label_);
+
+    // Tell the system that we have a stack frame.  Because the type is MANUAL,
+    // no is generated.
+    FrameScope scope(masm_, StackFrame::MANUAL);
+
+    // Actually emit code to start a new stack frame.
     // Push arguments
     // Save callee-save registers.
     // Start new stack frame.
@@ -669,7 +678,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     // string, and store that value in a local variable.
     __ mov(t5, a1);
     __ li(a1, Operand(1));
-    __ movn(a1, zero_reg, t5);
+    __ Movn(a1, zero_reg, t5);
     __ sw(a1, MemOperand(frame_pointer(), kAtStart));
 
     if (num_saved_registers_ > 0) {  // Always is, if generated from a regexp.
@@ -689,7 +698,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     // Initialize backtrack stack pointer.
     __ lw(backtrack_stackpointer(), MemOperand(frame_pointer(), kStackHighEnd));
     // Initialize code pointer register
-    __ li(code_pointer(), Operand(masm_->CodeObject()));
+    __ li(code_pointer(), Operand(masm_->CodeObject()), CONSTANT_SIZE);
     // Load previous char as initial value of current character register.
     Label at_start;
     __ lw(a0, MemOperand(frame_pointer(), kAtStart));
@@ -774,7 +783,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
 
       // String might have moved: Reload end of string from frame.
       __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
-      __ li(code_pointer(), Operand(masm_->CodeObject()));
+      __ li(code_pointer(), Operand(masm_->CodeObject()), CONSTANT_SIZE);
       SafeReturn();
     }
 
@@ -804,7 +813,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
       // Otherwise use return value as new stack pointer.
       __ mov(backtrack_stackpointer(), v0);
       // Restore saved registers and continue.
-      __ li(code_pointer(), Operand(masm_->CodeObject()));
+      __ li(code_pointer(), Operand(masm_->CodeObject()), CONSTANT_SIZE);
       __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
       SafeReturn();
     }
@@ -1001,7 +1010,7 @@ void RegExpMacroAssemblerMIPS::CallCheckStackGuardState(Register scratch) {
   __ PrepareCallCFunction(num_arguments, scratch);
   __ mov(a2, frame_pointer());
   // Code* of self.
-  __ li(a1, Operand(masm_->CodeObject()));
+  __ li(a1, Operand(masm_->CodeObject()), CONSTANT_SIZE);
   // a0 becomes return address pointer.
   ExternalReference stack_guard_check =
       ExternalReference::re_check_stack_guard_state(masm_->isolate());
@@ -1047,7 +1056,7 @@ int RegExpMacroAssemblerMIPS::CheckStackGuardState(Address* return_address,
   ASSERT(*return_address <=
       re_code->instruction_start() + re_code->instruction_size());
 
-  MaybeObject* result = Execution::HandleStackGuardInterrupt();
+  MaybeObject* result = Execution::HandleStackGuardInterrupt(isolate);
 
   if (*code_handle != re_code) {  // Return address no longer valid.
     int delta = code_handle->address() - re_code->address();
@@ -1103,6 +1112,11 @@ int RegExpMacroAssemblerMIPS::CheckStackGuardState(Address* return_address,
     frame_entry<const String*>(re_frame, kInputString) = *subject;
     frame_entry<const byte*>(re_frame, kInputStart) = new_address;
     frame_entry<const byte*>(re_frame, kInputEnd) = new_address + byte_length;
+  } else if (frame_entry<const String*>(re_frame, kInputString) != *subject) {
+    // Subject string might have been a ConsString that underwent
+    // short-circuiting during GC. That will not change start_address but
+    // will change pointer inside the subject handle.
+    frame_entry<const String*>(re_frame, kInputString) = *subject;
   }
 
   return 0;
@@ -1215,7 +1229,7 @@ void RegExpMacroAssemblerMIPS::CallCFunctionUsingStub(
   if (OS::ActivationFrameAlignment() != 0) {
     __ lw(sp, MemOperand(sp, 16));
   }
-  __ li(code_pointer(), Operand(masm_->CodeObject()));
+  __ li(code_pointer(), Operand(masm_->CodeObject()), CONSTANT_SIZE);
 }
 
 
@@ -1244,13 +1258,14 @@ void RegExpCEntryStub::Generate(MacroAssembler* masm_) {
   if (stack_alignment < kPointerSize) stack_alignment = kPointerSize;
   // Stack is already aligned for call, so decrement by alignment
   // to make room for storing the return address.
-  __ Subu(sp, sp, Operand(stack_alignment));
-  __ sw(ra, MemOperand(sp, 0));
-  __ mov(a0, sp);
+  __ Subu(sp, sp, Operand(stack_alignment + kCArgsSlotsSize));
+  const int return_address_offset = kCArgsSlotsSize;
+  __ Addu(a0, sp, return_address_offset);
+  __ sw(ra, MemOperand(a0, 0));
   __ mov(t9, t1);
   __ Call(t9);
-  __ lw(ra, MemOperand(sp, 0));
-  __ Addu(sp, sp, Operand(stack_alignment));
+  __ lw(ra, MemOperand(sp, return_address_offset));
+  __ Addu(sp, sp, Operand(stack_alignment + kCArgsSlotsSize));
   __ Jump(ra);
 }
 

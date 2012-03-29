@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -87,10 +87,14 @@ class LCodeGen BASE_EMBEDDED {
                                         SwVfpRegister flt_scratch,
                                         DoubleRegister dbl_scratch);
   int ToInteger32(LConstantOperand* op) const;
+  double ToDouble(LConstantOperand* op) const;
   Operand ToOperand(LOperand* op);
   MemOperand ToMemOperand(LOperand* op) const;
   // Returns a MemOperand pointing to the high word of a DoubleStackSlot.
   MemOperand ToHighMemOperand(LOperand* op) const;
+
+  bool IsInteger32(LConstantOperand* op) const;
+  Handle<Object> ToHandle(LConstantOperand* op) const;
 
   // Try to generate code for the entire chunk, but it may fail if the
   // chunk contains constructs we cannot handle. Returns true if the
@@ -110,10 +114,15 @@ class LCodeGen BASE_EMBEDDED {
   void DoDeferredTaggedToI(LTaggedToI* instr);
   void DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr);
   void DoDeferredStackCheck(LStackCheck* instr);
+  void DoDeferredRandom(LRandom* instr);
   void DoDeferredStringCharCodeAt(LStringCharCodeAt* instr);
   void DoDeferredStringCharFromCode(LStringCharFromCode* instr);
+  void DoDeferredAllocateObject(LAllocateObject* instr);
   void DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
                                        Label* map_check);
+
+  void DoCheckMapCommon(Register reg, Register scratch, Handle<Map> map,
+                        CompareMapMode mode, LEnvironment* env);
 
   // Parallel move support.
   void DoParallelMove(LParallelMove* move);
@@ -140,8 +149,8 @@ class LCodeGen BASE_EMBEDDED {
   bool is_done() const { return status_ == DONE; }
   bool is_aborted() const { return status_ == ABORTED; }
 
-  int strict_mode_flag() const {
-    return info()->is_strict_mode() ? kStrictMode : kNonStrictMode;
+  StrictModeFlag strict_mode_flag() const {
+    return info()->is_classic_mode() ? kNonStrictMode : kStrictMode;
   }
 
   LChunk* chunk() const { return chunk_; }
@@ -207,7 +216,7 @@ class LCodeGen BASE_EMBEDDED {
                                LInstruction* instr);
 
   // Generate a direct call to a known function.  Expects the function
-  // to be in edi.
+  // to be in r1.
   void CallKnownFunction(Handle<JSFunction> function,
                          int arity,
                          LInstruction* instr,
@@ -241,6 +250,7 @@ class LCodeGen BASE_EMBEDDED {
   void DoMathSqrt(LUnaryMathOperation* instr);
   void DoMathPowHalf(LUnaryMathOperation* instr);
   void DoMathLog(LUnaryMathOperation* instr);
+  void DoMathTan(LUnaryMathOperation* instr);
   void DoMathCos(LUnaryMathOperation* instr);
   void DoMathSin(LUnaryMathOperation* instr);
 
@@ -262,17 +272,19 @@ class LCodeGen BASE_EMBEDDED {
   static Condition TokenToCondition(Token::Value op, bool is_unsigned);
   void EmitGoto(int block);
   void EmitBranch(int left_block, int right_block, Condition cc);
-  void EmitCmpI(LOperand* left, LOperand* right);
   void EmitNumberUntagD(Register input,
                         DoubleRegister result,
                         bool deoptimize_on_undefined,
+                        bool deoptimize_on_minus_zero,
                         LEnvironment* env);
 
   // Emits optimized code for typeof x == "y".  Modifies input register.
   // Returns the condition on which a final split to
   // true and false label should be made, to optimize fallthrough.
-  Condition EmitTypeofIs(Label* true_label, Label* false_label,
-                         Register input, Handle<String> type_name);
+  Condition EmitTypeofIs(Label* true_label,
+                         Label* false_label,
+                         Register input,
+                         Handle<String> type_name);
 
   // Emits optimized code for %_IsObject(x).  Preserves input register.
   // Returns the condition on which a final split to
@@ -282,6 +294,13 @@ class LCodeGen BASE_EMBEDDED {
                          Label* is_not_object,
                          Label* is_object);
 
+  // Emits optimized code for %_IsString(x).  Preserves input register.
+  // Returns the condition on which a final split to
+  // true and false label should be made, to optimize fallthrough.
+  Condition EmitIsString(Register input,
+                         Register temp1,
+                         Label* is_not_string);
+
   // Emits optimized code for %_IsConstructCall().
   // Caller should branch on equal condition.
   void EmitIsConstructCall(Register temp1, Register temp2);
@@ -290,6 +309,13 @@ class LCodeGen BASE_EMBEDDED {
                                        Register object,
                                        Handle<Map> type,
                                        Handle<String> name);
+
+  // Emits optimized code to deep-copy the contents of statically known
+  // object graphs (e.g. object literal boilerplate).
+  void EmitDeepCopy(Handle<JSObject> object,
+                    Register result,
+                    Register source,
+                    int* offset);
 
   struct JumpTableEntry {
     explicit inline JumpTableEntry(Address entry)
@@ -378,16 +404,20 @@ class LCodeGen BASE_EMBEDDED {
 class LDeferredCode: public ZoneObject {
  public:
   explicit LDeferredCode(LCodeGen* codegen)
-      : codegen_(codegen), external_exit_(NULL) {
+      : codegen_(codegen),
+        external_exit_(NULL),
+        instruction_index_(codegen->current_instruction_) {
     codegen->AddDeferredCode(this);
   }
 
   virtual ~LDeferredCode() { }
   virtual void Generate() = 0;
+  virtual LInstruction* instr() = 0;
 
-  void SetExit(Label *exit) { external_exit_ = exit; }
+  void SetExit(Label* exit) { external_exit_ = exit; }
   Label* entry() { return &entry_; }
   Label* exit() { return external_exit_ != NULL ? external_exit_ : &exit_; }
+  int instruction_index() const { return instruction_index_; }
 
  protected:
   LCodeGen* codegen() const { return codegen_; }
@@ -398,6 +428,7 @@ class LDeferredCode: public ZoneObject {
   Label entry_;
   Label exit_;
   Label* external_exit_;
+  int instruction_index_;
 };
 
 } }  // namespace v8::internal

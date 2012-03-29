@@ -58,32 +58,16 @@
 # define SIGKILL         9
 #endif
 
-#include <uv.h>
-#include <v8.h>
+#include "uv.h"
+#include "v8.h"
 #include <sys/types.h> /* struct stat */
 #include <sys/stat.h>
 #include <assert.h>
 
-#include <node_object_wrap.h>
+#include "node_object_wrap.h"
 
-#if defined(_MSC_VER)
-#undef interface
-#endif
-
-#ifndef offset_of
-// g++ in strict mode complains loudly about the system offsetof() macro
-// because it uses NULL as the base address.
-#define offset_of(type, member) \
-  ((intptr_t) ((char *) &(((type *) 8)->member) - 8))
-#endif
-
-#ifndef container_of
-#define container_of(ptr, type, member) \
-  ((type *) ((char *) (ptr) - offset_of(type, member)))
-#endif
-
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
+#if NODE_WANT_INTERNALS
+# include "node_internals.h"
 #endif
 
 #ifndef NODE_STRINGIFY
@@ -113,19 +97,25 @@ void EmitExit(v8::Handle<v8::Object> process);
                 static_cast<v8::PropertyAttribute>(                       \
                     v8::ReadOnly|v8::DontDelete))
 
-#define NODE_SET_METHOD(obj, name, callback)                              \
-  obj->Set(v8::String::NewSymbol(name),                                   \
-           v8::FunctionTemplate::New(callback)->GetFunction())
+template <typename target_t>
+void SetMethod(target_t obj, const char* name,
+        v8::InvocationCallback callback)
+{
+    obj->Set(v8::String::NewSymbol(name),
+        v8::FunctionTemplate::New(callback)->GetFunction());
+}
 
-#define NODE_SET_PROTOTYPE_METHOD(templ, name, callback)                  \
-do {                                                                      \
-  v8::Local<v8::Signature> __callback##_SIG = v8::Signature::New(templ);  \
-  v8::Local<v8::FunctionTemplate> __callback##_TEM =                      \
-    v8::FunctionTemplate::New(callback, v8::Handle<v8::Value>(),          \
-                          __callback##_SIG);                              \
-  templ->PrototypeTemplate()->Set(v8::String::NewSymbol(name),            \
-                                  __callback##_TEM);                      \
-} while (0)
+template <typename target_t>
+void SetPrototypeMethod(target_t target,
+        const char* name, v8::InvocationCallback callback)
+{
+    v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(callback);
+    target->PrototypeTemplate()->Set(v8::String::NewSymbol(name), templ);
+}
+
+// for backwards compatibility
+#define NODE_SET_METHOD node::SetMethod
+#define NODE_SET_PROTOTYPE_METHOD node::SetPrototypeMethod
 
 enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
