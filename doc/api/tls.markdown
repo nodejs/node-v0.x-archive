@@ -95,7 +95,7 @@ The `options` object has these possibilities:
     it is recommended that you use this option in conjunction with the
     `honorCipherOrder` option described below to prioritize the RC4 algorithm,
     since it is a non-CBC cipher. A recommended cipher list follows:
-    `ECDHE-RSA-AES256-SHA384:AES256-SHA256:RC4-SHA:RC4:HIGH:!MD5:!aNULL:!EDH:!AESGCM`
+    `ECDHE-RSA-AES256-SHA:AES256-SHA:RC4-SHA:RC4:HIGH:!MD5:!aNULL:!EDH:!AESGCM`
 
   - `honorCipherOrder` :
 	When choosing a cipher, use the server's preferences instead of the client
@@ -400,6 +400,17 @@ Example:
 
 If the peer does not provide a certificate, it returns `null` or an empty
 object.
+
+### cleartextStream.getCipher()
+Returns an object representing the cipher name and the SSL/TLS
+protocol version of the current connection.
+
+Example:
+{ name: 'AES256-SHA', version: 'TLSv1/SSLv3' }
+
+See SSL_CIPHER_get_name() and SSL_CIPHER_get_version() in
+http://www.openssl.org/docs/ssl/ssl.html#DEALING_WITH_CIPHERS for more
+information.
 
 ### cleartextStream.address()
 
