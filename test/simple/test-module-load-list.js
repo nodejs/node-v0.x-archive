@@ -43,6 +43,7 @@ function checkExpected() {
 }
 
 var expected = [
+  'Binding errno',
   'Binding evals',
   'Binding natives',
   'NativeModule events',

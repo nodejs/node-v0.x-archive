@@ -36,7 +36,7 @@ var cmd = JSON.stringify(process.execPath) + ' ' +
 var child = child_process.exec(cmd);
 var output = '';
 var outputExpect = { 'code': 'EPIPE',
-                     'errno': 'EPIPE',
+                     'errno': 36,
                      'syscall': 'write' };
 
 child.stderr.on('data', function(c) {

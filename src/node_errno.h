@@ -19,17 +19,19 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-var net = require('net');
+#ifndef node_errno_h
+#define node_errno_h
 
-var server1 = net.createServer(function(socket) {
-});
-var server2 = net.createServer(function(socket) {
-});
-server1.listen(common.PORT);
-server2.on('error', function(error) {
-  assert.equal(error.code, 'EADDRINUSE');
-  server1.close();
-});
-server2.listen(common.PORT);
+#include <node.h>
+#include <v8.h>
+
+namespace node {
+
+class Errno {
+public:
+  static void Initialize (v8::Handle<v8::Object> target);
+};
+
+}  // namespace node
+
+#endif  // node_errno_h

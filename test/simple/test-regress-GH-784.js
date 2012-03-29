@@ -71,26 +71,27 @@ function afterPing(result) {
   console.error('afterPing. responses.length = ' + responses.length);
   switch (responses.length) {
     case 2:
-      assert.ok(/ECONNREFUSED/.test(responses[0]));
-      assert.ok(/ECONNREFUSED/.test(responses[1]));
+      console.log(responses[0]);
+      assert.equal(responses[0].code, 'ECONNREFUSED');
+      assert.equal(responses[1].code, 'ECONNREFUSED');
       serverOn();
       break;
 
     case 4:
-      assert.ok(/success/.test(responses[2]));
-      assert.ok(/success/.test(responses[3]));
+      assert.equal(responses[2], 'success');
+      assert.equal(responses[3], 'success');
       serverOff();
       break;
 
     case 6:
-      assert.ok(/ECONNREFUSED/.test(responses[4]));
-      assert.ok(/ECONNREFUSED/.test(responses[5]));
+      assert.equal(responses[4].code, 'ECONNREFUSED');
+      assert.equal(responses[5].code, 'ECONNREFUSED');
       serverOn();
       break;
 
     case 8:
-      assert.ok(/success/.test(responses[6]));
-      assert.ok(/success/.test(responses[7]));
+      assert.equal(responses[6], 'success');
+      assert.equal(responses[7], 'success');
       server.close();
       // we should go to process.on('exit') from here.
       break;
@@ -132,7 +133,7 @@ function ping() {
     console.log('Error making ping req: ' + error);
     hadError = true;
     assert.ok(!gotEnd);
-    afterPing(error.message);
+    afterPing(error);
   });
 }
 
