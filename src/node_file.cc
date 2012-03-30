@@ -26,6 +26,7 @@
 # include "node_stat_watcher.h"
 #endif
 #include "req_wrap.h"
+#include "scan_args.h"
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -400,11 +401,8 @@ static Handle<Value> FStat(const Arguments& args) {
 static Handle<Value> Symlink(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("dest path required");
-  if (len < 2) return TYPE_ERROR("src path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("dest path must be a string");
-  if (!args[1]->IsString()) return TYPE_ERROR("src path must be a string");
+  Handle<Value> ret = ScanArgs(args, 0, "SS", ignoreArg, ignoreArg);
+  if (!ret->IsNull()) return ret;
 
   String::Utf8Value dest(args[0]);
   String::Utf8Value path(args[1]);
@@ -428,11 +426,8 @@ static Handle<Value> Symlink(const Arguments& args) {
 static Handle<Value> Link(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("dest path required");
-  if (len < 2) return TYPE_ERROR("src path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("dest path must be a string");
-  if (!args[1]->IsString()) return TYPE_ERROR("src path must be a string");
+  Handle<Value> ret = ScanArgs(args, 0, "SS", ignoreArg, ignoreArg);
+  if (!ret->IsNull()) return ret;
 
   String::Utf8Value orig_path(args[0]);
   String::Utf8Value new_path(args[1]);
@@ -464,12 +459,9 @@ static Handle<Value> ReadLink(const Arguments& args) {
 static Handle<Value> Rename(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("old path required");
-  if (len < 2) return TYPE_ERROR("new path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("old path must be a string");
-  if (!args[1]->IsString()) return TYPE_ERROR("new path must be a string");
-  
+  Handle<Value> ret = ScanArgs(args, 0, "SS", ignoreArg, ignoreArg);
+  if (!ret->IsNull()) return ret;
+
   String::Utf8Value old_path(args[0]);
   String::Utf8Value new_path(args[1]);
 
@@ -584,12 +576,12 @@ static Handle<Value> RMDir(const Arguments& args) {
 static Handle<Value> MKDir(const Arguments& args) {
   HandleScope scope;
 
-  if (args.Length() < 2 || !args[0]->IsString() || !args[1]->IsInt32()) {
-    return THROW_BAD_ARGS;
-  }
+  int mode;
+
+  Handle<Value> ret = ScanArgs(args, 0, "Sd", ignoreArg, mode);
+  if (!ret->IsNull()) return ret;
 
   String::Utf8Value path(args[0]);
-  int mode = static_cast<int>(args[1]->Int32Value());
 
   if (args[2]->IsFunction()) {
     ASYNC_CALL(mkdir, args[2], *path, mode)
@@ -602,18 +594,12 @@ static Handle<Value> MKDir(const Arguments& args) {
 static Handle<Value> SendFile(const Arguments& args) {
   HandleScope scope;
 
-  if (args.Length() < 4 ||
-      !args[0]->IsUint32() ||
-      !args[1]->IsUint32() ||
-      !args[2]->IsUint32() ||
-      !args[3]->IsUint32()) {
-    return THROW_BAD_ARGS;
-  }
+  int out_fd, in_fd;
+  off_t in_offset;
+  size_t length;
 
-  int out_fd = args[0]->Uint32Value();
-  int in_fd = args[1]->Uint32Value();
-  off_t in_offset = args[2]->Uint32Value();
-  size_t length = args[3]->Uint32Value();
+  Handle<Value> ret = ScanArgs(args, 0, "uuuu", out_fd, in_fd, in_offset, length);
+  if (!ret->IsNull()) return ret;
 
   if (args[4]->IsFunction()) {
     ASYNC_CALL(sendfile, args[4], out_fd, in_fd, in_offset, length)
@@ -659,17 +645,12 @@ static Handle<Value> ReadDir(const Arguments& args) {
 static Handle<Value> Open(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("path required");
-  if (len < 2) return TYPE_ERROR("flags required");
-  if (len < 3) return TYPE_ERROR("mode required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
-  if (!args[1]->IsInt32()) return TYPE_ERROR("flags must be an int");
-  if (!args[2]->IsInt32()) return TYPE_ERROR("mode must be an int");
+  int flags, mode;
+
+  Handle<Value> ret = ScanArgs(args, 0, "Sdd", ignoreArg, flags, mode);
+  if (!ret->IsNull()) return ret;
 
   String::Utf8Value path(args[0]);
-  int flags = args[1]->Int32Value();
-  int mode = static_cast<int>(args[2]->Int32Value());
 
   if (args[3]->IsFunction()) {
     ASYNC_CALL(open, args[3], *path, flags, mode)
@@ -706,28 +687,28 @@ static Handle<Value> Open(const Arguments& args) {
 static Handle<Value> Write(const Arguments& args) {
   HandleScope scope;
 
-  if (!args[0]->IsInt32()) {
-    return THROW_BAD_ARGS;
-  }
+  int fd;
+  Local<Object> buffer_obj;
+  size_t off, len;
 
-  int fd = args[0]->Int32Value();
+
+  Handle<Value> ret = ScanArgs(args, 0, "dOdd", fd, buffer_obj, off, len);
+  if (!ret->IsNull()) return ret;
+  
 
   if (!Buffer::HasInstance(args[1])) {
     return ThrowException(Exception::Error(
                 String::New("Second argument needs to be a buffer")));
   }
 
-  Local<Object> buffer_obj = args[1]->ToObject();
   char *buffer_data = Buffer::Data(buffer_obj);
   size_t buffer_length = Buffer::Length(buffer_obj);
 
-  size_t off = args[2]->Int32Value();
   if (off >= buffer_length) {
     return ThrowException(Exception::Error(
           String::New("Offset is out of bounds")));
   }
 
-  ssize_t len = args[3]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
           String::New("Length is extends beyond buffer")));
@@ -762,45 +743,37 @@ static Handle<Value> Write(const Arguments& args) {
 static Handle<Value> Read(const Arguments& args) {
   HandleScope scope;
 
-  if (args.Length() < 2 || !args[0]->IsInt32()) {
-    return THROW_BAD_ARGS;
-  }
+  int fd;
+  Local<Object> buffer_obj;
+  size_t off, len;
 
-  int fd = args[0]->Int32Value();
 
-  Local<Value> cb;
-
-  size_t len;
-  off_t pos;
-
-  char * buf = NULL;
+  Handle<Value> ret = ScanArgs(args, 0, "dOdd", fd, buffer_obj, off, len);
+  if (!ret->IsNull()) return ret;
 
   if (!Buffer::HasInstance(args[1])) {
     return ThrowException(Exception::Error(
                 String::New("Second argument needs to be a buffer")));
   }
 
-  Local<Object> buffer_obj = args[1]->ToObject();
   char *buffer_data = Buffer::Data(buffer_obj);
   size_t buffer_length = Buffer::Length(buffer_obj);
 
-  size_t off = args[2]->Int32Value();
   if (off >= buffer_length) {
     return ThrowException(Exception::Error(
           String::New("Offset is out of bounds")));
   }
 
-  len = args[3]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
           String::New("Length extends beyond buffer")));
   }
 
-  pos = GET_OFFSET(args[4]);
+  off_t pos = GET_OFFSET(args[4]);
 
-  buf = buffer_data + off;
+  char *buf = buffer_data + off;
 
-  cb = args[5];
+  Local<Value> cb = args[5];
 
   if (cb->IsFunction()) {
     ASYNC_CALL(read, cb, fd, buf, len, pos);
@@ -818,11 +791,12 @@ static Handle<Value> Read(const Arguments& args) {
 static Handle<Value> Chmod(const Arguments& args) {
   HandleScope scope;
 
-  if(args.Length() < 2 || !args[0]->IsString() || !args[1]->IsInt32()) {
-    return THROW_BAD_ARGS;
-  }
+  int mode;
+
+  Handle<Value> ret = ScanArgs(args, 0, "Sd", ignoreArg, mode);
+  if (!ret->IsNull()) return ret;
+
   String::Utf8Value path(args[0]);
-  int mode = static_cast<int>(args[1]->Int32Value());
 
   if(args[2]->IsFunction()) {
     ASYNC_CALL(chmod, args[2], *path, mode);
@@ -839,11 +813,10 @@ static Handle<Value> Chmod(const Arguments& args) {
 static Handle<Value> FChmod(const Arguments& args) {
   HandleScope scope;
 
-  if(args.Length() < 2 || !args[0]->IsInt32() || !args[1]->IsInt32()) {
-    return THROW_BAD_ARGS;
-  }
-  int fd = args[0]->Int32Value();
-  int mode = static_cast<int>(args[1]->Int32Value());
+  int fd, mode;
+
+  Handle<Value> ret = ScanArgs(args, 0, "dd", fd, mode);
+  if (!ret->IsNull()) return ret;
 
   if(args[2]->IsFunction()) {
     ASYNC_CALL(fchmod, args[2], fd, mode);
@@ -860,17 +833,12 @@ static Handle<Value> FChmod(const Arguments& args) {
 static Handle<Value> Chown(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("path required");
-  if (len < 2) return TYPE_ERROR("uid required");
-  if (len < 3) return TYPE_ERROR("gid required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
-  if (!args[1]->IsInt32()) return TYPE_ERROR("uid must be an int");
-  if (!args[2]->IsInt32()) return TYPE_ERROR("gid must be an int");
+  int uid, gid;
+
+  Handle<Value> ret = ScanArgs(args, 0, "Sdd", ignoreArg, uid, gid);
+  if (!ret->IsNull()) return ret;
 
   String::Utf8Value path(args[0]);
-  int uid = static_cast<int>(args[1]->Int32Value());
-  int gid = static_cast<int>(args[2]->Int32Value());
 
   if (args[3]->IsFunction()) {
     ASYNC_CALL(chown, args[3], *path, uid, gid);
@@ -887,17 +855,10 @@ static Handle<Value> Chown(const Arguments& args) {
 static Handle<Value> FChown(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("fd required");
-  if (len < 2) return TYPE_ERROR("uid required");
-  if (len < 3) return TYPE_ERROR("gid required");
-  if (!args[0]->IsInt32()) return TYPE_ERROR("fd must be an int");
-  if (!args[1]->IsInt32()) return TYPE_ERROR("uid must be an int");
-  if (!args[2]->IsInt32()) return TYPE_ERROR("gid must be an int");
+  int fd, uid, gid;
 
-  int fd = args[0]->Int32Value();
-  int uid = static_cast<int>(args[1]->Int32Value());
-  int gid = static_cast<int>(args[2]->Int32Value());
+  Handle<Value> ret = ScanArgs(args, 0, "ddd", fd, uid, gid);
+  if (!ret->IsNull()) return ret;
 
   if (args[3]->IsFunction()) {
     ASYNC_CALL(fchown, args[3], fd, uid, gid);
@@ -911,17 +872,12 @@ static Handle<Value> FChown(const Arguments& args) {
 static Handle<Value> UTimes(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("path required");
-  if (len < 2) return TYPE_ERROR("atime required");
-  if (len < 3) return TYPE_ERROR("mtime required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
-  if (!args[1]->IsNumber()) return TYPE_ERROR("atime must be a number");
-  if (!args[2]->IsNumber()) return TYPE_ERROR("mtime must be a number");
+  double atime, mtime;
 
-  const String::Utf8Value path(args[0]);
-  const double atime = static_cast<double>(args[1]->NumberValue());
-  const double mtime = static_cast<double>(args[2]->NumberValue());
+  Handle<Value> ret = ScanArgs(args, 0, "Snn", ignoreArg, atime, mtime);
+  if (!ret->IsNull()) return ret;
+
+  String::Utf8Value path(args[0]);
 
   if (args[3]->IsFunction()) {
     ASYNC_CALL(utime, args[3], *path, atime, mtime);
@@ -934,17 +890,11 @@ static Handle<Value> UTimes(const Arguments& args) {
 static Handle<Value> FUTimes(const Arguments& args) {
   HandleScope scope;
 
-  int len = args.Length();
-  if (len < 1) return TYPE_ERROR("fd required");
-  if (len < 2) return TYPE_ERROR("atime required");
-  if (len < 3) return TYPE_ERROR("mtime required");
-  if (!args[0]->IsInt32()) return TYPE_ERROR("fd must be an int");
-  if (!args[1]->IsNumber()) return TYPE_ERROR("atime must be a number");
-  if (!args[2]->IsNumber()) return TYPE_ERROR("mtime must be a number");
+  int fd;
+  double atime, mtime;
 
-  const int fd = args[0]->Int32Value();
-  const double atime = static_cast<double>(args[1]->NumberValue());
-  const double mtime = static_cast<double>(args[2]->NumberValue());
+  Handle<Value> ret = ScanArgs(args, 0, "dnn", fd, atime, mtime);
+  if (!ret->IsNull()) return ret;
 
   if (args[3]->IsFunction()) {
     ASYNC_CALL(futime, args[3], fd, atime, mtime);
