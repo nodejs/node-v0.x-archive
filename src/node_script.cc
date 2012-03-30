@@ -22,6 +22,7 @@
 #include "node.h"
 #include "node_script.h"
 #include <assert.h>
+#include <memory>
 
 namespace node {
 
@@ -96,6 +97,18 @@ class WrappedScript : ObjectWrap {
   static Handle<Value> CompileRunInNewContext(const Arguments& args);
 
   Persistent<Script> script_;
+};
+
+template <class T> class PersistentScope {
+  public:
+    explicit inline PersistentScope(Persistent<T> handle) : handle_(handle) {}
+    inline ~PersistentScope() {
+      if (!handle_.IsEmpty()) {
+        handle_.Dispose();
+      }
+    }
+  private:
+    Persistent<T> handle_;
 };
 
 
@@ -358,13 +371,18 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   } else if (context_flag == userContext) {
     // Use the passed in context
     WrappedContext *nContext = ObjectWrap::Unwrap<WrappedContext>(sandbox);
-    context = nContext->GetV8Context();
+    context = Persistent<Context>::New(nContext->GetV8Context());
   }
+
+  // context_scope will enter and exit the Context automatically
+  std::auto_ptr<Context::Scope> context_scope;
+  // context_dtor will dispose the persistent handle automatically
+  PersistentScope<Context> context_dtor(context);
 
   // New and user context share code. DRY it up.
   if (context_flag == userContext || context_flag == newContext) {
-    // Enter the context
-    context->Enter();
+    // Enter the context. Disposes it at the end of this function. Magic.
+    context_scope.reset(new Context::Scope(context));
 
     // Copy everything from the passed in sandbox (either the persistent
     // context for runInContext(), or the sandbox arg to runInNewContext()).
@@ -407,11 +425,6 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   if (output_flag == returnResult) {
     result = script->Run();
     if (result.IsEmpty()) {
-      if (context_flag == newContext) {
-        context->DetachGlobal();
-        context->Exit();
-        context.Dispose();
-      }
       return try_catch.ReThrow();
     }
   } else {
@@ -427,16 +440,6 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   if (context_flag == userContext || context_flag == newContext) {
     // success! copy changes back onto the sandbox object.
     CloneObject(args.This(), context->Global()->GetPrototype(), sandbox);
-  }
-
-  if (context_flag == newContext) {
-    // Clean up, clean up, everybody everywhere!
-    context->DetachGlobal();
-    context->Exit();
-    context.Dispose();
-  } else if (context_flag == userContext) {
-    // Exit the passed in context.
-    context->Exit();
   }
 
   return result == args.This() ? result : scope.Close(result);
