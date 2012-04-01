@@ -22,17 +22,6 @@
 #include "node.h"
 #include "handle_wrap.h"
 
-#define UNWRAP \
-  assert(!args.Holder().IsEmpty()); \
-  assert(args.Holder()->InternalFieldCount() > 0); \
-  TimerWrap* wrap =  \
-      static_cast<TimerWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) { \
-    uv_err_t err; \
-    err.code = UV_EBADF; \
-    SetErrno(err); \
-    return scope.Close(Integer::New(-1)); \
-  }
 
 namespace node {
 
@@ -124,7 +113,7 @@ class TimerWrap : public HandleWrap {
   static Handle<Value> Start(const Arguments& args) {
     HandleScope scope;
 
-    UNWRAP
+    UNWRAP(TimerWrap);
 
     int64_t timeout = args[0]->IntegerValue();
     int64_t repeat = args[1]->IntegerValue();
@@ -142,7 +131,7 @@ class TimerWrap : public HandleWrap {
   static Handle<Value> Stop(const Arguments& args) {
     HandleScope scope;
 
-    UNWRAP
+    UNWRAP(TimerWrap);
 
     int r = uv_timer_stop(&wrap->handle_);
 
@@ -156,7 +145,7 @@ class TimerWrap : public HandleWrap {
   static Handle<Value> Again(const Arguments& args) {
     HandleScope scope;
 
-    UNWRAP
+    UNWRAP(TimerWrap);
 
     int r = uv_timer_again(&wrap->handle_);
 
@@ -170,7 +159,7 @@ class TimerWrap : public HandleWrap {
   static Handle<Value> SetRepeat(const Arguments& args) {
     HandleScope scope;
 
-    UNWRAP
+    UNWRAP(TimerWrap);
 
     int64_t repeat = args[0]->IntegerValue();
 
@@ -182,7 +171,7 @@ class TimerWrap : public HandleWrap {
   static Handle<Value> GetRepeat(const Arguments& args) {
     HandleScope scope;
 
-    UNWRAP
+    UNWRAP(TimerWrap);
 
     int64_t repeat = uv_timer_get_repeat(&wrap->handle_);
 
