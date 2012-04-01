@@ -117,7 +117,9 @@ else if (cluster.isMaster) {
 
   //Check event
   forEach(checks.worker.events, function(bool, name, index) {
+    console.log('adding handler ' + name + ' event');
     worker.on(name, function() {
+      console.log('got ' + name + ' event');
       //Set event
       checks.worker.events[name] = true;
 
@@ -145,6 +147,7 @@ else if (cluster.isMaster) {
       assert.ok(check, 'The worker state "' + name + '" was not set to true');
     });
 
+    console.log(require('util').inspect(checks));
     //Check worker events
     forEach(checks.worker.events, function(check, name) {
       assert.ok(check, 'The worker event "' + name + '" on the worker object ' +
