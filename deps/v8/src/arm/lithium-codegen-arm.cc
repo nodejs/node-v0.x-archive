@@ -62,7 +62,7 @@ class SafepointGenerator : public CallWrapper {
 #define __ masm()->
 
 bool LCodeGen::GenerateCode() {
-  HPhase phase("Code generation", chunk());
+  HPhase phase("Z_Code generation", chunk());
   ASSERT(is_unused());
   status_ = GENERATING;
   CpuFeatures::Scope scope1(VFP3);
@@ -479,10 +479,18 @@ void LCodeGen::WriteTranslation(LEnvironment* environment,
 
   WriteTranslation(environment->outer(), translation);
   int closure_id = DefineDeoptimizationLiteral(environment->closure());
-  if (environment->is_arguments_adaptor()) {
-    translation->BeginArgumentsAdaptorFrame(closure_id, translation_size);
-  } else {
-    translation->BeginJSFrame(environment->ast_id(), closure_id, height);
+  switch (environment->frame_type()) {
+    case JS_FUNCTION:
+      translation->BeginJSFrame(environment->ast_id(), closure_id, height);
+      break;
+    case JS_CONSTRUCT:
+      translation->BeginConstructStubFrame(closure_id, translation_size);
+      break;
+    case ARGUMENTS_ADAPTOR:
+      translation->BeginArgumentsAdaptorFrame(closure_id, translation_size);
+      break;
+    default:
+      UNREACHABLE();
   }
   for (int i = 0; i < translation_size; ++i) {
     LOperand* value = environment->values()->at(i);
@@ -619,7 +627,7 @@ void LCodeGen::RegisterEnvironmentForDeoptimization(LEnvironment* environment,
     int jsframe_count = 0;
     for (LEnvironment* e = environment; e != NULL; e = e->outer()) {
       ++frame_count;
-      if (!e->is_arguments_adaptor()) {
+      if (e->frame_type() == JS_FUNCTION) {
         ++jsframe_count;
       }
     }
@@ -640,7 +648,6 @@ void LCodeGen::DeoptimizeIf(Condition cc, LEnvironment* environment) {
   ASSERT(environment->HasBeenRegistered());
   int id = environment->deoptimization_index();
   Address entry = Deoptimizer::GetDeoptimizationEntry(id, Deoptimizer::EAGER);
-  ASSERT(entry != NULL);
   if (entry == NULL) {
     Abort("bailout was not prepared");
     return;
@@ -1427,6 +1434,46 @@ void LCodeGen::DoValueOf(LValueOf* instr) {
   __ ldr(result, FieldMemOperand(input, JSValue::kValueOffset));
 
   __ bind(&done);
+}
+
+
+void LCodeGen::DoDateField(LDateField* instr) {
+  Register object = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  Register scratch = ToRegister(instr->TempAt(0));
+  Smi* index = instr->index();
+  Label runtime, done;
+  ASSERT(object.is(result));
+  ASSERT(object.is(r0));
+  ASSERT(!scratch.is(scratch0()));
+  ASSERT(!scratch.is(object));
+
+#ifdef DEBUG
+  __ AbortIfSmi(object);
+  __ CompareObjectType(object, scratch, scratch, JS_DATE_TYPE);
+  __ Assert(eq, "Trying to get date field from non-date.");
+#endif
+
+  if (index->value() == 0) {
+    __ ldr(result, FieldMemOperand(object, JSDate::kValueOffset));
+  } else {
+    if (index->value() < JSDate::kFirstUncachedField) {
+      ExternalReference stamp = ExternalReference::date_cache_stamp(isolate());
+      __ mov(scratch, Operand(stamp));
+      __ ldr(scratch, MemOperand(scratch));
+      __ ldr(scratch0(), FieldMemOperand(object, JSDate::kCacheStampOffset));
+      __ cmp(scratch, scratch0());
+      __ b(ne, &runtime);
+      __ ldr(result, FieldMemOperand(object, JSDate::kValueOffset +
+                                             kPointerSize * index->value()));
+      __ jmp(&done);
+    }
+    __ bind(&runtime);
+    __ PrepareCallCFunction(2, scratch);
+    __ mov(r1, Operand(index));
+    __ CallCFunction(ExternalReference::get_date_field_function(isolate()), 2);
+    __ bind(&done);
+  }
 }
 
 
@@ -2752,15 +2799,10 @@ void LCodeGen::DoArgumentsLength(LArgumentsLength* instr) {
 }
 
 
-void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
+void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   Register receiver = ToRegister(instr->receiver());
   Register function = ToRegister(instr->function());
-  Register length = ToRegister(instr->length());
-  Register elements = ToRegister(instr->elements());
   Register scratch = scratch0();
-  ASSERT(receiver.is(r0));  // Used for parameter count.
-  ASSERT(function.is(r1));  // Required by InvokeFunction.
-  ASSERT(ToRegister(instr->result()).is(r0));
 
   // If the receiver is null or undefined, we have to pass the global
   // object as a receiver to normal functions. Values have to be
@@ -2801,6 +2843,18 @@ void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
   __ ldr(receiver,
          FieldMemOperand(receiver, JSGlobalObject::kGlobalReceiverOffset));
   __ bind(&receiver_ok);
+}
+
+
+void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
+  Register receiver = ToRegister(instr->receiver());
+  Register function = ToRegister(instr->function());
+  Register length = ToRegister(instr->length());
+  Register elements = ToRegister(instr->elements());
+  Register scratch = scratch0();
+  ASSERT(receiver.is(r0));  // Used for parameter count.
+  ASSERT(function.is(r1));  // Required by InvokeFunction.
+  ASSERT(ToRegister(instr->result()).is(r0));
 
   // Copy the arguments to this function possibly from the
   // adaptor frame below it.
@@ -2870,6 +2924,16 @@ void LCodeGen::DoOuterContext(LOuterContext* instr) {
   Register result = ToRegister(instr->result());
   __ ldr(result,
          MemOperand(context, Context::SlotOffset(Context::PREVIOUS_INDEX)));
+}
+
+
+void LCodeGen::DoDeclareGlobals(LDeclareGlobals* instr) {
+  __ push(cp);  // The context is the first argument.
+  __ LoadHeapObject(scratch0(), instr->hydrogen()->pairs());
+  __ push(scratch0());
+  __ mov(scratch0(), Operand(Smi::FromInt(instr->hydrogen()->flags())));
+  __ push(scratch0());
+  CallRuntime(Runtime::kDeclareGlobals, 3, instr);
 }
 
 
@@ -3212,15 +3276,62 @@ void LCodeGen::DoPower(LPower* instr) {
 
 
 void LCodeGen::DoRandom(LRandom* instr) {
+  class DeferredDoRandom: public LDeferredCode {
+   public:
+    DeferredDoRandom(LCodeGen* codegen, LRandom* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredRandom(instr_); }
+    virtual LInstruction* instr() { return instr_; }
+   private:
+    LRandom* instr_;
+  };
+
+  DeferredDoRandom* deferred = new DeferredDoRandom(this, instr);
+
   // Having marked this instruction as a call we can use any
   // registers.
   ASSERT(ToDoubleRegister(instr->result()).is(d7));
   ASSERT(ToRegister(instr->InputAt(0)).is(r0));
 
-  __ PrepareCallCFunction(1, scratch0());
-  __ ldr(r0, FieldMemOperand(r0, GlobalObject::kGlobalContextOffset));
-  __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 1);
+  static const int kSeedSize = sizeof(uint32_t);
+  STATIC_ASSERT(kPointerSize == kSeedSize);
 
+  __ ldr(r0, FieldMemOperand(r0, GlobalObject::kGlobalContextOffset));
+  static const int kRandomSeedOffset =
+      FixedArray::kHeaderSize + Context::RANDOM_SEED_INDEX * kPointerSize;
+  __ ldr(r2, FieldMemOperand(r0, kRandomSeedOffset));
+  // r2: FixedArray of the global context's random seeds
+
+  // Load state[0].
+  __ ldr(r1, FieldMemOperand(r2, ByteArray::kHeaderSize));
+  __ cmp(r1, Operand(0));
+  __ b(eq, deferred->entry());
+  // Load state[1].
+  __ ldr(r0, FieldMemOperand(r2, ByteArray::kHeaderSize + kSeedSize));
+  // r1: state[0].
+  // r0: state[1].
+
+  // state[0] = 18273 * (state[0] & 0xFFFF) + (state[0] >> 16)
+  __ and_(r3, r1, Operand(0xFFFF));
+  __ mov(r4, Operand(18273));
+  __ mul(r3, r3, r4);
+  __ add(r1, r3, Operand(r1, LSR, 16));
+  // Save state[0].
+  __ str(r1, FieldMemOperand(r2, ByteArray::kHeaderSize));
+
+  // state[1] = 36969 * (state[1] & 0xFFFF) + (state[1] >> 16)
+  __ and_(r3, r0, Operand(0xFFFF));
+  __ mov(r4, Operand(36969));
+  __ mul(r3, r3, r4);
+  __ add(r0, r3, Operand(r0, LSR, 16));
+  // Save state[1].
+  __ str(r0, FieldMemOperand(r2, ByteArray::kHeaderSize + kSeedSize));
+
+  // Random bit pattern = (state[0] << 14) + (state[1] & 0x3FFFF)
+  __ and_(r0, r0, Operand(0x3FFFF));
+  __ add(r0, r0, Operand(r1, LSL, 14));
+
+  __ bind(deferred->exit());
   // 0x41300000 is the top half of 1.0 x 2^20 as a double.
   // Create this constant using mov/orr to avoid PC relative load.
   __ mov(r1, Operand(0x41000000));
@@ -3232,6 +3343,13 @@ void LCodeGen::DoRandom(LRandom* instr) {
   __ vmov(d8, r0, r1);
   // Subtract and store the result in the heap number.
   __ vsub(d7, d7, d8);
+}
+
+
+void LCodeGen::DoDeferredRandom(LRandom* instr) {
+  __ PrepareCallCFunction(1, scratch0());
+  __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 1);
+  // Return value is in r0.
 }
 
 
@@ -4312,6 +4430,80 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
 }
 
 
+void LCodeGen::DoAllocateObject(LAllocateObject* instr) {
+  class DeferredAllocateObject: public LDeferredCode {
+   public:
+    DeferredAllocateObject(LCodeGen* codegen, LAllocateObject* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredAllocateObject(instr_); }
+    virtual LInstruction* instr() { return instr_; }
+   private:
+    LAllocateObject* instr_;
+  };
+
+  DeferredAllocateObject* deferred = new DeferredAllocateObject(this, instr);
+
+  Register result = ToRegister(instr->result());
+  Register scratch = ToRegister(instr->TempAt(0));
+  Register scratch2 = ToRegister(instr->TempAt(1));
+  Handle<JSFunction> constructor = instr->hydrogen()->constructor();
+  Handle<Map> initial_map(constructor->initial_map());
+  int instance_size = initial_map->instance_size();
+  ASSERT(initial_map->pre_allocated_property_fields() +
+         initial_map->unused_property_fields() -
+         initial_map->inobject_properties() == 0);
+
+  // Allocate memory for the object.  The initial map might change when
+  // the constructor's prototype changes, but instance size and property
+  // counts remain unchanged (if slack tracking finished).
+  ASSERT(!constructor->shared()->IsInobjectSlackTrackingInProgress());
+  __ AllocateInNewSpace(instance_size,
+                        result,
+                        scratch,
+                        scratch2,
+                        deferred->entry(),
+                        TAG_OBJECT);
+
+  // Load the initial map.
+  Register map = scratch;
+  __ LoadHeapObject(map, constructor);
+  __ ldr(map, FieldMemOperand(map, JSFunction::kPrototypeOrInitialMapOffset));
+
+  // Initialize map and fields of the newly allocated object.
+  ASSERT(initial_map->instance_type() == JS_OBJECT_TYPE);
+  __ str(map, FieldMemOperand(result, JSObject::kMapOffset));
+  __ LoadRoot(scratch, Heap::kEmptyFixedArrayRootIndex);
+  __ str(scratch, FieldMemOperand(result, JSObject::kElementsOffset));
+  __ str(scratch, FieldMemOperand(result, JSObject::kPropertiesOffset));
+  if (initial_map->inobject_properties() != 0) {
+    __ LoadRoot(scratch, Heap::kUndefinedValueRootIndex);
+    for (int i = 0; i < initial_map->inobject_properties(); i++) {
+      int property_offset = JSObject::kHeaderSize + i * kPointerSize;
+      __ str(scratch, FieldMemOperand(result, property_offset));
+    }
+  }
+
+  __ bind(deferred->exit());
+}
+
+
+void LCodeGen::DoDeferredAllocateObject(LAllocateObject* instr) {
+  Register result = ToRegister(instr->result());
+  Handle<JSFunction> constructor = instr->hydrogen()->constructor();
+
+  // TODO(3095996): Get rid of this. For now, we need to make the
+  // result register contain a valid pointer because it is already
+  // contained in the register pointer map.
+  __ mov(result, Operand(0));
+
+  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  __ LoadHeapObject(r0, constructor);
+  __ push(r0);
+  CallRuntimeFromDeferred(Runtime::kNewObject, 1, instr);
+  __ StoreToSafepointRegisterSlot(r0, result);
+}
+
+
 void LCodeGen::DoArrayLiteral(LArrayLiteral* instr) {
   Heap* heap = isolate()->heap();
   ElementsKind boilerplate_elements_kind =
@@ -4370,26 +4562,35 @@ void LCodeGen::EmitDeepCopy(Handle<JSObject> object,
   ASSERT(!source.is(r2));
   ASSERT(!result.is(r2));
 
+  // Only elements backing stores for non-COW arrays need to be copied.
+  Handle<FixedArrayBase> elements(object->elements());
+  bool has_elements = elements->length() > 0 &&
+      elements->map() != isolate()->heap()->fixed_cow_array_map();
+
   // Increase the offset so that subsequent objects end up right after
-  // this one.
-  int current_offset = *offset;
-  int size = object->map()->instance_size();
-  *offset += size;
+  // this object and its backing store.
+  int object_offset = *offset;
+  int object_size = object->map()->instance_size();
+  int elements_offset = *offset + object_size;
+  int elements_size = has_elements ? elements->Size() : 0;
+  *offset += object_size + elements_size;
 
   // Copy object header.
   ASSERT(object->properties()->length() == 0);
-  ASSERT(object->elements()->length() == 0 ||
-         object->elements()->map() == isolate()->heap()->fixed_cow_array_map());
   int inobject_properties = object->map()->inobject_properties();
-  int header_size = size - inobject_properties * kPointerSize;
+  int header_size = object_size - inobject_properties * kPointerSize;
   for (int i = 0; i < header_size; i += kPointerSize) {
-    __ ldr(r2, FieldMemOperand(source, i));
-    __ str(r2, FieldMemOperand(result, current_offset + i));
+    if (has_elements && i == JSObject::kElementsOffset) {
+      __ add(r2, result, Operand(elements_offset));
+    } else {
+      __ ldr(r2, FieldMemOperand(source, i));
+    }
+    __ str(r2, FieldMemOperand(result, object_offset + i));
   }
 
   // Copy in-object properties.
   for (int i = 0; i < inobject_properties; i++) {
-    int total_offset = current_offset + object->GetInObjectPropertyOffset(i);
+    int total_offset = object_offset + object->GetInObjectPropertyOffset(i);
     Handle<Object> value = Handle<Object>(object->InObjectPropertyAt(i));
     if (value->IsJSObject()) {
       Handle<JSObject> value_object = Handle<JSObject>::cast(value);
@@ -4405,10 +4606,58 @@ void LCodeGen::EmitDeepCopy(Handle<JSObject> object,
       __ str(r2, FieldMemOperand(result, total_offset));
     }
   }
+
+  if (has_elements) {
+    // Copy elements backing store header.
+    __ LoadHeapObject(source, elements);
+    for (int i = 0; i < FixedArray::kHeaderSize; i += kPointerSize) {
+      __ ldr(r2, FieldMemOperand(source, i));
+      __ str(r2, FieldMemOperand(result, elements_offset + i));
+    }
+
+    // Copy elements backing store content.
+    int elements_length = has_elements ? elements->length() : 0;
+    if (elements->IsFixedDoubleArray()) {
+      Handle<FixedDoubleArray> double_array =
+          Handle<FixedDoubleArray>::cast(elements);
+      for (int i = 0; i < elements_length; i++) {
+        int64_t value = double_array->get_representation(i);
+        // We only support little endian mode...
+        int32_t value_low = value & 0xFFFFFFFF;
+        int32_t value_high = value >> 32;
+        int total_offset =
+            elements_offset + FixedDoubleArray::OffsetOfElementAt(i);
+        __ mov(r2, Operand(value_low));
+        __ str(r2, FieldMemOperand(result, total_offset));
+        __ mov(r2, Operand(value_high));
+        __ str(r2, FieldMemOperand(result, total_offset + 4));
+      }
+    } else if (elements->IsFixedArray()) {
+      for (int i = 0; i < elements_length; i++) {
+        int total_offset = elements_offset + FixedArray::OffsetOfElementAt(i);
+        Handle<Object> value = JSObject::GetElement(object, i);
+        if (value->IsJSObject()) {
+          Handle<JSObject> value_object = Handle<JSObject>::cast(value);
+          __ add(r2, result, Operand(*offset));
+          __ str(r2, FieldMemOperand(result, total_offset));
+          __ LoadHeapObject(source, value_object);
+          EmitDeepCopy(value_object, result, source, offset);
+        } else if (value->IsHeapObject()) {
+          __ LoadHeapObject(r2, Handle<HeapObject>::cast(value));
+          __ str(r2, FieldMemOperand(result, total_offset));
+        } else {
+          __ mov(r2, Operand(value));
+          __ str(r2, FieldMemOperand(result, total_offset));
+        }
+      }
+    } else {
+      UNREACHABLE();
+    }
+  }
 }
 
 
-void LCodeGen::DoObjectLiteralFast(LObjectLiteralFast* instr) {
+void LCodeGen::DoFastLiteral(LFastLiteral* instr) {
   int size = instr->hydrogen()->total_size();
 
   // Allocate all objects that are part of the literal in one big
@@ -4430,12 +4679,13 @@ void LCodeGen::DoObjectLiteralFast(LObjectLiteralFast* instr) {
 }
 
 
-void LCodeGen::DoObjectLiteralGeneric(LObjectLiteralGeneric* instr) {
+void LCodeGen::DoObjectLiteral(LObjectLiteral* instr) {
+  Handle<FixedArray> literals(instr->environment()->closure()->literals());
   Handle<FixedArray> constant_properties =
       instr->hydrogen()->constant_properties();
 
-  __ ldr(r4, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
-  __ ldr(r4, FieldMemOperand(r4, JSFunction::kLiteralsOffset));
+  // Set up the parameters to the stub/runtime call.
+  __ LoadHeapObject(r4, literals);
   __ mov(r3, Operand(Smi::FromInt(instr->hydrogen()->literal_index())));
   __ mov(r2, Operand(constant_properties));
   int flags = instr->hydrogen()->fast_elements()
@@ -4444,7 +4694,7 @@ void LCodeGen::DoObjectLiteralGeneric(LObjectLiteralGeneric* instr) {
   __ mov(r1, Operand(Smi::FromInt(flags)));
   __ Push(r4, r3, r2, r1);
 
-  // Pick the right runtime function to call.
+  // Pick the right runtime function or stub to call.
   int properties_count = constant_properties->length() / 2;
   if (instr->hydrogen()->depth() > 1) {
     CallRuntime(Runtime::kCreateObjectLiteral, 4, instr);
@@ -4799,6 +5049,88 @@ void LCodeGen::DoOsrEntry(LOsrEntry* instr) {
 }
 
 
+void LCodeGen::DoForInPrepareMap(LForInPrepareMap* instr) {
+  __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
+  __ cmp(r0, ip);
+  DeoptimizeIf(eq, instr->environment());
+
+  Register null_value = r5;
+  __ LoadRoot(null_value, Heap::kNullValueRootIndex);
+  __ cmp(r0, null_value);
+  DeoptimizeIf(eq, instr->environment());
+
+  __ tst(r0, Operand(kSmiTagMask));
+  DeoptimizeIf(eq, instr->environment());
+
+  STATIC_ASSERT(FIRST_JS_PROXY_TYPE == FIRST_SPEC_OBJECT_TYPE);
+  __ CompareObjectType(r0, r1, r1, LAST_JS_PROXY_TYPE);
+  DeoptimizeIf(le, instr->environment());
+
+  Label use_cache, call_runtime;
+  __ CheckEnumCache(null_value, &call_runtime);
+
+  __ ldr(r0, FieldMemOperand(r0, HeapObject::kMapOffset));
+  __ b(&use_cache);
+
+  // Get the set of properties to enumerate.
+  __ bind(&call_runtime);
+  __ push(r0);
+  CallRuntime(Runtime::kGetPropertyNamesFast, 1, instr);
+
+  __ ldr(r1, FieldMemOperand(r0, HeapObject::kMapOffset));
+  __ LoadRoot(ip, Heap::kMetaMapRootIndex);
+  __ cmp(r1, ip);
+  DeoptimizeIf(ne, instr->environment());
+  __ bind(&use_cache);
+}
+
+
+void LCodeGen::DoForInCacheArray(LForInCacheArray* instr) {
+  Register map = ToRegister(instr->map());
+  Register result = ToRegister(instr->result());
+  __ LoadInstanceDescriptors(map, result);
+  __ ldr(result,
+         FieldMemOperand(result, DescriptorArray::kEnumerationIndexOffset));
+  __ ldr(result,
+         FieldMemOperand(result, FixedArray::SizeFor(instr->idx())));
+  __ cmp(result, Operand(0));
+  DeoptimizeIf(eq, instr->environment());
+}
+
+
+void LCodeGen::DoCheckMapValue(LCheckMapValue* instr) {
+  Register object = ToRegister(instr->value());
+  Register map = ToRegister(instr->map());
+  __ ldr(scratch0(), FieldMemOperand(object, HeapObject::kMapOffset));
+  __ cmp(map, scratch0());
+  DeoptimizeIf(ne, instr->environment());
+}
+
+
+void LCodeGen::DoLoadFieldByIndex(LLoadFieldByIndex* instr) {
+  Register object = ToRegister(instr->object());
+  Register index = ToRegister(instr->index());
+  Register result = ToRegister(instr->result());
+  Register scratch = scratch0();
+
+  Label out_of_object, done;
+  __ cmp(index, Operand(0));
+  __ b(lt, &out_of_object);
+
+  STATIC_ASSERT(kPointerSizeLog2 > kSmiTagSize);
+  __ add(scratch, object, Operand(index, LSL, kPointerSizeLog2 - kSmiTagSize));
+  __ ldr(result, FieldMemOperand(scratch, JSObject::kHeaderSize));
+
+  __ b(&done);
+
+  __ bind(&out_of_object);
+  __ ldr(result, FieldMemOperand(object, JSObject::kPropertiesOffset));
+  // Index is equal to negated out of object property index plus 1.
+  __ sub(scratch, result, Operand(index, LSL, kPointerSizeLog2 - kSmiTagSize));
+  __ ldr(result, FieldMemOperand(scratch,
+                                 FixedArray::kHeaderSize - kPointerSize));
+  __ bind(&done);
+}
 
 
 #undef __

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -173,7 +173,6 @@ namespace internal {
   K(EXPORT, "export", 0)                                                \
   K(IMPORT, "import", 0)                                                \
   K(LET, "let", 0)                                                      \
-  K(MODULE, "module", 0)                                                \
                                                                         \
   /* Illegal token - not able to scan. */                               \
   T(ILLEGAL, "ILLEGAL", 0)                                              \
@@ -216,7 +215,7 @@ class Token {
     return EQ <= op && op <= IN;
   }
 
-  static bool IsOrderedCompareOp(Value op) {
+  static bool IsOrderedRelationalCompareOp(Value op) {
     return op == LT || op == LTE || op == GT || op == GTE;
   }
 

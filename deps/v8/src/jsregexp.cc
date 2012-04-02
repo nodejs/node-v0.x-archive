@@ -175,7 +175,8 @@ Handle<Object> RegExpImpl::Exec(Handle<JSRegExp> regexp,
     case JSRegExp::IRREGEXP: {
       Handle<Object> result =
           IrregexpExec(regexp, subject, index, last_match_info);
-      ASSERT(!result.is_null() || Isolate::Current()->has_pending_exception());
+      ASSERT(!result.is_null() ||
+             regexp->GetIsolate()->has_pending_exception());
       return result;
     }
     default:
@@ -527,6 +528,7 @@ Handle<Object> RegExpImpl::IrregexpExec(Handle<JSRegExp> jsregexp,
                                         Handle<String> subject,
                                         int previous_index,
                                         Handle<JSArray> last_match_info) {
+  Isolate* isolate = jsregexp->GetIsolate();
   ASSERT_EQ(jsregexp->TypeTag(), JSRegExp::IRREGEXP);
 
   // Prepare space for the return values.
@@ -542,11 +544,11 @@ Handle<Object> RegExpImpl::IrregexpExec(Handle<JSRegExp> jsregexp,
   int required_registers = RegExpImpl::IrregexpPrepare(jsregexp, subject);
   if (required_registers < 0) {
     // Compiling failed with an exception.
-    ASSERT(Isolate::Current()->has_pending_exception());
+    ASSERT(isolate->has_pending_exception());
     return Handle<Object>::null();
   }
 
-  OffsetsVector registers(required_registers);
+  OffsetsVector registers(required_registers, isolate);
 
   IrregexpResult res = RegExpImpl::IrregexpExecOnce(
       jsregexp, subject, previous_index, Vector<int>(registers.vector(),
@@ -568,11 +570,11 @@ Handle<Object> RegExpImpl::IrregexpExec(Handle<JSRegExp> jsregexp,
     return last_match_info;
   }
   if (res == RE_EXCEPTION) {
-    ASSERT(Isolate::Current()->has_pending_exception());
+    ASSERT(isolate->has_pending_exception());
     return Handle<Object>::null();
   }
   ASSERT(res == RE_FAILURE);
-  return Isolate::Current()->factory()->null_value();
+  return isolate->factory()->null_value();
 }
 
 
@@ -1442,7 +1444,7 @@ static bool ShortCutEmitCharacterPair(RegExpMacroAssembler* macro_assembler,
   if (ascii) {
     char_mask = String::kMaxAsciiCharCode;
   } else {
-    char_mask = String::kMaxUC16CharCode;
+    char_mask = String::kMaxUtf16CodeUnit;
   }
   uc16 exor = c1 ^ c2;
   // Check whether exor has only one bit set.
@@ -1544,7 +1546,7 @@ static void EmitCharClass(RegExpMacroAssembler* macro_assembler,
   if (ascii) {
     max_char = String::kMaxAsciiCharCode;
   } else {
-    max_char = String::kMaxUC16CharCode;
+    max_char = String::kMaxUtf16CodeUnit;
   }
 
   Label success;
@@ -1640,7 +1642,7 @@ static void EmitCharClass(RegExpMacroAssembler* macro_assembler,
         macro_assembler->CheckCharacterLT(from, on_failure);
       }
     }
-    if (to != String::kMaxUC16CharCode) {
+    if (to != String::kMaxUtf16CodeUnit) {
       if (cc->is_negated()) {
         macro_assembler->CheckCharacterLT(to + 1, on_failure);
       } else {
@@ -1833,7 +1835,7 @@ bool QuickCheckDetails::Rationalize(bool asc) {
   if (asc) {
     char_mask = String::kMaxAsciiCharCode;
   } else {
-    char_mask = String::kMaxUC16CharCode;
+    char_mask = String::kMaxUtf16CodeUnit;
   }
   mask_ = 0;
   value_ = 0;
@@ -1885,7 +1887,7 @@ bool RegExpNode::EmitQuickCheck(RegExpCompiler* compiler,
     if (compiler->ascii()) {
       char_mask = String::kMaxAsciiCharCode;
     } else {
-      char_mask = String::kMaxUC16CharCode;
+      char_mask = String::kMaxUtf16CodeUnit;
     }
     if ((mask & char_mask) == char_mask) need_mask = false;
     mask &= char_mask;
@@ -1937,7 +1939,7 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
   if (compiler->ascii()) {
     char_mask = String::kMaxAsciiCharCode;
   } else {
-    char_mask = String::kMaxUC16CharCode;
+    char_mask = String::kMaxUtf16CodeUnit;
   }
   for (int k = 0; k < elms_->length(); k++) {
     TextElement elm = elms_->at(k);
@@ -3597,22 +3599,20 @@ void RegExpEngine::DotPrint(const char* label,
 // -------------------------------------------------------------------
 // Tree to graph conversion
 
-static const int kSpaceRangeCount = 20;
-static const int kSpaceRangeAsciiCount = 4;
-static const uc16 kSpaceRanges[kSpaceRangeCount] = { 0x0009, 0x000D, 0x0020,
-    0x0020, 0x00A0, 0x00A0, 0x1680, 0x1680, 0x180E, 0x180E, 0x2000, 0x200A,
-    0x2028, 0x2029, 0x202F, 0x202F, 0x205F, 0x205F, 0x3000, 0x3000 };
+static const uc16 kSpaceRanges[] = { 0x0009, 0x000D, 0x0020, 0x0020, 0x00A0,
+    0x00A0, 0x1680, 0x1680, 0x180E, 0x180E, 0x2000, 0x200A, 0x2028, 0x2029,
+    0x202F, 0x202F, 0x205F, 0x205F, 0x3000, 0x3000, 0xFEFF, 0xFEFF };
+static const int kSpaceRangeCount = ARRAY_SIZE(kSpaceRanges);
 
-static const int kWordRangeCount = 8;
-static const uc16 kWordRanges[kWordRangeCount] = { '0', '9', 'A', 'Z', '_',
-    '_', 'a', 'z' };
+static const uc16 kWordRanges[] = { '0', '9', 'A', 'Z', '_', '_', 'a', 'z' };
+static const int kWordRangeCount = ARRAY_SIZE(kWordRanges);
 
-static const int kDigitRangeCount = 2;
-static const uc16 kDigitRanges[kDigitRangeCount] = { '0', '9' };
+static const uc16 kDigitRanges[] = { '0', '9' };
+static const int kDigitRangeCount = ARRAY_SIZE(kDigitRanges);
 
-static const int kLineTerminatorRangeCount = 6;
-static const uc16 kLineTerminatorRanges[kLineTerminatorRangeCount] = { 0x000A,
-    0x000A, 0x000D, 0x000D, 0x2028, 0x2029 };
+static const uc16 kLineTerminatorRanges[] = { 0x000A, 0x000A, 0x000D, 0x000D,
+    0x2028, 0x2029 };
+static const int kLineTerminatorRangeCount = ARRAY_SIZE(kLineTerminatorRanges);
 
 RegExpNode* RegExpAtom::ToNode(RegExpCompiler* compiler,
                                RegExpNode* on_success) {
@@ -4079,7 +4079,7 @@ static void AddClassNegated(const uc16 *elmv,
                             int elmc,
                             ZoneList<CharacterRange>* ranges) {
   ASSERT(elmv[0] != 0x0000);
-  ASSERT(elmv[elmc-1] != String::kMaxUC16CharCode);
+  ASSERT(elmv[elmc-1] != String::kMaxUtf16CodeUnit);
   uc16 last = 0x0000;
   for (int i = 0; i < elmc; i += 2) {
     ASSERT(last <= elmv[i] - 1);
@@ -4087,7 +4087,7 @@ static void AddClassNegated(const uc16 *elmv,
     ranges->Add(CharacterRange(last, elmv[i] - 1));
     last = elmv[i + 1] + 1;
   }
-  ranges->Add(CharacterRange(last, String::kMaxUC16CharCode));
+  ranges->Add(CharacterRange(last, String::kMaxUtf16CodeUnit));
 }
 
 
@@ -4633,8 +4633,8 @@ void CharacterRange::Negate(ZoneList<CharacterRange>* ranges,
     from = range.to();
     i++;
   }
-  if (from < String::kMaxUC16CharCode) {
-    negated_ranges->Add(CharacterRange(from + 1, String::kMaxUC16CharCode));
+  if (from < String::kMaxUtf16CodeUnit) {
+    negated_ranges->Add(CharacterRange(from + 1, String::kMaxUtf16CodeUnit));
   }
 }
 
@@ -4797,7 +4797,7 @@ void DispatchTable::AddRange(CharacterRange full_range, int value) {
       entry->AddValue(value);
       // Bail out if the last interval ended at 0xFFFF since otherwise
       // adding 1 will wrap around to 0.
-      if (entry->to() == String::kMaxUC16CharCode)
+      if (entry->to() == String::kMaxUtf16CodeUnit)
         break;
       ASSERT(entry->to() + 1 > current.from());
       current.set_from(entry->to() + 1);
@@ -5117,7 +5117,7 @@ int TextNode::ComputeFirstCharacterSet(int budget) {
         int new_length = length + 1;
         if (length > 0) {
           if (ranges->at(0).from() == 0) new_length--;
-          if (ranges->at(length - 1).to() == String::kMaxUC16CharCode) {
+          if (ranges->at(length - 1).to() == String::kMaxUtf16CodeUnit) {
             new_length--;
           }
         }
@@ -5207,14 +5207,14 @@ void DispatchTableConstructor::AddInverse(ZoneList<CharacterRange>* ranges) {
     if (last < range.from())
       AddRange(CharacterRange(last, range.from() - 1));
     if (range.to() >= last) {
-      if (range.to() == String::kMaxUC16CharCode) {
+      if (range.to() == String::kMaxUtf16CodeUnit) {
         return;
       } else {
         last = range.to() + 1;
       }
     }
   }
-  AddRange(CharacterRange(last, String::kMaxUC16CharCode));
+  AddRange(CharacterRange(last, String::kMaxUtf16CodeUnit));
 }
 
 

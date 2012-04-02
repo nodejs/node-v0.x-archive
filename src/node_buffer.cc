@@ -20,10 +20,10 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <node.h>
-#include <node_buffer.h>
+#include "node.h"
+#include "node_buffer.h"
 
-#include <v8.h>
+#include "v8.h"
 
 #include <assert.h>
 #include <stdlib.h> // malloc, free
@@ -171,14 +171,14 @@ Handle<Value> Buffer::New(const Arguments &args) {
 
   HandleScope scope;
 
-  Buffer *buffer;
-  if (args[0]->IsInt32()) {
-    // var buffer = new Buffer(1024);
-    size_t length = args[0]->Uint32Value();
-    buffer = new Buffer(args.This(), length);
-  } else {
-    return ThrowException(Exception::TypeError(String::New("Bad argument")));
+  if (!args[0]->IsUint32()) return ThrowTypeError("Bad argument");
+
+  size_t length = args[0]->Uint32Value();
+  if (length > Buffer::kMaxLength) {
+    return ThrowRangeError("length > kMaxLength");
   }
+  new Buffer(args.This(), length);
+
   return args.This();
 }
 
@@ -278,13 +278,15 @@ Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
 static const char *base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                   "abcdefghijklmnopqrstuvwxyz"
                                   "0123456789+/";
+
+// supports regular and URL-safe base64
 static const int unbase64_table[] =
   {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-2,-1,-1,-2,-1,-1
   ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
-  ,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63
+  ,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,62,-1,63
   ,52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-1,-1,-1
   ,-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14
-  ,15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1
+  ,15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,63
   ,-1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40
   ,41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1
   ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
@@ -404,12 +406,11 @@ Handle<Value> Buffer::Copy(const Arguments &args) {
   }
 
   Local<Object> target = args[0]->ToObject();
-  char *target_data = Buffer::Data(target);
-  ssize_t target_length = Buffer::Length(target);
-
-  ssize_t target_start = args[1]->Int32Value();
-  ssize_t source_start = args[2]->Int32Value();
-  ssize_t source_end = args[3]->IsInt32() ? args[3]->Int32Value()
+  char* target_data = Buffer::Data(target);
+  size_t target_length = Buffer::Length(target);
+  size_t target_start = args[1]->Uint32Value();
+  size_t source_start = args[2]->Uint32Value();
+  size_t source_end = args[3]->IsUint32() ? args[3]->Uint32Value()
                                           : source->length_;
 
   if (source_end < source_start) {
@@ -422,25 +423,24 @@ Handle<Value> Buffer::Copy(const Arguments &args) {
     return scope.Close(Integer::New(0));
   }
 
-  if (target_start < 0 || target_start >= target_length) {
+  if (target_start >= target_length) {
     return ThrowException(Exception::Error(String::New(
             "targetStart out of bounds")));
   }
 
-  if (source_start < 0 || source_start >= source->length_) {
+  if (source_start >= source->length_) {
     return ThrowException(Exception::Error(String::New(
             "sourceStart out of bounds")));
   }
 
-  if (source_end < 0 || source_end > source->length_) {
+  if (source_end > source->length_) {
     return ThrowException(Exception::Error(String::New(
             "sourceEnd out of bounds")));
   }
 
-  ssize_t to_copy = MIN(MIN(source_end - source_start,
-                            target_length - target_start),
-                            source->length_ - source_start);
-
+  size_t to_copy = MIN(MIN(source_end - source_start,
+                           target_length - target_start),
+                           source->length_ - source_start);
 
   // need to use slightly slower memmove is the ranges might overlap
   memmove((void *)(target_data + target_start),
@@ -549,17 +549,17 @@ Handle<Value> Buffer::AsciiWrite(const Arguments &args) {
   }
 
   Local<String> s = args[0]->ToString();
-
+  size_t length = s->Length();
   size_t offset = args[1]->Int32Value();
 
-  if (s->Length() > 0 && offset >= buffer->length_) {
+  if (length > 0 && offset >= buffer->length_) {
     return ThrowException(Exception::TypeError(String::New(
             "Offset is out of bounds")));
   }
 
   size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
                                              : args[2]->Uint32Value();
-  max_length = MIN(s->Length(), MIN(buffer->length_ - offset, max_length));
+  max_length = MIN(length, MIN(buffer->length_ - offset, max_length));
 
   char *p = buffer->data_ + offset;
 
@@ -587,11 +587,12 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
             "Argument must be a string")));
   }
 
-  String::AsciiValue s(args[0]->ToString());
+  String::AsciiValue s(args[0]);
+  size_t length = s.length();
   size_t offset = args[1]->Int32Value();
   size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
                                              : args[2]->Uint32Value();
-  max_length = MIN(s.length(), MIN(buffer->length_ - offset, max_length));
+  max_length = MIN(length, MIN(buffer->length_ - offset, max_length));
 
   if (max_length && offset >= buffer->length_) {
     return ThrowException(Exception::TypeError(String::New(
@@ -651,7 +652,7 @@ Handle<Value> Buffer::BinaryWrite(const Arguments &args) {
   }
 
   Local<String> s = args[0]->ToString();
-
+  size_t length = s->Length();
   size_t offset = args[1]->Int32Value();
 
   if (s->Length() > 0 && offset >= buffer->length_) {
@@ -663,7 +664,7 @@ Handle<Value> Buffer::BinaryWrite(const Arguments &args) {
 
   size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
                                              : args[2]->Uint32Value();
-  max_length = MIN(s->Length(), MIN(buffer->length_ - offset, max_length));
+  max_length = MIN(length, MIN(buffer->length_ - offset, max_length));
 
   int written = DecodeWrite(p, max_length, s, BINARY);
 

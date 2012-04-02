@@ -60,6 +60,8 @@ MarkCompactCollector::MarkCompactCollector() :  // NOLINT
       state_(IDLE),
 #endif
       sweep_precisely_(false),
+      reduce_memory_footprint_(false),
+      abort_incremental_marking_(false),
       compacting_(false),
       was_marked_incrementally_(false),
       collect_maps_(FLAG_collect_maps),
@@ -107,14 +109,14 @@ static void VerifyMarking(NewSpace* space) {
   Address end = space->top();
   NewSpacePageIterator it(space->bottom(), end);
   // The bottom position is at the start of its page. Allows us to use
-  // page->body() as start of range on all pages.
+  // page->area_start() as start of range on all pages.
   ASSERT_EQ(space->bottom(),
-            NewSpacePage::FromAddress(space->bottom())->body());
+            NewSpacePage::FromAddress(space->bottom())->area_start());
   while (it.has_next()) {
     NewSpacePage* page = it.next();
-    Address limit = it.has_next() ? page->body_limit() : end;
+    Address limit = it.has_next() ? page->area_end() : end;
     ASSERT(limit == end || !page->Contains(end));
-    VerifyMarking(page->body(), limit);
+    VerifyMarking(page->area_start(), limit);
   }
 }
 
@@ -124,7 +126,7 @@ static void VerifyMarking(PagedSpace* space) {
 
   while (it.has_next()) {
     Page* p = it.next();
-    VerifyMarking(p->ObjectAreaStart(), p->ObjectAreaEnd());
+    VerifyMarking(p->area_start(), p->area_end());
   }
 }
 
@@ -187,8 +189,8 @@ static void VerifyEvacuation(NewSpace* space) {
 
   while (it.has_next()) {
     NewSpacePage* page = it.next();
-    Address current = page->body();
-    Address limit = it.has_next() ? page->body_limit() : space->top();
+    Address current = page->area_start();
+    Address limit = it.has_next() ? page->area_end() : space->top();
     ASSERT(limit == space->top() || !page->Contains(space->top()));
     while (current < limit) {
       HeapObject* object = HeapObject::FromAddress(current);
@@ -205,7 +207,7 @@ static void VerifyEvacuation(PagedSpace* space) {
   while (it.has_next()) {
     Page* p = it.next();
     if (p->IsEvacuationCandidate()) continue;
-    VerifyEvacuation(p->ObjectAreaStart(), p->ObjectAreaEnd());
+    VerifyEvacuation(p->area_start(), p->area_end());
   }
 }
 
@@ -232,7 +234,7 @@ void MarkCompactCollector::AddEvacuationCandidate(Page* p) {
 
 static void TraceFragmentation(PagedSpace* space) {
   int number_of_pages = space->CountTotalPages();
-  intptr_t reserved = (number_of_pages * Page::kObjectAreaSize);
+  intptr_t reserved = (number_of_pages * space->AreaSize());
   intptr_t free = reserved - space->SizeOfObjects();
   PrintF("[%s]: %d pages, %d (%.1f%%) free\n",
          AllocationSpaceName(space->identity()),
@@ -453,13 +455,14 @@ static int FreeListFragmentation(PagedSpace* space, Page* p) {
 
   intptr_t ratio;
   intptr_t ratio_threshold;
+  intptr_t area_size = space->AreaSize();
   if (space->identity() == CODE_SPACE) {
     ratio = (sizes.medium_size_ * 10 + sizes.large_size_ * 2) * 100 /
-        Page::kObjectAreaSize;
+        area_size;
     ratio_threshold = 10;
   } else {
     ratio = (sizes.small_size_ * 5 + sizes.medium_size_) * 100 /
-        Page::kObjectAreaSize;
+        area_size;
     ratio_threshold = 15;
   }
 
@@ -469,20 +472,20 @@ static int FreeListFragmentation(PagedSpace* space, Page* p) {
            AllocationSpaceName(space->identity()),
            static_cast<int>(sizes.small_size_),
            static_cast<double>(sizes.small_size_ * 100) /
-           Page::kObjectAreaSize,
+           area_size,
            static_cast<int>(sizes.medium_size_),
            static_cast<double>(sizes.medium_size_ * 100) /
-           Page::kObjectAreaSize,
+           area_size,
            static_cast<int>(sizes.large_size_),
            static_cast<double>(sizes.large_size_ * 100) /
-           Page::kObjectAreaSize,
+           area_size,
            static_cast<int>(sizes.huge_size_),
            static_cast<double>(sizes.huge_size_ * 100) /
-           Page::kObjectAreaSize,
+           area_size,
            (ratio > ratio_threshold) ? "[fragmented]" : "");
   }
 
-  if (FLAG_always_compact && sizes.Total() != Page::kObjectAreaSize) {
+  if (FLAG_always_compact && sizes.Total() != area_size) {
     return 1;
   }
 
@@ -528,11 +531,11 @@ void MarkCompactCollector::CollectEvacuationCandidates(PagedSpace* space) {
 
   CompactionMode mode = COMPACT_FREE_LISTS;
 
-  intptr_t reserved = number_of_pages * Page::kObjectAreaSize;
+  intptr_t reserved = number_of_pages * space->AreaSize();
   intptr_t over_reserved = reserved - space->SizeOfObjects();
   static const intptr_t kFreenessThreshold = 50;
 
-  if (over_reserved >= 2 * Page::kObjectAreaSize &&
+  if (over_reserved >= 2 * space->AreaSize() &&
       reduce_memory_footprint_) {
     mode = REDUCE_MEMORY_FOOTPRINT;
 
@@ -575,18 +578,17 @@ void MarkCompactCollector::CollectEvacuationCandidates(PagedSpace* space) {
       intptr_t free_bytes = 0;
 
       if (!p->WasSwept()) {
-        free_bytes = (Page::kObjectAreaSize - p->LiveBytes());
+        free_bytes = (p->area_size() - p->LiveBytes());
       } else {
         FreeList::SizeStats sizes;
         space->CountFreeListItems(p, &sizes);
         free_bytes = sizes.Total();
       }
 
-      int free_pct = static_cast<int>(free_bytes * 100 / Page::kObjectAreaSize);
+      int free_pct = static_cast<int>(free_bytes * 100) / p->area_size();
 
       if (free_pct >= kFreenessThreshold) {
-        estimated_release += Page::kObjectAreaSize +
-            (Page::kObjectAreaSize - free_bytes);
+        estimated_release += 2 * p->area_size() - free_bytes;
         fragmentation = free_pct;
       } else {
         fragmentation = 0;
@@ -597,7 +599,7 @@ void MarkCompactCollector::CollectEvacuationCandidates(PagedSpace* space) {
                reinterpret_cast<void*>(p),
                AllocationSpaceName(space->identity()),
                static_cast<int>(free_bytes),
-               static_cast<double>(free_bytes * 100) / Page::kObjectAreaSize,
+               static_cast<double>(free_bytes * 100) / p->area_size(),
                (fragmentation > 0) ? "[fragmented]" : "");
       }
     } else {
@@ -686,8 +688,8 @@ void MarkCompactCollector::Prepare(GCTracer* tracer) {
   }
 #endif
 
-  // Clear marking bits for precise sweeping to collect all garbage.
-  if (was_marked_incrementally_ && PreciseSweepingRequired()) {
+  // Clear marking bits if incremental marking is aborted.
+  if (was_marked_incrementally_ && abort_incremental_marking_) {
     heap()->incremental_marking()->Abort();
     ClearMarkbits();
     AbortCompaction();
@@ -1047,7 +1049,8 @@ class StaticMarkingVisitor : public StaticVisitorBase {
     Code* target = Code::GetCodeFromTargetAddress(rinfo->target_address());
     if (FLAG_cleanup_code_caches_at_gc && target->is_inline_cache_stub()
         && (target->ic_state() == MEGAMORPHIC ||
-            heap->mark_compact_collector()->flush_monomorphic_ics_)) {
+            heap->mark_compact_collector()->flush_monomorphic_ics_ ||
+            target->ic_age() != heap->global_ic_age())) {
       IC::Clear(rinfo->pc());
       target = Code::GetCodeFromTargetAddress(rinfo->target_address());
     }
@@ -1176,11 +1179,15 @@ class StaticMarkingVisitor : public StaticVisitorBase {
     Heap* heap = map->GetHeap();
     Code* code = reinterpret_cast<Code*>(object);
     if (FLAG_cleanup_code_caches_at_gc) {
-      TypeFeedbackCells* type_feedback_cells = code->type_feedback_cells();
-      for (int i = 0; i < type_feedback_cells->CellCount(); i++) {
-        ASSERT(type_feedback_cells->AstId(i)->IsSmi());
-        JSGlobalPropertyCell* cell = type_feedback_cells->Cell(i);
-        cell->set_value(TypeFeedbackCells::RawUninitializedSentinel(heap));
+      Object* raw_info = code->type_feedback_info();
+      if (raw_info->IsTypeFeedbackInfo()) {
+        TypeFeedbackCells* type_feedback_cells =
+            TypeFeedbackInfo::cast(raw_info)->type_feedback_cells();
+        for (int i = 0; i < type_feedback_cells->CellCount(); i++) {
+          ASSERT(type_feedback_cells->AstId(i)->IsSmi());
+          JSGlobalPropertyCell* cell = type_feedback_cells->Cell(i);
+          cell->set_value(TypeFeedbackCells::RawUninitializedSentinel(heap));
+        }
       }
     }
     code->CodeIterateBody<StaticMarkingVisitor>(heap);
@@ -1791,7 +1798,7 @@ void MarkCompactCollector::ProcessNewlyMarkedObject(HeapObject* object) {
   ASSERT(HEAP->Contains(object));
   if (object->IsMap()) {
     Map* map = Map::cast(object);
-    ClearCacheOnMap(map);
+    heap_->ClearCacheOnMap(map);
 
     // When map collection is enabled we have to mark through map's transitions
     // in a special way to make transition links weak.
@@ -1973,12 +1980,15 @@ static void DiscoverGreyObjectsOnPage(MarkingDeque* marking_deque, Page* p) {
   int last_cell_index =
       Bitmap::IndexToCell(
           Bitmap::CellAlignIndex(
-              p->AddressToMarkbitIndex(p->ObjectAreaEnd())));
+              p->AddressToMarkbitIndex(p->area_end())));
 
-  int cell_index = Page::kFirstUsedCell;
-  Address cell_base = p->ObjectAreaStart();
+  Address cell_base = p->area_start();
+  int cell_index = Bitmap::IndexToCell(
+          Bitmap::CellAlignIndex(
+              p->AddressToMarkbitIndex(cell_base)));
 
-  for (cell_index = Page::kFirstUsedCell;
+
+  for (;
        cell_index < last_cell_index;
        cell_index++, cell_base += 32 * kPointerSize) {
     ASSERT((unsigned)cell_index ==
@@ -2782,7 +2792,7 @@ bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
                                             int object_size) {
   Object* result;
 
-  if (object_size > heap()->MaxObjectSizeInPagedSpace()) {
+  if (object_size > Page::kMaxNonCodeHeapObjectSize) {
     MaybeObject* maybe_result =
         heap()->lo_space()->AllocateRaw(object_size, NOT_EXECUTABLE);
     if (maybe_result->ToObject(&result)) {
@@ -2900,13 +2910,16 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
   int last_cell_index =
       Bitmap::IndexToCell(
           Bitmap::CellAlignIndex(
-              p->AddressToMarkbitIndex(p->ObjectAreaEnd())));
+              p->AddressToMarkbitIndex(p->area_end())));
 
-  int cell_index = Page::kFirstUsedCell;
-  Address cell_base = p->ObjectAreaStart();
+  Address cell_base = p->area_start();
+  int cell_index = Bitmap::IndexToCell(
+          Bitmap::CellAlignIndex(
+              p->AddressToMarkbitIndex(cell_base)));
+
   int offsets[16];
 
-  for (cell_index = Page::kFirstUsedCell;
+  for (;
        cell_index < last_cell_index;
        cell_index++, cell_base += 32 * kPointerSize) {
     ASSERT((unsigned)cell_index ==
@@ -3061,12 +3074,16 @@ static void SweepPrecisely(PagedSpace* space,
   int last_cell_index =
       Bitmap::IndexToCell(
           Bitmap::CellAlignIndex(
-              p->AddressToMarkbitIndex(p->ObjectAreaEnd())));
+              p->AddressToMarkbitIndex(p->area_end())));
 
-  int cell_index = Page::kFirstUsedCell;
-  Address free_start = p->ObjectAreaStart();
+  Address free_start = p->area_start();
+  int cell_index =
+      Bitmap::IndexToCell(
+          Bitmap::CellAlignIndex(
+              p->AddressToMarkbitIndex(free_start)));
+
   ASSERT(reinterpret_cast<intptr_t>(free_start) % (32 * kPointerSize) == 0);
-  Address object_address = p->ObjectAreaStart();
+  Address object_address = free_start;
   int offsets[16];
 
   SkipList* skip_list = p->skip_list();
@@ -3075,7 +3092,7 @@ static void SweepPrecisely(PagedSpace* space,
     skip_list->Clear();
   }
 
-  for (cell_index = Page::kFirstUsedCell;
+  for (;
        cell_index < last_cell_index;
        cell_index++, object_address += 32 * kPointerSize) {
     ASSERT((unsigned)cell_index ==
@@ -3112,8 +3129,8 @@ static void SweepPrecisely(PagedSpace* space,
     // Clear marking bits for current cell.
     cells[cell_index] = 0;
   }
-  if (free_start != p->ObjectAreaEnd()) {
-    space->Free(free_start, static_cast<int>(p->ObjectAreaEnd() - free_start));
+  if (free_start != p->area_end()) {
+    space->Free(free_start, static_cast<int>(p->area_end() - free_start));
   }
   p->ResetLiveBytes();
 }
@@ -3408,10 +3425,9 @@ void MarkCompactCollector::EvacuateNewSpaceAndCandidates() {
     Page* p = evacuation_candidates_[i];
     if (!p->IsEvacuationCandidate()) continue;
     PagedSpace* space = static_cast<PagedSpace*>(p->owner());
-    space->Free(p->ObjectAreaStart(), Page::kObjectAreaSize);
+    space->Free(p->area_start(), p->area_size());
     p->set_scan_on_scavenge(false);
     slots_buffer_allocator_.DeallocateChain(p->slots_buffer_address());
-    p->ClearEvacuationCandidate();
     p->ResetLiveBytes();
     space->ReleasePage(p);
   }
@@ -3711,23 +3727,27 @@ intptr_t MarkCompactCollector::SweepConservatively(PagedSpace* space, Page* p) {
   int last_cell_index =
       Bitmap::IndexToCell(
           Bitmap::CellAlignIndex(
-              p->AddressToMarkbitIndex(p->ObjectAreaEnd())));
+              p->AddressToMarkbitIndex(p->area_end())));
 
-  int cell_index = Page::kFirstUsedCell;
+  int cell_index =
+      Bitmap::IndexToCell(
+          Bitmap::CellAlignIndex(
+              p->AddressToMarkbitIndex(p->area_start())));
+
   intptr_t freed_bytes = 0;
 
   // This is the start of the 32 word block that we are currently looking at.
-  Address block_address = p->ObjectAreaStart();
+  Address block_address = p->area_start();
 
   // Skip over all the dead objects at the start of the page and mark them free.
-  for (cell_index = Page::kFirstUsedCell;
+  for (;
        cell_index < last_cell_index;
        cell_index++, block_address += 32 * kPointerSize) {
     if (cells[cell_index] != 0) break;
   }
-  size_t size = block_address - p->ObjectAreaStart();
+  size_t size = block_address - p->area_start();
   if (cell_index == last_cell_index) {
-    freed_bytes += static_cast<int>(space->Free(p->ObjectAreaStart(),
+    freed_bytes += static_cast<int>(space->Free(p->area_start(),
                                                 static_cast<int>(size)));
     ASSERT_EQ(0, p->LiveBytes());
     return freed_bytes;
@@ -3736,8 +3756,8 @@ intptr_t MarkCompactCollector::SweepConservatively(PagedSpace* space, Page* p) {
   // first live object.
   Address free_end = StartOfLiveObject(block_address, cells[cell_index]);
   // Free the first free space.
-  size = free_end - p->ObjectAreaStart();
-  freed_bytes += space->Free(p->ObjectAreaStart(),
+  size = free_end - p->area_start();
+  freed_bytes += space->Free(p->area_start(),
                              static_cast<int>(size));
   // The start of the current free area is represented in undigested form by
   // the address of the last 32-word section that contained a live object and

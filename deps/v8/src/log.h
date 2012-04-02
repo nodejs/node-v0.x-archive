@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -71,7 +71,6 @@ namespace internal {
 // tick profiler requires code events, so --prof implies --log-code.
 
 // Forward declarations.
-class HashMap;
 class LogMessageBuilder;
 class Profiler;
 class Semaphore;
@@ -455,7 +454,6 @@ class SamplerRegistry : public AllStatic {
     return active_samplers_ != NULL && !active_samplers_->is_empty();
   }
 
-  static Mutex* mutex_;  // Protects the state below.
   static List<Sampler*>* active_samplers_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(SamplerRegistry);

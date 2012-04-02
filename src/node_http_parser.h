@@ -22,7 +22,9 @@
 #ifndef NODE_HTTP_PARSER
 #define NODE_HTTP_PARSER
 
-#include <v8.h>
+#include "v8.h"
+
+#include "http_parser.h"
 
 namespace node {
 

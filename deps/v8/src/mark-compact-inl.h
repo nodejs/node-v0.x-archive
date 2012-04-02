@@ -45,15 +45,10 @@ MarkBit Marking::MarkBitFrom(Address addr) {
 
 
 void MarkCompactCollector::SetFlags(int flags) {
-  sweep_precisely_ = ((flags & Heap::kMakeHeapIterableMask) != 0);
+  sweep_precisely_ = ((flags & Heap::kSweepPreciselyMask) != 0);
   reduce_memory_footprint_ = ((flags & Heap::kReduceMemoryFootprintMask) != 0);
-}
-
-
-void MarkCompactCollector::ClearCacheOnMap(Map* map) {
-  if (FLAG_cleanup_code_caches_at_gc) {
-    map->ClearCodeCache(heap());
-  }
+  abort_incremental_marking_ =
+      ((flags & Heap::kAbortIncrementalMarkingMask) != 0);
 }
 
 
@@ -86,7 +81,7 @@ void MarkCompactCollector::SetMark(HeapObject* obj, MarkBit mark_bit) {
   mark_bit.Set();
   MemoryChunk::IncrementLiveBytesFromGC(obj->address(), obj->Size());
   if (obj->IsMap()) {
-    ClearCacheOnMap(Map::cast(obj));
+    heap_->ClearCacheOnMap(Map::cast(obj));
   }
 }
 

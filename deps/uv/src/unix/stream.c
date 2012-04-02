@@ -22,14 +22,17 @@
 #include "uv.h"
 #include "internal.h"
 
-#include <assert.h>
-#include <errno.h>
-#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/uio.h>
+#include <assert.h>
+#include <errno.h>
 
-#include <stdio.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 
 static void uv__stream_connect(uv_stream_t*);
@@ -182,6 +185,9 @@ void uv__server_io(EV_P_ ev_io* watcher, int revents) {
       } else if (errno == EMFILE) {
         /* TODO special trick. unlock reserved socket, accept, close. */
         return;
+      } else if (errno == ECONNABORTED) {
+        /* ignore */
+        continue;
       } else {
         uv__set_sys_error(stream->loop, errno);
         stream->connection_cb((uv_stream_t*)stream, -1);
@@ -222,7 +228,7 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
   if (uv__stream_open(streamClient, streamServer->accepted_fd,
         UV_READABLE | UV_WRITABLE)) {
     /* TODO handle error */
-    uv__close(streamServer->accepted_fd);
+    close(streamServer->accepted_fd);
     streamServer->accepted_fd = -1;
     goto out;
   }
@@ -513,6 +519,28 @@ static void uv__write_callbacks(uv_stream_t* stream) {
 }
 
 
+static uv_handle_type uv__handle_type(int fd) {
+  struct sockaddr_storage ss;
+  socklen_t len;
+
+  memset(&ss, 0, sizeof(ss));
+  len = sizeof(ss);
+
+  if (getsockname(fd, (struct sockaddr*)&ss, &len))
+    return UV_UNKNOWN_HANDLE;
+
+  switch (ss.ss_family) {
+  case AF_UNIX:
+    return UV_NAMED_PIPE;
+  case AF_INET:
+  case AF_INET6:
+    return UV_TCP;
+  }
+
+  return UV_UNKNOWN_HANDLE;
+}
+
+
 static void uv__read(uv_stream_t* stream) {
   uv_buf_t buf;
   ssize_t nread;
@@ -633,7 +661,8 @@ static void uv__read(uv_stream_t* stream) {
 
 
         if (stream->accepted_fd >= 0) {
-          stream->read2_cb((uv_pipe_t*)stream, nread, buf, UV_TCP);
+          stream->read2_cb((uv_pipe_t*)stream, nread, buf,
+              uv__handle_type(stream->accepted_fd));
         } else {
           stream->read2_cb((uv_pipe_t*)stream, nread, buf, UV_UNKNOWN_HANDLE);
         }
@@ -767,7 +796,7 @@ int uv__connect(uv_connect_t* req, uv_stream_t* stream, struct sockaddr* addr,
     }
 
     if (uv__stream_open(stream, sockfd, UV_READABLE | UV_WRITABLE)) {
-      uv__close(sockfd);
+      close(sockfd);
       return -2;
     }
   }

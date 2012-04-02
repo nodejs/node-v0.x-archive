@@ -27,8 +27,14 @@
 
 
 uv_handle_type uv_guess_handle(uv_file file) {
-  HANDLE handle = (HANDLE) _get_osfhandle(file);
+  HANDLE handle;
   DWORD mode;
+
+  if (file < 0) {
+    return UV_UNKNOWN_HANDLE;
+  }
+
+  handle = (HANDLE) _get_osfhandle(file);
 
   switch (GetFileType(handle)) {
     case FILE_TYPE_CHAR:
@@ -65,7 +71,6 @@ int uv_is_active(uv_handle_t* handle) {
 
 
 void uv_close(uv_handle_t* handle, uv_close_cb cb) {
-  uv_tcp_t* tcp;
   uv_pipe_t* pipe;
   uv_udp_t* udp;
   uv_process_t* process;
@@ -82,18 +87,7 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
   /* Handle-specific close actions */
   switch (handle->type) {
     case UV_TCP:
-      tcp = (uv_tcp_t*)handle;
-      /* If we don't shutdown before calling closesocket, windows will */
-      /* silently discard the kernel send buffer and reset the connection. */
-      if (!(tcp->flags & UV_HANDLE_SHUT)) {
-        shutdown(tcp->socket, SD_SEND);
-        tcp->flags |= UV_HANDLE_SHUT;
-      }
-      tcp->flags &= ~(UV_HANDLE_READING | UV_HANDLE_LISTENING);
-      closesocket(tcp->socket);
-      if (tcp->reqs_pending == 0) {
-        uv_want_endgame(loop, handle);
-      }
+      uv_tcp_close((uv_tcp_t*)handle);
       return;
 
     case UV_NAMED_PIPE:
@@ -173,7 +167,7 @@ void uv_want_endgame(uv_loop_t* loop, uv_handle_t* handle) {
 void uv_process_endgames(uv_loop_t* loop) {
   uv_handle_t* handle;
 
-  while (loop->endgame_handles) {
+  while (loop->endgame_handles && loop->refs > 0) {
     handle = loop->endgame_handles;
     loop->endgame_handles = handle->endgame_next;
 

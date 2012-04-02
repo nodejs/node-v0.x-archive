@@ -72,7 +72,6 @@ if (cluster.isWorker) {
 
   // Check all values
   process.once('exit', function() {
-    console.log(checks.globalMasterWorkers);
     assert.ok(checks.globalMasterWorkers === 1, 'Wrong number of workers for global master');
     assert.ok(checks.localMasterWorkers === 1, 'Wrong number of workers for local master');
     assert.ok(checks.globalMasterArgs, 'Worker for global master did not receive custom args');

@@ -31,6 +31,7 @@
 #include "deoptimizer.h"
 #include "frames-inl.h"
 #include "full-codegen.h"
+#include "lazy-instance.h"
 #include "mark-compact.h"
 #include "safepoint-table.h"
 #include "scopeinfo.h"
@@ -40,6 +41,22 @@
 
 namespace v8 {
 namespace internal {
+
+
+static ReturnAddressLocationResolver return_address_location_resolver = NULL;
+
+
+// Resolves pc_address through the resolution address function if one is set.
+static inline Address* ResolveReturnAddressLocation(Address* pc_address) {
+  if (return_address_location_resolver == NULL) {
+    return pc_address;
+  } else {
+    return reinterpret_cast<Address*>(
+        return_address_location_resolver(
+            reinterpret_cast<uintptr_t>(pc_address)));
+  }
+}
+
 
 // Iterator that supports traversing the stack handlers of a
 // particular frame. Needs to know the top of the handler chain.
@@ -155,8 +172,8 @@ void StackFrameIterator::Reset() {
     ASSERT(fp_ != NULL);
     state.fp = fp_;
     state.sp = sp_;
-    state.pc_address =
-        reinterpret_cast<Address*>(StandardFrame::ComputePCAddress(fp_));
+    state.pc_address = ResolveReturnAddressLocation(
+        reinterpret_cast<Address*>(StandardFrame::ComputePCAddress(fp_)));
     type = StackFrame::ComputeType(isolate(), &state);
   }
   if (SingletonFor(type) == NULL) return;
@@ -414,6 +431,13 @@ void StackFrame::IteratePc(ObjectVisitor* v,
 }
 
 
+void StackFrame::SetReturnAddressLocationResolver(
+    ReturnAddressLocationResolver resolver) {
+  ASSERT(return_address_location_resolver == NULL);
+  return_address_location_resolver = resolver;
+}
+
+
 StackFrame::Type StackFrame::ComputeType(Isolate* isolate, State* state) {
   ASSERT(state->fp != NULL);
   if (StandardFrame::IsArgumentsAdaptorFrame(state->fp)) {
@@ -488,8 +512,8 @@ void ExitFrame::ComputeCallerState(State* state) const {
   // Set up the caller state.
   state->sp = caller_sp();
   state->fp = Memory::Address_at(fp() + ExitFrameConstants::kCallerFPOffset);
-  state->pc_address
-      = reinterpret_cast<Address*>(fp() + ExitFrameConstants::kCallerPCOffset);
+  state->pc_address = ResolveReturnAddressLocation(
+      reinterpret_cast<Address*>(fp() + ExitFrameConstants::kCallerPCOffset));
 }
 
 
@@ -523,7 +547,8 @@ StackFrame::Type ExitFrame::GetStateForFramePointer(Address fp, State* state) {
 void ExitFrame::FillState(Address fp, Address sp, State* state) {
   state->sp = sp;
   state->fp = fp;
-  state->pc_address = reinterpret_cast<Address*>(sp - 1 * kPointerSize);
+  state->pc_address = ResolveReturnAddressLocation(
+      reinterpret_cast<Address*>(sp - 1 * kPointerSize));
 }
 
 
@@ -558,7 +583,8 @@ int StandardFrame::ComputeExpressionsCount() const {
 void StandardFrame::ComputeCallerState(State* state) const {
   state->sp = caller_sp();
   state->fp = caller_fp();
-  state->pc_address = reinterpret_cast<Address*>(ComputePCAddress(fp()));
+  state->pc_address = ResolveReturnAddressLocation(
+      reinterpret_cast<Address*>(ComputePCAddress(fp())));
 }
 
 
@@ -818,14 +844,11 @@ void OptimizedFrame::Summarize(List<FrameSummary>* frames) {
 
   // We create the summary in reverse order because the frames
   // in the deoptimization translation are ordered bottom-to-top.
+  bool is_constructor = IsConstructor();
   int i = jsframe_count;
   while (i > 0) {
     opcode = static_cast<Translation::Opcode>(it.Next());
     if (opcode == Translation::JS_FRAME) {
-      // We don't inline constructor calls, so only the first, outermost
-      // frame can be a constructor frame in case of inlining.
-      bool is_constructor = (i == jsframe_count) && IsConstructor();
-
       i--;
       int ast_id = it.Next();
       int function_id = it.Next();
@@ -875,11 +898,18 @@ void OptimizedFrame::Summarize(List<FrameSummary>* frames) {
 
       FrameSummary summary(receiver, function, code, pc_offset, is_constructor);
       frames->Add(summary);
+      is_constructor = false;
+    } else if (opcode == Translation::CONSTRUCT_STUB_FRAME) {
+      // The next encountered JS_FRAME will be marked as a constructor call.
+      it.Skip(Translation::NumberOfOperandsFor(opcode));
+      ASSERT(!is_constructor);
+      is_constructor = true;
     } else {
       // Skip over operands to advance to the next opcode.
       it.Skip(Translation::NumberOfOperandsFor(opcode));
     }
   }
+  ASSERT(!is_constructor);
 }
 
 
@@ -1272,7 +1302,7 @@ Code* InnerPointerToCodeCache::GcSafeFindCodeForInnerPointer(
     Address inner_pointer) {
   Heap* heap = isolate_->heap();
   // Check if the inner pointer points into a large object chunk.
-  LargePage* large_page = heap->lo_space()->FindPageContainingPc(inner_pointer);
+  LargePage* large_page = heap->lo_space()->FindPage(inner_pointer);
   if (large_page != NULL) {
     return GcSafeCastToCode(large_page->GetObject(), inner_pointer);
   }
@@ -1351,12 +1381,12 @@ struct JSCallerSavedCodeData {
 };
 
 
-static const JSCallerSavedCodeData kCallerSavedCodeData;
-
+static LazyInstance<JSCallerSavedCodeData>::type caller_saved_code_data =
+    LAZY_INSTANCE_INITIALIZER;
 
 int JSCallerSavedCode(int n) {
   ASSERT(0 <= n && n < kNumJSCallerSaved);
-  return kCallerSavedCodeData.reg_code[n];
+  return caller_saved_code_data.Get().reg_code[n];
 }
 
 

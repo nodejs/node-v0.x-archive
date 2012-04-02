@@ -19,13 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
+#include "node.h"
 
-#include <uv.h>
+#include "uv.h"
 
-#include <v8-debug.h>
+#include "v8-debug.h"
 #ifdef HAVE_DTRACE
-# include <node_dtrace.h>
+# include "node_dtrace.h"
 #endif
 
 #include <locale.h>
@@ -55,31 +55,32 @@ typedef int mode_t;
 #endif
 #include <errno.h>
 #include <sys/types.h>
+#include "zlib.h"
 
 #ifdef __POSIX__
 # include <pwd.h> /* getpwnam() */
 # include <grp.h> /* getgrnam() */
 #endif
 
-#include <node_buffer.h>
+#include "node_buffer.h"
 #ifdef __POSIX__
-# include <node_io_watcher.h>
+# include "node_io_watcher.h"
 #endif
-#include <node_file.h>
-#include <node_http_parser.h>
+#include "node_file.h"
+#include "node_http_parser.h"
 #ifdef __POSIX__
-# include <node_signal_watcher.h>
-# include <node_stat_watcher.h>
+# include "node_signal_watcher.h"
+# include "node_stat_watcher.h"
 #endif
-#include <node_constants.h>
-#include <node_javascript.h>
-#include <node_version.h>
-#include <node_string.h>
+#include "node_constants.h"
+#include "node_javascript.h"
+#include "node_version.h"
+#include "node_string.h"
 #if HAVE_OPENSSL
-# include <node_crypto.h>
+# include "node_crypto.h"
 #endif
-#include <node_script.h>
-#include <v8_typed_array.h>
+#include "node_script.h"
+#include "v8_typed_array.h"
 
 using namespace v8;
 
@@ -110,6 +111,7 @@ static Persistent<String> emit_symbol;
 
 
 static bool print_eval = false;
+static bool force_repl = false;
 static char *eval_string = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
@@ -814,6 +816,20 @@ static const char* get_uv_errno_message(int errorno) {
 }
 
 
+static bool get_uv_dlerror_message(uv_lib_t lib, char* error_msg, int size) {
+  int r;
+  const char *msg;
+  if ((msg = uv_dlerror(lib)) == NULL) {
+    r = snprintf(error_msg, size, "%s", "Unable to load shared library ");
+  } else {
+    r = snprintf(error_msg, size, "%s", msg);
+    uv_dlerror_free(lib, msg);
+  }
+  // return bool if the error message be written correctly
+  return (0 < r && r < size);
+}
+
+
 // hack alert! copy of ErrnoException, tuned for uv errors
 Local<Value> UVException(int errorno,
                          const char *syscall,
@@ -1004,7 +1020,7 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
 
   if (!encoding_v->IsString()) return _default;
 
-  String::Utf8Value encoding(encoding_v->ToString());
+  String::Utf8Value encoding(encoding_v);
 
   if (strcasecmp(*encoding, "utf8") == 0) {
     return UTF8;
@@ -1215,8 +1231,8 @@ static void ReportException(TryCatch &try_catch, bool show_line) {
       fprintf(stderr, "%s: ", *name);
     }
 
-    String::Utf8Value msg(!isErrorObject ? er->ToString()
-                         : er->ToObject()->Get(String::New("message"))->ToString());
+    String::Utf8Value msg(!isErrorObject ? er
+                         : er->ToObject()->Get(String::New("message")));
     fprintf(stderr, "%s\n", *msg);
   }
 
@@ -1257,7 +1273,7 @@ static Handle<Value> Chdir(const Arguments& args) {
     return ThrowException(Exception::Error(String::New("Bad argument.")));
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
 
   uv_err_t r = uv_chdir(*path);
 
@@ -1288,76 +1304,6 @@ static Handle<Value> Cwd(const Arguments& args) {
 
   return scope.Close(cwd);
 }
-
-
-#ifdef _WIN32
-static Handle<Value> CwdForDrive(const Arguments& args) {
-  HandleScope scope;
-
-  if (args.Length() < 1) {
-    Local<Value> exception = Exception::Error(
-        String::New("process._cwdForDrive takes exactly 1 argument."));
-    return ThrowException(exception);
-  }
-
-  Local<String> driveLetter = args[0]->ToString();
-  if (driveLetter->Length() != 1) {
-    Local<Value> exception = Exception::Error(
-        String::New("Drive name should be 1 character."));
-    return ThrowException(exception);
-  }
-
-  char drive;
-
-  driveLetter->WriteAscii(&drive, 0, 1, 0);
-  if (drive >= 'a' && drive <= 'z') {
-    // Convert to uppercase
-    drive += 'A' - 'a';
-  } else if (drive < 'A' || drive > 'Z') {
-    // Not a letter
-    Local<Value> exception = Exception::Error(
-        String::New("Drive name should be a letter."));
-    return ThrowException(exception);
-  }
-
-  WCHAR env_key[] = L"=X:";
-  env_key[1] = (WCHAR) drive;
-
-  DWORD len = GetEnvironmentVariableW(env_key, NULL, 0);
-  if (len == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-    // There is no current directory for that drive. Default to drive + ":\".
-    Local<String> cwd = String::Concat(String::New(&drive, 1),
-                                       String::New(":\\"));
-    return scope.Close(cwd);
-
-  } else if (len == 0) {
-    // Error
-    Local<Value> exception = Exception::Error(
-      String::New(winapi_strerror(GetLastError())));
-    return ThrowException(exception);
-  }
-
-  WCHAR* buffer = new WCHAR[len];
-  if (buffer == NULL) {
-    Local<Value> exception = Exception::Error(
-        String::New("Out of memory."));
-    return ThrowException(exception);
-  }
-
-  DWORD len2 = GetEnvironmentVariableW(env_key, buffer, len);
-  if (len2 == 0 || len2 >= len) {
-    // Error
-    delete[] buffer;
-    Local<Value> exception = Exception::Error(
-      String::New(winapi_strerror(GetLastError())));
-    return ThrowException(exception);
-  }
-
-  Local<String> cwd = String::New(reinterpret_cast<uint16_t*>(buffer), len2);
-  delete[] buffer;
-  return scope.Close(cwd);
-}
-#endif
 
 
 static Handle<Value> Umask(const Arguments& args) {
@@ -1402,7 +1348,6 @@ static Handle<Value> Umask(const Arguments& args) {
 
 static Handle<Value> GetUid(const Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
   int uid = getuid();
   return scope.Close(Integer::New(uid));
 }
@@ -1410,7 +1355,6 @@ static Handle<Value> GetUid(const Arguments& args) {
 
 static Handle<Value> GetGid(const Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
   int gid = getgid();
   return scope.Close(Integer::New(gid));
 }
@@ -1429,7 +1373,7 @@ static Handle<Value> SetGid(const Arguments& args) {
   if (args[0]->IsNumber()) {
     gid = args[0]->Int32Value();
   } else if (args[0]->IsString()) {
-    String::Utf8Value grpnam(args[0]->ToString());
+    String::Utf8Value grpnam(args[0]);
     struct group grp, *grpp = NULL;
     int err;
 
@@ -1469,7 +1413,7 @@ static Handle<Value> SetUid(const Arguments& args) {
   if (args[0]->IsNumber()) {
     uid = args[0]->Int32Value();
   } else if (args[0]->IsString()) {
-    String::Utf8Value pwnam(args[0]->ToString());
+    String::Utf8Value pwnam(args[0]);
     struct passwd pwd, *pwdp = NULL;
     int err;
 
@@ -1533,7 +1477,6 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
 
 static Handle<Value> Uptime(const Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
   double uptime;
 
   uv_err_t err = uv_uptime(&uptime);
@@ -1580,7 +1523,6 @@ v8::Handle<v8::Value> UVCounters(const v8::Arguments& args) {
 
 v8::Handle<v8::Value> MemoryUsage(const v8::Arguments& args) {
   HandleScope scope;
-  assert(args.Length() == 0);
 
   size_t rss;
 
@@ -1631,6 +1573,34 @@ Handle<Value> Kill(const Arguments& args) {
   return Undefined();
 }
 
+// used in Hrtime() below
+#define NANOS_PER_SEC 1000000000
+
+// Hrtime exposes libuv's uv_hrtime() high-resolution timer.
+// The value returned by uv_hrtime() is a 64-bit int representing nanoseconds,
+// so this function instead returns an Array with 2 entries representing seconds
+// and nanoseconds, to avoid any integer overflow possibility.
+// Pass in an Array from a previous hrtime() call to instead get a time diff.
+Handle<Value> Hrtime(const v8::Arguments& args) {
+  HandleScope scope;
+
+  uint64_t t = uv_hrtime();
+
+  if (args.Length() > 0) {
+    // return a time diff tuple
+    Local<Array> inArray = Local<Array>::Cast(args[0]);
+    uint64_t seconds = inArray->Get(0)->Uint32Value();
+    uint64_t nanos = inArray->Get(1)->Uint32Value();
+    t -= (seconds * NANOS_PER_SEC) + nanos;
+  }
+
+  Local<Array> tuple = Array::New(2);
+  tuple->Set(0, Integer::NewFromUnsigned(t / NANOS_PER_SEC));
+  tuple->Set(1, Integer::NewFromUnsigned(t % NANOS_PER_SEC));
+
+  return scope.Close(tuple);
+}
+
 
 typedef void (UV_DYNAMIC* extInit)(Handle<Object> exports);
 
@@ -1650,18 +1620,28 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
     return ThrowException(exception);
   }
 
-  String::Utf8Value filename(args[0]->ToString()); // Cast
+  String::Utf8Value filename(args[0]); // Cast
   Local<Object> target = args[1]->ToObject(); // Cast
 
   err = uv_dlopen(*filename, &lib);
   if (err.code != UV_OK) {
+    // Retrieve uv_dlerror() message and throw exception with it
+    char dlerror_msg[1024];
+    if (!get_uv_dlerror_message(lib, dlerror_msg, sizeof dlerror_msg)) {
+      Local<Value> exception = Exception::Error(
+          String::New("Cannot retrieve an error message in process.dlopen"));
+      return ThrowException(exception);
+    }
+#ifdef __POSIX__
+    Local<Value> exception = Exception::Error(String::New(dlerror_msg));
+#else  // Windows needs to add the filename into the error message
     Local<Value> exception = Exception::Error(
-        String::Concat(String::New("Unable to load shared library "),
-        args[0]->ToString()));
+        String::Concat(String::New(dlerror_msg), args[0]->ToString()));
+#endif
     return ThrowException(exception);
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
   base = *path;
 
   /* Find the shared library filename within the full path. */
@@ -1688,7 +1668,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
 
   /* Add the `_module` suffix to the extension name. */
   r = snprintf(symbol, sizeof symbol, "%s_module", base);
-  if (r <= 0 || r >= sizeof symbol) {
+  if (r <= 0 || static_cast<size_t>(r) >= sizeof symbol) {
     Local<Value> exception =
         Exception::Error(String::New("Out of memory."));
     return ThrowException(exception);
@@ -1797,13 +1777,6 @@ void FatalException(TryCatch &try_catch) {
 }
 
 
-static void DebugBreakMessageHandler(const v8::Debug::Message& message) {
-  // do nothing with debug messages.
-  // The message handler will get changed by DebuggerAgent::CreateSession in
-  // debug-agent.cc of v8/src when a new session is created
-}
-
-
 Persistent<Object> binding_cache;
 Persistent<Array> module_load_list;
 
@@ -1875,7 +1848,7 @@ static void ProcessTitleSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
   HandleScope scope;
-  String::Utf8Value title(value->ToString());
+  String::Utf8Value title(value);
   // TODO: protect with a lock
   uv_set_process_title(*title);
 }
@@ -1883,12 +1856,28 @@ static void ProcessTitleSetter(Local<String> property,
 
 static Handle<Value> EnvGetter(Local<String> property,
                                const AccessorInfo& info) {
+  HandleScope scope;
+#ifdef __POSIX__
   String::Utf8Value key(property);
   const char* val = getenv(*key);
   if (val) {
-    HandleScope scope;
     return scope.Close(String::New(val));
   }
+#else  // _WIN32
+  String::Value key(property);
+  WCHAR buffer[32767]; // The maximum size allowed for environment variables.
+  DWORD result = GetEnvironmentVariableW(reinterpret_cast<WCHAR*>(*key),
+                                         buffer,
+                                         ARRAY_SIZE(buffer));
+  // If result >= sizeof buffer the buffer was too small. That should never
+  // happen. If result == 0 and result != ERROR_SUCCESS the variable was not
+  // not found.
+  if ((result > 0 || GetLastError() == ERROR_SUCCESS) &&
+      result < ARRAY_SIZE(buffer)) {
+    return scope.Close(String::New(reinterpret_cast<uint16_t*>(buffer), result));
+  }
+#endif
+  // Not found
   return Undefined();
 }
 
@@ -1897,66 +1886,78 @@ static Handle<Value> EnvSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
   HandleScope scope;
+#ifdef __POSIX__
   String::Utf8Value key(property);
   String::Utf8Value val(value);
-
-#ifdef __POSIX__
   setenv(*key, *val, 1);
-#else  // __WIN32__
-  int n = key.length() + val.length() + 2;
-  char* pair = new char[n];
-  snprintf(pair, n, "%s=%s", *key, *val);
-  int r = _putenv(pair);
-  if (r) {
-    fprintf(stderr, "error putenv: '%s'\n", pair);
+#else  // _WIN32
+  String::Value key(property);
+  String::Value val(value);
+  WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
+  // Environment variables that start with '=' are read-only.
+  if (key_ptr[0] != L'=') {
+    SetEnvironmentVariableW(key_ptr, reinterpret_cast<WCHAR*>(*val));
   }
-  delete [] pair;
 #endif
-
-  return value;
+  // Whether it worked or not, always return rval.
+  return scope.Close(value);
 }
 
 
 static Handle<Integer> EnvQuery(Local<String> property,
                                 const AccessorInfo& info) {
+  HandleScope scope;
+#ifdef __POSIX__
   String::Utf8Value key(property);
   if (getenv(*key)) {
-    HandleScope scope;
     return scope.Close(Integer::New(None));
   }
-  return Handle<Integer>();
+#else  // _WIN32
+  String::Value key(property);
+  WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
+  if (GetEnvironmentVariableW(key_ptr, NULL, 0) > 0 ||
+      GetLastError() == ERROR_SUCCESS) {
+    if (key_ptr[0] == L'=') {
+      // Environment variables that start with '=' are hidden and read-only.
+      return scope.Close(Integer::New(v8::ReadOnly ||
+                                      v8::DontDelete ||
+                                      v8::DontEnum));
+    } else {
+      return scope.Close(Integer::New(None));
+    }
+  }
+#endif
+  // Not found
+  return scope.Close(Handle<Integer>());
 }
 
 
 static Handle<Boolean> EnvDeleter(Local<String> property,
                                   const AccessorInfo& info) {
   HandleScope scope;
-
-  String::Utf8Value key(property);
-
-  if (getenv(*key)) {
 #ifdef __POSIX__
-    unsetenv(*key);	// prototyped as `void unsetenv(const char*)` on some platforms
+  String::Utf8Value key(property);
+  if (!getenv(*key)) return False();
+  unsetenv(*key); // can't check return value, it's void on some platforms
+  return True();
 #else
-    int n = key.length() + 2;
-    char* pair = new char[n];
-    snprintf(pair, n, "%s=", *key);
-    int r = _putenv(pair);
-    if (r) {
-      fprintf(stderr, "error unsetenv: '%s'\n", pair);
-    }
-    delete [] pair;
-#endif
-    return True();
+  String::Value key(property);
+  WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
+  if (key_ptr[0] == L'=' || !SetEnvironmentVariableW(key_ptr, NULL)) {
+    // Deletion failed. Return true if the key wasn't there in the first place,
+    // false if it is still there.
+    bool rv = GetEnvironmentVariableW(key_ptr, NULL, NULL) == 0 &&
+              GetLastError() != ERROR_SUCCESS;
+    return scope.Close(Boolean::New(rv));
   }
-
-  return False();
+  return True();
+#endif
 }
 
 
 static Handle<Array> EnvEnumerator(const AccessorInfo& info) {
   HandleScope scope;
-
+#ifdef __POSIX__
   int size = 0;
   while (environ[size]) size++;
 
@@ -1968,7 +1969,32 @@ static Handle<Array> EnvEnumerator(const AccessorInfo& info) {
     const int length = s ? s - var : strlen(var);
     env->Set(i, String::New(var, length));
   }
-
+#else  // _WIN32
+  WCHAR* environment = GetEnvironmentStringsW();
+  if (environment == NULL) {
+    // This should not happen.
+    return scope.Close(Handle<Array>());
+  }
+  Local<Array> env = Array::New();
+  WCHAR* p = environment;
+  int i = 0;
+  while (*p != NULL) {
+    WCHAR *s;
+    if (*p == L'=') {
+      // If the key starts with '=' it is a hidden environment variable.
+      p += wcslen(p) + 1;
+      continue;
+    } else {
+      s = wcschr(p, L'=');
+    }
+    if (!s) {
+      s = p + wcslen(p);
+    }
+    env->Set(i++, String::New(reinterpret_cast<uint16_t*>(p), s - p));
+    p = s + wcslen(s) + 1;
+  }
+  FreeEnvironmentStringsW(environment);
+#endif
   return scope.Close(env);
 }
 
@@ -2041,15 +2067,20 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   module_load_list = Persistent<Array>::New(Array::New());
   process->Set(String::NewSymbol("moduleLoadList"), module_load_list);
 
+  // process.versions
   Local<Object> versions = Object::New();
-  char buf[20];
   process->Set(String::NewSymbol("versions"), versions);
+  versions->Set(String::NewSymbol("http_parser"), String::New(
+               NODE_STRINGIFY(HTTP_PARSER_VERSION_MAJOR) "."
+               NODE_STRINGIFY(HTTP_PARSER_VERSION_MINOR)));
   // +1 to get rid of the leading 'v'
   versions->Set(String::NewSymbol("node"), String::New(NODE_VERSION+1));
   versions->Set(String::NewSymbol("v8"), String::New(V8::GetVersion()));
   versions->Set(String::NewSymbol("ares"), String::New(ARES_VERSION_STR));
-  snprintf(buf, 20, "%d.%d", UV_VERSION_MAJOR, UV_VERSION_MINOR);
-  versions->Set(String::NewSymbol("uv"), String::New(buf));
+  versions->Set(String::NewSymbol("uv"), String::New(
+               NODE_STRINGIFY(UV_VERSION_MAJOR) "."
+               NODE_STRINGIFY(UV_VERSION_MINOR)));
+  versions->Set(String::NewSymbol("zlib"), String::New(ZLIB_VERSION));
 #if HAVE_OPENSSL
   // Stupid code to slice out the version string.
   int c, l = strlen(OPENSSL_VERSION_TEXT);
@@ -2085,6 +2116,15 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   // assign it
   process->Set(String::NewSymbol("argv"), arguments);
 
+  // process.execArgv
+  Local<Array> execArgv = Array::New(option_end_index - 1);
+  for (j = 1, i = 0; j < option_end_index; j++, i++) {
+    execArgv->Set(Integer::New(i), String::New(argv[j]));
+  }
+  // assign it
+  process->Set(String::NewSymbol("execArgv"), execArgv);
+
+
   // create process.env
   Local<ObjectTemplate> envTemplate = ObjectTemplate::New();
   envTemplate->SetNamedPropertyHandler(EnvGetter,
@@ -2103,6 +2143,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   if (eval_string) {
     process->Set(String::NewSymbol("_eval"), String::New(eval_string));
     process->Set(String::NewSymbol("_print_eval"), Boolean::New(print_eval));
+  }
+
+  if (force_repl) {
+    process->Set(String::NewSymbol("_forceRepl"), True());
   }
 
   size_t size = 2*PATH_MAX;
@@ -2127,10 +2171,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "chdir", Chdir);
   NODE_SET_METHOD(process, "cwd", Cwd);
 
-#ifdef _WIN32
-  NODE_SET_METHOD(process, "_cwdForDrive", CwdForDrive);
-#endif
-
   NODE_SET_METHOD(process, "umask", Umask);
 
 #ifdef __POSIX__
@@ -2146,6 +2186,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
   NODE_SET_METHOD(process, "_debugPause", DebugPause);
   NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+
+  NODE_SET_METHOD(process, "hrtime", Hrtime);
 
   NODE_SET_METHOD(process, "dlopen", DLOpen);
 
@@ -2251,6 +2293,8 @@ static void PrintHelp() {
          "  -v, --version        print node's version\n"
          "  -e, --eval script    evaluate script\n"
          "  -p, --print          print result of --eval\n"
+         "  -i, --interactive    always enter the REPL even if stdin\n"
+         "                       does not appear to be a terminal\n"
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
@@ -2312,6 +2356,9 @@ static void ParseArgs(int argc, char **argv) {
     } else if (strcmp(arg, "--print") == 0 || strcmp(arg, "-p") == 0) {
       print_eval = true;
       argv[i] = const_cast<char*>("");
+    } else if (strcmp(arg, "--interactive") == 0 || strcmp(arg, "-i") == 0) {
+      force_repl = true;
+      argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--v8-options") == 0) {
       argv[i] = const_cast<char*>("--help");
     } else if (argv[i][0] != '-') {
@@ -2332,15 +2379,9 @@ static void EnableDebug(bool wait_connect) {
   node_isolate->Enter();
 
   // Start the debug thread and it's associated TCP server on port 5858.
-  bool r = v8::Debug::EnableAgent("node " NODE_VERSION, debug_port);
-
-  if (wait_connect) {
-    // Set up an empty handler so v8 will not continue until a debugger
-    // attaches. This is the same behavior as Debug::EnableAgent(_,_,true)
-    // except we don't break at the beginning of the script.
-    // see Debugger::StartAgent in debug.cc of v8/src
-    v8::Debug::SetMessageHandler2(node::DebugBreakMessageHandler);
-  }
+  bool r = v8::Debug::EnableAgent("node " NODE_VERSION,
+                                  debug_port,
+                                  wait_connect);
 
   // Crappy check that everything went well. FIXME
   assert(r);
@@ -2416,13 +2457,14 @@ DWORD WINAPI EnableDebugThreadProc(void* arg) {
 }
 
 
-static int GetDebugSignalHandlerMappingName(DWORD pid, char* buf, size_t buf_len) {
-  return snprintf(buf, buf_len, "node-debug-handler-%u", pid);
+static int GetDebugSignalHandlerMappingName(DWORD pid, wchar_t* buf,
+    size_t buf_len) {
+  return _snwprintf(buf, buf_len, L"node-debug-handler-%u", pid);
 }
 
 
 static int RegisterDebugSignalHandler() {
-  char mapping_name[32];
+  wchar_t mapping_name[32];
   HANDLE mapping_handle;
   DWORD pid;
   LPTHREAD_START_ROUTINE* handler;
@@ -2431,11 +2473,11 @@ static int RegisterDebugSignalHandler() {
 
   if (GetDebugSignalHandlerMappingName(pid,
                                        mapping_name,
-                                       sizeof mapping_name) < 0) {
+                                       ARRAY_SIZE(mapping_name)) < 0) {
     return -1;
   }
 
-  mapping_handle = CreateFileMappingA(INVALID_HANDLE_VALUE,
+  mapping_handle = CreateFileMappingW(INVALID_HANDLE_VALUE,
                                       NULL,
                                       PAGE_READWRITE,
                                       0,
@@ -2445,11 +2487,12 @@ static int RegisterDebugSignalHandler() {
     return -1;
   }
 
-  handler = (LPTHREAD_START_ROUTINE*) MapViewOfFile(mapping_handle,
-                                                    FILE_MAP_ALL_ACCESS,
-                                                    0,
-                                                    0,
-                                                    sizeof *handler);
+  handler = reinterpret_cast<LPTHREAD_START_ROUTINE*>(
+      MapViewOfFile(mapping_handle,
+                    FILE_MAP_ALL_ACCESS,
+                    0,
+                    0,
+                    sizeof *handler));
   if (handler == NULL) {
     CloseHandle(mapping_handle);
     return -1;
@@ -2470,7 +2513,7 @@ static Handle<Value> DebugProcess(const Arguments& args) {
   HANDLE process = NULL;
   HANDLE thread = NULL;
   HANDLE mapping = NULL;
-  char mapping_name[32];
+  wchar_t mapping_name[32];
   LPTHREAD_START_ROUTINE* handler = NULL;
 
   if (args.Length() != 1) {
@@ -2492,22 +2535,24 @@ static Handle<Value> DebugProcess(const Arguments& args) {
 
   if (GetDebugSignalHandlerMappingName(pid,
                                        mapping_name,
-                                       sizeof mapping_name) < 0) {
+                                       ARRAY_SIZE(mapping_name)) < 0) {
     rv = ThrowException(ErrnoException(errno, "sprintf"));
     goto out;
   }
 
-  mapping = OpenFileMapping(FILE_MAP_READ, FALSE, mapping_name);
+  mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, mapping_name);
   if (mapping == NULL) {
-    rv = ThrowException(WinapiErrnoException(GetLastError(), "sprintf"));
+    rv = ThrowException(WinapiErrnoException(GetLastError(),
+                                             "OpenFileMappingW"));
     goto out;
   }
 
-  handler = (LPTHREAD_START_ROUTINE*) MapViewOfFile(mapping,
-                                                    FILE_MAP_READ,
-                                                    0,
-                                                    0,
-                                                    sizeof *handler);
+  handler = reinterpret_cast<LPTHREAD_START_ROUTINE*>(
+      MapViewOfFile(mapping,
+                    FILE_MAP_READ,
+                    0,
+                    0,
+                    sizeof *handler));
   if (handler == NULL || *handler == NULL) {
     rv = ThrowException(WinapiErrnoException(GetLastError(), "MapViewOfFile"));
     goto out;
@@ -2571,9 +2616,6 @@ static Handle<Value> DebugEnd(const Arguments& args) {
 char** Init(int argc, char *argv[]) {
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
-
-  // Hack aroung with the argv pointer. Used for process.title = "blah".
-  argv = uv_setup_args(argc, argv);
 
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);
@@ -2670,45 +2712,81 @@ void EmitExit(v8::Handle<v8::Object> process_l) {
   }
 }
 
+static char **copy_argv(int argc, char **argv) {
+  size_t strlen_sum;
+  char **argv_copy;
+  char *argv_data;
+  size_t len;
+  int i;
+
+  strlen_sum = 0;
+  for(i = 0; i < argc; i++) {
+    strlen_sum += strlen(argv[i]) + 1;
+  }
+
+  argv_copy = (char **) malloc(sizeof(char *) * (argc + 1) + strlen_sum);
+  if (!argv_copy) {
+    return NULL;
+  }
+
+  argv_data = (char *) argv_copy + sizeof(char *) * (argc + 1);
+
+  for(i = 0; i < argc; i++) {
+    argv_copy[i] = argv_data;
+    len = strlen(argv[i]) + 1;
+    memcpy(argv_data, argv[i], len);
+    argv_data += len;
+  }
+
+  argv_copy[argc] = NULL;
+
+  return argv_copy;
+}
 
 int Start(int argc, char *argv[]) {
+  // Hack aroung with the argv pointer. Used for process.title = "blah".
+  argv = uv_setup_args(argc, argv);
+
+  // Logic to duplicate argv as Init() modifies arguments
+  // that are passed into it.
+  char **argv_copy = copy_argv(argc, argv);
+
   // This needs to run *before* V8::Initialize()
-  argv = Init(argc, argv);
+  // Use copy here as to not modify the original argv:
+  Init(argc, argv_copy);
 
-  V8::Initialize();
-  Persistent<Context> context;
-  {
-    Locker locker;
-    HandleScope handle_scope;
+  v8::V8::Initialize();
+  v8::HandleScope handle_scope;
 
-    // Create the one and only Context.
-    Persistent<Context> context = Context::New();
-    Context::Scope context_scope(context);
+  // Create the one and only Context.
+  Persistent<v8::Context> context = v8::Context::New();
+  v8::Context::Scope context_scope(context);
 
-    Handle<Object> process_l = SetupProcessObject(argc, argv);
-    v8_typed_array::AttachBindings(context->Global());
+  // Use original argv, as we're just copying values out of it.
+  Handle<Object> process_l = SetupProcessObject(argc, argv);
+  v8_typed_array::AttachBindings(context->Global());
 
-    // Create all the objects, load modules, do everything.
-    // so your next reading stop should be node::Load()!
-    Load(process_l);
+  // Create all the objects, load modules, do everything.
+  // so your next reading stop should be node::Load()!
+  Load(process_l);
 
-    // All our arguments are loaded. We've evaluated all of the scripts. We
-    // might even have created TCP servers. Now we enter the main eventloop. If
-    // there are no watchers on the loop (except for the ones that were
-    // uv_unref'd) then this function exits. As long as there are active
-    // watchers, it blocks.
-    uv_run(uv_default_loop());
+  // All our arguments are loaded. We've evaluated all of the scripts. We
+  // might even have created TCP servers. Now we enter the main eventloop. If
+  // there are no watchers on the loop (except for the ones that were
+  // uv_unref'd) then this function exits. As long as there are active
+  // watchers, it blocks.
+  uv_run(uv_default_loop());
 
-    EmitExit(process_l);
-#ifndef NDEBUG
-    context.Dispose();
-#endif
-  }
+  EmitExit(process_l);
 
 #ifndef NDEBUG
   // Clean up.
+  context.Dispose();
   V8::Dispose();
 #endif  // NDEBUG
+
+  // Clean up the copy:
+  free(argv_copy);
 
   return 0;
 }

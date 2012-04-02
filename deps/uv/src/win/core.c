@@ -74,6 +74,7 @@ static void uv_loop_init(uv_loop_t* loop) {
   loop->endgame_handles = NULL;
 
   RB_INIT(&loop->timers);
+  RB_INIT(&loop->uv_ares_handles_);
 
   loop->check_handles = NULL;
   loop->prepare_handles = NULL;

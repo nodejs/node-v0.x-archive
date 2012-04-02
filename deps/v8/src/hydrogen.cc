@@ -97,7 +97,7 @@ void HBasicBlock::RemovePhi(HPhi* phi) {
   ASSERT(phi->block() == this);
   ASSERT(phis_.Contains(phi));
   ASSERT(phi->HasNoUses() || !phi->is_live());
-  phi->ClearOperands();
+  phi->Kill();
   phis_.RemoveElement(phi);
   phi->SetBlock(NULL);
 }
@@ -446,7 +446,7 @@ class ReachabilityAnalyzer BASE_EMBEDDED {
                        HBasicBlock* dont_visit)
       : visited_count_(0),
         stack_(16),
-        reachable_(block_count),
+        reachable_(block_count, ZONE),
         dont_visit_(dont_visit) {
     PushBlock(entry_block);
     Analyze();
@@ -600,7 +600,7 @@ HConstant* HGraph::GetConstantHole() {
 HGraphBuilder::HGraphBuilder(CompilationInfo* info,
                              TypeFeedbackOracle* oracle)
     : function_state_(NULL),
-      initial_function_state_(this, info, oracle, false),
+      initial_function_state_(this, info, oracle, NORMAL_RETURN),
       ast_context_(NULL),
       break_scope_(NULL),
       graph_(NULL),
@@ -730,7 +730,7 @@ HBasicBlock* HGraph::CreateBasicBlock() {
 
 void HGraph::Canonicalize() {
   if (!FLAG_use_canonicalizing) return;
-  HPhase phase("Canonicalize", this);
+  HPhase phase("H_Canonicalize", this);
   for (int i = 0; i < blocks()->length(); ++i) {
     HInstruction* instr = blocks()->at(i)->first();
     while (instr != NULL) {
@@ -743,8 +743,8 @@ void HGraph::Canonicalize() {
 
 
 void HGraph::OrderBlocks() {
-  HPhase phase("Block ordering");
-  BitVector visited(blocks_.length());
+  HPhase phase("H_Block ordering");
+  BitVector visited(blocks_.length(), zone());
 
   ZoneList<HBasicBlock*> reverse_result(8);
   HBasicBlock* start = blocks_[0];
@@ -805,7 +805,7 @@ void HGraph::Postorder(HBasicBlock* block,
 
 
 void HGraph::AssignDominators() {
-  HPhase phase("Assign dominators", this);
+  HPhase phase("H_Assign dominators", this);
   for (int i = 0; i < blocks_.length(); ++i) {
     HBasicBlock* block = blocks_[i];
     if (block->IsLoopHeader()) {
@@ -824,7 +824,7 @@ void HGraph::AssignDominators() {
 // Mark all blocks that are dominated by an unconditional soft deoptimize to
 // prevent code motion across those blocks.
 void HGraph::PropagateDeoptimizingMark() {
-  HPhase phase("Propagate deoptimizing mark", this);
+  HPhase phase("H_Propagate deoptimizing mark", this);
   MarkAsDeoptimizingRecursively(entry_block());
 }
 
@@ -837,7 +837,7 @@ void HGraph::MarkAsDeoptimizingRecursively(HBasicBlock* block) {
 }
 
 void HGraph::EliminateRedundantPhis() {
-  HPhase phase("Redundant phi elimination", this);
+  HPhase phase("H_Redundant phi elimination", this);
 
   // Worklist of phis that can potentially be eliminated. Initialized with
   // all phi nodes. When elimination of a phi node modifies another phi node
@@ -871,7 +871,7 @@ void HGraph::EliminateRedundantPhis() {
 
 
 void HGraph::EliminateUnreachablePhis() {
-  HPhase phase("Unreachable phi elimination", this);
+  HPhase phase("H_Unreachable phi elimination", this);
 
   // Initialize worklist.
   ZoneList<HPhi*> phi_list(blocks_.length());
@@ -955,7 +955,7 @@ void HGraph::CollectPhis() {
 
 
 void HGraph::InferTypes(ZoneList<HValue*>* worklist) {
-  BitVector in_worklist(GetMaximumValueID());
+  BitVector in_worklist(GetMaximumValueID(), zone());
   for (int i = 0; i < worklist->length(); ++i) {
     ASSERT(!in_worklist.Contains(worklist->at(i)->id()));
     in_worklist.Add(worklist->at(i)->id());
@@ -979,7 +979,8 @@ void HGraph::InferTypes(ZoneList<HValue*>* worklist) {
 
 class HRangeAnalysis BASE_EMBEDDED {
  public:
-  explicit HRangeAnalysis(HGraph* graph) : graph_(graph), changed_ranges_(16) {}
+  explicit HRangeAnalysis(HGraph* graph) :
+      graph_(graph), zone_(graph->isolate()->zone()), changed_ranges_(16) { }
 
   void Analyze();
 
@@ -993,6 +994,7 @@ class HRangeAnalysis BASE_EMBEDDED {
   void AddRange(HValue* value, Range* range);
 
   HGraph* graph_;
+  Zone* zone_;
   ZoneList<HValue*> changed_ranges_;
 };
 
@@ -1008,7 +1010,7 @@ void HRangeAnalysis::TraceRange(const char* msg, ...) {
 
 
 void HRangeAnalysis::Analyze() {
-  HPhase phase("Range analysis", graph_);
+  HPhase phase("H_Range analysis", graph_);
   Analyze(graph_->entry_block());
 }
 
@@ -1079,14 +1081,14 @@ void HRangeAnalysis::UpdateControlFlowRange(Token::Value op,
 
   if (op == Token::EQ || op == Token::EQ_STRICT) {
     // The same range has to apply for value.
-    new_range = range->Copy();
+    new_range = range->Copy(zone_);
   } else if (op == Token::LT || op == Token::LTE) {
-    new_range = range->CopyClearLower();
+    new_range = range->CopyClearLower(zone_);
     if (op == Token::LT) {
       new_range->AddConstant(-1);
     }
   } else if (op == Token::GT || op == Token::GTE) {
-    new_range = range->CopyClearUpper();
+    new_range = range->CopyClearUpper(zone_);
     if (op == Token::GT) {
       new_range->AddConstant(1);
     }
@@ -1101,7 +1103,7 @@ void HRangeAnalysis::UpdateControlFlowRange(Token::Value op,
 void HRangeAnalysis::InferRange(HValue* value) {
   ASSERT(!value->HasRange());
   if (!value->representation().IsNone()) {
-    value->ComputeInitialRange();
+    value->ComputeInitialRange(zone_);
     Range* range = value->range();
     TraceRange("Initial inferred range of %d (%s) set to [%d,%d]\n",
                value->id(),
@@ -1122,7 +1124,7 @@ void HRangeAnalysis::RollBackTo(int index) {
 
 void HRangeAnalysis::AddRange(HValue* value, Range* range) {
   Range* original_range = value->range();
-  value->AddNewRange(range);
+  value->AddNewRange(range, zone_);
   changed_ranges_.Add(value);
   Range* new_range = value->range();
   TraceRange("Updated range of %d set to [%d,%d]\n",
@@ -1431,7 +1433,8 @@ class HGlobalValueNumberer BASE_EMBEDDED {
   void ProcessLoopBlock(HBasicBlock* block,
                         HBasicBlock* before_loop,
                         GVNFlagSet loop_kills,
-                        GVNFlagSet* accumulated_first_time_depends);
+                        GVNFlagSet* accumulated_first_time_depends,
+                        GVNFlagSet* accumulated_first_time_changes);
   bool AllowCodeMotion();
   bool ShouldMove(HInstruction* instr, HBasicBlock* loop_header);
 
@@ -1482,6 +1485,11 @@ void HGlobalValueNumberer::ComputeBlockSideEffects() {
     GVNFlagSet side_effects;
     while (instr != NULL) {
       side_effects.Add(instr->ChangesFlags());
+      if (instr->IsSoftDeoptimize()) {
+        block_side_effects_[id].RemoveAll();
+        side_effects.RemoveAll();
+        break;
+      }
       instr = instr->next();
     }
     block_side_effects_[id].Add(side_effects);
@@ -1512,10 +1520,12 @@ void HGlobalValueNumberer::LoopInvariantCodeMotion() {
                side_effects.ToIntegral());
 
       GVNFlagSet accumulated_first_time_depends;
+      GVNFlagSet accumulated_first_time_changes;
       HBasicBlock* last = block->loop_information()->GetLastBackEdge();
       for (int j = block->block_id(); j <= last->block_id(); ++j) {
         ProcessLoopBlock(graph_->blocks()->at(j), block, side_effects,
-                         &accumulated_first_time_depends);
+                         &accumulated_first_time_depends,
+                         &accumulated_first_time_changes);
       }
     }
   }
@@ -1526,7 +1536,8 @@ void HGlobalValueNumberer::ProcessLoopBlock(
     HBasicBlock* block,
     HBasicBlock* loop_header,
     GVNFlagSet loop_kills,
-    GVNFlagSet* accumulated_first_time_depends) {
+    GVNFlagSet* first_time_depends,
+    GVNFlagSet* first_time_changes) {
   HBasicBlock* pre_header = loop_header->predecessors()->at(0);
   GVNFlagSet depends_flags = HValue::ConvertChangesToDependsFlags(loop_kills);
   TraceGVN("Loop invariant motion for B%d depends_flags=0x%x\n",
@@ -1544,28 +1555,47 @@ void HGlobalValueNumberer::ProcessLoopBlock(
                instr->gvn_flags().ToIntegral(),
                depends_flags.ToIntegral());
       bool can_hoist = !instr->gvn_flags().ContainsAnyOf(depends_flags);
-      if (!can_hoist && instr->IsTransitionElementsKind()) {
-        // It's only possible to hoist one time side effects if there are no
-        // dependencies on their changes from the loop header to the current
-        // instruction.
-        GVNFlagSet converted_changes =
-            HValue::ConvertChangesToDependsFlags(instr->ChangesFlags());
-        TraceGVN("Checking dependencies on one-time instruction %d (%s) "
-                 "converted changes 0x%X, accumulated depends 0x%X\n",
+      if (instr->IsTransitionElementsKind()) {
+        // It's possible to hoist transitions out of a loop as long as the
+        // hoisting wouldn't move the transition past a DependsOn of one of it's
+        // changes or any instructions that might change an objects map or
+        // elements contents.
+        GVNFlagSet changes = instr->ChangesFlags();
+        GVNFlagSet hoist_depends_blockers =
+            HValue::ConvertChangesToDependsFlags(changes);
+        // In addition to not hoisting transitions above other instructions that
+        // change dependencies that the transition changes, it must not be
+        // hoisted above map changes and stores to an elements backing store
+        // that the transition might change.
+        GVNFlagSet hoist_change_blockers = changes;
+        hoist_change_blockers.Add(kChangesMaps);
+        HTransitionElementsKind* trans = HTransitionElementsKind::cast(instr);
+        if (trans->original_map()->has_fast_double_elements()) {
+          hoist_change_blockers.Add(kChangesDoubleArrayElements);
+        }
+        if (trans->transitioned_map()->has_fast_double_elements()) {
+          hoist_change_blockers.Add(kChangesArrayElements);
+        }
+        TraceGVN("Checking dependencies on HTransitionElementsKind %d (%s) "
+                 "hoist depends blockers 0x%X, hoist change blockers 0x%X, "
+                 "accumulated depends 0x%X, accumulated changes 0x%X\n",
                  instr->id(),
                  instr->Mnemonic(),
-                 converted_changes.ToIntegral(),
-                 accumulated_first_time_depends->ToIntegral());
-        // It's possible to hoist one-time side effects from the current loop
-        // loop only if they dominate all of the successor blocks in the same
-        // loop and there are not any instructions that have Changes/DependsOn
-        // that intervene between it and the beginning of the loop header.
+                 hoist_depends_blockers.ToIntegral(),
+                 hoist_change_blockers.ToIntegral(),
+                 first_time_depends->ToIntegral(),
+                 first_time_changes->ToIntegral());
+        // It's possible to hoist transition from the current loop loop only if
+        // they dominate all of the successor blocks in the same loop and there
+        // are not any instructions that have Changes/DependsOn that intervene
+        // between it and the beginning of the loop header.
         bool in_nested_loop = block != loop_header &&
             ((block->parent_loop_header() != loop_header) ||
              block->IsLoopHeader());
         can_hoist = !in_nested_loop &&
             block->IsLoopSuccessorDominator() &&
-            !accumulated_first_time_depends->ContainsAnyOf(converted_changes);
+            !first_time_depends->ContainsAnyOf(hoist_depends_blockers) &&
+            !first_time_changes->ContainsAnyOf(hoist_change_blockers);
       }
 
       if (can_hoist) {
@@ -1589,10 +1619,8 @@ void HGlobalValueNumberer::ProcessLoopBlock(
     if (!hoisted) {
       // If an instruction is not hoisted, we have to account for its side
       // effects when hoisting later HTransitionElementsKind instructions.
-      accumulated_first_time_depends->Add(instr->DependsOnFlags());
-      GVNFlagSet converted_changes =
-          HValue::ConvertChangesToDependsFlags(instr->SideEffectFlags());
-      accumulated_first_time_depends->Add(converted_changes);
+      first_time_depends->Add(instr->DependsOnFlags());
+      first_time_changes->Add(instr->ChangesFlags());
     }
     instr = next;
   }
@@ -1698,7 +1726,9 @@ void HGlobalValueNumberer::AnalyzeBlock(HBasicBlock* block, HValueMap* map) {
 class HInferRepresentation BASE_EMBEDDED {
  public:
   explicit HInferRepresentation(HGraph* graph)
-      : graph_(graph), worklist_(8), in_worklist_(graph->GetMaximumValueID()) {}
+      : graph_(graph),
+        worklist_(8),
+        in_worklist_(graph->GetMaximumValueID(), graph->zone()) { }
 
   void Analyze();
 
@@ -1736,6 +1766,12 @@ void HInferRepresentation::InferBasedOnInputs(HValue* current) {
   ASSERT(current->CheckFlag(HValue::kFlexibleRepresentation));
   Representation inferred = current->InferredRepresentation();
   if (inferred.IsSpecialization()) {
+    if (FLAG_trace_representation) {
+      PrintF("Changing #%d representation %s -> %s based on inputs\n",
+             current->id(),
+             r.Mnemonic(),
+             inferred.Mnemonic());
+    }
     current->ChangeRepresentation(inferred);
     AddDependantsToWorklist(current);
   }
@@ -1763,6 +1799,12 @@ void HInferRepresentation::InferBasedOnUses(HValue* value) {
   Representation new_rep = TryChange(value);
   if (!new_rep.IsNone()) {
     if (!value->representation().Equals(new_rep)) {
+      if (FLAG_trace_representation) {
+        PrintF("Changing #%d representation %s -> %s based on uses\n",
+               value->id(),
+               r.Mnemonic(),
+               new_rep.Mnemonic());
+      }
       value->ChangeRepresentation(new_rep);
       AddDependantsToWorklist(value);
     }
@@ -1806,7 +1848,7 @@ Representation HInferRepresentation::TryChange(HValue* value) {
 
 
 void HInferRepresentation::Analyze() {
-  HPhase phase("Infer representations", graph_);
+  HPhase phase("H_Infer representations", graph_);
 
   // (1) Initialize bit vectors and count real uses. Each phi gets a
   // bit-vector of length <number of phis>.
@@ -1815,7 +1857,7 @@ void HInferRepresentation::Analyze() {
   ZoneList<BitVector*> connected_phis(phi_count);
   for (int i = 0; i < phi_count; ++i) {
     phi_list->at(i)->InitRealUses(i);
-    BitVector* connected_set = new(zone()) BitVector(phi_count);
+    BitVector* connected_set = new(zone()) BitVector(phi_count, graph_->zone());
     connected_set->Add(i);
     connected_phis.Add(connected_set);
   }
@@ -1885,7 +1927,7 @@ void HInferRepresentation::Analyze() {
 
 
 void HGraph::InitializeInferredTypes() {
-  HPhase phase("Inferring types", this);
+  HPhase phase("H_Inferring types", this);
   InitializeInferredTypes(0, this->blocks_.length() - 1);
 }
 
@@ -2022,8 +2064,7 @@ void HGraph::InsertRepresentationChangesForValue(HValue* value) {
 
 
 void HGraph::InsertRepresentationChanges() {
-  HPhase phase("Insert representation changes", this);
-
+  HPhase phase("H_Representation changes", this);
 
   // Compute truncation flag for phis: Initially assume that all
   // int32-phis allow truncation and iteratively remove the ones that
@@ -2042,13 +2083,9 @@ void HGraph::InsertRepresentationChanges() {
     for (int i = 0; i < phi_list()->length(); i++) {
       HPhi* phi = phi_list()->at(i);
       if (!phi->CheckFlag(HValue::kTruncatingToInt32)) continue;
-      for (HUseIterator it(phi->uses()); !it.Done(); it.Advance()) {
-        HValue* use = it.value();
-        if (!use->CheckFlag(HValue::kTruncatingToInt32)) {
-          phi->ClearFlag(HValue::kTruncatingToInt32);
-          change = true;
-          break;
-        }
+      if (!phi->CheckUsesForFlag(HValue::kTruncatingToInt32)) {
+        phi->ClearFlag(HValue::kTruncatingToInt32);
+        change = true;
       }
     }
   }
@@ -2083,7 +2120,7 @@ void HGraph::RecursivelyMarkPhiDeoptimizeOnUndefined(HPhi* phi) {
 
 
 void HGraph::MarkDeoptimizeOnUndefined() {
-  HPhase phase("MarkDeoptimizeOnUndefined", this);
+  HPhase phase("H_MarkDeoptimizeOnUndefined", this);
   // Compute DeoptimizeOnUndefined flag for phis.
   // Any phi that can reach a use with DeoptimizeOnUndefined set must
   // have DeoptimizeOnUndefined set.  Currently only HCompareIDAndBranch, with
@@ -2105,7 +2142,7 @@ void HGraph::MarkDeoptimizeOnUndefined() {
 
 
 void HGraph::ComputeMinusZeroChecks() {
-  BitVector visited(GetMaximumValueID());
+  BitVector visited(GetMaximumValueID(), zone());
   for (int i = 0; i < blocks_.length(); ++i) {
     for (HInstruction* current = blocks_[i]->first();
          current != NULL;
@@ -2133,12 +2170,12 @@ void HGraph::ComputeMinusZeroChecks() {
 FunctionState::FunctionState(HGraphBuilder* owner,
                              CompilationInfo* info,
                              TypeFeedbackOracle* oracle,
-                             bool drop_extra)
+                             ReturnHandlingFlag return_handling)
     : owner_(owner),
       compilation_info_(info),
       oracle_(oracle),
       call_context_(NULL),
-      drop_extra_(drop_extra),
+      return_handling_(return_handling),
       function_return_(NULL),
       test_context_(NULL),
       outer_(owner->function_state()) {
@@ -2181,7 +2218,7 @@ AstContext::AstContext(HGraphBuilder* owner, Expression::Context kind)
       for_typeof_(false) {
   owner->set_ast_context(this);  // Push.
 #ifdef DEBUG
-  ASSERT(!owner->environment()->is_arguments_adaptor());
+  ASSERT(owner->environment()->frame_type() == JS_FUNCTION);
   original_length_ = owner->environment()->length();
 #endif
 }
@@ -2196,7 +2233,7 @@ EffectContext::~EffectContext() {
   ASSERT(owner()->HasStackOverflow() ||
          owner()->current_block() == NULL ||
          (owner()->environment()->length() == original_length_ &&
-          !owner()->environment()->is_arguments_adaptor()));
+          owner()->environment()->frame_type() == JS_FUNCTION));
 }
 
 
@@ -2204,7 +2241,7 @@ ValueContext::~ValueContext() {
   ASSERT(owner()->HasStackOverflow() ||
          owner()->current_block() == NULL ||
          (owner()->environment()->length() == original_length_ + 1 &&
-          !owner()->environment()->is_arguments_adaptor()));
+          owner()->environment()->frame_type() == JS_FUNCTION));
 }
 
 
@@ -2409,7 +2446,7 @@ HGraph* HGraphBuilder::CreateGraph() {
   if (FLAG_hydrogen_stats) HStatistics::Instance()->Initialize(info());
 
   {
-    HPhase phase("Block building");
+    HPhase phase("H_Block building");
     current_block_ = graph()->entry_block();
 
     Scope* scope = info()->scope();
@@ -2443,7 +2480,7 @@ HGraph* HGraphBuilder::CreateGraph() {
     // Handle implicit declaration of the function name in named function
     // expressions before other declarations.
     if (scope->is_function_scope() && scope->function() != NULL) {
-      HandleVariableDeclaration(scope->function(), CONST, NULL);
+      HandleDeclaration(scope->function(), CONST, NULL, NULL);
     }
     VisitDeclarations(scope->declarations());
     AddSimulate(AstNode::kDeclarationsId);
@@ -2483,6 +2520,14 @@ HGraph* HGraphBuilder::CreateGraph() {
   if (FLAG_eliminate_dead_phis) graph()->EliminateUnreachablePhis();
   graph()->CollectPhis();
 
+  if (graph()->has_osr_loop_entry()) {
+    const ZoneList<HPhi*>* phis = graph()->osr_loop_entry()->phis();
+    for (int j = 0; j < phis->length(); j++) {
+      HPhi* phi = phis->at(j);
+      graph()->osr_values()->at(phi->merged_index())->set_incoming_value(phi);
+    }
+  }
+
   HInferRepresentation rep(graph());
   rep.Analyze();
 
@@ -2494,7 +2539,7 @@ HGraph* HGraphBuilder::CreateGraph() {
 
   // Perform common subexpression elimination and loop-invariant code motion.
   if (FLAG_use_gvn) {
-    HPhase phase("Global value numbering", graph());
+    HPhase phase("H_Global value numbering", graph());
     HGlobalValueNumberer gvn(graph(), info());
     bool removed_side_effects = gvn.Analyze();
     // Trigger a second analysis pass to further eliminate duplicate values that
@@ -2527,7 +2572,7 @@ HGraph* HGraphBuilder::CreateGraph() {
 
 
 void HGraph::ReplaceCheckedValues() {
-  HPhase phase("Replace checked values", this);
+  HPhase phase("H_Replace checked values", this);
   for (int i = 0; i < blocks()->length(); ++i) {
     HInstruction* instr = blocks()->at(i)->first();
     while (instr != NULL) {
@@ -2567,8 +2612,8 @@ void HGraphBuilder::PushAndAdd(HInstruction* instr) {
 }
 
 
-template <int V>
-HInstruction* HGraphBuilder::PreProcessCall(HCall<V>* call) {
+template <class Instruction>
+HInstruction* HGraphBuilder::PreProcessCall(Instruction* call) {
   int count = call->argument_count();
   ZoneList<HValue*> arguments(count);
   for (int i = 0; i < count; ++i) {
@@ -2587,6 +2632,10 @@ void HGraphBuilder::SetUpScope(Scope* scope) {
       isolate()->factory()->undefined_value(), Representation::Tagged());
   AddInstruction(undefined_constant);
   graph_->set_undefined_constant(undefined_constant);
+
+  HArgumentsObject* object = new(zone()) HArgumentsObject;
+  AddInstruction(object);
+  graph()->SetArgumentsObject(object);
 
   // Set the initial values of parameters including "this".  "This" has
   // parameter index 0.
@@ -2614,10 +2663,9 @@ void HGraphBuilder::SetUpScope(Scope* scope) {
     if (!scope->arguments()->IsStackAllocated()) {
       return Bailout("context-allocated arguments");
     }
-    HArgumentsObject* object = new(zone()) HArgumentsObject;
-    AddInstruction(object);
-    graph()->SetArgumentsObject(object);
-    environment()->Bind(scope->arguments(), object);
+
+    environment()->Bind(scope->arguments(),
+                        graph()->GetArgumentsObject());
   }
 }
 
@@ -2721,12 +2769,20 @@ void HGraphBuilder::VisitIfStatement(IfStatement* stmt) {
 
 HBasicBlock* HGraphBuilder::BreakAndContinueScope::Get(
     BreakableStatement* stmt,
-    BreakType type) {
+    BreakType type,
+    int* drop_extra) {
+  *drop_extra = 0;
   BreakAndContinueScope* current = this;
   while (current != NULL && current->info()->target() != stmt) {
+    *drop_extra += current->info()->drop_extra();
     current = current->next();
   }
   ASSERT(current != NULL);  // Always found (unless stack is malformed).
+
+  if (type == BREAK) {
+    *drop_extra += current->info()->drop_extra();
+  }
+
   HBasicBlock* block = NULL;
   switch (type) {
     case BREAK:
@@ -2754,7 +2810,11 @@ void HGraphBuilder::VisitContinueStatement(ContinueStatement* stmt) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
-  HBasicBlock* continue_block = break_scope()->Get(stmt->target(), CONTINUE);
+  int drop_extra = 0;
+  HBasicBlock* continue_block = break_scope()->Get(stmt->target(),
+                                                   CONTINUE,
+                                                   &drop_extra);
+  Drop(drop_extra);
   current_block()->Goto(continue_block);
   set_current_block(NULL);
 }
@@ -2764,7 +2824,11 @@ void HGraphBuilder::VisitBreakStatement(BreakStatement* stmt) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
-  HBasicBlock* break_block = break_scope()->Get(stmt->target(), BREAK);
+  int drop_extra = 0;
+  HBasicBlock* break_block = break_scope()->Get(stmt->target(),
+                                                BREAK,
+                                                &drop_extra);
+  Drop(drop_extra);
   current_block()->Goto(break_block);
   set_current_block(NULL);
 }
@@ -2780,7 +2844,38 @@ void HGraphBuilder::VisitReturnStatement(ReturnStatement* stmt) {
     CHECK_ALIVE(VisitForValue(stmt->expression()));
     HValue* result = environment()->Pop();
     current_block()->FinishExit(new(zone()) HReturn(result));
-    set_current_block(NULL);
+  } else if (function_state()->is_construct()) {
+    // Return from an inlined construct call.  In a test context the return
+    // value will always evaluate to true, in a value context the return value
+    // needs to be a JSObject.
+    if (context->IsTest()) {
+      TestContext* test = TestContext::cast(context);
+      CHECK_ALIVE(VisitForEffect(stmt->expression()));
+      current_block()->Goto(test->if_true(), function_state()->drop_extra());
+    } else if (context->IsEffect()) {
+      CHECK_ALIVE(VisitForEffect(stmt->expression()));
+      current_block()->Goto(function_return(), function_state()->drop_extra());
+    } else {
+      ASSERT(context->IsValue());
+      CHECK_ALIVE(VisitForValue(stmt->expression()));
+      HValue* return_value = Pop();
+      HValue* receiver = environment()->Lookup(0);
+      HHasInstanceTypeAndBranch* typecheck =
+          new(zone()) HHasInstanceTypeAndBranch(return_value,
+                                                FIRST_SPEC_OBJECT_TYPE,
+                                                LAST_SPEC_OBJECT_TYPE);
+      HBasicBlock* if_spec_object = graph()->CreateBasicBlock();
+      HBasicBlock* not_spec_object = graph()->CreateBasicBlock();
+      typecheck->SetSuccessorAt(0, if_spec_object);
+      typecheck->SetSuccessorAt(1, not_spec_object);
+      current_block()->Finish(typecheck);
+      if_spec_object->AddLeaveInlined(return_value,
+                                      function_return(),
+                                      function_state()->drop_extra());
+      not_spec_object->AddLeaveInlined(receiver,
+                                       function_return(),
+                                       function_state()->drop_extra());
+    }
   } else {
     // Return from an inlined function, visit the subexpression in the
     // expression context of the call.
@@ -2795,13 +2890,13 @@ void HGraphBuilder::VisitReturnStatement(ReturnStatement* stmt) {
     } else {
       ASSERT(context->IsValue());
       CHECK_ALIVE(VisitForValue(stmt->expression()));
-      HValue* return_value = environment()->Pop();
+      HValue* return_value = Pop();
       current_block()->AddLeaveInlined(return_value,
                                        function_return(),
                                        function_state()->drop_extra());
     }
-    set_current_block(NULL);
   }
+  set_current_block(NULL);
 }
 
 
@@ -3005,8 +3100,8 @@ bool HGraphBuilder::HasOsrEntryAt(IterationStatement* statement) {
 }
 
 
-void HGraphBuilder::PreProcessOsrEntry(IterationStatement* statement) {
-  if (!HasOsrEntryAt(statement)) return;
+bool HGraphBuilder::PreProcessOsrEntry(IterationStatement* statement) {
+  if (!HasOsrEntryAt(statement)) return false;
 
   HBasicBlock* non_osr_entry = graph()->CreateBasicBlock();
   HBasicBlock* osr_entry = graph()->CreateBasicBlock();
@@ -3019,14 +3114,29 @@ void HGraphBuilder::PreProcessOsrEntry(IterationStatement* statement) {
 
   set_current_block(osr_entry);
   int osr_entry_id = statement->OsrEntryId();
-  // We want the correct environment at the OsrEntry instruction.  Build
-  // it explicitly.  The expression stack should be empty.
-  ASSERT(environment()->ExpressionStackIsEmpty());
-  for (int i = 0; i < environment()->length(); ++i) {
+  int first_expression_index = environment()->first_expression_index();
+  int length = environment()->length();
+  ZoneList<HUnknownOSRValue*>* osr_values =
+      new(zone()) ZoneList<HUnknownOSRValue*>(length);
+
+  for (int i = 0; i < first_expression_index; ++i) {
     HUnknownOSRValue* osr_value = new(zone()) HUnknownOSRValue;
     AddInstruction(osr_value);
     environment()->Bind(i, osr_value);
+    osr_values->Add(osr_value);
   }
+
+  if (first_expression_index != length) {
+    environment()->Drop(length - first_expression_index);
+    for (int i = first_expression_index; i < length; ++i) {
+      HUnknownOSRValue* osr_value = new(zone()) HUnknownOSRValue;
+      AddInstruction(osr_value);
+      environment()->Push(osr_value);
+      osr_values->Add(osr_value);
+    }
+  }
+
+  graph()->set_osr_values(osr_values);
 
   AddSimulate(osr_entry_id);
   AddInstruction(new(zone()) HOsrEntry(osr_entry_id));
@@ -3036,6 +3146,7 @@ void HGraphBuilder::PreProcessOsrEntry(IterationStatement* statement) {
   current_block()->Goto(loop_predecessor);
   loop_predecessor->SetJoinId(statement->EntryId());
   set_current_block(loop_predecessor);
+  return true;
 }
 
 
@@ -3059,10 +3170,11 @@ void HGraphBuilder::VisitDoWhileStatement(DoWhileStatement* stmt) {
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
   ASSERT(current_block() != NULL);
-  PreProcessOsrEntry(stmt);
+  bool osr_entry = PreProcessOsrEntry(stmt);
   HBasicBlock* loop_entry = CreateLoopHeaderBlock();
   current_block()->Goto(loop_entry);
   set_current_block(loop_entry);
+  if (osr_entry) graph()->set_osr_loop_entry(loop_entry);
 
   BreakAndContinueInfo break_info(stmt);
   CHECK_BAILOUT(VisitLoopBody(stmt, loop_entry, &break_info));
@@ -3101,10 +3213,12 @@ void HGraphBuilder::VisitWhileStatement(WhileStatement* stmt) {
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
   ASSERT(current_block() != NULL);
-  PreProcessOsrEntry(stmt);
+  bool osr_entry = PreProcessOsrEntry(stmt);
   HBasicBlock* loop_entry = CreateLoopHeaderBlock();
   current_block()->Goto(loop_entry);
   set_current_block(loop_entry);
+  if (osr_entry) graph()->set_osr_loop_entry(loop_entry);
+
 
   // If the condition is constant true, do not generate a branch.
   HBasicBlock* loop_successor = NULL;
@@ -3125,7 +3239,6 @@ void HGraphBuilder::VisitWhileStatement(WhileStatement* stmt) {
 
   BreakAndContinueInfo break_info(stmt);
   if (current_block() != NULL) {
-    BreakAndContinueScope push(&break_info, this);
     CHECK_BAILOUT(VisitLoopBody(stmt, loop_entry, &break_info));
   }
   HBasicBlock* body_exit =
@@ -3147,10 +3260,11 @@ void HGraphBuilder::VisitForStatement(ForStatement* stmt) {
     CHECK_ALIVE(Visit(stmt->init()));
   }
   ASSERT(current_block() != NULL);
-  PreProcessOsrEntry(stmt);
+  bool osr_entry = PreProcessOsrEntry(stmt);
   HBasicBlock* loop_entry = CreateLoopHeaderBlock();
   current_block()->Goto(loop_entry);
   set_current_block(loop_entry);
+  if (osr_entry) graph()->set_osr_loop_entry(loop_entry);
 
   HBasicBlock* loop_successor = NULL;
   if (stmt->cond() != NULL) {
@@ -3170,7 +3284,6 @@ void HGraphBuilder::VisitForStatement(ForStatement* stmt) {
 
   BreakAndContinueInfo break_info(stmt);
   if (current_block() != NULL) {
-    BreakAndContinueScope push(&break_info, this);
     CHECK_BAILOUT(VisitLoopBody(stmt, loop_entry, &break_info));
   }
   HBasicBlock* body_exit =
@@ -3195,7 +3308,119 @@ void HGraphBuilder::VisitForInStatement(ForInStatement* stmt) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
-  return Bailout("ForInStatement");
+
+  if (!FLAG_optimize_for_in) {
+    return Bailout("ForInStatement optimization is disabled");
+  }
+
+  if (!oracle()->IsForInFastCase(stmt)) {
+    return Bailout("ForInStatement is not fast case");
+  }
+
+  if (!stmt->each()->IsVariableProxy() ||
+      !stmt->each()->AsVariableProxy()->var()->IsStackLocal()) {
+    return Bailout("ForInStatement with non-local each variable");
+  }
+
+  Variable* each_var = stmt->each()->AsVariableProxy()->var();
+
+  CHECK_ALIVE(VisitForValue(stmt->enumerable()));
+  HValue* enumerable = Top();  // Leave enumerable at the top.
+
+  HInstruction* map = AddInstruction(new(zone()) HForInPrepareMap(
+      environment()->LookupContext(), enumerable));
+  AddSimulate(stmt->PrepareId());
+
+  HInstruction* array = AddInstruction(
+      new(zone()) HForInCacheArray(
+          enumerable,
+          map,
+          DescriptorArray::kEnumCacheBridgeCacheIndex));
+
+  HInstruction* array_length = AddInstruction(
+      new(zone()) HFixedArrayBaseLength(array));
+
+  HInstruction* start_index = AddInstruction(new(zone()) HConstant(
+      Handle<Object>(Smi::FromInt(0)), Representation::Integer32()));
+
+  Push(map);
+  Push(array);
+  Push(array_length);
+  Push(start_index);
+
+  HInstruction* index_cache = AddInstruction(
+      new(zone()) HForInCacheArray(
+          enumerable,
+          map,
+          DescriptorArray::kEnumCacheBridgeIndicesCacheIndex));
+  HForInCacheArray::cast(array)->set_index_cache(
+      HForInCacheArray::cast(index_cache));
+
+  bool osr_entry = PreProcessOsrEntry(stmt);
+  HBasicBlock* loop_entry = CreateLoopHeaderBlock();
+  current_block()->Goto(loop_entry);
+  set_current_block(loop_entry);
+  if (osr_entry) graph()->set_osr_loop_entry(loop_entry);
+
+  HValue* index = environment()->ExpressionStackAt(0);
+  HValue* limit = environment()->ExpressionStackAt(1);
+
+  // Check that we still have more keys.
+  HCompareIDAndBranch* compare_index =
+      new(zone()) HCompareIDAndBranch(index, limit, Token::LT);
+  compare_index->SetInputRepresentation(Representation::Integer32());
+
+  HBasicBlock* loop_body = graph()->CreateBasicBlock();
+  HBasicBlock* loop_successor = graph()->CreateBasicBlock();
+
+  compare_index->SetSuccessorAt(0, loop_body);
+  compare_index->SetSuccessorAt(1, loop_successor);
+  current_block()->Finish(compare_index);
+
+  set_current_block(loop_successor);
+  Drop(5);
+
+  set_current_block(loop_body);
+
+  HValue* key = AddInstruction(
+      new(zone()) HLoadKeyedFastElement(
+          environment()->ExpressionStackAt(2),  // Enum cache.
+          environment()->ExpressionStackAt(0),  // Iteration index.
+          HLoadKeyedFastElement::OMIT_HOLE_CHECK));
+
+  // Check if the expected map still matches that of the enumerable.
+  // If not just deoptimize.
+  AddInstruction(new(zone()) HCheckMapValue(
+      environment()->ExpressionStackAt(4),
+      environment()->ExpressionStackAt(3)));
+
+  Bind(each_var, key);
+
+  BreakAndContinueInfo break_info(stmt, 5);
+  CHECK_BAILOUT(VisitLoopBody(stmt, loop_entry, &break_info));
+
+  HBasicBlock* body_exit =
+      JoinContinue(stmt, current_block(), break_info.continue_block());
+
+  if (body_exit != NULL) {
+    set_current_block(body_exit);
+
+    HValue* current_index = Pop();
+    HInstruction* new_index = new(zone()) HAdd(environment()->LookupContext(),
+                                               current_index,
+                                               graph()->GetConstant1());
+    new_index->AssumeRepresentation(Representation::Integer32());
+    PushAndAdd(new_index);
+    body_exit = current_block();
+  }
+
+  HBasicBlock* loop_exit = CreateLoop(stmt,
+                                      loop_entry,
+                                      body_exit,
+                                      loop_successor,
+                                      break_info.break_block());
+
+  set_current_block(loop_exit);
 }
 
 
@@ -3437,19 +3662,40 @@ void HGraphBuilder::VisitRegExpLiteral(RegExpLiteral* expr) {
 }
 
 
-// Determines whether the given object literal boilerplate satisfies all
-// limits to be considered for fast deep-copying and computes the total
+// Determines whether the given array or object literal boilerplate satisfies
+// all limits to be considered for fast deep-copying and computes the total
 // size of all objects that are part of the graph.
-static bool IsFastObjectLiteral(Handle<JSObject> boilerplate,
-                                int max_depth,
-                                int* max_properties,
-                                int* total_size) {
-  if (max_depth <= 0) return false;
+static bool IsFastLiteral(Handle<JSObject> boilerplate,
+                          int max_depth,
+                          int* max_properties,
+                          int* total_size) {
+  ASSERT(max_depth >= 0 && *max_properties >= 0);
+  if (max_depth == 0) return false;
 
   Handle<FixedArrayBase> elements(boilerplate->elements());
   if (elements->length() > 0 &&
-      elements->map() != HEAP->fixed_cow_array_map()) {
-    return false;
+      elements->map() != boilerplate->GetHeap()->fixed_cow_array_map()) {
+    if (boilerplate->HasFastDoubleElements()) {
+      *total_size += FixedDoubleArray::SizeFor(elements->length());
+    } else if (boilerplate->HasFastElements()) {
+      int length = elements->length();
+      for (int i = 0; i < length; i++) {
+        if ((*max_properties)-- == 0) return false;
+        Handle<Object> value = JSObject::GetElement(boilerplate, i);
+        if (value->IsJSObject()) {
+          Handle<JSObject> value_object = Handle<JSObject>::cast(value);
+          if (!IsFastLiteral(value_object,
+                             max_depth - 1,
+                             max_properties,
+                             total_size)) {
+            return false;
+          }
+        }
+      }
+      *total_size += FixedArray::SizeFor(length);
+    } else {
+      return false;
+    }
   }
 
   Handle<FixedArray> properties(boilerplate->properties());
@@ -3458,14 +3704,14 @@ static bool IsFastObjectLiteral(Handle<JSObject> boilerplate,
   } else {
     int nof = boilerplate->map()->inobject_properties();
     for (int i = 0; i < nof; i++) {
-      if ((*max_properties)-- <= 0) return false;
+      if ((*max_properties)-- == 0) return false;
       Handle<Object> value(boilerplate->InObjectPropertyAt(i));
       if (value->IsJSObject()) {
         Handle<JSObject> value_object = Handle<JSObject>::cast(value);
-        if (!IsFastObjectLiteral(value_object,
-                                 max_depth - 1,
-                                 max_properties,
-                                 total_size)) {
+        if (!IsFastLiteral(value_object,
+                           max_depth - 1,
+                           max_properties,
+                           total_size)) {
           return false;
         }
       }
@@ -3487,26 +3733,26 @@ void HGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
 
   // Check whether to use fast or slow deep-copying for boilerplate.
   int total_size = 0;
-  int max_properties = HObjectLiteralFast::kMaxObjectLiteralProperties;
+  int max_properties = HFastLiteral::kMaxLiteralProperties;
   Handle<Object> boilerplate(closure->literals()->get(expr->literal_index()));
   if (boilerplate->IsJSObject() &&
-      IsFastObjectLiteral(Handle<JSObject>::cast(boilerplate),
-                          HObjectLiteralFast::kMaxObjectLiteralDepth,
-                          &max_properties,
-                          &total_size)) {
+      IsFastLiteral(Handle<JSObject>::cast(boilerplate),
+                    HFastLiteral::kMaxLiteralDepth,
+                    &max_properties,
+                    &total_size)) {
     Handle<JSObject> boilerplate_object = Handle<JSObject>::cast(boilerplate);
-    literal = new(zone()) HObjectLiteralFast(context,
-                                             boilerplate_object,
-                                             total_size,
-                                             expr->literal_index(),
-                                             expr->depth());
+    literal = new(zone()) HFastLiteral(context,
+                                       boilerplate_object,
+                                       total_size,
+                                       expr->literal_index(),
+                                       expr->depth());
   } else {
-    literal = new(zone()) HObjectLiteralGeneric(context,
-                                                expr->constant_properties(),
-                                                expr->fast_elements(),
-                                                expr->literal_index(),
-                                                expr->depth(),
-                                                expr->has_function());
+    literal = new(zone()) HObjectLiteral(context,
+                                         expr->constant_properties(),
+                                         expr->fast_elements(),
+                                         expr->literal_index(),
+                                         expr->depth(),
+                                         expr->has_function());
   }
 
   // The object is expected in the bailout environment during computation
@@ -3529,18 +3775,12 @@ void HGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
       case ObjectLiteral::Property::COMPUTED:
         if (key->handle()->IsSymbol()) {
           if (property->emit_store()) {
+            property->RecordTypeFeedback(oracle());
             CHECK_ALIVE(VisitForValue(value));
             HValue* value = Pop();
-            Handle<String> name = Handle<String>::cast(key->handle());
-            HStoreNamedGeneric* store =
-                new(zone()) HStoreNamedGeneric(
-                                context,
-                                literal,
-                                name,
-                                value,
-                                function_strict_mode_flag());
+            HInstruction* store = BuildStoreNamed(literal, value, property);
             AddInstruction(store);
-            AddSimulate(key->id());
+            if (store->HasObservableSideEffects()) AddSimulate(key->id());
           } else {
             CHECK_ALIVE(VisitForEffect(value));
           }
@@ -3577,6 +3817,7 @@ void HGraphBuilder::VisitArrayLiteral(ArrayLiteral* expr) {
   ZoneList<Expression*>* subexprs = expr->values();
   int length = subexprs->length();
   HValue* context = environment()->LookupContext();
+  HInstruction* literal;
 
   Handle<FixedArray> literals(environment()->closure()->literals());
   Handle<Object> raw_boilerplate(literals->get(expr->literal_index()));
@@ -3598,12 +3839,25 @@ void HGraphBuilder::VisitArrayLiteral(ArrayLiteral* expr) {
   ElementsKind boilerplate_elements_kind =
         Handle<JSObject>::cast(boilerplate)->GetElementsKind();
 
-  HArrayLiteral* literal = new(zone()) HArrayLiteral(
-      context,
-      boilerplate,
-      length,
-      expr->literal_index(),
-      expr->depth());
+  // Check whether to use fast or slow deep-copying for boilerplate.
+  int total_size = 0;
+  int max_properties = HFastLiteral::kMaxLiteralProperties;
+  if (IsFastLiteral(boilerplate,
+                    HFastLiteral::kMaxLiteralDepth,
+                    &max_properties,
+                    &total_size)) {
+    literal = new(zone()) HFastLiteral(context,
+                                       boilerplate,
+                                       total_size,
+                                       expr->literal_index(),
+                                       expr->depth());
+  } else {
+    literal = new(zone()) HArrayLiteral(context,
+                                        boilerplate,
+                                        length,
+                                        expr->literal_index(),
+                                        expr->depth());
+  }
 
   // The array is expected in the bailout environment during computation
   // of the property values and is the value of the entire expression.
@@ -3726,6 +3980,25 @@ HInstruction* HGraphBuilder::BuildStoreNamedGeneric(HValue* object,
                          name,
                          value,
                          function_strict_mode_flag());
+}
+
+
+HInstruction* HGraphBuilder::BuildStoreNamed(HValue* object,
+                                             HValue* value,
+                                             ObjectLiteral::Property* prop) {
+  Literal* key = prop->key()->AsLiteral();
+  Handle<String> name = Handle<String>::cast(key->handle());
+  ASSERT(!name.is_null());
+
+  LookupResult lookup(isolate());
+  Handle<Map> type = prop->GetReceiverType();
+  bool is_monomorphic = prop->IsMonomorphic() &&
+      ComputeStoredField(type, name, &lookup);
+
+  return is_monomorphic
+      ? BuildStoreNamedField(object, name, value, type, &lookup,
+                             true)  // Needs smi and map check.
+      : BuildStoreNamedGeneric(object, name, value);
 }
 
 
@@ -4255,6 +4528,10 @@ HLoadNamedField* HGraphBuilder::BuildLoadNamedField(HValue* object,
 
 HInstruction* HGraphBuilder::BuildLoadNamedGeneric(HValue* obj,
                                                    Property* expr) {
+  if (expr->IsUninitialized() && !FLAG_always_opt) {
+    AddInstruction(new(zone()) HSoftDeoptimize);
+    current_block()->MarkAsDeoptimizing();
+  }
   ASSERT(expr->key()->IsPropertyName());
   Handle<Object> name = expr->key()->AsLiteral()->handle();
   HValue* context = environment()->LookupContext();
@@ -4303,9 +4580,7 @@ HInstruction* HGraphBuilder::BuildExternalArrayElementAccess(
     ASSERT(val != NULL);
     switch (elements_kind) {
       case EXTERNAL_PIXEL_ELEMENTS: {
-        HClampToUint8* clamp = new(zone()) HClampToUint8(val);
-        AddInstruction(clamp);
-        val = clamp;
+        val = AddInstruction(new(zone()) HClampToUint8(val));
         break;
       }
       case EXTERNAL_BYTE_ELEMENTS:
@@ -4314,9 +4589,13 @@ HInstruction* HGraphBuilder::BuildExternalArrayElementAccess(
       case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
       case EXTERNAL_INT_ELEMENTS:
       case EXTERNAL_UNSIGNED_INT_ELEMENTS: {
-        HToInt32* floor_val = new(zone()) HToInt32(val);
-        AddInstruction(floor_val);
-        val = floor_val;
+        if (!val->representation().IsInteger32()) {
+          val = AddInstruction(new(zone()) HChange(
+              val,
+              Representation::Integer32(),
+              true,  // Truncate to int32.
+              false));  // Don't deoptimize undefined (irrelevant here).
+        }
         break;
       }
       case EXTERNAL_FLOAT_ELEMENTS:
@@ -4333,6 +4612,7 @@ HInstruction* HGraphBuilder::BuildExternalArrayElementAccess(
     return new(zone()) HStoreKeyedSpecializedArrayElement(
         external_elements, checked_key, val, elements_kind);
   } else {
+    ASSERT(val == NULL);
     return new(zone()) HLoadKeyedSpecializedArrayElement(
         external_elements, checked_key, elements_kind);
   }
@@ -4454,7 +4734,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
     Handle<Map> map = maps->at(i);
     ASSERT(map->IsMap());
     if (!transition_target.at(i).is_null()) {
-      object = AddInstruction(new(zone()) HTransitionElementsKind(
+      AddInstruction(new(zone()) HTransitionElementsKind(
           object, map, transition_target.at(i)));
     } else {
       type_todo[map->elements_kind()] = true;
@@ -4819,7 +5099,7 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
         PrintF("Trying to inline the polymorphic call to %s\n",
                *name->ToCString());
       }
-      if (FLAG_polymorphic_inlining && TryInline(expr)) {
+      if (FLAG_polymorphic_inlining && TryInlineCall(expr)) {
         // Trying to inline will signal that we should bailout from the
         // entire compilation by setting stack overflow on the visitor.
         if (HasStackOverflow()) return;
@@ -4889,19 +5169,18 @@ void HGraphBuilder::TraceInline(Handle<JSFunction> target,
 }
 
 
-bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
+bool HGraphBuilder::TryInline(CallKind call_kind,
+                              Handle<JSFunction> target,
+                              ZoneList<Expression*>* arguments,
+                              HValue* receiver,
+                              int ast_id,
+                              int return_id,
+                              ReturnHandlingFlag return_handling) {
   if (!FLAG_use_inlining) return false;
-
-  // The function call we are inlining is a method call if the call
-  // is a property call.
-  CallKind call_kind = (expr->expression()->AsProperty() == NULL)
-      ? CALL_AS_FUNCTION
-      : CALL_AS_METHOD;
 
   // Precondition: call is monomorphic and we have found a target with the
   // appropriate arity.
   Handle<JSFunction> caller = info()->closure();
-  Handle<JSFunction> target = expr->target();
   Handle<SharedFunctionInfo> target_shared(target->shared());
 
   // Do a quick check on source code length to avoid parsing large
@@ -4917,7 +5196,7 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
     TraceInline(target, caller, "target not inlineable");
     return false;
   }
-  if (target_shared->dont_inline() || target_shared->dont_crankshaft()) {
+  if (target_shared->dont_inline() || target_shared->dont_optimize()) {
     TraceInline(target, caller, "target contains unsupported syntax [early]");
     return false;
   }
@@ -4949,7 +5228,7 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
       TraceInline(target, caller, "inline depth limit reached");
       return false;
     }
-    if (!env->outer()->is_arguments_adaptor()) {
+    if (env->outer()->frame_type() == JS_FUNCTION) {
       current_level++;
     }
     env = env->outer();
@@ -4979,7 +5258,7 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
     if (target_info.isolate()->has_pending_exception()) {
       // Parse or scope error, never optimize this function.
       SetStackOverflow();
-      target_shared->DisableOptimization(*target);
+      target_shared->DisableOptimization();
     }
     TraceInline(target, caller, "parse failure");
     return false;
@@ -5005,10 +5284,21 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
     return false;
   }
 
-  // Don't inline functions that uses the arguments object.
+  // If the function uses the arguments object check that inlining of functions
+  // with arguments object is enabled and the arguments-variable is
+  // stack allocated.
   if (function->scope()->arguments() != NULL) {
-    TraceInline(target, caller, "target requires special argument handling");
-    return false;
+    if (!FLAG_inline_arguments) {
+      TraceInline(target, caller, "target uses arguments object");
+      return false;
+    }
+
+    if (!function->scope()->arguments()->IsStackAllocated()) {
+      TraceInline(target,
+                  caller,
+                  "target uses non-stackallocated arguments object");
+      return false;
+    }
   }
 
   // All declarations must be inlineable.
@@ -5057,16 +5347,17 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
       isolate());
   // The function state is new-allocated because we need to delete it
   // in two different places.
-  FunctionState* target_state =
-      new FunctionState(this, &target_info, &target_oracle, drop_extra);
+  FunctionState* target_state = new FunctionState(
+      this, &target_info, &target_oracle, return_handling);
 
   HConstant* undefined = graph()->GetConstantUndefined();
   HEnvironment* inner_env =
       environment()->CopyForInlining(target,
-                                     expr->arguments()->length(),
+                                     arguments->length(),
                                      function,
                                      undefined,
-                                     call_kind);
+                                     call_kind,
+                                     function_state()->is_construct());
 #ifdef V8_TARGET_ARCH_IA32
   // IA32 only, overwrite the caller's context in the deoptimization
   // environment with the correct one.
@@ -5078,21 +5369,26 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
   AddInstruction(context);
   inner_env->BindContext(context);
 #endif
-  HBasicBlock* body_entry = CreateBasicBlock(inner_env);
-  current_block()->Goto(body_entry);
-  body_entry->SetJoinId(expr->ReturnId());
-  set_current_block(body_entry);
+  AddSimulate(return_id);
+  current_block()->UpdateEnvironment(inner_env);
   AddInstruction(new(zone()) HEnterInlined(target,
-                                           expr->arguments()->length(),
+                                           arguments->length(),
                                            function,
-                                           call_kind));
+                                           call_kind,
+                                           function_state()->is_construct()));
+  // If the function uses arguments object create and bind one.
+  if (function->scope()->arguments() != NULL) {
+    ASSERT(function->scope()->arguments()->IsStackAllocated());
+    environment()->Bind(function->scope()->arguments(),
+                        graph()->GetArgumentsObject());
+  }
   VisitDeclarations(target_info.scope()->declarations());
   VisitStatements(function->body());
   if (HasStackOverflow()) {
     // Bail out if the inline function did, as we cannot residualize a call
     // instead.
     TraceInline(target, caller, "inline graph construction failed");
-    target_shared->DisableOptimization(*target);
+    target_shared->DisableOptimization();
     inline_bailout_ = true;
     delete target_state;
     return true;
@@ -5104,32 +5400,27 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
   TraceInline(target, caller, NULL);
 
   if (current_block() != NULL) {
-    // Add a return of undefined if control can fall off the body.  In a
-    // test context, undefined is false.
-    if (inlined_test_context() == NULL) {
+    // Add default return value (i.e. undefined for normals calls or the newly
+    // allocated receiver for construct calls) if control can fall off the
+    // body.  In a test context, undefined is false and any JSObject is true.
+    if (call_context()->IsValue()) {
       ASSERT(function_return() != NULL);
-      ASSERT(call_context()->IsEffect() || call_context()->IsValue());
-      if (call_context()->IsEffect()) {
-        current_block()->Goto(function_return(), drop_extra);
-      } else {
-        current_block()->AddLeaveInlined(undefined,
-                                         function_return(),
-                                         drop_extra);
-      }
+      HValue* return_value = function_state()->is_construct()
+          ? receiver
+          : undefined;
+      current_block()->AddLeaveInlined(return_value,
+                                       function_return(),
+                                       function_state()->drop_extra());
+    } else if (call_context()->IsEffect()) {
+      ASSERT(function_return() != NULL);
+      current_block()->Goto(function_return(), function_state()->drop_extra());
     } else {
-      // The graph builder assumes control can reach both branches of a
-      // test, so we materialize the undefined value and test it rather than
-      // simply jumping to the false target.
-      //
-      // TODO(3168478): refactor to avoid this.
       ASSERT(call_context()->IsTest());
-      HBasicBlock* empty_true = graph()->CreateBasicBlock();
-      HBasicBlock* empty_false = graph()->CreateBasicBlock();
-      HBranch* test = new(zone()) HBranch(undefined, empty_true, empty_false);
-      current_block()->Finish(test);
-
-      empty_true->Goto(inlined_test_context()->if_true(), drop_extra);
-      empty_false->Goto(inlined_test_context()->if_false(), drop_extra);
+      ASSERT(inlined_test_context() != NULL);
+      HBasicBlock* target = function_state()->is_construct()
+          ? inlined_test_context()->if_true()
+          : inlined_test_context()->if_false();
+      current_block()->Goto(target, function_state()->drop_extra());
     }
   }
 
@@ -5145,12 +5436,12 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
 
     // Forward to the real test context.
     if (if_true->HasPredecessor()) {
-      if_true->SetJoinId(expr->id());
+      if_true->SetJoinId(ast_id);
       HBasicBlock* true_target = TestContext::cast(ast_context())->if_true();
       if_true->Goto(true_target, function_state()->drop_extra());
     }
     if (if_false->HasPredecessor()) {
-      if_false->SetJoinId(expr->id());
+      if_false->SetJoinId(ast_id);
       HBasicBlock* false_target = TestContext::cast(ast_context())->if_false();
       if_false->Goto(false_target, function_state()->drop_extra());
     }
@@ -5158,7 +5449,7 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
     return true;
 
   } else if (function_return()->HasPredecessor()) {
-    function_return()->SetJoinId(expr->id());
+    function_return()->SetJoinId(ast_id);
     set_current_block(function_return());
   } else {
     set_current_block(NULL);
@@ -5168,17 +5459,45 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
 }
 
 
+bool HGraphBuilder::TryInlineCall(Call* expr, bool drop_extra) {
+  // The function call we are inlining is a method call if the call
+  // is a property call.
+  CallKind call_kind = (expr->expression()->AsProperty() == NULL)
+      ? CALL_AS_FUNCTION
+      : CALL_AS_METHOD;
+
+  return TryInline(call_kind,
+                   expr->target(),
+                   expr->arguments(),
+                   NULL,
+                   expr->id(),
+                   expr->ReturnId(),
+                   drop_extra ? DROP_EXTRA_ON_RETURN : NORMAL_RETURN);
+}
+
+
+bool HGraphBuilder::TryInlineConstruct(CallNew* expr, HValue* receiver) {
+  return TryInline(CALL_AS_FUNCTION,
+                   expr->target(),
+                   expr->arguments(),
+                   receiver,
+                   expr->id(),
+                   expr->ReturnId(),
+                   CONSTRUCT_CALL_RETURN);
+}
+
+
 bool HGraphBuilder::TryInlineBuiltinFunctionCall(Call* expr, bool drop_extra) {
   if (!expr->target()->shared()->HasBuiltinFunctionId()) return false;
   BuiltinFunctionId id = expr->target()->shared()->builtin_function_id();
   switch (id) {
     case kMathRound:
-    case kMathFloor:
     case kMathAbs:
     case kMathSqrt:
     case kMathLog:
     case kMathSin:
     case kMathCos:
+    case kMathTan:
       if (expr->arguments()->length() == 1) {
         HValue* argument = Pop();
         HValue* context = environment()->LookupContext();
@@ -5239,6 +5558,7 @@ bool HGraphBuilder::TryInlineBuiltinMethodCall(Call* expr,
     case kMathLog:
     case kMathSin:
     case kMathCos:
+    case kMathTan:
       if (argument_count == 2 && check_type == RECEIVER_MAP_CHECK) {
         AddCheckConstantFunction(expr, receiver, receiver_map, true);
         HValue* argument = Pop();
@@ -5311,32 +5631,43 @@ bool HGraphBuilder::TryInlineBuiltinMethodCall(Call* expr,
         AddCheckConstantFunction(expr, receiver, receiver_map, true);
         HValue* right = Pop();
         HValue* left = Pop();
-        // Do not inline if the return representation is not certain.
-        if (!left->representation().Equals(right->representation())) {
-          Push(left);
-          Push(right);
-          return false;
-        }
-
         Pop();  // Pop receiver.
-        Token::Value op = (id == kMathMin) ? Token::LT : Token::GT;
-        HCompareIDAndBranch* compare = NULL;
 
-        if (left->representation().IsTagged()) {
-          HChange* left_cvt =
-              new(zone()) HChange(left, Representation::Double(), false, true);
-          left_cvt->SetFlag(HValue::kBailoutOnMinusZero);
-          AddInstruction(left_cvt);
-          HChange* right_cvt =
-              new(zone()) HChange(right, Representation::Double(), false, true);
-          right_cvt->SetFlag(HValue::kBailoutOnMinusZero);
-          AddInstruction(right_cvt);
-          compare = new(zone()) HCompareIDAndBranch(left_cvt, right_cvt, op);
-          compare->SetInputRepresentation(Representation::Double());
-        } else {
-          compare = new(zone()) HCompareIDAndBranch(left, right, op);
-          compare->SetInputRepresentation(left->representation());
+        HValue* left_operand = left;
+        HValue* right_operand = right;
+
+        // If we do not have two integers, we convert to double for comparison.
+        if (!left->representation().IsInteger32() ||
+            !right->representation().IsInteger32()) {
+          if (!left->representation().IsDouble()) {
+            HChange* left_convert = new(zone()) HChange(
+                left,
+                Representation::Double(),
+                false,  // Do not truncate when converting to double.
+                true);  // Deoptimize for undefined.
+            left_convert->SetFlag(HValue::kBailoutOnMinusZero);
+            left_operand = AddInstruction(left_convert);
+          }
+          if (!right->representation().IsDouble()) {
+            HChange* right_convert = new(zone()) HChange(
+                right,
+                Representation::Double(),
+                false,  // Do not truncate when converting to double.
+                true);  // Deoptimize for undefined.
+            right_convert->SetFlag(HValue::kBailoutOnMinusZero);
+            right_operand = AddInstruction(right_convert);
+          }
         }
+
+        ASSERT(left_operand->representation().Equals(
+               right_operand->representation()));
+        ASSERT(!left_operand->representation().IsTagged());
+
+        Token::Value op = (id == kMathMin) ? Token::LT : Token::GT;
+
+        HCompareIDAndBranch* compare =
+            new(zone()) HCompareIDAndBranch(left_operand, right_operand, op);
+        compare->SetInputRepresentation(left_operand->representation());
 
         HBasicBlock* return_left = graph()->CreateBasicBlock();
         HBasicBlock* return_right = graph()->CreateBasicBlock();
@@ -5389,13 +5720,6 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   HValue* arg_two_value = environment()->Lookup(arg_two->var());
   if (!arg_two_value->CheckFlag(HValue::kIsArguments)) return false;
 
-  // Our implementation of arguments (based on this stack frame or an
-  // adapter below it) does not work for inlined functions.
-  if (function_state()->outer() != NULL) {
-    Bailout("Function.prototype.apply optimization in inlined function");
-    return true;
-  }
-
   // Found pattern f.apply(receiver, arguments).
   VisitForValue(prop->obj());
   if (HasStackOverflow() || current_block() == NULL) return true;
@@ -5406,13 +5730,46 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   VisitForValue(args->at(0));
   if (HasStackOverflow() || current_block() == NULL) return true;
   HValue* receiver = Pop();
-  HInstruction* elements = AddInstruction(new(zone()) HArgumentsElements);
-  HInstruction* length = AddInstruction(new(zone()) HArgumentsLength(elements));
-  HInstruction* result =
-      new(zone()) HApplyArguments(function, receiver, length, elements);
-  result->set_position(expr->position());
-  ast_context()->ReturnInstruction(result, expr->id());
-  return true;
+
+  if (function_state()->outer() == NULL) {
+    HInstruction* elements = AddInstruction(new(zone()) HArgumentsElements);
+    HInstruction* length =
+        AddInstruction(new(zone()) HArgumentsLength(elements));
+    HValue* wrapped_receiver =
+        AddInstruction(new(zone()) HWrapReceiver(receiver, function));
+    HInstruction* result =
+        new(zone()) HApplyArguments(function,
+                                    wrapped_receiver,
+                                    length,
+                                    elements);
+    result->set_position(expr->position());
+    ast_context()->ReturnInstruction(result, expr->id());
+    return true;
+  } else {
+    // We are inside inlined function and we know exactly what is inside
+    // arguments object.
+    HValue* context = environment()->LookupContext();
+
+    HValue* wrapped_receiver =
+        AddInstruction(new(zone()) HWrapReceiver(receiver, function));
+    PushAndAdd(new(zone()) HPushArgument(wrapped_receiver));
+
+    HEnvironment* arguments_env = environment()->arguments_environment();
+
+    int parameter_count = arguments_env->parameter_count();
+    for (int i = 1; i < arguments_env->parameter_count(); i++) {
+      PushAndAdd(new(zone()) HPushArgument(arguments_env->Lookup(i)));
+    }
+
+    HInvokeFunction* call = new(zone()) HInvokeFunction(
+        context,
+        function,
+        parameter_count);
+    Drop(parameter_count);
+    call->set_position(expr->position());
+    ast_context()->ReturnInstruction(call, expr->id());
+    return true;
+  }
 }
 
 
@@ -5487,7 +5844,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
       } else {
         AddCheckConstantFunction(expr, receiver, receiver_map, true);
 
-        if (TryInline(expr)) return;
+        if (TryInlineCall(expr)) return;
         call = PreProcessCall(
             new(zone()) HCallConstantFunction(expr->target(),
                                               argument_count));
@@ -5551,7 +5908,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
           }
           return;
         }
-        if (TryInline(expr)) return;
+        if (TryInlineCall(expr)) return;
         call = PreProcessCall(new(zone()) HCallKnownGlobal(expr->target(),
                                                            argument_count));
       } else {
@@ -5587,7 +5944,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
         return;
       }
 
-      if (TryInline(expr, true)) {   // Drop function from environment.
+      if (TryInlineCall(expr, true)) {   // Drop function from environment.
         return;
       } else {
         call = PreProcessCall(new(zone()) HInvokeFunction(context,
@@ -5617,25 +5974,72 @@ void HGraphBuilder::VisitCall(Call* expr) {
 }
 
 
+// Checks whether allocation using the given constructor can be inlined.
+static bool IsAllocationInlineable(Handle<JSFunction> constructor) {
+  return constructor->has_initial_map() &&
+      constructor->initial_map()->instance_type() == JS_OBJECT_TYPE;
+}
+
+
 void HGraphBuilder::VisitCallNew(CallNew* expr) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
   ASSERT(current_block()->HasPredecessor());
-  // The constructor function is also used as the receiver argument to the
-  // JS construct call builtin.
-  HValue* constructor = NULL;
-  CHECK_ALIVE(constructor = VisitArgument(expr->expression()));
-  CHECK_ALIVE(VisitArgumentList(expr->arguments()));
-
+  expr->RecordTypeFeedback(oracle());
+  int argument_count = expr->arguments()->length() + 1;  // Plus constructor.
   HValue* context = environment()->LookupContext();
 
-  // The constructor is both an operand to the instruction and an argument
-  // to the construct call.
-  int arg_count = expr->arguments()->length() + 1;  // Plus constructor.
-  HCallNew* call = new(zone()) HCallNew(context, constructor, arg_count);
-  call->set_position(expr->position());
-  Drop(arg_count);
-  return ast_context()->ReturnInstruction(call, expr->id());
+  if (FLAG_inline_construct &&
+      expr->IsMonomorphic() &&
+      IsAllocationInlineable(expr->target())) {
+    // The constructor function is on the stack in the unoptimized code
+    // during evaluation of the arguments.
+    CHECK_ALIVE(VisitForValue(expr->expression()));
+    HValue* function = Top();
+    CHECK_ALIVE(VisitExpressions(expr->arguments()));
+    Handle<JSFunction> constructor = expr->target();
+    HValue* check = AddInstruction(
+        new(zone()) HCheckFunction(function, constructor));
+
+    // Force completion of inobject slack tracking before generating
+    // allocation code to finalize instance size.
+    if (constructor->shared()->IsInobjectSlackTrackingInProgress()) {
+      constructor->shared()->CompleteInobjectSlackTracking();
+    }
+
+    // Replace the constructor function with a newly allocated receiver.
+    HInstruction* receiver = new(zone()) HAllocateObject(context, constructor);
+    // Index of the receiver from the top of the expression stack.
+    const int receiver_index = argument_count - 1;
+    AddInstruction(receiver);
+    ASSERT(environment()->ExpressionStackAt(receiver_index) == function);
+    environment()->SetExpressionStackAt(receiver_index, receiver);
+
+    if (TryInlineConstruct(expr, receiver)) return;
+
+    // TODO(mstarzinger): For now we remove the previous HAllocateObject and
+    // add HPushArgument for the arguments in case inlining failed.  What we
+    // actually should do is emit HInvokeFunction on the constructor instead
+    // of using HCallNew as a fallback.
+    receiver->DeleteAndReplaceWith(NULL);
+    check->DeleteAndReplaceWith(NULL);
+    environment()->SetExpressionStackAt(receiver_index, function);
+    HInstruction* call = PreProcessCall(
+        new(zone()) HCallNew(context, function, argument_count));
+    call->set_position(expr->position());
+    return ast_context()->ReturnInstruction(call, expr->id());
+  } else {
+    // The constructor function is both an operand to the instruction and an
+    // argument to the construct call.
+    HValue* constructor = NULL;
+    CHECK_ALIVE(constructor = VisitArgument(expr->expression()));
+    CHECK_ALIVE(VisitArgumentList(expr->arguments()));
+    HInstruction* call =
+        new(zone()) HCallNew(context, constructor, argument_count);
+    Drop(argument_count);
+    call->set_position(expr->position());
+    return ast_context()->ReturnInstruction(call, expr->id());
+  }
 }
 
 
@@ -6540,27 +6944,78 @@ void HGraphBuilder::VisitThisFunction(ThisFunction* expr) {
 }
 
 
-void HGraphBuilder::VisitVariableDeclaration(VariableDeclaration* decl) {
-  HandleVariableDeclaration(decl->proxy(), decl->mode(), decl->fun());
+void HGraphBuilder::VisitDeclarations(ZoneList<Declaration*>* declarations) {
+  int length = declarations->length();
+  int global_count = 0;
+  for (int i = 0; i < declarations->length(); i++) {
+    Declaration* decl = declarations->at(i);
+    FunctionDeclaration* fun_decl = decl->AsFunctionDeclaration();
+    HandleDeclaration(decl->proxy(),
+                      decl->mode(),
+                      fun_decl != NULL ? fun_decl->fun() : NULL,
+                      &global_count);
+  }
+
+  // Batch declare global functions and variables.
+  if (global_count > 0) {
+    Handle<FixedArray> array =
+        isolate()->factory()->NewFixedArray(2 * global_count, TENURED);
+    for (int j = 0, i = 0; i < length; i++) {
+      Declaration* decl = declarations->at(i);
+      Variable* var = decl->proxy()->var();
+
+      if (var->IsUnallocated()) {
+        array->set(j++, *(var->name()));
+        FunctionDeclaration* fun_decl = decl->AsFunctionDeclaration();
+        if (fun_decl == NULL) {
+          if (var->binding_needs_init()) {
+            // In case this binding needs initialization use the hole.
+            array->set_the_hole(j++);
+          } else {
+            array->set_undefined(j++);
+          }
+        } else {
+          Handle<SharedFunctionInfo> function =
+              Compiler::BuildFunctionInfo(fun_decl->fun(), info()->script());
+          // Check for stack-overflow exception.
+          if (function.is_null()) {
+            SetStackOverflow();
+            return;
+          }
+          array->set(j++, *function);
+        }
+      }
+    }
+    int flags = DeclareGlobalsEvalFlag::encode(info()->is_eval()) |
+                DeclareGlobalsNativeFlag::encode(info()->is_native()) |
+                DeclareGlobalsLanguageMode::encode(info()->language_mode());
+    HInstruction* result =
+        new(zone()) HDeclareGlobals(environment()->LookupContext(),
+                                    array,
+                                    flags);
+    AddInstruction(result);
+  }
 }
 
 
-void HGraphBuilder::HandleVariableDeclaration(VariableProxy* proxy,
-                                              VariableMode mode,
-                                              FunctionLiteral* function) {
+void HGraphBuilder::HandleDeclaration(VariableProxy* proxy,
+                                      VariableMode mode,
+                                      FunctionLiteral* function,
+                                      int* global_count) {
   Variable* var = proxy->var();
   bool binding_needs_init =
       (mode == CONST || mode == CONST_HARMONY || mode == LET);
   switch (var->location()) {
     case Variable::UNALLOCATED:
-      return Bailout("unsupported global declaration");
+      ++(*global_count);
+      return;
     case Variable::PARAMETER:
     case Variable::LOCAL:
     case Variable::CONTEXT:
       if (binding_needs_init || function != NULL) {
         HValue* value = NULL;
         if (function != NULL) {
-          VisitForValue(function);
+          CHECK_ALIVE(VisitForValue(function));
           value = Pop();
         } else {
           value = graph()->GetConstantHole();
@@ -6582,8 +7037,28 @@ void HGraphBuilder::HandleVariableDeclaration(VariableProxy* proxy,
 }
 
 
+void HGraphBuilder::VisitVariableDeclaration(VariableDeclaration* decl) {
+  UNREACHABLE();
+}
+
+
+void HGraphBuilder::VisitFunctionDeclaration(FunctionDeclaration* decl) {
+  UNREACHABLE();
+}
+
+
 void HGraphBuilder::VisitModuleDeclaration(ModuleDeclaration* decl) {
-  // TODO(rossberg)
+  UNREACHABLE();
+}
+
+
+void HGraphBuilder::VisitImportDeclaration(ImportDeclaration* decl) {
+  UNREACHABLE();
+}
+
+
+void HGraphBuilder::VisitExportDeclaration(ExportDeclaration* decl) {
+  UNREACHABLE();
 }
 
 
@@ -6705,10 +7180,11 @@ void HGraphBuilder::GenerateIsStringWrapperSafeForDefaultValueOf(
 void HGraphBuilder::GenerateIsConstructCall(CallRuntime* call) {
   ASSERT(call->arguments()->length() == 0);
   if (function_state()->outer() != NULL) {
-    // We are generating graph for inlined function. Currently
-    // constructor inlining is not supported and we can just return
-    // false from %_IsConstructCall().
-    return ast_context()->ReturnValue(graph()->GetConstantFalse());
+    // We are generating graph for inlined function.
+    HValue* value = function_state()->is_construct()
+        ? graph()->GetConstantTrue()
+        : graph()->GetConstantFalse();
+    return ast_context()->ReturnValue(value);
   } else {
     return ast_context()->ReturnControl(new(zone()) HIsConstructCallAndBranch,
                                         call->id());
@@ -6758,6 +7234,17 @@ void HGraphBuilder::GenerateValueOf(CallRuntime* call) {
   CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
   HValue* value = Pop();
   HValueOf* result = new(zone()) HValueOf(value);
+  return ast_context()->ReturnInstruction(result, call->id());
+}
+
+
+void HGraphBuilder::GenerateDateField(CallRuntime* call) {
+  ASSERT(call->arguments()->length() == 2);
+  ASSERT_NE(NULL, call->arguments()->at(1)->AsLiteral());
+  Smi* index = Smi::cast(*(call->arguments()->at(1)->AsLiteral()->handle()));
+  CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
+  HValue* date = Pop();
+  HDateField* result = new(zone()) HDateField(date, index);
   return ast_context()->ReturnInstruction(result, call->id());
 }
 
@@ -7096,14 +7583,14 @@ HEnvironment::HEnvironment(HEnvironment* outer,
     : closure_(closure),
       values_(0),
       assigned_variables_(4),
+      frame_type_(JS_FUNCTION),
       parameter_count_(0),
       specials_count_(1),
       local_count_(0),
       outer_(outer),
       pop_count_(0),
       push_count_(0),
-      ast_id_(AstNode::kNoNumber),
-      arguments_adaptor_(false) {
+      ast_id_(AstNode::kNoNumber) {
   Initialize(scope->num_parameters() + 1, scope->num_stack_slots(), 0);
 }
 
@@ -7111,31 +7598,32 @@ HEnvironment::HEnvironment(HEnvironment* outer,
 HEnvironment::HEnvironment(const HEnvironment* other)
     : values_(0),
       assigned_variables_(0),
+      frame_type_(JS_FUNCTION),
       parameter_count_(0),
       specials_count_(1),
       local_count_(0),
       outer_(NULL),
       pop_count_(0),
       push_count_(0),
-      ast_id_(other->ast_id()),
-      arguments_adaptor_(false) {
+      ast_id_(other->ast_id()) {
   Initialize(other);
 }
 
 
 HEnvironment::HEnvironment(HEnvironment* outer,
                            Handle<JSFunction> closure,
+                           FrameType frame_type,
                            int arguments)
     : closure_(closure),
       values_(arguments),
       assigned_variables_(0),
+      frame_type_(frame_type),
       parameter_count_(arguments),
       local_count_(0),
       outer_(outer),
       pop_count_(0),
       push_count_(0),
-      ast_id_(AstNode::kNoNumber),
-      arguments_adaptor_(true) {
+      ast_id_(AstNode::kNoNumber) {
 }
 
 
@@ -7156,13 +7644,13 @@ void HEnvironment::Initialize(const HEnvironment* other) {
   closure_ = other->closure();
   values_.AddAll(other->values_);
   assigned_variables_.AddAll(other->assigned_variables_);
+  frame_type_ = other->frame_type_;
   parameter_count_ = other->parameter_count_;
   local_count_ = other->local_count_;
   if (other->outer_ != NULL) outer_ = other->outer_->Copy();  // Deep copy.
   pop_count_ = other->pop_count_;
   push_count_ = other->push_count_;
   ast_id_ = other->ast_id_;
-  arguments_adaptor_ = other->arguments_adaptor_;
 }
 
 
@@ -7211,9 +7699,8 @@ bool HEnvironment::HasExpressionAt(int index) const {
 
 
 bool HEnvironment::ExpressionStackIsEmpty() const {
-  int first_expression = parameter_count() + specials_count() + local_count();
-  ASSERT(length() >= first_expression);
-  return length() == first_expression;
+  ASSERT(length() >= first_expression_index());
+  return length() == first_expression_index();
 }
 
 
@@ -7264,13 +7751,28 @@ HEnvironment* HEnvironment::CopyAsLoopHeader(HBasicBlock* loop_header) const {
 }
 
 
+HEnvironment* HEnvironment::CreateStubEnvironment(HEnvironment* outer,
+                                                  Handle<JSFunction> target,
+                                                  FrameType frame_type,
+                                                  int arguments) const {
+  HEnvironment* new_env = new(closure()->GetIsolate()->zone())
+      HEnvironment(outer, target, frame_type, arguments + 1);
+  for (int i = 0; i <= arguments; ++i) {  // Include receiver.
+    new_env->Push(ExpressionStackAt(arguments - i));
+  }
+  new_env->ClearHistory();
+  return new_env;
+}
+
+
 HEnvironment* HEnvironment::CopyForInlining(
     Handle<JSFunction> target,
     int arguments,
     FunctionLiteral* function,
     HConstant* undefined,
-    CallKind call_kind) const {
-  ASSERT(!is_arguments_adaptor());
+    CallKind call_kind,
+    bool is_construct) const {
+  ASSERT(frame_type() == JS_FUNCTION);
 
   Zone* zone = closure()->GetIsolate()->zone();
 
@@ -7281,13 +7783,16 @@ HEnvironment* HEnvironment::CopyForInlining(
   outer->Drop(arguments + 1);  // Including receiver.
   outer->ClearHistory();
 
+  if (is_construct) {
+    // Create artificial constructor stub environment.  The receiver should
+    // actually be the constructor function, but we pass the newly allocated
+    // object instead, DoComputeConstructStubFrame() relies on that.
+    outer = CreateStubEnvironment(outer, target, JS_CONSTRUCT, arguments);
+  }
+
   if (arity != arguments) {
     // Create artificial arguments adaptation environment.
-    outer = new(zone) HEnvironment(outer, target, arguments + 1);
-    for (int i = 0; i <= arguments; ++i) {  // Include receiver.
-      outer->Push(ExpressionStackAt(arguments - i));
-    }
-    outer->ClearHistory();
+    outer = CreateStubEnvironment(outer, target, ARGUMENTS_ADAPTOR, arguments);
   }
 
   HEnvironment* inner =
@@ -7302,7 +7807,7 @@ HEnvironment* HEnvironment::CopyForInlining(
   // builtin function, pass undefined as the receiver for function
   // calls (instead of the global receiver).
   if ((target->shared()->native() || !function->is_classic_mode()) &&
-      call_kind == CALL_AS_FUNCTION) {
+      call_kind == CALL_AS_FUNCTION && !is_construct) {
     inner->SetValueAt(0, undefined);
   }
   inner->SetValueAt(arity + 1, LookupContext());
@@ -7501,7 +8006,7 @@ void HTracer::TraceLiveRange(LiveRange* range, const char* type) {
     PrintIndent();
     trace_.Add("%d %s", range->id(), type);
     if (range->HasRegisterAssigned()) {
-      LOperand* op = range->CreateAssignedOperand();
+      LOperand* op = range->CreateAssignedOperand(ZONE);
       int assigned_reg = op->index();
       if (op->IsDoubleRegister()) {
         trace_.Add(" \"%s\"",
@@ -7645,7 +8150,10 @@ void HPhase::End() const {
     HStatistics::Instance()->SaveTiming(name_, end - start_, size);
   }
 
-  if (FLAG_trace_hydrogen) {
+  // Produce trace output if flag is set so that the first letter of the
+  // phase name matches the command line parameter FLAG_trace_phase.
+  if (FLAG_trace_hydrogen &&
+      OS::StrChr(const_cast<char*>(FLAG_trace_phase), name_[0]) != NULL) {
     if (graph_ != NULL) HTracer::Instance()->TraceHydrogen(name_, graph_);
     if (chunk_ != NULL) HTracer::Instance()->TraceLithium(name_, chunk_);
     if (allocator_ != NULL) {

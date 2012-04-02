@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,7 @@
 #ifndef V8_PREPARSER_H
 #define V8_PREPARSER_H
 
+#include "hashmap.h"
 #include "token.h"
 #include "scanner.h"
 
@@ -64,7 +65,7 @@ class DuplicateFinder {
         map_(&Match) { }
 
   int AddAsciiSymbol(i::Vector<const char> key, int value);
-  int AddUC16Symbol(i::Vector<const uint16_t> key, int value);
+  int AddUtf16Symbol(i::Vector<const uint16_t> key, int value);
   // Add a a number literal by converting it (if necessary)
   // to the string that ToString(ToNumber(literal)) would generate.
   // and then adding that string with AddAsciiSymbol.

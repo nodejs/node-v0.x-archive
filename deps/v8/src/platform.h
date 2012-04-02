@@ -79,6 +79,7 @@ int random();
 #endif  // WIN32
 
 #include "atomicops.h"
+#include "lazy-instance.h"
 #include "platform-tls.h"
 #include "utils.h"
 #include "v8globals.h"
@@ -95,6 +96,13 @@ class Mutex;
 
 double ceiling(double x);
 double modulo(double x, double y);
+
+// Custom implementation of sin, cos, tan and log.
+double fast_sin(double input);
+double fast_cos(double input);
+double fast_tan(double input);
+double fast_log(double input);
+double fast_sqrt(double input);
 
 // Forward declarations.
 class Socket;
@@ -356,6 +364,9 @@ class VirtualMemory {
   // Uncommit real memory.  Returns whether the operation succeeded.
   bool Uncommit(void* address, size_t size);
 
+  // Creates a single guard page at the given address.
+  bool Guard(void* address);
+
   void Release() {
     ASSERT(IsReserved());
     // Notice: Order is important here. The VirtualMemory object might live
@@ -519,6 +530,24 @@ class Mutex {
   virtual bool TryLock() = 0;
 };
 
+struct CreateMutexTrait {
+  static Mutex* Create() {
+    return OS::CreateMutex();
+  }
+};
+
+// POD Mutex initialized lazily (i.e. the first time Pointer() is called).
+// Usage:
+//   static LazyMutex my_mutex = LAZY_MUTEX_INITIALIZER;
+//
+//   void my_function() {
+//     ScopedLock my_lock(my_mutex.Pointer());
+//     // Do something.
+//   }
+//
+typedef LazyDynamicInstance<Mutex, CreateMutexTrait>::type LazyMutex;
+
+#define LAZY_MUTEX_INITIALIZER LAZY_DYNAMIC_INSTANCE_INITIALIZER
 
 // ----------------------------------------------------------------------------
 // ScopedLock
@@ -567,6 +596,30 @@ class Semaphore {
   // Increments the semaphore counter.
   virtual void Signal() = 0;
 };
+
+template <int InitialValue>
+struct CreateSemaphoreTrait {
+  static Semaphore* Create() {
+    return OS::CreateSemaphore(InitialValue);
+  }
+};
+
+// POD Semaphore initialized lazily (i.e. the first time Pointer() is called).
+// Usage:
+//   // The following semaphore starts at 0.
+//   static LazySemaphore<0>::type my_semaphore = LAZY_SEMAPHORE_INITIALIZER;
+//
+//   void my_function() {
+//     // Do something with my_semaphore.Pointer().
+//   }
+//
+template <int InitialValue>
+struct LazySemaphore {
+  typedef typename LazyDynamicInstance<
+      Semaphore, CreateSemaphoreTrait<InitialValue> >::type type;
+};
+
+#define LAZY_SEMAPHORE_INITIALIZER LAZY_DYNAMIC_INSTANCE_INITIALIZER
 
 
 // ----------------------------------------------------------------------------

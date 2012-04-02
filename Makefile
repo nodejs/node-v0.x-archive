@@ -33,22 +33,24 @@ out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/z
 	tools/gyp_node -f make
 
 install: all
-	out/Release/node tools/installer.js ./config.gypi install
+	out/Release/node tools/installer.js install
 
 uninstall:
-	out/Release/node tools/installer.js ./config.gypi uninstall
+	out/Release/node tools/installer.js uninstall
 
 clean:
-	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node
+	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node blog.html email.md
 	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
 
 distclean:
 	-rm -rf out
 	-rm -f config.gypi
 	-rm -f config.mk
+	-rm -rf node node_g blog.html email.md
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 test-http1: all
 	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
@@ -91,7 +93,8 @@ test-npm-publish: node
 	npm_package_config_publishtest=true ./node deps/npm/test/run.js
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
-apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html))
+apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html)) \
+          $(addprefix out/,$(apidoc_sources:.markdown=.json))
 
 apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets out/doc/about out/doc/community out/doc/logos out/doc/images
 
@@ -114,7 +117,7 @@ website_files = \
 	out/doc/logos/index.html \
 	$(doc_images)
 
-doc: node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
+doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -122,13 +125,24 @@ $(apidoc_dirs):
 out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
 
+out/doc/%.html: doc/%.html
+	cat $< | sed -e 's|__VERSION__|'$(VERSION)'|g' > $@
+
 out/doc/%: doc/%
 	cp -r $< $@
 
-out/doc/api/%.html: doc/api/%.markdown node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
-	out/Release/node tools/doctool/doctool.js doc/template.html $< > $@
+out/doc/api/%.json: doc/api/%.markdown
+	out/Release/node tools/doc/generate.js --format=json $< > $@
 
-out/doc/%:
+out/doc/api/%.html: doc/api/%.markdown
+	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
+
+email.md: ChangeLog tools/email-footer.md
+	bash tools/changelog-head.sh > $@
+	cat tools/email-footer.md | sed -e 's|__VERSION__|'$(VERSION)'|g' >> $@
+
+blog.html: email.md
+	cat $< | node tools/doc/node_modules/.bin/marked > $@
 
 website-upload: doc
 	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
@@ -152,9 +166,19 @@ PKGDIR=out/dist-osx
 pkg: $(PKG)
 
 $(PKG):
-	-rm -rf $(PKGDIR)
-	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot
+	rm -rf $(PKGDIR)
+	rm -rf out/deps out/Release
+	./configure --prefix=$(PKGDIR)/32/usr/local --without-snapshot --dest-cpu=ia32
 	$(MAKE) install
+	rm -rf out/deps out/Release
+	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot --dest-cpu=x64
+	$(MAKE) install
+	lipo $(PKGDIR)/32/usr/local/bin/node \
+		$(PKGDIR)/usr/local/bin/node \
+		-output $(PKGDIR)/usr/local/bin/node-universal \
+		-create
+	mv $(PKGDIR)/usr/local/bin/node-universal $(PKGDIR)/usr/local/bin/node
+	rm -rf $(PKGDIR)/32
 	$(packagemaker) \
 		--id "org.nodejs.NodeJS-$(VERSION)" \
 		--doc tools/osx-pkg.pmdoc \

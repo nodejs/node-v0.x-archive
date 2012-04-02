@@ -49,13 +49,13 @@ else if (cluster.isMaster) {
         fork: false,
         online: false,
         listening: false,
-        death: false
+        exit: false
       },
       equal: {
         fork: false,
         online: false,
         listening: false,
-        death: false
+        exit: false
       }
     },
 
@@ -63,12 +63,12 @@ else if (cluster.isMaster) {
       events: {
         online: false,
         listening: false,
-        death: false
+        exit: false
       },
       equal: {
         online: false,
         listening: false,
-        death: false
+        exit: false
       },
       states: {
         none: false,
@@ -106,7 +106,7 @@ else if (cluster.isMaster) {
   });
 
   //Kill process when worker is killed
-  cluster.on('death', function() {
+  cluster.on('exit', function() {
     process.exit(0);
   });
 
@@ -117,9 +117,7 @@ else if (cluster.isMaster) {
 
   //Check event
   forEach(checks.worker.events, function(bool, name, index) {
-    console.log('adding handler ' + name + ' event');
     worker.on(name, function() {
-      console.log('got ' + name + ' event');
       //Set event
       checks.worker.events[name] = true;
 
@@ -130,6 +128,7 @@ else if (cluster.isMaster) {
 
   //Check all values
   process.once('exit', function() {
+
     //Check cluster events
     forEach(checks.cluster.events, function(check, name) {
       assert.ok(check, 'The cluster event "' + name + '" on the cluster ' +
@@ -147,7 +146,6 @@ else if (cluster.isMaster) {
       assert.ok(check, 'The worker state "' + name + '" was not set to true');
     });
 
-    console.log(require('util').inspect(checks));
     //Check worker events
     forEach(checks.worker.events, function(check, name) {
       assert.ok(check, 'The worker event "' + name + '" on the worker object ' +

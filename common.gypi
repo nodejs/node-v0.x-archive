@@ -1,5 +1,6 @@
 {
   'variables': {
+    'strict_aliasing%': 'false',     # turn on/off -fstrict-aliasing
     'visibility%': 'hidden',         # V8's visibility setting
     'target_arch%': 'ia32',          # set v8's target architecture
     'host_arch%': 'ia32',            # set v8's host architecture
@@ -7,10 +8,11 @@
     'library%': 'static_library',    # allow override to 'shared_library' for DLL/.so builds
     'component%': 'static_library',  # NB. these names match with what V8 expects
     'msvs_multi_core_compile': '0',  # we do enable multicore compiles, but not using the V8 way
+    'v8_postmortem_support': 'true', # V8's postmortem metadata
   },
 
   'target_defaults': {
-    'default_configuration': 'Debug',
+    'default_configuration': 'Release',
     'configurations': {
       'Debug': {
         'defines': [ 'DEBUG', '_DEBUG' ],
@@ -34,16 +36,18 @@
         },
       },
       'Release': {
-        'conditions': [
-          [ 'OS!="solaris"', {
-            'cflags': [ '-fomit-frame-pointer' ]
-          }],
-        ],
-        # 'defines': [ 'NDEBUG' ],
         'cflags': [ '-O3', '-fdata-sections', '-ffunction-sections' ],
         'conditions': [
           ['target_arch=="x64"', {
             'msvs_configuration_platform': 'x64',
+          }],
+          ['OS=="solaris"', {
+            'cflags': [ '-fno-omit-frame-pointer' ],
+            # pull in V8's postmortem metadata
+            'ldflags': [ '-Wl,-z,allextract' ]
+          }],
+          ['strict_aliasing!="true"', {
+            'cflags': [ '-fno-strict-aliasing' ],
           }],
         ],
         'msvs_settings': {
@@ -139,6 +143,12 @@
             'cflags': [ '-ansi' ],
             'ldflags': [ '-rdynamic' ],
           }],
+          [ 'OS=="solaris"', {
+            'cflags': [ '-pthreads' ],
+            'ldflags': [ '-pthreads' ],
+            'cflags!': [ '-pthread' ],
+            'ldflags!': [ '-pthread' ],
+          }],
         ],
       }],
       ['OS=="mac"', {
@@ -168,6 +178,14 @@
         'target_conditions': [
           ['_type!="static_library"', {
             'xcode_settings': {'OTHER_LDFLAGS': ['-Wl,-search_paths_first']},
+          }],
+        ],
+        'conditions': [
+          ['target_arch=="ia32"', {
+            'xcode_settings': {'ARCHS': ['i386']},
+          }],
+          ['target_arch=="x64"', {
+            'xcode_settings': {'ARCHS': ['x86_64']},
           }],
         ],
       }],

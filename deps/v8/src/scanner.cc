@@ -45,7 +45,7 @@ Scanner::Scanner(UnicodeCache* unicode_cache)
       harmony_modules_(false) { }
 
 
-void Scanner::Initialize(UC16CharacterStream* source) {
+void Scanner::Initialize(Utf16CharacterStream* source) {
   source_ = source;
   // Need to capture identifiers in order to recognize "get" and "set"
   // in object literals.
@@ -850,9 +850,6 @@ uc32 Scanner::ScanIdentifierUnicodeEscape() {
   KEYWORD_GROUP('l')                                                \
   KEYWORD("let", harmony_scoping                                    \
                  ? Token::LET : Token::FUTURE_STRICT_RESERVED_WORD) \
-  KEYWORD_GROUP('m')                                                \
-  KEYWORD("module", harmony_modules                                 \
-                    ? Token::MODULE : Token::IDENTIFIER)            \
   KEYWORD_GROUP('n')                                                \
   KEYWORD("new", Token::NEW)                                        \
   KEYWORD("null", Token::NULL_LITERAL)                              \

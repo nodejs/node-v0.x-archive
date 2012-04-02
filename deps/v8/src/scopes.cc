@@ -40,26 +40,6 @@ namespace v8 {
 namespace internal {
 
 // ----------------------------------------------------------------------------
-// A Zone allocator for use with LocalsMap.
-
-// TODO(isolates): It is probably worth it to change the Allocator class to
-//                 take a pointer to an isolate.
-class ZoneAllocator: public Allocator {
- public:
-  /* nothing to do */
-  virtual ~ZoneAllocator()  {}
-
-  virtual void* New(size_t size)  { return ZONE->New(static_cast<int>(size)); }
-
-  /* ignored - Zone is freed in one fell swoop */
-  virtual void Delete(void* p)  {}
-};
-
-
-static ZoneAllocator* LocalsMapAllocator = ::new ZoneAllocator();
-
-
-// ----------------------------------------------------------------------------
 // Implementation of LocalsMap
 //
 // Note: We are storing the handle locations as key values in the hash map.
@@ -77,7 +57,7 @@ static bool Match(void* key1, void* key2) {
 }
 
 
-VariableMap::VariableMap() : HashMap(Match, LocalsMapAllocator, 8) {}
+VariableMap::VariableMap() : ZoneHashMap(Match, 8) {}
 VariableMap::~VariableMap() {}
 
 
@@ -87,8 +67,9 @@ Variable* VariableMap::Declare(
     VariableMode mode,
     bool is_valid_lhs,
     Variable::Kind kind,
-    InitializationFlag initialization_flag) {
-  HashMap::Entry* p = HashMap::Lookup(name.location(), name->Hash(), true);
+    InitializationFlag initialization_flag,
+    Interface* interface) {
+  Entry* p = ZoneHashMap::Lookup(name.location(), name->Hash(), true);
   if (p->value == NULL) {
     // The variable has not been declared yet -> insert it.
     ASSERT(p->key == name.location());
@@ -97,14 +78,15 @@ Variable* VariableMap::Declare(
                             mode,
                             is_valid_lhs,
                             kind,
-                            initialization_flag);
+                            initialization_flag,
+                            interface);
   }
   return reinterpret_cast<Variable*>(p->value);
 }
 
 
 Variable* VariableMap::Lookup(Handle<String> name) {
-  HashMap::Entry* p = HashMap::Lookup(name.location(), name->Hash(), false);
+  Entry* p = ZoneHashMap::Lookup(name.location(), name->Hash(), false);
   if (p != NULL) {
     ASSERT(*reinterpret_cast<String**>(p->key) == *name);
     ASSERT(p->value != NULL);
@@ -125,6 +107,9 @@ Scope::Scope(Scope* outer_scope, ScopeType type)
       params_(4),
       unresolved_(16),
       decls_(4),
+      interface_(FLAG_harmony_modules &&
+                 (type == MODULE_SCOPE || type == GLOBAL_SCOPE)
+                     ? Interface::NewModule() : NULL),
       already_resolved_(false) {
   SetDefaults(type, outer_scope, Handle<ScopeInfo>::null());
   // At some point we might want to provide outer scopes to
@@ -145,6 +130,7 @@ Scope::Scope(Scope* inner_scope,
       params_(4),
       unresolved_(16),
       decls_(4),
+      interface_(NULL),
       already_resolved_(true) {
   SetDefaults(type, NULL, scope_info);
   if (!scope_info.is_null()) {
@@ -165,6 +151,7 @@ Scope::Scope(Scope* inner_scope, Handle<String> catch_variable_name)
       params_(0),
       unresolved_(0),
       decls_(0),
+      interface_(NULL),
       already_resolved_(true) {
   SetDefaults(CATCH_SCOPE, NULL, Handle<ScopeInfo>::null());
   AddInnerScope(inner_scope);
@@ -275,7 +262,7 @@ bool Scope::Analyze(CompilationInfo* info) {
   // Allocate the variables.
   {
     AstNodeFactory<AstNullVisitor> ast_node_factory(info->isolate());
-    top->AllocateVariables(info->global_scope(), &ast_node_factory);
+    if (!top->AllocateVariables(info, &ast_node_factory)) return false;
   }
 
 #ifdef DEBUG
@@ -283,6 +270,11 @@ bool Scope::Analyze(CompilationInfo* info) {
           ? FLAG_print_builtin_scopes
           : FLAG_print_scopes) {
     scope->Print();
+  }
+
+  if (FLAG_harmony_modules && FLAG_print_interfaces && top->is_global_scope()) {
+    PrintF("global : ");
+    top->interface()->Print();
   }
 #endif
 
@@ -458,7 +450,8 @@ void Scope::DeclareParameter(Handle<String> name, VariableMode mode) {
 
 Variable* Scope::DeclareLocal(Handle<String> name,
                               VariableMode mode,
-                              InitializationFlag init_flag) {
+                              InitializationFlag init_flag,
+                              Interface* interface) {
   ASSERT(!already_resolved());
   // This function handles VAR and CONST modes.  DYNAMIC variables are
   // introduces during variable allocation, INTERNAL variables are allocated
@@ -468,8 +461,8 @@ Variable* Scope::DeclareLocal(Handle<String> name,
          mode == CONST_HARMONY ||
          mode == LET);
   ++num_var_or_const_;
-  return
-      variables_.Declare(this, name, mode, true, Variable::NORMAL, init_flag);
+  return variables_.Declare(
+      this, name, mode, true, Variable::NORMAL, init_flag, interface);
 }
 
 
@@ -606,7 +599,7 @@ void Scope::CollectStackAndContextLocals(ZoneList<Variable*>* stack_locals,
 }
 
 
-void Scope::AllocateVariables(Scope* global_scope,
+bool Scope::AllocateVariables(CompilationInfo* info,
                               AstNodeFactory<AstNullVisitor>* factory) {
   // 1) Propagate scope information.
   bool outer_scope_calls_non_strict_eval = false;
@@ -618,10 +611,12 @@ void Scope::AllocateVariables(Scope* global_scope,
   PropagateScopeInfo(outer_scope_calls_non_strict_eval);
 
   // 2) Resolve variables.
-  ResolveVariablesRecursively(global_scope, factory);
+  if (!ResolveVariablesRecursively(info, factory)) return false;
 
   // 3) Allocate variables.
   AllocateVariablesRecursively();
+
+  return true;
 }
 
 
@@ -704,6 +699,7 @@ static const char* Header(ScopeType type) {
   switch (type) {
     case EVAL_SCOPE: return "eval";
     case FUNCTION_SCOPE: return "function";
+    case MODULE_SCOPE: return "module";
     case GLOBAL_SCOPE: return "global";
     case CATCH_SCOPE: return "catch";
     case BLOCK_SCOPE: return "block";
@@ -935,14 +931,14 @@ Variable* Scope::LookupRecursive(Handle<String> name,
 }
 
 
-void Scope::ResolveVariable(Scope* global_scope,
+bool Scope::ResolveVariable(CompilationInfo* info,
                             VariableProxy* proxy,
                             AstNodeFactory<AstNullVisitor>* factory) {
-  ASSERT(global_scope == NULL || global_scope->is_global_scope());
+  ASSERT(info->global_scope()->is_global_scope());
 
   // If the proxy is already resolved there's nothing to do
   // (functions and consts may be resolved by the parser).
-  if (proxy->var() != NULL) return;
+  if (proxy->var() != NULL) return true;
 
   // Otherwise, try to resolve the variable.
   BindingKind binding_kind;
@@ -966,8 +962,7 @@ void Scope::ResolveVariable(Scope* global_scope,
 
     case UNBOUND:
       // No binding has been found. Declare a variable in global scope.
-      ASSERT(global_scope != NULL);
-      var = global_scope->DeclareGlobal(proxy->name());
+      var = info->global_scope()->DeclareGlobal(proxy->name());
       break;
 
     case UNBOUND_EVAL_SHADOWED:
@@ -984,23 +979,62 @@ void Scope::ResolveVariable(Scope* global_scope,
 
   ASSERT(var != NULL);
   proxy->BindTo(var);
+
+  if (FLAG_harmony_modules) {
+    bool ok;
+#ifdef DEBUG
+    if (FLAG_print_interface_details)
+      PrintF("# Resolve %s:\n", var->name()->ToAsciiArray());
+#endif
+    proxy->interface()->Unify(var->interface(), &ok);
+    if (!ok) {
+#ifdef DEBUG
+      if (FLAG_print_interfaces) {
+        PrintF("SCOPES TYPE ERROR\n");
+        PrintF("proxy: ");
+        proxy->interface()->Print();
+        PrintF("var: ");
+        var->interface()->Print();
+      }
+#endif
+
+      // Inconsistent use of module. Throw a syntax error.
+      // TODO(rossberg): generate more helpful error message.
+      MessageLocation location(info->script(),
+                               proxy->position(),
+                               proxy->position());
+      Isolate* isolate = Isolate::Current();
+      Factory* factory = isolate->factory();
+      Handle<JSArray> array = factory->NewJSArray(1);
+      USE(JSObject::SetElement(array, 0, var->name(), NONE, kStrictMode));
+      Handle<Object> result =
+          factory->NewSyntaxError("module_type_error", array);
+      isolate->Throw(*result, &location);
+      return false;
+    }
+  }
+
+  return true;
 }
 
 
-void Scope::ResolveVariablesRecursively(
-    Scope* global_scope,
+bool Scope::ResolveVariablesRecursively(
+    CompilationInfo* info,
     AstNodeFactory<AstNullVisitor>* factory) {
-  ASSERT(global_scope == NULL || global_scope->is_global_scope());
+  ASSERT(info->global_scope()->is_global_scope());
 
   // Resolve unresolved variables for this scope.
   for (int i = 0; i < unresolved_.length(); i++) {
-    ResolveVariable(global_scope, unresolved_[i], factory);
+    if (!ResolveVariable(info, unresolved_[i], factory)) return false;
   }
 
   // Resolve unresolved variables for inner scopes.
   for (int i = 0; i < inner_scopes_.length(); i++) {
-    inner_scopes_[i]->ResolveVariablesRecursively(global_scope, factory);
+    if (!inner_scopes_[i]->ResolveVariablesRecursively(info, factory))
+      return false;
   }
+
+  return true;
 }
 
 

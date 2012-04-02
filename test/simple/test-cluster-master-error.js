@@ -112,21 +112,28 @@ if (cluster.isWorker) {
     // Check that the cluster died accidently
     existMaster = (code === 1);
 
-    // When master is dead all workers should be dead to
-    var alive = false;
-    workers.forEach(function(pid) {
-      if (isAlive(pid)) {
-        alive = true;
-      }
-    });
+    // Give the workers time to shut down
+    setTimeout(checkWorkers, 200);
 
-    // If a worker was alive this did not act as expected
-    existWorker = !alive;
+    function checkWorkers() {
+      // When master is dead all workers should be dead to
+      var alive = false;
+      workers.forEach(function(pid) {
+        if (isAlive(pid)) {
+          alive = true;
+        }
+      });
+
+      // If a worker was alive this did not act as expected
+      existWorker = !alive;
+    }
   });
 
   process.once('exit', function() {
-    assert.ok(existMaster, 'The master did not die after an error was throwed');
-    assert.ok(existWorker, 'The workers did not die after an error in the master');
+    var m = 'The master did not die after an error was throwed';
+    assert.ok(existMaster, m);
+    m = 'The workers did not die after an error in the master';
+    assert.ok(existWorker, m);
   });
 
 }

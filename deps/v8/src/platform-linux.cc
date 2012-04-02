@@ -187,15 +187,15 @@ bool OS::ArmCpuHasFeature(CpuFeature feature) {
 // pair r0, r1 is loaded with 0.0. If -mfloat-abi=hard is pased to GCC then
 // calling this will return 1.0 and otherwise 0.0.
 static void ArmUsingHardFloatHelper() {
-  asm("mov r0, #0");
+  asm("mov r0, #0":::"r0");
 #if defined(__VFP_FP__) && !defined(__SOFTFP__)
   // Load 0x3ff00000 into r1 using instructions available in both ARM
   // and Thumb mode.
-  asm("mov r1, #3");
-  asm("mov r2, #255");
-  asm("lsl r1, r1, #8");
-  asm("orr r1, r1, r2");
-  asm("lsl r1, r1, #20");
+  asm("mov r1, #3":::"r1");
+  asm("mov r2, #255":::"r2");
+  asm("lsl r1, r1, #8":::"r1");
+  asm("orr r1, r1, r2":::"r1");
+  asm("lsl r1, r1, #20":::"r1");
   // For vmov d0, r0, r1 use ARM mode.
 #ifdef __thumb__
   asm volatile(
@@ -209,12 +209,12 @@ static void ArmUsingHardFloatHelper() {
     "    adr r3, 2f+1    \n\t"
     "    bx  r3          \n\t"
     "    .THUMB          \n"
-    "2:                  \n\t");
+    "2:                  \n\t":::"r3");
 #else
   asm("vmov d0, r0, r1");
 #endif  // __thumb__
 #endif  // defined(__VFP_FP__) && !defined(__SOFTFP__)
-  asm("mov r1, #0");
+  asm("mov r1, #0":::"r1");
 }
 
 
@@ -388,6 +388,9 @@ void OS::Sleep(int milliseconds) {
 
 void OS::Abort() {
   // Redirect to std abort to signal abnormal program termination.
+  if (FLAG_break_on_abort) {
+    DebugBreak();
+  }
   abort();
 }
 
@@ -663,6 +666,12 @@ bool VirtualMemory::Commit(void* address, size_t size, bool is_executable) {
 
 bool VirtualMemory::Uncommit(void* address, size_t size) {
   return UncommitRegion(address, size);
+}
+
+
+bool VirtualMemory::Guard(void* address) {
+  OS::Guard(address, OS::CommitPageSize());
+  return true;
 }
 
 
@@ -1084,7 +1093,7 @@ class SignalSender : public Thread {
   }
 
   static void AddActiveSampler(Sampler* sampler) {
-    ScopedLock lock(mutex_);
+    ScopedLock lock(mutex_.Pointer());
     SamplerRegistry::AddActiveSampler(sampler);
     if (instance_ == NULL) {
       // Start a thread that will send SIGPROF signal to VM threads,
@@ -1097,7 +1106,7 @@ class SignalSender : public Thread {
   }
 
   static void RemoveActiveSampler(Sampler* sampler) {
-    ScopedLock lock(mutex_);
+    ScopedLock lock(mutex_.Pointer());
     SamplerRegistry::RemoveActiveSampler(sampler);
     if (SamplerRegistry::GetState() == SamplerRegistry::HAS_NO_SAMPLERS) {
       RuntimeProfiler::StopRuntimeProfilerThreadBeforeShutdown(instance_);
@@ -1200,7 +1209,7 @@ class SignalSender : public Thread {
   RuntimeProfilerRateLimiter rate_limiter_;
 
   // Protects the process wide state below.
-  static Mutex* mutex_;
+  static LazyMutex mutex_;
   static SignalSender* instance_;
   static bool signal_handler_installed_;
   static struct sigaction old_signal_handler_;
@@ -1210,7 +1219,7 @@ class SignalSender : public Thread {
 };
 
 
-Mutex* SignalSender::mutex_ = OS::CreateMutex();
+LazyMutex SignalSender::mutex_ = LAZY_MUTEX_INITIALIZER;
 SignalSender* SignalSender::instance_ = NULL;
 struct sigaction SignalSender::old_signal_handler_;
 bool SignalSender::signal_handler_installed_ = false;

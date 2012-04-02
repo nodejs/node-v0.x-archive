@@ -83,7 +83,8 @@ if (cluster.isWorker) {
   process.once('exit', function() {
     assert.ok(checks.args, 'The arguments were not sent to the worker');
     assert.ok(checks.setupEvent, 'The setup event was never emitted');
-    assert.ok(checks.settingsObject, 'The settingsObject did not have correct properties');
+    var m = 'The settingsObject do not have correct properties';
+    assert.ok(checks.settingsObject, m);
   });
 
 }

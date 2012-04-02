@@ -78,6 +78,8 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case WSAEAFNOSUPPORT:                   return UV_EAFNOSUPPORT;
     case WSAEWOULDBLOCK:                    return UV_EAGAIN;
     case WSAEALREADY:                       return UV_EALREADY;
+    case ERROR_LOCK_VIOLATION:              return UV_EBUSY;
+    case ERROR_SHARING_VIOLATION:           return UV_EBUSY;
     case ERROR_CONNECTION_ABORTED:          return UV_ECONNABORTED;
     case WSAECONNABORTED:                   return UV_ECONNABORTED;
     case ERROR_CONNECTION_REFUSED:          return UV_ECONNREFUSED;
@@ -89,6 +91,8 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case WSAEFAULT:                         return UV_EFAULT;
     case ERROR_HOST_UNREACHABLE:            return UV_EHOSTUNREACH;
     case WSAEHOSTUNREACH:                   return UV_EHOSTUNREACH;
+    case ERROR_OPERATION_ABORTED:           return UV_EINTR;
+    case WSAEINTR:                          return UV_EINTR;
     case ERROR_INVALID_DATA:                return UV_EINVAL;
     case WSAEINVAL:                         return UV_EINVAL;
     case ERROR_CANT_RESOLVE_FILENAME:       return UV_ELOOP;
@@ -100,18 +104,28 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case WSAENETUNREACH:                    return UV_ENETUNREACH;
     case WSAENOBUFS:                        return UV_ENOBUFS;
     case ERROR_OUTOFMEMORY:                 return UV_ENOMEM;
+    case ERROR_CANNOT_MAKE:                 return UV_ENOSPC;
+    case ERROR_DISK_FULL:                   return UV_ENOSPC;
+    case ERROR_EA_TABLE_FULL:               return UV_ENOSPC;
+    case ERROR_END_OF_MEDIA:                return UV_ENOSPC;
+    case ERROR_HANDLE_DISK_FULL:            return UV_ENOSPC;
     case ERROR_NOT_CONNECTED:               return UV_ENOTCONN;
     case WSAENOTCONN:                       return UV_ENOTCONN;
+    case ERROR_DIR_NOT_EMPTY:               return UV_ENOTEMPTY;
     case ERROR_NOT_SUPPORTED:               return UV_ENOTSUP;
     case ERROR_INSUFFICIENT_BUFFER:         return UV_EINVAL;
     case ERROR_INVALID_FLAGS:               return UV_EBADF;
     case ERROR_INVALID_PARAMETER:           return UV_EINVAL;
     case ERROR_NO_UNICODE_TRANSLATION:      return UV_ECHARSET;
     case ERROR_BROKEN_PIPE:                 return UV_EOF;
+    case ERROR_BAD_PIPE:                    return UV_EPIPE;
+    case ERROR_NO_DATA:                     return UV_EPIPE;
+    case ERROR_PIPE_NOT_CONNECTED:          return UV_EPIPE;
     case ERROR_PIPE_BUSY:                   return UV_EBUSY;
     case ERROR_SEM_TIMEOUT:                 return UV_ETIMEDOUT;
     case WSAETIMEDOUT:                      return UV_ETIMEDOUT;
     case WSAHOST_NOT_FOUND:                 return UV_ENOENT;
+    case WSAENOTSOCK:                       return UV_ENOTSOCK;
     default:                                return UV_UNKNOWN;
   }
 }

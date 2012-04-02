@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -59,6 +59,7 @@ SOURCES = {
     counters.cc
     cpu-profiler.cc
     data-flow.cc
+    date.cc
     dateparser.cc
     debug-agent.cc
     debug.cc
@@ -78,13 +79,13 @@ SOURCES = {
     fast-dtoa.cc
     fixed-dtoa.cc
     handles.cc
-    hashmap.cc
     heap-profiler.cc
     heap.cc
     hydrogen.cc
     hydrogen-instructions.cc
     ic.cc
     incremental-marking.cc
+    interface.cc
     inspector.cc
     interpreter-irregexp.cc
     isolate.cc
@@ -100,6 +101,7 @@ SOURCES = {
     objects.cc
     objects-printer.cc
     objects-visiting.cc
+    once.cc
     parser.cc
     preparser.cc
     preparse-data.cc
@@ -246,7 +248,6 @@ PREPARSER_SOURCES = {
     dtoa.cc
     fast-dtoa.cc
     fixed-dtoa.cc
-    hashmap.cc
     preparse-data.cc
     preparser.cc
     preparser-api.cc

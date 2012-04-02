@@ -200,6 +200,26 @@ to trust only that specific signing authority.</p>
 
 <p>The location of npm's cache directory.  See <code><a href="../doc/cache.html">cache(1)</a></code></p>
 
+<h3 id="cache-max">cache-max</h3>
+
+<ul><li>Default: Infinity</li><li>Type: Number</li></ul>
+
+<p>The maximum time (in seconds) to keep items in the registry cache before
+re-checking against the registry.</p>
+
+<p>Note that no purging is done unless the <code>npm cache clean</code> command is
+explicitly used, and that only GET requests use the cache.</p>
+
+<h3 id="cache-min">cache-min</h3>
+
+<ul><li>Default: 0</li><li>Type: Number</li></ul>
+
+<p>The minimum time (in seconds) to keep items in the registry cache before
+re-checking against the registry.</p>
+
+<p>Note that no purging is done unless the <code>npm cache clean</code> command is
+explicitly used, and that only GET requests use the cache.</p>
+
 <h3 id="color">color</h3>
 
 <ul><li>Default: true on Posix, false on Windows</li><li>Type: Boolean or <code>"always"</code></li></ul>
@@ -330,6 +350,16 @@ from packages when building tarballs.</p>
 <ul><li>Default: ""</li><li>Type: String</li></ul>
 
 <p>The value <code>npm init</code> should use by default for the package author's homepage.</p>
+
+<h3 id="json">json</h3>
+
+<ul><li>Default: false</li><li>Type: Boolean</li></ul>
+
+<p>Whether or not to output JSON data, rather than the normal output.</p>
+
+<p>This feature is currently experimental, and the output data structures
+for many commands is either not implemented in JSON yet, or subject to
+change.  Only the output from <code>npm ls --json</code> is currently valid.</p>
 
 <h3 id="link">link</h3>
 
@@ -601,6 +631,15 @@ this value.  Thus, the defaults are <code>0755</code> and <code>0644</code> resp
 
 <p>Only relevant when specified explicitly on the command line.</p>
 
+<h3 id="versions">versions</h3>
+
+<ul><li>Default: false</li><li>Type: boolean</li></ul>
+
+<p>If true, output the npm version as well as node's <code>process.versions</code>
+hash, and exit successfully.</p>
+
+<p>Only relevant when specified explicitly on the command line.</p>
+
 <h3 id="viewer">viewer</h3>
 
 <ul><li>Default: "man" on Posix, "browser" on Windows</li><li>Type: path</li></ul>
@@ -623,7 +662,7 @@ then answer "no" to any prompt.</p>
 
 <ul><li><a href="../doc/folders.html">folders(1)</a></li><li><a href="../doc/npm.html">npm(1)</a></li></ul>
 </div>
-<p id="footer">config &mdash; npm@1.1.1</p>
+<p id="footer">config &mdash; npm@1.1.15</p>
 <script>
 ;(function () {
 var wrapper = document.getElementById("wrapper")

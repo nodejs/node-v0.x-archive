@@ -139,6 +139,8 @@ Object.defineProperty(exports, "defaults", {get: function () {
     , cache : process.platform === "win32"
             ? path.resolve(process.env.APPDATA || home || temp, "npm-cache")
             : path.resolve( home || temp, ".npm")
+    , "cache-max": Infinity
+    , "cache-min": 0
 
     , color : process.platform !== "win32" || winColor
     , coverage: false
@@ -161,6 +163,7 @@ Object.defineProperty(exports, "defaults", {get: function () {
     , "init.author.name" : ""
     , "init.author.email" : ""
     , "init.author.url" : ""
+    , json: false
     , link: false
     , logfd : 2
     , loglevel : "http"
@@ -206,6 +209,7 @@ Object.defineProperty(exports, "defaults", {get: function () {
     , userignorefile : path.resolve(home, ".npmignore")
     , umask: 022
     , version : false
+    , versions : false
     , viewer: process.platform === "win32" ? "browser" : "man"
     , yes: null
 
@@ -220,6 +224,8 @@ exports.types =
   , browser : String
   , ca: [null, String]
   , cache : path
+  , "cache-max": Number
+  , "cache-min": Number
   , color : ["always", Boolean]
   , coverage: Boolean
   , depth : Number
@@ -238,6 +244,7 @@ exports.types =
   , "init.author.name" : String
   , "init.author.email" : String
   , "init.author.url" : ["", url]
+  , json: Boolean
   , link: Boolean
   , logfd : [Number, Stream]
   , loglevel : ["silent","win","error","warn","http","info","verbose","silly"]
@@ -279,6 +286,7 @@ exports.types =
   , userignorefile : path
   , umask: Octal
   , version : Boolean
+  , versions : Boolean
   , viewer: String
   , yes: [false, null, Boolean]
   , _exit : Boolean

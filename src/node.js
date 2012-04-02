@@ -27,10 +27,8 @@
 (function(process) {
   global = this;
 
-  var EventEmitter;
-
   function startup() {
-    EventEmitter = NativeModule.require('events').EventEmitter;
+    var EventEmitter = NativeModule.require('events').EventEmitter;
     process.__proto__ = EventEmitter.prototype;
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
@@ -39,6 +37,7 @@
     startup.globalConsole();
 
     startup.processAssert();
+    startup.processConfig();
     startup.processNextTick();
     startup.processStdio();
     startup.processKillAndExit();
@@ -90,18 +89,52 @@
       }
 
       var Module = NativeModule.require('module');
-      // REMOVEME: nextTick should not be necessary. This hack to get
-      // test/simple/test-exception-handler2.js working.
-      // Main entry point into most programs:
-      process.nextTick(Module.runMain);
+
+      if (global.v8debug &&
+          process.execArgv.some(function(arg) {
+            return arg.match(/^--debug-brk(=[0-9]*)?$/);
+          })) {
+
+        // XXX Fix this terrible hack!
+        //
+        // Give the client program a few ticks to connect.
+        // Otherwise, there's a race condition where `node debug foo.js`
+        // will not be able to connect in time to catch the first
+        // breakpoint message on line 1.
+        //
+        // A better fix would be to somehow get a message from the
+        // global.v8debug object about a connection, and runMain when
+        // that occurs.  --isaacs
+
+        setTimeout(Module.runMain, 50);
+
+      } else {
+        // REMOVEME: nextTick should not be necessary. This hack to get
+        // test/simple/test-exception-handler2.js working.
+        // Main entry point into most programs:
+        process.nextTick(Module.runMain);
+      }
 
     } else {
       var Module = NativeModule.require('module');
 
-      // If stdin is a TTY.
-      if (NativeModule.require('tty').isatty(0)) {
+      // If -i or --interactive were passed, or stdin is a TTY.
+      if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
         // REPL
-        var repl = Module.requireRepl().start('> ', null, null, true);
+        var opts = {
+          useGlobal: true,
+          ignoreUndefined: false
+        };
+        if (parseInt(process.env['NODE_NO_READLINE'], 10)) {
+          opts.terminal = false;
+        }
+        if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
+          opts.useColors = false;
+        }
+        var repl = Module.requireRepl().start(opts);
+        repl.on('exit', function() {
+          process.exit();
+        });
 
       } else {
         // Read all of stdin - execute it.
@@ -175,6 +208,21 @@
       if (!x) throw new Error(msg || 'assertion error');
     };
   };
+
+  startup.processConfig = function() {
+    // used for `process.config`, but not a real module
+    var config = NativeModule._source.config;
+    delete NativeModule._source.config;
+
+    // strip the gyp comment line at the beginning
+    config = config.split('\n').slice(1).join('\n').replace(/'/g, '"');
+
+    process.config = JSON.parse(config, function(key, value) {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return value;
+    });
+  }
 
   startup.processNextTick = function() {
     var nextTickQueue = [];
@@ -282,6 +330,11 @@
         er = er || new Error('process.stdout cannot be closed.');
         stdout.emit('error', er);
       };
+      if (stdout.isTTY) {
+        process.on('SIGWINCH', function() {
+          stdout._refreshSize();
+        });
+      }
       return stdout;
     });
 
@@ -325,6 +378,10 @@
 
       // For supporting legacy API we put the FD here.
       stdin.fd = fd;
+
+      // stdin starts out life in a paused state, but node doesn't
+      // know yet.  Call pause() explicitly to unref() it.
+      stdin.pause();
 
       return stdin;
     });
@@ -491,7 +548,7 @@
   }
 
   NativeModule.exists = function(id) {
-    return (id in NativeModule._source);
+    return NativeModule._source.hasOwnProperty(id);
   }
 
   NativeModule.getSource = function(id) {

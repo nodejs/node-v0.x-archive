@@ -115,7 +115,7 @@ void check_permission(const char* filename, int mode) {
 
   s = req.ptr;
 #ifdef _WIN32
-  /* 
+  /*
    * On Windows, chmod can only modify S_IWUSR (_S_IWRITE) bit,
    * so only testing for the specified flags.
    */
@@ -186,8 +186,14 @@ static void chown_cb(uv_fs_t* req) {
 
 static void chown_root_cb(uv_fs_t* req) {
   ASSERT(req->fs_type == UV_FS_CHOWN);
+#ifdef _WIN32
+  /* On windows, chown is a no-op and always succeeds. */
+  ASSERT(req->result == 0);
+#else
+  /* On unix, chown'ing the root directory is not allowed. */
   ASSERT(req->result == -1);
   ASSERT(req->errorno == UV_EPERM);
+#endif
   chown_cb_count++;
   uv_fs_req_cleanup(req);
 }
@@ -219,6 +225,7 @@ static void close_cb(uv_fs_t* req) {
   uv_fs_req_cleanup(req);
   if (close_cb_count == 3) {
     r = uv_fs_unlink(loop, &unlink_req, "test_file2", unlink_cb);
+    ASSERT(r == 0);
   }
 }
 
@@ -231,6 +238,7 @@ static void ftruncate_cb(uv_fs_t* req) {
   ftruncate_cb_count++;
   uv_fs_req_cleanup(req);
   r = uv_fs_close(loop, &close_req, open_req1.result, close_cb);
+  ASSERT(r == 0);
 }
 
 
@@ -249,6 +257,7 @@ static void read_cb(uv_fs_t* req) {
     ASSERT(strcmp(buf, "test-bu") == 0);
     r = uv_fs_close(loop, &close_req, open_req1.result, close_cb);
   }
+  ASSERT(r == 0);
 }
 
 
@@ -268,6 +277,7 @@ static void open_cb(uv_fs_t* req) {
   memset(buf, 0, sizeof(buf));
   r = uv_fs_read(loop, &read_req, open_req1.result, buf, sizeof(buf), -1,
       read_cb);
+  ASSERT(r == 0);
 }
 
 
@@ -292,6 +302,7 @@ static void fsync_cb(uv_fs_t* req) {
   fsync_cb_count++;
   uv_fs_req_cleanup(req);
   r = uv_fs_close(loop, &close_req, open_req1.result, close_cb);
+  ASSERT(r == 0);
 }
 
 
@@ -303,6 +314,7 @@ static void fdatasync_cb(uv_fs_t* req) {
   fdatasync_cb_count++;
   uv_fs_req_cleanup(req);
   r = uv_fs_fsync(loop, &fsync_req, open_req1.result, fsync_cb);
+  ASSERT(r == 0);
 }
 
 
@@ -314,6 +326,7 @@ static void write_cb(uv_fs_t* req) {
   write_cb_count++;
   uv_fs_req_cleanup(req);
   r = uv_fs_fdatasync(loop, &fdatasync_req, open_req1.result, fdatasync_cb);
+  ASSERT(r == 0);
 }
 
 
@@ -326,6 +339,7 @@ static void create_cb(uv_fs_t* req) {
   uv_fs_req_cleanup(req);
   r = uv_fs_write(loop, &write_req, req->result, test_buf, sizeof(test_buf),
       -1, write_cb);
+  ASSERT(r == 0);
 }
 
 
@@ -1210,7 +1224,7 @@ TEST_IMPL(fs_symlink) {
        */
       return 0;
     } else if (uv_last_error(loop).sys_errno_ == ERROR_PRIVILEGE_NOT_HELD) {
-      /* 
+      /*
        * Creating a symlink is only allowed when running elevated.
        * We pass the test and bail out early if we get ERROR_PRIVILEGE_NOT_HELD.
        */
@@ -1656,6 +1670,62 @@ TEST_IMPL(fs_rename_to_existing_file) {
   /* Cleanup */
   unlink("test_file");
   unlink("test_file2");
+
+  return 0;
+}
+
+
+TEST_IMPL(fs_read_file_eof) {
+  int r;
+
+  /* Setup. */
+  unlink("test_file");
+
+  loop = uv_default_loop();
+
+  r = uv_fs_open(loop, &open_req1, "test_file", O_WRONLY | O_CREAT,
+      S_IWRITE | S_IREAD, NULL);
+  ASSERT(r != -1);
+  ASSERT(open_req1.result != -1);
+  uv_fs_req_cleanup(&open_req1);
+
+  r = uv_fs_write(loop, &write_req, open_req1.result, test_buf,
+      sizeof(test_buf), -1, NULL);
+  ASSERT(r != -1);
+  ASSERT(write_req.result != -1);
+  uv_fs_req_cleanup(&write_req);
+
+  r = uv_fs_close(loop, &close_req, open_req1.result, NULL);
+  ASSERT(r != -1);
+  ASSERT(close_req.result != -1);
+  uv_fs_req_cleanup(&close_req);
+
+  r = uv_fs_open(loop, &open_req1, "test_file", O_RDONLY, 0, NULL);
+  ASSERT(r != -1);
+  ASSERT(open_req1.result != -1);
+  uv_fs_req_cleanup(&open_req1);
+
+  memset(buf, 0, sizeof(buf));
+  r = uv_fs_read(loop, &read_req, open_req1.result, buf, sizeof(buf), -1,
+      NULL);
+  ASSERT(r != -1);
+  ASSERT(read_req.result != -1);
+  ASSERT(strcmp(buf, test_buf) == 0);
+  uv_fs_req_cleanup(&read_req);
+
+  r = uv_fs_read(loop, &read_req, open_req1.result, buf, sizeof(buf),
+      read_req.result, NULL);
+  ASSERT(r == 0);
+  ASSERT(read_req.result == 0);
+  uv_fs_req_cleanup(&read_req);
+
+  r = uv_fs_close(loop, &close_req, open_req1.result, NULL);
+  ASSERT(r != -1);
+  ASSERT(close_req.result != -1);
+  uv_fs_req_cleanup(&close_req);
+
+  /* Cleanup */
+  unlink("test_file");
 
   return 0;
 }

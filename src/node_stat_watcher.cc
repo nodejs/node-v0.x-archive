@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_stat_watcher.h>
+#include "node_stat_watcher.h"
 
 #include <assert.h>
 #include <string.h>
@@ -51,9 +51,9 @@ void StatWatcher::Callback(EV_P_ ev_stat *watcher, int revents) {
   StatWatcher *handler = static_cast<StatWatcher*>(watcher->data);
   assert(watcher == &handler->watcher_);
   HandleScope scope;
-  Handle<Value> argv[2];
-  argv[0] = Handle<Value>(BuildStatsObject(&watcher->attr));
-  argv[1] = Handle<Value>(BuildStatsObject(&watcher->prev));
+  Local<Value> argv[2];
+  argv[0] = BuildStatsObject(&watcher->attr);
+  argv[1] = BuildStatsObject(&watcher->prev);
   MakeCallback(handler->handle_, "onchange", 2, argv);
 }
 
@@ -78,7 +78,7 @@ Handle<Value> StatWatcher::Start(const Arguments& args) {
   }
 
   StatWatcher *handler = ObjectWrap::Unwrap<StatWatcher>(args.Holder());
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
 
   assert(handler->path_ == NULL);
   handler->path_ = strdup(*path);

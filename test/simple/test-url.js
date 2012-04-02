@@ -71,6 +71,26 @@ var parseTests = {
     'pathname': '/',
     'path': '/'
   },
+  'http://user@www.example.com/' : {
+    'href': 'http://user@www.example.com/',
+    'protocol': 'http:',
+    'slashes': true,
+    'auth': 'user',
+    'host': 'www.example.com',
+    'hostname': 'www.example.com',
+    'pathname': '/',
+    'path': '/'
+  },
+  'http://user%3Apw@www.example.com/' : {
+    'href': 'http://user:pw@www.example.com/',
+    'protocol': 'http:',
+    'slashes': true,
+    'auth': 'user:pw',
+    'host': 'www.example.com',
+    'hostname': 'www.example.com',
+    'pathname': '/',
+    'path': '/'
+  },
   'http://x.com/path?that\'s#all, folks' : {
     'href': 'http://x.com/path?that%27s#all,',
     'protocol': 'http:',
@@ -324,7 +344,7 @@ var parseTests = {
     'protocol' : 'http:',
     'slashes': true,
     'host' : '127.0.0.1:8080',
-    'auth' : 'atpass:foo%40bar',
+    'auth' : 'atpass:foo@bar',
     'hostname' : '127.0.0.1',
     'port' : '8080',
     'pathname': '/path',
@@ -525,6 +545,58 @@ var parseTests = {
     'query': 'n=Temperature',
     'pathname': '/.well-known/r',
     'path': '/.well-known/r?n=Temperature'
+  },
+  // empty port
+  'http://example.com:': {
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'example.com',
+    'hostname': 'example.com',
+    'href': 'http://example.com/',
+    'pathname': '/',
+    'path': '/'
+  },
+  'http://example.com:/a/b.html': {
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'example.com',
+    'hostname': 'example.com',
+    'href': 'http://example.com/a/b.html',
+    'pathname': '/a/b.html',
+    'path': '/a/b.html'
+  },
+  'http://example.com:?a=b': {
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'example.com',
+    'hostname': 'example.com',
+    'href': 'http://example.com/?a=b',
+    'search': '?a=b',
+    'query': 'a=b',
+    'pathname': '/',
+    'path': '/?a=b'
+  },
+  'http://example.com:#abc': {
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'example.com',
+    'hostname': 'example.com',
+    'href': 'http://example.com/#abc',
+    'hash': '#abc',
+    'pathname': '/',
+    'path': '/'
+  },
+  'http://[fe80::1]:/a/b?a=b#abc': {
+    'protocol': 'http:',
+    'slashes': true,
+    'host': '[fe80::1]',
+    'hostname': 'fe80::1',
+    'href': 'http://[fe80::1]/a/b?a=b#abc',
+    'search': '?a=b',
+    'query': 'a=b',
+    'hash': '#abc',
+    'pathname': '/a/b',
+    'path': '/a/b?a=b'
   }
 };
 

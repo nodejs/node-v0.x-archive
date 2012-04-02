@@ -294,6 +294,7 @@ void fs__read(uv_fs_t* req, uv_file file, void *buf, size_t length,
   OVERLAPPED overlapped, *overlapped_ptr;
   LARGE_INTEGER offset_;
   DWORD bytes;
+  DWORD error;
 
   VERIFY_UV_FILE(file, req);
 
@@ -323,7 +324,12 @@ void fs__read(uv_fs_t* req, uv_file file, void *buf, size_t length,
   if (ReadFile(handle, buf, length, &bytes, overlapped_ptr)) {
     SET_REQ_RESULT(req, bytes);
   } else {
-    SET_REQ_WIN32_ERROR(req, GetLastError());
+    error = GetLastError();
+    if (error == ERROR_HANDLE_EOF) {
+      SET_REQ_RESULT(req, bytes);
+    } else {
+      SET_REQ_WIN32_ERROR(req, error);
+    }
   }
 }
 
@@ -541,7 +547,8 @@ static void fs__stat(uv_fs_t* req, const wchar_t* path) {
   req->stat.st_size = ((int64_t) info.nFileSizeHigh << 32) +
                       (int64_t) info.nFileSizeLow;
 
-  req->stat.st_nlink = info.nNumberOfLinks;
+  req->stat.st_nlink = (info.nNumberOfLinks <= SHRT_MAX) ?
+                       (short) info.nNumberOfLinks : SHRT_MAX;
 
   req->ptr = &req->stat;
   req->result = 0;

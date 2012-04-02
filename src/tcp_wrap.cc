@@ -19,12 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
-#include <node_buffer.h>
-#include <req_wrap.h>
-#include <handle_wrap.h>
-#include <stream_wrap.h>
-#include <tcp_wrap.h>
+#include "node.h"
+#include "node_buffer.h"
+#include "req_wrap.h"
+#include "handle_wrap.h"
+#include "stream_wrap.h"
+#include "tcp_wrap.h"
 
 #include <stdlib.h>
 
@@ -57,20 +57,21 @@
 
 namespace node {
 
-using v8::Object;
-using v8::Handle;
-using v8::Local;
-using v8::Persistent;
-using v8::Value;
-using v8::HandleScope;
-using v8::FunctionTemplate;
-using v8::String;
-using v8::Function;
-using v8::TryCatch;
-using v8::Context;
 using v8::Arguments;
+using v8::Context;
+using v8::Function;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
 using v8::Integer;
+using v8::Local;
+using v8::Object;
+using v8::Null;
+using v8::Persistent;
+using v8::String;
+using v8::TryCatch;
 using v8::Undefined;
+using v8::Value;
 
 static Persistent<Function> tcpConstructor;
 static Persistent<String> family_symbol;
@@ -298,7 +299,7 @@ Handle<Value> TCPWrap::Bind(const Arguments& args) {
 
   UNWRAP
 
-  String::AsciiValue ip_address(args[0]->ToString());
+  String::AsciiValue ip_address(args[0]);
   int port = args[1]->Int32Value();
 
   struct sockaddr_in address = uv_ip4_addr(*ip_address, port);
@@ -316,7 +317,7 @@ Handle<Value> TCPWrap::Bind6(const Arguments& args) {
 
   UNWRAP
 
-  String::AsciiValue ip6_address(args[0]->ToString());
+  String::AsciiValue ip6_address(args[0]);
   int port = args[1]->Int32Value();
 
   struct sockaddr_in6 address = uv_ip6_addr(*ip6_address, port);
@@ -355,7 +356,7 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
   // uv_close() on the handle.
   assert(wrap->object_.IsEmpty() == false);
 
-  Handle<Value> argv[1];
+  Local<Value> argv[1];
 
   if (status == 0) {
     // Instantiate the client javascript object and handle.
@@ -366,16 +367,13 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
     TCPWrap* client_wrap =
         static_cast<TCPWrap*>(client_obj->GetPointerFromInternalField(0));
 
-    int r = uv_accept(handle, (uv_stream_t*)&client_wrap->handle_);
-
-    // uv_accept should always work.
-    assert(r == 0);
+    if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
 
     // Successful accept. Call the onconnection callback in JavaScript land.
     argv[0] = client_obj;
   } else {
     SetErrno(uv_last_error(uv_default_loop()));
-    argv[0] = v8::Null();
+    argv[0] = Local<Value>::New(Null());
   }
 
   MakeCallback(wrap->object_, "onconnection", 1, argv);
@@ -415,7 +413,7 @@ Handle<Value> TCPWrap::Connect(const Arguments& args) {
 
   UNWRAP
 
-  String::AsciiValue ip_address(args[0]->ToString());
+  String::AsciiValue ip_address(args[0]);
   int port = args[1]->Int32Value();
 
   struct sockaddr_in address = uv_ip4_addr(*ip_address, port);
@@ -445,7 +443,7 @@ Handle<Value> TCPWrap::Connect6(const Arguments& args) {
 
   UNWRAP
 
-  String::AsciiValue ip_address(args[0]->ToString());
+  String::AsciiValue ip_address(args[0]);
   int port = args[1]->Int32Value();
 
   struct sockaddr_in6 address = uv_ip6_addr(*ip_address, port);

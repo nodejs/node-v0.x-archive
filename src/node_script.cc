@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
-#include <node_script.h>
+#include "node.h"
+#include "node_script.h"
 #include <assert.h>
 
 namespace node {
@@ -357,7 +357,6 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
   } else if (context_flag == userContext) {
     // Use the passed in context
-    Local<Object> contextArg = args[sandbox_index]->ToObject();
     WrappedContext *nContext = ObjectWrap::Unwrap<WrappedContext>(sandbox);
     context = nContext->GetV8Context();
   }

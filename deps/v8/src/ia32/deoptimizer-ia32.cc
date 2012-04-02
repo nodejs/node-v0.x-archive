@@ -205,13 +205,22 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 }
 
 
+static const byte kJnsInstruction = 0x79;
+static const byte kJnsOffset = 0x13;
+static const byte kJaeInstruction = 0x73;
+static const byte kJaeOffset = 0x07;
+static const byte kCallInstruction = 0xe8;
+static const byte kNopByteOne = 0x66;
+static const byte kNopByteTwo = 0x90;
+
+
 void Deoptimizer::PatchStackCheckCodeAt(Code* unoptimized_code,
                                         Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
   Address call_target_address = pc_after - kIntSize;
-  ASSERT(check_code->entry() ==
-         Assembler::target_address_at(call_target_address));
+  ASSERT_EQ(check_code->entry(),
+            Assembler::target_address_at(call_target_address));
   // The stack check code matches the pattern:
   //
   //     cmp esp, <limit>
@@ -228,11 +237,17 @@ void Deoptimizer::PatchStackCheckCodeAt(Code* unoptimized_code,
   //     call <on-stack replacment>
   //     test eax, <loop nesting depth>
   // ok:
-  ASSERT(*(call_target_address - 3) == 0x73 &&  // jae
-         *(call_target_address - 2) == 0x07 &&  // offset
-         *(call_target_address - 1) == 0xe8);   // call
-  *(call_target_address - 3) = 0x66;  // 2 byte nop part 1
-  *(call_target_address - 2) = 0x90;  // 2 byte nop part 2
+
+  if (FLAG_count_based_interrupts) {
+    ASSERT_EQ(*(call_target_address - 3), kJnsInstruction);
+    ASSERT_EQ(*(call_target_address - 2), kJnsOffset);
+  } else {
+    ASSERT_EQ(*(call_target_address - 3), kJaeInstruction);
+    ASSERT_EQ(*(call_target_address - 2), kJaeOffset);
+  }
+  ASSERT_EQ(*(call_target_address - 1), kCallInstruction);
+  *(call_target_address - 3) = kNopByteOne;
+  *(call_target_address - 2) = kNopByteTwo;
   Assembler::set_target_address_at(call_target_address,
                                    replacement_code->entry());
 
@@ -246,15 +261,21 @@ void Deoptimizer::RevertStackCheckCodeAt(Code* unoptimized_code,
                                          Code* check_code,
                                          Code* replacement_code) {
   Address call_target_address = pc_after - kIntSize;
-  ASSERT(replacement_code->entry() ==
-         Assembler::target_address_at(call_target_address));
+  ASSERT_EQ(replacement_code->entry(),
+            Assembler::target_address_at(call_target_address));
+
   // Replace the nops from patching (Deoptimizer::PatchStackCheckCode) to
   // restore the conditional branch.
-  ASSERT(*(call_target_address - 3) == 0x66 &&  // 2 byte nop part 1
-         *(call_target_address - 2) == 0x90 &&  // 2 byte nop part 2
-         *(call_target_address - 1) == 0xe8);   // call
-  *(call_target_address - 3) = 0x73;  // jae
-  *(call_target_address - 2) = 0x07;  // offset
+  ASSERT_EQ(*(call_target_address - 3), kNopByteOne);
+  ASSERT_EQ(*(call_target_address - 2), kNopByteTwo);
+  ASSERT_EQ(*(call_target_address - 1), kCallInstruction);
+  if (FLAG_count_based_interrupts) {
+    *(call_target_address - 3) = kJnsInstruction;
+    *(call_target_address - 2) = kJnsOffset;
+  } else {
+    *(call_target_address - 3) = kJaeInstruction;
+    *(call_target_address - 2) = kJaeOffset;
+  }
   Assembler::set_target_address_at(call_target_address,
                                    check_code->entry());
 
@@ -406,14 +427,7 @@ void Deoptimizer::DoComputeOsrOutputFrame() {
     output_[0]->SetPc(reinterpret_cast<uint32_t>(from_));
   } else {
     // Set up the frame pointer and the context pointer.
-    // All OSR stack frames are dynamically aligned to an 8-byte boundary.
-    int frame_pointer = input_->GetRegister(ebp.code());
-    if ((frame_pointer & 0x4) == 0) {
-      // Return address at FP + 4 should be aligned, so FP mod 8 should be 4.
-      frame_pointer -= kPointerSize;
-      has_alignment_padding_ = 1;
-    }
-    output_[0]->SetRegister(ebp.code(), frame_pointer);
+    output_[0]->SetRegister(ebp.code(), input_->GetRegister(ebp.code()));
     output_[0]->SetRegister(esi.code(), input_->GetRegister(esi.code()));
 
     unsigned pc_offset = data->OsrPcOffset()->value();
@@ -446,7 +460,6 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
   }
 
   unsigned fixed_frame_size = ArgumentsAdaptorFrameConstants::kFrameSize;
-  unsigned input_frame_size = input_->GetFrameSize();
   unsigned output_frame_size = height_in_bytes + fixed_frame_size;
 
   // Allocate and store the output frame description.
@@ -468,16 +481,13 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
   // Compute the incoming parameter translation.
   int parameter_count = height;
   unsigned output_offset = output_frame_size;
-  unsigned input_offset = input_frame_size;
   for (int i = 0; i < parameter_count; ++i) {
     output_offset -= kPointerSize;
     DoTranslateCommand(iterator, frame_index, output_offset);
   }
-  input_offset -= (parameter_count * kPointerSize);
 
   // Read caller's PC from the previous frame.
   output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
   intptr_t callers_pc = output_[frame_index - 1]->GetPc();
   output_frame->SetFrameSlot(output_offset, callers_pc);
   if (FLAG_trace_deopt) {
@@ -487,7 +497,6 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
 
   // Read caller's FP from the previous frame, and set this frame's FP.
   output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
   intptr_t value = output_[frame_index - 1]->GetFp();
   output_frame->SetFrameSlot(output_offset, value);
   intptr_t fp_value = top_address + output_offset;
@@ -499,7 +508,6 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
 
   // A marker value is used in place of the context.
   output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
   intptr_t context = reinterpret_cast<intptr_t>(
       Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR));
   output_frame->SetFrameSlot(output_offset, context);
@@ -510,7 +518,6 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
 
   // The function was mentioned explicitly in the ARGUMENTS_ADAPTOR_FRAME.
   output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
   value = reinterpret_cast<intptr_t>(function);
   output_frame->SetFrameSlot(output_offset, value);
   if (FLAG_trace_deopt) {
@@ -520,7 +527,6 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
 
   // Number of incoming arguments.
   output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
   value = reinterpret_cast<uint32_t>(Smi::FromInt(height - 1));
   output_frame->SetFrameSlot(output_offset, value);
   if (FLAG_trace_deopt) {
@@ -536,6 +542,110 @@ void Deoptimizer::DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
   uint32_t pc = reinterpret_cast<uint32_t>(
       adaptor_trampoline->instruction_start() +
       isolate_->heap()->arguments_adaptor_deopt_pc_offset()->value());
+  output_frame->SetPc(pc);
+}
+
+
+void Deoptimizer::DoComputeConstructStubFrame(TranslationIterator* iterator,
+                                              int frame_index) {
+  JSFunction* function = JSFunction::cast(ComputeLiteral(iterator->Next()));
+  unsigned height = iterator->Next();
+  unsigned height_in_bytes = height * kPointerSize;
+  if (FLAG_trace_deopt) {
+    PrintF("  translating construct stub => height=%d\n", height_in_bytes);
+  }
+
+  unsigned fixed_frame_size = 6 * kPointerSize;
+  unsigned output_frame_size = height_in_bytes + fixed_frame_size;
+
+  // Allocate and store the output frame description.
+  FrameDescription* output_frame =
+      new(output_frame_size) FrameDescription(output_frame_size, function);
+  output_frame->SetFrameType(StackFrame::CONSTRUCT);
+
+  // Construct stub can not be topmost or bottommost.
+  ASSERT(frame_index > 0 && frame_index < output_count_ - 1);
+  ASSERT(output_[frame_index] == NULL);
+  output_[frame_index] = output_frame;
+
+  // The top address of the frame is computed from the previous
+  // frame's top and this frame's size.
+  uint32_t top_address;
+  top_address = output_[frame_index - 1]->GetTop() - output_frame_size;
+  output_frame->SetTop(top_address);
+
+  // Compute the incoming parameter translation.
+  int parameter_count = height;
+  unsigned output_offset = output_frame_size;
+  for (int i = 0; i < parameter_count; ++i) {
+    output_offset -= kPointerSize;
+    DoTranslateCommand(iterator, frame_index, output_offset);
+  }
+
+  // Read caller's PC from the previous frame.
+  output_offset -= kPointerSize;
+  intptr_t callers_pc = output_[frame_index - 1]->GetPc();
+  output_frame->SetFrameSlot(output_offset, callers_pc);
+  if (FLAG_trace_deopt) {
+    PrintF("    0x%08x: [top + %d] <- 0x%08x ; caller's pc\n",
+           top_address + output_offset, output_offset, callers_pc);
+  }
+
+  // Read caller's FP from the previous frame, and set this frame's FP.
+  output_offset -= kPointerSize;
+  intptr_t value = output_[frame_index - 1]->GetFp();
+  output_frame->SetFrameSlot(output_offset, value);
+  intptr_t fp_value = top_address + output_offset;
+  output_frame->SetFp(fp_value);
+  if (FLAG_trace_deopt) {
+    PrintF("    0x%08x: [top + %d] <- 0x%08x ; caller's fp\n",
+           fp_value, output_offset, value);
+  }
+
+  // The context can be gotten from the previous frame.
+  output_offset -= kPointerSize;
+  value = output_[frame_index - 1]->GetContext();
+  output_frame->SetFrameSlot(output_offset, value);
+  if (FLAG_trace_deopt) {
+    PrintF("    0x%08x: [top + %d] <- 0x%08x ; context\n",
+           top_address + output_offset, output_offset, value);
+  }
+
+  // A marker value is used in place of the function.
+  output_offset -= kPointerSize;
+  value = reinterpret_cast<intptr_t>(Smi::FromInt(StackFrame::CONSTRUCT));
+  output_frame->SetFrameSlot(output_offset, value);
+  if (FLAG_trace_deopt) {
+    PrintF("    0x%08x: [top + %d] <- 0x%08x ; function (construct sentinel)\n",
+           top_address + output_offset, output_offset, value);
+  }
+
+  // Number of incoming arguments.
+  output_offset -= kPointerSize;
+  value = reinterpret_cast<uint32_t>(Smi::FromInt(height - 1));
+  output_frame->SetFrameSlot(output_offset, value);
+  if (FLAG_trace_deopt) {
+    PrintF("    0x%08x: [top + %d] <- 0x%08x ; argc (%d)\n",
+           top_address + output_offset, output_offset, value, height - 1);
+  }
+
+  // The newly allocated object was passed as receiver in the artificial
+  // constructor stub environment created by HEnvironment::CopyForInlining().
+  output_offset -= kPointerSize;
+  value = output_frame->GetFrameSlot(output_frame_size - kPointerSize);
+  output_frame->SetFrameSlot(output_offset, value);
+  if (FLAG_trace_deopt) {
+    PrintF("    0x%08x: [top + %d] <- 0x%08x ; allocated receiver\n",
+           top_address + output_offset, output_offset, value);
+  }
+
+  ASSERT(0 == output_offset);
+
+  Builtins* builtins = isolate_->builtins();
+  Code* construct_stub = builtins->builtin(Builtins::kJSConstructStubGeneric);
+  uint32_t pc = reinterpret_cast<uint32_t>(
+      construct_stub->instruction_start() +
+      isolate_->heap()->construct_stub_deopt_pc_offset()->value());
   output_frame->SetPc(pc);
 }
 
@@ -575,11 +685,9 @@ void Deoptimizer::DoComputeJSFrame(TranslationIterator* iterator,
   // top address and the current frame's size.
   uint32_t top_address;
   if (is_bottommost) {
-    // If the optimized frame had alignment padding, adjust the frame pointer
-    // to point to the new position of the old frame pointer after padding
-    // is removed. Subtract 2 * kPointerSize for the context and function slots.
-    top_address = input_->GetRegister(ebp.code()) - (2 * kPointerSize) -
-        height_in_bytes + has_alignment_padding_ * kPointerSize;
+    // 2 = context and function in the frame.
+    top_address =
+        input_->GetRegister(ebp.code()) - (2 * kPointerSize) - height_in_bytes;
   } else {
     top_address = output_[frame_index - 1]->GetTop() - output_frame_size;
   }
@@ -630,9 +738,7 @@ void Deoptimizer::DoComputeJSFrame(TranslationIterator* iterator,
   }
   output_frame->SetFrameSlot(output_offset, value);
   intptr_t fp_value = top_address + output_offset;
-  ASSERT(!is_bottommost ||
-      input_->GetRegister(ebp.code()) + has_alignment_padding_ * kPointerSize
-      == fp_value);
+  ASSERT(!is_bottommost || input_->GetRegister(ebp.code()) == fp_value);
   output_frame->SetFp(fp_value);
   if (is_topmost) output_frame->SetRegister(ebp.code(), fp_value);
   if (FLAG_trace_deopt) {
@@ -651,6 +757,7 @@ void Deoptimizer::DoComputeJSFrame(TranslationIterator* iterator,
     value = reinterpret_cast<uint32_t>(function->context());
   }
   output_frame->SetFrameSlot(output_offset, value);
+  output_frame->SetContext(value);
   if (is_topmost) output_frame->SetRegister(esi.code(), value);
   if (FLAG_trace_deopt) {
     PrintF("    0x%08x: [top + %d] <- 0x%08x ; context\n",
@@ -821,17 +928,6 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ cmp(ecx, esp);
   __ j(not_equal, &pop_loop);
 
-  // If frame was dynamically aligned, pop padding.
-  Label sentinel, sentinel_done;
-  __ pop(ecx);
-  __ cmp(ecx, Operand(eax, Deoptimizer::frame_alignment_marker_offset()));
-  __ j(equal, &sentinel);
-  __ push(ecx);
-  __ jmp(&sentinel_done);
-  __ bind(&sentinel);
-  __ mov(Operand(eax, Deoptimizer::has_alignment_padding_offset()),
-         Immediate(1));
-  __ bind(&sentinel_done);
   // Compute the output frame in the deoptimizer.
   __ push(eax);
   __ PrepareCallCFunction(1, ebx);
@@ -842,17 +938,6 @@ void Deoptimizer::EntryGenerator::Generate() {
         ExternalReference::compute_output_frames_function(isolate), 1);
   }
   __ pop(eax);
-
-  if (type() == OSR) {
-    // If alignment padding is added, push the sentinel.
-    Label no_osr_padding;
-    __ cmp(Operand(eax, Deoptimizer::has_alignment_padding_offset()),
-           Immediate(0));
-    __ j(equal, &no_osr_padding, Label::kNear);
-    __ push(Operand(eax, Deoptimizer::frame_alignment_marker_offset()));
-    __ bind(&no_osr_padding);
-  }
-
 
   // Replace the current frame with the output frames.
   Label outer_push_loop, inner_push_loop;

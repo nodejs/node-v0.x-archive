@@ -32,6 +32,7 @@
 #include "isolate.h"
 #include "list-inl.h"
 #include "objects.h"
+#include "platform.h"
 #include "v8-counters.h"
 #include "store-buffer.h"
 #include "store-buffer-inl.h"
@@ -49,7 +50,7 @@ void PromotionQueue::insert(HeapObject* target, int size) {
     NewSpacePage* rear_page =
         NewSpacePage::FromAddress(reinterpret_cast<Address>(rear_));
     ASSERT(!rear_page->prev_page()->is_anchor());
-    rear_ = reinterpret_cast<intptr_t*>(rear_page->prev_page()->body_limit());
+    rear_ = reinterpret_cast<intptr_t*>(rear_page->prev_page()->area_end());
     ActivateGuardIfOnTheSamePage();
   }
 
@@ -78,11 +79,6 @@ void PromotionQueue::ActivateGuardIfOnTheSamePage() {
   guard_ = guard_ ||
       heap_->new_space()->active_space()->current_page()->address() ==
       GetHeadPage()->address();
-}
-
-
-int Heap::MaxObjectSizeInPagedSpace() {
-  return Page::kMaxHeapObjectSize;
 }
 
 
@@ -119,7 +115,7 @@ MaybeObject* Heap::AllocateAsciiSymbol(Vector<const char> str,
 
   // Allocate string.
   Object* result;
-  { MaybeObject* maybe_result = (size > MaxObjectSizeInPagedSpace())
+  { MaybeObject* maybe_result = (size > Page::kMaxNonCodeHeapObjectSize)
                    ? lo_space_->AllocateRaw(size, NOT_EXECUTABLE)
                    : old_data_space_->AllocateRaw(size);
     if (!maybe_result->ToObject(&result)) return maybe_result;
@@ -153,7 +149,7 @@ MaybeObject* Heap::AllocateTwoByteSymbol(Vector<const uc16> str,
 
   // Allocate string.
   Object* result;
-  { MaybeObject* maybe_result = (size > MaxObjectSizeInPagedSpace())
+  { MaybeObject* maybe_result = (size > Page::kMaxNonCodeHeapObjectSize)
                    ? lo_space_->AllocateRaw(size, NOT_EXECUTABLE)
                    : old_data_space_->AllocateRaw(size);
     if (!maybe_result->ToObject(&result)) return maybe_result;
@@ -663,15 +659,15 @@ double TranscendentalCache::SubCache::Calculate(double input) {
     case ATAN:
       return atan(input);
     case COS:
-      return cos(input);
+      return fast_cos(input);
     case EXP:
       return exp(input);
     case LOG:
-      return log(input);
+      return fast_log(input);
     case SIN:
-      return sin(input);
+      return fast_sin(input);
     case TAN:
-      return tan(input);
+      return fast_tan(input);
     default:
       return 0.0;  // Never happens.
   }

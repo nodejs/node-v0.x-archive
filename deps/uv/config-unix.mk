@@ -62,8 +62,8 @@ EV_CONFIG=config_linux.h
 EIO_CONFIG=config_linux.h
 CSTDFLAG += -D_GNU_SOURCE
 CPPFLAGS += -Isrc/ares/config_linux
-LINKFLAGS+=-lrt
-OBJS += src/unix/linux.o
+LINKFLAGS+=-ldl -lrt
+OBJS += src/unix/linux/core.o src/unix/linux/inotify.o
 endif
 
 ifeq (FreeBSD,$(uname_S))
@@ -152,14 +152,16 @@ src/unix/uv-eio.o: src/unix/uv-eio.c
 
 clean-platform:
 	-rm -f src/ares/*.o
+	-rm -f src/unix/*.o
 	-rm -f src/unix/ev/*.o
 	-rm -f src/unix/eio/*.o
-	-rm -f src/unix/*.o
+	-rm -f src/unix/linux/*.o
 	-rm -rf test/run-tests.dSYM run-benchmarks.dSYM
 
 distclean-platform:
 	-rm -f src/ares/*.o
-	-rm -f src/unix/ev/*.o
 	-rm -f src/unix/*.o
+	-rm -f src/unix/ev/*.o
 	-rm -f src/unix/eio/*.o
+	-rm -f src/unix/linux/*.o
 	-rm -rf test/run-tests.dSYM run-benchmarks.dSYM

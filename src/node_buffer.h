@@ -22,9 +22,9 @@
 #ifndef NODE_BUFFER_H_
 #define NODE_BUFFER_H_
 
-#include <node.h>
-#include <node_object_wrap.h>
-#include <v8.h>
+#include "node.h"
+#include "node_object_wrap.h"
+#include "v8.h"
 #include <assert.h>
 
 namespace node {
@@ -65,6 +65,9 @@ namespace node {
 
 class NODE_EXTERN Buffer: public ObjectWrap {
  public:
+  // mirrors deps/v8/src/objects.h
+  static const unsigned int kMaxLength = 0x3fffffff;
+
   static v8::Persistent<v8::FunctionTemplate> constructor_template;
 
   static bool HasInstance(v8::Handle<v8::Value> val);

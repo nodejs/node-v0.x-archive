@@ -67,21 +67,6 @@ class AssemblerBase: public Malloced {
   int jit_cookie_;
 };
 
-// -----------------------------------------------------------------------------
-// Common double constants.
-
-class DoubleConstant: public AllStatic {
- public:
-  static const double min_int;
-  static const double one_half;
-  static const double minus_zero;
-  static const double zero;
-  static const double uint8_max_value;
-  static const double negative_infinity;
-  static const double canonical_non_hole_nan;
-  static const double the_hole_nan;
-};
-
 
 // -----------------------------------------------------------------------------
 // Labels represent pc locations; they are typically jump or call targets.
@@ -594,6 +579,9 @@ class ExternalReference BASE_EMBEDDED {
   static ExternalReference random_uint32_function(Isolate* isolate);
   static ExternalReference transcendental_cache_array_address(Isolate* isolate);
   static ExternalReference delete_handle_scope_extensions(Isolate* isolate);
+
+  static ExternalReference get_date_field_function(Isolate* isolate);
+  static ExternalReference date_cache_stamp(Isolate* isolate);
 
   // Deoptimization support.
   static ExternalReference new_deoptimizer_function(Isolate* isolate);

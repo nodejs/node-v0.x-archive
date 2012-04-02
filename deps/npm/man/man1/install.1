@@ -1,7 +1,7 @@
 .\" Generated with Ronnjs/v0.1
 .\" http://github.com/kapouer/ronnjs/
 .
-.TH "NPM\-INSTALL" "1" "February 2012" "" ""
+.TH "NPM\-INSTALL" "1" "March 2012" "" ""
 .
 .SH "NAME"
 \fBnpm-install\fR \-\- Install a package
@@ -21,7 +21,9 @@ npm install <name>@<version range>
 .fi
 .
 .SH "DESCRIPTION"
-This command installs a package, and any packages that it depends on\.
+This command installs a package, and any packages that it depends on\. If the
+package has a shrinkwrap file, the installation of dependencies will be driven
+by that\. See npm help shrinkwrap\.
 .
 .P
 A \fBpackage\fR is:
@@ -369,6 +371,9 @@ npm help tag
 .
 .IP "\(bu" 4
 npm help rm
+.
+.IP "\(bu" 4
+npm help shrinkwrap
 .
 .IP "" 0
 

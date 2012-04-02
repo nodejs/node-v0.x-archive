@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -77,6 +77,17 @@ Handle<Object> TypeFeedbackOracle::GetInfo(unsigned ast_id) {
 }
 
 
+bool TypeFeedbackOracle::LoadIsUninitialized(Property* expr) {
+  Handle<Object> map_or_code = GetInfo(expr->id());
+  if (map_or_code->IsMap()) return false;
+  if (map_or_code->IsCode()) {
+    Handle<Code> code = Handle<Code>::cast(map_or_code);
+    return code->is_inline_cache_stub() && code->ic_state() == UNINITIALIZED;
+  }
+  return false;
+}
+
+
 bool TypeFeedbackOracle::LoadIsMonomorphicNormal(Property* expr) {
   Handle<Object> map_or_code = GetInfo(expr->id());
   if (map_or_code->IsMap()) return true;
@@ -110,7 +121,11 @@ bool TypeFeedbackOracle::StoreIsMonomorphicNormal(Expression* expr) {
   if (map_or_code->IsMap()) return true;
   if (map_or_code->IsCode()) {
     Handle<Code> code = Handle<Code>::cast(map_or_code);
+    bool allow_growth =
+        Code::GetKeyedAccessGrowMode(code->extra_ic_state()) ==
+        ALLOW_JSARRAY_GROWTH;
     return code->is_keyed_store_stub() &&
+        !allow_growth &&
         code->ic_state() == MONOMORPHIC &&
         Code::ExtractTypeFromFlags(code->flags()) == NORMAL &&
         code->FindFirstMap() != NULL &&
@@ -125,7 +140,11 @@ bool TypeFeedbackOracle::StoreIsMegamorphicWithTypeInfo(Expression* expr) {
   if (map_or_code->IsCode()) {
     Handle<Code> code = Handle<Code>::cast(map_or_code);
     Builtins* builtins = isolate_->builtins();
+    bool allow_growth =
+        Code::GetKeyedAccessGrowMode(code->extra_ic_state()) ==
+        ALLOW_JSARRAY_GROWTH;
     return code->is_keyed_store_stub() &&
+        !allow_growth &&
         *code != builtins->builtin(Builtins::kKeyedStoreIC_Generic) &&
         *code != builtins->builtin(Builtins::kKeyedStoreIC_Generic_Strict) &&
         code->ic_state() == MEGAMORPHIC;
@@ -143,6 +162,20 @@ bool TypeFeedbackOracle::CallIsMonomorphic(Call* expr) {
 bool TypeFeedbackOracle::CallNewIsMonomorphic(CallNew* expr) {
   Handle<Object> value = GetInfo(expr->id());
   return value->IsJSFunction();
+}
+
+
+bool TypeFeedbackOracle::ObjectLiteralStoreIsMonomorphic(
+    ObjectLiteral::Property* prop) {
+  Handle<Object> map_or_code = GetInfo(prop->key()->id());
+  return map_or_code->IsMap();
+}
+
+
+bool TypeFeedbackOracle::IsForInFastCase(ForInStatement* stmt) {
+  Handle<Object> value = GetInfo(stmt->PrepareId());
+  return value->IsSmi() &&
+      Smi::cast(*value)->value() == TypeFeedbackCells::kForInFastCaseMarker;
 }
 
 
@@ -248,6 +281,18 @@ Handle<JSFunction> TypeFeedbackOracle::GetCallTarget(Call* expr) {
 }
 
 
+Handle<JSFunction> TypeFeedbackOracle::GetCallNewTarget(CallNew* expr) {
+  return Handle<JSFunction>::cast(GetInfo(expr->id()));
+}
+
+
+Handle<Map> TypeFeedbackOracle::GetObjectLiteralStoreMap(
+    ObjectLiteral::Property* prop) {
+  ASSERT(ObjectLiteralStoreIsMonomorphic(prop));
+  return Handle<Map>::cast(GetInfo(prop->key()->id()));
+}
+
+
 bool TypeFeedbackOracle::LoadIsBuiltin(Property* expr, Builtins::Name id) {
   return *GetInfo(expr->id()) ==
       isolate_->builtins()->builtin(id);
@@ -348,6 +393,10 @@ TypeInfo TypeFeedbackOracle::BinaryType(BinaryOperation* expr) {
       case BinaryOpIC::SMI:
         switch (result_type) {
           case BinaryOpIC::UNINITIALIZED:
+            if (expr->op() == Token::DIV) {
+              return TypeInfo::Double();
+            }
+            return TypeInfo::Smi();
           case BinaryOpIC::SMI:
             return TypeInfo::Smi();
           case BinaryOpIC::INT32:
@@ -565,7 +614,11 @@ void TypeFeedbackOracle::GetRelocInfos(Handle<Code> code,
 void TypeFeedbackOracle::CreateDictionary(Handle<Code> code,
                                           ZoneList<RelocInfo>* infos) {
   DisableAssertNoAllocation allocation_allowed;
-  int length = infos->length() + code->type_feedback_cells()->CellCount();
+  int cell_count = code->type_feedback_info()->IsTypeFeedbackInfo()
+      ? TypeFeedbackInfo::cast(code->type_feedback_info())->
+          type_feedback_cells()->CellCount()
+      : 0;
+  int length = infos->length() + cell_count;
   byte* old_start = code->instruction_start();
   dictionary_ = FACTORY->NewUnseededNumberDictionary(length);
   byte* new_start = code->instruction_start();
@@ -607,7 +660,7 @@ void TypeFeedbackOracle::ProcessRelocInfos(ZoneList<RelocInfo>* infos) {
               SetInfo(ast_id, map);
             }
           }
-        } else if (target->ic_state() == MEGAMORPHIC) {
+        } else {
           SetInfo(ast_id, target);
         }
         break;
@@ -635,13 +688,17 @@ void TypeFeedbackOracle::ProcessRelocInfos(ZoneList<RelocInfo>* infos) {
 
 
 void TypeFeedbackOracle::ProcessTypeFeedbackCells(Handle<Code> code) {
-  Handle<TypeFeedbackCells> cache(code->type_feedback_cells());
+  Object* raw_info = code->type_feedback_info();
+  if (!raw_info->IsTypeFeedbackInfo()) return;
+  Handle<TypeFeedbackCells> cache(
+      TypeFeedbackInfo::cast(raw_info)->type_feedback_cells());
   for (int i = 0; i < cache->CellCount(); i++) {
     unsigned ast_id = cache->AstId(i)->value();
     Object* value = cache->Cell(i)->value();
-    if (value->IsJSFunction() &&
-        !CanRetainOtherContext(JSFunction::cast(value),
-                               *global_context_)) {
+    if (value->IsSmi() ||
+        (value->IsJSFunction() &&
+         !CanRetainOtherContext(JSFunction::cast(value),
+                                *global_context_))) {
       SetInfo(ast_id, value);
     }
   }

@@ -36,8 +36,10 @@
 #include "contexts.h"
 #include "execution.h"
 #include "frames.h"
+#include "date.h"
 #include "global-handles.h"
 #include "handles.h"
+#include "hashmap.h"
 #include "heap.h"
 #include "regexp-stack.h"
 #include "runtime-profiler.h"
@@ -280,23 +282,6 @@ class ThreadLocalTop BASE_EMBEDDED {
   Address try_catch_handler_address_;
 };
 
-#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
-
-#define ISOLATE_PLATFORM_INIT_LIST(V)                                          \
-  /* VirtualFrame::SpilledScope state */                                       \
-  V(bool, is_virtual_frame_in_spilled_scope, false)                            \
-  /* CodeGenerator::EmitNamedStore state */                                    \
-  V(int, inlined_write_barrier_size, -1)
-
-#if !defined(__arm__) && !defined(__mips__)
-class HashMap;
-#endif
-
-#else
-
-#define ISOLATE_PLATFORM_INIT_LIST(V)
-
-#endif
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
 
@@ -333,8 +318,6 @@ class HashMap;
 typedef List<HeapObject*, PreallocatedStorage> DebugObjectCache;
 
 #define ISOLATE_INIT_LIST(V)                                                   \
-  /* AssertNoZoneAllocation state. */                                          \
-  V(bool, zone_allow_allocation, true)                                         \
   /* SerializerDeserializer state. */                                          \
   V(int, serialize_partial_snapshot_cache_length, 0)                           \
   /* Assembler state. */                                                       \
@@ -369,7 +352,6 @@ typedef List<HeapObject*, PreallocatedStorage> DebugObjectCache;
   V(uint64_t, enabled_cpu_features, 0)                                         \
   V(CpuProfiler*, cpu_profiler, NULL)                                          \
   V(HeapProfiler*, heap_profiler, NULL)                                        \
-  ISOLATE_PLATFORM_INIT_LIST(V)                                                \
   ISOLATE_DEBUGGER_INIT_LIST(V)
 
 class Isolate {
@@ -448,19 +430,25 @@ class Isolate {
   // not currently set).
   static PerIsolateThreadData* CurrentPerIsolateThreadData() {
     return reinterpret_cast<PerIsolateThreadData*>(
-        Thread::GetThreadLocal(per_isolate_thread_data_key_));
+        Thread::GetThreadLocal(per_isolate_thread_data_key()));
   }
 
   // Returns the isolate inside which the current thread is running.
   INLINE(static Isolate* Current()) {
+    const Thread::LocalStorageKey key = isolate_key();
     Isolate* isolate = reinterpret_cast<Isolate*>(
-        Thread::GetExistingThreadLocal(isolate_key_));
+        Thread::GetExistingThreadLocal(key));
+    if (!isolate) {
+      EnsureDefaultIsolate();
+      isolate = reinterpret_cast<Isolate*>(
+          Thread::GetExistingThreadLocal(key));
+    }
     ASSERT(isolate != NULL);
     return isolate;
   }
 
   INLINE(static Isolate* UncheckedCurrent()) {
-    return reinterpret_cast<Isolate*>(Thread::GetThreadLocal(isolate_key_));
+    return reinterpret_cast<Isolate*>(Thread::GetThreadLocal(isolate_key()));
   }
 
   // Usually called by Init(), but can be called early e.g. to allow
@@ -482,7 +470,7 @@ class Isolate {
   // for legacy API reasons.
   void TearDown();
 
-  bool IsDefaultIsolate() const { return this == default_isolate_; }
+  bool IsDefaultIsolate() const;
 
   // Ensures that process-wide resources and the default isolate have been
   // allocated. It is only necessary to call this method in rare cases, for
@@ -507,14 +495,12 @@ class Isolate {
   // Returns the key used to store the pointer to the current isolate.
   // Used internally for V8 threads that do not execute JavaScript but still
   // are part of the domain of an isolate (like the context switcher).
-  static Thread::LocalStorageKey isolate_key() {
-    return isolate_key_;
-  }
+  static Thread::LocalStorageKey isolate_key();
 
   // Returns the key used to store process-wide thread IDs.
-  static Thread::LocalStorageKey thread_id_key() {
-    return thread_id_key_;
-  }
+  static Thread::LocalStorageKey thread_id_key();
+
+  static Thread::LocalStorageKey per_isolate_thread_data_key();
 
   // If a client attempts to create a Locker without specifying an isolate,
   // we assume that the client is using legacy behavior. Set up the current
@@ -943,6 +929,7 @@ class Isolate {
   }
 #endif
 
+  inline bool IsDebuggerActive();
   inline bool DebuggerHasBreakPoints();
 
 #ifdef DEBUG
@@ -1036,8 +1023,22 @@ class Isolate {
     return OS::TimeCurrentMillis() - time_millis_at_init_;
   }
 
+  DateCache* date_cache() {
+    return date_cache_;
+  }
+
+  void set_date_cache(DateCache* date_cache) {
+    if (date_cache != date_cache_) {
+      delete date_cache_;
+    }
+    date_cache_ = date_cache;
+  }
+
  private:
   Isolate();
+
+  friend struct GlobalState;
+  friend struct InitializeGlobalState;
 
   // The per-process lock should be acquired before the ThreadDataTable is
   // modified.
@@ -1081,16 +1082,6 @@ class Isolate {
     DISALLOW_COPY_AND_ASSIGN(EntryStackItem);
   };
 
-  // This mutex protects highest_thread_id_, thread_data_table_ and
-  // default_isolate_.
-  static Mutex* process_wide_mutex_;
-
-  static Thread::LocalStorageKey per_isolate_thread_data_key_;
-  static Thread::LocalStorageKey isolate_key_;
-  static Thread::LocalStorageKey thread_id_key_;
-  static Isolate* default_isolate_;
-  static ThreadDataTable* thread_data_table_;
-
   void Deinit();
 
   static void SetIsolateThreadLocals(Isolate* isolate,
@@ -1112,7 +1103,7 @@ class Isolate {
   // If one does not yet exist, allocate a new one.
   PerIsolateThreadData* FindOrAllocatePerThreadDataForThisThread();
 
-// PreInits and returns a default isolate. Needed when a new thread tries
+  // PreInits and returns a default isolate. Needed when a new thread tries
   // to create a Locker for the first time (the lock itself is in the isolate).
   static Isolate* GetDefaultIsolateForLocking();
 
@@ -1203,6 +1194,9 @@ class Isolate {
   unibrow::Mapping<unibrow::Ecma262Canonicalize>
       regexp_macro_assembler_canonicalize_;
   RegExpStack* regexp_stack_;
+
+  DateCache* date_cache_;
+
   unibrow::Mapping<unibrow::Ecma262Canonicalize> interp_canonicalize_mapping_;
   void* embedder_data_;
 

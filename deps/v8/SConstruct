@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -185,6 +185,9 @@ LIBRARY_FLAGS = {
       'mips_arch_variant:mips32r2': {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
+      'mips_arch_variant:loongson': {
+        'CPPDEFINES':    ['_MIPS_ARCH_LOONGSON']
+      },
       'simulator:none': {
         'CCFLAGS':      ['-EL'],
         'LINKFLAGS':    ['-EL'],
@@ -193,6 +196,9 @@ LIBRARY_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson': {
+          'CCFLAGS':      ['-march=mips3', '-Wa,-march=mips3']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -212,9 +218,12 @@ LIBRARY_FLAGS = {
       'LINKFLAGS':    ['-m32'],
       'mipsabi:softfloat': {
         'CPPDEFINES':    ['__mips_soft_float=1'],
+        'fpu:on': {
+          'CPPDEFINES' : ['CAN_USE_FPU_INSTRUCTIONS']
+        }
       },
       'mipsabi:hardfloat': {
-        'CPPDEFINES':    ['__mips_hard_float=1'],
+        'CPPDEFINES':    ['__mips_hard_float=1', 'CAN_USE_FPU_INSTRUCTIONS'],
       }
     },
     'arch:x64': {
@@ -296,10 +305,16 @@ V8_EXTRA_FLAGS = {
                        '-Werror',
                        '-W',
                        '-Wno-unused-parameter',
+                       '-Woverloaded-virtual',
                        '-Wnon-virtual-dtor']
     },
     'os:win32': {
-      'WARNINGFLAGS': ['-pedantic', '-Wno-long-long']
+      'WARNINGFLAGS': ['-pedantic',
+                       '-Wno-long-long',
+                       '-Wno-pedantic-ms-format'],
+      'library:shared': {
+        'LIBS': ['winmm', 'ws2_32']
+      }
     },
     'os:linux': {
       'WARNINGFLAGS': ['-pedantic'],
@@ -539,6 +554,9 @@ SAMPLE_FLAGS = {
       'mips_arch_variant:mips32r2': {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
+      'mips_arch_variant:loongson': {
+        'CPPDEFINES':    ['_MIPS_ARCH_LOONGSON']
+      },
       'simulator:none': {
         'CCFLAGS':      ['-EL'],
         'LINKFLAGS':    ['-EL'],
@@ -547,6 +565,9 @@ SAMPLE_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson': {
+          'CCFLAGS':      ['-march=mips3', '-Wa,-march=mips3']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -557,7 +578,10 @@ SAMPLE_FLAGS = {
         },
         'mipsabi:hardfloat': {
           'CCFLAGS':      ['-mhard-float'],
-          'LINKFLAGS':    ['-mhard-float']
+          'LINKFLAGS':    ['-mhard-float'],
+          'fpu:on': {
+            'CPPDEFINES' : ['CAN_USE_FPU_INSTRUCTIONS']
+          }
         }
       }
     },
@@ -691,6 +715,9 @@ PREPARSER_FLAGS = {
       'mips_arch_variant:mips32r2': {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
+      'mips_arch_variant:loongson': {
+        'CPPDEFINES':    ['_MIPS_ARCH_LOONGSON']
+      },
       'simulator:none': {
         'CCFLAGS':      ['-EL'],
         'LINKFLAGS':    ['-EL'],
@@ -699,6 +726,9 @@ PREPARSER_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson': {
+          'CCFLAGS':      ['-march=mips3', '-Wa,-march=mips3']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -1108,7 +1138,7 @@ SIMPLE_OPTIONS = {
     'help': 'generate calling conventiont according to selected mips ABI'
   },
   'mips_arch_variant': {
-    'values': ['mips32r2', 'mips32r1'],
+    'values': ['mips32r2', 'mips32r1', 'loongson'],
     'default': 'mips32r2',
     'help': 'mips variant'
   },
@@ -1121,6 +1151,11 @@ SIMPLE_OPTIONS = {
     'values': ['on', 'off'],
     'default': 'on',
     'help': 'use vfp3 instructions when building the snapshot [Arm only]'
+  },
+  'fpu': {
+    'values': ['on', 'off'],
+    'default': 'on',
+    'help': 'use fpu instructions when building the snapshot [MIPS only]'
   },
 
 }

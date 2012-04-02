@@ -220,11 +220,6 @@ class Deoptimizer : public Malloced {
     return OFFSET_OF(Deoptimizer, output_count_);
   }
   static int output_offset() { return OFFSET_OF(Deoptimizer, output_); }
-  static int frame_alignment_marker_offset() {
-    return OFFSET_OF(Deoptimizer, frame_alignment_marker_); }
-  static int has_alignment_padding_offset() {
-    return OFFSET_OF(Deoptimizer, has_alignment_padding_);
-  }
 
   static int GetDeoptimizedCodeCount(Isolate* isolate);
 
@@ -267,11 +262,7 @@ class Deoptimizer : public Malloced {
   int ConvertJSFrameIndexToFrameIndex(int jsframe_index);
 
  private:
-#ifdef V8_TARGET_ARCH_MIPS
-  static const int kNumberOfEntries = 4096;
-#else
   static const int kNumberOfEntries = 16384;
-#endif
 
   Deoptimizer(Isolate* isolate,
               JSFunction* function,
@@ -287,6 +278,8 @@ class Deoptimizer : public Malloced {
   void DoComputeJSFrame(TranslationIterator* iterator, int frame_index);
   void DoComputeArgumentsAdaptorFrame(TranslationIterator* iterator,
                                       int frame_index);
+  void DoComputeConstructStubFrame(TranslationIterator* iterator,
+                                   int frame_index);
   void DoTranslateCommand(TranslationIterator* iterator,
                           int frame_index,
                           unsigned output_offset);
@@ -338,10 +331,6 @@ class Deoptimizer : public Malloced {
   int jsframe_count_;
   // Array of output frame descriptions.
   FrameDescription** output_;
-
-  // Frames can be dynamically padded on ia32 to align untagged doubles.
-  Object* frame_alignment_marker_;
-  intptr_t has_alignment_padding_;
 
   List<HeapNumberMaterializationDescriptor> deferred_heap_numbers_;
 
@@ -435,6 +424,9 @@ class FrameDescription {
   intptr_t GetFp() const { return fp_; }
   void SetFp(intptr_t fp) { fp_ = fp; }
 
+  intptr_t GetContext() const { return context_; }
+  void SetContext(intptr_t context) { context_ = context; }
+
   Smi* GetState() const { return state_; }
   void SetState(Smi* state) { state_ = state; }
 
@@ -496,6 +488,7 @@ class FrameDescription {
   intptr_t top_;
   intptr_t pc_;
   intptr_t fp_;
+  intptr_t context_;
   StackFrame::Type type_;
   Smi* state_;
 #ifdef DEBUG
@@ -560,6 +553,7 @@ class Translation BASE_EMBEDDED {
   enum Opcode {
     BEGIN,
     JS_FRAME,
+    CONSTRUCT_STUB_FRAME,
     ARGUMENTS_ADAPTOR_FRAME,
     REGISTER,
     INT32_REGISTER,
@@ -588,6 +582,7 @@ class Translation BASE_EMBEDDED {
   // Commands.
   void BeginJSFrame(int node_id, int literal_id, unsigned height);
   void BeginArgumentsAdaptorFrame(int literal_id, unsigned height);
+  void BeginConstructStubFrame(int literal_id, unsigned height);
   void StoreRegister(Register reg);
   void StoreInt32Register(Register reg);
   void StoreDoubleRegister(DoubleRegister reg);
@@ -720,7 +715,8 @@ class DeoptimizedFrameInfo : public Malloced {
  public:
   DeoptimizedFrameInfo(Deoptimizer* deoptimizer,
                        int frame_index,
-                       bool has_arguments_adaptor);
+                       bool has_arguments_adaptor,
+                       bool has_construct_stub);
   virtual ~DeoptimizedFrameInfo();
 
   // GC support.
@@ -735,6 +731,12 @@ class DeoptimizedFrameInfo : public Malloced {
   // Get the frame function.
   JSFunction* GetFunction() {
     return function_;
+  }
+
+  // Check if this frame is preceded by construct stub frame.  The bottom-most
+  // inlined frame might still be called by an uninlined construct stub.
+  bool HasConstructStub() {
+    return has_construct_stub_;
   }
 
   // Get an incoming argument.
@@ -754,11 +756,6 @@ class DeoptimizedFrameInfo : public Malloced {
   }
 
  private:
-  // Set the frame function.
-  void SetFunction(JSFunction* function) {
-    function_ = function;
-  }
-
   // Set an incoming argument.
   void SetParameter(int index, Object* obj) {
     ASSERT(0 <= index && index < parameters_count());
@@ -772,6 +769,7 @@ class DeoptimizedFrameInfo : public Malloced {
   }
 
   JSFunction* function_;
+  bool has_construct_stub_;
   int parameters_count_;
   int expression_count_;
   Object** parameters_;

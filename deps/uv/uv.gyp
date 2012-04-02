@@ -32,6 +32,11 @@
       ],
       'direct_dependent_settings': {
         'include_dirs': [ 'include' ],
+        'conditions': [
+          ['OS=="linux"', {
+            'libraries': [ '-ldl' ],
+          }],
+        ],
       },
 
       'defines': [
@@ -206,7 +211,6 @@
           'sources': [ 'src/unix/darwin.c' ],
           'direct_dependent_settings': {
             'libraries': [
-              '$(SDKROOT)/System/Library/Frameworks/Carbon.framework',
               '$(SDKROOT)/System/Library/Frameworks/CoreServices.framework',
             ],
           },
@@ -217,7 +221,10 @@
         }],
         [ 'OS=="linux"', {
           'include_dirs': [ 'src/ares/config_linux' ],
-          'sources': [ 'src/unix/linux.c' ],
+          'sources': [
+            'src/unix/linux/core.c',
+            'src/unix/linux/inotify.c',
+          ],
           'defines': [
             'EV_CONFIG_H="config_linux.h"',
             'EIO_CONFIG_H="config_linux.h"',
@@ -301,6 +308,7 @@
         'test/test-hrtime.c',
         'test/test-idle.c',
         'test/test-ipc.c',
+        'test/test-ipc-send-recv.c',
         'test/test-list.h',
         'test/test-loop-handles.c',
         'test/test-multiple-listen.c',
@@ -311,6 +319,7 @@
         'test/test-platform-output.c',
         'test/test-process-title.c',
         'test/test-ref.c',
+        'test/test-shutdown-close.c',
         'test/test-shutdown-eof.c',
         'test/test-spawn.c',
         'test/test-stdio-over-pipes.c',
@@ -335,6 +344,7 @@
         'test/test-udp-send-and-recv.c',
         'test/test-udp-multicast-join.c',
         'test/test-counters-init.c',
+        'test/test-dlerror.c',
         'test/test-udp-multicast-ttl.c',
       ],
       'conditions': [

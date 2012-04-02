@@ -101,14 +101,14 @@ class RuntimeProfiler {
   void RemoveDeadSamples();
   void UpdateSamplesAfterCompact(ObjectVisitor* visitor);
 
+  void AttemptOnStackReplacement(JSFunction* function);
+
  private:
   static const int kSamplerWindowSize = 16;
 
   static void HandleWakeUp(Isolate* isolate);
 
   void Optimize(JSFunction* function, const char* reason);
-
-  void AttemptOnStackReplacement(JSFunction* function);
 
   void ClearSampleBuffer();
 
@@ -136,7 +136,6 @@ class RuntimeProfiler {
   //   -1            => the profiler thread is waiting on the semaphore
   //   0 or positive => the number of isolates running JavaScript code.
   static Atomic32 state_;
-  static Semaphore* semaphore_;
 
 #ifdef DEBUG
   static bool has_been_globally_set_up_;

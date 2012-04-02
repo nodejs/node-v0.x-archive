@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -56,6 +56,7 @@
 #include <windows.h>
 
 #ifdef V8_WIN32_HEADERS_FULL
+#include <signal.h>  // For raise().
 #include <time.h>  // For LocalOffset() implementation.
 #include <mmsystem.h>  // For timeGetTime().
 #ifdef __MINGW32__
@@ -64,10 +65,10 @@
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x501
 #endif  // __MINGW32__
-#ifndef __MINGW32__
+#if !defined(__MINGW32__) || defined(__MINGW64_VERSION_MAJOR)
 #include <dbghelp.h>  // For SymLoadModule64 and al.
 #include <errno.h>  // For STRUNCATE
-#endif  // __MINGW32__
+#endif  // !defined(__MINGW32__) || defined(__MINGW64_VERSION_MAJOR)
 #include <limits.h>  // For INT_MAX and al.
 #include <tlhelp32.h>  // For Module32First and al.
 
@@ -78,7 +79,7 @@
 #ifndef __MINGW32__
 #include <wspiapi.h>
 #endif  // __MINGW32__
-#include <process.h>  // for _beginthreadex()
+#include <process.h>  // For _beginthreadex().
 #include <stdlib.h>
 #endif  // V8_WIN32_HEADERS_FULL
 

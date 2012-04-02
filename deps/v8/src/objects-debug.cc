@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -137,6 +137,9 @@ void HeapObject::HeapObjectVerify() {
       break;
     case JS_VALUE_TYPE:
       JSValue::cast(this)->JSValueVerify();
+      break;
+    case JS_DATE_TYPE:
+      JSDate::cast(this)->JSDateVerify();
       break;
     case JS_FUNCTION_TYPE:
       JSFunction::cast(this)->JSFunctionVerify();
@@ -280,7 +283,9 @@ void JSObject::JSObjectVerify() {
              (map()->inobject_properties() + properties()->length() -
               map()->NextFreePropertyIndex()));
   }
-  ASSERT_EQ((map()->has_fast_elements() || map()->has_fast_smi_only_elements()),
+  ASSERT_EQ((map()->has_fast_elements() ||
+             map()->has_fast_smi_only_elements() ||
+             (elements() == GetHeap()->empty_fixed_array())),
             (elements()->map() == GetHeap()->fixed_array_map() ||
              elements()->map() == GetHeap()->fixed_cow_array_map()));
   ASSERT(map()->has_fast_elements() == HasFastElements());
@@ -324,6 +329,18 @@ void PolymorphicCodeCache::PolymorphicCodeCacheVerify() {
 }
 
 
+void TypeFeedbackInfo::TypeFeedbackInfoVerify() {
+  VerifyObjectField(kIcTotalCountOffset);
+  VerifyObjectField(kIcWithTypeinfoCountOffset);
+  VerifyHeapPointer(type_feedback_cells());
+}
+
+
+void AliasedArgumentsEntry::AliasedArgumentsEntryVerify() {
+  VerifySmiField(kAliasedContextSlot);
+}
+
+
 void FixedArray::FixedArrayVerify() {
   for (int i = 0; i < length(); i++) {
     Object* e = get(i);
@@ -353,6 +370,53 @@ void JSValue::JSValueVerify() {
   Object* v = value();
   if (v->IsHeapObject()) {
     VerifyHeapPointer(v);
+  }
+}
+
+
+void JSDate::JSDateVerify() {
+  if (value()->IsHeapObject()) {
+    VerifyHeapPointer(value());
+  }
+  CHECK(value()->IsUndefined() || value()->IsSmi() || value()->IsHeapNumber());
+  CHECK(year()->IsUndefined() || year()->IsSmi() || year()->IsNaN());
+  CHECK(month()->IsUndefined() || month()->IsSmi() || month()->IsNaN());
+  CHECK(day()->IsUndefined() || day()->IsSmi() || day()->IsNaN());
+  CHECK(weekday()->IsUndefined() || weekday()->IsSmi() || weekday()->IsNaN());
+  CHECK(hour()->IsUndefined() || hour()->IsSmi() || hour()->IsNaN());
+  CHECK(min()->IsUndefined() || min()->IsSmi() || min()->IsNaN());
+  CHECK(sec()->IsUndefined() || sec()->IsSmi() || sec()->IsNaN());
+  CHECK(cache_stamp()->IsUndefined() ||
+        cache_stamp()->IsSmi() ||
+        cache_stamp()->IsNaN());
+
+  if (month()->IsSmi()) {
+    int month = Smi::cast(this->month())->value();
+    CHECK(0 <= month && month <= 11);
+  }
+  if (day()->IsSmi()) {
+    int day = Smi::cast(this->day())->value();
+    CHECK(1 <= day && day <= 31);
+  }
+  if (hour()->IsSmi()) {
+    int hour = Smi::cast(this->hour())->value();
+    CHECK(0 <= hour && hour <= 23);
+  }
+  if (min()->IsSmi()) {
+    int min = Smi::cast(this->min())->value();
+    CHECK(0 <= min && min <= 59);
+  }
+  if (sec()->IsSmi()) {
+    int sec = Smi::cast(this->sec())->value();
+    CHECK(0 <= sec && sec <= 59);
+  }
+  if (weekday()->IsSmi()) {
+    int weekday = Smi::cast(this->weekday())->value();
+    CHECK(0 <= weekday && weekday <= 6);
+  }
+  if (cache_stamp()->IsSmi()) {
+    CHECK(Smi::cast(cache_stamp())->value() <=
+          Smi::cast(Isolate::Current()->date_cache()->stamp())->value());
   }
 }
 
@@ -468,8 +532,9 @@ void Oddball::OddballVerify() {
   } else {
     ASSERT(number->IsSmi());
     int value = Smi::cast(number)->value();
-    ASSERT(value <= 1);
     // Hidden oddballs have negative smis.
+    const int kLeastHiddenOddballNumber = -4;
+    ASSERT(value <= 1);
     ASSERT(value >= kLeastHiddenOddballNumber);
   }
 }

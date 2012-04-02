@@ -43,51 +43,74 @@ static void ProbeTable(Isolate* isolate,
                        MacroAssembler* masm,
                        Code::Flags flags,
                        StubCache::Table table,
+                       Register receiver,
                        Register name,
+                       // Number of the cache entry, not scaled.
                        Register offset,
                        Register scratch,
-                       Register scratch2) {
+                       Register scratch2,
+                       Register offset_scratch) {
   ExternalReference key_offset(isolate->stub_cache()->key_reference(table));
   ExternalReference value_offset(isolate->stub_cache()->value_reference(table));
+  ExternalReference map_offset(isolate->stub_cache()->map_reference(table));
 
   uint32_t key_off_addr = reinterpret_cast<uint32_t>(key_offset.address());
   uint32_t value_off_addr = reinterpret_cast<uint32_t>(value_offset.address());
+  uint32_t map_off_addr = reinterpret_cast<uint32_t>(map_offset.address());
 
   // Check the relative positions of the address fields.
   ASSERT(value_off_addr > key_off_addr);
   ASSERT((value_off_addr - key_off_addr) % 4 == 0);
   ASSERT((value_off_addr - key_off_addr) < (256 * 4));
+  ASSERT(map_off_addr > key_off_addr);
+  ASSERT((map_off_addr - key_off_addr) % 4 == 0);
+  ASSERT((map_off_addr - key_off_addr) < (256 * 4));
 
   Label miss;
-  Register offsets_base_addr = scratch;
+  Register base_addr = scratch;
+  scratch = no_reg;
+
+  // Multiply by 3 because there are 3 fields per entry (name, code, map).
+  __ sll(offset_scratch, offset, 1);
+  __ Addu(offset_scratch, offset_scratch, offset);
+
+  // Calculate the base address of the entry.
+  __ li(base_addr, Operand(key_offset));
+  __ sll(at, offset_scratch, kPointerSizeLog2);
+  __ Addu(base_addr, base_addr, at);
 
   // Check that the key in the entry matches the name.
-  __ li(offsets_base_addr, Operand(key_offset));
-  __ sll(scratch2, offset, 1);
-  __ addu(scratch2, offsets_base_addr, scratch2);
-  __ lw(scratch2, MemOperand(scratch2));
-  __ Branch(&miss, ne, name, Operand(scratch2));
+  __ lw(at, MemOperand(base_addr, 0));
+  __ Branch(&miss, ne, name, Operand(at));
+
+  // Check the map matches.
+  __ lw(at, MemOperand(base_addr, map_off_addr - key_off_addr));
+  __ lw(scratch2, FieldMemOperand(receiver, HeapObject::kMapOffset));
+  __ Branch(&miss, ne, at, Operand(scratch2));
 
   // Get the code entry from the cache.
-  __ Addu(offsets_base_addr, offsets_base_addr,
-         Operand(value_off_addr - key_off_addr));
-  __ sll(scratch2, offset, 1);
-  __ addu(scratch2, offsets_base_addr, scratch2);
-  __ lw(scratch2, MemOperand(scratch2));
+  Register code = scratch2;
+  scratch2 = no_reg;
+  __ lw(code, MemOperand(base_addr, value_off_addr - key_off_addr));
 
   // Check that the flags match what we're looking for.
-  __ lw(scratch2, FieldMemOperand(scratch2, Code::kFlagsOffset));
-  __ And(scratch2, scratch2, Operand(~Code::kFlagsNotUsedInLookup));
-  __ Branch(&miss, ne, scratch2, Operand(flags));
+  Register flags_reg = base_addr;
+  base_addr = no_reg;
+  __ lw(flags_reg, FieldMemOperand(code, Code::kFlagsOffset));
+  __ And(flags_reg, flags_reg, Operand(~Code::kFlagsNotUsedInLookup));
+  __ Branch(&miss, ne, flags_reg, Operand(flags));
 
-  // Re-load code entry from cache.
-  __ sll(offset, offset, 1);
-  __ addu(offset, offset, offsets_base_addr);
-  __ lw(offset, MemOperand(offset));
+#ifdef DEBUG
+    if (FLAG_test_secondary_stub_cache && table == StubCache::kPrimary) {
+      __ jmp(&miss);
+    } else if (FLAG_test_primary_stub_cache && table == StubCache::kSecondary) {
+      __ jmp(&miss);
+    }
+#endif
 
   // Jump to the first instruction in the code stub.
-  __ Addu(offset, offset, Operand(Code::kHeaderSize - kHeapObjectTag));
-  __ Jump(offset);
+  __ Addu(at, code, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ Jump(at);
 
   // Miss: fall through.
   __ bind(&miss);
@@ -157,13 +180,14 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
                               Register name,
                               Register scratch,
                               Register extra,
-                              Register extra2) {
+                              Register extra2,
+                              Register extra3) {
   Isolate* isolate = masm->isolate();
   Label miss;
 
-  // Make sure that code is valid. The shifting code relies on the
-  // entry size being 8.
-  ASSERT(sizeof(Entry) == 8);
+  // Make sure that code is valid. The multiplying code relies on the
+  // entry size being 12.
+  ASSERT(sizeof(Entry) == 12);
 
   // Make sure the flags does not name a specific type.
   ASSERT(Code::ExtractTypeFromFlags(flags) == 0);
@@ -179,39 +203,66 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   ASSERT(!extra2.is(scratch));
   ASSERT(!extra2.is(extra));
 
-  // Check scratch, extra and extra2 registers are valid.
+  // Check register validity.
   ASSERT(!scratch.is(no_reg));
   ASSERT(!extra.is(no_reg));
   ASSERT(!extra2.is(no_reg));
+  ASSERT(!extra3.is(no_reg));
+
+  Counters* counters = masm->isolate()->counters();
+  __ IncrementCounter(counters->megamorphic_stub_cache_probes(), 1,
+                      extra2, extra3);
 
   // Check that the receiver isn't a smi.
-  __ JumpIfSmi(receiver, &miss, t0);
+  __ JumpIfSmi(receiver, &miss);
 
   // Get the map of the receiver and compute the hash.
   __ lw(scratch, FieldMemOperand(name, String::kHashFieldOffset));
-  __ lw(t8, FieldMemOperand(receiver, HeapObject::kMapOffset));
-  __ Addu(scratch, scratch, Operand(t8));
-  __ Xor(scratch, scratch, Operand(flags));
-  __ And(scratch,
-         scratch,
-         Operand((kPrimaryTableSize - 1) << kHeapObjectTagSize));
+  __ lw(at, FieldMemOperand(receiver, HeapObject::kMapOffset));
+  __ Addu(scratch, scratch, at);
+  uint32_t mask = kPrimaryTableSize - 1;
+  // We shift out the last two bits because they are not part of the hash and
+  // they are always 01 for maps.
+  __ srl(scratch, scratch, kHeapObjectTagSize);
+  __ Xor(scratch, scratch, Operand((flags >> kHeapObjectTagSize) & mask));
+  __ And(scratch, scratch, Operand(mask));
 
   // Probe the primary table.
-  ProbeTable(isolate, masm, flags, kPrimary, name, scratch, extra, extra2);
+  ProbeTable(isolate,
+             masm,
+             flags,
+             kPrimary,
+             receiver,
+             name,
+             scratch,
+             extra,
+             extra2,
+             extra3);
 
   // Primary miss: Compute hash for secondary probe.
-  __ Subu(scratch, scratch, Operand(name));
-  __ Addu(scratch, scratch, Operand(flags));
-  __ And(scratch,
-         scratch,
-         Operand((kSecondaryTableSize - 1) << kHeapObjectTagSize));
+  __ srl(at, name, kHeapObjectTagSize);
+  __ Subu(scratch, scratch, at);
+  uint32_t mask2 = kSecondaryTableSize - 1;
+  __ Addu(scratch, scratch, Operand((flags >> kHeapObjectTagSize) & mask2));
+  __ And(scratch, scratch, Operand(mask2));
 
   // Probe the secondary table.
-  ProbeTable(isolate, masm, flags, kSecondary, name, scratch, extra, extra2);
+  ProbeTable(isolate,
+             masm,
+             flags,
+             kSecondary,
+             receiver,
+             name,
+             scratch,
+             extra,
+             extra2,
+             extra3);
 
   // Cache miss: Fall-through and let caller handle the miss by
   // entering the runtime system.
   __ bind(&miss);
+  __ IncrementCounter(counters->megamorphic_stub_cache_misses(), 1,
+                      extra2, extra3);
 }
 
 
@@ -526,8 +577,8 @@ static void CompileCallLoadPropertyWithInterceptor(
   ExternalReference ref =
       ExternalReference(IC_Utility(IC::kLoadPropertyWithInterceptorOnly),
           masm->isolate());
-  __ li(a0, Operand(5));
-  __ li(a1, Operand(ref));
+  __ PrepareCEntryArgs(5);
+  __ PrepareCEntryFunction(ref);
 
   CEntryStub stub(1);
   __ CallStub(&stub);
@@ -892,7 +943,7 @@ static void StoreIntAsFloat(MacroAssembler* masm,
     __ And(fval, ival, Operand(kBinary32SignMask));
     // Negate value if it is negative.
     __ subu(scratch1, zero_reg, ival);
-    __ movn(ival, scratch1, fval);
+    __ Movn(ival, scratch1, fval);
 
     // We have -1, 0 or 1, which we treat specially. Register ival contains
     // absolute value: it is either equal to 1 (special case of -1 and 1),
@@ -906,14 +957,14 @@ static void StoreIntAsFloat(MacroAssembler* masm,
     __ Xor(scratch1, ival, Operand(1));
     __ li(scratch2, exponent_word_for_1);
     __ or_(scratch2, fval, scratch2);
-    __ movz(fval, scratch2, scratch1);  // Only if ival is equal to 1.
+    __ Movz(fval, scratch2, scratch1);  // Only if ival is equal to 1.
     __ Branch(&done);
 
     __ bind(&not_special);
     // Count leading zeros.
     // Gets the wrong answer for 0, but we already checked for that case above.
     Register zeros = scratch2;
-    __ clz(zeros, ival);
+    __ Clz(zeros, ival);
 
     // Compute exponent and or it into the exponent register.
     __ li(scratch1, (kBitsPerInt - 1) + kBinary32ExponentBias);
@@ -1343,14 +1394,8 @@ void CallStubCompiler::GenerateGlobalReceiverCheck(Handle<JSObject> object,
   // Get the receiver from the stack.
   __ lw(a0, MemOperand(sp, argc * kPointerSize));
 
-  // If the object is the holder then we know that it's a global
-  // object which can only happen for contextual calls. In this case,
-  // the receiver cannot be a smi.
-  if (!object.is_identical_to(holder)) {
-    __ JumpIfSmi(a0, miss);
-  }
-
   // Check that the maps haven't changed.
+  __ JumpIfSmi(a0, miss);
   CheckPrototypes(object, a0, holder, a3, a1, t0, name, miss);
 }
 
@@ -2768,14 +2813,8 @@ Handle<Code> LoadStubCompiler::CompileLoadGlobal(
   // -----------------------------------
   Label miss;
 
-  // If the object is the holder then we know that it's a global
-  // object which can only happen for contextual calls. In this case,
-  // the receiver cannot be a smi.
-  if (!object.is_identical_to(holder)) {
-    __ JumpIfSmi(a0, &miss);
-  }
-
   // Check that the map of the global has not changed.
+  __ JumpIfSmi(a0, &miss);
   CheckPrototypes(object, a0, holder, a3, t0, a1, name, &miss);
 
   // Get the value from the cell.
@@ -3058,7 +3097,7 @@ Handle<Code> KeyedStoreStubCompiler::CompileStoreElement(
   ElementsKind elements_kind = receiver_map->elements_kind();
   bool is_js_array = receiver_map->instance_type() == JS_ARRAY_TYPE;
   Handle<Code> stub =
-      KeyedStoreElementStub(is_js_array, elements_kind).GetCode();
+      KeyedStoreElementStub(is_js_array, elements_kind, grow_mode_).GetCode();
 
   __ DispatchMap(a2, a3, receiver_map, stub, DO_SMI_CHECK);
 
@@ -3584,7 +3623,7 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
 
       __ li(t0, 0x7ff);
       __ Xor(t1, t5, Operand(0xFF));
-      __ movz(t5, t0, t1);  // Set t5 to 0x7ff only if t5 is equal to 0xff.
+      __ Movz(t5, t0, t1);  // Set t5 to 0x7ff only if t5 is equal to 0xff.
       __ Branch(&exponent_rebiased, eq, t0, Operand(0xff));
 
       // Rebias exponent.
@@ -3878,7 +3917,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
 
         __ xor_(t1, t6, t5);
         __ li(t2, kBinary32ExponentMask);
-        __ movz(t6, t2, t1);  // Only if t6 is equal to t5.
+        __ Movz(t6, t2, t1);  // Only if t6 is equal to t5.
         __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(t5));
 
         // Rebias exponent.
@@ -3891,12 +3930,12 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         __ Slt(t1, t1, t6);
         __ And(t2, t3, Operand(HeapNumber::kSignMask));
         __ Or(t2, t2, Operand(kBinary32ExponentMask));
-        __ movn(t3, t2, t1);  // Only if t6 is gt kBinary32MaxExponent.
+        __ Movn(t3, t2, t1);  // Only if t6 is gt kBinary32MaxExponent.
         __ Branch(&done, gt, t6, Operand(kBinary32MaxExponent));
 
         __ Slt(t1, t6, Operand(kBinary32MinExponent));
         __ And(t2, t3, Operand(HeapNumber::kSignMask));
-        __ movn(t3, t2, t1);  // Only if t6 is lt kBinary32MinExponent.
+        __ Movn(t3, t2, t1);  // Only if t6 is lt kBinary32MinExponent.
         __ Branch(&done, lt, t6, Operand(kBinary32MinExponent));
 
         __ And(t7, t3, Operand(HeapNumber::kSignMask));
@@ -3946,11 +3985,11 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         // and infinities. All these should be converted to 0.
         __ li(t5, HeapNumber::kExponentMask);
         __ and_(t6, t3, t5);
-        __ movz(t3, zero_reg, t6);  // Only if t6 is equal to zero.
+        __ Movz(t3, zero_reg, t6);  // Only if t6 is equal to zero.
         __ Branch(&done, eq, t6, Operand(zero_reg));
 
         __ xor_(t2, t6, t5);
-        __ movz(t3, zero_reg, t2);  // Only if t6 is equal to t5.
+        __ Movz(t3, zero_reg, t2);  // Only if t6 is equal to t5.
         __ Branch(&done, eq, t6, Operand(t5));
 
         // Unbias exponent.
@@ -3958,13 +3997,13 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         __ Subu(t6, t6, Operand(HeapNumber::kExponentBias));
         // If exponent is negative then result is 0.
         __ slt(t2, t6, zero_reg);
-        __ movn(t3, zero_reg, t2);  // Only if exponent is negative.
+        __ Movn(t3, zero_reg, t2);  // Only if exponent is negative.
         __ Branch(&done, lt, t6, Operand(zero_reg));
 
         // If exponent is too big then result is minimal value.
         __ slti(t1, t6, meaningfull_bits - 1);
         __ li(t2, min_value);
-        __ movz(t3, t2, t1);  // Only if t6 is ge meaningfull_bits - 1.
+        __ Movz(t3, t2, t1);  // Only if t6 is ge meaningfull_bits - 1.
         __ Branch(&done, ge, t6, Operand(meaningfull_bits - 1));
 
         __ And(t5, t3, Operand(HeapNumber::kSignMask));
@@ -3975,7 +4014,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         __ subu(t6, t9, t6);
         __ slt(t1, t6, zero_reg);
         __ srlv(t2, t3, t6);
-        __ movz(t3, t2, t1);  // Only if t6 is positive.
+        __ Movz(t3, t2, t1);  // Only if t6 is positive.
         __ Branch(&sign, ge, t6, Operand(zero_reg));
 
         __ subu(t6, zero_reg, t6);
@@ -3987,7 +4026,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
 
         __ bind(&sign);
         __ subu(t2, t3, zero_reg);
-        __ movz(t3, t2, t5);  // Only if t5 is zero.
+        __ Movz(t3, t2, t5);  // Only if t5 is zero.
 
         __ bind(&done);
 
@@ -4068,7 +4107,8 @@ void KeyedLoadStubCompiler::GenerateLoadFastElement(MacroAssembler* masm) {
   // have been verified by the caller to not be a smi.
 
   // Check that the key is a smi.
-  __ JumpIfNotSmi(a0, &miss_force_generic);
+  __ JumpIfNotSmi(a0, &miss_force_generic, at, USE_DELAY_SLOT);
+  // The delay slot can be safely used here, a1 is an object pointer.
 
   // Get the elements array.
   __ lw(a2, FieldMemOperand(a1, JSObject::kElementsOffset));
@@ -4076,7 +4116,7 @@ void KeyedLoadStubCompiler::GenerateLoadFastElement(MacroAssembler* masm) {
 
   // Check that the key is within bounds.
   __ lw(a3, FieldMemOperand(a2, FixedArray::kLengthOffset));
-  __ Branch(&miss_force_generic, hs, a0, Operand(a3));
+  __ Branch(USE_DELAY_SLOT, &miss_force_generic, hs, a0, Operand(a3));
 
   // Load the result and make sure it's not the hole.
   __ Addu(a3, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -4086,8 +4126,8 @@ void KeyedLoadStubCompiler::GenerateLoadFastElement(MacroAssembler* masm) {
   __ lw(t0, MemOperand(t0));
   __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
   __ Branch(&miss_force_generic, eq, t0, Operand(t1));
+  __ Ret(USE_DELAY_SLOT);
   __ mov(v0, t0);
-  __ Ret();
 
   __ bind(&miss_force_generic);
   Handle<Code> stub =
@@ -4168,7 +4208,8 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
 void KeyedStoreStubCompiler::GenerateStoreFastElement(
     MacroAssembler* masm,
     bool is_js_array,
-    ElementsKind elements_kind) {
+    ElementsKind elements_kind,
+    KeyedAccessGrowMode grow_mode) {
   // ----------- S t a t e -------------
   //  -- a0    : value
   //  -- a1    : key
@@ -4177,15 +4218,17 @@ void KeyedStoreStubCompiler::GenerateStoreFastElement(
   //  -- a3    : scratch
   //  -- a4    : scratch (elements)
   // -----------------------------------
-  Label miss_force_generic, transition_elements_kind;
+  Label miss_force_generic, transition_elements_kind, grow, slow;
+  Label finish_store, check_capacity;
 
   Register value_reg = a0;
   Register key_reg = a1;
   Register receiver_reg = a2;
-  Register scratch = a3;
-  Register elements_reg = t0;
-  Register scratch2 = t1;
-  Register scratch3 = t2;
+  Register scratch = t0;
+  Register elements_reg = a3;
+  Register length_reg = t1;
+  Register scratch2 = t2;
+  Register scratch3 = t3;
 
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
@@ -4193,26 +4236,35 @@ void KeyedStoreStubCompiler::GenerateStoreFastElement(
   // Check that the key is a smi.
   __ JumpIfNotSmi(key_reg, &miss_force_generic);
 
-  // Get the elements array and make sure it is a fast element array, not 'cow'.
-  __ lw(elements_reg,
-        FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
-  __ CheckMap(elements_reg,
-              scratch,
-              Heap::kFixedArrayMapRootIndex,
-              &miss_force_generic,
-              DONT_DO_SMI_CHECK);
+  if (elements_kind == FAST_SMI_ONLY_ELEMENTS) {
+    __ JumpIfNotSmi(value_reg, &transition_elements_kind);
+  }
 
   // Check that the key is within bounds.
+  __ lw(elements_reg,
+        FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
   if (is_js_array) {
     __ lw(scratch, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
   } else {
     __ lw(scratch, FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
   }
   // Compare smis.
-  __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch));
+  if (is_js_array && grow_mode == ALLOW_JSARRAY_GROWTH) {
+    __ Branch(&grow, hs, key_reg, Operand(scratch));
+  } else {
+    __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch));
+  }
+
+  // Make sure elements is a fast element array, not 'cow'.
+  __ CheckMap(elements_reg,
+              scratch,
+              Heap::kFixedArrayMapRootIndex,
+              &miss_force_generic,
+              DONT_DO_SMI_CHECK);
+
+  __ bind(&finish_store);
 
   if (elements_kind == FAST_SMI_ONLY_ELEMENTS) {
-    __ JumpIfNotSmi(value_reg, &transition_elements_kind);
     __ Addu(scratch,
             elements_reg,
             Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -4249,12 +4301,79 @@ void KeyedStoreStubCompiler::GenerateStoreFastElement(
   __ bind(&transition_elements_kind);
   Handle<Code> ic_miss = masm->isolate()->builtins()->KeyedStoreIC_Miss();
   __ Jump(ic_miss, RelocInfo::CODE_TARGET);
+
+  if (is_js_array && grow_mode == ALLOW_JSARRAY_GROWTH) {
+    // Grow the array by a single element if possible.
+    __ bind(&grow);
+
+    // Make sure the array is only growing by a single element, anything else
+    // must be handled by the runtime.
+    __ Branch(&miss_force_generic, ne, key_reg, Operand(scratch));
+
+    // Check for the empty array, and preallocate a small backing store if
+    // possible.
+    __ lw(length_reg,
+          FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ lw(elements_reg,
+          FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ LoadRoot(at, Heap::kEmptyFixedArrayRootIndex);
+    __ Branch(&check_capacity, ne, elements_reg, Operand(at));
+
+    int size = FixedArray::SizeFor(JSArray::kPreallocatedArrayElements);
+    __ AllocateInNewSpace(size, elements_reg, scratch, scratch2, &slow,
+                          TAG_OBJECT);
+
+    __ LoadRoot(scratch, Heap::kFixedArrayMapRootIndex);
+    __ sw(scratch, FieldMemOperand(elements_reg, JSObject::kMapOffset));
+    __ li(scratch, Operand(Smi::FromInt(JSArray::kPreallocatedArrayElements)));
+    __ sw(scratch, FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
+    __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
+    for (int i = 1; i < JSArray::kPreallocatedArrayElements; ++i) {
+      __ sw(scratch, FieldMemOperand(elements_reg, FixedArray::SizeFor(i)));
+    }
+
+    // Store the element at index zero.
+    __ sw(value_reg, FieldMemOperand(elements_reg, FixedArray::SizeFor(0)));
+
+    // Install the new backing store in the JSArray.
+    __ sw(elements_reg,
+          FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ RecordWriteField(receiver_reg, JSObject::kElementsOffset, elements_reg,
+                        scratch, kRAHasNotBeenSaved, kDontSaveFPRegs,
+                        EMIT_REMEMBERED_SET, OMIT_SMI_CHECK);
+
+    // Increment the length of the array.
+    __ li(length_reg, Operand(Smi::FromInt(1)));
+    __ sw(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ Ret();
+
+    __ bind(&check_capacity);
+    // Check for cow elements, in general they are not handled by this stub
+    __ CheckMap(elements_reg,
+                scratch,
+                Heap::kFixedCOWArrayMapRootIndex,
+                &miss_force_generic,
+                DONT_DO_SMI_CHECK);
+
+    __ lw(scratch, FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
+    __ Branch(&slow, hs, length_reg, Operand(scratch));
+
+    // Grow the array and finish the store.
+    __ Addu(length_reg, length_reg, Operand(Smi::FromInt(1)));
+    __ sw(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ jmp(&finish_store);
+
+    __ bind(&slow);
+    Handle<Code> ic_slow = masm->isolate()->builtins()->KeyedStoreIC_Slow();
+    __ Jump(ic_slow, RelocInfo::CODE_TARGET);
+  }
 }
 
 
 void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
     MacroAssembler* masm,
-    bool is_js_array) {
+    bool is_js_array,
+    KeyedAccessGrowMode grow_mode) {
   // ----------- S t a t e -------------
   //  -- a0    : value
   //  -- a1    : key
@@ -4266,7 +4385,8 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   //  -- t2    : scratch (exponent_reg)
   //  -- t3    : scratch4
   // -----------------------------------
-  Label miss_force_generic, transition_elements_kind;
+  Label miss_force_generic, transition_elements_kind, grow, slow;
+  Label finish_store, check_capacity;
 
   Register value_reg = a0;
   Register key_reg = a1;
@@ -4276,6 +4396,7 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   Register scratch2 = t1;
   Register scratch3 = t2;
   Register scratch4 = t3;
+  Register length_reg = t3;
 
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
@@ -4293,7 +4414,13 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   }
   // Compare smis, unsigned compare catches both negative and out-of-bound
   // indexes.
-  __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch1));
+  if (grow_mode == ALLOW_JSARRAY_GROWTH) {
+    __ Branch(&grow, hs, key_reg, Operand(scratch1));
+  } else {
+    __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch1));
+  }
+
+  __ bind(&finish_store);
 
   __ StoreNumberToDoubleElements(value_reg,
                                  key_reg,
@@ -4317,6 +4444,71 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   __ bind(&transition_elements_kind);
   Handle<Code> ic_miss = masm->isolate()->builtins()->KeyedStoreIC_Miss();
   __ Jump(ic_miss, RelocInfo::CODE_TARGET);
+
+  if (is_js_array && grow_mode == ALLOW_JSARRAY_GROWTH) {
+    // Grow the array by a single element if possible.
+    __ bind(&grow);
+
+    // Make sure the array is only growing by a single element, anything else
+    // must be handled by the runtime.
+    __ Branch(&miss_force_generic, ne, key_reg, Operand(scratch1));
+
+    // Transition on values that can't be stored in a FixedDoubleArray.
+    Label value_is_smi;
+    __ JumpIfSmi(value_reg, &value_is_smi);
+    __ lw(scratch1, FieldMemOperand(value_reg, HeapObject::kMapOffset));
+    __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+    __ Branch(&transition_elements_kind, ne, scratch1, Operand(at));
+    __ bind(&value_is_smi);
+
+    // Check for the empty array, and preallocate a small backing store if
+    // possible.
+    __ lw(length_reg,
+          FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ lw(elements_reg,
+          FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ LoadRoot(at, Heap::kEmptyFixedArrayRootIndex);
+    __ Branch(&check_capacity, ne, elements_reg, Operand(at));
+
+    int size = FixedDoubleArray::SizeFor(JSArray::kPreallocatedArrayElements);
+    __ AllocateInNewSpace(size, elements_reg, scratch1, scratch2, &slow,
+                          TAG_OBJECT);
+
+    // Initialize the new FixedDoubleArray. Leave elements unitialized for
+    // efficiency, they are guaranteed to be initialized before use.
+    __ LoadRoot(scratch1, Heap::kFixedDoubleArrayMapRootIndex);
+    __ sw(scratch1, FieldMemOperand(elements_reg, JSObject::kMapOffset));
+    __ li(scratch1, Operand(Smi::FromInt(JSArray::kPreallocatedArrayElements)));
+    __ sw(scratch1,
+          FieldMemOperand(elements_reg, FixedDoubleArray::kLengthOffset));
+
+    // Install the new backing store in the JSArray.
+    __ sw(elements_reg,
+          FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ RecordWriteField(receiver_reg, JSObject::kElementsOffset, elements_reg,
+                        scratch1, kRAHasNotBeenSaved, kDontSaveFPRegs,
+                        EMIT_REMEMBERED_SET, OMIT_SMI_CHECK);
+
+    // Increment the length of the array.
+    __ li(length_reg, Operand(Smi::FromInt(1)));
+    __ sw(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ jmp(&finish_store);
+
+    __ bind(&check_capacity);
+    // Make sure that the backing store can hold additional elements.
+    __ lw(scratch1,
+          FieldMemOperand(elements_reg, FixedDoubleArray::kLengthOffset));
+    __ Branch(&slow, hs, length_reg, Operand(scratch1));
+
+    // Grow the array and finish the store.
+    __ Addu(length_reg, length_reg, Operand(Smi::FromInt(1)));
+    __ sw(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ jmp(&finish_store);
+
+    __ bind(&slow);
+    Handle<Code> ic_slow = masm->isolate()->builtins()->KeyedStoreIC_Slow();
+    __ Jump(ic_slow, RelocInfo::CODE_TARGET);
+  }
 }
 
 

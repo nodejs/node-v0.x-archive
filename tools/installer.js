@@ -1,21 +1,15 @@
 var fs = require('fs'),
     path = require('path'),
     exec = require('child_process').exec,
-    options = fs.readFileSync(process.argv[2]).toString(),
-    cmd = process.argv[3];
+    cmd = process.argv[2];
 
 if (cmd !== 'install' && cmd !== 'uninstall') {
   console.error('Unknown command: ' + cmd);
   process.exit(1);
 }
 
-// Python pprint.pprint() uses single quotes instead of double.
-// awful.
-options = options.replace(/'/gi, '"')
-
-// Parse options file and remove first comment line
-options = JSON.parse(options.split('\n').slice(1).join(''));
-var variables = options.variables,
+// Use the built-in config reported by the current process
+var variables = process.config.variables,
     node_prefix = variables.node_prefix || '/usr/local';
 
 // Execution queue
@@ -53,18 +47,43 @@ function remove(files) {
   });
 }
 
+// Add/update shebang (#!) line
+function shebang(line, file) {
+  var content = fs.readFileSync(file, 'utf8');
+  var firstLine = content.split(/\n/, 1)[0];
+  var newContent;
+  if (firstLine.slice(0, 2) === '#!') {
+    newContent = line + content.slice(firstLine.length);
+  } else {
+    newContent = line + '\n' + content;
+  }
+  if (content !== newContent) {
+    fs.writeFileSync(file, newContent, 'utf8');
+  }
+  var mode = parseInt('0777', 8) & (~process.umask());
+  fs.chmodSync(file, mode);
+}
+
 // Run every command in queue, one-by-one
 function run() {
   var cmd = queue.shift();
   if (!cmd) return;
 
-  console.log(cmd);
-  exec(cmd, function(err, stdout, stderr) {
-    if (stderr) console.error(stderr);
-    if (err) process.exit(1);
-
+  if (Array.isArray(cmd) && cmd[0] instanceof Function) {
+    var func = cmd[0];
+    var args = cmd.slice(1);
+    console.log.apply(null, [func.name].concat(args));
+    func.apply(null, args);
     run();
-  });
+  } else {
+    console.log(cmd);
+    exec(cmd, function(err, stdout, stderr) {
+      if (stderr) console.error(stderr);
+      if (err) process.exit(1);
+
+      run();
+    });
+  }
 }
 
 if (cmd === 'install') {
@@ -99,16 +118,18 @@ if (cmd === 'install') {
   copy('out/Release/node', 'bin/node');
 
   // Install node-waf
-  if (variables.node_install_waf == 'true') {
+  if (variables.node_install_waf) {
     copy('tools/wafadmin', 'lib/node/');
     copy('tools/node-waf', 'bin/node-waf');
   }
 
   // Install npm (eventually)
-  if (variables.node_install_npm == 'true') {
+  if (variables.node_install_npm) {
     copy('deps/npm', 'lib/node_modules/npm');
     queue.push('ln -sf ../lib/node_modules/npm/bin/npm-cli.js ' +
                path.join(node_prefix, 'bin/npm'));
+    queue.push([shebang, '#!' + path.join(node_prefix, 'bin/node'),
+               path.join(node_prefix, 'lib/node_modules/npm/bin/npm-cli.js')]);
   }
 } else {
   remove([

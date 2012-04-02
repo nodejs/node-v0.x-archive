@@ -12,9 +12,11 @@ if /i "%1"=="--?" goto help
 if /i "%1"=="/?" goto help
 
 @rem Process arguments.
-set config=Debug
+set config=Release
 set target=Build
 set target_arch=ia32
+set debug_arg=
+set nosnapshot_arg=
 set noprojgen=
 set nobuild=
 set nosign=
@@ -23,51 +25,49 @@ set test=
 set test_args=
 set msi=
 set upload=
+set jslint=
 
 :next-arg
 if "%1"=="" goto args-done
-if /i "%1"=="debug"        set config=Debug&goto arg-ok
-if /i "%1"=="release"      set config=Release&goto arg-ok
-if /i "%1"=="clean"        set target=Clean&goto arg-ok
-if /i "%1"=="ia32"         set target_arch=ia32&goto arg-ok
-if /i "%1"=="x86"          set target_arch=ia32&goto arg-ok
-if /i "%1"=="x64"          set target_arch=x64&goto arg-ok
-if /i "%1"=="noprojgen"    set noprojgen=1&goto arg-ok
-if /i "%1"=="nobuild"      set nobuild=1&goto arg-ok
-if /i "%1"=="nosign"       set nosign=1&goto arg-ok
-if /i "%1"=="nosnapshot"   set nosnapshot=1&goto arg-ok
-if /i "%1"=="test-uv"      set test=test-uv&goto arg-ok
-if /i "%1"=="test-internet"set test=test-internet&goto arg-ok
-if /i "%1"=="test-pummel"  set test=test-pummel&goto arg-ok
-if /i "%1"=="test-simple"  set test=test-simple&goto arg-ok
-if /i "%1"=="test-message" set test=test-message&goto arg-ok
-if /i "%1"=="test-all"     set test=test-all&goto arg-ok
-if /i "%1"=="test"         set test=test&goto arg-ok
-if /i "%1"=="msi"          set msi=1&goto arg-ok
-if /i "%1"=="upload"       set upload=1&goto arg-ok
+if /i "%1"=="debug"         set config=Debug&goto arg-ok
+if /i "%1"=="release"       set config=Release&goto arg-ok
+if /i "%1"=="clean"         set target=Clean&goto arg-ok
+if /i "%1"=="ia32"          set target_arch=ia32&goto arg-ok
+if /i "%1"=="x86"           set target_arch=ia32&goto arg-ok
+if /i "%1"=="x64"           set target_arch=x64&goto arg-ok
+if /i "%1"=="noprojgen"     set noprojgen=1&goto arg-ok
+if /i "%1"=="nobuild"       set nobuild=1&goto arg-ok
+if /i "%1"=="nosign"        set nosign=1&goto arg-ok
+if /i "%1"=="nosnapshot"    set nosnapshot=1&goto arg-ok
+if /i "%1"=="test-uv"       set test=test-uv&goto arg-ok
+if /i "%1"=="test-internet" set test=test-internet&goto arg-ok
+if /i "%1"=="test-pummel"   set test=test-pummel&goto arg-ok
+if /i "%1"=="test-simple"   set test=test-simple&goto arg-ok
+if /i "%1"=="test-message"  set test=test-message&goto arg-ok
+if /i "%1"=="test-all"      set test=test-all&goto arg-ok
+if /i "%1"=="test"          set test=test&goto arg-ok
+if /i "%1"=="msi"           set msi=1&goto arg-ok
+if /i "%1"=="upload"        set upload=1&goto arg-ok
+if /i "%1"=="jslint"        set jslint=1&goto arg-ok
 
+echo Warning: ignoring invalid command line option `%1`.
 
 :arg-ok
 shift
 goto next-arg
 :args-done
 if defined upload goto upload
+if defined jslint goto jslint
 
+if "%config%"=="Debug" set debug_arg=--debug
+if defined nosnapshot set nosnapshot_arg=--without-snapshot
 
 :project-gen
 @rem Skip project generation if requested.
 if defined noprojgen goto msbuild
 
 @rem Generate the VS project.
-if defined nosnapshot goto nosnapshotgen
-python tools\gyp_node -f msvs -G msvs_version=2010 -Dtarget_arch=%target_arch%
-if errorlevel 1 goto create-msvs-files-failed
-if not exist node.sln goto create-msvs-files-failed
-echo Project files generated.
-goto msbuild
-
-:nosnapshotgen
-python tools\gyp_node -f msvs -G msvs_version=2010 -D v8_use_snapshot='false' -Dtarget_arch=%target_arch%
+python configure %debug_arg% %nosnapshot_arg% --dest-cpu=%target_arch%
 if errorlevel 1 goto create-msvs-files-failed
 if not exist node.sln goto create-msvs-files-failed
 echo Project files generated.
@@ -125,6 +125,9 @@ if "%test%"=="test-all" set test_args=%test_args%
 
 echo running 'python tools/test.py %test_args%'
 python tools/test.py %test_args%
+
+if "%test%"=="test" goto jslint
+
 goto exit
 
 :create-msvs-files-failed
@@ -144,10 +147,17 @@ scp Release\node.pdb node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node.
 @echo off
 goto exit
 
+:jslint
+echo running jslint
+set PYTHONPATH=tools/closure_linter/
+python tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/ --exclude_files lib/punycode.js
+goto exit
+
 :help
 echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [nobuild] [nosign]
 echo Examples:
-echo   vcbuild.bat                : builds debug build
+echo   vcbuild.bat                : builds release build
+echo   vcbuild.bat debug          : builds debug build
 echo   vcbuild.bat release msi    : builds release build and MSI installer package
 echo   vcbuild.bat test           : builds debug build and runs tests
 goto exit
