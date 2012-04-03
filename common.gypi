@@ -8,7 +8,13 @@
     'library%': 'static_library',    # allow override to 'shared_library' for DLL/.so builds
     'component%': 'static_library',  # NB. these names match with what V8 expects
     'msvs_multi_core_compile': '0',  # we do enable multicore compiles, but not using the V8 way
-    'v8_postmortem_support': 'true', # V8's postmortem metadata
+
+    # Enable V8's post-mortem debugging only on unix flavors.
+    'conditions': [
+      ['OS != "win"', {
+        'v8_postmortem_support': 'true'
+      }]
+    ],
   },
 
   'target_defaults': {
@@ -152,6 +158,7 @@
         ],
       }],
       ['OS=="mac"', {
+        'defines': ['_DARWIN_USE_64_BIT_INODE=1'],
         'xcode_settings': {
           'ALWAYS_SEARCH_USER_PATHS': 'NO',
           'GCC_CW_ASM_SYNTAX': 'NO',                # No -fasm-blocks
