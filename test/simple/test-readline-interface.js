@@ -21,9 +21,6 @@
 
 
 
-
-// Can't test this when 'make test' doesn't assign a tty to the stdout.
-// Yet another use-case for require('tty').spawn ?
 var assert = require('assert');
 var readline = require('readline');
 var EventEmitter = require('events').EventEmitter;
