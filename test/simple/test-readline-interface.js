@@ -22,7 +22,7 @@
 
 
 var assert = require('assert');
-var readline = require('readline');
+var readline = require('../../lib/readline');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('util').inherits;
 
@@ -45,6 +45,17 @@ rli.on('line', function(line) {
   assert.equal(line, 'asdf\n');
 });
 fi.emit('data', 'asdf\n');
+assert.ok(called);
+
+// sending a blank line
+fi = new FakeInput();
+rli = new readline.Interface(fi, {});
+called = false;
+rli.on('line', function(line) {
+  called = true;
+  assert.equal(line, '\n');
+});
+fi.emit('data', '\n');
 assert.ok(called);
 
 // sending a single character with no newline
