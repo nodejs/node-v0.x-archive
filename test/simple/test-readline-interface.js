@@ -22,7 +22,7 @@
 
 
 var assert = require('assert');
-var readline = require('../../lib/readline');
+var readline = require('readline');
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('util').inherits;
 
