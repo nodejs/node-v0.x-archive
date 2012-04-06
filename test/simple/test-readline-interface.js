@@ -30,7 +30,7 @@ function FakeInput() {
   EventEmitter.call(this);
 }
 inherits(FakeInput, EventEmitter);
-FakeInput.prototype.resume = function(){};
+FakeInput.prototype.resume = function() {};
 
 var fi;
 var rli;
@@ -84,7 +84,7 @@ assert.ok(called);
 // sending multiple newlines at once
 fi = new FakeInput();
 rli = new readline.Interface(fi, {});
-var expectedLines = ['foo\n','bar\n','baz\n'];
+var expectedLines = ['foo\n', 'bar\n', 'baz\n'];
 var callCount = 0;
 rli.on('line', function(line) {
   assert.equal(line, expectedLines[callCount]);
@@ -96,7 +96,7 @@ assert.equal(callCount, expectedLines.length);
 // sending multiple newlines at once that does not end with a new line
 fi = new FakeInput();
 rli = new readline.Interface(fi, {});
-var expectedLines = ['foo\n','bar\n','baz\n','bat'];
+var expectedLines = ['foo\n', 'bar\n', 'baz\n', 'bat'];
 var callCount = 0;
 rli.on('line', function(line) {
   assert.equal(line, expectedLines[callCount]);
