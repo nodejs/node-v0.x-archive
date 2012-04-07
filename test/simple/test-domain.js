@@ -27,7 +27,7 @@ var assert = require('assert');
 var domain = require('domain');
 var events = require('events');
 var caught = 0;
-var expectCaught = 6;
+var expectCaught = 7;
 
 var d = new domain.create();
 var e = new events.EventEmitter();
@@ -78,6 +78,13 @@ d.on('error', function(er) {
       assert.equal(er.domain_emitter, implicit);
       assert.equal(er.domain, d);
       assert.equal(er.domain_thrown, false);
+      assert.ok(!er.domain_bound);
+      break;
+
+    case 'implicit timer':
+      assert.equal(er.domain, d);
+      assert.equal(er.domain_thrown, true);
+      assert.ok(!er.domain_emitter);
       assert.ok(!er.domain_bound);
       break;
 
@@ -137,13 +144,24 @@ fs.readFile('this file does not exist', d.bind(function(er) {
 
 // implicit addition by being created within a domain-bound context.
 var implicit;
-setTimeout(d.bind(function() {
+
+d.run(function() {
   implicit = new events.EventEmitter;
+});
+
+setTimeout(function() {
+  // escape from the domain, but implicit is still bound to it.
+  implicit.emit('error', new Error('implicit'));
+}, 10);
+
+
+
+// implicit addition of a timer created within a domain-bound context.
+d.run(function() {
   setTimeout(function() {
-    // escape from the domain, but implicit is still bound to it.
-    implicit.emit('error', new Error('implicit'));
-  }, 10);
-}), 10);
+    throw new Error('implicit timer');
+  });
+});
 
 
 
