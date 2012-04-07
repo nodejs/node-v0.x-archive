@@ -27,7 +27,7 @@ var assert = require('assert');
 var domain = require('domain');
 var events = require('events');
 var caught = 0;
-var expectCaught = 5;
+var expectCaught = 6;
 
 var d = new domain.create();
 var e = new events.EventEmitter();
@@ -65,7 +65,6 @@ d.on('error', function(er) {
       break;
 
     case "ENOENT, open 'stream for nonexistent file'":
-      console.error(er)
       assert.equal(typeof er.errno, 'number');
       assert.equal(er.code, 'ENOENT');
       assert.equal(er.path, 'stream for nonexistent file');
@@ -73,6 +72,13 @@ d.on('error', function(er) {
       assert.equal(er.domain_emitter, fst);
       assert.ok(!er.domain_bound);
       assert.equal(er.domain_thrown, false);
+      break;
+
+    case 'implicit':
+      assert.equal(er.domain_emitter, implicit);
+      assert.equal(er.domain, d);
+      assert.equal(er.domain_thrown, false);
+      assert.ok(!er.domain_bound);
       break;
 
     default:
@@ -126,6 +132,18 @@ fs.readFile('this file does not exist', d.bind(function(er) {
   console.error('should not get here!', er);
   throw new Error('should not get here!');
 }));
+
+
+
+// implicit addition by being created within a domain-bound context.
+var implicit;
+setTimeout(d.bind(function() {
+  implicit = new events.EventEmitter;
+  setTimeout(function() {
+    // escape from the domain, but implicit is still bound to it.
+    implicit.emit('error', new Error('implicit'));
+  }, 10);
+}), 10);
 
 
 
