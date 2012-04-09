@@ -394,7 +394,7 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
     req_wrap->object_->GetHiddenValue(buffer_sym),
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 4, argv);
+  MakeCallback(req_wrap->object_, req_wrap->oncomplete_, 4, argv);
   delete req_wrap;
 }
 
@@ -422,7 +422,7 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
   if (nread < 0) {
     Local<Value> argv[] = { Local<Object>::New(wrap->object_) };
     SetErrno(uv_last_error(uv_default_loop()));
-    MakeCallback(wrap->object_, "onmessage", ARRAY_SIZE(argv), argv);
+    MakeCallback(wrap->object_, wrap->callbacks_[ONMESSAGE], ARRAY_SIZE(argv), argv);
     return;
   }
 
@@ -433,7 +433,7 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
     Integer::NewFromUnsigned(nread),
     AddressToJS(addr)
   };
-  MakeCallback(wrap->object_, "onmessage", ARRAY_SIZE(argv), argv);
+  MakeCallback(wrap->object_, wrap->callbacks_[ONMESSAGE], ARRAY_SIZE(argv), argv);
 }
 
 

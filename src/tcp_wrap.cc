@@ -376,7 +376,7 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
     argv[0] = Local<Value>::New(Null());
   }
 
-  MakeCallback(wrap->object_, "onconnection", 1, argv);
+  MakeCallback(wrap->object_, wrap->callbacks_[ONCONNECTION], 1, argv);
 }
 
 
@@ -402,7 +402,7 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
     Local<Value>::New(v8::True())
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 5, argv);
+  MakeCallback(req_wrap->object_, req_wrap->oncomplete_, 5, argv);
 
   delete req_wrap;
 }

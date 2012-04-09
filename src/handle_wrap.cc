@@ -51,6 +51,11 @@ using v8::Integer;
     return scope.Close(Integer::New(-1)); \
   }
 
+#define X(a, b) b,
+const char *HandleWrap::callbackNames[CALLBACK_COUNT + 1] = {
+    CALLBACK_TABLE
+};
+#undef X
 
 void HandleWrap::Initialize(Handle<Object> target) {
   /* Doesn't do anything at the moment. */
@@ -125,6 +130,13 @@ HandleWrap::HandleWrap(Handle<Object> object, uv_handle_t* h) {
   assert(object->InternalFieldCount() > 0);
   object_ = v8::Persistent<v8::Object>::New(object);
   object_->SetPointerInInternalField(0, this);
+
+  object_->SetAccessor(String::New(callbackNames[ONCONNECTION]), Getter<ONCONNECTION>, Setter<ONCONNECTION>);
+  object_->SetAccessor(String::New(callbackNames[ONREAD]), Getter<ONREAD>, Setter<ONREAD>);
+  object_->SetAccessor(String::New(callbackNames[ONMESSAGE]), Getter<ONMESSAGE>, Setter<ONMESSAGE>);
+  object_->SetAccessor(String::New(callbackNames[ONTIMEOUT]), Getter<ONTIMEOUT>, Setter<ONTIMEOUT>);
+  object_->SetAccessor(String::New(callbackNames[ONEXIT]), Getter<ONEXIT>, Setter<ONEXIT>);
+  object_->SetAccessor(String::New(callbackNames[ONCHANGE]), Getter<ONCHANGE>, Setter<ONCHANGE>);
 }
 
 
@@ -152,6 +164,9 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   wrap->object_.Dispose();
   wrap->object_.Clear();
 
+  for (int i = 0; i < CALLBACK_COUNT; ++i ) {
+    wrap->callbacks_[i].Dispose();
+  }
   delete wrap;
 }
 
