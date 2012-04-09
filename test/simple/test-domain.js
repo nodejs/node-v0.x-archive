@@ -29,7 +29,7 @@ var events = require('events');
 var caught = 0;
 var expectCaught = 7;
 
-var d = new domain.create();
+var d = new domain.Domain();
 var e = new events.EventEmitter();
 
 d.on('error', function(er) {
@@ -135,12 +135,12 @@ setTimeout(d.bind(thrower), 100);
 
 
 
-// Pass a bound function to an fs operation that fails.
+// Pass an intercepted function to an fs operation that fails.
 var fs = require('fs');
-fs.readFile('this file does not exist', d.bind(function(er) {
+fs.readFile('this file does not exist', d.intercept(function(er) {
   console.error('should not get here!', er);
   throw new Error('should not get here!');
-}));
+}, true));
 
 
 
