@@ -110,22 +110,24 @@ e.emit('error', new Error('emitted'));
 
 
 
-// get rid of the `if (er) return cb(er)` malarky, by binding
-// the cb functions to the domain, and using the bound function
+// get rid of the `if (er) return cb(er)` malarky, by intercepting
+// the cb functions to the domain, and using the intercepted function
 // as a callback instead.
 function fn(er) {
   throw new Error('This function should never be called!');
   process.exit(1);
 }
 
-var bound = d.bind(fn);
+var bound = d.intercept(fn);
 bound(new Error('bound'));
 
 
 
 // throwing in a bound fn is also caught,
 // even if it's asynchronous, by hitting the
-// global uncaughtException handler.
+// global uncaughtException handler. This doesn't
+// require interception, since throws are always
+// caught by the domain.
 function thrower() {
   throw new Error('thrown');
 }
