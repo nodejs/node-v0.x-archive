@@ -223,7 +223,7 @@ class ProcessWrap : public HandleWrap {
       String::New(signo_string(term_signal))
     };
 
-    MakeCallback(wrap->object_, "onexit", 2, argv);
+    MakeCallback(wrap->object_, wrap->callbacks_[ONEXIT], 2, argv);
   }
 
   uv_process_t process_;

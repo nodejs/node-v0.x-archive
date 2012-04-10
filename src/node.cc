@@ -972,7 +972,7 @@ Handle<Value> FromConstructorTemplate(Persistent<FunctionTemplate>& t,
 //
 // Maybe make this a method of a node::Handle super class
 //
-void MakeCallback(Handle<Object> object,
+void MakeCallback(const Handle<Object>& object,
                   const char* method,
                   int argc,
                   Handle<Value> argv[]) {
@@ -995,6 +995,24 @@ void MakeCallback(Handle<Object> object,
     FatalException(try_catch);
   }
 }
+
+void MakeCallback(const Handle<Object>& object,
+                  const Handle<Function>& callback,
+                  int argc,
+                  Handle<Value> argv[]) {
+  HandleScope scope;
+
+  // TODO Hook for long stack traces to be made here.
+
+  TryCatch try_catch;
+
+  callback->Call(object, argc, argv);
+
+  if (try_catch.HasCaught()) {
+    FatalException(try_catch);
+  }
+}
+
 
 
 void SetErrno(uv_err_t err) {

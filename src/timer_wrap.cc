@@ -200,7 +200,7 @@ class TimerWrap : public HandleWrap {
     wrap->StateChange();
 
     Local<Value> argv[1] = { Integer::New(status) };
-    MakeCallback(wrap->object_, "ontimeout", 1, argv);
+    MakeCallback(wrap->object_, wrap->callbacks_[ONTIMEOUT], 1, argv);
   }
 
   uv_timer_t handle_;

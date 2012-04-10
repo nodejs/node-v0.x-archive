@@ -168,7 +168,7 @@ void StreamWrap::OnReadCommon(uv_stream_t* handle, ssize_t nread,
 
   if (nread < 0)  {
     SetErrno(uv_last_error(uv_default_loop()));
-    MakeCallback(wrap->object_, "onread", 0, NULL);
+    MakeCallback(wrap->object_, wrap->callbacks_[ONREAD], 0, NULL);
     return;
   }
 
@@ -201,7 +201,7 @@ void StreamWrap::OnReadCommon(uv_stream_t* handle, ssize_t nread,
     argc++;
   }
 
-  MakeCallback(wrap->object_, "onread", argc, argv);
+  MakeCallback(wrap->object_, wrap->callbacks_[ONREAD], argc, argv);
 }
 
 
@@ -306,7 +306,7 @@ void StreamWrap::AfterWrite(uv_write_t* req, int status) {
     req_wrap->object_->GetHiddenValue(buffer_sym),
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 4, argv);
+  MakeCallback(req_wrap->object_, req_wrap->oncomplete_, 4, argv);
 
   delete req_wrap;
 }
@@ -353,7 +353,7 @@ void StreamWrap::AfterShutdown(uv_shutdown_t* req, int status) {
     Local<Value>::New(req_wrap->object_)
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 3, argv);
+  MakeCallback(req_wrap->object_, req_wrap->oncomplete_, 3, argv);
 
   delete req_wrap;
 }

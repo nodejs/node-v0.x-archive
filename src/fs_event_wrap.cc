@@ -165,7 +165,7 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
     filename ? (Local<Value>)String::New(filename) : Local<Value>::New(v8::Null())
   };
 
-  MakeCallback(wrap->object_, "onchange", 3, argv);
+  MakeCallback(wrap->object_, wrap->callbacks_[ONCHANGE], 3, argv);
 }
 
 

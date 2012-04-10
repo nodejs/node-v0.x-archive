@@ -43,6 +43,21 @@ namespace node {
 // - uv_ref, uv_unref counts are managed at this layer to avoid needless
 //   js/c++ boundary crossing. At the javascript layer that should all be
 //   taken care of.
+//
+#define CALLBACK_TABLE \
+    X(ONCONNECTION, "onconnection") \
+    X(ONREAD, "onread") \
+    X(ONMESSAGE, "onmessage") \
+    X(ONTIMEOUT, "ontimeout") \
+    X(ONEXIT, "onexit") \
+    X(ONCHANGE, "onchange") \
+    X(CALLBACK_COUNT, NULL) 
+
+#define X(a, b) a,
+    enum CALLBACKS {
+      CALLBACK_TABLE
+    };
+#undef X
 
 class HandleWrap {
   public:
@@ -59,8 +74,36 @@ class HandleWrap {
     virtual void StateChange() {}
 
     v8::Persistent<v8::Object> object_;
+    v8::Persistent<v8::Function> callbacks_[CALLBACK_COUNT]; 
 
   private:
+
+    static const char *callbackNames[CALLBACK_COUNT + 1];
+
+    template<int index>
+    static v8::Handle<v8::Value> Getter(v8::Local<v8::String> property,
+        const v8::AccessorInfo& info) {
+      v8::Local<v8::Object> self = info.Holder();
+      HandleWrap* ptr = static_cast<HandleWrap*>(self->GetPointerFromInternalField(0));
+      if (ptr) {
+        return ptr->callbacks_[index];
+      }
+
+      return v8::Null();
+    }
+
+    template<int index>
+    static void Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
+        const v8::AccessorInfo& info) {
+      v8::Local<v8::Object> self = info.Holder();
+      HandleWrap* ptr = static_cast<HandleWrap*>(self->GetPointerFromInternalField(0));
+
+      if (ptr) {
+        ptr->callbacks_[index] = v8::Persistent<v8::Function>::New(v8::Handle<v8::Function>::Cast(value));
+      }
+    }
+
+
     static void OnClose(uv_handle_t* handle);
     // Using double underscore due to handle_ member in tcp_wrap. Probably
     // tcp_wrap should rename it's member to 'handle'.

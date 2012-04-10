@@ -215,7 +215,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
 
   // Successful accept. Call the onconnection callback in JavaScript land.
   Local<Value> argv[1] = { client_obj };
-  MakeCallback(wrap->object_, "onconnection", 1, argv);
+  MakeCallback(wrap->object_, wrap->callbacks_[ONCONNECTION], 1, argv);
 }
 
 // TODO Maybe share this with TCPWrap?
@@ -247,7 +247,7 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
     Local<Value>::New(Boolean::New(writable))
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 5, argv);
+  MakeCallback(req_wrap->object_, req_wrap->oncomplete_, 5, argv);
 
   delete req_wrap;
 }
