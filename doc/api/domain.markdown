@@ -125,7 +125,7 @@ with a single error handler in a single place.
     var d = domain.create();
 
     function readSomeFile(filename, cb) {
-      fs.readFile(filename, d.bind(function(er, data) {
+      fs.readFile(filename, d.intercept(function(er, data) {
         // if this throws, it will also be passed to the domain
         // additionally, we know that 'er' will always be null,
         // so the error-handling logic can be moved to the 'error'
