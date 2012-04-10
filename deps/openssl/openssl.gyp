@@ -611,6 +611,11 @@
         'openssl/engines/e_sureware.c',
         'openssl/engines/e_ubsec.c'
       ],
+      'sources/': [
+        ['exclude', 'camellia/.*$'],
+        ['exclude', 'cms/.*$'],
+        ['exclude', 'mdc2/.*$'],
+      ],
       'conditions': [
         ['target_arch!="ia32" and target_arch!="x64"', {
           # Disable asm
