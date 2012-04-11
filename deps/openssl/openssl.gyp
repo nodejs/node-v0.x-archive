@@ -13,6 +13,7 @@
         'ENGINESDIR="ssl/lib/engines"',
         'OPENSSL_THREADS',
         'PURIFY',
+        'ZLIB',
         '_REENTRANT',
       ],
 
@@ -61,7 +62,9 @@
           },
         }],
       ],
-
+      'dependencies': [
+        '../zlib/zlib.gyp:zlib',
+      ],
       'copts': [
         '-w',
         '-Wno-cast-qual',
@@ -630,6 +633,7 @@
         'openssl/crypto/asn1',
         'openssl/crypto/evp',
         'openssl/include',
+        '../zlib',
       ],
     },
   ],
