@@ -1015,7 +1015,7 @@ Handle<Value> Connection::EncIn(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   int bytes_written = BIO_write(ss->bio_read_, buffer_data + off, len);
@@ -1054,7 +1054,7 @@ Handle<Value> Connection::ClearOut(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   if (!SSL_is_init_finished(ss->ssl_)) {
@@ -1127,7 +1127,7 @@ Handle<Value> Connection::EncOut(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   int bytes_read = BIO_read(ss->bio_write_, buffer_data + off, len);
@@ -1167,7 +1167,7 @@ Handle<Value> Connection::ClearIn(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   if (!SSL_is_init_finished(ss->ssl_)) {
@@ -2829,16 +2829,12 @@ class Hmac : public ObjectWrap {
     HandleScope scope;
 
     unsigned char* md_value = NULL;
-    unsigned int md_len = -1;
+    unsigned int md_len = 0;
     char* md_hexdigest;
     int md_hex_len;
-    Handle<Value> output ;
+    Handle<Value> output;
 
     int r = hmac->HmacDigest(&md_value, &md_len);
-
-    assert(md_value != NULL);
-    assert(md_len != -1);
-
     if (md_len == 0 || r == 0) {
       return scope.Close(String::New(""));
     }
@@ -4075,14 +4071,14 @@ EIO_PBKDF2After(uv_work_t* req) {
   pbkdf2_req* request = (pbkdf2_req*)req->data;
   delete req;
 
-  Handle<Value> argv[2];
+  Local<Value> argv[2];
   if (request->err) {
-    argv[0] = Undefined();
+    argv[0] = Local<Value>::New(Undefined());
     argv[1] = Encode(request->key, request->keylen, BINARY);
     memset(request->key, 0, request->keylen);
   } else {
     argv[0] = Exception::Error(String::New("PBKDF2 error"));
-    argv[1] = Undefined();
+    argv[1] = Local<Value>::New(Undefined());
   }
 
   TryCatch try_catch;
@@ -4249,9 +4245,8 @@ void RandomBytesWork(uv_work_t* work_req) {
 }
 
 
-void RandomBytesCheck(RandomBytesRequest* req, Handle<Value> argv[2]) {
-  HandleScope scope;
-
+// don't call this function without a valid HandleScope
+void RandomBytesCheck(RandomBytesRequest* req, Local<Value> argv[2]) {
   if (req->error_) {
     char errmsg[256] = "Operation not supported";
 
@@ -4259,13 +4254,13 @@ void RandomBytesCheck(RandomBytesRequest* req, Handle<Value> argv[2]) {
       ERR_error_string_n(req->error_, errmsg, sizeof errmsg);
 
     argv[0] = Exception::Error(String::New(errmsg));
-    argv[1] = Null();
+    argv[1] = Local<Value>::New(Null());
   }
   else {
     // avoids the malloc + memcpy
     Buffer* buffer = Buffer::New(req->data_, req->size_, RandomBytesFree, NULL);
-    argv[0] = Null();
-    argv[1] = buffer->handle_;
+    argv[0] = Local<Value>::New(Null());
+    argv[1] = Local<Object>::New(buffer->handle_);
   }
 }
 
@@ -4276,7 +4271,7 @@ void RandomBytesAfter(uv_work_t* work_req) {
       container_of(work_req, RandomBytesRequest, work_req_);
 
   HandleScope scope;
-  Handle<Value> argv[2];
+  Local<Value> argv[2];
   RandomBytesCheck(req, argv);
 
   TryCatch tc;
@@ -4319,7 +4314,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     return Undefined();
   }
   else {
-    Handle<Value> argv[2];
+    Local<Value> argv[2];
     RandomBytesWork<generator>(&req->work_req_);
     RandomBytesCheck(req, argv);
     delete req;

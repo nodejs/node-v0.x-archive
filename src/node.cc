@@ -1668,7 +1668,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
 
   /* Add the `_module` suffix to the extension name. */
   r = snprintf(symbol, sizeof symbol, "%s_module", base);
-  if (r <= 0 || r >= sizeof symbol) {
+  if (r <= 0 || static_cast<size_t>(r) >= sizeof symbol) {
     Local<Value> exception =
         Exception::Error(String::New("Out of memory."));
     return ThrowException(exception);
@@ -1774,13 +1774,6 @@ void FatalException(TryCatch &try_catch) {
   emit->Call(process, 2, event_argv);
   // Decrement so we know if the next exception is a recursion or not
   uncaught_exception_counter--;
-}
-
-
-static void DebugBreakMessageHandler(const v8::Debug::Message& message) {
-  // do nothing with debug messages.
-  // The message handler will get changed by DebuggerAgent::CreateSession in
-  // debug-agent.cc of v8/src when a new session is created
 }
 
 
@@ -1944,12 +1937,9 @@ static Handle<Boolean> EnvDeleter(Local<String> property,
   HandleScope scope;
 #ifdef __POSIX__
   String::Utf8Value key(property);
-  // prototyped as `void unsetenv(const char*)` on some platforms
-  if (unsetenv(*key) < 0) {
-    // Deletion failed. Return true if the key wasn't there in the first place,
-    // false if it is still there.
-    return scope.Close(Boolean::New(getenv(*key) == NULL));
-  };
+  if (!getenv(*key)) return False();
+  unsetenv(*key); // can't check return value, it's void on some platforms
+  return True();
 #else
   String::Value key(property);
   WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
@@ -1960,9 +1950,8 @@ static Handle<Boolean> EnvDeleter(Local<String> property,
               GetLastError() != ERROR_SUCCESS;
     return scope.Close(Boolean::New(rv));
   }
+  return True();
 #endif
-  // It worked
-  return v8::True();
 }
 
 
@@ -2766,39 +2755,33 @@ int Start(int argc, char *argv[]) {
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
 
-  V8::Initialize();
-  Persistent<Context> context;
-  {
-    Locker locker;
-    HandleScope handle_scope;
+  v8::V8::Initialize();
+  v8::HandleScope handle_scope;
 
-    // Create the one and only Context.
-    Persistent<Context> context = Context::New();
-    Context::Scope context_scope(context);
+  // Create the one and only Context.
+  Persistent<v8::Context> context = v8::Context::New();
+  v8::Context::Scope context_scope(context);
 
-    // Use original argv, as we're just copying values out of it.
-    Handle<Object> process_l = SetupProcessObject(argc, argv);
-    v8_typed_array::AttachBindings(context->Global());
+  // Use original argv, as we're just copying values out of it.
+  Handle<Object> process_l = SetupProcessObject(argc, argv);
+  v8_typed_array::AttachBindings(context->Global());
 
-    // Create all the objects, load modules, do everything.
-    // so your next reading stop should be node::Load()!
-    Load(process_l);
+  // Create all the objects, load modules, do everything.
+  // so your next reading stop should be node::Load()!
+  Load(process_l);
 
-    // All our arguments are loaded. We've evaluated all of the scripts. We
-    // might even have created TCP servers. Now we enter the main eventloop. If
-    // there are no watchers on the loop (except for the ones that were
-    // uv_unref'd) then this function exits. As long as there are active
-    // watchers, it blocks.
-    uv_run(uv_default_loop());
+  // All our arguments are loaded. We've evaluated all of the scripts. We
+  // might even have created TCP servers. Now we enter the main eventloop. If
+  // there are no watchers on the loop (except for the ones that were
+  // uv_unref'd) then this function exits. As long as there are active
+  // watchers, it blocks.
+  uv_run(uv_default_loop());
 
-    EmitExit(process_l);
-#ifndef NDEBUG
-    context.Dispose();
-#endif
-  }
+  EmitExit(process_l);
 
 #ifndef NDEBUG
   // Clean up.
+  context.Dispose();
   V8::Dispose();
 #endif  // NDEBUG
 
