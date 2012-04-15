@@ -36,7 +36,12 @@
   #include <err.h>
 #endif
 
+#include "node.h"
+#include "platform.h"
+
 namespace node {
+
+extern char * process_title;
 
 void Platform::SetProcessTitle(char *title) {
   static int symbol_lookup_status = 0; // 1=ok, 2=unavailable

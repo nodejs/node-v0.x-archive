@@ -38,14 +38,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
-
-
+#include <errno.h>
 
 namespace node {
 
 using namespace v8;
 
-static char *process_title;
+char *process_title;
+
 double Platform::prog_start_time = Platform::GetUptime();
 
 char** Platform::SetupArgs(int argc, char *argv[]) {
@@ -56,7 +56,6 @@ char** Platform::SetupArgs(int argc, char *argv[]) {
 
 // Platform::SetProcessTitle implemented in platform_darwin_proctitle.cc
 }  // namespace node
-#include "platform_darwin_proctitle.cc"
 namespace node {
 
 

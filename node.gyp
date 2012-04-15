@@ -172,7 +172,10 @@
           ]
         }],
         [ 'OS=="mac"', {
-          'sources': [ 'src/platform_darwin.cc' ],
+          'sources': [ 
+             'src/platform_darwin.cc',
+             'src/platform_darwin_proctitle.cc'
+           ],
           'libraries': [ '-framework Carbon' ],
         }],
         [ 'OS=="linux"', {
