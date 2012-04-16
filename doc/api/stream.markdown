@@ -57,7 +57,10 @@ Makes the data event emit a string instead of a `Buffer`. `encoding` can be
 
 ### stream.pause()
 
-Pauses the incoming `'data'` events.
+Pauses the incoming `'data'` events. NOTE: this is only advisory; some
+`'data'` events may be emitted before the pausing can actually take place.
+See [this discussion](https://groups.google.com/forum/?fromgroups#!topic/nodejs/yv6Dl-O-wYk)
+for more information.
 
 ### stream.resume()
 
