@@ -62,9 +62,8 @@ that no further data be sent until `resume()` is called.
 
 Note that, due to the advisory nature, certain streams will not be paused
 immediately, and so `'data'` events may be emitted for some indeterminate
-period of time even after `pause()` is called. This will be changed in
-Node 0.9, but until then you may wish to buffer `'data'` events emitted
-after a `pause()`.
+period of time even after `pause()` is called. You may wish to buffer such
+`'data'` events.
 
 ### stream.resume()
 
