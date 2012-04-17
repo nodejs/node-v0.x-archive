@@ -43,18 +43,6 @@
 # define uv_inet_ntop inet_ntop
 #endif
 
-#define UNWRAP \
-  assert(!args.Holder().IsEmpty()); \
-  assert(args.Holder()->InternalFieldCount() > 0); \
-  TCPWrap* wrap =  \
-      static_cast<TCPWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) { \
-    uv_err_t err; \
-    err.code = UV_EBADF; \
-    SetErrno(err); \
-    return scope.Close(Integer::New(-1)); \
-  }
-
 namespace node {
 
 using v8::Arguments;
@@ -172,7 +160,7 @@ Handle<Value> TCPWrap::GetSockName(const Arguments& args) {
   char ip[INET6_ADDRSTRLEN];
   const char *family_name;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   int addrlen = sizeof(address);
   int r = uv_tcp_getsockname(&wrap->handle_,
@@ -216,7 +204,7 @@ Handle<Value> TCPWrap::GetPeerName(const Arguments& args) {
   int port;
   char ip[INET6_ADDRSTRLEN];
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   int addrlen = sizeof(address);
   int r = uv_tcp_getpeername(&wrap->handle_,
@@ -254,7 +242,7 @@ Handle<Value> TCPWrap::GetPeerName(const Arguments& args) {
 Handle<Value> TCPWrap::SetNoDelay(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   int enable = static_cast<int>(args[0]->BooleanValue());
   int r = uv_tcp_nodelay(&wrap->handle_, enable);
@@ -268,7 +256,7 @@ Handle<Value> TCPWrap::SetNoDelay(const Arguments& args) {
 Handle<Value> TCPWrap::SetKeepAlive(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   int enable = args[0]->Int32Value();
   unsigned int delay = args[1]->Uint32Value();
@@ -285,7 +273,7 @@ Handle<Value> TCPWrap::SetKeepAlive(const Arguments& args) {
 Handle<Value> TCPWrap::SetSimultaneousAccepts(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   bool enable = args[0]->BooleanValue();
 
@@ -301,7 +289,7 @@ Handle<Value> TCPWrap::SetSimultaneousAccepts(const Arguments& args) {
 Handle<Value> TCPWrap::Bind(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   String::AsciiValue ip_address(args[0]);
   int port = args[1]->Int32Value();
@@ -319,7 +307,7 @@ Handle<Value> TCPWrap::Bind(const Arguments& args) {
 Handle<Value> TCPWrap::Bind6(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   String::AsciiValue ip6_address(args[0]);
   int port = args[1]->Int32Value();
@@ -337,7 +325,7 @@ Handle<Value> TCPWrap::Bind6(const Arguments& args) {
 Handle<Value> TCPWrap::Listen(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   int backlog = args[0]->Int32Value();
 
@@ -415,7 +403,7 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
 Handle<Value> TCPWrap::Connect(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   String::AsciiValue ip_address(args[0]);
   int port = args[1]->Int32Value();
@@ -445,7 +433,7 @@ Handle<Value> TCPWrap::Connect(const Arguments& args) {
 Handle<Value> TCPWrap::Connect6(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(TCPWrap);
 
   String::AsciiValue ip_address(args[0]);
   int port = args[1]->Int32Value();

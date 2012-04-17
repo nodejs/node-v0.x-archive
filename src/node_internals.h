@@ -23,7 +23,7 @@
 #define SRC_NODE_INTERNALS_H_
 
 #include "v8.h"
-
+#include <stdlib.h> //abort()
 namespace node {
 
 #ifdef _WIN32
@@ -80,6 +80,18 @@ inline static v8::Handle<v8::Value> ThrowTypeError(const char* errmsg) {
 inline static v8::Handle<v8::Value> ThrowRangeError(const char* errmsg) {
   THROW_ERROR(v8::Exception::RangeError);
 }
+
+
+#define UNWRAP(type) \
+  assert(!args.Holder().IsEmpty()); \
+  assert(args.Holder()->InternalFieldCount() > 0); \
+  type* wrap =  \
+      static_cast<type*>(args.Holder()->GetPointerFromInternalField(0)); \
+  if (!wrap) { \
+    fprintf(stderr, #type " :Aborting due to unwrap failure at %s:%d\n", __FILE__, __LINE__);\
+    abort();\
+  } \
+  while(0)
 
 } // namespace node
 
