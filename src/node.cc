@@ -95,6 +95,7 @@ namespace node {
 
 
 static Persistent<Object> process;
+static Persistent<String> tick_count_symbol;
 
 static Persistent<String> errno_symbol;
 static Persistent<String> syscall_symbol;
@@ -226,7 +227,7 @@ static void Tick(void) {
     uv_idle_stop(&tick_spinner);
     uv_unref(uv_default_loop());
   }
-
+  uv_tick_me_off(uv_default_loop());
   HandleScope scope;
 
   if (tick_callback_sym.IsEmpty()) {
@@ -984,7 +985,11 @@ void MakeCallback(Handle<Object> object,
   }
   assert(callback_v->IsFunction());
   Local<Function> callback = Local<Function>::Cast(callback_v);
+  
+  process->Set(tick_count_symbol
+             , Integer::New(uv_current_tick(uv_default_loop())));
 
+                
   // TODO Hook for long stack traces to be made here.
 
   TryCatch try_catch;
@@ -2137,6 +2142,13 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   process->Set(String::NewSymbol("env"), env);
 
   process->Set(String::NewSymbol("pid"), Integer::New(getpid()));
+
+  // Lazily set the symbol
+  tick_count_symbol = NODE_PSYMBOL("tick");
+
+  process->Set(tick_count_symbol
+             , Integer::New(uv_current_tick(uv_default_loop())));
+    
   process->Set(String::NewSymbol("features"), GetFeatures());
 
   // -e, --eval
