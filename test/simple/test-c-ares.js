@@ -51,3 +51,7 @@ if (process.platform != 'win32') {
     assert.ok(Array.isArray(domains));
   });
 }
+
+process.binding('cares_wrap').getServers(function(servers) {
+  assert.ok(Array.isArray(servers));
+});

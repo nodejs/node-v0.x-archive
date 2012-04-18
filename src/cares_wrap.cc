@@ -65,6 +65,7 @@ using v8::Object;
 using v8::Persistent;
 using v8::String;
 using v8::Value;
+using v8::Undefined;
 
 
 typedef class ReqWrap<uv_getaddrinfo_t> GetAddrInfoReqWrap;
@@ -727,6 +728,39 @@ static Handle<Value> GetAddrInfo(const Arguments& args) {
   }
 }
 
+static Handle<Value> GetServers(const Arguments &args) {
+  HandleScope scope;
+  int r, i;
+  struct ares_addr_node *servers = NULL, *cur = NULL;
+  char ip[INET6_ADDRSTRLEN];
+
+  Local<Array> server_array = Array::New();
+  Local<Function> callback = Local<Function>::Cast(args[0]);
+  Local<Value> argv[1];
+
+  argv[0] = server_array;
+
+  r = ares_get_servers(ares_channel, &servers);
+  assert(r == ARES_SUCCESS);
+
+  cur = servers;
+  i = 0;
+
+  while (cur != NULL) {
+    uv_inet_ntop(cur->family, (const void *) &cur->addr, ip, sizeof(ip));
+
+    Local<String> addr = String::New(ip);
+    server_array->Set(Integer::New(i), addr);
+
+    i++;
+    cur = cur->next;
+  }
+
+  callback->Call(Context::GetCurrent()->Global(), 1, argv);
+
+  ares_free_data(servers);
+  return Undefined();
+}
 
 static void Initialize(Handle<Object> target) {
   HandleScope scope;
@@ -750,6 +784,7 @@ static void Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "getHostByName", QueryWithFamily<GetHostByNameWrap>);
 
   NODE_SET_METHOD(target, "getaddrinfo", GetAddrInfo);
+  NODE_SET_METHOD(target, "getServers", GetServers);
 
   target->Set(String::NewSymbol("AF_INET"), Integer::New(AF_INET));
   target->Set(String::NewSymbol("AF_INET6"), Integer::New(AF_INET6));
