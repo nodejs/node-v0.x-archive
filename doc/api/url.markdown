@@ -17,9 +17,9 @@ string will not be in the parsed object. Examples are shown for the URL
 * `protocol`: The request protocol, lowercased.
 
   Example: `'http:'`
-* `host`: The full lowercased host portion of the URL, including port and authentication information.
+* `host`: The full lowercased host portion of the URL, including the port.
 
-  Example: `'user:pass@host.com:8080'`
+  Example: `'host.com:8080'`
 * `auth`: The authentication information portion of a URL.
 
   Example: `'user:pass'`
@@ -70,7 +70,7 @@ Take a parsed URL object, and return a formatted URL string.
 * `auth` will only be used if `host` is absent.
 * `hostname` will only be used if `host` is absent.
 * `port` will only be used if `host` is absent.
-* `host` will be used in place of `auth`, `hostname`, and `port`
+* `host` will be used in place of `hostname` and `port`
 * `pathname` is treated the same with or without the leading `/` (slash)
 * `search` will be used in place of `query`
 * `query` (object; see `querystring`) will only be used if `search` is absent.

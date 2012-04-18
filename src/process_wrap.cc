@@ -54,6 +54,7 @@ using v8::Context;
 using v8::Arguments;
 using v8::Integer;
 
+static Persistent<String> onexit_sym;
 
 class ProcessWrap : public HandleWrap {
  public:
@@ -107,9 +108,9 @@ class ProcessWrap : public HandleWrap {
 
     // options.file
     Local<Value> file_v = js_options->Get(String::New("file"));
-    if (!file_v.IsEmpty() && file_v->IsString()) {
-      String::Utf8Value file(file_v->ToString());
-      options.file = strdup(*file);
+    String::Utf8Value file(file_v->IsString() ? file_v : Local<Value>());
+    if (file.length() > 0) {
+      options.file = *file;
     }
 
     // options.args
@@ -120,7 +121,7 @@ class ProcessWrap : public HandleWrap {
       // Heap allocate to detect errors. +1 is for NULL.
       options.args = new char*[argc + 1];
       for (int i = 0; i < argc; i++) {
-        String::Utf8Value arg(js_argv->Get(i)->ToString());
+        String::Utf8Value arg(js_argv->Get(i));
         options.args[i] = strdup(*arg);
       }
       options.args[argc] = NULL;
@@ -128,11 +129,9 @@ class ProcessWrap : public HandleWrap {
 
     // options.cwd
     Local<Value> cwd_v = js_options->Get(String::New("cwd"));
-    if (!cwd_v.IsEmpty() && cwd_v->IsString()) {
-      String::Utf8Value cwd(cwd_v->ToString());
-      if (cwd.length() > 0) {
-        options.cwd = strdup(*cwd);
-      }
+    String::Utf8Value cwd(cwd_v->IsString() ? cwd_v : Local<Value>());
+    if (cwd.length() > 0) {
+      options.cwd = *cwd;
     }
 
     // options.env
@@ -142,7 +141,7 @@ class ProcessWrap : public HandleWrap {
       int envc = env->Length();
       options.env = new char*[envc + 1]; // Heap allocated to detect errors.
       for (int i = 0; i < envc; i++) {
-        String::Utf8Value pair(env->Get(i)->ToString());
+        String::Utf8Value pair(env->Get(i));
         options.env[i] = strdup(*pair);
       }
       options.env[envc] = NULL;
@@ -191,9 +190,6 @@ class ProcessWrap : public HandleWrap {
       delete [] options.args;
     }
 
-    free(options.cwd);
-    free((void*)options.file);
-
     if (options.env) {
       for (int i = 0; options.env[i]; i++) free(options.env[i]);
       delete [] options.env;
@@ -228,7 +224,10 @@ class ProcessWrap : public HandleWrap {
       String::New(signo_string(term_signal))
     };
 
-    MakeCallback(wrap->object_, "onexit", 2, argv);
+    if (onexit_sym.IsEmpty()) {
+      onexit_sym = NODE_PSYMBOL("onexit");
+    }
+    MakeCallback(wrap->object_, onexit_sym, ARRAY_SIZE(argv), argv);
   }
 
   uv_process_t process_;

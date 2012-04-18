@@ -89,18 +89,49 @@
       }
 
       var Module = NativeModule.require('module');
-      // REMOVEME: nextTick should not be necessary. This hack to get
-      // test/simple/test-exception-handler2.js working.
-      // Main entry point into most programs:
-      process.nextTick(Module.runMain);
+
+      if (global.v8debug &&
+          process.execArgv.some(function(arg) {
+            return arg.match(/^--debug-brk(=[0-9]*)?$/);
+          })) {
+
+        // XXX Fix this terrible hack!
+        //
+        // Give the client program a few ticks to connect.
+        // Otherwise, there's a race condition where `node debug foo.js`
+        // will not be able to connect in time to catch the first
+        // breakpoint message on line 1.
+        //
+        // A better fix would be to somehow get a message from the
+        // global.v8debug object about a connection, and runMain when
+        // that occurs.  --isaacs
+
+        setTimeout(Module.runMain, 50);
+
+      } else {
+        // REMOVEME: nextTick should not be necessary. This hack to get
+        // test/simple/test-exception-handler2.js working.
+        // Main entry point into most programs:
+        process.nextTick(Module.runMain);
+      }
 
     } else {
       var Module = NativeModule.require('module');
 
-      // If stdin is a TTY.
-      if (NativeModule.require('tty').isatty(0)) {
+      // If -i or --interactive were passed, or stdin is a TTY.
+      if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
         // REPL
-        var repl = Module.requireRepl().start('> ', null, null, true);
+        var opts = {
+          useGlobal: true,
+          ignoreUndefined: false
+        };
+        if (parseInt(process.env['NODE_NO_READLINE'], 10)) {
+          opts.terminal = false;
+        }
+        if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
+          opts.useColors = false;
+        }
+        var repl = Module.requireRepl().start(opts);
         repl.on('exit', function() {
           process.exit();
         });
@@ -204,7 +235,16 @@
       nextTickQueue = [];
 
       try {
-        for (var i = 0; i < l; i++) q[i]();
+        for (var i = 0; i < l; i++) {
+          var tock = q[i];
+          var callback = tock.callback;
+          if (tock.domain) {
+            if (tock.domain._disposed) continue;
+            tock.domain.enter();
+          }
+          callback();
+          if (tock.domain) tock.domain.exit();
+        }
       }
       catch (e) {
         if (i + 1 < l) {
@@ -218,7 +258,9 @@
     };
 
     process.nextTick = function(callback) {
-      nextTickQueue.push(callback);
+      var tock = { callback: callback };
+      if (process.domain) tock.domain = process.domain;
+      nextTickQueue.push(tock);
       process._needTickCallback();
     };
   };
@@ -299,6 +341,11 @@
         er = er || new Error('process.stdout cannot be closed.');
         stdout.emit('error', er);
       };
+      if (stdout.isTTY) {
+        process.on('SIGWINCH', function() {
+          stdout._refreshSize();
+        });
+      }
       return stdout;
     });
 

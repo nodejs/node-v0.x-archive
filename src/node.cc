@@ -109,8 +109,14 @@ static Persistent<String> listeners_symbol;
 static Persistent<String> uncaught_exception_symbol;
 static Persistent<String> emit_symbol;
 
+static Persistent<String> domain_symbol;
+static Persistent<String> enter_symbol;
+static Persistent<String> exit_symbol;
+static Persistent<String> disposed_symbol;
+
 
 static bool print_eval = false;
+static bool force_repl = false;
 static char *eval_string = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
@@ -230,8 +236,7 @@ static void Tick(void) {
 
   if (tick_callback_sym.IsEmpty()) {
     // Lazily set the symbol
-    tick_callback_sym =
-      Persistent<String>::New(String::NewSymbol("_tickCallback"));
+    tick_callback_sym = NODE_PSYMBOL("_tickCallback");
   }
 
   Local<Value> cb_v = process->Get(tick_callback_sym);
@@ -971,28 +976,96 @@ Handle<Value> FromConstructorTemplate(Persistent<FunctionTemplate>& t,
 //
 // Maybe make this a method of a node::Handle super class
 //
-void MakeCallback(Handle<Object> object,
-                  const char* method,
-                  int argc,
-                  Handle<Value> argv[]) {
+Handle<Value>
+MakeCallback(const Handle<Object> object,
+             const char* method,
+             int argc,
+             Handle<Value> argv[]) {
   HandleScope scope;
 
-  Local<Value> callback_v = object->Get(String::New(method));
+  Handle<Value> ret =
+    MakeCallback(object, String::NewSymbol(method), argc, argv);
+
+  return scope.Close(ret);
+}
+
+Handle<Value>
+MakeCallback(const Handle<Object> object,
+             const Handle<String> symbol,
+             int argc,
+             Handle<Value> argv[]) {
+  HandleScope scope;
+
+  Local<Value> callback_v = object->Get(symbol);
   if (!callback_v->IsFunction()) {
-    fprintf(stderr, "method = %s", method);
+    String::Utf8Value method(symbol);
+    // XXX: If the object has a domain attached, handle it there?
+    // At least, would be good to get *some* sort of indication
+    // of how we got here, even if it's not catchable.
+    fprintf(stderr, "Non-function in MakeCallback. method = %s\n", *method);
+    abort();
   }
-  assert(callback_v->IsFunction());
+
   Local<Function> callback = Local<Function>::Cast(callback_v);
+
+  return scope.Close(MakeCallback(object, callback, argc, argv));
+}
+
+Handle<Value>
+MakeCallback(const Handle<Object> object,
+             const Handle<Function> callback,
+             int argc,
+             Handle<Value> argv[]) {
+  HandleScope scope;
 
   // TODO Hook for long stack traces to be made here.
 
   TryCatch try_catch;
 
-  callback->Call(object, argc, argv);
+  if (domain_symbol.IsEmpty()) {
+    domain_symbol = NODE_PSYMBOL("domain");
+    enter_symbol = NODE_PSYMBOL("enter");
+    exit_symbol = NODE_PSYMBOL("exit");
+    disposed_symbol = NODE_PSYMBOL("_disposed");
+  }
+
+  Local<Value> domain_v = object->Get(domain_symbol);
+  Local<Object> domain;
+  Local<Function> enter;
+  Local<Function> exit;
+  if (!domain_v->IsUndefined()) {
+    domain = domain_v->ToObject();
+    if (domain->Get(disposed_symbol)->BooleanValue()) {
+      // domain has been disposed of.
+      return Undefined();
+    }
+    enter = Local<Function>::Cast(domain->Get(enter_symbol));
+    enter->Call(domain, 0, NULL);
+  }
 
   if (try_catch.HasCaught()) {
     FatalException(try_catch);
+    return Undefined();
   }
+
+  Local<Value> ret = callback->Call(object, argc, argv);
+
+  if (try_catch.HasCaught()) {
+    FatalException(try_catch);
+    return Undefined();
+  }
+
+  if (!domain_v->IsUndefined()) {
+    exit = Local<Function>::Cast(domain->Get(exit_symbol));
+    exit->Call(domain, 0, NULL);
+  }
+
+  if (try_catch.HasCaught()) {
+    FatalException(try_catch);
+    return Undefined();
+  }
+
+  return scope.Close(ret);
 }
 
 
@@ -1019,7 +1092,7 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
 
   if (!encoding_v->IsString()) return _default;
 
-  String::Utf8Value encoding(encoding_v->ToString());
+  String::Utf8Value encoding(encoding_v);
 
   if (strcasecmp(*encoding, "utf8") == 0) {
     return UTF8;
@@ -1230,8 +1303,8 @@ static void ReportException(TryCatch &try_catch, bool show_line) {
       fprintf(stderr, "%s: ", *name);
     }
 
-    String::Utf8Value msg(!isErrorObject ? er->ToString()
-                         : er->ToObject()->Get(String::New("message"))->ToString());
+    String::Utf8Value msg(!isErrorObject ? er
+                         : er->ToObject()->Get(String::New("message")));
     fprintf(stderr, "%s\n", *msg);
   }
 
@@ -1272,7 +1345,7 @@ static Handle<Value> Chdir(const Arguments& args) {
     return ThrowException(Exception::Error(String::New("Bad argument.")));
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
 
   uv_err_t r = uv_chdir(*path);
 
@@ -1372,7 +1445,7 @@ static Handle<Value> SetGid(const Arguments& args) {
   if (args[0]->IsNumber()) {
     gid = args[0]->Int32Value();
   } else if (args[0]->IsString()) {
-    String::Utf8Value grpnam(args[0]->ToString());
+    String::Utf8Value grpnam(args[0]);
     struct group grp, *grpp = NULL;
     int err;
 
@@ -1412,7 +1485,7 @@ static Handle<Value> SetUid(const Arguments& args) {
   if (args[0]->IsNumber()) {
     uid = args[0]->Int32Value();
   } else if (args[0]->IsString()) {
-    String::Utf8Value pwnam(args[0]->ToString());
+    String::Utf8Value pwnam(args[0]);
     struct passwd pwd, *pwdp = NULL;
     int err;
 
@@ -1619,7 +1692,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
     return ThrowException(exception);
   }
 
-  String::Utf8Value filename(args[0]->ToString()); // Cast
+  String::Utf8Value filename(args[0]); // Cast
   Local<Object> target = args[1]->ToObject(); // Cast
 
   err = uv_dlopen(*filename, &lib);
@@ -1640,7 +1713,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
     return ThrowException(exception);
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
   base = *path;
 
   /* Find the shared library filename within the full path. */
@@ -1667,7 +1740,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
 
   /* Add the `_module` suffix to the extension name. */
   r = snprintf(symbol, sizeof symbol, "%s_module", base);
-  if (r <= 0 || r >= sizeof symbol) {
+  if (r <= 0 || static_cast<size_t>(r) >= sizeof symbol) {
     Local<Value> exception =
         Exception::Error(String::New("Out of memory."));
     return ThrowException(exception);
@@ -1723,16 +1796,8 @@ static void OnFatalError(const char* location, const char* message) {
   exit(1);
 }
 
-static int uncaught_exception_counter = 0;
-
 void FatalException(TryCatch &try_catch) {
   HandleScope scope;
-
-  // Check if uncaught_exception_counter indicates a recursion
-  if (uncaught_exception_counter > 0) {
-    ReportException(try_catch, true);
-    exit(1);
-  }
 
   if (listeners_symbol.IsEmpty()) {
     listeners_symbol = NODE_PSYMBOL("listeners");
@@ -1769,17 +1834,13 @@ void FatalException(TryCatch &try_catch) {
   Local<Value> error = try_catch.Exception();
   Local<Value> event_argv[2] = { uncaught_exception_symbol_l, error };
 
-  uncaught_exception_counter++;
+  TryCatch event_try_catch;
   emit->Call(process, 2, event_argv);
-  // Decrement so we know if the next exception is a recursion or not
-  uncaught_exception_counter--;
-}
-
-
-static void DebugBreakMessageHandler(const v8::Debug::Message& message) {
-  // do nothing with debug messages.
-  // The message handler will get changed by DebuggerAgent::CreateSession in
-  // debug-agent.cc of v8/src when a new session is created
+  if (event_try_catch.HasCaught()) {
+    // the uncaught exception event threw, so we must exit.
+    ReportException(event_try_catch, true);
+    exit(1);
+  }
 }
 
 
@@ -1854,7 +1915,7 @@ static void ProcessTitleSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
   HandleScope scope;
-  String::Utf8Value title(value->ToString());
+  String::Utf8Value title(value);
   // TODO: protect with a lock
   uv_set_process_title(*title);
 }
@@ -1943,12 +2004,9 @@ static Handle<Boolean> EnvDeleter(Local<String> property,
   HandleScope scope;
 #ifdef __POSIX__
   String::Utf8Value key(property);
-  // prototyped as `void unsetenv(const char*)` on some platforms
-  if (unsetenv(*key) < 0) {
-    // Deletion failed. Return true if the key wasn't there in the first place,
-    // false if it is still there.
-    return scope.Close(Boolean::New(getenv(*key) == NULL));
-  };
+  if (!getenv(*key)) return False();
+  unsetenv(*key); // can't check return value, it's void on some platforms
+  return True();
 #else
   String::Value key(property);
   WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
@@ -1959,9 +2017,8 @@ static Handle<Boolean> EnvDeleter(Local<String> property,
               GetLastError() != ERROR_SUCCESS;
     return scope.Close(Boolean::New(rv));
   }
+  return True();
 #endif
-  // It worked
-  return v8::True();
 }
 
 
@@ -2155,6 +2212,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
     process->Set(String::NewSymbol("_print_eval"), Boolean::New(print_eval));
   }
 
+  if (force_repl) {
+    process->Set(String::NewSymbol("_forceRepl"), True());
+  }
+
   size_t size = 2*PATH_MAX;
   char* execPath = new char[size];
   if (uv_exepath(execPath, &size) != 0) {
@@ -2299,6 +2360,8 @@ static void PrintHelp() {
          "  -v, --version        print node's version\n"
          "  -e, --eval script    evaluate script\n"
          "  -p, --print          print result of --eval\n"
+         "  -i, --interactive    always enter the REPL even if stdin\n"
+         "                       does not appear to be a terminal\n"
          "  --v8-options         print v8 command line options\n"
          "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
@@ -2360,6 +2423,9 @@ static void ParseArgs(int argc, char **argv) {
     } else if (strcmp(arg, "--print") == 0 || strcmp(arg, "-p") == 0) {
       print_eval = true;
       argv[i] = const_cast<char*>("");
+    } else if (strcmp(arg, "--interactive") == 0 || strcmp(arg, "-i") == 0) {
+      force_repl = true;
+      argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--v8-options") == 0) {
       argv[i] = const_cast<char*>("--help");
     } else if (argv[i][0] != '-') {
@@ -2380,15 +2446,9 @@ static void EnableDebug(bool wait_connect) {
   node_isolate->Enter();
 
   // Start the debug thread and it's associated TCP server on port 5858.
-  bool r = v8::Debug::EnableAgent("node " NODE_VERSION, debug_port);
-
-  if (wait_connect) {
-    // Set up an empty handler so v8 will not continue until a debugger
-    // attaches. This is the same behavior as Debug::EnableAgent(_,_,true)
-    // except we don't break at the beginning of the script.
-    // see Debugger::StartAgent in debug.cc of v8/src
-    v8::Debug::SetMessageHandler2(node::DebugBreakMessageHandler);
-  }
+  bool r = v8::Debug::EnableAgent("node " NODE_VERSION,
+                                  debug_port,
+                                  wait_connect);
 
   // Crappy check that everything went well. FIXME
   assert(r);
@@ -2762,39 +2822,33 @@ int Start(int argc, char *argv[]) {
   // Use copy here as to not modify the original argv:
   Init(argc, argv_copy);
 
-  V8::Initialize();
-  Persistent<Context> context;
-  {
-    Locker locker;
-    HandleScope handle_scope;
+  v8::V8::Initialize();
+  v8::HandleScope handle_scope;
 
-    // Create the one and only Context.
-    Persistent<Context> context = Context::New();
-    Context::Scope context_scope(context);
+  // Create the one and only Context.
+  Persistent<v8::Context> context = v8::Context::New();
+  v8::Context::Scope context_scope(context);
 
-    // Use original argv, as we're just copying values out of it.
-    Handle<Object> process_l = SetupProcessObject(argc, argv);
-    v8_typed_array::AttachBindings(context->Global());
+  // Use original argv, as we're just copying values out of it.
+  Handle<Object> process_l = SetupProcessObject(argc, argv);
+  v8_typed_array::AttachBindings(context->Global());
 
-    // Create all the objects, load modules, do everything.
-    // so your next reading stop should be node::Load()!
-    Load(process_l);
+  // Create all the objects, load modules, do everything.
+  // so your next reading stop should be node::Load()!
+  Load(process_l);
 
-    // All our arguments are loaded. We've evaluated all of the scripts. We
-    // might even have created TCP servers. Now we enter the main eventloop. If
-    // there are no watchers on the loop (except for the ones that were
-    // uv_unref'd) then this function exits. As long as there are active
-    // watchers, it blocks.
-    uv_run(uv_default_loop());
+  // All our arguments are loaded. We've evaluated all of the scripts. We
+  // might even have created TCP servers. Now we enter the main eventloop. If
+  // there are no watchers on the loop (except for the ones that were
+  // uv_unref'd) then this function exits. As long as there are active
+  // watchers, it blocks.
+  uv_run(uv_default_loop());
 
-    EmitExit(process_l);
-#ifndef NDEBUG
-    context.Dispose();
-#endif
-  }
+  EmitExit(process_l);
 
 #ifndef NDEBUG
   // Clean up.
+  context.Dispose();
   V8::Dispose();
 #endif  // NDEBUG
 

@@ -27,85 +27,150 @@
 
 var common = require('../common');
 var assert = require('assert');
-var SlowBuffer = process.binding('buffer').SlowBuffer;
-var ArrayBuffer = process.binding('typed_array').ArrayBuffer;
-var Int32Array = process.binding('typed_array').Int32Array;
-var Int16Array = process.binding('typed_array').Int16Array;
-var Uint8Array = process.binding('typed_array').Uint8Array;
 
-function test(clazz) {
-  var size = clazz.length;
-  var b = clazz;
+[
+  'ArrayBuffer',
+  'Int8Array',
+  'Uint8Array',
+  'Int16Array',
+  'Uint16Array',
+  'Int32Array',
+  'Uint32Array',
+  'Float32Array',
+  'Float64Array',
+  'Uint8ClampedArray'
+].forEach(function(name) {
+  var expected = '[object ' + name + ']';
+  var clazz = global[name];
+  var obj = new clazz(1);
 
-  // create a view v1 referring to b, of type Int32, starting at
-  // the default byte index (0) and extending until the end of the buffer
-  var v1 = new Int32Array(b);
-  assert(4, v1.BYTES_PER_ELEMENT);
+  assert.equal(obj.toString(), expected);
+  assert.equal(Object.prototype.toString.call(obj), expected);
 
-  // create a view v2 referring to b, of type Uint8, starting at
-  // byte index 2 and extending until the end of the buffer
-  var v2 = new Uint8Array(b, 2);
-  assert(1, v1.BYTES_PER_ELEMENT);
+  obj = new DataView(obj);
+  assert.equal(obj.toString(), '[object DataView]');
+  assert.equal(Object.prototype.toString.call(obj), '[object DataView]');
+});
 
-  // create a view v3 referring to b, of type Int16, starting at
-  // byte index 2 and having a length of 2
-  var v3 = new Int16Array(b, 2, 2);
-  assert(2, v1.BYTES_PER_ELEMENT);
+// initialize a zero-filled buffer
+var buffer = new Buffer(16);
+buffer.fill(0);
 
-  // The layout is now
-  // var index
-  // b = |0|1|2|3|4|5|6|7| bytes (not indexable)
-  // v1 = |0 |1 | indices (indexable)
-  // v2 = |0|1|2|3|4|5|
-  // v3 = |0 |1 |
-
-  // testing values
-  v1[0] = 0x1234;
-  v1[1] = 0x5678;
-
-  assert(0x1234, v1[0]);
-  assert(0x5678, v1[1]);
-
-  assert(0x3, v2[0]);
-  assert(0x4, v2[1]);
-  assert(0x5, v2[2]);
-  assert(0x6, v2[3]);
-  assert(0x7, v2[4]);
-  assert(0x8, v2[5]);
-
-  assert(0x34, v3[0]);
-  assert(0x56, v3[1]);
-
-  // test get/set
-  v2.set(1, 0x8);
-  v2.set(2, 0xF);
-  assert(0x8, v2.get(1));
-  assert(0xF, v2.get(2));
-  assert(0x38, v3.get(0));
-  assert(0xF6, v3.get(1));
-
-  // test subarray
-  var v4 = v1.subarray(1);
-  assert(Int32Array, typeof v4);
-  assert(0xF678, v4[0]);
-
-  // test set with typed array and []
-  v2.set([1, 2, 3, 4], 2);
-  assert(0x1234, v1[0]);
-
-  var sub = new Int32Array(4);
-  sub[0] = 0xabcd;
-  v2.set(sub, 1);
-  assert(0x3a, v3[0]);
-  assert(0xbc, v3[1]);
+// only one of these instantiations should succeed, as the other ones will be
+// unaligned
+var errors = 0;
+var offset;
+for (var i = 0; i < 8; i++) {
+  try {
+    new Float64Array(buffer, i);
+    offset = i;
+  } catch (e) {
+    errors += 1;
+  }
 }
 
-// basic Typed Arrays tests
-var size = 8;
-var ab = new ArrayBuffer(size);
-assert.equal(size, ab.byteLength);
-test(ab);
+assert.equal(errors, 7);
 
-// testing sharing Buffer object
-var buffer = new Buffer(size);
-test(buffer);
+var uint8 = new Uint8Array(buffer, offset);
+var uint16 = new Uint16Array(buffer, offset);
+var uint16slice = new Uint16Array(buffer, offset + 2, 2);
+var uint32 = new Uint32Array(buffer, offset);
+
+assert.equal(uint8.BYTES_PER_ELEMENT, 1);
+assert.equal(uint16.BYTES_PER_ELEMENT, 2);
+assert.equal(uint16slice.BYTES_PER_ELEMENT, 2);
+assert.equal(uint32.BYTES_PER_ELEMENT, 4);
+
+// now change the underlying buffer
+buffer[offset    ] = 0x08;
+buffer[offset + 1] = 0x09;
+buffer[offset + 2] = 0x0a;
+buffer[offset + 3] = 0x0b;
+buffer[offset + 4] = 0x0c;
+buffer[offset + 5] = 0x0d;
+buffer[offset + 6] = 0x0e;
+buffer[offset + 7] = 0x0f;
+
+/*
+  This is what we expect the variables to look like at this point (on
+  little-endian machines):
+
+  uint8       | 0x08 | 0x09 | 0x0a | 0x0b | 0x0c | 0x0d | 0x0e | 0x0f |
+  uint16      |    0x0908   |    0x0b0a   |    0x0d0c   |    0x0f0e   |
+  uint16slice --------------|    0x0b0a   |    0x0d0c   |--------------
+  uint32      |         0x0b0a0908        |         0x0f0e0d0c        |
+*/
+
+assert.equal(uint8[0], 0x08);
+assert.equal(uint8[1], 0x09);
+assert.equal(uint8[2], 0x0a);
+assert.equal(uint8[3], 0x0b);
+assert.equal(uint8[4], 0x0c);
+assert.equal(uint8[5], 0x0d);
+assert.equal(uint8[6], 0x0e);
+assert.equal(uint8[7], 0x0f);
+
+// determine whether or not typed array values are stored little-endian first
+// internally
+var IS_LITTLE_ENDIAN = (new Uint16Array([0x1234])).buffer[0] === 0x34;
+
+if (IS_LITTLE_ENDIAN) {
+  assert.equal(uint16[0], 0x0908);
+  assert.equal(uint16[1], 0x0b0a);
+  assert.equal(uint16[2], 0x0d0c);
+  assert.equal(uint16[3], 0x0f0e);
+
+  assert.equal(uint16slice[0], 0x0b0a);
+  assert.equal(uint16slice[1], 0x0d0c);
+
+  assert.equal(uint32[0], 0x0b0a0908);
+  assert.equal(uint32[1], 0x0f0e0d0c);
+} else {
+  assert.equal(uint16[0], 0x0809);
+  assert.equal(uint16[1], 0x0a0b);
+  assert.equal(uint16[2], 0x0c0d);
+  assert.equal(uint16[3], 0x0e0f);
+
+  assert.equal(uint16slice[0], 0x0a0b);
+  assert.equal(uint16slice[1], 0x0c0d);
+
+  assert.equal(uint32[0], 0x08090a0b);
+  assert.equal(uint32[1], 0x0c0d0e0f);
+}
+
+// test .subarray(begin, end)
+var sub = uint8.subarray(2, 4);
+
+assert.ok(sub instanceof Uint8Array);
+assert.equal(sub[0], 0x0a);
+assert.equal(sub[1], 0x0b);
+
+// modifications of a value in the subarray of `uint8` should propagate to
+// the other views
+sub[0] = 0x12;
+sub[1] = 0x34;
+
+assert.equal(uint8[2], 0x12);
+assert.equal(uint8[3], 0x34);
+
+// test .set(index, value), .set(arr, offset) and .get(index)
+uint8.set(1, 0x09);
+uint8.set([0x0a, 0x0b], 2);
+
+assert.equal(uint8.get(1), 0x09);
+assert.equal(uint8.get(2), 0x0a);
+assert.equal(uint8.get(3), 0x0b);
+
+// test clamped array
+var uint8c = new Uint8ClampedArray(buffer);
+uint8c[0] = -1;
+uint8c[1] = 257;
+
+assert.equal(uint8c[0], 0);
+assert.equal(uint8c[1], 255);
+
+uint8c.set(0, -10);
+uint8c.set(1, 260);
+
+assert.equal(uint8c[0], 0);
+assert.equal(uint8c[1], 255);

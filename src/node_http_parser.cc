@@ -166,7 +166,7 @@ struct StringPtr {
   }
 
 
-  Handle<String> ToString() const {
+  Local<String> ToString() const {
     if (str_)
       return String::New(str_, size_);
     else
@@ -302,7 +302,7 @@ public:
     if (!cb->IsFunction())
       return 0;
 
-    Handle<Value> argv[3] = {
+    Local<Value> argv[3] = {
       *current_buffer,
       Integer::New(at - current_buffer_data),
       Integer::New(length)
@@ -406,7 +406,7 @@ public:
     size_t len = args[2]->Int32Value();
     if (off+len > buffer_len) {
       return ThrowException(Exception::Error(
-            String::New("Length is extends beyond buffer")));
+            String::New("off + len > buffer.length")));
     }
 
     // Assign 'buffer_' while we parse. The callbacks will access that varible.
@@ -432,9 +432,12 @@ public:
     // If there was a parse error in one of the callbacks
     // TODO What if there is an error on EOF?
     if (!parser->parser_.upgrade && nparsed != len) {
+      enum http_errno err = HTTP_PARSER_ERRNO(&parser->parser_);
+
       Local<Value> e = Exception::Error(String::NewSymbol("Parse Error"));
       Local<Object> obj = e->ToObject();
       obj->Set(String::NewSymbol("bytesParsed"), nparsed_obj);
+      obj->Set(String::NewSymbol("code"), String::New(http_errno_name(err)));
       return scope.Close(e);
     } else {
       return scope.Close(nparsed_obj);
@@ -455,9 +458,12 @@ public:
     if (parser->got_exception_) return Local<Value>();
 
     if (rv != 0) {
+      enum http_errno err = HTTP_PARSER_ERRNO(&parser->parser_);
+
       Local<Value> e = Exception::Error(String::NewSymbol("Parse Error"));
       Local<Object> obj = e->ToObject();
       obj->Set(String::NewSymbol("bytesParsed"), Integer::New(0));
+      obj->Set(String::NewSymbol("code"), String::New(http_errno_name(err)));
       return scope.Close(e);
     }
 
@@ -508,7 +514,7 @@ private:
     if (!cb->IsFunction())
       return;
 
-    Handle<Value> argv[2] = {
+    Local<Value> argv[2] = {
       CreateHeaders(),
       url_.ToString()
     };
