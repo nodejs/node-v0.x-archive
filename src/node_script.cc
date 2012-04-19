@@ -353,6 +353,10 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   Local<Array> keys;
   if (context_flag == newContext) {
     // Create the new context
+    // Context::New returns a Persistent<Context>, but we only need it for this
+    // function. Here we grab a temporary handle to the new context, assign it
+    // to a local handle, and then dispose the persistent handle. This ensures
+    // that when this function exits the context will be disposed.
     Persistent<Context> tmp = Context::New();
     context = Local<Context>::New(tmp);
     tmp.Dispose();
