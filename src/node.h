@@ -214,6 +214,7 @@ struct node_module_struct {
   const char *filename;
   void (*register_func) (v8::Handle<v8::Object> target);
   const char *modname;
+  void (*unregister_func) ();
 };
 
 node_module_struct* get_builtin_module(const char *name);
@@ -237,18 +238,25 @@ node_module_struct* get_builtin_module(const char *name);
 # define NODE_MODULE_EXPORT /* empty */
 #endif
 
-#define NODE_MODULE(modname, regfunc)                                 \
+#define NODE_MODULE(modname, regfunc, ...)                            \
   extern "C" {                                                        \
     NODE_MODULE_EXPORT node::node_module_struct modname ## _module =  \
     {                                                                 \
       NODE_STANDARD_MODULE_STUFF,                                     \
       regfunc,                                                        \
-      NODE_STRINGIFY(modname)                                         \
+      NODE_STRINGIFY(modname),                                        \
+      __VA_ARGS__                                                     \
     };                                                                \
   }
 
 #define NODE_MODULE_DECL(modname) \
   extern "C" node::node_module_struct modname ## _module;
+
+/* Called after the event loop exits but before the VM is disposed.
+ * Callbacks are run in reverse order of registration, i.e. newest first.
+ */
+typedef void(*ExitCallbackFunc)(void* arg);
+NODE_EXTERN void AtExit(ExitCallbackFunc cb, void* arg);
 
 NODE_EXTERN void SetErrno(uv_err_t err);
 NODE_EXTERN v8::Handle<v8::Value>
