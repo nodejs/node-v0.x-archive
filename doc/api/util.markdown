@@ -1,176 +1,143 @@
-# util
+## util
 
     Stability: 5 - Locked
 
-These functions are in the module `'util'`. Use `require('util')` to access
-them.
+
+The `util` module provides varies utilities that you can use in your Node.js programs, fmostly around verifying the type of an object. To access these methods, add `require('util')` to your code.
+
+A major difference between these methods and the ones found in the [[console `console`]] module is that these don't print to the console.
 
 
-## util.format()
 
-Returns a formatted string using the first argument as a `printf`-like format.
+### util.debug(str), String
+- str {String}   The string to print
 
-The first argument is a string that contains zero or more *placeholders*.
-Each placeholder is replaced with the converted value from its corresponding
-argument. Supported placeholders are:
+A synchronous output function. This block the process and outputs `string` immediately to `stderr`.
+
+
+ 
+
+
+### util.format([arg...]), String
+- arg {String}   The string to print, and any additional formatting arguments
+
+Returns a formatted string using the first argument in [a `printf()`-like](http://en.wikipedia.org/wiki/Printf_format_string#Format_placeholders) way.
+
+The first argument is a string that contains zero or more placeholders. Each placeholder is replaced with the converted value from its corresponding argument. Supported placeholders are:
 
 * `%s` - String.
 * `%d` - Number (both integer and float).
 * `%j` - JSON.
 * `%%` - single percent sign (`'%'`). This does not consume an argument.
 
-If the placeholder does not have a corresponding argument, the placeholder is
-not replaced.
 
-    util.format('%s:%s', 'foo'); // 'foo:%s'
+#### Example
 
-If there are more arguments than placeholders, the extra arguments are
-converted to strings with `util.inspect()` and these strings are concatenated,
-delimited by a space.
-
-    util.format('%s:%s', 'foo', 'bar', 'baz'); // 'foo:bar baz'
-
-If the first argument is not a format string then `util.format()` returns
-a string that is the concatenation of all its arguments separated by spaces.
-Each argument is converted to a string with `util.inspect()`.
-
-    util.format(1, 2, 3); // '1 2 3'
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/util/util.format.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+ 
 
 
-## util.debug(string)
+### util.inspect(object, showHidden=false, depth=2), String
+- object {Object}   The object to be represented
+- showHidden {Boolean}  Identifies whether the non-enumerable properties are also shown
+- depth {Number}  Indicates how many times to recurse while formatting the object
 
-A synchronous output function. Will block the process and
-output `string` immediately to `stderr`.
+Returns a string representation of `object`, which is useful for debugging.
 
-    require('util').debug('message on stderr');
+To make the function recurse an object indefinitely, pass in `null` for `depth`.
 
+If `colors` is `true`, the output is styled with ANSI color codes.
 
-## util.log(string)
+#### Example
 
-Output with timestamp on `stdout`.
+Here's an example inspecting all the properties of the `util` object:
 
-    require('util').log('Timestamped message.');
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/util/util.inspect.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-
-## util.inspect(object, [showHidden], [depth], [colors])
-
-Return a string representation of `object`, which is useful for debugging.
-
-If `showHidden` is `true`, then the object's non-enumerable properties will be
-shown too. Defaults to `false`.
-
-If `depth` is provided, it tells `inspect` how many times to recurse while
-formatting the object. This is useful for inspecting large complicated objects.
-
-The default is to only recurse twice.  To make it recurse indefinitely, pass
-in `null` for `depth`.
-
-If `colors` is `true`, the output will be styled with ANSI color codes.
-Defaults to `false`.
-
-Example of inspecting all properties of the `util` object:
-
-    var util = require('util');
-
-    console.log(util.inspect(util, true, null));
+ 
 
 
-## util.isArray(object)
+### util.isArray(object), Boolean
+- object {Object}   The object to be identified
 
-Returns `true` if the given "object" is an `Array`. `false` otherwise.
+Returns `true` if the given object is an `Array`.
 
-    var util = require('util');
+#### Example
 
-    util.isArray([])
-      // true
-    util.isArray(new Array)
-      // true
-    util.isArray({})
-      // false
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/util/util.isArray.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+ 
 
 
-## util.isRegExp(object)
+### util.isDate(object), Boolean
+- object {Object}   The object to be identified
 
-Returns `true` if the given "object" is a `RegExp`. `false` otherwise.
+Returns `true` if the given object is a `Date`.
 
-    var util = require('util');
+#### Example
 
-    util.isRegExp(/some regexp/)
-      // true
-    util.isRegExp(new RegExp('another regexp'))
-      // true
-    util.isRegExp({})
-      // false
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/util/util.isDate.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+ 
 
 
-## util.isDate(object)
+### util.isError(object), Boolean
+- object {Object}   The object to be identified
 
-Returns `true` if the given "object" is a `Date`. `false` otherwise.
+Returns `true` if the given object is an `Error`.
 
-    var util = require('util');
+#### Example
 
-    util.isDate(new Date())
-      // true
-    util.isDate(Date())
-      // false (without 'new' returns a String)
-    util.isDate({})
-      // false
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/util/util.isError.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+ 
 
 
-## util.isError(object)
+### util.isRegExp(object), Boolean
+- object {Object}   The object to be identified
 
-Returns `true` if the given "object" is an `Error`. `false` otherwise.
+Returns `true` if the given "object" is a `RegExp`.
 
-    var util = require('util');
+#### Example
 
-    util.isError(new Error())
-      // true
-    util.isError(new TypeError())
-      // true
-    util.isError({ name: 'Error', message: 'an error occurred' })
-      // false
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/util/util.isRegExp.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+    
 
-
-## util.pump(readableStream, writableStream, [callback])
-
-Experimental
-
-Read the data from `readableStream` and send it to the `writableStream`.
-When `writableStream.write(data)` returns `false` `readableStream` will be
-paused until the `drain` event occurs on the `writableStream`. `callback` gets
-an error as its only argument and is called when `writableStream` is closed or
-when an error occurs.
+ 
 
 
-## util.inherits(constructor, superConstructor)
+### util.log(str)
+- str {String}  The string to print
 
-Inherit the prototype methods from one
-[constructor](https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Object/constructor)
-into another.  The prototype of `constructor` will be set to a new
-object created from `superConstructor`.
+Outputs to `stdout`...but with a timestamp!
 
-As an additional convenience, `superConstructor` will be accessible
-through the `constructor.super_` property.
+ 
 
-    var util = require("util");
-    var events = require("events");
 
-    function MyStream() {
-        events.EventEmitter.call(this);
-    }
+### util.pump(readableStream, writableStream, [callback()])
+- readableStream {streams.ReadableStream}  The stream to read from
+- writableStream {streams.WritableStream}  The stream to write to
+- callback {Function}   An optional callback function once the pump is through
 
-    util.inherits(MyStream, events.EventEmitter);
+Reads the data from `readableStream` and sends it to the `writableStream`.
 
-    MyStream.prototype.write = function(data) {
-        this.emit("data", data);
-    }
+When `writableStream.write(data)` returns `false`, `readableStream` is paused until the `drain` event occurs on the `writableStream`. `callback` gets an error as its only argument and is called when `writableStream` is closed or when an error occurs.
 
-    var stream = new MyStream();
+ 
+### util.inherits(constructor, superConstructor)
+- constructor {Function}  The prototype methods to inherit
+- superConstructor {Object}  The new object's type
 
-    console.log(stream instanceof events.EventEmitter); // true
-    console.log(MyStream.super_ === events.EventEmitter); // true
+Inherit the prototype methods from one constructor into another. The prototype of `constructor` is set to a new object created from `superConstructor`.
 
-    stream.on("data", function(data) {
-        console.log('Received data: "' + data + '"');
-    })
-    stream.write("It works!"); // Received data: "It works!"
+As an additional convenience, `superConstructor` is accessible through the `constructor.super_` property.
+
+For more information, see the MDN [`constructor`](https://developer.mozilla.org/en/Javascript/Reference/Global_Objects/Object/constructor) documentation.
+
+#### Example
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/util/util.inherits.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+
+ 
+

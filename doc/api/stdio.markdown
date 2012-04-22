@@ -1,60 +1,92 @@
-# console
+## console
 
-    Stability: 4 - API Frozen
+    Stability: 3 - Stable
+    
+These methods are useful for printing to stdout and stderr. They are similar to the `console` object functions provided by most web browsers. The `console` object is global, so you don't need to `require` anything.
 
-* {Object}
-
-<!--type=global-->
-
-For printing to stdout and stderr.  Similar to the console object functions
-provided by most web browsers, here the output is sent to stdout or stderr.
+It's important to note that printing to stdout and stderr is synchronous, and therefore, blocking.
 
 
-## console.log()
+console.assert()
+(alias of: assert.ok)
 
-Prints to stdout with newline. This function can take multiple arguments in a
-`printf()`-like way. Example:
-
-    console.log('count: %d', count);
-
-If formatting elements are not found in the first string then `util.inspect`
-is used on each argument.
-See [util.format()](util.html#util.format) for more information.
-
-## console.info()
-
-Same as `console.log`.
-
-## console.warn()
-## console.error()
-
-Same as `console.log` but prints to stderr.
-
-## console.dir(obj)
-
-Uses `util.inspect` on `obj` and prints resulting string to stdout.
-
-## console.time(label)
-
-Mark a time.
+An alias to `assert.ok()`.
 
 
-## console.timeEnd(label)
 
-Finish timer, record output. Example
+console.dir(obj)
+- obj {Object}  An object to inspect
+(alias of: util.inspect)
 
-    console.time('100-elements');
-    for (var i = 0; i < 100; i++) {
-      ;
-    }
-    console.timeEnd('100-elements');
+Uses [[util.inspect `util.inspect()`]] on `obj` and prints the resulting string to stderr.
 
 
-## console.trace()
+console.warn([arg...])
+- warn {String}  A message to send
+(related to: console.log)
 
-Print a stack trace to stderr of the current position.
+This performs the same role as `console.log()`, but prints to stderr instead.
 
-## console.assert()
 
-Same as `assert.ok()`.
+console.error([arg...])
+- obj {Object}  An object to inspect
+(related to: console.log)
+
+This performs the same role as `console.log()`, but prints to stderr instead.
+
+
+
+console.info()
+(alias of: console.log)
+
+This is just an alias to `console.log()`.
+
+
+console.log([arg...])
+- arg {String}   The string to print, and any additional formatting arguments
+(alias of: util.format)
+
+Prints to stdout with a newline. This function can take multiple arguments in [a `printf()`-like](http://en.wikipedia.org/wiki/Printf_format_string#Format_placeholders) way.
+     
+Each placeholder is replaced with the converted value from its corresponding argument. Supported placeholders are:
+
+* `%s` - String.
+* `%d` - Number (both integer and float).
+* `%j` - JSON.
+* `%%` - single percent sign (`'%'`). This does not consume an argument.
+
+If formatting elements are not found in the first string then [[util.inspect `util.inspect()`]] is used on each argument. 
+
+#### Example
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/console/console.log.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+
+
+console.time(label)
+- label {String}  An identifying string
+(related to: console.timeEnd)
+
+Marks a time by printing it out to the console. This is used in conjunction with `console.timeEnd()`.
+
+#### Example
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/console/console.time.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+
+
+console.timeEnd(label)
+- label {String}  An identifying string
+(related to: console.time)
+
+Finish the previous timer and prints output.
+
+#### Example
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/console/console.time.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+console.trace()
+
+Prints a stack trace to stderr of the current position.
+
 

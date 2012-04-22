@@ -1,102 +1,95 @@
-# Stream
+## streams
 
     Stability: 2 - Unstable
 
-A stream is an abstract interface implemented by various objects in Node.
-For example a request to an HTTP server is a stream, as is stdout. Streams
-are readable, writable, or both. All streams are instances of `EventEmitter`.
+A stream is an abstract interface implemented by various objects in Node.js. For example, a request to an HTTP server is a stream, as is stdout. Streams can be readable, writable, or both. All streams are instances of [[eventemitter `EventEmitter`]].
 
-You can load up the Stream base class by doing `require('stream')`.
+For more information, see [this article on understanding streams](../nodejs_dev_guide/understanding_streams.html).
 
-## Readable Stream
+#### Example: Printing to the console
+	
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/streams/streams.1.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-<!--type=class-->
+#### Example: Reading from the console
 
-A `Readable Stream` has the following methods, members, and events.
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/streams/streams.2.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-### Event: 'data'
+## streams.ReadableStream
 
-`function (data) { }`
 
-The `'data'` event emits either a `Buffer` (by default) or a string if
-`setEncoding()` was used.
 
-Note that the __data will be lost__ if there is no listener when a
-`Readable Stream` emits a `'data'` event.
+### streams.ReadableStream@close()
 
-### Event: 'end'
+Emitted when the underlying file descriptor has been closed. Not all streams emit this.  For example, an incoming HTTP request don't emit `close`.
 
-`function () { }`
+ 
 
-Emitted when the stream has received an EOF (FIN in TCP terminology).
-Indicates that no more `'data'` events will happen. If the stream is also
-writable, it may be possible to continue writing.
 
-### Event: 'error'
+### streams.ReadableStream@data(data)
+- data {Buffer | String}   The data being emitted
 
-`function (exception) { }`
+The `data` event emits either a `Buffer` (by default) or a string if `setEncoding()` was previously used on the stream.
+
+ 
+
+
+### streams.ReadableStream@end()
+
+Emitted when the stream has received an EOF (FIN in TCP terminology). Indicates that no more `data` events will happen. If the stream is also writable, it may be possible to continue writing.
+
+ 
+
+
+### streams.ReadableStream@error()
 
 Emitted if there was an error receiving data.
-
-### Event: 'close'
-
-`function () { }`
-
-Emitted when the underlying file descriptor has been closed. Not all streams
-will emit this.  (For example, an incoming HTTP request will not emit
-`'close'`.)
-
-### stream.readable
-
-A boolean that is `true` by default, but turns `false` after an `'error'`
-occurred, the stream came to an `'end'`, or `destroy()` was called.
-
-### stream.setEncoding(encoding)
-Makes the data event emit a string instead of a `Buffer`. `encoding` can be
-`'utf8'`, `'ascii'`, or `'base64'`.
-
-### stream.pause()
-
-Issues an advisory signal to the underlying communication layer, requesting
-that no further data be sent until `resume()` is called.
-
-Note that, due to the advisory nature, certain streams will not be paused
-immediately, and so `'data'` events may be emitted for some indeterminate
-period of time even after `pause()` is called. You may wish to buffer such
-`'data'` events.
-
-### stream.resume()
-
-Resumes the incoming `'data'` events after a `pause()`.
-
-### stream.destroy()
-
-Closes the underlying file descriptor. Stream will not emit any more events.
+ 
 
 
-### stream.destroySoon()
+### streams.ReadableStream@pipe(src)
+- src {streams.ReadableStream}  The readable stream
+
+Emitted when the stream is passed to a readable stream's pipe method.
+
+ 
+
+
+### streams.ReadableStream.destroy()
+
+Closes the underlying file descriptor. The stream will not emit any more events.
+ 
+
+
+### streams.ReadableStream.destroySoon()
 
 After the write queue is drained, close the file descriptor.
 
-### stream.pipe(destination, [options])
+ 
 
-This is a `Stream.prototype` method available on all `Stream`s.
 
-Connects this read stream to `destination` WriteStream. Incoming
-data on this stream gets written to `destination`. The destination and source
-streams are kept in sync by pausing and resuming as necessary.
+### streams.ReadableStream.pause()
+
+Pause any incoming `'data'` events.
+
+
+
+
+### streams.ReadableStream.pipe(destination [, options]), streams
+- destination {streams.WritableStream}   The WriteStream to connect to
+- options {Object}   Any optional commands to send
+
+This is the `Stream.prototype()` method available on all `Stream` objects. It connects this read stream to a `destination`. Incoming data on this stream is then written to `destination`. The destination and source streams are kept in sync by Node.js pausing and resuming as necessary.
 
 This function returns the `destination` stream.
 
+By default, `end()` is called on the destination when the source stream emits `end`, so that `destination` is no longer writable. Pass `{ end: false }` into `options` to keep the destination stream open.
+
+#### Example 
+
 Emulating the Unix `cat` command:
 
-    process.stdin.resume();
-    process.stdin.pipe(process.stdout);
-
-
-By default `end()` is called on the destination when the source stream emits
-`end`, so that `destination` is no longer writable. Pass `{ end: false }` as
-`options` to keep the destination stream open.
+    process.stdin.resume(); // process.stdin is paused by default, so we need to start it up
+    process.stdin.pipe(process.stdout); // type something into the console & watch it repeat
 
 This keeps `process.stdout` open so that "Goodbye" can be written at the end.
 
@@ -108,82 +101,99 @@ This keeps `process.stdout` open so that "Goodbye" can be written at the end.
       process.stdout.write("Goodbye\n");
     });
 
+ 
+ 
 
-## Writable Stream
+/** related to: streams.ReadableStream.data
+streams.ReadableStream.setEncoding(encoding)
+- encoding {String}  The encoding to use; this can be `'utf8'`, `'ascii'`, or `'base64'`.
 
-<!--type=class-->
+Makes the `data` event emit a string instead of a `Buffer`.
 
-A `Writable Stream` has the following methods, members, and events.
+ 
 
-### Event: 'drain'
 
-`function () { }`
+### streams.ReadableStream.resume()
 
-After a `write()` method returned `false`, this event is emitted to
-indicate that it is safe to write again.
+Resumes the incoming `'data'` events after a `pause()`. 
 
-### Event: 'error'
+ 
 
-`function (exception) { }`
+## streams.WritableStream
 
-Emitted on error with the exception `exception`.
+ 
 
-### Event: 'close'
+### streams.WritableStream.writable, Boolean
 
-`function () { }`
+A boolean that is `true` by default, but turns `false` after an `error` event occurs, the stream comes to an `'end'`, or if `destroy()` was called.
+
+
+
+### streams.WritableStream@close()
+
 
 Emitted when the underlying file descriptor has been closed.
 
-### Event: 'pipe'
+ 
 
-`function (src) { }`
 
-Emitted when the stream is passed to a readable stream's pipe method.
 
-### stream.writable
+### streams.WritableStream@drain()
 
-A boolean that is `true` by default, but turns `false` after an `'error'`
-occurred or `end()` / `destroy()` was called.
+After a `write()` method returns `false`, this event is emitted to indicate that it is safe to write again.
 
-### stream.write(string, [encoding], [fd])
+ 
 
-Writes `string` with the given `encoding` to the stream.  Returns `true` if
-the string has been flushed to the kernel buffer.  Returns `false` to
-indicate that the kernel buffer is full, and the data will be sent out in
-the future. The `'drain'` event will indicate when the kernel buffer is
-empty again. The `encoding` defaults to `'utf8'`.
 
-If the optional `fd` parameter is specified, it is interpreted as an integral
-file descriptor to be sent over the stream. This is only supported for UNIX
-streams, and is silently ignored otherwise. When writing a file descriptor in
-this manner, closing the descriptor before the stream drains risks sending an
-invalid (closed) FD.
+### streams.WritableStream@error(exception)
+- exception {Error}  The exception that was received
 
-### stream.write(buffer)
+Emitted when there's an error with the exception `exception`.
 
-Same as the above except with a raw buffer.
+ 
 
-### stream.end()
 
-Terminates the stream with EOF or FIN.
-This call will allow queued write data to be sent before closing the stream.
+### streams.WritableStream.destroy()
 
-### stream.end(string, encoding)
+Closes the underlying file descriptor. The stream doesn't emit any more events. Any queued write data is not sent.
 
-Sends `string` with the given `encoding` and terminates the stream with EOF
-or FIN. This is useful to reduce the number of packets sent.
 
-### stream.end(buffer)
 
-Same as above but with a `buffer`.
 
-### stream.destroy()
+### streams.WritableStream.destroySoon()
 
-Closes the underlying file descriptor. Stream will not emit any more events.
-Any queued write data will not be sent.
+After the write queue is drained, this closes the file descriptor. `destroySoon()` can still destroy straight away, as long as there is no data left in the queue for writes.
 
-### stream.destroySoon()
 
-After the write queue is drained, close the file descriptor. `destroySoon()`
-can still destroy straight away, as long as there is no data left in the queue
-for writes.
+ 
+
+### streams.WritableStream.end()
+### streams.WritableStream.end(string, encoding)
+### streams.WritableStream.end(Buffer)
+- string {String}  The message to send
+- encoding {String}  The encoding to use
+- buffer {Buffer}   The buffer to send
+
+Terminates the stream with EOF or FIN. This call send queued write data before closing the stream.
+
+For `streams.WritableStream.end(string, encoding)`, a `string` with the given `encoding` is sent. This is useful to reduce the number of packets sent.
+
+For `streams.WritableStream.end(Buffer)`, a `buffer` is sent.
+
+
+
+
+### streams.WritableStream.write(string, encoding='utf8' [, fd])
+### streams.WritableStream.write(Buffer)
+- string {String}   The string to write
+- encoding {String}   The encoding to use; defaults to `utf8`
+- fd {Number}   An optional file descriptor to pass
+- buffer {Buffer}  The buffer to write to
+
+Writes `string` with the given `encoding` to the stream, or write `buffer`.  Returns `true` if the string has been flushed to the kernel buffer.  Returns `false` to indicate that the kernel buffer is full, and the data will be sent out in the future. The `drain` event indicates when the kernel buffer is empty again.
+
+If `fd` is specified, it's interpreted as an integral file descriptor to be sent over the stream. This is only supported for UNIX streams, and is ignored otherwise. When writing a file descriptor in this manner, closing the descripton before the stream drains risks sending an invalid (closed) FD.
+
+ 
+
+

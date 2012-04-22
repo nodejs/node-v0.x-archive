@@ -1,182 +1,148 @@
-# Executing JavaScript
+## vm
 
     Stability: 3 - Stable
+    
+In Node.js, Javascript code can be compiled and run immediately or compiled, saved, and run later. To do that, you can add `require('vm');` to your code.
 
-<!--name=vm-->
+#### Example
 
-You can access this module with:
-
-    var vm = require('vm');
-
-JavaScript code can be compiled and run immediately or compiled, saved, and run later.
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
 
-## vm.runInThisContext(code, [filename])
 
-`vm.runInThisContext()` compiles `code`, runs it and returns the result. Running
-code does not have access to local scope. `filename` is optional, it's used only
-in stack traces.
+### vm.runInThisContext(code [, filename]), String
+- code {String}   The code to run
+- filename {String}  A filename to emulate where the code is coming from 
 
-Example of using `vm.runInThisContext` and `eval` to run the same code:
+`vm.runInThisContext()` compiles `code` as if it were loaded from `filename`, runs it, and returns the result. Running code does not have access to local scope. The `filename` is optional, and is only used in stack traces.
 
-    var localVar = 123,
-        usingscript, evaled,
-        vm = require('vm');
+In case of syntax error in `code`, `vm.runInThisContext()` emits the syntax error to stderr and throws an exception.
 
-    usingscript = vm.runInThisContext('localVar = 1;',
-      'myfile.vm');
-    console.log('localVar: ' + localVar + ', usingscript: ' +
-      usingscript);
-    evaled = eval('localVar = 1;');
-    console.log('localVar: ' + localVar + ', evaled: ' +
-      evaled);
+#### Example: Using `vm.runInThisContext` and `eval` to run the same code:
 
-    // localVar: 123, usingscript: 1
-    // localVar: 1, evaled: 1
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.runInThisContext.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-`vm.runInThisContext` does not have access to the local scope, so `localVar` is unchanged.
-`eval` does have access to the local scope, so `localVar` is changed.
+Since `vm.runInThisContext()` doesn't have access to the local scope, `localVar` is unchanged. `eval` does have access to the local scope, so `localVar` is changed.
 
-In case of syntax error in `code`, `vm.runInThisContext` emits the syntax error to stderr
-and throws an exception.
+#### Returns
+
+A string representing the result of running `code`.
+
+ 
 
 
-## vm.runInNewContext(code, [sandbox], [filename])
+### vm.runInNewContext(code [, sandbox] [, filename])
+- code {String}  The code to run
+- sandbox {Object}  A global object with properties to pass into `code`
+- filename {String}   A filename to emulate where the code is coming from
 
-`vm.runInNewContext` compiles `code`, then runs it in `sandbox` and returns the
-result. Running code does not have access to local scope. The object `sandbox`
-will be used as the global object for `code`.
-`sandbox` and `filename` are optional, `filename` is only used in stack traces.
+`vm.runInNewContext()` compiles `code` then runs it in `sandbox` and returns the result. Running code does not have access to local scope. The object `sandbox` is used as the global object for `code`.
+`sandbox` and `filename` are optional, and `filename` is only used in stack traces.
 
-Example: compile and execute code that increments a global variable and sets a new one.
-These globals are contained in the sandbox.
+Warning: Running untrusted code is a tricky business requiring great care.  To prevent accidental global variable leakage, `vm.runInNewContext()` is quite useful, but safely running untrusted code requires a separate process.
 
-    var util = require('util'),
-        vm = require('vm'),
-        sandbox = {
-          animal: 'cat',
-          count: 2
-        };
+In case of syntax error in `code`, `vm.runInNewContext()` emits the syntax error to stderr and throws an exception.
 
-    vm.runInNewContext('count += 1; name = "kitty"', sandbox, 'myfile.vm');
-    console.log(util.inspect(sandbox));
+#### Example
 
-    // { animal: 'cat', count: 3, name: 'kitty' }
+Here's an example to ompile and execute code that increments a global variable and sets a new one. These globals are contained in the sandbox.
 
-Note that running untrusted code is a tricky business requiring great care.  To prevent accidental
-global variable leakage, `vm.runInNewContext` is quite useful, but safely running untrusted code
-requires a separate process.
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.runInNewContext.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-In case of syntax error in `code`, `vm.runInNewContext` emits the syntax error to stderr
-and throws an exception.
-
-## vm.runInContext(code, context, [filename])
-
-`vm.runInContext` compiles `code`, then runs it in `context` and returns the
-result. A (V8) context comprises a global object, together with a set of
-built-in objects and functions. Running code does not have access to local scope
-and the global object held within `context` will be used as the global object
-for `code`.
-`filename` is optional, it's used only in stack traces.
-
-Example: compile and execute code in a existing context.
-
-    var util = require('util'),
-        vm = require('vm'),
-        initSandbox = {
-          animal: 'cat',
-          count: 2
-        },
-        context = vm.createContext(initSandbox);
-
-    vm.runInContext('count += 1; name = "CATT"', context, 'myfile.vm');
-    console.log(util.inspect(context));
-
-    // { animal: 'cat', count: 3, name: 'CATT' }
-
-Note that `createContext` will perform a shallow clone of the supplied sandbox object in order to
-initialise the global object of the freshly constructed context.
-
-Note that running untrusted code is a tricky business requiring great care.  To prevent accidental
-global variable leakage, `vm.runInContext` is quite useful, but safely running untrusted code
-requires a separate process.
-
-In case of syntax error in `code`, `vm.runInContext` emits the syntax error to stderr
-and throws an exception.
-
-## vm.createContext([initSandbox])
-
-`vm.createContext` creates a new context which is suitable for use as the 2nd argument of a subsequent
-call to `vm.runInContext`. A (V8) context comprises a global object together with a set of
-build-in objects and functions. The optional argument `initSandbox` will be shallow-copied
-to seed the initial contents of the global object used by the context.
-
-## vm.createScript(code, [filename])
-
-`createScript` compiles `code` but does not run it. Instead, it returns a
-`vm.Script` object representing this compiled code. This script can be run
-later many times using methods below. The returned script is not bound to any
-global object. It is bound before each run, just for that run. `filename` is
-optional, it's only used in stack traces.
-
-In case of syntax error in `code`, `createScript` prints the syntax error to stderr
-and throws an exception.
+ 
 
 
-## Class: Script
+### vm.runInContext(code, context [, filename]), String
+- code {String}  The code to run
+- context {Object}  The context to execute it in, coming from [[vm.createContext `vm.createContext()`]]
+- filename {String}  A filename to emulate where the code is coming from
 
-A class for running scripts.  Returned by vm.createScript.
+`vm.runInContext()` compiles `code`, then runs it in `context` and returns the result.
 
-### script.runInThisContext()
+A (V8) context comprises a global object, together with a set of built-in objects and functions. Running code does not have access to local scope and the global object held within `context` is used as the global object for `code`. The `filename` is optional, and is only used in stack traces.
 
-Similar to `vm.runInThisContext` but a method of a precompiled `Script` object.
-`script.runInThisContext` runs the code of `script` and returns the result.
-Running code does not have access to local scope, but does have access to the `global` object
-(v8: in actual context).
+In case of syntax error in `code`, `vm.runInContext()` emits the syntax error to stderr and throws an exception.
 
-Example of using `script.runInThisContext` to compile code once and run it multiple times:
+Note: Running untrusted code is a tricky business requiring great care.  To prevent accidental global variable leakage, `vm.runInContext()` is quite useful, but safely running untrusted code requires a separate process.
 
-    var vm = require('vm');
+#### Example
 
-    globalVar = 0;
+Compiling and executing code in an existing context.
 
-    var script = vm.createScript('globalVar += 1', 'myfile.vm');
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.runInContext.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-    for (var i = 0; i < 1000 ; i += 1) {
-      script.runInThisContext();
-    }
+#### Returns
 
-    console.log(globalVar);
+A string representing the result of running `code`.
 
-    // 1000
+ 
 
 
-### script.runInNewContext([sandbox])
+### vm.createContext([initSandbox]), Object
+- initSandbox {Object}  An object that is shallow-copied to seed the initial contents of the global object used by the context
 
-Similar to `vm.runInNewContext` a method of a precompiled `Script` object.
-`script.runInNewContext` runs the code of `script` with `sandbox` as the global object and returns the result.
-Running code does not have access to local scope. `sandbox` is optional.
+`vm.createContext()` creates a new context which is suitable for use as the second argument of a subsequent call to `vm.runInContext()`. 
 
-Example: compile code that increments a global variable and sets one, then execute this code multiple times.
-These globals are contained in the sandbox.
+A (V8) context comprises a global object together with a set of build-in objects and functions.
 
-    var util = require('util'),
-        vm = require('vm'),
-        sandbox = {
-          animal: 'cat',
-          count: 2
-        };
+ 
 
-    var script = vm.createScript('count += 1; name = "kitty"', 'myfile.vm');
 
-    for (var i = 0; i < 10 ; i += 1) {
-      script.runInNewContext(sandbox);
-    }
+### vm.createScript(code [, filename]), vm.Script
+- code {String}  The code to run
+- filename {String}  A filename to emulate where the code is coming from
 
-    console.log(util.inspect(sandbox));
 
-    // { animal: 'cat', count: 12, name: 'kitty' }
+This script can be run later many times using the other `vm` methods. In case of syntax error in `code`, `createScript` prints the syntax error to stderr and throws an exception.
 
-Note that running untrusted code is a tricky business requiring great care.  To prevent accidental
-global variable leakage, `script.runInNewContext` is quite useful, but safely running untrusted code
-requires a separate process.
+
+`createScript()` compiles `code` as if it were loaded from `filename`, but does not run it. Instead, it returns a `vm.Script` object representing this compiled code. The returned script is not bound to any global object. It is bound before each run, just for that run. The `filename` is optional, and is only used in stack traces.
+
+ 
+## vm.Script
+
+This object is created as a result of the [[vm.createScript `vm.createScript()`]] method. It represents some compiled code than can be run at a later moment.
+
+
+
+
+### vm.Script.runInThisContext(), String
+
+Similar to `vm.runInThisContext()`, but a method of the precompiled `Script` object.
+
+`script.runInThisContext()` runs the code of `script` and returns the result. Running code doesn't have access to local scope, but does have access to the `global` object.
+
+#### Example
+
+Using `script.runInThisContext()` to compile code once and run it multiple times:
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.Script.runInThisContext.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+#### Returns
+
+A string representing the result of running `code`.
+
+ 
+
+
+### vm.Script.runInNewContext([sandbox]), String
+- sandbox {Object}  A global object with properties to pass into the `Script` object
+
+Similar to `vm.runInNewContext()`, this is a method of a precompiled `Script` object.
+
+`script.runInNewContext()` runs the code of `script` with `sandbox` as the global object and returns the result. Running code does not have access to local scope.
+
+Warning: Running untrusted code is a tricky business requiring great care.  To prevent accidental global variable leakage, `script.runInNewContext()` is quite useful, but safely running untrusted code requires a separate process.
+
+#### Example
+
+Compiling code that increments a global variable and sets one, then execute the code multiple times:
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/vm/vm.Script.runInNewContext.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+
+#### Returns
+
+A string representing the result of running `code`.
+
+ 
+

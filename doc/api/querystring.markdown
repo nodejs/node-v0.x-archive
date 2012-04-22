@@ -1,49 +1,53 @@
-# Query String
+## querystring
 
     Stability: 3 - Stable
+    
+This module provides utilities for dealing with query strings in URLs. To include this module, add `require('querystring')` to your code.
 
-<!--name=querystring-->
+#### Example
 
-This module provides utilities for dealing with query strings.
-It provides the following methods:
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/querystring/querystring.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-## querystring.stringify(obj, [sep], [eq])
 
-Serialize an object to a query string.
-Optionally override the default separator (`'&'`) and assignment (`'='`)
-characters.
 
-Example:
+### querystring.escape(), String
 
-    querystring.stringify({ foo: 'bar', baz: ['qux', 'quux'], corge: '' })
-    // returns
-    'foo=bar&baz=qux&baz=quux&corge='
+The escape function used by `querystring.stringify()`, provided so that it can be overridden, if necessary.
 
-    querystring.stringify({foo: 'bar', baz: 'qux'}, ';', ':')
-    // returns
-    'foo:bar;baz:qux'
+ 
 
-## querystring.parse(str, [sep], [eq], [options])
 
-Deserialize a query string to an object.
-Optionally override the default separator (`'&'`) and assignment (`'='`)
-characters.
+### querystring.parse(str [, sep='&'] [, eq='=']), Object
+- str {String}  The query string to parse
+- sep {String}  The separator character
+- eq {String}  The equivalency character
 
-Options object may contain `maxKeys` property (equal to 1000 by default), it'll
-be used to limit processed keys. Set it to 0 to remove key count limitation.
+Deserialize a query string to an object and returns it. You can choose to override the default separator and assignment characters.
 
-Example:
+#### Example
 
-    querystring.parse('foo=bar&baz=qux&baz=quux&corge')
-    // returns
-    { foo: 'bar', baz: ['qux', 'quux'], corge: '' }
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/querystring/querystring.parse.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+  
+ 
 
-## querystring.escape
 
-The escape function used by `querystring.stringify`,
-provided so that it could be overridden if necessary.
+### querystring.stringify(obj [, sep='&'] [, eq='=']), String
+- obj {Object}   The JSON object to serialize
+- sep {String}  The separator character
+- eq {String}  The equivalency character
 
-## querystring.unescape
+Serialize an object to a query string and returns it. You can choose to override the default separator and assignment characters.
 
-The unescape function used by `querystring.parse`,
-provided so that it could be overridden if necessary.
+#### Examples
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/querystring/querystring.stringify.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
+ 
+
+
+### querystring.unescape() , String
+
+The `unescape()` function, used by `querystring.parse()`, is provided so that it can be overridden if necessary.
+
+
+
+
