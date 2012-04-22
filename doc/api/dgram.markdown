@@ -1,209 +1,135 @@
-# UDP / Datagram Sockets
+## dgram
 
     Stability: 3 - Stable
 
-<!-- name=dgram -->
+A datagram socket is a type of connectionless Internet socket, for the sending or receiving point for packet delivery services. Datagram sockets are available in Node.js by adding `require('dgram')` to your code.
 
-Datagram sockets are available through `require('dgram')`.
+#### Some Notes About UDP Datagram Size
 
-## dgram.createSocket(type, [callback])
+The maximum size of an `IPv4/v6` datagram depends on the `MTU` (_Maximum Transmission Unit_) and on the `Payload Length` field size.
 
-* `type` String. Either 'udp4' or 'udp6'
-* `callback` Function. Attached as a listener to `message` events.
-  Optional
-* Returns: Socket object
+The `Payload Length` field is `16 bits` wide, which means that a normal payload can't be larger than 64K octets, including internet header and data: (65,507 bytes = 65,535 − 8 bytes UDP header − 20 bytes IP header). This is generally true for loopback interfaces, but such long datagrams are impractical for most hosts and networks.
 
-Creates a datagram Socket of the specified types.  Valid types are `udp4`
-and `udp6`.
+The `MTU` is the largest size a given link layer technology can support for datagrams. For any link, IPv4 mandates a minimum `MTU` of `68` octets, while the recommended `MTU` for IPv4 is `576` (typically recommended as the `MTU` for dial-up type applications), whether they arrive whole or in fragments.
 
-Takes an optional callback which is added as a listener for `message` events.
+For `IPv6`, the minimum `MTU` is `1280` octets; however, the mandatory minimum fragment reassembly buffer size is `1500` octets. The value of `68` octets is very small, since most current link layer technologies have a minimum `MTU` of `1500` (like Ethernet).
 
-Call `socket.bind` if you want to receive datagrams. `socket.bind()` will bind
-to the "all interfaces" address on a random port (it does the right thing for
-both `udp4` and `udp6` sockets). You can then retrieve the address and port
-with `socket.address().address` and `socket.address().port`.
+Note: It's impossible to know in advance the MTU of each link through which a packet might travel, and that generally sending a datagram greater than the (receiver) `MTU` won't work (the packet gets silently dropped, without informing the source that the data did not reach its intended recipient).
 
-## Class: Socket
+#### Example
+		
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-The dgram Socket class encapsulates the datagram functionality.  It
-should be created via `dgram.createSocket(type, [callback])`.
 
-### Event: 'message'
+### dgram.createSocket(type, [callback()]), dgram
+- type {String}   The type of socket to create; valid types are `udp4` and `udp6`
+- callback {Function}  A callback that's added as a listener for `message` events
 
-* `msg` Buffer object. The message
-* `rinfo` Object. Remote address information
+Creates a datagram socket of the specified types.
 
-Emitted when a new datagram is available on a socket.  `msg` is a `Buffer` and `rinfo` is
-an object with the sender's address information and the number of bytes in the datagram.
+If you want to receive datagrams, call `socket.bind()`. `socket.bind()` binds to the "all interfaces" address on a random port (it does the right thing for both `udp4` and `udp6` sockets). You can then retrieve the address and port with `socket.address().address` and `socket.address().port`.
 
-### Event: 'listening'
+### dgram.send(buf, offset, length, port, address, [callback(err)])
+- buf {Buffer}  The data buffer to send
+- offset {Number}   Indicates where in the buffer to start at
+- length {Number}   Indicates how much of the buffer to use (its number of bytes)
+- port {Number}   The port to send to
+- address {String}   The address to send to
+- callback {Function}  The callback to execute once the method completes that may be used to detect any DNS errors and when `buf` may be reused
+- err {Error}  The standard `Error` object 
 
-Emitted when a socket starts listening for datagrams.  This happens as soon as UDP sockets
-are created.
+Sends some information to a specified `address:port`. For UDP sockets, the destination port and IP address must be specified.  
 
-### Event: 'close'
-
-Emitted when a socket is closed with `close()`.  No new `message` events will be emitted
-on this socket.
-
-### Event: 'error'
-
-* `exception` Error object
-
-Emitted when an error occurs.
-
-### dgram.send(buf, offset, length, port, address, [callback])
-
-* `buf` Buffer object.  Message to be sent
-* `offset` Integer. Offset in the buffer where the message starts.
-* `length` Integer. Number of bytes in the message.
-* `port` Integer. destination port
-* `address` String. destination IP
-* `callback` Function. Callback when message is done being delivered.
-  Optional.
-
-For UDP sockets, the destination port and IP address must be specified.  A string
-may be supplied for the `address` parameter, and it will be resolved with DNS.  An
-optional callback may be specified to detect any DNS errors and when `buf` may be
-re-used.  Note that DNS lookups will delay the time that a send takes place, at
-least until the next tick.  The only way to know for sure that a send has taken place
+A string may be supplied for the `address` parameter, and it will be resolved with DNS. Note that DNS lookups delay the time that a send takes place, at least until the next tick.  The only way to know for sure that a send has taken place
 is to use the callback.
 
-If the socket has not been previously bound with a call to `bind`, it's
-assigned a random port number and bound to the "all interfaces" address
-(0.0.0.0 for `udp4` sockets, ::0 for `udp6` sockets).
+If the socket has not been previously bound with a call to [[dgram.bind `dgram.bind()`]], it's assigned a random port number and bound to the "all interfaces" address (0.0.0.0 for `udp4` sockets, ::0 for `udp6` sockets).
 
-Example of sending a UDP packet to a random port on `localhost`;
+#### Example: Sending a UDP packet to a random port on `localhost`;
 
-    var dgram = require('dgram');
-    var message = new Buffer("Some bytes");
-    var client = dgram.createSocket("udp4");
-    client.send(message, 0, message.length, 41234, "localhost", function(err, bytes) {
-      client.close();
-    });
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.send.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-**A Note about UDP datagram size**
+### dgram.bind(port [, address])
+- port {Number}  The port to bind to
+- address {String}  The address to attach to
 
-The maximum size of an `IPv4/v6` datagram depends on the `MTU` (_Maximum Transmission Unit_)
-and on the `Payload Length` field size.
+For UDP sockets, listen for datagrams on a named `port` and optional `address`. If `address` isn't specified, the OS tries to listen on all addresses.
 
-- The `Payload Length` field is `16 bits` wide, which means that a normal payload
-  cannot be larger than 64K octets including internet header and data
-  (65,507 bytes = 65,535 − 8 bytes UDP header − 20 bytes IP header);
-  this is generally true for loopback interfaces, but such long datagrams
-  are impractical for most hosts and networks.
+#### Example: A UDP server listening on port 41234:
 
-- The `MTU` is the largest size a given link layer technology can support for datagrams.
-  For any link, `IPv4` mandates a minimum `MTU` of `68` octets, while the recommended `MTU`
-  for IPv4 is `576` (typically recommended as the `MTU` for dial-up type applications),
-  whether they arrive whole or in fragments.
-
-  For `IPv6`, the minimum `MTU` is `1280` octets, however, the mandatory minimum
-  fragment reassembly buffer size is `1500` octets.
-  The value of `68` octets is very small, since most current link layer technologies have
-  a minimum `MTU` of `1500` (like Ethernet).
-
-Note that it's impossible to know in advance the MTU of each link through which
-a packet might travel, and that generally sending a datagram greater than
-the (receiver) `MTU` won't work (the packet gets silently dropped, without
-informing the source that the data did not reach its intended recipient).
-
-### dgram.bind(port, [address])
-
-* `port` Integer
-* `address` String, Optional
-
-For UDP sockets, listen for datagrams on a named `port` and optional `address`. If
-`address` is not specified, the OS will try to listen on all addresses.
-
-Example of a UDP server listening on port 41234:
-
-    var dgram = require("dgram");
-
-    var server = dgram.createSocket("udp4");
-
-    server.on("message", function (msg, rinfo) {
-      console.log("server got: " + msg + " from " +
-        rinfo.address + ":" + rinfo.port);
-    });
-
-    server.on("listening", function () {
-      var address = server.address();
-      console.log("server listening " +
-          address.address + ":" + address.port);
-    });
-
-    server.bind(41234);
-    // server listening 0.0.0.0:41234
-
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.bind.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
 ### dgram.close()
 
 Close the underlying socket and stop listening for data on it.
 
-### dgram.address()
+### dgram.address(), Object
 
-Returns an object containing the address information for a socket.  For UDP sockets,
-this object will contain `address` and `port`.
+Returns an object containing the address information for a socket.  For UDP sockets, this object contains the properties `address` and `port`.
 
 ### dgram.setBroadcast(flag)
+- flag {Boolean}  The value of `SO_BROADCAST`
 
-* `flag` Boolean
-
-Sets or clears the `SO_BROADCAST` socket option.  When this option is set, UDP packets
-may be sent to a local interface's broadcast address.
+Sets or clears the `SO_BROADCAST` socket option.  When this option is set to `true`, UDP packets may be sent to a local interface's broadcast address.
 
 ### dgram.setTTL(ttl)
+- ttl {Number}  The value of `IP_TTL`
 
-* `ttl` Integer
+Sets the `IP_TTL` socket option. TTL stands for "Time to Live," but in this context it specifies the number of IP hops that a packet is allowed to go through. Each router or gateway that forwards a packet decrements the TTL.  If the TTL is decremented to 0 by a router, it will not be forwarded.  Changing TTL values is typically done for network probes or when multicasting.
 
-Sets the `IP_TTL` socket option.  TTL stands for "Time to Live," but in this context it
-specifies the number of IP hops that a packet is allowed to go through.  Each router or
-gateway that forwards a packet decrements the TTL.  If the TTL is decremented to 0 by a
-router, it will not be forwarded.  Changing TTL values is typically done for network
-probes or when multicasting.
-
-The argument to `setTTL()` is a number of hops between 1 and 255.  The default on most
-systems is 64.
+The argument to `setTTL()` is a number of hops between 1 and 255.  The default on most systems is 64.
 
 ### dgram.setMulticastTTL(ttl)
+- ttl {Number}  The value of `IP_MULTICAST_TTL` 
 
-* `ttl` Integer
+Sets the `IP_MULTICAST_TTL` socket option.  TTL stands for "Time to Live," but in this context it specifies the number of IP hops that a packet is allowed to go through, specifically for multicast traffic.  Each router or gateway that forwards a packet decrements the TTL. If the TTL is decremented to 0 by a router, it will not be forwarded.
 
-Sets the `IP_MULTICAST_TTL` socket option.  TTL stands for "Time to Live," but in this
-context it specifies the number of IP hops that a packet is allowed to go through,
-specifically for multicast traffic.  Each router or gateway that forwards a packet
-decrements the TTL. If the TTL is decremented to 0 by a router, it will not be forwarded.
-
-The argument to `setMulticastTTL()` is a number of hops between 0 and 255.  The default on most
-systems is 1.
+The argument to `setMulticastTTL()` is a number of hops between 0 and 255.  The default on most systems is 64.
 
 ### dgram.setMulticastLoopback(flag)
+- flag {Boolean}   The value of `IP_MULTICAST_LOOP`
 
-* `flag` Boolean
+Sets or clears the `IP_MULTICAST_LOOP` socket option.  When this option is `true`, multicast packets will also be received on the local interface.
 
-Sets or clears the `IP_MULTICAST_LOOP` socket option.  When this option is set, multicast
-packets will also be received on the local interface.
+### dgram.addMembership(multicastAddress [, multicastInterface])
+- multicastAddress {String}  The address to add
+- multicastInterface {String}  The interface to use
 
-### dgram.addMembership(multicastAddress, [multicastInterface])
+Tells the kernel to join a multicast group with the `IP_ADD_MEMBERSHIP` socket option.
 
-* `multicastAddress` String
-* `multicastInterface` String, Optional
+If `multicastInterface` is not specified, the OS will try to add membership to all valid interfaces.
 
-Tells the kernel to join a multicast group with `IP_ADD_MEMBERSHIP` socket option.
+#### Example
 
-If `multicastInterface` is not specified, the OS will try to add membership to all valid
-interfaces.
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/dgram/dgram.addMembership.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-### dgram.dropMembership(multicastAddress, [multicastInterface])
+### dgram.dropMembership(multicastAddress [, multicastInterface])
+- multicastAddress {String}  The address to drop
+- multicastInterface {String}  The interface to use
 
-* `multicastAddress` String
-* `multicastInterface` String, Optional
+The opposite of `addMembership`—this tells the kernel to leave a multicast group with `IP_DROP_MEMBERSHIP` socket option. This is automatically called by the kernel when the socket is closed or process terminates, so most apps will never need to call this.
 
-Opposite of `addMembership` - tells the kernel to leave a multicast group with
-`IP_DROP_MEMBERSHIP` socket option. This is automatically called by the kernel
-when the socket is closed or process terminates, so most apps will never need to call
-this.
+If `multicastInterface` is not specified, the OS will try to drop membership to all valid interfaces.
 
-If `multicastInterface` is not specified, the OS will try to drop membership to all valid
-interfaces.
+## socket
+
+The dgram Socket class encapsulates the datagram functionality.  It should be created via `dgram.createSocket(type, [callback])`.
+
+### socket@message(msg, rinfo)
+- msg {Buffer} A `Buffer` of information
+- rinfo {Object} An object with the sender's address information and the number of bytes in the datagram. 
+
+Emitted when a new datagram is available on a socket. 
+
+### socket@listening()
+
+Emitted when a socket starts listening for datagrams. This happens as soon as UDP sockets are created.
+
+### socket@close()
+
+Emitted when a socket is closed with [[dgram.close `dgram.close()`]].  No new `message` events are emitted on this socket.
+
+### socket@error(exception)
+- exception {Error} The error that was encountered
+
+Emitted when an error occurs.

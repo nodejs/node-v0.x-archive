@@ -1,386 +1,160 @@
-# Child Process
+## child_process
 
     Stability: 3 - Stable
+    
+Node.js provides a tri-directional [`popen(3)`](http://www.kernel.org/doc/man-pages/online/pages/man3/popen.3.html) facility through the `child_process` module. It's possible to stream data through the child's `stdin`, `stdout`, and `stderr` in a fully non-blocking way.
 
-Node provides a tri-directional `popen(3)` facility through the
-`child_process` module.
+To create a child process object, use `require('child_process')` in your code.
 
-It is possible to stream data through a child's `stdin`, `stdout`, and
-`stderr` in a fully non-blocking way.
+Child processes always have three streams associated with them. They are:
 
-To create a child process use `require('child_process').spawn()` or
-`require('child_process').fork()`.  The semantics of each are slightly
-different, and explained below.
+* `child.stdin`, the standard input stream
+* `child.stdout`, the standard output stream
+* `child.stderr`, the standard error stream
 
-## Class: ChildProcess
+#### Example: Running ls in a child process
 
-`ChildProcess` is an `EventEmitter`.
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child_process.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-Child processes always have three streams associated with them. `child.stdin`,
-`child.stdout`, and `child.stderr`.  These may be shared with the stdio
-streams of the parent process, or they may be separate stream objects
-which can be piped to and from.
+### child_process@exit(code, signal)
+- code {Number} The final exit code of the process (otherwise, `null`)
+- signal {String} The string name of the signal (otherwise, `null`)
 
-The ChildProcess class is not intended to be used directly.  Use the
-`spawn()` or `fork()` methods to create a Child Process instance.
 
-### Event:  'exit'
+This event is emitted after the child process ends.
 
-* `code` {Number} the exit code, if it exited normally.
-* `signal` {String} the signal passed to kill the child process, if it
-  was killed by the parent.
+For more information, see [waitpid(2)](http://www.kernel.org/doc/man-pages/online/pages/man2/wait.2.html).
 
-This event is emitted after the child process ends. If the process terminated
-normally, `code` is the final exit code of the process, otherwise `null`. If
-the process terminated due to receipt of a signal, `signal` is the string name
-of the signal, otherwise `null`.
+### child_process.stdin, streams.WritableStream
 
-Note that the child process stdio streams might still be open.
+A [[streams.WritableStream `Writable Stream`]] that represents the child process's `stdin`. Closing this stream via [[streams.WritableStream.end `streams.WritableStream.end()`]] often causes the child process to terminate.
 
-See `waitpid(2)`.
+### child_process.stdout, streams.ReadableStream
 
-### Event: 'close'
+A [[streams.ReadableStream `Readable Stream`]] that represents the child process's `stdout`.
 
-This event is emitted when the stdio streams of a child process have all
-terminated.  This is distinct from 'exit', since multiple processes
-might share the same stdio streams.
-
-### Event: 'disconnect'
-
-This event is emitted after using the `.disconnect()` method in the parent or
-in the child. After disconnecting it is no longer possible to send messages.
-An alternative way to check if you can send messages is to see if the
-`child.connected` property is `true`.
-
-### child.stdin
-
-* {Stream object}
-
-A `Writable Stream` that represents the child process's `stdin`.
-Closing this stream via `end()` often causes the child process to terminate.
-
-If the child stdio streams are shared with the parent, then this will
-not be set.
-
-### child.stdout
-
-* {Stream object}
-
-A `Readable Stream` that represents the child process's `stdout`.
-
-If the child stdio streams are shared with the parent, then this will
-not be set.
-
-### child.stderr
-
-* {Stream object}
-
-A `Readable Stream` that represents the child process's `stderr`.
-
-If the child stdio streams are shared with the parent, then this will
-not be set.
-
-### child.pid
-
-* {Integer}
+### child_process.pid, Number
 
 The PID of the child process.
 
-Example:
+#### Example
 
-    var spawn = require('child_process').spawn,
-        grep  = spawn('grep', ['ssh']);
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.pid.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-    console.log('Spawned child pid: ' + grep.pid);
-    grep.stdin.end();
+### child_process.spawn(command [, args] [, options])
+- command {String} The Unix command to spawn
+- args {String | Array} The command line arguments to pass
+- options {Object}  Any additional options you want to transfer
+(related to: child_process.exec)
 
-### child.kill([signal])
+Launches a new process for the given Unix `command`. You can pass command line arguments through `args`. `options` specifies additional options, which default to:
 
-* `signal` {String}
-
-Send a signal to the child process. If no argument is given, the process will
-be sent `'SIGTERM'`. See `signal(7)` for a list of available signals.
-
-    var spawn = require('child_process').spawn,
-        grep  = spawn('grep', ['ssh']);
-
-    grep.on('exit', function (code, signal) {
-      console.log('child process terminated due to receipt of signal '+signal);
-    });
-
-    // send SIGHUP to process
-    grep.kill('SIGHUP');
-
-Note that while the function is called `kill`, the signal delivered to the child
-process may not actually kill it.  `kill` really just sends a signal to a process.
-
-See `kill(2)`
-
-
-### child.send(message, [sendHandle])
-
-* `message` {Object}
-* `sendHandle` {Handle object}
-
-Send a message (and, optionally, a handle object) to a child process.
-
-See `child_process.fork()` for details.
-
-## child_process.spawn(command, [args], [options])
-
-* `command` {String} The command to run
-* `args` {Array} List of string arguments
-* `options` {Object}
-  * `cwd` {String} Current working directory of the child process
-  * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
-  * `env` {Object} Environment key-value pairs
-  * `setsid` {Boolean}
-* return: {ChildProcess object}
-
-Launches a new process with the given `command`, with  command line arguments in `args`.
-If omitted, `args` defaults to an empty Array.
-
-The third argument is used to specify additional options, which defaults to:
-
-    { cwd: undefined,
-      env: process.env
+    { 
+			cwd: undefined,
+      	env: process.env,
+      	setsid: false
     }
 
-`cwd` allows you to specify the working directory from which the process is spawned.
-Use `env` to specify environment variables that will be visible to the new process.
+They refer to:
 
-Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit code:
+* `cwd` specifies the working directory from which the process is spawned
+* `env` specifies environment variables that will be visible to the new process
+* `setsid`, if `true`, causes the subprocess to run in a new session
 
-    var util  = require('util'),
-        spawn = require('child_process').spawn,
-        ls    = spawn('ls', ['-lh', '/usr']);
+Note that if `spawn()` receives an empty `options` object, it spawns the process with an empty environment rather than using [[process.env `process.env`]]. This is due to backwards compatibility issues with a deprecated API.
 
-    ls.stdout.on('data', function (data) {
-      console.log('stdout: ' + data);
-    });
+##### Undocumented Options 
 
-    ls.stderr.on('data', function (data) {
-      console.log('stderr: ' + data);
-    });
+There are several internal options—in particular: `stdinStream`, `stdoutStream`, and `stderrStream`. They are for INTERNAL USE ONLY. As with all undocumented APIs in Node.js, they shouldn't be used.
 
-    ls.on('exit', function (code) {
-      console.log('child process exited with code ' + code);
-    });
+There is also a deprecated option called `customFds`, which allows one to specify specific file descriptors for the `stdio` of the child process. This API was not portable to all platforms and therefore removed. With `customFds`, it was possible to hook up the new process' [stdin, stdout, stderr] to existing stream; `-1` meant that a new stream should be created. **Use this functionality at your own risk.**
+
+#### Example: Running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit code
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.spawn_1.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
 
-Example: A very elaborate way to run 'ps ax | grep ssh'
+#### Example: A very elaborate way to run `'ps ax | grep ssh'`:
 
-    var util  = require('util'),
-        spawn = require('child_process').spawn,
-        ps    = spawn('ps', ['ax']),
-        grep  = spawn('grep', ['ssh']);
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.spawn_2.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-    ps.stdout.on('data', function (data) {
-      grep.stdin.write(data);
-    });
+#### Example: Checking for a failed `exec`:
 
-    ps.stderr.on('data', function (data) {
-      console.log('ps stderr: ' + data);
-    });
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.spawn_3.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-    ps.on('exit', function (code) {
-      if (code !== 0) {
-        console.log('ps process exited with code ' + code);
-      }
-      grep.stdin.end();
-    });
+### child_process.exec(command[, options], callback(error, stdout, stderr)), Object
+- command {String} The Unix command to run
+- options {Object} The options to pass to the command
+- callback {Function} The function to run after the method completes
+- error {Error} The standard `Error` object; `err.code` is the exit code of the child process and `err.signal` is set to the signal that terminated the process
+- stdout {streams.ReadableStream} The standard output stream
+- stderr {streams.ReadableStream} The standard error stream
+(related to: child_process.spawn)
 
-    grep.stdout.on('data', function (data) {
-      console.log(data);
-    });
+Runs a Unix command in a shell and buffers the output.
 
-    grep.stderr.on('data', function (data) {
-      console.log('grep stderr: ' + data);
-    });
+There is a second optional argument to specify several options. The default options are:
 
-    grep.on('exit', function (code) {
-      if (code !== 0) {
-        console.log('grep process exited with code ' + code);
-      }
-    });
-
-
-Example of checking for failed exec:
-
-    var spawn = require('child_process').spawn,
-        child = spawn('bad_command');
-
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', function (data) {
-      if (/^execvp\(\)/.test(data)) {
-        console.log('Failed to start child process.');
-      }
-    });
-
-Note that if spawn receives an empty options object, it will result in
-spawning the process with an empty environment rather than using
-`process.env`. This due to backwards compatibility issues with a deprecated
-API.
-
-There is a deprecated option called `customFds` which allows one to specify
-specific file descriptors for the stdio of the child process. This API was
-not portable to all platforms and therefore removed.
-With `customFds` it was possible to hook up the new process' `[stdin, stdout,
-stderr]` to existing streams; `-1` meant that a new stream should be created.
-Use at your own risk.
-
-There are several internal options. In particular `stdinStream`,
-`stdoutStream`, `stderrStream`. They are for INTERNAL USE ONLY. As with all
-undocumented APIs in Node, they should not be used.
-
-See also: `child_process.exec()` and `child_process.fork()`
-
-## child_process.exec(command, [options], callback)
-
-* `command` {String} The command to run, with space-separated arguments
-* `options` {Object}
-  * `cwd` {String} Current working directory of the child process
-  * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
-  * `env` {Object} Environment key-value pairs
-  * `setsid` {Boolean}
-  * `encoding` {String} (Default: 'utf8')
-  * `timeout` {Number} (Default: 0)
-  * `maxBuffer` {Number} (Default: 200*1024)
-  * `killSignal` {String} (Default: 'SIGTERM')
-* `callback` {Function} called with the output when process terminates
-  * `code` {Integer} Exit code
-  * `stdout` {Buffer}
-  * `stderr` {Buffer}
-* Return: ChildProcess object
-
-Runs a command in a shell and buffers the output.
-
-    var util = require('util'),
-        exec = require('child_process').exec,
-        child;
-
-    child = exec('cat *.js bad_file | wc -l',
-      function (error, stdout, stderr) {
-        console.log('stdout: ' + stdout);
-        console.log('stderr: ' + stderr);
-        if (error !== null) {
-          console.log('exec error: ' + error);
-        }
-    });
-
-The callback gets the arguments `(error, stdout, stderr)`. On success, `error`
-will be `null`.  On error, `error` will be an instance of `Error` and `err.code`
-will be the exit code of the child process, and `err.signal` will be set to the
-signal that terminated the process.
-
-There is a second optional argument to specify several options. The
-default options are
-
-    { encoding: 'utf8',
+    { 
+      encoding: 'utf8',
       timeout: 0,
       maxBuffer: 200*1024,
       killSignal: 'SIGTERM',
       cwd: null,
-      env: null }
+      env: null 
+    }
 
-If `timeout` is greater than 0, then it will kill the child process
-if it runs longer than `timeout` milliseconds. The child process is killed with
-`killSignal` (default: `'SIGTERM'`). `maxBuffer` specifies the largest
-amount of data allowed on stdout or stderr - if this value is exceeded then
-the child process is killed.
+These refer to:
 
+* `encoding` is the current encoding the output is defined with
+* `timeout` is an integer, which, if greater than `0`, kills the child process if it runs longer than `timeout` milliseconds
+* `maxBuffer` specifies the largest amount of data allowed on stdout or stderr; if this value is exceeded then the child process is killed.
+* `killSignal` defines [a kill signal](http://kernel.org/doc/man-pages/online/pages/man7/signal.7.html) to kill the child process with 
+* `cwd` is a string defining the current working directory
+* `env` is an object with the current environment options
 
-## child_process.execFile(file, args, options, callback)
+#### Example
 
-* `file` {String} The filename of the program to run
-* `args` {Array} List of string arguments
-* `options` {Object}
-  * `cwd` {String} Current working directory of the child process
-  * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
-  * `env` {Object} Environment key-value pairs
-  * `setsid` {Boolean}
-  * `encoding` {String} (Default: 'utf8')
-  * `timeout` {Number} (Default: 0)
-  * `maxBuffer` {Number} (Default: 200*1024)
-  * `killSignal` {String} (Default: 'SIGTERM')
-* `callback` {Function} called with the output when process terminates
-  * `code` {Integer} Exit code
-  * `stdout` {Buffer}
-  * `stderr` {Buffer}
-* Return: ChildProcess object
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.exec.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-This is similar to `child_process.exec()` except it does not execute a
-subshell but rather the specified file directly. This makes it slightly
-leaner than `child_process.exec`. It has the same options.
+#### Returns
 
+An object containing the three standard streams, plus other parameters like the PID, signal code, and exit code
 
-## child_process.fork(modulePath, [args], [options])
+### child_process.execFile(file, args, options, callback(error, stdout, stderr))
+- file {String} The file location with the commands to run
+- args {String} The command line arguments to pass
+- options {Object} The options to pass to the `exec` call
+- callback {Function} The function to run after the method completes
+- error {Error} The standard `Error` object, except `err.code` is the exit code of the child process, and `err.signal is set to the signal that terminated the process
+- stdout {streams.ReadableStream} is the standard output stream
+- stderr {streams.ReadableStream} is the standard error stream
 
-* `modulePath` {String} The module to run in the child
-* `args` {Array} List of string arguments
-* `options` {Object}
-  * `cwd` {String} Current working directory of the child process
-  * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
-  * `env` {Object} Environment key-value pairs
-  * `setsid` {Boolean}
-  * `encoding` {String} (Default: 'utf8')
-  * `timeout` {Number} (Default: 0)
-* `callback` {Function} called with the output when process terminates
-  * `code` {Integer} Exit code
-  * `stdout` {Buffer}
-  * `stderr` {Buffer}
-* Return: ChildProcess object
+A function similar to `child.exec()`, except instead of executing a subshell it executes the specified file directly. This makes it slightly leaner than `child.exec`. It has the same options and callback.
 
-This is a special case of the `spawn()` functionality for spawning Node
-processes. In addition to having all the methods in a normal ChildProcess
-instance, the returned object has a communication channel built-in. The
-channel is written to with `child.send(message, [sendHandle])` and messages
-are received by a `'message'` event on the child.
+### child_process.fork(modulePath, arguments, options), Object
+- modulePath {String} The location of the module
+- arguments {String} Any starting arguments to use
+- options {Object} Any additional options to pass
+(related to: child_process.spawn)
 
-For example:
+This is a special case of the [[child_process.spawn `child_process.spawn()`]] functionality for spawning Node.js processes. In addition to having all the methods in a normal ChildProcess instance, the returned object has a communication channel built-in. The channel is written with `child.send(message, [sendHandle])`, and messages are recieved by a `'message'` event on the child.
 
-    var cp = require('child_process');
+By default the spawned Node.js process will have the `stdin`, `stdout`, `stderr` associated with the parent's.
 
-    var n = cp.fork(__dirname + '/sub.js');
+These child nodes are still whole new instances of V8. Assume at least 30ms startup and 10mb memory for each new node. That is, you can't create many thousands of them.
 
-    n.on('message', function(m) {
-      console.log('PARENT got message:', m);
-    });
+#### Example
 
-    n.send({ hello: 'world' });
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.fork.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-And then the child script, `'sub.js'` might look like this:
+The child script, `'sub.js'`, might look like this:
 
-    process.on('message', function(m) {
-      console.log('CHILD got message:', m);
-    });
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/sub.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
 
-    process.send({ foo: 'bar' });
+In the child, the `process` object has a `send()` method, and `process` emits objects each time it receives a message on its channel.
 
-In the child the `process` object will have a `send()` method, and `process`
-will emit objects each time it receives a message on its channel.
-
-There is a special case when sending a `{cmd: 'NODE_foo'}` message. All messages
-containing a `NODE_` prefix in its `cmd` property will not be emitted in
-the `message` event, since they are internal messages used by node core.
-Messages containing the prefix are emitted in the `internalMessage` event, you
-should by all means avoid using this feature, it may change without warranty.
-
-By default the spawned Node process will have the stdout, stderr associated
-with the parent's. To change this behavior set the `silent` property in the
-`options` object to `true`.
-
-These child Nodes are still whole new instances of V8. Assume at least 30ms
-startup and 10mb memory for each new Node. That is, you cannot create many
-thousands of them.
-
-The `sendHandle` option to `child.send()` is for sending a handle object to
-another process. Child will receive the handle as as second argument to the
-`message` event. Here is an example of sending a handle:
+The `sendHandle` option on `child.send()` is for sending a handle object to another process. The child receives the handle as as second argument to the `message` event. Here's an example of sending a handle:
 
     var server = require('net').createServer();
     var child = require('child_process').fork(__dirname + '/child.js');
@@ -389,8 +163,7 @@ another process. Child will receive the handle as as second argument to the
       child.send({ server: true }, server._handle);
     });
 
-Here is an example of receiving the server handle and sharing it between
-processes:
+Here's an example of receiving the server handle and sharing it between processes:
 
     process.on('message', function(m, serverHandle) {
       if (serverHandle) {
@@ -399,9 +172,16 @@ processes:
       }
     });
 
-To close the IPC connection between parent and child use the
-`child.disconnect()` method. This allows the child to exit gracefully since
-there is no IPC channel keeping it alive. When calling this method the
-`disconnect` event will be emitted in both parent and child, and the
-`connected` flag will be set to `false`. Please note that you can also call
-`process.disconnect()` in the child process.
+
+### child_process.kill([signal='SIGTERM'])
+- signal {String} The kill signal to send
+
+Sends a signal to the child process. See [`signal(7)`](http://www.kernel.org/doc/man-pages/online/pages/man7/signal.7.html) for a list of available signals.
+
+Note that while the function is called `kill`, the signal delivered to the child process may not actually kill it. `kill` really just sends a signal to a process.
+
+For more information, see [`kill(2)`](http://www.kernel.org/doc/man-pages/online/pages/man2/kill.2.html).
+
+#### Example
+
+<script src='http://snippets.c9.io/github.com/c9/nodemanual.org-examples/nodejs_ref_guide/child_process/child.kill.js?linestart=3&lineend=0&showlines=false' defer='defer'></script>
