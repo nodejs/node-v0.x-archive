@@ -177,14 +177,14 @@
         [ 'node_shared_zlib=="false"', {
           'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
         }],
-    
-       [ 'node_staticlib=="true"', {
+
+        [ 'node_staticlib=="true"', {
           'type': '<(library)',
          }, {
           'sources': ['src/node_main.cc'],
         }],
 
-       [ 'OS=="win"', {
+        [ 'OS=="win"', {
           'sources': [
             'tools/msvs/res/node.rc',
           ],
