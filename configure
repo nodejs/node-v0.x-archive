@@ -126,6 +126,11 @@ parser.add_option("--dest-cpu",
     dest="dest_cpu",
     help="CPU architecture to build for. Valid values are: arm, ia32, x64")
 
+parser.add_option("--staticlib",
+    action="store_true",
+    dest="staticlib",
+    help="Enable this option to build Node as a static library")
+
 (options, args) = parser.parse_args()
 
 
@@ -232,6 +237,13 @@ def configure_node(o):
   o['variables']['node_prefix'] = options.prefix if options.prefix else ''
   o['variables']['node_install_npm'] = b(not options.without_npm)
   o['variables']['node_install_waf'] = b(not options.without_waf)
+  o['variables']['node_staticlib']   = b(options.staticlib)
+
+  if os.path.exists('lib/_third_party_main.js'):
+    o['variables']['node_thirdparty'] = 'lib/_third_party_main.js'
+  else:
+    o['variables']['node_thirdparty'] = ''
+
   o['variables']['host_arch'] = host_arch()
   o['variables']['target_arch'] = options.dest_cpu or target_arch()
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
