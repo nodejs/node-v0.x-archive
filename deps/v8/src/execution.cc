@@ -826,6 +826,11 @@ Object* Execution::DebugBreakHelper() {
     return isolate->heap()->undefined_value();
   }
 
+  StackLimitCheck check(isolate);
+  if (check.HasOverflowed()) {
+    return isolate->heap()->undefined_value();
+  }
+
   {
     JavaScriptFrameIterator it(isolate);
     ASSERT(!it.done());
@@ -862,6 +867,11 @@ void Execution::ProcessDebugMessages(bool debug_command_only) {
   // Clear the debug command request flag.
   isolate->stack_guard()->Continue(DEBUGCOMMAND);
 
+  StackLimitCheck check(isolate);
+  if (check.HasOverflowed()) {
+    return;
+  }
+
   HandleScope scope(isolate);
   // Enter the debugger. Just continue if we fail to enter the debugger.
   EnterDebugger debugger;
@@ -885,7 +895,8 @@ MaybeObject* Execution::HandleStackGuardInterrupt(Isolate* isolate) {
   }
 
   if (stack_guard->IsGCRequest()) {
-    isolate->heap()->CollectAllGarbage(false, "StackGuard GC request");
+    isolate->heap()->CollectAllGarbage(Heap::kNoGCFlags,
+                                       "StackGuard GC request");
     stack_guard->Continue(GC_REQUEST);
   }
 

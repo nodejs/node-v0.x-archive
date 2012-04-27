@@ -67,15 +67,7 @@
 
     } else if (process._eval != null) {
       // User passed '-e' or '--eval' arguments to Node.
-      var Module = NativeModule.require('module');
-      var path = NativeModule.require('path');
-      var cwd = process.cwd();
-
-      var module = new Module('eval');
-      module.filename = path.join(cwd, 'eval');
-      module.paths = Module._nodeModulePaths(cwd);
-      var result = module._compile('return eval(process._eval)', 'eval');
-      if (process._print_eval) console.log(result);
+      evalScript('eval');
     } else if (process.argv[1]) {
       // make process.argv[1] into a full path
       var path = NativeModule.require('path');
@@ -121,7 +113,17 @@
       // If -i or --interactive were passed, or stdin is a TTY.
       if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
         // REPL
-        var repl = Module.requireRepl().start('> ', null, null, true);
+        var opts = {
+          useGlobal: true,
+          ignoreUndefined: false
+        };
+        if (parseInt(process.env['NODE_NO_READLINE'], 10)) {
+          opts.terminal = false;
+        }
+        if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
+          opts.useColors = false;
+        }
+        var repl = Module.requireRepl().start(opts);
         repl.on('exit', function() {
           process.exit();
         });
@@ -137,7 +139,8 @@
         });
 
         process.stdin.on('end', function() {
-          new Module()._compile(code, '[stdin]');
+          process._eval = code;
+          evalScript('[stdin]');
         });
       }
     }
@@ -225,7 +228,16 @@
       nextTickQueue = [];
 
       try {
-        for (var i = 0; i < l; i++) q[i]();
+        for (var i = 0; i < l; i++) {
+          var tock = q[i];
+          var callback = tock.callback;
+          if (tock.domain) {
+            if (tock.domain._disposed) continue;
+            tock.domain.enter();
+          }
+          callback();
+          if (tock.domain) tock.domain.exit();
+        }
       }
       catch (e) {
         if (i + 1 < l) {
@@ -239,10 +251,24 @@
     };
 
     process.nextTick = function(callback) {
-      nextTickQueue.push(callback);
+      var tock = { callback: callback };
+      if (process.domain) tock.domain = process.domain;
+      nextTickQueue.push(tock);
       process._needTickCallback();
     };
   };
+
+  function evalScript(name) {
+    var Module = NativeModule.require('module');
+    var path = NativeModule.require('path');
+    var cwd = process.cwd();
+
+    var module = new Module(name);
+    module.filename = path.join(cwd, name);
+    module.paths = Module._nodeModulePaths(cwd);
+    var result = module._compile('return eval(process._eval)', name);
+    if (process._print_eval) console.log(result);
+  }
 
   function errnoException(errorno, syscall) {
     // TODO make this more compatible with ErrnoException from src/node.cc
@@ -320,6 +346,11 @@
         er = er || new Error('process.stdout cannot be closed.');
         stdout.emit('error', er);
       };
+      if (stdout.isTTY) {
+        process.on('SIGWINCH', function() {
+          stdout._refreshSize();
+        });
+      }
       return stdout;
     });
 

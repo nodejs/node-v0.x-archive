@@ -2,6 +2,7 @@
 
 BUILDTYPE ?= Release
 PYTHON ?= python
+DESTDIR ?=
 
 # BUILDTYPE=Debug builds both release and debug builds. If you want to compile
 # just the debug build, run `make -C out BUILDTYPE=Debug` instead.
@@ -33,19 +34,20 @@ out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/z
 	tools/gyp_node -f make
 
 install: all
-	out/Release/node tools/installer.js install
+	out/Release/node tools/installer.js install $(DESTDIR)
 
 uninstall:
 	out/Release/node tools/installer.js uninstall
 
 clean:
-	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node
+	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node blog.html email.md
 	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
 
 distclean:
 	-rm -rf out
 	-rm -f config.gypi
 	-rm -f config.mk
+	-rm -rf node node_g blog.html email.md
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
@@ -114,6 +116,7 @@ website_files = \
 	out/doc/about/index.html \
 	out/doc/community/index.html \
 	out/doc/logos/index.html \
+	out/doc/changelog.html \
 	$(doc_images)
 
 doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/
@@ -123,6 +126,9 @@ $(apidoc_dirs):
 
 out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
+
+out/doc/changelog.html: ChangeLog doc/changelog-head.html doc/changelog-foot.html tools/build-changelog.sh
+	bash tools/build-changelog.sh
 
 out/doc/%.html: doc/%.html
 	cat $< | sed -e 's|__VERSION__|'$(VERSION)'|g' > $@
@@ -136,8 +142,22 @@ out/doc/api/%.json: doc/api/%.markdown
 out/doc/api/%.html: doc/api/%.markdown
 	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
 
+email.md: ChangeLog tools/email-footer.md
+	bash tools/changelog-head.sh > $@
+	cat tools/email-footer.md | sed -e 's|__VERSION__|'$(VERSION)'|g' >> $@
+
+blog.html: email.md
+	cat $< | ./node tools/doc/node_modules/.bin/marked > $@
+
 website-upload: doc
 	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
+	ssh node@nodejs.org '\
+    rm -f ~/web/nodejs.org/dist/latest &&\
+    ln -s $(VERSION) ~/web/nodejs.org/dist/latest &&\
+    rm -f ~/web/nodejs.org/docs/latest &&\
+    ln -s $(VERSION) ~/web/nodejs.org/docs/latest &&\
+    rm -f ~/web/nodejs.org/dist/node-latest.tar.gz &&\
+    ln -s $(VERSION)/node-$(VERSION).tar.gz ~/web/nodejs.org/dist/node-latest.tar.gz'
 
 docopen: out/doc/api/all.html
 	-google-chrome out/doc/api/all.html
@@ -210,7 +230,7 @@ bench-idle:
 	./node benchmark/idle_clients.js &
 
 jslint:
-	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/ --exclude_files lib/punycode.js
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 cpplint:
 	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)

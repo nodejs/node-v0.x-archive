@@ -121,11 +121,16 @@ The `connectListener` parameter will be added as an listener for the
 This class is used to create a TCP or UNIX server.
 A server is a `net.Socket` that can listen for new incoming connections.
 
-### server.listen(port, [host], [listeningListener])
+### server.listen(port, [host], [backlog], [listeningListener])
 
 Begin accepting connections on the specified `port` and `host`.  If the
 `host` is omitted, the server will accept connections directed to any
 IPv4 address (`INADDR_ANY`). A port value of zero will assign a random port.
+
+Backlog is the maximum length of the queue of pending connections.
+The actual length will be determined by your OS through sysctl settings such as
+`tcp_max_syn_backlog` and `somaxconn` on linux. The default value of this
+parameter is 511 (not 512).
 
 This function is asynchronous.  When the server has been bound,
 ['listening'](#event_listening_) event will be emitted.
@@ -168,9 +173,11 @@ event.
 
 ### server.address()
 
-Returns the bound address and port of the server as reported by the operating system.
+Returns the bound address, the address family name and port of the server
+as reported by the operating system.
 Useful to find which port was assigned when giving getting an OS-assigned address.
-Returns an object with two properties, e.g. `{"address":"127.0.0.1", "port":2121}`
+Returns an object with three properties, e.g.
+`{ port: 12346, family: 'IPv4', address: '127.0.0.1' }`
 
 Example:
 
@@ -356,9 +363,10 @@ initialDelay will leave the value unchanged from the default
 
 ### socket.address()
 
-Returns the bound address and port of the socket as reported by the operating
-system. Returns an object with two properties, e.g.
-`{"address":"192.168.57.1", "port":62053}`
+Returns the bound address, the address family name and port of the
+socket as reported by the operating system. Returns an object with
+three properties, e.g.
+`{ port: 12346, family: 'IPv4', address: '127.0.0.1' }`
 
 ### socket.remoteAddress
 

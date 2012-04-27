@@ -21,11 +21,13 @@
 
 #include "node.h"
 #include "node_buffer.h"
-
+#include "slab_allocator.h"
 #include "req_wrap.h"
 #include "handle_wrap.h"
 
 #include <stdlib.h>
+
+#define SLAB_SIZE (1024 * 1024)
 
 // Temporary hack: libuv should provide uv_inet_pton and uv_inet_ntop.
 // Clean this up in tcp_wrap.cc too.
@@ -59,25 +61,16 @@ namespace node {
     return scope.Close(Integer::New(-1));                                   \
   }
 
-#define SLAB_SIZE (1024 * 1024)
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-
-// TODO share with tcp_wrap.cc
-Persistent<String> address_symbol;
-Persistent<String> port_symbol;
-Persistent<String> buffer_sym;
-static Persistent<String> udp_slab_sym;
-
-void AddressToJS(Handle<Object> info,
-                 const sockaddr* addr,
-                 int addrlen);
-
 typedef ReqWrap<uv_udp_send_t> SendWrap;
 
+Local<Object> AddressToJS(const sockaddr* addr);
 
-static size_t slab_used;
-size_t slab_offset_;
-static uv_handle_t* handle_that_last_alloced;
+static Persistent<String> address_symbol;
+static Persistent<String> port_symbol;
+static Persistent<String> buffer_sym;
+static Persistent<String> oncomplete_sym;
+static Persistent<String> onmessage_sym;
+static SlabAllocator slab_allocator(SLAB_SIZE);
 
 
 class UDPWrap: public HandleWrap {
@@ -99,8 +92,6 @@ public:
   static Handle<Value> SetTTL(const Arguments& args);
 
 private:
-  static inline char* NewSlab(v8::Handle<v8::Object> global, v8::Handle<v8::Object> wrap_obj);
-
   UDPWrap(Handle<Object> object);
   virtual ~UDPWrap();
 
@@ -138,10 +129,11 @@ void UDPWrap::Initialize(Handle<Object> target) {
 
   HandleScope scope;
 
-  udp_slab_sym = Persistent<String>::New(String::NewSymbol("udpslab"));
   buffer_sym = NODE_PSYMBOL("buffer");
   port_symbol = NODE_PSYMBOL("port");
   address_symbol = NODE_PSYMBOL("address");
+  oncomplete_sym = NODE_PSYMBOL("oncomplete");
+  onmessage_sym = NODE_PSYMBOL("onmessage");
 
   Local<FunctionTemplate> t = FunctionTemplate::New(New);
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -373,15 +365,13 @@ Handle<Value> UDPWrap::GetSockName(const Arguments& args) {
                              reinterpret_cast<sockaddr*>(&address),
                              &addrlen);
 
-  if (r == 0) {
-    Local<Object> sockname = Object::New();
-    AddressToJS(sockname, reinterpret_cast<sockaddr*>(&address), addrlen);
-    return scope.Close(sockname);
-  }
-  else {
+  if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
     return Null();
   }
+
+  const sockaddr* addr = reinterpret_cast<const sockaddr*>(&address);
+  return scope.Close(AddressToJS(addr));
 }
 
 
@@ -408,50 +398,15 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
     req_wrap->object_->GetHiddenValue(buffer_sym),
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 4, argv);
+  MakeCallback(req_wrap->object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
   delete req_wrap;
 }
 
 
 uv_buf_t UDPWrap::OnAlloc(uv_handle_t* handle, size_t suggested_size) {
-  HandleScope scope;
-
   UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
-
-  char* slab = NULL;
-
-  Handle<Object> global = Context::GetCurrent()->Global();
-  Local<Value> slab_v = global->GetHiddenValue(udp_slab_sym);
-
-  if (slab_v.IsEmpty()) {
-    // No slab currently. Create a new one.
-    slab = NewSlab(global, wrap->object_);
-  } else {
-    // Use existing slab.
-    Local<Object> slab_obj = slab_v->ToObject();
-    slab = Buffer::Data(slab_obj);
-    assert(Buffer::Length(slab_obj) == SLAB_SIZE);
-    assert(SLAB_SIZE >= slab_used);
-
-    // If less than 64kb is remaining on the slab allocate a new one.
-    if (SLAB_SIZE - slab_used < 64 * 1024) {
-      slab = NewSlab(global, wrap->object_);
-    } else {
-      wrap->object_->SetHiddenValue(udp_slab_sym, slab_obj);
-    }
-  }
-
-  uv_buf_t buf;
-  buf.base = slab + slab_used;
-  buf.len = MIN(SLAB_SIZE - slab_used, suggested_size);
-
-  slab_offset_ = slab_used;
-  slab_used += buf.len;
-
-  handle_that_last_alloced = reinterpret_cast<uv_handle_t*>(handle);
-
-  return buf;
-
+  char* buf = slab_allocator.Allocate(wrap->object_, suggested_size);
+  return uv_buf_init(buf, suggested_size);
 }
 
 
@@ -460,58 +415,40 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
                      uv_buf_t buf,
                      struct sockaddr* addr,
                      unsigned flags) {
-  if (nread == 0) {
-    return;
-  }
-
   HandleScope scope;
 
   UDPWrap* wrap = reinterpret_cast<UDPWrap*>(handle->data);
+  Local<Object> slab = slab_allocator.Shrink(wrap->object_,
+                                             buf.base,
+                                             nread < 0 ? 0 : nread);
+  if (nread == 0) return;
 
-  Handle<Value> argv[4] = {
-    wrap->object_,
-    Integer::New(nread),
-    Null(),
-    Null()
-  };
-
-  if (nread == -1) {
+  if (nread < 0) {
+    Local<Value> argv[] = { Local<Object>::New(wrap->object_) };
     SetErrno(uv_last_error(uv_default_loop()));
-  }
-  else {
-    Local<Object> rinfo = Object::New();
-    AddressToJS(rinfo, addr, sizeof *addr);
-    argv[2] = Buffer::New(buf.base, nread, NULL, NULL)->handle_;
-    argv[3] = rinfo;
+    MakeCallback(wrap->object_, onmessage_sym, ARRAY_SIZE(argv), argv);
+    return;
   }
 
-  MakeCallback(wrap->object_, "onmessage", ARRAY_SIZE(argv), argv);
+  Local<Value> argv[] = {
+    Local<Object>::New(wrap->object_),
+    slab,
+    Integer::NewFromUnsigned(buf.base - Buffer::Data(slab)),
+    Integer::NewFromUnsigned(nread),
+    AddressToJS(addr)
+  };
+  MakeCallback(wrap->object_, onmessage_sym, ARRAY_SIZE(argv), argv);
 }
 
-inline char* UDPWrap::NewSlab(Handle<Object> global,
-                                        Handle<Object> wrap_obj) {
-  Buffer* b = Buffer::New(SLAB_SIZE);
-  global->SetHiddenValue(udp_slab_sym, b->handle_);
-  assert(Buffer::Length(b) == SLAB_SIZE);
-  slab_used = 0;
-  wrap_obj->SetHiddenValue(udp_slab_sym, b->handle_);
-  return Buffer::Data(b);
-}
 
-void AddressToJS(Handle<Object> info,
-                 const sockaddr* addr,
-                 int addrlen) {
+Local<Object> AddressToJS(const sockaddr* addr) {
+  HandleScope scope;
   char ip[INET6_ADDRSTRLEN];
   const sockaddr_in *a4;
   const sockaddr_in6 *a6;
   int port;
 
-  assert(addr != NULL);
-
-  if (addrlen == 0) {
-    info->Set(address_symbol, String::Empty());
-    return;
-  }
+  Local<Object> info = Object::New();
 
   switch (addr->sa_family) {
   case AF_INET6:
@@ -533,6 +470,8 @@ void AddressToJS(Handle<Object> info,
   default:
     info->Set(address_symbol, String::Empty());
   }
+
+  return scope.Close(info);
 }
 
 

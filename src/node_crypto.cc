@@ -82,6 +82,8 @@ static Persistent<String> fingerprint_symbol;
 static Persistent<String> name_symbol;
 static Persistent<String> version_symbol;
 static Persistent<String> ext_key_usage_symbol;
+static Persistent<String> onhandshakestart_sym;
+static Persistent<String> onhandshakedone_sym;
 
 static Persistent<FunctionTemplate> secure_context_constructor;
 
@@ -861,16 +863,13 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       Local<Value> argv[1] = {*p->servername_};
       Local<Function> callback = *p->sniCallback_;
 
-      TryCatch try_catch;
-
       // Call it
-      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(),
-                                        1,
-                                        argv);
-
-      if (try_catch.HasCaught()) {
-        FatalException(try_catch);
-      }
+      //
+      // XXX There should be an object connected to this that
+      // we can attach a domain onto.
+      Local<Value> ret;
+      ret = Local<Value>::New(MakeCallback(Context::GetCurrent()->Global(),
+                                           callback, ARRAY_SIZE(argv), argv));
 
       // If ret is SecureContext
       if (secure_context_constructor->HasInstance(ret)) {
@@ -973,16 +972,25 @@ Handle<Value> Connection::New(const Arguments& args) {
 }
 
 
-void Connection::SSLInfoCallback(const SSL *ssl, int where, int ret) {
+void Connection::SSLInfoCallback(const SSL *ssl_, int where, int ret) {
+  // Be compatible with older versions of OpenSSL. SSL_get_app_data() wants
+  // a non-const SSL* in OpenSSL <= 0.9.7e.
+  SSL* ssl = const_cast<SSL*>(ssl_);
   if (where & SSL_CB_HANDSHAKE_START) {
     HandleScope scope;
     Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
-    MakeCallback(c->handle_, "onhandshakestart", 0, NULL);
+    if (onhandshakestart_sym.IsEmpty()) {
+      onhandshakestart_sym = NODE_PSYMBOL("onhandshakestart");
+    }
+    MakeCallback(c->handle_, onhandshakestart_sym, 0, NULL);
   }
   if (where & SSL_CB_HANDSHAKE_DONE) {
     HandleScope scope;
     Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
-    MakeCallback(c->handle_, "onhandshakedone", 0, NULL);
+    if (onhandshakedone_sym.IsEmpty()) {
+      onhandshakedone_sym = NODE_PSYMBOL("onhandshakedone");
+    }
+    MakeCallback(c->handle_, onhandshakedone_sym, 0, NULL);
   }
 }
 
@@ -1015,7 +1023,7 @@ Handle<Value> Connection::EncIn(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   int bytes_written = BIO_write(ss->bio_read_, buffer_data + off, len);
@@ -1054,7 +1062,7 @@ Handle<Value> Connection::ClearOut(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   if (!SSL_is_init_finished(ss->ssl_)) {
@@ -1127,7 +1135,7 @@ Handle<Value> Connection::EncOut(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   int bytes_read = BIO_read(ss->bio_write_, buffer_data + off, len);
@@ -1167,7 +1175,7 @@ Handle<Value> Connection::ClearIn(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   if (!SSL_is_init_finished(ss->ssl_)) {
@@ -2829,16 +2837,12 @@ class Hmac : public ObjectWrap {
     HandleScope scope;
 
     unsigned char* md_value = NULL;
-    unsigned int md_len = -1;
+    unsigned int md_len = 0;
     char* md_hexdigest;
     int md_hex_len;
-    Handle<Value> output ;
+    Handle<Value> output;
 
     int r = hmac->HmacDigest(&md_value, &md_len);
-
-    assert(md_value != NULL);
-    assert(md_len != -1);
-
     if (md_len == 0 || r == 0) {
       return scope.Close(String::New(""));
     }
@@ -4075,22 +4079,21 @@ EIO_PBKDF2After(uv_work_t* req) {
   pbkdf2_req* request = (pbkdf2_req*)req->data;
   delete req;
 
-  Handle<Value> argv[2];
+  Local<Value> argv[2];
   if (request->err) {
-    argv[0] = Undefined();
+    argv[0] = Local<Value>::New(Undefined());
     argv[1] = Encode(request->key, request->keylen, BINARY);
     memset(request->key, 0, request->keylen);
   } else {
     argv[0] = Exception::Error(String::New("PBKDF2 error"));
-    argv[1] = Undefined();
+    argv[1] = Local<Value>::New(Undefined());
   }
 
-  TryCatch try_catch;
-
-  request->callback->Call(Context::GetCurrent()->Global(), 2, argv);
-
-  if (try_catch.HasCaught())
-    FatalException(try_catch);
+  // XXX There should be an object connected to this that
+  // we can attach a domain onto.
+  MakeCallback(Context::GetCurrent()->Global(),
+               request->callback,
+               ARRAY_SIZE(argv), argv);
 
   delete[] request->pass;
   delete[] request->salt;
@@ -4249,9 +4252,8 @@ void RandomBytesWork(uv_work_t* work_req) {
 }
 
 
-void RandomBytesCheck(RandomBytesRequest* req, Handle<Value> argv[2]) {
-  HandleScope scope;
-
+// don't call this function without a valid HandleScope
+void RandomBytesCheck(RandomBytesRequest* req, Local<Value> argv[2]) {
   if (req->error_) {
     char errmsg[256] = "Operation not supported";
 
@@ -4259,13 +4261,13 @@ void RandomBytesCheck(RandomBytesRequest* req, Handle<Value> argv[2]) {
       ERR_error_string_n(req->error_, errmsg, sizeof errmsg);
 
     argv[0] = Exception::Error(String::New(errmsg));
-    argv[1] = Null();
+    argv[1] = Local<Value>::New(Null());
   }
   else {
     // avoids the malloc + memcpy
     Buffer* buffer = Buffer::New(req->data_, req->size_, RandomBytesFree, NULL);
-    argv[0] = Null();
-    argv[1] = buffer->handle_;
+    argv[0] = Local<Value>::New(Null());
+    argv[1] = Local<Object>::New(buffer->handle_);
   }
 }
 
@@ -4276,14 +4278,14 @@ void RandomBytesAfter(uv_work_t* work_req) {
       container_of(work_req, RandomBytesRequest, work_req_);
 
   HandleScope scope;
-  Handle<Value> argv[2];
+  Local<Value> argv[2];
   RandomBytesCheck(req, argv);
 
-  TryCatch tc;
-  req->callback_->Call(Context::GetCurrent()->Global(), 2, argv);
-
-  if (tc.HasCaught())
-    FatalException(tc);
+  // XXX There should be an object connected to this that
+  // we can attach a domain onto.
+  MakeCallback(Context::GetCurrent()->Global(),
+               req->callback_,
+               ARRAY_SIZE(argv), argv);
 
   delete req;
 }
@@ -4319,7 +4321,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     return Undefined();
   }
   else {
-    Handle<Value> argv[2];
+    Local<Value> argv[2];
     RandomBytesWork<generator>(&req->work_req_);
     RandomBytesCheck(req, argv);
     delete req;

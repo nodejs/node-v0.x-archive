@@ -148,7 +148,7 @@ struct StringPtr {
   void Update(const char* str, size_t size) {
     if (str_ == NULL)
       str_ = str;
-    else if (on_heap_ || str_ + size != str) {
+    else if (on_heap_ || str_ + size_ != str) {
       // Non-consecutive input, make a copy on the heap.
       // TODO Use slab allocation, O(n) allocs is bad.
       char* s = new char[size_ + size];
@@ -166,7 +166,7 @@ struct StringPtr {
   }
 
 
-  Handle<String> ToString() const {
+  Local<String> ToString() const {
     if (str_)
       return String::New(str_, size_);
     else
@@ -302,7 +302,7 @@ public:
     if (!cb->IsFunction())
       return 0;
 
-    Handle<Value> argv[3] = {
+    Local<Value> argv[3] = {
       *current_buffer,
       Integer::New(at - current_buffer_data),
       Integer::New(length)
@@ -406,7 +406,7 @@ public:
     size_t len = args[2]->Int32Value();
     if (off+len > buffer_len) {
       return ThrowException(Exception::Error(
-            String::New("Length is extends beyond buffer")));
+            String::New("off + len > buffer.length")));
     }
 
     // Assign 'buffer_' while we parse. The callbacks will access that varible.
@@ -514,7 +514,7 @@ private:
     if (!cb->IsFunction())
       return;
 
-    Handle<Value> argv[2] = {
+    Local<Value> argv[2] = {
       CreateHeaders(),
       url_.ToString()
     };

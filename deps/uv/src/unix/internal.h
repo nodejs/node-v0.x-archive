@@ -125,7 +125,7 @@ inline static int sys_accept4(int fd,
 #endif
 
 /* FIXME exact copy of the #ifdef guard in uv-unix.h */
-#if (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060) \
+#if defined(__APPLE__)  \
   || defined(__FreeBSD__) \
   || defined(__OpenBSD__) \
   || defined(__NetBSD__)
@@ -171,13 +171,6 @@ int uv__nonblock(int fd, int set) __attribute__((unused));
 int uv__cloexec(int fd, int set) __attribute__((unused));
 int uv__socket(int domain, int type, int protocol);
 int uv__dup(int fd);
-
-/* We used to handle EINTR in uv__close() but linux 2.6 will have closed the
- * file descriptor anyway, even on EINTR. Retrying in that case isn't merely
- * useless, it's actively harmful - the file descriptor may have been acquired
- * by another thread.
- */
-#define uv__close(fd) close(fd)
 
 /* error */
 uv_err_code uv_translate_sys_error(int sys_errno);

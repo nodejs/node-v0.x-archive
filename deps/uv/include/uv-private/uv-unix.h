@@ -78,6 +78,10 @@ typedef void* uv_lib_t;
   /* Poll result queue */ \
   eio_channel uv_eio_channel; \
   struct ev_loop* ev; \
+  /* Various thing for libeio. */ \
+  uv_async_t uv_eio_want_poll_notifier; \
+  uv_async_t uv_eio_done_poll_notifier; \
+  uv_idle_t uv_eio_poller; \
   UV_LOOP_PRIVATE_PLATFORM_FIELDS
 
 #define UV_REQ_BUFSML_SIZE (4)
@@ -219,7 +223,7 @@ typedef void* uv_lib_t;
   ev_io read_watcher;                 \
   uv_fs_event_cb cb;
 
-#elif (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1060) \
+#elif defined(__APPLE__)  \
   || defined(__FreeBSD__) \
   || defined(__OpenBSD__) \
   || defined(__NetBSD__)

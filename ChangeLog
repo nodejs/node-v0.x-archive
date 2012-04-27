@@ -1,4 +1,86 @@
-2012.03.13, Version 0.7.6 (unstable)
+2012.04.18, Version 0.7.8, (unstable)
+
+* Upgrade V8 to 3.9.24.9
+
+* Upgrade OpenSSL to 1.0.0f
+
+* Upgrade npm to 1.1.18
+
+* Show licenses in Binary installers
+
+* Domains (isaacs)
+
+* readline: rename "end" to "close" (Nathan Rajlich)
+
+* tcp: make getsockname() return address family as string (Shigeki Ohtsu)
+
+* http, https: fix .setTimeout() (ssuda)
+
+* os: add cross platform EOL character (Mustansir Golawala)
+
+* typed arrays: unexport SizeOfArrayElementForType() (Aaron Jacobs)
+
+* net: honor 'enable' flag in .setNoDelay() (Ben Noordhuis)
+
+* child_process: emit error when .kill fails (Andreas Madsen)
+
+* gyp: fix 'argument list too long' build error (Ben Noordhuis)
+
+* fs.WriteStream: Handle modifications to fs.open (isaacs)
+
+* repl, readline: Handle newlines better (Nathan Rajlich, Nathan Friedly)
+
+* build: target OSX 10.5 when building on darwin (Nathan Rajlich)
+
+* Fix #3052 Handle errors properly in zlib (isaacs)
+
+* build: add support for DTrace and postmortem (Dave Pacheco)
+
+* core: add reusable Slab allocator (Ben Noordhuis)
+
+
+2012.03.30, Version 0.7.7 (unstable), 5cda2542fdb086f9fe5de889bea435a65e377dea
+
+* Upgrade V8 to 3.9.24.7
+
+* Upgrade npm to 1.1.15
+
+* Handle Emoji characters properly (Erik Corry, Bert Belder)
+
+* readline: migrate ansi/vt100 logic from tty to readline (Nathan Rajlich)
+
+* readline: Fix multiline handling (Alex Kocharin)
+
+* add a -i/--interactive flag to force the REPL (Nathan Rajlich)
+
+* debugger: add breakOnException command (Fedor Indutny)
+
+* cluster: kill workers when master dies (Andreas Madsen)
+
+* cluster: add graceful disconnect support (Andreas Madsen)
+
+* child_process: Separate 'close' event from 'exit' (Charlie McConnell)
+
+* typed arrays: add Uint8ClampedArray (Mikael Bourges-Sevenier)
+
+* buffer: Fix byte alignment issues (Ben Noordhuis, Erik Lundin)
+
+* tls: fix CryptoStream.setKeepAlive() (Shigeki Ohtsu)
+
+* Expose http parse error codes (Felix Geisendörfer)
+
+* events: don't delete the listeners array (Ben Noordhuis, Nathan Rajlich)
+
+* process: add process.config to view node's ./configure settings (Nathan Rajlich)
+
+* process: process.execArgv to see node's arguments (Micheil Smith)
+
+* process: fix process.title setter (Ben Noordhuis)
+
+* timers: handle negative or non-numeric timeout values (Ben Noordhuis)
+
+
+2012.03.13, Version 0.7.6 (unstable), f06abda6f58e517349d1b63a2cbf5a8d04a03505
 
 * Upgrade v8 to 3.9.17
 
@@ -171,6 +253,52 @@
 * Use isolates for internal debugger (Fedor Indutny)
 
 * Bug fixes
+
+
+2012.04.09 Version 0.6.15 (stable)
+
+* Update npm to 1.1.16
+
+* Show licenses in binary installers.
+
+* unix: add uv_fs_read64, uv_fs_write64 and uv_fs_ftruncate64 (Ben Noordhuis)
+
+* add 64bit offset fs functions (Igor Zinkovsky)
+
+* windows: don't report ENOTSOCK when attempting to bind an udp handle twice (Bert Belder)
+
+* windows: backport pipe-connect-to-file fixes from master (Bert Belder)
+
+* windows: never call fs event callbacks after closing the watcher (Bert Belder)
+
+* fs.readFile: don't make the callback before the fd is closed (Bert Belder)
+
+* windows: use 64bit offsets for uv_fs apis (Igor Zinkovsky)
+
+* Fix #2061: segmentation fault on OS X due to stat size mismatch (Ben Noordhuis)
+
+
+2012.03.22 Version 0.6.14 (stable), e513ffef7549a56a5af728e1f0c2c0c8f290518a
+
+* net: don't crash when queued write fails (Igor Zinkovsky)
+
+* sunos: fix EMFILE on process.memoryUsage() (Bryan Cantrill)
+
+* crypto: fix compile-time error with openssl 0.9.7e (Ben Noordhuis)
+
+* unix: ignore ECONNABORTED errors from accept() (Ben Noordhuis)
+
+* Add UV_ENOSPC and mappings to it (Bert Belder)
+
+* http-parser: Fix response body is not read (koichik)
+
+* Upgrade npm to 1.1.12
+  - upgrade node-gyp to 0.3.7
+  - work around AV-locked directories on Windows
+  - Fix isaacs/npm#2293 Don't try to 'uninstall' /
+  - Exclude symbolic links from packages.
+  - Fix isaacs/npm#2275 Spurious 'unresolvable cycle' error.
+  - Exclude/include dot files as if they were normal files
 
 
 2012.03.15 Version 0.6.13 (stable), 9f7f86b534f8556290eb8cad915984ff4ca54996
