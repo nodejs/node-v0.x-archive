@@ -62,12 +62,12 @@ the entire process until they complete--halting all connections.
 Relative path to filename can be used, remember however that this path will be relative
 to `process.cwd()`.
 
-## fs.rename(path1, path2, [callback])
+## fs.rename(oldPath, newPath, [callback])
 
 Asynchronous rename(2). No arguments other than a possible exception are given
 to the completion callback.
 
-## fs.renameSync(path1, path2)
+## fs.renameSync(oldPath, newPath)
 
 Synchronous rename(2).
 
@@ -174,14 +174,14 @@ the completion callback.
 
 Synchronous link(2).
 
-## fs.symlink(linkdata, path, [type], [callback])
+## fs.symlink(destination, path, [type], [callback])
 
 Asynchronous symlink(2). No arguments other than a possible exception are given
 to the completion callback.
 `type` argument can be either `'dir'` or `'file'` (default is `'file'`).  It is only 
 used on Windows (ignored on other platforms).
 
-## fs.symlinkSync(linkdata, path, [type])
+## fs.symlinkSync(destination, path, [type])
 
 Synchronous symlink(2).
 
@@ -194,12 +194,22 @@ linkString)`.
 
 Synchronous readlink(2). Returns the symbolic link's string value.
 
-## fs.realpath(path, [callback])
+## fs.realpath(path, [cache], callback)
 
-Asynchronous realpath(2).  The callback gets two arguments `(err,
-resolvedPath)`.  May use `process.cwd` to resolve relative paths.
+Asynchronous realpath(2). The `callback` gets two arguments `(err,
+resolvedPath)`. May use `process.cwd` to resolve relative paths. `cache` is an
+object literal of mapped paths that can be used to force a specific path
+resolution or avoid additional `fs.stat` calls for known real paths.
 
-## fs.realpathSync(path)
+Example:
+
+    var cache = {'/etc':'/private/etc'};
+    fs.realpath('/etc/passwd', cache, function (err, resolvedPath) {
+      if (err) throw err;
+      console.log(resolvedPath);
+    });
+
+## fs.realpathSync(path, [cache])
 
 Synchronous realpath(2). Returns the resolved path.
 
@@ -513,7 +523,7 @@ callback, and have some fallback logic if it is null.
       }
     });
 
-## fs.exists(p, [callback])
+## fs.exists(path, [callback])
 
 Test whether or not the given path exists by checking with the file system.
 Then call the `callback` argument with either true or false.  Example:
@@ -523,7 +533,7 @@ Then call the `callback` argument with either true or false.  Example:
     });
 
 
-## fs.existsSync(p)
+## fs.existsSync(path)
 
 Synchronous version of `fs.exists`.
 

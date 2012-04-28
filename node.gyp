@@ -23,6 +23,7 @@
       'lib/cluster.js',
       'lib/dgram.js',
       'lib/dns.js',
+      'lib/domain.js',
       'lib/events.js',
       'lib/freelist.js',
       'lib/fs.js',
@@ -309,7 +310,7 @@
       'target_name': 'node_dtrace_ustack',
       'type': 'none',
       'conditions': [
-        [ 'node_use_dtrace=="true"', {
+        [ 'node_use_dtrace=="true" and target_arch=="ia32"', {
           'actions': [
             {
               'action_name': 'node_dtrace_ustack_constants',

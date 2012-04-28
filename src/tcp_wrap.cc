@@ -77,6 +77,8 @@ static Persistent<Function> tcpConstructor;
 static Persistent<String> family_symbol;
 static Persistent<String> address_symbol;
 static Persistent<String> port_symbol;
+static Persistent<String> oncomplete_sym;
+static Persistent<String> onconnection_sym;
 
 
 typedef class ReqWrap<uv_connect_t> ConnectWrap;
@@ -131,6 +133,8 @@ void TCPWrap::Initialize(Handle<Object> target) {
   family_symbol = NODE_PSYMBOL("family");
   address_symbol = NODE_PSYMBOL("address");
   port_symbol = NODE_PSYMBOL("port");
+  onconnection_sym = NODE_PSYMBOL("onconnection");
+  oncomplete_sym = NODE_PSYMBOL("oncomplete");
 
   target->Set(String::NewSymbol("TCP"), tcpConstructor);
 }
@@ -170,6 +174,7 @@ Handle<Value> TCPWrap::GetSockName(const Arguments& args) {
   int family;
   int port;
   char ip[INET6_ADDRSTRLEN];
+  const char *family_name;
 
   UNWRAP
 
@@ -188,17 +193,19 @@ Handle<Value> TCPWrap::GetSockName(const Arguments& args) {
       struct sockaddr_in* addrin = (struct sockaddr_in*)&address;
       uv_inet_ntop(AF_INET, &(addrin->sin_addr), ip, INET6_ADDRSTRLEN);
       port = ntohs(addrin->sin_port);
+      family_name = "IPv4";
     } else if (family == AF_INET6) {
       struct sockaddr_in6* addrin6 = (struct sockaddr_in6*)&address;
       uv_inet_ntop(AF_INET6, &(addrin6->sin6_addr), ip, INET6_ADDRSTRLEN);
       port = ntohs(addrin6->sin6_port);
+      family_name = "IPv6";
     } else {
       assert(0 && "bad address family");
       abort();
     }
 
     sockname->Set(port_symbol, Integer::New(port));
-    sockname->Set(family_symbol, Integer::New(family));
+    sockname->Set(family_symbol, String::New(family_name));
     sockname->Set(address_symbol, String::New(ip));
   }
 
@@ -377,7 +384,7 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
     argv[0] = Local<Value>::New(Null());
   }
 
-  MakeCallback(wrap->object_, "onconnection", 1, argv);
+  MakeCallback(wrap->object_, onconnection_sym, ARRAY_SIZE(argv), argv);
 }
 
 
@@ -403,7 +410,7 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
     Local<Value>::New(v8::True())
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 5, argv);
+  MakeCallback(req_wrap->object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
 
   delete req_wrap;
 }

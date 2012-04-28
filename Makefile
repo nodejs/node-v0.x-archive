@@ -2,6 +2,7 @@
 
 BUILDTYPE ?= Release
 PYTHON ?= python
+DESTDIR ?=
 
 # BUILDTYPE=Debug builds both release and debug builds. If you want to compile
 # just the debug build, run `make -C out BUILDTYPE=Debug` instead.
@@ -33,7 +34,7 @@ out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/z
 	tools/gyp_node -f make
 
 install: all
-	out/Release/node tools/installer.js install
+	out/Release/node tools/installer.js install $(DESTDIR)
 
 uninstall:
 	out/Release/node tools/installer.js uninstall
@@ -150,6 +151,13 @@ blog.html: email.md
 
 website-upload: doc
 	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
+	ssh node@nodejs.org '\
+    rm -f ~/web/nodejs.org/dist/latest &&\
+    ln -s $(VERSION) ~/web/nodejs.org/dist/latest &&\
+    rm -f ~/web/nodejs.org/docs/latest &&\
+    ln -s $(VERSION) ~/web/nodejs.org/docs/latest &&\
+    rm -f ~/web/nodejs.org/dist/node-latest.tar.gz &&\
+    ln -s $(VERSION)/node-$(VERSION).tar.gz ~/web/nodejs.org/dist/node-latest.tar.gz'
 
 docopen: out/doc/api/all.html
 	-google-chrome out/doc/api/all.html
@@ -222,7 +230,7 @@ bench-idle:
 	./node benchmark/idle_clients.js &
 
 jslint:
-	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/ --exclude_files lib/punycode.js
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 cpplint:
 	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
