@@ -187,21 +187,21 @@ def target_arch():
   return host_arch()
 
 def cc_version():
-    try:
-        proc = subprocess.Popen([CC, '-v'], stderr=subprocess.PIPE)
-    except OSError:
-        return None
-    lines = proc.communicate()[1].split('\n')
-    version_line = None
-    for i, line in enumerate(lines):
-        if 'version' in line:
-            version_line = line
-    if not version_line:
-        return None
-    version = version_line.split("version")[1].strip().split()[0].split(".")
-    if not version:
-        return None
-    return ['LLVM' in version_line] + version
+  try:
+    proc = subprocess.Popen([CC, '-v'], stderr=subprocess.PIPE)
+  except OSError:
+    return None
+  lines = proc.communicate()[1].split('\n')
+  version_line = None
+  for i, line in enumerate(lines):
+    if 'version' in line:
+      version_line = line
+  if not version_line:
+    return None
+  version = version_line.split("version")[1].strip().split()[0].split(".")
+  if not version:
+    return None
+  return ['LLVM' in version_line] + version
 
 def configure_node(o):
   # TODO add gdb
