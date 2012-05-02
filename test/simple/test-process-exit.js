@@ -22,12 +22,13 @@
 var common = require('../common');
 var assert = require('assert');
 
-// recursively calling .exit() should not overflow the call stack
+// calling .exit() from within "exit" should not overflow the call stack
 var nexits = 0;
 
-process.on('exit', function() {
+process.on('exit', function(code) {
   assert.equal(nexits++, 0);
+  assert.equal(code, 0);
   process.exit();
 });
 
-process.exit();
+// "exit" should be emitted unprovoked
