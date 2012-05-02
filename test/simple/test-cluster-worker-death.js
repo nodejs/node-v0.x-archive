@@ -30,11 +30,11 @@ else {
   var seenExit = 0;
   var seenDeath = 0;
   var worker = cluster.fork();
-  worker.on('exit', function(statusCode) {
-    assert.equal(statusCode, 42);
+  worker.on('exit', function(worker) {
+    assert.equal(worker.process.exitCode, 42);
     seenExit++;
   });
-  cluster.on('death', function(worker_) {
+  cluster.on('exit', function(worker_) {
     assert.equal(worker_, worker);
     seenDeath++;
   });
