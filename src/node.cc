@@ -1779,6 +1779,9 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
 
   // Execute the C++ module
   mod->register_func(target);
+  if (mod->unregister_func) {
+    mod->unregister_func();
+  }
 
   // Tell coverity that 'handle' should not be freed when we return.
   // coverity[leaked_storage]
@@ -2769,6 +2772,33 @@ char** Init(int argc, char *argv[]) {
   return argv;
 }
 
+class AtExitCallback;
+static AtExitCallback* at_exit_functions_ = NULL;
+
+class AtExitCallback {
+  AtExitCallback* next_;
+  ExitCallbackFunc cb_;
+  void* arg_;
+
+  public:
+  AtExitCallback(ExitCallbackFunc cb, void* arg) : cb_(cb), arg_(arg) {
+    next_ = at_exit_functions_;
+    at_exit_functions_ = this;
+  }
+
+  ~AtExitCallback(){
+    cb_(arg_);
+    delete next_;
+  }
+};
+
+inline void AtExit(ExitCallbackFunc cb, void* arg) {
+  new AtExitCallback(cb, arg);
+}
+
+inline void RunAtExit() {
+  delete at_exit_functions_;
+}
 
 void EmitExit(v8::Handle<v8::Object> process_l) {
   // process.emit('exit')
@@ -2850,6 +2880,7 @@ int Start(int argc, char *argv[]) {
   uv_run(uv_default_loop());
 
   EmitExit(process_l);
+  RunAtExit();
 
 #ifndef NDEBUG
   // Clean up.
