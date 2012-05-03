@@ -22,7 +22,7 @@
 
 // test-cluster-worker-kill.js
 // verifies that, when a child process is killed (we use SIGHUP)
-// - the parent receives the proper events in the proper order, and no duplicates
+// - the parent receives the proper events in the proper order, no duplicates
 // - the exitCode and signalCode are correct in the 'exit' event
 // - the worker.suicide flag, and worker.state are correct
 // - the worker process actually goes away
@@ -40,26 +40,26 @@ if (cluster.isWorker) {
 
 } else if (cluster.isMaster) {
 
-  var KILL_SIGNAL = 'SIGHUP'
-  , expected_results = {
+  var KILL_SIGNAL = 'SIGHUP',
+    expected_results = {
       cluster_emitDisconnect: [1, "the cluster did not emit 'disconnect'"],
       cluster_emitExit: [1, "the cluster did not emit 'exit'"],
-      cluster_exitCode: [null, "the cluster exited w/ incorrect exitCode"],
-      cluster_signalCode: [KILL_SIGNAL, "the cluster exited w/ incorrect signalCode"],
+      cluster_exitCode: [null, 'the cluster exited w/ incorrect exitCode'],
+      cluster_signalCode: [KILL_SIGNAL, 'the cluster exited w/ incorrect signalCode'],
       worker_emitDisconnect: [1, "the worker did not emit 'disconnect'"],
       worker_emitExit: [1, "the worker did not emit 'exit'"],
-      worker_state: ['disconnected', "the worker state is incorrect"],
-      worker_suicideMode: [false, "the worker.suicide flag is incorrect"],
-      worker_died: [true, "the worker is still running"],
-      worker_exitCode: [null, "the worker exited w/ incorrect exitCode"],
-      worker_signalCode: [KILL_SIGNAL, "the worker exited w/ incorrect signalCode"]
-  };
-  var results = {
+      worker_state: ['disconnected', 'the worker state is incorrect'],
+      worker_suicideMode: [false, 'the worker.suicide flag is incorrect'],
+      worker_died: [true, 'the worker is still running'],
+      worker_exitCode: [null, 'the worker exited w/ incorrect exitCode'],
+      worker_signalCode: [KILL_SIGNAL, 'the worker exited w/ incorrect signalCode']
+    },
+    results = {
       cluster_emitDisconnect: 0,
       cluster_emitExit: 0,
       worker_emitDisconnect: 0,
       worker_emitExit: 0
-  };
+    };
 
 
   // start worker
@@ -76,10 +76,11 @@ if (cluster.isWorker) {
     results.cluster_emitDisconnect += 1;
   });
   cluster.on('exit', function(worker) {
-    results.cluster_exitCode = worker && worker.process && worker.process.exitCode;
-    results.cluster_signalCode = worker && worker.process && worker.process.signalCode;
-    results.cluster_emitExit += 1 ;
-    assert.ok( results.cluster_emitDisconnect, "cluster: 'exit' event before 'disconnect' event" );
+    results.cluster_exitCode = worker.process.exitCode;
+    results.cluster_signalCode = worker.process.signalCode;
+    results.cluster_emitExit += 1;
+    assert.ok(results.cluster_emitDisconnect,
+        "cluster: 'exit' event before 'disconnect' event");
   });
 
   // Check worker eventes and properties
@@ -90,22 +91,23 @@ if (cluster.isWorker) {
   });
 
   // Check that the worker died
-  worker.once('exit', function(worker) {
-    results.worker_exitCode = worker && worker.process && worker.process.exitCode;
-    results.worker_signalCode = worker && worker.process && worker.process.signalCode;
+  worker.once('exit', function(exitCode, signalCode) {
+    results.worker_exitCode = exitCode;
+    results.worker_signalCode = signalCode;
     results.worker_emitExit += 1;
     results.worker_died = !alive(worker.process.pid);
-    //assert.ok( results.worker_emitDisconnect, "worker: 'exit' event before 'disconnect' event" );
+    assert.ok(results.worker_emitDisconnect,
+        "worker: 'exit' event before 'disconnect' event");
 
     process.nextTick(function() { finish_test(); });
   });
 
   var finish_test = function() {
     try {
-      checkResults( expected_results, results );
-    } catch(exc) {
-      console.error("FAIL: "+exc.message);
-      if( exc.name != "AssertionError" ) {
+      checkResults(expected_results, results);
+    } catch (exc) {
+      console.error('FAIL: ' + exc.message);
+      if (exc.name != 'AssertionError') {
         console.trace(exc);
       }
 
@@ -113,24 +115,25 @@ if (cluster.isWorker) {
       return;
     }
     process.exit(0);
-  }
+  };
 }
 
 // some helper functions ...
 
-  function checkResults( expected_results, results ) {
-    for( var k in expected_results ) {
-      var actual = results[k]
-      , expected = expected_results[k];
+  function checkResults(expected_results, results) {
+    for (var k in expected_results) {
+      var actual = results[k],
+          expected = expected_results[k];
 
-      if( typeof expected === 'function' ) {
-        expected( r[k] );
+      if (typeof expected === 'function') {
+        expected(r[k]);
       } else {
-        var msg = (expected[1] || '') + (" [expected: "+expected[0]+" / actual: "+actual+"]");
-        if( expected && expected.length ) {
-          assert.equal( actual, expected[0], msg );
+        var msg = (expected[1] || '') +
+            (' [expected: ' + expected[0] + ' / actual: ' + actual + ']');
+        if (expected && expected.length) {
+          assert.equal(actual, expected[0], msg);
         } else {
-          assert.equal( actual, expected, msg );
+          assert.equal(actual, expected, msg);
         }
       }
     }
@@ -143,4 +146,4 @@ if (cluster.isWorker) {
     } catch (e) {
       return false;
     }
-  };
+  }
