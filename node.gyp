@@ -47,8 +47,7 @@
       'lib/url.js',
       'lib/util.js',
       'lib/vm.js',
-      'lib/zlib.js',
-      '<@(node_thirdparty)'
+      'lib/zlib.js'
     ],
   },
 
