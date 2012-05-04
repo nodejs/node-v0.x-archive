@@ -52,7 +52,6 @@ server.listen(common.PORT, "127.0.0.1", function() {
     gotError = true;
 
     server.close();
-    process.exit();
   }).end();
 });
 
