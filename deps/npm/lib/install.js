@@ -125,7 +125,7 @@ function install (args, cb_) {
     }
 
     // initial "family" is the name:version of the root, if it's got
-    // a pacakge.json file.
+    // a package.json file.
     readJson(path.resolve(where, "package.json"), function (er, data) {
       if (er) data = null
       var family = {}
