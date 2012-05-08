@@ -443,6 +443,8 @@ def configure(conf):
   if sys.platform.startswith("darwin"):
     # used by platform_darwin_*.cc
     conf.env.append_value('LINKFLAGS', ['-framework','Carbon'])
+    # define _DARWIN_C_SOURCE to enable SUSv3 UNIX 2003 compatiblity
+    conf.env.append_value('CPPFLAGS', '-D_DARWIN_C_SOURCE')
     # cross compile for architecture specified by DEST_CPU
     if 'DEST_CPU' in conf.env:
       arch = conf.env['DEST_CPU']
@@ -509,6 +511,9 @@ def configure(conf):
   else:
     Options.options.platform_file = False
     conf.env["PLATFORM_FILE"] = "src/platform_none.cc"
+
+  if sys.platform.startswith("darwin"):
+    conf.env["PLATFORM_FILE"] = "src/platform_darwin.cc src/platform_darwin_proctitle.cc"
 
   if conf.env['USE_PROFILING'] == True:
     conf.env.append_value('CPPFLAGS', '-pg')
