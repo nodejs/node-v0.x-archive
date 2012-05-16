@@ -512,13 +512,7 @@ that it sets the method to GET and calls `req.end()` automatically.
 
 Example:
 
-    var options = {
-      host: 'www.google.com',
-      port: 80,
-      path: '/index.html'
-    };
-
-    http.get(options, function(res) {
+    http.get("http://www.google.com/index.html", function(res) {
       console.log("Got response: " + res.statusCode);
     }).on('error', function(e) {
       console.log("Got error: " + e.message);
