@@ -425,8 +425,9 @@ followed by `response.end()`.
 ## http.request(options, callback)
 
 Node maintains several connections per server to make HTTP requests.
-This function allows one to transparently issue requests.  `options` align
-with [url.parse()](url.html#url.parse).
+This function allows one to transparently issue requests.  
+
+`options` can be an object or a string. If `options` is a string, it is automatically parsed with [url.parse()](url.html#url.parse).
 
 Options:
 
