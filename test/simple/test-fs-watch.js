@@ -58,15 +58,6 @@ try { fs.rmdirSync(testsubdir); } catch (e) { }
 
 fs.writeFileSync(filepathOne, 'hello');
 
-assert.throws(
-    function() {
-      fs.watch(filepathOne);
-    },
-    function(e) {
-      return e.message === 'watch requires a listener function';
-    }
-);
-
 assert.doesNotThrow(
     function() {
       var watcher = fs.watch(filepathOne, function(event, filename) {
@@ -90,15 +81,6 @@ setTimeout(function() {
 process.chdir(testDir);
 
 fs.writeFileSync(filepathTwoAbs, 'howdy');
-
-assert.throws(
-    function() {
-      fs.watch(filepathTwo);
-    },
-    function(e) {
-      return e.message === 'watch requires a listener function';
-    }
-);
 
 assert.doesNotThrow(
     function() {
