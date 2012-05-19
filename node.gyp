@@ -9,6 +9,7 @@
     'node_shared_zlib%': 'false',
     'node_use_openssl%': 'true',
     'node_use_system_openssl%': 'false',
+    'node_staticlib%': 'true',
     'library_files': [
       'src/node.js',
       'lib/_debugger.js',
@@ -46,7 +47,7 @@
       'lib/url.js',
       'lib/util.js',
       'lib/vm.js',
-      'lib/zlib.js',
+      'lib/zlib.js'
     ],
   },
 
@@ -78,7 +79,6 @@
         'src/node_file.cc',
         'src/node_http_parser.cc',
         'src/node_javascript.cc',
-        'src/node_main.cc',
         'src/node_os.cc',
         'src/node_script.cc',
         'src/node_string.cc',
@@ -176,6 +176,12 @@
 
         [ 'node_shared_zlib=="false"', {
           'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+        }],
+
+        [ 'node_staticlib=="true"', {
+          'type': '<(library)',
+         }, {
+          'sources': ['src/node_main.cc'],
         }],
 
         [ 'OS=="win"', {
