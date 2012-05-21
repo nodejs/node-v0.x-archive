@@ -102,6 +102,19 @@ DEFINE_bool(harmony_proxies, false, "enable harmony proxies")
 DEFINE_bool(harmony_weakmaps, false, "enable harmony weak maps")
 DEFINE_bool(harmony_block_scoping, false, "enable harmony block scoping")
 
+#define DEFINE_implication(whenflag, thenflag) \
+  if (FLAG_##whenflag) FLAG_##thenflag = true;
+#else
+#error No mode supplied when including flags.defs
+#endif
+
+DEFINE_bool(harmony, false, "enable all harmony features (typeof, proxies, weakmaps, block-scoping)")
+DEFINE_implication(harmony, harmony_typeof)
+DEFINE_implication(harmony, harmony_weakmaps)
+DEFINE_implication(harmony, harmony_proxies)
+DEFINE_implication(harmony, harmony_block_scoping)
+DEFINE_implication(harmony_modules, harmony_scoping)
+
 // Flags for experimental implementation features.
 DEFINE_bool(unbox_double_arrays, true, "automatically unbox arrays of doubles")
 DEFINE_bool(string_slices, false, "use string slices")
