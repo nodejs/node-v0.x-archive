@@ -339,7 +339,7 @@ And then the child script, `'sub.js'` might look like this:
       console.log('CHILD got message:', m);
     });
 
-    process.send({ foo: 'bar' });
+    process.emit('message', { foo: 'bar' });
 
 In the child the `process` object will have a `send()` method, and `process`
 will emit objects each time it receives a message on its channel.
