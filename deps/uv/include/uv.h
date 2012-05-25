@@ -1227,7 +1227,15 @@ enum uv_process_flags {
    * converting the argument list into a command line string. This option is
    * only meaningful on Windows systems. On unix it is silently ignored.
    */
-  UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS = (1 << 2)
+  UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS = (1 << 2),
+  /*
+   * On UNIX-like systems, the child process will become a new session leader.
+   * The session ID will be equal to the child process PID.
+   * See man setsid for more information.
+   *
+   * To kill the process group, call uv_kill with a negative PID.
+   */
+  UV_PROCESS_SETSID = (1 << 3)
 };
 
 /*

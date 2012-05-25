@@ -576,6 +576,61 @@ TEST_IMPL(spawn_setuid_setgid) {
 
 
 #ifndef _WIN32
+TEST_IMPL(spawn_setsid) {
+  int r;
+
+  init_process_options("spawn_helper1", exit_cb);
+
+  options.flags = UV_PROCESS_SETSID;
+
+  r = uv_spawn(uv_default_loop(), &process, options);
+  ASSERT(r == 0);
+
+  r = uv_run(uv_default_loop());
+  ASSERT(r == 0);
+
+  ASSERT(exit_cb_called == 1);
+  ASSERT(close_cb_called == 1);
+
+  return 0;
+}
+
+
+TEST_IMPL(spawn_setsid_killpg) {
+  int r;
+  uv_err_t err;
+
+  no_term_signal = 1;
+
+  init_process_options("spawn_helper4", kill_cb);
+
+  options.flags |= UV_PROCESS_SETSID;
+
+  r = uv_spawn(uv_default_loop(), &process, options);
+  ASSERT(r == 0);
+
+  /* Sending signum == 0 should check if the
+   * child process is still alive, not kill it.
+   */
+  err = uv_kill(-process.pid, 0);  // Negative PID = killpg
+  ASSERT(err.code == UV_OK);
+
+  /* Kill the process. */
+  err = uv_kill(-process.pid, /* SIGTERM */ 15);
+  ASSERT(err.code == UV_OK);
+
+  r = uv_run(uv_default_loop());
+  ASSERT(r == 0);
+
+  ASSERT(exit_cb_called == 1);
+  ASSERT(close_cb_called == 1);
+
+  return 0;
+}
+#endif
+
+
+#ifndef _WIN32
 TEST_IMPL(spawn_setuid_fails) {
   int r;
 

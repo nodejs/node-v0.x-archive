@@ -199,6 +199,11 @@ class ProcessWrap : public HandleWrap {
       options.flags |= UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS;
     }
 
+    // options.setsid
+    if (js_options->Get(String::NewSymbol("setsid"))->IsTrue()) {
+      options.flags |= UV_PROCESS_SETSID;
+    }
+
     int r = uv_spawn(uv_default_loop(), &wrap->process_, options);
 
     if (r) {
