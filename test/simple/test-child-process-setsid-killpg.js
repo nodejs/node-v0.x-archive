@@ -34,7 +34,7 @@ var termSignal;
 var gotStdoutEOF = false;
 var gotStderrEOF = false;
 
-var cat = spawn('cat', [], {setsid: true});
+var cat = spawn(is_windows ? 'cmd' : 'cat', [], {setsid: true});
 
 
 cat.stdout.on('data', function(chunk) {
@@ -59,8 +59,8 @@ cat.on('exit', function(code, signal) {
 });
 
 assert.equal(cat.killed, false);
-process.kill(-cat.pid);  // killpg(cat.pid)
-assert.equal(cat.killed, false);  // We only implicitly kill the process
+process.kill(is_windows? cat.pid : -cat.pid);  // negative -> killpg(cat.pid)
+assert.equal(cat.killed, is_windows);  // On UNIX we kill implicitly
 
 process.on('exit', function() {
   assert.strictEqual(exitCode, null);
