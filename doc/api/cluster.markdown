@@ -117,7 +117,7 @@ where the 'listening' event is emitted.
 
 The event handler is executed with two arguments, the `worker` contains the worker
 object and the `address` object contains the following connection properties:
-`address`, `port` and `addressType`. This is very useful if the worker is listening
+`address`, `port` and `family`. This is very useful if the worker is listening
 on more than one address.
 
     cluster.on('listening', function(worker, address) {
@@ -143,7 +143,7 @@ connections.
 ## Event: 'exit'
 
 * `worker` {Worker object}
-* `code` {Number} the exit code, if it exited normally. 
+* `code` {Number} the exit code, if it exited normally.
 * `signal` {String} the name of the signal (eg. `'SIGHUP'`) that caused
   the process to be killed.
 
@@ -435,12 +435,12 @@ on the specified worker.
 
 ### Event: 'exit'
 
-* `code` {Number} the exit code, if it exited normally. 
+* `code` {Number} the exit code, if it exited normally.
 * `signal` {String} the name of the signal (eg. `'SIGHUP'`) that caused
   the process to be killed.
 
 Emitted by the individual worker instance, when the underlying child process
-is terminated.  See [child_process event: 'exit'](child_process.html#child_process_event_exit). 
+is terminated.  See [child_process event: 'exit'](child_process.html#child_process_event_exit).
 
     var worker = cluster.fork();
     worker.on('exit', function(code, signal) {
