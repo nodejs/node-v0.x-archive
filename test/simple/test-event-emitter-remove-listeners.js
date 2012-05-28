@@ -23,6 +23,10 @@ var common = require('../common');
 var assert = require('assert');
 var events = require('events');
 
+var e = new events.EventEmitter();
+
+// sanity check
+assert.equal(e.removeListener, e.off);
 
 var count = 0;
 
