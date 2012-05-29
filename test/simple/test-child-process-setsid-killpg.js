@@ -59,8 +59,8 @@ cat.on('exit', function(code, signal) {
 });
 
 assert.equal(cat.killed, false);
-process.kill(is_windows? cat.pid : -cat.pid);  // negative -> killpg(cat.pid)
-assert.equal(cat.killed, is_windows);  // On UNIX we kill implicitly
+process.kill(-cat.pid);  // UNIX: killpg(cat.pid); Windows: kill(cat.pid)
+assert.equal(cat.killed, false);  // Built-in exit handlers do not set .killed
 
 process.on('exit', function() {
   assert.strictEqual(exitCode, null);
