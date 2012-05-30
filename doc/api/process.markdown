@@ -331,6 +331,12 @@ Example of sending a signal to yourself:
 
     process.kill(process.pid, 'SIGHUP');
 
+If you spawn a session leader via child_process API with an option
+`setsid: true`, you can kill, or send a signal to, the entire process group
+by calling `kill` with the negative PID of the session leader -- on UNIX-like
+systems it will invoke the `killpg` system function with that ID.
+On Windows it will still do a regular `kill` for that PID, so no need to write
+platform conditions, although it would not affect the grandchildren on Windows.
 
 ## process.pid
 

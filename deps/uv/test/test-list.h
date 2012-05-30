@@ -174,6 +174,8 @@ TEST_DECLARE   (listen_no_simultaneous_accepts)
 TEST_DECLARE   (fs_stat_root)
 #else
 TEST_DECLARE   (spawn_setuid_setgid)
+TEST_DECLARE   (spawn_setsid)
+TEST_DECLARE   (spawn_setsid_killpg)
 #endif
 HELPER_DECLARE (tcp4_echo_server)
 HELPER_DECLARE (tcp6_echo_server)
@@ -346,6 +348,8 @@ TASK_LIST_START
   TEST_ENTRY  (fs_stat_root)
 #else
   TEST_ENTRY  (spawn_setuid_setgid)
+  TEST_ENTRY  (spawn_setsid)
+  TEST_ENTRY  (spawn_setsid_killpg)
 #endif
 
   TEST_ENTRY  (fs_file_noent)

@@ -347,6 +347,20 @@ There are several internal options. In particular `stdinStream`,
 `stdoutStream`, `stderrStream`. They are for INTERNAL USE ONLY. As with all
 undocumented APIs in Node, they should not be used.
 
+`setsid` allows to make the child process a new session leader on UNIX-like
+systems and has no effect on Windows. The session ID (SID) will be equal to the
+leader's PID. You can then kill, or send a signal to, all processes in the
+session by calling `process.kill` with the negated PID of the leader -- the
+process that you spawned here. On Windows it would still do a regular `kill`
+of the child only, with no effect on the grandchildren.
+
+Example of using `setsid`:
+
+    var spawn = require('child_process').spawn,
+        child = spawn('sh', ['-c', 'sleep 30 &'], {setsid: true});
+    process.kill(-child.pid);  // On UNIX will also kill the "sleep 30" process
+
+
 See also: `child_process.exec()` and `child_process.fork()`
 
 ## child_process.exec(command, [options], callback)

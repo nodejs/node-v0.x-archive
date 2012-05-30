@@ -241,7 +241,8 @@ int uv_spawn(uv_loop_t* loop, uv_process_t* process,
   assert(options.file != NULL);
   assert(!(options.flags & ~(UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS |
                              UV_PROCESS_SETGID |
-                             UV_PROCESS_SETUID)));
+                             UV_PROCESS_SETUID |
+                             UV_PROCESS_SETSID)));
 
 
   uv__handle_init(loop, (uv_handle_t*)process, UV_PROCESS);
@@ -336,6 +337,12 @@ int uv_spawn(uv_loop_t* loop, uv_process_t* process,
       _exit(127);
     }
 
+    pid_t sid = -1;
+    if ((options.flags & UV_PROCESS_SETSID) && -1 == (sid = setsid())) {
+      perror("setsid()");
+      _exit(127);
+    }
+
     environ = options.env;
 
     execvp(options.file, options.args);
@@ -413,7 +420,7 @@ int uv_process_kill(uv_process_t* process, int signum) {
 
 
 uv_err_t uv_kill(int pid, int signum) {
-  int r = kill(pid, signum);
+  int r = (pid >= 0) ? kill(pid, signum) : killpg(-pid, signum);
 
   if (r) {
     return uv__new_sys_error(errno);

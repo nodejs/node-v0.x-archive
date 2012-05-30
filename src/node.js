@@ -415,6 +415,15 @@
     process.kill = function(pid, sig) {
       var r;
 
+      // On UNIX, a kill with a negative PID means killpg().
+      // On Windows there is no exact equivalent for killpg().
+      // Allow to write code without platform checks and to pass a negative
+      // PID to kill() even on Windows, translate it into a straight kill().
+      var isWindows = process.platform === 'win32';
+      if (isWindows && pid < 0) {
+        pid = -pid;
+      }
+
       // preserve null signal
       if (0 === sig) {
         r = process._kill(pid, 0);
