@@ -356,9 +356,9 @@ of the child only, with no effect on the grandchildren.
 
 Example of using `setsid`:
 
-  var spawn = require('child_process').spawn,
-      child = spawn('sh', ['-c', 'sleep 30 &'], {setsid: true};
-  process.kill(-child.pid);  // On UNIX this will also kill "sleep 30"
+    var spawn = require('child_process').spawn,
+        child = spawn('sh', ['-c', 'sleep 30 &'], {setsid: true});
+    process.kill(-child.pid);  // On UNIX will also kill the "sleep 30" process
 
 
 See also: `child_process.exec()` and `child_process.fork()`
