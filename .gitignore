@@ -33,7 +33,6 @@ ipch/
 
 /config.mk
 /config.gypi
-/config.wxi
 *-nodegyp*
 /gyp-mac-tool
 /dist-osx

@@ -3,7 +3,6 @@
 
   <?define repoDir="$(var.ProjectDir)..\..\..\" ?>
   <?define sourcedir="$(var.repoDir)\$(var.Configuration)\" ?>
-  <?include $(var.repoDir)\config.wxi ?>
 
   <Product Id="$(var.ProductId)"
            Name="node.js"
