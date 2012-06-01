@@ -23,6 +23,16 @@
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
     <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+    <OutputPath>..\..\..\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+    <OutputPath>..\..\..\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NPMSourceDir=..\..\..\deps\npm\</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="product.wxs" />
     <Compile Include="..\..\..\npm.wxs" />

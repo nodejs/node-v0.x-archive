@@ -3,6 +3,7 @@
 
   <?define repoDir="$(var.ProjectDir)..\..\..\" ?>
   <?define sourcedir="$(var.repoDir)\$(var.Configuration)\" ?>
+  <?include $(var.repoDir)\config.wxi ?>
 
   <Product Id="$(var.ProductId)"
            Name="node.js"
@@ -11,7 +12,7 @@
            Manufacturer="Joyent, Inc"
            UpgradeCode="1d60944c-b9ce-4a71-a7c0-0384eb884baa">
 
-    <Package InstallerVersion="200" Compressed="yes" Platform="x86" />
+    <Package InstallerVersion="200" Compressed="yes" />
 
     <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" />
 
@@ -19,7 +20,7 @@
                   DowngradeErrorMessage="A later version of node.js is already installed. Setup will now exit." />
     
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder">
+      <Directory Id="$(var.ProgramFilesFolderId)">
         <Directory Id="NodeRoot" Name="nodejs">
           <Directory Id="NodeModulesFolder" Name="node_modules">
             <Directory Id="NPMFolder" Name="npm">
