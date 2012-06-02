@@ -19,14 +19,14 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_CONSTANTS_H_
-#define SRC_CONSTANTS_H_
+#ifndef SRC_NODE_CONSTANTS_H_
+#define SRC_NODE_CONSTANTS_H_
 
-#include "node.h"
-#include "v8.h"
+#include "src/node.h"
+#include <v8.h>
 
 namespace node {
 void DefineConstants(v8::Handle<v8::Object> target);
 }  // namespace node
 
-#endif  // SRC_CONSTANTS_H_
+#endif  // SRC_NODE_CONSTANTS_H_

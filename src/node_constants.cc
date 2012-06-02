@@ -19,9 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node_constants.h"
+#include "src/node_constants.h"
 
-#include "uv.h"
+#include <uv.h>
 
 #include <errno.h>
 #if !defined(_MSC_VER)
@@ -38,7 +38,8 @@
 
 namespace node {
 
-using namespace v8;
+using v8::Handle;
+using v8::Object;
 
 void DefineConstants(Handle<Object> target) {
   // file access modes
@@ -989,6 +990,6 @@ void DefineConstants(Handle<Object> target) {
 #define NPN_ENABLED 1
   NODE_DEFINE_CONSTANT(target, NPN_ENABLED);
 #endif
-}
+}  // NOLINT(readability/fn_size)
 
-}  // namespace node
+}  // namespace node NOLINT(readability/fn_size)
