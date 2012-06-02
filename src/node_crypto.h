@@ -22,10 +22,10 @@
 #ifndef SRC_NODE_CRYPTO_H_
 #define SRC_NODE_CRYPTO_H_
 
-#include "node.h"
+#include "src/node.h"
 
-#include "node_object_wrap.h"
-#include "v8.h"
+#include "src/node_object_wrap.h"
+#include <v8.h>
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -38,7 +38,7 @@
 #include <openssl/pkcs12.h>
 
 #ifdef OPENSSL_NPN_NEGOTIATED
-#include "node_buffer.h"
+#include "src/node_buffer.h"
 #endif
 
 #define EVP_F_EVP_DECRYPTFINAL 101
@@ -54,7 +54,7 @@ class SecureContext : ObjectWrap {
   static void Initialize(v8::Handle<v8::Object> target);
 
   SSL_CTX *ctx_;
-  // TODO: ca_store_ should probably be removed, it's not used anywhere.
+  // TODO(ry): ca_store_ should probably be removed, it's not used anywhere.
   X509_STORE *ca_store_;
 
  protected:
@@ -144,7 +144,8 @@ class Connection : ObjectWrap {
                                          unsigned int *len,
                                          void *arg);
   static int SelectNextProtoCallback_(SSL *s,
-                                      unsigned char **out, unsigned char *outlen,
+                                      unsigned char **out,
+                                      unsigned char *outlen,
                                       const unsigned char* in,
                                       unsigned int inlen, void *arg);
 #endif
@@ -185,9 +186,9 @@ class Connection : ObjectWrap {
 #endif
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-   if (!sniCallback_.IsEmpty()) sniCallback_.Dispose();
-   if (!sniContext_.IsEmpty()) sniContext_.Dispose();
-   if (!servername_.IsEmpty()) servername_.Dispose();
+    if (!sniCallback_.IsEmpty()) sniCallback_.Dispose();
+    if (!sniContext_.IsEmpty()) sniContext_.Dispose();
+    if (!servername_.IsEmpty()) servername_.Dispose();
 #endif
   }
 
