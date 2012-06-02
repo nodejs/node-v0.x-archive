@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "winresrc.h"
-#include "node_version.h"
+#include "src/node_version.h"
 
 
 // Application icon
