@@ -20,9 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <assert.h>
-#include "node.h"
-#include "req_wrap.h"
-#include "uv.h"
+#include <uv.h>
 
 #include <string.h>
 
@@ -41,12 +39,14 @@
 # define uv_inet_pton ares_inet_pton
 # define uv_inet_ntop ares_inet_ntop
 
-#else // __POSIX__
+#else  // __POSIX__
 # include <arpa/inet.h>
 # define uv_inet_pton inet_pton
 # define uv_inet_ntop inet_ntop
 #endif
 
+#include "src/node.h"
+#include "src/req_wrap.h"
 
 namespace node {
 
@@ -601,7 +601,8 @@ static Handle<Value> QueryWithFamily(const Arguments& args) {
 void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
   HandleScope scope;
 
-  GetAddrInfoReqWrap* req_wrap = (GetAddrInfoReqWrap*) req->data;
+  GetAddrInfoReqWrap* req_wrap =
+    reinterpret_cast<GetAddrInfoReqWrap*>(req->data);
 
   Local<Value> argv[1];
 
@@ -636,7 +637,8 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
       // Ignore random ai_family types.
       if (address->ai_family == AF_INET) {
         // Juggle pointers
-        addr = (char*) &((struct sockaddr_in*) address->ai_addr)->sin_addr;
+        sockaddr_in* ai_addr_sai = (struct sockaddr_in*)address->ai_addr;
+        addr = reinterpret_cast<char*>(&ai_addr_sai->sin_addr);
         const char* c = uv_inet_ntop(address->ai_family, addr, ip,
             INET6_ADDRSTRLEN);
 
@@ -658,7 +660,8 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
       // Ignore random ai_family types.
       if (address->ai_family == AF_INET6) {
         // Juggle pointers
-        addr = (char*) &((struct sockaddr_in6*) address->ai_addr)->sin6_addr;
+        sockaddr_in6* ai_addr_sai6 = (struct sockaddr_in6*)address->ai_addr;
+        addr = reinterpret_cast<char*>(&ai_addr_sai6->sin6_addr);
         const char* c = uv_inet_ntop(address->ai_family, addr, ip,
             INET6_ADDRSTRLEN);
 
@@ -759,7 +762,7 @@ static void Initialize(Handle<Object> target) {
 }
 
 
-} // namespace cares_wrap
+}  // namespace cares_wrap
 
 }  // namespace node
 
