@@ -85,9 +85,12 @@
         <Shortcut Id="ApplicationStartMenuShortcut" Name="Node.js"
                   Description="$(var.ProductDescription)" Target="[APPLICATIONROOTDIRECTORY]node.exe"
                   WorkingDirectory="APPLICATIONROOTDIRECTORY"/>
-        <util:InternetShortcut Id="OnlineDocumentationShortcut"
+        <util:InternetShortcut Id="OnlineWebsiteShortcut"
                   Name="Node.js website"
-                  Target="http://nodejs.org/"/>
+                  Target="http://nodejs.org"/>
+        <util:InternetShortcut Id="OnlineDocumentationShortcut"
+                  Name="Node.js documentation"
+                  Target="http://nodejs.org/dist/v$(var.ProductVersion)/docs/api/"/>
         <Shortcut Id="UninstallProduct"
                   Name="Uninstall Node.js"
                   Target="[SystemFolder]msiexec.exe"
