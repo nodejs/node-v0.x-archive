@@ -58,13 +58,13 @@
 # define SIGKILL         9
 #endif
 
-#include "uv.h"
-#include "v8.h"
+#include <uv.h>
+#include <v8.h>
 #include <sys/types.h> /* struct stat */
 #include <sys/stat.h>
 #include <assert.h>
 
-#include "node_object_wrap.h"
+#include "src/node_object_wrap.h"
 
 #if NODE_WANT_INTERNALS
 # include "node_internals.h"
@@ -107,16 +107,14 @@ void EmitExit(v8::Handle<v8::Object> process);
 
 template <typename target_t>
 void SetMethod(target_t obj, const char* name,
-        v8::InvocationCallback callback)
-{
+        v8::InvocationCallback callback) {
     obj->Set(v8::String::NewSymbol(name),
         v8::FunctionTemplate::New(callback)->GetFunction());
 }
 
 template <typename target_t>
 void SetPrototypeMethod(target_t target,
-        const char* name, v8::InvocationCallback callback)
-{
+        const char* name, v8::InvocationCallback callback) {
     v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(callback);
     target->PrototypeTemplate()->Set(v8::String::NewSymbol(name), templ);
 }
@@ -128,8 +126,8 @@ void SetPrototypeMethod(target_t target,
 enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
-NODE_EXTERN void FatalException(v8::TryCatch &try_catch);
-void DisplayExceptionLine(v8::TryCatch &try_catch); // hack
+NODE_EXTERN void FatalException(const v8::TryCatch &try_catch);
+void DisplayExceptionLine(const v8::TryCatch &try_catch);  // hack
 
 v8::Local<v8::Value> Encode(const void *buf, size_t len,
                             enum encoding encoding = BINARY);
@@ -150,7 +148,7 @@ ssize_t DecodeWrite(char *buf,
 # define NODE_STAT        stat
 # define NODE_FSTAT       fstat
 # define NODE_STAT_STRUCT struct stat
-#else // _WIN32
+#else  // _WIN32
 # define NODE_STAT        _stati64
 # define NODE_FSTAT       _fstati64
 # define NODE_STAT_STRUCT struct _stati64
@@ -167,7 +165,7 @@ v8::Local<v8::Object> BuildStatsObject(NODE_STAT_STRUCT *s);
  * @see v8::Arguments::IsConstructCall
  */
 v8::Handle<v8::Value> FromConstructorTemplate(
-    v8::Persistent<v8::FunctionTemplate>& constructorTemplate,
+    const v8::Persistent<v8::FunctionTemplate>& constructorTemplate,
     const v8::Arguments& args);
 
 
@@ -212,7 +210,7 @@ struct node_module_struct {
   int version;
   void *dso_handle;
   const char *filename;
-  void (*register_func) (v8::Handle<v8::Object> target);
+  void (*register_func)(v8::Handle<v8::Object> target);
   const char *modname;
 };
 
