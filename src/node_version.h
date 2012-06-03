@@ -20,11 +20,11 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #if 0 /* commenting out to build via gyp faster */
-#include "node_config.h"
+#include "src/node_config.h"
 #endif
 
-#ifndef NODE_VERSION_H
-#define NODE_VERSION_H
+#ifndef SRC_NODE_VERSION_H_
+#define SRC_NODE_VERSION_H_
 
 #define NODE_MAJOR_VERSION 0
 #define NODE_MINOR_VERSION 7
@@ -52,6 +52,6 @@
 #define NODE_VERSION_AT_LEAST(major, minor, patch) \
   (( (major) < NODE_MAJOR_VERSION) \
   || ((major) == NODE_MAJOR_VERSION && (minor) < NODE_MINOR_VERSION) \
-  || ((major) == NODE_MAJOR_VERSION && (minor) == NODE_MINOR_VERSION && (patch) <= NODE_PATCH_VERSION))
+  || ((major) == NODE_MAJOR_VERSION && (minor) == NODE_MINOR_VERSION && (patch) <= NODE_PATCH_VERSION))  // NOLINT(whitespace/line_length)
 
-#endif /* NODE_VERSION_H */
+#endif  // SRC_NODE_VERSION_H_
