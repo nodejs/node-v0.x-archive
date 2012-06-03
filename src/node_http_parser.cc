@@ -19,11 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node_http_parser.h"
+#include "src/node_http_parser.h"
 
-#include "v8.h"
-#include "node.h"
-#include "node_buffer.h"
+#include <v8.h>
 
 #include <string.h>  /* strdup() */
 #if !defined(_MSC_VER)
@@ -32,6 +30,9 @@
 #define strcasecmp _stricmp
 #endif
 #include <stdlib.h>  /* free() */
+
+#include "src/node.h"
+#include "src/node_buffer.h"
 
 // This is a binding to http_parser (https://github.com/joyent/http-parser)
 // The goal is to decouple sockets from parsing for more javascript-level
@@ -47,7 +48,26 @@
 
 namespace node {
 
-using namespace v8;
+using v8::Arguments;
+using v8::Array;
+using v8::DontDelete;
+using v8::Exception;
+using v8::False;
+using v8::Function;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Object;
+using v8::Persistent;
+using v8::PropertyAttribute;
+using v8::ReadOnly;
+using v8::String;
+using v8::ThrowException;
+using v8::True;
+using v8::Undefined;
+using v8::Value;
 
 static Persistent<String> on_headers_sym;
 static Persistent<String> on_headers_complete_sym;
@@ -82,11 +102,11 @@ static size_t current_buffer_len;
 
 
 #define HTTP_CB(name)                                               \
-	  static int name(http_parser* p_) {                              \
-	    Parser* self = container_of(p_, Parser, parser_);             \
-	    return self->name##_();                                       \
-	  }                                                               \
-	  int name##_()
+    static int name(http_parser* p_) {                              \
+      Parser* self = container_of(p_, Parser, parser_);             \
+      return self->name##_();                                       \
+    }                                                               \
+    int name##_()
 
 
 #define HTTP_DATA_CB(name)                                          \
@@ -98,7 +118,7 @@ static size_t current_buffer_len;
 
 
 static inline Persistent<String>
-method_to_str(unsigned short m) {
+method_to_str(uint16_t m) {
   switch (m) {
 #define X(num, name, string) case HTTP_##name: return name##_sym;
   HTTP_METHOD_MAP(X)
@@ -150,7 +170,7 @@ struct StringPtr {
       str_ = str;
     else if (on_heap_ || str_ + size_ != str) {
       // Non-consecutive input, make a copy on the heap.
-      // TODO Use slab allocation, O(n) allocs is bad.
+      // TODO(bnoordhuis) Use slab allocation, O(n) allocs is bad.
       char* s = new char[size_ + size];
       memcpy(s, str_, size_);
       memcpy(s + size_, str, size);
@@ -181,8 +201,8 @@ struct StringPtr {
 
 
 class Parser : public ObjectWrap {
-public:
-  Parser(enum http_parser_type type) : ObjectWrap() {
+ public:
+  explicit Parser(enum http_parser_type type) : ObjectWrap() {
     Init(type);
   }
 
@@ -217,7 +237,7 @@ public:
       fields_[num_fields_ - 1].Reset();
     }
 
-    assert(num_fields_ < (int)ARRAY_SIZE(fields_));
+    assert(num_fields_ < static_cast<int>(ARRAY_SIZE(fields_)));
     assert(num_fields_ == num_values_ + 1);
 
     fields_[num_fields_ - 1].Update(at, length);
@@ -233,7 +253,7 @@ public:
       values_[num_values_ - 1].Reset();
     }
 
-    assert(num_values_ < (int)ARRAY_SIZE(values_));
+    assert(num_values_ < static_cast<int>(ARRAY_SIZE(values_)));
     assert(num_values_ == num_fields_);
 
     values_[num_values_ - 1].Update(at, length);
@@ -253,8 +273,7 @@ public:
     if (have_flushed_) {
       // Slow case, flush remaining headers.
       Flush();
-    }
-    else {
+    } else {
       // Fast case, pass headers and URL to JS land.
       message_info->Set(headers_sym, CreateHeaders());
       if (parser_.type == HTTP_REQUEST)
@@ -323,7 +342,7 @@ public:
     HandleScope scope;
 
     if (num_fields_)
-      Flush(); // Flush trailing HTTP headers.
+      Flush();  // Flush trailing HTTP headers.
 
     Local<Value> cb = handle_->Get(on_message_complete_sym);
 
@@ -430,7 +449,7 @@ public:
 
     Local<Integer> nparsed_obj = Integer::New(nparsed);
     // If there was a parse error in one of the callbacks
-    // TODO What if there is an error on EOF?
+    // TODO(ry) What if there is an error on EOF?
     if (!parser->parser_.upgrade && nparsed != len) {
       enum http_errno err = HTTP_PARSER_ERRNO(&parser->parser_);
 
@@ -489,7 +508,7 @@ public:
   }
 
 
-private:
+ private:
 
   Local<Array> CreateHeaders() {
     // num_values_ is either -1 or the entry # of the last header

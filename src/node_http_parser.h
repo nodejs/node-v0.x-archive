@@ -19,17 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_HTTP_PARSER
-#define NODE_HTTP_PARSER
+#ifndef SRC_NODE_HTTP_PARSER_H_
+#define SRC_NODE_HTTP_PARSER_H_
 
-#include "v8.h"
+#include <v8.h>
 
-#include "http_parser.h"
+#include <http_parser.h>
 
 namespace node {
-
 void InitHttpParser(v8::Handle<v8::Object> target);
-
 }
 
-#endif  // NODE_HTTP_PARSER
+#endif  // SRC_NODE_HTTP_PARSER_H_
