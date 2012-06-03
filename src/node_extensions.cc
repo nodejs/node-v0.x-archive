@@ -20,10 +20,10 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "node.h"
-#include "node_version.h"
 #include <string.h>
 #include <stdio.h>
+#include "src/node.h"
+#include "src/node_version.h"
 
 #undef NODE_EXT_LIST_START
 #undef NODE_EXT_LIST_ITEM
@@ -33,7 +33,7 @@
 #define NODE_EXT_LIST_ITEM NODE_MODULE_DECL
 #define NODE_EXT_LIST_END
 
-#include "node_extensions.h"
+#include "src/node_extensions.h"
 
 #undef NODE_EXT_LIST_START
 #undef NODE_EXT_LIST_ITEM
@@ -44,12 +44,11 @@
 #define NODE_EXT_LIST_ITEM NODE_EXT_STRING
 #define NODE_EXT_LIST_END NULL};
 
-#include "node_extensions.h"
+#include "src/node_extensions.h"  // NOLINT(build/include)
 
 namespace node {
 
-node_module_struct* get_builtin_module(const char *name)
-{
+node_module_struct* get_builtin_module(const char *name) {
   char buf[128];
   node_module_struct *cur = NULL;
   snprintf(buf, sizeof(buf), "node_%s", name);
@@ -65,4 +64,4 @@ node_module_struct* get_builtin_module(const char *name)
   return NULL;
 }
 
-}; // namespace node
+};  // namespace node
