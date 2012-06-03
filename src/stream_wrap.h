@@ -19,12 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef STREAM_WRAP_H_
-#define STREAM_WRAP_H_
+#ifndef SRC_STREAM_WRAP_H_
+#define SRC_STREAM_WRAP_H_
 
-#include "v8.h"
-#include "node.h"
-#include "handle_wrap.h"
+#include <v8.h>
+#include "src/node.h"
+#include "src/handle_wrap.h"
 
 namespace node {
 
@@ -59,7 +59,8 @@ class StreamWrap : public HandleWrap {
   void UpdateWriteQueueSize();
 
  private:
-  static inline char* NewSlab(v8::Handle<v8::Object> global, v8::Handle<v8::Object> wrap_obj);
+  static inline char* NewSlab(v8::Handle<v8::Object> global,
+    v8::Handle<v8::Object> wrap_obj);
 
   // Callbacks for libuv
   static void AfterWrite(uv_write_t* req, int status);
@@ -83,4 +84,4 @@ class StreamWrap : public HandleWrap {
 }  // namespace node
 
 
-#endif  // STREAM_WRAP_H_
+#endif  // SRC_STREAM_WRAP_H_
