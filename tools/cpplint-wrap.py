@@ -5,7 +5,8 @@ from subprocess import call
 
 cpplint = ['python', 'tools/cpplint.py']
 excludes = [
-	'src{0}{1}'.format(os.sep, 'node_extensions.h')
+	'src{0}{1}'.format(os.sep, 'node_extensions.h'),
+	'src{0}{1}'.format(os.sep, 'node_root_certs.h')
 ]
 
 lintfiles = filter(lambda x: excludes.count(x) == 0,
@@ -13,6 +14,7 @@ lintfiles = filter(lambda x: excludes.count(x) == 0,
 
 run_args = [
 	['--filter=-build/header_guard', 'src/node_extensions.h'],
+	['--filter=-whitespace/line_length', 'src/node_root_certs.h'],
 	lintfiles # no filters for the "regular" files
 ]
 
