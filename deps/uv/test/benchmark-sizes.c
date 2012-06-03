@@ -27,6 +27,7 @@ BENCHMARK_IMPL(sizes) {
   LOGF("uv_shutdown_t: %u bytes\n", (unsigned int) sizeof(uv_shutdown_t));
   LOGF("uv_write_t: %u bytes\n", (unsigned int) sizeof(uv_write_t));
   LOGF("uv_connect_t: %u bytes\n", (unsigned int) sizeof(uv_connect_t));
+  LOGF("uv_udp_send_t: %u bytes\n", (unsigned int) sizeof(uv_udp_send_t));
   LOGF("uv_tcp_t: %u bytes\n", (unsigned int) sizeof(uv_tcp_t));
   LOGF("uv_pipe_t: %u bytes\n", (unsigned int) sizeof(uv_pipe_t));
   LOGF("uv_tty_t: %u bytes\n", (unsigned int) sizeof(uv_tty_t));
@@ -36,5 +37,6 @@ BENCHMARK_IMPL(sizes) {
   LOGF("uv_async_t: %u bytes\n", (unsigned int) sizeof(uv_async_t));
   LOGF("uv_timer_t: %u bytes\n", (unsigned int) sizeof(uv_timer_t));
   LOGF("uv_process_t: %u bytes\n", (unsigned int) sizeof(uv_process_t));
+  LOGF("uv_poll_t: %u bytes\n", (unsigned int) sizeof(uv_poll_t));
   return 0;
 }

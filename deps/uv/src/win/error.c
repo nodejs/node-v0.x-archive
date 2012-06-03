@@ -26,7 +26,6 @@
 #include <string.h>
 
 #include "uv.h"
-#include "../uv-common.h"
 #include "internal.h"
 
 
@@ -67,7 +66,24 @@ void uv_fatal_error(const int errorno, const char* syscall) {
 uv_err_code uv_translate_sys_error(int sys_errno) {
   switch (sys_errno) {
     case ERROR_SUCCESS:                     return UV_OK;
+    case ERROR_BEGINNING_OF_MEDIA:          return UV_EIO;
+    case ERROR_BUS_RESET:                   return UV_EIO;
+    case ERROR_CRC:                         return UV_EIO;
+    case ERROR_DEVICE_DOOR_OPEN:            return UV_EIO;
+    case ERROR_DEVICE_REQUIRES_CLEANING:    return UV_EIO;
+    case ERROR_DISK_CORRUPT:                return UV_EIO;
+    case ERROR_EOM_OVERFLOW:                return UV_EIO;
+    case ERROR_FILEMARK_DETECTED:           return UV_EIO;
+    case ERROR_INVALID_BLOCK_LENGTH:        return UV_EIO;
+    case ERROR_IO_DEVICE:                   return UV_EIO;
+    case ERROR_NO_DATA_DETECTED:            return UV_EIO;
+    case ERROR_NO_SIGNAL_SENT:              return UV_EIO;
+    case ERROR_OPEN_FAILED:                 return UV_EIO;
+    case ERROR_SETMARK_DETECTED:            return UV_EIO;
+    case ERROR_SIGNAL_REFUSED:              return UV_EIO;
     case ERROR_FILE_NOT_FOUND:              return UV_ENOENT;
+    case ERROR_INVALID_NAME:                return UV_ENOENT;
+    case ERROR_MOD_NOT_FOUND:               return UV_ENOENT;
     case ERROR_PATH_NOT_FOUND:              return UV_ENOENT;
     case ERROR_ACCESS_DENIED:               return UV_EPERM;
     case ERROR_NOACCESS:                    return UV_EACCES;
@@ -109,6 +125,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_EA_TABLE_FULL:               return UV_ENOSPC;
     case ERROR_END_OF_MEDIA:                return UV_ENOSPC;
     case ERROR_HANDLE_DISK_FULL:            return UV_ENOSPC;
+    case ERROR_WRITE_PROTECT:               return UV_EROFS;
     case ERROR_NOT_CONNECTED:               return UV_ENOTCONN;
     case WSAENOTCONN:                       return UV_ENOTCONN;
     case ERROR_DIR_NOT_EMPTY:               return UV_ENOTEMPTY;
@@ -126,6 +143,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case WSAETIMEDOUT:                      return UV_ETIMEDOUT;
     case WSAHOST_NOT_FOUND:                 return UV_ENOENT;
     case WSAENOTSOCK:                       return UV_ENOTSOCK;
+    case ERROR_NOT_SAME_DEVICE:             return UV_EXDEV;
     default:                                return UV_UNKNOWN;
   }
 }

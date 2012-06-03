@@ -24,6 +24,7 @@
 #include "slab_allocator.h"
 #include "req_wrap.h"
 #include "handle_wrap.h"
+#include "udp_wrap.h"
 
 #include <stdlib.h>
 
@@ -49,65 +50,15 @@ using namespace v8;
 
 namespace node {
 
-#define UNWRAP                                                              \
-  assert(!args.Holder().IsEmpty());                                         \
-  assert(args.Holder()->InternalFieldCount() > 0);                          \
-  UDPWrap* wrap =                                                           \
-      static_cast<UDPWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) {                                                              \
-    uv_err_t err;                                                           \
-    err.code = UV_EBADF;                                                    \
-    SetErrno(err);                                                          \
-    return scope.Close(Integer::New(-1));                                   \
-  }
-
 typedef ReqWrap<uv_udp_send_t> SendWrap;
 
+// see tcp_wrap.cc
 Local<Object> AddressToJS(const sockaddr* addr);
 
-static Persistent<String> address_symbol;
-static Persistent<String> port_symbol;
 static Persistent<String> buffer_sym;
+static Persistent<String> oncomplete_sym;
+static Persistent<String> onmessage_sym;
 static SlabAllocator slab_allocator(SLAB_SIZE);
-
-
-class UDPWrap: public HandleWrap {
-public:
-  static void Initialize(Handle<Object> target);
-  static Handle<Value> New(const Arguments& args);
-  static Handle<Value> Bind(const Arguments& args);
-  static Handle<Value> Send(const Arguments& args);
-  static Handle<Value> Bind6(const Arguments& args);
-  static Handle<Value> Send6(const Arguments& args);
-  static Handle<Value> RecvStart(const Arguments& args);
-  static Handle<Value> RecvStop(const Arguments& args);
-  static Handle<Value> GetSockName(const Arguments& args);
-  static Handle<Value> AddMembership(const Arguments& args);
-  static Handle<Value> DropMembership(const Arguments& args);
-  static Handle<Value> SetMulticastTTL(const Arguments& args);
-  static Handle<Value> SetMulticastLoopback(const Arguments& args);
-  static Handle<Value> SetBroadcast(const Arguments& args);
-  static Handle<Value> SetTTL(const Arguments& args);
-
-private:
-  UDPWrap(Handle<Object> object);
-  virtual ~UDPWrap();
-
-  static Handle<Value> DoBind(const Arguments& args, int family);
-  static Handle<Value> DoSend(const Arguments& args, int family);
-  static Handle<Value> SetMembership(const Arguments& args,
-                                     uv_membership membership);
-
-  static uv_buf_t OnAlloc(uv_handle_t* handle, size_t suggested_size);
-  static void OnSend(uv_udp_send_t* req, int status);
-  static void OnRecv(uv_udp_t* handle,
-                     ssize_t nread,
-                     uv_buf_t buf,
-                     struct sockaddr* addr,
-                     unsigned flags);
-
-  uv_udp_t handle_;
-};
 
 
 UDPWrap::UDPWrap(Handle<Object> object): HandleWrap(object,
@@ -128,8 +79,8 @@ void UDPWrap::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   buffer_sym = NODE_PSYMBOL("buffer");
-  port_symbol = NODE_PSYMBOL("port");
-  address_symbol = NODE_PSYMBOL("address");
+  oncomplete_sym = NODE_PSYMBOL("oncomplete");
+  onmessage_sym = NODE_PSYMBOL("onmessage");
 
   Local<FunctionTemplate> t = FunctionTemplate::New(New);
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -168,7 +119,7 @@ Handle<Value> UDPWrap::DoBind(const Arguments& args, int family) {
   HandleScope scope;
   int r;
 
-  UNWRAP
+  UNWRAP(UDPWrap)
 
   // bind(ip, port, flags)
   assert(args.Length() == 3);
@@ -209,7 +160,7 @@ Handle<Value> UDPWrap::Bind6(const Arguments& args) {
 #define X(name, fn)                                                           \
   Handle<Value> UDPWrap::name(const Arguments& args) {                        \
     HandleScope scope;                                                        \
-    UNWRAP                                                                    \
+    UNWRAP(UDPWrap)                                                                    \
     assert(args.Length() == 1);                                               \
     int flag = args[0]->Int32Value();                                         \
     int r = fn(&wrap->handle_, flag);                                         \
@@ -228,7 +179,7 @@ X(SetMulticastLoopback, uv_udp_set_multicast_loop)
 Handle<Value> UDPWrap::SetMembership(const Arguments& args,
                                      uv_membership membership) {
   HandleScope scope;
-  UNWRAP
+  UNWRAP(UDPWrap)
 
   assert(args.Length() == 2);
 
@@ -267,7 +218,7 @@ Handle<Value> UDPWrap::DoSend(const Arguments& args, int family) {
   // send(buffer, offset, length, port, address)
   assert(args.Length() == 5);
 
-  UNWRAP
+  UNWRAP(UDPWrap)
 
   assert(Buffer::HasInstance(args[0]));
   Local<Object> buffer_obj = args[0]->ToObject();
@@ -326,7 +277,7 @@ Handle<Value> UDPWrap::Send6(const Arguments& args) {
 Handle<Value> UDPWrap::RecvStart(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(UDPWrap)
 
   // UV_EALREADY means that the socket is already bound but that's okay
   int r = uv_udp_recv_start(&wrap->handle_, OnAlloc, OnRecv);
@@ -342,7 +293,7 @@ Handle<Value> UDPWrap::RecvStart(const Arguments& args) {
 Handle<Value> UDPWrap::RecvStop(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(UDPWrap)
 
   int r = uv_udp_recv_stop(&wrap->handle_);
 
@@ -354,7 +305,7 @@ Handle<Value> UDPWrap::GetSockName(const Arguments& args) {
   HandleScope scope;
   struct sockaddr_storage address;
 
-  UNWRAP
+  UNWRAP(UDPWrap)
 
   int addrlen = sizeof(address);
   int r = uv_udp_getsockname(&wrap->handle_,
@@ -394,7 +345,7 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
     req_wrap->object_->GetHiddenValue(buffer_sym),
   };
 
-  MakeCallback(req_wrap->object_, "oncomplete", 4, argv);
+  MakeCallback(req_wrap->object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
   delete req_wrap;
 }
 
@@ -422,7 +373,7 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
   if (nread < 0) {
     Local<Value> argv[] = { Local<Object>::New(wrap->object_) };
     SetErrno(uv_last_error(uv_default_loop()));
-    MakeCallback(wrap->object_, "onmessage", ARRAY_SIZE(argv), argv);
+    MakeCallback(wrap->object_, onmessage_sym, ARRAY_SIZE(argv), argv);
     return;
   }
 
@@ -433,41 +384,19 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
     Integer::NewFromUnsigned(nread),
     AddressToJS(addr)
   };
-  MakeCallback(wrap->object_, "onmessage", ARRAY_SIZE(argv), argv);
+  MakeCallback(wrap->object_, onmessage_sym, ARRAY_SIZE(argv), argv);
 }
 
 
-Local<Object> AddressToJS(const sockaddr* addr) {
-  HandleScope scope;
-  char ip[INET6_ADDRSTRLEN];
-  const sockaddr_in *a4;
-  const sockaddr_in6 *a6;
-  int port;
+UDPWrap* UDPWrap::Unwrap(Local<Object> obj) {
+  assert(!obj.IsEmpty());
+  assert(obj->InternalFieldCount() > 0);
+  return static_cast<UDPWrap*>(obj->GetPointerFromInternalField(0));
+}
 
-  Local<Object> info = Object::New();
 
-  switch (addr->sa_family) {
-  case AF_INET6:
-    a6 = reinterpret_cast<const sockaddr_in6*>(addr);
-    uv_inet_ntop(AF_INET6, &a6->sin6_addr, ip, sizeof ip);
-    port = ntohs(a6->sin6_port);
-    info->Set(address_symbol, String::New(ip));
-    info->Set(port_symbol, Integer::New(port));
-    break;
-
-  case AF_INET:
-    a4 = reinterpret_cast<const sockaddr_in*>(addr);
-    uv_inet_ntop(AF_INET, &a4->sin_addr, ip, sizeof ip);
-    port = ntohs(a4->sin_port);
-    info->Set(address_symbol, String::New(ip));
-    info->Set(port_symbol, Integer::New(port));
-    break;
-
-  default:
-    info->Set(address_symbol, String::Empty());
-  }
-
-  return scope.Close(info);
+uv_udp_t* UDPWrap::UVHandle() {
+  return &handle_;
 }
 
 

@@ -70,6 +70,7 @@ class JumpPatchSite BASE_EMBEDDED {
   // the inlined smi code.
   void EmitJumpIfNotSmi(Register reg, Label* target) {
     ASSERT(!patch_site_.is_bound() && !info_emitted_);
+    Assembler::BlockConstPoolScope block_const_pool(masm_);
     __ bind(&patch_site_);
     __ cmp(reg, Operand(reg));
     // Don't use b(al, ...) as that might emit the constant pool right after the
@@ -82,6 +83,7 @@ class JumpPatchSite BASE_EMBEDDED {
   // the inlined smi code.
   void EmitJumpIfSmi(Register reg, Label* target) {
     ASSERT(!patch_site_.is_bound() && !info_emitted_);
+    Assembler::BlockConstPoolScope block_const_pool(masm_);
     __ bind(&patch_site_);
     __ cmp(reg, Operand(reg));
     __ b(ne, target);  // Never taken before patched.
@@ -108,13 +110,6 @@ class JumpPatchSite BASE_EMBEDDED {
   bool info_emitted_;
 #endif
 };
-
-
-// TODO(jkummerow): Obsolete as soon as x64 is updated. Remove.
-int FullCodeGenerator::self_optimization_header_size() {
-  UNREACHABLE();
-  return 24;
-}
 
 
 // Generate code for a JS function.  On entry to the function the receiver
@@ -273,11 +268,11 @@ void FullCodeGenerator::Generate() {
       // For named function expressions, declare the function name as a
       // constant.
       if (scope()->is_function_scope() && scope()->function() != NULL) {
-        VariableProxy* proxy = scope()->function();
-        ASSERT(proxy->var()->mode() == CONST ||
-               proxy->var()->mode() == CONST_HARMONY);
-        ASSERT(proxy->var()->location() != Variable::UNALLOCATED);
-        EmitDeclaration(proxy, proxy->var()->mode(), NULL);
+        VariableDeclaration* function = scope()->function();
+        ASSERT(function->proxy()->var()->mode() == CONST ||
+               function->proxy()->var()->mode() == CONST_HARMONY);
+        ASSERT(function->proxy()->var()->location() != Variable::UNALLOCATED);
+        VisitVariableDeclaration(function);
       }
       VisitDeclarations(scope()->declarations());
     }
@@ -787,62 +782,51 @@ void FullCodeGenerator::PrepareForBailoutBeforeSplit(Expression* expr,
 }
 
 
-void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
-                                        VariableMode mode,
-                                        FunctionLiteral* function) {
+void FullCodeGenerator::EmitDebugCheckDeclarationContext(Variable* variable) {
+  // The variable in the declaration always resides in the current function
+  // context.
+  ASSERT_EQ(0, scope()->ContextChainLength(variable->scope()));
+  if (FLAG_debug_code) {
+    // Check that we're not inside a with or catch context.
+    __ ldr(r1, FieldMemOperand(cp, HeapObject::kMapOffset));
+    __ CompareRoot(r1, Heap::kWithContextMapRootIndex);
+    __ Check(ne, "Declaration in with context.");
+    __ CompareRoot(r1, Heap::kCatchContextMapRootIndex);
+    __ Check(ne, "Declaration in catch context.");
+  }
+}
+
+
+void FullCodeGenerator::VisitVariableDeclaration(
+    VariableDeclaration* declaration) {
   // If it was not possible to allocate the variable at compile time, we
   // need to "declare" it at runtime to make sure it actually exists in the
   // local context.
+  VariableProxy* proxy = declaration->proxy();
+  VariableMode mode = declaration->mode();
   Variable* variable = proxy->var();
-  bool binding_needs_init = (function == NULL) &&
-      (mode == CONST || mode == CONST_HARMONY || mode == LET);
+  bool hole_init = mode == CONST || mode == CONST_HARMONY || mode == LET;
   switch (variable->location()) {
     case Variable::UNALLOCATED:
-      ++global_count_;
+      globals_->Add(variable->name());
+      globals_->Add(variable->binding_needs_init()
+                        ? isolate()->factory()->the_hole_value()
+                        : isolate()->factory()->undefined_value());
       break;
 
     case Variable::PARAMETER:
     case Variable::LOCAL:
-      if (function != NULL) {
-        Comment cmnt(masm_, "[ Declaration");
-        VisitForAccumulatorValue(function);
-        __ str(result_register(), StackOperand(variable));
-      } else if (binding_needs_init) {
-        Comment cmnt(masm_, "[ Declaration");
+      if (hole_init) {
+        Comment cmnt(masm_, "[ VariableDeclaration");
         __ LoadRoot(ip, Heap::kTheHoleValueRootIndex);
         __ str(ip, StackOperand(variable));
       }
       break;
 
     case Variable::CONTEXT:
-      // The variable in the decl always resides in the current function
-      // context.
-      ASSERT_EQ(0, scope()->ContextChainLength(variable->scope()));
-      if (FLAG_debug_code) {
-        // Check that we're not inside a with or catch context.
-        __ ldr(r1, FieldMemOperand(cp, HeapObject::kMapOffset));
-        __ CompareRoot(r1, Heap::kWithContextMapRootIndex);
-        __ Check(ne, "Declaration in with context.");
-        __ CompareRoot(r1, Heap::kCatchContextMapRootIndex);
-        __ Check(ne, "Declaration in catch context.");
-      }
-      if (function != NULL) {
-        Comment cmnt(masm_, "[ Declaration");
-        VisitForAccumulatorValue(function);
-        __ str(result_register(), ContextOperand(cp, variable->index()));
-        int offset = Context::SlotOffset(variable->index());
-        // We know that we have written a function, which is not a smi.
-        __ RecordWriteContextSlot(cp,
-                                  offset,
-                                  result_register(),
-                                  r2,
-                                  kLRHasBeenSaved,
-                                  kDontSaveFPRegs,
-                                  EMIT_REMEMBERED_SET,
-                                  OMIT_SMI_CHECK);
-        PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
-      } else if (binding_needs_init) {
-        Comment cmnt(masm_, "[ Declaration");
+      if (hole_init) {
+        Comment cmnt(masm_, "[ VariableDeclaration");
+        EmitDebugCheckDeclarationContext(variable);
         __ LoadRoot(ip, Heap::kTheHoleValueRootIndex);
         __ str(ip, ContextOperand(cp, variable->index()));
         // No write barrier since the_hole_value is in old space.
@@ -851,13 +835,11 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
       break;
 
     case Variable::LOOKUP: {
-      Comment cmnt(masm_, "[ Declaration");
+      Comment cmnt(masm_, "[ VariableDeclaration");
       __ mov(r2, Operand(variable->name()));
       // Declaration nodes are always introduced in one of four modes.
-      ASSERT(mode == VAR ||
-             mode == CONST ||
-             mode == CONST_HARMONY ||
-             mode == LET);
+      ASSERT(mode == VAR || mode == LET ||
+             mode == CONST || mode == CONST_HARMONY);
       PropertyAttributes attr = (mode == CONST || mode == CONST_HARMONY)
           ? READ_ONLY : NONE;
       __ mov(r1, Operand(Smi::FromInt(attr)));
@@ -865,11 +847,7 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
       // Note: For variables we must not push an initial value (such as
       // 'undefined') because we may have a (legal) redeclaration and we
       // must not destroy the current value.
-      if (function != NULL) {
-        __ Push(cp, r2, r1);
-        // Push initial value for function declaration.
-        VisitForStackValue(function);
-      } else if (binding_needs_init) {
+      if (hole_init) {
         __ LoadRoot(r0, Heap::kTheHoleValueRootIndex);
         __ Push(cp, r2, r1, r0);
       } else {
@@ -880,6 +858,122 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
       break;
     }
   }
+}
+
+
+void FullCodeGenerator::VisitFunctionDeclaration(
+    FunctionDeclaration* declaration) {
+  VariableProxy* proxy = declaration->proxy();
+  Variable* variable = proxy->var();
+  switch (variable->location()) {
+    case Variable::UNALLOCATED: {
+      globals_->Add(variable->name());
+      Handle<SharedFunctionInfo> function =
+          Compiler::BuildFunctionInfo(declaration->fun(), script());
+      // Check for stack-overflow exception.
+      if (function.is_null()) return SetStackOverflow();
+      globals_->Add(function);
+      break;
+    }
+
+    case Variable::PARAMETER:
+    case Variable::LOCAL: {
+      Comment cmnt(masm_, "[ FunctionDeclaration");
+      VisitForAccumulatorValue(declaration->fun());
+      __ str(result_register(), StackOperand(variable));
+      break;
+    }
+
+    case Variable::CONTEXT: {
+      Comment cmnt(masm_, "[ FunctionDeclaration");
+      EmitDebugCheckDeclarationContext(variable);
+      VisitForAccumulatorValue(declaration->fun());
+      __ str(result_register(), ContextOperand(cp, variable->index()));
+      int offset = Context::SlotOffset(variable->index());
+      // We know that we have written a function, which is not a smi.
+      __ RecordWriteContextSlot(cp,
+                                offset,
+                                result_register(),
+                                r2,
+                                kLRHasBeenSaved,
+                                kDontSaveFPRegs,
+                                EMIT_REMEMBERED_SET,
+                                OMIT_SMI_CHECK);
+      PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
+      break;
+    }
+
+    case Variable::LOOKUP: {
+      Comment cmnt(masm_, "[ FunctionDeclaration");
+      __ mov(r2, Operand(variable->name()));
+      __ mov(r1, Operand(Smi::FromInt(NONE)));
+      __ Push(cp, r2, r1);
+      // Push initial value for function declaration.
+      VisitForStackValue(declaration->fun());
+      __ CallRuntime(Runtime::kDeclareContextSlot, 4);
+      break;
+    }
+  }
+}
+
+
+void FullCodeGenerator::VisitModuleDeclaration(ModuleDeclaration* declaration) {
+  VariableProxy* proxy = declaration->proxy();
+  Variable* variable = proxy->var();
+  Handle<JSModule> instance = declaration->module()->interface()->Instance();
+  ASSERT(!instance.is_null());
+
+  switch (variable->location()) {
+    case Variable::UNALLOCATED: {
+      Comment cmnt(masm_, "[ ModuleDeclaration");
+      globals_->Add(variable->name());
+      globals_->Add(instance);
+      Visit(declaration->module());
+      break;
+    }
+
+    case Variable::CONTEXT: {
+      Comment cmnt(masm_, "[ ModuleDeclaration");
+      EmitDebugCheckDeclarationContext(variable);
+      __ mov(r1, Operand(instance));
+      __ str(r1, ContextOperand(cp, variable->index()));
+      Visit(declaration->module());
+      break;
+    }
+
+    case Variable::PARAMETER:
+    case Variable::LOCAL:
+    case Variable::LOOKUP:
+      UNREACHABLE();
+  }
+}
+
+
+void FullCodeGenerator::VisitImportDeclaration(ImportDeclaration* declaration) {
+  VariableProxy* proxy = declaration->proxy();
+  Variable* variable = proxy->var();
+  switch (variable->location()) {
+    case Variable::UNALLOCATED:
+      // TODO(rossberg)
+      break;
+
+    case Variable::CONTEXT: {
+      Comment cmnt(masm_, "[ ImportDeclaration");
+      EmitDebugCheckDeclarationContext(variable);
+      // TODO(rossberg)
+      break;
+    }
+
+    case Variable::PARAMETER:
+    case Variable::LOCAL:
+    case Variable::LOOKUP:
+      UNREACHABLE();
+  }
+}
+
+
+void FullCodeGenerator::VisitExportDeclaration(ExportDeclaration* declaration) {
+  // TODO(rossberg)
 }
 
 
@@ -1607,7 +1701,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
   ASSERT_EQ(2, constant_elements->length());
   ElementsKind constant_elements_kind =
       static_cast<ElementsKind>(Smi::cast(constant_elements->get(0))->value());
-  bool has_fast_elements = constant_elements_kind == FAST_ELEMENTS;
+  bool has_fast_elements = IsFastObjectElementsKind(constant_elements_kind);
   Handle<FixedArrayBase> constant_elements_values(
       FixedArrayBase::cast(constant_elements->get(1)));
 
@@ -1628,8 +1722,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
   } else if (length > FastCloneShallowArrayStub::kMaximumClonedLength) {
     __ CallRuntime(Runtime::kCreateArrayLiteralShallow, 3);
   } else {
-    ASSERT(constant_elements_kind == FAST_ELEMENTS ||
-           constant_elements_kind == FAST_SMI_ONLY_ELEMENTS ||
+    ASSERT(IsFastSmiOrObjectElementsKind(constant_elements_kind) ||
            FLAG_smi_only_arrays);
     FastCloneShallowArrayStub::Mode mode = has_fast_elements
       ? FastCloneShallowArrayStub::CLONE_ELEMENTS
@@ -1657,7 +1750,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
     }
     VisitForAccumulatorValue(subexpr);
 
-    if (constant_elements_kind == FAST_ELEMENTS) {
+    if (IsFastObjectElementsKind(constant_elements_kind)) {
       int offset = FixedArray::kHeaderSize + (i * kPointerSize);
       __ ldr(r6, MemOperand(sp));  // Copy of array literal.
       __ ldr(r1, FieldMemOperand(r6, JSObject::kElementsOffset));
@@ -2269,6 +2362,18 @@ void FullCodeGenerator::EmitCallWithStub(Call* expr, CallFunctionFlags flags) {
   }
   // Record source position for debugger.
   SetSourcePosition(expr->position());
+
+  // Record call targets in unoptimized code, but not in the snapshot.
+  if (!Serializer::enabled()) {
+    flags = static_cast<CallFunctionFlags>(flags | RECORD_CALL_TARGET);
+    Handle<Object> uninitialized =
+        TypeFeedbackCells::UninitializedSentinel(isolate());
+    Handle<JSGlobalPropertyCell> cell =
+        isolate()->factory()->NewJSGlobalPropertyCell(uninitialized);
+    RecordTypeFeedbackCell(expr->id(), cell);
+    __ mov(r2, Operand(cell));
+  }
+
   CallFunctionStub stub(arg_count, flags);
   __ ldr(r1, MemOperand(sp, (arg_count + 1) * kPointerSize));
   __ CallStub(&stub);
@@ -3360,104 +3465,6 @@ void FullCodeGenerator::EmitRegExpConstructResult(CallRuntime* expr) {
 }
 
 
-void FullCodeGenerator::EmitSwapElements(CallRuntime* expr) {
-  ZoneList<Expression*>* args = expr->arguments();
-  ASSERT(args->length() == 3);
-  VisitForStackValue(args->at(0));
-  VisitForStackValue(args->at(1));
-  VisitForStackValue(args->at(2));
-  Label done;
-  Label slow_case;
-  Register object = r0;
-  Register index1 = r1;
-  Register index2 = r2;
-  Register elements = r3;
-  Register scratch1 = r4;
-  Register scratch2 = r5;
-
-  __ ldr(object, MemOperand(sp, 2 * kPointerSize));
-  // Fetch the map and check if array is in fast case.
-  // Check that object doesn't require security checks and
-  // has no indexed interceptor.
-  __ CompareObjectType(object, scratch1, scratch2, JS_ARRAY_TYPE);
-  __ b(ne, &slow_case);
-  // Map is now in scratch1.
-
-  __ ldrb(scratch2, FieldMemOperand(scratch1, Map::kBitFieldOffset));
-  __ tst(scratch2, Operand(KeyedLoadIC::kSlowCaseBitFieldMask));
-  __ b(ne, &slow_case);
-
-  // Check the object's elements are in fast case and writable.
-  __ ldr(elements, FieldMemOperand(object, JSObject::kElementsOffset));
-  __ ldr(scratch1, FieldMemOperand(elements, HeapObject::kMapOffset));
-  __ LoadRoot(ip, Heap::kFixedArrayMapRootIndex);
-  __ cmp(scratch1, ip);
-  __ b(ne, &slow_case);
-
-  // Check that both indices are smis.
-  __ ldr(index1, MemOperand(sp, 1 * kPointerSize));
-  __ ldr(index2, MemOperand(sp, 0));
-  __ JumpIfNotBothSmi(index1, index2, &slow_case);
-
-  // Check that both indices are valid.
-  __ ldr(scratch1, FieldMemOperand(object, JSArray::kLengthOffset));
-  __ cmp(scratch1, index1);
-  __ cmp(scratch1, index2, hi);
-  __ b(ls, &slow_case);
-
-  // Bring the address of the elements into index1 and index2.
-  __ add(scratch1, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ add(index1,
-         scratch1,
-         Operand(index1, LSL, kPointerSizeLog2 - kSmiTagSize));
-  __ add(index2,
-         scratch1,
-         Operand(index2, LSL, kPointerSizeLog2 - kSmiTagSize));
-
-  // Swap elements.
-  __ ldr(scratch1, MemOperand(index1, 0));
-  __ ldr(scratch2, MemOperand(index2, 0));
-  __ str(scratch1, MemOperand(index2, 0));
-  __ str(scratch2, MemOperand(index1, 0));
-
-  Label no_remembered_set;
-  __ CheckPageFlag(elements,
-                   scratch1,
-                   1 << MemoryChunk::SCAN_ON_SCAVENGE,
-                   ne,
-                   &no_remembered_set);
-  // Possible optimization: do a check that both values are Smis
-  // (or them and test against Smi mask.)
-
-  // We are swapping two objects in an array and the incremental marker never
-  // pauses in the middle of scanning a single object.  Therefore the
-  // incremental marker is not disturbed, so we don't need to call the
-  // RecordWrite stub that notifies the incremental marker.
-  __ RememberedSetHelper(elements,
-                         index1,
-                         scratch2,
-                         kDontSaveFPRegs,
-                         MacroAssembler::kFallThroughAtEnd);
-  __ RememberedSetHelper(elements,
-                         index2,
-                         scratch2,
-                         kDontSaveFPRegs,
-                         MacroAssembler::kFallThroughAtEnd);
-
-  __ bind(&no_remembered_set);
-  // We are done. Drop elements from the stack, and return undefined.
-  __ Drop(3);
-  __ LoadRoot(r0, Heap::kUndefinedValueRootIndex);
-  __ jmp(&done);
-
-  __ bind(&slow_case);
-  __ CallRuntime(Runtime::kSwapElements, 3);
-
-  __ bind(&done);
-  context()->Plug(r0);
-}
-
-
 void FullCodeGenerator::EmitGetFromCache(CallRuntime* expr) {
   ZoneList<Expression*>* args = expr->arguments();
   ASSERT_EQ(2, args->length());
@@ -3660,7 +3667,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   __ ldrb(scratch1, FieldMemOperand(scratch1, Map::kInstanceTypeOffset));
   __ JumpIfInstanceTypeIsNotSequentialAscii(scratch1, scratch2, &bailout);
   __ ldr(scratch1, FieldMemOperand(string, SeqAsciiString::kLengthOffset));
-  __ add(string_length, string_length, Operand(scratch1));
+  __ add(string_length, string_length, Operand(scratch1), SetCC);
   __ b(vs, &bailout);
   __ cmp(element, elements_end);
   __ b(lt, &loop);
@@ -3697,7 +3704,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   __ b(ne, &bailout);
   __ tst(scratch2, Operand(0x80000000));
   __ b(ne, &bailout);
-  __ add(string_length, string_length, Operand(scratch2));
+  __ add(string_length, string_length, Operand(scratch2), SetCC);
   __ b(vs, &bailout);
   __ SmiUntag(string_length);
 
@@ -4453,7 +4460,8 @@ void FullCodeGenerator::LoadContextField(Register dst, int context_index) {
 
 void FullCodeGenerator::PushFunctionArgumentForContextAllocation() {
   Scope* declaration_scope = scope()->DeclarationScope();
-  if (declaration_scope->is_global_scope()) {
+  if (declaration_scope->is_global_scope() ||
+      declaration_scope->is_module_scope()) {
     // Contexts nested in the global context have a canonical empty function
     // as their closure, not the anonymous closure containing the global
     // code.  Pass a smi sentinel and let the runtime look up the empty

@@ -206,12 +206,18 @@ class LCodeGen BASE_EMBEDDED {
                                LInstruction* instr,
                                LOperand* context);
 
+  enum EDIState {
+    EDI_UNINITIALIZED,
+    EDI_CONTAINS_TARGET
+  };
+
   // Generate a direct call to a known function.  Expects the function
   // to be in edi.
   void CallKnownFunction(Handle<JSFunction> function,
                          int arity,
                          LInstruction* instr,
-                         CallKind call_kind);
+                         CallKind call_kind,
+                         EDIState edi_state);
 
   void RecordSafepointWithLazyDeopt(LInstruction* instr,
                                     SafepointMode safepoint_mode);
@@ -236,7 +242,8 @@ class LCodeGen BASE_EMBEDDED {
   Operand BuildFastArrayOperand(LOperand* elements_pointer,
                                 LOperand* key,
                                 ElementsKind elements_kind,
-                                uint32_t offset);
+                                uint32_t offset,
+                                uint32_t additional_index = 0);
 
   // Specific math operations - used from DoUnaryMathOperation.
   void EmitIntegerMathAbs(LUnaryMathOperation* instr);

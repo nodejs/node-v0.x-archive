@@ -25,12 +25,26 @@ parsing only. It parses a message into headers and body but it does not
 parse the actual headers or the body.
 
 
+## http.STATUS_CODES
+
+* {Object}
+
+A collection of all the standard HTTP response status codes, and the
+short description of each.  For example, `http.STATUS_CODES[404] === 'Not
+Found'`.
+
 ## http.createServer([requestListener])
 
 Returns a new web server object.
 
 The `requestListener` is a function which is automatically
 added to the `'request'` event.
+
+## http.createClient([port], [host])
+
+This function is **deprecated**; please use
+[http.request()](#http_http_request_options_callback) instead. Constructs a new
+HTTP client. `port` and `host` refer to the server to be connected to.
 
 ## Class: http.Server
 
@@ -117,13 +131,18 @@ sent to the server on that socket.
 
 If a client connection emits an 'error' event - it will forwarded here.
 
-### server.listen(port, [hostname], [callback])
+### server.listen(port, [hostname], [backlog], [callback])
 
 Begin accepting connections on the specified port and hostname.  If the
 hostname is omitted, the server will accept connections directed to any
 IPv4 address (`INADDR_ANY`).
 
 To listen to a unix socket, supply a filename instead of port and hostname.
+
+Backlog is the maximum length of the queue of pending connections.
+The actual length will be determined by your OS through sysctl settings such as
+`tcp_max_syn_backlog` and `somaxconn` on linux. The default value of this
+parameter is 511 (not 512).
 
 This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'](net.html#event_listening_) event.
@@ -247,9 +266,9 @@ Also `request.httpVersionMajor` is the first integer and
 
 ### request.setEncoding([encoding])
 
-Set the encoding for the request body. Either `'utf8'` or `'binary'`. Defaults
-to `null`, which means that the `'data'` event will emit a `Buffer` object..
-
+Set the encoding for the request body. See
+[stream.setEncoding()](stream.html#stream_stream_setencoding_encoding)
+for more information.
 
 ### request.pause()
 
@@ -427,8 +446,10 @@ followed by `response.end()`.
 ## http.request(options, callback)
 
 Node maintains several connections per server to make HTTP requests.
-This function allows one to transparently issue requests.  `options` align
-with [url.parse()](url.html#url.parse).
+This function allows one to transparently issue requests.
+
+`options` can be an object or a string. If `options` is a string, it is
+automatically parsed with [url.parse()](url.html#url.parse).
 
 Options:
 
@@ -509,18 +530,12 @@ There are a few special headers that should be noted.
 ## http.get(options, callback)
 
 Since most requests are GET requests without bodies, Node provides this
-convenience method. The only difference between this method and `http.request()` is
-that it sets the method to GET and calls `req.end()` automatically.
+convenience method. The only difference between this method and `http.request()`
+is that it sets the method to GET and calls `req.end()` automatically.
 
 Example:
 
-    var options = {
-      host: 'www.google.com',
-      port: 80,
-      path: '/index.html'
-    };
-
-    http.get(options, function(res) {
+    http.get("http://www.google.com/index.html", function(res) {
       console.log("Got response: " + res.statusCode);
     }).on('error', function(e) {
       console.log("Got error: " + e.message);
@@ -532,7 +547,7 @@ Example:
 In node 0.5.3+ there is a new implementation of the HTTP Agent which is used
 for pooling sockets used in HTTP client requests.
 
-Previously, a single agent instance help the pool for single host+port. The
+Previously, a single agent instance helped pool for a single host+port. The
 current implementation now holds sockets for any number of hosts.
 
 The current HTTP Agent also defaults client requests to using
@@ -862,9 +877,9 @@ The response trailers object. Only populated after the 'end' event.
 
 ### response.setEncoding([encoding])
 
-Set the encoding for the response body. Either `'utf8'`, `'ascii'`, or
-`'base64'`. Defaults to `null`, which means that the `'data'` event will emit
-a `Buffer` object.
+Set the encoding for the response body. See
+[stream.setEncoding()](stream.html#stream_stream_setencoding_encoding)
+for more information.
 
 ### response.pause()
 

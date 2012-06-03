@@ -4079,8 +4079,8 @@
         (FACILITY_NTWIN32 << 16) | ERROR_SEVERITY_WARNING)))
 
 /* from ntifs.h */
-/* MinGW already has it */
-#if defined(_MSC_VER) || defined(__MINGW64__)
+/* MinGW already has it, mingw-w64 does not. */
+#if defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR)
   typedef struct _REPARSE_DATA_BUFFER {
     ULONG  ReparseTag;
     USHORT ReparseDataLength;
@@ -4140,6 +4140,10 @@ typedef struct _FILE_BASIC_INFORMATION {
 typedef struct _FILE_MODE_INFORMATION {
   ULONG Mode;
 } FILE_MODE_INFORMATION, *PFILE_MODE_INFORMATION;
+
+typedef struct _FILE_END_OF_FILE_INFORMATION {
+  LARGE_INTEGER  EndOfFile;
+} FILE_END_OF_FILE_INFORMATION, *PFILE_END_OF_FILE_INFORMATION;
 
 #define FILE_SYNCHRONOUS_IO_ALERT               0x00000010
 #define FILE_SYNCHRONOUS_IO_NONALERT            0x00000020
@@ -4335,7 +4339,7 @@ typedef NTSTATUS (NTAPI *sNtSetInformationFile)
 # define SYMBOLIC_LINK_FLAG_DIRECTORY 0x1
 #endif
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
   typedef struct _OVERLAPPED_ENTRY {
       ULONG_PTR lpCompletionKey;
       LPOVERLAPPED lpOverlapped;
@@ -4374,6 +4378,10 @@ typedef BOOLEAN (WINAPI* sCreateSymbolicLinkW)
                  LPCWSTR lpTargetFileName,
                  DWORD dwFlags);
 
+typedef BOOL (WINAPI* sCancelIoEx)
+             (HANDLE hFile,
+              LPOVERLAPPED lpOverlapped);
+
 typedef VOID (WINAPI* sInitializeSRWLock)
              (PSRWLOCK SRWLock);
 
@@ -4408,6 +4416,7 @@ extern sNtSetInformationFile pNtSetInformationFile;
 extern sGetQueuedCompletionStatusEx pGetQueuedCompletionStatusEx;
 extern sSetFileCompletionNotificationModes pSetFileCompletionNotificationModes;
 extern sCreateSymbolicLinkW pCreateSymbolicLinkW;
+extern sCancelIoEx pCancelIoEx;
 extern sInitializeSRWLock pInitializeSRWLock;
 extern sAcquireSRWLockShared pAcquireSRWLockShared;
 extern sAcquireSRWLockExclusive pAcquireSRWLockExclusive;

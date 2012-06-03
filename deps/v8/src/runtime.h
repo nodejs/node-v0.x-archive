@@ -77,6 +77,7 @@ namespace internal {
   \
   /* Utilities */ \
   F(CheckIsBootstrapping, 0, 1) \
+  F(GetRootNaN, 0, 1) \
   F(Call, -1 /* >= 2 */, 1) \
   F(Apply, 5, 1) \
   F(GetFunctionDelegate, 1, 1) \
@@ -88,6 +89,7 @@ namespace internal {
   F(NotifyDeoptimized, 1, 1) \
   F(NotifyOSR, 0, 1) \
   F(DeoptimizeFunction, 1, 1) \
+  F(ClearFunctionTypeFeedback, 1, 1) \
   F(RunningInSimulator, 0, 1) \
   F(OptimizeFunctionOnNextCall, -1, 1) \
   F(GetOptimizationStatus, 1, 1) \
@@ -97,6 +99,8 @@ namespace internal {
   F(AllocateInNewSpace, 1, 1) \
   F(SetNativeFlag, 1, 1) \
   F(StoreArrayLiteralElement, 5, 1) \
+  F(DebugCallbackSupportsStepping, 1, 1) \
+  F(DebugPrepareStepInIfStepping, 1, 1) \
   \
   /* Array join support */ \
   F(PushIfAbsent, 2, 1) \
@@ -268,7 +272,6 @@ namespace internal {
   F(GetArrayKeys, 2, 1) \
   F(MoveArrayContents, 2, 1) \
   F(EstimateNumberOfElements, 1, 1) \
-  F(SwapElements, 3, 1) \
   \
   /* Getters and Setters */ \
   F(LookupAccessor, 3, 1) \
@@ -323,6 +326,7 @@ namespace internal {
   F(PushWithContext, 2, 1) \
   F(PushCatchContext, 3, 1) \
   F(PushBlockContext, 2, 1) \
+  F(PushModuleContext, 2, 1) \
   F(DeleteContextSlot, 2, 1) \
   F(LoadContextSlot, 2, 2) \
   F(LoadContextSlotNoReferenceError, 2, 2) \
@@ -360,9 +364,11 @@ namespace internal {
   F(IS_VAR, 1, 1) \
   \
   /* expose boolean functions from objects-inl.h */ \
-  F(HasFastSmiOnlyElements, 1, 1) \
-  F(HasFastElements, 1, 1) \
+  F(HasFastSmiElements, 1, 1) \
+  F(HasFastSmiOrObjectElements, 1, 1) \
+  F(HasFastObjectElements, 1, 1) \
   F(HasFastDoubleElements, 1, 1) \
+  F(HasFastHoleyElements, 1, 1) \
   F(HasDictionaryElements, 1, 1) \
   F(HasExternalPixelElements, 1, 1) \
   F(HasExternalArrayElements, 1, 1) \
@@ -400,6 +406,8 @@ namespace internal {
   F(GetFrameDetails, 2, 1) \
   F(GetScopeCount, 2, 1) \
   F(GetScopeDetails, 4, 1) \
+  F(GetFunctionScopeCount, 1, 1) \
+  F(GetFunctionScopeDetails, 2, 1) \
   F(DebugPrintScopes, 0, 1) \
   F(GetThreadCount, 1, 1) \
   F(GetThreadDetails, 2, 1) \
@@ -529,8 +537,7 @@ namespace internal {
   F(RegExpExec, 4, 1)                                                        \
   F(RegExpConstructResult, 3, 1)                                             \
   F(GetFromCache, 2, 1)                                                      \
-  F(NumberToString, 1, 1)                                                    \
-  F(SwapElements, 3, 1)
+  F(NumberToString, 1, 1)
 
 
 //---------------------------------------------------------------------------

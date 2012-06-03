@@ -19,6 +19,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <stdio.h>
 #include <string.h>
 
 #include "runner.h"
@@ -28,6 +29,9 @@ char executable_path[PATHMAX] = { '\0' };
 
 
 static void log_progress(int total, int passed, int failed, const char* name) {
+  if (total == 0)
+    total = 1;
+
   LOGF("[%% %3d|+ %3d|- %3d]: %s", (passed + failed) / total * 100,
       passed, failed, name);
 }
@@ -88,6 +92,11 @@ int run_test(const char* test, int timeout, int benchmark_output) {
   status = 255;
   main_proc = NULL;
   process_count = 0;
+
+#ifndef _WIN32
+  /* Clean up stale socket from previous run. */
+  remove(TEST_PIPENAME);
+#endif
 
   /* If it's a helper the user asks for, start it directly. */
   for (task = TASKS; task->main; task++) {

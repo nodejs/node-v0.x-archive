@@ -296,58 +296,44 @@ Failure* IC::ReferenceError(const char* type, Handle<String> name) {
 }
 
 
+static int ComputeTypeInfoCountDelta(IC::State old_state, IC::State new_state) {
+  bool was_uninitialized =
+      old_state == UNINITIALIZED || old_state == PREMONOMORPHIC;
+  bool is_uninitialized =
+      new_state == UNINITIALIZED || new_state == PREMONOMORPHIC;
+  return (was_uninitialized && !is_uninitialized) ?  1 :
+         (!was_uninitialized && is_uninitialized) ? -1 : 0;
+}
+
+
 void IC::PostPatching(Address address, Code* target, Code* old_target) {
-  if (FLAG_type_info_threshold > 0) {
-    if (old_target->is_inline_cache_stub() &&
-        target->is_inline_cache_stub()) {
-      State old_state = old_target->ic_state();
-      State new_state = target->ic_state();
-      bool was_uninitialized =
-          old_state == UNINITIALIZED || old_state == PREMONOMORPHIC;
-      bool is_uninitialized =
-          new_state == UNINITIALIZED || new_state == PREMONOMORPHIC;
-      int delta = 0;
-      if (was_uninitialized && !is_uninitialized) {
-        delta = 1;
-      } else if (!was_uninitialized && is_uninitialized) {
-        delta = -1;
-      }
-      if (delta != 0) {
-        Code* host = target->GetHeap()->isolate()->
-            inner_pointer_to_code_cache()->GetCacheEntry(address)->code;
-        // Not all Code objects have TypeFeedbackInfo.
-        if (host->type_feedback_info()->IsTypeFeedbackInfo()) {
-          TypeFeedbackInfo* info =
-              TypeFeedbackInfo::cast(host->type_feedback_info());
-          info->set_ic_with_typeinfo_count(
-              info->ic_with_typeinfo_count() + delta);
-        }
-      }
+  if (FLAG_type_info_threshold == 0 && !FLAG_watch_ic_patching) {
+    return;
+  }
+  Code* host = target->GetHeap()->isolate()->
+      inner_pointer_to_code_cache()->GetCacheEntry(address)->code;
+  if (host->kind() != Code::FUNCTION) return;
+
+  if (FLAG_type_info_threshold > 0 &&
+      old_target->is_inline_cache_stub() &&
+      target->is_inline_cache_stub()) {
+    int delta = ComputeTypeInfoCountDelta(old_target->ic_state(),
+                                          target->ic_state());
+    // Not all Code objects have TypeFeedbackInfo.
+    if (delta != 0 && host->type_feedback_info()->IsTypeFeedbackInfo()) {
+      TypeFeedbackInfo* info =
+          TypeFeedbackInfo::cast(host->type_feedback_info());
+      info->set_ic_with_type_info_count(
+          info->ic_with_type_info_count() + delta);
     }
   }
   if (FLAG_watch_ic_patching) {
+    host->set_profiler_ticks(0);
     Isolate::Current()->runtime_profiler()->NotifyICChanged();
-    // We do not want to optimize until the ICs have settled down,
-    // so when they are patched, we postpone optimization for the
-    // current function and the functions above it on the stack that
-    // might want to inline this one.
-    StackFrameIterator it;
-    if (it.done()) return;
-    it.Advance();
-    static const int kStackFramesToMark = Compiler::kMaxInliningLevels - 1;
-    for (int i = 0; i < kStackFramesToMark; ++i) {
-      if (it.done()) return;
-      StackFrame* raw_frame = it.frame();
-      if (raw_frame->is_java_script()) {
-        JSFunction* function =
-            JSFunction::cast(JavaScriptFrame::cast(raw_frame)->function());
-        if (function->IsOptimized()) continue;
-        SharedFunctionInfo* shared = function->shared();
-        shared->set_profiler_ticks(0);
-      }
-      it.Advance();
-    }
   }
+  // TODO(2029): When an optimized function is patched, it would
+  // be nice to propagate the corresponding type information to its
+  // unoptimized version for the benefit of later inlining.
 }
 
 
@@ -366,9 +352,9 @@ void IC::Clear(Address address) {
       return KeyedStoreIC::Clear(address, target);
     case Code::CALL_IC: return CallIC::Clear(address, target);
     case Code::KEYED_CALL_IC:  return KeyedCallIC::Clear(address, target);
+    case Code::COMPARE_IC: return CompareIC::Clear(address, target);
     case Code::UNARY_OP_IC:
     case Code::BINARY_OP_IC:
-    case Code::COMPARE_IC:
     case Code::TO_BOOLEAN_IC:
       // Clearing these is tricky and does not
       // make any performance difference.
@@ -379,9 +365,8 @@ void IC::Clear(Address address) {
 
 
 void CallICBase::Clear(Address address, Code* target) {
+  if (target->ic_state() == UNINITIALIZED) return;
   bool contextual = CallICBase::Contextual::decode(target->extra_ic_state());
-  State state = target->ic_state();
-  if (state == UNINITIALIZED) return;
   Code* code =
       Isolate::Current()->stub_cache()->FindCallInitialize(
           target->arguments_count(),
@@ -421,6 +406,17 @@ void KeyedStoreIC::Clear(Address address, Code* target) {
       (Code::GetStrictMode(target->extra_ic_state()) == kStrictMode)
         ? initialize_stub_strict()
         : initialize_stub());
+}
+
+
+void CompareIC::Clear(Address address, Code* target) {
+  // Only clear ICCompareStubs, we currently cannot clear generic CompareStubs.
+  if (target->major_key() != CodeStub::CompareIC) return;
+  // Only clear CompareICs that can retain objects.
+  if (target->compare_state() != KNOWN_OBJECTS) return;
+  Token::Value op = CompareIC::ComputeOperation(target);
+  SetTargetAtAddress(address, GetRawUninitialized(op));
+  PatchInlinedSmiCode(address, DISABLE_INLINED_SMI_CHECK);
 }
 
 
@@ -1067,18 +1063,33 @@ Handle<Code> KeyedLoadIC::ComputePolymorphicStub(
 }
 
 
+static Handle<Object> TryConvertKey(Handle<Object> key, Isolate* isolate) {
+  // This helper implements a few common fast cases for converting
+  // non-smi keys of keyed loads/stores to a smi or a string.
+  if (key->IsHeapNumber()) {
+    double value = Handle<HeapNumber>::cast(key)->value();
+    if (isnan(value)) {
+      key = isolate->factory()->nan_symbol();
+    } else {
+      int int_value = FastD2I(value);
+      if (value == int_value && Smi::IsValid(int_value)) {
+        key = Handle<Smi>(Smi::FromInt(int_value));
+      }
+    }
+  } else if (key->IsUndefined()) {
+    key = isolate->factory()->undefined_symbol();
+  }
+  return key;
+}
+
+
 MaybeObject* KeyedLoadIC::Load(State state,
                                Handle<Object> object,
                                Handle<Object> key,
                                bool force_generic_stub) {
-  // Check for values that can be converted into a symbol.
-  // TODO(1295): Remove this code.
-  if (key->IsHeapNumber() &&
-      isnan(Handle<HeapNumber>::cast(key)->value())) {
-    key = isolate()->factory()->nan_symbol();
-  } else if (key->IsUndefined()) {
-    key = isolate()->factory()->undefined_symbol();
-  }
+  // Check for values that can be converted into a symbol directly or
+  // is representable as a smi.
+  key = TryConvertKey(key, isolate());
 
   if (key->IsSymbol()) {
     Handle<String> name = Handle<String>::cast(key);
@@ -1633,8 +1644,7 @@ Handle<Code> KeyedIC::ComputeMonomorphicStubWithoutMapCheck(
     return string_stub();
   } else {
     ASSERT(receiver_map->has_dictionary_elements() ||
-           receiver_map->has_fast_elements() ||
-           receiver_map->has_fast_smi_only_elements() ||
+           receiver_map->has_fast_smi_or_object_elements() ||
            receiver_map->has_fast_double_elements() ||
            receiver_map->has_external_array_elements());
     bool is_js_array = receiver_map->instance_type() == JS_ARRAY_TYPE;
@@ -1649,8 +1659,7 @@ Handle<Code> KeyedIC::ComputeMonomorphicStub(Handle<JSObject> receiver,
                                              StubKind stub_kind,
                                              StrictModeFlag strict_mode,
                                              Handle<Code> generic_stub) {
-  if (receiver->HasFastElements() ||
-      receiver->HasFastSmiOnlyElements() ||
+  if (receiver->HasFastSmiOrObjectElements() ||
       receiver->HasExternalArrayElements() ||
       receiver->HasFastDoubleElements() ||
       receiver->HasDictionaryElements()) {
@@ -1670,15 +1679,26 @@ Handle<Map> KeyedIC::ComputeTransitionedMap(Handle<JSObject> receiver,
     case KeyedIC::STORE_AND_GROW_TRANSITION_SMI_TO_OBJECT:
     case KeyedIC::STORE_AND_GROW_TRANSITION_DOUBLE_TO_OBJECT:
       return JSObject::GetElementsTransitionMap(receiver, FAST_ELEMENTS);
-      break;
     case KeyedIC::STORE_TRANSITION_SMI_TO_DOUBLE:
     case KeyedIC::STORE_AND_GROW_TRANSITION_SMI_TO_DOUBLE:
       return JSObject::GetElementsTransitionMap(receiver, FAST_DOUBLE_ELEMENTS);
-      break;
-    default:
+    case KeyedIC::STORE_TRANSITION_HOLEY_SMI_TO_OBJECT:
+    case KeyedIC::STORE_TRANSITION_HOLEY_DOUBLE_TO_OBJECT:
+    case KeyedIC::STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_OBJECT:
+    case KeyedIC::STORE_AND_GROW_TRANSITION_HOLEY_DOUBLE_TO_OBJECT:
+      return JSObject::GetElementsTransitionMap(receiver,
+                                                FAST_HOLEY_ELEMENTS);
+    case KeyedIC::STORE_TRANSITION_HOLEY_SMI_TO_DOUBLE:
+    case KeyedIC::STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_DOUBLE:
+      return JSObject::GetElementsTransitionMap(receiver,
+                                                FAST_HOLEY_DOUBLE_ELEMENTS);
+    case KeyedIC::LOAD:
+    case KeyedIC::STORE_NO_TRANSITION:
+    case KeyedIC::STORE_AND_GROW_NO_TRANSITION:
       UNREACHABLE();
-      return Handle<Map>::null();
+      break;
   }
+  return Handle<Map>::null();
 }
 
 
@@ -1738,30 +1758,54 @@ KeyedIC::StubKind KeyedStoreIC::GetStubKind(Handle<JSObject> receiver,
 
   if (allow_growth) {
     // Handle growing array in stub if necessary.
-    if (receiver->HasFastSmiOnlyElements()) {
+    if (receiver->HasFastSmiElements()) {
       if (value->IsHeapNumber()) {
-        return STORE_AND_GROW_TRANSITION_SMI_TO_DOUBLE;
+        if (receiver->HasFastHoleyElements()) {
+          return STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_DOUBLE;
+        } else {
+          return STORE_AND_GROW_TRANSITION_SMI_TO_DOUBLE;
+        }
       }
       if (value->IsHeapObject()) {
-        return STORE_AND_GROW_TRANSITION_SMI_TO_OBJECT;
+        if (receiver->HasFastHoleyElements()) {
+          return STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_OBJECT;
+        } else {
+          return STORE_AND_GROW_TRANSITION_SMI_TO_OBJECT;
+        }
       }
     } else if (receiver->HasFastDoubleElements()) {
       if (!value->IsSmi() && !value->IsHeapNumber()) {
-        return STORE_AND_GROW_TRANSITION_DOUBLE_TO_OBJECT;
+        if (receiver->HasFastHoleyElements()) {
+          return STORE_AND_GROW_TRANSITION_HOLEY_DOUBLE_TO_OBJECT;
+        } else {
+          return STORE_AND_GROW_TRANSITION_DOUBLE_TO_OBJECT;
+        }
       }
     }
     return STORE_AND_GROW_NO_TRANSITION;
   } else {
     // Handle only in-bounds elements accesses.
-    if (receiver->HasFastSmiOnlyElements()) {
+    if (receiver->HasFastSmiElements()) {
       if (value->IsHeapNumber()) {
-        return STORE_TRANSITION_SMI_TO_DOUBLE;
+        if (receiver->HasFastHoleyElements()) {
+          return STORE_TRANSITION_HOLEY_SMI_TO_DOUBLE;
+        } else {
+          return STORE_TRANSITION_SMI_TO_DOUBLE;
+        }
       } else if (value->IsHeapObject()) {
-        return STORE_TRANSITION_SMI_TO_OBJECT;
+        if (receiver->HasFastHoleyElements()) {
+          return STORE_TRANSITION_HOLEY_SMI_TO_OBJECT;
+        } else {
+          return STORE_TRANSITION_SMI_TO_OBJECT;
+        }
       }
     } else if (receiver->HasFastDoubleElements()) {
       if (!value->IsSmi() && !value->IsHeapNumber()) {
-        return STORE_TRANSITION_DOUBLE_TO_OBJECT;
+        if (receiver->HasFastHoleyElements()) {
+          return STORE_TRANSITION_HOLEY_DOUBLE_TO_OBJECT;
+        } else {
+          return STORE_TRANSITION_DOUBLE_TO_OBJECT;
+        }
       }
     }
     return STORE_NO_TRANSITION;
@@ -1775,6 +1819,10 @@ MaybeObject* KeyedStoreIC::Store(State state,
                                  Handle<Object> key,
                                  Handle<Object> value,
                                  bool force_generic) {
+  // Check for values that can be converted into a symbol directly or
+  // is representable as a smi.
+  key = TryConvertKey(key, isolate());
+
   if (key->IsSymbol()) {
     Handle<String> name = Handle<String>::cast(key);
 
@@ -2391,7 +2439,7 @@ RUNTIME_FUNCTION(MaybeObject*, BinaryOp_Patch) {
 
     // Activate inlined smi code.
     if (previous_type == BinaryOpIC::UNINITIALIZED) {
-      PatchInlinedSmiCode(ic.address());
+      PatchInlinedSmiCode(ic.address(), ENABLE_INLINED_SMI_CHECK);
     }
   }
 
@@ -2452,6 +2500,14 @@ RUNTIME_FUNCTION(MaybeObject*, BinaryOp_Patch) {
 }
 
 
+Code* CompareIC::GetRawUninitialized(Token::Value op) {
+  ICCompareStub stub(op, UNINITIALIZED);
+  Code* code = NULL;
+  CHECK(stub.FindCodeInCache(&code));
+  return code;
+}
+
+
 Handle<Code> CompareIC::GetUninitialized(Token::Value op) {
   ICCompareStub stub(op, UNINITIALIZED);
   return stub.GetCode();
@@ -2463,6 +2519,12 @@ CompareIC::State CompareIC::ComputeState(Code* target) {
   if (key == CodeStub::Compare) return GENERIC;
   ASSERT(key == CodeStub::CompareIC);
   return static_cast<State>(target->compare_state());
+}
+
+
+Token::Value CompareIC::ComputeOperation(Code* target) {
+  ASSERT(target->major_key() == CodeStub::CompareIC);
+  return static_cast<Token::Value>(target->compare_operation());
 }
 
 

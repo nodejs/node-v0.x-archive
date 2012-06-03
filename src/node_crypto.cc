@@ -29,7 +29,6 @@
 
 #include <string.h>
 #ifdef _MSC_VER
-#define snprintf _snprintf
 #define strcasecmp _stricmp
 #endif
 
@@ -43,6 +42,7 @@
 #else
 # include <pthread.h>
 #endif
+
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 # define OPENSSL_CONST const
@@ -82,6 +82,8 @@ static Persistent<String> fingerprint_symbol;
 static Persistent<String> name_symbol;
 static Persistent<String> version_symbol;
 static Persistent<String> ext_key_usage_symbol;
+static Persistent<String> onhandshakestart_sym;
+static Persistent<String> onhandshakedone_sym;
 
 static Persistent<FunctionTemplate> secure_context_constructor;
 
@@ -149,6 +151,7 @@ void SecureContext::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setSessionIdContext",
                                SecureContext::SetSessionIdContext);
   NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
+  NODE_SET_PROTOTYPE_METHOD(t, "loadPKCS12", SecureContext::LoadPKCS12);
 
   target->Set(String::NewSymbol("SecureContext"), t->GetFunction());
 }
@@ -575,6 +578,83 @@ Handle<Value> SecureContext::Close(const Arguments& args) {
   return False();
 }
 
+//Takes .pfx or .p12 and password in string or buffer format
+Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
+  HandleScope scope;
+
+  BIO* in = NULL;
+  PKCS12* p12 = NULL;
+  EVP_PKEY* pkey = NULL;
+  X509* cert = NULL;
+  STACK_OF(X509)* extraCerts = NULL;
+  char* pass = NULL;
+  bool ret = false;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  if (args.Length() < 1) {
+    return ThrowException(Exception::TypeError(
+          String::New("Bad parameter")));
+  }
+
+  in = LoadBIO(args[0]);
+  if (in == NULL) {
+    return ThrowException(Exception::Error(
+          String::New("Unable to load BIO")));
+  }
+
+  if (args.Length() >= 2) {
+    ASSERT_IS_STRING_OR_BUFFER(args[1]);
+
+    int passlen = DecodeBytes(args[1], BINARY);
+    if (passlen < 0) {
+      BIO_free(in);
+      return ThrowException(Exception::TypeError(
+            String::New("Bad password")));
+    }
+    pass = new char[passlen + 1];
+    int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
+
+    assert(pass_written == passlen);
+    pass[passlen] = '\0';
+  }
+
+  if (d2i_PKCS12_bio(in, &p12) &&
+      PKCS12_parse(p12, pass, &pkey, &cert, &extraCerts) &&
+      SSL_CTX_use_certificate(sc->ctx_, cert) &&
+      SSL_CTX_use_PrivateKey(sc->ctx_, pkey))
+  {
+    // set extra certs
+    while (X509* x509 = sk_X509_pop(extraCerts)) {
+      if (!sc->ca_store_) {
+        sc->ca_store_ = X509_STORE_new();
+        SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
+      }
+
+      X509_STORE_add_cert(sc->ca_store_, x509);
+      SSL_CTX_add_client_CA(sc->ctx_, x509);
+    }
+
+    EVP_PKEY_free(pkey);
+    X509_free(cert);
+    sk_X509_free(extraCerts);
+
+    ret = true;
+  }
+
+  PKCS12_free(p12);
+  BIO_free(in);
+  delete[] pass;
+
+  if (!ret) {
+    unsigned long err = ERR_get_error();
+    const char *str = ERR_reason_error_string(err);
+    return ThrowException(Exception::Error(String::New(str)));
+  }
+
+  return True();
+}
+
 
 #ifdef SSL_PRINT_DEBUG
 # define DEBUG_PRINT(...) fprintf (stderr, __VA_ARGS__)
@@ -861,16 +941,13 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       Local<Value> argv[1] = {*p->servername_};
       Local<Function> callback = *p->sniCallback_;
 
-      TryCatch try_catch;
-
       // Call it
-      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(),
-                                        1,
-                                        argv);
-
-      if (try_catch.HasCaught()) {
-        FatalException(try_catch);
-      }
+      //
+      // XXX There should be an object connected to this that
+      // we can attach a domain onto.
+      Local<Value> ret;
+      ret = Local<Value>::New(MakeCallback(Context::GetCurrent()->Global(),
+                                           callback, ARRAY_SIZE(argv), argv));
 
       // If ret is SecureContext
       if (secure_context_constructor->HasInstance(ret)) {
@@ -973,16 +1050,25 @@ Handle<Value> Connection::New(const Arguments& args) {
 }
 
 
-void Connection::SSLInfoCallback(const SSL *ssl, int where, int ret) {
+void Connection::SSLInfoCallback(const SSL *ssl_, int where, int ret) {
+  // Be compatible with older versions of OpenSSL. SSL_get_app_data() wants
+  // a non-const SSL* in OpenSSL <= 0.9.7e.
+  SSL* ssl = const_cast<SSL*>(ssl_);
   if (where & SSL_CB_HANDSHAKE_START) {
     HandleScope scope;
     Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
-    MakeCallback(c->handle_, "onhandshakestart", 0, NULL);
+    if (onhandshakestart_sym.IsEmpty()) {
+      onhandshakestart_sym = NODE_PSYMBOL("onhandshakestart");
+    }
+    MakeCallback(c->handle_, onhandshakestart_sym, 0, NULL);
   }
   if (where & SSL_CB_HANDSHAKE_DONE) {
     HandleScope scope;
     Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
-    MakeCallback(c->handle_, "onhandshakedone", 0, NULL);
+    if (onhandshakedone_sym.IsEmpty()) {
+      onhandshakedone_sym = NODE_PSYMBOL("onhandshakedone");
+    }
+    MakeCallback(c->handle_, onhandshakedone_sym, 0, NULL);
   }
 }
 
@@ -4121,12 +4207,11 @@ EIO_PBKDF2After(uv_work_t* req) {
     argv[1] = Local<Value>::New(Undefined());
   }
 
-  TryCatch try_catch;
-
-  request->callback->Call(Context::GetCurrent()->Global(), 2, argv);
-
-  if (try_catch.HasCaught())
-    FatalException(try_catch);
+  // XXX There should be an object connected to this that
+  // we can attach a domain onto.
+  MakeCallback(Context::GetCurrent()->Global(),
+               request->callback,
+               ARRAY_SIZE(argv), argv);
 
   delete[] request->pass;
   delete[] request->salt;
@@ -4314,11 +4399,11 @@ void RandomBytesAfter(uv_work_t* work_req) {
   Local<Value> argv[2];
   RandomBytesCheck(req, argv);
 
-  TryCatch tc;
-  req->callback_->Call(Context::GetCurrent()->Global(), 2, argv);
-
-  if (tc.HasCaught())
-    FatalException(tc);
+  // XXX There should be an object connected to this that
+  // we can attach a domain onto.
+  MakeCallback(Context::GetCurrent()->Global(),
+               req->callback_,
+               ARRAY_SIZE(argv), argv);
 
   delete req;
 }

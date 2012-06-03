@@ -291,6 +291,15 @@ Handle<Context> Factory::NewGlobalContext() {
 }
 
 
+Handle<Context> Factory::NewModuleContext(Handle<Context> previous,
+                                          Handle<ScopeInfo> scope_info) {
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateModuleContext(*previous, *scope_info),
+      Context);
+}
+
+
 Handle<Context> Factory::NewFunctionContext(int length,
                                             Handle<JSFunction> function) {
   CALL_HEAP_FUNCTION(
@@ -324,10 +333,9 @@ Handle<Context> Factory::NewWithContext(Handle<JSFunction> function,
 }
 
 
-Handle<Context> Factory::NewBlockContext(
-    Handle<JSFunction> function,
-    Handle<Context> previous,
-    Handle<ScopeInfo> scope_info) {
+Handle<Context> Factory::NewBlockContext(Handle<JSFunction> function,
+                                         Handle<Context> previous,
+                                         Handle<ScopeInfo> scope_info) {
   CALL_HEAP_FUNCTION(
       isolate(),
       isolate()->heap()->AllocateBlockContext(*function,
@@ -536,6 +544,10 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
           ? isolate()->function_map()
           : isolate()->strict_mode_function_map(),
       pretenure);
+
+  if (function_info->ic_age() != isolate()->heap()->global_ic_age()) {
+    function_info->ResetForNewContext(isolate()->heap()->global_ic_age());
+  }
 
   result->set_context(*context);
   if (!function_info->bound()) {
@@ -763,7 +775,7 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
       instance_size != JSObject::kHeaderSize) {
     Handle<Map> initial_map = NewMap(type,
                                      instance_size,
-                                     FAST_SMI_ONLY_ELEMENTS);
+                                     GetInitialFastElementsKind());
     function->set_initial_map(*initial_map);
     initial_map->set_constructor(*function);
   }
@@ -924,6 +936,13 @@ Handle<JSObject> Factory::NewJSObject(Handle<JSFunction> constructor,
 }
 
 
+Handle<JSModule> Factory::NewJSModule() {
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateJSModule(), JSModule);
+}
+
+
 Handle<GlobalObject> Factory::NewGlobalObject(
     Handle<JSFunction> constructor) {
   CALL_HEAP_FUNCTION(isolate(),
@@ -994,10 +1013,11 @@ void Factory::EnsureCanContainHeapObjectElements(Handle<JSArray> array) {
 
 void Factory::EnsureCanContainElements(Handle<JSArray> array,
                                        Handle<FixedArrayBase> elements,
+                                       uint32_t length,
                                        EnsureElementsMode mode) {
   CALL_HEAP_FUNCTION_VOID(
       isolate(),
-      array->EnsureCanContainElements(*elements, mode));
+      array->EnsureCanContainElements(*elements, length, mode));
 }
 
 

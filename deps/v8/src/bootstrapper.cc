@@ -484,8 +484,8 @@ Handle<JSFunction> Genesis::CreateEmptyFunction(Isolate* isolate) {
 
     global_context()->set_initial_object_prototype(*prototype);
     SetPrototype(object_fun, prototype);
-    object_function_map->
-      set_instance_descriptors(heap->empty_descriptor_array());
+    object_function_map->set_instance_descriptors(
+        heap->empty_descriptor_array());
   }
 
   // Allocate the empty function as the prototype for function ECMAScript
@@ -516,12 +516,10 @@ Handle<JSFunction> Genesis::CreateEmptyFunction(Isolate* isolate) {
   function_instance_map_writable_prototype_->set_prototype(*empty_function);
 
   // Allocate the function map first and then patch the prototype later
-  Handle<Map> empty_fm = factory->CopyMapDropDescriptors(
-      function_without_prototype_map);
-  empty_fm->set_instance_descriptors(
-      function_without_prototype_map->instance_descriptors());
-  empty_fm->set_prototype(global_context()->object_function()->prototype());
-  empty_function->set_map(*empty_fm);
+  Handle<Map> empty_function_map = CreateFunctionMap(DONT_ADD_PROTOTYPE);
+  empty_function_map->set_prototype(
+      global_context()->object_function()->prototype());
+  empty_function->set_map(*empty_function_map);
   return empty_function;
 }
 
@@ -1011,7 +1009,7 @@ bool Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
     proto_map->set_prototype(global_context()->initial_object_prototype());
     Handle<JSObject> proto = factory->NewJSObjectFromMap(proto_map);
     proto->InObjectPropertyAtPut(JSRegExp::kSourceFieldIndex,
-                                 heap->empty_string());
+                                 heap->query_colon_symbol());
     proto->InObjectPropertyAtPut(JSRegExp::kGlobalFieldIndex,
                                  heap->false_value());
     proto->InObjectPropertyAtPut(JSRegExp::kIgnoreCaseFieldIndex,
@@ -1094,7 +1092,7 @@ bool Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 
     // Check the state of the object.
     ASSERT(result->HasFastProperties());
-    ASSERT(result->HasFastElements());
+    ASSERT(result->HasFastObjectElements());
 #endif
   }
 
@@ -1187,7 +1185,7 @@ bool Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 
     // Check the state of the object.
     ASSERT(result->HasFastProperties());
-    ASSERT(result->HasFastElements());
+    ASSERT(result->HasFastObjectElements());
 #endif
   }
 
@@ -1301,6 +1299,12 @@ bool Genesis::CompileNative(Vector<const char> name, Handle<String> source) {
 #ifdef ENABLE_DEBUGGER_SUPPORT
   isolate->debugger()->set_compiling_natives(true);
 #endif
+  // During genesis, the boilerplate for stack overflow won't work until the
+  // environment has been at least partially initialized. Add a stack check
+  // before entering JS code to catch overflow early.
+  StackLimitCheck check(Isolate::Current());
+  if (check.HasOverflowed()) return false;
+
   bool result = CompileScriptCached(name,
                                     source,
                                     NULL,
@@ -1631,7 +1635,7 @@ bool Genesis::InstallNatives() {
         array_function->initial_map()->CopyDropTransitions();
     Map* new_map;
     if (!maybe_map->To<Map>(&new_map)) return false;
-    new_map->set_elements_kind(FAST_ELEMENTS);
+    new_map->set_elements_kind(FAST_HOLEY_ELEMENTS);
     array_function->set_initial_map(new_map);
 
     // Make "length" magic on instances.
@@ -2153,7 +2157,7 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
     Handle<DescriptorArray> descs =
         Handle<DescriptorArray>(from->map()->instance_descriptors());
     for (int i = 0; i < descs->number_of_descriptors(); i++) {
-      PropertyDetails details = PropertyDetails(descs->GetDetails(i));
+      PropertyDetails details = descs->GetDetails(i);
       switch (details.type()) {
         case FIELD: {
           HandleScope inner;
@@ -2288,6 +2292,12 @@ Genesis::Genesis(Isolate* isolate,
   // on all function exits.
   HandleScope scope;
   SaveContext saved_context(isolate);
+
+  // During genesis, the boilerplate for stack overflow won't work until the
+  // environment has been at least partially initialized. Add a stack check
+  // before entering JS code to catch overflow early.
+  StackLimitCheck check(Isolate::Current());
+  if (check.HasOverflowed()) return;
 
   Handle<Context> new_context = Snapshot::NewContextFromSnapshot();
   if (!new_context.is_null()) {

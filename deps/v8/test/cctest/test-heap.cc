@@ -673,7 +673,7 @@ TEST(JSArray) {
   array->SetElementsLength(Smi::FromInt(0))->ToObjectChecked();
   CHECK_EQ(Smi::FromInt(0), array->length());
   // Must be in fast mode.
-  CHECK(array->HasFastTypeElements());
+  CHECK(array->HasFastSmiOrObjectElements());
 
   // array[length] = name.
   array->SetElement(0, *name, NONE, kNonStrictMode)->ToObjectChecked();
@@ -811,7 +811,9 @@ TEST(Iteration) {
 
   // Allocate a JS array to OLD_POINTER_SPACE and NEW_SPACE
   objs[next_objs_index++] = FACTORY->NewJSArray(10);
-  objs[next_objs_index++] = FACTORY->NewJSArray(10, FAST_ELEMENTS, TENURED);
+  objs[next_objs_index++] = FACTORY->NewJSArray(10,
+                                                FAST_HOLEY_ELEMENTS,
+                                                TENURED);
 
   // Allocate a small string to OLD_DATA_SPACE and NEW_SPACE
   objs[next_objs_index++] =
@@ -1214,7 +1216,9 @@ TEST(TestSizeOfObjects) {
   // The heap size should go back to initial size after a full GC, even
   // though sweeping didn't finish yet.
   HEAP->CollectAllGarbage(Heap::kNoGCFlags);
-  CHECK(!HEAP->old_pointer_space()->IsSweepingComplete());
+
+  // Normally sweeping would not be complete here, but no guarantees.
+
   CHECK_EQ(initial_size, static_cast<int>(HEAP->SizeOfObjects()));
 
   // Advancing the sweeper step-wise should not change the heap size.
@@ -1264,9 +1268,9 @@ static void FillUpNewSpace(NewSpace* new_space) {
   v8::HandleScope scope;
   AlwaysAllocateScope always_allocate;
   intptr_t available = new_space->EffectiveCapacity() - new_space->Size();
-  intptr_t number_of_fillers = (available / FixedArray::SizeFor(1000)) - 10;
+  intptr_t number_of_fillers = (available / FixedArray::SizeFor(32)) - 1;
   for (intptr_t i = 0; i < number_of_fillers; i++) {
-    CHECK(HEAP->InNewSpace(*FACTORY->NewFixedArray(1000, NOT_TENURED)));
+    CHECK(HEAP->InNewSpace(*FACTORY->NewFixedArray(32, NOT_TENURED)));
   }
 }
 
@@ -1274,6 +1278,13 @@ static void FillUpNewSpace(NewSpace* new_space) {
 TEST(GrowAndShrinkNewSpace) {
   InitializeVM();
   NewSpace* new_space = HEAP->new_space();
+
+  if (HEAP->ReservedSemiSpaceSize() == HEAP->InitialSemiSpaceSize()) {
+    // The max size cannot exceed the reserved size, since semispaces must be
+    // always within the reserved space.  We can't test new space growing and
+    // shrinking if the reserved size is the same as the minimum (initial) size.
+    return;
+  }
 
   // Explicitly growing should double the space capacity.
   intptr_t old_capacity, new_capacity;
@@ -1315,6 +1326,14 @@ TEST(GrowAndShrinkNewSpace) {
 
 TEST(CollectingAllAvailableGarbageShrinksNewSpace) {
   InitializeVM();
+
+  if (HEAP->ReservedSemiSpaceSize() == HEAP->InitialSemiSpaceSize()) {
+    // The max size cannot exceed the reserved size, since semispaces must be
+    // always within the reserved space.  We can't test new space growing and
+    // shrinking if the reserved size is the same as the minimum (initial) size.
+    return;
+  }
+
   v8::HandleScope scope;
   NewSpace* new_space = HEAP->new_space();
   intptr_t old_capacity, new_capacity;
@@ -1521,16 +1540,12 @@ TEST(InstanceOfStubWriteBarrier) {
 
   while (!Marking::IsBlack(Marking::MarkBitFrom(f->code())) &&
          !marking->IsStopped()) {
-    marking->Step(MB);
+    // Discard any pending GC requests otherwise we will get GC when we enter
+    // code below.
+    marking->Step(MB, IncrementalMarking::NO_GC_VIA_STACK_GUARD);
   }
 
   CHECK(marking->IsMarking());
-
-  // Discard any pending GC requests otherwise we will get GC when we enter
-  // code below.
-  if (ISOLATE->stack_guard()->IsGCRequest()) {
-    ISOLATE->stack_guard()->Continue(GC_REQUEST);
-  }
 
   {
     v8::HandleScope scope;
@@ -1582,7 +1597,7 @@ TEST(PrototypeTransitionClearing) {
   Handle<JSObject> prototype;
   PagedSpace* space = HEAP->old_pointer_space();
   do {
-    prototype = FACTORY->NewJSArray(32 * KB, FAST_ELEMENTS, TENURED);
+    prototype = FACTORY->NewJSArray(32 * KB, FAST_HOLEY_ELEMENTS, TENURED);
   } while (space->FirstPage() == space->LastPage() ||
       !space->LastPage()->Contains(prototype->address()));
 
@@ -1596,4 +1611,186 @@ TEST(PrototypeTransitionClearing) {
   CHECK(map->GetPrototypeTransition(*prototype)->IsMap());
   HEAP->CollectAllGarbage(Heap::kNoGCFlags);
   CHECK(map->GetPrototypeTransition(*prototype)->IsMap());
+}
+
+
+TEST(ResetSharedFunctionInfoCountersDuringIncrementalMarking) {
+  i::FLAG_allow_natives_syntax = true;
+#ifdef DEBUG
+  i::FLAG_verify_heap = true;
+#endif
+  InitializeVM();
+  if (!i::V8::UseCrankshaft()) return;
+  v8::HandleScope outer_scope;
+
+  {
+    v8::HandleScope scope;
+    CompileRun(
+        "function f () {"
+        "  var s = 0;"
+        "  for (var i = 0; i < 100; i++)  s += i;"
+        "  return s;"
+        "}"
+        "f(); f();"
+        "%OptimizeFunctionOnNextCall(f);"
+        "f();");
+  }
+  Handle<JSFunction> f =
+      v8::Utils::OpenHandle(
+          *v8::Handle<v8::Function>::Cast(
+              v8::Context::GetCurrent()->Global()->Get(v8_str("f"))));
+  CHECK(f->IsOptimized());
+
+  IncrementalMarking* marking = HEAP->incremental_marking();
+  marking->Abort();
+  marking->Start();
+
+  // The following two calls will increment HEAP->global_ic_age().
+  const int kLongIdlePauseInMs = 1000;
+  v8::V8::ContextDisposedNotification();
+  v8::V8::IdleNotification(kLongIdlePauseInMs);
+
+  while (!marking->IsStopped() && !marking->IsComplete()) {
+    marking->Step(1 * MB, IncrementalMarking::NO_GC_VIA_STACK_GUARD);
+  }
+  if (!marking->IsStopped() || marking->should_hurry()) {
+    // We don't normally finish a GC via Step(), we normally finish by
+    // setting the stack guard and then do the final steps in the stack
+    // guard interrupt.  But here we didn't ask for that, and there is no
+    // JS code running to trigger the interrupt, so we explicitly finalize
+    // here.
+    HEAP->CollectAllGarbage(Heap::kNoGCFlags,
+                            "Test finalizing incremental mark-sweep");
+  }
+
+  CHECK_EQ(HEAP->global_ic_age(), f->shared()->ic_age());
+  CHECK_EQ(0, f->shared()->opt_count());
+  CHECK_EQ(0, f->shared()->code()->profiler_ticks());
+}
+
+
+TEST(ResetSharedFunctionInfoCountersDuringMarkSweep) {
+  i::FLAG_allow_natives_syntax = true;
+#ifdef DEBUG
+  i::FLAG_verify_heap = true;
+#endif
+  InitializeVM();
+  if (!i::V8::UseCrankshaft()) return;
+  v8::HandleScope outer_scope;
+
+  {
+    v8::HandleScope scope;
+    CompileRun(
+        "function f () {"
+        "  var s = 0;"
+        "  for (var i = 0; i < 100; i++)  s += i;"
+        "  return s;"
+        "}"
+        "f(); f();"
+        "%OptimizeFunctionOnNextCall(f);"
+        "f();");
+  }
+  Handle<JSFunction> f =
+      v8::Utils::OpenHandle(
+          *v8::Handle<v8::Function>::Cast(
+              v8::Context::GetCurrent()->Global()->Get(v8_str("f"))));
+  CHECK(f->IsOptimized());
+
+  HEAP->incremental_marking()->Abort();
+
+  // The following two calls will increment HEAP->global_ic_age().
+  // Since incremental marking is off, IdleNotification will do full GC.
+  const int kLongIdlePauseInMs = 1000;
+  v8::V8::ContextDisposedNotification();
+  v8::V8::IdleNotification(kLongIdlePauseInMs);
+
+  CHECK_EQ(HEAP->global_ic_age(), f->shared()->ic_age());
+  CHECK_EQ(0, f->shared()->opt_count());
+  CHECK_EQ(0, f->shared()->code()->profiler_ticks());
+}
+
+
+// Test that HAllocateObject will always return an object in new-space.
+TEST(OptimizedAllocationAlwaysInNewSpace) {
+  i::FLAG_allow_natives_syntax = true;
+  InitializeVM();
+  if (!i::V8::UseCrankshaft() || i::FLAG_always_opt) return;
+  v8::HandleScope scope;
+
+  FillUpNewSpace(HEAP->new_space());
+  AlwaysAllocateScope always_allocate;
+  v8::Local<v8::Value> res = CompileRun(
+      "function c(x) {"
+      "  this.x = x;"
+      "  for (var i = 0; i < 32; i++) {"
+      "    this['x' + i] = x;"
+      "  }"
+      "}"
+      "function f(x) { return new c(x); };"
+      "f(1); f(2); f(3);"
+      "%OptimizeFunctionOnNextCall(f);"
+      "f(4);");
+  CHECK_EQ(4, res->ToObject()->GetRealNamedProperty(v8_str("x"))->Int32Value());
+
+  Handle<JSObject> o =
+      v8::Utils::OpenHandle(*v8::Handle<v8::Object>::Cast(res));
+
+  CHECK(HEAP->InNewSpace(*o));
+}
+
+
+static int CountMapTransitions(Map* map) {
+  int result = 0;
+  DescriptorArray* descs = map->instance_descriptors();
+  for (int i = 0; i < descs->number_of_descriptors(); i++) {
+    if (descs->IsTransitionOnly(i)) {
+      result++;
+    }
+  }
+  return result;
+}
+
+
+// Test that map transitions are cleared and maps are collected with
+// incremental marking as well.
+TEST(Regress1465) {
+  i::FLAG_allow_natives_syntax = true;
+  i::FLAG_trace_incremental_marking = true;
+  InitializeVM();
+  v8::HandleScope scope;
+
+  #define TRANSITION_COUNT 256
+  for (int i = 0; i < TRANSITION_COUNT; i++) {
+    EmbeddedVector<char, 64> buffer;
+    OS::SNPrintF(buffer, "var o = new Object; o.prop%d = %d;", i, i);
+    CompileRun(buffer.start());
+  }
+  CompileRun("var root = new Object;");
+  Handle<JSObject> root =
+      v8::Utils::OpenHandle(
+          *v8::Handle<v8::Object>::Cast(
+              v8::Context::GetCurrent()->Global()->Get(v8_str("root"))));
+
+  // Count number of live transitions before marking.
+  int transitions_before = CountMapTransitions(root->map());
+  CompileRun("%DebugPrint(root);");
+  CHECK_EQ(TRANSITION_COUNT, transitions_before);
+
+  // Go through all incremental marking steps in one swoop.
+  IncrementalMarking* marking = HEAP->incremental_marking();
+  CHECK(marking->IsStopped());
+  marking->Start();
+  CHECK(marking->IsMarking());
+  while (!marking->IsComplete()) {
+    marking->Step(MB, IncrementalMarking::NO_GC_VIA_STACK_GUARD);
+  }
+  CHECK(marking->IsComplete());
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
+  CHECK(marking->IsStopped());
+
+  // Count number of live transitions after marking.  Note that one transition
+  // is left, because 'o' still holds an instance of one transition target.
+  int transitions_after = CountMapTransitions(root->map());
+  CompileRun("%DebugPrint(root);");
+  CHECK_EQ(1, transitions_after);
 }

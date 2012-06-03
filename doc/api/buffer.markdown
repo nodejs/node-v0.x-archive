@@ -2,7 +2,7 @@
 
     Stability: 3 - Stable
 
-Pure Javascript is Unicode friendly but not nice to binary data.  When
+Pure JavaScript is Unicode friendly but not nice to binary data.  When
 dealing with TCP streams or the file system, it's necessary to handle octet
 streams. Node has several strategies for manipulating, creating, and
 consuming octet streams.
@@ -23,10 +23,13 @@ encoding method.  Here are the different string encodings.
   `0x20` (character code of a space). If you want to convert a null character
   into `0x00`, you should use `'utf8'`.
 
-* `'utf8'` - Multi byte encoded Unicode characters.  Many web pages and other document formats use UTF-8.
+* `'utf8'` - Multibyte encoded Unicode characters. Many web pages and other
+  document formats use UTF-8.
 
-* `'ucs2'` - 2-bytes, little endian encoded Unicode characters. It can encode
-  only BMP(Basic Multilingual Plane, U+0000 - U+FFFF).
+* `'utf16le'` - 2 or 4 bytes, little endian encoded Unicode characters.
+  Surrogate pairs (U+10000 to U+10FFFF) are supported.
+
+* `'ucs2'` - Alias of `'utf16le'`.
 
 * `'base64'` - Base64 string encoding.
 
@@ -35,7 +38,7 @@ encoding method.  Here are the different string encodings.
   should be avoided in favor of `Buffer` objects where possible. This encoding
   will be removed in future versions of Node.
 
-* `'hex'` - Encode each byte as two hexidecimal characters.
+* `'hex'` - Encode each byte as two hexadecimal characters.
 
 ## Class: Buffer
 
@@ -66,7 +69,7 @@ Allocates a new buffer containing the given `str`.
 
 * `string` String - data to be written to buffer
 * `offset` Number, Optional, Default: 0
-* `length` Number, Optional
+* `length` Number, Optional, Default: `buffer.length - offset`
 * `encoding` String, Optional, Default: 'utf8'
 
 Writes `string` to the buffer at `offset` using the given encoding.
@@ -89,7 +92,7 @@ next time `buf.write()` is called.
 
 * `encoding` String, Optional, Default: 'utf8'
 * `start` Number, Optional, Default: 0
-* `end` Number, Optional
+* `end` Number, Optional, Default: `buffer.length`
 
 Decodes and returns a string from buffer data encoded with `encoding`
 (defaults to `'utf8'`) beginning at `start` (defaults to `0`) and ending at
@@ -167,7 +170,7 @@ buffer object.  It does not change when the contents of the buffer are changed.
 * `targetBuffer` Buffer object - Buffer to copy into
 * `targetStart` Number, Optional, Default: 0
 * `sourceStart` Number, Optional, Default: 0
-* `sourceEnd` Number, Optional, Default: 0
+* `sourceEnd` Number, Optional, Default: `buffer.length`
 
 Does copy between buffers. The source and target regions can be overlapped.
 `targetStart` and `sourceStart` default to `0`.
@@ -193,7 +196,7 @@ into `buf2`, starting at the 8th byte in `buf2`.
 ### buf.slice([start], [end])
 
 * `start` Number, Optional, Default: 0
-* `end` Number, Optional, Default: 0
+* `end` Number, Optional, Default: `buffer.length`
 
 Returns a new buffer which references the same memory as the old, but offset
 and cropped by the `start` (defaults to `0`) and `end` (defaults to

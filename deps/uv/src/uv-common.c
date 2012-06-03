@@ -32,6 +32,25 @@
 #include "ares/inet_net_pton.h"
 #include "ares/inet_ntop.h"
 
+#define XX(uc, lc) case UV_##uc: return sizeof(uv_##lc##_t);
+
+size_t uv_handle_size(uv_handle_type type) {
+  switch (type) {
+    UV_HANDLE_TYPE_MAP(XX)
+    default:
+      return -1;
+  }
+}
+
+size_t uv_req_size(uv_req_type type) {
+  switch(type) {
+    UV_REQ_TYPE_MAP(XX)
+    default:
+      return -1;
+  }
+}
+
+#undef XX
 
 size_t uv_strlcpy(char* dst, const char* src, size_t size) {
   size_t n;
@@ -180,43 +199,6 @@ int uv_ip6_name(struct sockaddr_in6* src, char* dst, size_t size) {
 }
 
 
-static int cmp_ares_tasks(const uv_ares_task_t* a, const uv_ares_task_t* b) {
-  if (a->sock < b->sock) return -1;
-  if (a->sock > b->sock) return 1;
-  return 0;
-}
-
-
-RB_GENERATE_STATIC(uv__ares_tasks, uv_ares_task_s, node, cmp_ares_tasks)
-
-
-/* add ares handle to list */
-void uv_add_ares_handle(uv_loop_t* loop, uv_ares_task_t* handle) {
-  assert(loop == handle->loop);
-  RB_INSERT(uv__ares_tasks, &loop->uv_ares_handles_, handle);
-}
-
-
-/* find matching ares handle in list */
-uv_ares_task_t* uv_find_ares_handle(uv_loop_t* loop, ares_socket_t sock) {
-  uv_ares_task_t handle;
-  handle.sock = sock;
-  return RB_FIND(uv__ares_tasks, &loop->uv_ares_handles_, &handle);
-}
-
-
-/* remove ares handle in list */
-void uv_remove_ares_handle(uv_ares_task_t* handle) {
-  RB_REMOVE(uv__ares_tasks, &handle->loop->uv_ares_handles_, handle);
-}
-
-
-/* Returns 1 if the uv_ares_handles_ list is empty. 0 otherwise. */
-int uv_ares_handles_empty(uv_loop_t* loop) {
-  return RB_EMPTY(&loop->uv_ares_handles_);
-}
-
-
 int uv_tcp_bind(uv_tcp_t* handle, struct sockaddr_in addr) {
   if (handle->type != UV_TCP || addr.sin_family != AF_INET) {
     uv__set_artificial_error(handle->loop, UV_EFAULT);
@@ -332,4 +314,26 @@ int uv_thread_create(uv_thread_t *tid, void (*entry)(void *arg), void *arg) {
   }
 
   return 0;
+}
+
+
+void uv_walk(uv_loop_t* loop, uv_walk_cb walk_cb, void* arg) {
+  ngx_queue_t* q;
+  uv_handle_t* h;
+
+  ngx_queue_foreach(q, &loop->handle_queue) {
+    h = ngx_queue_data(q, uv_handle_t, handle_queue);
+    if (h->flags & UV__HANDLE_INTERNAL) continue;
+    walk_cb(h, arg);
+  }
+}
+
+
+void uv_ref(uv_handle_t* handle) {
+  uv__handle_ref(handle);
+}
+
+
+void uv_unref(uv_handle_t* handle) {
+  uv__handle_unref(handle);
 }

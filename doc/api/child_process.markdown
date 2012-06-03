@@ -52,6 +52,14 @@ in the child. After disconnecting it is no longer possible to send messages.
 An alternative way to check if you can send messages is to see if the
 `child.connected` property is `true`.
 
+### Event: 'message'
+
+* `message` {Object} a parsed JSON object or primitive value
+* `sendHandle` {Handle object} a Socket or Server object
+
+Messages send by `.send(message, [sendHandle])` are obtained using the
+`message` event.
+
 ### child.stdin
 
 * {Stream object}
@@ -116,15 +124,120 @@ process may not actually kill it.  `kill` really just sends a signal to a proces
 
 See `kill(2)`
 
-
 ### child.send(message, [sendHandle])
 
 * `message` {Object}
 * `sendHandle` {Handle object}
 
-Send a message (and, optionally, a handle object) to a child process.
+When using `child_process.fork()` you can write to the child using
+`child.send(message, [sendHandle])` and messages are received by
+a `'message'` event on the child.
 
-See `child_process.fork()` for details.
+For example:
+
+    var cp = require('child_process');
+
+    var n = cp.fork(__dirname + '/sub.js');
+
+    n.on('message', function(m) {
+      console.log('PARENT got message:', m);
+    });
+
+    n.send({ hello: 'world' });
+
+And then the child script, `'sub.js'` might look like this:
+
+    process.on('message', function(m) {
+      console.log('CHILD got message:', m);
+    });
+
+    process.send({ foo: 'bar' });
+
+In the child the `process` object will have a `send()` method, and `process`
+will emit objects each time it receives a message on its channel.
+
+There is a special case when sending a `{cmd: 'NODE_foo'}` message. All messages
+containing a `NODE_` prefix in its `cmd` property will not be emitted in
+the `message` event, since they are internal messages used by node core.
+Messages containing the prefix are emitted in the `internalMessage` event, you
+should by all means avoid using this feature, it is subject to change without notice.
+
+The `sendHandle` option to `child.send()` is for sending a TCP server or
+socket object to another process. The child will receive the object as its
+second argument to the `message` event.
+
+**send server object**
+
+Here is an example of sending a server:
+
+    var child = require('child_process').fork('child.js');
+
+    // Open up the server object and send the handle.
+    var server = require('net').createServer();
+    server.on('connection', function (socket) {
+      socket.end('handled by parent');
+    });
+    server.listen(1337, function() {
+      child.send('server', server);
+    });
+
+And the child would the recive the server object as:
+
+    process.on('message', function(m, server) {
+      if (m === 'server') {
+        server.on('connection', function (socket) {
+          socket.end('handled by child');
+        });
+      }
+    });
+
+Note that the server is now shared between the parent and child, this means
+that some connections will be handled by the parent and some by the child.
+
+**send socket object**
+
+Here is an example of sending a socket. It will spawn two childs and handle
+connections with the remote address `74.125.127.100` as VIP by sending the
+socket to a "special" child process. Other sockets will go to a "normal" process.
+
+    var normal = require('child_process').fork('child.js', ['normal']);
+    var special = require('child_process').fork('child.js', ['special']);
+
+    // Open up the server and send sockets to child
+    var server = require('net').createServer();
+    server.on('connection', function (socket) {
+
+      // if this is a VIP
+      if (socket.remoteAddress === '74.125.127.100') {
+        special.send('socket', socket);
+        return;
+      }
+      // just the usual dudes
+      normal.send('socket', socket);
+    });
+    server.listen(1337);
+
+The `child.js` could look like this:
+
+    process.on('message', function(m, socket) {
+      if (m === 'socket') {
+        socket.end('You where handled as a ' + process.argv[2] + ' person');
+      }
+    });
+
+Note that once a single socket has been sent to a child the parent can no
+longer keep track of when the socket is destroyed. To indicate this condition
+the `.connections` property becomes `null`.
+It is also recomended not to use `.maxConnections` in this condition.
+
+### child.disconnect()
+
+To close the IPC connection between parent and child use the
+`child.disconnect()` method. This allows the child to exit gracefully since
+there is no IPC channel keeping it alive. When calling this method the
+`disconnect` event will be emitted in both parent and child, and the
+`connected` flag will be set to `false`. Please note that you can also call
+`process.disconnect()` in the child process.
 
 ## child_process.spawn(command, [args], [options])
 
@@ -132,6 +245,7 @@ See `child_process.fork()` for details.
 * `args` {Array} List of string arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
+  * `stdio` {Array|String} Child's stdio configuration. (See below)
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
     for stdio.  (See below)
   * `env` {Object} Environment key-value pairs
@@ -223,6 +337,47 @@ spawning the process with an empty environment rather than using
 `process.env`. This due to backwards compatibility issues with a deprecated
 API.
 
+The 'stdio' option to `child_process.spawn()` is an array where each
+index corresponds to a fd in the child.  The value is one of the following:
+
+1. `null`, `undefined` - Use default value. For 0,1,2 stdios this is the same
+   as `'pipe'`. For any higher value, `'ignore'`
+2. `'ignore'` - Open the fd in the child, but do not expose it to the parent
+3. `'pipe'` - Open the fd and expose as a `Stream` object to parent.
+4. `'ipc'` - Create IPC channel for passing messages/file descriptors between
+   parent and child.
+
+     Note: A ChildProcess may have at most *one* IPC stdio file descriptor.
+     Setting this option enables the ChildProcess.send() method.  If the
+     child writes JSON messages to this file descriptor, then this will trigger
+     ChildProcess.on('message').  If the child is a Node.js program, then
+     the presence of an IPC channel will enable process.send() and
+     process.on('message')
+5. positive integer - Share corresponding fd with child
+6. Any TTY, TCP, File stream (or any object with `fd` property) - Share
+   corresponding stream with child.
+
+As a shorthand, the `stdio` argument may also be one of the following
+strings, rather than an array:
+
+* `ignore` - `['ignore', 'ignore', 'ignore']`
+* `pipe` - `['pipe', 'pipe', 'pipe']`
+* `inherit` - `[process.stdin, process.stdout, process.stderr]` or `[0,1,2]`
+
+Example:
+
+    var spawn = require('child_process').spawn;
+
+    // Child will use parent's stdios
+    spawn('prg', [], { stdio: 'inherit' });
+
+    // Spawn child sharing only stderr
+    spawn('prg', [], { stdio: ['pipe', 'pipe', process.stderr] });
+
+    // Open an extra fd=4, to interact with programs present a
+    // startd-style interface.
+    spawn('prg', [], { stdio: ['pipe', null, null, null, 'pipe'] });
+
 There is a deprecated option called `customFds` which allows one to specify
 specific file descriptors for the stdio of the child process. This API was
 not portable to all platforms and therefore removed.
@@ -241,8 +396,9 @@ See also: `child_process.exec()` and `child_process.fork()`
 * `command` {String} The command to run, with space-separated arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
+  * `stdio` {Array|String} Child's stdio configuration. (See above)
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
+    for stdio.  (See above)
   * `env` {Object} Environment key-value pairs
   * `setsid` {Boolean}
   * `encoding` {String} (Default: 'utf8')
@@ -250,7 +406,7 @@ See also: `child_process.exec()` and `child_process.fork()`
   * `maxBuffer` {Number} (Default: 200*1024)
   * `killSignal` {String} (Default: 'SIGTERM')
 * `callback` {Function} called with the output when process terminates
-  * `code` {Integer} Exit code
+  * `error` {Error}
   * `stdout` {Buffer}
   * `stderr` {Buffer}
 * Return: ChildProcess object
@@ -298,8 +454,9 @@ the child process is killed.
 * `args` {Array} List of string arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
+  * `stdio` {Array|String} Child's stdio configuration. (See above)
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
+    for stdio.  (See above)
   * `env` {Object} Environment key-value pairs
   * `setsid` {Boolean}
   * `encoding` {String} (Default: 'utf8')
@@ -307,7 +464,7 @@ the child process is killed.
   * `maxBuffer` {Number} (Default: 200*1024)
   * `killSignal` {String} (Default: 'SIGTERM')
 * `callback` {Function} called with the output when process terminates
-  * `code` {Integer} Exit code
+  * `error` {Error}
   * `stdout` {Buffer}
   * `stderr` {Buffer}
 * Return: ChildProcess object
@@ -323,52 +480,16 @@ leaner than `child_process.exec`. It has the same options.
 * `args` {Array} List of string arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
-  * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
   * `env` {Object} Environment key-value pairs
   * `setsid` {Boolean}
   * `encoding` {String} (Default: 'utf8')
   * `timeout` {Number} (Default: 0)
-* `callback` {Function} called with the output when process terminates
-  * `code` {Integer} Exit code
-  * `stdout` {Buffer}
-  * `stderr` {Buffer}
 * Return: ChildProcess object
 
 This is a special case of the `spawn()` functionality for spawning Node
 processes. In addition to having all the methods in a normal ChildProcess
-instance, the returned object has a communication channel built-in. The
-channel is written to with `child.send(message, [sendHandle])` and messages
-are received by a `'message'` event on the child.
-
-For example:
-
-    var cp = require('child_process');
-
-    var n = cp.fork(__dirname + '/sub.js');
-
-    n.on('message', function(m) {
-      console.log('PARENT got message:', m);
-    });
-
-    n.send({ hello: 'world' });
-
-And then the child script, `'sub.js'` might look like this:
-
-    process.on('message', function(m) {
-      console.log('CHILD got message:', m);
-    });
-
-    process.send({ foo: 'bar' });
-
-In the child the `process` object will have a `send()` method, and `process`
-will emit objects each time it receives a message on its channel.
-
-There is a special case when sending a `{cmd: 'NODE_foo'}` message. All messages
-containing a `NODE_` prefix in its `cmd` property will not be emitted in
-the `message` event, since they are internal messages used by node core.
-Messages containing the prefix are emitted in the `internalMessage` event, you
-should by all means avoid using this feature, it may change without warranty.
+instance, the returned object has a communication channel built-in. See
+`child.send(message, [sendHandle])` for details.
 
 By default the spawned Node process will have the stdout, stderr associated
 with the parent's. To change this behavior set the `silent` property in the
@@ -377,31 +498,3 @@ with the parent's. To change this behavior set the `silent` property in the
 These child Nodes are still whole new instances of V8. Assume at least 30ms
 startup and 10mb memory for each new Node. That is, you cannot create many
 thousands of them.
-
-The `sendHandle` option to `child.send()` is for sending a handle object to
-another process. Child will receive the handle as as second argument to the
-`message` event. Here is an example of sending a handle:
-
-    var server = require('net').createServer();
-    var child = require('child_process').fork(__dirname + '/child.js');
-    // Open up the server object and send the handle.
-    server.listen(1337, function() {
-      child.send({ server: true }, server._handle);
-    });
-
-Here is an example of receiving the server handle and sharing it between
-processes:
-
-    process.on('message', function(m, serverHandle) {
-      if (serverHandle) {
-        var server = require('net').createServer();
-        server.listen(serverHandle);
-      }
-    });
-
-To close the IPC connection between parent and child use the
-`child.disconnect()` method. This allows the child to exit gracefully since
-there is no IPC channel keeping it alive. When calling this method the
-`disconnect` event will be emitted in both parent and child, and the
-`connected` flag will be set to `false`. Please note that you can also call
-`process.disconnect()` in the child process.

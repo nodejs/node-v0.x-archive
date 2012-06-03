@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -767,15 +767,22 @@ bool Debug::CompileDebuggerScript(int index) {
   Handle<JSFunction> function =
       factory->NewFunctionFromSharedFunctionInfo(function_info, context);
 
-  Execution::TryCall(function, Handle<Object>(context->global()),
-                     0, NULL, &caught_exception);
+  Handle<Object> exception =
+      Execution::TryCall(function, Handle<Object>(context->global()),
+                         0, NULL, &caught_exception);
 
   // Check for caught exceptions.
   if (caught_exception) {
+    ASSERT(!isolate->has_pending_exception());
+    MessageLocation computed_location;
+    isolate->ComputeLocation(&computed_location);
     Handle<Object> message = MessageHandler::MakeMessageObject(
-        "error_loading_debugger", NULL, Vector<Handle<Object> >::empty(),
-        Handle<String>(), Handle<JSArray>());
+        "error_loading_debugger", &computed_location,
+        Vector<Handle<Object> >::empty(), Handle<String>(), Handle<JSArray>());
+    ASSERT(!isolate->has_pending_exception());
+    isolate->set_pending_exception(*exception);
     MessageHandler::ReportMessage(Isolate::Current(), NULL, message);
+    isolate->clear_pending_exception();
     return false;
   }
 
@@ -812,6 +819,9 @@ bool Debug::Load() {
           Handle<Object>::null(),
           v8::Handle<ObjectTemplate>(),
           NULL);
+
+  // Fail if no context could be created.
+  if (context.is_null()) return false;
 
   // Use the debugger context.
   SaveContext save(isolate_);
@@ -879,6 +889,16 @@ void Debug::PreemptionWhileInDebugger() {
 void Debug::Iterate(ObjectVisitor* v) {
   v->VisitPointer(BitCast<Object**>(&(debug_break_return_)));
   v->VisitPointer(BitCast<Object**>(&(debug_break_slot_)));
+}
+
+
+void Debug::PutValuesOnStackAndDie(int start,
+                                   Address c_entry_fp,
+                                   Address last_fp,
+                                   Address larger_fp,
+                                   int count,
+                                   int end) {
+  OS::Abort();
 }
 
 
@@ -974,9 +994,32 @@ Object* Debug::Break(Arguments args) {
       // Count frames until target frame
       int count = 0;
       JavaScriptFrameIterator it(isolate_);
-      while (!it.done() && it.frame()->fp() != thread_local_.last_fp_) {
+      while (!it.done() && it.frame()->fp() < thread_local_.last_fp_) {
         count++;
         it.Advance();
+      }
+
+      // Catch the cases that would lead to crashes and capture
+      // - C entry FP at which to start stack crawl.
+      // - FP of the frame at which we plan to stop stepping out (last FP).
+      // - current FP that's larger than last FP.
+      // - Counter for the number of steps to step out.
+      if (it.done()) {
+        // We crawled the entire stack, never reaching last_fp_.
+        PutValuesOnStackAndDie(0xBEEEEEEE,
+                               frame->fp(),
+                               thread_local_.last_fp_,
+                               NULL,
+                               count,
+                               0xFEEEEEEE);
+      } else if (it.frame()->fp() != thread_local_.last_fp_) {
+        // We crawled over last_fp_, without getting a match.
+        PutValuesOnStackAndDie(0xBEEEEEEE,
+                               frame->fp(),
+                               thread_local_.last_fp_,
+                               it.frame()->fp(),
+                               count,
+                               0xFEEEEEEE);
       }
 
       // If we found original frame
@@ -1847,13 +1890,6 @@ static void RedirectActivationsToRecompiledCodeOnThread(
       // break slots.
       debug_break_slot_count++;
     }
-    if (frame_code->has_self_optimization_header() &&
-        !new_code->has_self_optimization_header()) {
-      delta -= FullCodeGenerator::self_optimization_header_size();
-    } else {
-      ASSERT(frame_code->has_self_optimization_header() ==
-             new_code->has_self_optimization_header());
-    }
     int debug_break_slot_bytes =
         debug_break_slot_count * Assembler::kDebugBreakSlotLength;
     if (FLAG_trace_deopt) {
@@ -2222,6 +2258,13 @@ void Debug::FramesHaveBeenDropped(StackFrame::Id new_break_frame_id,
   thread_local_.restarter_frame_function_pointer_ =
       restarter_frame_function_pointer;
 }
+
+
+const int Debug::FramePaddingLayout::kInitialSize = 1;
+
+
+// Any even value bigger than kInitialSize as needed for stack scanning.
+const int Debug::FramePaddingLayout::kPaddingValue = kInitialSize + 1;
 
 
 bool Debug::IsDebugGlobal(GlobalObject* global) {
@@ -3239,7 +3282,7 @@ EnterDebugger::~EnterDebugger() {
   debug->SetBreak(break_frame_id_, break_id_);
 
   // Check for leaving the debugger.
-  if (prev_ == NULL) {
+  if (!load_failed_ && prev_ == NULL) {
     // Clear mirror cache when leaving the debugger. Skip this if there is a
     // pending exception as clearing the mirror cache calls back into
     // JavaScript. This can happen if the v8::Debug::Call is used in which

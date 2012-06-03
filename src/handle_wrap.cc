@@ -20,10 +20,12 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "node.h"
+#include "ngx-queue.h"
 #include "handle_wrap.h"
 
 namespace node {
 
+using v8::Array;
 using v8::Object;
 using v8::Handle;
 using v8::Local;
@@ -39,17 +41,8 @@ using v8::Arguments;
 using v8::Integer;
 
 
-#define UNWRAP \
-  assert(!args.Holder().IsEmpty()); \
-  assert(args.Holder()->InternalFieldCount() > 0); \
-  HandleWrap* wrap =  \
-      static_cast<HandleWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) { \
-    uv_err_t err; \
-    err.code = UV_EBADF; \
-    SetErrno(err); \
-    return scope.Close(Integer::New(-1)); \
-  }
+// defined in node.cc
+extern ngx_queue_t handle_wrap_queue;
 
 
 void HandleWrap::Initialize(Handle<Object> target) {
@@ -62,33 +55,10 @@ void HandleWrap::Initialize(Handle<Object> target) {
 Handle<Value> HandleWrap::Unref(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(HandleWrap)
 
-  // Calling unnecessarily is a no-op
-  if (wrap->unref) {
-    return v8::Undefined();
-  }
-
-  wrap->unref = true;
-  uv_unref(uv_default_loop());
-
-  return v8::Undefined();
-}
-
-
-// Adds a reference to keep uv alive because of this thing.
-Handle<Value> HandleWrap::Ref(const Arguments& args) {
-  HandleScope scope;
-
-  UNWRAP
-
-  // Calling multiple times is a no-op
-  if (!wrap->unref) {
-    return v8::Undefined();
-  }
-
-  wrap->unref = false;
-  uv_ref(uv_default_loop());
+  uv_unref(wrap->handle__);
+  wrap->unref_ = true;
 
   return v8::Undefined();
 }
@@ -97,24 +67,22 @@ Handle<Value> HandleWrap::Ref(const Arguments& args) {
 Handle<Value> HandleWrap::Close(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  HandleWrap *wrap = static_cast<HandleWrap*>(
+      args.Holder()->GetPointerFromInternalField(0));
 
   // guard against uninitialized handle or double close
-  if (wrap->handle__ == NULL) return v8::Null();
-  assert(!wrap->object_.IsEmpty());
-  uv_close(wrap->handle__, OnClose);
-  wrap->handle__ = NULL;
-
-  HandleWrap::Ref(args);
-
-  wrap->StateChange();
+  if (wrap && wrap->handle__) {
+    assert(!wrap->object_.IsEmpty());
+    uv_close(wrap->handle__, OnClose);
+    wrap->handle__ = NULL;
+  }
 
   return v8::Null();
 }
 
 
 HandleWrap::HandleWrap(Handle<Object> object, uv_handle_t* h) {
-  unref = false;
+  unref_ = false;
   handle__ = h;
   if (h) {
     h->data = this;
@@ -125,6 +93,7 @@ HandleWrap::HandleWrap(Handle<Object> object, uv_handle_t* h) {
   assert(object->InternalFieldCount() > 0);
   object_ = v8::Persistent<v8::Object>::New(object);
   object_->SetPointerInInternalField(0, this);
+  ngx_queue_insert_tail(&handle_wrap_queue, &handle_wrap_queue_);
 }
 
 
@@ -136,6 +105,7 @@ void HandleWrap::SetHandle(uv_handle_t* h) {
 
 HandleWrap::~HandleWrap() {
   assert(object_.IsEmpty());
+  ngx_queue_remove(&handle_wrap_queue_);
 }
 
 

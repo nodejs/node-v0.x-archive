@@ -1,4 +1,88 @@
-2012.03.30, Version 0.7.7 (unstable)
+2012.05.28, Version 0.7.9 (unstable)
+
+* Upgrade V8 to 3.11.1
+
+* Upgrade npm to 1.1.23
+
+* uv: rework reference counting scheme (Ben Noordhuis)
+
+* uv: add interface for joining external event loops (Bert Belder)
+
+* repl, readline: Handle Ctrl+Z and SIGCONT better (Nathan Rajlich)
+
+* fs: 64bit offsets for fs calls (Igor Zinkovsky)
+
+* fs: add sync open flags 'rs' and 'rs+' (Kevin Bowman)
+
+* windows: enable creating directory junctions with fs.symlink (Igor Zinkovsky, Bert Belder)
+
+* windows: fix fs.lstat to properly detect symlinks. (Igor Zinkovsky)
+
+* Fix #3270 Escape url.parse delims (isaacs)
+
+* http: make http.get() accept a URL (Adam Malcontenti-Wilson)
+
+* Cleanup vm module memory leakage (Marcel Laverdet)
+
+* Optimize writing strings with Socket.write (Bert Belder)
+
+* add support for CESU-8 and UTF-16LE encodings (koichik)
+
+* path: add path.sep to get the path separator. (Yi, EungJun)
+
+* net, http: add backlog parameter to .listen() (Erik Dubbelboer)
+
+* debugger: support mirroring Date objects (Fedor Indutny)
+
+* addon: add AtExit() function (Ben Noordhuis)
+
+* net: signal localAddress bind failure in connect (Brian Schroeder)
+
+* util: handle non-string return value in .inspect() (Alex Kocharin)
+
+
+2012.04.18, Version 0.7.8 (unstable), c2b47097c0b483552efc1947c6766fa1128600b6
+
+* Upgrade V8 to 3.9.24.9
+
+* Upgrade OpenSSL to 1.0.0f
+
+* Upgrade npm to 1.1.18
+
+* Show licenses in Binary installers
+
+* Domains (isaacs)
+
+* readline: rename "end" to "close" (Nathan Rajlich)
+
+* tcp: make getsockname() return address family as string (Shigeki Ohtsu)
+
+* http, https: fix .setTimeout() (ssuda)
+
+* os: add cross platform EOL character (Mustansir Golawala)
+
+* typed arrays: unexport SizeOfArrayElementForType() (Aaron Jacobs)
+
+* net: honor 'enable' flag in .setNoDelay() (Ben Noordhuis)
+
+* child_process: emit error when .kill fails (Andreas Madsen)
+
+* gyp: fix 'argument list too long' build error (Ben Noordhuis)
+
+* fs.WriteStream: Handle modifications to fs.open (isaacs)
+
+* repl, readline: Handle newlines better (Nathan Rajlich, Nathan Friedly)
+
+* build: target OSX 10.5 when building on darwin (Nathan Rajlich)
+
+* Fix #3052 Handle errors properly in zlib (isaacs)
+
+* build: add support for DTrace and postmortem (Dave Pacheco)
+
+* core: add reusable Slab allocator (Ben Noordhuis)
+
+
+2012.03.30, Version 0.7.7 (unstable), 5cda2542fdb086f9fe5de889bea435a65e377dea
 
 * Upgrade V8 to 3.9.24.7
 
@@ -212,6 +296,127 @@
 * Use isolates for internal debugger (Fedor Indutny)
 
 * Bug fixes
+
+
+2012.05.15 Version 0.6.18 (stable), 4bc1d395de6abed2cf1e4d0b7b3a1480a21c368f
+
+* windows: skip GetFileAttributes call when opening a file (Bert Belder)
+
+* crypto: add PKCS12/PFX support (Sambasiva Suda)
+
+* #3240: child_process: delete NODE_CHANNEL_FD from env in spawn (Ben Noordhuis)
+
+* windows: add test for path.normalize with UNC paths (Bert Belder)
+
+* windows: make path.normalize convert all slashes to backslashes (Bert Belder)
+
+* fs: Automatically close FSWatcher on error (Bert Belder)
+
+* #3258: fs.ReadStream.pause() emits duplicate data event (koichik)
+
+* pipe_wrap: don't assert() on pipe accept errors (Ben Noordhuis)
+
+* Better exception output for module load and process.nextTick (Felix Geisendörfer)
+
+* zlib: fix error reporting (Ben Noordhuis)
+
+* http: Don't destroy on timeout (isaacs)
+
+* #3231: http: Don't try to emit error on a null'ed req object (isaacs)
+
+* #3236: http: Refactor ClientRequest.onSocket (isaacs)
+
+
+2012.05.04 Version 0.6.17 (stable), 4ced23deaf36493f4303a18f6fdce768c58becc0
+
+* Upgrade npm to 1.1.21
+
+* uv: Add support for EROFS errors (Ben Noordhuis, Maciej Małecki)
+
+* uv: Add support for EIO and ENOSPC errors (Fedor Indutny)
+
+* windows: Add support for EXDEV errors (Bert Belder)
+
+* http: Fix client memory leaks (isaacs, Vincent Voyer)
+
+* fs: fix file descriptor leak in sync functions (Ben Noordhuis)
+
+* fs: fix ReadStream / WriteStream double close bug (Ben Noordhuis)
+
+
+2012.04.30 Version 0.6.16 (stable), a1d193963ddc80a27da5da01b59751e14e33d1d6
+
+* Upgrade V8 to 3.6.6.25
+
+* Upgrade npm to 1.1.19
+
+* Windows: add mappings for UV_ENOENT (Bert Belder)
+
+* linux: add IN_MOVE_SELF to inotify event mask (Ben Noordhuis)
+
+* unix: call pipe handle connection cb on accept() error (Ben Noordhuis)
+
+* unix: handle EWOULDBLOCK (Ben Noordhuis)
+
+* map EWOULDBLOCK to UV_EAGAIN (Ben Noordhuis)
+
+* Map ENOMEM to UV_ENOMEM (isaacs)
+
+* Child process: support the `gid` and `uid` options (Bert Belder)
+
+* test: cluster: add worker death event test (Ben Noordhuis)
+
+* typo in node_http_parser (isaacs)
+
+* http_parser: Eat CRLF between requests, even on connection:close. (Ben Noordhuis)
+
+* don't check return value of unsetenv (Ben Noordhuis)
+
+
+2012.04.09 Version 0.6.15 (stable), f160a45b254e591eb33716311c92be533c6d86c4
+
+* Update npm to 1.1.16
+
+* Show licenses in binary installers.
+
+* unix: add uv_fs_read64, uv_fs_write64 and uv_fs_ftruncate64 (Ben Noordhuis)
+
+* add 64bit offset fs functions (Igor Zinkovsky)
+
+* windows: don't report ENOTSOCK when attempting to bind an udp handle twice (Bert Belder)
+
+* windows: backport pipe-connect-to-file fixes from master (Bert Belder)
+
+* windows: never call fs event callbacks after closing the watcher (Bert Belder)
+
+* fs.readFile: don't make the callback before the fd is closed (Bert Belder)
+
+* windows: use 64bit offsets for uv_fs apis (Igor Zinkovsky)
+
+* Fix #2061: segmentation fault on OS X due to stat size mismatch (Ben Noordhuis)
+
+
+2012.03.22 Version 0.6.14 (stable), e513ffef7549a56a5af728e1f0c2c0c8f290518a
+
+* net: don't crash when queued write fails (Igor Zinkovsky)
+
+* sunos: fix EMFILE on process.memoryUsage() (Bryan Cantrill)
+
+* crypto: fix compile-time error with openssl 0.9.7e (Ben Noordhuis)
+
+* unix: ignore ECONNABORTED errors from accept() (Ben Noordhuis)
+
+* Add UV_ENOSPC and mappings to it (Bert Belder)
+
+* http-parser: Fix response body is not read (koichik)
+
+* Upgrade npm to 1.1.12
+  - upgrade node-gyp to 0.3.7
+  - work around AV-locked directories on Windows
+  - Fix isaacs/npm#2293 Don't try to 'uninstall' /
+  - Exclude symbolic links from packages.
+  - Fix isaacs/npm#2275 Spurious 'unresolvable cycle' error.
+  - Exclude/include dot files as if they were normal files
 
 
 2012.03.15 Version 0.6.13 (stable), 9f7f86b534f8556290eb8cad915984ff4ca54996

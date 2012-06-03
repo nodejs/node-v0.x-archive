@@ -75,6 +75,14 @@
 #define NODE_STRINGIFY_HELPER(n) #n
 #endif
 
+#ifndef STATIC_ASSERT
+#if defined(_MSC_VER)
+#  define STATIC_ASSERT(expr) static_assert(expr, "")
+# else
+#  define STATIC_ASSERT(expr) static_cast<void>((sizeof(char[-1 + !!(expr)])))
+# endif
+#endif
+
 namespace node {
 
 int Start(int argc, char *argv[]);
@@ -242,11 +250,28 @@ node_module_struct* get_builtin_module(const char *name);
 #define NODE_MODULE_DECL(modname) \
   extern "C" node::node_module_struct modname ## _module;
 
-NODE_EXTERN void SetErrno(uv_err_t err);
-NODE_EXTERN void MakeCallback(v8::Handle<v8::Object> object,
-                              const char* method,
-                              int argc,
-                              v8::Handle<v8::Value> argv[]);
+/* Called after the event loop exits but before the VM is disposed.
+ * Callbacks are run in reverse order of registration, i.e. newest first.
+ */
+NODE_EXTERN void AtExit(void (*cb)(void* arg), void* arg = 0);
 
+NODE_EXTERN void SetErrno(uv_err_t err);
+NODE_EXTERN v8::Handle<v8::Value>
+MakeCallback(const v8::Handle<v8::Object> object,
+             const char* method,
+             int argc,
+             v8::Handle<v8::Value> argv[]);
+
+NODE_EXTERN v8::Handle<v8::Value>
+MakeCallback(const v8::Handle<v8::Object> object,
+             const v8::Handle<v8::String> symbol,
+             int argc,
+             v8::Handle<v8::Value> argv[]);
+
+NODE_EXTERN v8::Handle<v8::Value>
+MakeCallback(const v8::Handle<v8::Object> object,
+             const v8::Handle<v8::Function> callback,
+             int argc,
+             v8::Handle<v8::Value> argv[]);
 }  // namespace node
 #endif  // SRC_NODE_H_

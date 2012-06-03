@@ -203,8 +203,9 @@ void RegExpMacroAssemblerIrregexp::PushBacktrack(Label* l) {
 }
 
 
-void RegExpMacroAssemblerIrregexp::Succeed() {
+bool RegExpMacroAssemblerIrregexp::Succeed() {
   Emit(BC_SUCCEED, 0);
+  return false;  // Restart matching for global regexp not supported.
 }
 
 
@@ -349,6 +350,42 @@ void RegExpMacroAssemblerIrregexp::CheckNotCharacterAfterMinusAnd(
   Emit16(minus);
   Emit16(mask);
   EmitOrLink(on_not_equal);
+}
+
+
+void RegExpMacroAssemblerIrregexp::CheckCharacterInRange(
+    uc16 from,
+    uc16 to,
+    Label* on_in_range) {
+  Emit(BC_CHECK_CHAR_IN_RANGE, 0);
+  Emit16(from);
+  Emit16(to);
+  EmitOrLink(on_in_range);
+}
+
+
+void RegExpMacroAssemblerIrregexp::CheckCharacterNotInRange(
+    uc16 from,
+    uc16 to,
+    Label* on_not_in_range) {
+  Emit(BC_CHECK_CHAR_NOT_IN_RANGE, 0);
+  Emit16(from);
+  Emit16(to);
+  EmitOrLink(on_not_in_range);
+}
+
+
+void RegExpMacroAssemblerIrregexp::CheckBitInTable(
+    Handle<ByteArray> table, Label* on_bit_set) {
+  Emit(BC_CHECK_BIT_IN_TABLE, 0);
+  EmitOrLink(on_bit_set);
+  for (int i = 0; i < kTableSize; i += kBitsPerByte) {
+    int byte = 0;
+    for (int j = 0; j < kBitsPerByte; j++) {
+      if (table->get(i + j) != 0) byte |= 1 << j;
+    }
+    Emit8(byte);
+  }
 }
 
 

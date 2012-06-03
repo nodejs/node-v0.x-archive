@@ -194,6 +194,8 @@ if (isWindows) {
   assert.equal(path.normalize('a//b//../b'), 'a\\b');
   assert.equal(path.normalize('a//b//./c'), 'a\\b\\c');
   assert.equal(path.normalize('a//b//.'), 'a\\b');
+  assert.equal(path.normalize('//server/share/dir/file.ext'),
+               '\\\\server\\share\\dir\\file.ext');
 } else {
   assert.equal(path.normalize('./fixtures///b/../b/c.js'),
                'fixtures/b/c.js');
@@ -273,3 +275,11 @@ relativeTests.forEach(function(test) {
 });
 assert.equal(failures.length, 0, failures.join(''));
 
+// path.sep tests
+if (isWindows) {
+    // windows
+    assert.equal(path.sep, '\\');
+} else {
+    // posix
+    assert.equal(path.sep, '/');
+}

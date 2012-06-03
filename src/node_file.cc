@@ -39,7 +39,6 @@
 # include <io.h>
 #endif
 
-
 namespace node {
 
 using namespace v8;
@@ -70,11 +69,20 @@ static Persistent<String> buf_symbol;
 static Persistent<String> oncomplete_sym;
 
 
-#ifdef _LARGEFILE_SOURCE
+#define ASSERT_OFFSET(a) \
+  if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
+    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
+  }
+#define ASSERT_TRUNCATE_LENGTH(a) \
+  if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
+    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
+  }
+#define GET_OFFSET(a) ((a)->IsNumber() ? (a)->IntegerValue() : -1)
+#define GET_TRUNCATE_LENGTH(a) ((a)->IntegerValue())
+
 static inline int IsInt64(double x) {
   return x == static_cast<double>(static_cast<int64_t>(x));
 }
-#endif
 
 
 static void After(uv_fs_t *req) {
@@ -82,9 +90,6 @@ static void After(uv_fs_t *req) {
 
   FSReqWrap* req_wrap = (FSReqWrap*) req->data;
   assert(&req_wrap->req_ == req);
-  Local<Value> callback_v = req_wrap->object_->Get(oncomplete_sym);
-  assert(callback_v->IsFunction());
-  Local<Function> callback = Local<Function>::Cast(callback_v);
 
   // there is always at least one argument. "error"
   int argc = 1;
@@ -196,13 +201,10 @@ static void After(uv_fs_t *req) {
     }
   }
 
-  TryCatch try_catch;
-
-  callback->Call(req_wrap->object_, argc, argv);
-
-  if (try_catch.HasCaught()) {
-    FatalException(try_catch);
+  if (oncomplete_sym.IsEmpty()) {
+    oncomplete_sym = NODE_PSYMBOL("oncomplete");
   }
+  MakeCallback(req_wrap->object_, oncomplete_sym, argc, argv);
 
   uv_fs_req_cleanup(&req_wrap->req_);
   delete req_wrap;
@@ -412,8 +414,13 @@ static Handle<Value> Symlink(const Arguments& args) {
 
   if (args[2]->IsString()) {
     String::Utf8Value mode(args[2]);
-    if (memcmp(*mode, "dir\0", 4) == 0) {
+    if (strcmp(*mode, "dir") == 0) {
       flags |= UV_FS_SYMLINK_DIR;
+    } else if (strcmp(*mode, "junction") == 0) {
+      flags |= UV_FS_SYMLINK_JUNCTION;
+    } else if (strcmp(*mode, "file") != 0) {
+      return ThrowException(Exception::Error(
+        String::New("Unknown symlink type")));
     }
   }
 
@@ -481,20 +488,6 @@ static Handle<Value> Rename(const Arguments& args) {
   }
 }
 
-#ifndef _LARGEFILE_SOURCE
-#define ASSERT_TRUNCATE_LENGTH(a) \
-  if (!(a)->IsUndefined() && !(a)->IsNull() && !(a)->IsUint32()) { \
-    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
-  }
-#define GET_TRUNCATE_LENGTH(a) ((a)->Uint32Value())
-#else
-#define ASSERT_TRUNCATE_LENGTH(a) \
-  if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
-    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
-  }
-#define GET_TRUNCATE_LENGTH(a) ((a)->IntegerValue())
-#endif
-
 static Handle<Value> Truncate(const Arguments& args) {
   HandleScope scope;
 
@@ -505,7 +498,7 @@ static Handle<Value> Truncate(const Arguments& args) {
   int fd = args[0]->Int32Value();
 
   ASSERT_TRUNCATE_LENGTH(args[1]);
-  off_t len = GET_TRUNCATE_LENGTH(args[1]);
+  int64_t len = GET_TRUNCATE_LENGTH(args[1]);
 
   if (args[2]->IsFunction()) {
     ASYNC_CALL(ftruncate, args[2], fd, len)
@@ -680,20 +673,6 @@ static Handle<Value> Open(const Arguments& args) {
   }
 }
 
-#ifndef _LARGEFILE_SOURCE
-#define ASSERT_OFFSET(a) \
-  if (!(a)->IsUndefined() && !(a)->IsNull() && !(a)->IsInt32()) { \
-    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
-  }
-#define GET_OFFSET(a) ((a)->IsNumber() ? (a)->Int32Value() : -1)
-#else
-#define ASSERT_OFFSET(a) \
-  if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
-    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
-  }
-#define GET_OFFSET(a) ((a)->IsNumber() ? (a)->IntegerValue() : -1)
-#endif
-
 // bytesWritten = write(fd, data, position, enc, callback)
 // Wrapper for write(2).
 //
@@ -734,7 +713,7 @@ static Handle<Value> Write(const Arguments& args) {
   }
 
   ASSERT_OFFSET(args[4]);
-  off_t pos = GET_OFFSET(args[4]);
+  int64_t pos = GET_OFFSET(args[4]);
 
   char * buf = (char*)buffer_data + off;
   Local<Value> cb = args[5];
@@ -771,7 +750,7 @@ static Handle<Value> Read(const Arguments& args) {
   Local<Value> cb;
 
   size_t len;
-  off_t pos;
+  int64_t pos;
 
   char * buf = NULL;
 
