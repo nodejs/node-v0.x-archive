@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node.h"
-#include "handle_wrap.h"
+#include "src/node.h"
+#include "src/handle_wrap.h"
 
 namespace node {
 
@@ -78,8 +78,8 @@ class TimerWrap : public HandleWrap {
     return scope.Close(args.This());
   }
 
-  TimerWrap(Handle<Object> object)
-      : HandleWrap(object, (uv_handle_t*) &handle_) {
+  explicit TimerWrap(Handle<Object> object)
+      : HandleWrap(object, reinterpret_cast<uv_handle_t*>(&handle_)) {
     int r = uv_timer_init(uv_default_loop(), &handle_);
     assert(r == 0);
     handle_.data = this;
