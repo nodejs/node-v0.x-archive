@@ -19,11 +19,14 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node_string.h"
+#include "src/node_string.h"
 
 namespace node {
 
-using namespace v8;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Local;
+using v8::String;
 
 Handle<String> ImmutableAsciiSource::CreateFromLiteral(
     const char *string_literal,
@@ -35,5 +38,4 @@ Handle<String> ImmutableAsciiSource::CreateFromLiteral(
       length));
   return scope.Close(ret);
 }
-
 }
