@@ -19,14 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "v8.h"
-#include "node.h"
-#include "node_buffer.h"
-#include "slab_allocator.h"
+#include "src/slab_allocator.h"
+
+#include <v8.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 
+#include "src/node.h"
+#include "src/node_buffer.h"
 
 using v8::Handle;
 using v8::HandleScope;
@@ -61,7 +62,7 @@ SlabAllocator::~SlabAllocator() {
 void SlabAllocator::Initialize() {
   HandleScope scope;
   char sym[256];
-  snprintf(sym, sizeof(sym), "slab_%p", this); // namespace object key
+  snprintf(sym, sizeof(sym), "slab_%p", this);  // namespace object key
   offset_ = 0;
   last_ptr_ = NULL;
   initialized_ = true;
@@ -127,4 +128,4 @@ Local<Object> SlabAllocator::Shrink(Handle<Object> obj,
 }
 
 
-} // namespace node
+}  // namespace node

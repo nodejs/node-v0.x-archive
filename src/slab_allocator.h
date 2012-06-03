@@ -19,13 +19,16 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "v8.h"
+#ifndef SRC_SLAB_ALLOCATOR_H_
+#define SRC_SLAB_ALLOCATOR_H_
+
+#include <v8.h>
 
 namespace node {
 
 class SlabAllocator {
-public:
-  SlabAllocator(unsigned int size = 10485760); // default to 10M
+ public:
+  explicit SlabAllocator(unsigned int size = 10485760);  // default to 10M
   ~SlabAllocator();
 
   // allocate memory from slab, attaches the slice to `obj`
@@ -36,7 +39,7 @@ public:
                                char* ptr,
                                unsigned int size);
 
-private:
+ private:
   void Initialize();
   bool initialized_;
   v8::Persistent<v8::Object> slab_;
@@ -46,4 +49,6 @@ private:
   char* last_ptr_;
 };
 
-} // namespace node
+}  // namespace node
+
+#endif  // SRC_SLAB_ALLOCATOR_H_
