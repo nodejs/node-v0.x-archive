@@ -20,10 +20,10 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "node.h"
-#include "node_os.h"
+#include "src/node.h"
+#include "src/node_os.h"
 
-#include "v8.h"
+#include <v8.h>
 
 #include <errno.h>
 #include <string.h>
@@ -39,7 +39,20 @@
 
 namespace node {
 
-using namespace v8;
+using v8::Arguments;
+using v8::Array;
+using v8::False;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Number;
+using v8::Object;
+using v8::String;
+using v8::ThrowException;
+using v8::True;
+using v8::Undefined;
+using v8::Value;
 
 static Handle<Value> GetHostname(const Arguments& args) {
   HandleScope scope;
@@ -49,9 +62,9 @@ static Handle<Value> GetHostname(const Arguments& args) {
   if (r < 0) {
 #ifdef __POSIX__
     return ThrowException(ErrnoException(errno, "gethostname"));
-#else // __MINGW32__
+#else  // __MINGW32__
     return ThrowException(ErrnoException(WSAGetLastError(), "gethostname"));
-#endif // __MINGW32__
+#endif  // __MINGW32__
   }
 
   return scope.Close(String::New(s));
@@ -69,7 +82,7 @@ static Handle<Value> GetOSType(const Arguments& args) {
   type[strlen(info.sysname)] = 0;
 
   return scope.Close(String::New(type));
-#else // __MINGW32__
+#else  // __MINGW32__
   return scope.Close(String::New("Windows_NT"));
 #endif
 }
@@ -85,7 +98,7 @@ static Handle<Value> GetOSRelease(const Arguments& args) {
   strncpy(release, info.release, strlen(info.release));
   release[strlen(info.release)] = 0;
 
-#else // __MINGW32__
+#else  // __MINGW32__
   OSVERSIONINFO info;
   info.dwOSVersionInfoSize = sizeof(info);
 
@@ -93,8 +106,15 @@ static Handle<Value> GetOSRelease(const Arguments& args) {
     return Undefined();
   }
 
-  sprintf(release, "%d.%d.%d", static_cast<int>(info.dwMajorVersion),
-      static_cast<int>(info.dwMinorVersion), static_cast<int>(info.dwBuildNumber));
+#ifdef _WIN32
+  _snprintf(
+#else
+  snprintf(
+#endif
+      release, sizeof(release), "%d.%d.%d",
+      static_cast<int>(info.dwMajorVersion),
+      static_cast<int>(info.dwMinorVersion),
+      static_cast<int>(info.dwBuildNumber));
 #endif
 
   return scope.Close(String::New(release));
@@ -130,7 +150,7 @@ static Handle<Value> GetCPUInfo(const Arguments& args) {
     cpu_info->Set(String::New("model"), String::New(cpu_infos[i].model));
     cpu_info->Set(String::New("speed"), Integer::New(cpu_infos[i].speed));
     cpu_info->Set(String::New("times"), times_info);
-    (*cpus)->Set(i,cpu_info);
+    (*cpus)->Set(i, cpu_info);
   }
 
   uv_free_cpu_info(cpu_infos, count);
@@ -214,7 +234,7 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
     }
 
     if (interfaces[i].address.address4.sin_family == AF_INET) {
-      uv_ip4_name(&interfaces[i].address.address4,ip, sizeof(ip));
+      uv_ip4_name(&interfaces[i].address.address4, ip, sizeof(ip));
       family = String::New("IPv4");
     } else if (interfaces[i].address.address4.sin_family == AF_INET6) {
       uv_ip6_name(&interfaces[i].address.address6, ip, sizeof(ip));
@@ -228,7 +248,7 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
     o->Set(String::New("address"), String::New(ip));
     o->Set(String::New("family"), family);
     o->Set(String::New("internal"), interfaces[i].is_internal ?
-	True() : False());
+  True() : False());
 
     ifarr->Set(ifarr->Length(), o);
   }
