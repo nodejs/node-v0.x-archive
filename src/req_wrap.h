@@ -19,10 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef REQ_WRAP_H_
-#define REQ_WRAP_H_
+#ifndef SRC_REQ_WRAP_H_
+#define SRC_REQ_WRAP_H_
 
-#include "ngx-queue.h"
+#include "src/ngx-queue.h"
 
 namespace node {
 
@@ -70,11 +70,11 @@ class ReqWrap {
   v8::Persistent<v8::Object> object_;
   ngx_queue_t req_wrap_queue_;
   void* data_;
-  T req_; // *must* be last, GetActiveRequests() in node.cc depends on it
+  T req_;  // *must* be last, GetActiveRequests() in node.cc depends on it
 };
 
 
 }  // namespace node
 
 
-#endif  // REQ_WRAP_H_
+#endif  // SRC_REQ_WRAP_H_
