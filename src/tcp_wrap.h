@@ -19,9 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef TCP_WRAP_H_
-#define TCP_WRAP_H_
-#include "stream_wrap.h"
+#ifndef SRC_TCP_WRAP_H_
+#define SRC_TCP_WRAP_H_
+#include "src/stream_wrap.h"
 
 namespace node {
 
@@ -34,7 +34,7 @@ class TCPWrap : public StreamWrap {
   uv_tcp_t* UVHandle();
 
  private:
-  TCPWrap(v8::Handle<v8::Object> object);
+  explicit TCPWrap(v8::Handle<v8::Object> object);
   ~TCPWrap();
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -50,7 +50,8 @@ class TCPWrap : public StreamWrap {
   static v8::Handle<v8::Value> Open(const v8::Arguments& args);
 
 #ifdef _WIN32
-  static v8::Handle<v8::Value> SetSimultaneousAccepts(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetSimultaneousAccepts(
+    const v8::Arguments& args);
 #endif
 
   static void OnConnection(uv_stream_t* handle, int status);
@@ -63,4 +64,4 @@ class TCPWrap : public StreamWrap {
 }  // namespace node
 
 
-#endif  // TCP_WRAP_H_
+#endif  // SRC_TCP_WRAP_H_

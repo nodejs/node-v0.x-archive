@@ -19,12 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node.h"
-#include "node_buffer.h"
-#include "req_wrap.h"
-#include "handle_wrap.h"
-#include "stream_wrap.h"
-#include "tcp_wrap.h"
+#include "src/tcp_wrap.h"
 
 #include <stdlib.h>
 
@@ -37,11 +32,17 @@
 # define uv_inet_pton ares_inet_pton
 # define uv_inet_ntop ares_inet_ntop
 
-#else // __POSIX__
+#else  // __POSIX__
 # include <arpa/inet.h>
 # define uv_inet_pton inet_pton
 # define uv_inet_ntop inet_ntop
 #endif
+
+#include "src/node.h"
+#include "src/node_buffer.h"
+#include "src/req_wrap.h"
+#include "src/handle_wrap.h"
+#include "src/stream_wrap.h"
 
 namespace node {
 
@@ -101,7 +102,8 @@ void TCPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "shutdown", StreamWrap::Shutdown);
 
   NODE_SET_PROTOTYPE_METHOD(t, "writeBuffer", StreamWrap::WriteBuffer);
-  NODE_SET_PROTOTYPE_METHOD(t, "writeAsciiString", StreamWrap::WriteAsciiString);
+  NODE_SET_PROTOTYPE_METHOD(t, "writeAsciiString",
+    StreamWrap::WriteAsciiString);
   NODE_SET_PROTOTYPE_METHOD(t, "writeUtf8String", StreamWrap::WriteUtf8String);
   NODE_SET_PROTOTYPE_METHOD(t, "writeUcs2String", StreamWrap::WriteUcs2String);
 
@@ -116,7 +118,8 @@ void TCPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setKeepAlive", SetKeepAlive);
 
 #ifdef _WIN32
-  NODE_SET_PROTOTYPE_METHOD(t, "setSimultaneousAccepts", SetSimultaneousAccepts);
+  NODE_SET_PROTOTYPE_METHOD(t, "setSimultaneousAccepts",
+    SetSimultaneousAccepts);
 #endif
 
   tcpConstructor = Persistent<Function>::New(t->GetFunction());
@@ -155,10 +158,10 @@ Handle<Value> TCPWrap::New(const Arguments& args) {
 
 
 TCPWrap::TCPWrap(Handle<Object> object)
-    : StreamWrap(object, (uv_stream_t*) &handle_) {
+    : StreamWrap(object, reinterpret_cast<uv_stream_t*>(&handle_)) {
   int r = uv_tcp_init(uv_default_loop(), &handle_);
-  assert(r == 0); // How do we proxy this error up to javascript?
-                  // Suggestion: uv_tcp_init() returns void.
+  assert(r == 0);  // How do we proxy this error up to javascript?
+                   // Suggestion: uv_tcp_init() returns void.
   UpdateWriteQueueSize();
 }
 
@@ -300,7 +303,8 @@ Handle<Value> TCPWrap::Listen(const Arguments& args) {
 
   int backlog = args[0]->Int32Value();
 
-  int r = uv_listen((uv_stream_t*)&wrap->handle_, backlog, OnConnection);
+  int r = uv_listen(reinterpret_cast<uv_stream_t*>(&wrap->handle_), backlog,
+    OnConnection);
 
   // Error starting the tcp.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
@@ -313,7 +317,7 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
   HandleScope scope;
 
   TCPWrap* wrap = static_cast<TCPWrap*>(handle->data);
-  assert(&wrap->handle_ == (uv_tcp_t*)handle);
+  assert(&wrap->handle_ == reinterpret_cast<uv_tcp_t*>(handle));
 
   // We should not be getting this callback if someone as already called
   // uv_close() on the handle.
@@ -330,7 +334,8 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
     TCPWrap* client_wrap =
         static_cast<TCPWrap*>(client_obj->GetPointerFromInternalField(0));
 
-    if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
+    if (uv_accept(handle,
+      reinterpret_cast<uv_stream_t*>(&client_wrap->handle_))) return;
 
     // Successful accept. Call the onconnection callback in JavaScript land.
     argv[0] = client_obj;
@@ -344,8 +349,8 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
 
 
 void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
-  ConnectWrap* req_wrap = (ConnectWrap*) req->data;
-  TCPWrap* wrap = (TCPWrap*) req->handle->data;
+  ConnectWrap* req_wrap = reinterpret_cast<ConnectWrap*>(req->data);
+  TCPWrap* wrap = reinterpret_cast<TCPWrap*>(req->handle->data);
 
   HandleScope scope;
 
