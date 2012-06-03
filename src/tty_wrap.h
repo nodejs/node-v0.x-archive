@@ -19,11 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef TTY_WRAP_H_
-#define TTY_WRAP_H_
+#ifndef SRC_TTY_WRAP_H_
+#define SRC_TTY_WRAP_H_
 
-#include "handle_wrap.h"
-#include "stream_wrap.h"
+#include "src/handle_wrap.h"
+#include "src/stream_wrap.h"
 
 namespace node {
 
@@ -53,6 +53,6 @@ class TTYWrap : StreamWrap {
   uv_tty_t handle_;
 };
 
-} // namespace node
+}  // namespace node
 
-#endif // TTY_WRAP_H_
+#endif  // SRC_TTY_WRAP_H_
