@@ -19,9 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef PIPE_WRAP_H_
-#define PIPE_WRAP_H_
-#include "stream_wrap.h"
+#ifndef SRC_PIPE_WRAP_H_
+#define SRC_PIPE_WRAP_H_
+#include "src/stream_wrap.h"
 
 namespace node {
 
@@ -56,4 +56,4 @@ class PipeWrap : StreamWrap {
 }  // namespace node
 
 
-#endif  // PIPE_WRAP_H_
+#endif  // SRC_PIPE_WRAP_H_

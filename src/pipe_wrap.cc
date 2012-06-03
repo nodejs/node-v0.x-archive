@@ -19,12 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node.h"
-#include "node_buffer.h"
-#include "req_wrap.h"
-#include "handle_wrap.h"
-#include "stream_wrap.h"
-#include "pipe_wrap.h"
+#include "src/node.h"
+#include "src/node_buffer.h"
+#include "src/req_wrap.h"
+#include "src/handle_wrap.h"
+#include "src/stream_wrap.h"
+#include "src/pipe_wrap.h"
 
 namespace node {
 
@@ -49,7 +49,7 @@ static Persistent<String> onconnection_sym;
 static Persistent<String> oncomplete_sym;
 
 
-// TODO share with TCPWrap?
+// TODO(ry): share with TCPWrap?
 typedef class ReqWrap<uv_connect_t> ConnectWrap;
 
 
@@ -90,7 +90,8 @@ void PipeWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "shutdown", StreamWrap::Shutdown);
 
   NODE_SET_PROTOTYPE_METHOD(t, "writeBuffer", StreamWrap::WriteBuffer);
-  NODE_SET_PROTOTYPE_METHOD(t, "writeAsciiString", StreamWrap::WriteAsciiString);
+  NODE_SET_PROTOTYPE_METHOD(t, "writeAsciiString",
+    StreamWrap::WriteAsciiString);
   NODE_SET_PROTOTYPE_METHOD(t, "writeUtf8String", StreamWrap::WriteUtf8String);
   NODE_SET_PROTOTYPE_METHOD(t, "writeUcs2String", StreamWrap::WriteUcs2String);
 
@@ -124,10 +125,10 @@ Handle<Value> PipeWrap::New(const Arguments& args) {
 
 
 PipeWrap::PipeWrap(Handle<Object> object, bool ipc)
-    : StreamWrap(object, (uv_stream_t*) &handle_) {
+    : StreamWrap(object, reinterpret_cast<uv_stream_t*>(&handle_)) {
   int r = uv_pipe_init(uv_default_loop(), &handle_, ipc);
-  assert(r == 0); // How do we proxy this error up to javascript?
-                  // Suggestion: uv_pipe_init() returns void.
+  assert(r == 0);  // How do we proxy this error up to javascript?
+                   // Suggestion: uv_pipe_init() returns void.
   handle_.data = reinterpret_cast<void*>(this);
   UpdateWriteQueueSize();
 }
@@ -171,7 +172,8 @@ Handle<Value> PipeWrap::Listen(const Arguments& args) {
 
   int backlog = args[0]->Int32Value();
 
-  int r = uv_listen((uv_stream_t*)&wrap->handle_, backlog, OnConnection);
+  int r = uv_listen(reinterpret_cast<uv_stream_t*>(&wrap->handle_), backlog,
+    OnConnection);
 
   // Error starting the pipe.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
@@ -180,12 +182,12 @@ Handle<Value> PipeWrap::Listen(const Arguments& args) {
 }
 
 
-// TODO maybe share with TCPWrap?
+// TODO(ry): maybe share with TCPWrap?
 void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   HandleScope scope;
 
   PipeWrap* wrap = static_cast<PipeWrap*>(handle->data);
-  assert(&wrap->handle_ == (uv_pipe_t*)handle);
+  assert(&wrap->handle_ == reinterpret_cast<uv_pipe_t*>(handle));
 
   // We should not be getting this callback if someone as already called
   // uv_close() on the handle.
@@ -205,7 +207,8 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   PipeWrap* client_wrap =
       static_cast<PipeWrap*>(client_obj->GetPointerFromInternalField(0));
 
-  if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
+  if (uv_accept(handle, reinterpret_cast<uv_stream_t*>(&client_wrap->handle_)))
+    return;
 
   // Successful accept. Call the onconnection callback in JavaScript land.
   Local<Value> argv[1] = { client_obj };
@@ -215,10 +218,10 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   MakeCallback(wrap->object_, onconnection_sym, ARRAY_SIZE(argv), argv);
 }
 
-// TODO Maybe share this with TCPWrap?
+// TODO(ry): Maybe share this with TCPWrap?
 void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
-  ConnectWrap* req_wrap = (ConnectWrap*) req->data;
-  PipeWrap* wrap = (PipeWrap*) req->handle->data;
+  ConnectWrap* req_wrap = reinterpret_cast<ConnectWrap*>(req->data);
+  PipeWrap* wrap = reinterpret_cast<PipeWrap*>(req->handle->data);
 
   HandleScope scope;
 
