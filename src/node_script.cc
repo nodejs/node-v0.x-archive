@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node.h"
-#include "node_script.h"
+#include "src/node.h"
+#include "src/node_script.h"
 #include <assert.h>
 
 namespace node {
@@ -111,19 +111,19 @@ void CloneObject(Handle<Object> recv,
   if (cloneObjectMethod.IsEmpty()) {
     Local<Function> cloneObjectMethod_ = Local<Function>::Cast(
       Script::Compile(String::New(
-        "(function(source, target) {\n\
+        "(function(source, target) {  // NOLINT(readability/multiline_string)\n\
            Object.getOwnPropertyNames(source).forEach(function(key) {\n\
            try {\n\
              var desc = Object.getOwnPropertyDescriptor(source, key);\n\
              if (desc.value === source) desc.value = target;\n\
              Object.defineProperty(target, key, desc);\n\
-           } catch (e) {\n\
+           } catch (e) {  // NOLINT(whitespace/parens)\n\
             // Catch sealed properties errors\n\
            }\n\
          });\n\
-        })"
-      ), String::New("binding:script"))->Run()
-    );
+        })" // NOLINT(readability/multiline_string)
+      ), String::New("binding:script"))->Run()  // NOLINT(whitespace/parens)
+    );  // NOLINT(whitespace/parens)
     cloneObjectMethod = Persistent<Function>::New(cloneObjectMethod_);
   }
 
@@ -321,8 +321,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
   const int sandbox_index = input_flag == compileCode ? 1 : 0;
   if (context_flag == userContext
-    && !WrappedContext::InstanceOf(args[sandbox_index]))
-  {
+    && !WrappedContext::InstanceOf(args[sandbox_index])) {
     return ThrowException(Exception::TypeError(
           String::New("needs a 'context' argument.")));
   }
