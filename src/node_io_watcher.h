@@ -19,10 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_IO_H_
-#define NODE_IO_H_
+#ifndef SRC_NODE_IO_WATCHER_H_
+#define SRC_NODE_IO_WATCHER_H_
 
-#include "node_object_wrap.h"
+#include "src/node_object_wrap.h"
 #include "uv-private/ev.h"
 
 namespace node {
@@ -40,7 +40,7 @@ class IOWatcher : ObjectWrap {
   }
 
   ~IOWatcher() {
-    ev_io_stop(EV_DEFAULT_UC_ &watcher_);
+    ev_io_stop(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
     assert(!ev_is_active(&watcher_));
     assert(!ev_is_pending(&watcher_));
   }
@@ -60,5 +60,5 @@ class IOWatcher : ObjectWrap {
 };
 
 }  // namespace node
-#endif  // NODE_IO_H_
+#endif  // SRC_NODE_IO_WATCHER_H_
 

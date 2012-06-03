@@ -19,16 +19,30 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node_io_watcher.h"
+#include "src/node_io_watcher.h"
 
-#include "node.h"
-#include "v8.h"
-
+#include <v8.h>
 #include <assert.h>
+
+#include "src/node.h"
 
 namespace node {
 
-using namespace v8;
+using v8::Arguments;
+using v8::Exception;
+using v8::False;
+using v8::Function;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Local;
+using v8::Object;
+using v8::Persistent;
+using v8::String;
+using v8::ThrowException;
+using v8::True;
+using v8::Undefined;
+using v8::Value;
 
 Persistent<FunctionTemplate> IOWatcher::constructor_template;
 Persistent<String> callback_symbol;
@@ -46,7 +60,8 @@ void IOWatcher::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "stop", IOWatcher::Stop);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "set", IOWatcher::Set);
 
-  target->Set(String::NewSymbol("IOWatcher"), constructor_template->GetFunction());
+  target->Set(String::NewSymbol("IOWatcher"),
+    constructor_template->GetFunction());
 
   callback_symbol = NODE_PSYMBOL("callback");
 }
@@ -109,7 +124,7 @@ Handle<Value> IOWatcher::Stop(const Arguments& args) {
 
 void IOWatcher::Start() {
   if (!ev_is_active(&watcher_)) {
-    ev_io_start(EV_DEFAULT_UC_ &watcher_);
+    ev_io_start(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
     Ref();
   }
 }
@@ -117,7 +132,7 @@ void IOWatcher::Start() {
 
 void IOWatcher::Stop() {
   if (ev_is_active(&watcher_)) {
-    ev_io_stop(EV_DEFAULT_UC_ &watcher_);
+    ev_io_stop(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
     Unref();
   }
 }
