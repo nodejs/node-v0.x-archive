@@ -114,6 +114,7 @@ if errorlevel 1 echo Failed to generate license.rtf&goto exit
 @rem Skip msi generation if not requested
 if not defined msi goto run
 python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
+copy "%~dp0tools\msvs\nodejsvars.bat" %config%\nodejsvars.bat
 if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
 for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
 msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:Configuration=%config% /p:Platform=%msiplatform% /p:NodeVersion=%NODE_VERSION% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
