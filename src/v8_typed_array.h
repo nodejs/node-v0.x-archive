@@ -19,10 +19,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-#ifndef V8_TYPED_ARRAY_H_
-#define V8_TYPED_ARRAY_H_
+#ifndef SRC_V8_TYPED_ARRAY_H_
+#define SRC_V8_TYPED_ARRAY_H_
 
-#include "v8.h"
+#include <v8.h>
 
 namespace v8_typed_array {
 
@@ -30,4 +30,4 @@ void AttachBindings(v8::Handle<v8::Object> obj);
 
 }  // namespace v8_typed_array
 
-#endif  // V8_TYPED_ARRAY_H_
+#endif  // SRC_V8_TYPED_ARRAY_H_

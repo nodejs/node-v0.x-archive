@@ -22,10 +22,10 @@
 #include <stdlib.h>  // calloc, etc
 #include <string.h>  // memmove
 
-#include "v8_typed_array.h"
-#include "node_buffer.h"
-#include "node.h"
-#include "v8.h"
+#include <v8.h>
+#include "src/v8_typed_array.h"
+#include "src/node_buffer.h"
+#include "src/node.h"
 
 namespace {
 
@@ -238,8 +238,7 @@ class TypedArray {
 
       args.This()->SetIndexedPropertiesToExternalArrayData(
         begin, TEAType, length);
-    }
-    else if (args[0]->IsObject()) {  // TypedArray / type[] constructor.
+    } else if (args[0]->IsObject()) {  // TypedArray / type[] constructor.
       v8::Local<v8::Object> obj = v8::Local<v8::Object>::Cast(args[0]);
       length = obj->Get(v8::String::New("length"))->Uint32Value();
 
@@ -248,7 +247,7 @@ class TypedArray {
           v8::Integer::NewFromUnsigned(length * TBytes)};
       buffer = ArrayBuffer::GetTemplate()->
                  GetFunction()->NewInstance(1, argv);
-      if (buffer.IsEmpty()) return v8::Undefined(); // constructor failed
+      if (buffer.IsEmpty()) return v8::Undefined();  // constructor failed
 
       void* buf = buffer->GetPointerFromInternalField(0);
       args.This()->SetIndexedPropertiesToExternalArrayData(
@@ -277,7 +276,7 @@ class TypedArray {
 
       buffer = ArrayBuffer::GetTemplate()->
                  GetFunction()->NewInstance(1, argv);
-      if (buffer.IsEmpty()) return v8::Undefined(); // constructor failed
+      if (buffer.IsEmpty()) return v8::Undefined();  // constructor failed
 
       void* buf = buffer->GetPointerFromInternalField(0);
       args.This()->SetIndexedPropertiesToExternalArrayData(
@@ -314,9 +313,9 @@ class TypedArray {
       else if (TEAType == v8::kExternalUnsignedByteArray)
         return v8::Integer::New(reinterpret_cast<unsigned char*>(ptr)[index]);
       else if (TEAType == v8::kExternalShortArray)
-        return v8::Integer::New(reinterpret_cast<short*>(ptr)[index]);
+        return v8::Integer::New(reinterpret_cast<int16_t*>(ptr)[index]);
       else if (TEAType == v8::kExternalUnsignedShortArray)
-        return v8::Integer::New(reinterpret_cast<unsigned short*>(ptr)[index]);
+        return v8::Integer::New(reinterpret_cast<uint16_t*>(ptr)[index]);
       else if (TEAType == v8::kExternalIntArray)
         return v8::Integer::New(reinterpret_cast<int*>(ptr)[index]);
       else if (TEAType == v8::kExternalUnsignedIntArray)
@@ -333,7 +332,7 @@ class TypedArray {
     if (args.Length() < 1)
       return ThrowError("Wrong number of arguments.");
 
-    //if (!args[0]->IsObject())
+    // if (!args[0]->IsObject())
     //  return ThrowTypeError("Type error.");
 
     if (args[0]->IsNumber()) {
@@ -341,24 +340,29 @@ class TypedArray {
       unsigned int index = args[0]->Uint32Value();
       void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
       if (TEAType == v8::kExternalByteArray)
-        reinterpret_cast<char*>(ptr)[index] = (char) args[1]->Int32Value();
+        reinterpret_cast<char*>(ptr)[index] =
+            static_cast<char>(args[1]->Int32Value());
       else if (TEAType == v8::kExternalUnsignedByteArray)
         reinterpret_cast<unsigned char*>(ptr)[index] =
             (unsigned char) args[1]->Int32Value();
       else if (TEAType == v8::kExternalShortArray)
-        reinterpret_cast<short*>(ptr)[index] = (short) args[1]->Int32Value();
+        reinterpret_cast<int16_t*>(ptr)[index] =
+            (int16_t) args[1]->Int32Value();
       else if (TEAType == v8::kExternalUnsignedShortArray)
-        reinterpret_cast<unsigned short*>(ptr)[index] =
-            (unsigned short) args[1]->Int32Value();
+        reinterpret_cast<uint16_t*>(ptr)[index] =
+            (uint16_t) args[1]->Int32Value();
       else if (TEAType == v8::kExternalIntArray)
-        reinterpret_cast<int*>(ptr)[index] = (int) args[1]->Int32Value();
+        reinterpret_cast<int*>(ptr)[index] =
+            static_cast<int>(args[1]->Int32Value());
       else if (TEAType == v8::kExternalUnsignedIntArray)
         reinterpret_cast<unsigned int*>(ptr)[index] =
             (unsigned int) args[1]->Int32Value();
       else if (TEAType == v8::kExternalFloatArray)
-        reinterpret_cast<float*>(ptr)[index] = (float) args[1]->NumberValue();
+        reinterpret_cast<float*>(ptr)[index] =
+            static_cast<float>(args[1]->NumberValue());
       else if (TEAType == v8::kExternalDoubleArray)
-        reinterpret_cast<double*>(ptr)[index] = (double) args[1]->NumberValue();
+        reinterpret_cast<double*>(ptr)[index] =
+            static_cast<double>(args[1]->NumberValue());
       else if (TEAType == v8::kExternalPixelArray) {
         int value = args[1]->Int32Value();
         if (value < 0)
@@ -386,8 +390,8 @@ class TypedArray {
         if (src_length > dst_length - offset)
           return ThrowRangeError("Offset/length out of range.");
 
-        // We don't want to get the buffer pointer, because that means we'll have
-        // to just do the calculations for byteOffset / byteLength again.
+        // We don't want to get the buffer pointer, because that means we'll
+        // have to just do the calculations for byteOffset / byteLength again.
         // Instead just use the pointer on the external array data.
         void* src_ptr = obj->GetIndexedPropertiesExternalArrayData();
         void* dst_ptr = args.This()->GetIndexedPropertiesExternalArrayData();
@@ -502,12 +506,12 @@ v8::Handle<v8::Value> cTypeToValue(char val) {
 }
 
 template <>
-v8::Handle<v8::Value> cTypeToValue(unsigned short val) {
+v8::Handle<v8::Value> cTypeToValue(uint16_t val) {
   return v8::Integer::NewFromUnsigned(val);
 }
 
 template <>
-v8::Handle<v8::Value> cTypeToValue(short val) {
+v8::Handle<v8::Value> cTypeToValue(int16_t val) {
   return v8::Integer::New(val);
 }
 
@@ -548,12 +552,12 @@ char valueToCType(v8::Handle<v8::Value> value) {
 }
 
 template <>
-unsigned short valueToCType(v8::Handle<v8::Value> value) {
+uint16_t valueToCType(v8::Handle<v8::Value> value) {
   return value->Uint32Value();
 }
 
 template <>
-short valueToCType(v8::Handle<v8::Value> value) {
+int16_t valueToCType(v8::Handle<v8::Value> value) {
   return value->Int32Value();
 }
 
@@ -762,11 +766,11 @@ class DataView {
   }
 
   static v8::Handle<v8::Value> getUint16(const v8::Arguments& args) {
-    return getGeneric<unsigned short>(args);
+    return getGeneric<uint16_t>(args);
   }
 
   static v8::Handle<v8::Value> getInt16(const v8::Arguments& args) {
-    return getGeneric<short>(args);
+    return getGeneric<int16_t>(args);
   }
 
   static v8::Handle<v8::Value> getUint32(const v8::Arguments& args) {
@@ -794,11 +798,11 @@ class DataView {
   }
 
   static v8::Handle<v8::Value> setUint16(const v8::Arguments& args) {
-    return setGeneric<unsigned short>(args);
+    return setGeneric<uint16_t>(args);
   }
 
   static v8::Handle<v8::Value> setInt16(const v8::Arguments& args) {
-    return setGeneric<short>(args);
+    return setGeneric<int16_t>(args);
   }
 
   static v8::Handle<v8::Value> setUint32(const v8::Arguments& args) {
