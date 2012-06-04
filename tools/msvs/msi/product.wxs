@@ -65,7 +65,7 @@
           </Component>
           <?endif?>
           <Component Id="nodejsvars" Guid="*">
-            <File Id="filenodejsvars" KeyPath="yes" Source="$(var.sourcedir)\nodejsvars.bat" />
+            <File Id="filenodejsvars" KeyPath="yes" Source="$(var.repoDir)\tools\msvs\nodejsvars.bat" />
           </Component>
         </Directory>
       </Directory>
