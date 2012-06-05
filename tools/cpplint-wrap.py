@@ -8,7 +8,8 @@ excludes = [
 	'src{0}{1}'.format(os.sep, 'node_extensions.h'),
 	'src{0}{1}'.format(os.sep, 'node_root_certs.h'),
 	'src{0}{1}'.format(os.sep, 'v8_typed_array.cc'),
-	'src{0}{1}'.format(os.sep, 'v8_typed_array.h')
+	'src{0}{1}'.format(os.sep, 'v8_typed_array.h'),
+	'src{0}{1}'.format(os.sep, 'v8abbr.h')
 ]
 
 lintfiles = filter(lambda x: excludes.count(x) == 0,
@@ -19,7 +20,8 @@ run_args = [
 	['--filter=-whitespace/line_length', 'src/node_root_certs.h'],
 	['--filter=-legal/copyright',
 		'src/v8_typed_array.cc',
-		'src/v8_typed_array.h'
+		'src/v8_typed_array.h',
+		'src/v8abbr.h'
 	],
 	lintfiles # no filters for the "regular" files
 ]

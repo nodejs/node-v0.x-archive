@@ -3,8 +3,8 @@
  * helper.
  */
 
-#ifndef V8_ABBR_H
-#define V8_ABBR_H
+#ifndef SRC_V8ABBR_H_
+#define SRC_V8ABBR_H_
 
 /* Frame pointer offsets */
 #define V8_OFF_FP_FUNC              ((uint32_t)V8DBG_OFF_FP_FUNCTION)
@@ -83,4 +83,4 @@
 #define V8_OFF_MAP_ATTRS  \
     V8_OFF_HEAP(V8DBG_CLASS_MAP__INSTANCE_ATTRIBUTES__INT)
 
-#endif /* V8_ABBR_H */
+#endif  // SRC_V8ABBR_H_
