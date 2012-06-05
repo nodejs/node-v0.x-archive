@@ -4,7 +4,7 @@
  */
 
 
-#ifndef NGX_QUEUE_H_INCLUDED_
+#ifndef NGX_QUEUE_H_INCLUDED_  // NOLINT(build/header_guard)
 #define NGX_QUEUE_H_INCLUDED_
 
 
@@ -96,11 +96,11 @@ struct ngx_queue_s {
 
 
 #define ngx_queue_data(q, type, link)                                         \
-    (type *) ((unsigned char *) q - offsetof(type, link))
+    (type *) ((unsigned char *) q - offsetof(type, link))  // NOLINT
 
 
 #define ngx_queue_foreach(q, h)                                               \
     for ((q) = ngx_queue_head(h); (q) != (h); (q) = ngx_queue_next(q))
 
 
-#endif /* NGX_QUEUE_H_INCLUDED_ */
+#endif /* NGX_QUEUE_H_INCLUDED_ */  // NOLINT(build/header_guard)
