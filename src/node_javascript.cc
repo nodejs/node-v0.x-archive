@@ -19,16 +19,20 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "v8.h"
-#include "node.h"
-#include "node_natives.h"
-#include "node_string.h"
+#include <v8.h>
+#include <node_natives.h>
 #include <string.h>
 #if !defined(_MSC_VER)
 #include <strings.h>
 #endif
 
-using namespace v8;
+#include "src/node.h"
+#include "src/node_string.h"
+
+using v8::Handle;
+using v8::HandleScope;
+using v8::Local;
+using v8::String;
 
 namespace node {
 
@@ -42,7 +46,8 @@ void DefineJavaScript(v8::Handle<v8::Object> target) {
   for (int i = 0; natives[i].name; i++) {
     if (natives[i].source != node_native) {
       Local<String> name = String::New(natives[i].name);
-      Handle<String> source = BUILTIN_ASCII_ARRAY(natives[i].source, natives[i].source_len);
+      Handle<String> source = BUILTIN_ASCII_ARRAY(natives[i].source,
+        natives[i].source_len);
       target->Set(name, source);
     }
   }
