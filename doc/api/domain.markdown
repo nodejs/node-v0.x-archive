@@ -119,8 +119,9 @@ Returns a new Domain object.
 The Domain class encapsulates the functionality of routing errors and
 uncaught exceptions to the active Domain object.
 
-Domain is a child class of EventEmitter.  To handle the errors that it
-catches, listen to its `error` event.
+Domain is a child class of
+[EventEmitter](events.html#events_class_events_eventemitter).  To handle the
+errors that it catches, listen to its `error` event.
 
 ### domain.run(fn)
 

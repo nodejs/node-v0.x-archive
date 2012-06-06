@@ -14,7 +14,7 @@ different, and explained below.
 
 ## Class: ChildProcess
 
-`ChildProcess` is an `EventEmitter`.
+`ChildProcess` is an [EventEmitter](events.html#events_class_events_eventemitter).
 
 Child processes always have three streams associated with them. `child.stdin`,
 `child.stdout`, and `child.stderr`.  These may be shared with the stdio

@@ -207,7 +207,8 @@ The number of concurrent connections on the server.
 
 This becomes `null` when sending a socket to a child with `child_process.fork()`.
 
-`net.Server` is an `EventEmitter` with the following events:
+`net.Server` is an [EventEmitter](events.html#events_class_events_eventemitter)
+with the following events:
 
 ### Event: 'listening'
 
@@ -392,7 +393,8 @@ The amount of received bytes.
 The amount of bytes sent.
 
 
-`net.Socket` instances are EventEmitters with the following events:
+`net.Socket` instances are [EventEmitter](events.html#events_class_events_eventemitter)
+with the following events:
 
 ### Event: 'connect'
 

@@ -48,7 +48,8 @@ HTTP client. `port` and `host` refer to the server to be connected to.
 
 ## Class: http.Server
 
-This is an `EventEmitter` with the following events:
+This is an [EventEmitter](events.html#events_class_events_eventemitter) with
+the following events:
 
 ### Event: 'request'
 
@@ -176,7 +177,8 @@ This object is created internally by a HTTP server -- not by
 the user -- and passed as the first argument to a `'request'` listener.
 
 The request implements the [Readable Stream](stream.html#readable_stream)
-interface. This is an `EventEmitter` with the following events:
+interface. This is an [EventEmitter](events.html#events_class_events_eventemitter)
+with the following events:
 
 ### Event: 'data'
 
@@ -296,7 +298,8 @@ This object is created internally by a HTTP server--not by the user. It is
 passed as the second parameter to the `'request'` event.
 
 The response implements the [Writable  Stream](stream.html#writable_stream)
-interface. This is an `EventEmitter` with the following events:
+interface. This is an [EventEmitter](events.html#events_class_events_eventemitter)
+with the following events:
 
 ### Event: 'close'
 
@@ -635,7 +638,8 @@ Note: Node does not check whether Content-Length and the length of the body
 which has been transmitted are equal or not.
 
 The request implements the [Writable  Stream](stream.html#writable_stream)
-interface. This is an `EventEmitter` with the following events:
+interface. This is an [EventEmitter](events.html#events_class_events_eventemitter)
+with the following events:
 
 ### Event 'response'
 
@@ -827,7 +831,8 @@ This object is created when making a request with `http.request()`. It is
 passed to the `'response'` event of the request object.
 
 The response implements the [Readable Stream](stream.html#readable_stream)
-interface. This is an `EventEmitter` with the following events:
+interface. This is an [EventEmitter](events.html#events_class_events_eventemitter)
+with the following events:
 
 
 ### Event: 'data'

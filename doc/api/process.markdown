@@ -3,7 +3,7 @@
 <!-- type=global -->
 
 The `process` object is a global object and can be accessed from anywhere.
-It is an instance of `EventEmitter`.
+It is an instance of [EventEmitter](events.html#events_class_events_eventemitter).
 
 
 ## Event: 'exit'
