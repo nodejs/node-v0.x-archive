@@ -59,6 +59,9 @@ class TimerWrap : public HandleWrap {
     NODE_SET_PROTOTYPE_METHOD(constructor, "getRepeat", GetRepeat);
     NODE_SET_PROTOTYPE_METHOD(constructor, "again", Again);
 
+    NODE_SET_PROTOTYPE_METHOD(constructor, "ref", HandleWrap::Ref);
+    NODE_SET_PROTOTYPE_METHOD(constructor, "unref", HandleWrap::Unref);
+
     ontimeout_sym = NODE_PSYMBOL("ontimeout");
 
     target->Set(String::NewSymbol("Timer"), constructor->GetFunction());
