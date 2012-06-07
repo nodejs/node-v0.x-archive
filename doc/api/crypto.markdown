@@ -112,7 +112,7 @@ Creates and returns a cipher object, with the given algorithm and password.
 On recent releases, `openssl list-cipher-algorithms` will display the
 available cipher algorithms.
 `password` is used to derive key and IV, which must be `'binary'` encoded
-string (See the [Buffer section](buffer.html) for more information).
+string (See the [Buffer section][] for more information).
 
 ## crypto.createCipheriv(algorithm, key, iv)
 
@@ -120,7 +120,7 @@ Creates and returns a cipher object, with the given algorithm, key and iv.
 
 `algorithm` is the same as the `createCipher()`. `key` is a raw key used in
 algorithm. `iv` is an Initialization vector. `key` and `iv` must be `'binary'`
-encoded string (See the [Buffer section](buffer.html) for more information).
+encoded string (See the [Buffer section][] for more information).
 
 ## Class: Cipher
 
@@ -156,12 +156,12 @@ Useful for non-standard padding, e.g. using `0x0` instead of PKCS padding. You m
 ## crypto.createDecipher(algorithm, password)
 
 Creates and returns a decipher object, with the given algorithm and key.
-This is the mirror of the [createCipher()](#crypto.createCipher) above.
+This is the mirror of the [createCipher()][] above.
 
 ## crypto.createDecipheriv(algorithm, key, iv)
 
 Creates and returns a decipher object, with the given algorithm, key and iv.
-This is the mirror of the [createCipheriv()](#crypto.createCipheriv) above.
+This is the mirror of the [createCipheriv()][] above.
 
 ## Class: Decipher
 
@@ -313,13 +313,13 @@ or `'base64'`. Defaults to `'binary'`.
 
 Creates a predefined Diffie-Hellman key exchange object.
 The supported groups are: `'modp1'`, `'modp2'`, `'modp5'`
-(defined in [RFC 2412](http://www.rfc-editor.org/rfc/rfc2412.txt ))
+(defined in [RFC 2412][])
 and `'modp14'`, `'modp15'`, `'modp16'`, `'modp17'`, `'modp18'`
-(defined in [RFC 3526](http://www.rfc-editor.org/rfc/rfc3526.txt )).
+(defined in [RFC 3526][]).
 The returned object mimics the interface of objects created by
-[crypto.createDiffieHellman()](#crypto.createDiffieHellman) above, but
+[crypto.createDiffieHellman()][] above, but
 will not allow to change the keys (with
-[diffieHellman.setPublicKey()](#diffieHellman.setPublicKey) for example).
+[diffieHellman.setPublicKey()][] for example).
 The advantage of using this routine is that the parties don't have to
 generate nor exchange group modulus beforehand, saving both processor and
 communication time.
@@ -362,3 +362,11 @@ Generates cryptographically strong pseudo-random data. Usage:
     } catch (ex) {
       // handle error
     }
+
+[Buffer section]: buffer.html
+[createCipher()]: #crypto_crypto_createcipher_algorithm_password
+[createCipheriv()]: #crypto_crypto_createcipheriv_algorithm_key_iv
+[crypto.createDiffieHellman()]: #crypto_crypto_creatediffiehellman_prime_encoding
+[diffieHellman.setPublicKey()]: #crypto_diffiehellman_setpublickey_public_key_encoding
+[RFC 2412]: http://www.rfc-editor.org/rfc/rfc2412.txt
+[RFC 3526]: http://www.rfc-editor.org/rfc/rfc3526.txt
