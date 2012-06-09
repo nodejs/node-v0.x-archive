@@ -16,11 +16,11 @@ endif
 # to check for changes.
 .PHONY: node node_g
 
-node: config.gypi
+node: config.gypi cpplint
 	$(MAKE) -C out BUILDTYPE=Release
 	ln -fs out/Release/node node
 
-node_g: config.gypi
+node_g: config.gypi cpplint
 	$(MAKE) -C out BUILDTYPE=Debug
 	ln -fs out/Debug/node node_g
 
@@ -244,8 +244,11 @@ bench-idle:
 jslint:
 	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
-cpplint:
-	@$(PYTHON) tools/cpplint-wrap.py
+.cpplintstamp: $(wildcard src/*.cc src/*.h src/*.c)
+	@-$(PYTHON) tools/cpplint-wrap.py
+	@touch $@
+
+cpplint: .cpplintstamp
 
 lint: jslint cpplint
 
