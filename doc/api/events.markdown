@@ -47,6 +47,20 @@ it is removed.
       console.log('Ah, we have our first user!');
     });
 
+### emitter.onAny(listener)
+
+Adds a listener for the "*" event type. This event type will be emitted on every event.
+
+    server.onAny(function (eventType, arg1, arg2) {
+      console.log('server emitter event type ', eventType);
+    });
+
+This is equivalent to:
+
+    server.on("*", function (eventType, arg1, arg2) {
+      console.log('server emitter event type ', eventType);
+    });
+
 ### emitter.removeListener(event, listener)
 
 Remove a listener from the listener array for the specified event.
@@ -64,6 +78,21 @@ Remove a listener from the listener array for the specified event.
 
 Removes all listeners, or those of the specified event.
 
+### emitter.removeAnyListener(listener)
+
+Removes a listener of the "*" event.
+
+    var callback = function(eventType, arg1, arg2) {
+      console.log('server emitter event type ', eventType);
+    };
+
+    server.onAny(callback);
+
+    server.removeAnyListener(callback);
+
+This last line is equivalent to:
+
+    server.removeListener("*", callback);
 
 ### emitter.setMaxListeners(n)
 
