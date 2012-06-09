@@ -37,8 +37,8 @@ d.on('error', function(er) {
   switch (er.message) {
     case "ENOENT, open 'this file does not exist'":
       assert.equal(er.domain, d);
-      assert.equal(er.domain_thrown, true);
-      assert.ok(!er.domain_emitter);
+      assert.equal(er.domainThrown, true);
+      assert.ok(!er.domainEmitter);
       assert.equal(er.code, 'ENOENT');
       assert.equal(er.path, 'this file does not exist');
       assert.equal(typeof er.errno, 'number');
