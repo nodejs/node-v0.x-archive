@@ -672,6 +672,23 @@ static Handle<Value> Open(const Arguments& args) {
     return scope.Close(Integer::New(fd));
   }
 }
+static Handle<Value> Exists(const Arguments& args) {
+  HandleScope scope;
+  
+  int len = args.Length();
+  if (len < 1) return TYPE_ERROR("path required dude");
+  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+  
+  String::AsciiValue path(args[0]);
+  char * str = (char *) malloc(path.length() + 1);
+  strcpy(str, *path);
+  if (FILE * file = fopen(str, "r"))
+  {
+    fclose(file);
+    return scope.Close(True());
+  }
+  return scope.Close(False());
+}
 
 // bytesWritten = write(fd, data, position, enc, callback)
 // Wrapper for write(2).
@@ -951,6 +968,7 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "stat", Stat);
   NODE_SET_METHOD(target, "lstat", LStat);
   NODE_SET_METHOD(target, "fstat", FStat);
+  NODE_SET_METHOD(target, "exists", Exists);
   NODE_SET_METHOD(target, "link", Link);
   NODE_SET_METHOD(target, "symlink", Symlink);
   NODE_SET_METHOD(target, "readlink", ReadLink);
