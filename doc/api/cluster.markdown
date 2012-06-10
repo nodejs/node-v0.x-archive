@@ -74,7 +74,7 @@ If the `process.env.NODE_UNIQUE_ID` is set to a value, then
 * `worker` {Worker object}
 
 When a new worker is forked the cluster module will emit a 'fork' event.
-This can be used to log worker activity, and create you own timeout.
+This can be used to log worker activity, or to create your own timeout.
 
     var timeouts = [];
     function errorMsg() {
@@ -112,7 +112,7 @@ being executed.
 * `address` {Object}
 
 When calling `listen()` from a worker, a 'listening' event is automatically assigned
-to the server instance. When the server is listening a message is send to the master
+to the server instance. When the server is listening a message is sent to the master
 where the 'listening' event is emitted.
 
 The event handler is executed with two arguments, the `worker` contains the worker
@@ -219,7 +219,7 @@ The method takes an optional callback argument which will be called when finishe
 
 * {Object}
 
-In the cluster all living worker objects are stored in this object by there
+In the cluster, all living worker objects are stored in this object with their
 `uniqueID` as the key. This makes it easy to loop through all living workers.
 
     // Go through all workers
@@ -307,7 +307,6 @@ and accidental exit.
 
     // destroy worker
     worker.destroy();
-
 
 ### worker.disconnect()
 
@@ -406,7 +405,7 @@ in the master process using the message system:
 
 ### Event: 'online'
 
-Same as the `cluster.on('online')` event, but emits only when the state change
+Same as the `cluster.on('online')` event, but emits only when the state changes
 on the specified worker.
 
     cluster.fork().on('online', function() {
@@ -417,7 +416,7 @@ on the specified worker.
 
 * `address` {Object}
 
-Same as the `cluster.on('listening')` event, but emits only when the state change
+Same as the `cluster.on('listening')` event, but emits only when the state changes
 on the specified worker.
 
     cluster.fork().on('listening', function(address) {

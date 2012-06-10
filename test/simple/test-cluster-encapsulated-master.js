@@ -32,59 +32,51 @@ if (cluster.isWorker) {
 } else if (cluster.isMaster) {
 
   var checks = {
-    args: false,
-    setupEvent: false,
-    settingsObject: false
+    globalMasterArgs    : false,
+    localMasterArgs     : false,
+    globalMasterWorkers : 0,
+    localMasterWorkers  : 0
   };
 
-  var totalWorkers = 2;
-
-  cluster.once('setup', function() {
-    checks.setupEvent = true;
-
-    var settings = cluster.settings;
-    if (settings &&
-        settings.args && settings.args[0] === 'custom argument' &&
-        settings.silent === true &&
-        settings.exec === process.argv[1]) {
-      checks.settingsObject = true;
-    }
-  });
-
-  // Setup master
   cluster.setupMaster({
-    args: ['custom argument'],
-    silent: true
+    'args' : ['custom argument']
   });
 
-  var correctIn = 0;
+  var localMaster = new cluster.Master();
+
+  localMaster.setupMaster({
+    'args' : ['local custom argument']
+  });
 
   cluster.on('online', function lisenter(worker) {
+    checks.globalMasterWorkers++;
 
     worker.once('message', function(data) {
-      correctIn += (data === 'custom argument' ? 1 : 0);
-      if (correctIn === totalWorkers) {
-        checks.args = true;
-      }
+      checks.globalMasterArgs = (data === 'custom argument');
       worker.destroy();
     });
-
-    // All workers are online
-    if (cluster.onlineWorkers === totalWorkers) {
-      checks.workers = true;
-    }
   });
 
-  // Start all workers
+  localMaster.on('online', function lisenter(worker) {
+    checks.localMasterWorkers++;
+
+    worker.once('message', function(data) {
+      checks.localMasterArgs = (data === 'local custom argument');
+      worker.destroy();
+    });
+  });
+
+  // Start workers
   cluster.fork();
-  cluster.fork();
+  localMaster.fork();
 
   // Check all values
   process.once('exit', function() {
-    assert.ok(checks.args, 'The arguments were not sent to the worker');
-    assert.ok(checks.setupEvent, 'The setup event was never emitted');
-    var m = 'The settingsObject do not have correct properties';
-    assert.ok(checks.settingsObject, m);
+    assert.ok(checks.globalMasterWorkers === 1, 'Wrong number of workers for global master');
+    assert.ok(checks.localMasterWorkers === 1, 'Wrong number of workers for local master');
+    assert.ok(checks.globalMasterArgs, 'Worker for global master did not receive custom args');
+    assert.ok(checks.localMasterArgs, 'Worker for local master did not receive custom args');
   });
 
 }
+

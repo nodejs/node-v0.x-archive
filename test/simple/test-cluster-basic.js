@@ -148,6 +148,7 @@ else if (cluster.isMaster) {
 
   //Check all values
   process.once('exit', function() {
+
     //Check cluster events
     forEach(checks.cluster.events, function(check, name) {
       assert.ok(check, 'The cluster event "' + name + '" on the cluster ' +
