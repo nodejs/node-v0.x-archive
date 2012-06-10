@@ -37,6 +37,8 @@
 # include <sys/utsname.h>
 #endif
 
+#include "src/node_internals.h"
+
 namespace node {
 
 using v8::Arguments;
@@ -106,15 +108,10 @@ static Handle<Value> GetOSRelease(const Arguments& args) {
     return Undefined();
   }
 
-#ifdef _WIN32
-  _snprintf(
-#else
-  snprintf(
-#endif
-      release, sizeof(release), "%d.%d.%d",
-      static_cast<int>(info.dwMajorVersion),
-      static_cast<int>(info.dwMinorVersion),
-      static_cast<int>(info.dwBuildNumber));
+  snprintf(release, sizeof(release), "%d.%d.%d",
+    static_cast<int>(info.dwMajorVersion),
+    static_cast<int>(info.dwMinorVersion),
+    static_cast<int>(info.dwBuildNumber));
 #endif
 
   return scope.Close(String::New(release));
