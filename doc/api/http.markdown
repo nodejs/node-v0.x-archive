@@ -200,7 +200,7 @@ will be emitted on the request.
 
 `function () { }`
 
-Indicates that the underlaying connection was terminated before
+Indicates that the underlying connection was terminated before
 `response.end()` was called or able to flush.
 
 Just like `'end'`, this event occurs only once per request, and no more `'data'`
@@ -302,7 +302,7 @@ interface. This is an `EventEmitter` with the following events:
 
 `function () { }`
 
-Indicates that the underlaying connection was terminated before
+Indicates that the underlying connection was terminated before
 `response.end()` was called or able to flush.
 
 ### response.writeContinue()
