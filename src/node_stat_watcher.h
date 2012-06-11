@@ -19,10 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_NODE_STAT_WATCHER_H_
-#define SRC_NODE_STAT_WATCHER_H_
+#ifndef NODE_STAT_WATCHER_H_
+#define NODE_STAT_WATCHER_H_
 
-#include "src/node.h"
+#include "node.h"
 #include "uv-private/ev.h"
 
 namespace node {
@@ -37,15 +37,13 @@ class StatWatcher : ObjectWrap {
   StatWatcher() : ObjectWrap() {
     persistent_ = false;
     path_ = NULL;
-    watcher_ = new ev_stat;
-    ev_init(watcher_, StatWatcher::Callback);
-    watcher_->data = this;
+    ev_init(&watcher_, StatWatcher::Callback);
+    watcher_.data = this;
   }
 
   ~StatWatcher() {
     Stop();
     assert(path_ == NULL);
-    delete watcher_;
   }
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -57,10 +55,10 @@ class StatWatcher : ObjectWrap {
 
   void Stop();
 
-  ev_stat *watcher_;
+  ev_stat watcher_;
   bool persistent_;
   char *path_;
 };
 
 }  // namespace node
-#endif  // SRC_NODE_STAT_WATCHER_H_
+#endif  // NODE_STAT_WATCHER_H_

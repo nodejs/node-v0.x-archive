@@ -19,10 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_NODE_IO_WATCHER_H_
-#define SRC_NODE_IO_WATCHER_H_
+#ifndef NODE_IO_H_
+#define NODE_IO_H_
 
-#include "src/node_object_wrap.h"
+#include "node_object_wrap.h"
 #include "uv-private/ev.h"
 
 namespace node {
@@ -35,16 +35,14 @@ class IOWatcher : ObjectWrap {
   static v8::Persistent<v8::FunctionTemplate> constructor_template;
 
   IOWatcher() : ObjectWrap() {
-    watcher_ = new ev_io;
-    ev_init(watcher_, IOWatcher::Callback);
-    watcher_->data = this;
+    ev_init(&watcher_, IOWatcher::Callback);
+    watcher_.data = this;
   }
 
   ~IOWatcher() {
-    ev_io_stop(EV_DEFAULT_UC_ watcher_);
-    assert(!ev_is_active(watcher_));
-    assert(!ev_is_pending(watcher_));
-    delete watcher_;
+    ev_io_stop(EV_DEFAULT_UC_ &watcher_);
+    assert(!ev_is_active(&watcher_));
+    assert(!ev_is_pending(&watcher_));
   }
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -58,9 +56,9 @@ class IOWatcher : ObjectWrap {
   void Start();
   void Stop();
 
-  ev_io *watcher_;
+  ev_io watcher_;
 };
 
 }  // namespace node
-#endif  // SRC_NODE_IO_WATCHER_H_
+#endif  // NODE_IO_H_
 

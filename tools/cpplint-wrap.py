@@ -8,7 +8,13 @@ excludes = [
   'src{0}{1}'.format(os.sep, 'ngx-queue.h'),
   'src{0}{1}'.format(os.sep, 'node_constants.cc'),
   'src{0}{1}'.format(os.sep, 'node_extensions.h'),
+  'src{0}{1}'.format(os.sep, 'node_io_watcher.cc'),
+  'src{0}{1}'.format(os.sep, 'node_io_watcher.h'),
   'src{0}{1}'.format(os.sep, 'node_root_certs.h'),
+  'src{0}{1}'.format(os.sep, 'node_signal_watcher.cc'),
+  'src{0}{1}'.format(os.sep, 'node_signal_watcher.h'),
+  'src{0}{1}'.format(os.sep, 'node_stat_watcher.cc'),
+  'src{0}{1}'.format(os.sep, 'node_stat_watcher.h'),
   'src{0}{1}'.format(os.sep, 'v8_typed_array.cc'),
   'src{0}{1}'.format(os.sep, 'v8_typed_array.h'),
   'src{0}{1}'.format(os.sep, 'v8abbr.h')

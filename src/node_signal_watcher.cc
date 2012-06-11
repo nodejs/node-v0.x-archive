@@ -19,22 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/node_signal_watcher.h"
+#include "node_signal_watcher.h"
 #include <assert.h>
 
 namespace node {
 
-using v8::Arguments;
-using v8::Function;
-using v8::FunctionTemplate;
-using v8::Handle;
-using v8::HandleScope;
-using v8::Local;
-using v8::Object;
-using v8::Persistent;
-using v8::String;
-using v8::Undefined;
-using v8::Value;
+using namespace v8;
 
 Persistent<FunctionTemplate> SignalWatcher::constructor_template;
 static Persistent<String> callback_symbol;
@@ -47,8 +37,7 @@ void SignalWatcher::Initialize(Handle<Object> target) {
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   constructor_template->SetClassName(String::NewSymbol("SignalWatcher"));
 
-  NODE_SET_PROTOTYPE_METHOD(constructor_template, "start",
-    SignalWatcher::Start);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "start", SignalWatcher::Start);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "stop", SignalWatcher::Stop);
 
   target->Set(String::NewSymbol("SignalWatcher"),
@@ -60,7 +49,7 @@ void SignalWatcher::Initialize(Handle<Object> target) {
 void SignalWatcher::Callback(EV_P_ ev_signal *watcher, int revents) {
   SignalWatcher *w = static_cast<SignalWatcher*>(watcher->data);
 
-  assert(watcher == w->watcher_);
+  assert(watcher == &w->watcher_);
   assert(revents == EV_SIGNAL);
 
   HandleScope scope;
@@ -102,9 +91,9 @@ Handle<Value> SignalWatcher::Start(const Arguments& args) {
   return Undefined();
 }
 
-void SignalWatcher::Start() {
-  if (!watcher_->active) {
-    ev_signal_start(EV_DEFAULT_UC_ watcher_);
+void SignalWatcher::Start () {
+  if (!watcher_.active) {
+    ev_signal_start(EV_DEFAULT_UC_ &watcher_);
     ev_unref(EV_DEFAULT_UC);
     Ref();
   }
@@ -117,10 +106,10 @@ Handle<Value> SignalWatcher::Stop(const Arguments& args) {
   return Undefined();
 }
 
-void SignalWatcher::Stop() {
-  if (watcher_->active) {
+void SignalWatcher::Stop () {
+  if (watcher_.active) {
     ev_ref(EV_DEFAULT_UC);
-    ev_signal_stop(EV_DEFAULT_UC_ watcher_);
+    ev_signal_stop(EV_DEFAULT_UC_ &watcher_);
     Unref();
   }
 }

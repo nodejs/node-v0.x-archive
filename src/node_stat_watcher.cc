@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/node_stat_watcher.h"
+#include "node_stat_watcher.h"
 
 #include <assert.h>
 #include <string.h>
@@ -27,18 +27,7 @@
 
 namespace node {
 
-using v8::Arguments;
-using v8::Exception;
-using v8::FunctionTemplate;
-using v8::Handle;
-using v8::HandleScope;
-using v8::Local;
-using v8::Object;
-using v8::Persistent;
-using v8::String;
-using v8::ThrowException;
-using v8::Undefined;
-using v8::Value;
+using namespace v8;
 
 Persistent<FunctionTemplate> StatWatcher::constructor_template;
 static Persistent<String> onchange_sym;
@@ -55,15 +44,14 @@ void StatWatcher::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "start", StatWatcher::Start);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "stop", StatWatcher::Stop);
 
-  target->Set(String::NewSymbol("StatWatcher"),
-    constructor_template->GetFunction());
+  target->Set(String::NewSymbol("StatWatcher"), constructor_template->GetFunction());
 }
 
 
 void StatWatcher::Callback(EV_P_ ev_stat *watcher, int revents) {
   assert(revents == EV_STAT);
   StatWatcher *handler = static_cast<StatWatcher*>(watcher->data);
-  assert(watcher == handler->watcher_);
+  assert(watcher == &handler->watcher_);
   HandleScope scope;
   Local<Value> argv[2];
   argv[0] = BuildStatsObject(&watcher->attr);
@@ -105,8 +93,8 @@ Handle<Value> StatWatcher::Start(const Arguments& args) {
     interval = NODE_V8_UNIXTIME(args[2]);
   }
 
-  ev_stat_set(handler->watcher_, handler->path_, interval);
-  ev_stat_start(EV_DEFAULT_UC_ handler->watcher_);
+  ev_stat_set(&handler->watcher_, handler->path_, interval);
+  ev_stat_start(EV_DEFAULT_UC_ &handler->watcher_);
 
   handler->persistent_ = args[1]->IsTrue();
 
@@ -132,10 +120,10 @@ Handle<Value> StatWatcher::Stop(const Arguments& args) {
 }
 
 
-void StatWatcher::Stop() {
-  if (watcher_->active) {
+void StatWatcher::Stop () {
+  if (watcher_.active) {
     if (!persistent_) ev_ref(EV_DEFAULT_UC);
-    ev_stat_stop(EV_DEFAULT_UC_ watcher_);
+    ev_stat_stop(EV_DEFAULT_UC_ &watcher_);
     free(path_);
     path_ = NULL;
     Unref();

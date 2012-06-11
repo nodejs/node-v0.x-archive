@@ -19,11 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_NODE_SIGNAL_WATCHER_H_
-#define SRC_NODE_SIGNAL_WATCHER_H_
+#ifndef NODE_SIGNAL_WATCHER_H_
+#define NODE_SIGNAL_WATCHER_H_
 
-#include "src/node.h"
-#include <v8.h>
+#include "node.h"
+#include "v8.h"
 #include "uv-private/ev.h"
 
 namespace node {
@@ -35,15 +35,13 @@ class SignalWatcher : ObjectWrap {
  protected:
   static v8::Persistent<v8::FunctionTemplate> constructor_template;
 
-  explicit SignalWatcher(int sig) : ObjectWrap() {
-    watcher_ = new ev_signal;
-    ev_signal_init(watcher_, SignalWatcher::Callback, sig);
-    watcher_->data = this;
+  SignalWatcher(int sig) : ObjectWrap() {
+    ev_signal_init(&watcher_, SignalWatcher::Callback, sig);
+    watcher_.data = this;
   }
 
   ~SignalWatcher() {
-    ev_signal_stop(EV_DEFAULT_UC_ watcher_);
-    delete watcher_;
+    ev_signal_stop(EV_DEFAULT_UC_ &watcher_);
   }
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -56,9 +54,9 @@ class SignalWatcher : ObjectWrap {
   void Start();
   void Stop();
 
-  ev_signal *watcher_;
+  ev_signal watcher_;
 };
 
 }  // namespace node
-#endif  // SRC_NODE_SIGNAL_WATCHER_H_
+#endif  // NODE_SIGNAL_WATCHER_H_
 
