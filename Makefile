@@ -244,7 +244,7 @@ bench-idle:
 jslint:
 	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
-.cpplintstamp: $(wildcard src/*.cc src/*.h src/*.c)
+.cpplintstamp: $(wildcard src/*.cc src/*.h src/*.c) tools/cpplint-wrap.py
 	@-$(PYTHON) tools/cpplint-wrap.py
 	@touch $@
 
