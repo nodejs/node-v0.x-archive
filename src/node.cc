@@ -2113,11 +2113,10 @@ static Handle<Object> GetFeatures() {
   Local<Object> obj = Object::New();
   obj->Set(String::NewSymbol("debug"),
 #if defined(DEBUG) && DEBUG
-    True()
+    True());
 #else
-    False()
+    False());
 #endif
-  );  // NOLINT(whitespace/parens)
 
   obj->Set(String::NewSymbol("uv"), True());
   obj->Set(String::NewSymbol("ipv6"), True());  // TODO(bnoordhuis) ping libuv
@@ -2870,15 +2869,13 @@ static char **copy_argv(int argc, char **argv) {
     strlen_sum += strlen(argv[i]) + 1;
   }
 
-  size_t argv_copy_size = sizeof(char *) *  // NOLINT(runtime/sizeof)
-    (argc + 1) + strlen_sum;
-  argv_copy = reinterpret_cast<char **>(malloc(argv_copy_size));
+  size_t base_size = sizeof(argv_data) * (argc + 1);
+  argv_copy = reinterpret_cast<char **>(malloc(base_size + strlen_sum));
   if (!argv_copy) {
     return NULL;
   }
 
-  argv_data = reinterpret_cast<char *>(argv_copy) +
-    sizeof(char *) * (argc + 1);  // NOLINT(runtime/sizeof)
+  argv_data = reinterpret_cast<char *>(argv_copy) + base_size;
 
   for (i = 0; i < argc; i++) {
     argv_copy[i] = argv_data;

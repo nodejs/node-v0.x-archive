@@ -52,6 +52,7 @@
 #define NODE_VERSION_AT_LEAST(major, minor, patch) \
   (( (major) < NODE_MAJOR_VERSION) \
   || ((major) == NODE_MAJOR_VERSION && (minor) < NODE_MINOR_VERSION) \
-  || ((major) == NODE_MAJOR_VERSION && (minor) == NODE_MINOR_VERSION && (patch) <= NODE_PATCH_VERSION))  // NOLINT(whitespace/line_length)
+  || ((major) == NODE_MAJOR_VERSION && (minor) == NODE_MINOR_VERSION \
+      && (patch) <= NODE_PATCH_VERSION))
 
 #endif  // SRC_NODE_VERSION_H_

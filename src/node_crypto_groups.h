@@ -396,14 +396,22 @@ typedef struct {
 } modp_group;
 
 modp_group modp_groups[] = {
-  { "modp1", group_modp1, sizeof(group_modp1) / sizeof(group_modp1[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
-  { "modp2", group_modp2, sizeof(group_modp2) / sizeof(group_modp2[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
-  { "modp5", group_modp5, sizeof(group_modp5) / sizeof(group_modp5[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
-  { "modp14", group_modp14, sizeof(group_modp14) / sizeof(group_modp14[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
-  { "modp15", group_modp15, sizeof(group_modp15) / sizeof(group_modp15[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
-  { "modp16", group_modp16, sizeof(group_modp16) / sizeof(group_modp16[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
-  { "modp17", group_modp17, sizeof(group_modp17) / sizeof(group_modp17[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
-  { "modp18", group_modp18, sizeof(group_modp18) / sizeof(group_modp18[0]), two_generator, 1 },  // NOLINT(whitespace/line_length)
+  { "modp1", group_modp1,
+    sizeof(group_modp1) / sizeof(group_modp1[0]), two_generator, 1 },
+  { "modp2", group_modp2,
+    sizeof(group_modp2) / sizeof(group_modp2[0]), two_generator, 1 },
+  { "modp5", group_modp5,
+    sizeof(group_modp5) / sizeof(group_modp5[0]), two_generator, 1 },
+  { "modp14", group_modp14,
+    sizeof(group_modp14) / sizeof(group_modp14[0]), two_generator, 1 },
+  { "modp15", group_modp15,
+    sizeof(group_modp15) / sizeof(group_modp15[0]), two_generator, 1 },
+  { "modp16", group_modp16,
+    sizeof(group_modp16) / sizeof(group_modp16[0]), two_generator, 1 },
+  { "modp17", group_modp17,
+    sizeof(group_modp17) / sizeof(group_modp17[0]), two_generator, 1 },
+  { "modp18", group_modp18,
+    sizeof(group_modp18) / sizeof(group_modp18[0]), two_generator, 1 },
   { NULL, NULL, 0, NULL, 0 }
 };
 

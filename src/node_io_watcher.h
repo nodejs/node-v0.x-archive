@@ -35,14 +35,16 @@ class IOWatcher : ObjectWrap {
   static v8::Persistent<v8::FunctionTemplate> constructor_template;
 
   IOWatcher() : ObjectWrap() {
-    ev_init(&watcher_, IOWatcher::Callback);
-    watcher_.data = this;
+    watcher_ = new ev_io;
+    ev_init(watcher_, IOWatcher::Callback);
+    watcher_->data = this;
   }
 
   ~IOWatcher() {
-    ev_io_stop(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
-    assert(!ev_is_active(&watcher_));
-    assert(!ev_is_pending(&watcher_));
+    ev_io_stop(EV_DEFAULT_UC_ watcher_);
+    assert(!ev_is_active(watcher_));
+    assert(!ev_is_pending(watcher_));
+    delete watcher_;
   }
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -56,7 +58,7 @@ class IOWatcher : ObjectWrap {
   void Start();
   void Stop();
 
-  ev_io watcher_;
+  ev_io *watcher_;
 };
 
 }  // namespace node

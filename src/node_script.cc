@@ -22,6 +22,7 @@
 #include "src/node.h"
 #include "src/node_script.h"
 #include <assert.h>
+#include <string>
 
 namespace node {
 
@@ -107,23 +108,24 @@ void CloneObject(Handle<Object> recv,
 
   Handle<Value> args[] = {source, target};
 
+  std::string script =
+           "(function(source, target) {\n";
+  script +=   "Object.getOwnPropertyNames(source).forEach(function(key) {\n";
+  script +=     "try {\n";
+  script +=       "var desc = Object.getOwnPropertyDescriptor(source, key);\n";
+  script +=       "if (desc.value === source) desc.value = target;\n";
+  script +=       "Object.defineProperty(target, key, desc);\n";
+  script +=     "} catch(e) {\n";
+  script +=       "// Catch sealed properties errors\n";
+  script +=     "}\n";
+  script +=   "});\n";
+  script += "})";
+
   // Init
   if (cloneObjectMethod.IsEmpty()) {
     Local<Function> cloneObjectMethod_ = Local<Function>::Cast(
-      Script::Compile(String::New(
-        "(function(source, target) {  // NOLINT(readability/multiline_string)\n\
-           Object.getOwnPropertyNames(source).forEach(function(key) {\n\
-           try {\n\
-             var desc = Object.getOwnPropertyDescriptor(source, key);\n\
-             if (desc.value === source) desc.value = target;\n\
-             Object.defineProperty(target, key, desc);\n\
-           } catch (e) {  // NOLINT(whitespace/parens)\n\
-            // Catch sealed properties errors\n\
-           }\n\
-         });\n\
-        })" // NOLINT(readability/multiline_string)
-      ), String::New("binding:script"))->Run()  // NOLINT(whitespace/parens)
-    );  // NOLINT(whitespace/parens)
+      Script::Compile(String::New(script.c_str()),
+      String::New("binding:script"))->Run());
     cloneObjectMethod = Persistent<Function>::New(cloneObjectMethod_);
   }
 

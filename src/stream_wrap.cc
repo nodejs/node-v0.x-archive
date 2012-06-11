@@ -261,7 +261,7 @@ Handle<Value> StreamWrap::WriteBuffer(const Arguments& args) {
   }
 
   char* storage = new char[sizeof(WriteWrap)];
-  WriteWrap* req_wrap = new (storage) WriteWrap();  // NOLINT(whitespace/parens)
+  WriteWrap* req_wrap = new(storage) WriteWrap();
 
   req_wrap->object_->SetHiddenValue(buffer_sym, buffer_obj);
 
@@ -346,7 +346,7 @@ Handle<Value> StreamWrap::WriteStringImpl(const Arguments& args) {
   }
 
   char* storage = new char[sizeof(WriteWrap) + storage_size + 15];
-  WriteWrap* req_wrap = new (storage) WriteWrap();  // NOLINT(whitespace/parens)
+  WriteWrap* req_wrap = new(storage) WriteWrap();
 
   char* data = reinterpret_cast<char*>(ROUND_UP(
       reinterpret_cast<uintptr_t>(storage) + sizeof(WriteWrap), 16));

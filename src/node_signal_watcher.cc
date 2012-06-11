@@ -60,7 +60,7 @@ void SignalWatcher::Initialize(Handle<Object> target) {
 void SignalWatcher::Callback(EV_P_ ev_signal *watcher, int revents) {
   SignalWatcher *w = static_cast<SignalWatcher*>(watcher->data);
 
-  assert(watcher == &w->watcher_);
+  assert(watcher == w->watcher_);
   assert(revents == EV_SIGNAL);
 
   HandleScope scope;
@@ -103,8 +103,8 @@ Handle<Value> SignalWatcher::Start(const Arguments& args) {
 }
 
 void SignalWatcher::Start() {
-  if (!watcher_.active) {
-    ev_signal_start(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
+  if (!watcher_->active) {
+    ev_signal_start(EV_DEFAULT_UC_ watcher_);
     ev_unref(EV_DEFAULT_UC);
     Ref();
   }
@@ -118,9 +118,9 @@ Handle<Value> SignalWatcher::Stop(const Arguments& args) {
 }
 
 void SignalWatcher::Stop() {
-  if (watcher_.active) {
+  if (watcher_->active) {
     ev_ref(EV_DEFAULT_UC);
-    ev_signal_stop(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
+    ev_signal_stop(EV_DEFAULT_UC_ watcher_);
     Unref();
   }
 }

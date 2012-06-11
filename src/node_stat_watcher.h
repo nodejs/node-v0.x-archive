@@ -37,13 +37,15 @@ class StatWatcher : ObjectWrap {
   StatWatcher() : ObjectWrap() {
     persistent_ = false;
     path_ = NULL;
-    ev_init(&watcher_, StatWatcher::Callback);
-    watcher_.data = this;
+    watcher_ = new ev_stat;
+    ev_init(watcher_, StatWatcher::Callback);
+    watcher_->data = this;
   }
 
   ~StatWatcher() {
     Stop();
     assert(path_ == NULL);
+    delete watcher_;
   }
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -55,7 +57,7 @@ class StatWatcher : ObjectWrap {
 
   void Stop();
 
-  ev_stat watcher_;
+  ev_stat *watcher_;
   bool persistent_;
   char *path_;
 };

@@ -69,7 +69,7 @@ void IOWatcher::Initialize(Handle<Object> target) {
 
 void IOWatcher::Callback(EV_P_ ev_io *w, int revents) {
   IOWatcher *io = static_cast<IOWatcher*>(w->data);
-  assert(w == &io->watcher_);
+  assert(w == io->watcher_);
   HandleScope scope;
 
   Local<Value> callback_v = io->handle_->Get(callback_symbol);
@@ -123,16 +123,16 @@ Handle<Value> IOWatcher::Stop(const Arguments& args) {
 
 
 void IOWatcher::Start() {
-  if (!ev_is_active(&watcher_)) {
-    ev_io_start(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
+  if (!ev_is_active(watcher_)) {
+    ev_io_start(EV_DEFAULT_UC_ watcher_);
     Ref();
   }
 }
 
 
 void IOWatcher::Stop() {
-  if (ev_is_active(&watcher_)) {
-    ev_io_stop(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
+  if (ev_is_active(watcher_)) {
+    ev_io_stop(EV_DEFAULT_UC_ watcher_);
     Unref();
   }
 }
@@ -166,8 +166,8 @@ Handle<Value> IOWatcher::Set(const Arguments& args) {
 
   if (args[2]->IsTrue()) events |= EV_WRITE;
 
-  assert(!io->watcher_.active);
-  ev_io_set(&io->watcher_, fd, events);
+  assert(!io->watcher_->active);
+  ev_io_set(io->watcher_, fd, events);
 
   return Undefined();
 }

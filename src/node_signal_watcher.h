@@ -36,12 +36,14 @@ class SignalWatcher : ObjectWrap {
   static v8::Persistent<v8::FunctionTemplate> constructor_template;
 
   explicit SignalWatcher(int sig) : ObjectWrap() {
-    ev_signal_init(&watcher_, SignalWatcher::Callback, sig);
-    watcher_.data = this;
+    watcher_ = new ev_signal;
+    ev_signal_init(watcher_, SignalWatcher::Callback, sig);
+    watcher_->data = this;
   }
 
   ~SignalWatcher() {
-    ev_signal_stop(EV_DEFAULT_UC_ &watcher_);  // NOLINT(runtime/references)
+    ev_signal_stop(EV_DEFAULT_UC_ watcher_);
+    delete watcher_;
   }
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -54,7 +56,7 @@ class SignalWatcher : ObjectWrap {
   void Start();
   void Stop();
 
-  ev_signal watcher_;
+  ev_signal *watcher_;
 };
 
 }  // namespace node

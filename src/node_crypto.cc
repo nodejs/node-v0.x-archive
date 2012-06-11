@@ -4530,11 +4530,10 @@ void InitCrypto(Handle<Object> target) {
 #if !defined(OPENSSL_NO_COMP)
   STACK_OF(SSL_COMP)* comp_methods =
 #if OPENSSL_VERSION_NUMBER < 0x00908000L
-    SSL_COMP_get_compression_method()
+    SSL_COMP_get_compression_method();
 #else
-    SSL_COMP_get_compression_methods()
+    SSL_COMP_get_compression_methods();
 #endif
-  ;  // NOLINT(whitespace/semicolon)
   sk_SSL_COMP_zero(comp_methods);
   assert(sk_SSL_COMP_num(comp_methods) == 0);
 #endif

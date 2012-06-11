@@ -990,6 +990,6 @@ void DefineConstants(Handle<Object> target) {
 #define NPN_ENABLED 1
   NODE_DEFINE_CONSTANT(target, NPN_ENABLED);
 #endif
-}  // NOLINT(readability/fn_size)
+}
 
-}  // namespace node NOLINT(readability/fn_size)
+}  // namespace node
