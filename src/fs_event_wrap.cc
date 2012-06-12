@@ -138,6 +138,9 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
     SetErrno(uv_last_error(uv_default_loop()));
     eventStr = String::Empty();
   }
+  else if (events & UV_REVOKE) {
+    eventStr = String::New("revoke");
+  }
   else if (events & UV_RENAME) {
     eventStr = String::New("rename");
   }

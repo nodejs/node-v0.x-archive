@@ -52,18 +52,32 @@ static void uv__fs_event_stop(uv_fs_event_t* handle) {
 
 static void uv__fs_event(EV_P_ ev_io* w, int revents) {
   uv_fs_event_t* handle;
-  int events;
+  int events = 0;
+  char filename_bytes[MAXPATHLEN];
+  char* filename = filename_bytes;
 
   assert(revents == EV_LIBUV_KQUEUE_HACK);
 
   handle = container_of(w, uv_fs_event_t, event_watcher);
 
-  if (handle->fflags & (NOTE_ATTRIB | NOTE_EXTEND))
-    events = UV_CHANGE;
-  else
-    events = UV_RENAME;
+  if (handle->fflags & (NOTE_ATTRIB | NOTE_EXTEND | NOTE_WRITE))
+    events |= UV_CHANGE;
+  if (handle->fflags & NOTE_RENAME)
+    events |= UV_RENAME;
+  if (handle->fflags & (NOTE_DELETE | NOTE_REVOKE))
+    events |= UV_REVOKE;
 
-  handle->cb(handle, NULL, events, 0);
+  /* Get filename. */
+  if (!(events & UV_REVOKE)) {
+    if (events & UV_RENAME)
+      (void)fcntl(handle->fd, F_FULLFSYNC); /* FIXME This is only available on OS X, but without it we sometimes get the old path, and fsync() doesn't help. */
+    if (fcntl(handle->fd, F_GETPATH, filename) == -1)
+      filename = NULL;
+  }
+  else
+    filename = NULL;
+
+  handle->cb(handle, filename, events, 0);
 
   if (handle->fd == -1)
     return;
