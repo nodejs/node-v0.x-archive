@@ -363,6 +363,14 @@
             },
           }],  # OS=="mac"
           ['OS=="win"', {
+<<<<<<< HEAD
+=======
+            'msvs_configuration_attributes': {
+              'OutputDirectory': '$(SolutionDir)$(ConfigurationName)',
+              'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
+              'CharacterSet': '1',
+            },
+>>>>>>> a78eb55... Change done in order to avoid a problem under Windows 7 x64-bits
             'msvs_settings': {
               'VCCLCompilerTool': {
                 'Optimization': '2',
