@@ -76,7 +76,7 @@ This causes potentially surprising behavior in three edge cases:
 When multiple processes are all `accept()`ing on the same underlying
 resource, the operating system load-balances across them very
 efficiently.  There is no routing logic in Node.js, or in your program,
-and no shared state between the workers.  Therefor, it is important to
+and no shared state between the workers.  Therefore, it is important to
 design your program such that it does not rely too heavily on in-memory
 data objects for things like sessions and login.
 
