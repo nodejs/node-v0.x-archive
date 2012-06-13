@@ -170,6 +170,8 @@ This will cause the server to accept connections on the specified
 handle, but it is presumed that the file descriptor or handle has
 already been bound to a port or domain socket.
 
+Listening on a file descriptor is not supported on Windows.
+
 This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'](net.html#event_listening_) event.
 See also [net.Server.listen()](net.html#server.listen).
