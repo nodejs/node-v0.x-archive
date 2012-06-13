@@ -196,18 +196,12 @@ class LCodeGen BASE_EMBEDDED {
                                int argc,
                                LInstruction* instr);
 
-  enum RDIState {
-    RDI_UNINITIALIZED,
-    RDI_CONTAINS_TARGET
-  };
-
   // Generate a direct call to a known function.  Expects the function
   // to be in rdi.
   void CallKnownFunction(Handle<JSFunction> function,
                          int arity,
                          LInstruction* instr,
-                         CallKind call_kind,
-                         RDIState rdi_state);
+                         CallKind call_kind);
 
 
   void RecordSafepointWithLazyDeopt(LInstruction* instr,
@@ -231,8 +225,7 @@ class LCodeGen BASE_EMBEDDED {
       LOperand* elements_pointer,
       LOperand* key,
       ElementsKind elements_kind,
-      uint32_t offset,
-      uint32_t additional_index = 0);
+      uint32_t offset);
 
   // Specific math operations - used from DoUnaryMathOperation.
   void EmitIntegerMathAbs(LUnaryMathOperation* instr);

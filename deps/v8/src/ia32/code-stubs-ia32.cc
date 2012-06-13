@@ -1681,11 +1681,6 @@ void BinaryOpStub::GenerateBothStringStub(MacroAssembler* masm) {
 }
 
 
-// Input:
-//    edx: left operand (tagged)
-//    eax: right operand (tagged)
-// Output:
-//    eax: result (tagged)
 void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
   Label call_runtime;
   ASSERT(operands_type_ == BinaryOpIC::INT32);
@@ -1695,37 +1690,31 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
     case Token::ADD:
     case Token::SUB:
     case Token::MUL:
-    case Token::DIV:
-    case Token::MOD: {
+    case Token::DIV: {
       Label not_floats;
       Label not_int32;
       if (CpuFeatures::IsSupported(SSE2)) {
         CpuFeatures::Scope use_sse2(SSE2);
         FloatingPointHelper::LoadSSE2Operands(masm, &not_floats);
         FloatingPointHelper::CheckSSE2OperandsAreInt32(masm, &not_int32, ecx);
-        if (op_ == Token::MOD) {
-          GenerateRegisterArgsPush(masm);
-          __ InvokeBuiltin(Builtins::MOD, JUMP_FUNCTION);
-        } else {
-          switch (op_) {
-            case Token::ADD: __ addsd(xmm0, xmm1); break;
-            case Token::SUB: __ subsd(xmm0, xmm1); break;
-            case Token::MUL: __ mulsd(xmm0, xmm1); break;
-            case Token::DIV: __ divsd(xmm0, xmm1); break;
-            default: UNREACHABLE();
-          }
-          // Check result type if it is currently Int32.
-          if (result_type_ <= BinaryOpIC::INT32) {
-            __ cvttsd2si(ecx, Operand(xmm0));
-            __ cvtsi2sd(xmm2, ecx);
-            __ ucomisd(xmm0, xmm2);
-            __ j(not_zero, &not_int32);
-            __ j(carry, &not_int32);
-          }
-          GenerateHeapResultAllocation(masm, &call_runtime);
-          __ movdbl(FieldOperand(eax, HeapNumber::kValueOffset), xmm0);
-          __ ret(0);
+        switch (op_) {
+          case Token::ADD: __ addsd(xmm0, xmm1); break;
+          case Token::SUB: __ subsd(xmm0, xmm1); break;
+          case Token::MUL: __ mulsd(xmm0, xmm1); break;
+          case Token::DIV: __ divsd(xmm0, xmm1); break;
+          default: UNREACHABLE();
         }
+        // Check result type if it is currently Int32.
+        if (result_type_ <= BinaryOpIC::INT32) {
+          __ cvttsd2si(ecx, Operand(xmm0));
+          __ cvtsi2sd(xmm2, ecx);
+          __ ucomisd(xmm0, xmm2);
+          __ j(not_zero, &not_int32);
+          __ j(carry, &not_int32);
+        }
+        GenerateHeapResultAllocation(masm, &call_runtime);
+        __ movdbl(FieldOperand(eax, HeapNumber::kValueOffset), xmm0);
+        __ ret(0);
       } else {  // SSE2 not available, use FPU.
         FloatingPointHelper::CheckFloatOperands(masm, &not_floats, ebx);
         FloatingPointHelper::LoadFloatOperands(
@@ -1733,28 +1722,20 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
             ecx,
             FloatingPointHelper::ARGS_IN_REGISTERS);
         FloatingPointHelper::CheckFloatOperandsAreInt32(masm, &not_int32);
-        if (op_ == Token::MOD) {
-          // The operands are now on the FPU stack, but we don't need them.
-          __ fstp(0);
-          __ fstp(0);
-          GenerateRegisterArgsPush(masm);
-          __ InvokeBuiltin(Builtins::MOD, JUMP_FUNCTION);
-        } else {
-          switch (op_) {
-            case Token::ADD: __ faddp(1); break;
-            case Token::SUB: __ fsubp(1); break;
-            case Token::MUL: __ fmulp(1); break;
-            case Token::DIV: __ fdivp(1); break;
-            default: UNREACHABLE();
-          }
-          Label after_alloc_failure;
-          GenerateHeapResultAllocation(masm, &after_alloc_failure);
-          __ fstp_d(FieldOperand(eax, HeapNumber::kValueOffset));
-          __ ret(0);
-          __ bind(&after_alloc_failure);
-          __ fstp(0);  // Pop FPU stack before calling runtime.
-          __ jmp(&call_runtime);
+        switch (op_) {
+          case Token::ADD: __ faddp(1); break;
+          case Token::SUB: __ fsubp(1); break;
+          case Token::MUL: __ fmulp(1); break;
+          case Token::DIV: __ fdivp(1); break;
+          default: UNREACHABLE();
         }
+        Label after_alloc_failure;
+        GenerateHeapResultAllocation(masm, &after_alloc_failure);
+        __ fstp_d(FieldOperand(eax, HeapNumber::kValueOffset));
+        __ ret(0);
+        __ bind(&after_alloc_failure);
+        __ ffree();
+        __ jmp(&call_runtime);
       }
 
       __ bind(&not_floats);
@@ -1763,6 +1744,10 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
       break;
     }
 
+    case Token::MOD: {
+      // For MOD we go directly to runtime in the non-smi case.
+      break;
+    }
     case Token::BIT_OR:
     case Token::BIT_AND:
     case Token::BIT_XOR:
@@ -1773,6 +1758,11 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
       Label not_floats;
       Label not_int32;
       Label non_smi_result;
+      /*  {
+        CpuFeatures::Scope use_sse2(SSE2);
+        FloatingPointHelper::LoadSSE2Operands(masm, &not_floats);
+        FloatingPointHelper::CheckSSE2OperandsAreInt32(masm, &not_int32, ecx);
+        }*/
       FloatingPointHelper::LoadUnknownsAsIntegers(masm,
                                                   use_sse3_,
                                                   &not_floats);
@@ -1843,8 +1833,8 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
     default: UNREACHABLE(); break;
   }
 
-  // If an allocation fails, or SHR hits a hard case, use the runtime system to
-  // get the correct result.
+  // If an allocation fails, or SHR or MOD hit a hard case,
+  // use the runtime system to get the correct result.
   __ bind(&call_runtime);
 
   switch (op_) {
@@ -1865,6 +1855,8 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
       __ InvokeBuiltin(Builtins::DIV, JUMP_FUNCTION);
       break;
     case Token::MOD:
+      GenerateRegisterArgsPush(masm);
+      __ InvokeBuiltin(Builtins::MOD, JUMP_FUNCTION);
       break;
     case Token::BIT_OR:
       __ InvokeBuiltin(Builtins::BIT_OR, JUMP_FUNCTION);
@@ -1965,7 +1957,7 @@ void BinaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
         __ fstp_d(FieldOperand(eax, HeapNumber::kValueOffset));
         __ ret(0);
         __ bind(&after_alloc_failure);
-        __ fstp(0);  // Pop FPU stack before calling runtime.
+        __ ffree();
         __ jmp(&call_runtime);
       }
 
@@ -2169,8 +2161,8 @@ void BinaryOpStub::GenerateGeneric(MacroAssembler* masm) {
         __ fstp_d(FieldOperand(eax, HeapNumber::kValueOffset));
         __ ret(0);
         __ bind(&after_alloc_failure);
-        __ fstp(0);  // Pop FPU stack before calling runtime.
-        __ jmp(&call_runtime);
+          __ ffree();
+          __ jmp(&call_runtime);
       }
         __ bind(&not_floats);
         break;
@@ -3822,24 +3814,20 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ IncrementCounter(counters->regexp_entry_native(), 1);
 
   // Isolates: note we add an additional parameter here (isolate pointer).
-  static const int kRegExpExecuteArguments = 9;
+  static const int kRegExpExecuteArguments = 8;
   __ EnterApiExitFrame(kRegExpExecuteArguments);
 
-  // Argument 9: Pass current isolate address.
-  __ mov(Operand(esp, 8 * kPointerSize),
+  // Argument 8: Pass current isolate address.
+  __ mov(Operand(esp, 7 * kPointerSize),
       Immediate(ExternalReference::isolate_address()));
 
-  // Argument 8: Indicate that this is a direct call from JavaScript.
-  __ mov(Operand(esp, 7 * kPointerSize), Immediate(1));
+  // Argument 7: Indicate that this is a direct call from JavaScript.
+  __ mov(Operand(esp, 6 * kPointerSize), Immediate(1));
 
-  // Argument 7: Start (high end) of backtracking stack memory area.
+  // Argument 6: Start (high end) of backtracking stack memory area.
   __ mov(esi, Operand::StaticVariable(address_of_regexp_stack_memory_address));
   __ add(esi, Operand::StaticVariable(address_of_regexp_stack_memory_size));
-  __ mov(Operand(esp, 6 * kPointerSize), esi);
-
-  // Argument 6: Set the number of capture registers to zero to force global
-  // regexps to behave as non-global.  This does not affect non-global regexps.
-  __ mov(Operand(esp, 5 * kPointerSize), Immediate(0));
+  __ mov(Operand(esp, 5 * kPointerSize), esi);
 
   // Argument 5: static offsets vector buffer.
   __ mov(Operand(esp, 4 * kPointerSize),
@@ -3902,9 +3890,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Check the result.
   Label success;
-  __ cmp(eax, 1);
-  // We expect exactly one result since we force the called regexp to behave
-  // as non-global.
+  __ cmp(eax, NativeRegExpMacroAssembler::SUCCESS);
   __ j(equal, &success);
   Label failure;
   __ cmp(eax, NativeRegExpMacroAssembler::FAILURE);
@@ -5020,9 +5006,11 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ j(not_equal, &not_outermost_js, Label::kNear);
   __ mov(Operand::StaticVariable(js_entry_sp), ebp);
   __ push(Immediate(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
-  __ jmp(&invoke, Label::kNear);
+  Label cont;
+  __ jmp(&cont, Label::kNear);
   __ bind(&not_outermost_js);
   __ push(Immediate(Smi::FromInt(StackFrame::INNER_JSENTRY_FRAME)));
+  __ bind(&cont);
 
   // Jump to a faked try block that does the invoke, with a faked catch
   // block that sets the pending exception.
@@ -6174,11 +6162,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ sub(ecx, edx);
   __ cmp(ecx, FieldOperand(eax, String::kLengthOffset));
   Label not_original_string;
-  // Shorter than original string's length: an actual substring.
-  __ j(below, &not_original_string, Label::kNear);
-  // Longer than original string's length or negative: unsafe arguments.
-  __ j(above, &runtime);
-  // Return original string.
+  __ j(not_equal, &not_original_string, Label::kNear);
   Counters* counters = masm->isolate()->counters();
   __ IncrementCounter(counters->sub_string_native(), 1);
   __ ret(3 * kPointerSize);
@@ -7063,8 +7047,8 @@ static const AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   // KeyedStoreStubCompiler::GenerateStoreFastElement.
   { REG(edi), REG(ebx), REG(ecx), EMIT_REMEMBERED_SET},
   { REG(edx), REG(edi), REG(ebx), EMIT_REMEMBERED_SET},
-  // ElementsTransitionGenerator::GenerateMapChangeElementTransition
-  // and ElementsTransitionGenerator::GenerateSmiToDouble
+  // ElementsTransitionGenerator::GenerateSmiOnlyToObject
+  // and ElementsTransitionGenerator::GenerateSmiOnlyToDouble
   // and ElementsTransitionGenerator::GenerateDoubleToObject
   { REG(edx), REG(ebx), REG(edi), EMIT_REMEMBERED_SET},
   { REG(edx), REG(ebx), REG(edi), OMIT_REMEMBERED_SET},
@@ -7336,9 +7320,9 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
 
   __ CheckFastElements(edi, &double_elements);
 
-  // Check for FAST_*_SMI_ELEMENTS or FAST_*_ELEMENTS elements
+  // FAST_SMI_ONLY_ELEMENTS or FAST_ELEMENTS
   __ JumpIfSmi(eax, &smi_element);
-  __ CheckFastSmiElements(edi, &fast_elements, Label::kNear);
+  __ CheckFastSmiOnlyElements(edi, &fast_elements, Label::kNear);
 
   // Store into the array literal requires a elements transition. Call into
   // the runtime.
@@ -7360,7 +7344,7 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   __ pop(edx);
   __ jmp(&slow_elements);
 
-  // Array literal has ElementsKind of FAST_*_ELEMENTS and value is an object.
+  // Array literal has ElementsKind of FAST_ELEMENTS and value is an object.
   __ bind(&fast_elements);
   __ mov(ebx, FieldOperand(ebx, JSObject::kElementsOffset));
   __ lea(ecx, FieldOperand(ebx, ecx, times_half_pointer_size,
@@ -7373,15 +7357,15 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
                  OMIT_SMI_CHECK);
   __ ret(0);
 
-  // Array literal has ElementsKind of FAST_*_SMI_ELEMENTS or FAST_*_ELEMENTS,
-  // and value is Smi.
+  // Array literal has ElementsKind of FAST_SMI_ONLY_ELEMENTS or
+  // FAST_ELEMENTS, and value is Smi.
   __ bind(&smi_element);
   __ mov(ebx, FieldOperand(ebx, JSObject::kElementsOffset));
   __ mov(FieldOperand(ebx, ecx, times_half_pointer_size,
                       FixedArrayBase::kHeaderSize), eax);
   __ ret(0);
 
-  // Array literal has ElementsKind of FAST_*_DOUBLE_ELEMENTS.
+  // Array literal has ElementsKind of FAST_DOUBLE_ELEMENTS.
   __ bind(&double_elements);
 
   __ push(edx);

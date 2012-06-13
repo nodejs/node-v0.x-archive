@@ -112,15 +112,18 @@ Creates and returns a cipher object, with the given algorithm and password.
 On recent releases, `openssl list-cipher-algorithms` will display the
 available cipher algorithms.
 `password` is used to derive key and IV, which must be `'binary'` encoded
-string (See the [Buffer section][] for more information).
+string or [buffer][].
 
 ## crypto.createCipheriv(algorithm, key, iv)
 
 Creates and returns a cipher object, with the given algorithm, key and iv.
 
-`algorithm` is the same as the `createCipher()`. `key` is a raw key used in
-algorithm. `iv` is an Initialization vector. `key` and `iv` must be `'binary'`
-encoded string (See the [Buffer section][] for more information).
+`algorithm` is the same as the argument to `createCipher()`.
+`key` is the raw key used by the algorithm.
+`iv` is an [initialization
+vector](http://en.wikipedia.org/wiki/Initialization_vector).
+
+`key` and `iv` must be `'binary'` encoded strings or [buffers][].
 
 ## Class: Cipher
 
@@ -363,6 +366,7 @@ Generates cryptographically strong pseudo-random data. Usage:
       // handle error
     }
 
+[buffer]: buffer.html
 [Buffer section]: buffer.html
 [createCipher()]: #crypto_crypto_createcipher_algorithm_password
 [createCipheriv()]: #crypto_crypto_createcipheriv_algorithm_key_iv

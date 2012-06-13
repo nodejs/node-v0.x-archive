@@ -1,4 +1,4 @@
-// Copyright 2012 the V8 project authors. All rights reserved.
+// Copyright 2009 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -247,7 +247,7 @@ SmartArrayPointer<char> DebuggerAgentUtil::ReceiveMessage(const Socket* conn) {
     while (!(c == '\n' && prev_c == '\r')) {
       prev_c = c;
       received = conn->Receive(&c, 1);
-      if (received == 0) {
+      if (received <= 0) {
         PrintF("Error %d\n", Socket::LastError());
         return SmartArrayPointer<char>();
       }
@@ -454,7 +454,7 @@ int DebuggerAgentUtil::ReceiveAll(const Socket* conn, char* data, int len) {
   int total_received = 0;
   while (total_received < len) {
     int received = conn->Receive(data + total_received, len - total_received);
-    if (received == 0) {
+    if (received <= 0) {
       return total_received;
     }
     total_received += received;

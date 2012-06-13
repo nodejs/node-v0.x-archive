@@ -227,13 +227,16 @@ with a single error handler in a single place.
     var d = domain.create();
 
     function readSomeFile(filename, cb) {
-      fs.readFile(filename, d.intercept(function(er, data) {
+      fs.readFile(filename, d.intercept(function(data) {
+        // note, the first argument is never passed to the
+        // callback since it is assumed to be the 'Error' argument
+        // and thus intercepted by the domain.
+
         // if this throws, it will also be passed to the domain
-        // additionally, we know that 'er' will always be null,
         // so the error-handling logic can be moved to the 'error'
         // event on the domain instead of being repeated throughout
         // the program.
-        return cb(er, JSON.parse(data));
+        return cb(null, JSON.parse(data));
       }));
     }
 
@@ -254,6 +257,8 @@ are raised as a result of this are ignored.
 The intention of calling `dispose` is generally to prevent cascading
 errors when a critical part of the Domain context is found to be in an
 error state.
+
+Once the domain is disposed the `dispose` event will emit.
 
 Note that IO might still be performed.  However, to the highest degree
 possible, once a domain is disposed, further errors from the emitters in
