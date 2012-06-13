@@ -233,6 +233,9 @@ static unsigned int uv__poll_timeout(uv_loop_t* loop) {
   if (!ngx_queue_empty(&loop->idle_handles))
     return 0;
 
+  if (loop->closing_handles)
+    return 0;
+
   return uv__next_timeout(loop);
 }
 
@@ -265,18 +268,6 @@ int uv_run(uv_loop_t* loop) {
 
 int uv_run_once(uv_loop_t* loop) {
   return uv__run(loop);
-}
-
-
-void uv__handle_init(uv_loop_t* loop, uv_handle_t* handle,
-    uv_handle_type type) {
-  loop->counters.handle_init++;
-
-  handle->loop = loop;
-  handle->type = type;
-  handle->flags = UV__HANDLE_REF; /* ref the loop when active */
-  handle->next_closing = NULL;
-  ngx_queue_insert_tail(&loop->handle_queue, &handle->handle_queue);
 }
 
 

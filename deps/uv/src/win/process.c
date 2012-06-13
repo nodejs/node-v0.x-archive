@@ -101,8 +101,7 @@ typedef struct env_var {
 
 
 static void uv_process_init(uv_loop_t* loop, uv_process_t* handle) {
-  uv_handle_init(loop, (uv_handle_t*) handle);
-  handle->type = UV_PROCESS;
+  uv__handle_init(loop, (uv_handle_t*) handle, UV_PROCESS);
   handle->exit_cb = NULL;
   handle->pid = 0;
   handle->exit_signal = 0;
@@ -1093,7 +1092,7 @@ static int init_child_stdio(uv_loop_t* loop, uv_process_options_t* options,
         uv_stream_t* stream = fdopt.data.stream;
 
         /* Leech the handle out of the stream. */
-        if (stream->type = UV_TTY) {
+        if (stream->type == UV_TTY) {
           stream_handle = ((uv_tty_t*) stream)->handle;
           crt_flags = FOPEN | FDEV;
         } else if (stream->type == UV_NAMED_PIPE &&
@@ -1320,32 +1319,46 @@ done:
 
 
 static uv_err_t uv__kill(HANDLE process_handle, int signum) {
-  DWORD status;
-  uv_err_t err;
+  switch (signum) {
+    case SIGTERM:
+    case SIGKILL:
+    case SIGINT: {
+      /* Unconditionally terminate the process. On Windows, killed processes */
+      /* normally return 1. */
+      DWORD error, status;
 
-  if (signum == SIGTERM || signum == SIGKILL || signum == SIGINT) {
-    /* Kill the process. On Windows, killed processes normally return 1. */
-    if (TerminateProcess(process_handle, 1)) {
-      err = uv_ok_;
-    } else {
-      err = uv__new_sys_error(GetLastError());
-    }
-  } else if (signum == 0) {
-    /* Health check: is the process still alive? */
-    if (GetExitCodeProcess(process_handle, &status)) {
-      if (status == STILL_ACTIVE) {
-        err =  uv_ok_;
-      } else {
-        err = uv__new_artificial_error(UV_ESRCH);
+      if (TerminateProcess(process_handle, 1))
+        return uv_ok_;
+
+      /* If the process already exited before TerminateProcess was called, */
+      /* TerminateProcess will fail with ERROR_ACESS_DENIED. */
+      error = GetLastError();
+      if (error == ERROR_ACCESS_DENIED &&
+          GetExitCodeProcess(process_handle, &status) &&
+          status != STILL_ACTIVE) {
+        return uv__new_artificial_error(UV_ESRCH);
       }
-    } else {
-      err = uv__new_sys_error(GetLastError());
-    }
-  } else {
-    err = uv__new_artificial_error(UV_ENOSYS);
-  }
 
-  return err;
+      return uv__new_sys_error(error);
+    }
+
+    case 0: {
+      /* Health check: is the process still alive? */
+      DWORD status;
+
+      if (!GetExitCodeProcess(process_handle, &status))
+        return uv__new_sys_error(GetLastError());
+
+      if (status != STILL_ACTIVE)
+        return uv__new_artificial_error(UV_ESRCH);
+
+      return uv_ok_;
+    }
+
+    default:
+      /* Unsupported signal. */
+      return uv__new_artificial_error(UV_ENOSYS);
+  }
 }
 
 
