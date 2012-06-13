@@ -26,6 +26,11 @@ var net = require('net');
 var PORT = common.PORT;
 var spawn = require('child_process').spawn;
 
+if (process.platform === 'win32') {
+  console.error('This test is disabled on windows.');
+  return;
+}
+
 switch (process.argv[2]) {
   case 'child': return child();
   case 'parent': return parent();
