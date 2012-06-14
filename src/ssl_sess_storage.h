@@ -55,7 +55,7 @@ class SessionStorage {
 
   SessionStorage(SSL_CTX* ctx, int size, uint64_t timeout);
 
-  int GetIndex(unsigned char* key, int len);
+  uint32_t GetIndex(unsigned char* key, int len);
   void RemoveExpired();
 
   static SessionStorage* Init(SSL_CTX* ctx, int size, int64_t timeout);

@@ -38,7 +38,8 @@ int SessionStorage::ssl_idx = -1;
 SessionStorage* SessionStorage::Init(SSL_CTX* ctx, int size, int64_t timeout) {
   SSL_CTX_set_session_cache_mode(ctx,
                                  SSL_SESS_CACHE_SERVER |
-                                 SSL_SESS_CACHE_NO_INTERNAL);
+                                 SSL_SESS_CACHE_NO_INTERNAL |
+                                 SSL_SESS_CACHE_NO_AUTO_CLEAR);
   SSL_CTX_sess_set_new_cb(ctx, SessionStorage::New);
   SSL_CTX_sess_set_get_cb(ctx, SessionStorage::Get);
   SSL_CTX_sess_set_remove_cb(ctx, SessionStorage::Remove);
@@ -65,7 +66,7 @@ SessionStorage::SessionStorage(SSL_CTX* ctx, int size, uint64_t timeout)
       mask_(size - 1),
       expire_timeout_(timeout) {
   // Nullify map
-  memset(map_, 0, sizeof(KeyValue*) * size_);
+  memset(map_, 0, sizeof(map_[0]) * size_);
 }
 
 
@@ -106,7 +107,7 @@ inline uint32_t SessionStorage::Hash(unsigned char* key, int len) {
 }
 
 
-int SessionStorage::GetIndex(unsigned char* key, int len) {
+uint32_t SessionStorage::GetIndex(unsigned char* key, int len) {
   uint32_t start = Hash(key, len) & mask_;
   uint32_t index;
   int tries = 0;
@@ -144,7 +145,6 @@ void SessionStorage::RemoveExpired() {
     if (map_[i]->created_ < expire_edge) {
       delete map_[i];
       map_[i] = NULL;
-      continue;
     }
   }
 }
