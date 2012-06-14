@@ -30,10 +30,6 @@
 #include "handle-inl.h"
 #include "req-inl.h"
 
-
-#define SIGKILL         9
-
-
 typedef struct env_var {
   const char* narrow;
   const wchar_t* wide;
@@ -948,6 +944,15 @@ static uv_err_t uv__kill(HANDLE process_handle, int signum) {
 
       return uv__new_sys_error(error);
     }
+
+    case SIGUSR1:
+	// Process Groud Id remains NULL
+	// If this parameter is zero, the signal is generated in 
+	// all processes that share the console of the calling process.
+	if (!GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, NULL))
+		return uv__new_sys_error(GetLastError());
+
+	return uv_ok_;
 
     case 0: {
       /* Health check: is the process still alive? */
