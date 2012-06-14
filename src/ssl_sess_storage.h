@@ -32,13 +32,15 @@ namespace crypto {
 
 class SessionStorage {
  public:
+  // Content of hashmap's space's cell
+  // NOTE: that constructors copies `key`, while `value` is used as it is.
   class KeyValue {
    public:
     KeyValue(unsigned char* key, int len, unsigned char* value, int value_len);
 
     ~KeyValue() {
-      delete key_;
-      delete value_;
+      delete[] key_;
+      delete[] value_;
     }
 
     inline bool Equals(unsigned char* key, int len);
@@ -54,6 +56,9 @@ class SessionStorage {
   };
 
   SessionStorage(SSL_CTX* ctx, int size, uint64_t timeout);
+  ~SessionStorage() {
+    delete[] map_;
+  }
 
   uint32_t GetIndex(unsigned char* key, int len);
   void RemoveExpired();
