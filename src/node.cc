@@ -2476,8 +2476,6 @@ static void EnableDebug(bool wait_connect) {
   node_isolate->Exit();
 }
 
-
-#ifdef __POSIX__
 static void EnableDebugSignalHandler(int signal) {
   // Break once process will return execution to v8
   v8::Debug::DebugBreak(node_isolate);
@@ -2488,6 +2486,7 @@ static void EnableDebugSignalHandler(int signal) {
   }
 }
 
+#ifdef __POSIX__
 
 static void RegisterSignalHandler(int signal, void (*handler)(int)) {
   struct sigaction sa;
@@ -2541,6 +2540,69 @@ DWORD WINAPI EnableDebugThreadProc(void* arg) {
 static int GetDebugSignalHandlerMappingName(DWORD pid, wchar_t* buf,
     size_t buf_len) {
   return _snwprintf(buf, buf_len, L"node-debug-handler-%u", pid);
+}
+
+#define SIGUSR1 SIGBREAK
+
+typedef void (*PHANDLER_ROUTINE_SIGNAL)(int signal);
+
+
+static PHANDLER_ROUTINE SignalHandlerFn = NULL;
+static PHANDLER_ROUTINE_SIGNAL SIGUSR1HandlerFn = NULL;
+
+static BOOL WINAPI ConsoleHandler(unsigned int CEvent) {
+
+	bool sigHandled = false;
+
+    switch(CEvent)
+    {
+		case CTRL_C_EVENT:
+		case CTRL_CLOSE_EVENT:
+		case CTRL_LOGOFF_EVENT:
+		case CTRL_SHUTDOWN_EVENT:
+			sigHandled = false;
+			break;
+
+		case CTRL_BREAK_EVENT:
+			if (SIGUSR1HandlerFn != NULL) {
+				SIGUSR1HandlerFn(SIGUSR1);
+				sigHandled = true;
+			}
+			break;
+    }
+
+    return sigHandled;
+}
+
+static int InitialzieSignalHandler() {
+	
+	SignalHandlerFn = (PHANDLER_ROUTINE) ConsoleHandler;
+
+	if (SetConsoleCtrlHandler(SignalHandlerFn, true) == false)
+	{
+		// unable to install handler... 
+		// display message to the user
+		fprintf(stderr, "Unable to install handler!\n");
+		return -1;
+	}
+}
+
+static void RegisterSignalHandler(int signal, PHANDLER_ROUTINE_SIGNAL handler) {
+	
+	if (SignalHandlerFn == NULL) {
+		InitialzieSignalHandler();
+	}
+
+	switch(signal)
+	{
+		case SIGUSR1:
+			SIGUSR1HandlerFn = handler;
+			break;
+
+		default:
+			fprintf(stderr, "Only SIGUSR1 is supported at this stage.\n");
+			break;
+	}
 }
 
 
@@ -2771,11 +2833,8 @@ char** Init(int argc, char *argv[]) {
   if (use_debug_agent) {
     EnableDebug(debug_wait_connect);
   } else {
-#ifdef _WIN32
-    RegisterDebugSignalHandler();
-#else // Posix
-    RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
-#endif // __POSIX__
+
+   RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
   }
 
   return argv;

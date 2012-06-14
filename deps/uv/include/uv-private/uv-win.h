@@ -23,6 +23,9 @@
 # define _WIN32_WINNT   0x0502
 #endif
 
+#define SIGUSR1 	SIGBREAK
+#define SIGKILL         9
+
 #include <process.h>
 #include <stdint.h>
 #include <winsock2.h>
