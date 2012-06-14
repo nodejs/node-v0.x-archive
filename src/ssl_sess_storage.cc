@@ -35,7 +35,9 @@ namespace crypto {
 int SessionStorage::ssl_idx = -1;
 
 
-SessionStorage* SessionStorage::Init(SSL_CTX* ctx, int size, int64_t timeout) {
+SessionStorage* SessionStorage::Init(SSL_CTX* ctx,
+                                     int32_t size,
+                                     int64_t timeout) {
   SSL_CTX_set_session_cache_mode(ctx,
                                  SSL_SESS_CACHE_SERVER |
                                  SSL_SESS_CACHE_NO_INTERNAL |
@@ -59,7 +61,7 @@ SessionStorage* SessionStorage::Init(SSL_CTX* ctx, int size, int64_t timeout) {
 }
 
 
-SessionStorage::SessionStorage(SSL_CTX* ctx, int size, uint64_t timeout)
+SessionStorage::SessionStorage(SSL_CTX* ctx, int32_t size, uint64_t timeout)
     : ctx_(ctx),
       map_(new KeyValue*[size]),
       size_(size),
@@ -122,7 +124,6 @@ uint32_t SessionStorage::GetIndex(unsigned char* key, int len) {
     if (map_[index]->created_ < expire_edge) {
       delete map_[index];
       map_[index] = NULL;
-      continue;
     }
     if (map_[index]->Equals(key, len)) return index;
   }
@@ -164,7 +165,7 @@ int SessionStorage::New(SSL* ssl, SSL_SESSION* sess) {
   i2d_SSL_SESSION(sess, &pserialized);
 
   // Put it into hashmap
-  int index = storage->GetIndex(sess->session_id, sess->session_id_length);
+  uint32_t index = storage->GetIndex(sess->session_id, sess->session_id_length);
   storage->map_[index] = new KeyValue(sess->session_id,
                                       sess->session_id_length,
                                       serialized,
@@ -177,7 +178,7 @@ int SessionStorage::New(SSL* ssl, SSL_SESSION* sess) {
 void SessionStorage::Remove(SSL_CTX* ctx, SSL_SESSION* sess) {
   UNWRAP_STORAGE(ctx)
 
-  int index = storage->GetIndex(sess->session_id, sess->session_id_length);
+  uint32_t index = storage->GetIndex(sess->session_id, sess->session_id_length);
 
   delete storage->map_[index];
   storage->map_[index] = NULL;
@@ -193,7 +194,7 @@ SSL_SESSION* SessionStorage::Get(SSL* ssl,
   // Do not use ref-counting for this session
   *copy = NULL;
 
-  int index = storage->GetIndex(id, len);
+  uint32_t index = storage->GetIndex(id, len);
 
   KeyValue* kv = storage->map_[index];
   if (kv == NULL) return NULL;

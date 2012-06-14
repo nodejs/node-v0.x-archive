@@ -143,6 +143,12 @@ The `options` object has these possibilities:
     resumption. If `requestCert` is `true`, the default is MD5 hash value
     generated from command-line. Otherwise, the default is not provided.
 
+  - `sessionStorage`: A configuration object for node's internal storage for TLS
+    sessions. Possible properties: `size` (amount of sessions that can be stored
+    within storage, default: `10000`), `timeout` (liveness time for each session
+    in milliseconds, default: `50000`).
+    Default value: `true`, use `false` to disable session storage.
+
 Here is a simple example echo server:
 
     var tls = require('tls');

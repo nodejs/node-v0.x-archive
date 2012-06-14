@@ -55,7 +55,7 @@ class SessionStorage {
     friend class SessionStorage;
   };
 
-  SessionStorage(SSL_CTX* ctx, int size, uint64_t timeout);
+  SessionStorage(SSL_CTX* ctx, int32_t size, uint64_t timeout);
   ~SessionStorage() {
     delete[] map_;
   }
@@ -63,7 +63,7 @@ class SessionStorage {
   uint32_t GetIndex(unsigned char* key, int len);
   void RemoveExpired();
 
-  static SessionStorage* Init(SSL_CTX* ctx, int size, int64_t timeout);
+  static SessionStorage* Init(SSL_CTX* ctx, int32_t size, int64_t timeout);
   static inline uint32_t Hash(unsigned char* key, int len);
   static int New(SSL* ssl, SSL_SESSION* sess);
   static void Remove(SSL_CTX* ctx, SSL_SESSION* sess);
