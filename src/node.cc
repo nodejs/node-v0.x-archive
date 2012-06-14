@@ -26,8 +26,12 @@
 #include "uv.h"
 
 #include "v8-debug.h"
-#ifdef HAVE_DTRACE
+#if defined HAVE_DTRACE || defined HAVE_ETW
 # include "node_dtrace.h"
+#endif
+
+#ifdef HAVE_ETW
+# include "node_win32_etw_provider.h"
 #endif
 
 #include <locale.h>
@@ -2325,7 +2329,7 @@ void Load(Handle<Object> process_l) {
   Local<Object> global = v8::Context::GetCurrent()->Global();
   Local<Value> args[1] = { Local<Value>::New(process_l) };
 
-#ifdef HAVE_DTRACE
+#if defined HAVE_DTRACE || defined HAVE_ETW
   InitDTrace(global);
 #endif
 
@@ -2698,6 +2702,9 @@ char** Init(int argc, char *argv[]) {
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
 
+  // Make inherited handles noninheritable.
+  uv_disable_stdio_inheritance();
+
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);
   // Parse the rest of the args (up to the 'option_end_index' (where '--' was
@@ -2893,6 +2900,10 @@ int Start(int argc, char *argv[]) {
     // uv_unref'd) then this function exits. As long as there are active
     // watchers, it blocks.
     uv_run(uv_default_loop());
+
+#ifdef HAVE_ETW
+    shutdown_etw();
+#endif
 
     EmitExit(process_l);
     RunAtExit();
