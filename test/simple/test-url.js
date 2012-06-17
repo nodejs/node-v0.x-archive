@@ -430,6 +430,18 @@ var parseTests = {
     'path': '/bar'
   },
 
+  // protocols that seperate the host from path with ':'
+  'ssh://user@foo.com:folder': {
+    'href': 'ssh://user@foo.com:folder',
+    'host': 'foo.com',
+    'auth': 'user',
+    'hostname': 'foo.com',
+    'protocol': 'ssh:',
+    'pathname': 'folder',
+    'path': 'folder',
+    'slashes': true
+  },
+
   // IDNA tests
   'http://www.日本語.com/' : {
     'href': 'http://www.xn--wgv71a119e.com/',
