@@ -505,24 +505,23 @@ var parseTests = {
   },
 
   'http://bucket_name.s3.amazonaws.com/image.jpg': {
-    protocol: 'http:',
+    'protocol': 'http:',
     'slashes': true,
-    slashes: true,
-    host: 'bucket_name.s3.amazonaws.com',
-    hostname: 'bucket_name.s3.amazonaws.com',
-    pathname: '/image.jpg',
-    href: 'http://bucket_name.s3.amazonaws.com/image.jpg',
+    'host': 'bucket_name.s3.amazonaws.com',
+    'hostname': 'bucket_name.s3.amazonaws.com',
+    'pathname': '/image.jpg',
+    'href': 'http://bucket_name.s3.amazonaws.com/image.jpg',
     'path': '/image.jpg'
   },
 
   'git+http://github.com/joyent/node.git': {
-    protocol: 'git+http:',
-    slashes: true,
-    host: 'github.com',
-    hostname: 'github.com',
-    pathname: '/joyent/node.git',
-    path: '/joyent/node.git',
-    href: 'git+http://github.com/joyent/node.git'
+    'protocol': 'git+http:',
+    'slashes': true,
+    'host': 'github.com',
+    'hostname': 'github.com',
+    'pathname': '/joyent/node.git',
+    'path': '/joyent/node.git',
+    'href': 'git+http://github.com/joyent/node.git'
   },
 
   //if local1@domain1 is uses as a relative URL it may
