@@ -118,7 +118,6 @@ static Persistent<String> enter_symbol;
 static Persistent<String> exit_symbol;
 static Persistent<String> disposed_symbol;
 
-
 static bool print_eval = false;
 static bool force_repl = false;
 static char *eval_string = NULL;
@@ -174,6 +173,7 @@ static double prog_start_time;
 #define TICK_TIME(n) tick_times[(tick_time_head - (n)) % RPM_SAMPLES]
 static int64_t tick_times[RPM_SAMPLES];
 static int tick_time_head;
+
 
 static void CheckStatus(uv_timer_t* watcher, int status);
 
@@ -1227,26 +1227,16 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     String::Utf8Value sourceline(message->GetSourceLine());
     const char* sourceline_string = *sourceline;
 
-    // HACK HACK HACK
-    //
-    // FIXME
-    //
-    // Because of how CommonJS modules work, all scripts are wrapped with a
+    // This removes from the printed error messages the module wrap prefix:
     // "function (function (exports, __filename, ...) {"
-    // to provide script local variables.
-    //
-    // When reporting errors on the first line of a script, this wrapper
-    // function is leaked to the user. This HACK is to remove it. The length
-    // of the wrapper is 62. That wrapper is defined in src/node.js
-    //
-    // If that wrapper is ever changed, then this number also has to be
-    // updated. Or - someone could clean this up so that the two peices
-    // don't need to be changed.
-    //
+    // that is around all scripts that are run as modules.
+
     // Even better would be to get support into V8 for wrappers that
     // shouldn't be reported to users.
-    int offset = linenum == 1 ? 62 : 0;
-
+    int offset = 0;
+    if(linenum == 1 && 0 == strncmp(sourceline_string, MODULE_WRAP_PREFIX, strlen(MODULE_WRAP_PREFIX))){
+      offset += strlen(MODULE_WRAP_PREFIX);
+    }
     fprintf(stderr, "%s\n", sourceline_string + offset);
     // Print wavy underline (GetUnderline is deprecated).
     int start = message->GetStartColumn();
@@ -2213,6 +2203,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   process->Set(String::NewSymbol("pid"), Integer::New(getpid()));
   process->Set(String::NewSymbol("features"), GetFeatures());
+
+  //Add in the module wrap signatures
+  process->Set(String::NewSymbol("_moduleWrapPrefix"), String::New(MODULE_WRAP_PREFIX));
+  process->Set(String::NewSymbol("_moduleWrapSuffix"), String::New(MODULE_WRAP_SUFFIX));
 
   // -e, --eval
   if (eval_string) {

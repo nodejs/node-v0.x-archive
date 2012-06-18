@@ -393,11 +393,10 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
     script = output_flag == returnResult ? Script::Compile(code, filename)
                                          : Script::New(code, filename);
     if (script.IsEmpty()) {
-      // FIXME UGLY HACK TO DISPLAY SYNTAX ERRORS.
-      if (display_error) DisplayExceptionLine(try_catch);
-
-      // Hack because I can't get a proper stacktrace on SyntaxError
       return try_catch.ReThrow();
+//    return v8::ThrowException(val);
+//    FatalException(try_catch);
+//    return v8::Undefined();
     }
   } else {
     WrappedScript *n_script = ObjectWrap::Unwrap<WrappedScript>(args.Holder());
