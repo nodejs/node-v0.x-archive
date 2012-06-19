@@ -22,8 +22,11 @@
 #include <assert.h>
 
 #include "uv.h"
-#include "../uv-common.h"
 #include "internal.h"
+#include "handle-inl.h"
+#include "stream-inl.h"
+#include "req-inl.h"
+
 
 
 /*
@@ -81,18 +84,13 @@ static int uv__tcp_keepalive(uv_tcp_t* handle, SOCKET socket, int enable, unsign
 static int uv_tcp_set_socket(uv_loop_t* loop, uv_tcp_t* handle,
     SOCKET socket, int imported) {
   DWORD yes = 1;
+  int non_ifs_lsp;
 
   assert(handle->socket == INVALID_SOCKET);
 
   /* Set the socket to nonblocking mode */
   if (ioctlsocket(socket, FIONBIO, &yes) == SOCKET_ERROR) {
     uv__set_sys_error(loop, WSAGetLastError());
-    return -1;
-  }
-
-  /* Make the socket non-inheritable */
-  if (!SetHandleInformation((HANDLE)socket, HANDLE_FLAG_INHERIT, 0)) {
-    uv__set_sys_error(loop, GetLastError());
     return -1;
   }
 
@@ -110,7 +108,10 @@ static int uv_tcp_set_socket(uv_loop_t* loop, uv_tcp_t* handle,
     }
   }
 
-  if (pSetFileCompletionNotificationModes) {
+  non_ifs_lsp = (handle->flags & UV_HANDLE_IPV6) ? uv_tcp_non_ifs_lsp_ipv6 :
+    uv_tcp_non_ifs_lsp_ipv4;
+
+  if (pSetFileCompletionNotificationModes && !non_ifs_lsp) {
     if (pSetFileCompletionNotificationModes((HANDLE) socket,
         FILE_SKIP_SET_EVENT_ON_HANDLE |
         FILE_SKIP_COMPLETION_PORT_ON_SUCCESS)) {
@@ -139,12 +140,11 @@ static int uv_tcp_set_socket(uv_loop_t* loop, uv_tcp_t* handle,
 
 
 int uv_tcp_init(uv_loop_t* loop, uv_tcp_t* handle) {
-  uv_stream_init(loop, (uv_stream_t*)handle);
+  uv_stream_init(loop, (uv_stream_t*) handle, UV_TCP);
 
   handle->accept_reqs = NULL;
   handle->pending_accepts = NULL;
   handle->socket = INVALID_SOCKET;
-  handle->type = UV_TCP;
   handle->reqs_pending = 0;
   handle->func_acceptex = NULL;
   handle->func_connectex = NULL;
@@ -163,17 +163,22 @@ void uv_tcp_endgame(uv_loop_t* loop, uv_tcp_t* handle) {
   uv_tcp_accept_t* req;
 
   if (handle->flags & UV_HANDLE_CONNECTION &&
-      handle->flags & UV_HANDLE_SHUTTING &&
-      !(handle->flags & UV_HANDLE_SHUT) &&
+      handle->shutdown_req != NULL &&
       handle->write_reqs_pending == 0) {
 
-    if (shutdown(handle->socket, SD_SEND) != SOCKET_ERROR) {
+    UNREGISTER_HANDLE_REQ(loop, handle, handle->shutdown_req);
+
+    if (handle->flags & UV_HANDLE_CLOSING) {
+      status = -1;
+      sys_error = WSAEINTR;
+    } else if (shutdown(handle->socket, SD_SEND) != SOCKET_ERROR) {
       status = 0;
       handle->flags |= UV_HANDLE_SHUT;
     } else {
       status = -1;
       sys_error = WSAGetLastError();
     }
+
     if (handle->shutdown_req->cb) {
       if (status == -1) {
         uv__set_sys_error(loop, sys_error);
@@ -181,6 +186,7 @@ void uv_tcp_endgame(uv_loop_t* loop, uv_tcp_t* handle) {
       handle->shutdown_req->cb(handle->shutdown_req, status);
     }
 
+    handle->shutdown_req = NULL;
     DECREASE_PENDING_REQ_COUNT(handle);
     return;
   }
@@ -188,7 +194,12 @@ void uv_tcp_endgame(uv_loop_t* loop, uv_tcp_t* handle) {
   if (handle->flags & UV_HANDLE_CLOSING &&
       handle->reqs_pending == 0) {
     assert(!(handle->flags & UV_HANDLE_CLOSED));
-    handle->flags |= UV_HANDLE_CLOSED;
+    uv__handle_stop(handle);
+
+    if (!(handle->flags & UV_HANDLE_TCP_SOCKET_CLOSED)) {
+      closesocket(handle->socket);
+      handle->flags |= UV_HANDLE_TCP_SOCKET_CLOSED;
+    }
 
     if (!(handle->flags & UV_HANDLE_CONNECTION) && handle->accept_reqs) {
       if (handle->flags & UV_HANDLE_EMULATE_IOCP) {
@@ -209,13 +220,20 @@ void uv_tcp_endgame(uv_loop_t* loop, uv_tcp_t* handle) {
       handle->accept_reqs = NULL;
     }
 
-    if (handle->close_cb) {
-      handle->close_cb((uv_handle_t*)handle);
+    if (handle->flags & UV_HANDLE_CONNECTION &&
+        handle->flags & UV_HANDLE_EMULATE_IOCP) {
+      if (handle->read_req.wait_handle != INVALID_HANDLE_VALUE) {
+        UnregisterWait(handle->read_req.wait_handle);
+        handle->read_req.wait_handle = INVALID_HANDLE_VALUE;
+      }
+      if (handle->read_req.event_handle) {
+        CloseHandle(handle->read_req.event_handle);
+        handle->read_req.event_handle = NULL;
+      }
     }
 
+    uv__handle_close(handle);
     loop->active_tcp_streams--;
-
-    uv_unref(loop);
   }
 }
 
@@ -226,12 +244,18 @@ static int uv__bind(uv_tcp_t* handle,
                     int addrsize) {
   DWORD err;
   int r;
-  SOCKET sock;
 
   if (handle->socket == INVALID_SOCKET) {
-    sock = socket(domain, SOCK_STREAM, 0);
+    SOCKET sock = socket(domain, SOCK_STREAM, 0);
     if (sock == INVALID_SOCKET) {
       uv__set_sys_error(handle->loop, WSAGetLastError());
+      return -1;
+    }
+
+    /* Make the socket non-inheritable */
+    if (!SetHandleInformation((HANDLE) sock, HANDLE_FLAG_INHERIT, 0)) {
+      uv__set_sys_error(handle->loop, GetLastError());
+      closesocket(sock);
       return -1;
     }
 
@@ -285,12 +309,31 @@ int uv__tcp_bind6(uv_tcp_t* handle, struct sockaddr_in6 addr) {
 
 
 static void CALLBACK post_completion(void* context, BOOLEAN timed_out) {
-  uv_tcp_accept_t* req;
+  uv_req_t* req;
   uv_tcp_t* handle;
 
-  req = (uv_tcp_accept_t*) context;
+  req = (uv_req_t*) context;
   assert(req != NULL);
   handle = (uv_tcp_t*)req->data;
+  assert(handle != NULL);
+  assert(!timed_out);
+
+  if (!PostQueuedCompletionStatus(handle->loop->iocp,
+                                  req->overlapped.InternalHigh,
+                                  0,
+                                  &req->overlapped)) {
+    uv_fatal_error(GetLastError(), "PostQueuedCompletionStatus");
+  }
+}
+
+
+static void CALLBACK post_write_completion(void* context, BOOLEAN timed_out) {
+  uv_write_t* req;
+  uv_tcp_t* handle;
+
+  req = (uv_write_t*) context;
+  assert(req != NULL);
+  handle = (uv_tcp_t*)req->handle;
   assert(handle != NULL);
   assert(!timed_out);
 
@@ -329,10 +372,19 @@ static void uv_tcp_queue_accept(uv_tcp_t* handle, uv_tcp_accept_t* req) {
     return;
   }
 
+  /* Make the socket non-inheritable */
+  if (!SetHandleInformation((HANDLE) accept_socket, HANDLE_FLAG_INHERIT, 0)) {
+    SET_REQ_ERROR(req, GetLastError());
+    uv_insert_pending_req(loop, (uv_req_t*)req);
+    handle->reqs_pending++;
+    closesocket(accept_socket);
+    return;
+  }
+
   /* Prepare the overlapped structure. */
   memset(&(req->overlapped), 0, sizeof(req->overlapped));
   if (handle->flags & UV_HANDLE_EMULATE_IOCP) {
-    req->overlapped.hEvent = (HANDLE) ((DWORD) req->event_handle | 1);
+    req->overlapped.hEvent = (HANDLE) ((ULONG_PTR) req->event_handle | 1);
   }
 
   success = handle->func_acceptex(handle->socket,
@@ -356,7 +408,7 @@ static void uv_tcp_queue_accept(uv_tcp_t* handle, uv_tcp_accept_t* req) {
     if (handle->flags & UV_HANDLE_EMULATE_IOCP &&
         req->wait_handle == INVALID_HANDLE_VALUE &&
         !RegisterWaitForSingleObject(&req->wait_handle,
-          req->overlapped.hEvent, post_completion, (void*) req,
+          req->event_handle, post_completion, (void*) req,
           INFINITE, WT_EXECUTEINWAITTHREAD)) {
       SET_REQ_ERROR(req, GetLastError());
       uv_insert_pending_req(loop, (uv_req_t*)req);
@@ -406,6 +458,13 @@ static void uv_tcp_queue_read(uv_loop_t* loop, uv_tcp_t* handle) {
     buf.len = 0;
   }
 
+  /* Prepare the overlapped structure. */
+  memset(&(req->overlapped), 0, sizeof(req->overlapped));
+  if (handle->flags & UV_HANDLE_EMULATE_IOCP) {
+    assert(req->event_handle);
+    req->overlapped.hEvent = (HANDLE) ((ULONG_PTR) req->event_handle | 1);
+  }
+
   flags = 0;
   result = WSARecv(handle->socket,
                    (WSABUF*)&buf,
@@ -425,6 +484,14 @@ static void uv_tcp_queue_read(uv_loop_t* loop, uv_tcp_t* handle) {
     /* The req will be processed with IOCP. */
     handle->flags |= UV_HANDLE_READ_PENDING;
     handle->reqs_pending++;
+    if (handle->flags & UV_HANDLE_EMULATE_IOCP &&
+        req->wait_handle == INVALID_HANDLE_VALUE &&
+        !RegisterWaitForSingleObject(&req->wait_handle,
+          req->event_handle, post_completion, (void*) req,
+          INFINITE, WT_EXECUTEINWAITTHREAD)) {
+      SET_REQ_ERROR(req, GetLastError());
+      uv_insert_pending_req(loop, (uv_req_t*)req);
+    }
   } else {
     /* Make this req pending reporting an error. */
     SET_REQ_ERROR(req, WSAGetLastError());
@@ -440,6 +507,15 @@ int uv_tcp_listen(uv_tcp_t* handle, int backlog, uv_connection_cb cb) {
   uv_tcp_accept_t* req;
 
   assert(backlog > 0);
+
+  if (handle->flags & UV_HANDLE_LISTENING) {
+    handle->connection_cb = cb;
+  }
+
+  if (handle->flags & UV_HANDLE_READING) {
+    uv__set_artificial_error(loop, UV_EISCONN);
+    return -1;
+  }
 
   if (handle->flags & UV_HANDLE_BIND_ERROR) {
     uv__set_sys_error(loop, handle->bind_error);
@@ -457,7 +533,7 @@ int uv_tcp_listen(uv_tcp_t* handle, int backlog, uv_connection_cb cb) {
     }
   }
 
-  if (!(handle->flags & UV_HANDLE_SHARED_TCP_SERVER) &&
+  if (!(handle->flags & UV_HANDLE_SHARED_TCP_SOCKET) &&
       listen(handle->socket, backlog) == SOCKET_ERROR) {
     uv__set_sys_error(loop, WSAGetLastError());
     return -1;
@@ -465,6 +541,7 @@ int uv_tcp_listen(uv_tcp_t* handle, int backlog, uv_connection_cb cb) {
 
   handle->flags |= UV_HANDLE_LISTENING;
   handle->connection_cb = cb;
+  INCREASE_ACTIVE_COUNT(loop, handle);
 
   simultaneous_accepts = handle->flags & UV_HANDLE_TCP_SINGLE_ACCEPT ? 1
     : uv_simultaneous_server_accepts;
@@ -544,7 +621,7 @@ int uv_tcp_accept(uv_tcp_t* server, uv_tcp_t* client) {
 
       if (server->processed_accepts >= uv_simultaneous_server_accepts) {
         server->processed_accepts = 0;
-        /* 
+        /*
          * All previously queued accept requests are now processed.
          * We now switch to queueing just a single accept.
          */
@@ -583,11 +660,20 @@ int uv_tcp_read_start(uv_tcp_t* handle, uv_alloc_cb alloc_cb,
   handle->flags |= UV_HANDLE_READING;
   handle->read_cb = read_cb;
   handle->alloc_cb = alloc_cb;
+  INCREASE_ACTIVE_COUNT(loop, handle);
 
-  /* If reading was stopped and then started again, there could stell be a */
+  /* If reading was stopped and then started again, there could still be a */
   /* read request pending. */
-  if (!(handle->flags & UV_HANDLE_READ_PENDING))
+  if (!(handle->flags & UV_HANDLE_READ_PENDING)) {
+    if (handle->flags & UV_HANDLE_EMULATE_IOCP &&
+        !handle->read_req.event_handle) {
+      handle->read_req.event_handle = CreateEvent(NULL, 0, 0, NULL);
+      if (!handle->read_req.event_handle) {
+        uv_fatal_error(GetLastError(), "CreateEvent");
+      }
+    }
     uv_tcp_queue_read(loop, handle);
+  }
 
   return 0;
 }
@@ -635,10 +721,12 @@ int uv__tcp_connect(uv_connect_t* req,
   if (UV_SUCCEEDED_WITHOUT_IOCP(success)) {
     /* Process the req without IOCP. */
     handle->reqs_pending++;
+    REGISTER_HANDLE_REQ(loop, handle, req);
     uv_insert_pending_req(loop, (uv_req_t*)req);
   } else if (UV_SUCCEEDED_WITH_IOCP(success)) {
     /* The req will be processed with IOCP. */
     handle->reqs_pending++;
+    REGISTER_HANDLE_REQ(loop, handle, req);
   } else {
     uv__set_sys_error(loop, WSAGetLastError());
     return -1;
@@ -694,9 +782,11 @@ int uv__tcp_connect6(uv_connect_t* req,
 
   if (UV_SUCCEEDED_WITHOUT_IOCP(success)) {
     handle->reqs_pending++;
+    REGISTER_HANDLE_REQ(loop, handle, req);
     uv_insert_pending_req(loop, (uv_req_t*)req);
   } else if (UV_SUCCEEDED_WITH_IOCP(success)) {
     handle->reqs_pending++;
+    REGISTER_HANDLE_REQ(loop, handle, req);
   } else {
     uv__set_sys_error(loop, WSAGetLastError());
     return -1;
@@ -777,6 +867,17 @@ int uv_tcp_write(uv_loop_t* loop, uv_write_t* req, uv_tcp_t* handle,
   req->cb = cb;
   memset(&req->overlapped, 0, sizeof(req->overlapped));
 
+  /* Prepare the overlapped structure. */
+  memset(&(req->overlapped), 0, sizeof(req->overlapped));
+  if (handle->flags & UV_HANDLE_EMULATE_IOCP) {
+    req->event_handle = CreateEvent(NULL, 0, 0, NULL);
+    if (!req->event_handle) {
+      uv_fatal_error(GetLastError(), "CreateEvent");
+    }
+    req->overlapped.hEvent = (HANDLE) ((ULONG_PTR) req->event_handle | 1);
+    req->wait_handle = INVALID_HANDLE_VALUE;
+  }
+
   result = WSASend(handle->socket,
                    (WSABUF*)bufs,
                    bufcnt,
@@ -790,13 +891,22 @@ int uv_tcp_write(uv_loop_t* loop, uv_write_t* req, uv_tcp_t* handle,
     req->queued_bytes = 0;
     handle->reqs_pending++;
     handle->write_reqs_pending++;
+    REGISTER_HANDLE_REQ(loop, handle, req);
     uv_insert_pending_req(loop, (uv_req_t*) req);
   } else if (UV_SUCCEEDED_WITH_IOCP(result == 0)) {
     /* Request queued by the kernel. */
     req->queued_bytes = uv_count_bufs(bufs, bufcnt);
     handle->reqs_pending++;
     handle->write_reqs_pending++;
+    REGISTER_HANDLE_REQ(loop, handle, req);
     handle->write_queue_size += req->queued_bytes;
+    if (handle->flags & UV_HANDLE_EMULATE_IOCP &&
+        !RegisterWaitForSingleObject(&req->wait_handle,
+          req->event_handle, post_write_completion, (void*) req,
+          INFINITE, WT_EXECUTEINWAITTHREAD | WT_EXECUTEONLYONCE)) {
+      SET_REQ_ERROR(req, GetLastError());
+      uv_insert_pending_req(loop, (uv_req_t*)req);
+    }
   } else {
     /* Send failed due to an error. */
     uv__set_sys_error(loop, WSAGetLastError());
@@ -821,13 +931,14 @@ void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle,
     if ((handle->flags & UV_HANDLE_READING) ||
         !(handle->flags & UV_HANDLE_ZERO_READ)) {
       handle->flags &= ~UV_HANDLE_READING;
+      DECREASE_ACTIVE_COUNT(loop, handle);
       buf = (handle->flags & UV_HANDLE_ZERO_READ) ?
             uv_buf_init(NULL, 0) : handle->read_buffer;
 
       err = GET_REQ_SOCK_ERROR(req);
 
       if (err == WSAECONNABORTED) {
-        /* 
+        /*
          * Turn WSAECONNABORTED into UV_ECONNRESET to be consistent with Unix.
          */
         uv__set_error(loop, UV_ECONNRESET, err);
@@ -851,8 +962,12 @@ void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle,
         }
       } else {
         /* Connection closed */
-        handle->flags &= ~UV_HANDLE_READING;
+        if (handle->flags & UV_HANDLE_READING) {
+          handle->flags &= ~UV_HANDLE_READING;
+          DECREASE_ACTIVE_COUNT(loop, handle);
+        }
         handle->flags |= UV_HANDLE_EOF;
+
         uv__set_error(loop, UV_EOF, ERROR_SUCCESS);
         buf.base = 0;
         buf.len = 0;
@@ -883,7 +998,9 @@ void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle,
         } else {
           /* Connection closed */
           handle->flags &= ~UV_HANDLE_READING;
+          DECREASE_ACTIVE_COUNT(loop, handle);
           handle->flags |= UV_HANDLE_EOF;
+
           uv__set_error(loop, UV_EOF, ERROR_SUCCESS);
           handle->read_cb((uv_stream_t*)handle, -1, buf);
           break;
@@ -895,16 +1012,18 @@ void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle,
           uv__set_sys_error(loop, WSAEWOULDBLOCK);
           handle->read_cb((uv_stream_t*)handle, 0, buf);
         } else {
+          /* Ouch! serious error. */
+          handle->flags &= ~UV_HANDLE_READING;
+          DECREASE_ACTIVE_COUNT(loop, handle);
+
           if (err == WSAECONNABORTED) {
-            /* 
-             * Turn WSAECONNABORTED into UV_ECONNRESET to be consistent with Unix.
-             */
+            /* Turn WSAECONNABORTED into UV_ECONNRESET to be consistent with */
+            /* Unix. */
             uv__set_error(loop, UV_ECONNRESET, err);
           } else {
-            /* Ouch! serious error. */
             uv__set_sys_error(loop, err);
           }
-          handle->flags &= ~UV_HANDLE_READING;
+
           handle->read_cb((uv_stream_t*)handle, -1, buf);
         }
         break;
@@ -929,6 +1048,17 @@ void uv_process_tcp_write_req(uv_loop_t* loop, uv_tcp_t* handle,
 
   assert(handle->write_queue_size >= req->queued_bytes);
   handle->write_queue_size -= req->queued_bytes;
+
+  UNREGISTER_HANDLE_REQ(loop, handle, req);
+
+  if (handle->flags & UV_HANDLE_EMULATE_IOCP) {
+    if (req->wait_handle != INVALID_HANDLE_VALUE) {
+      UnregisterWait(req->wait_handle);
+    }
+    if (req->event_handle) {
+      CloseHandle(req->event_handle);
+    }
+  }
 
   if (req->cb) {
     uv__set_sys_error(loop, GET_REQ_SOCK_ERROR(req));
@@ -958,6 +1088,7 @@ void uv_process_tcp_accept_req(uv_loop_t* loop, uv_tcp_t* handle,
   if (req->accept_socket == INVALID_SOCKET) {
     if (handle->flags & UV_HANDLE_LISTENING) {
       handle->flags &= ~UV_HANDLE_LISTENING;
+      DECREASE_ACTIVE_COUNT(loop, handle);
       if (handle->connection_cb) {
         uv__set_sys_error(loop, GET_REQ_SOCK_ERROR(req));
         handle->connection_cb((uv_stream_t*)handle, -1);
@@ -995,31 +1126,32 @@ void uv_process_tcp_connect_req(uv_loop_t* loop, uv_tcp_t* handle,
     uv_connect_t* req) {
   assert(handle->type == UV_TCP);
 
-  if (req->cb) {
-    if (REQ_SUCCESS(req)) {
-      if (setsockopt(handle->socket,
-                      SOL_SOCKET,
-                      SO_UPDATE_CONNECT_CONTEXT,
-                      NULL,
-                      0) == 0) {
-        uv_connection_init((uv_stream_t*)handle);
-        loop->active_tcp_streams++;
-        ((uv_connect_cb)req->cb)(req, 0);
-      } else {
-        uv__set_sys_error(loop, WSAGetLastError());
-        ((uv_connect_cb)req->cb)(req, -1);
-      }
+  UNREGISTER_HANDLE_REQ(loop, handle, req);
+
+  if (REQ_SUCCESS(req)) {
+    if (setsockopt(handle->socket,
+                    SOL_SOCKET,
+                    SO_UPDATE_CONNECT_CONTEXT,
+                    NULL,
+                    0) == 0) {
+      uv_connection_init((uv_stream_t*)handle);
+      loop->active_tcp_streams++;
+      ((uv_connect_cb)req->cb)(req, 0);
     } else {
-      uv__set_sys_error(loop, GET_REQ_SOCK_ERROR(req));
+      uv__set_sys_error(loop, WSAGetLastError());
       ((uv_connect_cb)req->cb)(req, -1);
     }
+  } else {
+    uv__set_sys_error(loop, GET_REQ_SOCK_ERROR(req));
+    ((uv_connect_cb)req->cb)(req, -1);
   }
 
   DECREASE_PENDING_REQ_COUNT(handle);
 }
 
 
-int uv_tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info) {
+int uv_tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info,
+    int tcp_connection) {
   SOCKET socket = WSASocketW(AF_INET,
                              SOCK_STREAM,
                              IPPROTO_IP,
@@ -1032,10 +1164,30 @@ int uv_tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info) {
     return -1;
   }
 
-  tcp->flags |= UV_HANDLE_BOUND;
-  tcp->flags |= UV_HANDLE_SHARED_TCP_SERVER;
+  if (!SetHandleInformation((HANDLE) socket, HANDLE_FLAG_INHERIT, 0)) {
+    uv__set_sys_error(tcp->loop, GetLastError());
+    closesocket(socket);
+    return -1;
+  }
 
-  return uv_tcp_set_socket(tcp->loop, tcp, socket, 1);
+  if (uv_tcp_set_socket(tcp->loop, tcp, socket, 1) != 0) {
+    closesocket(socket);
+    return -1;
+  }
+
+  if (tcp_connection) {
+    uv_connection_init((uv_stream_t*)tcp);
+  }
+
+  tcp->flags |= UV_HANDLE_BOUND;
+  tcp->flags |= UV_HANDLE_SHARED_TCP_SOCKET;
+
+  if (socket_protocol_info->iAddressFamily == AF_INET6) {
+    tcp->flags |= UV_HANDLE_IPV6;
+  }
+
+  tcp->loop->active_tcp_streams++;
+  return 0;
 }
 
 
@@ -1073,37 +1225,34 @@ int uv_tcp_keepalive(uv_tcp_t* handle, int enable, unsigned int delay) {
 }
 
 
-
 int uv_tcp_duplicate_socket(uv_tcp_t* handle, int pid,
     LPWSAPROTOCOL_INFOW protocol_info) {
-  assert(!(handle->flags & UV_HANDLE_CONNECTION));
+  if (!(handle->flags & UV_HANDLE_CONNECTION)) {
+    /*
+     * We're about to share the socket with another process.  Because
+     * this is a listening socket, we assume that the other process will
+     * be accepting connections on it.  So, before sharing the socket
+     * with another process, we call listen here in the parent process.
+     */
 
-  /* 
-   * We're about to share the socket with another process.  Because
-   * this is a listening socket, we assume that the other process will
-   * be accepting connections on it.  So, before sharing the socket
-   * with another process, we call listen here in the parent process.
-   * This needs to be modified if the socket is shared with
-   * another process for anything other than accepting connections.
-   */
-
-  if (!(handle->flags & UV_HANDLE_LISTENING)) {
-    if (!(handle->flags & UV_HANDLE_BOUND)) {
-      uv__set_artificial_error(handle->loop, UV_EINVAL);
-      return -1;
+    if (!(handle->flags & UV_HANDLE_LISTENING)) {
+      if (!(handle->flags & UV_HANDLE_BOUND)) {
+        uv__set_artificial_error(handle->loop, UV_EINVAL);
+        return -1;
+      }
+      if (listen(handle->socket, SOMAXCONN) == SOCKET_ERROR) {
+        uv__set_sys_error(handle->loop, WSAGetLastError());
+        return -1;
+      }
     }
-    if (listen(handle->socket, SOMAXCONN) == SOCKET_ERROR) {
-      uv__set_sys_error(handle->loop, WSAGetLastError());
-      return -1;
-    }
-
-    handle->flags |= UV_HANDLE_SHARED_TCP_SERVER;
   }
 
   if (WSADuplicateSocketW(handle->socket, pid, protocol_info)) {
     uv__set_sys_error(handle->loop, WSAGetLastError());
     return -1;
   }
+
+  handle->flags |= UV_HANDLE_SHARED_TCP_SOCKET;
 
   return 0;
 }
@@ -1140,4 +1289,56 @@ int uv_tcp_simultaneous_accepts(uv_tcp_t* handle, int enable) {
   }
 
   return 0;
+}
+
+
+void uv_tcp_close(uv_loop_t* loop, uv_tcp_t* tcp) {
+  int non_ifs_lsp;
+  int close_socket = 1;
+
+  /*
+   * In order for winsock to do a graceful close there must not be
+   * any pending reads.
+   */
+  if (tcp->flags & UV_HANDLE_READ_PENDING) {
+    /* Just do shutdown on non-shared sockets, which ensures graceful close. */
+    if (!(tcp->flags & UV_HANDLE_SHARED_TCP_SOCKET)) {
+      shutdown(tcp->socket, SD_SEND);
+      tcp->flags |= UV_HANDLE_SHUT;
+    } else {
+      /* Check if we have any non-IFS LSPs stacked on top of TCP */
+      non_ifs_lsp = (tcp->flags & UV_HANDLE_IPV6) ? uv_tcp_non_ifs_lsp_ipv6 :
+        uv_tcp_non_ifs_lsp_ipv4;
+
+      if (!non_ifs_lsp) {
+        /*
+         * Shared socket with no non-IFS LSPs, request to cancel pending I/O.
+         * The socket will be closed inside endgame.
+         */
+        CancelIo((HANDLE)tcp->socket);
+        close_socket = 0;
+      }
+    }
+  }
+
+  if (tcp->flags & UV_HANDLE_READING) {
+    tcp->flags &= ~UV_HANDLE_READING;
+    DECREASE_ACTIVE_COUNT(loop, tcp);
+  }
+
+  if (tcp->flags & UV_HANDLE_LISTENING) {
+    tcp->flags &= ~UV_HANDLE_LISTENING;
+    DECREASE_ACTIVE_COUNT(loop, tcp);
+  }
+
+  if (close_socket) {
+    closesocket(tcp->socket);
+    tcp->flags |= UV_HANDLE_TCP_SOCKET_CLOSED;
+  }
+
+  uv__handle_start(tcp);
+
+  if (tcp->reqs_pending == 0) {
+    uv_want_endgame(tcp->loop, (uv_handle_t*)tcp);
+  }
 }

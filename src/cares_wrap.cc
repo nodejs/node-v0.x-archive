@@ -20,10 +20,9 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <assert.h>
-#include <node.h>
-#include <req_wrap.h>
-#include <node_vars.h>
-#include <uv.h>
+#include "node.h"
+#include "req_wrap.h"
+#include "uv.h"
 
 #include <string.h>
 
@@ -49,11 +48,6 @@
 #endif
 
 
-#include <node_vars.h>
-#define oncomplete_sym NODE_VAR(oncomplete_sym)
-#define ares_channel NODE_VAR(ares_channel)
-
-
 namespace node {
 
 namespace cares_wrap {
@@ -74,6 +68,11 @@ using v8::Value;
 
 
 typedef class ReqWrap<uv_getaddrinfo_t> GetAddrInfoReqWrap;
+
+static Persistent<String> oncomplete_sym;
+
+static ares_channel ares_channel;
+
 
 static Local<Array> HostentToAddresses(struct hostent* host) {
   HandleScope scope;
@@ -219,13 +218,13 @@ class QueryWrap {
   void CallOnComplete(Local<Value> answer) {
     HandleScope scope;
     Local<Value> argv[2] = { Integer::New(0), answer };
-    MakeCallback(object_, "oncomplete", 2, argv);
+    MakeCallback(object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
   }
 
   void CallOnComplete(Local<Value> answer, Local<Value> family) {
     HandleScope scope;
     Local<Value> argv[3] = { Integer::New(0), answer, family };
-    MakeCallback(object_, "oncomplete", 3, argv);
+    MakeCallback(object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
   }
 
   void ParseError(int status) {
@@ -234,7 +233,7 @@ class QueryWrap {
 
     HandleScope scope;
     Local<Value> argv[1] = { Integer::New(-1) };
-    MakeCallback(object_, "oncomplete", 1, argv);
+    MakeCallback(object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
   }
 
   // Subclasses should implement the appropriate Parse method.
@@ -556,7 +555,7 @@ static Handle<Value> Query(const Arguments& args) {
   // object reference, causing wrap->GetObject() to return undefined.
   Local<Object> object = Local<Object>::New(wrap->GetObject());
 
-  String::Utf8Value name(args[0]->ToString());
+  String::Utf8Value name(args[0]);
 
   int r = wrap->Send(*name);
   if (r) {
@@ -585,7 +584,7 @@ static Handle<Value> QueryWithFamily(const Arguments& args) {
   // object reference, causing wrap->GetObject() to return undefined.
   Local<Object> object = Local<Object>::New(wrap->GetObject());
 
-  String::Utf8Value name(args[0]->ToString());
+  String::Utf8Value name(args[0]);
   int family = args[1]->Int32Value();
 
   int r = wrap->Send(*name, family);
@@ -608,7 +607,7 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
 
   if (status) {
     // Error
-    SetErrno(uv_last_error(Loop()));
+    SetErrno(uv_last_error(uv_default_loop()));
     argv[0] = Local<Value>::New(Null());
   } else {
     // Success
@@ -680,7 +679,7 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
   uv_freeaddrinfo(res);
 
   // Make the callback into JavaScript
-  MakeCallback(req_wrap->object_, "oncomplete", 1, argv);
+  MakeCallback(req_wrap->object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
 
   delete req_wrap;
 }
@@ -689,7 +688,7 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
 static Handle<Value> GetAddrInfo(const Arguments& args) {
   HandleScope scope;
 
-  String::Utf8Value hostname(args[0]->ToString());
+  String::Utf8Value hostname(args[0]);
 
   int fam = AF_UNSPEC;
   if (args[1]->IsInt32()) {
@@ -711,7 +710,7 @@ static Handle<Value> GetAddrInfo(const Arguments& args) {
   hints.ai_family = fam;
   hints.ai_socktype = SOCK_STREAM;
 
-  int r = uv_getaddrinfo(Loop(),
+  int r = uv_getaddrinfo(uv_default_loop(),
                          &req_wrap->req_,
                          AfterGetAddrInfo,
                          *hostname,
@@ -720,7 +719,7 @@ static Handle<Value> GetAddrInfo(const Arguments& args) {
   req_wrap->Dispatched();
 
   if (r) {
-    SetErrno(uv_last_error(Loop()));
+    SetErrno(uv_last_error(uv_default_loop()));
     delete req_wrap;
     return scope.Close(v8::Null());
   } else {
@@ -737,7 +736,7 @@ static void Initialize(Handle<Object> target) {
   assert(r == ARES_SUCCESS);
 
   struct ares_options options;
-  uv_ares_init_options(Loop(), &ares_channel, &options, 0);
+  uv_ares_init_options(uv_default_loop(), &ares_channel, &options, 0);
   assert(r == 0);
 
   NODE_SET_METHOD(target, "queryA", Query<QueryAWrap>);
@@ -756,7 +755,7 @@ static void Initialize(Handle<Object> target) {
   target->Set(String::NewSymbol("AF_INET6"), Integer::New(AF_INET6));
   target->Set(String::NewSymbol("AF_UNSPEC"), Integer::New(AF_UNSPEC));
 
-  oncomplete_sym = Persistent<String>::New(String::NewSymbol("oncomplete"));
+  oncomplete_sym = NODE_PSYMBOL("oncomplete");
 }
 
 

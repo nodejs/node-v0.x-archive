@@ -51,25 +51,17 @@ process.on('exit', function() {
 });
 
 // Clean up stale files (if any) from previous run.
-try { fs.unlinkSync(filepathOne);    } catch (e) { }
+try { fs.unlinkSync(filepathOne); } catch (e) { }
 try { fs.unlinkSync(filepathTwoAbs); } catch (e) { }
-try { fs.unlinkSync(filepathThree);  } catch (e) { }
-try { fs.rmdirSync(testsubdir);      } catch (e) { }
+try { fs.unlinkSync(filepathThree); } catch (e) { }
+try { fs.rmdirSync(testsubdir); } catch (e) { }
 
 fs.writeFileSync(filepathOne, 'hello');
 
-assert.throws(
-    function() {
-      fs.watch(filepathOne);
-    },
-    function(e) {
-      return e.message === 'watch requires a listener function';
-    }
-);
-
 assert.doesNotThrow(
     function() {
-      var watcher = fs.watch(filepathOne, function(event, filename) {
+      var watcher = fs.watch(filepathOne)
+      watcher.on('change', function(event, filename) {
         assert.equal('change', event);
         if (expectFilePath) {
           assert.equal('watch.txt', filename);
@@ -90,15 +82,6 @@ setTimeout(function() {
 process.chdir(testDir);
 
 fs.writeFileSync(filepathTwoAbs, 'howdy');
-
-assert.throws(
-    function() {
-      fs.watch(filepathTwo);
-    },
-    function(e) {
-      return e.message === 'watch requires a listener function';
-    }
-);
 
 assert.doesNotThrow(
     function() {
@@ -125,7 +108,8 @@ try { fs.mkdirSync(testsubdir, 0700); } catch (e) {}
 assert.doesNotThrow(
     function() {
       var watcher = fs.watch(testsubdir, function(event, filename) {
-        assert.equal('rename', event);
+        var renameEv = process.platform === 'solaris' ? 'change' : 'rename';
+        assert.equal(renameEv, event);
         if (expectFilePath) {
           assert.equal('newfile.txt', filename);
         } else {

@@ -19,6 +19,7 @@
  */
 
 #include "uv.h"
+#include "../uv-common.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -28,7 +29,7 @@
 #include <time.h>
 
 #undef NANOSEC
-#define NANOSEC 1000000000
+#define NANOSEC ((uint64_t) 1e9)
 
 
 uint64_t uv_hrtime() {
@@ -78,6 +79,6 @@ int uv_fs_event_init(uv_loop_t* loop,
 }
 
 
-void uv__fs_event_destroy(uv_fs_event_t* handle) {
+void uv__fs_event_close(uv_fs_event_t* handle) {
   assert(0 && "implement me");
 }

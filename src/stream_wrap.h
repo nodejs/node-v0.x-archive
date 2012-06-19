@@ -22,11 +22,19 @@
 #ifndef STREAM_WRAP_H_
 #define STREAM_WRAP_H_
 
-#include <v8.h>
-#include <node.h>
-#include <handle_wrap.h>
+#include "v8.h"
+#include "node.h"
+#include "handle_wrap.h"
 
 namespace node {
+
+
+enum WriteEncoding {
+  kAscii,
+  kUtf8,
+  kUcs2
+};
+
 
 class StreamWrap : public HandleWrap {
  public:
@@ -35,14 +43,17 @@ class StreamWrap : public HandleWrap {
   static void Initialize(v8::Handle<v8::Object> target);
 
   // JavaScript functions
-  static v8::Handle<v8::Value> Write(const v8::Arguments& args);
   static v8::Handle<v8::Value> ReadStart(const v8::Arguments& args);
   static v8::Handle<v8::Value> ReadStop(const v8::Arguments& args);
   static v8::Handle<v8::Value> Shutdown(const v8::Arguments& args);
 
+  static v8::Handle<v8::Value> WriteBuffer(const v8::Arguments& args);
+  static v8::Handle<v8::Value> WriteAsciiString(const v8::Arguments& args);
+  static v8::Handle<v8::Value> WriteUtf8String(const v8::Arguments& args);
+  static v8::Handle<v8::Value> WriteUcs2String(const v8::Arguments& args);
+
  protected:
   StreamWrap(v8::Handle<v8::Object> object, uv_stream_t* stream);
-  virtual ~StreamWrap() { }
   virtual void SetHandle(uv_handle_t* h);
   void StateChange() { }
   void UpdateWriteQueueSize();
@@ -60,6 +71,9 @@ class StreamWrap : public HandleWrap {
       uv_handle_type pending);
   static void OnReadCommon(uv_stream_t* handle, ssize_t nread,
       uv_buf_t buf, uv_handle_type pending);
+
+  template <enum WriteEncoding encoding>
+  static v8::Handle<v8::Value> WriteStringImpl(const v8::Arguments& args);
 
   size_t slab_offset_;
   uv_stream_t* stream_;

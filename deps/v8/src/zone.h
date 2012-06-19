@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,6 +29,11 @@
 #define V8_ZONE_H_
 
 #include "allocation.h"
+#include "checks.h"
+#include "hashmap.h"
+#include "globals.h"
+#include "list.h"
+#include "splay-tree.h"
 
 namespace v8 {
 namespace internal {
@@ -42,6 +47,7 @@ enum ZoneScopeMode {
 };
 
 class Segment;
+class Isolate;
 
 // The Zone supports very fast allocation of small chunks of
 // memory. The chunks cannot be deallocated individually, but instead
@@ -142,7 +148,6 @@ class Zone {
 class ZoneObject {
  public:
   // Allocate a new ZoneObject of 'size' bytes in the Zone.
-  INLINE(void* operator new(size_t size));
   INLINE(void* operator new(size_t size, Zone* zone));
 
   // Ideally, the delete operator should be private instead of
@@ -158,25 +163,16 @@ class ZoneObject {
 };
 
 
-class AssertNoZoneAllocation {
+// The ZoneAllocationPolicy is used to specialize generic data
+// structures to allocate themselves and their elements in the Zone.
+struct ZoneAllocationPolicy {
  public:
-  inline AssertNoZoneAllocation();
-  inline ~AssertNoZoneAllocation();
+  explicit ZoneAllocationPolicy(Zone* zone) : zone_(zone) { }
+  INLINE(void* New(size_t size));
+  INLINE(static void Delete(void *pointer)) { }
+
  private:
-  bool prev_;
-};
-
-
-// The ZoneListAllocationPolicy is used to specialize the GenericList
-// implementation to allocate ZoneLists and their elements in the
-// Zone.
-class ZoneListAllocationPolicy {
- public:
-  // Allocate 'size' bytes of memory in the zone.
-  static void* New(int size);
-
-  // De-allocation attempts are silently ignored.
-  static void Delete(void* p) { }
+  Zone* zone_;
 };
 
 
@@ -185,20 +181,48 @@ class ZoneListAllocationPolicy {
 // Zone. ZoneLists cannot be deleted individually; you can delete all
 // objects in the Zone by calling Zone::DeleteAll().
 template<typename T>
-class ZoneList: public List<T, ZoneListAllocationPolicy> {
+class ZoneList: public List<T, ZoneAllocationPolicy> {
  public:
-  INLINE(void* operator new(size_t size));
-  INLINE(void* operator new(size_t size, Zone* zone));
-
   // Construct a new ZoneList with the given capacity; the length is
   // always zero. The capacity must be non-negative.
-  explicit ZoneList(int capacity)
-      : List<T, ZoneListAllocationPolicy>(capacity) { }
+  ZoneList(int capacity, Zone* zone)
+      : List<T, ZoneAllocationPolicy>(capacity, ZoneAllocationPolicy(zone)) { }
+
+  INLINE(void* operator new(size_t size, Zone* zone));
 
   // Construct a new ZoneList by copying the elements of the given ZoneList.
-  explicit ZoneList(const ZoneList<T>& other)
-      : List<T, ZoneListAllocationPolicy>(other.length()) {
-    AddAll(other);
+  ZoneList(const ZoneList<T>& other, Zone* zone)
+      : List<T, ZoneAllocationPolicy>(other.length(),
+                                      ZoneAllocationPolicy(zone)) {
+    AddAll(other, ZoneAllocationPolicy(zone));
+  }
+
+  // We add some convenience wrappers so that we can pass in a Zone
+  // instead of a (less convenient) ZoneAllocationPolicy.
+  INLINE(void Add(const T& element, Zone* zone)) {
+    List<T, ZoneAllocationPolicy>::Add(element, ZoneAllocationPolicy(zone));
+  }
+  INLINE(void AddAll(const List<T, ZoneAllocationPolicy>& other,
+                     Zone* zone)) {
+    List<T, ZoneAllocationPolicy>::AddAll(other, ZoneAllocationPolicy(zone));
+  }
+  INLINE(void AddAll(const Vector<T>& other, Zone* zone)) {
+    List<T, ZoneAllocationPolicy>::AddAll(other, ZoneAllocationPolicy(zone));
+  }
+  INLINE(void InsertAt(int index, const T& element, Zone* zone)) {
+    List<T, ZoneAllocationPolicy>::InsertAt(index, element,
+                                            ZoneAllocationPolicy(zone));
+  }
+  INLINE(Vector<T> AddBlock(T value, int count, Zone* zone)) {
+    return List<T, ZoneAllocationPolicy>::AddBlock(value, count,
+                                                   ZoneAllocationPolicy(zone));
+  }
+  INLINE(void Allocate(int length, Zone* zone)) {
+    List<T, ZoneAllocationPolicy>::Allocate(length, ZoneAllocationPolicy(zone));
+  }
+  INLINE(void Initialize(int capacity, Zone* zone)) {
+    List<T, ZoneAllocationPolicy>::Initialize(capacity,
+                                              ZoneAllocationPolicy(zone));
   }
 
   void operator delete(void* pointer) { UNREACHABLE(); }
@@ -235,13 +259,15 @@ class ZoneScope BASE_EMBEDDED {
 // different configurations of a concrete splay tree (see splay-tree.h).
 // The tree itself and all its elements are allocated in the Zone.
 template <typename Config>
-class ZoneSplayTree: public SplayTree<Config, ZoneListAllocationPolicy> {
+class ZoneSplayTree: public SplayTree<Config, ZoneAllocationPolicy> {
  public:
-  ZoneSplayTree()
-      : SplayTree<Config, ZoneListAllocationPolicy>() {}
+  explicit ZoneSplayTree(Zone* zone)
+      : SplayTree<Config, ZoneAllocationPolicy>(ZoneAllocationPolicy(zone)) {}
   ~ZoneSplayTree();
 };
 
+
+typedef TemplateHashMapImpl<ZoneAllocationPolicy> ZoneHashMap;
 
 } }  // namespace v8::internal
 

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -94,7 +94,7 @@ TEST(Promotion) {
 
   // Allocate a fixed array in the new space.
   int array_size =
-      (HEAP->MaxObjectSizeInPagedSpace() - FixedArray::kHeaderSize) /
+      (Page::kMaxNonCodeHeapObjectSize - FixedArray::kHeaderSize) /
       (kPointerSize * 4);
   Object* obj = HEAP->AllocateFixedArray(array_size)->ToObjectChecked();
 
@@ -125,7 +125,7 @@ TEST(NoPromotion) {
 
   // Allocate a big Fixed array in the new space.
   int max_size =
-      Min(HEAP->MaxObjectSizeInPagedSpace(), HEAP->MaxObjectSizeInNewSpace());
+      Min(Page::kMaxNonCodeHeapObjectSize, HEAP->MaxObjectSizeInNewSpace());
 
   int length = (max_size - FixedArray::kHeaderSize) / (2*kPointerSize);
   Object* obj = i::Isolate::Current()->heap()->AllocateFixedArray(length)->
@@ -526,12 +526,25 @@ static intptr_t MemoryInUse() {
 
 TEST(BootUpMemoryUse) {
   intptr_t initial_memory = MemoryInUse();
+  FLAG_crankshaft = false;  // Avoid flakiness.
   // Only Linux has the proc filesystem and only if it is mapped.  If it's not
   // there we just skip the test.
   if (initial_memory >= 0) {
     InitializeVM();
-    intptr_t booted_memory = MemoryInUse();
-    CHECK_LE(booted_memory - initial_memory, 16 * 1024 * 1024);
+    intptr_t delta = MemoryInUse() - initial_memory;
+    if (sizeof(initial_memory) == 8) {
+      if (v8::internal::Snapshot::IsEnabled()) {
+        CHECK_LE(delta, 3600 * 1024);  // 3396.
+      } else {
+        CHECK_LE(delta, 4000 * 1024);  // 3948.
+      }
+    } else {
+      if (v8::internal::Snapshot::IsEnabled()) {
+        CHECK_LE(delta, 2600 * 1024);  // 2484.
+      } else {
+        CHECK_LE(delta, 2950 * 1024);  // 2844
+      }
+    }
   }
 }
 

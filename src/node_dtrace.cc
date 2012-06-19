@@ -19,11 +19,14 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_dtrace.h>
+#include "node_dtrace.h"
 #include <string.h>
 
 #ifdef HAVE_DTRACE
 #include "node_provider.h"
+#elif HAVE_ETW
+#include "node_win32_etw_provider.h"
+#include "node_win32_etw_provider-inl.h"
 #else
 #define NODE_HTTP_SERVER_REQUEST(arg0, arg1)
 #define NODE_HTTP_SERVER_REQUEST_ENABLED() (0)
@@ -54,7 +57,7 @@ using namespace v8;
     return (ThrowException(Exception::Error(String::New("expected " \
       "object for " #obj " to contain string member " #member)))); \
   } \
-  String::Utf8Value _##member(obj->Get(String::New(#member))->ToString()); \
+  String::Utf8Value _##member(obj->Get(String::New(#member))); \
   if ((*(const char **)valp = *_##member) == NULL) \
     *(const char **)valp = "<unknown>";
 
@@ -203,7 +206,7 @@ Handle<Value> DTRACE_HTTP_SERVER_REQUEST(const Arguments& args) {
       "object for request to contain string member headers"))));
 
   Local<Value> strfwdfor = headers->Get(String::New("x-forwarded-for"));
-  String::Utf8Value fwdfor(strfwdfor->ToString());
+  String::Utf8Value fwdfor(strfwdfor);
 
   if (!strfwdfor->IsString() || (req.forwardedFor = *fwdfor) == NULL)
     req.forwardedFor = const_cast<char*>("");
@@ -315,7 +318,11 @@ void InitDTrace(Handle<Object> target) {
     target->Set(String::NewSymbol(tab[i].name), tab[i].templ->GetFunction());
   }
 
-#ifdef HAVE_DTRACE
+#ifdef HAVE_ETW
+  init_etw();
+#endif
+
+#if defined HAVE_DTRACE || defined HAVE_ETW
   v8::V8::AddGCPrologueCallback((GCPrologueCallback)dtrace_gc_start);
   v8::V8::AddGCEpilogueCallback((GCEpilogueCallback)dtrace_gc_done);
 #endif

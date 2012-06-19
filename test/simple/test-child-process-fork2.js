@@ -27,11 +27,7 @@ var net = require('net');
 var socketCloses = 0;
 var N = 10;
 
-var options = {
-  thread: process.TEST_ISOLATE ? true : false
-};
-
-var n = fork(common.fixturesDir + '/fork2.js', [], options);
+var n = fork(common.fixturesDir + '/fork2.js');
 
 var messageCount = 0;
 
@@ -40,10 +36,7 @@ var server = new net.Server(function(c) {
   c.destroy();
 });
 
-// TODO need better API for this.
-server._backlog = 9;
-
-server.listen(common.PORT, function() {
+server.listen(common.PORT, /* backlog */ 9, function() {
   console.log('PARENT send child server handle');
   n.send({ hello: 'world' }, server._handle);
 });
@@ -51,12 +44,12 @@ server.listen(common.PORT, function() {
 function makeConnections() {
   for (var i = 0; i < N; i++) {
     var socket = net.connect(common.PORT, function() {
-      console.log("CLIENT connected");
+      console.log('CLIENT connected');
     });
 
-    socket.on("close", function() {
+    socket.on('close', function() {
       socketCloses++;
-      console.log("CLIENT closed " + socketCloses);
+      console.log('CLIENT closed ' + socketCloses);
       if (socketCloses == N) {
         n.kill();
         server.close();

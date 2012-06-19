@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -56,6 +56,9 @@ def BuildOptions():
   result.add_option("--no-presubmit",
                     help='Skip presubmit checks',
                     default=False, action="store_true")
+  result.add_option("--buildbot",
+                    help='Adapt to path structure used on buildbots',
+                    default=False, action="store_true")
 
   # Flags this wrapper script handles itself:
   result.add_option("-m", "--mode",
@@ -72,6 +75,8 @@ def BuildOptions():
       help="The style of progress indicator (verbose, dots, color, mono)",
       choices=PROGRESS_INDICATORS, default="mono")
   result.add_option("--report", help="Print a summary of the tests to be run",
+      default=False, action="store_true")
+  result.add_option("--download-data", help="Download missing test suite data",
       default=False, action="store_true")
   result.add_option("-s", "--suite", help="A test suite",
       default=[], action="append")
@@ -107,9 +112,6 @@ def BuildOptions():
   result.add_option("--nostress",
                     help="Don't run crankshaft --always-opt --stress-op test",
                     default=False, action="store_true")
-  result.add_option("--crankshaft",
-                    help="Run with the --crankshaft flag",
-                    default=False, action="store_true")
   result.add_option("--shard-count",
                     help="Split testsuites into this number of shards",
                     default=1, type="int")
@@ -142,14 +144,16 @@ def ProcessOptions(options):
     options.mode = options.mode.split(',')
     options.arch = options.arch.split(',')
   for mode in options.mode:
-    if not mode in ['debug', 'release']:
+    if not mode.lower() in ['debug', 'release']:
       print "Unknown mode %s" % mode
       return False
   for arch in options.arch:
     if not arch in ['ia32', 'x64', 'arm', 'mips']:
       print "Unknown architecture %s" % arch
       return False
-
+  if options.buildbot:
+    # Buildbots run presubmit tests as a separate step.
+    options.no_presubmit = True
   return True
 
 
@@ -161,6 +165,8 @@ def PassOnOptions(options):
     result += ['--progress=' + options.progress]
   if options.report:
     result += ['--report']
+  if options.download_data:
+    result += ['--download-data']
   if options.suite != []:
     for suite in options.suite:
       result += ['--suite=../../test/' + suite]
@@ -190,12 +196,10 @@ def PassOnOptions(options):
     result += ['--stress-only']
   if options.nostress:
     result += ['--nostress']
-  if options.crankshaft:
-    result += ['--crankshaft']
   if options.shard_count != 1:
-    result += ['--shard_count=%s' % options.shard_count]
+    result += ['--shard-count=%s' % options.shard_count]
   if options.shard_run != 1:
-    result += ['--shard_run=%s' % options.shard_run]
+    result += ['--shard-run=%s' % options.shard_run]
   if options.noprof:
     result += ['--noprof']
   return result
@@ -209,28 +213,34 @@ def Main():
     return 1
 
   workspace = abspath(join(dirname(sys.argv[0]), '..'))
+  returncodes = 0
 
   if not options.no_presubmit:
     print ">>> running presubmit tests"
-    subprocess.call([workspace + '/tools/presubmit.py'])
+    returncodes += subprocess.call([workspace + '/tools/presubmit.py'])
 
-  args_for_children = [workspace + '/tools/test.py'] + PassOnOptions(options)
+  args_for_children = ['python']
+  args_for_children += [workspace + '/tools/test.py'] + PassOnOptions(options)
   args_for_children += ['--no-build', '--build-system=gyp']
   for arg in args:
     args_for_children += [arg]
-  returncodes = 0
   env = os.environ
 
   for mode in options.mode:
     for arch in options.arch:
       print ">>> running tests for %s.%s" % (arch, mode)
-      shellpath = workspace + '/' + options.outdir + '/' + arch + '.' + mode
+      if options.buildbot:
+        shellpath = workspace + '/' + options.outdir + '/' + mode
+        mode = mode.lower()
+      else:
+        shellpath = workspace + '/' + options.outdir + '/' + arch + '.' + mode
       env['LD_LIBRARY_PATH'] = shellpath + '/lib.target'
       shell = shellpath + "/d8"
-      child = subprocess.Popen(' '.join(args_for_children +
-                                        ['--arch=' + arch] +
-                                        ['--mode=' + mode] +
-                                        ['--shell=' + shell]),
+      cmdline = ' '.join(args_for_children +
+                         ['--arch=' + arch] +
+                         ['--mode=' + mode] +
+                         ['--shell=' + shell])
+      child = subprocess.Popen(cmdline,
                                shell=True,
                                cwd=workspace,
                                env=env)

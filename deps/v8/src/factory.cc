@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -34,6 +34,7 @@
 #include "macro-assembler.h"
 #include "objects.h"
 #include "objects-visiting.h"
+#include "platform.h"
 #include "scopeinfo.h"
 
 namespace v8 {
@@ -114,7 +115,8 @@ Handle<ObjectHashTable> Factory::NewObjectHashTable(int at_least_space_for) {
 Handle<DescriptorArray> Factory::NewDescriptorArray(int number_of_descriptors) {
   ASSERT(0 <= number_of_descriptors);
   CALL_HEAP_FUNCTION(isolate(),
-                     DescriptorArray::Allocate(number_of_descriptors),
+                     DescriptorArray::Allocate(number_of_descriptors,
+                                               DescriptorArray::MAY_BE_SHARED),
                      DescriptorArray);
 }
 
@@ -145,6 +147,13 @@ Handle<AccessorPair> Factory::NewAccessorPair() {
   CALL_HEAP_FUNCTION(isolate(),
                      isolate()->heap()->AllocateAccessorPair(),
                      AccessorPair);
+}
+
+
+Handle<TypeFeedbackInfo> Factory::NewTypeFeedbackInfo() {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->AllocateTypeFeedbackInfo(),
+                     TypeFeedbackInfo);
 }
 
 
@@ -284,6 +293,15 @@ Handle<Context> Factory::NewGlobalContext() {
 }
 
 
+Handle<Context> Factory::NewModuleContext(Handle<Context> previous,
+                                          Handle<ScopeInfo> scope_info) {
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateModuleContext(*previous, *scope_info),
+      Context);
+}
+
+
 Handle<Context> Factory::NewFunctionContext(int length,
                                             Handle<JSFunction> function) {
   CALL_HEAP_FUNCTION(
@@ -317,10 +335,9 @@ Handle<Context> Factory::NewWithContext(Handle<JSFunction> function,
 }
 
 
-Handle<Context> Factory::NewBlockContext(
-    Handle<JSFunction> function,
-    Handle<Context> previous,
-    Handle<ScopeInfo> scope_info) {
+Handle<Context> Factory::NewBlockContext(Handle<JSFunction> function,
+                                         Handle<Context> previous,
+                                         Handle<ScopeInfo> scope_info) {
   CALL_HEAP_FUNCTION(
       isolate(),
       isolate()->heap()->AllocateBlockContext(*function,
@@ -375,6 +392,8 @@ Handle<Script> Factory::NewScript(Handle<String> source) {
   script->set_context_data(heap->undefined_value());
   script->set_type(Smi::FromInt(Script::TYPE_NORMAL));
   script->set_compilation_type(Smi::FromInt(Script::COMPILATION_TYPE_HOST));
+  script->set_compilation_state(
+      Smi::FromInt(Script::COMPILATION_STATE_INITIAL));
   script->set_wrapper(*wrapper);
   script->set_line_ends(heap->undefined_value());
   script->set_eval_from_shared(heap->undefined_value());
@@ -478,15 +497,18 @@ Handle<Map> Factory::CopyMap(Handle<Map> src,
 
 
 Handle<Map> Factory::CopyMapDropTransitions(Handle<Map> src) {
-  CALL_HEAP_FUNCTION(isolate(), src->CopyDropTransitions(), Map);
+  CALL_HEAP_FUNCTION(isolate(),
+                     src->CopyDropTransitions(DescriptorArray::MAY_BE_SHARED),
+                     Map);
 }
 
 
 Handle<Map> Factory::GetElementsTransitionMap(
     Handle<JSObject> src,
     ElementsKind elements_kind) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     src->GetElementsTransitionMap(elements_kind),
+  Isolate* i = isolate();
+  CALL_HEAP_FUNCTION(i,
+                     src->GetElementsTransitionMap(i, elements_kind),
                      Map);
 }
 
@@ -527,6 +549,10 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
           : isolate()->strict_mode_function_map(),
       pretenure);
 
+  if (function_info->ic_age() != isolate()->heap()->global_ic_age()) {
+    function_info->ResetForNewContext(isolate()->heap()->global_ic_age());
+  }
+
   result->set_context(*context);
   if (!function_info->bound()) {
     int number_of_literals = function_info->num_literals();
@@ -539,16 +565,13 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
                     context->global_context());
     }
     result->set_literals(*literals);
-  } else {
-    result->set_function_bindings(isolate()->heap()->empty_fixed_array());
   }
-  result->set_next_function_link(isolate()->heap()->undefined_value());
-
   if (V8::UseCrankshaft() &&
       FLAG_always_opt &&
       result->is_compiled() &&
       !function_info->is_toplevel() &&
-      function_info->allows_lazy_compilation()) {
+      function_info->allows_lazy_compilation() &&
+      !function_info->optimization_disabled()) {
     result->MarkForLazyRecompilation();
   }
   return result;
@@ -656,6 +679,43 @@ Handle<Object> Factory::NewError(const char* type,
 }
 
 
+Handle<String> Factory::EmergencyNewError(const char* type,
+                                          Handle<JSArray> args) {
+  const int kBufferSize = 1000;
+  char buffer[kBufferSize];
+  size_t space = kBufferSize;
+  char* p = &buffer[0];
+
+  Vector<char> v(buffer, kBufferSize);
+  OS::StrNCpy(v, type, space);
+  space -= Min(space, strlen(type));
+  p = &buffer[kBufferSize] - space;
+
+  for (unsigned i = 0; i < ARRAY_SIZE(args); i++) {
+    if (space > 0) {
+      *p++ = ' ';
+      space--;
+      if (space > 0) {
+        MaybeObject* maybe_arg = args->GetElement(i);
+        Handle<String> arg_str(reinterpret_cast<String*>(maybe_arg));
+        const char* arg = *arg_str->ToCString();
+        Vector<char> v2(p, space);
+        OS::StrNCpy(v2, arg, space);
+        space -= Min(space, strlen(arg));
+        p = &buffer[kBufferSize] - space;
+      }
+    }
+  }
+  if (space > 0) {
+    *p = '\0';
+  } else {
+    buffer[kBufferSize - 1] = '\0';
+  }
+  Handle<String> error_string = NewStringFromUtf8(CStrVector(buffer), TENURED);
+  return error_string;
+}
+
+
 Handle<Object> Factory::NewError(const char* maker,
                                  const char* type,
                                  Handle<JSArray> args) {
@@ -664,8 +724,9 @@ Handle<Object> Factory::NewError(const char* maker,
       isolate()->js_builtins_object()->GetPropertyNoExceptionThrown(*make_str));
   // If the builtins haven't been properly configured yet this error
   // constructor may not have been defined.  Bail out.
-  if (!fun_obj->IsJSFunction())
-    return undefined_value();
+  if (!fun_obj->IsJSFunction()) {
+    return EmergencyNewError(type, args);
+  }
   Handle<JSFunction> fun = Handle<JSFunction>::cast(fun_obj);
   Handle<Object> type_obj = LookupAsciiSymbol(type);
   Handle<Object> argv[] = { type_obj, args };
@@ -754,12 +815,9 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
   if (force_initial_map ||
       type != JS_OBJECT_TYPE ||
       instance_size != JSObject::kHeaderSize) {
-    ElementsKind default_elements_kind = FLAG_smi_only_arrays
-        ? FAST_SMI_ONLY_ELEMENTS
-        : FAST_ELEMENTS;
     Handle<Map> initial_map = NewMap(type,
                                      instance_size,
-                                     default_elements_kind);
+                                     GetInitialFastElementsKind());
     function->set_initial_map(*initial_map);
     initial_map->set_constructor(*function);
   }
@@ -867,7 +925,7 @@ Handle<DescriptorArray> Factory::CopyAppendCallbackDescriptors(
   // Copy the descriptors from the array.
   for (int i = 0; i < array->number_of_descriptors(); i++) {
     if (!array->IsNullDescriptor(i)) {
-      result->CopyFrom(descriptor_count++, *array, i, witness);
+      DescriptorArray::CopyFrom(result, descriptor_count++, array, i, witness);
     }
   }
 
@@ -884,7 +942,7 @@ Handle<DescriptorArray> Factory::CopyAppendCallbackDescriptors(
     Handle<String> key =
         SymbolFromString(Handle<String>(String::cast(entry->name())));
     // Check if a descriptor with this name already exists before writing.
-    if (result->LinearSearch(*key, descriptor_count) ==
+    if (result->LinearSearch(EXPECT_UNSORTED, *key, descriptor_count) ==
         DescriptorArray::kNotFound) {
       CallbacksDescriptor desc(*key, *entry, entry->property_attributes());
       result->Set(descriptor_count, &desc, witness);
@@ -901,7 +959,7 @@ Handle<DescriptorArray> Factory::CopyAppendCallbackDescriptors(
     Handle<DescriptorArray> new_result =
         NewDescriptorArray(number_of_descriptors);
     for (int i = 0; i < number_of_descriptors; i++) {
-      new_result->CopyFrom(i, *result, i, witness);
+      DescriptorArray::CopyFrom(new_result, i, result, i, witness);
     }
     result = new_result;
   }
@@ -917,6 +975,13 @@ Handle<JSObject> Factory::NewJSObject(Handle<JSFunction> constructor,
   CALL_HEAP_FUNCTION(
       isolate(),
       isolate()->heap()->AllocateJSObject(*constructor, pretenure), JSObject);
+}
+
+
+Handle<JSModule> Factory::NewJSModule() {
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateJSModule(), JSModule);
 }
 
 
@@ -938,22 +1003,28 @@ Handle<JSObject> Factory::NewJSObjectFromMap(Handle<Map> map) {
 
 
 Handle<JSArray> Factory::NewJSArray(int capacity,
+                                    ElementsKind elements_kind,
                                     PretenureFlag pretenure) {
-  Handle<JSObject> obj = NewJSObject(isolate()->array_function(), pretenure);
   CALL_HEAP_FUNCTION(isolate(),
-                     Handle<JSArray>::cast(obj)->Initialize(capacity),
+                     isolate()->heap()->AllocateJSArrayAndStorage(
+                         elements_kind,
+                         0,
+                         capacity,
+                         INITIALIZE_ARRAY_ELEMENTS_WITH_HOLE,
+                         pretenure),
                      JSArray);
 }
 
 
 Handle<JSArray> Factory::NewJSArrayWithElements(Handle<FixedArrayBase> elements,
+                                                ElementsKind elements_kind,
                                                 PretenureFlag pretenure) {
-  Handle<JSArray> result =
-      Handle<JSArray>::cast(NewJSObject(isolate()->array_function(),
-                                        pretenure));
-  result->set_length(Smi::FromInt(0));
-  SetContent(result, elements);
-  return result;
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateJSArrayWithElements(*elements,
+                                                     elements_kind,
+                                                     pretenure),
+      JSArray);
 }
 
 
@@ -984,10 +1055,11 @@ void Factory::EnsureCanContainHeapObjectElements(Handle<JSArray> array) {
 
 void Factory::EnsureCanContainElements(Handle<JSArray> array,
                                        Handle<FixedArrayBase> elements,
+                                       uint32_t length,
                                        EnsureElementsMode mode) {
   CALL_HEAP_FUNCTION_VOID(
       isolate(),
-      array->EnsureCanContainElements(*elements, mode));
+      array->EnsureCanContainElements(*elements, length, mode));
 }
 
 

@@ -39,7 +39,7 @@ var fs = require("graceful-fs")
   , mkdir = require("mkdirp")
   , npm = require("../npm.js")
 
-  , log = require("./log.js")
+  , log = require("npmlog")
   , configDefs = require("./config-defs.js")
 
   , myUid = process.env.SUDO_UID !== undefined
@@ -66,7 +66,6 @@ exports.configList = configList
 
 // just put this here for a moment, so that the logs
 // in the config-loading phase don't cause it to blow up.
-configList.push({loglevel:"warn"})
 
 function resolveConfigs (cli, cb_) {
   defaultConfig = defaultConfig || configDefs.defaults
@@ -108,7 +107,8 @@ function resolveConfigs (cli, cb_) {
       if (er) return cb(er)
 
       if (conf.hasOwnProperty("prefix")) {
-        log.warn("Cannot set prefix in globalconfig file"
+        log.warn( "globalconfig"
+                , "Cannot set prefix in globalconfig file"
                 , cl.get("globalconfig"))
         delete conf.prefix
       }
@@ -196,7 +196,7 @@ function parseField (f, k, emptyIsFalse) {
 
 function parseFile (file, cb) {
   if (!file) return cb(null, {})
-  log.verbose(file, "config file")
+  log.verbose("config file", file)
   fs.readFile(file, function (er, data) {
     // treat all errors as just an empty file
     if (er) return cb(null, {})
@@ -323,8 +323,14 @@ function envReplace (f) {
   if (typeof f !== "string" || !f) return f
 
   // replace any ${ENV} values with the appropriate environ.
-  return f.replace(/\$\{([^}]+)\}/g, function (orig, name, i, s) {
-    return process.env[name] || orig
+  var envExpr = /(\\*)\$\{([^}]+)\}/g
+  return f.replace(envExpr, function (orig, esc, name, i, s) {
+    esc = esc.length && esc.length % 2
+    if (esc) return orig
+    if (undefined === process.env[name]) {
+      throw new Error("Failed to replace env in config: "+orig)
+    }
+    return process.env[name]
   })
 }
 

@@ -43,47 +43,83 @@ static void ProbeTable(Isolate* isolate,
                        MacroAssembler* masm,
                        Code::Flags flags,
                        StubCache::Table table,
+                       Register receiver,
                        Register name,
+                       // Number of the cache entry, not scaled.
                        Register offset,
                        Register scratch,
-                       Register scratch2) {
+                       Register scratch2,
+                       Register offset_scratch) {
   ExternalReference key_offset(isolate->stub_cache()->key_reference(table));
   ExternalReference value_offset(isolate->stub_cache()->value_reference(table));
+  ExternalReference map_offset(isolate->stub_cache()->map_reference(table));
 
   uint32_t key_off_addr = reinterpret_cast<uint32_t>(key_offset.address());
   uint32_t value_off_addr = reinterpret_cast<uint32_t>(value_offset.address());
+  uint32_t map_off_addr = reinterpret_cast<uint32_t>(map_offset.address());
 
   // Check the relative positions of the address fields.
   ASSERT(value_off_addr > key_off_addr);
   ASSERT((value_off_addr - key_off_addr) % 4 == 0);
   ASSERT((value_off_addr - key_off_addr) < (256 * 4));
+  ASSERT(map_off_addr > key_off_addr);
+  ASSERT((map_off_addr - key_off_addr) % 4 == 0);
+  ASSERT((map_off_addr - key_off_addr) < (256 * 4));
 
   Label miss;
-  Register offsets_base_addr = scratch;
+  Register base_addr = scratch;
+  scratch = no_reg;
+
+  // Multiply by 3 because there are 3 fields per entry (name, code, map).
+  __ add(offset_scratch, offset, Operand(offset, LSL, 1));
+
+  // Calculate the base address of the entry.
+  __ mov(base_addr, Operand(key_offset));
+  __ add(base_addr, base_addr, Operand(offset_scratch, LSL, kPointerSizeLog2));
 
   // Check that the key in the entry matches the name.
-  __ mov(offsets_base_addr, Operand(key_offset));
-  __ ldr(ip, MemOperand(offsets_base_addr, offset, LSL, 1));
+  __ ldr(ip, MemOperand(base_addr, 0));
   __ cmp(name, ip);
   __ b(ne, &miss);
 
-  // Get the code entry from the cache.
-  __ add(offsets_base_addr, offsets_base_addr,
-         Operand(value_off_addr - key_off_addr));
-  __ ldr(scratch2, MemOperand(offsets_base_addr, offset, LSL, 1));
-
-  // Check that the flags match what we're looking for.
-  __ ldr(scratch2, FieldMemOperand(scratch2, Code::kFlagsOffset));
-  __ bic(scratch2, scratch2, Operand(Code::kFlagsNotUsedInLookup));
-  __ cmp(scratch2, Operand(flags));
+  // Check the map matches.
+  __ ldr(ip, MemOperand(base_addr, map_off_addr - key_off_addr));
+  __ ldr(scratch2, FieldMemOperand(receiver, HeapObject::kMapOffset));
+  __ cmp(ip, scratch2);
   __ b(ne, &miss);
 
-  // Re-load code entry from cache.
-  __ ldr(offset, MemOperand(offsets_base_addr, offset, LSL, 1));
+  // Get the code entry from the cache.
+  Register code = scratch2;
+  scratch2 = no_reg;
+  __ ldr(code, MemOperand(base_addr, value_off_addr - key_off_addr));
+
+  // Check that the flags match what we're looking for.
+  Register flags_reg = base_addr;
+  base_addr = no_reg;
+  __ ldr(flags_reg, FieldMemOperand(code, Code::kFlagsOffset));
+  // It's a nice optimization if this constant is encodable in the bic insn.
+
+  uint32_t mask = Code::kFlagsNotUsedInLookup;
+  ASSERT(__ ImmediateFitsAddrMode1Instruction(mask));
+  __ bic(flags_reg, flags_reg, Operand(mask));
+  // Using cmn and the negative instead of cmp means we can use movw.
+  if (flags < 0) {
+    __ cmn(flags_reg, Operand(-flags));
+  } else {
+    __ cmp(flags_reg, Operand(flags));
+  }
+  __ b(ne, &miss);
+
+#ifdef DEBUG
+    if (FLAG_test_secondary_stub_cache && table == StubCache::kPrimary) {
+      __ jmp(&miss);
+    } else if (FLAG_test_primary_stub_cache && table == StubCache::kSecondary) {
+      __ jmp(&miss);
+    }
+#endif
 
   // Jump to the first instruction in the code stub.
-  __ add(offset, offset, Operand(Code::kHeaderSize - kHeapObjectTag));
-  __ Jump(offset);
+  __ add(pc, code, Operand(Code::kHeaderSize - kHeapObjectTag));
 
   // Miss: fall through.
   __ bind(&miss);
@@ -155,13 +191,14 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
                               Register name,
                               Register scratch,
                               Register extra,
-                              Register extra2) {
+                              Register extra2,
+                              Register extra3) {
   Isolate* isolate = masm->isolate();
   Label miss;
 
-  // Make sure that code is valid. The shifting code relies on the
-  // entry size being 8.
-  ASSERT(sizeof(Entry) == 8);
+  // Make sure that code is valid. The multiplying code relies on the
+  // entry size being 12.
+  ASSERT(sizeof(Entry) == 12);
 
   // Make sure the flags does not name a specific type.
   ASSERT(Code::ExtractTypeFromFlags(flags) == 0);
@@ -181,6 +218,11 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   ASSERT(!scratch.is(no_reg));
   ASSERT(!extra.is(no_reg));
   ASSERT(!extra2.is(no_reg));
+  ASSERT(!extra3.is(no_reg));
+
+  Counters* counters = masm->isolate()->counters();
+  __ IncrementCounter(counters->megamorphic_stub_cache_probes(), 1,
+                      extra2, extra3);
 
   // Check that the receiver isn't a smi.
   __ JumpIfSmi(receiver, &miss);
@@ -189,27 +231,51 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   __ ldr(scratch, FieldMemOperand(name, String::kHashFieldOffset));
   __ ldr(ip, FieldMemOperand(receiver, HeapObject::kMapOffset));
   __ add(scratch, scratch, Operand(ip));
-  __ eor(scratch, scratch, Operand(flags));
-  __ and_(scratch,
-          scratch,
-          Operand((kPrimaryTableSize - 1) << kHeapObjectTagSize));
+  uint32_t mask = kPrimaryTableSize - 1;
+  // We shift out the last two bits because they are not part of the hash and
+  // they are always 01 for maps.
+  __ mov(scratch, Operand(scratch, LSR, kHeapObjectTagSize));
+  // Mask down the eor argument to the minimum to keep the immediate
+  // ARM-encodable.
+  __ eor(scratch, scratch, Operand((flags >> kHeapObjectTagSize) & mask));
+  // Prefer and_ to ubfx here because ubfx takes 2 cycles.
+  __ and_(scratch, scratch, Operand(mask));
 
   // Probe the primary table.
-  ProbeTable(isolate, masm, flags, kPrimary, name, scratch, extra, extra2);
+  ProbeTable(isolate,
+             masm,
+             flags,
+             kPrimary,
+             receiver,
+             name,
+             scratch,
+             extra,
+             extra2,
+             extra3);
 
   // Primary miss: Compute hash for secondary probe.
-  __ sub(scratch, scratch, Operand(name));
-  __ add(scratch, scratch, Operand(flags));
-  __ and_(scratch,
-          scratch,
-          Operand((kSecondaryTableSize - 1) << kHeapObjectTagSize));
+  __ sub(scratch, scratch, Operand(name, LSR, kHeapObjectTagSize));
+  uint32_t mask2 = kSecondaryTableSize - 1;
+  __ add(scratch, scratch, Operand((flags >> kHeapObjectTagSize) & mask2));
+  __ and_(scratch, scratch, Operand(mask2));
 
   // Probe the secondary table.
-  ProbeTable(isolate, masm, flags, kSecondary, name, scratch, extra, extra2);
+  ProbeTable(isolate,
+             masm,
+             flags,
+             kSecondary,
+             receiver,
+             name,
+             scratch,
+             extra,
+             extra2,
+             extra3);
 
   // Cache miss: Fall-through and let caller handle the miss by
   // entering the runtime system.
   __ bind(&miss);
+  __ IncrementCounter(counters->megamorphic_stub_cache_misses(), 1,
+                      extra2, extra3);
 }
 
 
@@ -369,20 +435,59 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
                                       Handle<JSObject> object,
                                       int index,
                                       Handle<Map> transition,
+                                      Handle<String> name,
                                       Register receiver_reg,
                                       Register name_reg,
-                                      Register scratch,
+                                      Register scratch1,
+                                      Register scratch2,
                                       Label* miss_label) {
   // r0 : value
   Label exit;
 
+  LookupResult lookup(masm->isolate());
+  object->Lookup(*name, &lookup);
+  if (lookup.IsFound() && (lookup.IsReadOnly() || !lookup.IsCacheable())) {
+    // In sloppy mode, we could just return the value and be done. However, we
+    // might be in strict mode, where we have to throw. Since we cannot tell,
+    // go into slow case unconditionally.
+    __ jmp(miss_label);
+    return;
+  }
+
   // Check that the map of the object hasn't changed.
-  __ CheckMap(receiver_reg, scratch, Handle<Map>(object->map()), miss_label,
-              DO_SMI_CHECK, ALLOW_ELEMENT_TRANSITION_MAPS);
+  CompareMapMode mode = transition.is_null() ? ALLOW_ELEMENT_TRANSITION_MAPS
+                                             : REQUIRE_EXACT_MAP;
+  __ CheckMap(receiver_reg, scratch1, Handle<Map>(object->map()), miss_label,
+              DO_SMI_CHECK, mode);
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
-    __ CheckAccessGlobalProxy(receiver_reg, scratch, miss_label);
+    __ CheckAccessGlobalProxy(receiver_reg, scratch1, miss_label);
+  }
+
+  // Check that we are allowed to write this.
+  if (!transition.is_null() && object->GetPrototype()->IsJSObject()) {
+    JSObject* holder;
+    if (lookup.IsFound()) {
+      holder = lookup.holder();
+    } else {
+      // Find the top object.
+      holder = *object;
+      do {
+        holder = JSObject::cast(holder->GetPrototype());
+      } while (holder->GetPrototype()->IsJSObject());
+    }
+    // We need an extra register, push
+    __ push(name_reg);
+    Label miss_pop, done_check;
+    CheckPrototypes(object, receiver_reg, Handle<JSObject>(holder), name_reg,
+                    scratch1, scratch2, name, &miss_pop);
+    __ jmp(&done_check);
+    __ bind(&miss_pop);
+    __ pop(name_reg);
+    __ jmp(miss_label);
+    __ bind(&done_check);
+    __ pop(name_reg);
   }
 
   // Stub never generated for non-global objects that require access
@@ -405,10 +510,20 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
   }
 
   if (!transition.is_null()) {
-    // Update the map of the object; no write barrier updating is
-    // needed because the map is never in new space.
-    __ mov(ip, Operand(transition));
-    __ str(ip, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
+    // Update the map of the object.
+    __ mov(scratch1, Operand(transition));
+    __ str(scratch1, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
+
+    // Update the write barrier for the map field and pass the now unused
+    // name_reg as scratch register.
+    __ RecordWriteField(receiver_reg,
+                        HeapObject::kMapOffset,
+                        scratch1,
+                        name_reg,
+                        kLRHasNotBeenSaved,
+                        kDontSaveFPRegs,
+                        OMIT_REMEMBERED_SET,
+                        OMIT_SMI_CHECK);
   }
 
   // Adjust for the number of properties stored in the object. Even in the
@@ -430,15 +545,16 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     __ RecordWriteField(receiver_reg,
                         offset,
                         name_reg,
-                        scratch,
+                        scratch1,
                         kLRHasNotBeenSaved,
                         kDontSaveFPRegs);
   } else {
     // Write to the properties array.
     int offset = index * kPointerSize + FixedArray::kHeaderSize;
     // Get the properties array
-    __ ldr(scratch, FieldMemOperand(receiver_reg, JSObject::kPropertiesOffset));
-    __ str(r0, FieldMemOperand(scratch, offset));
+    __ ldr(scratch1,
+           FieldMemOperand(receiver_reg, JSObject::kPropertiesOffset));
+    __ str(r0, FieldMemOperand(scratch1, offset));
 
     // Skip updating write barrier if storing a smi.
     __ JumpIfSmi(r0, &exit);
@@ -446,7 +562,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     // Update the write barrier for the array address.
     // Ok to clobber receiver_reg and name_reg, since we return.
     __ mov(name_reg, r0);
-    __ RecordWriteField(scratch,
+    __ RecordWriteField(scratch1,
                         offset,
                         name_reg,
                         receiver_reg,
@@ -514,6 +630,8 @@ static void PushInterceptorArguments(MacroAssembler* masm,
   __ push(holder);
   __ ldr(scratch, FieldMemOperand(scratch, InterceptorInfo::kDataOffset));
   __ push(scratch);
+  __ mov(scratch, Operand(ExternalReference::isolate_address()));
+  __ push(scratch);
 }
 
 
@@ -528,7 +646,7 @@ static void CompileCallLoadPropertyWithInterceptor(
   ExternalReference ref =
       ExternalReference(IC_Utility(IC::kLoadPropertyWithInterceptorOnly),
                         masm->isolate());
-  __ mov(r0, Operand(5));
+  __ mov(r0, Operand(6));
   __ mov(r1, Operand(ref));
 
   CEntryStub stub(1);
@@ -536,9 +654,9 @@ static void CompileCallLoadPropertyWithInterceptor(
 }
 
 
-static const int kFastApiCallArguments = 3;
+static const int kFastApiCallArguments = 4;
 
-// Reserves space for the extra arguments to FastHandleApiCall in the
+// Reserves space for the extra arguments to API function in the
 // caller's frame.
 //
 // These arguments are set by CheckPrototypes and GenerateFastApiDirectCall.
@@ -562,11 +680,12 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
                                       int argc) {
   // ----------- S t a t e -------------
   //  -- sp[0]              : holder (set by CheckPrototypes)
-  //  -- sp[4]              : callee js function
+  //  -- sp[4]              : callee JS function
   //  -- sp[8]              : call data
-  //  -- sp[12]             : last js argument
+  //  -- sp[12]             : isolate
+  //  -- sp[16]             : last JS argument
   //  -- ...
-  //  -- sp[(argc + 3) * 4] : first js argument
+  //  -- sp[(argc + 3) * 4] : first JS argument
   //  -- sp[(argc + 4) * 4] : receiver
   // -----------------------------------
   // Get the function and setup the context.
@@ -574,7 +693,7 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   __ LoadHeapObject(r5, function);
   __ ldr(cp, FieldMemOperand(r5, JSFunction::kContextOffset));
 
-  // Pass the additional arguments FastHandleApiCall expects.
+  // Pass the additional arguments.
   Handle<CallHandlerInfo> api_call_info = optimization.api_call_info();
   Handle<Object> call_data(api_call_info->data());
   if (masm->isolate()->heap()->InNewSpace(*call_data)) {
@@ -583,13 +702,15 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   } else {
     __ Move(r6, call_data);
   }
-  // Store js function and call data.
-  __ stm(ib, sp, r5.bit() | r6.bit());
+  __ mov(r7, Operand(ExternalReference::isolate_address()));
+  // Store JS function, call data and isolate.
+  __ stm(ib, sp, r5.bit() | r6.bit() | r7.bit());
 
-  // r2 points to call data as expected by Arguments
-  // (refer to layout above).
-  __ add(r2, sp, Operand(2 * kPointerSize));
+  // Prepare arguments.
+  __ add(r2, sp, Operand(3 * kPointerSize));
 
+  // Allocate the v8::Arguments structure in the arguments' space since
+  // it's not controlled by GC.
   const int kApiStackSpace = 4;
 
   FrameScope frame_scope(masm, StackFrame::MANUAL);
@@ -598,9 +719,9 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   // r0 = v8::Arguments&
   // Arguments is after the return address.
   __ add(r0, sp, Operand(1 * kPointerSize));
-  // v8::Arguments::implicit_args = data
+  // v8::Arguments::implicit_args_
   __ str(r2, MemOperand(r0, 0 * kPointerSize));
-  // v8::Arguments::values = last argument
+  // v8::Arguments::values_
   __ add(ip, r2, Operand(argc * kPointerSize));
   __ str(ip, MemOperand(r0, 1 * kPointerSize));
   // v8::Arguments::length_ = argc
@@ -738,7 +859,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
           ? CALL_AS_FUNCTION
           : CALL_AS_METHOD;
       __ InvokeFunction(optimization.constant_function(), arguments_,
-                        JUMP_FUNCTION, call_kind);
+                        JUMP_FUNCTION, NullCallWrapper(), call_kind);
     }
 
     // Deferred code for fast API call case---clean preallocated space.
@@ -777,7 +898,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
     __ CallExternalReference(
         ExternalReference(IC_Utility(IC::kLoadPropertyWithInterceptorForCall),
                           masm->isolate()),
-        5);
+        6);
     // Restore the name_ register.
     __ pop(name_);
     // Leave the internal frame.
@@ -1136,7 +1257,9 @@ void StubCompiler::GenerateLoadCallback(Handle<JSObject> object,
   } else {
     __ Move(scratch3, Handle<Object>(callback->data()));
   }
-  __ Push(reg, scratch3, name_reg);
+  __ Push(reg, scratch3);
+  __ mov(scratch3, Operand(ExternalReference::isolate_address()));
+  __ Push(scratch3, name_reg);
   __ mov(r0, sp);  // r0 = Handle<String>
 
   const int kApiStackSpace = 1;
@@ -1148,7 +1271,7 @@ void StubCompiler::GenerateLoadCallback(Handle<JSObject> object,
   __ str(scratch2, MemOperand(sp, 1 * kPointerSize));
   __ add(r1, sp, Operand(1 * kPointerSize));  // r1 = AccessorInfo&
 
-  const int kStackUnwindSpace = 4;
+  const int kStackUnwindSpace = 5;
   Address getter_address = v8::ToCData<Address>(callback->getter());
   ApiFunction fun(getter_address);
   ExternalReference ref =
@@ -1179,13 +1302,14 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
   // and CALLBACKS, so inline only them, other cases may be added
   // later.
   bool compile_followup_inline = false;
-  if (lookup->IsProperty() && lookup->IsCacheable()) {
+  if (lookup->IsFound() && lookup->IsCacheable()) {
     if (lookup->type() == FIELD) {
       compile_followup_inline = true;
     } else if (lookup->type() == CALLBACKS &&
                lookup->GetCallbackObject()->IsAccessorInfo()) {
-      compile_followup_inline =
-          AccessorInfo::cast(lookup->GetCallbackObject())->getter() != NULL;
+      AccessorInfo* callback = AccessorInfo::cast(lookup->GetCallbackObject());
+      compile_followup_inline = callback->getter() != NULL &&
+          callback->IsCompatibleReceiver(*object);
     }
   }
 
@@ -1198,12 +1322,19 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
                                           name, miss);
     ASSERT(holder_reg.is(receiver) || holder_reg.is(scratch1));
 
+    // Preserve the receiver register explicitly whenever it is different from
+    // the holder and it is needed should the interceptor return without any
+    // result. The CALLBACKS case needs the receiver to be passed into C++ code,
+    // the FIELD case might cause a miss during the prototype check.
+    bool must_perfrom_prototype_check = *interceptor_holder != lookup->holder();
+    bool must_preserve_receiver_reg = !receiver.is(holder_reg) &&
+        (lookup->type() == CALLBACKS || must_perfrom_prototype_check);
+
     // Save necessary data before invoking an interceptor.
     // Requires a frame to make GC aware of pushed pointers.
     {
       FrameScope frame_scope(masm(), StackFrame::INTERNAL);
-      if (lookup->type() == CALLBACKS && !receiver.is(holder_reg)) {
-        // CALLBACKS case needs a receiver to be passed into C++ callback.
+      if (must_preserve_receiver_reg) {
         __ Push(receiver, holder_reg, name_reg);
       } else {
         __ Push(holder_reg, name_reg);
@@ -1228,14 +1359,14 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
       __ bind(&interceptor_failed);
       __ pop(name_reg);
       __ pop(holder_reg);
-      if (lookup->type() == CALLBACKS && !receiver.is(holder_reg)) {
+      if (must_preserve_receiver_reg) {
         __ pop(receiver);
       }
       // Leave the internal frame.
     }
     // Check that the maps from interceptor's holder to lookup's holder
     // haven't changed.  And load lookup's holder into |holder| register.
-    if (*interceptor_holder != lookup->holder()) {
+    if (must_perfrom_prototype_check) {
       holder_reg = CheckPrototypes(interceptor_holder,
                                    holder_reg,
                                    Handle<JSObject>(lookup->holder()),
@@ -1269,20 +1400,19 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
       if (!receiver.is(holder_reg)) {
         ASSERT(scratch1.is(holder_reg));
         __ Push(receiver, holder_reg);
-        __ ldr(scratch3,
-               FieldMemOperand(scratch2, AccessorInfo::kDataOffset));
-        __ Push(scratch3, scratch2, name_reg);
       } else {
         __ push(receiver);
-        __ ldr(scratch3,
-               FieldMemOperand(scratch2, AccessorInfo::kDataOffset));
-        __ Push(holder_reg, scratch3, scratch2, name_reg);
+        __ push(holder_reg);
       }
+      __ ldr(scratch3,
+             FieldMemOperand(scratch2, AccessorInfo::kDataOffset));
+      __ mov(scratch1, Operand(ExternalReference::isolate_address()));
+      __ Push(scratch3, scratch1, scratch2, name_reg);
 
       ExternalReference ref =
           ExternalReference(IC_Utility(IC::kLoadCallbackProperty),
                             masm()->isolate());
-      __ TailCallExternalReference(ref, 5, 1);
+      __ TailCallExternalReference(ref, 6, 1);
     }
   } else {  // !compile_followup_inline
     // Call the runtime system to load the interceptor.
@@ -1296,7 +1426,7 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
     ExternalReference ref =
         ExternalReference(IC_Utility(IC::kLoadPropertyWithInterceptorForLoad),
                           masm()->isolate());
-    __ TailCallExternalReference(ref, 5, 1);
+    __ TailCallExternalReference(ref, 6, 1);
   }
 }
 
@@ -1321,14 +1451,8 @@ void CallStubCompiler::GenerateGlobalReceiverCheck(Handle<JSObject> object,
   // Get the receiver from the stack.
   __ ldr(r0, MemOperand(sp, argc * kPointerSize));
 
-  // If the object is the holder then we know that it's a global
-  // object which can only happen for contextual calls. In this case,
-  // the receiver cannot be a smi.
-  if (!object.is_identical_to(holder)) {
-    __ JumpIfSmi(r0, miss);
-  }
-
   // Check that the maps haven't changed.
+  __ JumpIfSmi(r0, miss);
   CheckPrototypes(object, r0, holder, r3, r1, r4, name, miss);
 }
 
@@ -1445,20 +1569,22 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
     __ Ret();
   } else {
     Label call_builtin;
-    Register elements = r3;
-    Register end_elements = r5;
-    // Get the elements array of the object.
-    __ ldr(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
-
-    // Check that the elements are in fast mode and writable.
-    __ CheckMap(elements,
-                r0,
-                Heap::kFixedArrayMapRootIndex,
-                &call_builtin,
-                DONT_DO_SMI_CHECK);
 
     if (argc == 1) {  // Otherwise fall through to call the builtin.
       Label attempt_to_grow_elements;
+
+      Register elements = r6;
+      Register end_elements = r5;
+      // Get the elements array of the object.
+      __ ldr(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
+
+      // Check that the elements are in fast mode and writable.
+      __ CheckMap(elements,
+                  r0,
+                  Heap::kFixedArrayMapRootIndex,
+                  &call_builtin,
+                  DONT_DO_SMI_CHECK);
+
 
       // Get the array's length into r0 and calculate new length.
       __ ldr(r0, FieldMemOperand(receiver, JSArray::kLengthOffset));
@@ -1466,7 +1592,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       STATIC_ASSERT(kSmiTag == 0);
       __ add(r0, r0, Operand(Smi::FromInt(argc)));
 
-      // Get the element's length.
+      // Get the elements' length.
       __ ldr(r4, FieldMemOperand(elements, FixedArray::kLengthOffset));
 
       // Check if we could survive without allocation.
@@ -1481,7 +1607,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       // Save new length.
       __ str(r0, FieldMemOperand(receiver, JSArray::kLengthOffset));
 
-      // Push the element.
+      // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       __ add(end_elements, elements,
@@ -1496,13 +1622,46 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
 
       __ bind(&with_write_barrier);
 
-      __ ldr(r6, FieldMemOperand(receiver, HeapObject::kMapOffset));
-      __ CheckFastObjectElements(r6, r6, &call_builtin);
+      __ ldr(r3, FieldMemOperand(receiver, HeapObject::kMapOffset));
+
+      if (FLAG_smi_only_arrays  && !FLAG_trace_elements_transitions) {
+        Label fast_object, not_fast_object;
+        __ CheckFastObjectElements(r3, r7, &not_fast_object);
+        __ jmp(&fast_object);
+        // In case of fast smi-only, convert to fast object, otherwise bail out.
+        __ bind(&not_fast_object);
+        __ CheckFastSmiElements(r3, r7, &call_builtin);
+        // edx: receiver
+        // r3: map
+        Label try_holey_map;
+        __ LoadTransitionedArrayMapConditional(FAST_SMI_ELEMENTS,
+                                               FAST_ELEMENTS,
+                                               r3,
+                                               r7,
+                                               &try_holey_map);
+        __ mov(r2, receiver);
+        ElementsTransitionGenerator::
+            GenerateMapChangeElementsTransition(masm());
+        __ jmp(&fast_object);
+
+        __ bind(&try_holey_map);
+        __ LoadTransitionedArrayMapConditional(FAST_HOLEY_SMI_ELEMENTS,
+                                               FAST_HOLEY_ELEMENTS,
+                                               r3,
+                                               r7,
+                                               &call_builtin);
+        __ mov(r2, receiver);
+        ElementsTransitionGenerator::
+            GenerateMapChangeElementsTransition(masm());
+        __ bind(&fast_object);
+      } else {
+        __ CheckFastObjectElements(r3, r3, &call_builtin);
+      }
 
       // Save new length.
       __ str(r0, FieldMemOperand(receiver, JSArray::kLengthOffset));
 
-      // Push the element.
+      // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       __ add(end_elements, elements,
@@ -1548,25 +1707,25 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
              Operand(r0, LSL, kPointerSizeLog2 - kSmiTagSize));
       __ add(end_elements, end_elements, Operand(kEndElementsOffset));
       __ mov(r7, Operand(new_space_allocation_top));
-      __ ldr(r6, MemOperand(r7));
-      __ cmp(end_elements, r6);
+      __ ldr(r3, MemOperand(r7));
+      __ cmp(end_elements, r3);
       __ b(ne, &call_builtin);
 
       __ mov(r9, Operand(new_space_allocation_limit));
       __ ldr(r9, MemOperand(r9));
-      __ add(r6, r6, Operand(kAllocationDelta * kPointerSize));
-      __ cmp(r6, r9);
+      __ add(r3, r3, Operand(kAllocationDelta * kPointerSize));
+      __ cmp(r3, r9);
       __ b(hi, &call_builtin);
 
       // We fit and could grow elements.
       // Update new_space_allocation_top.
-      __ str(r6, MemOperand(r7));
+      __ str(r3, MemOperand(r7));
       // Push the argument.
       __ str(r2, MemOperand(end_elements));
       // Fill the rest with holes.
-      __ LoadRoot(r6, Heap::kTheHoleValueRootIndex);
+      __ LoadRoot(r3, Heap::kTheHoleValueRootIndex);
       for (int i = 1; i < kAllocationDelta; i++) {
-        __ str(r6, MemOperand(end_elements, i * kPointerSize));
+        __ str(r3, MemOperand(end_elements, i * kPointerSize));
       }
 
       // Update elements' and array's sizes.
@@ -1648,7 +1807,7 @@ Handle<Code> CallStubCompiler::CompileArrayPopCall(
   // We can't address the last element in one operation. Compute the more
   // expensive shift first, and use an offset later on.
   __ add(elements, elements, Operand(r4, LSL, kPointerSizeLog2 - kSmiTagSize));
-  __ ldr(r0, MemOperand(elements, FixedArray::kHeaderSize - kHeapObjectTag));
+  __ ldr(r0, FieldMemOperand(elements, FixedArray::kHeaderSize));
   __ cmp(r0, r6);
   __ b(eq, &call_builtin);
 
@@ -1656,7 +1815,7 @@ Handle<Code> CallStubCompiler::CompileArrayPopCall(
   __ str(r4, FieldMemOperand(receiver, JSArray::kLengthOffset));
 
   // Fill with the hole.
-  __ str(r6, MemOperand(elements, FixedArray::kHeaderSize - kHeapObjectTag));
+  __ str(r6, FieldMemOperand(elements, FixedArray::kHeaderSize));
   __ Drop(argc + 1);
   __ Ret();
 
@@ -1904,7 +2063,8 @@ Handle<Code> CallStubCompiler::CompileStringFromCharCodeCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function,  arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -1983,7 +2143,7 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ vmrs(r3);
   // Set custom FPCSR:
   //  - Set rounding mode to "Round towards Minus Infinity"
-  //    (ie bits [23:22] = 0b10).
+  //    (i.e. bits [23:22] = 0b10).
   //  - Clear vfp cumulative exception flags (bits [3:0]).
   //  - Make sure Flush-to-zero mode control bit is unset (bit 22).
   __ bic(r9, r3,
@@ -2049,7 +2209,8 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ bind(&slow);
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -2147,7 +2308,8 @@ Handle<Code> CallStubCompiler::CompileMathAbsCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // r2: function name.
@@ -2325,7 +2487,8 @@ Handle<Code> CallStubCompiler::CompileCallConstant(Handle<Object> object,
   CallKind call_kind = CallICBase::Contextual::decode(extra_state_)
       ? CALL_AS_FUNCTION
       : CALL_AS_METHOD;
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, call_kind);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), call_kind);
 
   // Handle call cache miss.
   __ bind(&miss);
@@ -2444,7 +2607,13 @@ Handle<Code> StoreStubCompiler::CompileStoreField(Handle<JSObject> object,
   // -----------------------------------
   Label miss;
 
-  GenerateStoreField(masm(), object, index, transition, r1, r2, r3, &miss);
+  GenerateStoreField(masm(),
+                     object,
+                     index,
+                     transition,
+                     name,
+                     r1, r2, r3, r4,
+                     &miss);
   __ bind(&miss);
   Handle<Code> ic = masm()->isolate()->builtins()->StoreIC_Miss();
   __ Jump(ic, RelocInfo::CODE_TARGET);
@@ -2490,6 +2659,51 @@ Handle<Code> StoreStubCompiler::CompileStoreCallback(
   __ TailCallExternalReference(store_callback_property, 4, 1);
 
   // Handle store cache miss.
+  __ bind(&miss);
+  Handle<Code> ic = masm()->isolate()->builtins()->StoreIC_Miss();
+  __ Jump(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode(CALLBACKS, name);
+}
+
+
+Handle<Code> StoreStubCompiler::CompileStoreViaSetter(
+    Handle<JSObject> receiver,
+    Handle<JSFunction> setter,
+    Handle<String> name) {
+  // ----------- S t a t e -------------
+  //  -- r0    : value
+  //  -- r1    : receiver
+  //  -- r2    : name
+  //  -- lr    : return address
+  // -----------------------------------
+  Label miss;
+
+  // Check that the map of the object hasn't changed.
+  __ CheckMap(r1, r3, Handle<Map>(receiver->map()), &miss, DO_SMI_CHECK,
+              ALLOW_ELEMENT_TRANSITION_MAPS);
+
+  {
+    FrameScope scope(masm(), StackFrame::INTERNAL);
+
+    // Save value register, so we can restore it later.
+    __ push(r0);
+
+    // Call the JavaScript getter with the receiver and the value on the stack.
+    __ Push(r1, r0);
+    ParameterCount actual(1);
+    __ InvokeFunction(setter, actual, CALL_FUNCTION, NullCallWrapper(),
+                      CALL_AS_METHOD);
+
+    // We have to return the passed value, not the return value of the setter.
+    __ pop(r0);
+
+    // Restore context register.
+    __ ldr(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  }
+  __ Ret();
+
   __ bind(&miss);
   Handle<Code> ic = masm()->isolate()->builtins()->StoreIC_Miss();
   __ Jump(ic, RelocInfo::CODE_TARGET);
@@ -2666,6 +2880,44 @@ Handle<Code> LoadStubCompiler::CompileLoadCallback(
 }
 
 
+Handle<Code> LoadStubCompiler::CompileLoadViaGetter(
+    Handle<String> name,
+    Handle<JSObject> receiver,
+    Handle<JSObject> holder,
+    Handle<JSFunction> getter) {
+  // ----------- S t a t e -------------
+  //  -- r0    : receiver
+  //  -- r2    : name
+  //  -- lr    : return address
+  // -----------------------------------
+  Label miss;
+
+  // Check that the maps haven't changed.
+  __ JumpIfSmi(r0, &miss);
+  CheckPrototypes(receiver, r0, holder, r3, r4, r1, name, &miss);
+
+  {
+    FrameScope scope(masm(), StackFrame::INTERNAL);
+
+    // Call the JavaScript getter with the receiver on the stack.
+    __ push(r0);
+    ParameterCount actual(0);
+    __ InvokeFunction(getter, actual, CALL_FUNCTION, NullCallWrapper(),
+                      CALL_AS_METHOD);
+
+    // Restore context register.
+    __ ldr(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  }
+  __ Ret();
+
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(CALLBACKS, name);
+}
+
+
 Handle<Code> LoadStubCompiler::CompileLoadConstant(Handle<JSObject> object,
                                                    Handle<JSObject> holder,
                                                    Handle<JSFunction> value,
@@ -2721,14 +2973,8 @@ Handle<Code> LoadStubCompiler::CompileLoadGlobal(
   // -----------------------------------
   Label miss;
 
-  // If the object is the holder then we know that it's a global
-  // object which can only happen for contextual calls. In this case,
-  // the receiver cannot be a smi.
-  if (!object.is_identical_to(holder)) {
-    __ JumpIfSmi(r0, &miss);
-  }
-
   // Check that the map of the global has not changed.
+  __ JumpIfSmi(r0, &miss);
   CheckPrototypes(object, r0, holder, r3, r4, r1, name, &miss);
 
   // Get the value from the cell.
@@ -2996,7 +3242,13 @@ Handle<Code> KeyedStoreStubCompiler::CompileStoreField(Handle<JSObject> object,
 
   // r3 is used as scratch register. r1 and r2 keep their values if a jump to
   // the miss label is generated.
-  GenerateStoreField(masm(), object, index, transition, r2, r1, r3, &miss);
+  GenerateStoreField(masm(),
+                     object,
+                     index,
+                     transition,
+                     name,
+                     r2, r1, r3, r4,
+                     &miss);
   __ bind(&miss);
 
   __ DecrementCounter(counters->keyed_store_field(), 1, r3, r4);
@@ -3020,7 +3272,7 @@ Handle<Code> KeyedStoreStubCompiler::CompileStoreElement(
   ElementsKind elements_kind = receiver_map->elements_kind();
   bool is_js_array = receiver_map->instance_type() == JS_ARRAY_TYPE;
   Handle<Code> stub =
-      KeyedStoreElementStub(is_js_array, elements_kind).GetCode();
+      KeyedStoreElementStub(is_js_array, elements_kind, grow_mode_).GetCode();
 
   __ DispatchMap(r2, r3, receiver_map, stub, DO_SMI_CHECK);
 
@@ -3277,14 +3529,55 @@ static bool IsElementTypeSigned(ElementsKind elements_kind) {
     case EXTERNAL_FLOAT_ELEMENTS:
     case EXTERNAL_DOUBLE_ELEMENTS:
     case FAST_ELEMENTS:
-    case FAST_SMI_ONLY_ELEMENTS:
+    case FAST_SMI_ELEMENTS:
     case FAST_DOUBLE_ELEMENTS:
+    case FAST_HOLEY_ELEMENTS:
+    case FAST_HOLEY_SMI_ELEMENTS:
+    case FAST_HOLEY_DOUBLE_ELEMENTS:
     case DICTIONARY_ELEMENTS:
     case NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
       return false;
   }
   return false;
+}
+
+
+static void GenerateSmiKeyCheck(MacroAssembler* masm,
+                                Register key,
+                                Register scratch0,
+                                Register scratch1,
+                                DwVfpRegister double_scratch0,
+                                Label* fail) {
+  if (CpuFeatures::IsSupported(VFP3)) {
+    CpuFeatures::Scope scope(VFP3);
+    Label key_ok;
+    // Check for smi or a smi inside a heap number.  We convert the heap
+    // number and check if the conversion is exact and fits into the smi
+    // range.
+    __ JumpIfSmi(key, &key_ok);
+    __ CheckMap(key,
+                scratch0,
+                Heap::kHeapNumberMapRootIndex,
+                fail,
+                DONT_DO_SMI_CHECK);
+    __ sub(ip, key, Operand(kHeapObjectTag));
+    __ vldr(double_scratch0, ip, HeapNumber::kValueOffset);
+    __ EmitVFPTruncate(kRoundToZero,
+                       double_scratch0.low(),
+                       double_scratch0,
+                       scratch0,
+                       scratch1,
+                       kCheckForInexactConversion);
+    __ b(ne, fail);
+    __ vmov(scratch0, double_scratch0.low());
+    __ TrySmiTag(scratch0, fail, scratch1);
+    __ mov(key, scratch0);
+    __ bind(&key_ok);
+  } else {
+    // Check that the key is a smi.
+    __ JumpIfNotSmi(key, fail);
+  }
 }
 
 
@@ -3304,8 +3597,8 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
 
-  // Check that the key is a smi.
-  __ JumpIfNotSmi(key, &miss_force_generic);
+  // Check that the key is a smi or a heap number convertible to a smi.
+  GenerateSmiKeyCheck(masm, key, r4, r5, d1, &miss_force_generic);
 
   __ ldr(r3, FieldMemOperand(receiver, JSObject::kElementsOffset));
   // r3: elements array
@@ -3364,8 +3657,11 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
       }
       break;
     case FAST_ELEMENTS:
-    case FAST_SMI_ONLY_ELEMENTS:
+    case FAST_SMI_ELEMENTS:
     case FAST_DOUBLE_ELEMENTS:
+    case FAST_HOLEY_ELEMENTS:
+    case FAST_HOLEY_SMI_ELEMENTS:
+    case FAST_HOLEY_DOUBLE_ELEMENTS:
     case DICTIONARY_ELEMENTS:
     case NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
@@ -3635,8 +3931,8 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
 
-  // Check that the key is a smi.
-  __ JumpIfNotSmi(key, &miss_force_generic);
+  // Check that the key is a smi or a heap number convertible to a smi.
+  GenerateSmiKeyCheck(masm, key, r4, r5, d1, &miss_force_generic);
 
   __ ldr(r3, FieldMemOperand(receiver, JSObject::kElementsOffset));
 
@@ -3705,8 +4001,11 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
       }
       break;
     case FAST_ELEMENTS:
-    case FAST_SMI_ONLY_ELEMENTS:
+    case FAST_SMI_ELEMENTS:
     case FAST_DOUBLE_ELEMENTS:
+    case FAST_HOLEY_ELEMENTS:
+    case FAST_HOLEY_SMI_ELEMENTS:
+    case FAST_HOLEY_DOUBLE_ELEMENTS:
     case DICTIONARY_ELEMENTS:
     case NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
@@ -3769,8 +4068,11 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
           case EXTERNAL_FLOAT_ELEMENTS:
           case EXTERNAL_DOUBLE_ELEMENTS:
           case FAST_ELEMENTS:
-          case FAST_SMI_ONLY_ELEMENTS:
+          case FAST_SMI_ELEMENTS:
           case FAST_DOUBLE_ELEMENTS:
+          case FAST_HOLEY_ELEMENTS:
+          case FAST_HOLEY_SMI_ELEMENTS:
+          case FAST_HOLEY_DOUBLE_ELEMENTS:
           case DICTIONARY_ELEMENTS:
           case NON_STRICT_ARGUMENTS_ELEMENTS:
             UNREACHABLE();
@@ -3909,8 +4211,11 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
           case EXTERNAL_FLOAT_ELEMENTS:
           case EXTERNAL_DOUBLE_ELEMENTS:
           case FAST_ELEMENTS:
-          case FAST_SMI_ONLY_ELEMENTS:
+          case FAST_SMI_ELEMENTS:
           case FAST_DOUBLE_ELEMENTS:
+          case FAST_HOLEY_ELEMENTS:
+          case FAST_HOLEY_SMI_ELEMENTS:
+          case FAST_HOLEY_DOUBLE_ELEMENTS:
           case DICTIONARY_ELEMENTS:
           case NON_STRICT_ARGUMENTS_ELEMENTS:
             UNREACHABLE();
@@ -3961,8 +4266,8 @@ void KeyedLoadStubCompiler::GenerateLoadFastElement(MacroAssembler* masm) {
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
 
-  // Check that the key is a smi.
-  __ JumpIfNotSmi(r0, &miss_force_generic);
+  // Check that the key is a smi or a heap number convertible to a smi.
+  GenerateSmiKeyCheck(masm, r0, r4, r5, d1, &miss_force_generic);
 
   // Get the elements array.
   __ ldr(r2, FieldMemOperand(r1, JSObject::kElementsOffset));
@@ -4013,8 +4318,8 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
 
-  // Check that the key is a smi.
-  __ JumpIfNotSmi(key_reg, &miss_force_generic);
+  // Check that the key is a smi or a heap number convertible to a smi.
+  GenerateSmiKeyCheck(masm, key_reg, r4, r5, d1, &miss_force_generic);
 
   // Get the elements array.
   __ ldr(elements_reg,
@@ -4065,7 +4370,8 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
 void KeyedStoreStubCompiler::GenerateStoreFastElement(
     MacroAssembler* masm,
     bool is_js_array,
-    ElementsKind elements_kind) {
+    ElementsKind elements_kind,
+    KeyedAccessGrowMode grow_mode) {
   // ----------- S t a t e -------------
   //  -- r0    : value
   //  -- r1    : key
@@ -4074,30 +4380,30 @@ void KeyedStoreStubCompiler::GenerateStoreFastElement(
   //  -- r3    : scratch
   //  -- r4    : scratch (elements)
   // -----------------------------------
-  Label miss_force_generic, transition_elements_kind;
+  Label miss_force_generic, transition_elements_kind, grow, slow;
+  Label finish_store, check_capacity;
 
   Register value_reg = r0;
   Register key_reg = r1;
   Register receiver_reg = r2;
-  Register scratch = r3;
-  Register elements_reg = r4;
+  Register scratch = r4;
+  Register elements_reg = r3;
+  Register length_reg = r5;
+  Register scratch2 = r6;
 
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
 
-  // Check that the key is a smi.
-  __ JumpIfNotSmi(key_reg, &miss_force_generic);
+  // Check that the key is a smi or a heap number convertible to a smi.
+  GenerateSmiKeyCheck(masm, key_reg, r4, r5, d1, &miss_force_generic);
 
-  // Get the elements array and make sure it is a fast element array, not 'cow'.
-  __ ldr(elements_reg,
-         FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
-  __ CheckMap(elements_reg,
-              scratch,
-              Heap::kFixedArrayMapRootIndex,
-              &miss_force_generic,
-              DONT_DO_SMI_CHECK);
+  if (IsFastSmiElementsKind(elements_kind)) {
+    __ JumpIfNotSmi(value_reg, &transition_elements_kind);
+  }
 
   // Check that the key is within bounds.
+  __ ldr(elements_reg,
+         FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
   if (is_js_array) {
     __ ldr(scratch, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
   } else {
@@ -4105,10 +4411,21 @@ void KeyedStoreStubCompiler::GenerateStoreFastElement(
   }
   // Compare smis.
   __ cmp(key_reg, scratch);
-  __ b(hs, &miss_force_generic);
+  if (is_js_array && grow_mode == ALLOW_JSARRAY_GROWTH) {
+    __ b(hs, &grow);
+  } else {
+    __ b(hs, &miss_force_generic);
+  }
 
-  if (elements_kind == FAST_SMI_ONLY_ELEMENTS) {
-    __ JumpIfNotSmi(value_reg, &transition_elements_kind);
+  // Make sure elements is a fast element array, not 'cow'.
+  __ CheckMap(elements_reg,
+              scratch,
+              Heap::kFixedArrayMapRootIndex,
+              &miss_force_generic,
+              DONT_DO_SMI_CHECK);
+
+  __ bind(&finish_store);
+  if (IsFastSmiElementsKind(elements_kind)) {
     __ add(scratch,
            elements_reg,
            Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -4118,7 +4435,7 @@ void KeyedStoreStubCompiler::GenerateStoreFastElement(
            Operand(key_reg, LSL, kPointerSizeLog2 - kSmiTagSize));
     __ str(value_reg, MemOperand(scratch));
   } else {
-    ASSERT(elements_kind == FAST_ELEMENTS);
+    ASSERT(IsFastObjectElementsKind(elements_kind));
     __ add(scratch,
            elements_reg,
            Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -4146,12 +4463,80 @@ void KeyedStoreStubCompiler::GenerateStoreFastElement(
   __ bind(&transition_elements_kind);
   Handle<Code> ic_miss = masm->isolate()->builtins()->KeyedStoreIC_Miss();
   __ Jump(ic_miss, RelocInfo::CODE_TARGET);
+
+  if (is_js_array && grow_mode == ALLOW_JSARRAY_GROWTH) {
+    // Grow the array by a single element if possible.
+    __ bind(&grow);
+
+    // Make sure the array is only growing by a single element, anything else
+    // must be handled by the runtime. Flags already set by previous compare.
+    __ b(ne, &miss_force_generic);
+
+    // Check for the empty array, and preallocate a small backing store if
+    // possible.
+    __ ldr(length_reg,
+           FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ ldr(elements_reg,
+           FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ CompareRoot(elements_reg, Heap::kEmptyFixedArrayRootIndex);
+    __ b(ne, &check_capacity);
+
+    int size = FixedArray::SizeFor(JSArray::kPreallocatedArrayElements);
+    __ AllocateInNewSpace(size, elements_reg, scratch, scratch2, &slow,
+                          TAG_OBJECT);
+
+    __ LoadRoot(scratch, Heap::kFixedArrayMapRootIndex);
+    __ str(scratch, FieldMemOperand(elements_reg, JSObject::kMapOffset));
+    __ mov(scratch, Operand(Smi::FromInt(JSArray::kPreallocatedArrayElements)));
+    __ str(scratch, FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
+    __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
+    for (int i = 1; i < JSArray::kPreallocatedArrayElements; ++i) {
+      __ str(scratch, FieldMemOperand(elements_reg, FixedArray::SizeFor(i)));
+    }
+
+    // Store the element at index zero.
+    __ str(value_reg, FieldMemOperand(elements_reg, FixedArray::SizeFor(0)));
+
+    // Install the new backing store in the JSArray.
+    __ str(elements_reg,
+           FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ RecordWriteField(receiver_reg, JSObject::kElementsOffset, elements_reg,
+                        scratch, kLRHasNotBeenSaved, kDontSaveFPRegs,
+                        EMIT_REMEMBERED_SET, OMIT_SMI_CHECK);
+
+    // Increment the length of the array.
+    __ mov(length_reg, Operand(Smi::FromInt(1)));
+    __ str(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ Ret();
+
+    __ bind(&check_capacity);
+    // Check for cow elements, in general they are not handled by this stub
+    __ CheckMap(elements_reg,
+                scratch,
+                Heap::kFixedCOWArrayMapRootIndex,
+                &miss_force_generic,
+                DONT_DO_SMI_CHECK);
+
+    __ ldr(scratch, FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
+    __ cmp(length_reg, scratch);
+    __ b(hs, &slow);
+
+    // Grow the array and finish the store.
+    __ add(length_reg, length_reg, Operand(Smi::FromInt(1)));
+    __ str(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ jmp(&finish_store);
+
+    __ bind(&slow);
+    Handle<Code> ic_slow = masm->isolate()->builtins()->KeyedStoreIC_Slow();
+    __ Jump(ic_slow, RelocInfo::CODE_TARGET);
+  }
 }
 
 
 void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
     MacroAssembler* masm,
-    bool is_js_array) {
+    bool is_js_array,
+    KeyedAccessGrowMode grow_mode) {
   // ----------- S t a t e -------------
   //  -- r0    : value
   //  -- r1    : key
@@ -4161,7 +4546,8 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   //  -- r4    : scratch
   //  -- r5    : scratch
   // -----------------------------------
-  Label miss_force_generic, transition_elements_kind;
+  Label miss_force_generic, transition_elements_kind, grow, slow;
+  Label finish_store, check_capacity;
 
   Register value_reg = r0;
   Register key_reg = r1;
@@ -4171,10 +4557,13 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   Register scratch2 = r5;
   Register scratch3 = r6;
   Register scratch4 = r7;
+  Register length_reg = r7;
 
   // This stub is meant to be tail-jumped to, the receiver must already
   // have been verified by the caller to not be a smi.
-  __ JumpIfNotSmi(key_reg, &miss_force_generic);
+
+  // Check that the key is a smi or a heap number convertible to a smi.
+  GenerateSmiKeyCheck(masm, key_reg, r4, r5, d1, &miss_force_generic);
 
   __ ldr(elements_reg,
          FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
@@ -4189,8 +4578,13 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   // Compare smis, unsigned compare catches both negative and out-of-bound
   // indexes.
   __ cmp(key_reg, scratch1);
-  __ b(hs, &miss_force_generic);
+  if (grow_mode == ALLOW_JSARRAY_GROWTH) {
+    __ b(hs, &grow);
+  } else {
+    __ b(hs, &miss_force_generic);
+  }
 
+  __ bind(&finish_store);
   __ StoreNumberToDoubleElements(value_reg,
                                  key_reg,
                                  receiver_reg,
@@ -4211,6 +4605,75 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   __ bind(&transition_elements_kind);
   Handle<Code> ic_miss = masm->isolate()->builtins()->KeyedStoreIC_Miss();
   __ Jump(ic_miss, RelocInfo::CODE_TARGET);
+
+  if (is_js_array && grow_mode == ALLOW_JSARRAY_GROWTH) {
+    // Grow the array by a single element if possible.
+    __ bind(&grow);
+
+    // Make sure the array is only growing by a single element, anything else
+    // must be handled by the runtime. Flags already set by previous compare.
+    __ b(ne, &miss_force_generic);
+
+    // Transition on values that can't be stored in a FixedDoubleArray.
+    Label value_is_smi;
+    __ JumpIfSmi(value_reg, &value_is_smi);
+    __ ldr(scratch1, FieldMemOperand(value_reg, HeapObject::kMapOffset));
+    __ CompareRoot(scratch1, Heap::kHeapNumberMapRootIndex);
+    __ b(ne, &transition_elements_kind);
+    __ bind(&value_is_smi);
+
+    // Check for the empty array, and preallocate a small backing store if
+    // possible.
+    __ ldr(length_reg,
+           FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ ldr(elements_reg,
+           FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ CompareRoot(elements_reg, Heap::kEmptyFixedArrayRootIndex);
+    __ b(ne, &check_capacity);
+
+    int size = FixedDoubleArray::SizeFor(JSArray::kPreallocatedArrayElements);
+    __ AllocateInNewSpace(size, elements_reg, scratch1, scratch2, &slow,
+                          TAG_OBJECT);
+
+    // Initialize the new FixedDoubleArray. Leave elements unitialized for
+    // efficiency, they are guaranteed to be initialized before use.
+    __ LoadRoot(scratch1, Heap::kFixedDoubleArrayMapRootIndex);
+    __ str(scratch1, FieldMemOperand(elements_reg, JSObject::kMapOffset));
+    __ mov(scratch1,
+           Operand(Smi::FromInt(JSArray::kPreallocatedArrayElements)));
+    __ str(scratch1,
+           FieldMemOperand(elements_reg, FixedDoubleArray::kLengthOffset));
+
+    // Install the new backing store in the JSArray.
+    __ str(elements_reg,
+           FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ RecordWriteField(receiver_reg, JSObject::kElementsOffset, elements_reg,
+                        scratch1, kLRHasNotBeenSaved, kDontSaveFPRegs,
+                        EMIT_REMEMBERED_SET, OMIT_SMI_CHECK);
+
+    // Increment the length of the array.
+    __ mov(length_reg, Operand(Smi::FromInt(1)));
+    __ str(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ ldr(elements_reg,
+           FieldMemOperand(receiver_reg, JSObject::kElementsOffset));
+    __ jmp(&finish_store);
+
+    __ bind(&check_capacity);
+    // Make sure that the backing store can hold additional elements.
+    __ ldr(scratch1,
+           FieldMemOperand(elements_reg, FixedDoubleArray::kLengthOffset));
+    __ cmp(length_reg, scratch1);
+    __ b(hs, &slow);
+
+    // Grow the array and finish the store.
+    __ add(length_reg, length_reg, Operand(Smi::FromInt(1)));
+    __ str(length_reg, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ jmp(&finish_store);
+
+    __ bind(&slow);
+    Handle<Code> ic_slow = masm->isolate()->builtins()->KeyedStoreIC_Slow();
+    __ Jump(ic_slow, RelocInfo::CODE_TARGET);
+  }
 }
 
 

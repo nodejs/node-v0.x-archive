@@ -1,15 +1,16 @@
 module.exports = unbuild
 unbuild.usage = "npm unbuild <folder>\n(this is plumbing)"
 
-var readJson = require("./utils/read-json.js")
+var readJson = require("read-package-json")
   , rm = require("rimraf")
+  , gentlyRm = require("./utils/gently-rm.js")
   , npm = require("./npm.js")
   , path = require("path")
   , fs = require("graceful-fs")
   , lifecycle = require("./utils/lifecycle.js")
   , asyncMap = require("slide").asyncMap
   , chain = require("slide").chain
-  , log = require("./utils/log.js")
+  , log = require("npmlog")
   , build = require("./build.js")
 
 // args is a list of folders.
@@ -23,7 +24,7 @@ function unbuild_ (folder, cb) {
   readJson(path.resolve(folder, "package.json"), function (er, pkg) {
     // if no json, then just trash it, but no scripts or whatever.
     if (er) return rm(folder, cb)
-    readJson.clearCache(folder)
+    readJson.cache.del(folder)
     chain
       ( [ [lifecycle, pkg, "preuninstall", folder, false, true]
         , [lifecycle, pkg, "uninstall", folder, false, true]
@@ -54,17 +55,23 @@ function rmBins (pkg, folder, parent, top, cb) {
   log.verbose([binRoot, pkg.bin], "binRoot")
   asyncMap(Object.keys(pkg.bin), function (b, cb) {
     if (process.platform === "win32") {
-      rm(path.resolve(binRoot, b) + ".cmd", cb)
+      chain([ [rm, path.resolve(binRoot, b) + ".cmd"]
+            , [rm, path.resolve(binRoot, b) ] ], cb)
     } else {
-      rm( path.resolve(binRoot, b)
-        , { gently: !npm.config.get("force") && folder }
-        , cb )
+      gentlyRm( path.resolve(binRoot, b)
+              , !npm.config.get("force") && folder
+              , cb )
     }
   }, cb)
 }
 
 function rmMans (pkg, folder, parent, top, cb) {
-  if (!pkg.man || !top || process.platform === "win32") return cb()
+  if (!pkg.man
+      || !top
+      || process.platform === "win32"
+      || !npm.config.get("global")) {
+    return cb()
+  }
   var manRoot = path.resolve(npm.config.get("prefix"), "share", "man")
   asyncMap(pkg.man, function (man, cb) {
     var parseMan = man.match(/(.*)\.([0-9]+)(\.gz)?$/)
@@ -78,8 +85,8 @@ function rmMans (pkg, folder, parent, top, cb) {
                              : pkg.name + "-" + bn)
                              + "." + sxn + gz
                            )
-    rm( manDest
-      , { gently: !npm.config.get("force") && folder }
-      , cb )
+    gentlyRm( manDest
+            , !npm.config.get("force") && folder
+            , cb )
   }, cb)
 }

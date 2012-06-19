@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -91,9 +91,11 @@ void BreakLocationIterator::ClearDebugBreakAtSlot() {
   rinfo()->PatchCode(original_rinfo()->pc(), Assembler::kDebugBreakSlotLength);
 }
 
+// All debug break stubs support padding for LiveEdit.
+const bool Debug::FramePaddingLayout::kIsSupported = true;
+
 
 #define __ ACCESS_MASM(masm)
-
 
 static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
                                           RegList object_regs,
@@ -102,6 +104,13 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   // Enter an internal frame.
   {
     FrameScope scope(masm, StackFrame::INTERNAL);
+
+    // Load padding words on stack.
+    for (int i = 0; i < Debug::FramePaddingLayout::kInitialSize; i++) {
+      __ push(Immediate(Smi::FromInt(
+          Debug::FramePaddingLayout::kPaddingValue)));
+    }
+    __ push(Immediate(Smi::FromInt(Debug::FramePaddingLayout::kInitialSize)));
 
     // Store the registers containing live values on the expression stack to
     // make sure that these are correctly updated during GC. Non object values
@@ -134,6 +143,10 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
     CEntryStub ceb(1);
     __ CallStub(&ceb);
 
+    // Automatically find register that could be used after register restore.
+    // We need one register for padding skip instructions.
+    Register unused_reg = { -1 };
+
     // Restore the register values containing object pointers from the
     // expression stack.
     for (int i = kNumJSCallerSaved; --i >= 0;) {
@@ -142,14 +155,28 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
       if (FLAG_debug_code) {
         __ Set(reg, Immediate(kDebugZapValue));
       }
+      bool taken = reg.code() == esi.code();
       if ((object_regs & (1 << r)) != 0) {
         __ pop(reg);
+        taken = true;
       }
       if ((non_object_regs & (1 << r)) != 0) {
         __ pop(reg);
         __ SmiUntag(reg);
+        taken = true;
+      }
+      if (!taken) {
+        unused_reg = reg;
       }
     }
+
+    ASSERT(unused_reg.code() != -1);
+
+    // Read current padding counter and skip corresponding number of words.
+    __ pop(unused_reg);
+    // We divide stored value by 2 (untagging) and multiply it by word's size.
+    STATIC_ASSERT(kSmiTagSize == 1 && kSmiShiftSize == 0);
+    __ lea(esp, Operand(esp, unused_reg, times_half_pointer_size, 0));
 
     // Get rid of the internal frame.
   }
@@ -172,10 +199,10 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
 void Debug::GenerateLoadICDebugBreak(MacroAssembler* masm) {
   // Register state for IC load call (from ic-ia32.cc).
   // ----------- S t a t e -------------
-  //  -- eax    : receiver
   //  -- ecx    : name
+  //  -- edx    : receiver
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, eax.bit() | ecx.bit(), 0, false);
+  Generate_DebugBreakCallHelper(masm, ecx.bit() | edx.bit(), 0, false);
 }
 
 
@@ -194,10 +221,10 @@ void Debug::GenerateStoreICDebugBreak(MacroAssembler* masm) {
 void Debug::GenerateKeyedLoadICDebugBreak(MacroAssembler* masm) {
   // Register state for keyed IC load call (from ic-ia32.cc).
   // ----------- S t a t e -------------
+  //  -- ecx    : key
   //  -- edx    : receiver
-  //  -- eax    : key
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, eax.bit() | edx.bit(), 0, false);
+  Generate_DebugBreakCallHelper(masm, ecx.bit() | edx.bit(), 0, false);
 }
 
 
@@ -222,8 +249,36 @@ void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
 }
 
 
-void Debug::GenerateConstructCallDebugBreak(MacroAssembler* masm) {
+void Debug::GenerateReturnDebugBreak(MacroAssembler* masm) {
   // Register state just before return from JS function (from codegen-ia32.cc).
+  // ----------- S t a t e -------------
+  //  -- eax: return value
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, eax.bit(), 0, true);
+}
+
+
+void Debug::GenerateCallFunctionStubDebugBreak(MacroAssembler* masm) {
+  // Register state for CallFunctionStub (from code-stubs-ia32.cc).
+  // ----------- S t a t e -------------
+  //  -- edi: function
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, edi.bit(), 0, false);
+}
+
+
+void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
+  // Register state for CallFunctionStub (from code-stubs-ia32.cc).
+  // ----------- S t a t e -------------
+  //  -- ebx: cache cell for call target
+  //  -- edi: function
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, ebx.bit() | edi.bit(), 0, false);
+}
+
+
+void Debug::GenerateCallConstructStubDebugBreak(MacroAssembler* masm) {
+  // Register state for CallConstructStub (from code-stubs-ia32.cc).
   // eax is the actual number of arguments not encoded as a smi see comment
   // above IC call.
   // ----------- S t a t e -------------
@@ -235,21 +290,17 @@ void Debug::GenerateConstructCallDebugBreak(MacroAssembler* masm) {
 }
 
 
-void Debug::GenerateReturnDebugBreak(MacroAssembler* masm) {
-  // Register state just before return from JS function (from codegen-ia32.cc).
+void Debug::GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm) {
+  // Register state for CallConstructStub (from code-stubs-ia32.cc).
+  // eax is the actual number of arguments not encoded as a smi see comment
+  // above IC call.
   // ----------- S t a t e -------------
-  //  -- eax: return value
+  //  -- eax: number of arguments (not smi)
+  //  -- ebx: cache cell for call target
+  //  -- edi: constructor function
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, eax.bit(), 0, true);
-}
-
-
-void Debug::GenerateCallFunctionStubDebugBreak(MacroAssembler* masm) {
-  // Register state for stub CallFunction (from CallFunctionStub in ic-ia32.cc).
-  // ----------- S t a t e -------------
-  //  -- edi: function
-  // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, edi.bit(), 0, false);
+  // The number of arguments in eax is not smi encoded.
+  Generate_DebugBreakCallHelper(masm, ebx.bit() | edi.bit(), eax.bit(), false);
 }
 
 

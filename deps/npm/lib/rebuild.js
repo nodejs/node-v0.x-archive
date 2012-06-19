@@ -1,9 +1,9 @@
 
 module.exports = rebuild
 
-var readInstalled = require("./utils/read-installed.js")
+var readInstalled = require("read-installed")
   , semver = require("semver")
-  , log = require("./utils/log.js")
+  , log = require("npmlog")
   , path = require("path")
   , npm = require("./npm.js")
   , output = require("./utils/output.js")
@@ -16,22 +16,21 @@ rebuild.usage = "npm rebuild [<name>[@<version>] [name[@<version>] ...]]"
 rebuild.completion = require("./utils/completion/installed-deep.js")
 
 function rebuild (args, cb) {
-  readInstalled(npm.prefix, function (er, data) {
-    log(typeof data, "read Installed")
+  readInstalled(npm.prefix, npm.config.get("depth"), function (er, data) {
+    log.info("readInstalled", typeof data)
     if (er) return cb(er)
     var set = filter(data, args)
       , folders = Object.keys(set).filter(function (f) {
           return f !== npm.prefix
         })
     if (!folders.length) return cb()
-    log.silly(folders, "rebuild set")
+    log.silly("rebuild set", folders)
     cleanBuild(folders, set, cb)
   })
 }
 
 function cleanBuild (folders, set, cb) {
   // https://github.com/isaacs/npm/issues/1872
-  // If there's a makefile, try 'make clean'
   // If there's a wscript, try 'node-waf clean'
   // But don't die on either of those if they fail.
   // Just a best-effort kind of deal.
@@ -41,8 +40,6 @@ function cleanBuild (folders, set, cb) {
       if (er) return cb(er)
       if (files.indexOf("wscript") !== -1) {
         exec("node-waf", ["clean"], null, false, f, thenBuild)
-      } else if (files.indexOf("Makefile") !== -1) {
-        exec("make", ["clean"], null, false, f, thenBuild)
       } else thenBuild()
     })
     function thenBuild (er) {
@@ -82,7 +79,7 @@ function filter (data, args, set, seen) {
     }
   }
   if (pass && data._id) {
-    log.verbose([data.path, data._id], "path id")
+    log.verbose("rebuild", "path, id", [data.path, data._id])
     set[data.path] = data._id
   }
   // need to also dive through kids, always.

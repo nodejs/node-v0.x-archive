@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -26,14 +26,14 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Default number of frames to include in the response to backtrace request.
-const kDefaultBacktraceLength = 10;
+var kDefaultBacktraceLength = 10;
 
-const Debug = {};
+var Debug = {};
 
 // Regular expression to skip "crud" at the beginning of a source line which is
 // not really code. Currently the regular expression matches whitespace and
 // comments.
-const sourceLineBeginningSkip = /^(?:\s*(?:\/\*.*?\*\/)*)*/;
+var sourceLineBeginningSkip = /^(?:\s*(?:\/\*.*?\*\/)*)*/;
 
 // Debug events which can occour in the V8 JavaScript engine. These originate
 // from the API include file debug.h.
@@ -478,7 +478,8 @@ ScriptBreakPoint.prototype.clear = function () {
 function UpdateScriptBreakPoints(script) {
   for (var i = 0; i < script_break_points.length; i++) {
     var break_point = script_break_points[i];
-    if ((break_point.type() == Debug.ScriptBreakPointType.ScriptName) &&
+    if ((break_point.type() == Debug.ScriptBreakPointType.ScriptName ||
+         break_point.type() == Debug.ScriptBreakPointType.ScriptRegExp) &&
         break_point.matchesScript(script)) {
       break_point.set(script);
     }
@@ -1956,7 +1957,7 @@ DebugCommandProcessor.prototype.frameForScopeRequest_ = function(request) {
   if (request.arguments && !IS_UNDEFINED(request.arguments.frameNumber)) {
     frame_index = request.arguments.frameNumber;
     if (frame_index < 0 || this.exec_state_.frameCount() <= frame_index) {
-      return response.failed('Invalid frame number');
+      throw new Error('Invalid frame number');
     }
     return this.exec_state_.frame(frame_index);
   } else {
@@ -1965,20 +1966,44 @@ DebugCommandProcessor.prototype.frameForScopeRequest_ = function(request) {
 };
 
 
-DebugCommandProcessor.prototype.scopesRequest_ = function(request, response) {
-  // No frames no scopes.
-  if (this.exec_state_.frameCount() == 0) {
-    return response.failed('No scopes');
+// Gets scope host object from request. It is either a function
+// ('functionHandle' argument must be specified) or a stack frame
+// ('frameNumber' may be specified and the current frame is taken by default).
+DebugCommandProcessor.prototype.scopeHolderForScopeRequest_ =
+    function(request) {
+  if (request.arguments && "functionHandle" in request.arguments) {
+    if (!IS_NUMBER(request.arguments.functionHandle)) {
+      throw new Error('Function handle must be a number');
+    }
+    var function_mirror = LookupMirror(request.arguments.functionHandle);
+    if (!function_mirror) {
+      throw new Error('Failed to find function object by handle');
+    }
+    if (!function_mirror.isFunction()) {
+      throw new Error('Value of non-function type is found by handle');
+    }
+    return function_mirror;
+  } else {
+    // No frames no scopes.
+    if (this.exec_state_.frameCount() == 0) {
+      throw new Error('No scopes');
+    }
+
+    // Get the frame for which the scopes are requested.
+    var frame = this.frameForScopeRequest_(request);
+    return frame;
   }
+}
 
-  // Get the frame for which the scopes are requested.
-  var frame = this.frameForScopeRequest_(request);
 
-  // Fill all scopes for this frame.
-  var total_scopes = frame.scopeCount();
+DebugCommandProcessor.prototype.scopesRequest_ = function(request, response) {
+  var scope_holder = this.scopeHolderForScopeRequest_(request);
+
+  // Fill all scopes for this frame or function.
+  var total_scopes = scope_holder.scopeCount();
   var scopes = [];
   for (var i = 0; i < total_scopes; i++) {
-    scopes.push(frame.scope(i));
+    scopes.push(scope_holder.scope(i));
   }
   response.body = {
     fromScope: 0,
@@ -1990,24 +2015,19 @@ DebugCommandProcessor.prototype.scopesRequest_ = function(request, response) {
 
 
 DebugCommandProcessor.prototype.scopeRequest_ = function(request, response) {
-  // No frames no scopes.
-  if (this.exec_state_.frameCount() == 0) {
-    return response.failed('No scopes');
-  }
-
-  // Get the frame for which the scope is requested.
-  var frame = this.frameForScopeRequest_(request);
+  // Get the frame or function for which the scope is requested.
+  var scope_holder = this.scopeHolderForScopeRequest_(request);
 
   // With no scope argument just return top scope.
   var scope_index = 0;
   if (request.arguments && !IS_UNDEFINED(request.arguments.number)) {
     scope_index = %ToNumber(request.arguments.number);
-    if (scope_index < 0 || frame.scopeCount() <= scope_index) {
+    if (scope_index < 0 || scope_holder.scopeCount() <= scope_index) {
       return response.failed('Invalid scope number');
     }
   }
 
-  response.body = frame.scope(scope_index);
+  response.body = scope_holder.scope(scope_index);
 };
 
 

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,6 +27,8 @@
 
 #ifndef V8_X64_ASSEMBLER_X64_INL_H_
 #define V8_X64_ASSEMBLER_X64_INL_H_
+
+#include "x64/assembler-x64.h"
 
 #include "cpu.h"
 #include "debug.h"
@@ -233,9 +235,9 @@ Address RelocInfo::target_address_address() {
 
 int RelocInfo::target_address_size() {
   if (IsCodedSpecially()) {
-    return Assembler::kCallTargetSize;
+    return Assembler::kSpecialTargetSize;
   } else {
-    return Assembler::kExternalTargetSize;
+    return kPointerSize;
   }
 }
 

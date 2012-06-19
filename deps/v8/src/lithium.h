@@ -35,6 +35,14 @@
 namespace v8 {
 namespace internal {
 
+#define LITHIUM_OPERAND_LIST(V)         \
+  V(ConstantOperand, CONSTANT_OPERAND)  \
+  V(StackSlot,       STACK_SLOT)        \
+  V(DoubleStackSlot, DOUBLE_STACK_SLOT) \
+  V(Register,        REGISTER)          \
+  V(DoubleRegister,  DOUBLE_REGISTER)
+
+
 class LOperand: public ZoneObject {
  public:
   enum Kind {
@@ -52,15 +60,14 @@ class LOperand: public ZoneObject {
 
   Kind kind() const { return KindField::decode(value_); }
   int index() const { return static_cast<int>(value_) >> kKindFieldWidth; }
-  bool IsConstantOperand() const { return kind() == CONSTANT_OPERAND; }
-  bool IsStackSlot() const { return kind() == STACK_SLOT; }
-  bool IsDoubleStackSlot() const { return kind() == DOUBLE_STACK_SLOT; }
-  bool IsRegister() const { return kind() == REGISTER; }
-  bool IsDoubleRegister() const { return kind() == DOUBLE_REGISTER; }
-  bool IsArgument() const { return kind() == ARGUMENT; }
-  bool IsUnallocated() const { return kind() == UNALLOCATED; }
+#define LITHIUM_OPERAND_PREDICATE(name, type) \
+  bool Is##name() const { return kind() == type; }
+  LITHIUM_OPERAND_LIST(LITHIUM_OPERAND_PREDICATE)
+  LITHIUM_OPERAND_PREDICATE(Argument, ARGUMENT)
+  LITHIUM_OPERAND_PREDICATE(Unallocated, UNALLOCATED)
+  LITHIUM_OPERAND_PREDICATE(Ignored, INVALID)
+#undef LITHIUM_OPERAND_PREDICATE
   bool Equals(LOperand* other) const { return value_ == other->value_; }
-  int VirtualRegister();
 
   void PrintTo(StringStream* stream);
   void ConvertTo(Kind kind, int index) {
@@ -68,6 +75,10 @@ class LOperand: public ZoneObject {
     value_ |= index << kKindFieldWidth;
     ASSERT(this->index() == index);
   }
+
+  // Calls SetUpCache()/TearDownCache() for each subclass.
+  static void SetUpCaches();
+  static void TearDownCaches();
 
  protected:
   static const int kKindFieldWidth = 3;
@@ -89,8 +100,7 @@ class LUnallocated: public LOperand {
     FIXED_SLOT,
     MUST_HAVE_REGISTER,
     WRITABLE_REGISTER,
-    SAME_AS_FIRST_INPUT,
-    IGNORE
+    SAME_AS_FIRST_INPUT
   };
 
   // Lifetime of operand inside the instruction.
@@ -121,9 +131,9 @@ class LUnallocated: public LOperand {
 
   // The superclass has a KindField.  Some policies have a signed fixed
   // index in the upper bits.
-  static const int kPolicyWidth = 4;
+  static const int kPolicyWidth = 3;
   static const int kLifetimeWidth = 1;
-  static const int kVirtualRegisterWidth = 17;
+  static const int kVirtualRegisterWidth = 18;
 
   static const int kPolicyShift = kKindFieldWidth;
   static const int kLifetimeShift = kPolicyShift + kPolicyWidth;
@@ -143,12 +153,10 @@ class LUnallocated: public LOperand {
                         kVirtualRegisterWidth> {
   };
 
-  static const int kMaxVirtualRegisters = 1 << (kVirtualRegisterWidth + 1);
+  static const int kMaxVirtualRegisters = 1 << kVirtualRegisterWidth;
   static const int kMaxFixedIndex = 63;
   static const int kMinFixedIndex = -64;
 
-  bool HasIgnorePolicy() const { return policy() == IGNORE; }
-  bool HasNoPolicy() const { return policy() == NONE; }
   bool HasAnyPolicy() const {
     return policy() == ANY;
   }
@@ -171,7 +179,7 @@ class LUnallocated: public LOperand {
     return static_cast<int>(value_) >> kFixedIndexShift;
   }
 
-  unsigned virtual_register() const {
+  int virtual_register() const {
     return VirtualRegisterField::decode(value_);
   }
 
@@ -179,8 +187,8 @@ class LUnallocated: public LOperand {
     value_ = VirtualRegisterField::update(value_, id);
   }
 
-  LUnallocated* CopyUnconstrained() {
-    LUnallocated* result = new LUnallocated(ANY);
+  LUnallocated* CopyUnconstrained(Zone* zone) {
+    LUnallocated* result = new(zone) LUnallocated(ANY);
     result->set_virtual_register(virtual_register());
     return result;
   }
@@ -234,9 +242,7 @@ class LMoveOperands BASE_EMBEDDED {
   }
 
   bool IsIgnored() const {
-    return destination_ != NULL &&
-        destination_->IsUnallocated() &&
-        LUnallocated::cast(destination_)->HasIgnorePolicy();
+    return destination_ != NULL && destination_->IsIgnored();
   }
 
   // We clear both operands to indicate move that's been eliminated.
@@ -254,10 +260,10 @@ class LMoveOperands BASE_EMBEDDED {
 
 class LConstantOperand: public LOperand {
  public:
-  static LConstantOperand* Create(int index) {
+  static LConstantOperand* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
     if (index < kNumCachedOperands) return &cache[index];
-    return new LConstantOperand(index);
+    return new(zone) LConstantOperand(index);
   }
 
   static LConstantOperand* cast(LOperand* op) {
@@ -266,10 +272,11 @@ class LConstantOperand: public LOperand {
   }
 
   static void SetUpCache();
+  static void TearDownCache();
 
  private:
   static const int kNumCachedOperands = 128;
-  static LConstantOperand cache[];
+  static LConstantOperand* cache;
 
   LConstantOperand() : LOperand() { }
   explicit LConstantOperand(int index) : LOperand(CONSTANT_OPERAND, index) { }
@@ -289,10 +296,10 @@ class LArgument: public LOperand {
 
 class LStackSlot: public LOperand {
  public:
-  static LStackSlot* Create(int index) {
+  static LStackSlot* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
     if (index < kNumCachedOperands) return &cache[index];
-    return new LStackSlot(index);
+    return new(zone) LStackSlot(index);
   }
 
   static LStackSlot* cast(LOperand* op) {
@@ -301,10 +308,11 @@ class LStackSlot: public LOperand {
   }
 
   static void SetUpCache();
+  static void TearDownCache();
 
  private:
   static const int kNumCachedOperands = 128;
-  static LStackSlot cache[];
+  static LStackSlot* cache;
 
   LStackSlot() : LOperand() { }
   explicit LStackSlot(int index) : LOperand(STACK_SLOT, index) { }
@@ -313,10 +321,10 @@ class LStackSlot: public LOperand {
 
 class LDoubleStackSlot: public LOperand {
  public:
-  static LDoubleStackSlot* Create(int index) {
+  static LDoubleStackSlot* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
     if (index < kNumCachedOperands) return &cache[index];
-    return new LDoubleStackSlot(index);
+    return new(zone) LDoubleStackSlot(index);
   }
 
   static LDoubleStackSlot* cast(LOperand* op) {
@@ -325,10 +333,11 @@ class LDoubleStackSlot: public LOperand {
   }
 
   static void SetUpCache();
+  static void TearDownCache();
 
  private:
   static const int kNumCachedOperands = 128;
-  static LDoubleStackSlot cache[];
+  static LDoubleStackSlot* cache;
 
   LDoubleStackSlot() : LOperand() { }
   explicit LDoubleStackSlot(int index) : LOperand(DOUBLE_STACK_SLOT, index) { }
@@ -337,10 +346,10 @@ class LDoubleStackSlot: public LOperand {
 
 class LRegister: public LOperand {
  public:
-  static LRegister* Create(int index) {
+  static LRegister* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
     if (index < kNumCachedOperands) return &cache[index];
-    return new LRegister(index);
+    return new(zone) LRegister(index);
   }
 
   static LRegister* cast(LOperand* op) {
@@ -349,10 +358,11 @@ class LRegister: public LOperand {
   }
 
   static void SetUpCache();
+  static void TearDownCache();
 
  private:
   static const int kNumCachedOperands = 16;
-  static LRegister cache[];
+  static LRegister* cache;
 
   LRegister() : LOperand() { }
   explicit LRegister(int index) : LOperand(REGISTER, index) { }
@@ -361,10 +371,10 @@ class LRegister: public LOperand {
 
 class LDoubleRegister: public LOperand {
  public:
-  static LDoubleRegister* Create(int index) {
+  static LDoubleRegister* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
     if (index < kNumCachedOperands) return &cache[index];
-    return new LDoubleRegister(index);
+    return new(zone) LDoubleRegister(index);
   }
 
   static LDoubleRegister* cast(LOperand* op) {
@@ -373,10 +383,11 @@ class LDoubleRegister: public LOperand {
   }
 
   static void SetUpCache();
+  static void TearDownCache();
 
  private:
   static const int kNumCachedOperands = 16;
-  static LDoubleRegister cache[];
+  static LDoubleRegister* cache;
 
   LDoubleRegister() : LOperand() { }
   explicit LDoubleRegister(int index) : LOperand(DOUBLE_REGISTER, index) { }
@@ -385,10 +396,10 @@ class LDoubleRegister: public LOperand {
 
 class LParallelMove : public ZoneObject {
  public:
-  LParallelMove() : move_operands_(4) { }
+  explicit LParallelMove(Zone* zone) : move_operands_(4, zone) { }
 
-  void AddMove(LOperand* from, LOperand* to) {
-    move_operands_.Add(LMoveOperands(from, to));
+  void AddMove(LOperand* from, LOperand* to, Zone* zone) {
+    move_operands_.Add(LMoveOperands(from, to), zone);
   }
 
   bool IsRedundant() const;
@@ -406,9 +417,9 @@ class LParallelMove : public ZoneObject {
 
 class LPointerMap: public ZoneObject {
  public:
-  explicit LPointerMap(int position)
-      : pointer_operands_(8),
-        untagged_operands_(0),
+  explicit LPointerMap(int position, Zone* zone)
+      : pointer_operands_(8, zone),
+        untagged_operands_(0, zone),
         position_(position),
         lithium_position_(-1) { }
 
@@ -427,9 +438,9 @@ class LPointerMap: public ZoneObject {
     lithium_position_ = pos;
   }
 
-  void RecordPointer(LOperand* op);
+  void RecordPointer(LOperand* op, Zone* zone);
   void RemovePointer(LOperand* op);
-  void RecordUntagged(LOperand* op);
+  void RecordUntagged(LOperand* op, Zone* zone);
   void PrintTo(StringStream* stream);
 
  private:
@@ -443,26 +454,30 @@ class LPointerMap: public ZoneObject {
 class LEnvironment: public ZoneObject {
  public:
   LEnvironment(Handle<JSFunction> closure,
+               FrameType frame_type,
                int ast_id,
                int parameter_count,
                int argument_count,
                int value_count,
-               LEnvironment* outer)
+               LEnvironment* outer,
+               Zone* zone)
       : closure_(closure),
+        frame_type_(frame_type),
         arguments_stack_height_(argument_count),
         deoptimization_index_(Safepoint::kNoDeoptimizationIndex),
         translation_index_(-1),
         ast_id_(ast_id),
         parameter_count_(parameter_count),
         pc_offset_(-1),
-        values_(value_count),
-        representations_(value_count),
+        values_(value_count, zone),
+        is_tagged_(value_count, closure->GetHeap()->isolate()->zone()),
         spilled_registers_(NULL),
         spilled_double_registers_(NULL),
-        outer_(outer) {
-  }
+        outer_(outer),
+        zone_(zone) { }
 
   Handle<JSFunction> closure() const { return closure_; }
+  FrameType frame_type() const { return frame_type_; }
   int arguments_stack_height() const { return arguments_stack_height_; }
   int deoptimization_index() const { return deoptimization_index_; }
   int translation_index() const { return translation_index_; }
@@ -477,12 +492,14 @@ class LEnvironment: public ZoneObject {
   LEnvironment* outer() const { return outer_; }
 
   void AddValue(LOperand* operand, Representation representation) {
-    values_.Add(operand);
-    representations_.Add(representation);
+    values_.Add(operand, zone());
+    if (representation.IsTagged()) {
+      is_tagged_.Add(values_.length() - 1);
+    }
   }
 
   bool HasTaggedValueAt(int index) const {
-    return representations_[index].IsTagged();
+    return is_tagged_.Contains(index);
   }
 
   void Register(int deoptimization_index,
@@ -505,8 +522,11 @@ class LEnvironment: public ZoneObject {
 
   void PrintTo(StringStream* stream);
 
+  Zone* zone() const { return zone_; }
+
  private:
   Handle<JSFunction> closure_;
+  FrameType frame_type_;
   int arguments_stack_height_;
   int deoptimization_index_;
   int translation_index_;
@@ -514,7 +534,7 @@ class LEnvironment: public ZoneObject {
   int parameter_count_;
   int pc_offset_;
   ZoneList<LOperand*> values_;
-  ZoneList<Representation> representations_;
+  BitVector is_tagged_;
 
   // Allocation index indexed arrays of spill slot operands for registers
   // that are also in spill slots at an OSR entry.  NULL for environments
@@ -523,6 +543,8 @@ class LEnvironment: public ZoneObject {
   LOperand** spilled_double_registers_;
 
   LEnvironment* outer_;
+
+  Zone* zone_;
 };
 
 

@@ -38,6 +38,7 @@
 #define V8_ARM_ASSEMBLER_ARM_INL_H_
 
 #include "arm/assembler-arm.h"
+
 #include "cpu.h"
 #include "debug.h"
 
@@ -79,7 +80,7 @@ Address RelocInfo::target_address_address() {
 
 
 int RelocInfo::target_address_size() {
-  return Assembler::kExternalTargetSize;
+  return kPointerSize;
 }
 
 
@@ -363,8 +364,14 @@ Address Assembler::target_address_at(Address pc) {
 }
 
 
-void Assembler::set_target_at(Address constant_pool_entry,
-                              Address target) {
+void Assembler::deserialization_set_special_target_at(
+    Address constant_pool_entry, Address target) {
+  Memory::Address_at(constant_pool_entry) = target;
+}
+
+
+void Assembler::set_external_target_at(Address constant_pool_entry,
+                                       Address target) {
   Memory::Address_at(constant_pool_entry) = target;
 }
 

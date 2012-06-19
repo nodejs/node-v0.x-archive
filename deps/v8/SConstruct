@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -33,6 +33,7 @@ import os
 from os.path import join, dirname, abspath
 from types import DictType, StringTypes
 root_dir = dirname(File('SConstruct').rfile().abspath)
+src_dir = join(root_dir, 'src')
 sys.path.insert(0, join(root_dir, 'tools'))
 import js2c, utils
 
@@ -53,7 +54,7 @@ GCC_DTOA_EXTRA_CCFLAGS = []
 
 LIBRARY_FLAGS = {
   'all': {
-    'CPPPATH': [join(root_dir, 'src')],
+    'CPPPATH': [src_dir],
     'regexp:interpreted': {
       'CPPDEFINES': ['V8_INTERPRETED_REGEXP']
     },
@@ -100,24 +101,24 @@ LIBRARY_FLAGS = {
     'os:linux': {
       'CCFLAGS':      ['-ansi'] + GCC_EXTRA_CCFLAGS,
       'library:shared': {
-        'CPPDEFINES': ['V8_SHARED'],
+        'CPPDEFINES': ['V8_SHARED', 'BUILDING_V8_SHARED'],
         'LIBS': ['pthread']
       }
     },
     'os:macos': {
       'CCFLAGS':      ['-ansi', '-mmacosx-version-min=10.4'],
       'library:shared': {
-        'CPPDEFINES': ['V8_SHARED']
+        'CPPDEFINES': ['V8_SHARED', 'BUILDING_V8_SHARED'],
       }
     },
     'os:freebsd': {
-      'CPPPATH' : ['/usr/local/include'],
+      'CPPPATH' : [src_dir, '/usr/local/include'],
       'LIBPATH' : ['/usr/local/lib'],
       'CCFLAGS':      ['-ansi'],
       'LIBS': ['execinfo']
     },
     'os:openbsd': {
-      'CPPPATH' : ['/usr/local/include'],
+      'CPPPATH' : [src_dir, '/usr/local/include'],
       'LIBPATH' : ['/usr/local/lib'],
       'CCFLAGS':      ['-ansi'],
     },
@@ -125,12 +126,12 @@ LIBRARY_FLAGS = {
       # On Solaris, to get isinf, INFINITY, fpclassify and other macros one
       # needs to define __C99FEATURES__.
       'CPPDEFINES': ['__C99FEATURES__'],
-      'CPPPATH' : ['/usr/local/include'],
+      'CPPPATH' : [src_dir, '/usr/local/include'],
       'LIBPATH' : ['/usr/local/lib'],
       'CCFLAGS':      ['-ansi'],
     },
     'os:netbsd': {
-      'CPPPATH' : ['/usr/pkg/include'],
+      'CPPPATH' : [src_dir, '/usr/pkg/include'],
       'LIBPATH' : ['/usr/pkg/lib'],
     },
     'os:win32': {
@@ -184,6 +185,9 @@ LIBRARY_FLAGS = {
       'mips_arch_variant:mips32r2': {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
+      'mips_arch_variant:loongson': {
+        'CPPDEFINES':    ['_MIPS_ARCH_LOONGSON']
+      },
       'simulator:none': {
         'CCFLAGS':      ['-EL'],
         'LINKFLAGS':    ['-EL'],
@@ -192,6 +196,9 @@ LIBRARY_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson': {
+          'CCFLAGS':      ['-march=mips3', '-Wa,-march=mips3']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -211,9 +218,12 @@ LIBRARY_FLAGS = {
       'LINKFLAGS':    ['-m32'],
       'mipsabi:softfloat': {
         'CPPDEFINES':    ['__mips_soft_float=1'],
+        'fpu:on': {
+          'CPPDEFINES' : ['CAN_USE_FPU_INSTRUCTIONS']
+        }
       },
       'mipsabi:hardfloat': {
-        'CPPDEFINES':    ['__mips_hard_float=1'],
+        'CPPDEFINES':    ['__mips_hard_float=1', 'CAN_USE_FPU_INSTRUCTIONS'],
       }
     },
     'arch:x64': {
@@ -295,10 +305,16 @@ V8_EXTRA_FLAGS = {
                        '-Werror',
                        '-W',
                        '-Wno-unused-parameter',
+                       '-Woverloaded-virtual',
                        '-Wnon-virtual-dtor']
     },
     'os:win32': {
-      'WARNINGFLAGS': ['-pedantic', '-Wno-long-long']
+      'WARNINGFLAGS': ['-pedantic',
+                       '-Wno-long-long',
+                       '-Wno-pedantic-ms-format'],
+      'library:shared': {
+        'LIBS': ['winmm', 'ws2_32']
+      }
     },
     'os:linux': {
       'WARNINGFLAGS': ['-pedantic'],
@@ -403,7 +419,7 @@ DTOA_EXTRA_FLAGS = {
 
 CCTEST_EXTRA_FLAGS = {
   'all': {
-    'CPPPATH': [join(root_dir, 'src')],
+    'CPPPATH': [src_dir],
     'library:shared': {
       'CPPDEFINES': ['USING_V8_SHARED']
     },
@@ -460,7 +476,7 @@ CCTEST_EXTRA_FLAGS = {
 
 SAMPLE_FLAGS = {
   'all': {
-    'CPPPATH': [join(abspath('.'), 'include')],
+    'CPPPATH': [join(root_dir, 'include')],
     'library:shared': {
       'CPPDEFINES': ['USING_V8_SHARED']
     },
@@ -538,6 +554,9 @@ SAMPLE_FLAGS = {
       'mips_arch_variant:mips32r2': {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
+      'mips_arch_variant:loongson': {
+        'CPPDEFINES':    ['_MIPS_ARCH_LOONGSON']
+      },
       'simulator:none': {
         'CCFLAGS':      ['-EL'],
         'LINKFLAGS':    ['-EL'],
@@ -546,6 +565,9 @@ SAMPLE_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson': {
+          'CCFLAGS':      ['-march=mips3', '-Wa,-march=mips3']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -556,7 +578,10 @@ SAMPLE_FLAGS = {
         },
         'mipsabi:hardfloat': {
           'CCFLAGS':      ['-mhard-float'],
-          'LINKFLAGS':    ['-mhard-float']
+          'LINKFLAGS':    ['-mhard-float'],
+          'fpu:on': {
+            'CPPDEFINES' : ['CAN_USE_FPU_INSTRUCTIONS']
+          }
         }
       }
     },
@@ -643,7 +668,7 @@ SAMPLE_FLAGS = {
 
 PREPARSER_FLAGS = {
   'all': {
-    'CPPPATH': [join(abspath('.'), 'include'), join(abspath('.'), 'src')],
+    'CPPPATH': [join(root_dir, 'include'), src_dir],
     'library:shared': {
       'CPPDEFINES': ['USING_V8_SHARED']
     },
@@ -690,6 +715,9 @@ PREPARSER_FLAGS = {
       'mips_arch_variant:mips32r2': {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
+      'mips_arch_variant:loongson': {
+        'CPPDEFINES':    ['_MIPS_ARCH_LOONGSON']
+      },
       'simulator:none': {
         'CCFLAGS':      ['-EL'],
         'LINKFLAGS':    ['-EL'],
@@ -698,6 +726,9 @@ PREPARSER_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson': {
+          'CCFLAGS':      ['-march=mips3', '-Wa,-march=mips3']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -1107,7 +1138,7 @@ SIMPLE_OPTIONS = {
     'help': 'generate calling conventiont according to selected mips ABI'
   },
   'mips_arch_variant': {
-    'values': ['mips32r2', 'mips32r1'],
+    'values': ['mips32r2', 'mips32r1', 'loongson'],
     'default': 'mips32r2',
     'help': 'mips variant'
   },
@@ -1120,6 +1151,11 @@ SIMPLE_OPTIONS = {
     'values': ['on', 'off'],
     'default': 'on',
     'help': 'use vfp3 instructions when building the snapshot [Arm only]'
+  },
+  'fpu': {
+    'values': ['on', 'off'],
+    'default': 'on',
+    'help': 'use fpu instructions when building the snapshot [MIPS only]'
   },
 
 }
@@ -1565,4 +1601,17 @@ except:
   pass
 
 
+def WarnAboutDeprecation():
+  print """
+#######################################################
+#  WARNING: Building V8 with SCons is deprecated and  #
+#  will not work much longer. Please switch to using  #
+#  the GYP-based build now. Instructions are at       #
+#  http://code.google.com/p/v8/wiki/BuildingWithGYP.  #
+#######################################################
+  """
+
+WarnAboutDeprecation()
+import atexit
+atexit.register(WarnAboutDeprecation)
 Build()

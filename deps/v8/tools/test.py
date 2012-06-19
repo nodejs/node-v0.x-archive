@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2008 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -472,7 +472,7 @@ def RunProcess(context, timeout, args, **rest):
   popen_args = args
   prev_error_mode = SEM_INVALID_VALUE
   if utils.IsWindows():
-    popen_args = '"' + subprocess.list2cmdline(args) + '"'
+    popen_args = subprocess.list2cmdline(args)
     if context.suppress_dialogs:
       # Try to change the error mode to avoid dialogs on fatal errors. Don't
       # touch any existing error mode flags by merging the existing error mode.
@@ -631,9 +631,15 @@ class TestRepository(TestSuite):
   def GetBuildRequirements(self, path, context):
     return self.GetConfiguration(context).GetBuildRequirements()
 
+  def DownloadData(self, context):
+    config = self.GetConfiguration(context)
+    if 'DownloadData' in dir(config):
+      config.DownloadData()
+
   def AddTestsToList(self, result, current_path, path, context, mode):
-    for v in self.GetConfiguration(context).VariantFlags():
-      tests = self.GetConfiguration(context).ListTests(current_path, path, mode, v)
+    config = self.GetConfiguration(context)
+    for v in config.VariantFlags():
+      tests = config.ListTests(current_path, path, mode, v)
       for t in tests: t.variant_flags = v
       result += tests
 
@@ -655,6 +661,12 @@ class LiteralTestSuite(TestSuite):
         result += test.GetBuildRequirements(rest, context)
     return result
 
+  def DownloadData(self, path, context):
+    (name, rest) = CarCdr(path)
+    for test in self.tests:
+      if not name or name.match(test.GetName()):
+        test.DownloadData(context)
+
   def ListTests(self, current_path, path, context, mode, variant_flags):
     (name, rest) = CarCdr(path)
     result = [ ]
@@ -674,8 +686,8 @@ SUFFIX = {
     'debug'   : '_g',
     'release' : '' }
 FLAGS = {
-    'debug'   : ['--enable-slow-asserts', '--debug-code', '--verify-heap'],
-    'release' : []}
+    'debug'   : ['--nobreak-on-abort', '--enable-slow-asserts', '--debug-code', '--verify-heap'],
+    'release' : ['--nobreak-on-abort']}
 TIMEOUT_SCALEFACTOR = {
     'debug'   : 4,
     'release' : 1 }
@@ -711,7 +723,7 @@ class Context(object):
   def GetTimeout(self, testcase, mode):
     result = self.timeout * TIMEOUT_SCALEFACTOR[mode]
     if '--stress-opt' in self.GetVmFlags(testcase, mode):
-      return result * 2
+      return result * 4
     else:
       return result
 
@@ -850,6 +862,9 @@ class Operation(Expression):
     elif self.op == '==':
       inter = self.left.GetOutcomes(env, defs).Intersect(self.right.GetOutcomes(env, defs))
       return not inter.IsEmpty()
+    elif self.op == '!=':
+      inter = self.left.GetOutcomes(env, defs).Intersect(self.right.GetOutcomes(env, defs))
+      return inter.IsEmpty()
     else:
       assert self.op == '&&'
       return self.left.Evaluate(env, defs) and self.right.Evaluate(env, defs)
@@ -932,6 +947,9 @@ class Tokenizer(object):
       elif self.Current(2) == '==':
         self.AddToken('==')
         self.Advance(2)
+      elif self.Current(2) == '!=':
+        self.AddToken('!=')
+        self.Advance(2)
       else:
         return None
     return self.tokens
@@ -984,7 +1002,7 @@ def ParseAtomicExpression(scan):
     return None
 
 
-BINARIES = ['==']
+BINARIES = ['==', '!=']
 def ParseOperatorExpression(scan):
   left = ParseAtomicExpression(scan)
   if not left: return None
@@ -1006,7 +1024,7 @@ def ParseConditionalExpression(scan):
     right = ParseOperatorExpression(scan)
     if not right:
       return None
-    left=  Operation(left, 'if', right)
+    left = Operation(left, 'if', right)
   return left
 
 
@@ -1186,6 +1204,8 @@ def BuildOptions():
       default='scons')
   result.add_option("--report", help="Print a summary of the tests to be run",
       default=False, action="store_true")
+  result.add_option("--download-data", help="Download missing test suite data",
+      default=False, action="store_true")
   result.add_option("-s", "--suite", help="A test suite",
       default=[], action="append")
   result.add_option("-t", "--timeout", help="Timeout in seconds",
@@ -1211,6 +1231,7 @@ def BuildOptions():
         dest="suppress_dialogs", default=True, action="store_true")
   result.add_option("--no-suppress-dialogs", help="Display Windows dialogs for crashing tests",
         dest="suppress_dialogs", action="store_false")
+  result.add_option("--mips-arch-variant", help="mips architecture variant: mips32r1/mips32r2", default="mips32r2");
   result.add_option("--shell", help="Path to V8 shell", default="d8")
   result.add_option("--isolates", help="Whether to test isolates", default=False, action="store_true")
   result.add_option("--store-unexpected-output",
@@ -1224,9 +1245,6 @@ def BuildOptions():
                     default=False, action="store_true")
   result.add_option("--nostress",
                     help="Don't run crankshaft --always-opt --stress-op test",
-                    default=False, action="store_true")
-  result.add_option("--crankshaft",
-                    help="Run with the --crankshaft flag",
                     default=False, action="store_true")
   result.add_option("--shard-count",
                     help="Split testsuites into this number of shards",
@@ -1272,15 +1290,13 @@ def ProcessOptions(options):
   if options.snapshot:
     options.scons_flags.append("snapshot=on")
   global VARIANT_FLAGS
+  if options.mips_arch_variant:
+    options.scons_flags.append("mips_arch_variant=" + options.mips_arch_variant)
+
   if options.stress_only:
     VARIANT_FLAGS = [['--stress-opt', '--always-opt']]
   if options.nostress:
     VARIANT_FLAGS = [[],['--nocrankshaft']]
-  if options.crankshaft:
-    if options.special_command:
-      options.special_command += " --crankshaft"
-    else:
-      options.special_command = "@ --crankshaft"
   if options.shell.endswith("d8"):
     if options.special_command:
       options.special_command += " --test"
@@ -1452,6 +1468,11 @@ def Main():
   root.GetTestStatus(context, sections, defs)
   config = Configuration(sections, defs)
 
+  # Download missing test suite data if requested.
+  if options.download_data:
+    for path in paths:
+      root.DownloadData(path, context)
+
   # List the tests
   all_cases = [ ]
   all_unused = [ ]
@@ -1464,7 +1485,6 @@ def Main():
         'system': utils.GuessOS(),
         'arch': options.arch,
         'simulator': options.simulator,
-        'crankshaft': options.crankshaft,
         'isolates': options.isolates
       }
       test_list = root.ListTests([], path, context, mode, [])

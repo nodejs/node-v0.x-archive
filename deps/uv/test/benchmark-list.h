@@ -20,6 +20,8 @@
  */
 
 BENCHMARK_DECLARE (sizes)
+BENCHMARK_DECLARE (loop_count)
+BENCHMARK_DECLARE (loop_count_timed)
 BENCHMARK_DECLARE (ping_pongs)
 BENCHMARK_DECLARE (tcp_write_batch)
 BENCHMARK_DECLARE (tcp4_pound_100)
@@ -44,6 +46,7 @@ BENCHMARK_DECLARE (gethostbyname)
 BENCHMARK_DECLARE (getaddrinfo)
 BENCHMARK_DECLARE (spawn)
 BENCHMARK_DECLARE (thread_create)
+BENCHMARK_DECLARE (million_timers)
 HELPER_DECLARE    (tcp4_blackhole_server)
 HELPER_DECLARE    (tcp_pump_server)
 HELPER_DECLARE    (pipe_pump_server)
@@ -53,6 +56,8 @@ HELPER_DECLARE    (dns_server)
 
 TASK_LIST_START
   BENCHMARK_ENTRY  (sizes)
+  BENCHMARK_ENTRY  (loop_count)
+  BENCHMARK_ENTRY  (loop_count_timed)
 
   BENCHMARK_ENTRY  (ping_pongs)
   BENCHMARK_HELPER (ping_pongs, tcp4_echo_server)
@@ -102,4 +107,5 @@ TASK_LIST_START
 
   BENCHMARK_ENTRY  (spawn)
   BENCHMARK_ENTRY  (thread_create)
+  BENCHMARK_ENTRY  (million_timers)
 TASK_LIST_END

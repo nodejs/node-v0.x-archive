@@ -19,13 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_http_parser.h>
+#include "node_http_parser.h"
 
-#include <v8.h>
-#include <node.h>
-#include <node_buffer.h>
-
-#include <http_parser.h>
+#include "v8.h"
+#include "node.h"
+#include "node_buffer.h"
 
 #include <string.h>  /* strdup() */
 #if !defined(_MSC_VER)
@@ -47,56 +45,40 @@
 // allocations.
 
 
-#include <node_vars.h>
-// We do the following to minimize the detal between v0.6 branch. We want to
-// use the variables as they were being used before.
-#define on_headers_sym NODE_VAR(on_headers_sym)
-#define on_headers_complete_sym NODE_VAR(on_headers_complete_sym)
-#define on_body_sym NODE_VAR(on_body_sym)
-#define on_message_complete_sym NODE_VAR(on_message_complete_sym)
-#define delete_sym NODE_VAR(delete_sym)
-#define get_sym NODE_VAR(get_sym)
-#define head_sym NODE_VAR(head_sym)
-#define post_sym NODE_VAR(post_sym)
-#define put_sym NODE_VAR(put_sym)
-#define connect_sym NODE_VAR(connect_sym)
-#define options_sym NODE_VAR(options_sym)
-#define trace_sym NODE_VAR(trace_sym)
-#define patch_sym NODE_VAR(patch_sym)
-#define copy_sym NODE_VAR(copy_sym)
-#define lock_sym NODE_VAR(lock_sym)
-#define mkcol_sym NODE_VAR(mkcol_sym)
-#define move_sym NODE_VAR(move_sym)
-#define propfind_sym NODE_VAR(propfind_sym)
-#define proppatch_sym NODE_VAR(proppatch_sym)
-#define unlock_sym NODE_VAR(unlock_sym)
-#define report_sym NODE_VAR(report_sym)
-#define mkactivity_sym NODE_VAR(mkactivity_sym)
-#define checkout_sym NODE_VAR(checkout_sym)
-#define merge_sym NODE_VAR(merge_sym)
-#define msearch_sym NODE_VAR(msearch_sym)
-#define notify_sym NODE_VAR(notify_sym)
-#define subscribe_sym NODE_VAR(subscribe_sym)
-#define unsubscribe_sym NODE_VAR(unsubscribe_sym)
-#define unknown_method_sym NODE_VAR(unknown_method_sym)
-#define method_sym NODE_VAR(method_sym)
-#define status_code_sym NODE_VAR(status_code_sym)
-#define http_version_sym NODE_VAR(http_version_sym)
-#define version_major_sym NODE_VAR(version_major_sym)
-#define version_minor_sym NODE_VAR(version_minor_sym)
-#define should_keep_alive_sym NODE_VAR(should_keep_alive_sym)
-#define upgrade_sym NODE_VAR(upgrade_sym)
-#define headers_sym NODE_VAR(headers_sym)
-#define url_sym NODE_VAR(url_sym)
-#define settings NODE_VAR(settings)
-#define current_buffer NODE_VAR(current_buffer)
-#define current_buffer_data NODE_VAR(current_buffer_data)
-#define current_buffer_len NODE_VAR(current_buffer_len)
-
-
 namespace node {
 
 using namespace v8;
+
+static Persistent<String> on_headers_sym;
+static Persistent<String> on_headers_complete_sym;
+static Persistent<String> on_body_sym;
+static Persistent<String> on_message_complete_sym;
+
+static Persistent<String> method_sym;
+static Persistent<String> status_code_sym;
+static Persistent<String> http_version_sym;
+static Persistent<String> version_major_sym;
+static Persistent<String> version_minor_sym;
+static Persistent<String> should_keep_alive_sym;
+static Persistent<String> upgrade_sym;
+static Persistent<String> headers_sym;
+static Persistent<String> url_sym;
+
+static Persistent<String> unknown_method_sym;
+
+#define X(num, name, string) static Persistent<String> name##_sym;
+HTTP_METHOD_MAP(X)
+#undef X
+
+static struct http_parser_settings settings;
+
+
+// This is a hack to get the current_buffer to the callbacks with the least
+// amount of overhead. Nothing else will run while http_parser_execute()
+// runs, therefore this pointer can be set and used for the execution.
+static Local<Value>* current_buffer;
+static char* current_buffer_data;
+static size_t current_buffer_len;
 
 
 #define HTTP_CB(name)                                               \
@@ -118,32 +100,11 @@ using namespace v8;
 static inline Persistent<String>
 method_to_str(unsigned short m) {
   switch (m) {
-    case HTTP_DELETE:     return delete_sym;
-    case HTTP_GET:        return get_sym;
-    case HTTP_HEAD:       return head_sym;
-    case HTTP_POST:       return post_sym;
-    case HTTP_PUT:        return put_sym;
-    case HTTP_CONNECT:    return connect_sym;
-    case HTTP_OPTIONS:    return options_sym;
-    case HTTP_TRACE:      return trace_sym;
-    case HTTP_PATCH:      return patch_sym;
-    case HTTP_COPY:       return copy_sym;
-    case HTTP_LOCK:       return lock_sym;
-    case HTTP_MKCOL:      return mkcol_sym;
-    case HTTP_MOVE:       return move_sym;
-    case HTTP_PROPFIND:   return propfind_sym;
-    case HTTP_PROPPATCH:  return proppatch_sym;
-    case HTTP_UNLOCK:     return unlock_sym;
-    case HTTP_REPORT:     return report_sym;
-    case HTTP_MKACTIVITY: return mkactivity_sym;
-    case HTTP_CHECKOUT:   return checkout_sym;
-    case HTTP_MERGE:      return merge_sym;
-    case HTTP_MSEARCH:    return msearch_sym;
-    case HTTP_NOTIFY:     return notify_sym;
-    case HTTP_SUBSCRIBE:  return subscribe_sym;
-    case HTTP_UNSUBSCRIBE:return unsubscribe_sym;
-    default:              return unknown_method_sym;
+#define X(num, name, string) case HTTP_##name: return name##_sym;
+  HTTP_METHOD_MAP(X)
+#undef X
   }
+  return unknown_method_sym;
 }
 
 
@@ -187,7 +148,7 @@ struct StringPtr {
   void Update(const char* str, size_t size) {
     if (str_ == NULL)
       str_ = str;
-    else if (on_heap_ || str_ + size != str) {
+    else if (on_heap_ || str_ + size_ != str) {
       // Non-consecutive input, make a copy on the heap.
       // TODO Use slab allocation, O(n) allocs is bad.
       char* s = new char[size_ + size];
@@ -205,7 +166,7 @@ struct StringPtr {
   }
 
 
-  Handle<String> ToString() const {
+  Local<String> ToString() const {
     if (str_)
       return String::New(str_, size_);
     else
@@ -341,7 +302,7 @@ public:
     if (!cb->IsFunction())
       return 0;
 
-    Handle<Value> argv[3] = {
+    Local<Value> argv[3] = {
       *current_buffer,
       Integer::New(at - current_buffer_data),
       Integer::New(length)
@@ -445,7 +406,7 @@ public:
     size_t len = args[2]->Int32Value();
     if (off+len > buffer_len) {
       return ThrowException(Exception::Error(
-            String::New("Length is extends beyond buffer")));
+            String::New("off + len > buffer.length")));
     }
 
     // Assign 'buffer_' while we parse. The callbacks will access that varible.
@@ -471,9 +432,12 @@ public:
     // If there was a parse error in one of the callbacks
     // TODO What if there is an error on EOF?
     if (!parser->parser_.upgrade && nparsed != len) {
+      enum http_errno err = HTTP_PARSER_ERRNO(&parser->parser_);
+
       Local<Value> e = Exception::Error(String::NewSymbol("Parse Error"));
       Local<Object> obj = e->ToObject();
       obj->Set(String::NewSymbol("bytesParsed"), nparsed_obj);
+      obj->Set(String::NewSymbol("code"), String::New(http_errno_name(err)));
       return scope.Close(e);
     } else {
       return scope.Close(nparsed_obj);
@@ -494,9 +458,12 @@ public:
     if (parser->got_exception_) return Local<Value>();
 
     if (rv != 0) {
+      enum http_errno err = HTTP_PARSER_ERRNO(&parser->parser_);
+
       Local<Value> e = Exception::Error(String::NewSymbol("Parse Error"));
       Local<Object> obj = e->ToObject();
       obj->Set(String::NewSymbol("bytesParsed"), Integer::New(0));
+      obj->Set(String::NewSymbol("code"), String::New(http_errno_name(err)));
       return scope.Close(e);
     }
 
@@ -547,7 +514,7 @@ private:
     if (!cb->IsFunction())
       return;
 
-    Handle<Value> argv[2] = {
+    Local<Value> argv[2] = {
       CreateHeaders(),
       url_.ToString()
     };
@@ -605,30 +572,9 @@ void InitHttpParser(Handle<Object> target) {
   on_body_sym             = NODE_PSYMBOL("onBody");
   on_message_complete_sym = NODE_PSYMBOL("onMessageComplete");
 
-  delete_sym = NODE_PSYMBOL("DELETE");
-  get_sym = NODE_PSYMBOL("GET");
-  head_sym = NODE_PSYMBOL("HEAD");
-  post_sym = NODE_PSYMBOL("POST");
-  put_sym = NODE_PSYMBOL("PUT");
-  connect_sym = NODE_PSYMBOL("CONNECT");
-  options_sym = NODE_PSYMBOL("OPTIONS");
-  trace_sym = NODE_PSYMBOL("TRACE");
-  patch_sym = NODE_PSYMBOL("PATCH");
-  copy_sym = NODE_PSYMBOL("COPY");
-  lock_sym = NODE_PSYMBOL("LOCK");
-  mkcol_sym = NODE_PSYMBOL("MKCOL");
-  move_sym = NODE_PSYMBOL("MOVE");
-  propfind_sym = NODE_PSYMBOL("PROPFIND");
-  proppatch_sym = NODE_PSYMBOL("PROPPATCH");
-  unlock_sym = NODE_PSYMBOL("UNLOCK");
-  report_sym = NODE_PSYMBOL("REPORT");
-  mkactivity_sym = NODE_PSYMBOL("MKACTIVITY");
-  checkout_sym = NODE_PSYMBOL("CHECKOUT");
-  merge_sym = NODE_PSYMBOL("MERGE");
-  msearch_sym = NODE_PSYMBOL("M-SEARCH");
-  notify_sym = NODE_PSYMBOL("NOTIFY");
-  subscribe_sym = NODE_PSYMBOL("SUBSCRIBE");
-  unsubscribe_sym = NODE_PSYMBOL("UNSUBSCRIBE");;
+#define X(num, name, string) name##_sym = NODE_PSYMBOL(#string);
+  HTTP_METHOD_MAP(X)
+#undef X
   unknown_method_sym = NODE_PSYMBOL("UNKNOWN_METHOD");
 
   method_sym = NODE_PSYMBOL("method");

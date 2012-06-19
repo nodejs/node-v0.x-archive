@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -43,22 +43,26 @@ class SafepointGenerator;
 
 class LCodeGen BASE_EMBEDDED {
  public:
-  LCodeGen(LChunk* chunk, MacroAssembler* assembler, CompilationInfo* info)
+  LCodeGen(LChunk* chunk, MacroAssembler* assembler, CompilationInfo* info,
+           Zone* zone)
       : chunk_(chunk),
         masm_(assembler),
         info_(info),
         current_block_(-1),
         current_instruction_(-1),
         instructions_(chunk->instructions()),
-        deoptimizations_(4),
-        deopt_jump_table_(4),
-        deoptimization_literals_(8),
+        deoptimizations_(4, zone),
+        deopt_jump_table_(4, zone),
+        deoptimization_literals_(8, zone),
         inlined_function_count_(0),
         scope_(info->scope()),
         status_(UNUSED),
-        deferred_(8),
+        translations_(zone),
+        deferred_(8, zone),
         osr_pc_offset_(-1),
         last_lazy_deopt_pc_(0),
+        safepoints_(zone),
+        zone_(zone),
         resolver_(this),
         expected_safepoint_kind_(Safepoint::kSimple) {
     PopulateDeoptimizationLiteralsWithInlinedFunctions();
@@ -71,6 +75,7 @@ class LCodeGen BASE_EMBEDDED {
   Isolate* isolate() const { return info_->isolate(); }
   Factory* factory() const { return isolate()->factory(); }
   Heap* heap() const { return isolate()->heap(); }
+  Zone* zone() const { return zone_; }
 
   // Support for converting LOperands to assembler types.
   // LOperand must be a register.
@@ -110,10 +115,15 @@ class LCodeGen BASE_EMBEDDED {
   void DoDeferredTaggedToI(LTaggedToI* instr);
   void DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr);
   void DoDeferredStackCheck(LStackCheck* instr);
+  void DoDeferredRandom(LRandom* instr);
   void DoDeferredStringCharCodeAt(LStringCharCodeAt* instr);
   void DoDeferredStringCharFromCode(LStringCharFromCode* instr);
+  void DoDeferredAllocateObject(LAllocateObject* instr);
   void DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
                                        Label* map_check);
+
+  void DoCheckMapCommon(Register reg, Register scratch, Handle<Map> map,
+                        CompareMapMode mode, LEnvironment* env);
 
   // Parallel move support.
   void DoParallelMove(LParallelMove* move);
@@ -168,7 +178,7 @@ class LCodeGen BASE_EMBEDDED {
   void Abort(const char* format, ...);
   void Comment(const char* format, ...);
 
-  void AddDeferredCode(LDeferredCode* code) { deferred_.Add(code); }
+  void AddDeferredCode(LDeferredCode* code) { deferred_.Add(code, zone()); }
 
   // Code generation passes.  Returns true if code generation should
   // continue.
@@ -207,12 +217,18 @@ class LCodeGen BASE_EMBEDDED {
                                int argc,
                                LInstruction* instr);
 
+  enum A1State {
+    A1_UNINITIALIZED,
+    A1_CONTAINS_TARGET
+  };
+
   // Generate a direct call to a known function.  Expects the function
   // to be in a1.
   void CallKnownFunction(Handle<JSFunction> function,
                          int arity,
                          LInstruction* instr,
-                         CallKind call_kind);
+                         CallKind call_kind,
+                         A1State a1_state);
 
   void LoadHeapObject(Register result, Handle<HeapObject> object);
 
@@ -223,8 +239,8 @@ class LCodeGen BASE_EMBEDDED {
                                             Safepoint::DeoptMode mode);
   void DeoptimizeIf(Condition cc,
                     LEnvironment* environment,
-                    Register src1,
-                    const Operand& src2);
+                    Register src1 = zero_reg,
+                    const Operand& src2 = Operand(zero_reg));
 
   void AddToTranslation(Translation* translation,
                         LOperand* op,
@@ -280,6 +296,7 @@ class LCodeGen BASE_EMBEDDED {
   void EmitNumberUntagD(Register input,
                         DoubleRegister result,
                         bool deoptimize_on_undefined,
+                        bool deoptimize_on_minus_zero,
                         LEnvironment* env);
 
   // Emits optimized code for typeof x == "y".  Modifies input register.
@@ -317,7 +334,8 @@ class LCodeGen BASE_EMBEDDED {
   void EmitLoadFieldOrConstantFunction(Register result,
                                        Register object,
                                        Handle<Map> type,
-                                       Handle<String> name);
+                                       Handle<String> name,
+                                       LEnvironment* env);
 
   // Emits optimized code to deep-copy the contents of statically known
   // object graphs (e.g. object literal boilerplate).
@@ -357,6 +375,8 @@ class LCodeGen BASE_EMBEDDED {
   // Builder that keeps track of safepoints in the code. The table
   // itself is emitted at the end of the generated code.
   SafepointTableBuilder safepoints_;
+
+  Zone* zone_;
 
   // Compiler from a set of parallel moves to a sequential list of moves.
   LGapResolver resolver_;

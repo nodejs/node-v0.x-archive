@@ -32,7 +32,7 @@
 #include <time.h>
 
 #undef NANOSEC
-#define NANOSEC 1000000000
+#define NANOSEC ((uint64_t) 1e9)
 
 
 uint64_t uv_hrtime(void) {
@@ -54,10 +54,6 @@ void uv_loadavg(double avg[3]) {
 }
 
 int uv_exepath(char* buffer, size_t* size) {
-  uint32_t usize;
-  int result;
-  char* path;
-  char* fullpath;
   int mib[4];
   size_t cb;
   pid_t mypid;

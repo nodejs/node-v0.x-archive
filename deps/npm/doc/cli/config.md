@@ -115,6 +115,9 @@ The following shorthands are parsed on the command-line:
 * `-l`: `--long`
 * `-desc`: `--description`
 * `-S`: `--save`
+* `-D`: `--save-dev`
+* `-O`: `--save-optional`
+* `-B`: `--save-bundle`
 * `-y`: `--yes`
 * `-n`: `--yes false`
 * `ll` and `la` commands: `ls --long`
@@ -165,32 +168,6 @@ then the user could change the behavior by doing:
 Force npm to always require authentication when accessing the registry,
 even for `GET` requests.
 
-### bin-publish
-
-* Default: false
-* Type: Boolean
-
-If set to true, then binary packages will be created on publish.
-
-This is the way to opt into the "bindist" behavior described below.
-
-### bindist
-
-* Default: Unstable node versions, `null`, otherwise
-  `"<node version>-<platform>-<os release>"`
-* Type: String or `null`
-
-Experimental: on stable versions of node, binary distributions will be
-created with this tag.  If a user then installs that package, and their
-`bindist` tag is found in the list of binary distributions, they will
-get that prebuilt version.
-
-Pre-build node packages have their preinstall, install, and postinstall
-scripts stripped (since they are run prior to publishing), and do not
-have their `build` directories automatically ignored.
-
-It's yet to be seen if this is a good idea.
-
 ### browser
 
 * Default: OS X: `"open"`, others: `"google-chrome"`
@@ -217,6 +194,28 @@ See also the `strict-ssl` config.
 * Type: path
 
 The location of npm's cache directory.  See `npm-cache(1)`
+
+### cache-max
+
+* Default: Infinity
+* Type: Number
+
+The maximum time (in seconds) to keep items in the registry cache before
+re-checking against the registry.
+
+Note that no purging is done unless the `npm cache clean` command is
+explicitly used, and that only GET requests use the cache.
+
+### cache-min
+
+* Default: 0
+* Type: Number
+
+The minimum time (in seconds) to keep items in the registry cache before
+re-checking against the registry.
+
+Note that no purging is done unless the `npm cache clean` command is
+explicitly used, and that only GET requests use the cache.
 
 ### color
 
@@ -336,6 +335,13 @@ user.
 
 A proxy to use for outgoing https requests.
 
+### user-agent
+
+* Default: npm/{npm.version} node/{process.version}
+* Type: String
+
+Sets a User-Agent to the request header
+
 ### ignore
 
 * Default: ""
@@ -343,6 +349,16 @@ A proxy to use for outgoing https requests.
 
 A white-space separated list of glob patterns of files to always exclude
 from packages when building tarballs.
+
+### init-module
+
+* Default: ~/.npm-init.js
+* Type: path
+
+A module that will be loaded by the `npm init` command.  See the
+documentation for the
+[init-package-json](https://github.com/isaacs/init-package-json) module
+for more information, or npm-init(1).
 
 ### init.version
 
@@ -353,7 +369,7 @@ The value `npm init` should use by default for the package version.
 
 ### init.author.name
 
-* Default: "0.0.0"
+* Default: ""
 * Type: String
 
 The value `npm init` should use by default for the package author's name.
@@ -372,6 +388,17 @@ The value `npm init` should use by default for the package author's email.
 
 The value `npm init` should use by default for the package author's homepage.
 
+### json
+
+* Default: false
+* Type: Boolean
+
+Whether or not to output JSON data, rather than the normal output.
+
+This feature is currently experimental, and the output data structures
+for many commands is either not implemented in JSON yet, or subject to
+change.  Only the output from `npm ls --json` is currently valid.
+
 ### link
 
 * Default: false
@@ -388,13 +415,6 @@ if one of the two conditions are met:
 * the globally installed version is identical to the version that is
   being installed locally.
 
-### logfd
-
-* Default: stderr file descriptor
-* Type: Number or Stream
-
-The location to write log output.
-
 ### loglevel
 
 * Default: "http"
@@ -407,13 +427,17 @@ What level of logs to report.  On failure, *all* logs are written to
 Any logs of a higher level than the setting are shown.
 The default is "http", which shows http, warn, and error output.
 
-### logprefix
+### logstream
 
-* Default: true on Posix, false on Windows
-* Type: Boolean
+* Default: process.stderr
+* Type: Stream
 
-Whether or not to prefix log messages with "npm" and the log level.  See
-also "color" and "loglevel".
+This is the stream that is passed to the
+[npmlog](https://github.com/isaacs/npmlog) module at run time.
+
+It cannot be set from the command line, but if you are using npm
+programmatically, you may wish to send logs to somewhere other than
+stderr.
 
 ### long
 
@@ -460,13 +484,6 @@ The url to report npat test results.
 
 A node module to `require()` when npm loads.  Useful for programmatic
 usage.
-
-### outfd
-
-* Default: standard output file descriptor
-* Type: Number or Stream
-
-Where to write "normal" output.  This has no effect on log output.
 
 ### parseable
 
@@ -541,6 +558,45 @@ Remove failed installs.
 * Type: Boolean
 
 Save installed packages to a package.json file as dependencies.
+
+When used with the `npm rm` command, it removes it from the dependencies
+hash.
+
+Only works if there is already a package.json file present.
+
+### save-bundle
+
+* Default: false
+* Type: Boolean
+
+If a package would be saved at install time by the use of `--save`,
+`--save-dev`, or `--save-optional`, then also put it in the
+`bundleDependencies` list.
+
+When used with the `npm rm` command, it removes it from the
+bundledDependencies list.
+
+### save-dev
+
+* Default: false
+* Type: Boolean
+
+Save installed packages to a package.json file as devDependencies.
+
+When used with the `npm rm` command, it removes it from the devDependencies
+hash.
+
+Only works if there is already a package.json file present.
+
+### save-optional
+
+* Default: false
+* Type: Boolean
+
+Save installed packages to a package.json file as optionalDependencies.
+
+When used with the `npm rm` command, it removes it from the devDependencies
+hash.
 
 Only works if there is already a package.json file present.
 
@@ -679,6 +735,16 @@ this value.  Thus, the defaults are `0755` and `0644` respectively.
 * Type: boolean
 
 If true, output the npm version and exit successfully.
+
+Only relevant when specified explicitly on the command line.
+
+### versions
+
+* Default: false
+* Type: boolean
+
+If true, output the npm version as well as node's `process.versions`
+hash, and exit successfully.
 
 Only relevant when specified explicitly on the command line.
 

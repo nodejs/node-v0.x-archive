@@ -104,6 +104,7 @@ function test(handler, request_generator, response_validator) {
     assert.equal('1.0', req.httpVersion);
     assert.equal(1, req.httpVersionMajor);
     assert.equal(0, req.httpVersionMinor);
+    res.sendDate = false;
     res.writeHead(200, {'Content-Type': 'text/plain'});
     res.write('Hello, '); res._send('');
     res.write('world!'); res._send('');
@@ -112,7 +113,8 @@ function test(handler, request_generator, response_validator) {
 
   function request_generator() {
     return ('GET / HTTP/1.0\r\n' +
-        'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n' +
+        'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 ' +
+        'OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n' +
         'Host: 127.0.0.1:1337\r\n' +
         'Accept: */*\r\n' +
         '\r\n');
@@ -139,6 +141,7 @@ function test(handler, request_generator, response_validator) {
     assert.equal('1.1', req.httpVersion);
     assert.equal(1, req.httpVersionMajor);
     assert.equal(1, req.httpVersionMinor);
+    res.sendDate = false;
     res.writeHead(200, {'Content-Type': 'text/plain'});
     res.write('Hello, '); res._send('');
     res.write('world!'); res._send('');
@@ -147,7 +150,8 @@ function test(handler, request_generator, response_validator) {
 
   function request_generator() {
     return ('GET / HTTP/1.1\r\n' +
-        'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n' +
+        'User-Agent: curl/7.19.7 (x86_64-pc-linux-gnu) libcurl/7.19.7 ' +
+        'OpenSSL/0.9.8k zlib/1.2.3.3 libidn/1.15\r\n' +
         'Connection: close\r\n' +
         'Host: 127.0.0.1:1337\r\n' +
         'Accept: */*\r\n' +

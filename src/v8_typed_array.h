@@ -22,13 +22,11 @@
 #ifndef V8_TYPED_ARRAY_H_
 #define V8_TYPED_ARRAY_H_
 
-#include <v8.h>
+#include "v8.h"
 
 namespace v8_typed_array {
 
 void AttachBindings(v8::Handle<v8::Object> obj);
-
-int SizeOfArrayElementForType(v8::ExternalArrayType type);
 
 }  // namespace v8_typed_array
 

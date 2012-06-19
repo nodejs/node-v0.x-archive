@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -26,15 +26,16 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "v8.h"
-
 #include "accessors.h"
-#include "ast.h"
+
+#include "contexts.h"
 #include "deoptimizer.h"
 #include "execution.h"
 #include "factory.h"
+#include "frames-inl.h"
+#include "isolate.h"
 #include "list-inl.h"
-#include "safepoint-table.h"
-#include "scopeinfo.h"
+#include "property-details.h"
 
 namespace v8 {
 namespace internal {
@@ -486,16 +487,6 @@ MaybeObject* Accessors::FunctionSetPrototype(JSObject* object,
                                                     NONE);
   }
 
-  if (function->has_initial_map()) {
-    // If the function has allocated the initial map
-    // replace it with a copy containing the new prototype.
-    Object* new_map;
-    { MaybeObject* maybe_new_map =
-          function->initial_map()->CopyDropTransitions();
-      if (!maybe_new_map->ToObject(&new_map)) return maybe_new_map;
-    }
-    function->set_initial_map(Map::cast(new_map));
-  }
   Object* prototype;
   { MaybeObject* maybe_prototype = function->SetPrototype(value);
     if (!maybe_prototype->ToObject(&prototype)) return maybe_prototype;
@@ -574,11 +565,12 @@ static MaybeObject* ConstructArgumentsObjectForInlinedFunction(
     Handle<JSFunction> inlined_function,
     int inlined_frame_index) {
   Factory* factory = Isolate::Current()->factory();
-  int args_count = inlined_function->shared()->formal_parameter_count();
-  ScopedVector<SlotRef> args_slots(args_count);
-  SlotRef::ComputeSlotMappingForArguments(frame,
-                                          inlined_frame_index,
-                                          &args_slots);
+  Vector<SlotRef> args_slots =
+      SlotRef::ComputeSlotMappingForArguments(
+          frame,
+          inlined_frame_index,
+          inlined_function->shared()->formal_parameter_count());
+  int args_count = args_slots.length();
   Handle<JSObject> arguments =
       factory->NewArgumentsObject(inlined_function, args_count);
   Handle<FixedArray> array = factory->NewFixedArray(args_count);
@@ -587,6 +579,7 @@ static MaybeObject* ConstructArgumentsObjectForInlinedFunction(
     array->set(i, *value);
   }
   arguments->set_elements(*array);
+  args_slots.Dispose();
 
   // Return the freshly allocated arguments object.
   return *arguments;

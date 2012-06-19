@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -75,6 +75,8 @@ class Factory {
       PretenureFlag pretenure);
   // Allocates a pre-tenured empty AccessorPair.
   Handle<AccessorPair> NewAccessorPair();
+
+  Handle<TypeFeedbackInfo> NewTypeFeedbackInfo();
 
   Handle<String> LookupSymbol(Vector<const char> str);
   Handle<String> LookupSymbol(Handle<String> str);
@@ -160,9 +162,12 @@ class Factory {
   // Create a global (but otherwise uninitialized) context.
   Handle<Context> NewGlobalContext();
 
+  // Create a module context.
+  Handle<Context> NewModuleContext(Handle<Context> previous,
+                                   Handle<ScopeInfo> scope_info);
+
   // Create a function context.
-  Handle<Context> NewFunctionContext(int length,
-                                     Handle<JSFunction> function);
+  Handle<Context> NewFunctionContext(int length, Handle<JSFunction> function);
 
   // Create a catch context.
   Handle<Context> NewCatchContext(Handle<JSFunction> function,
@@ -175,7 +180,7 @@ class Factory {
                                  Handle<Context> previous,
                                  Handle<JSObject> extension);
 
-  // Create a 'block' context.
+  // Create a block context.
   Handle<Context> NewBlockContext(Handle<JSFunction> function,
                                   Handle<Context> previous,
                                   Handle<ScopeInfo> scope_info);
@@ -211,9 +216,10 @@ class Factory {
   Handle<JSGlobalPropertyCell> NewJSGlobalPropertyCell(
       Handle<Object> value);
 
-  Handle<Map> NewMap(InstanceType type,
-                     int instance_size,
-                     ElementsKind elements_kind = FAST_ELEMENTS);
+  Handle<Map> NewMap(
+      InstanceType type,
+      int instance_size,
+      ElementsKind elements_kind = TERMINAL_FAST_ELEMENTS_KIND);
 
   Handle<JSObject> NewFunctionPrototype(Handle<JSFunction> function);
 
@@ -233,7 +239,7 @@ class Factory {
   Handle<FixedDoubleArray> CopyFixedDoubleArray(
       Handle<FixedDoubleArray> array);
 
-  // Numbers (eg, literals) are pretenured by the parser.
+  // Numbers (e.g. literals) are pretenured by the parser.
   Handle<Object> NewNumber(double value,
                            PretenureFlag pretenure = NOT_TENURED);
 
@@ -260,12 +266,18 @@ class Factory {
   // runtime.
   Handle<JSObject> NewJSObjectFromMap(Handle<Map> map);
 
+  // JS modules are pretenured.
+  Handle<JSModule> NewJSModule();
+
   // JS arrays are pretenured when allocated by the parser.
-  Handle<JSArray> NewJSArray(int capacity,
-                             PretenureFlag pretenure = NOT_TENURED);
+  Handle<JSArray> NewJSArray(
+      int capacity,
+      ElementsKind elements_kind = TERMINAL_FAST_ELEMENTS_KIND,
+      PretenureFlag pretenure = NOT_TENURED);
 
   Handle<JSArray> NewJSArrayWithElements(
       Handle<FixedArrayBase> elements,
+      ElementsKind elements_kind = TERMINAL_FAST_ELEMENTS_KIND,
       PretenureFlag pretenure = NOT_TENURED);
 
   void SetElementsCapacityAndLength(Handle<JSArray> array,
@@ -277,6 +289,7 @@ class Factory {
   void EnsureCanContainHeapObjectElements(Handle<JSArray> array);
   void EnsureCanContainElements(Handle<JSArray> array,
                                 Handle<FixedArrayBase> elements,
+                                uint32_t length,
                                 EnsureElementsMode mode);
 
   Handle<JSProxy> NewJSProxy(Handle<Object> handler, Handle<Object> prototype);
@@ -325,6 +338,7 @@ class Factory {
 
   Handle<Object> NewError(const char* maker, const char* type,
                           Handle<JSArray> args);
+  Handle<String> EmergencyNewError(const char* type, Handle<JSArray> args);
   Handle<Object> NewError(const char* maker, const char* type,
                           Vector< Handle<Object> > args);
   Handle<Object> NewError(const char* type,

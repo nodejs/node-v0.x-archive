@@ -31,53 +31,56 @@ var accessErrorFired = false;
 
 // Test if ENOTSOCK is fired when trying to connect to a file which is not
 // a socket.
-var notSocketClient = net.createConnection(
-  path.join(common.fixturesDir, 'empty.txt'),
-  function () {
-    assert.ok(false);
-  }
-);
+var emptyTxt = path.join(common.fixturesDir, 'empty.txt');
+var notSocketClient = net.createConnection(emptyTxt, function() {
+  assert.ok(false);
+});
 
-notSocketClient.on('error', function (err) {
+notSocketClient.on('error', function(err) {
   assert(err.code === 'ENOTSOCK' || err.code === 'ECONNREFUSED');
   notSocketErrorFired = true;
 });
 
 
 // Trying to connect to not-existing socket should result in ENOENT error
-var noEntSocketClient = net.createConnection('no-ent-file', function () {
+var noEntSocketClient = net.createConnection('no-ent-file', function() {
   assert.ok(false);
 });
 
-noEntSocketClient.on('error', function (err) {
+noEntSocketClient.on('error', function(err) {
   assert.equal(err.code, 'ENOENT');
   noEntErrorFired = true;
 });
 
 
-// Trying to connect to a socket one has no access to should result in EACCES
-var accessServer = net.createServer(function () {
-  assert.ok(false);
-});
-accessServer.listen(common.PIPE, function () {
-  fs.chmodSync(common.PIPE, 0);
-
-  var accessClient = net.createConnection(common.PIPE, function () {
+// On Windows or when running as root, a chmod has no effect on named pipes
+if (process.platform !== 'win32' && process.getuid() !== 0) {
+  // Trying to connect to a socket one has no access to should result in EACCES
+  var accessServer = net.createServer(function() {
     assert.ok(false);
   });
+  accessServer.listen(common.PIPE, function() {
+    fs.chmodSync(common.PIPE, 0);
 
-  accessClient.on('error', function (err) {
-    assert.equal(err.code, 'EACCES');
-    accessErrorFired = true;
-    accessServer.close();
+    var accessClient = net.createConnection(common.PIPE, function() {
+      assert.ok(false);
+    });
+
+    accessClient.on('error', function(err) {
+      assert.equal(err.code, 'EACCES');
+      accessErrorFired = true;
+      accessServer.close();
+    });
   });
-});
+}
 
 
 // Assert that all error events were fired
-process.on('exit', function () {
+process.on('exit', function() {
   assert.ok(notSocketErrorFired);
   assert.ok(noEntErrorFired);
-  assert.ok(accessErrorFired);
+  if (process.platform !== 'win32' && process.getuid() !== 0) {
+    assert.ok(accessErrorFired);
+  }
 });
 

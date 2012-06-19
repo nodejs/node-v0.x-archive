@@ -78,7 +78,7 @@ static void create_dir(uv_loop_t* loop, const char* name) {
   uv_fs_t req;
   r = uv_fs_rmdir(loop, &req, name, NULL);
   r = uv_fs_mkdir(loop, &req, name, 0755, NULL);
-  ASSERT(r == 0);
+  ASSERT(r == 0 || uv_last_error(loop).code == UV_EEXIST);
   uv_fs_req_cleanup(&req);
 }
 
@@ -92,21 +92,21 @@ static void create_cb(uv_fs_t* req) {
 
 TEST_IMPL(counters_init) {
   int r;
-  int eio_init_prev;
-  int req_init_prev;
-  int handle_init_prev;
-  int stream_init_prev;
-  int tcp_init_prev;
-  int udp_init_prev;
-  int pipe_init_prev;
-  int tty_init_prev;
-  int prepare_init_prev;
-  int check_init_prev;
-  int idle_init_prev;
-  int async_init_prev;
-  int timer_init_prev;
-  int process_init_prev;
-  int fs_event_init_prev;
+  uint64_t eio_init_prev;
+  uint64_t req_init_prev;
+  uint64_t handle_init_prev;
+  uint64_t stream_init_prev;
+  uint64_t tcp_init_prev;
+  uint64_t udp_init_prev;
+  uint64_t pipe_init_prev;
+  uint64_t tty_init_prev;
+  uint64_t prepare_init_prev;
+  uint64_t check_init_prev;
+  uint64_t idle_init_prev;
+  uint64_t async_init_prev;
+  uint64_t timer_init_prev;
+  uint64_t process_init_prev;
+  uint64_t fs_event_init_prev;
 
   /* req_init and eio_init test by uv_fs_open() */
   unlink("test_file");
@@ -208,8 +208,7 @@ TEST_IMPL(counters_init) {
   r = uv_fs_event_init(uv_default_loop(), &fs_event, "watch_dir", NULL, 0);
   ASSERT(r == 0);
   ASSERT(uv_default_loop()->counters.fs_event_init == ++fs_event_init_prev);
-  r = uv_fs_rmdir(uv_default_loop(), &fs_req, "watch_dir", NULL);
-  ASSERT(r == 0);
+  uv_fs_rmdir(uv_default_loop(), &fs_req, "watch_dir", NULL);
   uv_fs_req_cleanup(&fs_req);
 
   return 0;

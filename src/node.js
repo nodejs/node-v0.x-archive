@@ -27,11 +27,15 @@
 (function(process) {
   global = this;
 
-  var EventEmitter;
-
   function startup() {
-    EventEmitter = NativeModule.require('events').EventEmitter;
-    process.__proto__ = EventEmitter.prototype;
+    var EventEmitter = NativeModule.require('events').EventEmitter;
+
+    process.__proto__ = Object.create(EventEmitter.prototype, {
+      constructor: {
+        value: process.constructor
+      }
+    });
+
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
     startup.globalVariables();
@@ -39,14 +43,13 @@
     startup.globalConsole();
 
     startup.processAssert();
+    startup.processConfig();
     startup.processNextTick();
     startup.processStdio();
     startup.processKillAndExit();
     startup.processSignalHandlers();
 
     startup.processChannel();
-
-    startup.removedMethods();
 
     startup.resolveArgv0();
 
@@ -70,15 +73,7 @@
 
     } else if (process._eval != null) {
       // User passed '-e' or '--eval' arguments to Node.
-      var Module = NativeModule.require('module');
-      var path = NativeModule.require('path');
-      var cwd = process.cwd();
-
-      var module = new Module('eval');
-      module.filename = path.join(cwd, 'eval');
-      module.paths = Module._nodeModulePaths(cwd);
-      var result = module._compile('return eval(process._eval)', 'eval');
-      if (process._print_eval) console.log(result);
+      evalScript('eval');
     } else if (process.argv[1]) {
       // make process.argv[1] into a full path
       var path = NativeModule.require('path');
@@ -89,21 +84,58 @@
       if (process.env.NODE_UNIQUE_ID) {
         var cluster = NativeModule.require('cluster');
         cluster._setupWorker();
+
+        // Make sure it's not accidentally inherited by child processes.
+        delete process.env.NODE_UNIQUE_ID;
       }
 
       var Module = NativeModule.require('module');
-      // REMOVEME: nextTick should not be necessary. This hack to get
-      // test/simple/test-exception-handler2.js working.
-      // Main entry point into most programs:
-      process.nextTick(Module.runMain);
+
+      if (global.v8debug &&
+          process.execArgv.some(function(arg) {
+            return arg.match(/^--debug-brk(=[0-9]*)?$/);
+          })) {
+
+        // XXX Fix this terrible hack!
+        //
+        // Give the client program a few ticks to connect.
+        // Otherwise, there's a race condition where `node debug foo.js`
+        // will not be able to connect in time to catch the first
+        // breakpoint message on line 1.
+        //
+        // A better fix would be to somehow get a message from the
+        // global.v8debug object about a connection, and runMain when
+        // that occurs.  --isaacs
+
+        setTimeout(Module.runMain, 50);
+
+      } else {
+        // REMOVEME: nextTick should not be necessary. This hack to get
+        // test/simple/test-exception-handler2.js working.
+        // Main entry point into most programs:
+        process.nextTick(Module.runMain);
+      }
 
     } else {
       var Module = NativeModule.require('module');
 
-      // If stdin is a TTY.
-      if (NativeModule.require('tty').isatty(0)) {
+      // If -i or --interactive were passed, or stdin is a TTY.
+      if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
         // REPL
-        var repl = Module.requireRepl().start('> ', null, null, true);
+        var opts = {
+          useGlobal: true,
+          ignoreUndefined: false
+        };
+        if (parseInt(process.env['NODE_NO_READLINE'], 10)) {
+          opts.terminal = false;
+        }
+        if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
+          opts.useColors = false;
+        }
+        var repl = Module.requireRepl().start(opts);
+        repl.on('exit', function() {
+          process.exit();
+        });
 
       } else {
         // Read all of stdin - execute it.
@@ -116,25 +148,11 @@
         });
 
         process.stdin.on('end', function() {
-          new Module()._compile(code, '[stdin]');
+          process._eval = code;
+          evalScript('[stdin]');
         });
       }
     }
-
-    if (process.tid === 1) return;
-
-    // isolate initialization
-    process.send = function(msg) {
-      if (typeof msg === 'undefined') throw new TypeError('Bad argument.');
-      msg = JSON.stringify(msg);
-      msg = new Buffer(msg);
-      return process._send(msg);
-    };
-
-    process._onmessage = function(msg) {
-      msg = JSON.parse('' + msg);
-      process.emit('message', msg);
-    };
   }
 
   startup.globalVariables = function() {
@@ -193,35 +211,65 @@
     };
   };
 
+  startup.processConfig = function() {
+    // used for `process.config`, but not a real module
+    var config = NativeModule._source.config;
+    delete NativeModule._source.config;
+
+    // strip the gyp comment line at the beginning
+    config = config.split('\n').slice(1).join('\n').replace(/'/g, '"');
+
+    process.config = JSON.parse(config, function(key, value) {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return value;
+    });
+  }
+
   startup.processNextTick = function() {
     var nextTickQueue = [];
+    var nextTickIndex = 0;
 
     process._tickCallback = function() {
-      var l = nextTickQueue.length;
-      if (l === 0) return;
+      var nextTickLength = nextTickQueue.length;
+      if (nextTickLength === 0) return;
 
-      var q = nextTickQueue;
-      nextTickQueue = [];
+      while (nextTickIndex < nextTickLength) {
+        var tock = nextTickQueue[nextTickIndex++];
+        var callback = tock.callback;
+        if (tock.domain) {
+          if (tock.domain._disposed) continue;
+          tock.domain.enter();
+        }
+        callback();
+        if (tock.domain) {
+          tock.domain.exit();
+        }
+      }
 
-      try {
-        for (var i = 0; i < l; i++) q[i]();
-      }
-      catch (e) {
-        if (i + 1 < l) {
-          nextTickQueue = q.slice(i + 1).concat(nextTickQueue);
-        }
-        if (nextTickQueue.length) {
-          process._needTickCallback();
-        }
-        throw e; // process.nextTick error, or 'error' event on first tick
-      }
+      nextTickQueue.splice(0, nextTickIndex);
+      nextTickIndex = 0;
     };
 
     process.nextTick = function(callback) {
-      nextTickQueue.push(callback);
+      var tock = { callback: callback };
+      if (process.domain) tock.domain = process.domain;
+      nextTickQueue.push(tock);
       process._needTickCallback();
     };
   };
+
+  function evalScript(name) {
+    var Module = NativeModule.require('module');
+    var path = NativeModule.require('path');
+    var cwd = process.cwd();
+
+    var module = new Module(name);
+    module.filename = path.join(cwd, name);
+    module.paths = Module._nodeModulePaths(cwd);
+    var result = module._compile('return eval(process._eval)', name);
+    if (process._print_eval) console.log(result);
+  }
 
   function errnoException(errorno, syscall) {
     // TODO make this more compatible with ErrnoException from src/node.cc
@@ -295,17 +343,24 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = createWritableStdioStream(1);
-      stdout.end = stdout.destroy = stdout.destroySoon = function() {
-        throw new Error('process.stdout cannot be closed');
+      stdout.destroy = stdout.destroySoon = function(er) {
+        er = er || new Error('process.stdout cannot be closed.');
+        stdout.emit('error', er);
       };
+      if (stdout.isTTY) {
+        process.on('SIGWINCH', function() {
+          stdout._refreshSize();
+        });
+      }
       return stdout;
     });
 
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = createWritableStdioStream(2);
-      stderr.end = stderr.destroy = stderr.destroySoon = function() {
-        throw new Error('process.stderr cannot be closed');
+      stderr.destroy = stderr.destroySoon = function(er) {
+        er = er || new Error('process.stderr cannot be closed.');
+        stderr.emit('error', er);
       };
       return stderr;
     });
@@ -341,6 +396,10 @@
       // For supporting legacy API we put the FD here.
       stdin.fd = fd;
 
+      // stdin starts out life in a paused state, but node doesn't
+      // know yet.  Call pause() explicitly to unref() it.
+      stdin.pause();
+
       return stdin;
     });
 
@@ -351,11 +410,9 @@
   };
 
   startup.processKillAndExit = function() {
-    var exiting = false;
-
     process.exit = function(code) {
-      if (!exiting) {
-        exiting = true;
+      if (!process._exiting) {
+        process._exiting = true;
         process.emit('exit', code || 0);
       }
       process.reallyExit(code || 0);
@@ -379,6 +436,8 @@
       if (r) {
         throw errnoException(errno, 'kill');
       }
+
+      return true;
     };
   };
 
@@ -431,43 +490,23 @@
     // If we were spawned with env NODE_CHANNEL_FD then load that up and
     // start parsing data from that stream.
     if (process.env.NODE_CHANNEL_FD) {
-      assert(parseInt(process.env.NODE_CHANNEL_FD) >= 0);
+      var fd = parseInt(process.env.NODE_CHANNEL_FD, 10);
+      assert(fd >= 0);
+
+      // Make sure it's not accidentally inherited by child processes.
+      delete process.env.NODE_CHANNEL_FD;
+
       var cp = NativeModule.require('child_process');
 
       // Load tcp_wrap to avoid situation where we might immediately receive
       // a message.
       // FIXME is this really necessary?
-      process.binding('tcp_wrap')
+      process.binding('tcp_wrap');
 
-      cp._forkChild();
+      cp._forkChild(fd);
       assert(process.send);
     }
   }
-
-  startup._removedProcessMethods = {
-    'assert': 'process.assert() use require("assert").ok() instead',
-    'debug': 'process.debug() use console.error() instead',
-    'error': 'process.error() use console.error() instead',
-    'watchFile': 'process.watchFile() has moved to fs.watchFile()',
-    'unwatchFile': 'process.unwatchFile() has moved to fs.unwatchFile()',
-    'mixin': 'process.mixin() has been removed.',
-    'createChildProcess': 'childProcess API has changed. See doc/api.txt.',
-    'inherits': 'process.inherits() has moved to util.inherits()',
-    '_byteLength': 'process._byteLength() has moved to Buffer.byteLength'
-  };
-
-  startup.removedMethods = function() {
-    for (var method in startup._removedProcessMethods) {
-      var reason = startup._removedProcessMethods[method];
-      process[method] = startup._removedMethod(reason);
-    }
-  };
-
-  startup._removedMethod = function(reason) {
-    return function() {
-      throw new Error(reason);
-    };
-  };
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();
@@ -531,7 +570,7 @@
   }
 
   NativeModule.exists = function(id) {
-    return (id in NativeModule._source);
+    return NativeModule._source.hasOwnProperty(id);
   }
 
   NativeModule.getSource = function(id) {
@@ -559,6 +598,35 @@
 
   NativeModule.prototype.cache = function() {
     NativeModule._cache[this.id] = this;
+  };
+
+  // Wrap a core module's method in a wrapper that will warn on first use
+  // and then return the result of invoking the original function. After
+  // first being called the original method is restored.
+  NativeModule.prototype.deprecate = function(method, message) {
+    var original = this.exports[method];
+    var self = this;
+    var warned = false;
+    message = message || '';
+
+    Object.defineProperty(this.exports, method, {
+      enumerable: false,
+      value: function() {
+        if (!warned) {
+          warned = true;
+          message = self.id + '.' + method + ' is deprecated. ' + message;
+
+          var moduleIdCheck = new RegExp('\\b' + self.id + '\\b');
+          if (moduleIdCheck.test(process.env.NODE_DEBUG))
+            console.trace(message);
+          else
+            console.error(message);
+
+          self.exports[method] = original;
+        }
+        return original.apply(this, arguments);
+      }
+    });
   };
 
   startup();

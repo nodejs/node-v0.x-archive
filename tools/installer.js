@@ -1,22 +1,17 @@
 var fs = require('fs'),
     path = require('path'),
     exec = require('child_process').exec,
-    options = fs.readFileSync(process.argv[2]).toString(),
-    cmd = process.argv[3];
+    cmd = process.argv[2],
+    dest_dir = process.argv[3] || '';
 
 if (cmd !== 'install' && cmd !== 'uninstall') {
   console.error('Unknown command: ' + cmd);
   process.exit(1);
 }
 
-// Python pprint.pprint() uses single quotes instead of double.
-// awful.
-options = options.replace(/'/gi, '"')
-
-// Parse options file and remove first comment line
-options = JSON.parse(options.split('\n').slice(1).join(''));
-var variables = options.variables,
-    node_prefix = variables.node_prefix || '/usr/local';
+// Use the built-in config reported by the current process
+var variables = process.config.variables,
+    node_prefix = dest_dir || variables.node_prefix || '/usr/local';
 
 // Execution queue
 var queue = [],
@@ -53,18 +48,43 @@ function remove(files) {
   });
 }
 
+// Add/update shebang (#!) line
+function shebang(line, file) {
+  var content = fs.readFileSync(file, 'utf8');
+  var firstLine = content.split(/\n/, 1)[0];
+  var newContent;
+  if (firstLine.slice(0, 2) === '#!') {
+    newContent = line + content.slice(firstLine.length);
+  } else {
+    newContent = line + '\n' + content;
+  }
+  if (content !== newContent) {
+    fs.writeFileSync(file, newContent, 'utf8');
+  }
+  var mode = parseInt('0777', 8) & (~process.umask());
+  fs.chmodSync(file, mode);
+}
+
 // Run every command in queue, one-by-one
 function run() {
   var cmd = queue.shift();
   if (!cmd) return;
 
-  console.log(cmd);
-  exec(cmd, function(err, stdout, stderr) {
-    if (stderr) console.error(stderr);
-    if (err) process.exit(1);
-
+  if (Array.isArray(cmd) && cmd[0] instanceof Function) {
+    var func = cmd[0];
+    var args = cmd.slice(1);
+    console.log.apply(null, [func.name].concat(args));
+    func.apply(null, args);
     run();
-  });
+  } else {
+    console.log(cmd);
+    exec(cmd, function(err, stdout, stderr) {
+      if (stderr) console.error(stderr);
+      if (err) process.exit(1);
+
+      run();
+    });
+  }
 }
 
 if (cmd === 'install') {
@@ -72,7 +92,7 @@ if (cmd === 'install') {
   copy([
     // Node
     'src/node.h', 'src/node_buffer.h', 'src/node_object_wrap.h',
-    'src/node_version.h',
+    'src/node_version.h', 'src/ev-emul.h', 'src/eio-emul.h',
     // v8
     'deps/v8/include/v8-debug.h', 'deps/v8/include/v8-preparser.h',
     'deps/v8/include/v8-profiler.h', 'deps/v8/include/v8-testing.h',
@@ -80,6 +100,14 @@ if (cmd === 'install') {
     // uv
     'deps/uv/include/uv.h'
   ], 'include/node/');
+
+  // man page
+  copy(['doc/node.1'], 'share/man/man1/');
+
+  // dtrace
+  if (!process.platform.match(/^linux/)) {
+    copy(['src/node.d'], 'lib/dtrace/');
+  }
 
   // Private uv headers
   copy([
@@ -99,21 +127,36 @@ if (cmd === 'install') {
   copy('out/Release/node', 'bin/node');
 
   // Install node-waf
-  if (variables.node_install_waf == 'true') {
+  if (variables.node_install_waf) {
     copy('tools/wafadmin', 'lib/node/');
     copy('tools/node-waf', 'bin/node-waf');
   }
 
   // Install npm (eventually)
-  if (variables.node_install_npm == 'true') {
-    copy('deps/npm', 'lib/node_modules/npm');
-    queue.push('ln -sf ../lib/node_modules/npm/bin/npm-cli.js ' +
-               path.join(node_prefix, 'bin/npm'));
+  if (variables.node_install_npm) {
+    // Frequently, in development, the installed npm is a symbolic
+    // link to the development folder, and so installing this is
+    // a bit annoying.  If it's a symlink, skip it.
+    var isSymlink = false;
+    try {
+      var st = fs.lstatSync(path.resolve(node_prefix, 'lib/node_modules/npm'));
+      isSymlink = st.isSymbolicLink();
+    } catch (e) {}
+
+    if (!isSymlink) {
+      copy('deps/npm', 'lib/node_modules/npm');
+      queue.push('ln -sf ../lib/node_modules/npm/bin/npm-cli.js ' +
+                 path.join(node_prefix, 'bin/npm'));
+      queue.push([shebang, '#!' + path.join(node_prefix, 'bin/node'),
+                 path.join(node_prefix,
+                           'lib/node_modules/npm/bin/npm-cli.js')]);
+    }
   }
 } else {
   remove([
      'bin/node', 'bin/npm', 'bin/node-waf',
-     'include/node/*', 'lib/node_modules', 'lib/node'
+     'include/node/*', 'lib/node_modules', 'lib/node',
+     'lib/dtrace/node.d', 'share/man/man1/node.1'
   ]);
 }
 

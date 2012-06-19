@@ -59,10 +59,7 @@ function test(mod) {
   req.end();
 }
 
-// FIXME This doesn't work for https because the tls module won't emit errors
-// until a secure channel has been established - and that is never going to
-// happen because the host name is invalid.
-//test(https);
+test(https);
 test(http);
 
 process.on('exit', function() {

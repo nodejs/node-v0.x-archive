@@ -24,11 +24,18 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "handle-inl.h"
 
 
 uv_handle_type uv_guess_handle(uv_file file) {
-  HANDLE handle = (HANDLE) _get_osfhandle(file);
+  HANDLE handle;
   DWORD mode;
+
+  if (file < 0) {
+    return UV_UNKNOWN_HANDLE;
+  }
+
+  handle = (HANDLE) _get_osfhandle(file);
 
   switch (GetFileType(handle)) {
     case FILE_TYPE_CHAR:
@@ -50,29 +57,17 @@ uv_handle_type uv_guess_handle(uv_file file) {
 }
 
 
-int uv_is_active(uv_handle_t* handle) {
-  switch (handle->type) {
-    case UV_TIMER:
-    case UV_IDLE:
-    case UV_PREPARE:
-    case UV_CHECK:
-      return (handle->flags & UV_HANDLE_ACTIVE) ? 1 : 0;
-
-    default:
-      return 1;
-  }
+int uv_is_active(const uv_handle_t* handle) {
+  return (handle->flags & UV__HANDLE_ACTIVE) &&
+        !(handle->flags & UV_HANDLE_CLOSING);
 }
 
 
 void uv_close(uv_handle_t* handle, uv_close_cb cb) {
-  uv_tcp_t* tcp;
-  uv_pipe_t* pipe;
-  uv_udp_t* udp;
-  uv_process_t* process;
-
   uv_loop_t* loop = handle->loop;
 
   if (handle->flags & UV_HANDLE_CLOSING) {
+    assert(0);
     return;
   }
 
@@ -82,27 +77,11 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
   /* Handle-specific close actions */
   switch (handle->type) {
     case UV_TCP:
-      tcp = (uv_tcp_t*)handle;
-      /* If we don't shutdown before calling closesocket, windows will */
-      /* silently discard the kernel send buffer and reset the connection. */
-      if (!(tcp->flags & UV_HANDLE_SHUT)) {
-        shutdown(tcp->socket, SD_SEND);
-        tcp->flags |= UV_HANDLE_SHUT;
-      }
-      tcp->flags &= ~(UV_HANDLE_READING | UV_HANDLE_LISTENING);
-      closesocket(tcp->socket);
-      if (tcp->reqs_pending == 0) {
-        uv_want_endgame(loop, handle);
-      }
+      uv_tcp_close(loop, (uv_tcp_t*)handle);
       return;
 
     case UV_NAMED_PIPE:
-      pipe = (uv_pipe_t*)handle;
-      pipe->flags &= ~(UV_HANDLE_READING | UV_HANDLE_LISTENING);
-      close_pipe(pipe, NULL, NULL);
-      if (pipe->reqs_pending == 0) {
-        uv_want_endgame(loop, handle);
-      }
+      uv_pipe_close(loop, (uv_pipe_t*) handle);
       return;
 
     case UV_TTY:
@@ -110,47 +89,53 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
       return;
 
     case UV_UDP:
-      udp = (uv_udp_t*) handle;
-      uv_udp_recv_stop(udp);
-      closesocket(udp->socket);
-      if (udp->reqs_pending == 0) {
-        uv_want_endgame(loop, handle);
-      }
+      uv_udp_close(loop, (uv_udp_t*) handle);
+      return;
+
+    case UV_POLL:
+      uv_poll_close(loop, (uv_poll_t*) handle);
       return;
 
     case UV_TIMER:
       uv_timer_stop((uv_timer_t*)handle);
+      uv__handle_start(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_PREPARE:
       uv_prepare_stop((uv_prepare_t*)handle);
+      uv__handle_start(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_CHECK:
       uv_check_stop((uv_check_t*)handle);
+      uv__handle_start(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_IDLE:
       uv_idle_stop((uv_idle_t*)handle);
+      uv__handle_start(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_ASYNC:
-      if (!((uv_async_t*)handle)->async_sent) {
-        uv_want_endgame(loop, handle);
-      }
+      uv_async_close(loop, (uv_async_t*) handle);
       return;
 
     case UV_PROCESS:
-      process = (uv_process_t*)handle;
-      uv_process_close(loop, process);
+      uv_process_close(loop, (uv_process_t*) handle);
       return;
 
     case UV_FS_EVENT:
-      uv_fs_event_close(loop, (uv_fs_event_t*)handle);
+      uv_fs_event_close(loop, (uv_fs_event_t*) handle);
+      return;
+
+    case UV_FS_POLL:
+      uv__fs_poll_close((uv_fs_poll_t*) handle);
+      uv__handle_start(handle);
+      uv_want_endgame(loop, handle);
       return;
 
     default:
@@ -160,67 +145,6 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
 }
 
 
-void uv_want_endgame(uv_loop_t* loop, uv_handle_t* handle) {
-  if (!(handle->flags & UV_HANDLE_ENDGAME_QUEUED)) {
-    handle->flags |= UV_HANDLE_ENDGAME_QUEUED;
-
-    handle->endgame_next = loop->endgame_handles;
-    loop->endgame_handles = handle;
-  }
-}
-
-
-void uv_process_endgames(uv_loop_t* loop) {
-  uv_handle_t* handle;
-
-  while (loop->endgame_handles) {
-    handle = loop->endgame_handles;
-    loop->endgame_handles = handle->endgame_next;
-
-    handle->flags &= ~UV_HANDLE_ENDGAME_QUEUED;
-
-    switch (handle->type) {
-      case UV_TCP:
-        uv_tcp_endgame(loop, (uv_tcp_t*) handle);
-        break;
-
-      case UV_NAMED_PIPE:
-        uv_pipe_endgame(loop, (uv_pipe_t*) handle);
-        break;
-
-      case UV_TTY:
-        uv_tty_endgame(loop, (uv_tty_t*) handle);
-        break;
-
-      case UV_UDP:
-        uv_udp_endgame(loop, (uv_udp_t*) handle);
-        break;
-
-      case UV_TIMER:
-        uv_timer_endgame(loop, (uv_timer_t*) handle);
-        break;
-
-      case UV_PREPARE:
-      case UV_CHECK:
-      case UV_IDLE:
-        uv_loop_watcher_endgame(loop, handle);
-        break;
-
-      case UV_ASYNC:
-        uv_async_endgame(loop, (uv_async_t*) handle);
-        break;
-
-      case UV_PROCESS:
-        uv_process_endgame(loop, (uv_process_t*) handle);
-        break;
-
-      case UV_FS_EVENT:
-        uv_fs_event_endgame(loop, (uv_fs_event_t*) handle);
-        break;
-
-      default:
-        assert(0);
-        break;
-    }
-  }
+int uv_is_closing(const uv_handle_t* handle) {
+  return handle->flags & (UV_HANDLE_CLOSING | UV_HANDLE_CLOSED);
 }

@@ -303,7 +303,11 @@ int main(int argc, char** argv) {
 #endif
   i::Serializer::Enable();
   Persistent<Context> context = v8::Context::New();
-  ASSERT(!context.IsEmpty());
+  if (context.IsEmpty()) {
+    fprintf(stderr,
+            "\nException thrown while compiling natives - see above.\n\n");
+    exit(1);
+  }
   // Make sure all builtin scripts are cached.
   { HandleScope scope;
     for (int i = 0; i < i::Natives::GetBuiltinsCount(); i++) {
@@ -312,7 +316,7 @@ int main(int argc, char** argv) {
   }
   // If we don't do this then we end up with a stray root pointing at the
   // context even after we have disposed of the context.
-  HEAP->CollectAllGarbage(i::Heap::kNoGCFlags);
+  HEAP->CollectAllGarbage(i::Heap::kNoGCFlags, "mksnapshot");
   i::Object* raw_context = *(v8::Utils::OpenHandle(*context));
   context.Dispose();
   CppByteSink sink(argv[1]);

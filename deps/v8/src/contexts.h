@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -106,6 +106,7 @@ enum BindingFlags {
   V(OBJECT_FUNCTION_INDEX, JSFunction, object_function) \
   V(INTERNAL_ARRAY_FUNCTION_INDEX, JSFunction, internal_array_function) \
   V(ARRAY_FUNCTION_INDEX, JSFunction, array_function) \
+  V(JS_ARRAY_MAPS_INDEX, Object, js_array_maps) \
   V(DATE_FUNCTION_INDEX, JSFunction, date_function) \
   V(JSON_OBJECT_INDEX, JSObject, json_object) \
   V(REGEXP_FUNCTION_INDEX, JSFunction, regexp_function) \
@@ -129,7 +130,6 @@ enum BindingFlags {
   V(FUNCTION_INSTANCE_MAP_INDEX, Map, function_instance_map) \
   V(STRICT_MODE_FUNCTION_INSTANCE_MAP_INDEX, Map, \
     strict_mode_function_instance_map) \
-  V(JS_ARRAY_MAP_INDEX, Map, js_array_map)\
   V(REGEXP_RESULT_MAP_INDEX, Map, regexp_result_map)\
   V(ARGUMENTS_BOILERPLATE_INDEX, JSObject, arguments_boilerplate) \
   V(ALIASED_ARGUMENTS_BOILERPLATE_INDEX, JSObject, \
@@ -231,7 +231,6 @@ class Context: public FixedArray {
     ARGUMENTS_BOILERPLATE_INDEX,
     ALIASED_ARGUMENTS_BOILERPLATE_INDEX,
     STRICT_MODE_ARGUMENTS_BOILERPLATE_INDEX,
-    JS_ARRAY_MAP_INDEX,
     REGEXP_RESULT_MAP_INDEX,
     FUNCTION_MAP_INDEX,
     STRICT_MODE_FUNCTION_MAP_INDEX,
@@ -247,6 +246,7 @@ class Context: public FixedArray {
     OBJECT_FUNCTION_INDEX,
     INTERNAL_ARRAY_FUNCTION_INDEX,
     ARRAY_FUNCTION_INDEX,
+    JS_ARRAY_MAPS_INDEX,
     DATE_FUNCTION_INDEX,
     JSON_OBJECT_INDEX,
     REGEXP_FUNCTION_INDEX,
@@ -352,6 +352,10 @@ class Context: public FixedArray {
     Map* map = this->map();
     return map == map->GetHeap()->block_context_map();
   }
+  bool IsModuleContext() {
+    Map* map = this->map();
+    return map == map->GetHeap()->module_context_map();
+  }
 
   // Tells whether the global context is marked with out of memory.
   inline bool has_out_of_memory();
@@ -377,7 +381,7 @@ class Context: public FixedArray {
   GLOBAL_CONTEXT_FIELDS(GLOBAL_CONTEXT_FIELD_ACCESSORS)
 #undef GLOBAL_CONTEXT_FIELD_ACCESSORS
 
-  // Lookup the the slot called name, starting with the current context.
+  // Lookup the slot called name, starting with the current context.
   // There are three possibilities:
   //
   // 1) result->IsContext():

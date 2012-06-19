@@ -1,4 +1,6 @@
-## Zlib
+# Zlib
+
+    Stability: 3 - Stable
 
 You can access this module with:
 
@@ -8,7 +10,7 @@ This provides bindings to Gzip/Gunzip, Deflate/Inflate, and
 DeflateRaw/InflateRaw classes.  Each class takes the same options, and
 is a readable/writable Stream.
 
-### Examples
+## Examples
 
 Compressing or decompressing a file can be done by piping an
 fs.ReadStream into a zlib stream, then into an fs.WriteStream.
@@ -45,7 +47,7 @@ header on responses.
 
 **Note: these examples are drastically simplified to show
 the basic concept.**  Zlib encoding can be expensive, and the results
-ought to be cached.  See [Memory Usage Tuning](#memory_Usage_Tuning)
+ought to be cached.  See [Memory Usage Tuning](#zlib_memory_usage_tuning)
 below for more information on the speed/memory/compression
 tradeoffs involved in zlib usage.
 
@@ -101,72 +103,74 @@ tradeoffs involved in zlib usage.
       }
     }).listen(1337);
 
-### Constants
+## zlib.createGzip([options])
 
-All of the constants defined in zlib.h are also defined on
-`require('zlib')`.  They are described in more detail in the zlib
-documentation.  See <http://zlib.net/manual.html#Constants>
-for more details.
+Returns a new [Gzip](#zlib_class_zlib_gzip) object with an
+[options](#zlib_options).
 
-### zlib.createGzip([options])
+## zlib.createGunzip([options])
 
-Returns a new [Gzip](#zlib.Gzip) object with an [options](#options).
+Returns a new [Gunzip](#zlib_class_zlib_gunzip) object with an
+[options](#zlib_options).
 
-### zlib.createGunzip([options])
+## zlib.createDeflate([options])
 
-Returns a new [Gunzip](#zlib.Gunzip) object with an [options](#options).
+Returns a new [Deflate](#zlib_class_zlib_deflate) object with an
+[options](#zlib_options).
 
-### zlib.createDeflate([options])
+## zlib.createInflate([options])
 
-Returns a new [Deflate](#zlib.Deflate) object with an [options](#options).
+Returns a new [Inflate](#zlib_class_zlib_inflate) object with an
+[options](#zlib_options).
 
-### zlib.createInflate([options])
+## zlib.createDeflateRaw([options])
 
-Returns a new [Inflate](#zlib.Inflate) object with an [options](#options).
+Returns a new [DeflateRaw](#zlib_class_zlib_deflateraw) object with an
+[options](#zlib_options).
 
-### zlib.createDeflateRaw([options])
+## zlib.createInflateRaw([options])
 
-Returns a new [DeflateRaw](#zlib.DeflateRaw) object with an [options](#options).
+Returns a new [InflateRaw](#zlib_class_zlib_inflateraw) object with an
+[options](#zlib_options).
 
-### zlib.createInflateRaw([options])
+## zlib.createUnzip([options])
 
-Returns a new [InflateRaw](#zlib.InflateRaw) object with an [options](#options).
-
-### zlib.createUnzip([options])
-
-Returns a new [Unzip](#zlib.Unzip) object with an [options](#options).
+Returns a new [Unzip](#zlib_class_zlib_unzip) object with an
+[options](#zlib_options).
 
 
-### zlib.Gzip
+## Class: zlib.Gzip
 
 Compress data using gzip.
 
-### zlib.Gunzip
+## Class: zlib.Gunzip
 
 Decompress a gzip stream.
 
-### zlib.Deflate
+## Class: zlib.Deflate
 
 Compress data using deflate.
 
-### zlib.Inflate
+## Class: zlib.Inflate
 
 Decompress a deflate stream.
 
-### zlib.DeflateRaw
+## Class: zlib.DeflateRaw
 
 Compress data using deflate, and do not append a zlib header.
 
-### zlib.InflateRaw
+## Class: zlib.InflateRaw
 
 Decompress a raw deflate stream.
 
-### zlib.Unzip
+## Class: zlib.Unzip
 
 Decompress either a Gzip- or Deflate-compressed stream by auto-detecting
 the header.
 
 ## Convenience Methods
+
+<!--type=misc-->
 
 All of these take a string or buffer as the first argument, and call the
 supplied callback with `callback(error, result)`.  The
@@ -174,35 +178,37 @@ compression/decompression engine is created using the default settings
 in all convenience methods.  To supply different options, use the
 zlib classes directly.
 
-### zlib.deflate(buf, callback)
+## zlib.deflate(buf, callback)
 
 Compress a string with Deflate.
 
-### zlib.deflateRaw(buf, callback)
+## zlib.deflateRaw(buf, callback)
 
 Compress a string with DeflateRaw.
 
-### zlib.gzip(buf, callback)
+## zlib.gzip(buf, callback)
 
 Compress a string with Gzip.
 
-### zlib.gunzip(buf, callback)
+## zlib.gunzip(buf, callback)
 
 Decompress a raw Buffer with Gunzip.
 
-### zlib.inflate(buf, callback)
+## zlib.inflate(buf, callback)
 
 Decompress a raw Buffer with Inflate.
 
-### zlib.inflateRaw(buf, callback)
+## zlib.inflateRaw(buf, callback)
 
 Decompress a raw Buffer with InflateRaw.
 
-### zlib.unzip(buf, callback)
+## zlib.unzip(buf, callback)
 
 Decompress a raw Buffer with Unzip.
 
 ## Options
+
+<!--type=misc-->
 
 Each class takes an options object.  All options are optional.  (The
 convenience methods use the default settings for all options.)
@@ -217,10 +223,12 @@ relevant when compressing, and are ignored by the decompression classes.
 * strategy (compression only)
 * dictionary (deflate/inflate only, empty dictionary by default)
 
-See the description of `deflateInit2` and `inflateInit2` at
-<http://zlib.net/manual.html#Advanced> for more information on these.
+See the description of `deflateInit2` and `inflateInit2`
+at <http://zlib.net/manual.html#Advanced> for more information on these.
 
-### Memory Usage Tuning
+## Memory Usage Tuning
+
+<!--type=misc-->
 
 From `zlib/zconf.h`, modified to node's usage:
 
@@ -257,3 +265,69 @@ In general, greater memory usage options will mean that node has to make
 fewer calls to zlib, since it'll be able to process more data in a
 single `write` operation.  So, this is another factor that affects the
 speed, at the cost of memory usage.
+
+## Constants
+
+<!--type=misc-->
+
+All of the constants defined in zlib.h are also defined on
+`require('zlib')`.
+In the normal course of operations, you will not need to ever set any of
+these.  They are documented here so that their presence is not
+surprising.  This section is taken almost directly from the [zlib
+documentation](http://zlib.net/manual.html#Constants).  See
+<http://zlib.net/manual.html#Constants> for more details.
+
+Allowed flush values.
+
+* `zlib.Z_NO_FLUSH`
+* `zlib.Z_PARTIAL_FLUSH`
+* `zlib.Z_SYNC_FLUSH`
+* `zlib.Z_FULL_FLUSH`
+* `zlib.Z_FINISH`
+* `zlib.Z_BLOCK`
+* `zlib.Z_TREES`
+
+Return codes for the compression/decompression functions. Negative
+values are errors, positive values are used for special but normal
+events.
+
+* `zlib.Z_OK`
+* `zlib.Z_STREAM_END`
+* `zlib.Z_NEED_DICT`
+* `zlib.Z_ERRNO`
+* `zlib.Z_STREAM_ERROR`
+* `zlib.Z_DATA_ERROR`
+* `zlib.Z_MEM_ERROR`
+* `zlib.Z_BUF_ERROR`
+* `zlib.Z_VERSION_ERROR`
+
+Compression levels.
+
+* `zlib.Z_NO_COMPRESSION`
+* `zlib.Z_BEST_SPEED`
+* `zlib.Z_BEST_COMPRESSION`
+* `zlib.Z_DEFAULT_COMPRESSION`
+
+Compression strategy.
+
+* `zlib.Z_FILTERED`
+* `zlib.Z_HUFFMAN_ONLY`
+* `zlib.Z_RLE`
+* `zlib.Z_FIXED`
+* `zlib.Z_DEFAULT_STRATEGY`
+
+Possible values of the data_type field.
+
+* `zlib.Z_BINARY`
+* `zlib.Z_TEXT`
+* `zlib.Z_ASCII`
+* `zlib.Z_UNKNOWN`
+
+The deflate compression method (the only one supported in this version).
+
+* `zlib.Z_DEFLATED`
+
+For initializing zalloc, zfree, opaque.
+
+* `zlib.Z_NULL`

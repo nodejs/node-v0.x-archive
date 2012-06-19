@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -47,6 +47,10 @@ const intptr_t kObjectAlignmentMask = kObjectAlignment - 1;
 // Desired alignment for pointers.
 const intptr_t kPointerAlignment = (1 << kPointerSizeLog2);
 const intptr_t kPointerAlignmentMask = kPointerAlignment - 1;
+
+// Desired alignment for double values.
+const intptr_t kDoubleAlignment = 8;
+const intptr_t kDoubleAlignmentMask = kDoubleAlignment - 1;
 
 // Desired alignment for maps.
 #if V8_HOST_ARCH_64_BIT
@@ -107,14 +111,12 @@ const uint32_t kQuietNaNHighBitsMask = 0xfff << (51 - 32);
 
 // -----------------------------------------------------------------------------
 // Forward declarations for frequently used classes
-// (sorted alphabetically)
 
 class AccessorInfo;
 class Allocation;
 class Arguments;
 class Assembler;
 class AssertNoAllocation;
-class BreakableStatement;
 class Code;
 class CodeGenerator;
 class CodeStub;
@@ -124,10 +126,8 @@ class Debugger;
 class DebugInfo;
 class Descriptor;
 class DescriptorArray;
-class Expression;
 class ExternalReference;
 class FixedArray;
-class FunctionLiteral;
 class FunctionTemplateInfo;
 class MemoryChunk;
 class SeededNumberDictionary;
@@ -138,7 +138,6 @@ class Heap;
 class HeapObject;
 class IC;
 class InterceptorInfo;
-class IterationStatement;
 class JSArray;
 class JSFunction;
 class JSObject;
@@ -149,31 +148,19 @@ class Map;
 class MapSpace;
 class MarkCompactCollector;
 class NewSpace;
-class NodeVisitor;
 class Object;
 class MaybeObject;
 class OldSpace;
-class Property;
 class Foreign;
-class RegExpNode;
-struct RegExpCompileData;
-class RegExpTree;
-class RegExpCompiler;
-class RegExpVisitor;
 class Scope;
 class ScopeInfo;
 class Script;
-class Slot;
 class Smi;
 template <typename Config, class Allocator = FreeStoreAllocationPolicy>
     class SplayTree;
-class Statement;
 class String;
 class Struct;
-class SwitchStatement;
-class AstVisitor;
 class Variable;
-class VariableProxy;
 class RelocInfo;
 class Deserializer;
 class MessageLocation;
@@ -478,6 +465,7 @@ enum CallKind {
 enum ScopeType {
   EVAL_SCOPE,      // The top-level scope for an eval source.
   FUNCTION_SCOPE,  // The top-level scope for a function.
+  MODULE_SCOPE,    // The scope introduced by a module literal
   GLOBAL_SCOPE,    // The top-level scope for a program or a top-level eval.
   CATCH_SCOPE,     // The scope introduced by catch.
   BLOCK_SCOPE,     // The scope introduced by a new block.

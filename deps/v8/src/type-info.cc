@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -61,9 +61,11 @@ TypeInfo TypeInfo::TypeFromValue(Handle<Object> value) {
 
 TypeFeedbackOracle::TypeFeedbackOracle(Handle<Code> code,
                                        Handle<Context> global_context,
-                                       Isolate* isolate) {
+                                       Isolate* isolate,
+                                       Zone* zone) {
   global_context_ = global_context;
   isolate_ = isolate;
+  zone_ = zone;
   BuildDictionary(code);
   ASSERT(reinterpret_cast<Address>(*dictionary_.location()) != kHandleZapValue);
 }
@@ -74,6 +76,17 @@ Handle<Object> TypeFeedbackOracle::GetInfo(unsigned ast_id) {
   return entry != UnseededNumberDictionary::kNotFound
       ? Handle<Object>(dictionary_->ValueAt(entry))
       : Handle<Object>::cast(isolate_->factory()->undefined_value());
+}
+
+
+bool TypeFeedbackOracle::LoadIsUninitialized(Property* expr) {
+  Handle<Object> map_or_code = GetInfo(expr->id());
+  if (map_or_code->IsMap()) return false;
+  if (map_or_code->IsCode()) {
+    Handle<Code> code = Handle<Code>::cast(map_or_code);
+    return code->is_inline_cache_stub() && code->ic_state() == UNINITIALIZED;
+  }
+  return false;
 }
 
 
@@ -110,7 +123,11 @@ bool TypeFeedbackOracle::StoreIsMonomorphicNormal(Expression* expr) {
   if (map_or_code->IsMap()) return true;
   if (map_or_code->IsCode()) {
     Handle<Code> code = Handle<Code>::cast(map_or_code);
+    bool allow_growth =
+        Code::GetKeyedAccessGrowMode(code->extra_ic_state()) ==
+        ALLOW_JSARRAY_GROWTH;
     return code->is_keyed_store_stub() &&
+        !allow_growth &&
         code->ic_state() == MONOMORPHIC &&
         Code::ExtractTypeFromFlags(code->flags()) == NORMAL &&
         code->FindFirstMap() != NULL &&
@@ -125,7 +142,11 @@ bool TypeFeedbackOracle::StoreIsMegamorphicWithTypeInfo(Expression* expr) {
   if (map_or_code->IsCode()) {
     Handle<Code> code = Handle<Code>::cast(map_or_code);
     Builtins* builtins = isolate_->builtins();
+    bool allow_growth =
+        Code::GetKeyedAccessGrowMode(code->extra_ic_state()) ==
+        ALLOW_JSARRAY_GROWTH;
     return code->is_keyed_store_stub() &&
+        !allow_growth &&
         *code != builtins->builtin(Builtins::kKeyedStoreIC_Generic) &&
         *code != builtins->builtin(Builtins::kKeyedStoreIC_Generic_Strict) &&
         code->ic_state() == MEGAMORPHIC;
@@ -137,6 +158,26 @@ bool TypeFeedbackOracle::StoreIsMegamorphicWithTypeInfo(Expression* expr) {
 bool TypeFeedbackOracle::CallIsMonomorphic(Call* expr) {
   Handle<Object> value = GetInfo(expr->id());
   return value->IsMap() || value->IsSmi() || value->IsJSFunction();
+}
+
+
+bool TypeFeedbackOracle::CallNewIsMonomorphic(CallNew* expr) {
+  Handle<Object> value = GetInfo(expr->id());
+  return value->IsJSFunction();
+}
+
+
+bool TypeFeedbackOracle::ObjectLiteralStoreIsMonomorphic(
+    ObjectLiteral::Property* prop) {
+  Handle<Object> map_or_code = GetInfo(prop->key()->id());
+  return map_or_code->IsMap();
+}
+
+
+bool TypeFeedbackOracle::IsForInFastCase(ForInStatement* stmt) {
+  Handle<Object> value = GetInfo(stmt->PrepareId());
+  return value->IsSmi() &&
+      Smi::cast(*value)->value() == TypeFeedbackCells::kForInFastCaseMarker;
 }
 
 
@@ -242,6 +283,18 @@ Handle<JSFunction> TypeFeedbackOracle::GetCallTarget(Call* expr) {
 }
 
 
+Handle<JSFunction> TypeFeedbackOracle::GetCallNewTarget(CallNew* expr) {
+  return Handle<JSFunction>::cast(GetInfo(expr->id()));
+}
+
+
+Handle<Map> TypeFeedbackOracle::GetObjectLiteralStoreMap(
+    ObjectLiteral::Property* prop) {
+  ASSERT(ObjectLiteralStoreIsMonomorphic(prop));
+  return Handle<Map>::cast(GetInfo(prop->key()->id()));
+}
+
+
 bool TypeFeedbackOracle::LoadIsBuiltin(Property* expr, Builtins::Name id) {
   return *GetInfo(expr->id()) ==
       isolate_->builtins()->builtin(id);
@@ -342,6 +395,10 @@ TypeInfo TypeFeedbackOracle::BinaryType(BinaryOperation* expr) {
       case BinaryOpIC::SMI:
         switch (result_type) {
           case BinaryOpIC::UNINITIALIZED:
+            if (expr->op() == Token::DIV) {
+              return TypeInfo::Double();
+            }
+            return TypeInfo::Smi();
           case BinaryOpIC::SMI:
             return TypeInfo::Smi();
           case BinaryOpIC::INT32:
@@ -446,10 +503,10 @@ void TypeFeedbackOracle::CollectReceiverTypes(unsigned ast_id,
     // we need a generic store (or load) here.
     ASSERT(Handle<Code>::cast(object)->ic_state() == MEGAMORPHIC);
   } else if (object->IsMap()) {
-    types->Add(Handle<Map>::cast(object));
+    types->Add(Handle<Map>::cast(object), zone());
   } else if (FLAG_collect_megamorphic_maps_from_stub_cache &&
       Handle<Code>::cast(object)->ic_state() == MEGAMORPHIC) {
-    types->Reserve(4);
+    types->Reserve(4, zone());
     ASSERT(object->IsCode());
     isolate_->stub_cache()->CollectMatchingMaps(types,
                                                 *name,
@@ -493,11 +550,12 @@ bool TypeFeedbackOracle::CanRetainOtherContext(JSFunction* function,
 }
 
 
-static void AddMapIfMissing(Handle<Map> map, SmallMapList* list) {
+static void AddMapIfMissing(Handle<Map> map, SmallMapList* list,
+                            Zone* zone) {
   for (int i = 0; i < list->length(); ++i) {
     if (list->at(i).is_identical_to(map)) return;
   }
-  list->Add(map);
+  list->Add(map, zone);
 }
 
 
@@ -516,7 +574,7 @@ void TypeFeedbackOracle::CollectKeyedReceiverTypes(unsigned ast_id,
       if (object->IsMap()) {
         Map* map = Map::cast(object);
         if (!CanRetainOtherContext(map, *global_context_)) {
-          AddMapIfMissing(Handle<Map>(map), types);
+          AddMapIfMissing(Handle<Map>(map), types, zone());
         }
       }
     }
@@ -536,11 +594,12 @@ byte TypeFeedbackOracle::ToBooleanTypes(unsigned ast_id) {
 // infos before we process them.
 void TypeFeedbackOracle::BuildDictionary(Handle<Code> code) {
   AssertNoAllocation no_allocation;
-  ZoneList<RelocInfo> infos(16);
+  ZoneList<RelocInfo> infos(16, zone());
   HandleScope scope;
   GetRelocInfos(code, &infos);
   CreateDictionary(code, &infos);
   ProcessRelocInfos(&infos);
+  ProcessTypeFeedbackCells(code);
   // Allocate handle in the parent scope.
   dictionary_ = scope.CloseAndEscape(dictionary_);
 }
@@ -550,7 +609,7 @@ void TypeFeedbackOracle::GetRelocInfos(Handle<Code> code,
                                        ZoneList<RelocInfo>* infos) {
   int mask = RelocInfo::ModeMask(RelocInfo::CODE_TARGET_WITH_ID);
   for (RelocIterator it(*code, mask); !it.done(); it.next()) {
-    infos->Add(*it.rinfo());
+    infos->Add(*it.rinfo(), zone());
   }
 }
 
@@ -558,8 +617,13 @@ void TypeFeedbackOracle::GetRelocInfos(Handle<Code> code,
 void TypeFeedbackOracle::CreateDictionary(Handle<Code> code,
                                           ZoneList<RelocInfo>* infos) {
   DisableAssertNoAllocation allocation_allowed;
+  int cell_count = code->type_feedback_info()->IsTypeFeedbackInfo()
+      ? TypeFeedbackInfo::cast(code->type_feedback_info())->
+          type_feedback_cells()->CellCount()
+      : 0;
+  int length = infos->length() + cell_count;
   byte* old_start = code->instruction_start();
-  dictionary_ = FACTORY->NewUnseededNumberDictionary(infos->length());
+  dictionary_ = FACTORY->NewUnseededNumberDictionary(length);
   byte* new_start = code->instruction_start();
   RelocateRelocInfos(infos, old_start, new_start);
 }
@@ -599,7 +663,7 @@ void TypeFeedbackOracle::ProcessRelocInfos(ZoneList<RelocInfo>* infos) {
               SetInfo(ast_id, map);
             }
           }
-        } else if (target->ic_state() == MEGAMORPHIC) {
+        } else {
           SetInfo(ast_id, target);
         }
         break;
@@ -619,20 +683,26 @@ void TypeFeedbackOracle::ProcessRelocInfos(ZoneList<RelocInfo>* infos) {
         SetInfo(ast_id, target);
         break;
 
-      case Code::STUB:
-        if (target->major_key() == CodeStub::CallFunction &&
-            target->has_function_cache()) {
-          Object* value = CallFunctionStub::GetCachedValue(reloc_entry.pc());
-          if (value->IsJSFunction() &&
-              !CanRetainOtherContext(JSFunction::cast(value),
-                                     *global_context_)) {
-            SetInfo(ast_id, value);
-          }
-        }
-        break;
-
       default:
         break;
+    }
+  }
+}
+
+
+void TypeFeedbackOracle::ProcessTypeFeedbackCells(Handle<Code> code) {
+  Object* raw_info = code->type_feedback_info();
+  if (!raw_info->IsTypeFeedbackInfo()) return;
+  Handle<TypeFeedbackCells> cache(
+      TypeFeedbackInfo::cast(raw_info)->type_feedback_cells());
+  for (int i = 0; i < cache->CellCount(); i++) {
+    unsigned ast_id = cache->AstId(i)->value();
+    Object* value = cache->Cell(i)->value();
+    if (value->IsSmi() ||
+        (value->IsJSFunction() &&
+         !CanRetainOtherContext(JSFunction::cast(value),
+                                *global_context_))) {
+      SetInfo(ast_id, value);
     }
   }
 }

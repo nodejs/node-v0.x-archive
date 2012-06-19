@@ -19,6 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+var common = require('../common');
 var crypto = require('crypto');
 var stream = require('stream');
 var Stream = stream.Stream;
@@ -29,7 +30,7 @@ var zlib = require('zlib');
 
 
 // emit random bytes, and keep a shasum
-function RandomReadStream (opt) {
+function RandomReadStream(opt) {
   Stream.call(this);
 
   this.readable = true;
@@ -67,7 +68,7 @@ RandomReadStream.prototype.resume = function() {
   // console.error("rrs resume");
   this._paused = false;
   this.emit('resume');
-  this._process()
+  this._process();
 };
 
 RandomReadStream.prototype._process = function() {
@@ -91,9 +92,9 @@ RandomReadStream.prototype._process = function() {
   if (jitter) {
     block += Math.ceil(Math.random() * jitter - (jitter / 2));
   }
-  block = Math.min(block, this._remaining)
+  block = Math.min(block, this._remaining);
   var buf = new Buffer(block);
-  for (var i = 0; i < block; i ++) {
+  for (var i = 0; i < block; i++) {
     buf[i] = Math.random() * 256;
   }
 
@@ -110,7 +111,7 @@ RandomReadStream.prototype._process = function() {
 
 
 // a filter that just verifies a shasum
-function HashStream () {
+function HashStream() {
   Stream.call(this);
 
   this.readable = this.writable = true;
@@ -152,7 +153,7 @@ var gunz = zlib.createGunzip();
 inp.pipe(gzip).pipe(gunz).pipe(out);
 
 var didSomething = false;
-out.on('data', function (c) {
+out.on('data', function(c) {
   didSomething = true;
   console.error('hash=%s', c);
   assert.equal(c, inp._hash, 'hashes should match');
@@ -160,4 +161,4 @@ out.on('data', function (c) {
 
 process.on('exit', function() {
   assert(didSomething, 'should have done something');
-})
+});

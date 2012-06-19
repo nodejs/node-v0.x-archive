@@ -52,48 +52,71 @@ If set to 1 then modules will load in their own global contexts.
 .IP NODE_DISABLE_COLORS
 If set to 1 then colors will not be used in the REPL.
 
-.IP NODE_USE_UV
-If set to 1 then Node will use the new libuv-based backend.
-
 .SH V8 OPTIONS
 
-  --crankshaft (use crankshaft)
+  --use_strict (enforce strict mode)
         type: bool  default: false
-  --hydrogen_filter (hydrogen use/trace filter)
+  --es5_readonly (activate correct semantics for inheriting readonliness)
+        type: bool  default: false
+  --es52_globals (activate new semantics for global var declarations)
+        type: bool  default: false
+  --harmony_typeof (enable harmony semantics for typeof)
+        type: bool  default: false
+  --harmony_scoping (enable harmony block scoping)
+        type: bool  default: false
+  --harmony_modules (enable harmony modules (implies block scoping))
+        type: bool  default: false
+  --harmony_proxies (enable harmony proxies)
+        type: bool  default: false
+  --harmony_collections (enable harmony collections (sets, maps, and weak maps))
+        type: bool  default: false
+  --harmony (enable all harmony features (except typeof))
+        type: bool  default: false
+  --packed_arrays (optimizes arrays that have no holes)
+        type: bool  default: false
+  --smi_only_arrays (tracks arrays with only smi values)
+        type: bool  default: true
+  --clever_optimizations (Optimize object size, Array shift, DOM strings and string +)
+        type: bool  default: true
+  --unbox_double_arrays (automatically unbox arrays of doubles)
+        type: bool  default: true
+  --string_slices (use string slices)
+        type: bool  default: true
+  --crankshaft (use crankshaft)
+        type: bool  default: true
+  --hydrogen_filter (optimization filter)
         type: string  default: 
-  --use_hydrogen (use generated hydrogen for compilation)
-        type: bool  default: true
-  --build_lithium (use lithium chunk builder)
-        type: bool  default: true
-  --alloc_lithium (use lithium register allocator)
-        type: bool  default: true
-  --use_lithium (use lithium code generator)
-        type: bool  default: true
   --use_range (use hydrogen range analysis)
         type: bool  default: true
   --eliminate_dead_phis (eliminate dead phis)
         type: bool  default: true
   --use_gvn (use hydrogen global value numbering)
         type: bool  default: true
-  --use_peeling (use loop peeling)
-        type: bool  default: false
   --use_canonicalizing (use hydrogen instruction canonicalizing)
         type: bool  default: true
   --use_inlining (use function inlining)
         type: bool  default: true
-  --limit_inlining (limit code size growth from inlining)
-        type: bool  default: true
-  --eliminate_empty_blocks (eliminate empty blocks)
-        type: bool  default: true
+  --max_inlined_source_size (maximum source size in bytes considered for a single inlining)
+        type: int  default: 600
+  --max_inlined_nodes (maximum number of AST nodes considered for a single inlining)
+        type: int  default: 196
+  --max_inlined_nodes_cumulative (maximum cumulative number of AST nodes considered for inlining)
+        type: int  default: 196
   --loop_invariant_code_motion (loop invariant code motion)
         type: bool  default: true
-  --time_hydrogen (timing for hydrogen)
+  --collect_megamorphic_maps_from_stub_cache (crankshaft harvests type feedback from stub cache)
+        type: bool  default: true
+  --hydrogen_stats (print statistics for hydrogen)
         type: bool  default: false
   --trace_hydrogen (trace generated hydrogen to file)
         type: bool  default: false
+  --trace_phase (trace generated IR for specified phases)
+        type: string  default: Z
   --trace_inlining (trace inlining decisions)
         type: bool  default: false
   --trace_alloc (trace register allocator)
+        type: bool  default: false
+  --trace_all_uses (trace all use positions)
         type: bool  default: false
   --trace_range (trace range analysis)
         type: bool  default: false
@@ -107,33 +130,61 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: false
   --deopt_every_n_times (deoptimize every n times a deopt point is passed)
         type: int  default: 0
-  --process_arguments_object (try to deal with arguments object)
-        type: bool  default: true
   --trap_on_deopt (put a break point before deoptimizing)
         type: bool  default: false
   --deoptimize_uncommon_cases (deoptimize uncommon cases)
         type: bool  default: true
   --polymorphic_inlining (polymorphic inlining)
         type: bool  default: true
-  --aggressive_loop_invariant_motion (aggressive motion of instructions out of loops)
-        type: bool  default: true
   --use_osr (use on-stack replacement)
         type: bool  default: true
+  --array_bounds_checks_elimination (perform array bounds checks elimination)
+        type: bool  default: false
+  --array_index_dehoisting (perform array index dehoisting)
+        type: bool  default: false
   --trace_osr (trace on-stack replacement)
         type: bool  default: false
   --stress_runs (number of stress runs)
         type: int  default: 0
   --optimize_closures (optimize closures)
         type: bool  default: true
+  --inline_construct (inline constructor calls)
+        type: bool  default: true
+  --inline_arguments (inline functions with arguments object)
+        type: bool  default: true
+  --loop_weight (loop weight for representation inference)
+        type: int  default: 1
+  --optimize_for_in (optimize functions containing for-in loops)
+        type: bool  default: true
+  --experimental_profiler (enable all profiler experiments)
+        type: bool  default: true
+  --watch_ic_patching (profiler considers IC stability)
+        type: bool  default: false
+  --frame_count (number of stack frames inspected by the profiler)
+        type: int  default: 1
+  --self_optimization (primitive functions trigger their own optimization)
+        type: bool  default: false
+  --direct_self_opt (call recompile stub directly when self-optimizing)
+        type: bool  default: false
+  --retry_self_opt (re-try self-optimization if it failed)
+        type: bool  default: false
+  --count_based_interrupts (trigger profiler ticks based on counting instead of timing)
+        type: bool  default: false
+  --interrupt_at_exit (insert an interrupt check at function exit)
+        type: bool  default: false
+  --weighted_back_edges (weight back edges by jump distance for interrupt triggering)
+        type: bool  default: false
+  --interrupt_budget (execution budget before interrupt is triggered)
+        type: int  default: 5900
+  --type_info_threshold (percentage of ICs that must have type info to allow optimization)
+        type: int  default: 15
+  --self_opt_count (call count before self-optimization)
+        type: int  default: 130
+  --trace_opt_verbose (extra verbose compilation tracing)
+        type: bool  default: false
   --debug_code (generate extra code (assertions) for debugging)
         type: bool  default: false
   --code_comments (emit comments in code disassembly)
-        type: bool  default: false
-  --emit_branch_hints (emit branch hints)
-        type: bool  default: false
-  --peephole_optimization (perform peephole optimizations in assembly code)
-        type: bool  default: true
-  --print_peephole_optimization (print peephole optimizations in assembly code)
         type: bool  default: false
   --enable_sse2 (enable use of SSE2 instructions if available)
         type: bool  default: true
@@ -147,9 +198,11 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: true
   --enable_sahf (enable use of SAHF instruction if available (X64 only))
         type: bool  default: true
-  --enable_vfp3 (enable use of VFP3 instructions if available (ARM only))
+  --enable_vfp3 (enable use of VFP3 instructions if available - this implies enabling ARMv7 instructions (ARM only))
         type: bool  default: true
   --enable_armv7 (enable use of ARMv7 instructions if available (ARM only))
+        type: bool  default: true
+  --enable_fpu (enable use of MIPS FPU instructions if available (MIPS only))
         type: bool  default: true
   --expose_natives_as (expose natives in global object)
         type: string  default: NULL
@@ -161,6 +214,8 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: false
   --stack_trace_limit (number of stack frames to capture)
         type: int  default: 10
+  --builtins_in_stack_traces (show built-in functions in stack traces)
+        type: bool  default: false
   --disable_native_files (disable builtin natives files)
         type: bool  default: false
   --inline_new (use fast inline allocation)
@@ -169,8 +224,6 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: true
   --trace (trace function calls)
         type: bool  default: false
-  --defer_negation (defer negation operation)
-        type: bool  default: true
   --mask_constants_with_cookie (use random jit cookie to mask large constants)
         type: bool  default: true
   --lazy (use lazy compilation)
@@ -181,46 +234,32 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: false
   --opt (use adaptive optimizations)
         type: bool  default: true
-  --opt_eagerly (be more eager when adaptively optimizing)
-        type: bool  default: false
   --always_opt (always try to optimize functions)
         type: bool  default: false
   --prepare_always_opt (prepare for turning on always opt)
         type: bool  default: false
-  --debug_info (add debug information to compiled functions)
-        type: bool  default: true
-  --deopt (support deoptimization)
-        type: bool  default: true
   --trace_deopt (trace deoptimization)
-        type: bool  default: false
-  --strict (strict error checking)
         type: bool  default: false
   --min_preparse_length (minimum length for automatic enable preparsing)
         type: int  default: 1024
-  --full_compiler (enable dedicated backend for run-once code)
-        type: bool  default: true
   --always_full_compiler (try to use the dedicated run-once backend for all code)
         type: bool  default: false
   --trace_bailout (print reasons for falling back to using the classic V8 backend)
         type: bool  default: false
-  --safe_int32_compiler (enable optimized side-effect-free int32 expressions.)
-        type: bool  default: true
-  --use_flow_graph (perform flow-graph based optimizations)
-        type: bool  default: false
   --compilation_cache (enable compilation cache)
         type: bool  default: true
-  --loop_peeling (Peel off the first iteration of loops.)
-        type: bool  default: false
-  --remote_debugging (enable remote debugging)
-        type: bool  default: false
+  --cache_prototype_transitions (cache prototype transitions)
+        type: bool  default: true
   --trace_debug_json (trace debugging JSON request/response)
         type: bool  default: false
   --debugger_auto_break (automatically set the debug break flag when debugger commands are in the queue)
         type: bool  default: true
   --enable_liveedit (enable liveedit experimental feature)
         type: bool  default: true
-  --stack_size (default size of stack region v8 is allowed to use (in KkBytes))
-        type: int  default: 1024
+  --break_on_abort (always cause a debug break before aborting)
+        type: bool  default: true
+  --stack_size (default size of stack region v8 is allowed to use (in kBytes))
+        type: int  default: 984
   --max_stack_trace_source_length (maximum length of function source code printed in a stack trace.)
         type: int  default: 300
   --always_inline_smi_code (always inline smi code in non-opt code)
@@ -243,47 +282,45 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: false
   --trace_gc_verbose (print more details following each garbage collection)
         type: bool  default: false
+  --trace_fragmentation (report fragmentation for old pointer and data pages)
+        type: bool  default: false
   --collect_maps (garbage collect maps from which no objects can be reached)
         type: bool  default: true
   --flush_code (flush code that we expect not to use again before full gc)
         type: bool  default: true
+  --incremental_marking (use incremental marking)
+        type: bool  default: true
+  --incremental_marking_steps (do incremental marking steps)
+        type: bool  default: true
+  --trace_incremental_marking (trace progress of the incremental marking)
+        type: bool  default: false
   --use_idle_notification (Use idle notification to reduce memory footprint.)
         type: bool  default: true
+  --send_idle_notification (Send idle notifcation between stress runs.)
+        type: bool  default: false
   --use_ic (use inline caching)
         type: bool  default: true
   --native_code_counters (generate extra code for manipulating stats counters)
         type: bool  default: false
   --always_compact (Perform compaction on every full GC)
         type: bool  default: false
+  --lazy_sweeping (Use lazy sweeping for old pointer and data spaces)
+        type: bool  default: true
   --never_compact (Never perform compaction on full GC - testing only)
         type: bool  default: false
-  --cleanup_ics_at_gc (Flush inline caches prior to mark compact collection.)
+  --compact_code_space (Compact code space on full non-incremental collections)
         type: bool  default: true
-  --cleanup_caches_in_maps_at_gc (Flush code caches in maps during mark compact cycle.)
+  --cleanup_code_caches_at_gc (Flush inline caches prior to mark compact collection and flush code caches in maps during mark compact cycle.)
         type: bool  default: true
   --random_seed (Default seed for initializing random generator (0, the default, means to use system random).)
         type: int  default: 0
-  --canonicalize_object_literal_maps (Canonicalize maps for object literals.)
-        type: bool  default: true
-  --use_big_map_space (Use big map space, but don't compact if it grew too big.)
-        type: bool  default: true
-  --max_map_space_pages (Maximum number of pages in map space which still allows to encode forwarding pointers.  That's actually a constant, but it's useful to control it with a flag for better testing.)
-        type: int  default: 65535
-  --h (print this message)
-        type: bool  default: false
-  --new_snapshot (use new snapshot implementation)
-        type: bool  default: true
   --use_verbose_printer (allows verbose printing)
         type: bool  default: true
   --allow_natives_syntax (allow natives syntax)
         type: bool  default: false
-  --strict_mode (allow strict mode directives)
-        type: bool  default: true
-  --optimize_ast (optimize the ast)
-        type: bool  default: true
   --trace_sim (Trace simulator execution)
         type: bool  default: false
-  --check_icache (Check icache flushes in ARM simulator)
+  --check_icache (Check icache flushes in ARM and MIPS simulator)
         type: bool  default: false
   --stop_sim_at (Simulator stop after x number of instructions)
         type: int  default: 0
@@ -293,13 +330,13 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: false
   --preallocate_message_memory (preallocate some memory to build stack traces.)
         type: bool  default: false
+  --randomize_hashes (randomize hashes to avoid predictable hash collisions (with snapshots this option cannot override the baked-in seed))
+        type: bool  default: true
+  --hash_seed (Fixed seed to use to hash property keys (0 means random)(with snapshots this option cannot override the baked-in seed))
+        type: int  default: 0
   --preemption (activate a 100ms timer that switches between V8 threads)
         type: bool  default: false
-  --trace_regexps (trace regexp execution)
-        type: bool  default: false
   --regexp_optimization (generate optimized regexp code)
-        type: bool  default: true
-  --regexp_entry_native (use native code to enter regexp)
         type: bool  default: true
   --testing_bool_flag (testing_bool_flag)
         type: bool  default: true
@@ -326,7 +363,7 @@ If set to 1 then Node will use the new libuv-based backend.
   --debugger_port (Port to use for remote debugging)
         type: int  default: 5858
   --map_counters (Map counters to a file)
-        type: string  default: NULL
+        type: string  default: 
   --js_arguments (Pass all remaining arguments to the script. Alias for "--".)
         type: arguments  default: 
   --debug_compile_events (Enable debugger compile events)
@@ -338,6 +375,12 @@ If set to 1 then Node will use the new libuv-based backend.
   --gdbjit_full (enable GDBJIT interface for all code objects)
         type: bool  default: false
   --gdbjit_dump (dump elf objects with debug info to disk)
+        type: bool  default: false
+  --gdbjit_dump_filter (dump only objects containing this substring)
+        type: string  default: 
+  --force_marking_deque_overflows (force overflows of marking deque by reducing it's size to 64 words)
+        type: bool  default: false
+  --stress_compaction (stress the GC compactor to flush out bugs (implies --force_marking_deque_overflows))
         type: bool  default: false
   --log (Minimal logging (no API, code, GC, suspect, or handles samples).)
         type: bool  default: false
@@ -357,8 +400,6 @@ If set to 1 then Node will use the new libuv-based backend.
         type: bool  default: false
   --log_suspect (Log suspect operations.)
         type: bool  default: false
-  --log_producers (Log stack traces of JS objects allocations.)
-        type: bool  default: false
   --prof (Log statistical profiling information (implies --log-code).)
         type: bool  default: false
   --prof_auto (Used with --prof, starts profiling automatically)
@@ -375,7 +416,6 @@ If set to 1 then Node will use the new libuv-based backend.
         type: string  default: v8.log
   --ll_prof (Enable low-level linux profiler.)
         type: bool  default: false
-
 
 .SH RESOURCES AND DOCUMENTATION
 

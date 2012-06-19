@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -46,6 +46,8 @@ namespace internal {
 
 // Optimization sampler constants.
 static const int kSamplerFrameCount = 2;
+
+// Constants for statistical profiler.
 static const int kSamplerFrameWeight[kSamplerFrameCount] = { 2, 1 };
 
 static const int kSamplerTicksBetweenThresholdAdjustment = 32;
@@ -58,11 +60,34 @@ static const int kSamplerThresholdSizeFactorInit = 3;
 
 static const int kSizeLimit = 1500;
 
+// Constants for counter based profiler.
+
+// Number of times a function has to be seen on the stack before it is
+// optimized.
+static const int kProfilerTicksBeforeOptimization = 2;
+// If the function optimization was disabled due to high deoptimization count,
+// but the function is hot and has been seen on the stack this number of times,
+// then we try to reenable optimization for this function.
+static const int kProfilerTicksBeforeReenablingOptimization = 250;
+// If a function does not have enough type info (according to
+// FLAG_type_info_threshold), but has seen a huge number of ticks,
+// optimize it as it is.
+static const int kTicksWhenNotEnoughTypeInfo = 100;
+// We only have one byte to store the number of ticks.
+STATIC_ASSERT(kProfilerTicksBeforeOptimization < 256);
+STATIC_ASSERT(kProfilerTicksBeforeReenablingOptimization < 256);
+STATIC_ASSERT(kTicksWhenNotEnoughTypeInfo < 256);
+
+
+// Maximum size in bytes of generated code for a function to be optimized
+// the very first time it is seen on the stack.
+static const int kMaxSizeEarlyOpt = 500;
+
 
 Atomic32 RuntimeProfiler::state_ = 0;
-// TODO(isolates): Create the semaphore lazily and clean it up when no
-// longer required.
-Semaphore* RuntimeProfiler::semaphore_ = OS::CreateSemaphore(0);
+
+// TODO(isolates): Clean up the semaphore when it is no longer required.
+static LazySemaphore<0>::type semaphore = LAZY_SEMAPHORE_INITIALIZER;
 
 #ifdef DEBUG
 bool RuntimeProfiler::has_been_globally_set_up_ = false;
@@ -76,12 +101,14 @@ RuntimeProfiler::RuntimeProfiler(Isolate* isolate)
       sampler_threshold_size_factor_(kSamplerThresholdSizeFactorInit),
       sampler_ticks_until_threshold_adjustment_(
           kSamplerTicksBetweenThresholdAdjustment),
-      sampler_window_position_(0) {
+      sampler_window_position_(0),
+      any_ic_changed_(false),
+      code_generated_(false) {
   ClearSampleBuffer();
 }
 
 
-void RuntimeProfiler::GlobalSetup() {
+void RuntimeProfiler::GlobalSetUp() {
   ASSERT(!has_been_globally_set_up_);
   enabled_ = V8::UseCrankshaft() && FLAG_opt;
 #ifdef DEBUG
@@ -90,13 +117,37 @@ void RuntimeProfiler::GlobalSetup() {
 }
 
 
-void RuntimeProfiler::Optimize(JSFunction* function) {
+static void GetICCounts(JSFunction* function,
+                        int* ic_with_type_info_count,
+                        int* ic_total_count,
+                        int* percentage) {
+  *ic_total_count = 0;
+  *ic_with_type_info_count = 0;
+  Object* raw_info =
+      function->shared()->code()->type_feedback_info();
+  if (raw_info->IsTypeFeedbackInfo()) {
+    TypeFeedbackInfo* info = TypeFeedbackInfo::cast(raw_info);
+    *ic_with_type_info_count = info->ic_with_type_info_count();
+    *ic_total_count = info->ic_total_count();
+  }
+  *percentage = *ic_total_count > 0
+      ? 100 * *ic_with_type_info_count / *ic_total_count
+      : 100;
+}
+
+
+void RuntimeProfiler::Optimize(JSFunction* function, const char* reason) {
   ASSERT(function->IsOptimizable());
   if (FLAG_trace_opt) {
     PrintF("[marking ");
     function->PrintName();
     PrintF(" 0x%" V8PRIxPTR, reinterpret_cast<intptr_t>(function->address()));
-    PrintF(" for recompilation");
+    PrintF(" for recompilation, reason: %s", reason);
+    if (FLAG_type_info_threshold > 0) {
+      int typeinfo, total, percentage;
+      GetICCounts(function, &typeinfo, &total, &percentage);
+      PrintF(", ICs with typeinfo: %d/%d (%d%%)", typeinfo, total, percentage);
+    }
     PrintF("]\n");
   }
 
@@ -135,9 +186,17 @@ void RuntimeProfiler::AttemptOnStackReplacement(JSFunction* function) {
 
   // Get the stack check stub code object to match against.  We aren't
   // prepared to generate it, but we don't expect to have to.
-  StackCheckStub check_stub;
+  bool found_code = false;
   Code* stack_check_code = NULL;
-  if (check_stub.FindCodeInCache(&stack_check_code)) {
+  if (FLAG_count_based_interrupts) {
+    InterruptStub interrupt_stub;
+    found_code = interrupt_stub.FindCodeInCache(&stack_check_code);
+  } else  // NOLINT
+  {  // NOLINT
+    StackCheckStub check_stub;
+    found_code = check_stub.FindCodeInCache(&stack_check_code);
+  }
+  if (found_code) {
     Code* replacement_code =
         isolate_->builtins()->builtin(Builtins::kOnStackReplacement);
     Code* unoptimized_code = shared->code();
@@ -186,68 +245,139 @@ void RuntimeProfiler::OptimizeNow() {
   JSFunction* samples[kSamplerFrameCount];
   int sample_count = 0;
   int frame_count = 0;
+  int frame_count_limit = FLAG_watch_ic_patching ? FLAG_frame_count
+                                                 : kSamplerFrameCount;
   for (JavaScriptFrameIterator it(isolate_);
-       frame_count++ < kSamplerFrameCount && !it.done();
+       frame_count++ < frame_count_limit && !it.done();
        it.Advance()) {
     JavaScriptFrame* frame = it.frame();
     JSFunction* function = JSFunction::cast(frame->function());
 
-    // Adjust threshold each time we have processed
-    // a certain number of ticks.
-    if (sampler_ticks_until_threshold_adjustment_ > 0) {
-      sampler_ticks_until_threshold_adjustment_--;
-      if (sampler_ticks_until_threshold_adjustment_ <= 0) {
-        // If the threshold is not already at the minimum
-        // modify and reset the ticks until next adjustment.
-        if (sampler_threshold_ > kSamplerThresholdMin) {
-          sampler_threshold_ -= kSamplerThresholdDelta;
-          sampler_ticks_until_threshold_adjustment_ =
-              kSamplerTicksBetweenThresholdAdjustment;
+    if (!FLAG_watch_ic_patching) {
+      // Adjust threshold each time we have processed
+      // a certain number of ticks.
+      if (sampler_ticks_until_threshold_adjustment_ > 0) {
+        sampler_ticks_until_threshold_adjustment_--;
+        if (sampler_ticks_until_threshold_adjustment_ <= 0) {
+          // If the threshold is not already at the minimum
+          // modify and reset the ticks until next adjustment.
+          if (sampler_threshold_ > kSamplerThresholdMin) {
+            sampler_threshold_ -= kSamplerThresholdDelta;
+            sampler_ticks_until_threshold_adjustment_ =
+                kSamplerTicksBetweenThresholdAdjustment;
+          }
         }
       }
     }
 
+    SharedFunctionInfo* shared = function->shared();
+    Code* shared_code = shared->code();
+
+    if (shared_code->kind() != Code::FUNCTION) continue;
+
     if (function->IsMarkedForLazyRecompilation()) {
-      Code* unoptimized = function->shared()->code();
-      int nesting = unoptimized->allow_osr_at_loop_nesting_level();
+      int nesting = shared_code->allow_osr_at_loop_nesting_level();
       if (nesting == 0) AttemptOnStackReplacement(function);
       int new_nesting = Min(nesting + 1, Code::kMaxLoopNestingMarker);
-      unoptimized->set_allow_osr_at_loop_nesting_level(new_nesting);
+      shared_code->set_allow_osr_at_loop_nesting_level(new_nesting);
+    }
+
+    // Only record top-level code on top of the execution stack and
+    // avoid optimizing excessively large scripts since top-level code
+    // will be executed only once.
+    const int kMaxToplevelSourceSize = 10 * 1024;
+    if (shared->is_toplevel() &&
+        (frame_count > 1 || shared->SourceSize() > kMaxToplevelSourceSize)) {
+      continue;
     }
 
     // Do not record non-optimizable functions.
+    if (shared->optimization_disabled()) {
+      if (shared->deopt_count() >= Compiler::kDefaultMaxOptCount) {
+        // If optimization was disabled due to many deoptimizations,
+        // then check if the function is hot and try to reenable optimization.
+        int ticks = shared_code->profiler_ticks();
+        if (ticks >= kProfilerTicksBeforeReenablingOptimization) {
+          shared_code->set_profiler_ticks(0);
+          shared->TryReenableOptimization();
+        } else {
+          shared_code->set_profiler_ticks(ticks + 1);
+        }
+      }
+      continue;
+    }
     if (!function->IsOptimizable()) continue;
-    samples[sample_count++] = function;
 
-    int function_size = function->shared()->SourceSize();
-    int threshold_size_factor = (function_size > kSizeLimit)
-        ? sampler_threshold_size_factor_
-        : 1;
 
-    int threshold = sampler_threshold_ * threshold_size_factor;
 
-    if (LookupSample(function) >= threshold) {
-      Optimize(function);
+    if (FLAG_watch_ic_patching) {
+      int ticks = shared_code->profiler_ticks();
+
+      if (ticks >= kProfilerTicksBeforeOptimization) {
+        int typeinfo, total, percentage;
+        GetICCounts(function, &typeinfo, &total, &percentage);
+        if (percentage >= FLAG_type_info_threshold) {
+          // If this particular function hasn't had any ICs patched for enough
+          // ticks, optimize it now.
+          Optimize(function, "hot and stable");
+        } else if (ticks >= kTicksWhenNotEnoughTypeInfo) {
+          Optimize(function, "not much type info but very hot");
+        } else {
+          shared_code->set_profiler_ticks(ticks + 1);
+          if (FLAG_trace_opt_verbose) {
+            PrintF("[not yet optimizing ");
+            function->PrintName();
+            PrintF(", not enough type info: %d/%d (%d%%)]\n",
+                   typeinfo, total, percentage);
+          }
+        }
+      } else if (!any_ic_changed_ &&
+          shared_code->instruction_size() < kMaxSizeEarlyOpt) {
+        // If no IC was patched since the last tick and this function is very
+        // small, optimistically optimize it now.
+        Optimize(function, "small function");
+      } else {
+        shared_code->set_profiler_ticks(ticks + 1);
+      }
+    } else {  // !FLAG_watch_ic_patching
+      samples[sample_count++] = function;
+
+      int function_size = function->shared()->SourceSize();
+      int threshold_size_factor = (function_size > kSizeLimit)
+          ? sampler_threshold_size_factor_
+          : 1;
+
+      int threshold = sampler_threshold_ * threshold_size_factor;
+
+      if (LookupSample(function) >= threshold) {
+        Optimize(function, "sampler window lookup");
+      }
     }
   }
-
-  // Add the collected functions as samples. It's important not to do
-  // this as part of collecting them because this will interfere with
-  // the sample lookup in case of recursive functions.
-  for (int i = 0; i < sample_count; i++) {
-    AddSample(samples[i], kSamplerFrameWeight[i]);
+  if (FLAG_watch_ic_patching) {
+    any_ic_changed_ = false;
+  } else {  // !FLAG_watch_ic_patching
+    // Add the collected functions as samples. It's important not to do
+    // this as part of collecting them because this will interfere with
+    // the sample lookup in case of recursive functions.
+    for (int i = 0; i < sample_count; i++) {
+      AddSample(samples[i], kSamplerFrameWeight[i]);
+    }
   }
 }
 
 
 void RuntimeProfiler::NotifyTick() {
+  if (FLAG_count_based_interrupts) return;
   isolate_->stack_guard()->RequestRuntimeProfilerTick();
 }
 
 
 void RuntimeProfiler::SetUp() {
   ASSERT(has_been_globally_set_up_);
-  ClearSampleBuffer();
+  if (!FLAG_watch_ic_patching) {
+    ClearSampleBuffer();
+  }
   // If the ticker hasn't already started, make sure to do so to get
   // the ticks for the runtime profiler.
   if (IsEnabled()) isolate_->logger()->EnsureTickerStarted();
@@ -255,10 +385,12 @@ void RuntimeProfiler::SetUp() {
 
 
 void RuntimeProfiler::Reset() {
-  sampler_threshold_ = kSamplerThresholdInit;
-  sampler_threshold_size_factor_ = kSamplerThresholdSizeFactorInit;
-  sampler_ticks_until_threshold_adjustment_ =
-      kSamplerTicksBetweenThresholdAdjustment;
+  if (!FLAG_watch_ic_patching) {
+    sampler_threshold_ = kSamplerThresholdInit;
+    sampler_threshold_size_factor_ = kSamplerThresholdSizeFactorInit;
+    sampler_ticks_until_threshold_adjustment_ =
+        kSamplerTicksBetweenThresholdAdjustment;
+  }
 }
 
 
@@ -295,7 +427,7 @@ void RuntimeProfiler::HandleWakeUp(Isolate* isolate) {
   // undid the decrement done by the profiler thread. Increment again
   // to get the right count of active isolates.
   NoBarrier_AtomicIncrement(&state_, 1);
-  semaphore_->Signal();
+  semaphore.Pointer()->Signal();
 }
 
 
@@ -308,7 +440,7 @@ bool RuntimeProfiler::WaitForSomeIsolateToEnterJS() {
   Atomic32 old_state = NoBarrier_CompareAndSwap(&state_, 0, -1);
   ASSERT(old_state >= -1);
   if (old_state != 0) return false;
-  semaphore_->Wait();
+  semaphore.Pointer()->Wait();
   return true;
 }
 
@@ -324,7 +456,7 @@ void RuntimeProfiler::StopRuntimeProfilerThreadBeforeShutdown(Thread* thread) {
   if (new_state == 0) {
     // The profiler thread is waiting. Wake it up. It must check for
     // stop conditions before attempting to wait again.
-    semaphore_->Signal();
+    semaphore.Pointer()->Signal();
   }
   thread->Join();
   // The profiler thread is now stopped. Undo the increment in case it

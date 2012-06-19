@@ -97,16 +97,25 @@ struct Register {
   int code_;
 };
 
+const int kRegister_eax_Code = 0;
+const int kRegister_ecx_Code = 1;
+const int kRegister_edx_Code = 2;
+const int kRegister_ebx_Code = 3;
+const int kRegister_esp_Code = 4;
+const int kRegister_ebp_Code = 5;
+const int kRegister_esi_Code = 6;
+const int kRegister_edi_Code = 7;
+const int kRegister_no_reg_Code = -1;
 
-const Register eax = { 0 };
-const Register ecx = { 1 };
-const Register edx = { 2 };
-const Register ebx = { 3 };
-const Register esp = { 4 };
-const Register ebp = { 5 };
-const Register esi = { 6 };
-const Register edi = { 7 };
-const Register no_reg = { -1 };
+const Register eax = { kRegister_eax_Code };
+const Register ecx = { kRegister_ecx_Code };
+const Register edx = { kRegister_edx_Code };
+const Register ebx = { kRegister_ebx_Code };
+const Register esp = { kRegister_esp_Code };
+const Register ebp = { kRegister_ebp_Code };
+const Register esi = { kRegister_esi_Code };
+const Register edi = { kRegister_edi_Code };
+const Register no_reg = { kRegister_no_reg_Code };
 
 
 inline const char* Register::AllocationIndexToString(int index) {
@@ -589,8 +598,8 @@ class Assembler : public AssemblerBase {
 
   // This sets the branch destination (which is in the instruction on x86).
   // This is for calls and branches within generated code.
-  inline static void set_target_at(Address instruction_payload,
-                                   Address target) {
+  inline static void deserialization_set_special_target_at(
+      Address instruction_payload, Address target) {
     set_target_address_at(instruction_payload, target);
   }
 
@@ -601,8 +610,7 @@ class Assembler : public AssemblerBase {
     set_target_address_at(instruction_payload, target);
   }
 
-  static const int kCallTargetSize = kPointerSize;
-  static const int kExternalTargetSize = kPointerSize;
+  static const int kSpecialTargetSize = kPointerSize;
 
   // Distance between the address of the code target in the call instruction
   // and the return address
@@ -621,8 +629,6 @@ class Assembler : public AssemblerBase {
   // The debug break slot must be able to contain a call instruction.
   static const int kDebugBreakSlotLength = kCallInstructionLength;
 
-  // One byte opcode for test eax,0xXXXXXXXX.
-  static const byte kTestEaxByte = 0xA9;
   // One byte opcode for test al, 0xXX.
   static const byte kTestAlByte = 0xA8;
   // One byte opcode for nop.
@@ -634,6 +640,9 @@ class Assembler : public AssemblerBase {
   static const byte kJccShortPrefix = 0x70;
   static const byte kJncShortOpcode = kJccShortPrefix | not_carry;
   static const byte kJcShortOpcode = kJccShortPrefix | carry;
+  static const byte kJnzShortOpcode = kJccShortPrefix | not_zero;
+  static const byte kJzShortOpcode = kJccShortPrefix | zero;
+
 
   // ---------------------------------------------------------------------------
   // Code generation

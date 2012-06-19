@@ -121,9 +121,11 @@ docpublish: doc-publish
 doc-publish: doc
 	rsync -vazu --stats --no-implied-dirs --delete html/doc/ npmjs.org:/var/www/npmjs.org/public/doc
 	rsync -vazu --stats --no-implied-dirs --delete html/api/ npmjs.org:/var/www/npmjs.org/public/api
+	rsync -vazu --stats --no-implied-dirs --delete html/webfonts/ npmjs.org:/var/www/npmjs.org/public/webfonts
+	scp html/style.css npmjs.org:/var/www/npmjs.org/public/
 
 zip-publish: release
-	scp release/*.zip npmjs.org:/var/www/npmjs.org/public/dist/
+	scp release/* npmjs.org:/var/www/npmjs.org/public/dist/
 
 release:
 	@bash scripts/release.sh

@@ -27,10 +27,10 @@ var exceptionCaught = false;
 
 try {
   process.stdout.end();
-} catch(e) {
+} catch (e) {
   exceptionCaught = true;
   assert.ok(common.isError(e));
-  assert.equal('process.stdout cannot be closed', e.message);
+  assert.equal('process.stdout cannot be closed.', e.message);
 }
 
 assert.ok(exceptionCaught);

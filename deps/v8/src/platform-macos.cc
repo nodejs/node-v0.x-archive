@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -58,6 +58,7 @@
 
 #include "v8.h"
 
+#include "platform-posix.h"
 #include "platform.h"
 #include "vm-state-inl.h"
 
@@ -75,7 +76,7 @@ extern "C" {
 namespace v8 {
 namespace internal {
 
-// 0 is never a valid thread id on MacOSX since a ptread_t is
+// 0 is never a valid thread id on MacOSX since a pthread_t is
 // a pointer.
 static const pthread_t kNoThread = (pthread_t) 0;
 
@@ -93,17 +94,14 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-void OS::SetUp() {
-  // Seed the random number generator. We preserve microsecond resolution.
-  uint64_t seed = Ticks() ^ (getpid() << 16);
-  srandom(static_cast<unsigned int>(seed));
-  limit_mutex = CreateMutex();
+void OS::PostSetUp() {
+  POSIXPostSetUp();
 }
 
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -429,6 +427,12 @@ bool VirtualMemory::Commit(void* address, size_t size, bool is_executable) {
 }
 
 
+bool VirtualMemory::Guard(void* address) {
+  OS::Guard(address, OS::CommitPageSize());
+  return true;
+}
+
+
 bool VirtualMemory::CommitRegion(void* address,
                                  size_t size,
                                  bool is_executable) {
@@ -473,17 +477,11 @@ class Thread::PlatformData : public Malloced {
   pthread_t thread_;  // Thread handle for pthread.
 };
 
+
 Thread::Thread(const Options& options)
     : data_(new PlatformData),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -736,11 +734,17 @@ class Sampler::PlatformData : public Malloced {
   thread_act_t profiled_thread_;
 };
 
+
 class SamplerThread : public Thread {
  public:
+  static const int kSamplerThreadStackSize = 64 * KB;
+
   explicit SamplerThread(int interval)
-      : Thread("SamplerThread"),
+      : Thread(Thread::Options("SamplerThread", kSamplerThreadStackSize)),
         interval_(interval) {}
+
+  static void SetUp() { if (!mutex_) mutex_ = OS::CreateMutex(); }
+  static void TearDown() { delete mutex_; }
 
   static void AddActiveSampler(Sampler* sampler) {
     ScopedLock lock(mutex_);
@@ -854,14 +858,30 @@ class SamplerThread : public Thread {
   static Mutex* mutex_;
   static SamplerThread* instance_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SamplerThread);
 };
 
 #undef REGISTER_FIELD
 
 
-Mutex* SamplerThread::mutex_ = OS::CreateMutex();
+Mutex* SamplerThread::mutex_ = NULL;
 SamplerThread* SamplerThread::instance_ = NULL;
+
+
+void OS::SetUp() {
+  // Seed the random number generator. We preserve microsecond resolution.
+  uint64_t seed = Ticks() ^ (getpid() << 16);
+  srandom(static_cast<unsigned int>(seed));
+  limit_mutex = CreateMutex();
+  SamplerThread::SetUp();
+}
+
+
+void OS::TearDown() {
+  SamplerThread::TearDown();
+  delete limit_mutex;
+}
 
 
 Sampler::Sampler(Isolate* isolate, int interval)

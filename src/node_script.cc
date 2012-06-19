@@ -19,9 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
-#include <node_script.h>
-#include <node_vars.h>
+#include "node.h"
+#include "node_script.h"
 #include <assert.h>
 
 namespace node {
@@ -44,8 +43,6 @@ using v8::Integer;
 using v8::Function;
 using v8::FunctionTemplate;
 
-#define wrapped_context_constructor NODE_VAR(wrapped_context_constructor)
-#define wrapped_script_constructor NODE_VAR(wrapped_script_constructor)
 
 class WrappedContext : ObjectWrap {
  public:
@@ -58,11 +55,16 @@ class WrappedContext : ObjectWrap {
 
  protected:
 
+  static Persistent<FunctionTemplate> constructor_template;
+
   WrappedContext();
   ~WrappedContext();
 
   Persistent<Context> context_;
 };
+
+
+Persistent<FunctionTemplate> WrappedContext::constructor_template;
 
 
 class WrappedScript : ObjectWrap {
@@ -79,6 +81,8 @@ class WrappedScript : ObjectWrap {
   static Handle<Value> EvalMachine(const Arguments& args);
 
  protected:
+  static Persistent<FunctionTemplate> constructor_template;
+
   WrappedScript() : ObjectWrap() {}
   ~WrappedScript();
 
@@ -131,17 +135,17 @@ void WrappedContext::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(WrappedContext::New);
-  wrapped_context_constructor = Persistent<FunctionTemplate>::New(t);
-  wrapped_context_constructor->InstanceTemplate()->SetInternalFieldCount(1);
-  wrapped_context_constructor->SetClassName(String::NewSymbol("Context"));
+  constructor_template = Persistent<FunctionTemplate>::New(t);
+  constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
+  constructor_template->SetClassName(String::NewSymbol("Context"));
 
   target->Set(String::NewSymbol("Context"),
-              wrapped_context_constructor->GetFunction());
+              constructor_template->GetFunction());
 }
 
 
 bool WrappedContext::InstanceOf(Handle<Value> value) {
-  return !value.IsEmpty() && wrapped_context_constructor->HasInstance(value);
+  return !value.IsEmpty() && constructor_template->HasInstance(value);
 }
 
 
@@ -166,7 +170,7 @@ WrappedContext::~WrappedContext() {
 
 
 Local<Object> WrappedContext::NewInstance() {
-  Local<Object> context = wrapped_context_constructor->GetFunction()->NewInstance();
+  Local<Object> context = constructor_template->GetFunction()->NewInstance();
   return context;
 }
 
@@ -176,57 +180,60 @@ Persistent<Context> WrappedContext::GetV8Context() {
 }
 
 
+Persistent<FunctionTemplate> WrappedScript::constructor_template;
+
+
 void WrappedScript::Initialize(Handle<Object> target) {
   HandleScope scope;
 
   Local<FunctionTemplate> t = FunctionTemplate::New(WrappedScript::New);
-  wrapped_script_constructor = Persistent<FunctionTemplate>::New(t);
-  wrapped_script_constructor->InstanceTemplate()->SetInternalFieldCount(1);
+  constructor_template = Persistent<FunctionTemplate>::New(t);
+  constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   // Note: We use 'NodeScript' instead of 'Script' so that we do not
   // conflict with V8's Script class defined in v8/src/messages.js
   // See GH-203 https://github.com/joyent/node/issues/203
-  wrapped_script_constructor->SetClassName(String::NewSymbol("NodeScript"));
+  constructor_template->SetClassName(String::NewSymbol("NodeScript"));
 
-  NODE_SET_PROTOTYPE_METHOD(wrapped_script_constructor,
+  NODE_SET_PROTOTYPE_METHOD(constructor_template,
                             "createContext",
                             WrappedScript::CreateContext);
 
-  NODE_SET_PROTOTYPE_METHOD(wrapped_script_constructor,
+  NODE_SET_PROTOTYPE_METHOD(constructor_template,
                             "runInContext",
                             WrappedScript::RunInContext);
 
-  NODE_SET_PROTOTYPE_METHOD(wrapped_script_constructor,
+  NODE_SET_PROTOTYPE_METHOD(constructor_template,
                             "runInThisContext",
                             WrappedScript::RunInThisContext);
 
-  NODE_SET_PROTOTYPE_METHOD(wrapped_script_constructor,
+  NODE_SET_PROTOTYPE_METHOD(constructor_template,
                             "runInNewContext",
                             WrappedScript::RunInNewContext);
 
-  NODE_SET_METHOD(wrapped_script_constructor,
+  NODE_SET_METHOD(constructor_template,
                   "createContext",
                   WrappedScript::CreateContext);
 
-  NODE_SET_METHOD(wrapped_script_constructor,
+  NODE_SET_METHOD(constructor_template,
                   "runInContext",
                   WrappedScript::CompileRunInContext);
 
-  NODE_SET_METHOD(wrapped_script_constructor,
+  NODE_SET_METHOD(constructor_template,
                   "runInThisContext",
                   WrappedScript::CompileRunInThisContext);
 
-  NODE_SET_METHOD(wrapped_script_constructor,
+  NODE_SET_METHOD(constructor_template,
                   "runInNewContext",
                   WrappedScript::CompileRunInNewContext);
 
   target->Set(String::NewSymbol("NodeScript"),
-              wrapped_script_constructor->GetFunction());
+              constructor_template->GetFunction());
 }
 
 
 Handle<Value> WrappedScript::New(const Arguments& args) {
   if (!args.IsConstructCall()) {
-    return FromConstructorTemplate(wrapped_script_constructor, args);
+    return FromConstructorTemplate(constructor_template, args);
   }
 
   HandleScope scope;
@@ -250,9 +257,14 @@ Handle<Value> WrappedScript::CreateContext(const Arguments& args) {
   Local<Object> context = WrappedContext::NewInstance();
 
   if (args.Length() > 0) {
-    Local<Object> sandbox = args[0]->ToObject();
+    if (args[0]->IsObject()) {
+      Local<Object> sandbox = args[0].As<Object>();
 
-    CloneObject(args.This(), sandbox, context);
+      CloneObject(args.This(), sandbox, context);
+    } else {
+      return ThrowException(Exception::TypeError(String::New(
+          "createContext() accept only object as first argument.")));
+    }
   }
 
 
@@ -341,25 +353,29 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
     display_error = true;
   }
 
-  Persistent<Context> context;
+  Handle<Context> context = Context::GetCurrent();
 
   Local<Array> keys;
   if (context_flag == newContext) {
     // Create the new context
-    context = Context::New();
+    // Context::New returns a Persistent<Context>, but we only need it for this
+    // function. Here we grab a temporary handle to the new context, assign it
+    // to a local handle, and then dispose the persistent handle. This ensures
+    // that when this function exits the context will be disposed.
+    Persistent<Context> tmp = Context::New();
+    context = Local<Context>::New(tmp);
+    tmp.Dispose();
 
   } else if (context_flag == userContext) {
     // Use the passed in context
-    Local<Object> contextArg = args[sandbox_index]->ToObject();
     WrappedContext *nContext = ObjectWrap::Unwrap<WrappedContext>(sandbox);
     context = nContext->GetV8Context();
   }
 
+  Context::Scope context_scope(context);
+
   // New and user context share code. DRY it up.
   if (context_flag == userContext || context_flag == newContext) {
-    // Enter the context
-    context->Enter();
-
     // Copy everything from the passed in sandbox (either the persistent
     // context for runInContext(), or the sandbox arg to runInNewContext()).
     CloneObject(args.This(), sandbox, context->Global()->GetPrototype());
@@ -401,11 +417,6 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   if (output_flag == returnResult) {
     result = script->Run();
     if (result.IsEmpty()) {
-      if (context_flag == newContext) {
-        context->DetachGlobal();
-        context->Exit();
-        context.Dispose();
-      }
       return try_catch.ReThrow();
     }
   } else {
@@ -421,16 +432,6 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
   if (context_flag == userContext || context_flag == newContext) {
     // success! copy changes back onto the sandbox object.
     CloneObject(args.This(), context->Global()->GetPrototype(), sandbox);
-  }
-
-  if (context_flag == newContext) {
-    // Clean up, clean up, everybody everywhere!
-    context->DetachGlobal();
-    context->Exit();
-    context.Dispose();
-  } else if (context_flag == userContext) {
-    // Exit the passed in context.
-    context->Exit();
   }
 
   return result == args.This() ? result : scope.Close(result);

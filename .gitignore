@@ -31,9 +31,14 @@ ipch/
 *.sdf
 *.opensdf
 
+/config.mk
 /config.gypi
 *-nodegyp*
 /gyp-mac-tool
 /dist-osx
 /npm.wxs
 /tools/msvs/npm.wixobj
+email.md
+blog.html
+deps/v8-*
+./node_modules

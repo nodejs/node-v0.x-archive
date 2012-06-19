@@ -1,4 +1,6 @@
-## Crypto
+# Crypto
+
+    Stability: 3 - Stable
 
 Use `require('crypto')` to access this module.
 
@@ -8,19 +10,25 @@ of a secure HTTPS net or http connection.
 
 It also offers a set of wrappers for OpenSSL's hash, hmac, cipher, decipher, sign and verify methods.
 
-### crypto.createCredentials(details)
+## crypto.createCredentials(details)
 
 Creates a credentials object, with the optional details being a dictionary with keys:
 
-* `key` : a string holding the PEM encoded private key
-* `cert` : a string holding the PEM encoded certificate
-* `ca` : either a string or list of strings of PEM encoded CA certificates to trust.
+* `pfx` : A string or buffer holding the PFX or PKCS12 encoded private key, certificate and CA certificates
+* `key` : A string holding the PEM encoded private key
+* `passphrase` : A string of passphrase for the private key or pfx
+* `cert` : A string holding the PEM encoded certificate
+* `ca` : Either a string or list of strings of PEM encoded CA certificates to trust.
+* `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate Revocation List)
+* `ciphers`: A string describing the ciphers to use or exclude. Consult
+  <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for details
+  on the format.
 
 If no 'ca' details are given, then node.js will use the default publicly trusted list of CAs as given in
 <http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>.
 
 
-### crypto.createHash(algorithm)
+## crypto.createHash(algorithm)
 
 Creates and returns a hash object, a cryptographic hash with the given algorithm
 which can be used to generate hash digests.
@@ -47,6 +55,12 @@ Example: this program that takes the sha1 sum of a file
       console.log(d + '  ' + filename);
     });
 
+## Class: Hash
+
+The class for creating hash digests of data.
+
+Returned by `crypto.createHash`.
+
 ### hash.update(data, [input_encoding])
 
 Updates the hash content with the given `data`, the encoding of which is given
@@ -63,12 +77,18 @@ Defaults to `'binary'`.
 Note: `hash` object can not be used after `digest()` method been called.
 
 
-### crypto.createHmac(algorithm, key)
+## crypto.createHmac(algorithm, key)
 
 Creates and returns a hmac object, a cryptographic hmac with the given algorithm and key.
 
 `algorithm` is dependent on the available algorithms supported by OpenSSL - see createHash above.
 `key` is the hmac key to be used.
+
+## Class: Hmac
+
+Class for creating cryptographic hmac content.
+
+Returned by `crypto.createHmac`.
 
 ### hmac.update(data)
 
@@ -84,23 +104,32 @@ Defaults to `'binary'`.
 Note: `hmac` object can not be used after `digest()` method been called.
 
 
-### crypto.createCipher(algorithm, password)
+## crypto.createCipher(algorithm, password)
 
 Creates and returns a cipher object, with the given algorithm and password.
 
 `algorithm` is dependent on OpenSSL, examples are `'aes192'`, etc.
 On recent releases, `openssl list-cipher-algorithms` will display the
 available cipher algorithms.
-`password` is used to derive key and IV, which must be `'binary'` encoded
-string (See the [Buffers](buffers.html) for more information).
+`password` is used to derive key and IV, which must be a `'binary'` encoded
+string or a [buffer](buffer.html).
 
-### crypto.createCipheriv(algorithm, key, iv)
+## crypto.createCipheriv(algorithm, key, iv)
 
 Creates and returns a cipher object, with the given algorithm, key and iv.
 
-`algorithm` is the same as the `createCipher()`. `key` is a raw key used in
-algorithm. `iv` is an Initialization vector. `key` and `iv` must be `'binary'`
-encoded string (See the [Buffers](buffers.html) for more information).
+`algorithm` is the same as the argument to `createCipher()`.
+`key` is the raw key used by the algorithm.
+`iv` is an [initialization
+vector](http://en.wikipedia.org/wiki/Initialization_vector).
+
+`key` and `iv` must be `'binary'` encoded strings or [buffers](buffer.html).
+
+## Class: Cipher
+
+Class for encrypting data.
+
+Returned by `crypto.createCipher` and `crypto.createCipheriv`.
 
 ### cipher.update(data, [input_encoding], [output_encoding])
 
@@ -120,16 +149,28 @@ Returns any remaining enciphered contents, with `output_encoding` being one of:
 
 Note: `cipher` object can not be used after `final()` method been called.
 
+### cipher.setAutoPadding(auto_padding=true)
 
-### crypto.createDecipher(algorithm, password)
+You can disable automatic padding of the input data to block size. If `auto_padding` is false,
+the length of the entire input data must be a multiple of the cipher's block size or `final` will fail.
+Useful for non-standard padding, e.g. using `0x0` instead of PKCS padding. You must call this before `cipher.final`.
+
+
+## crypto.createDecipher(algorithm, password)
 
 Creates and returns a decipher object, with the given algorithm and key.
-This is the mirror of the [createCipher()](#crypto.createCipher) above.
+This is the mirror of the [createCipher()][] above.
 
-### crypto.createDecipheriv(algorithm, key, iv)
+## crypto.createDecipheriv(algorithm, key, iv)
 
 Creates and returns a decipher object, with the given algorithm, key and iv.
-This is the mirror of the [createCipheriv()](#crypto.createCipheriv) above.
+This is the mirror of the [createCipheriv()][] above.
+
+## Class: Decipher
+
+Class for decrypting data.
+
+Returned by `crypto.createDecipher` and `crypto.createDecipheriv`.
 
 ### decipher.update(data, [input_encoding], [output_encoding])
 
@@ -147,12 +188,23 @@ Defaults to `'binary'`.
 
 Note: `decipher` object can not be used after `final()` method been called.
 
+### decipher.setAutoPadding(auto_padding=true)
 
-### crypto.createSign(algorithm)
+You can disable auto padding if the data has been encrypted without standard block padding to prevent
+`decipher.final` from checking and removing it. Can only work if the input data's length is a multiple of the
+ciphers block size. You must call this before streaming data to `decipher.update`.
+
+## crypto.createSign(algorithm)
 
 Creates and returns a signing object, with the given algorithm.
 On recent OpenSSL releases, `openssl list-public-key-algorithms` will display
 the available signing algorithms. Examples are `'RSA-SHA256'`.
+
+## Class: Signer
+
+Class for generating signatures.
+
+Returned by `crypto.createSign`.
 
 ### signer.update(data)
 
@@ -169,11 +221,16 @@ Returns the signature in `output_format` which can be `'binary'`, `'hex'` or
 
 Note: `signer` object can not be used after `sign()` method been called.
 
-
-### crypto.createVerify(algorithm)
+## crypto.createVerify(algorithm)
 
 Creates and returns a verification object, with the given algorithm.
 This is the mirror of the signing object above.
+
+## Class: Verify
+
+Class for verifying signatures.
+
+Returned by `crypto.createVerify`.
 
 ### verifier.update(data)
 
@@ -192,16 +249,22 @@ Returns true or false depending on the validity of the signature for the data an
 
 Note: `verifier` object can not be used after `verify()` method been called.
 
-### crypto.createDiffieHellman(prime_length)
+## crypto.createDiffieHellman(prime_length)
 
 Creates a Diffie-Hellman key exchange object and generates a prime of the
 given bit length. The generator used is `2`.
 
-### crypto.createDiffieHellman(prime, [encoding])
+## crypto.createDiffieHellman(prime, [encoding])
 
 Creates a Diffie-Hellman key exchange object using the supplied prime. The
 generator used is `2`. Encoding can be `'binary'`, `'hex'`, or `'base64'`.
 Defaults to `'binary'`.
+
+## Class: DiffieHellman
+
+The class for creating Diffie-Hellman key exchanges.
+
+Returned by `crypto.createDiffieHellman`.
 
 ### diffieHellman.generateKeys([encoding])
 
@@ -249,13 +312,43 @@ or `'base64'`. Defaults to `'binary'`.
 Sets the Diffie-Hellman private key. Key encoding can be `'binary'`, `'hex'`,
 or `'base64'`. Defaults to `'binary'`.
 
-### pbkdf2(password, salt, iterations, keylen, callback)
+## crypto.getDiffieHellman(group_name)
+
+Creates a predefined Diffie-Hellman key exchange object.
+The supported groups are: `'modp1'`, `'modp2'`, `'modp5'`
+(defined in [RFC 2412][])
+and `'modp14'`, `'modp15'`, `'modp16'`, `'modp17'`, `'modp18'`
+(defined in [RFC 3526][]).
+The returned object mimics the interface of objects created by
+[crypto.createDiffieHellman()][] above, but
+will not allow to change the keys (with
+[diffieHellman.setPublicKey()][] for example).
+The advantage of using this routine is that the parties don't have to
+generate nor exchange group modulus beforehand, saving both processor and
+communication time.
+
+Example (obtaining a shared secret):
+
+    var crypto = require('crypto');
+    var alice = crypto.getDiffieHellman('modp5');
+    var bob = crypto.getDiffieHellman('modp5');
+
+    alice.generateKeys();
+    bob.generateKeys();
+
+    var alice_secret = alice.computeSecret(bob.getPublicKey(), 'binary', 'hex');
+    var bob_secret = bob.computeSecret(alice.getPublicKey(), 'binary', 'hex');
+
+    /* alice_secret and bob_secret should be the same */
+    console.log(alice_secret == bob_secret);
+
+## crypto.pbkdf2(password, salt, iterations, keylen, callback)
 
 Asynchronous PBKDF2 applies pseudorandom function HMAC-SHA1 to derive
 a key of given length from the given password, salt and iterations.
 The callback gets two arguments `(err, derivedKey)`.
 
-### randomBytes(size, [callback])
+## crypto.randomBytes(size, [callback])
 
 Generates cryptographically strong pseudo-random data. Usage:
 
@@ -272,3 +365,10 @@ Generates cryptographically strong pseudo-random data. Usage:
     } catch (ex) {
       // handle error
     }
+
+[createCipher()]: #crypto_crypto_createcipher_algorithm_password
+[createCipheriv()]: #crypto_crypto_createcipheriv_algorithm_key_iv
+[crypto.createDiffieHellman()]: #crypto_crypto_creatediffiehellman_prime_encoding
+[diffieHellman.setPublicKey()]: #crypto_diffiehellman_setpublickey_public_key_encoding
+[RFC 2412]: http://www.rfc-editor.org/rfc/rfc2412.txt
+[RFC 3526]: http://www.rfc-editor.org/rfc/rfc3526.txt

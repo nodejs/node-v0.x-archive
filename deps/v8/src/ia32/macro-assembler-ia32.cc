@@ -237,6 +237,68 @@ void MacroAssembler::RecordWriteField(
 }
 
 
+void MacroAssembler::RecordWriteForMap(
+    Register object,
+    Handle<Map> map,
+    Register scratch1,
+    Register scratch2,
+    SaveFPRegsMode save_fp) {
+  Label done;
+
+  Register address = scratch1;
+  Register value = scratch2;
+  if (emit_debug_code()) {
+    Label ok;
+    lea(address, FieldOperand(object, HeapObject::kMapOffset));
+    test_b(address, (1 << kPointerSizeLog2) - 1);
+    j(zero, &ok, Label::kNear);
+    int3();
+    bind(&ok);
+  }
+
+  ASSERT(!object.is(value));
+  ASSERT(!object.is(address));
+  ASSERT(!value.is(address));
+  if (emit_debug_code()) {
+    AbortIfSmi(object);
+  }
+
+  if (!FLAG_incremental_marking) {
+    return;
+  }
+
+  // A single check of the map's pages interesting flag suffices, since it is
+  // only set during incremental collection, and then it's also guaranteed that
+  // the from object's page's interesting flag is also set.  This optimization
+  // relies on the fact that maps can never be in new space.
+  ASSERT(!isolate()->heap()->InNewSpace(*map));
+  CheckPageFlagForMap(map,
+                      MemoryChunk::kPointersToHereAreInterestingMask,
+                      zero,
+                      &done,
+                      Label::kNear);
+
+  // Delay the initialization of |address| and |value| for the stub until it's
+  // known that the will be needed. Up until this point their values are not
+  // needed since they are embedded in the operands of instructions that need
+  // them.
+  lea(address, FieldOperand(object, HeapObject::kMapOffset));
+  mov(value, Immediate(map));
+  RecordWriteStub stub(object, value, address, OMIT_REMEMBERED_SET, save_fp);
+  CallStub(&stub);
+
+  bind(&done);
+
+  // Clobber clobbered input registers when running with the debug-code flag
+  // turned on to provoke errors.
+  if (emit_debug_code()) {
+    mov(value, Immediate(BitCast<int32_t>(kZapValue)));
+    mov(scratch1, Immediate(BitCast<int32_t>(kZapValue)));
+    mov(scratch2, Immediate(BitCast<int32_t>(kZapValue)));
+  }
+}
+
+
 void MacroAssembler::RecordWrite(Register object,
                                  Register address,
                                  Register value,
@@ -382,10 +444,12 @@ void MacroAssembler::CmpInstanceType(Register map, InstanceType type) {
 void MacroAssembler::CheckFastElements(Register map,
                                        Label* fail,
                                        Label::Distance distance) {
-  STATIC_ASSERT(FAST_SMI_ONLY_ELEMENTS == 0);
-  STATIC_ASSERT(FAST_ELEMENTS == 1);
+  STATIC_ASSERT(FAST_SMI_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_HOLEY_SMI_ELEMENTS == 1);
+  STATIC_ASSERT(FAST_ELEMENTS == 2);
+  STATIC_ASSERT(FAST_HOLEY_ELEMENTS == 3);
   cmpb(FieldOperand(map, Map::kBitField2Offset),
-       Map::kMaximumBitField2FastElementValue);
+       Map::kMaximumBitField2FastHoleyElementValue);
   j(above, fail, distance);
 }
 
@@ -393,23 +457,26 @@ void MacroAssembler::CheckFastElements(Register map,
 void MacroAssembler::CheckFastObjectElements(Register map,
                                              Label* fail,
                                              Label::Distance distance) {
-  STATIC_ASSERT(FAST_SMI_ONLY_ELEMENTS == 0);
-  STATIC_ASSERT(FAST_ELEMENTS == 1);
+  STATIC_ASSERT(FAST_SMI_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_HOLEY_SMI_ELEMENTS == 1);
+  STATIC_ASSERT(FAST_ELEMENTS == 2);
+  STATIC_ASSERT(FAST_HOLEY_ELEMENTS == 3);
   cmpb(FieldOperand(map, Map::kBitField2Offset),
-       Map::kMaximumBitField2FastSmiOnlyElementValue);
+       Map::kMaximumBitField2FastHoleySmiElementValue);
   j(below_equal, fail, distance);
   cmpb(FieldOperand(map, Map::kBitField2Offset),
-       Map::kMaximumBitField2FastElementValue);
+       Map::kMaximumBitField2FastHoleyElementValue);
   j(above, fail, distance);
 }
 
 
-void MacroAssembler::CheckFastSmiOnlyElements(Register map,
-                                              Label* fail,
-                                              Label::Distance distance) {
-  STATIC_ASSERT(FAST_SMI_ONLY_ELEMENTS == 0);
+void MacroAssembler::CheckFastSmiElements(Register map,
+                                          Label* fail,
+                                          Label::Distance distance) {
+  STATIC_ASSERT(FAST_SMI_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_HOLEY_SMI_ELEMENTS == 1);
   cmpb(FieldOperand(map, Map::kBitField2Offset),
-       Map::kMaximumBitField2FastSmiOnlyElementValue);
+       Map::kMaximumBitField2FastHoleySmiElementValue);
   j(above, fail, distance);
 }
 
@@ -493,24 +560,18 @@ void MacroAssembler::CompareMap(Register obj,
                                 CompareMapMode mode) {
   cmp(FieldOperand(obj, HeapObject::kMapOffset), map);
   if (mode == ALLOW_ELEMENT_TRANSITION_MAPS) {
-    Map* transitioned_fast_element_map(
-        map->LookupElementsTransitionMap(FAST_ELEMENTS, NULL));
-    ASSERT(transitioned_fast_element_map == NULL ||
-           map->elements_kind() != FAST_ELEMENTS);
-    if (transitioned_fast_element_map != NULL) {
-      j(equal, early_success, Label::kNear);
-      cmp(FieldOperand(obj, HeapObject::kMapOffset),
-          Handle<Map>(transitioned_fast_element_map));
-    }
-
-    Map* transitioned_double_map(
-        map->LookupElementsTransitionMap(FAST_DOUBLE_ELEMENTS, NULL));
-    ASSERT(transitioned_double_map == NULL ||
-           map->elements_kind() == FAST_SMI_ONLY_ELEMENTS);
-    if (transitioned_double_map != NULL) {
-      j(equal, early_success, Label::kNear);
-      cmp(FieldOperand(obj, HeapObject::kMapOffset),
-          Handle<Map>(transitioned_double_map));
+    ElementsKind kind = map->elements_kind();
+    if (IsFastElementsKind(kind)) {
+      bool packed = IsFastPackedElementsKind(kind);
+      Map* current_map = *map;
+      while (CanTransitionToMoreGeneralFastElementsKind(kind, packed)) {
+        kind = GetNextMoreGeneralFastElementsKind(kind, packed);
+        current_map = current_map->LookupElementsTransitionMap(kind);
+        if (!current_map) break;
+        j(equal, early_success, Label::kNear);
+        cmp(FieldOperand(obj, HeapObject::kMapOffset),
+            Handle<Map>(current_map));
+      }
     }
   }
 }
@@ -764,8 +825,7 @@ void MacroAssembler::LeaveApiExitFrame() {
 }
 
 
-void MacroAssembler::PushTryHandler(CodeLocation try_location,
-                                    HandlerType type,
+void MacroAssembler::PushTryHandler(StackHandler::Kind kind,
                                     int handler_index) {
   // Adjust this code if not the case.
   STATIC_ASSERT(StackHandlerConstants::kSize == 5 * kPointerSize);
@@ -776,25 +836,21 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
   STATIC_ASSERT(StackHandlerConstants::kFPOffset == 4 * kPointerSize);
 
   // We will build up the handler from the bottom by pushing on the stack.
-  // First compute the state and push the frame pointer and context.
-  unsigned state = StackHandler::OffsetField::encode(handler_index);
-  if (try_location == IN_JAVASCRIPT) {
-    push(ebp);
-    push(esi);
-    state |= (type == TRY_CATCH_HANDLER)
-        ? StackHandler::KindField::encode(StackHandler::TRY_CATCH)
-        : StackHandler::KindField::encode(StackHandler::TRY_FINALLY);
-  } else {
-    ASSERT(try_location == IN_JS_ENTRY);
+  // First push the frame pointer and context.
+  if (kind == StackHandler::JS_ENTRY) {
     // The frame pointer does not point to a JS frame so we save NULL for
     // ebp. We expect the code throwing an exception to check ebp before
     // dereferencing it to restore the context.
     push(Immediate(0));  // NULL frame pointer.
     push(Immediate(Smi::FromInt(0)));  // No context.
-    state |= StackHandler::KindField::encode(StackHandler::ENTRY);
+  } else {
+    push(ebp);
+    push(esi);
   }
-
   // Push the state and the code object.
+  unsigned state =
+      StackHandler::IndexField::encode(handler_index) |
+      StackHandler::KindField::encode(kind);
   push(Immediate(state));
   Push(CodeObject());
 
@@ -867,8 +923,7 @@ void MacroAssembler::Throw(Register value) {
 }
 
 
-void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
-                                      Register value) {
+void MacroAssembler::ThrowUncatchable(Register value) {
   // Adjust this code if not the case.
   STATIC_ASSERT(StackHandlerConstants::kSize == 5 * kPointerSize);
   STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
@@ -878,21 +933,9 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
   STATIC_ASSERT(StackHandlerConstants::kFPOffset == 4 * kPointerSize);
 
   // The exception is expected in eax.
-  if (type == OUT_OF_MEMORY) {
-    // Set external caught exception to false.
-    ExternalReference external_caught(Isolate::kExternalCaughtExceptionAddress,
-                                      isolate());
-    mov(Operand::StaticVariable(external_caught), Immediate(false));
-
-    // Set pending exception and eax to out of memory exception.
-    ExternalReference pending_exception(Isolate::kPendingExceptionAddress,
-                                        isolate());
-    mov(eax, reinterpret_cast<int32_t>(Failure::OutOfMemoryException()));
-    mov(Operand::StaticVariable(pending_exception), eax);
-  } else if (!value.is(eax)) {
+  if (!value.is(eax)) {
     mov(eax, value);
   }
-
   // Drop the stack pointer to the top of the top stack handler.
   ExternalReference handler_address(Isolate::kHandlerAddress, isolate());
   mov(esp, Operand::StaticVariable(handler_address));
@@ -904,7 +947,7 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
   mov(esp, Operand(esp, StackHandlerConstants::kNextOffset));
 
   bind(&check_kind);
-  STATIC_ASSERT(StackHandler::ENTRY == 0);
+  STATIC_ASSERT(StackHandler::JS_ENTRY == 0);
   test(Operand(esp, StackHandlerConstants::kStateOffset),
        Immediate(StackHandler::KindField::kMask));
   j(not_zero, &fetch_next);
@@ -1387,7 +1430,7 @@ void MacroAssembler::AllocateAsciiString(Register result,
   add(scratch1, Immediate(kObjectAlignmentMask));
   and_(scratch1, Immediate(~kObjectAlignmentMask));
 
-  // Allocate ascii string in new space.
+  // Allocate ASCII string in new space.
   AllocateInNewSpace(SeqAsciiString::kHeaderSize,
                      times_1,
                      scratch1,
@@ -1415,7 +1458,7 @@ void MacroAssembler::AllocateAsciiString(Register result,
                                          Label* gc_required) {
   ASSERT(length > 0);
 
-  // Allocate ascii string in new space.
+  // Allocate ASCII string in new space.
   AllocateInNewSpace(SeqAsciiString::SizeFor(length),
                      result,
                      scratch1,
@@ -1933,11 +1976,13 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     Handle<Code> code_constant,
                                     const Operand& code_operand,
                                     Label* done,
+                                    bool* definitely_mismatches,
                                     InvokeFlag flag,
                                     Label::Distance done_near,
                                     const CallWrapper& call_wrapper,
                                     CallKind call_kind) {
   bool definitely_matches = false;
+  *definitely_mismatches = false;
   Label invoke;
   if (expected.is_immediate()) {
     ASSERT(actual.is_immediate());
@@ -1953,6 +1998,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
         // arguments.
         definitely_matches = true;
       } else {
+        *definitely_mismatches = true;
         mov(ebx, expected.immediate());
       }
     }
@@ -1990,7 +2036,9 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       SetCallKind(ecx, call_kind);
       call(adaptor, RelocInfo::CODE_TARGET);
       call_wrapper.AfterCall();
-      jmp(done, done_near);
+      if (!*definitely_mismatches) {
+        jmp(done, done_near);
+      }
     } else {
       SetCallKind(ecx, call_kind);
       jmp(adaptor, RelocInfo::CODE_TARGET);
@@ -2010,20 +2058,23 @@ void MacroAssembler::InvokeCode(const Operand& code,
   ASSERT(flag == JUMP_FUNCTION || has_frame());
 
   Label done;
+  bool definitely_mismatches = false;
   InvokePrologue(expected, actual, Handle<Code>::null(), code,
-                 &done, flag, Label::kNear, call_wrapper,
-                 call_kind);
-  if (flag == CALL_FUNCTION) {
-    call_wrapper.BeforeCall(CallSize(code));
-    SetCallKind(ecx, call_kind);
-    call(code);
-    call_wrapper.AfterCall();
-  } else {
-    ASSERT(flag == JUMP_FUNCTION);
-    SetCallKind(ecx, call_kind);
-    jmp(code);
+                 &done, &definitely_mismatches, flag, Label::kNear,
+                 call_wrapper, call_kind);
+  if (!definitely_mismatches) {
+    if (flag == CALL_FUNCTION) {
+      call_wrapper.BeforeCall(CallSize(code));
+      SetCallKind(ecx, call_kind);
+      call(code);
+      call_wrapper.AfterCall();
+    } else {
+      ASSERT(flag == JUMP_FUNCTION);
+      SetCallKind(ecx, call_kind);
+      jmp(code);
+    }
+    bind(&done);
   }
-  bind(&done);
 }
 
 
@@ -2039,19 +2090,22 @@ void MacroAssembler::InvokeCode(Handle<Code> code,
 
   Label done;
   Operand dummy(eax, 0);
-  InvokePrologue(expected, actual, code, dummy, &done, flag, Label::kNear,
-                 call_wrapper, call_kind);
-  if (flag == CALL_FUNCTION) {
-    call_wrapper.BeforeCall(CallSize(code, rmode));
-    SetCallKind(ecx, call_kind);
-    call(code, rmode);
-    call_wrapper.AfterCall();
-  } else {
-    ASSERT(flag == JUMP_FUNCTION);
-    SetCallKind(ecx, call_kind);
-    jmp(code, rmode);
+  bool definitely_mismatches = false;
+  InvokePrologue(expected, actual, code, dummy, &done, &definitely_mismatches,
+                 flag, Label::kNear, call_wrapper, call_kind);
+  if (!definitely_mismatches) {
+    if (flag == CALL_FUNCTION) {
+      call_wrapper.BeforeCall(CallSize(code, rmode));
+      SetCallKind(ecx, call_kind);
+      call(code, rmode);
+      call_wrapper.AfterCall();
+    } else {
+      ASSERT(flag == JUMP_FUNCTION);
+      SetCallKind(ecx, call_kind);
+      jmp(code, rmode);
+    }
+    bind(&done);
   }
-  bind(&done);
 }
 
 
@@ -2154,6 +2208,57 @@ void MacroAssembler::LoadContext(Register dst, int context_chain_length) {
         isolate()->factory()->with_context_map());
     Check(not_equal, "Variable resolved to with context.");
   }
+}
+
+
+void MacroAssembler::LoadTransitionedArrayMapConditional(
+    ElementsKind expected_kind,
+    ElementsKind transitioned_kind,
+    Register map_in_out,
+    Register scratch,
+    Label* no_map_match) {
+  // Load the global or builtins object from the current context.
+  mov(scratch, Operand(esi, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  mov(scratch, FieldOperand(scratch, GlobalObject::kGlobalContextOffset));
+
+  // Check that the function's map is the same as the expected cached map.
+  mov(scratch, Operand(scratch,
+                       Context::SlotOffset(Context::JS_ARRAY_MAPS_INDEX)));
+
+  size_t offset = expected_kind * kPointerSize +
+      FixedArrayBase::kHeaderSize;
+  cmp(map_in_out, FieldOperand(scratch, offset));
+  j(not_equal, no_map_match);
+
+  // Use the transitioned cached map.
+  offset = transitioned_kind * kPointerSize +
+      FixedArrayBase::kHeaderSize;
+  mov(map_in_out, FieldOperand(scratch, offset));
+}
+
+
+void MacroAssembler::LoadInitialArrayMap(
+    Register function_in, Register scratch,
+    Register map_out, bool can_have_holes) {
+  ASSERT(!function_in.is(map_out));
+  Label done;
+  mov(map_out, FieldOperand(function_in,
+                            JSFunction::kPrototypeOrInitialMapOffset));
+  if (!FLAG_smi_only_arrays) {
+    ElementsKind kind = can_have_holes ? FAST_HOLEY_ELEMENTS : FAST_ELEMENTS;
+    LoadTransitionedArrayMapConditional(FAST_SMI_ELEMENTS,
+                                        kind,
+                                        map_out,
+                                        scratch,
+                                        &done);
+  } else if (can_have_holes) {
+    LoadTransitionedArrayMapConditional(FAST_SMI_ELEMENTS,
+                                        FAST_HOLEY_SMI_ELEMENTS,
+                                        map_out,
+                                        scratch,
+                                        &done);
+  }
+  bind(&done);
 }
 
 
@@ -2464,7 +2569,7 @@ void MacroAssembler::JumpIfNotBothSequentialAsciiStrings(Register object1,
   movzx_b(scratch1, FieldOperand(scratch1, Map::kInstanceTypeOffset));
   movzx_b(scratch2, FieldOperand(scratch2, Map::kInstanceTypeOffset));
 
-  // Check that both are flat ascii strings.
+  // Check that both are flat ASCII strings.
   const int kFlatAsciiStringMask =
       kIsNotStringMask | kStringRepresentationMask | kStringEncodingMask;
   const int kFlatAsciiStringTag = ASCII_STRING_TYPE;
@@ -2533,7 +2638,7 @@ bool AreAliased(Register r1, Register r2, Register r3, Register r4) {
 CodePatcher::CodePatcher(byte* address, int size)
     : address_(address),
       size_(size),
-      masm_(Isolate::Current(), address, size + Assembler::kGap) {
+      masm_(NULL, address, size + Assembler::kGap) {
   // Create a new macro assembler pointing to the address of the code to patch.
   // The size is adjusted with kGap on order for the assembler to generate size
   // bytes of instructions without failing with buffer size constraints.
@@ -2570,6 +2675,28 @@ void MacroAssembler::CheckPageFlag(
            static_cast<uint8_t>(mask));
   } else {
     test(Operand(scratch, MemoryChunk::kFlagsOffset), Immediate(mask));
+  }
+  j(cc, condition_met, condition_met_distance);
+}
+
+
+void MacroAssembler::CheckPageFlagForMap(
+    Handle<Map> map,
+    int mask,
+    Condition cc,
+    Label* condition_met,
+    Label::Distance condition_met_distance) {
+  ASSERT(cc == zero || cc == not_zero);
+  Page* page = Page::FromAddress(map->address());
+  ExternalReference reference(ExternalReference::page_flags(page));
+  // The inlined static address check of the page's flags relies
+  // on maps never being compacted.
+  ASSERT(!isolate()->heap()->mark_compact_collector()->
+         IsOnEvacuationCandidate(*map));
+  if (mask < (1 << kBitsPerByte)) {
+    test_b(Operand::StaticVariable(reference), static_cast<uint8_t>(mask));
+  } else {
+    test(Operand::StaticVariable(reference), Immediate(mask));
   }
   j(cc, condition_met, condition_met_distance);
 }
@@ -2741,6 +2868,46 @@ void MacroAssembler::EnsureNotWhite(
   }
 
   bind(&done);
+}
+
+
+void MacroAssembler::CheckEnumCache(Label* call_runtime) {
+  Label next;
+  mov(ecx, eax);
+  bind(&next);
+
+  // Check that there are no elements.  Register ecx contains the
+  // current JS object we've reached through the prototype chain.
+  cmp(FieldOperand(ecx, JSObject::kElementsOffset),
+      isolate()->factory()->empty_fixed_array());
+  j(not_equal, call_runtime);
+
+  // Check that instance descriptors are not empty so that we can
+  // check for an enum cache.  Leave the map in ebx for the subsequent
+  // prototype load.
+  mov(ebx, FieldOperand(ecx, HeapObject::kMapOffset));
+  mov(edx, FieldOperand(ebx, Map::kInstanceDescriptorsOrBitField3Offset));
+  JumpIfSmi(edx, call_runtime);
+
+  // Check that there is an enum cache in the non-empty instance
+  // descriptors (edx).  This is the case if the next enumeration
+  // index field does not contain a smi.
+  mov(edx, FieldOperand(edx, DescriptorArray::kEnumerationIndexOffset));
+  JumpIfSmi(edx, call_runtime);
+
+  // For all objects but the receiver, check that the cache is empty.
+  Label check_prototype;
+  cmp(ecx, eax);
+  j(equal, &check_prototype, Label::kNear);
+  mov(edx, FieldOperand(edx, DescriptorArray::kEnumCacheBridgeCacheOffset));
+  cmp(edx, isolate()->factory()->empty_fixed_array());
+  j(not_equal, call_runtime);
+
+  // Load the prototype from the map and loop if non-null.
+  bind(&check_prototype);
+  mov(ecx, FieldOperand(ebx, Map::kPrototypeOffset));
+  cmp(ecx, isolate()->factory()->null_value());
+  j(not_equal, &next);
 }
 
 } }  // namespace v8::internal

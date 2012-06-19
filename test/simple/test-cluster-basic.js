@@ -24,6 +24,9 @@ var common = require('../common');
 var assert = require('assert');
 var cluster = require('cluster');
 
+assert.equal('NODE_UNIQUE_ID' in process.env, false,
+      'NODE_UNIQUE_ID should be removed on startup');
+
 function forEach(obj, fn) {
   Object.keys(obj).forEach(function(name, index) {
     fn(obj[name], name, index);
@@ -40,22 +43,19 @@ if (cluster.isWorker) {
 
 else if (cluster.isMaster) {
 
-  assert.equal('NODE_UNIQUE_ID' in process.env, false,
-      'cluster.isMaster should not be true when NODE_UNIQUE_ID is set');
-
   var checks = {
     cluster: {
       events: {
         fork: false,
         online: false,
         listening: false,
-        death: false
+        exit: false
       },
       equal: {
         fork: false,
         online: false,
         listening: false,
-        death: false
+        exit: false
       }
     },
 
@@ -63,12 +63,12 @@ else if (cluster.isMaster) {
       events: {
         online: false,
         listening: false,
-        death: false
+        exit: false
       },
       equal: {
         online: false,
         listening: false,
-        death: false
+        exit: false
       },
       states: {
         none: false,
@@ -106,12 +106,13 @@ else if (cluster.isMaster) {
   });
 
   //Kill process when worker is killed
-  cluster.on('death', function() {
+  cluster.on('exit', function() {
     process.exit(0);
   });
 
   //Create worker
   worker = cluster.fork();
+  assert.equal(worker.id, 1);
   assert.ok(worker instanceof cluster.Worker,
       'the worker is not a instance of the Worker constructor');
 
@@ -122,7 +123,28 @@ else if (cluster.isMaster) {
       checks.worker.events[name] = true;
 
       //Check argument
-      checks.worker.equal[name] = worker === arguments[0];
+      checks.worker.equal[name] = (worker === this);
+
+      switch (name) {
+        case 'exit':
+          assert.equal(arguments[0], worker.process.exitCode);
+          assert.equal(arguments[1], worker.process.signalCode);
+          assert.equal(arguments.length, 2);
+          break;
+
+        case 'listening':
+          assert.equal(arguments.length, 1);
+          var expect = { address: '127.0.0.1',
+                         port: common.PORT,
+                         addressType: 4,
+                         fd: undefined };
+          assert.deepEqual(arguments[0], expect);
+          break;
+
+        default:
+          assert.equal(arguments.length, 0);
+          break;
+      }
     });
   });
 
@@ -137,7 +159,7 @@ else if (cluster.isMaster) {
     //Check cluster event arguments
     forEach(checks.cluster.equal, function(check, name) {
       assert.ok(check, 'The cluster event "' + name + '" did not emit ' +
-                'with corrent argument');
+                'with correct argument');
     });
 
     //Check worker states

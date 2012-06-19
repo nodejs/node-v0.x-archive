@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -356,7 +356,7 @@ void StackGuard::EnableInterrupts() {
 
 void StackGuard::SetStackLimit(uintptr_t limit) {
   ExecutionAccess access(isolate_);
-  // If the current limits are special (eg due to a pending interrupt) then
+  // If the current limits are special (e.g. due to a pending interrupt) then
   // leave them alone.
   uintptr_t jslimit = SimulatorStack::JsLimitFromCLimit(isolate_, limit);
   if (thread_local_.jslimit_ == thread_local_.real_jslimit_) {
@@ -373,6 +373,12 @@ void StackGuard::SetStackLimit(uintptr_t limit) {
 void StackGuard::DisableInterrupts() {
   ExecutionAccess access(isolate_);
   reset_limits(access);
+}
+
+
+bool StackGuard::ShouldPostponeInterrupts() {
+  ExecutionAccess access(isolate_);
+  return should_postpone_interrupts(access);
 }
 
 
@@ -820,6 +826,11 @@ Object* Execution::DebugBreakHelper() {
     return isolate->heap()->undefined_value();
   }
 
+  StackLimitCheck check(isolate);
+  if (check.HasOverflowed()) {
+    return isolate->heap()->undefined_value();
+  }
+
   {
     JavaScriptFrameIterator it(isolate);
     ASSERT(!it.done());
@@ -856,6 +867,11 @@ void Execution::ProcessDebugMessages(bool debug_command_only) {
   // Clear the debug command request flag.
   isolate->stack_guard()->Continue(DEBUGCOMMAND);
 
+  StackLimitCheck check(isolate);
+  if (check.HasOverflowed()) {
+    return;
+  }
+
   HandleScope scope(isolate);
   // Enter the debugger. Just continue if we fail to enter the debugger.
   EnterDebugger debugger;
@@ -872,17 +888,22 @@ void Execution::ProcessDebugMessages(bool debug_command_only) {
 
 #endif
 
-MaybeObject* Execution::HandleStackGuardInterrupt() {
-  Isolate* isolate = Isolate::Current();
+MaybeObject* Execution::HandleStackGuardInterrupt(Isolate* isolate) {
   StackGuard* stack_guard = isolate->stack_guard();
+  if (stack_guard->ShouldPostponeInterrupts()) {
+    return isolate->heap()->undefined_value();
+  }
 
   if (stack_guard->IsGCRequest()) {
-    isolate->heap()->CollectAllGarbage(false);
+    isolate->heap()->CollectAllGarbage(Heap::kNoGCFlags,
+                                       "StackGuard GC request");
     stack_guard->Continue(GC_REQUEST);
   }
 
   isolate->counters()->stack_interrupts()->Increment();
-  if (stack_guard->IsRuntimeProfilerTick()) {
+  // If FLAG_count_based_interrupts, every interrupt is a profiler interrupt.
+  if (FLAG_count_based_interrupts ||
+      stack_guard->IsRuntimeProfilerTick()) {
     isolate->counters()->runtime_profiler_ticks()->Increment();
     stack_guard->Continue(RUNTIME_PROFILER_TICK);
     isolate->runtime_profiler()->OptimizeNow();
@@ -903,5 +924,6 @@ MaybeObject* Execution::HandleStackGuardInterrupt() {
   }
   return isolate->heap()->undefined_value();
 }
+
 
 } }  // namespace v8::internal

@@ -21,7 +21,7 @@
 
 #ifndef PIPE_WRAP_H_
 #define PIPE_WRAP_H_
-#include <stream_wrap.h>
+#include "stream_wrap.h"
 
 namespace node {
 
@@ -29,6 +29,7 @@ class PipeWrap : StreamWrap {
  public:
   uv_pipe_t* UVHandle();
 
+  static v8::Local<v8::Object> Instantiate();
   static PipeWrap* Unwrap(v8::Local<v8::Object> obj);
   static void Initialize(v8::Handle<v8::Object> target);
 

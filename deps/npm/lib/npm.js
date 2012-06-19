@@ -17,53 +17,38 @@ require("path").SPLIT_CHAR = process.platform === "win32" ? "\\" : "/"
 var EventEmitter = require("events").EventEmitter
   , npm = module.exports = new EventEmitter
   , config = require("./config.js")
-  , set = require("./utils/set.js")
-  , get = require("./utils/get.js")
   , ini = require("./utils/ini.js")
-  , log = require("./utils/log.js")
+  , log = require("npmlog")
   , fs = require("graceful-fs")
   , path = require("path")
   , abbrev = require("abbrev")
   , which = require("which")
   , semver = require("semver")
   , findPrefix = require("./utils/find-prefix.js")
-  , getUid = require("./utils/uid-number.js")
-  , mkdir = require("./utils/mkdir-p.js")
+  , getUid = require("uid-number")
+  , mkdirp = require("mkdirp")
   , slide = require("slide")
   , chain = slide.chain
+  , RegClient = require("npm-registry-client")
+
+// /usr/local is often a read-only fs, which is not
+// well handled by node or mkdirp.  Just double-check
+// in the case of errors when making the prefix dirs.
+function mkdir (p, cb) {
+  mkdirp(p, function (er, made) {
+    // it could be that we couldn't create it, because it
+    // already exists, and is on a read-only fs.
+    if (er) {
+      return fs.stat(p, function (er2, st) {
+        if (er2 || !st.isDirectory()) return cb(er)
+        return cb(null, made)
+      })
+    }
+    return cb(er, made)
+  })
+}
 
 npm.commands = {}
-npm.ELIFECYCLE = {}
-npm.E404 = {}
-npm.EPUBLISHCONFLICT = {}
-npm.EJSONPARSE = {}
-npm.EISGIT = {}
-npm.ECYCLE = {}
-npm.ENOTSUP = {}
-
-// HACK for windows
-if (process.platform === "win32") {
-  // stub in unavailable methods from process and fs binding
-  if (!process.getuid) process.getuid = function() {}
-  if (!process.getgid) process.getgid = function() {}
-  var fsBinding = process.binding("fs")
-  if (!fsBinding.chown) fsBinding.chown = function() {
-    var cb = arguments[arguments.length - 1]
-    if (typeof cb == "function") cb()
-  }
-
-  // patch rename/renameSync, but this should really be fixed in node
-  var _fsRename = fs.rename
-    , _fsPathPatch
-  _fsPathPatch = function(p) {
-    return p && p.replace(/\\/g, "/") || p;
-  }
-  fs.rename = function(p1, p2) {
-    arguments[0] = _fsPathPatch(p1)
-    arguments[1] = _fsPathPatch(p2)
-    return _fsRename.apply(fs, arguments);
-  }
-}
 
 try {
   // startup, ok to do this synchronously
@@ -72,17 +57,17 @@ try {
   npm.version = j.version
   npm.nodeVersionRequired = j.engines.node
   if (!semver.satisfies(process.version, j.engines.node)) {
-    log.error([""
+    log.error("unsupported version", [""
               ,"npm requires node version: "+j.engines.node
               ,"And you have: "+process.version
               ,"which is not satisfactory."
               ,""
               ,"Bad things will likely happen.  You have been warned."
-              ,""].join("\n"), "unsupported version")
+              ,""].join("\n"))
   }
 } catch (ex) {
   try {
-    log(ex, "error reading version")
+    log.info("error reading version", ex)
   } catch (er) {}
   npm.version = ex
 }
@@ -112,6 +97,7 @@ var commandCache = {}
               , "unstar": "star" // same function
               , "apihelp" : "help"
               , "login": "adduser"
+              , "add-user": "adduser"
               }
 
   , aliasNames = Object.keys(aliases)
@@ -138,6 +124,7 @@ var commandCache = {}
               , "unpublish"
               , "owner"
               , "deprecate"
+              , "shrinkwrap"
 
               , "help"
               , "help-search"
@@ -256,7 +243,7 @@ npm.load = function (conf, cb_) {
     }
   }
 
-  log.waitForConfig()
+  log.pause()
 
   load(npm, conf, cb)
 }
@@ -274,8 +261,33 @@ function load (npm, conf, cb) {
     //console.error("about to look up configs")
 
     ini.resolveConfigs(conf, function (er) {
-      //console.error("back from config lookup", er && er.stack)
+      log.level = npm.config.get("loglevel")
+      log.heading = "npm"
+      log.stream = npm.config.get("logstream")
+      switch (npm.config.get("color")) {
+        case "always": log.enableColor(); break
+        case false: log.disableColor(); break
+      }
+      log.resume()
+
       if (er) return cb(er)
+
+      // at this point the configs are all set.
+      // go ahead and spin up the registry client.
+      npm.registry = new RegClient(
+        { registry: npm.config.get("registry")
+        , cache: npm.config.get("cache")
+        , auth: npm.config.get("_auth")
+        , alwaysAuth: npm.config.get("always-auth")
+        , email: npm.config.get("email")
+        , tag: npm.config.get("tag")
+        , ca: npm.config.get("ca")
+        , strictSSL: npm.config.get("strict-ssl")
+        , userAgent: npm.config.get("user-agent")
+        , E404: npm.E404
+        , EPUBLISHCONFLICT: npm.EPUBLISHCONFLICT
+        , log: log
+        })
 
       var umask = parseInt(conf.umask, 8)
       npm.modes = { exec: 0777 & (~umask)
@@ -309,7 +321,7 @@ function loadPrefix (npm, conf, cb) {
       })
     // the prefix MUST exist, or else nothing works.
     if (!npm.config.get("global")) {
-      mkdir(p, npm.modes.exec, null, null, true, next)
+      mkdir(p, next)
     } else {
       next(er)
     }
@@ -322,7 +334,7 @@ function loadPrefix (npm, conf, cb) {
       , enumerable : true
       })
     // the prefix MUST exist, or else nothing works.
-    mkdir(gp, npm.modes.exec, null, null, true, next)
+    mkdir(gp, next)
   })
 
   var i = 2
@@ -358,7 +370,7 @@ function setUser (cl, dc, cb) {
   var prefix = path.resolve(cl.get("prefix"))
   mkdir(prefix, function (er) {
     if (er) {
-      log.error(prefix, "could not create prefix directory")
+      log.error("could not create prefix dir", prefix)
       return cb(er)
     }
     fs.stat(prefix, function (er, st) {

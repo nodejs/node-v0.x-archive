@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,27 +28,18 @@
 #ifndef V8_ZONE_INL_H_
 #define V8_ZONE_INL_H_
 
-#include "isolate.h"
 #include "zone.h"
+
+#include "counters.h"
+#include "isolate.h"
+#include "utils.h"
 #include "v8-counters.h"
 
 namespace v8 {
 namespace internal {
 
 
-AssertNoZoneAllocation::AssertNoZoneAllocation()
-    : prev_(Isolate::Current()->zone_allow_allocation()) {
-  Isolate::Current()->set_zone_allow_allocation(false);
-}
-
-
-AssertNoZoneAllocation::~AssertNoZoneAllocation() {
-  Isolate::Current()->set_zone_allow_allocation(prev_);
-}
-
-
 inline void* Zone::New(int size) {
-  ASSERT(Isolate::Current()->zone_allow_allocation());
   ASSERT(ZoneScope::nesting() > 0);
   // Round up the requested size to fit the alignment.
   size = RoundUp(size, kAlignment);
@@ -99,30 +90,17 @@ ZoneSplayTree<Config>::~ZoneSplayTree() {
   // Reset the root to avoid unneeded iteration over all tree nodes
   // in the destructor.  For a zone-allocated tree, nodes will be
   // freed by the Zone.
-  SplayTree<Config, ZoneListAllocationPolicy>::ResetRoot();
+  SplayTree<Config, ZoneAllocationPolicy>::ResetRoot();
 }
 
-
-// TODO(isolates): for performance reasons, this should be replaced with a new
-//                 operator that takes the zone in which the object should be
-//                 allocated.
-void* ZoneObject::operator new(size_t size) {
-  return ZONE->New(static_cast<int>(size));
-}
 
 void* ZoneObject::operator new(size_t size, Zone* zone) {
   return zone->New(static_cast<int>(size));
 }
 
-
-inline void* ZoneListAllocationPolicy::New(int size) {
-  return ZONE->New(size);
-}
-
-
-template <typename T>
-void* ZoneList<T>::operator new(size_t size) {
-  return ZONE->New(static_cast<int>(size));
+inline void* ZoneAllocationPolicy::New(size_t size) {
+  ASSERT(zone_);
+  return zone_->New(size);
 }
 
 

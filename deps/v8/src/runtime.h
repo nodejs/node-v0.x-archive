@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -70,8 +70,6 @@ namespace internal {
   F(GetPrototype, 1, 1) \
   F(IsInPrototypeChain, 2, 1) \
   \
-  F(IsConstructCall, 0, 1) \
-  \
   F(GetOwnProperty, 2, 1) \
   \
   F(IsExtensible, 1, 1) \
@@ -79,6 +77,7 @@ namespace internal {
   \
   /* Utilities */ \
   F(CheckIsBootstrapping, 0, 1) \
+  F(GetRootNaN, 0, 1) \
   F(Call, -1 /* >= 2 */, 1) \
   F(Apply, 5, 1) \
   F(GetFunctionDelegate, 1, 1) \
@@ -90,8 +89,9 @@ namespace internal {
   F(NotifyDeoptimized, 1, 1) \
   F(NotifyOSR, 0, 1) \
   F(DeoptimizeFunction, 1, 1) \
+  F(ClearFunctionTypeFeedback, 1, 1) \
   F(RunningInSimulator, 0, 1) \
-  F(OptimizeFunctionOnNextCall, 1, 1) \
+  F(OptimizeFunctionOnNextCall, -1, 1) \
   F(GetOptimizationStatus, 1, 1) \
   F(GetOptimizationCount, 1, 1) \
   F(CompileForOnStackReplacement, 1, 1) \
@@ -99,6 +99,8 @@ namespace internal {
   F(AllocateInNewSpace, 1, 1) \
   F(SetNativeFlag, 1, 1) \
   F(StoreArrayLiteralElement, 5, 1) \
+  F(DebugCallbackSupportsStepping, 1, 1) \
+  F(DebugPrepareStepInIfStepping, 1, 1) \
   \
   /* Array join support */ \
   F(PushIfAbsent, 2, 1) \
@@ -197,6 +199,7 @@ namespace internal {
   F(StringLocaleCompare, 2, 1) \
   F(SubString, 3, 1) \
   F(StringReplaceRegExpWithString, 4, 1) \
+  F(StringReplaceOneCharWithString, 3, 1) \
   F(StringMatch, 3, 1) \
   F(StringTrim, 3, 1) \
   F(StringToArray, 2, 1) \
@@ -228,7 +231,7 @@ namespace internal {
   F(FunctionIsAPIFunction, 1, 1) \
   F(FunctionIsBuiltin, 1, 1) \
   F(GetScript, 1, 1) \
-  F(CollectStackTrace, 2, 1) \
+  F(CollectStackTrace, 3, 1) \
   F(GetV8Version, 0, 1) \
   \
   F(ClassOf, 1, 1) \
@@ -245,10 +248,9 @@ namespace internal {
   F(DateCurrentTime, 0, 1) \
   F(DateParseString, 2, 1) \
   F(DateLocalTimezone, 1, 1) \
-  F(DateLocalTimeOffset, 0, 1) \
-  F(DateDaylightSavingsOffset, 1, 1) \
+  F(DateToUTC, 1, 1) \
   F(DateMakeDay, 2, 1) \
-  F(DateYMDFromTime, 2, 1) \
+  F(DateSetValue, 3, 1) \
   \
   /* Numbers */ \
   \
@@ -270,10 +272,8 @@ namespace internal {
   F(GetArrayKeys, 2, 1) \
   F(MoveArrayContents, 2, 1) \
   F(EstimateNumberOfElements, 1, 1) \
-  F(SwapElements, 3, 1) \
   \
   /* Getters and Setters */ \
-  F(DefineAccessor, -1 /* 4 or 5 */, 1) \
   F(LookupAccessor, 3, 1) \
   \
   /* Literals */ \
@@ -318,6 +318,7 @@ namespace internal {
   F(ReThrow, 1, 1) \
   F(ThrowReferenceError, 1, 1) \
   F(StackGuard, 0, 1) \
+  F(Interrupt, 0, 1) \
   F(PromoteScheduledException, 0, 1) \
   \
   /* Contexts */ \
@@ -325,6 +326,7 @@ namespace internal {
   F(PushWithContext, 2, 1) \
   F(PushCatchContext, 3, 1) \
   F(PushBlockContext, 2, 1) \
+  F(PushModuleContext, 2, 1) \
   F(DeleteContextSlot, 2, 1) \
   F(LoadContextSlot, 2, 2) \
   F(LoadContextSlotNoReferenceError, 2, 2) \
@@ -362,9 +364,11 @@ namespace internal {
   F(IS_VAR, 1, 1) \
   \
   /* expose boolean functions from objects-inl.h */ \
-  F(HasFastSmiOnlyElements, 1, 1) \
-  F(HasFastElements, 1, 1) \
+  F(HasFastSmiElements, 1, 1) \
+  F(HasFastSmiOrObjectElements, 1, 1) \
+  F(HasFastObjectElements, 1, 1) \
   F(HasFastDoubleElements, 1, 1) \
+  F(HasFastHoleyElements, 1, 1) \
   F(HasDictionaryElements, 1, 1) \
   F(HasExternalPixelElements, 1, 1) \
   F(HasExternalArrayElements, 1, 1) \
@@ -376,6 +380,7 @@ namespace internal {
   F(HasExternalUnsignedIntElements, 1, 1) \
   F(HasExternalFloatElements, 1, 1) \
   F(HasExternalDoubleElements, 1, 1) \
+  F(HasFastProperties, 1, 1) \
   F(TransitionElementsSmiToDouble, 1, 1) \
   F(TransitionElementsDoubleToObject, 1, 1) \
   F(HaveSameMap, 2, 1) \
@@ -402,6 +407,8 @@ namespace internal {
   F(GetFrameDetails, 2, 1) \
   F(GetScopeCount, 2, 1) \
   F(GetScopeDetails, 4, 1) \
+  F(GetFunctionScopeCount, 1, 1) \
+  F(GetFunctionScopeDetails, 2, 1) \
   F(DebugPrintScopes, 0, 1) \
   F(GetThreadCount, 1, 1) \
   F(GetThreadDetails, 2, 1) \
@@ -420,6 +427,7 @@ namespace internal {
   F(DebugReferencedBy, 3, 1) \
   F(DebugConstructedBy, 2, 1) \
   F(DebugGetPrototype, 1, 1) \
+  F(DebugSetScriptSource, 2, 1) \
   F(SystemBreak, 0, 1) \
   F(DebugDisassembleFunction, 1, 1) \
   F(DebugDisassembleConstructor, 1, 1) \
@@ -487,11 +495,13 @@ namespace internal {
   F(IsNonNegativeSmi, 1, 1)                                                  \
   F(IsArray, 1, 1)                                                           \
   F(IsRegExp, 1, 1)                                                          \
+  F(IsConstructCall, 0, 1)                                                   \
   F(CallFunction, -1 /* receiver + n args + function */, 1)                  \
   F(ArgumentsLength, 0, 1)                                                   \
   F(Arguments, 1, 1)                                                         \
   F(ValueOf, 1, 1)                                                           \
   F(SetValueOf, 2, 1)                                                        \
+  F(DateField, 2 /* date object, field index */, 1)                          \
   F(StringCharFromCode, 1, 1)                                                \
   F(StringCharAt, 2, 1)                                                      \
   F(ObjectEquals, 2, 1)                                                      \
@@ -519,7 +529,6 @@ namespace internal {
 // a corresponding runtime function, that is called for slow cases.
 // Entries have the form F(name, number of arguments, number of return values).
 #define INLINE_RUNTIME_FUNCTION_LIST(F) \
-  F(IsConstructCall, 0, 1)                                                   \
   F(ClassOf, 1, 1)                                                           \
   F(StringCharCodeAt, 2, 1)                                                  \
   F(Log, 3, 1)                                                               \
@@ -529,8 +538,7 @@ namespace internal {
   F(RegExpExec, 4, 1)                                                        \
   F(RegExpConstructResult, 3, 1)                                             \
   F(GetFromCache, 2, 1)                                                      \
-  F(NumberToString, 1, 1)                                                    \
-  F(SwapElements, 3, 1)
+  F(NumberToString, 1, 1)
 
 
 //---------------------------------------------------------------------------
@@ -628,6 +636,13 @@ class Runtime : public AllStatic {
 
   // Get the intrinsic function with the given FunctionId.
   static const Function* FunctionForId(FunctionId id);
+
+  static Handle<String> StringReplaceOneCharWithString(Isolate* isolate,
+                                                       Handle<String> subject,
+                                                       Handle<String> search,
+                                                       Handle<String> replace,
+                                                       bool* found,
+                                                       int recursion_limit);
 
   // General-purpose helper functions for runtime system.
   static int StringMatch(Isolate* isolate,

@@ -1,9 +1,11 @@
-## HTTPS
+# HTTPS
+
+    Stability: 3 - Stable
 
 HTTPS is the HTTP protocol over TLS/SSL. In Node this is implemented as a
 separate module.
 
-## https.Server
+## Class: https.Server
 
 This class is a subclass of `tls.Server` and emits events same as
 `http.Server`. See `http.Server` for more information.
@@ -11,8 +13,8 @@ This class is a subclass of `tls.Server` and emits events same as
 ## https.createServer(options, [requestListener])
 
 Returns a new HTTPS web server object. The `options` is similar to
-[tls.createServer()](tls.html#tls.createServer).  The `requestListener` is
-a function which is automatically added to the `'request'` event.
+[tls.createServer()][].  The `requestListener` is a function which is
+automatically added to the `'request'` event.
 
 Example:
 
@@ -30,11 +32,24 @@ Example:
       res.end("hello world\n");
     }).listen(8000);
 
+Or
+
+    var https = require('https');
+    var fs = require('fs');
+
+    var options = {
+      pfx: fs.readFileSync('server.pfx')
+    };
+
+    https.createServer(options, function (req, res) {
+      res.writeHead(200);
+      res.end("hello world\n");
+    }).listen(8000);
 
 ## https.request(options, callback)
 
-Makes a request to a secure web server.
-All options from [http.request()](http.html#http.request) are valid.
+Makes a request to a secure web server.  All options from [http.request()][]
+are valid.
 
 Example:
 
@@ -78,22 +93,25 @@ The options argument has the following options
 - `headers`: An object containing request headers.
 - `auth`: Basic authentication i.e. `'user:password'` to compute an
   Authorization header.
-- `agent`: Controls [Agent](#https.Agent) behavior. When an Agent is
-  used request will default to `Connection: keep-alive`. Possible values:
- - `undefined` (default): use [globalAgent](#https.globalAgent) for this
-   host and port.
+- `agent`: Controls [Agent][] behavior. When an Agent is used request will
+  default to `Connection: keep-alive`. Possible values:
+ - `undefined` (default): use [globalAgent][] for this host and port.
  - `Agent` object: explicitly use the passed in `Agent`.
  - `false`: opts out of connection pooling with an Agent, defaults request to
    `Connection: close`.
 
-The following options from [tls.connect()](tls.html#tls.connect) can also be
-specified. However, a [globalAgent](#https.globalAgent) silently ignores these.
+The following options from [tls.connect()][] can also be specified. However, a
+[globalAgent][] silently ignores these.
 
+- `pfx`: Certificate, Private key and CA certificates to use for SSL. Default `null`.
 - `key`: Private key to use for SSL. Default `null`.
-- `passphrase`: A string of passphrase for the private key. Default `null`.
+- `passphrase`: A string of passphrase for the private key or pfx. Default `null`.
 - `cert`: Public x509 certificate to use. Default `null`.
 - `ca`: An authority certificate or array of authority certificates to check
   the remote host against.
+- `ciphers`: A string describing the ciphers to use or exclude. Consult
+  <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for
+  details on the format.
 - `rejectUnauthorized`: If `true`, the server certificate is verified against
   the list of supplied CAs. An `'error'` event is emitted if verification
   fails. Verification happens at the connection level, *before* the HTTP
@@ -156,13 +174,20 @@ Example:
     });
 
 
-## https.Agent
+## Class: https.Agent
 
-An Agent object for HTTPS similar to [http.Agent](http.html#http.Agent).
-See [https.request()](#https.request) for more information.
+An Agent object for HTTPS similar to [http.Agent][].  See [https.request()][]
+for more information.
 
 
 ## https.globalAgent
 
-Global instance of [https.Agent](#https.Agent) which is used as the default
-for all HTTPS client requests.
+Global instance of [https.Agent][] for all HTTPS client requests.
+
+[Agent]: #https_class_https_agent
+[globalAgent]: #https_https_globalagent
+[http.Agent]: http.html#http_class_http_agent
+[http.request()]: http.html#http_http_request_options_callback
+[https.Agent]: #https_class_https_agent
+[tls.connect()]: tls.html#tls_tls_connect_options_secureconnectlistener
+[tls.createServer()]: tls.html#tls_tls_createserver_options_secureconnectionlistener

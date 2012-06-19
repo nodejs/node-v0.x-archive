@@ -19,17 +19,16 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node_crypto.h>
-#include <v8.h>
+#include "node_crypto.h"
+#include "node_crypto_groups.h"
+#include "v8.h"
 
-#include <node.h>
-#include <node_buffer.h>
-#include <node_vars.h>
-#include <node_root_certs.h>
+#include "node.h"
+#include "node_buffer.h"
+#include "node_root_certs.h"
 
 #include <string.h>
 #ifdef _MSC_VER
-#define snprintf _snprintf
 #define strcasecmp _stricmp
 #endif
 
@@ -43,6 +42,7 @@
 #else
 # include <pthread.h>
 #endif
+
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 # define OPENSSL_CONST const
@@ -64,33 +64,30 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_SEP_MULTILINE
                                  | XN_FLAG_FN_SN;
 
-
-#include <node_vars.h>
-// We do the following to minimize the detal between v0.6 branch. We want to
-// use the variables as they were being used before.
-#define on_headers_sym NODE_VAR(on_headers_sym)
-#define errno_symbol NODE_VAR(errno_symbol)
-#define syscall_symbol NODE_VAR(syscall_symbol)
-#define subject_symbol NODE_VAR(subject_symbol)
-#define subjectaltname_symbol NODE_VAR(subjectaltname_symbol)
-#define modulus_symbol NODE_VAR(modulus_symbol)
-#define exponent_symbol NODE_VAR(exponent_symbol)
-#define issuer_symbol NODE_VAR(issuer_symbol)
-#define valid_from_symbol NODE_VAR(valid_from_symbol)
-#define valid_to_symbol NODE_VAR(valid_to_symbol)
-#define fingerprint_symbol NODE_VAR(fingerprint_symbol)
-#define name_symbol NODE_VAR(name_symbol)
-#define version_symbol NODE_VAR(version_symbol)
-#define ext_key_usage_symbol NODE_VAR(ext_key_usage_symbol)
-#define secure_context_constructor NODE_VAR(secure_context_constructor)
-
-
 namespace node {
 namespace crypto {
 
-static uv_rwlock_t* locks;
-
 using namespace v8;
+
+static Persistent<String> errno_symbol;
+static Persistent<String> syscall_symbol;
+static Persistent<String> subject_symbol;
+static Persistent<String> subjectaltname_symbol;
+static Persistent<String> modulus_symbol;
+static Persistent<String> exponent_symbol;
+static Persistent<String> issuer_symbol;
+static Persistent<String> valid_from_symbol;
+static Persistent<String> valid_to_symbol;
+static Persistent<String> fingerprint_symbol;
+static Persistent<String> name_symbol;
+static Persistent<String> version_symbol;
+static Persistent<String> ext_key_usage_symbol;
+static Persistent<String> onhandshakestart_sym;
+static Persistent<String> onhandshakedone_sym;
+
+static Persistent<FunctionTemplate> secure_context_constructor;
+
+static uv_rwlock_t* locks;
 
 
 static unsigned long crypto_id_cb(void) {
@@ -154,6 +151,7 @@ void SecureContext::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setSessionIdContext",
                                SecureContext::SetSessionIdContext);
   NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
+  NODE_SET_PROTOTYPE_METHOD(t, "loadPKCS12", SecureContext::LoadPKCS12);
 
   target->Set(String::NewSymbol("SecureContext"), t->GetFunction());
 }
@@ -175,7 +173,7 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
   OPENSSL_CONST SSL_METHOD *method = SSLv23_method();
 
   if (args.Length() == 1 && args[0]->IsString()) {
-    String::Utf8Value sslmethod(args[0]->ToString());
+    String::Utf8Value sslmethod(args[0]);
 
     if (strcmp(*sslmethod, "SSLv2_method") == 0) {
 #ifndef OPENSSL_NO_SSL2
@@ -239,7 +237,7 @@ static BIO* LoadBIO (Handle<Value> v) {
   int r = -1;
 
   if (v->IsString()) {
-    String::Utf8Value s(v->ToString());
+    String::Utf8Value s(v);
     r = BIO_write(bio, *s, s.length());
   } else if (Buffer::HasInstance(v)) {
     Local<Object> buffer_obj = v->ToObject();
@@ -292,7 +290,7 @@ Handle<Value> SecureContext::SetKey(const Arguments& args) {
   BIO *bio = LoadBIO(args[0]);
   if (!bio) return False();
 
-  String::Utf8Value passphrase(args[1]->ToString());
+  String::Utf8Value passphrase(args[1]);
 
   EVP_PKEY* key = PEM_read_bio_PrivateKey(bio, NULL, NULL,
                                           len == 1 ? NULL : *passphrase);
@@ -519,7 +517,7 @@ Handle<Value> SecureContext::SetCiphers(const Arguments& args) {
     return ThrowException(Exception::TypeError(String::New("Bad parameter")));
   }
 
-  String::Utf8Value ciphers(args[0]->ToString());
+  String::Utf8Value ciphers(args[0]);
   SSL_CTX_set_cipher_list(sc->ctx_, *ciphers);
 
   return True();
@@ -550,7 +548,7 @@ Handle<Value> SecureContext::SetSessionIdContext(const Arguments& args) {
     return ThrowException(Exception::TypeError(String::New("Bad parameter")));
   }
 
-  String::Utf8Value sessionIdContext(args[0]->ToString());
+  String::Utf8Value sessionIdContext(args[0]);
   const unsigned char* sid_ctx = (const unsigned char*) *sessionIdContext;
   unsigned int sid_ctx_len = sessionIdContext.length();
 
@@ -580,6 +578,83 @@ Handle<Value> SecureContext::Close(const Arguments& args) {
   return False();
 }
 
+//Takes .pfx or .p12 and password in string or buffer format
+Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
+  HandleScope scope;
+
+  BIO* in = NULL;
+  PKCS12* p12 = NULL;
+  EVP_PKEY* pkey = NULL;
+  X509* cert = NULL;
+  STACK_OF(X509)* extraCerts = NULL;
+  char* pass = NULL;
+  bool ret = false;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  if (args.Length() < 1) {
+    return ThrowException(Exception::TypeError(
+          String::New("Bad parameter")));
+  }
+
+  in = LoadBIO(args[0]);
+  if (in == NULL) {
+    return ThrowException(Exception::Error(
+          String::New("Unable to load BIO")));
+  }
+
+  if (args.Length() >= 2) {
+    ASSERT_IS_STRING_OR_BUFFER(args[1]);
+
+    int passlen = DecodeBytes(args[1], BINARY);
+    if (passlen < 0) {
+      BIO_free(in);
+      return ThrowException(Exception::TypeError(
+            String::New("Bad password")));
+    }
+    pass = new char[passlen + 1];
+    int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
+
+    assert(pass_written == passlen);
+    pass[passlen] = '\0';
+  }
+
+  if (d2i_PKCS12_bio(in, &p12) &&
+      PKCS12_parse(p12, pass, &pkey, &cert, &extraCerts) &&
+      SSL_CTX_use_certificate(sc->ctx_, cert) &&
+      SSL_CTX_use_PrivateKey(sc->ctx_, pkey))
+  {
+    // set extra certs
+    while (X509* x509 = sk_X509_pop(extraCerts)) {
+      if (!sc->ca_store_) {
+        sc->ca_store_ = X509_STORE_new();
+        SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
+      }
+
+      X509_STORE_add_cert(sc->ca_store_, x509);
+      SSL_CTX_add_client_CA(sc->ctx_, x509);
+    }
+
+    EVP_PKEY_free(pkey);
+    X509_free(cert);
+    sk_X509_free(extraCerts);
+
+    ret = true;
+  }
+
+  PKCS12_free(p12);
+  BIO_free(in);
+  delete[] pass;
+
+  if (!ret) {
+    unsigned long err = ERR_get_error();
+    const char *str = ERR_reason_error_string(err);
+    return ThrowException(Exception::Error(String::New(str)));
+  }
+
+  return True();
+}
+
 
 #ifdef SSL_PRINT_DEBUG
 # define DEBUG_PRINT(...) fprintf (stderr, __VA_ARGS__)
@@ -592,6 +667,7 @@ int Connection::HandleBIOError(BIO *bio, const char* func, int rv) {
   if (rv >= 0) return rv;
 
   int retry = BIO_should_retry(bio);
+  (void) retry; // unused if !defined(SSL_PRINT_DEBUG)
 
   if (BIO_should_write(bio)) {
     DEBUG_PRINT("[%p] BIO: %s want write. should retry %d\n", ssl_, func, retry);
@@ -865,16 +941,13 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       Local<Value> argv[1] = {*p->servername_};
       Local<Function> callback = *p->sniCallback_;
 
-      TryCatch try_catch;
-
       // Call it
-      Local<Value> ret = callback->Call(Context::GetCurrent()->Global(),
-                                        1,
-                                        argv);
-
-      if (try_catch.HasCaught()) {
-        FatalException(try_catch);
-      }
+      //
+      // XXX There should be an object connected to this that
+      // we can attach a domain onto.
+      Local<Value> ret;
+      ret = Local<Value>::New(MakeCallback(Context::GetCurrent()->Global(),
+                                           callback, ARRAY_SIZE(argv), argv));
 
       // If ret is SecureContext
       if (secure_context_constructor->HasInstance(ret)) {
@@ -913,6 +986,8 @@ Handle<Value> Connection::New(const Arguments& args) {
 
   SSL_set_app_data(p->ssl_, p);
 
+  if (is_server) SSL_set_info_callback(p->ssl_, SSLInfoCallback);
+
 #ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
@@ -932,7 +1007,7 @@ Handle<Value> Connection::New(const Arguments& args) {
   if (is_server) {
     SSL_CTX_set_tlsext_servername_callback(sc->ctx_, SelectSNIContextCallback_);
   } else {
-    String::Utf8Value servername(args[2]->ToString());
+    String::Utf8Value servername(args[2]);
     SSL_set_tlsext_host_name(p->ssl_, *servername);
   }
 #endif
@@ -975,6 +1050,29 @@ Handle<Value> Connection::New(const Arguments& args) {
 }
 
 
+void Connection::SSLInfoCallback(const SSL *ssl_, int where, int ret) {
+  // Be compatible with older versions of OpenSSL. SSL_get_app_data() wants
+  // a non-const SSL* in OpenSSL <= 0.9.7e.
+  SSL* ssl = const_cast<SSL*>(ssl_);
+  if (where & SSL_CB_HANDSHAKE_START) {
+    HandleScope scope;
+    Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
+    if (onhandshakestart_sym.IsEmpty()) {
+      onhandshakestart_sym = NODE_PSYMBOL("onhandshakestart");
+    }
+    MakeCallback(c->handle_, onhandshakestart_sym, 0, NULL);
+  }
+  if (where & SSL_CB_HANDSHAKE_DONE) {
+    HandleScope scope;
+    Connection* c = static_cast<Connection*>(SSL_get_app_data(ssl));
+    if (onhandshakedone_sym.IsEmpty()) {
+      onhandshakedone_sym = NODE_PSYMBOL("onhandshakedone");
+    }
+    MakeCallback(c->handle_, onhandshakedone_sym, 0, NULL);
+  }
+}
+
+
 Handle<Value> Connection::EncIn(const Arguments& args) {
   HandleScope scope;
 
@@ -1003,7 +1101,7 @@ Handle<Value> Connection::EncIn(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   int bytes_written = BIO_write(ss->bio_read_, buffer_data + off, len);
@@ -1042,7 +1140,7 @@ Handle<Value> Connection::ClearOut(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   if (!SSL_is_init_finished(ss->ssl_)) {
@@ -1115,7 +1213,7 @@ Handle<Value> Connection::EncOut(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   int bytes_read = BIO_read(ss->bio_write_, buffer_data + off, len);
@@ -1155,7 +1253,7 @@ Handle<Value> Connection::ClearIn(const Arguments& args) {
   size_t len = args[2]->Int32Value();
   if (off + len > buffer_length) {
     return ThrowException(Exception::Error(
-          String::New("Length is extends beyond buffer")));
+          String::New("off + len > buffer.length")));
   }
 
   if (!SSL_is_init_finished(ss->ssl_)) {
@@ -1882,6 +1980,7 @@ class Cipher : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "init", CipherInit);
     NODE_SET_PROTOTYPE_METHOD(t, "initiv", CipherInitIv);
     NODE_SET_PROTOTYPE_METHOD(t, "update", CipherUpdate);
+    NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
     NODE_SET_PROTOTYPE_METHOD(t, "final", CipherFinal);
 
     target->Set(String::NewSymbol("Cipher"), t->GetFunction());
@@ -1945,7 +2044,6 @@ class Cipher : public ObjectWrap {
     return true;
   }
 
-
   int CipherUpdate(char* data, int len, unsigned char** out, int* out_len) {
     if (!initialised_) return 0;
     *out_len=len+EVP_CIPHER_CTX_block_size(&ctx);
@@ -1955,19 +2053,24 @@ class Cipher : public ObjectWrap {
     return 1;
   }
 
+  int SetAutoPadding(bool auto_padding) {
+    if (!initialised_) return 0;
+    return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
+  }
+
   int CipherFinal(unsigned char** out, int *out_len) {
     if (!initialised_) return 0;
     *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
-    EVP_CipherFinal_ex(&ctx,*out,out_len);
+    int r = EVP_CipherFinal_ex(&ctx,*out, out_len);
     EVP_CIPHER_CTX_cleanup(&ctx);
     initialised_ = false;
-    return 1;
+    return r;
   }
 
 
  protected:
 
-  static Handle<Value> New (const Arguments& args) {
+  static Handle<Value> New(const Arguments& args) {
     HandleScope scope;
 
     Cipher *cipher = new Cipher();
@@ -1980,9 +2083,12 @@ class Cipher : public ObjectWrap {
 
     Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
 
-    cipher->incomplete_base64=NULL;
+    cipher->incomplete_base64 = NULL;
 
-    if (args.Length() <= 1 || !args[0]->IsString() || !args[1]->IsString()) {
+    if (args.Length() <= 1
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key")));
     }
@@ -1999,7 +2105,7 @@ class Cipher : public ObjectWrap {
     ssize_t key_written = DecodeWrite(key_buf, key_buf_len, args[1], BINARY);
     assert(key_written == key_buf_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->CipherInit(*cipherType, key_buf, key_buf_len);
 
@@ -2018,9 +2124,13 @@ class Cipher : public ObjectWrap {
 
     HandleScope scope;
 
-    cipher->incomplete_base64=NULL;
+    cipher->incomplete_base64 = NULL;
 
-    if (args.Length() <= 2 || !args[0]->IsString() || !args[1]->IsString() || !args[2]->IsString()) {
+    if (args.Length() <= 2
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
+        || !(args[2]->IsString() || Buffer::HasInstance(args[2])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key, and iv as argument")));
     }
@@ -2049,7 +2159,7 @@ class Cipher : public ObjectWrap {
     ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
     assert(iv_written == iv_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
@@ -2155,6 +2265,15 @@ class Cipher : public ObjectWrap {
     return scope.Close(outString);
   }
 
+  static Handle<Value> SetAutoPadding(const Arguments& args) {
+    HandleScope scope;
+    Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
+
+    cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
+
+    return Undefined();
+  }
+
   static Handle<Value> CipherFinal(const Arguments& args) {
     Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
 
@@ -2169,10 +2288,18 @@ class Cipher : public ObjectWrap {
     int r = cipher->CipherFinal(&out_value, &out_len);
 
     assert(out_value != NULL);
-    assert(out_len != -1);
+    assert(out_len != -1 || r == 0);
 
     if (out_len == 0 || r == 0) {
-      return scope.Close(String::New(""));
+      // out_value always get allocated.
+      delete[] out_value;
+      if (r == 0) {
+        Local<Value> exception = Exception::TypeError(
+          String::New("CipherFinal fail"));
+        return ThrowException(exception);
+      } else {
+        return scope.Close(String::New(""));
+      }
     }
 
     enum encoding enc = ParseEncoding(args[0], BINARY);
@@ -2247,7 +2374,9 @@ class Decipher : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "initiv", DecipherInitIv);
     NODE_SET_PROTOTYPE_METHOD(t, "update", DecipherUpdate);
     NODE_SET_PROTOTYPE_METHOD(t, "final", DecipherFinal<false>);
+    // This is completely undocumented:
     NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinal<true>);
+    NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
 
     target->Set(String::NewSymbol("Decipher"), t->GetFunction());
   }
@@ -2330,9 +2459,16 @@ class Decipher : public ObjectWrap {
     return 1;
   }
 
+  int SetAutoPadding(bool auto_padding) {
+    if (!initialised_) return 0;
+    return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
+  }
+
   // coverity[alloc_arg]
   template <bool TOLERATE_PADDING>
   int DecipherFinal(unsigned char** out, int *out_len) {
+    int r;
+
     if (!initialised_) {
       *out_len = 0;
       *out = NULL;
@@ -2341,13 +2477,13 @@ class Decipher : public ObjectWrap {
 
     *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
     if (TOLERATE_PADDING) {
-      local_EVP_DecryptFinal_ex(&ctx,*out,out_len);
+      r = local_EVP_DecryptFinal_ex(&ctx,*out,out_len);
     } else {
-      EVP_CipherFinal_ex(&ctx,*out,out_len);
+      r = EVP_CipherFinal_ex(&ctx,*out,out_len);
     }
     EVP_CIPHER_CTX_cleanup(&ctx);
     initialised_ = false;
-    return 1;
+    return r;
   }
 
 
@@ -2366,10 +2502,13 @@ class Decipher : public ObjectWrap {
 
     HandleScope scope;
 
-    cipher->incomplete_utf8=NULL;
-    cipher->incomplete_hex_flag=false;
+    cipher->incomplete_utf8 = NULL;
+    cipher->incomplete_hex_flag = false;
 
-    if (args.Length() <= 1 || !args[0]->IsString() || !args[1]->IsString()) {
+    if (args.Length() <= 1
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key as argument")));
     }
@@ -2386,7 +2525,7 @@ class Decipher : public ObjectWrap {
     ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
     assert(key_written == key_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->DecipherInit(*cipherType, key_buf,key_len);
 
@@ -2404,10 +2543,14 @@ class Decipher : public ObjectWrap {
 
     HandleScope scope;
 
-    cipher->incomplete_utf8=NULL;
-    cipher->incomplete_hex_flag=false;
+    cipher->incomplete_utf8 = NULL;
+    cipher->incomplete_hex_flag = false;
 
-    if (args.Length() <= 2 || !args[0]->IsString() || !args[1]->IsString() || !args[2]->IsString()) {
+    if (args.Length() <= 2
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
+        || !(args[2]->IsString() || Buffer::HasInstance(args[2])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key, and iv as argument")));
     }
@@ -2436,7 +2579,7 @@ class Decipher : public ObjectWrap {
     ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
     assert(iv_written == iv_len);
 
-    String::Utf8Value cipherType(args[0]->ToString());
+    String::Utf8Value cipherType(args[0]);
 
     bool r = cipher->DecipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
 
@@ -2580,6 +2723,15 @@ class Decipher : public ObjectWrap {
 
   }
 
+  static Handle<Value> SetAutoPadding(const Arguments& args) {
+    HandleScope scope;
+    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+
+    cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
+
+    return Undefined();
+  }
+
   template <bool TOLERATE_PADDING>
   static Handle<Value> DecipherFinal(const Arguments& args) {
     HandleScope scope;
@@ -2596,8 +2748,14 @@ class Decipher : public ObjectWrap {
     assert(out_len != -1);
 
     if (out_len == 0 || r == 0) {
-      delete[] out_value;
-      return scope.Close(String::New(""));
+      delete [] out_value; // allocated even if out_len == 0
+      if (r == 0) {
+        Local<Value> exception = Exception::TypeError(
+          String::New("DecipherFinal fail"));
+        return ThrowException(exception);
+      } else {
+        return scope.Close(String::New(""));
+      }
     }
 
     if (args.Length() == 0 || !args[0]->IsString()) {
@@ -2724,7 +2882,7 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    String::Utf8Value hashType(args[0]->ToString());
+    String::Utf8Value hashType(args[0]);
 
     bool r;
 
@@ -2795,16 +2953,12 @@ class Hmac : public ObjectWrap {
     HandleScope scope;
 
     unsigned char* md_value = NULL;
-    unsigned int md_len = -1;
+    unsigned int md_len = 0;
     char* md_hexdigest;
     int md_hex_len;
-    Local<Value> outString ;
+    Local<Value> outString;
 
     int r = hmac->HmacDigest(&md_value, &md_len);
-
-    assert(md_value != NULL);
-    assert(md_len != -1);
-
     if (md_len == 0 || r == 0) {
       return scope.Close(String::New(""));
     }
@@ -2888,7 +3042,7 @@ class Hash : public ObjectWrap {
         "Must give hashtype string as argument")));
     }
 
-    String::Utf8Value hashType(args[0]->ToString());
+    String::Utf8Value hashType(args[0]);
 
     Hash *hash = new Hash();
     if (!hash->HashInit(*hashType)) {
@@ -3081,7 +3235,7 @@ class Sign : public ObjectWrap {
         "Must give signtype string as argument")));
     }
 
-    String::Utf8Value signType(args[0]->ToString());
+    String::Utf8Value signType(args[0]);
 
     bool r = sign->SignInit(*signType);
 
@@ -3332,7 +3486,7 @@ class Verify : public ObjectWrap {
         "Must give verifytype string as argument")));
     }
 
-    String::Utf8Value verifyType(args[0]->ToString());
+    String::Utf8Value verifyType(args[0]);
 
     bool r = verify->VerifyInit(*verifyType);
 
@@ -3478,6 +3632,18 @@ class DiffieHellman : public ObjectWrap {
     NODE_SET_PROTOTYPE_METHOD(t, "setPrivateKey", SetPrivateKey);
 
     target->Set(String::NewSymbol("DiffieHellman"), t->GetFunction());
+
+    Local<FunctionTemplate> t2 = FunctionTemplate::New(DiffieHellmanGroup);
+    t2->InstanceTemplate()->SetInternalFieldCount(1);
+
+    NODE_SET_PROTOTYPE_METHOD(t2, "generateKeys", GenerateKeys);
+    NODE_SET_PROTOTYPE_METHOD(t2, "computeSecret", ComputeSecret);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPrime", GetPrime);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getGenerator", GetGenerator);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPublicKey", GetPublicKey);
+    NODE_SET_PROTOTYPE_METHOD(t2, "getPrivateKey", GetPrivateKey);
+
+    target->Set(String::NewSymbol("DiffieHellmanGroup"), t2->GetFunction());
   }
 
   bool Init(int primeLength) {
@@ -3500,7 +3666,48 @@ class DiffieHellman : public ObjectWrap {
     return true;
   }
 
+  bool Init(unsigned char* p, int p_len, unsigned char* g, int g_len) {
+    dh = DH_new();
+    dh->p = BN_bin2bn(p, p_len, 0);
+    dh->g = BN_bin2bn(g, g_len, 0);
+    initialised_ = true;
+    return true;
+  }
+
  protected:
+  static Handle<Value> DiffieHellmanGroup(const Arguments& args) {
+    HandleScope scope;
+
+    DiffieHellman* diffieHellman = new DiffieHellman();
+
+    if (args.Length() != 1 || !args[0]->IsString()) {
+      return ThrowException(Exception::Error(
+          String::New("No group name given")));
+    }
+
+    String::Utf8Value group_name(args[0]);
+
+    modp_group* it = modp_groups;
+
+    while(it->name != NULL) {
+      if (!strcasecmp(*group_name, it->name))
+          break;
+      it++;
+    }
+
+    if (it->name != NULL) {
+      diffieHellman->Init(it->prime, it->prime_size,
+              it->gen, it->gen_size);
+    } else {
+      return ThrowException(Exception::Error(
+          String::New("Unknown group")));
+    }
+
+    diffieHellman->Wrap(args.This());
+
+    return args.This();
+  }
+
   static Handle<Value> New(const Arguments& args) {
     HandleScope scope;
 
@@ -3751,6 +3958,15 @@ class DiffieHellman : public ObjectWrap {
     BN_free(key);
 
     Local<Value> outString;
+
+    // DH_size returns number of bytes in a prime number
+    // DH_compute_key returns number of bytes in a remainder of exponent, which
+    // may have less bytes than a prime number. Therefore add 0-padding to the
+    // allocated buffer.
+    if (size != dataSize) {
+      assert(dataSize > size);
+      memset(data + size, 0, dataSize - size);
+    }
 
     if (size == -1) {
       int checkResult;
@@ -4004,22 +4220,21 @@ EIO_PBKDF2After(uv_work_t* req) {
   pbkdf2_req* request = (pbkdf2_req*)req->data;
   delete req;
 
-  Handle<Value> argv[2];
+  Local<Value> argv[2];
   if (request->err) {
-    argv[0] = Undefined();
+    argv[0] = Local<Value>::New(Undefined());
     argv[1] = Encode(request->key, request->keylen, BINARY);
     memset(request->key, 0, request->keylen);
   } else {
     argv[0] = Exception::Error(String::New("PBKDF2 error"));
-    argv[1] = Undefined();
+    argv[1] = Local<Value>::New(Undefined());
   }
 
-  TryCatch try_catch;
-
-  request->callback->Call(Context::GetCurrent()->Global(), 2, argv);
-
-  if (try_catch.HasCaught())
-    FatalException(try_catch);
+  // XXX There should be an object connected to this that
+  // we can attach a domain onto.
+  MakeCallback(Context::GetCurrent()->Global(),
+               request->callback,
+               ARRAY_SIZE(argv), argv);
 
   delete[] request->pass;
   delete[] request->salt;
@@ -4118,8 +4333,7 @@ PBKDF2(const Arguments& args) {
 
   req = new uv_work_t();
   req->data = request;
-  uv_queue_work(Loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
-
+  uv_queue_work(uv_default_loop(), req, EIO_PBKDF2, EIO_PBKDF2After);
   return Undefined();
 
 err:
@@ -4179,9 +4393,8 @@ void RandomBytesWork(uv_work_t* work_req) {
 }
 
 
-void RandomBytesCheck(RandomBytesRequest* req, Handle<Value> argv[2]) {
-  HandleScope scope;
-
+// don't call this function without a valid HandleScope
+void RandomBytesCheck(RandomBytesRequest* req, Local<Value> argv[2]) {
   if (req->error_) {
     char errmsg[256] = "Operation not supported";
 
@@ -4189,13 +4402,13 @@ void RandomBytesCheck(RandomBytesRequest* req, Handle<Value> argv[2]) {
       ERR_error_string_n(req->error_, errmsg, sizeof errmsg);
 
     argv[0] = Exception::Error(String::New(errmsg));
-    argv[1] = Null();
+    argv[1] = Local<Value>::New(Null());
   }
   else {
     // avoids the malloc + memcpy
     Buffer* buffer = Buffer::New(req->data_, req->size_, RandomBytesFree, NULL);
-    argv[0] = Null();
-    argv[1] = buffer->handle_;
+    argv[0] = Local<Value>::New(Null());
+    argv[1] = Local<Object>::New(buffer->handle_);
   }
 }
 
@@ -4206,14 +4419,14 @@ void RandomBytesAfter(uv_work_t* work_req) {
       container_of(work_req, RandomBytesRequest, work_req_);
 
   HandleScope scope;
-  Handle<Value> argv[2];
+  Local<Value> argv[2];
   RandomBytesCheck(req, argv);
 
-  TryCatch tc;
-  req->callback_->Call(Context::GetCurrent()->Global(), 2, argv);
-
-  if (tc.HasCaught())
-    FatalException(tc);
+  // XXX There should be an object connected to this that
+  // we can attach a domain onto.
+  MakeCallback(Context::GetCurrent()->Global(),
+               req->callback_,
+               ARRAY_SIZE(argv), argv);
 
   delete req;
 }
@@ -4241,7 +4454,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     Local<Function> callback_v = Local<Function>(Function::Cast(*args[1]));
     req->callback_ = Persistent<Function>::New(callback_v);
 
-    uv_queue_work(Loop(),
+    uv_queue_work(uv_default_loop(),
                   &req->work_req_,
                   RandomBytesWork<generator>,
                   RandomBytesAfter<generator>);
@@ -4249,7 +4462,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
     return Undefined();
   }
   else {
-    Handle<Value> argv[2];
+    Local<Value> argv[2];
     RandomBytesWork<generator>(&req->work_req_);
     RandomBytesCheck(req, argv);
     delete req;
@@ -4319,4 +4532,3 @@ void InitCrypto(Handle<Object> target) {
 }  // namespace node
 
 NODE_MODULE(node_crypto, node::crypto::InitCrypto)
-

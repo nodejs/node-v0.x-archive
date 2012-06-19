@@ -58,13 +58,13 @@
 # define SIGKILL         9
 #endif
 
-#include <uv.h>
-#include <v8.h>
+#include "uv.h"
+#include "v8.h"
 #include <sys/types.h> /* struct stat */
 #include <sys/stat.h>
 #include <assert.h>
 
-#include <node_object_wrap.h>
+#include "node_object_wrap.h"
 
 #if NODE_WANT_INTERNALS
 # include "node_internals.h"
@@ -75,18 +75,22 @@
 #define NODE_STRINGIFY_HELPER(n) #n
 #endif
 
+#ifndef STATIC_ASSERT
+#if defined(_MSC_VER)
+#  define STATIC_ASSERT(expr) static_assert(expr, "")
+# else
+#  define STATIC_ASSERT(expr) static_cast<void>((sizeof(char[-1 + !!(expr)])))
+# endif
+#endif
+
 namespace node {
 
-int Start(int argc, char *argv[]);
+NODE_EXTERN int Start(int argc, char *argv[]);
 
 char** Init(int argc, char *argv[]);
 v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
 void Load(v8::Handle<v8::Object> process);
 void EmitExit(v8::Handle<v8::Object> process);
-
-// Returns the loop for the current isolate. If compiled with
-// --without-isolates then this will always return uv_default_loop();
-uv_loop_t* Loop();
 
 #define NODE_PSYMBOL(s) \
   v8::Persistent<v8::String>::New(v8::String::NewSymbol(s))
@@ -101,19 +105,25 @@ uv_loop_t* Loop();
                 static_cast<v8::PropertyAttribute>(                       \
                     v8::ReadOnly|v8::DontDelete))
 
-#define NODE_SET_METHOD(obj, name, callback)                              \
-  obj->Set(v8::String::NewSymbol(name),                                   \
-           v8::FunctionTemplate::New(callback)->GetFunction())
+template <typename target_t>
+void SetMethod(target_t obj, const char* name,
+        v8::InvocationCallback callback)
+{
+    obj->Set(v8::String::NewSymbol(name),
+        v8::FunctionTemplate::New(callback)->GetFunction());
+}
 
-#define NODE_SET_PROTOTYPE_METHOD(templ, name, callback)                  \
-do {                                                                      \
-  v8::Local<v8::Signature> __callback##_SIG = v8::Signature::New(templ);  \
-  v8::Local<v8::FunctionTemplate> __callback##_TEM =                      \
-    v8::FunctionTemplate::New(callback, v8::Handle<v8::Value>(),          \
-                          __callback##_SIG);                              \
-  templ->PrototypeTemplate()->Set(v8::String::NewSymbol(name),            \
-                                  __callback##_TEM);                      \
-} while (0)
+template <typename target_t>
+void SetPrototypeMethod(target_t target,
+        const char* name, v8::InvocationCallback callback)
+{
+    v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(callback);
+    target->PrototypeTemplate()->Set(v8::String::NewSymbol(name), templ);
+}
+
+// for backwards compatibility
+#define NODE_SET_METHOD node::SetMethod
+#define NODE_SET_PROTOTYPE_METHOD node::SetPrototypeMethod
 
 enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
@@ -240,11 +250,34 @@ node_module_struct* get_builtin_module(const char *name);
 #define NODE_MODULE_DECL(modname) \
   extern "C" node::node_module_struct modname ## _module;
 
+/* Called after the event loop exits but before the VM is disposed.
+ * Callbacks are run in reverse order of registration, i.e. newest first.
+ */
+NODE_EXTERN void AtExit(void (*cb)(void* arg), void* arg = 0);
+
 NODE_EXTERN void SetErrno(uv_err_t err);
-NODE_EXTERN void MakeCallback(v8::Handle<v8::Object> object,
-                              const char* method,
-                              int argc,
-                              v8::Handle<v8::Value> argv[]);
+NODE_EXTERN v8::Handle<v8::Value>
+MakeCallback(const v8::Handle<v8::Object> object,
+             const char* method,
+             int argc,
+             v8::Handle<v8::Value> argv[]);
+
+NODE_EXTERN v8::Handle<v8::Value>
+MakeCallback(const v8::Handle<v8::Object> object,
+             const v8::Handle<v8::String> symbol,
+             int argc,
+             v8::Handle<v8::Value> argv[]);
+
+NODE_EXTERN v8::Handle<v8::Value>
+MakeCallback(const v8::Handle<v8::Object> object,
+             const v8::Handle<v8::Function> callback,
+             int argc,
+             v8::Handle<v8::Value> argv[]);
+
+#if !defined(NODE_WANT_INTERNALS)
+# include "ev-emul.h"
+# include "eio-emul.h"
+#endif
 
 }  // namespace node
 #endif  // SRC_NODE_H_

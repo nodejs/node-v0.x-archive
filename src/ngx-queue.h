@@ -4,12 +4,9 @@
  */
 
 
-#ifndef _NGX_QUEUE_H_INCLUDED_
-#define _NGX_QUEUE_H_INCLUDED_
+#ifndef NGX_QUEUE_H_INCLUDED_
+#define NGX_QUEUE_H_INCLUDED_
 
-#ifdef _WIN32
-# include <stddef.h>
-#endif
 
 typedef struct ngx_queue_s  ngx_queue_t;
 
@@ -106,4 +103,4 @@ struct ngx_queue_s {
     for ((q) = ngx_queue_head(h); (q) != (h); (q) = ngx_queue_next(q))
 
 
-#endif /* _NGX_QUEUE_H_INCLUDED_ */
+#endif /* NGX_QUEUE_H_INCLUDED_ */

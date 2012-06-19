@@ -1,10 +1,15 @@
+-include config.mk
+
 BUILDTYPE ?= Release
 PYTHON ?= python
+DESTDIR ?=
 
+# BUILDTYPE=Debug builds both release and debug builds. If you want to compile
+# just the debug build, run `make -C out BUILDTYPE=Debug` instead.
 ifeq ($(BUILDTYPE),Release)
 all: out/Makefile node
 else
-all: out/Makefile node_g
+all: out/Makefile node node_g
 endif
 
 # The .PHONY is needed to ensure that we recursively use the out/Makefile
@@ -29,20 +34,26 @@ out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/z
 	tools/gyp_node -f make
 
 install: all
-	out/Release/node tools/installer.js ./config.gypi install
+	out/Release/node tools/installer.js install $(DESTDIR)
 
 uninstall:
-	out/Release/node tools/installer.js ./config.gypi uninstall
+	out/Release/node tools/installer.js uninstall
 
 clean:
-	-rm -rf out/Makefile node node_g out/**/*.o  out/**/*.a out/$(BUILDTYPE)/node
+	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node blog.html email.md
+	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
+	-rm -rf node_modules
 
 distclean:
 	-rm -rf out
-	-rm config.gypi
+	-rm -f config.gypi
+	-rm -f config.mk
+	-rm -rf node node_g blog.html email.md
+	-rm -rf node_modules
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 test-http1: all
 	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
@@ -50,9 +61,18 @@ test-http1: all
 test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
-test-all: all
-	python tools/test.py --mode=debug,release
-	$(MAKE) test-npm
+test/gc/node_modules/weak/build:
+	@if [ ! -f node ]; then make all; fi
+	./node deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
+		--directory="$(shell pwd)/test/gc/node_modules/weak" \
+		--nodedir="$(shell pwd)"
+
+test-gc: all test/gc/node_modules/weak/build
+	$(PYTHON) tools/test.py --mode=release gc
+
+test-all: all test/gc/node_modules/weak/build
+	$(PYTHON) tools/test.py --mode=debug,release
+	make test-npm
 
 test-all-http1: all
 	$(PYTHON) tools/test.py --mode=debug,release --use-http1
@@ -85,11 +105,14 @@ test-npm-publish: node
 	npm_package_config_publishtest=true ./node deps/npm/test/run.js
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
-apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html))
+apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html)) \
+          $(addprefix out/,$(apidoc_sources:.markdown=.json))
 
-apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets out/doc/about out/doc/community out/doc/logos
+apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets out/doc/about out/doc/community out/doc/logos out/doc/images
 
 apiassets = $(subst api_assets,api/assets,$(addprefix out/,$(wildcard doc/api_assets/*)))
+
+doc_images = $(addprefix out/,$(wildcard doc/images/* doc/*.jpg doc/*.png))
 
 website_files = \
 	out/doc/index.html    \
@@ -98,26 +121,16 @@ website_files = \
 	out/doc/sh_main.js    \
 	out/doc/sh_javascript.min.js \
 	out/doc/sh_vim-dark.css \
-	out/doc/logo.png      \
-	out/doc/sponsored.png \
+	out/doc/sh.css \
 	out/doc/favicon.ico   \
 	out/doc/pipe.css \
 	out/doc/about/index.html \
-	out/doc/close-downloads.png \
 	out/doc/community/index.html \
-	out/doc/community/not-invented-here.png \
-	out/doc/download-logo.png \
-	out/doc/ebay-logo.png \
-	out/doc/footer-logo.png \
-	out/doc/icons.png \
-	out/doc/linkedin-logo.png \
 	out/doc/logos/index.html \
-	out/doc/microsoft-logo.png \
-	out/doc/platform-icons.png \
-	out/doc/ryan-speaker.jpg \
-	out/doc/yahoo-logo.png
+	out/doc/changelog.html \
+	$(doc_images)
 
-doc: node $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs)
+doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -125,16 +138,37 @@ $(apidoc_dirs):
 out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
 
+out/doc/changelog.html: ChangeLog doc/changelog-head.html doc/changelog-foot.html tools/build-changelog.sh
+	bash tools/build-changelog.sh
+
+out/doc/%.html: doc/%.html
+	cat $< | sed -e 's|__VERSION__|'$(VERSION)'|g' > $@
+
 out/doc/%: doc/%
-	cp $< $@
+	cp -r $< $@
 
-out/doc/api/%.html: doc/api/%.markdown node $(apidoc_dirs) $(apiassets) tools/doctool/doctool.js
-	out/Release/node tools/doctool/doctool.js doc/template.html $< > $@
+out/doc/api/%.json: doc/api/%.markdown
+	out/Release/node tools/doc/generate.js --format=json $< > $@
 
-out/doc/%:
+out/doc/api/%.html: doc/api/%.markdown
+	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
+
+email.md: ChangeLog tools/email-footer.md
+	bash tools/changelog-head.sh | sed 's|^\* #|* \\#|g' > $@
+	cat tools/email-footer.md | sed -e 's|__VERSION__|'$(VERSION)'|g' >> $@
+
+blog.html: email.md
+	cat $< | ./node tools/doc/node_modules/.bin/marked > $@
 
 website-upload: doc
 	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
+	ssh node@nodejs.org '\
+    rm -f ~/web/nodejs.org/dist/latest &&\
+    ln -s $(VERSION) ~/web/nodejs.org/dist/latest &&\
+    rm -f ~/web/nodejs.org/docs/latest &&\
+    ln -s $(VERSION) ~/web/nodejs.org/docs/latest &&\
+    rm -f ~/web/nodejs.org/dist/node-latest.tar.gz &&\
+    ln -s $(VERSION)/node-$(VERSION).tar.gz ~/web/nodejs.org/dist/node-latest.tar.gz'
 
 docopen: out/doc/api/all.html
 	-google-chrome out/doc/api/all.html
@@ -155,21 +189,52 @@ PKGDIR=out/dist-osx
 pkg: $(PKG)
 
 $(PKG):
-	-rm -rf $(PKGDIR)
-	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot
+	rm -rf $(PKGDIR)
+	rm -rf out/deps out/Release
+	./configure --prefix=$(PKGDIR)/32/usr/local --without-snapshot --dest-cpu=ia32
 	$(MAKE) install
+	rm -rf out/deps out/Release
+	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot --dest-cpu=x64
+	$(MAKE) install
+	lipo $(PKGDIR)/32/usr/local/bin/node \
+		$(PKGDIR)/usr/local/bin/node \
+		-output $(PKGDIR)/usr/local/bin/node-universal \
+		-create
+	mv $(PKGDIR)/usr/local/bin/node-universal $(PKGDIR)/usr/local/bin/node
+	rm -rf $(PKGDIR)/32
 	$(packagemaker) \
 		--id "org.nodejs.NodeJS-$(VERSION)" \
 		--doc tools/osx-pkg.pmdoc \
 		--out $(PKG)
 
 $(TARBALL): node out/doc
+	@if [ "$(shell git status --porcelain | egrep -v '^\?\? ')" = "" ]; then \
+		exit 0 ; \
+	else \
+	  echo "" >&2 ; \
+		echo "The git repository is not clean." >&2 ; \
+		echo "Please commit changes before building release tarball." >&2 ; \
+		echo "" >&2 ; \
+		git status --porcelain | egrep -v '^\?\?' >&2 ; \
+		echo "" >&2 ; \
+		exit 1 ; \
+	fi
+	@if [ $(shell ./node --version) = "$(VERSION)" ]; then \
+		exit 0; \
+	else \
+	  echo "" >&2 ; \
+		echo "$(shell ./node --version) doesn't match $(VERSION)." >&2 ; \
+	  echo "Did you remember to update src/node_version.cc?" >&2 ; \
+	  echo "" >&2 ; \
+		exit 1 ; \
+	fi
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
-	mkdir -p $(TARNAME)/doc
+	mkdir -p $(TARNAME)/doc/api
 	cp doc/node.1 $(TARNAME)/doc/node.1
-	cp -r out/doc/api $(TARNAME)/doc/api
+	cp -r out/doc/api/* $(TARNAME)/doc/api/
 	rm -rf $(TARNAME)/deps/v8/test # too big
-	rm -rf $(TARNAME)/doc/logos # too big
+	rm -rf $(TARNAME)/doc/images # too big
+	find $(TARNAME)/ -type l | xargs rm # annoying on windows
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
 	gzip -f -9 $(TARNAME).tar
@@ -188,7 +253,7 @@ bench-idle:
 	./node benchmark/idle_clients.js &
 
 jslint:
-	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ -r test/ --exclude_files lib/punycode.js
+	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 cpplint:
 	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)

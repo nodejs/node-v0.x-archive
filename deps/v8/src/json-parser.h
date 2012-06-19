@@ -43,15 +43,15 @@ namespace internal {
 template <bool seq_ascii>
 class JsonParser BASE_EMBEDDED {
  public:
-  static Handle<Object> Parse(Handle<String> source) {
-    return JsonParser().ParseJson(source);
+  static Handle<Object> Parse(Handle<String> source, Zone* zone) {
+    return JsonParser().ParseJson(source, zone);
   }
 
   static const int kEndOfString = -1;
 
  private:
   // Parse a string containing a single JSON value.
-  Handle<Object> ParseJson(Handle<String> source);
+  Handle<Object> ParseJson(Handle<String> source, Zone* zone);
 
   inline void Advance() {
     position_++;
@@ -130,7 +130,7 @@ class JsonParser BASE_EMBEDDED {
   // An object literal is a squiggly-braced and comma separated sequence
   // (possibly empty) of key/value pairs, where the key is a JSON string
   // literal, the value is a JSON value, and the two are separated by a colon.
-  // A JSON array dosn't allow numbers and identifiers as keys, like a
+  // A JSON array doesn't allow numbers and identifiers as keys, like a
   // JavaScript array.
   Handle<Object> ParseJsonObject();
 
@@ -149,6 +149,7 @@ class JsonParser BASE_EMBEDDED {
   }
 
   inline Isolate* isolate() { return isolate_; }
+  inline Zone* zone() const { return zone_; }
 
   static const int kInitialSpecialStringLength = 1024;
 
@@ -161,11 +162,14 @@ class JsonParser BASE_EMBEDDED {
   Isolate* isolate_;
   uc32 c0_;
   int position_;
+  Zone* zone_;
 };
 
 template <bool seq_ascii>
-Handle<Object> JsonParser<seq_ascii>::ParseJson(Handle<String> source) {
+Handle<Object> JsonParser<seq_ascii>::ParseJson(Handle<String> source,
+                                                Zone* zone) {
   isolate_ = source->map()->GetHeap()->isolate();
+  zone_ = zone;
   FlattenString(source);
   source_ = source;
   source_length_ = source_->length();
@@ -177,7 +181,7 @@ Handle<Object> JsonParser<seq_ascii>::ParseJson(Handle<String> source) {
 
   // Set initial position right before the string.
   position_ = -1;
-  // Advance to the first character (posibly EOS)
+  // Advance to the first character (possibly EOS)
   AdvanceSkipWhitespace();
   Handle<Object> result = ParseJsonValue();
   if (result.is_null() || c0_ != kEndOfString) {
@@ -323,7 +327,7 @@ Handle<Object> JsonParser<seq_ascii>::ParseJsonObject() {
 template <bool seq_ascii>
 Handle<Object> JsonParser<seq_ascii>::ParseJsonArray() {
   ZoneScope zone_scope(isolate(), DELETE_ON_EXIT);
-  ZoneList<Handle<Object> > elements(4);
+  ZoneList<Handle<Object> > elements(4, zone());
   ASSERT_EQ(c0_, '[');
 
   AdvanceSkipWhitespace();
@@ -331,7 +335,7 @@ Handle<Object> JsonParser<seq_ascii>::ParseJsonArray() {
     do {
       Handle<Object> element = ParseJsonValue();
       if (element.is_null()) return ReportUnexpectedCharacter();
-      elements.Add(element);
+      elements.Add(element, zone());
     } while (MatchSkipWhiteSpace(','));
     if (c0_ != ']') {
       return ReportUnexpectedCharacter();

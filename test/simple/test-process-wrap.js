@@ -58,7 +58,11 @@ pipe.onread = function(b, off, len) {
 p.spawn({
   file: process.execPath,
   args: [process.execPath, '-v'],
-  stdoutStream: pipe
+  stdio: [
+    { type: 'ignore' },
+    { type: 'pipe', handle: pipe },
+    { type: 'ignore' }
+  ]
 });
 
 

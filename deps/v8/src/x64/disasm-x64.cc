@@ -34,6 +34,7 @@
 #if defined(V8_TARGET_ARCH_X64)
 
 #include "disasm.h"
+#include "lazy-instance.h"
 
 namespace disasm {
 
@@ -269,7 +270,8 @@ void InstructionTable::AddJumpConditionalShort() {
 }
 
 
-static InstructionTable instruction_table;
+static v8::internal::LazyInstance<InstructionTable>::type instruction_table =
+    LAZY_INSTANCE_INITIALIZER;
 
 
 static InstructionDesc cmov_instructions[16] = {
@@ -313,7 +315,8 @@ class DisassemblerX64 {
         rex_(0),
         operand_size_(0),
         group_1_prefix_(0),
-        byte_size_operand_(false) {
+        byte_size_operand_(false),
+        instruction_table_(instruction_table.Pointer()) {
     tmp_buffer_[0] = '\0';
   }
 
@@ -342,6 +345,7 @@ class DisassemblerX64 {
   byte group_1_prefix_;  // 0xF2, 0xF3, or (if no group 1 prefix is present) 0.
   // Byte size operand override.
   bool byte_size_operand_;
+  const InstructionTable* const instruction_table_;
 
   void setRex(byte rex) {
     ASSERT_EQ(0x40, rex & 0xF0);
@@ -1338,7 +1342,7 @@ int DisassemblerX64::InstructionDecode(v8::internal::Vector<char> out_buffer,
     data++;
   }
 
-  const InstructionDesc& idesc = instruction_table.Get(current);
+  const InstructionDesc& idesc = instruction_table_->Get(current);
   byte_size_operand_ = idesc.byte_size_operation;
   switch (idesc.type) {
     case ZERO_OPERANDS_INSTR:
@@ -1680,7 +1684,7 @@ int DisassemblerX64::InstructionDecode(v8::internal::Vector<char> out_buffer,
           default:
             UNREACHABLE();
         }
-        AppendToBuffer("test%c rax,0x%"V8_PTR_PREFIX"x",
+        AppendToBuffer("test%c rax,0x%" V8_PTR_PREFIX "x",
                        operand_size_code(),
                        value);
         break;

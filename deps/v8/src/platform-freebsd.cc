@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -54,6 +54,7 @@
 #include "v8.h"
 #include "v8threads.h"
 
+#include "platform-posix.h"
 #include "platform.h"
 #include "vm-state-inl.h"
 
@@ -79,15 +80,8 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-void OS::SetUp() {
-  // Seed the random number generator.
-  // Convert the current time to a 64-bit integer first, before converting it
-  // to an unsigned. Going directly can cause an overflow and the seed to be
-  // set to all ones. The seed will be identical for different instances that
-  // call this setup code within the same millisecond.
-  uint64_t seed = static_cast<uint64_t>(TimeCurrentMillis());
-  srandom(static_cast<unsigned int>(seed));
-  limit_mutex = CreateMutex();
+void OS::PostSetUp() {
+  POSIXPostSetUp();
 }
 
 
@@ -128,7 +122,7 @@ double OS::LocalTimeOffset() {
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -411,6 +405,12 @@ bool VirtualMemory::Uncommit(void* address, size_t size) {
 }
 
 
+bool VirtualMemory::Guard(void* address) {
+  OS::Guard(address, OS::CommitPageSize());
+  return true;
+}
+
+
 void* VirtualMemory::ReserveRegion(size_t size) {
   void* result = mmap(OS::GetRandomMmapAddr(),
                       size,
@@ -464,15 +464,8 @@ class Thread::PlatformData : public Malloced {
 
 Thread::Thread(const Options& options)
     : data_(new PlatformData),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -561,6 +554,7 @@ class FreeBSDMutex : public Mutex {
     ASSERT(result == 0);
     result = pthread_mutex_init(&mutex_, &attrs);
     ASSERT(result == 0);
+    USE(result);
   }
 
   virtual ~FreeBSDMutex() { pthread_mutex_destroy(&mutex_); }
@@ -717,9 +711,14 @@ class SignalSender : public Thread {
     FULL_INTERVAL
   };
 
+  static const int kSignalSenderStackSize = 64 * KB;
+
   explicit SignalSender(int interval)
-      : Thread("SignalSender"),
+      : Thread(Thread::Options("SignalSender", kSignalSenderStackSize)),
         interval_(interval) {}
+
+  static void SetUp() { if (!mutex_) mutex_ = OS::CreateMutex(); }
+  static void TearDown() { delete mutex_; }
 
   static void AddActiveSampler(Sampler* sampler) {
     ScopedLock lock(mutex_);
@@ -840,13 +839,33 @@ class SignalSender : public Thread {
   static bool signal_handler_installed_;
   static struct sigaction old_signal_handler_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SignalSender);
 };
 
-Mutex* SignalSender::mutex_ = OS::CreateMutex();
+Mutex* SignalSender::mutex_ = NULL;
 SignalSender* SignalSender::instance_ = NULL;
 struct sigaction SignalSender::old_signal_handler_;
 bool SignalSender::signal_handler_installed_ = false;
+
+
+void OS::SetUp() {
+  // Seed the random number generator.
+  // Convert the current time to a 64-bit integer first, before converting it
+  // to an unsigned. Going directly can cause an overflow and the seed to be
+  // set to all ones. The seed will be identical for different instances that
+  // call this setup code within the same millisecond.
+  uint64_t seed = static_cast<uint64_t>(TimeCurrentMillis());
+  srandom(static_cast<unsigned int>(seed));
+  limit_mutex = CreateMutex();
+  SignalSender::SetUp();
+}
+
+
+void OS::TearDown() {
+  SignalSender::TearDown();
+  delete limit_mutex;
+}
 
 
 Sampler::Sampler(Isolate* isolate, int interval)

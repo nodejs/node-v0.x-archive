@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2006-2008 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -128,12 +128,13 @@ def ExpandMacros(lines, macros):
       end = pattern_match.end()
       assert lines[end - 1] == '('
       last_match = end
-      arg_index = 0
+      arg_index = [0]  # Wrap state into array, to work around Python "scoping"
       mapping = { }
       def add_arg(str):
         # Remember to expand recursively in the arguments
         replacement = ExpandMacros(str.strip(), macros)
-        mapping[macro.args[arg_index]] = replacement
+        mapping[macro.args[arg_index[0]]] = replacement
+        arg_index[0] += 1
       while end < len(lines) and height > 0:
         # We don't count commas at higher nesting levels.
         if lines[end] == ',' and height == 1:
@@ -194,14 +195,14 @@ def ReadMacros(lines):
       macro_match = MACRO_PATTERN.match(line)
       if macro_match:
         name = macro_match.group(1)
-        args = map(string.strip, macro_match.group(2).split(','))
+        args = [match.strip() for match in macro_match.group(2).split(',')]
         body = macro_match.group(3).strip()
         macros.append((re.compile("\\b%s\\(" % name), TextMacro(args, body)))
       else:
         python_match = PYTHON_MACRO_PATTERN.match(line)
         if python_match:
           name = python_match.group(1)
-          args = map(string.strip, python_match.group(2).split(','))
+          args = [match.strip() for match in python_match.group(2).split(',')]
           body = python_match.group(3).strip()
           fun = eval("lambda " + ",".join(args) + ': ' + body)
           macros.append((re.compile("\\b%s\\(" % name), PythonMacro(args, fun)))

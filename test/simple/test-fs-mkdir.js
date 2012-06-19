@@ -21,7 +21,6 @@
 
 var common = require('../common');
 var assert = require('assert');
-var path = require('path');
 var fs = require('fs');
 
 function unlink(pathname) {
@@ -39,7 +38,7 @@ function unlink(pathname) {
 
   fs.mkdir(pathname, function(err) {
     assert.equal(err, null);
-    assert.equal(path.existsSync(pathname), true);
+    assert.equal(fs.existsSync(pathname), true);
     ncalls++;
   });
 
@@ -57,7 +56,7 @@ function unlink(pathname) {
 
   fs.mkdir(pathname, 511 /*=0777*/, function(err) {
     assert.equal(err, null);
-    assert.equal(path.existsSync(pathname), true);
+    assert.equal(fs.existsSync(pathname), true);
     ncalls++;
   });
 
@@ -73,7 +72,7 @@ function unlink(pathname) {
   unlink(pathname);
   fs.mkdirSync(pathname);
 
-  var exists = path.existsSync(pathname);
+  var exists = fs.existsSync(pathname);
   unlink(pathname);
 
   assert.equal(exists, true);
@@ -81,4 +80,4 @@ function unlink(pathname) {
 
 // Keep the event loop alive so the async mkdir() requests
 // have a chance to run (since they don't ref the event loop).
-process.nextTick(function(){});
+process.nextTick(function() {});

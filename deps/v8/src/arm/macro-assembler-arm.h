@@ -85,7 +85,14 @@ enum SmiCheck { INLINE_SMI_CHECK, OMIT_SMI_CHECK };
 enum LinkRegisterStatus { kLRHasNotBeenSaved, kLRHasBeenSaved };
 
 
-bool AreAliased(Register r1, Register r2, Register r3, Register r4);
+#ifdef DEBUG
+bool AreAliased(Register reg1,
+                Register reg2,
+                Register reg3 = no_reg,
+                Register reg4 = no_reg,
+                Register reg5 = no_reg,
+                Register reg6 = no_reg);
+#endif
 
 
 // MacroAssembler implements a collection of frequently used macros.
@@ -243,7 +250,7 @@ class MacroAssembler: public Assembler {
                       Register scratch3,
                       Label* object_is_white_and_not_data);
 
-  // Detects conservatively whether an object is data-only, ie it does need to
+  // Detects conservatively whether an object is data-only, i.e. it does need to
   // be scanned by the garbage collector.
   void JumpIfDataObject(Register value,
                         Register scratch,
@@ -491,6 +498,23 @@ class MacroAssembler: public Assembler {
 
   void LoadContext(Register dst, int context_chain_length);
 
+  // Conditionally load the cached Array transitioned map of type
+  // transitioned_kind from the global context if the map in register
+  // map_in_out is the cached Array map in the global context of
+  // expected_kind.
+  void LoadTransitionedArrayMapConditional(
+      ElementsKind expected_kind,
+      ElementsKind transitioned_kind,
+      Register map_in_out,
+      Register scratch,
+      Label* no_map_match);
+
+  // Load the initial map for new Arrays from a JSFunction.
+  void LoadInitialArrayMap(Register function_in,
+                           Register scratch,
+                           Register map_out,
+                           bool can_have_holes);
+
   void LoadGlobalFunction(int index, Register function);
 
   // Load the initial map from the global function. The registers
@@ -539,6 +563,7 @@ class MacroAssembler: public Assembler {
   void InvokeFunction(Handle<JSFunction> function,
                       const ParameterCount& actual,
                       InvokeFlag flag,
+                      const CallWrapper& call_wrapper,
                       CallKind call_kind);
 
   void IsObjectJSObjectType(Register heap_object,
@@ -565,20 +590,18 @@ class MacroAssembler: public Assembler {
   // Exception handling
 
   // Push a new try handler and link into try handler chain.
-  void PushTryHandler(CodeLocation try_location,
-                      HandlerType type,
-                      int handler_index);
+  void PushTryHandler(StackHandler::Kind kind, int handler_index);
 
   // Unlink the stack handler on top of the stack from the try handler chain.
   // Must preserve the result register.
   void PopTryHandler();
 
-  // Passes thrown value (in r0) to the handler of top of the try handler chain.
+  // Passes thrown value to the handler of top of the try handler chain.
   void Throw(Register value);
 
   // Propagates an uncatchable exception to the top of the current JS stack's
   // handler chain.
-  void ThrowUncatchable(UncatchableExceptionType type, Register value);
+  void ThrowUncatchable(Register value);
 
   // ---------------------------------------------------------------------------
   // Inline caching support
@@ -606,7 +629,7 @@ class MacroAssembler: public Assembler {
   }
 
   // Check if the given instruction is a 'type' marker.
-  // ie. check if is is a mov r<type>, r<type> (referenced as nop(type))
+  // i.e. check if is is a mov r<type>, r<type> (referenced as nop(type))
   // These instructions are generated to mark special location in the code,
   // like some special IC code.
   static inline bool IsMarkedCode(Instr instr, int type) {
@@ -780,13 +803,14 @@ class MacroAssembler: public Assembler {
 
   // Check if a map for a JSObject indicates that the object has fast smi only
   // elements.  Jump to the specified label if it does not.
-  void CheckFastSmiOnlyElements(Register map,
-                                Register scratch,
-                                Label* fail);
+  void CheckFastSmiElements(Register map,
+                            Register scratch,
+                            Label* fail);
 
   // Check to see if maybe_number can be stored as a double in
   // FastDoubleElements. If it can, store it at the index specified by key in
-  // the FastDoubleElements array elements, otherwise jump to fail.
+  // the FastDoubleElements array elements. Otherwise jump to fail, in which
+  // case scratch2, scratch3 and scratch4 are unmodified.
   void StoreNumberToDoubleElements(Register value_reg,
                                    Register key_reg,
                                    Register receiver_reg,
@@ -807,10 +831,17 @@ class MacroAssembler: public Assembler {
                   Label* early_success,
                   CompareMapMode mode = REQUIRE_EXACT_MAP);
 
+  // As above, but the map of the object is already loaded into the register
+  // which is preserved by the code generated.
+  void CompareMap(Register obj_map,
+                  Handle<Map> map,
+                  Label* early_success,
+                  CompareMapMode mode = REQUIRE_EXACT_MAP);
+
   // Check if the map of an object is equal to a specified map and branch to
   // label if not. Skip the smi check if not required (object is known to be a
   // heap object). If mode is ALLOW_ELEMENT_TRANSITION_MAPS, then also match
-  // against maps that are ElementsKind transition maps of the specificed map.
+  // against maps that are ElementsKind transition maps of the specified map.
   void CheckMap(Register obj,
                 Register scratch,
                 Handle<Map> map,
@@ -908,7 +939,7 @@ class MacroAssembler: public Assembler {
   // Truncates a double using a specific rounding mode.
   // Clears the z flag (ne condition) if an overflow occurs.
   // If exact_conversion is true, the z flag is also cleared if the conversion
-  // was inexact, ie. if the double value could not be converted exactly
+  // was inexact, i.e. if the double value could not be converted exactly
   // to a 32bit integer.
   void EmitVFPTruncate(VFPRoundingMode rounding_mode,
                        SwVfpRegister result,
@@ -1025,7 +1056,7 @@ class MacroAssembler: public Assembler {
 
   // Calls an API function.  Allocates HandleScope, extracts returned value
   // from handle and propagates exceptions.  Restores context.  stack_space
-  // - space to be unwound on exit (includes the call js arguments space and
+  // - space to be unwound on exit (includes the call JS arguments space and
   // the additional space allocated for the fast call).
   void CallApiFunctionAndReturn(ExternalReference function, int stack_space);
 
@@ -1143,6 +1174,14 @@ class MacroAssembler: public Assembler {
     mov(dst, Operand(src, ASR, kSmiTagSize), s);
   }
 
+  // Untag the source value into destination and jump if source is a smi.
+  // Souce and destination can be the same register.
+  void UntagAndJumpIfSmi(Register dst, Register src, Label* smi_case);
+
+  // Untag the source value into destination and jump if source is not a smi.
+  // Souce and destination can be the same register.
+  void UntagAndJumpIfNotSmi(Register dst, Register src, Label* non_smi_case);
+
   // Jump the register contains a smi.
   inline void JumpIfSmi(Register value, Label* smi_label) {
     tst(value, Operand(kSmiTagMask));
@@ -1235,6 +1274,10 @@ class MacroAssembler: public Assembler {
   void EnterFrame(StackFrame::Type type);
   void LeaveFrame(StackFrame::Type type);
 
+  // Expects object in r0 and returns map with validated enum cache
+  // in r0.  Assumes that any other register can be used as a scratch.
+  void CheckEnumCache(Register null_value, Label* call_runtime);
+
  private:
   void CallCFunctionHelper(Register function,
                            int num_reg_arguments,
@@ -1248,6 +1291,7 @@ class MacroAssembler: public Assembler {
                       Handle<Code> code_constant,
                       Register code_reg,
                       Label* done,
+                      bool* definitely_mismatches,
                       InvokeFlag flag,
                       const CallWrapper& call_wrapper,
                       CallKind call_kind);
@@ -1292,7 +1336,6 @@ class MacroAssembler: public Assembler {
 };
 
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
 // The code patcher is used to patch (typically) small parts of code e.g. for
 // debugging and other types of instrumentation. When using the code patcher
 // the exact number of bytes specified must be emitted. It is not legal to emit
@@ -1322,7 +1365,6 @@ class CodePatcher {
   int size_;  // Number of bytes of the expected patch size.
   MacroAssembler masm_;  // Macro assembler used to generate the code.
 };
-#endif  // ENABLE_DEBUGGER_SUPPORT
 
 
 // -----------------------------------------------------------------------------

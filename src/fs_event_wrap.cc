@@ -19,9 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <node.h>
-#include <handle_wrap.h>
-#include <node_vars.h>
+#include "node.h"
+#include "handle_wrap.h"
 
 #include <stdlib.h>
 
@@ -29,17 +28,7 @@ using namespace v8;
 
 namespace node {
 
-#define UNWRAP                                                              \
-  assert(!args.Holder().IsEmpty());                                         \
-  assert(args.Holder()->InternalFieldCount() > 0);                          \
-  FSEventWrap* wrap =                                                       \
-      static_cast<FSEventWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) {                                                              \
-    uv_err_t err;                                                           \
-    err.code = UV_EBADF;                                                    \
-    SetErrno(err);                                                          \
-    return scope.Close(Integer::New(-1));                                   \
-  }
+static Persistent<String> onchange_sym;
 
 class FSEventWrap: public HandleWrap {
 public:
@@ -102,23 +91,23 @@ Handle<Value> FSEventWrap::New(const Arguments& args) {
 Handle<Value> FSEventWrap::Start(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(FSEventWrap)
 
   if (args.Length() < 1 || !args[0]->IsString()) {
     return ThrowException(Exception::TypeError(String::New("Bad arguments")));
   }
 
-  String::Utf8Value path(args[0]->ToString());
+  String::Utf8Value path(args[0]);
 
-  int r = uv_fs_event_init(Loop(), &wrap->handle_, *path, OnEvent, 0);
+  int r = uv_fs_event_init(uv_default_loop(), &wrap->handle_, *path, OnEvent, 0);
   if (r == 0) {
     // Check for persistent argument
     if (!args[1]->IsTrue()) {
-      uv_unref(Loop());
+      uv_unref(reinterpret_cast<uv_handle_t*>(&wrap->handle_));
     }
     wrap->initialized_ = true;
   } else {
-    SetErrno(uv_last_error(Loop()));
+    SetErrno(uv_last_error(uv_default_loop()));
   }
 
   return scope.Close(Integer::New(r));
@@ -146,7 +135,7 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   // assumption that a rename implicitly means an attribute change. Not too
   // unreasonable, right? Still, we should revisit this before v1.0.
   if (status) {
-    SetErrno(uv_last_error(Loop()));
+    SetErrno(uv_last_error(uv_default_loop()));
     eventStr = String::Empty();
   }
   else if (events & UV_RENAME) {
@@ -166,14 +155,18 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
     filename ? (Local<Value>)String::New(filename) : Local<Value>::New(v8::Null())
   };
 
-  MakeCallback(wrap->object_, "onchange", 3, argv);
+  if (onchange_sym.IsEmpty()) {
+    onchange_sym = NODE_PSYMBOL("onchange");
+  }
+
+  MakeCallback(wrap->object_, onchange_sym, ARRAY_SIZE(argv), argv);
 }
 
 
 Handle<Value> FSEventWrap::Close(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(FSEventWrap)
 
   if (!wrap->initialized_)
     return Undefined();

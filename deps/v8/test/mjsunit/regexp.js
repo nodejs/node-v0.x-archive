@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -126,6 +126,17 @@ assertTrue(re.test("c"));
 assertTrue(re.test("$"));
 
 assertTrue(/^[Z-\c-e]*$/.test("Z[\\cde"));
+
+// Test that we handle \s and \S correctly on special Unicode characters.
+re = /\s/;
+assertTrue(re.test("\u2028"));
+assertTrue(re.test("\u2029"));
+assertTrue(re.test("\uFEFF"));
+
+re = /\S/;
+assertFalse(re.test("\u2028"));
+assertFalse(re.test("\u2029"));
+assertFalse(re.test("\uFEFF"));
 
 // Test that we handle \s and \S correctly inside some bizarre
 // character classes.
@@ -690,3 +701,18 @@ assertThrows("RegExp('(*)')");
 assertThrows("RegExp('(?:*)')");
 assertThrows("RegExp('(?=*)')");
 assertThrows("RegExp('(?!*)')");
+
+// Test trimmed regular expression for RegExp.test().
+assertTrue(/.*abc/.test("abc"));
+assertFalse(/.*\d+/.test("q"));
+
+// Test that RegExp.prototype.toString() throws TypeError for
+// incompatible receivers (ES5 section 15.10.6 and 15.10.6.4).
+assertThrows("RegExp.prototype.toString.call(null)", TypeError);
+assertThrows("RegExp.prototype.toString.call(0)", TypeError);
+assertThrows("RegExp.prototype.toString.call('')", TypeError);
+assertThrows("RegExp.prototype.toString.call(false)", TypeError);
+assertThrows("RegExp.prototype.toString.call(true)", TypeError);
+assertThrows("RegExp.prototype.toString.call([])", TypeError);
+assertThrows("RegExp.prototype.toString.call({})", TypeError);
+assertThrows("RegExp.prototype.toString.call(function(){})", TypeError);

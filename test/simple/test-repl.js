@@ -30,6 +30,10 @@ var net = require('net'),
     prompt_unix = 'node via Unix socket> ',
     prompt_tcp = 'node via TCP socket> ',
     prompt_multiline = '... ',
+    prompt_npm = 'npm should be run outside of the ' +
+                 'node repl, in your normal shell.\n' +
+                 '(Press Control-D to exit.)\n',
+    expect_npm = prompt_npm + prompt_unix,
     server_tcp, server_unix, client_tcp, client_unix, timer;
 
 
@@ -52,7 +56,7 @@ function send_expect(list) {
     cur.client.expect = cur.expect;
     cur.client.list = list;
     if (cur.send.length > 0) {
-      cur.client.write(cur.send);
+      cur.client.write(cur.send + '\n');
     }
   }
 }
@@ -76,8 +80,11 @@ function error_test() {
                   JSON.stringify(client_unix.expect)));
 
     if (read_buffer.indexOf(prompt_unix) !== -1) {
-      assert.ok(read_buffer.match(client_unix.expect));
-      common.error('match');
+      // if it's an exact match, then don't do the regexp
+      if (read_buffer !== client_unix.expect) {
+        assert.ok(read_buffer.match(client_unix.expect));
+        common.error('match');
+      }
       read_buffer = '';
       if (client_unix.list && client_unix.list.length > 0) {
         send_expect(client_unix.list);
@@ -124,6 +131,9 @@ function error_test() {
       expect: prompt_unix },
     { client: client_unix, send: 'blah()',
       expect: '1\n' + prompt_unix },
+    // Functions should not evaluate twice (#2773)
+    { client: client_unix, send: 'var I = [1,2,3,function() {}]; I.pop()',
+      expect: '[Function]' },
     // Multiline object
     { client: client_unix, send: '{ a: ',
       expect: prompt_multiline },
@@ -137,7 +147,10 @@ function error_test() {
     { client: client_unix, send: 'return 1;',
       expect: prompt_multiline },
     { client: client_unix, send: '})()',
-      expect: '1' }
+      expect: '1' },
+    // npm prompt error message
+    { client: client_unix, send: 'npm install foobar',
+      expect: expect_npm }
   ]);
 }
 
@@ -164,12 +177,12 @@ function tcp_test() {
       send_expect([
         { client: client_tcp, send: '',
           expect: prompt_tcp },
-        { client: client_tcp, send: 'invoke_me(333)\n',
+        { client: client_tcp, send: 'invoke_me(333)',
           expect: ('\'' + 'invoked 333' + '\'\n' + prompt_tcp) },
-        { client: client_tcp, send: 'a += 1\n',
+        { client: client_tcp, send: 'a += 1',
           expect: ('12346' + '\n' + prompt_tcp) },
         { client: client_tcp,
-          send: 'require(' + JSON.stringify(moduleFilename) + ').number\n',
+          send: 'require(' + JSON.stringify(moduleFilename) + ').number',
           expect: ('42' + '\n' + prompt_tcp) }
       ]);
     });
@@ -227,13 +240,13 @@ function unix_test() {
       send_expect([
         { client: client_unix, send: '',
           expect: prompt_unix },
-        { client: client_unix, send: 'message\n',
+        { client: client_unix, send: 'message',
           expect: ('\'' + message + '\'\n' + prompt_unix) },
-        { client: client_unix, send: 'invoke_me(987)\n',
+        { client: client_unix, send: 'invoke_me(987)',
           expect: ('\'' + 'invoked 987' + '\'\n' + prompt_unix) },
-        { client: client_unix, send: 'a = 12345\n',
+        { client: client_unix, send: 'a = 12345',
           expect: ('12345' + '\n' + prompt_unix) },
-        { client: client_unix, send: '{a:1}\n',
+        { client: client_unix, send: '{a:1}',
           expect: ('{ a: 1 }' + '\n' + prompt_unix) }
       ]);
     });

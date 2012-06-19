@@ -2,15 +2,26 @@
 exports = module.exports = lifecycle
 exports.cmd = cmd
 
-var log = require("./log.js")
+var log = require("npmlog")
   , exec = require("./exec.js")
   , npm = require("../npm.js")
   , path = require("path")
-  , readJson = require("./read-json.js")
   , fs = require("graceful-fs")
   , chain = require("slide").chain
   , constants = require("constants")
   , output = require("./output.js")
+  , Stream = require("stream").Stream
+  , PATH = "PATH"
+
+// windows calls it's path "Path" usually, but this is not guaranteed.
+if (process.platform === "win32") {
+  PATH = "Path"
+  Object.keys(process.env).forEach(function (e) {
+    if (e.match(/^PATH$/i)) {
+      PATH = e
+    }
+  })
+}
 
 function lifecycle (pkg, stage, wd, unsafe, failOk, cb) {
   if (typeof cb !== "function") cb = failOk, failOk = false
@@ -20,7 +31,7 @@ function lifecycle (pkg, stage, wd, unsafe, failOk, cb) {
   while (pkg && pkg._data) pkg = pkg._data
   if (!pkg) return cb(new Error("Invalid package data"))
 
-  log(pkg._id, stage)
+  log.info(stage, pkg._id)
   if (!pkg.scripts) pkg.scripts = {}
 
   validWd(wd || path.resolve(npm.dir, pkg.name), function (er, wd) {
@@ -30,7 +41,8 @@ function lifecycle (pkg, stage, wd, unsafe, failOk, cb) {
 
     if ((wd.indexOf(npm.dir) !== 0 || path.basename(wd) !== pkg.name)
         && !unsafe && pkg.scripts[stage]) {
-      log.warn(pkg._id+" "+pkg.scripts[stage], "skipping, cannot run in "+wd)
+      log.warn( "cannot run in wd", "%s %s (wd=%s)"
+              , pkg._id, pkg.scripts[stage], wd)
       return cb()
     }
 
@@ -54,34 +66,47 @@ function checkForLink (pkg, cb) {
 }
 
 function lifecycle_ (pkg, stage, wd, env, unsafe, failOk, cb) {
-  var PATH = []
+  var pathArr = []
     , p = wd.split("node_modules")
     , acc = path.resolve(p.shift())
   p.forEach(function (pp) {
-    PATH.unshift(path.join(acc, "node_modules", ".bin"))
+    pathArr.unshift(path.join(acc, "node_modules", ".bin"))
     acc = path.join(acc, "node_modules", pp)
   })
-  PATH.unshift(path.join(acc, "node_modules", ".bin"))
-  if (env.PATH) PATH.push(env.PATH)
-  env.PATH = PATH.join(process.platform === "win32" ? ";" : ":")
+  pathArr.unshift(path.join(acc, "node_modules", ".bin"))
+
+  // we also unshift the bundled node-gyp-bin folder so that
+  // the bundled one will be used for installing things.
+  pathArr.unshift(path.join(__dirname, "..", "..", "bin", "node-gyp-bin"))
+
+  if (env[PATH]) pathArr.push(env[PATH])
+  env[PATH] = pathArr.join(process.platform === "win32" ? ";" : ":")
 
   var packageLifecycle = pkg.scripts && pkg.scripts.hasOwnProperty(stage)
 
   if (packageLifecycle) {
     // define this here so it's available to all scripts.
     env.npm_lifecycle_script = pkg.scripts[stage]
+    // if the command is "node-gyp <args>", then call ours instead.
+    try {
+      var ourGyp = require.resolve("node-gyp/bin/node-gyp.js")
+    } catch (er) {
+      return cb(new Error("No gyp installed with npm"))
+    }
+    var gyp = path.execPath + " " + JSON.stringify(ourGyp)
+    pkg.scripts[stage] = pkg.scripts[stage].replace(/^node-gyp( |$)/, gyp)
   }
 
   if (failOk) {
     cb = (function (cb_) { return function (er) {
-      if (er) log.warn(er.message, "continuing anyway")
+      if (er) log.warn("continuing anyway", er.message)
       cb_()
     }})(cb)
   }
 
   if (npm.config.get("force")) {
     cb = (function (cb_) { return function (er) {
-      if (er) log(er, "forced, continuing")
+      if (er) log.info("forced, continuing", er)
       cb_()
     }})(cb)
   }
@@ -113,27 +138,30 @@ function runPackageLifecycle (pkg, env, wd, unsafe, cb) {
     , cmd = env.npm_lifecycle_script
     , sh = "sh"
     , shFlag = "-c"
-  
+
   if (process.platform === "win32") {
     sh = "cmd"
     shFlag = "/c"
   }
 
-  log.verbose(unsafe, "unsafe-perm in lifecycle")
+  log.verbose("unsafe-perm in lifecycle", unsafe)
 
-  output.write("\n> "+pkg._id+" " + stage+" "+wd+"\n> "+cmd+"\n", function (er) {
+  var note = "\n> " + pkg._id + " " + stage + " " + wd
+           + "\n> " + cmd + "\n"
+
+  output.write(note, function (er) {
     if (er) return cb(er)
-    
+
     exec( sh, [shFlag, cmd], env, true, wd
         , user, group
         , function (er, code, stdout, stderr) {
       if (er && !npm.ROLLBACK) {
-        log("Failed to exec "+stage+" script", pkg._id)
+        log.info(pkg._id, "Failed to exec "+stage+" script")
         er.message = pkg._id + " "
                    + stage + ": `" + env.npm_lifecycle_script+"`\n"
                    + er.message
-        if (er.errno !== constants.EPERM) {
-          er.errno = npm.ELIFECYCLE
+        if (er.code !== "EPERM") {
+          er.code = "ELIFECYCLE"
         }
         er.pkgid = pkg._id
         er.stage = stage
@@ -141,8 +169,8 @@ function runPackageLifecycle (pkg, env, wd, unsafe, cb) {
         er.pkgname = pkg.name
         return cb(er)
       } else if (er) {
-        log.error(er, pkg._id+"."+stage)
-        log.error("failed, but continuing anyway", pkg._id+"."+stage)
+        log.error(pkg._id+"."+stage, er)
+        log.error(pkg._id+"."+stage, "continuing anyway")
         return cb()
       }
       cb(er)
@@ -166,7 +194,7 @@ function runHookLifecycle (pkg, env, wd, unsafe, cb) {
         , function (er) {
       if (er) {
         er.message += "\nFailed to exec "+stage+" hook script"
-        log(er, pkg._id)
+        log.info(pkg._id, er)
       }
       if (npm.ROLLBACK) return cb()
       cb(er)
@@ -233,6 +261,7 @@ function makeEnv (data, prefix, env) {
       return
     }
     var value = ini.get(i)
+    if (value instanceof Stream) return
     if (!value) value = ""
     else if (typeof value !== "string") value = JSON.stringify(value)
 

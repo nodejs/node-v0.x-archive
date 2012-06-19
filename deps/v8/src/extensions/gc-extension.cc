@@ -40,15 +40,14 @@ v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunction(
 
 
 v8::Handle<v8::Value> GCExtension::GC(const v8::Arguments& args) {
-  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags, "gc extension");
   return v8::Undefined();
 }
 
 
 void GCExtension::Register() {
-  static GCExtension* gc_extension = NULL;
-  if (gc_extension == NULL) gc_extension = new GCExtension();
-  static v8::DeclareExtension gc_extension_declaration(gc_extension);
+  static GCExtension gc_extension;
+  static v8::DeclareExtension declaration(&gc_extension);
 }
 
 } }  // namespace v8::internal

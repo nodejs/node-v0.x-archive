@@ -51,8 +51,9 @@ enum ParsingFlags {
   // STRICT_MODE,
   // EXTENDED_MODE,
   kLanguageModeMask = 0x03,
-  kAllowLazy = 4,
-  kAllowNativesSyntax = 8
+  kAllowLazy = 0x04,
+  kAllowNativesSyntax = 0x08,
+  kAllowModules = 0x10
 };
 
 STATIC_ASSERT((kLanguageModeMask & CLASSIC_MODE) == CLASSIC_MODE);
@@ -72,15 +73,17 @@ inline int HexValue(uc32 c) {
 
 
 // ---------------------------------------------------------------------
-// Buffered stream of characters, using an internal UC16 buffer.
+// Buffered stream of UTF-16 code units, using an internal UTF-16 buffer.
+// A code unit is a 16 bit value representing either a 16 bit code point
+// or one part of a surrogate pair that make a single 21 bit code point.
 
-class UC16CharacterStream {
+class Utf16CharacterStream {
  public:
-  UC16CharacterStream() : pos_(0) { }
-  virtual ~UC16CharacterStream() { }
+  Utf16CharacterStream() : pos_(0) { }
+  virtual ~Utf16CharacterStream() { }
 
-  // Returns and advances past the next UC16 character in the input
-  // stream. If there are no more characters, it returns a negative
+  // Returns and advances past the next UTF-16 code unit in the input
+  // stream. If there are no more code units, it returns a negative
   // value.
   inline uc32 Advance() {
     if (buffer_cursor_ < buffer_end_ || ReadBlock()) {
@@ -89,47 +92,47 @@ class UC16CharacterStream {
     }
     // Note: currently the following increment is necessary to avoid a
     // parser problem! The scanner treats the final kEndOfInput as
-    // a character with a position, and does math relative to that
+    // a code unit with a position, and does math relative to that
     // position.
     pos_++;
 
     return kEndOfInput;
   }
 
-  // Return the current position in the character stream.
+  // Return the current position in the code unit stream.
   // Starts at zero.
   inline unsigned pos() const { return pos_; }
 
-  // Skips forward past the next character_count UC16 characters
+  // Skips forward past the next code_unit_count UTF-16 code units
   // in the input, or until the end of input if that comes sooner.
-  // Returns the number of characters actually skipped. If less
-  // than character_count,
-  inline unsigned SeekForward(unsigned character_count) {
+  // Returns the number of code units actually skipped. If less
+  // than code_unit_count,
+  inline unsigned SeekForward(unsigned code_unit_count) {
     unsigned buffered_chars =
         static_cast<unsigned>(buffer_end_ - buffer_cursor_);
-    if (character_count <= buffered_chars) {
-      buffer_cursor_ += character_count;
-      pos_ += character_count;
-      return character_count;
+    if (code_unit_count <= buffered_chars) {
+      buffer_cursor_ += code_unit_count;
+      pos_ += code_unit_count;
+      return code_unit_count;
     }
-    return SlowSeekForward(character_count);
+    return SlowSeekForward(code_unit_count);
   }
 
-  // Pushes back the most recently read UC16 character (or negative
+  // Pushes back the most recently read UTF-16 code unit (or negative
   // value if at end of input), i.e., the value returned by the most recent
   // call to Advance.
   // Must not be used right after calling SeekForward.
-  virtual void PushBack(int32_t character) = 0;
+  virtual void PushBack(int32_t code_unit) = 0;
 
  protected:
   static const uc32 kEndOfInput = -1;
 
-  // Ensures that the buffer_cursor_ points to the character at
+  // Ensures that the buffer_cursor_ points to the code_unit at
   // position pos_ of the input, if possible. If the position
   // is at or after the end of the input, return false. If there
-  // are more characters available, return true.
+  // are more code_units available, return true.
   virtual bool ReadBlock() = 0;
-  virtual unsigned SlowSeekForward(unsigned character_count) = 0;
+  virtual unsigned SlowSeekForward(unsigned code_unit_count) = 0;
 
   const uc16* buffer_cursor_;
   const uc16* buffer_end_;
@@ -177,23 +180,24 @@ class LiteralBuffer {
     }
   }
 
-  INLINE(void AddChar(uc16 character)) {
+  INLINE(void AddChar(uint32_t code_unit)) {
     if (position_ >= backing_store_.length()) ExpandBuffer();
     if (is_ascii_) {
-      if (character < kMaxAsciiCharCodeU) {
-        backing_store_[position_] = static_cast<byte>(character);
+      if (code_unit < kMaxAsciiCharCodeU) {
+        backing_store_[position_] = static_cast<byte>(code_unit);
         position_ += kASCIISize;
         return;
       }
-      ConvertToUC16();
+      ConvertToUtf16();
     }
-    *reinterpret_cast<uc16*>(&backing_store_[position_]) = character;
+    ASSERT(code_unit < 0x10000u);
+    *reinterpret_cast<uc16*>(&backing_store_[position_]) = code_unit;
     position_ += kUC16Size;
   }
 
   bool is_ascii() { return is_ascii_; }
 
-  Vector<const uc16> uc16_literal() {
+  Vector<const uc16> utf16_literal() {
     ASSERT(!is_ascii_);
     ASSERT((position_ & 0x1) == 0);
     return Vector<const uc16>(
@@ -235,13 +239,13 @@ class LiteralBuffer {
     backing_store_ = new_store;
   }
 
-  void ConvertToUC16() {
+  void ConvertToUtf16() {
     ASSERT(is_ascii_);
     Vector<byte> new_store;
     int new_content_size = position_ * kUC16Size;
     if (new_content_size >= backing_store_.length()) {
-      // Ensure room for all currently read characters as UC16 as well
-      // as the character about to be stored.
+      // Ensure room for all currently read code units as UC16 as well
+      // as the code unit about to be stored.
       new_store = Vector<byte>::New(NewCapacity(new_content_size));
     } else {
       new_store = backing_store_;
@@ -315,7 +319,7 @@ class Scanner {
 
   explicit Scanner(UnicodeCache* scanner_contants);
 
-  void Initialize(UC16CharacterStream* source);
+  void Initialize(Utf16CharacterStream* source);
 
   // Returns the next token and advances input.
   Token::Value Next();
@@ -334,9 +338,9 @@ class Scanner {
     ASSERT_NOT_NULL(current_.literal_chars);
     return current_.literal_chars->ascii_literal();
   }
-  Vector<const uc16> literal_uc16_string() {
+  Vector<const uc16> literal_utf16_string() {
     ASSERT_NOT_NULL(current_.literal_chars);
-    return current_.literal_chars->uc16_literal();
+    return current_.literal_chars->utf16_literal();
   }
   bool is_literal_ascii() {
     ASSERT_NOT_NULL(current_.literal_chars);
@@ -370,9 +374,9 @@ class Scanner {
     ASSERT_NOT_NULL(next_.literal_chars);
     return next_.literal_chars->ascii_literal();
   }
-  Vector<const uc16> next_literal_uc16_string() {
+  Vector<const uc16> next_literal_utf16_string() {
     ASSERT_NOT_NULL(next_.literal_chars);
-    return next_.literal_chars->uc16_literal();
+    return next_.literal_chars->utf16_literal();
   }
   bool is_next_literal_ascii() {
     ASSERT_NOT_NULL(next_.literal_chars);
@@ -403,8 +407,14 @@ class Scanner {
   bool HarmonyScoping() const {
     return harmony_scoping_;
   }
-  void SetHarmonyScoping(bool block_scoping) {
-    harmony_scoping_ = block_scoping;
+  void SetHarmonyScoping(bool scoping) {
+    harmony_scoping_ = scoping;
+  }
+  bool HarmonyModules() const {
+    return harmony_modules_;
+  }
+  void SetHarmonyModules(bool modules) {
+    harmony_modules_ = modules;
   }
 
 
@@ -510,13 +520,16 @@ class Scanner {
   Token::Value ScanIdentifierOrKeyword();
   Token::Value ScanIdentifierSuffix(LiteralScope* literal);
 
-  void ScanEscape();
   Token::Value ScanString();
 
-  // Decodes a unicode escape-sequence which is part of an identifier.
+  // Scans an escape-sequence which is part of a string and adds the
+  // decoded character to the current literal. Returns true if a pattern
+  // is scanned.
+  bool ScanEscape();
+  // Decodes a Unicode escape-sequence which is part of an identifier.
   // If the escape sequence cannot be decoded the result is kBadChar.
   uc32 ScanIdentifierUnicodeEscape();
-  // Recognizes a uniocde escape-sequence and adds its characters,
+  // Scans a Unicode escape-sequence and adds its characters,
   // uninterpreted, to the current literal. Used for parsing RegExp
   // flags.
   bool ScanLiteralUnicodeEscape();
@@ -535,8 +548,8 @@ class Scanner {
   TokenDesc current_;  // desc for current token (as returned by Next())
   TokenDesc next_;     // desc for next token (one token look-ahead)
 
-  // Input stream. Must be initialized to an UC16CharacterStream.
-  UC16CharacterStream* source_;
+  // Input stream. Must be initialized to an Utf16CharacterStream.
+  Utf16CharacterStream* source_;
 
 
   // Start position of the octal literal last scanned.
@@ -552,9 +565,10 @@ class Scanner {
   // Whether there is a multi-line comment that contains a
   // line-terminator after the current token, and before the next.
   bool has_multiline_comment_before_next_;
-  // Whether we scan 'let' as a keyword for harmony block scoped
-  // let bindings.
+  // Whether we scan 'let' as a keyword for harmony block-scoped let bindings.
   bool harmony_scoping_;
+  // Whether we scan 'module', 'import', 'export' as keywords.
+  bool harmony_modules_;
 };
 
 } }  // namespace v8::internal

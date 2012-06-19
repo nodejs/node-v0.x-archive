@@ -2,13 +2,15 @@
 module.exports = config
 
 config.usage = "npm config set <key> <value>"
-             + "\nnpm config get <key>"
+             + "\nnpm config get [<key>]"
              + "\nnpm config delete <key>"
              + "\nnpm config list"
              + "\nnpm config edit"
+             + "\nnpm set <key> <value>"
+             + "\nnpm get [<key>]"
 
 var ini = require("./utils/ini.js")
-  , log = require("./utils/log.js")
+  , log = require("npmlog")
   , npm = require("./npm.js")
   , exec = require("./utils/exec.js")
   , fs = require("graceful-fs")
@@ -113,6 +115,9 @@ function del (key, cb) {
 }
 
 function set (key, val, cb) {
+  if (key === undefined) {
+    return unknown("", cb)
+  }
   if (val === undefined) {
     if (key.indexOf("=") !== -1) {
       var k = key.split("=")
@@ -124,7 +129,7 @@ function set (key, val, cb) {
   }
   key = key.trim()
   val = val.trim()
-  log("set "+key+" "+val, "config")
+  log.info("config", "set %j %j", key, val)
   var where = ini.get("global") ? "global" : "user"
   ini.set(key, val, where)
   ini.save(where, cb)

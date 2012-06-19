@@ -26,7 +26,7 @@
 #define MAX_CONNS 1000
 
 #undef NANOSEC
-#define NANOSEC ((uint64_t)10e8)
+#define NANOSEC ((uint64_t) 1e9)
 
 #undef DEBUG
 #define DEBUG 0
@@ -107,7 +107,9 @@ static void connect_cb(uv_connect_t* req, int status) {
 
   if (status != 0) {
 #if DEBUG
-    fprintf(stderr, "connect error %s\n", uv_err_name(uv_last_error()));
+    fprintf(stderr,
+            "connect error %s\n",
+            uv_err_name(uv_last_error(uv_default_loop())));
 #endif
     uv_close((uv_handle_t*)req->handle, close_cb);
     conns_failed++;

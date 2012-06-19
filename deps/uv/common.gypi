@@ -24,7 +24,7 @@
               }],
             ],
             'Optimization': 0, # /Od, no optimization
-            'MinimalRebuild': 'true',
+            'MinimalRebuild': 'false',
             'OmitFramePointers': 'false',
             'BasicRuntimeChecks': 3, # /RTC1
           },
@@ -57,9 +57,6 @@
             'OmitFramePointers': 'true',
             'EnableFunctionLevelLinking': 'true',
             'EnableIntrinsicFunctions': 'true',
-            'AdditionalOptions': [
-              '/MP', # compile across multiple CPUs
-            ],
           },
           'VCLibrarianTool': {
             'AdditionalOptions': [
@@ -84,6 +81,9 @@
         'ExceptionHandling': 1, # /EHsc
         'SuppressStartupBanner': 'true',
         'WarnAsError': 'false',
+        'AdditionalOptions': [
+           '/MP', # compile across multiple CPUs
+         ],
       },
       'VCLibrarianTool': {
       },
@@ -153,7 +153,6 @@
           'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',      # -fvisibility=hidden
           'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
           'GCC_WARN_ABOUT_MISSING_NEWLINE': 'YES',  # -Wnewline-eof
-          'MACOSX_DEPLOYMENT_TARGET': '10.4',       # -mmacosx-version-min=10.4
           'PREBINDING': 'NO',                       # No -Wl,-prebind
           'USE_HEADERMAP': 'NO',
           'OTHER_CFLAGS': [

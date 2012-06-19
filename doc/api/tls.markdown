@@ -1,4 +1,6 @@
-## TLS (SSL)
+# TLS (SSL)
+
+    Stability: 3 - Stable
 
 Use `require('tls')` to access this module.
 
@@ -26,18 +28,68 @@ Alternatively you can send the CSR to a Certificate Authority for signing.
 (TODO: docs on creating a CA, for now interested users should just look at
 `test/fixtures/keys/Makefile` in the Node source code)
 
+To create .pfx or .p12, do this:
 
-#### tls.createServer(options, [secureConnectionListener])
+    openssl pkcs12 -export -in agent5-cert.pem -inkey agent5-key.pem \
+        -certfile ca-cert.pem -out agent5.pfx
 
-Creates a new [tls.Server](#tls.Server).
-The `connectionListener` argument is automatically set as a listener for the
-[secureConnection](#event_secureConnection_) event.
-The `options` object has these possibilities:
+  - `in`:  certificate
+  - `inkey`: private key
+  - `certfile`: all CA certs concatenated in one file like
+    `cat ca1-cert.pem ca2-cert.pem > ca-cert.pem`
+
+
+## Client-initiated renegotiation attack mitigation
+
+<!-- type=misc -->
+
+The TLS protocol lets the client renegotiate certain aspects of the TLS session.
+Unfortunately, session renegotiation requires a disproportional amount of
+server-side resources, which makes it a potential vector for denial-of-service
+attacks.
+
+To mitigate this, renegotiations are limited to three times every 10 minutes. An
+error is emitted on the [CleartextStream][] instance when the threshold is
+exceeded. The limits are configurable:
+
+  - `tls.CLIENT_RENEG_LIMIT`: renegotiation limit, default is 3.
+
+  - `tls.CLIENT_RENEG_WINDOW`: renegotiation window in seconds, default is
+                               10 minutes.
+
+Don't change the defaults unless you know what you are doing.
+
+To test your server, connect to it with `openssl s_client -connect address:port`
+and tap `R<CR>` (that's the letter `R` followed by a carriage return) a few
+times.
+
+
+## NPN and SNI
+
+<!-- type=misc -->
+
+NPN (Next Protocol Negotiation) and SNI (Server Name Indication) are TLS
+handshake extensions allowing you:
+
+  * NPN - to use one TLS server for multiple protocols (HTTP, SPDY)
+  * SNI - to use one TLS server for multiple hostnames with different SSL
+    certificates.
+
+
+## tls.createServer(options, [secureConnectionListener])
+
+Creates a new [tls.Server][].  The `connectionListener` argument is
+automatically set as a listener for the [secureConnection][] event.  The
+`options` object has these possibilities:
+
+  - `pfx`: A string or `Buffer` containing the private key, certificate and
+    CA certs of the server in PFX or PKCS12 format. (Mutually exclusive with
+    the `key`, `cert` and `ca` options.)
 
   - `key`: A string or `Buffer` containing the private key of the server in
     PEM format. (Required)
 
-  - `passphrase`: A string of passphrase for the private key.
+  - `passphrase`: A string of passphrase for the private key or pfx.
 
   - `cert`: A string or `Buffer` containing the certificate key of the server in
     PEM format. (Required)
@@ -45,6 +97,28 @@ The `options` object has these possibilities:
   - `ca`: An array of strings or `Buffer`s of trusted certificates. If this is
     omitted several well known "root" CAs will be used, like VeriSign.
     These are used to authorize connections.
+
+  - `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate
+    Revocation List)
+
+  - `ciphers`: A string describing the ciphers to use or exclude. Consult
+    <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for
+    details on the format.
+    To mitigate [BEAST attacks]
+    (http://blog.ivanristic.com/2011/10/mitigating-the-beast-attack-on-tls.html),
+    it is recommended that you use this option in conjunction with the
+    `honorCipherOrder` option described below to prioritize the RC4 algorithm,
+    since it is a non-CBC cipher. A recommended cipher list follows:
+    `ECDHE-RSA-AES256-SHA:AES256-SHA:RC4-SHA:RC4:HIGH:!MD5:!aNULL:!EDH:!AESGCM`
+
+  - `honorCipherOrder` :
+	When choosing a cipher, use the server's preferences instead of the client
+	preferences.
+	Note that if SSLv2 is used, the server will send its list of preferences
+	to the client, and the client chooses the cipher.
+	Although, this option is disabled by default, it is *recommended* that you
+	use this option in conjunction with the `ciphers` option to mitigate
+	BEAST attacks.
 
   - `requestCert`: If `true` the server will request a certificate from
     clients that connect and attempt to verify that certificate. Default:
@@ -95,15 +169,37 @@ Here is a simple example echo server:
       console.log('server bound');
     });
 
+Or
 
+    var tls = require('tls');
+    var fs = require('fs');
+
+    var options = {
+      pfx: fs.readFileSync('server.pfx'),
+
+      // This is necessary only if using the client certificate authentication.
+      requestCert: true,
+
+    };
+
+    var server = tls.createServer(options, function(cleartextStream) {
+      console.log('server connected',
+                  cleartextStream.authorized ? 'authorized' : 'unauthorized');
+      cleartextStream.write("welcome!\n");
+      cleartextStream.setEncoding('utf8');
+      cleartextStream.pipe(cleartextStream);
+    });
+    server.listen(8000, function() {
+      console.log('server bound');
+    });
 You can test this server by connecting to it with `openssl s_client`:
 
 
     openssl s_client -connect 127.0.0.1:8000
 
 
-#### tls.connect(options, [secureConnectListener])
-#### tls.connect(port, [host], [options], [secureConnectListener])
+## tls.connect(options, [secureConnectListener])
+## tls.connect(port, [host], [options], [secureConnectListener])
 
 Creates a new client connection to the given `port` and `host` (old API) or
 `options.port` and `options.host`. (If `host` is omitted, it defaults to
@@ -117,10 +213,13 @@ Creates a new client connection to the given `port` and `host` (old API) or
     creating a new socket. If this option is specified, `host` and `port`
     are ignored.
 
+  - `pfx`: A string or `Buffer` containing the private key, certificate and
+    CA certs of the server in PFX or PKCS12 format.
+
   - `key`: A string or `Buffer` containing the private key of the client in
     PEM format.
 
-  - `passphrase`: A string of passphrase for the private key.
+  - `passphrase`: A string of passphrase for the private key or pfx.
 
   - `cert`: A string or `Buffer` containing the certificate key of the client in
     PEM format.
@@ -141,9 +240,9 @@ Creates a new client connection to the given `port` and `host` (old API) or
   - `servername`: Servername for SNI (Server Name Indication) TLS extension.
 
 The `secureConnectListener` parameter will be added as a listener for the
-['secureConnect'](#event_secureConnect_) event.
+['secureConnect'][] event.
 
-`tls.connect()` returns a [CleartextStream](#tls.CleartextStream) object.
+`tls.connect()` returns a [CleartextStream][] object.
 
 Here is an example of a client of echo server as described previously:
 
@@ -173,28 +272,30 @@ Here is an example of a client of echo server as described previously:
       server.close();
     });
 
+Or
 
-### STARTTLS
+    var tls = require('tls');
+    var fs = require('fs');
 
-In the v0.4 branch no function exists for starting a TLS session on an
-already existing TCP connection.  This is possible it just requires a bit of
-work. The technique is to use `tls.createSecurePair()` which returns two
-streams: an encrypted stream and a cleartext stream. The encrypted stream is
-then piped to the socket, the cleartext stream is what the user interacts with
-thereafter.
+    var options = {
+      pfx: fs.readFileSync('client.pfx')
+    };
 
-[Here is some code that does it.](http://gist.github.com/848444)
+    var cleartextStream = tls.connect(8000, options, function() {
+      console.log('client connected',
+                  cleartextStream.authorized ? 'authorized' : 'unauthorized');
+      process.stdin.pipe(cleartextStream);
+      process.stdin.resume();
+    });
+    cleartextStream.setEncoding('utf8');
+    cleartextStream.on('data', function(data) {
+      console.log(data);
+    });
+    cleartextStream.on('end', function() {
+      server.close();
+    });
 
-### NPN and SNI
-
-NPN (Next Protocol Negotiation) and SNI (Server Name Indication) are TLS
-handshake extensions allowing you:
-
-  * NPN - to use one TLS server for multiple protocols (HTTP, SPDY)
-  * SNI - to use one TLS server for multiple hostnames with different SSL
-    certificates.
-
-### pair = tls.createSecurePair([credentials], [isServer], [requestCert], [rejectUnauthorized])
+## tls.createSecurePair([credentials], [isServer], [requestCert], [rejectUnauthorized])
 
 Creates a new secure pair object with two streams, one of which reads/writes
 encrypted data, and one reads/writes cleartext data.
@@ -213,10 +314,14 @@ and the cleartext one is used as a replacement for the initial encrypted stream.
    automatically reject clients with invalid certificates. Only applies to
    servers with `requestCert` enabled.
 
-`tls.createSecurePair()` returns a SecurePair object with
-[cleartext](#tls.CleartextStream) and `encrypted` stream properties.
+`tls.createSecurePair()` returns a SecurePair object with [cleartext][] and
+`encrypted` stream properties.
 
-#### Event: 'secure'
+## Class: SecurePair
+
+Returned by tls.createSecurePair.
+
+### Event: 'secure'
 
 The event is emitted from the SecurePair once the pair has successfully
 established a secure connection.
@@ -225,20 +330,19 @@ Similarly to the checking for the server 'secureConnection' event,
 pair.cleartext.authorized should be checked to confirm whether the certificate
 used properly authorized.
 
-### tls.Server
+## Class: tls.Server
 
 This class is a subclass of `net.Server` and has the same methods on it.
 Instead of accepting just raw TCP connections, this accepts encrypted
 connections using TLS or SSL.
 
-#### Event: 'secureConnection'
+### Event: 'secureConnection'
 
 `function (cleartextStream) {}`
 
 This event is emitted after a new connection has been successfully
-handshaked. The argument is a instance of
-[CleartextStream](#tls.CleartextStream). It has all the common stream methods
-and events.
+handshaked. The argument is a instance of [CleartextStream][]. It has all the
+common stream methods and events.
 
 `cleartextStream.authorized` is a boolean value which indicates if the
 client has verified by one of the supplied certificate authorities for the
@@ -251,7 +355,7 @@ server, you unauthorized connections may be accepted.
 SNI.
 
 
-#### Event: 'clientError'
+### Event: 'clientError'
 
 `function (exception) { }`
 
@@ -259,7 +363,7 @@ When a client connection emits an 'error' event before secure connection is
 established - it will be forwarded here.
 
 
-#### server.listen(port, [host], [callback])
+### server.listen(port, [host], [callback])
 
 Begin accepting connections on the specified `port` and `host`.  If the
 `host` is omitted, the server will accept connections directed to any
@@ -271,45 +375,45 @@ when the server has been bound.
 See `net.Server` for more information.
 
 
-#### server.close()
+### server.close()
 
 Stops the server from accepting new connections. This function is
 asynchronous, the server is finally closed when the server emits a `'close'`
 event.
 
-#### server.address()
+### server.address()
 
-Returns the bound address and port of the server as reported by the operating
-system.
-See [net.Server.address()](net.html#server.address) for more information.
+Returns the bound address, the address family name and port of the
+server as reported by the operating system.  See [net.Server.address()][] for
+more information.
 
-#### server.addContext(hostname, credentials)
+### server.addContext(hostname, credentials)
 
 Add secure context that will be used if client request's SNI hostname is
 matching passed `hostname` (wildcards can be used). `credentials` can contain
 `key`, `cert` and `ca`.
 
-#### server.maxConnections
+### server.maxConnections
 
 Set this property to reject connections when the server's connection count
 gets high.
 
-#### server.connections
+### server.connections
 
 The number of concurrent connections on the server.
 
 
-### tls.CleartextStream
+## Class: tls.CleartextStream
 
 This is a stream on top of the *Encrypted* stream that makes it possible to
 read/write an encrypted data as a cleartext data.
 
-This instance implements a duplex [Stream](streams.html#streams) interfaces.
-It has all the common stream methods and events.
+This instance implements a duplex [Stream][] interfaces.  It has all the
+common stream methods and events.
 
-#### Event: 'secureConnect'
+A ClearTextStream is the `clear` member of a SecurePair object.
 
-`function () {}`
+### Event: 'secureConnect'
 
 This event is emitted after a new connection has been successfully handshaked. 
 The listener will be called no matter if the server's certificate was
@@ -319,17 +423,17 @@ If `cleartextStream.authorized === false` then the error can be found in
 `cleartextStream.authorizationError`. Also if NPN was used - you can check
 `cleartextStream.npnProtocol` for negotiated protocol.
 
-#### cleartextStream.authorized
+### cleartextStream.authorized
 
 A boolean that is `true` if the peer certificate was signed by one of the
 specified CAs, otherwise `false`
 
-#### cleartextStream.authorizationError
+### cleartextStream.authorizationError
 
 The reason why the peer's certificate has not been verified. This property
 becomes available only when `cleartextStream.authorized === false`.
 
-#### cleartextStream.getPeerCertificate()
+### cleartextStream.getPeerCertificate()
 
 Returns an object representing the peer's certificate. The returned object has
 some properties corresponding to the field of the certificate.
@@ -357,17 +461,36 @@ Example:
 If the peer does not provide a certificate, it returns `null` or an empty
 object.
 
-#### cleartextStream.address()
+### cleartextStream.getCipher()
+Returns an object representing the cipher name and the SSL/TLS
+protocol version of the current connection.
 
-Returns the bound address and port of the underlying socket as reported by the
-operating system. Returns an object with two properties, e.g.
-`{"address":"192.168.57.1", "port":62053}`
+Example:
+{ name: 'AES256-SHA', version: 'TLSv1/SSLv3' }
 
-#### cleartextStream.remoteAddress
+See SSL_CIPHER_get_name() and SSL_CIPHER_get_version() in
+http://www.openssl.org/docs/ssl/ssl.html#DEALING_WITH_CIPHERS for more
+information.
+
+### cleartextStream.address()
+
+Returns the bound address, the address family name and port of the
+underlying socket as reported by the operating system. Returns an
+object with three properties, e.g.
+`{ port: 12346, family: 'IPv4', address: '127.0.0.1' }`
+
+### cleartextStream.remoteAddress
 
 The string representation of the remote IP address. For example,
 `'74.125.127.100'` or `'2001:4860:a005::68'`.
 
-#### cleartextStream.remotePort
+### cleartextStream.remotePort
 
 The numeric representation of the remote port. For example, `443`.
+
+[CleartextStream]: #tls_class_tls_cleartextstream
+[net.Server.address()]: net.html#net_server_address
+['secureConnect']: #tls_event_secureconnect
+[secureConnection]: #tls_event_secureconnection
+[Stream]: stream.html#stream_stream
+[tls.Server]: #tls_class_tls_server

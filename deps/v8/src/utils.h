@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -83,6 +83,32 @@ inline int WhichPowerOf2(uint32_t x) {
   return bits;
   return 0;
 }
+
+
+// Magic numbers for integer division.
+// These are kind of 2's complement reciprocal of the divisors.
+// Details and proofs can be found in:
+// - Hacker's Delight, Henry S. Warren, Jr.
+// - The PowerPC Compiler Writer’s Guide
+// and probably many others.
+// See details in the implementation of the algorithm in
+// lithium-codegen-arm.cc : LCodeGen::TryEmitSignedIntegerDivisionByConstant().
+struct DivMagicNumbers {
+  unsigned M;
+  unsigned s;
+};
+
+const DivMagicNumbers InvalidDivMagicNumber= {0, 0};
+const DivMagicNumbers DivMagicNumberFor3   = {0x55555556, 0};
+const DivMagicNumbers DivMagicNumberFor5   = {0x66666667, 1};
+const DivMagicNumbers DivMagicNumberFor7   = {0x92492493, 2};
+const DivMagicNumbers DivMagicNumberFor9   = {0x38e38e39, 1};
+const DivMagicNumbers DivMagicNumberFor11  = {0x2e8ba2e9, 1};
+const DivMagicNumbers DivMagicNumberFor25  = {0x51eb851f, 3};
+const DivMagicNumbers DivMagicNumberFor125 = {0x10624dd3, 3};
+const DivMagicNumbers DivMagicNumberFor625 = {0x68db8bad, 8};
+
+const DivMagicNumbers DivMagicNumberFor(int32_t divisor);
 
 
 // The C++ standard leaves the semantics of '>>' undefined for
@@ -931,9 +957,17 @@ class EnumSet {
   explicit EnumSet(T bits = 0) : bits_(bits) {}
   bool IsEmpty() const { return bits_ == 0; }
   bool Contains(E element) const { return (bits_ & Mask(element)) != 0; }
+  bool ContainsAnyOf(const EnumSet& set) const {
+    return (bits_ & set.bits_) != 0;
+  }
   void Add(E element) { bits_ |= Mask(element); }
+  void Add(const EnumSet& set) { bits_ |= set.bits_; }
   void Remove(E element) { bits_ &= ~Mask(element); }
+  void Remove(const EnumSet& set) { bits_ &= ~set.bits_; }
+  void RemoveAll() { bits_ = 0; }
+  void Intersect(const EnumSet& set) { bits_ &= set.bits_; }
   T ToIntegral() const { return bits_; }
+  bool operator==(const EnumSet& set) { return bits_ == set.bits_; }
 
  private:
   T Mask(E element) const {

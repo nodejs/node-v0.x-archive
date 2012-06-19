@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -91,6 +91,8 @@ void BreakLocationIterator::ClearDebugBreakAtSlot() {
   rinfo()->PatchCode(original_rinfo()->pc(), Assembler::kDebugBreakSlotLength);
 }
 
+const bool Debug::FramePaddingLayout::kIsSupported = true;
+
 
 #define __ ACCESS_MASM(masm)
 
@@ -102,6 +104,12 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   // Enter an internal frame.
   {
     FrameScope scope(masm, StackFrame::INTERNAL);
+
+    // Load padding words on stack.
+    for (int i = 0; i < Debug::FramePaddingLayout::kInitialSize; i++) {
+      __ Push(Smi::FromInt(Debug::FramePaddingLayout::kPaddingValue));
+    }
+    __ Push(Smi::FromInt(Debug::FramePaddingLayout::kInitialSize));
 
     // Store the registers containing live values on the expression stack to
     // make sure that these are correctly updated during GC. Non object values
@@ -156,6 +164,11 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         __ or_(reg, kScratchRegister);
       }
     }
+
+    // Read current padding counter and skip corresponding number of words.
+    __ pop(kScratchRegister);
+    __ SmiToInteger32(kScratchRegister, kScratchRegister);
+    __ lea(rsp, Operand(rsp, kScratchRegister, times_pointer_size, 0));
 
     // Get rid of the internal frame.
   }
@@ -229,18 +242,6 @@ void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
 }
 
 
-void Debug::GenerateConstructCallDebugBreak(MacroAssembler* masm) {
-  // Register state just before return from JS function (from codegen-x64.cc).
-  // rax is the actual number of arguments not encoded as a smi, see comment
-  // above IC call.
-  // ----------- S t a t e -------------
-  //  -- rax: number of arguments
-  // -----------------------------------
-  // The number of arguments in rax is not smi encoded.
-  Generate_DebugBreakCallHelper(masm, rdi.bit(), rax.bit(), false);
-}
-
-
 void Debug::GenerateReturnDebugBreak(MacroAssembler* masm) {
   // Register state just before return from JS function (from codegen-x64.cc).
   // ----------- S t a t e -------------
@@ -251,11 +252,46 @@ void Debug::GenerateReturnDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GenerateCallFunctionStubDebugBreak(MacroAssembler* masm) {
-  // Register state for stub CallFunction (from CallFunctionStub in ic-x64.cc).
+  // Register state for CallFunctionStub (from code-stubs-x64.cc).
   // ----------- S t a t e -------------
   //  -- rdi : function
   // -----------------------------------
   Generate_DebugBreakCallHelper(masm, rdi.bit(), 0, false);
+}
+
+
+void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
+  // Register state for CallFunctionStub (from code-stubs-x64.cc).
+  // ----------- S t a t e -------------
+  //  -- rdi : function
+  //  -- rbx: cache cell for call target
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, rbx.bit() | rdi.bit(), 0, false);
+}
+
+
+void Debug::GenerateCallConstructStubDebugBreak(MacroAssembler* masm) {
+  // Register state for CallConstructStub (from code-stubs-x64.cc).
+  // rax is the actual number of arguments not encoded as a smi, see comment
+  // above IC call.
+  // ----------- S t a t e -------------
+  //  -- rax: number of arguments
+  // -----------------------------------
+  // The number of arguments in rax is not smi encoded.
+  Generate_DebugBreakCallHelper(masm, rdi.bit(), rax.bit(), false);
+}
+
+
+void Debug::GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm) {
+  // Register state for CallConstructStub (from code-stubs-x64.cc).
+  // rax is the actual number of arguments not encoded as a smi, see comment
+  // above IC call.
+  // ----------- S t a t e -------------
+  //  -- rax: number of arguments
+  //  -- rbx: cache cell for call target
+  // -----------------------------------
+  // The number of arguments in rax is not smi encoded.
+  Generate_DebugBreakCallHelper(masm, rbx.bit() | rdi.bit(), rax.bit(), false);
 }
 
 

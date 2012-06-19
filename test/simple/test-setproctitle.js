@@ -23,14 +23,15 @@
 
 // FIXME add sunos support
 if ('linux freebsd'.indexOf(process.platform) === -1) {
-  console.error("Skipping test, platform not supported.");
+  console.error('Skipping test, platform not supported.');
   process.exit();
 }
 
+var common = require('../common');
 var assert = require('assert');
 var exec = require('child_process').exec;
 
-var title = "testTestTESTtest123123123123123123HiHaiJo";
+var title = 'testTestTESTtest123123123123123123HiHaiJo';
 
 assert.notEqual(process.title, title);
 process.title = title;

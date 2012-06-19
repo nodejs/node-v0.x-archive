@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -232,6 +232,12 @@ class Debug {
   void PreemptionWhileInDebugger();
   void Iterate(ObjectVisitor* v);
 
+  NO_INLINE(void PutValuesOnStackAndDie(int start,
+                                        Address c_entry_fp,
+                                        Address last_fp,
+                                        Address larger_fp,
+                                        int count,
+                                        int end));
   Object* Break(Arguments args);
   void SetBreakPoint(Handle<SharedFunctionInfo> shared,
                      Handle<Object> break_point_object,
@@ -239,11 +245,14 @@ class Debug {
   void ClearBreakPoint(Handle<Object> break_point_object);
   void ClearAllBreakPoints();
   void FloodWithOneShot(Handle<SharedFunctionInfo> shared);
+  void FloodBoundFunctionWithOneShot(Handle<JSFunction> function);
   void FloodHandlerWithOneShot();
   void ChangeBreakOnException(ExceptionBreakType type, bool enable);
   bool IsBreakOnException(ExceptionBreakType type);
   void PrepareStep(StepAction step_action, int step_count);
   void ClearStepping();
+  void ClearStepOut();
+  bool IsStepping() { return thread_local_.step_count_ > 0; }
   bool StepNextContinue(BreakLocationIterator* break_location_iterator,
                         JavaScriptFrame* frame);
   static Handle<DebugInfo> GetDebugInfo(Handle<SharedFunctionInfo> shared);
@@ -402,9 +411,11 @@ class Debug {
   static void GenerateStoreICDebugBreak(MacroAssembler* masm);
   static void GenerateKeyedLoadICDebugBreak(MacroAssembler* masm);
   static void GenerateKeyedStoreICDebugBreak(MacroAssembler* masm);
-  static void GenerateConstructCallDebugBreak(MacroAssembler* masm);
   static void GenerateReturnDebugBreak(MacroAssembler* masm);
   static void GenerateCallFunctionStubDebugBreak(MacroAssembler* masm);
+  static void GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm);
+  static void GenerateCallConstructStubDebugBreak(MacroAssembler* masm);
+  static void GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm);
   static void GenerateSlotDebugBreak(MacroAssembler* masm);
   static void GeneratePlainReturnLiveEdit(MacroAssembler* masm);
 
@@ -452,6 +463,50 @@ class Debug {
   // Architecture-specific constant.
   static const bool kFrameDropperSupported;
 
+  /**
+   * Defines layout of a stack frame that supports padding. This is a regular
+   * internal frame that has a flexible stack structure. LiveEdit can shift
+   * its lower part up the stack, taking up the 'padding' space when additional
+   * stack memory is required.
+   * Such frame is expected immediately above the topmost JavaScript frame.
+   *
+   * Stack Layout:
+   *   --- Top
+   *   LiveEdit routine frames
+   *   ---
+   *   C frames of debug handler
+   *   ---
+   *   ...
+   *   ---
+   *      An internal frame that has n padding words:
+   *      - any number of words as needed by code -- upper part of frame
+   *      - padding size: a Smi storing n -- current size of padding
+   *      - padding: n words filled with kPaddingValue in form of Smi
+   *      - 3 context/type words of a regular InternalFrame
+   *      - fp
+   *   ---
+   *      Topmost JavaScript frame
+   *   ---
+   *   ...
+   *   --- Bottom
+   */
+  class FramePaddingLayout : public AllStatic {
+   public:
+    // Architecture-specific constant.
+    static const bool kIsSupported;
+
+    // A size of frame base including fp. Padding words starts right above
+    // the base.
+    static const int kFrameBaseSize = 4;
+
+    // A number of words that should be reserved on stack for the LiveEdit use.
+    // Normally equals 1. Stored on stack in form of Smi.
+    static const int kInitialSize;
+    // A value that padding words are filled with (in form of Smi). Going
+    // bottom-top, the first word not having this value is a counter word.
+    static const int kPaddingValue;
+  };
+
  private:
   explicit Debug(Isolate* isolate);
   ~Debug();
@@ -461,7 +516,6 @@ class Debug {
   void ActivateStepIn(StackFrame* frame);
   void ClearStepIn();
   void ActivateStepOut(StackFrame* frame);
-  void ClearStepOut();
   void ClearStepNext();
   // Returns whether the compile succeeded.
   void RemoveDebugInfo(Handle<DebugInfo> debug_info);

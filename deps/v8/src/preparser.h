@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -28,6 +28,7 @@
 #ifndef V8_PREPARSER_H
 #define V8_PREPARSER_H
 
+#include "hashmap.h"
 #include "token.h"
 #include "scanner.h"
 
@@ -64,7 +65,7 @@ class DuplicateFinder {
         map_(&Match) { }
 
   int AddAsciiSymbol(i::Vector<const char> key, int value);
-  int AddUC16Symbol(i::Vector<const uint16_t> key, int value);
+  int AddUtf16Symbol(i::Vector<const uint16_t> key, int value);
   // Add a a number literal by converting it (if necessary)
   // to the string that ToString(ToNumber(literal)) would generate.
   // and then adding that string with AddAsciiSymbol.
@@ -115,7 +116,8 @@ class PreParser {
             i::ParserRecorder* log,
             uintptr_t stack_limit,
             bool allow_lazy,
-            bool allow_natives_syntax)
+            bool allow_natives_syntax,
+            bool allow_modules)
       : scanner_(scanner),
         log_(log),
         scope_(NULL),
@@ -124,6 +126,7 @@ class PreParser {
         strict_mode_violation_type_(NULL),
         stack_overflow_(false),
         allow_lazy_(allow_lazy),
+        allow_modules_(allow_modules),
         allow_natives_syntax_(allow_natives_syntax),
         parenthesized_function_(false),
         harmony_scoping_(scanner->HarmonyScoping()) { }
@@ -140,8 +143,9 @@ class PreParser {
                                         uintptr_t stack_limit) {
     bool allow_lazy = (flags & i::kAllowLazy) != 0;
     bool allow_natives_syntax = (flags & i::kAllowNativesSyntax) != 0;
-    return PreParser(scanner, log, stack_limit,
-                     allow_lazy, allow_natives_syntax).PreParse();
+    bool allow_modules = (flags & i::kAllowModules) != 0;
+    return PreParser(scanner, log, stack_limit, allow_lazy,
+                     allow_natives_syntax, allow_modules).PreParse();
   }
 
   // Parses a single function literal, from the opening parentheses before
@@ -466,8 +470,19 @@ class PreParser {
     void set_language_mode(i::LanguageMode language_mode) {
       language_mode_ = language_mode;
     }
-    void EnterWith() { with_nesting_count_++; }
-    void LeaveWith() { with_nesting_count_--; }
+
+    class InsideWith {
+     public:
+      explicit InsideWith(Scope* scope) : scope_(scope) {
+        scope->with_nesting_count_++;
+      }
+
+      ~InsideWith() { scope_->with_nesting_count_--; }
+
+     private:
+      Scope* scope_;
+      DISALLOW_COPY_AND_ASSIGN(InsideWith);
+    };
 
    private:
     Scope** const variable_;
@@ -647,6 +662,7 @@ class PreParser {
   const char* strict_mode_violation_type_;
   bool stack_overflow_;
   bool allow_lazy_;
+  bool allow_modules_;
   bool allow_natives_syntax_;
   bool parenthesized_function_;
   bool harmony_scoping_;

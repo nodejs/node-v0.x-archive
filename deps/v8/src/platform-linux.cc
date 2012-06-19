@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -46,9 +46,9 @@
 #include <sys/stat.h>   // open
 #include <fcntl.h>      // open
 #include <unistd.h>     // sysconf
-#ifdef __GLIBC__
+#if defined(__GLIBC__) && !defined(__UCLIBC__)
 #include <execinfo.h>   // backtrace, backtrace_symbols
-#endif  // def __GLIBC__
+#endif  // defined(__GLIBC__) && !defined(__UCLIBC__)
 #include <strings.h>    // index
 #include <errno.h>
 #include <stdarg.h>
@@ -57,6 +57,7 @@
 
 #include "v8.h"
 
+#include "platform-posix.h"
 #include "platform.h"
 #include "v8threads.h"
 #include "vm-state-inl.h"
@@ -78,30 +79,8 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-void OS::SetUp() {
-  // Seed the random number generator. We preserve microsecond resolution.
-  uint64_t seed = Ticks() ^ (getpid() << 16);
-  srandom(static_cast<unsigned int>(seed));
-  limit_mutex = CreateMutex();
-
-#ifdef __arm__
-  // When running on ARM hardware check that the EABI used by V8 and
-  // by the C code is the same.
-  bool hard_float = OS::ArmUsingHardFloat();
-  if (hard_float) {
-#if !USE_EABI_HARDFLOAT
-    PrintF("ERROR: Binary compiled with -mfloat-abi=hard but without "
-           "-DUSE_EABI_HARDFLOAT\n");
-    exit(1);
-#endif
-  } else {
-#if USE_EABI_HARDFLOAT
-    PrintF("ERROR: Binary not compiled with -mfloat-abi=hard but with "
-           "-DUSE_EABI_HARDFLOAT\n");
-    exit(1);
-#endif
-  }
-#endif
+void OS::PostSetUp() {
+  POSIXPostSetUp();
 }
 
 
@@ -187,15 +166,15 @@ bool OS::ArmCpuHasFeature(CpuFeature feature) {
 // pair r0, r1 is loaded with 0.0. If -mfloat-abi=hard is pased to GCC then
 // calling this will return 1.0 and otherwise 0.0.
 static void ArmUsingHardFloatHelper() {
-  asm("mov r0, #0");
+  asm("mov r0, #0":::"r0");
 #if defined(__VFP_FP__) && !defined(__SOFTFP__)
   // Load 0x3ff00000 into r1 using instructions available in both ARM
   // and Thumb mode.
-  asm("mov r1, #3");
-  asm("mov r2, #255");
-  asm("lsl r1, r1, #8");
-  asm("orr r1, r1, r2");
-  asm("lsl r1, r1, #20");
+  asm("mov r1, #3":::"r1");
+  asm("mov r2, #255":::"r2");
+  asm("lsl r1, r1, #8":::"r1");
+  asm("orr r1, r1, r2":::"r1");
+  asm("lsl r1, r1, #20":::"r1");
   // For vmov d0, r0, r1 use ARM mode.
 #ifdef __thumb__
   asm volatile(
@@ -209,12 +188,12 @@ static void ArmUsingHardFloatHelper() {
     "    adr r3, 2f+1    \n\t"
     "    bx  r3          \n\t"
     "    .THUMB          \n"
-    "2:                  \n\t");
+    "2:                  \n\t":::"r3");
 #else
   asm("vmov d0, r0, r1");
 #endif  // __thumb__
 #endif  // defined(__VFP_FP__) && !defined(__SOFTFP__)
-  asm("mov r1, #0");
+  asm("mov r1, #0":::"r1");
 }
 
 
@@ -326,7 +305,7 @@ double OS::LocalTimeOffset() {
 
 // We keep the lowest and highest addresses mapped as a quick way of
 // determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, ie, not all addresses in
+// and verification).  The estimate is conservative, i.e., not all addresses in
 // 'allocated' space are actually allocated to our heap.  The range is
 // [lowest, highest), inclusive on the low and and exclusive on the high end.
 static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
@@ -388,6 +367,9 @@ void OS::Sleep(int milliseconds) {
 
 void OS::Abort() {
   // Redirect to std abort to signal abnormal program termination.
+  if (FLAG_break_on_abort) {
+    DebugBreak();
+  }
   abort();
 }
 
@@ -553,7 +535,7 @@ void OS::SignalCodeMovingGC() {
 
 int OS::StackWalk(Vector<OS::StackFrame> frames) {
   // backtrace is a glibc extension.
-#ifdef __GLIBC__
+#if defined(__GLIBC__) && !defined(__UCLIBC__)
   int frames_size = frames.length();
   ScopedVector<void*> addresses(frames_size);
 
@@ -578,9 +560,9 @@ int OS::StackWalk(Vector<OS::StackFrame> frames) {
   free(symbols);
 
   return frames_count;
-#else  // ndef __GLIBC__
+#else  // defined(__GLIBC__) && !defined(__UCLIBC__)
   return 0;
-#endif  // ndef __GLIBC__
+#endif  // defined(__GLIBC__) && !defined(__UCLIBC__)
 }
 
 
@@ -666,6 +648,12 @@ bool VirtualMemory::Uncommit(void* address, size_t size) {
 }
 
 
+bool VirtualMemory::Guard(void* address) {
+  OS::Guard(address, OS::CommitPageSize());
+  return true;
+}
+
+
 void* VirtualMemory::ReserveRegion(size_t size) {
   void* result = mmap(OS::GetRandomMmapAddr(),
                       size,
@@ -720,15 +708,8 @@ class Thread::PlatformData : public Malloced {
 
 Thread::Thread(const Options& options)
     : data_(new PlatformData()),
-      stack_size_(options.stack_size) {
-  set_name(options.name);
-}
-
-
-Thread::Thread(const char* name)
-    : data_(new PlatformData()),
-      stack_size_(0) {
-  set_name(name);
+      stack_size_(options.stack_size()) {
+  set_name(options.name());
 }
 
 
@@ -951,6 +932,57 @@ typedef struct ucontext {
 } ucontext_t;
 enum ArmRegisters {R15 = 15, R13 = 13, R11 = 11};
 
+#elif !defined(__GLIBC__) && defined(__mips__)
+// MIPS version of sigcontext, for Android bionic.
+struct sigcontext {
+  uint32_t regmask;
+  uint32_t status;
+  uint64_t pc;
+  uint64_t gregs[32];
+  uint64_t fpregs[32];
+  uint32_t acx;
+  uint32_t fpc_csr;
+  uint32_t fpc_eir;
+  uint32_t used_math;
+  uint32_t dsp;
+  uint64_t mdhi;
+  uint64_t mdlo;
+  uint32_t hi1;
+  uint32_t lo1;
+  uint32_t hi2;
+  uint32_t lo2;
+  uint32_t hi3;
+  uint32_t lo3;
+};
+typedef uint32_t __sigset_t;
+typedef struct sigcontext mcontext_t;
+typedef struct ucontext {
+  uint32_t uc_flags;
+  struct ucontext* uc_link;
+  stack_t uc_stack;
+  mcontext_t uc_mcontext;
+  __sigset_t uc_sigmask;
+} ucontext_t;
+
+#elif !defined(__GLIBC__) && defined(__i386__)
+// x86 version for Android.
+struct sigcontext {
+  uint32_t gregs[19];
+  void* fpregs;
+  uint32_t oldmask;
+  uint32_t cr2;
+};
+
+typedef uint32_t __sigset_t;
+typedef struct sigcontext mcontext_t;
+typedef struct ucontext {
+  uint32_t uc_flags;
+  struct ucontext* uc_link;
+  stack_t uc_stack;
+  mcontext_t uc_mcontext;
+  __sigset_t uc_sigmask;
+} ucontext_t;
+enum { REG_EBP = 6, REG_ESP = 7, REG_EIP = 14 };
 #endif
 
 
@@ -1035,10 +1067,15 @@ class SignalSender : public Thread {
     FULL_INTERVAL
   };
 
+  static const int kSignalSenderStackSize = 64 * KB;
+
   explicit SignalSender(int interval)
-      : Thread("SignalSender"),
+      : Thread(Thread::Options("SignalSender", kSignalSenderStackSize)),
         vm_tgid_(getpid()),
         interval_(interval) {}
+
+  static void SetUp() { if (!mutex_) mutex_ = OS::CreateMutex(); }
+  static void TearDown() { delete mutex_; }
 
   static void InstallSignalHandler() {
     struct sigaction sa;
@@ -1151,6 +1188,9 @@ class SignalSender : public Thread {
     // occuring during signal delivery.
     useconds_t interval = interval_ * 1000 - 100;
     if (full_or_half == HALF_INTERVAL) interval /= 2;
+#if defined(ANDROID)
+    usleep(interval);
+#else
     int result = usleep(interval);
 #ifdef DEBUG
     if (result != 0 && errno != EINTR) {
@@ -1160,8 +1200,9 @@ class SignalSender : public Thread {
               errno);
       ASSERT(result == 0 || errno == EINTR);
     }
-#endif
+#endif  // DEBUG
     USE(result);
+#endif  // ANDROID
   }
 
   const int vm_tgid_;
@@ -1174,14 +1215,49 @@ class SignalSender : public Thread {
   static bool signal_handler_installed_;
   static struct sigaction old_signal_handler_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(SignalSender);
 };
 
 
-Mutex* SignalSender::mutex_ = OS::CreateMutex();
+Mutex* SignalSender::mutex_ = NULL;
 SignalSender* SignalSender::instance_ = NULL;
 struct sigaction SignalSender::old_signal_handler_;
 bool SignalSender::signal_handler_installed_ = false;
+
+
+void OS::SetUp() {
+  // Seed the random number generator. We preserve microsecond resolution.
+  uint64_t seed = Ticks() ^ (getpid() << 16);
+  srandom(static_cast<unsigned int>(seed));
+  limit_mutex = CreateMutex();
+
+#ifdef __arm__
+  // When running on ARM hardware check that the EABI used by V8 and
+  // by the C code is the same.
+  bool hard_float = OS::ArmUsingHardFloat();
+  if (hard_float) {
+#if !USE_EABI_HARDFLOAT
+    PrintF("ERROR: Binary compiled with -mfloat-abi=hard but without "
+           "-DUSE_EABI_HARDFLOAT\n");
+    exit(1);
+#endif
+  } else {
+#if USE_EABI_HARDFLOAT
+    PrintF("ERROR: Binary not compiled with -mfloat-abi=hard but with "
+           "-DUSE_EABI_HARDFLOAT\n");
+    exit(1);
+#endif
+  }
+#endif
+  SignalSender::SetUp();
+}
+
+
+void OS::TearDown() {
+  SignalSender::TearDown();
+  delete limit_mutex;
+}
 
 
 Sampler::Sampler(Isolate* isolate, int interval)

@@ -36,7 +36,7 @@ namespace v8 {
 namespace internal {
 
 LGapResolver::LGapResolver(LCodeGen* owner)
-    : cgen_(owner), moves_(32) {}
+    : cgen_(owner), moves_(32, owner->zone()) {}
 
 
 void LGapResolver::Resolve(LParallelMove* parallel_move) {
@@ -74,7 +74,7 @@ void LGapResolver::BuildInitialMoveList(LParallelMove* parallel_move) {
   const ZoneList<LMoveOperands>* moves = parallel_move->move_operands();
   for (int i = 0; i < moves->length(); ++i) {
     LMoveOperands move = moves->at(i);
-    if (!move.IsRedundant()) moves_.Add(move);
+    if (!move.IsRedundant()) moves_.Add(move, cgen_->zone());
   }
   Verify();
 }
@@ -204,8 +204,9 @@ void LGapResolver::EmitMove(int index) {
       ASSERT(destination->IsStackSlot());
       Operand dst = cgen_->ToOperand(destination);
       if (cgen_->IsInteger32Constant(constant_source)) {
-        // Allow top 32 bits of an untagged Integer32 to be arbitrary.
-        __ movl(dst, Immediate(cgen_->ToInteger32(constant_source)));
+        // Zero top 32 bits of a 64 bit spill slot that holds a 32 bit untagged
+        // value.
+        __ movq(dst, Immediate(cgen_->ToInteger32(constant_source)));
       } else {
         __ LoadObject(kScratchRegister, cgen_->ToHandle(constant_source));
         __ movq(dst, kScratchRegister);

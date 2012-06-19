@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,13 +27,13 @@
 
 // Flags: --allow-natives-syntax --smi-only-arrays
 
-support_smi_only_arrays = %HasFastSmiOnlyElements([1,2,3,4,5,6,7,8,9,10]);
+support_smi_only_arrays = %HasFastSmiElements(new Array(1,2,3,4,5,6));
 
 if (support_smi_only_arrays) {
   var a = new Array(0, 1, 2);
-  assertTrue(%HasFastSmiOnlyElements(a));
+  assertTrue(%HasFastSmiElements(a));
   var b = new Array(0.5, 1.2, 2.3);
   assertTrue(%HasFastDoubleElements(b));
   var c = new Array(0.5, 1.2, new Object());
-  assertTrue(%HasFastElements(c));
+  assertTrue(%HasFastObjectElements(c));
 }

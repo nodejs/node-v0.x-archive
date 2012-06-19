@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -503,7 +503,7 @@ try {
 // Defining properties null should fail even when we have
 // other allowed values
 try {
-  %DefineOrRedefineAccessorProperty(null, 'foo', 0, func, 0);
+  %DefineOrRedefineAccessorProperty(null, 'foo', func, null, 0);
 } catch (e) {
   assertTrue(/illegal access/.test(e));
 }
@@ -1054,3 +1054,34 @@ for (var i = 0; i < 1000; i++) {
   Object.defineProperty(o, i, {value: i, enumerable: false});
 }
 assertEquals(999, o[999]);
+
+
+// Regression test: Bizzare behavior on non-strict arguments object.
+(function test(arg0) {
+  // Here arguments[0] is a fast alias on arg0.
+  Object.defineProperty(arguments, "0", {
+    value:1,
+    enumerable:false
+  });
+  // Here arguments[0] is a slow alias on arg0.
+  Object.defineProperty(arguments, "0", {
+    value:2,
+    writable:false
+  });
+  // Here arguments[0] is no alias at all.
+  Object.defineProperty(arguments, "0", {
+    value:3
+  });
+  assertEquals(2, arg0);
+  assertEquals(3, arguments[0]);
+})(0);
+
+
+// Regression test: We should never observe the hole value.
+var objectWithGetter = {};
+objectWithGetter.__defineGetter__('foo', function() {});
+assertEquals(undefined, objectWithGetter.__lookupSetter__('foo'));
+
+var objectWithSetter = {};
+objectWithSetter.__defineSetter__('foo', function(x) {});
+assertEquals(undefined, objectWithSetter.__lookupGetter__('foo'));

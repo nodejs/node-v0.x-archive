@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -39,6 +39,8 @@ typedef uint32_t RegList;
 
 // Get the number of registers in a given register list.
 int NumRegs(RegList list);
+
+void SetUpJSCallerSavedCodeData();
 
 // Return the code of the n-th saved register available to JavaScript.
 int JSCallerSavedCode(int n);
@@ -85,15 +87,17 @@ class InnerPointerToCodeCache {
 class StackHandler BASE_EMBEDDED {
  public:
   enum Kind {
-    ENTRY,
-    TRY_CATCH,
-    TRY_FINALLY
+    JS_ENTRY,
+    CATCH,
+    FINALLY,
+    LAST_KIND = FINALLY
   };
 
   static const int kKindWidth = 2;
-  static const int kOffsetWidth = 32 - kKindWidth;
+  STATIC_ASSERT(LAST_KIND < (1 << kKindWidth));
+  static const int kIndexWidth = 32 - kKindWidth;
   class KindField: public BitField<StackHandler::Kind, 0, kKindWidth> {};
-  class OffsetField: public BitField<unsigned, kKindWidth, kOffsetWidth> {};
+  class IndexField: public BitField<unsigned, kKindWidth, kIndexWidth> {};
 
   // Get the address of this stack handler.
   inline Address address() const;
@@ -111,9 +115,9 @@ class StackHandler BASE_EMBEDDED {
   static inline StackHandler* FromAddress(Address address);
 
   // Testers
-  inline bool is_entry() const;
-  inline bool is_try_catch() const;
-  inline bool is_try_finally() const;
+  inline bool is_js_entry() const;
+  inline bool is_catch() const;
+  inline bool is_finally() const;
 
  private:
   // Accessors.
@@ -202,10 +206,18 @@ class StackFrame BASE_EMBEDDED {
   Address fp() const { return state_.fp; }
   Address caller_sp() const { return GetCallerStackPointer(); }
 
+  // If this frame is optimized and was dynamically aligned return its old
+  // unaligned frame pointer.  When the frame is deoptimized its FP will shift
+  // up one word and become unaligned.
+  Address UnpaddedFP() const;
+
   Address pc() const { return *pc_address(); }
   void set_pc(Address pc) { *pc_address() = pc; }
 
   virtual void SetCallerFp(Address caller_fp) = 0;
+
+  // Manually changes value of fp in this object.
+  void UpdateFp(Address fp) { state_.fp = fp; }
 
   Address* pc_address() const { return state_.pc_address; }
 
@@ -239,6 +251,11 @@ class StackFrame BASE_EMBEDDED {
   virtual void Iterate(ObjectVisitor* v) const = 0;
   static void IteratePc(ObjectVisitor* v, Address* pc_address, Code* holder);
 
+  // Sets a callback function for return-address rewriting profilers
+  // to resolve the location of a return address to the location of the
+  // profiler's stashed return address.
+  static void SetReturnAddressLocationResolver(
+      ReturnAddressLocationResolver resolver);
 
   // Printing support.
   enum PrintMode { OVERVIEW, DETAILS };
@@ -876,7 +893,7 @@ class StackFrameLocator BASE_EMBEDDED {
 
 // Reads all frames on the current stack and copies them into the current
 // zone memory.
-Vector<StackFrame*> CreateStackMap();
+Vector<StackFrame*> CreateStackMap(Zone* zone);
 
 } }  // namespace v8::internal
 

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -45,7 +45,19 @@ MarkBit Marking::MarkBitFrom(Address addr) {
 
 
 void MarkCompactCollector::SetFlags(int flags) {
-  sweep_precisely_ = ((flags & Heap::kMakeHeapIterableMask) != 0);
+  sweep_precisely_ = ((flags & Heap::kSweepPreciselyMask) != 0);
+  reduce_memory_footprint_ = ((flags & Heap::kReduceMemoryFootprintMask) != 0);
+  abort_incremental_marking_ =
+      ((flags & Heap::kAbortIncrementalMarkingMask) != 0);
+}
+
+
+bool MarkCompactCollector::MarkObjectAndPush(HeapObject* obj) {
+  if (MarkObjectWithoutPush(obj)) {
+    marking_deque_.PushBlack(obj);
+    return true;
+  }
+  return false;
 }
 
 
@@ -53,9 +65,19 @@ void MarkCompactCollector::MarkObject(HeapObject* obj, MarkBit mark_bit) {
   ASSERT(Marking::MarkBitFrom(obj) == mark_bit);
   if (!mark_bit.Get()) {
     mark_bit.Set();
-    MemoryChunk::IncrementLiveBytes(obj->address(), obj->Size());
+    MemoryChunk::IncrementLiveBytesFromGC(obj->address(), obj->Size());
     ProcessNewlyMarkedObject(obj);
   }
+}
+
+
+bool MarkCompactCollector::MarkObjectWithoutPush(HeapObject* obj) {
+  MarkBit mark_bit = Marking::MarkBitFrom(obj);
+  if (!mark_bit.Get()) {
+    SetMark(obj, mark_bit);
+    return true;
+  }
+  return false;
 }
 
 
@@ -63,7 +85,10 @@ void MarkCompactCollector::SetMark(HeapObject* obj, MarkBit mark_bit) {
   ASSERT(!mark_bit.Get());
   ASSERT(Marking::MarkBitFrom(obj) == mark_bit);
   mark_bit.Set();
-  MemoryChunk::IncrementLiveBytes(obj->address(), obj->Size());
+  MemoryChunk::IncrementLiveBytesFromGC(obj->address(), obj->Size());
+  if (obj->IsMap()) {
+    heap_->ClearCacheOnMap(Map::cast(obj));
+  }
 }
 
 

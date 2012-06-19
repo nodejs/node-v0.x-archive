@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -51,7 +51,37 @@ void BreakableStatementChecker::Check(Expression* expr) {
 }
 
 
-void BreakableStatementChecker::VisitDeclaration(Declaration* decl) {
+void BreakableStatementChecker::VisitVariableDeclaration(
+    VariableDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitFunctionDeclaration(
+    FunctionDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitModuleDeclaration(
+    ModuleDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitImportDeclaration(
+    ImportDeclaration* decl) {
+}
+
+void BreakableStatementChecker::VisitExportDeclaration(
+    ExportDeclaration* decl) {
+}
+
+
+void BreakableStatementChecker::VisitModuleLiteral(ModuleLiteral* module) {
+}
+
+void BreakableStatementChecker::VisitModuleVariable(ModuleVariable* module) {
+}
+
+void BreakableStatementChecker::VisitModulePath(ModulePath* module) {
+}
+
+void BreakableStatementChecker::VisitModuleUrl(ModuleUrl* module) {
 }
 
 
@@ -273,8 +303,8 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   masm.positions_recorder()->StartGDBJITLineInfoRecording();
 #endif
 
-  FullCodeGenerator cgen(&masm);
-  cgen.Generate(info);
+  FullCodeGenerator cgen(&masm, info, isolate->zone());
+  cgen.Generate();
   if (cgen.HasStackOverflow()) {
     ASSERT(!isolate->has_pending_exception());
     return false;
@@ -283,8 +313,12 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
 
   Code::Flags flags = Code::ComputeFlags(Code::FUNCTION);
   Handle<Code> code = CodeGenerator::MakeCodeEpilogue(&masm, flags, info);
-  code->set_optimizable(info->IsOptimizable());
+  code->set_optimizable(info->IsOptimizable() &&
+                        !info->function()->flags()->Contains(kDontOptimize) &&
+                        info->function()->scope()->AllowsLazyRecompilation());
   cgen.PopulateDeoptimizationData(code);
+  cgen.PopulateTypeFeedbackInfo(code);
+  cgen.PopulateTypeFeedbackCells(code);
   code->set_has_deoptimization_support(info->HasDeoptimizationSupport());
   code->set_handler_table(*cgen.handler_table());
 #ifdef ENABLE_DEBUGGER_SUPPORT
@@ -293,6 +327,7 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   code->set_compiled_optimizable(info->IsOptimizable());
 #endif  // ENABLE_DEBUGGER_SUPPORT
   code->set_allow_osr_at_loop_nesting_level(0);
+  code->set_profiler_ticks(0);
   code->set_stack_check_table_offset(table_offset);
   CodeGenerator::PrintCode(code, info);
   info->SetCode(code);  // May be an empty handle.
@@ -329,8 +364,7 @@ void FullCodeGenerator::PopulateDeoptimizationData(Handle<Code> code) {
   ASSERT(info_->HasDeoptimizationSupport() || bailout_entries_.is_empty());
   if (!info_->HasDeoptimizationSupport()) return;
   int length = bailout_entries_.length();
-  Handle<DeoptimizationOutputData> data =
-      isolate()->factory()->
+  Handle<DeoptimizationOutputData> data = isolate()->factory()->
       NewDeoptimizationOutputData(length, TENURED);
   for (int i = 0; i < length; i++) {
     data->SetAstId(i, Smi::FromInt(bailout_entries_[i].id));
@@ -338,6 +372,30 @@ void FullCodeGenerator::PopulateDeoptimizationData(Handle<Code> code) {
   }
   code->set_deoptimization_data(*data);
 }
+
+
+void FullCodeGenerator::PopulateTypeFeedbackInfo(Handle<Code> code) {
+  Handle<TypeFeedbackInfo> info = isolate()->factory()->NewTypeFeedbackInfo();
+  info->set_ic_total_count(ic_total_count_);
+  ASSERT(!isolate()->heap()->InNewSpace(*info));
+  code->set_type_feedback_info(*info);
+}
+
+
+void FullCodeGenerator::PopulateTypeFeedbackCells(Handle<Code> code) {
+  if (type_feedback_cells_.is_empty()) return;
+  int length = type_feedback_cells_.length();
+  int array_size = TypeFeedbackCells::LengthOfFixedArray(length);
+  Handle<TypeFeedbackCells> cache = Handle<TypeFeedbackCells>::cast(
+      isolate()->factory()->NewFixedArray(array_size, TENURED));
+  for (int i = 0; i < length; i++) {
+    cache->SetAstId(i, Smi::FromInt(type_feedback_cells_[i].ast_id));
+    cache->SetCell(i, *type_feedback_cells_[i].cell);
+  }
+  TypeFeedbackInfo::cast(code->type_feedback_info())->set_type_feedback_cells(
+      *cache);
+}
+
 
 
 void FullCodeGenerator::PrepareForBailout(Expression* node, State state) {
@@ -365,21 +423,31 @@ void FullCodeGenerator::RecordJSReturnSite(Call* call) {
 void FullCodeGenerator::PrepareForBailoutForId(unsigned id, State state) {
   // There's no need to prepare this code for bailouts from already optimized
   // code or code that can't be optimized.
-  if (!FLAG_deopt || !info_->HasDeoptimizationSupport()) return;
+  if (!info_->HasDeoptimizationSupport()) return;
   unsigned pc_and_state =
       StateField::encode(state) | PcField::encode(masm_->pc_offset());
+  ASSERT(Smi::IsValid(pc_and_state));
   BailoutEntry entry = { id, pc_and_state };
 #ifdef DEBUG
-  // Assert that we don't have multiple bailout entries for the same node.
-  for (int i = 0; i < bailout_entries_.length(); i++) {
-    if (bailout_entries_.at(i).id == entry.id) {
-      AstPrinter printer;
-      PrintF("%s", printer.PrintProgram(info_->function()));
-      UNREACHABLE();
+  if (FLAG_enable_slow_asserts) {
+    // Assert that we don't have multiple bailout entries for the same node.
+    for (int i = 0; i < bailout_entries_.length(); i++) {
+      if (bailout_entries_.at(i).id == entry.id) {
+        AstPrinter printer;
+        PrintF("%s", printer.PrintProgram(info_->function()));
+        UNREACHABLE();
+      }
     }
   }
 #endif  // DEBUG
-  bailout_entries_.Add(entry);
+  bailout_entries_.Add(entry, zone());
+}
+
+
+void FullCodeGenerator::RecordTypeFeedbackCell(
+    unsigned id, Handle<JSGlobalPropertyCell> cell) {
+  TypeFeedbackCellEntry entry = { id, cell };
+  type_feedback_cells_.Add(entry, zone());
 }
 
 
@@ -388,7 +456,7 @@ void FullCodeGenerator::RecordStackCheck(unsigned ast_id) {
   // state.
   ASSERT(masm_->pc_offset() > 0);
   BailoutEntry entry = { ast_id, static_cast<unsigned>(masm_->pc_offset()) };
-  stack_checks_.Add(entry);
+  stack_checks_.Add(entry, zone());
 }
 
 
@@ -501,46 +569,96 @@ void FullCodeGenerator::DoTest(const TestContext* context) {
 
 void FullCodeGenerator::VisitDeclarations(
     ZoneList<Declaration*>* declarations) {
-  int length = declarations->length();
-  int global_count = 0;
-  for (int i = 0; i < length; i++) {
-    Declaration* decl = declarations->at(i);
-    EmitDeclaration(decl->proxy(), decl->mode(), decl->fun(), &global_count);
-  }
+  ZoneList<Handle<Object> >* saved_globals = globals_;
+  ZoneList<Handle<Object> > inner_globals(10, zone());
+  globals_ = &inner_globals;
 
-  // Batch declare global functions and variables.
-  if (global_count > 0) {
-    Handle<FixedArray> array =
-        isolate()->factory()->NewFixedArray(2 * global_count, TENURED);
-    for (int j = 0, i = 0; i < length; i++) {
-      Declaration* decl = declarations->at(i);
-      Variable* var = decl->proxy()->var();
-
-      if (var->IsUnallocated()) {
-        array->set(j++, *(var->name()));
-        if (decl->fun() == NULL) {
-          if (var->binding_needs_init()) {
-            // In case this binding needs initialization use the hole.
-            array->set_the_hole(j++);
-          } else {
-            array->set_undefined(j++);
-          }
-        } else {
-          Handle<SharedFunctionInfo> function =
-              Compiler::BuildFunctionInfo(decl->fun(), script());
-          // Check for stack-overflow exception.
-          if (function.is_null()) {
-            SetStackOverflow();
-            return;
-          }
-          array->set(j++, *function);
-        }
-      }
-    }
+  AstVisitor::VisitDeclarations(declarations);
+  if (!globals_->is_empty()) {
     // Invoke the platform-dependent code generator to do the actual
     // declaration the global functions and variables.
+    Handle<FixedArray> array =
+       isolate()->factory()->NewFixedArray(globals_->length(), TENURED);
+    for (int i = 0; i < globals_->length(); ++i)
+      array->set(i, *globals_->at(i));
     DeclareGlobals(array);
   }
+
+  globals_ = saved_globals;
+}
+
+
+void FullCodeGenerator::VisitModuleLiteral(ModuleLiteral* module) {
+  Handle<JSModule> instance = module->interface()->Instance();
+  ASSERT(!instance.is_null());
+
+  // Allocate a module context statically.
+  Block* block = module->body();
+  Scope* saved_scope = scope();
+  scope_ = block->scope();
+  Handle<ScopeInfo> scope_info = scope_->GetScopeInfo();
+
+  // Generate code for module creation and linking.
+  Comment cmnt(masm_, "[ ModuleLiteral");
+  SetStatementPosition(block);
+
+  if (scope_info->HasContext()) {
+    // Set up module context.
+    __ Push(scope_info);
+    __ Push(instance);
+    __ CallRuntime(Runtime::kPushModuleContext, 2);
+    StoreToFrameField(
+        StandardFrameConstants::kContextOffset, context_register());
+  }
+
+  {
+    Comment cmnt(masm_, "[ Declarations");
+    VisitDeclarations(scope_->declarations());
+  }
+
+  scope_ = saved_scope;
+  if (scope_info->HasContext()) {
+    // Pop module context.
+    LoadContextField(context_register(), Context::PREVIOUS_INDEX);
+    // Update local stack frame context field.
+    StoreToFrameField(
+        StandardFrameConstants::kContextOffset, context_register());
+  }
+
+  // Populate module instance object.
+  const PropertyAttributes attr =
+      static_cast<PropertyAttributes>(READ_ONLY | DONT_DELETE | DONT_ENUM);
+  for (Interface::Iterator it = module->interface()->iterator();
+       !it.done(); it.Advance()) {
+    if (it.interface()->IsModule()) {
+      Handle<Object> value = it.interface()->Instance();
+      ASSERT(!value.is_null());
+      JSReceiver::SetProperty(instance, it.name(), value, attr, kStrictMode);
+    } else {
+      // TODO(rossberg): set proper getters instead of undefined...
+      // instance->DefineAccessor(*it.name(), ACCESSOR_GETTER, *getter, attr);
+      Handle<Object> value(isolate()->heap()->undefined_value());
+      JSReceiver::SetProperty(instance, it.name(), value, attr, kStrictMode);
+    }
+  }
+  USE(instance->PreventExtensions());
+}
+
+
+void FullCodeGenerator::VisitModuleVariable(ModuleVariable* module) {
+  // Noting to do.
+  // The instance object is resolved statically through the module's interface.
+}
+
+
+void FullCodeGenerator::VisitModulePath(ModulePath* module) {
+  // Noting to do.
+  // The instance object is resolved statically through the module's interface.
+}
+
+
+void FullCodeGenerator::VisitModuleUrl(ModuleUrl* decl) {
+  // TODO(rossberg)
 }
 
 
@@ -797,9 +915,9 @@ void FullCodeGenerator::VisitBlock(Block* stmt) {
 
   Scope* saved_scope = scope();
   // Push a block context when entering a block with block scoped variables.
-  if (stmt->block_scope() != NULL) {
+  if (stmt->scope() != NULL) {
     { Comment cmnt(masm_, "[ Extend block context");
-      scope_ = stmt->block_scope();
+      scope_ = stmt->scope();
       Handle<ScopeInfo> scope_info = scope_->GetScopeInfo();
       int heap_slots = scope_info->ContextLength() - Context::MIN_CONTEXT_SLOTS;
       __ Push(scope_info);
@@ -826,7 +944,7 @@ void FullCodeGenerator::VisitBlock(Block* stmt) {
   PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
 
   // Pop block context if necessary.
-  if (stmt->block_scope() != NULL) {
+  if (stmt->scope() != NULL) {
     LoadContextField(context_register(), Context::PREVIOUS_INDEX);
     // Update local stack frame context field.
     StoreToFrameField(StandardFrameConstants::kContextOffset,
@@ -995,7 +1113,7 @@ void FullCodeGenerator::VisitDoWhileStatement(DoWhileStatement* stmt) {
   // Check stack before looping.
   PrepareForBailoutForId(stmt->BackEdgeId(), NO_REGISTERS);
   __ bind(&stack_check);
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &body);
   __ jmp(&body);
 
   PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
@@ -1024,7 +1142,7 @@ void FullCodeGenerator::VisitWhileStatement(WhileStatement* stmt) {
   SetStatementPosition(stmt);
 
   // Check stack before looping.
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &body);
 
   __ bind(&test);
   VisitForControl(stmt->cond(),
@@ -1043,6 +1161,10 @@ void FullCodeGenerator::VisitForStatement(ForStatement* stmt) {
   Label test, body;
 
   Iteration loop_statement(this, stmt);
+
+  // Set statement position for a break slot before entering the for-body.
+  SetStatementPosition(stmt);
+
   if (stmt->init() != NULL) {
     Visit(stmt->init());
   }
@@ -1057,7 +1179,6 @@ void FullCodeGenerator::VisitForStatement(ForStatement* stmt) {
 
   PrepareForBailoutForId(stmt->ContinueId(), NO_REGISTERS);
   __ bind(loop_statement.continue_label());
-  SetStatementPosition(stmt);
   if (stmt->next() != NULL) {
     Visit(stmt->next());
   }
@@ -1067,7 +1188,7 @@ void FullCodeGenerator::VisitForStatement(ForStatement* stmt) {
   SetStatementPosition(stmt);
 
   // Check stack before looping.
-  EmitStackCheck(stmt);
+  EmitStackCheck(stmt, &body);
 
   __ bind(&test);
   if (stmt->cond() != NULL) {
@@ -1123,7 +1244,7 @@ void FullCodeGenerator::VisitTryCatchStatement(TryCatchStatement* stmt) {
 
   // Try block code. Sets up the exception handler chain.
   __ bind(&try_entry);
-  __ PushTryHandler(IN_JAVASCRIPT, TRY_CATCH_HANDLER, stmt->index());
+  __ PushTryHandler(StackHandler::CATCH, stmt->index());
   { TryCatch try_body(this);
     Visit(stmt->try_block());
   }
@@ -1180,7 +1301,7 @@ void FullCodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* stmt) {
 
   // Set up try handler.
   __ bind(&try_entry);
-  __ PushTryHandler(IN_JAVASCRIPT, TRY_FINALLY_HANDLER, stmt->index());
+  __ PushTryHandler(StackHandler::FINALLY, stmt->index());
   { TryFinally try_body(this, &finally_entry);
     Visit(stmt->try_block());
   }

@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -63,54 +63,13 @@ enum PropertyType {
   INTERCEPTOR               = 5,  // only in lookup results, not in descriptors
   // All properties before MAP_TRANSITION are real.
   MAP_TRANSITION            = 6,  // only in fast mode
-  ELEMENTS_TRANSITION       = 7,
-  CONSTANT_TRANSITION       = 8,  // only in fast mode
-  NULL_DESCRIPTOR           = 9,  // only in fast mode
+  CONSTANT_TRANSITION       = 7,  // only in fast mode
+  NULL_DESCRIPTOR           = 8,  // only in fast mode
   // There are no IC stubs for NULL_DESCRIPTORS. Therefore,
   // NULL_DESCRIPTOR can be used as the type flag for IC stubs for
   // nonexistent properties.
   NONEXISTENT = NULL_DESCRIPTOR
 };
-
-
-inline bool IsTransitionType(PropertyType type) {
-  switch (type) {
-    case MAP_TRANSITION:
-    case CONSTANT_TRANSITION:
-    case ELEMENTS_TRANSITION:
-      return true;
-    case NORMAL:
-    case FIELD:
-    case CONSTANT_FUNCTION:
-    case CALLBACKS:
-    case HANDLER:
-    case INTERCEPTOR:
-    case NULL_DESCRIPTOR:
-      return false;
-  }
-  UNREACHABLE();  // keep the compiler happy
-  return false;
-}
-
-
-inline bool IsRealProperty(PropertyType type) {
-  switch (type) {
-    case NORMAL:
-    case FIELD:
-    case CONSTANT_FUNCTION:
-    case CALLBACKS:
-    case HANDLER:
-    case INTERCEPTOR:
-      return true;
-    case MAP_TRANSITION:
-    case ELEMENTS_TRANSITION:
-    case CONSTANT_TRANSITION:
-    case NULL_DESCRIPTOR:
-      return false;
-  }
-  UNREACHABLE();  // keep the compiler happy
-  return false;
-}
 
 
 // PropertyDetails captures type and attributes for a property.
@@ -138,16 +97,6 @@ class PropertyDetails BASE_EMBEDDED {
   inline Smi* AsSmi();
 
   PropertyType type() { return TypeField::decode(value_); }
-
-  bool IsTransition() {
-    PropertyType t = type();
-    ASSERT(t != INTERCEPTOR);
-    return IsTransitionType(t);
-  }
-
-  bool IsProperty() {
-    return IsRealProperty(type());
-  }
 
   PropertyAttributes attributes() { return AttributesField::decode(value_); }
 

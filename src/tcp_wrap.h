@@ -21,7 +21,7 @@
 
 #ifndef TCP_WRAP_H_
 #define TCP_WRAP_H_
-#include <stream_wrap.h>
+#include "stream_wrap.h"
 
 namespace node {
 
@@ -30,6 +30,8 @@ class TCPWrap : public StreamWrap {
   static v8::Local<v8::Object> Instantiate();
   static TCPWrap* Unwrap(v8::Local<v8::Object> obj);
   static void Initialize(v8::Handle<v8::Object> target);
+
+  uv_tcp_t* UVHandle();
 
  private:
   TCPWrap(v8::Handle<v8::Object> object);
