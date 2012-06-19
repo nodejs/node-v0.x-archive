@@ -45,9 +45,10 @@
 
   // For each passpharse encode and decode using url
   passphrases.forEach(function (auth) {
+    auth = 'username:' + auth;
     var auth2 = url.parse(url.format({
             "protocol": "http:"
-          , "auth": 'username:' + auth
+          , "auth": auth
           , "host": "example.com"
           , "pathname": "/session"
         })).auth
