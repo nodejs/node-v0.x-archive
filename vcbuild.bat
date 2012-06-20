@@ -16,6 +16,7 @@ set config=Release
 set msiplatform=x86
 set target=Build
 set target_arch=ia32
+set output_type=executable
 set debug_arg=
 set nosnapshot_arg=
 set noprojgen=
@@ -41,6 +42,8 @@ if /i "%1"=="clean"         set target=Clean&goto arg-ok
 if /i "%1"=="ia32"          set target_arch=ia32&goto arg-ok
 if /i "%1"=="x86"           set target_arch=ia32&goto arg-ok
 if /i "%1"=="x64"           set target_arch=x64&goto arg-ok
+if /i "%1"=="sharedlibrary" set output_type=shared_library&goto arg-ok
+if /i "%1"=="staticlibrary" set output_type=static_library&goto arg-ok
 if /i "%1"=="noprojgen"     set noprojgen=1&goto arg-ok
 if /i "%1"=="nobuild"       set nobuild=1&goto arg-ok
 if /i "%1"=="nosign"        set nosign=1&goto arg-ok
@@ -80,7 +83,7 @@ if defined noetw set noetw_arg=--without-etw& set noetw_msi_arg=/p:NoETW=1
 if defined noprojgen goto msbuild
 
 @rem Generate the VS project.
-python configure %debug_arg% %nosnapshot_arg% %noetw_arg% --dest-cpu=%target_arch%
+python configure %debug_arg% %nosnapshot_arg% %noetw_arg% --dest-cpu=%target_arch% --output-type=%output_type%
 if errorlevel 1 goto create-msvs-files-failed
 if not exist node.sln goto create-msvs-files-failed
 echo Project files generated.
@@ -187,12 +190,13 @@ python tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --noj
 goto exit
 
 :help
-echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [nobuild] [nosign] [x86/x64]
+echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [nobuild] [nosign] [x86/x64] [sharedlibrary/staticlibrary]
 echo Examples:
 echo   vcbuild.bat                : builds release build
 echo   vcbuild.bat debug          : builds debug build
 echo   vcbuild.bat release msi    : builds release build and MSI installer package
 echo   vcbuild.bat test           : builds debug build and runs tests
+echo   vcbuild.bat sharedlibrary  : builds release build as a dll
 goto exit
 
 :exit

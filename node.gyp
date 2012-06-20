@@ -54,7 +54,7 @@
   'targets': [
     {
       'target_name': 'node',
-      'type': 'executable',
+      'type': '<(output_type)',
 
       'dependencies': [
         'deps/cares/cares.gyp:cares',
