@@ -20,10 +20,10 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "src/node.h"
-#include "src/node_os.h"
+#include "node.h"
+#include "node_os.h"
 
-#include <v8.h>
+#include "v8.h"
 
 #include <errno.h>
 #include <string.h>
@@ -36,8 +36,6 @@
 # include <unistd.h>  // gethostname, sysconf
 # include <sys/utsname.h>
 #endif
-
-#include "src/node_internals.h"
 
 namespace node {
 

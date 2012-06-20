@@ -19,10 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <stdlib.h>
+#include "node.h"
+#include "handle_wrap.h"
 
-#include "src/node.h"
-#include "src/handle_wrap.h"
+#include <stdlib.h>
 
 using v8::Arguments;
 using v8::Exception;

@@ -22,8 +22,8 @@
 #ifndef SRC_NODE_OBJECT_WRAP_H_
 #define SRC_NODE_OBJECT_WRAP_H_
 
-#include "src/node.h"
-#include <v8.h>
+#include "node.h"
+#include "v8.h"
 #include <assert.h>
 
 namespace node {

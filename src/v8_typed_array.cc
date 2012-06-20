@@ -22,10 +22,10 @@
 #include <stdlib.h>  // calloc, etc
 #include <string.h>  // memmove
 
-#include <v8.h>
-#include "src/v8_typed_array.h"
-#include "src/node_buffer.h"
-#include "src/node.h"
+#include "v8_typed_array.h"
+#include "node_buffer.h"
+#include "node.h"
+#include "v8.h"
 
 namespace {
 

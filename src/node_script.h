@@ -22,10 +22,10 @@
 #ifndef SRC_NODE_SCRIPT_H_
 #define SRC_NODE_SCRIPT_H_
 
-#include "src/node.h"
-#include "src/node_object_wrap.h"
-#include <v8.h>
-#include <uv.h>
+#include "node.h"
+#include "node_object_wrap.h"
+#include "v8.h"
+#include "uv.h"
 
 namespace node {
 

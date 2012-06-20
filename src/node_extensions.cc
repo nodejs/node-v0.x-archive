@@ -20,10 +20,10 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+#include "node.h"
+#include "node_version.h"
 #include <string.h>
 #include <stdio.h>
-#include "src/node.h"
-#include "src/node_version.h"
 
 #undef NODE_EXT_LIST_START
 #undef NODE_EXT_LIST_ITEM
@@ -33,7 +33,7 @@
 #define NODE_EXT_LIST_ITEM NODE_MODULE_DECL
 #define NODE_EXT_LIST_END
 
-#include "src/node_extensions.h"
+#include "node_extensions.h"
 
 #undef NODE_EXT_LIST_START
 #undef NODE_EXT_LIST_ITEM
@@ -44,7 +44,7 @@
 #define NODE_EXT_LIST_ITEM NODE_EXT_STRING
 #define NODE_EXT_LIST_END NULL};
 
-#include "src/node_extensions.h"  // NOLINT(build/include)
+#include "node_extensions.h"
 
 namespace node {
 

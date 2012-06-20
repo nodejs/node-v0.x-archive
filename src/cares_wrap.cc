@@ -20,7 +20,9 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <assert.h>
-#include <uv.h>
+#include "node.h"
+#include "req_wrap.h"
+#include "uv.h"
 
 #include <string.h>
 
@@ -44,9 +46,6 @@
 # define uv_inet_pton inet_pton
 # define uv_inet_ntop inet_ntop
 #endif
-
-#include "src/node.h"
-#include "src/req_wrap.h"
 
 namespace node {
 

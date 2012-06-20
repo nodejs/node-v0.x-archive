@@ -19,7 +19,16 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/node.h"
+#include "node.h"
+#include "req_wrap.h"
+#include "handle_wrap.h"
+
+#include "uv.h"
+
+#include "v8-debug.h"
+#ifdef HAVE_DTRACE
+# include "node_dtrace.h"
+#endif
 
 #include <locale.h>
 #include <signal.h>
@@ -45,46 +54,32 @@ typedef int mode_t;
 #endif
 #include <errno.h>
 #include <sys/types.h>
+#include "zlib.h"
 
 #ifdef __POSIX__
 # include <pwd.h> /* getpwnam() */
 # include <grp.h> /* getgrnam() */
 #endif
 
-#include <zlib.h>
-#include <uv.h>
-#include <v8-debug.h>
-
-# ifdef __APPLE__
-# include <crt_externs.h>
-#endif
-
-#include "src/req_wrap.h"
-#include "src/handle_wrap.h"
-
-#ifdef HAVE_DTRACE
-# include "src/node_dtrace.h"
-#endif
-
-#include "src/node_buffer.h"
+#include "node_buffer.h"
 #ifdef __POSIX__
-# include "src/node_io_watcher.h"
+# include "node_io_watcher.h"
 #endif
-#include "src/node_file.h"
-#include "src/node_http_parser.h"
+#include "node_file.h"
+#include "node_http_parser.h"
 #ifdef __POSIX__
-# include "src/node_signal_watcher.h"
-# include "src/node_stat_watcher.h"
+# include "node_signal_watcher.h"
+# include "node_stat_watcher.h"
 #endif
-#include "src/node_constants.h"
-#include "src/node_javascript.h"
-#include "src/node_version.h"
-#include "src/node_string.h"
+#include "node_constants.h"
+#include "node_javascript.h"
+#include "node_version.h"
+#include "node_string.h"
 #if HAVE_OPENSSL
-# include "src/node_crypto.h"
+# include "node_crypto.h"
 #endif
-#include "src/node_script.h"
-#include "src/v8_typed_array.h"
+#include "node_script.h"
+#include "v8_typed_array.h"
 
 using v8::AccessorInfo;
 using v8::Arguments;
@@ -118,6 +113,7 @@ using v8::V8;
 using v8::Value;
 
 # ifdef __APPLE__
+# include <crt_externs.h>
 # define environ (*_NSGetEnviron())
 # elif !defined(_MSC_VER)
 extern char **environ;

@@ -19,7 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/node_file.h"
+#include "node.h"
+#include "node_file.h"
+#include "node_buffer.h"
+#ifdef __POSIX__
+# include "node_stat_watcher.h"
+#endif
+#include "req_wrap.h"
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -32,13 +38,6 @@
 #if defined(__MINGW32__) || defined(_MSC_VER)
 # include <io.h>
 #endif
-
-#include "src/node.h"
-#include "src/node_buffer.h"
-#ifdef __POSIX__
-# include "src/node_stat_watcher.h"
-#endif
-#include "src/req_wrap.h"
 
 namespace node {
 

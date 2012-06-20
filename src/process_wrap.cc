@@ -19,15 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "node.h"
+#include "handle_wrap.h"
+#include "pipe_wrap.h"
+#include "tty_wrap.h"
+#include "tcp_wrap.h"
+#include "udp_wrap.h"
+
 #include <string.h>
 #include <stdlib.h>
-
-#include "src/node.h"
-#include "src/handle_wrap.h"
-#include "src/pipe_wrap.h"
-#include "src/tty_wrap.h"
-#include "src/tcp_wrap.h"
-#include "src/udp_wrap.h"
 
 namespace node {
 

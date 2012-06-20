@@ -22,7 +22,7 @@
 #ifndef SRC_HANDLE_WRAP_H_
 #define SRC_HANDLE_WRAP_H_
 
-#include "src/ngx-queue.h"
+#include "ngx-queue.h"
 
 namespace node {
 

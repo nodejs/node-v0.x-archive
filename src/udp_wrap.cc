@@ -19,7 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/udp_wrap.h"
+#include "node.h"
+#include "node_buffer.h"
+#include "slab_allocator.h"
+#include "req_wrap.h"
+#include "handle_wrap.h"
+#include "udp_wrap.h"
 
 #include <stdlib.h>
 
@@ -40,12 +45,6 @@
 # define uv_inet_pton inet_pton
 # define uv_inet_ntop inet_ntop
 #endif
-
-#include "src/node.h"
-#include "src/node_buffer.h"
-#include "src/slab_allocator.h"
-#include "src/req_wrap.h"
-#include "src/handle_wrap.h"
 
 using v8::False;
 using v8::FunctionTemplate;

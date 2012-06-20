@@ -22,8 +22,8 @@
 #ifndef SRC_TTY_WRAP_H_
 #define SRC_TTY_WRAP_H_
 
-#include "src/handle_wrap.h"
-#include "src/stream_wrap.h"
+#include "handle_wrap.h"
+#include "stream_wrap.h"
 
 namespace node {
 

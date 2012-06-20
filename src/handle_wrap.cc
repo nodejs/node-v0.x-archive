@@ -19,9 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/node.h"
-#include "src/ngx-queue.h"
-#include "src/handle_wrap.h"
+#include "node.h"
+#include "ngx-queue.h"
+#include "handle_wrap.h"
 
 namespace node {
 

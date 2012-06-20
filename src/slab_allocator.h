@@ -22,7 +22,7 @@
 #ifndef SRC_SLAB_ALLOCATOR_H_
 #define SRC_SLAB_ALLOCATOR_H_
 
-#include <v8.h>
+#include "v8.h"
 
 namespace node {
 

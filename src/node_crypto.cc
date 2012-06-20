@@ -19,9 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/node_crypto.h"
+#include "node_crypto.h"
+#include "node_crypto_groups.h"
+#include "v8.h"
 
-#include <v8.h>
+#include "node.h"
+#include "node_buffer.h"
+#include "node_root_certs.h"
 
 #include <string.h>
 #ifdef _MSC_VER
@@ -38,11 +42,6 @@
 #else
 # include <pthread.h>
 #endif
-
-#include "src/node_crypto_groups.h"
-#include "src/node.h"
-#include "src/node_buffer.h"
-#include "src/node_root_certs.h"
 
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L

@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #if 0 /* commenting out to build via gyp faster */
-#include "src/node_config.h"
+#include "node_config.h"
 #endif
 
 #ifndef SRC_NODE_VERSION_H_

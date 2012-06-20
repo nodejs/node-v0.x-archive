@@ -22,9 +22,9 @@
 #ifndef SRC_UDP_WRAP_H_
 #define SRC_UDP_WRAP_H_
 
-#include "src/node.h"
-#include "src/req_wrap.h"
-#include "src/handle_wrap.h"
+#include "node.h"
+#include "req_wrap.h"
+#include "handle_wrap.h"
 
 namespace node {
 

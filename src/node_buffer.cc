@@ -20,7 +20,10 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "src/node_buffer.h"
+#include "node.h"
+#include "node_buffer.h"
+
+#include "v8.h"
 
 #include <assert.h>
 #include <stdlib.h>  // malloc, free
@@ -30,9 +33,6 @@
 # include <arpa/inet.h>  // htons, htonl
 #endif
 
-#include <v8.h>
-
-#include "src/node.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 

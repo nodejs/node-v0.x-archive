@@ -19,11 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "src/node_dtrace.h"
+#include "node_dtrace.h"
 #include <string.h>
 
 #ifdef HAVE_DTRACE
-#include <node_provider.h>
+#include "node_provider.h"
 #else
 #define NODE_HTTP_SERVER_REQUEST(arg0, arg1)
 #define NODE_HTTP_SERVER_REQUEST_ENABLED() (0)

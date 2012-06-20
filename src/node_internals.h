@@ -24,7 +24,7 @@
 
 #include <stdlib.h>
 
-#include <v8.h>
+#include "v8.h"
 
 namespace node {
 
