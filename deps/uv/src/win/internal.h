@@ -269,6 +269,12 @@ void uv_fs_event_endgame(uv_loop_t* loop, uv_fs_event_t* handle);
 
 
 /*
+ * Stat poller.
+ */
+void uv__fs_poll_endgame(uv_loop_t* loop, uv_fs_poll_t* handle);
+
+
+/*
  * Utilities.
  */
 void uv__util_init();
@@ -277,6 +283,18 @@ int uv_parent_pid();
 void uv_filetime_to_time_t(FILETIME* file_time,  time_t* stat_time);
 void uv_fatal_error(const int errorno, const char* syscall);
 uv_err_code uv_translate_sys_error(int sys_errno);
+
+
+/*
+ * Process stdio handles.
+ */
+int uv__stdio_create(uv_loop_t* loop, uv_process_options_t* options,
+    BYTE** buffer_ptr);
+void uv__stdio_destroy(BYTE* buffer);
+void uv__stdio_noinherit(BYTE* buffer);
+int uv__stdio_verify(BYTE* buffer, WORD size);
+WORD uv__stdio_size(BYTE* buffer);
+HANDLE uv__stdio_handle(BYTE* buffer, int fd);
 
 
 /*

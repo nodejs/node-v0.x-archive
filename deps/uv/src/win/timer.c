@@ -67,8 +67,7 @@ RB_GENERATE_STATIC(uv_timer_tree_s, uv_timer_s, tree_entry, uv_timer_compare);
 
 
 int uv_timer_init(uv_loop_t* loop, uv_timer_t* handle) {
-  uv_handle_init(loop, (uv_handle_t*) handle);
-  handle->type = UV_TIMER;
+  uv__handle_init(loop, (uv_handle_t*) handle, UV_TIMER);
   handle->timer_cb = NULL;
   handle->repeat = 0;
 
@@ -90,6 +89,7 @@ void uv_timer_endgame(uv_loop_t* loop, uv_timer_t* handle) {
 int uv_timer_start(uv_timer_t* handle, uv_timer_cb timer_cb, int64_t timeout,
     int64_t repeat) {
   uv_loop_t* loop = handle->loop;
+  uv_timer_t* old;
 
   if (handle->flags & UV_HANDLE_ACTIVE) {
     RB_REMOVE(uv_timer_tree_s, &loop->timers, handle);
@@ -101,9 +101,8 @@ int uv_timer_start(uv_timer_t* handle, uv_timer_cb timer_cb, int64_t timeout,
   handle->flags |= UV_HANDLE_ACTIVE;
   uv__handle_start(handle);
 
-  if (RB_INSERT(uv_timer_tree_s, &loop->timers, handle) != NULL) {
-    uv_fatal_error(ERROR_INVALID_DATA, "RB_INSERT");
-  }
+  old = RB_INSERT(uv_timer_tree_s, &loop->timers, handle);
+  assert(old == NULL);
 
   return 0;
 }

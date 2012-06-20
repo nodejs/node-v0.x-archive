@@ -61,17 +61,16 @@ test-http1: all
 test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
-node_modules/weak:
+test/gc/node_modules/weak/build:
 	@if [ ! -f node ]; then make all; fi
-	@if [ ! -d node_modules ]; then mkdir -p node_modules; fi
-	./node deps/npm/bin/npm-cli.js install weak \
-		--nodedir="$(shell pwd)" \
-		--prefix="$(shell pwd)" --unsafe-perm # go ahead and run as root.
+	./node deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
+		--directory="$(shell pwd)/test/gc/node_modules/weak" \
+		--nodedir="$(shell pwd)"
 
-test-gc: all node_modules/weak
+test-gc: all test/gc/node_modules/weak/build
 	$(PYTHON) tools/test.py --mode=release gc
 
-test-all: all node_modules/weak
+test-all: all test/gc/node_modules/weak/build
 	$(PYTHON) tools/test.py --mode=debug,release
 	make test-npm
 
@@ -209,6 +208,17 @@ $(PKG):
 		--out $(PKG)
 
 $(TARBALL): node out/doc
+	@if [ "$(shell git status --porcelain | egrep -v '^\?\? ')" = "" ]; then \
+		exit 0 ; \
+	else \
+	  echo "" >&2 ; \
+		echo "The git repository is not clean." >&2 ; \
+		echo "Please commit changes before building release tarball." >&2 ; \
+		echo "" >&2 ; \
+		git status --porcelain | egrep -v '^\?\?' >&2 ; \
+		echo "" >&2 ; \
+		exit 1 ; \
+	fi
 	@if [ $(shell ./node --version) = "$(VERSION)" ]; then \
 		exit 0; \
 	else \
@@ -224,6 +234,7 @@ $(TARBALL): node out/doc
 	cp -r out/doc/api/* $(TARNAME)/doc/api/
 	rm -rf $(TARNAME)/deps/v8/test # too big
 	rm -rf $(TARNAME)/doc/images # too big
+	find $(TARNAME)/ -type l | xargs rm # annoying on windows
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
 	gzip -f -9 $(TARNAME).tar

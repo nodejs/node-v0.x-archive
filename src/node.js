@@ -29,7 +29,13 @@
 
   function startup() {
     var EventEmitter = NativeModule.require('events').EventEmitter;
-    process.__proto__ = EventEmitter.prototype;
+
+    process.__proto__ = Object.create(EventEmitter.prototype, {
+      constructor: {
+        value: process.constructor
+      }
+    });
+
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
     startup.globalVariables();
@@ -430,6 +436,8 @@
       if (r) {
         throw errnoException(errno, 'kill');
       }
+
+      return true;
     };
   };
 

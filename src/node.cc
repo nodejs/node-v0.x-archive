@@ -26,7 +26,7 @@
 #include "uv.h"
 
 #include "v8-debug.h"
-#ifdef HAVE_DTRACE
+#if defined HAVE_DTRACE || defined HAVE_ETW
 # include "node_dtrace.h"
 #endif
 
@@ -2151,6 +2151,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   Local<FunctionTemplate> process_template = FunctionTemplate::New();
 
+  process_template->SetClassName(String::NewSymbol("process"));
+
   process = Persistent<Object>::New(
     process_template->GetFunction()->NewInstance());
 
@@ -2161,11 +2163,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   // process.version
   process->Set(String::NewSymbol("version"), String::New(NODE_VERSION));
-
-#ifdef NODE_PREFIX
-  // process.installPrefix
-  process->Set(String::NewSymbol("installPrefix"), String::New(NODE_PREFIX));
-#endif
 
   // process.moduleLoadList
   module_load_list = Persistent<Array>::New(Array::New());
@@ -2354,7 +2351,7 @@ void Load(Handle<Object> process_l) {
   Local<Object> global = v8::Context::GetCurrent()->Global();
   Local<Value> args[1] = { Local<Value>::New(process_l) };
 
-#ifdef HAVE_DTRACE
+#if defined HAVE_DTRACE || defined HAVE_ETW
   InitDTrace(global);
 #endif
 
@@ -2406,7 +2403,6 @@ static void PrintHelp() {
          "  -i, --interactive    always enter the REPL even if stdin\n"
          "                       does not appear to be a terminal\n"
          "  --v8-options         print v8 command line options\n"
-         "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
          "\n"
          "Environment variables:\n"
@@ -2435,14 +2431,6 @@ static void ParseArgs(int argc, char **argv) {
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
-      exit(0);
-    } else if (strcmp(arg, "--vars") == 0) {
-#ifdef NODE_PREFIX
-      printf("NODE_PREFIX: %s\n", NODE_PREFIX);
-#endif
-#ifdef NODE_CFLAGS
-      printf("NODE_CFLAGS: %s\n", NODE_CFLAGS);
-#endif
       exit(0);
     } else if (strstr(arg, "--max-stack-size=") == arg) {
       const char *p = 0;
@@ -2726,6 +2714,9 @@ static Handle<Value> DebugEnd(const Arguments& args) {
 char** Init(int argc, char *argv[]) {
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
+
+  // Make inherited handles noninheritable.
+  uv_disable_stdio_inheritance();
 
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);

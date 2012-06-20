@@ -92,7 +92,7 @@ if (cmd === 'install') {
   copy([
     // Node
     'src/node.h', 'src/node_buffer.h', 'src/node_object_wrap.h',
-    'src/node_version.h',
+    'src/node_version.h', 'src/ev-emul.h', 'src/eio-emul.h',
     // v8
     'deps/v8/include/v8-debug.h', 'deps/v8/include/v8-preparser.h',
     'deps/v8/include/v8-profiler.h', 'deps/v8/include/v8-testing.h',
@@ -100,6 +100,14 @@ if (cmd === 'install') {
     // uv
     'deps/uv/include/uv.h'
   ], 'include/node/');
+
+  // man page
+  copy(['doc/node.1'], 'share/man/man1/');
+
+  // dtrace
+  if (!process.platform.match(/^linux/)) {
+    copy(['src/node.d'], 'lib/dtrace/');
+  }
 
   // Private uv headers
   copy([
@@ -147,7 +155,8 @@ if (cmd === 'install') {
 } else {
   remove([
      'bin/node', 'bin/npm', 'bin/node-waf',
-     'include/node/*', 'lib/node_modules', 'lib/node'
+     'include/node/*', 'lib/node_modules', 'lib/node',
+     'lib/dtrace/node.d', 'share/man/man1/node.1'
   ]);
 }
 

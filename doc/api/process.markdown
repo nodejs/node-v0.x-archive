@@ -3,7 +3,7 @@
 <!-- type=global -->
 
 The `process` object is a global object and can be accessed from anywhere.
-It is an instance of `EventEmitter`.
+It is an instance of [EventEmitter][].
 
 
 ## Event: 'exit'
@@ -300,13 +300,6 @@ An example of the possible output looks like:
          target_arch: 'x64',
          v8_use_snapshot: 'true' } }
 
-## process.installPrefix
-
-A compiled-in property that exposes `NODE_PREFIX`.
-
-    console.log('Prefix: ' + process.installPrefix);
-
-
 ## process.kill(pid, [signal])
 
 Send a signal to a process. `pid` is the process id and `signal` is the
@@ -425,3 +418,5 @@ a diff reading, useful for benchmarks and measuring intervals:
       console.log('benchmark took %d seconds and %d nanoseconds', t[0], t[1]);
       // benchmark took 1 seconds and 6962306 nanoseconds
     }, 1000);
+
+[EventEmitter]: events.html#events_class_events_eventemitter

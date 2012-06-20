@@ -28,16 +28,21 @@
 #include "eio.h"
 
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <pwd.h>
+
 #include <termios.h>
+#include <pwd.h>
 
 #include <semaphore.h>
 #include <pthread.h>
+#include <signal.h>
 
 #if __sun
 # include <sys/port.h>
@@ -53,6 +58,8 @@ typedef struct {
 typedef int uv_file;
 
 typedef int uv_os_sock_t;
+
+typedef struct stat uv_statbuf_t;
 
 #define UV_ONCE_INIT PTHREAD_ONCE_INIT
 
@@ -113,6 +120,9 @@ struct uv__io_s {
   ngx_queue_t prepare_handles;                                                \
   ngx_queue_t check_handles;                                                  \
   ngx_queue_t idle_handles;                                                   \
+  ngx_queue_t async_handles;                                                  \
+  uv__io_t async_watcher;                                                     \
+  int async_pipefd[2];                                                        \
   /* RB_HEAD(uv__timers, uv_timer_s) */                                       \
   struct uv__timers { struct uv_timer_s* rbh_root; } timer_handles;           \
   uint64_t time;                                                              \
@@ -211,9 +221,10 @@ struct uv__io_s {
 
 
 /* UV_ASYNC */
-#define UV_ASYNC_PRIVATE_FIELDS \
-  ev_async async_watcher; \
-  uv_async_cb async_cb;
+#define UV_ASYNC_PRIVATE_FIELDS                                               \
+  volatile sig_atomic_t pending;                                              \
+  uv_async_cb async_cb;                                                       \
+  ngx_queue_t queue;
 
 
 /* UV_TIMER */

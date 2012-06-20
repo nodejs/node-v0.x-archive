@@ -115,6 +115,16 @@ parser.add_option("--without-dtrace",
     dest="without_dtrace",
     help="Build without DTrace")
 
+parser.add_option("--with-etw",
+    action="store_true",
+    dest="with_etw",
+    help="Build with ETW (default is true on Windows)")
+
+parser.add_option("--without-etw",
+    action="store_true",
+    dest="without_etw",
+    help="Build without ETW")
+
 # CHECKME does this still work with recent releases of V8?
 parser.add_option("--gdb",
     action="store_true",
@@ -125,6 +135,11 @@ parser.add_option("--dest-cpu",
     action="store",
     dest="dest_cpu",
     help="CPU architecture to build for. Valid values are: arm, ia32, x64")
+
+parser.add_option("--no-ifaddrs",
+    action="store_true",
+    dest="no_ifaddrs",
+    help="Use on deprecated SunOS systems that do not support ifaddrs.h")
 
 (options, args) = parser.parse_args()
 
@@ -273,6 +288,15 @@ def configure_node(o):
     o['variables']['node_use_dtrace'] = 'false'
 
 
+  # By default, enable ETW on Windows.
+  if sys.platform.startswith('win32'):
+    o['variables']['node_use_etw'] = b(not options.without_etw);
+  elif b(options.with_etw) == 'true':
+    raise Exception('ETW is only supported on Windows.')
+  else:
+    o['variables']['node_use_etw'] = 'false'
+
+
 def configure_libz(o):
   o['variables']['node_shared_zlib'] = b(options.shared_zlib)
 
@@ -308,6 +332,9 @@ def configure_openssl(o):
 
   if options.without_ssl:
     return
+
+  if options.no_ifaddrs:
+    o['defines'] += ['SUNOS_NO_IFADDRS']
 
   if options.no_ssl2:
     o['defines'] += ['OPENSSL_NO_SSL2=1']

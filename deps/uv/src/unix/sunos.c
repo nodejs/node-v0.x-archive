@@ -28,7 +28,7 @@
 #include <assert.h>
 #include <errno.h>
 
-#ifdef SUNOS_HAVE_IFADDRS
+#ifndef SUNOS_NO_IFADDRS
 # include <ifaddrs.h>
 #endif
 #include <net/if.h>
@@ -215,6 +215,7 @@ void uv__fs_event_close(uv_fs_event_t* handle) {
   free(handle->filename);
   handle->filename = NULL;
   handle->fo.fo_name = NULL;
+  uv__handle_stop(handle);
 }
 
 #else /* !HAVE_PORTS_FS */
@@ -407,7 +408,7 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
 
 uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
   int* count) {
-#ifndef SUNOS_HAVE_IFADDRS
+#ifdef SUNOS_NO_IFADDRS
   return uv__new_artificial_error(UV_ENOSYS);
 #else
   struct ifaddrs *addrs, *ent;
@@ -466,7 +467,7 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
   freeifaddrs(addrs);
 
   return uv_ok_;
-#endif  /* SUNOS_HAVE_IFADDRS */
+#endif  /* SUNOS_NO_IFADDRS */
 }
 
 
