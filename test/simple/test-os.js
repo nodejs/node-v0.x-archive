@@ -74,23 +74,18 @@ if (process.platform != 'sunos') {
   assert.ok(os.totalmem() > 0);
 }
 
-
+// Check for an IPv4 loopback 
 var interfaces = os.networkInterfaces();
 console.error(interfaces);
-switch (platform) {
-  case 'linux':
-    var filter = function(e) { return e.address == '127.0.0.1'; };
-    var actual = interfaces.lo.filter(filter);
-    var expected = [{ address: '127.0.0.1', family: 'IPv4', internal: true }];
-    assert.deepEqual(actual, expected);
-    break;
-  case 'win32':
-    var filter = function(e) { return e.address == '127.0.0.1'; };
-    var actual = interfaces['Loopback Pseudo-Interface 1'].filter(filter);
-    var expected = [{ address: '127.0.0.1', family: 'IPv4', internal: true }];
-    assert.deepEqual(actual, expected);
-    break;
+var filter = function(e) { return e.address == '127.0.0.1'; };
+var expected = { address: '127.0.0.1', family: 'IPv4', internal: true };
+var address = function(a) { assert.deepEqual(a, expected); return true; };
+var count = 0;
+for (var i in interfaces) {
+  var addr=interfaces[i].filter(filter).filter(address);
+  count += addr.length;
 }
+assert(count > 0);
 
 var EOL = os.EOL;
 assert.ok(EOL.length > 0);
