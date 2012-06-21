@@ -2209,9 +2209,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   //Add in the module wrap signatures
   process->Set(String::NewSymbol("_moduleWrapPrefix"), String::New(MODULE_WRAP_PREFIX),
-          static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
+               static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
   process->Set(String::NewSymbol("_moduleWrapSuffix"), String::New(MODULE_WRAP_SUFFIX),
-          static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
+               static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
 
   // -e, --eval
   if (eval_string) {
