@@ -133,6 +133,7 @@ enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
 #define MODULE_WRAP_SUFFIX "\n});"
 
 NODE_EXTERN void FatalException(v8::TryCatch &try_catch);
+void DisplayExceptionLine(v8::TryCatch &try_catch); // hack
 
 v8::Local<v8::Value> Encode(const void *buf, size_t len,
                             enum encoding encoding = BINARY);
