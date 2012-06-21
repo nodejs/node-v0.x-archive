@@ -62,6 +62,9 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 # define ROUND_UP(a, b) ((a) % (b) ? ((a) + (b)) - ((a) % (b)) : (a))
 #endif
 
+#define MODULE_WRAP_PREFIX "(function (exports, require, module, __filename, __dirname) { "
+#define MODULE_WRAP_SUFFIX "\n});"
+
 // this would have been a template function were it not for the fact that g++
 // sometimes fails to resolve it...
 #define THROW_ERROR(fun)                                                      \

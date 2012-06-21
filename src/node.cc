@@ -20,6 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "node.h"
+#include "node_internals.h"
 #include "req_wrap.h"
 #include "handle_wrap.h"
 
@@ -118,6 +119,7 @@ static Persistent<String> enter_symbol;
 static Persistent<String> exit_symbol;
 static Persistent<String> disposed_symbol;
 
+
 static bool print_eval = false;
 static bool force_repl = false;
 static char *eval_string = NULL;
@@ -173,7 +175,6 @@ static double prog_start_time;
 #define TICK_TIME(n) tick_times[(tick_time_head - (n)) % RPM_SAMPLES]
 static int64_t tick_times[RPM_SAMPLES];
 static int tick_time_head;
-
 
 static void CheckStatus(uv_timer_t* watcher, int status);
 
@@ -1234,8 +1235,8 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     // Even better would be to get support into V8 for wrappers that
     // shouldn't be reported to users.
     int offset = 0;
-    if(linenum == 1 && 0 == strncmp(sourceline_string, MODULE_WRAP_PREFIX, strlen(MODULE_WRAP_PREFIX))){
-      offset += strlen(MODULE_WRAP_PREFIX);
+    if (linenum == 1 && 0 == strncmp(sourceline_string, MODULE_WRAP_PREFIX, sizeof(MODULE_WRAP_PREFIX) - 1)){
+      offset += sizeof(MODULE_WRAP_PREFIX) - 1;
     }
     fprintf(stderr, "%s\n", sourceline_string + offset);
     // Print wavy underline (GetUnderline is deprecated).
@@ -1899,6 +1900,17 @@ static Handle<Value> Binding(const Arguments& args) {
   return scope.Close(exports);
 }
 
+static Handle<Value> ModuleWrapPrefixGetter(Local<String> property,
+                                            const AccessorInfo& info){
+  HandleScope scope;
+  return scope.Close(String::New(MODULE_WRAP_PREFIX));
+}
+
+static Handle<Value> ModuleWrapSuffixGetter(Local<String> property,
+                                            const AccessorInfo& info){
+  HandleScope scope;
+  return scope.Close(String::New(MODULE_WRAP_PREFIX));
+}
 
 static Handle<Value> ProcessTitleGetter(Local<String> property,
                                         const AccessorInfo& info) {
@@ -2206,8 +2218,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   process->Set(String::NewSymbol("features"), GetFeatures());
 
   //Add in the module wrap signatures
-  process->Set(String::NewSymbol("_moduleWrapPrefix"), String::New(MODULE_WRAP_PREFIX));
-  process->Set(String::NewSymbol("_moduleWrapSuffix"), String::New(MODULE_WRAP_SUFFIX));
+  process->Set(String::NewSymbol("_moduleWrapPrefix"), String::New(MODULE_WRAP_PREFIX),
+          static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
+  process->Set(String::NewSymbol("_moduleWrapSuffix"), String::New(MODULE_WRAP_SUFFIX),
+          static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
 
   // -e, --eval
   if (eval_string) {
