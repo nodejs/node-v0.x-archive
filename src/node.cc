@@ -1900,6 +1900,7 @@ static Handle<Value> Binding(const Arguments& args) {
   return scope.Close(exports);
 }
 
+
 static Handle<Value> ProcessTitleGetter(Local<String> property,
                                         const AccessorInfo& info) {
   HandleScope scope;
