@@ -1235,7 +1235,8 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     // Even better would be to get support into V8 for wrappers that
     // shouldn't be reported to users.
     int offset = 0;
-    if (linenum == 1 && 0 == strncmp(sourceline_string, MODULE_WRAP_PREFIX, sizeof(MODULE_WRAP_PREFIX) - 1)){
+    if (linenum == 1 && 0 == strncmp(sourceline_string, MODULE_WRAP_PREFIX,
+        sizeof(MODULE_WRAP_PREFIX) - 1)) {
       offset += sizeof(MODULE_WRAP_PREFIX) - 1;
     }
     fprintf(stderr, "%s\n", sourceline_string + offset);
