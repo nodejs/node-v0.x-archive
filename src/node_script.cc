@@ -397,7 +397,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
       //the place where ReThrow was called.  This makes it impossible to get a stack
       //trace after the an error has been rethrown.  Until this V8 bug is fixed, this
       //display_error argument makes it possible to log the location information.
-      if(display_error) DisplayExceptionLine(try_catch);
+      if (display_error) DisplayExceptionLine(try_catch);
 
       return try_catch.ReThrow();
     }
