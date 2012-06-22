@@ -30,7 +30,7 @@ var os = require('os');
 process.env.TMPDIR = '/tmpdir';
 process.env.TMP = '/tmp';
 process.env.TEMP = '/temp';
-var t = ( process.platform === 'win32' ? 'c:\\windows\\temp' : '/tmp' );
+var t = (process.platform === 'win32' ? 'c:\\windows\\temp' : '/tmp');
 assert.equal(os.tmpDir(), '/tmpdir');
 process.env.TMPDIR = '';
 assert.equal(os.tmpDir(), '/tmp');
@@ -74,18 +74,26 @@ if (process.platform != 'sunos') {
   assert.ok(os.totalmem() > 0);
 }
 
-// Check for an IPv4 loopback 
+// Check at least 1 IPv4 loopback exists & all have correct details
 var interfaces = os.networkInterfaces();
 console.error(interfaces);
+
 var filter = function(e) { return e.address == '127.0.0.1'; };
 var expected = { address: '127.0.0.1', family: 'IPv4', internal: true };
-var address = function(a) { assert.deepEqual(a, expected); return true; };
-var count = 0;
-for (var i in interfaces) {
-  var addr=interfaces[i].filter(filter).filter(address);
-  count += addr.length;
+
+var found = false;
+for (var iname in interfaces) {
+  var inter = interfaces[iname];
+
+  var addrs = inter.length;
+  for (var a = 0; a < addrs; a++) {
+    if (inter[a].address == '127.0.0.1') {
+      assert.deepEqual(inter[a], expected);
+      found = true;
+    }
+  }
 }
-assert(count > 0);
+assert(found);
 
 var EOL = os.EOL;
 assert.ok(EOL.length > 0);
