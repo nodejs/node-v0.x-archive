@@ -38,7 +38,7 @@ var actual = '';
 var inp = fs.createReadStream(fixture).pipe(gunzip);
 
 inp.on('data', function(data) {
-  assert.equal(typeof(data), 'string', 'data should be a string');
+  assert.equal(typeof data, 'string', 'data should be a string');
   actual += data;
 });
 
