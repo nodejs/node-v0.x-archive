@@ -12,6 +12,7 @@ def buildFilterList(filters=[]):
 
 cpplint = ['python', 'tools/cpplint.py']
 excludes = [
+  'src{0}{1}'.format(os.sep, 'eio-emul.h'),
   'src{0}{1}'.format(os.sep, 'ngx-queue.h'),
   'src{0}{1}'.format(os.sep, 'node_constants.cc'),
   'src{0}{1}'.format(os.sep, 'node_win32_etw_provider-inl.h'),
@@ -32,6 +33,7 @@ lintfiles = filter(lambda x: excludes.count(x) == 0,
   glob.glob("src/*.cc") + glob.glob("src/*.h") + glob.glob("src/*.c"))
 
 run_args = [
+  [buildFilterList('-whitespace/line_length,-whitespace/comma'), 'src/eio-emul.h'],
   [buildFilterList('-readability/fn_size'), 'src/node_constants.cc'],
   [buildFilterList('-runtime/sizeof'), 'src/node_win32_etw_provider-inl.h'],
   [buildFilterList('-build/header_guard'), 'src/node_extensions.h'],

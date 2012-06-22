@@ -20,8 +20,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef NODE_EIO_EMUL_H_
-#define NODE_EIO_EMUL_H_
+#ifndef SRC_EIO_EMUL_H_
+#define SRC_EIO_EMUL_H_
 
 #define eio_nop(a,b,c)                      eio_nop(a,b,c,(&uv_default_loop()->uv_eio_channel))
 #define eio_busy(a,b,c,d)                   eio_busy(a,b,c,d,(&uv_default_loop()->uv_eio_channel))
@@ -65,7 +65,7 @@
 #define eio_link(a,b,c,d,e)                 eio_link(a,b,c,d,e,(&uv_default_loop()->uv_eio_channel))
 #define eio_symlink(a,b,c,d,e)              eio_symlink(a,b,c,d,e,(&uv_default_loop()->uv_eio_channel))
 #define eio_rename(a,b,c,d,e)               eio_rename(a,b,c,d,e,(&uv_default_loop()->uv_eio_channel))
-#define eio_custom(a,b,c,d)                 eio_custom((void (*)(eio_req*))a,b,c,d,(&uv_default_loop()->uv_eio_channel))
+#define eio_custom(a,b,c,d)                 eio_custom((void (*)(eio_req* req))a,b,c,d,(&uv_default_loop()->uv_eio_channel))
 #define eio_grp(a,b)                        eio_grp(a,b,(&uv_default_loop()->uv_eio_channel))
 
-#endif /* NODE_EIO_EMUL_H_ */
+#endif  // SRC_EIO_EMUL_H_
