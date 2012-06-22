@@ -4,16 +4,17 @@ import sys
 from subprocess import call
 
 def buildFilterList(filters=[]):
+  # globally disable all warnings about includes
   globalfilter = ['--filter=-build/include']
   if not type(filters) is list:
     filters = [filters]
   return ','.join(globalfilter + filters)
 
-# globally disable all warnings about includes
 cpplint = ['python', 'tools/cpplint.py']
 excludes = [
   'src{0}{1}'.format(os.sep, 'ngx-queue.h'),
   'src{0}{1}'.format(os.sep, 'node_constants.cc'),
+  'src{0}{1}'.format(os.sep, 'node_win32_etw_provider-inl.h'),
   'src{0}{1}'.format(os.sep, 'node_extensions.h'),
   'src{0}{1}'.format(os.sep, 'node_io_watcher.cc'),
   'src{0}{1}'.format(os.sep, 'node_io_watcher.h'),
@@ -32,6 +33,7 @@ lintfiles = filter(lambda x: excludes.count(x) == 0,
 
 run_args = [
   [buildFilterList('-readability/fn_size'), 'src/node_constants.cc'],
+  [buildFilterList('-runtime/sizeof'), 'src/node_win32_etw_provider-inl.h'],
   [buildFilterList('-build/header_guard'), 'src/node_extensions.h'],
   [buildFilterList('-whitespace/line_length'), 'src/node_root_certs.h'],
   [buildFilterList('-legal/copyright'),

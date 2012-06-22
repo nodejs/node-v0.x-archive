@@ -19,15 +19,16 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_ETW_H_
-#define SRC_ETW_H_
+#ifndef SRC_NODE_WIN32_ETW_PROVIDER_H_
+#define SRC_NODE_WIN32_ETW_PROVIDER_H_
 
 #include <evntprov.h>
 #include "node_dtrace.h"
 
 namespace node {
 
-using namespace v8;
+using v8::GCType;
+using v8::GCCallbackFlags;
 
 #if defined(_MSC_VER)
 # define INLINE __forceinline
@@ -79,4 +80,4 @@ INLINE bool NODE_NET_SOCKET_WRITE_ENABLED();
 #define NODE_NET_SOCKET_READ(arg0, arg1)
 #define NODE_NET_SOCKET_WRITE(arg0, arg1)
 }
-#endif  // SRC_ETW_H_
+#endif  // SRC_NODE_WIN32_ETW_PROVIDER_H_
