@@ -84,6 +84,10 @@ Handle<Value> IOWatcher::New(const Arguments& args) {
     return FromConstructorTemplate(constructor_template, args);
   }
 
+  if (!no_deprecation) {
+    fprintf(stderr, "WARNING: don't use IOWatcher, it'll be removed in v0.9\n");
+  }
+
   HandleScope scope;
   IOWatcher *s = new IOWatcher();
   s->Wrap(args.This());
