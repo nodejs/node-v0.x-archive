@@ -2113,8 +2113,7 @@ class Cipher : public ObjectWrap {
 
     if (args.Length() <= 1
         || !args[0]->IsString()
-        || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
-    {
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key")));
     }
@@ -2541,8 +2540,7 @@ class Decipher : public ObjectWrap {
 
     if (args.Length() <= 1
         || !args[0]->IsString()
-        || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
-    {
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1]))) {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key as argument")));
     }
