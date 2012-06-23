@@ -164,6 +164,16 @@ parser.add_option("--no-ifaddrs",
     dest="no_ifaddrs",
     help="Use on deprecated SunOS systems that do not support ifaddrs.h")
 
+parser.add_option("--with-hardfloat",
+    action="store_true",
+    dest="use_hardfloat",
+    help="Use ARM EABI calling convention where double arguments are passed in VFP registers")
+
+parser.add_option("--with-armv7",
+    action="store_true",
+    dest="use_armv7",
+    help="Optimise v8 for armv7")
+
 (options, args) = parser.parse_args()
 
 
@@ -327,6 +337,11 @@ def configure_libz(o):
 def configure_v8(o):
   o['variables']['v8_use_snapshot'] = b(not options.without_snapshot)
   o['variables']['node_shared_v8'] = b(options.shared_v8)
+
+  # todo: auto-detect these variables when not cross-compiling
+  if o['variables']['target_arch'] == 'arm':
+    o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.use_hardfloat)
+    o['variables']['armv7'] = b(options.use_armv7)   
 
   # assume shared_v8 if one of these is set?
   if options.shared_v8_libpath:
