@@ -78,9 +78,7 @@ if (process.platform != 'sunos') {
 var interfaces = os.networkInterfaces();
 console.error(interfaces);
 
-var filter = function(e) { return e.address == '127.0.0.1'; };
 var expected = { address: '127.0.0.1', family: 'IPv4', internal: true };
-
 var found = false;
 for (var iname in interfaces) {
   var inter = interfaces[iname];
