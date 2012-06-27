@@ -65,6 +65,19 @@ static const int kSizeLimit = 1500;
 // Number of times a function has to be seen on the stack before it is
 // optimized.
 static const int kProfilerTicksBeforeOptimization = 2;
+// If the function optimization was disabled due to high deoptimization count,
+// but the function is hot and has been seen on the stack this number of times,
+// then we try to reenable optimization for this function.
+static const int kProfilerTicksBeforeReenablingOptimization = 250;
+// If a function does not have enough type info (according to
+// FLAG_type_info_threshold), but has seen a huge number of ticks,
+// optimize it as it is.
+static const int kTicksWhenNotEnoughTypeInfo = 100;
+// We only have one byte to store the number of ticks.
+STATIC_ASSERT(kProfilerTicksBeforeOptimization < 256);
+STATIC_ASSERT(kProfilerTicksBeforeReenablingOptimization < 256);
+STATIC_ASSERT(kTicksWhenNotEnoughTypeInfo < 256);
+
 
 // Maximum size in bytes of generated code for a function to be optimized
 // the very first time it is seen on the stack.
@@ -88,12 +101,14 @@ RuntimeProfiler::RuntimeProfiler(Isolate* isolate)
       sampler_threshold_size_factor_(kSamplerThresholdSizeFactorInit),
       sampler_ticks_until_threshold_adjustment_(
           kSamplerTicksBetweenThresholdAdjustment),
-      sampler_window_position_(0) {
+      sampler_window_position_(0),
+      any_ic_changed_(false),
+      code_generated_(false) {
   ClearSampleBuffer();
 }
 
 
-void RuntimeProfiler::GlobalSetup() {
+void RuntimeProfiler::GlobalSetUp() {
   ASSERT(!has_been_globally_set_up_);
   enabled_ = V8::UseCrankshaft() && FLAG_opt;
 #ifdef DEBUG
@@ -103,20 +118,20 @@ void RuntimeProfiler::GlobalSetup() {
 
 
 static void GetICCounts(JSFunction* function,
-                        int* ic_with_typeinfo_count,
+                        int* ic_with_type_info_count,
                         int* ic_total_count,
                         int* percentage) {
   *ic_total_count = 0;
-  *ic_with_typeinfo_count = 0;
+  *ic_with_type_info_count = 0;
   Object* raw_info =
       function->shared()->code()->type_feedback_info();
   if (raw_info->IsTypeFeedbackInfo()) {
     TypeFeedbackInfo* info = TypeFeedbackInfo::cast(raw_info);
-    *ic_with_typeinfo_count = info->ic_with_typeinfo_count();
+    *ic_with_type_info_count = info->ic_with_type_info_count();
     *ic_total_count = info->ic_total_count();
   }
   *percentage = *ic_total_count > 0
-      ? 100 * *ic_with_typeinfo_count / *ic_total_count
+      ? 100 * *ic_with_type_info_count / *ic_total_count
       : 100;
 }
 
@@ -173,14 +188,10 @@ void RuntimeProfiler::AttemptOnStackReplacement(JSFunction* function) {
   // prepared to generate it, but we don't expect to have to.
   bool found_code = false;
   Code* stack_check_code = NULL;
-#if defined(V8_TARGET_ARCH_IA32) || \
-    defined(V8_TARGET_ARCH_ARM) || \
-    defined(V8_TARGET_ARCH_MIPS)
   if (FLAG_count_based_interrupts) {
     InterruptStub interrupt_stub;
     found_code = interrupt_stub.FindCodeInCache(&stack_check_code);
   } else  // NOLINT
-#endif
   {  // NOLINT
     StackCheckStub check_stub;
     found_code = check_stub.FindCodeInCache(&stack_check_code);
@@ -259,31 +270,48 @@ void RuntimeProfiler::OptimizeNow() {
       }
     }
 
-    if (function->IsMarkedForLazyRecompilation() &&
-        function->shared()->code()->kind() == Code::FUNCTION) {
-      Code* unoptimized = function->shared()->code();
-      int nesting = unoptimized->allow_osr_at_loop_nesting_level();
+    SharedFunctionInfo* shared = function->shared();
+    Code* shared_code = shared->code();
+
+    if (shared_code->kind() != Code::FUNCTION) continue;
+
+    if (function->IsMarkedForLazyRecompilation()) {
+      int nesting = shared_code->allow_osr_at_loop_nesting_level();
       if (nesting == 0) AttemptOnStackReplacement(function);
       int new_nesting = Min(nesting + 1, Code::kMaxLoopNestingMarker);
-      unoptimized->set_allow_osr_at_loop_nesting_level(new_nesting);
+      shared_code->set_allow_osr_at_loop_nesting_level(new_nesting);
     }
-
-    // Do not record non-optimizable functions.
-    if (!function->IsOptimizable()) continue;
-    if (function->shared()->optimization_disabled()) continue;
 
     // Only record top-level code on top of the execution stack and
     // avoid optimizing excessively large scripts since top-level code
     // will be executed only once.
     const int kMaxToplevelSourceSize = 10 * 1024;
-    if (function->shared()->is_toplevel()
-        && (frame_count > 1
-            || function->shared()->SourceSize() > kMaxToplevelSourceSize)) {
+    if (shared->is_toplevel() &&
+        (frame_count > 1 || shared->SourceSize() > kMaxToplevelSourceSize)) {
       continue;
     }
 
+    // Do not record non-optimizable functions.
+    if (shared->optimization_disabled()) {
+      if (shared->deopt_count() >= Compiler::kDefaultMaxOptCount) {
+        // If optimization was disabled due to many deoptimizations,
+        // then check if the function is hot and try to reenable optimization.
+        int ticks = shared_code->profiler_ticks();
+        if (ticks >= kProfilerTicksBeforeReenablingOptimization) {
+          shared_code->set_profiler_ticks(0);
+          shared->TryReenableOptimization();
+        } else {
+          shared_code->set_profiler_ticks(ticks + 1);
+        }
+      }
+      continue;
+    }
+    if (!function->IsOptimizable()) continue;
+
+
+
     if (FLAG_watch_ic_patching) {
-      int ticks = function->shared()->profiler_ticks();
+      int ticks = shared_code->profiler_ticks();
 
       if (ticks >= kProfilerTicksBeforeOptimization) {
         int typeinfo, total, percentage;
@@ -292,12 +320,10 @@ void RuntimeProfiler::OptimizeNow() {
           // If this particular function hasn't had any ICs patched for enough
           // ticks, optimize it now.
           Optimize(function, "hot and stable");
-        } else if (ticks >= 100) {
-          // If this function does not have enough type info, but has
-          // seen a huge number of ticks, optimize it as it is.
+        } else if (ticks >= kTicksWhenNotEnoughTypeInfo) {
           Optimize(function, "not much type info but very hot");
         } else {
-          function->shared()->set_profiler_ticks(ticks + 1);
+          shared_code->set_profiler_ticks(ticks + 1);
           if (FLAG_trace_opt_verbose) {
             PrintF("[not yet optimizing ");
             function->PrintName();
@@ -306,20 +332,12 @@ void RuntimeProfiler::OptimizeNow() {
           }
         }
       } else if (!any_ic_changed_ &&
-          function->shared()->code()->instruction_size() < kMaxSizeEarlyOpt) {
+          shared_code->instruction_size() < kMaxSizeEarlyOpt) {
         // If no IC was patched since the last tick and this function is very
         // small, optimistically optimize it now.
         Optimize(function, "small function");
-      } else if (!code_generated_ &&
-          !any_ic_changed_ &&
-          total_code_generated_ > 0 &&
-          total_code_generated_ < 2000) {
-        // If no code was generated and no IC was patched since the last tick,
-        // but a little code has already been generated since last Reset(),
-        // then type info might already be stable and we can optimize now.
-        Optimize(function, "stable on startup");
       } else {
-        function->shared()->set_profiler_ticks(ticks + 1);
+        shared_code->set_profiler_ticks(ticks + 1);
       }
     } else {  // !FLAG_watch_ic_patching
       samples[sample_count++] = function;
@@ -338,7 +356,6 @@ void RuntimeProfiler::OptimizeNow() {
   }
   if (FLAG_watch_ic_patching) {
     any_ic_changed_ = false;
-    code_generated_ = false;
   } else {  // !FLAG_watch_ic_patching
     // Add the collected functions as samples. It's important not to do
     // this as part of collecting them because this will interfere with
@@ -351,11 +368,7 @@ void RuntimeProfiler::OptimizeNow() {
 
 
 void RuntimeProfiler::NotifyTick() {
-#if defined(V8_TARGET_ARCH_IA32) || \
-    defined(V8_TARGET_ARCH_ARM) || \
-    defined(V8_TARGET_ARCH_MIPS)
   if (FLAG_count_based_interrupts) return;
-#endif
   isolate_->stack_guard()->RequestRuntimeProfilerTick();
 }
 
@@ -372,9 +385,7 @@ void RuntimeProfiler::SetUp() {
 
 
 void RuntimeProfiler::Reset() {
-  if (FLAG_watch_ic_patching) {
-    total_code_generated_ = 0;
-  } else {  // !FLAG_watch_ic_patching
+  if (!FLAG_watch_ic_patching) {
     sampler_threshold_ = kSamplerThresholdInit;
     sampler_threshold_size_factor_ = kSamplerThresholdSizeFactorInit;
     sampler_ticks_until_threshold_adjustment_ =

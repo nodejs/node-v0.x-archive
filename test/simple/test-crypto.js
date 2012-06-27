@@ -38,6 +38,7 @@ var path = require('path');
 // Test Certificates
 var caPem = fs.readFileSync(common.fixturesDir + '/test_ca.pem', 'ascii');
 var certPem = fs.readFileSync(common.fixturesDir + '/test_cert.pem', 'ascii');
+var certPfx = fs.readFileSync(common.fixturesDir + '/test_cert.pfx');
 var keyPem = fs.readFileSync(common.fixturesDir + '/test_key.pem', 'ascii');
 var rsaPubPem = fs.readFileSync(common.fixturesDir + '/test_rsa_pubkey.pem',
     'ascii');
@@ -54,8 +55,24 @@ try {
   process.exit();
 }
 
-// Test HMAC
+// PFX tests
+assert.doesNotThrow(function() {
+  crypto.createCredentials({pfx:certPfx, passphrase:'sample'});
+});
 
+assert.throws(function() {
+  crypto.createCredentials({pfx:certPfx});
+}, 'mac verify failure');
+
+assert.throws(function() {
+  crypto.createCredentials({pfx:certPfx, passphrase:'test'});
+}, 'mac verify failure');
+
+assert.throws(function() {
+  crypto.createCredentials({pfx:'sample', passphrase:'test'});
+}, 'not enough data');
+
+// Test HMAC
 var h1 = crypto.createHmac('sha1', 'Node')
                .update('some data')
                .update('to hmac')
@@ -416,99 +433,105 @@ var verified = crypto.createVerify('RSA-SHA256')
                      .verify(certPem, s2); // binary
 assert.strictEqual(verified, true, 'sign and verify (binary)');
 
-// Test encryption and decryption
-var plaintext = 'Keep this a secret? No! Tell everyone about node.js!';
-var cipher = crypto.createCipher('aes192', 'MySecretKey123');
 
-// encrypt plaintext which is in utf8 format
-// to a ciphertext which will be in hex
-var ciph = cipher.update(plaintext, 'utf8', 'hex');
-// Only use binary or hex, not base64.
-ciph += cipher.final('hex');
+function testCipher1(key) {
+  // Test encryption and decryption
+  var plaintext = 'Keep this a secret? No! Tell everyone about node.js!';
+  var cipher = crypto.createCipher('aes192', key);
 
-//MySecretKey123
-var key_buf = new Buffer('4d795365637265744b6579313233', 'hex');
-var buf_cipher = crypto.createCipher('aes192', key_buf);
+  // encrypt plaintext which is in utf8 format
+  // to a ciphertext which will be in hex
+  var ciph = cipher.update(plaintext, 'utf8', 'hex');
+  // Only use binary or hex, not base64.
+  ciph += cipher.final('hex');
 
-var buf_ciph = buf_cipher.update(plaintext, 'utf8', 'hex');
-buf_ciph += buf_cipher.final('hex');
+  cipher = crypto.createCipher('aes192', key);
+  //cypher text as buffer
+  var ctb1 = cipher.update(plaintext, 'utf8', null);
+  var ctb2 = cipher.final(null);
 
-assert.equal(ciph, buf_ciph, 'key as string and buffer');
+  assert.ok(Buffer.isBuffer(ctb1));
+  assert.ok(Buffer.isBuffer(ctb2));
 
-cipher = crypto.createCipher('aes192', 'MySecretKey123');
-var ctb1 = cipher.update(plaintext, 'utf8', null);
-var ctb2 = cipher.final(null);
+  var ctb = new Buffer(ctb1.length + ctb2.length);
+  ctb1.copy(ctb);
+  ctb2.copy(ctb, ctb1.length);
 
-assert.ok(Buffer.isBuffer(ctb1));
-assert.ok(Buffer.isBuffer(ctb2));
+  assert.equal(ciph, ctb.toString('hex'), 'cipher output as buffer');
 
-var ctb = new Buffer(ctb1.length + ctb2.length);
-ctb1.copy(ctb);
-ctb2.copy(ctb, ctb1.length);
+  var decipher = crypto.createDecipher('aes192', key);
+  var txt = decipher.update(ciph, 'hex', 'utf8');
+  txt += decipher.final('utf8');
 
-assert.equal(ciph, ctb.toString('hex'), 'cipher output as buffer');
+  decipher = crypto.createDecipher('aes192', 'MySecretKey123');
+  //plain text as buffer
+  var ptb1 = decipher.update(ciph, 'hex', null);
+  var ptb2 = decipher.final(null);
 
-var decipher = crypto.createDecipher('aes192', 'MySecretKey123');
-var txt = decipher.update(ciph, 'hex', 'utf8');
-txt += decipher.final('utf8');
+  assert.ok(Buffer.isBuffer(ptb1));
+  assert.ok(Buffer.isBuffer(ptb2));
 
-assert.equal(txt, plaintext, 'encryption and decryption');
+  var ptb = new Buffer(ptb1.length + ptb2.length);
+  ptb1.copy(ptb);
+  ptb2.copy(ptb, ptb1.length);
 
-decipher = crypto.createDecipher('aes192', 'MySecretKey123');
-var ptb1 = decipher.update(ciph, 'hex', null);
-var ptb2 = decipher.final(null);
+  assert.equal(txt, ptb.toString('utf8'), 'decipher output as buffer');
 
-assert.ok(Buffer.isBuffer(ptb1));
-assert.ok(Buffer.isBuffer(ptb2));
-
-var ptb = new Buffer(ptb1.length + ptb2.length);
-ptb1.copy(ptb);
-ptb2.copy(ptb, ptb1.length);
-
-assert.equal(txt, ptb.toString('utf8'), 'decipher output as buffer');
-
-// encryption and decryption with Base64
-// reported in https://github.com/joyent/node/issues/738
-var plaintext =
-    '32|RmVZZkFUVmpRRkp0TmJaUm56ZU9qcnJkaXNNWVNpTTU*|iXmckfRWZBGWWELw' +
-    'eCBsThSsfUHLeRe0KCsK8ooHgxie0zOINpXxfZi/oNG7uq9JWFVCk70gfzQH8ZUJjAfaFg**';
-var cipher = crypto.createCipher('aes256', '0123456789abcdef');
-
-// encrypt plaintext which is in utf8 format
-// to a ciphertext which will be in Base64
-var ciph = cipher.update(plaintext, 'utf8', 'base64');
-ciph += cipher.final('base64');
-
-var decipher = crypto.createDecipher('aes256', '0123456789abcdef');
-var txt = decipher.update(ciph, 'base64', 'utf8');
-txt += decipher.final('utf8');
-
-assert.equal(txt, plaintext, 'encryption and decryption with Base64');
+  assert.equal(txt, plaintext, 'encryption and decryption');
+}
 
 
-// Test encyrption and decryption with explicit key and iv
-var encryption_key = '0123456789abcd0123456789';
-var iv = '12345678';
+function testCipher2(key) {
+  // encryption and decryption with Base64
+  // reported in https://github.com/joyent/node/issues/738
+  var plaintext =
+      '32|RmVZZkFUVmpRRkp0TmJaUm56ZU9qcnJkaXNNWVNpTTU*|iXmckfRWZBGWWELw' +
+      'eCBsThSsfUHLeRe0KCsK8ooHgxie0zOINpXxfZi/oNG7uq9JWFVCk70gfzQH8ZUJ' +
+      'jAfaFg**';
+  var cipher = crypto.createCipher('aes256', key);
 
-var cipher = crypto.createCipheriv('des-ede3-cbc', encryption_key, iv);
-var ciph = cipher.update(plaintext, 'utf8', 'hex');
-ciph += cipher.final('hex');
+  // encrypt plaintext which is in utf8 format
+  // to a ciphertext which will be in Base64
+  var ciph = cipher.update(plaintext, 'utf8', 'base64');
+  ciph += cipher.final('base64');
 
-var decipher = crypto.createDecipheriv('des-ede3-cbc', encryption_key, iv);
-var txt = decipher.update(ciph, 'hex', 'utf8');
-txt += decipher.final('utf8');
+  var decipher = crypto.createDecipher('aes256', key);
+  var txt = decipher.update(ciph, 'base64', 'utf8');
+  txt += decipher.final('utf8');
 
-assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
+  assert.equal(txt, plaintext, 'encryption and decryption with Base64');
+}
 
-var encryption_key_buf = //0123456789abcd0123456789
-    new Buffer('303132333435363738396162636430313233343536373839', 'hex');
-var iv_buf = new Buffer('3132333435363738', 'hex'); //12345678
 
-var cipher = crypto.createCipheriv('des-ede3-cbc', encryption_key_buf, iv_buf);
-var buf_ciph = cipher.update(plaintext, 'utf8', 'hex');
-buf_ciph += cipher.final('hex');
+function testCipher3(key, iv) {
+  // Test encyrption and decryption with explicit key and iv
+  var plaintext =
+      '32|RmVZZkFUVmpRRkp0TmJaUm56ZU9qcnJkaXNNWVNpTTU*|iXmckfRWZBGWWELw' +
+      'eCBsThSsfUHLeRe0KCsK8ooHgxie0zOINpXxfZi/oNG7uq9JWFVCk70gfzQH8ZUJ' +
+      'jAfaFg**';
+  var cipher = crypto.createCipheriv('des-ede3-cbc', key, iv);
+  var ciph = cipher.update(plaintext, 'utf8', 'hex');
+  ciph += cipher.final('hex');
 
-assert.equal(ciph, buf_ciph, 'key and iv as strings and as buffers');
+  var decipher = crypto.createDecipheriv('des-ede3-cbc', key, iv);
+  var txt = decipher.update(ciph, 'hex', 'utf8');
+  txt += decipher.final('utf8');
+
+  assert.equal(txt, plaintext, 'encryption and decryption with key and iv');
+}
+
+
+testCipher1('MySecretKey123');
+testCipher1(new Buffer('MySecretKey123'));
+
+testCipher2('0123456789abcdef');
+testCipher2(new Buffer('0123456789abcdef'));
+
+testCipher3('0123456789abcd0123456789', '12345678');
+testCipher3('0123456789abcd0123456789', new Buffer('12345678'));
+testCipher3(new Buffer('0123456789abcd0123456789'), '12345678');
+testCipher3(new Buffer('0123456789abcd0123456789'), new Buffer('12345678'));
+
 
 // update() should only take buffers / strings
 assert.throws(function() {

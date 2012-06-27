@@ -1,4 +1,189 @@
-2012.04.18, Version 0.7.8, (unstable)
+2012.06.25, Version 0.8.0 (stable)
+
+* V8: upgrade to v3.11.10.10
+
+* npm: Upgrade to 1.1.32
+
+* Deprecate iowatcher (Ben Noordhuis)
+
+* windows: update icon (Bert Belder)
+
+* http: Hush 'MUST NOT have a body' warnings to debug() (isaacs)
+
+* Move blog.nodejs.org content into repository (isaacs)
+
+* Fix #3503: stdin: resume() on pipe(dest) (isaacs)
+
+* crypto: fix error reporting in SetKey() (Fedor Indutny)
+
+* Add --no-deprecation and --trace-deprecation command-line flags (isaacs)
+
+* fs: fix fs.watchFile() (Ben Noordhuis)
+
+* fs: Fix fs.readfile() on pipes (isaacs)
+
+* Rename GYP variable node_use_system_openssl to be consistent (Ryan Dahl)
+
+
+2012.06.19, Version 0.7.12 (unstable), a72120190a8ffdbcd3d6ad2a2e6ceecd2087111e
+
+* npm: Upgrade to 1.1.30
+	- Improved 'npm init'
+	- Fix the 'cb never called' error from 'oudated' and 'update'
+	- Add --save-bundle|-B config
+	- Fix isaacs/npm#2465: Make npm script and windows shims cygwin-aware
+	- Fix isaacs/npm#2452 Use --save(-dev|-optional) in npm rm
+	- `logstream` option to replace removed `logfd` (Rod Vagg)
+	- Read default descriptions from README.md files
+
+* Shims to support deprecated ev_* and eio_* methods (Ben Noordhuis)
+
+* #3118 net.Socket: Delay pause/resume until after connect (isaacs)
+
+* #3465 Add ./configure --no-ifaddrs flag (isaacs)
+
+* child_process: add .stdin stream to forks (Fedor Indutny)
+
+* build: fix `make install DESTDIR=/path` (Ben Noordhuis)
+
+* tls: fix off-by-one error in renegotiation check (Ben Noordhuis)
+
+* crypto: Fix diffie-hellman key generation UTF-8 errors (Fedor Indutny)
+
+* node: change the constructor name of process from EventEmitter to process (Andreas Madsen)
+
+* net: Prevent property access throws during close (Reid Burke)
+
+* querystring: improved speed and code cleanup (Felix Böhm)
+
+* sunos: fix assertion errors breaking fs.watch() (Fedor Indutny)
+
+* unix: stat: detect sub-second changes (Ben Noordhuis)
+
+* add stat() based file watcher (Ben Noordhuis)
+
+
+2012.06.15, Version 0.7.11 (unstable), 5cfe0b86d5be266ef51bbba369c39e412ee51944
+
+* V8: Upgrade to v3.11.10
+
+* npm: Upgrade to 1.1.26
+
+* doc: Improve cross-linking in API docs markdown (Ben Kelly)
+
+* Fix #3425: removeAllListeners should delete array (Reid Burke)
+
+* cluster: don't silently drop messages when the write queue gets big (Bert Belder)
+
+* Add Buffer.concat method (isaacs)
+
+* windows: make symlinks tolerant to forward slashes (Bert Belder)
+
+* build: Add node.d and node.1 to installer (isaacs)
+
+* cluster: rename worker.unqiueID to worker.id (Andreas Madsen)
+
+* Windows: Enable ETW events on Windows for existing DTrace probes. (Igor Zinkovsky)
+
+* test: bundle node-weak in test/gc so that it doesn't need to be downloaded (Nathan Rajlich)
+
+* Make many tests pass on Windows (Bert Belder)
+
+* Fix #3388 Support listening on file descriptors (isaacs)
+
+* Fix #3407 Add os.tmpDir() (isaacs)
+
+* Unbreak the snapshotted build on Windows (Bert Belder)
+
+* Clean up child_process.kill throws (Bert Belder)
+
+* crypto: make cipher/decipher accept buffer args (Ben Noordhuis)
+
+
+2012.06.11, Version 0.7.10 (unstable), 12a32a48a30182621b3f8e9b9695d1946b53c131
+
+* Roll V8 back to 3.9.24.31
+
+* build: x64 target should always pass -m64 (Robert Mustacchi)
+
+* add NODE_EXTERN to node::Start (Joel Brandt)
+
+* repl: Warn about running npm commands (isaacs)
+
+* slab_allocator: fix crash in dtor if V8 is dead (Ben Noordhuis)
+
+* slab_allocator: fix leak of Persistent handles (Shigeki Ohtsu)
+
+* windows/msi: add node.js prompt to startmenu (Jeroen Janssen)
+
+* windows/msi: fix adding node to PATH (Jeroen Janssen)
+
+* windows/msi: add start menu links when installing (Jeroen Janssen)
+
+* windows: don't install x64 version into the 'program files (x86)' folder (Matt Gollob)
+
+* domain: Fix #3379 domain.intercept no longer passes error arg to cb (Marc Harter)
+
+* fs: make callbacks run in global context (Ben Noordhuis)
+
+* fs: enable fs.realpath on windows (isaacs)
+
+* child_process: expose UV_PROCESS_DETACHED as options.detached (Charlie McConnell)
+
+* child_process: new stdio API for .spawn() method (Fedor Indutny)
+
+* child_process: spawn().ref() and spawn().unref() (Fedor Indutny)
+
+* Upgrade npm to 1.1.25
+	- Enable npm link on windows
+	- Properly remove sh-shim on Windows
+	- Abstract out registry client and logger
+
+
+2012.05.28, Version 0.7.9 (unstable), 782277f11a753ded831439ed826448c06fc0f356
+
+* Upgrade V8 to 3.11.1
+
+* Upgrade npm to 1.1.23
+
+* uv: rework reference counting scheme (Ben Noordhuis)
+
+* uv: add interface for joining external event loops (Bert Belder)
+
+* repl, readline: Handle Ctrl+Z and SIGCONT better (Nathan Rajlich)
+
+* fs: 64bit offsets for fs calls (Igor Zinkovsky)
+
+* fs: add sync open flags 'rs' and 'rs+' (Kevin Bowman)
+
+* windows: enable creating directory junctions with fs.symlink (Igor Zinkovsky, Bert Belder)
+
+* windows: fix fs.lstat to properly detect symlinks. (Igor Zinkovsky)
+
+* Fix #3270 Escape url.parse delims (isaacs)
+
+* http: make http.get() accept a URL (Adam Malcontenti-Wilson)
+
+* Cleanup vm module memory leakage (Marcel Laverdet)
+
+* Optimize writing strings with Socket.write (Bert Belder)
+
+* add support for CESU-8 and UTF-16LE encodings (koichik)
+
+* path: add path.sep to get the path separator. (Yi, EungJun)
+
+* net, http: add backlog parameter to .listen() (Erik Dubbelboer)
+
+* debugger: support mirroring Date objects (Fedor Indutny)
+
+* addon: add AtExit() function (Ben Noordhuis)
+
+* net: signal localAddress bind failure in connect (Brian Schroeder)
+
+* util: handle non-string return value in .inspect() (Alex Kocharin)
+
+
+2012.04.18, Version 0.7.8 (unstable), c2b47097c0b483552efc1947c6766fa1128600b6
 
 * Upgrade V8 to 3.9.24.9
 
@@ -255,7 +440,82 @@
 * Bug fixes
 
 
-2012.04.09 Version 0.6.15 (stable)
+2012.05.15 Version 0.6.18 (stable), 4bc1d395de6abed2cf1e4d0b7b3a1480a21c368f
+
+* windows: skip GetFileAttributes call when opening a file (Bert Belder)
+
+* crypto: add PKCS12/PFX support (Sambasiva Suda)
+
+* #3240: child_process: delete NODE_CHANNEL_FD from env in spawn (Ben Noordhuis)
+
+* windows: add test for path.normalize with UNC paths (Bert Belder)
+
+* windows: make path.normalize convert all slashes to backslashes (Bert Belder)
+
+* fs: Automatically close FSWatcher on error (Bert Belder)
+
+* #3258: fs.ReadStream.pause() emits duplicate data event (koichik)
+
+* pipe_wrap: don't assert() on pipe accept errors (Ben Noordhuis)
+
+* Better exception output for module load and process.nextTick (Felix Geisendörfer)
+
+* zlib: fix error reporting (Ben Noordhuis)
+
+* http: Don't destroy on timeout (isaacs)
+
+* #3231: http: Don't try to emit error on a null'ed req object (isaacs)
+
+* #3236: http: Refactor ClientRequest.onSocket (isaacs)
+
+
+2012.05.04 Version 0.6.17 (stable), 4ced23deaf36493f4303a18f6fdce768c58becc0
+
+* Upgrade npm to 1.1.21
+
+* uv: Add support for EROFS errors (Ben Noordhuis, Maciej Małecki)
+
+* uv: Add support for EIO and ENOSPC errors (Fedor Indutny)
+
+* windows: Add support for EXDEV errors (Bert Belder)
+
+* http: Fix client memory leaks (isaacs, Vincent Voyer)
+
+* fs: fix file descriptor leak in sync functions (Ben Noordhuis)
+
+* fs: fix ReadStream / WriteStream double close bug (Ben Noordhuis)
+
+
+2012.04.30 Version 0.6.16 (stable), a1d193963ddc80a27da5da01b59751e14e33d1d6
+
+* Upgrade V8 to 3.6.6.25
+
+* Upgrade npm to 1.1.19
+
+* Windows: add mappings for UV_ENOENT (Bert Belder)
+
+* linux: add IN_MOVE_SELF to inotify event mask (Ben Noordhuis)
+
+* unix: call pipe handle connection cb on accept() error (Ben Noordhuis)
+
+* unix: handle EWOULDBLOCK (Ben Noordhuis)
+
+* map EWOULDBLOCK to UV_EAGAIN (Ben Noordhuis)
+
+* Map ENOMEM to UV_ENOMEM (isaacs)
+
+* Child process: support the `gid` and `uid` options (Bert Belder)
+
+* test: cluster: add worker death event test (Ben Noordhuis)
+
+* typo in node_http_parser (isaacs)
+
+* http_parser: Eat CRLF between requests, even on connection:close. (Ben Noordhuis)
+
+* don't check return value of unsetenv (Ben Noordhuis)
+
+
+2012.04.09 Version 0.6.15 (stable), f160a45b254e591eb33716311c92be533c6d86c4
 
 * Update npm to 1.1.16
 

@@ -31,63 +31,39 @@
 
 static void uv__udp_run_completed(uv_udp_t* handle);
 static void uv__udp_run_pending(uv_udp_t* handle);
-static void uv__udp_recvmsg(EV_P_ ev_io* w, int revents);
-static void uv__udp_sendmsg(EV_P_ ev_io* w, int revents);
+static void uv__udp_recvmsg(uv_loop_t* loop, uv__io_t* w, int revents);
+static void uv__udp_sendmsg(uv_loop_t* loop, uv__io_t* w, int revents);
 static int uv__udp_maybe_deferred_bind(uv_udp_t* handle, int domain);
 static int uv__udp_send(uv_udp_send_t* req, uv_udp_t* handle, uv_buf_t bufs[],
     int bufcnt, struct sockaddr* addr, socklen_t addrlen, uv_udp_send_cb send_cb);
 
 
 static void uv__udp_start_watcher(uv_udp_t* handle,
-                                  ev_io* w,
-                                  void (*cb)(EV_P_ ev_io*, int),
-                                  int flags) {
-  if (ev_is_active(w)) return;
-  ev_set_cb(w, cb);
-  ev_io_set(w, handle->fd, flags);
-  ev_io_start(handle->loop->ev, w);
-  ev_unref(handle->loop->ev);
+                                  uv__io_t* w,
+                                  uv__io_cb cb,
+                                  int events) {
+  if (uv__io_active(w)) return;
+  uv__io_init(w, cb, handle->fd, events);
+  uv__io_start(handle->loop, w);
+  uv__handle_start(handle);
 }
 
 
-static void uv__udp_stop_watcher(uv_udp_t* handle, ev_io* w) {
-  if (!ev_is_active(w)) return;
-  ev_ref(handle->loop->ev);
-  ev_io_stop(handle->loop->ev, w);
-  ev_io_set(w, -1, 0);
-  ev_set_cb(w, NULL);
+static void uv__udp_stop_watcher(uv_udp_t* handle, uv__io_t* w) {
+  if (!uv__io_active(w)) return;
+  uv__io_stop(handle->loop, w);
+
+  if (!uv__io_active(&handle->read_watcher) &&
+      !uv__io_active(&handle->write_watcher))
+  {
+    uv__handle_stop(handle);
+  }
 }
 
 
-static void uv__udp_start_read_watcher(uv_udp_t* handle) {
-  uv__udp_start_watcher(handle,
-                        &handle->read_watcher,
-                        uv__udp_recvmsg,
-                        EV_READ);
-}
-
-
-static void uv__udp_start_write_watcher(uv_udp_t* handle) {
-  uv__udp_start_watcher(handle,
-                        &handle->write_watcher,
-                        uv__udp_sendmsg,
-                        EV_WRITE);
-}
-
-
-static void uv__udp_stop_read_watcher(uv_udp_t* handle) {
-  uv__udp_stop_watcher(handle, &handle->read_watcher);
-}
-
-
-static void uv__udp_stop_write_watcher(uv_udp_t* handle) {
+void uv__udp_close(uv_udp_t* handle) {
   uv__udp_stop_watcher(handle, &handle->write_watcher);
-}
-
-
-void uv__udp_start_close(uv_udp_t* handle) {
-  uv__udp_stop_write_watcher(handle);
-  uv__udp_stop_read_watcher(handle);
+  uv__udp_stop_watcher(handle, &handle->read_watcher);
   close(handle->fd);
   handle->fd = -1;
 }
@@ -97,8 +73,8 @@ void uv__udp_finish_close(uv_udp_t* handle) {
   uv_udp_send_t* req;
   ngx_queue_t* q;
 
-  assert(!ev_is_active(&handle->write_watcher));
-  assert(!ev_is_active(&handle->read_watcher));
+  assert(!uv__io_active(&handle->write_watcher));
+  assert(!uv__io_active(&handle->read_watcher));
   assert(handle->fd == -1);
 
   uv__udp_run_completed(handle);
@@ -108,6 +84,8 @@ void uv__udp_finish_close(uv_udp_t* handle) {
     ngx_queue_remove(q);
 
     req = ngx_queue_data(q, uv_udp_send_t, queue);
+    uv__req_unregister(handle->loop, req);
+
     if (req->send_cb) {
       /* FIXME proper error code like UV_EABORTED */
       uv__set_artificial_error(handle->loop, UV_EINTR);
@@ -138,7 +116,8 @@ static void uv__udp_run_pending(uv_udp_t* handle) {
 
     memset(&h, 0, sizeof h);
     h.msg_name = &req->addr;
-    h.msg_namelen = req->addrlen;
+    h.msg_namelen = (req->addr.sin6_family == AF_INET6 ?
+      sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in));
     h.msg_iov = (struct iovec*)req->bufs;
     h.msg_iovlen = req->bufcnt;
 
@@ -185,12 +164,10 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
 
   while (!ngx_queue_empty(&handle->write_completed_queue)) {
     q = ngx_queue_head(&handle->write_completed_queue);
-    assert(q != NULL);
-
     ngx_queue_remove(q);
 
     req = ngx_queue_data(q, uv_udp_send_t, queue);
-    assert(req != NULL);
+    uv__req_unregister(handle->loop, req);
 
     if (req->bufs != req->bufsml)
       free(req->bufs);
@@ -212,30 +189,36 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
 }
 
 
-static void uv__udp_recvmsg(EV_P_ ev_io* w, int revents) {
+static void uv__udp_recvmsg(uv_loop_t* loop, uv__io_t* w, int revents) {
   struct sockaddr_storage peer;
   struct msghdr h;
   uv_udp_t* handle;
   ssize_t nread;
   uv_buf_t buf;
   int flags;
+  int count;
 
   handle = container_of(w, uv_udp_t, read_watcher);
   assert(handle->type == UV_UDP);
-  assert(revents & EV_READ);
+  assert(revents & UV__IO_READ);
 
   assert(handle->recv_cb != NULL);
   assert(handle->alloc_cb != NULL);
 
+  /* Prevent loop starvation when the data comes in as fast as (or faster than)
+   * we can read it. XXX Need to rearm fd if we switch to edge-triggered I/O.
+   */
+  count = 32;
+
+  memset(&h, 0, sizeof(h));
+  h.msg_name = &peer;
+
   do {
-    /* FIXME: hoist alloc_cb out the loop but for now follow uv__read() */
     buf = handle->alloc_cb((uv_handle_t*)handle, 64 * 1024);
     assert(buf.len > 0);
     assert(buf.base != NULL);
 
-    memset(&h, 0, sizeof h);
-    h.msg_name = &peer;
-    h.msg_namelen = sizeof peer;
+    h.msg_namelen = sizeof(peer);
     h.msg_iov = (struct iovec*)&buf;
     h.msg_iovlen = 1;
 
@@ -269,17 +252,18 @@ static void uv__udp_recvmsg(EV_P_ ev_io* w, int revents) {
   }
   /* recv_cb callback may decide to pause or close the handle */
   while (nread != -1
+      && count-- > 0
       && handle->fd != -1
       && handle->recv_cb != NULL);
 }
 
 
-static void uv__udp_sendmsg(EV_P_ ev_io* w, int revents) {
+static void uv__udp_sendmsg(uv_loop_t* loop, uv__io_t* w, int revents) {
   uv_udp_t* handle;
 
   handle = container_of(w, uv_udp_t, write_watcher);
   assert(handle->type == UV_UDP);
-  assert(revents & EV_WRITE);
+  assert(revents & UV__IO_WRITE);
 
   assert(!ngx_queue_empty(&handle->write_queue)
       || !ngx_queue_empty(&handle->write_completed_queue));
@@ -292,11 +276,11 @@ static void uv__udp_sendmsg(EV_P_ ev_io* w, int revents) {
 
   if (!ngx_queue_empty(&handle->write_completed_queue)) {
     /* Schedule completion callbacks. */
-    ev_feed_event(handle->loop->ev, &handle->write_watcher, EV_WRITE);
+    uv__io_feed(handle->loop, &handle->write_watcher, UV__IO_WRITE);
   }
   else if (ngx_queue_empty(&handle->write_queue)) {
     /* Pending queue and completion queue empty, stop watcher. */
-    uv__udp_stop_write_watcher(handle);
+    uv__udp_stop_watcher(handle, &handle->write_watcher);
   }
 }
 
@@ -437,14 +421,13 @@ static int uv__udp_send(uv_udp_send_t* req,
   if (uv__udp_maybe_deferred_bind(handle, addr->sa_family))
     return -1;
 
-  uv__req_init(handle->loop, (uv_req_t*)req);
+  uv__req_init(handle->loop, req, UV_UDP_SEND);
 
+  assert(addrlen <= sizeof(req->addr));
   memcpy(&req->addr, addr, addrlen);
-  req->addrlen = addrlen;
   req->send_cb = send_cb;
   req->handle = handle;
   req->bufcnt = bufcnt;
-  req->type = UV_UDP_SEND;
 
   if (bufcnt <= UV_REQ_BUFSML_SIZE) {
     req->bufs = req->bufsml;
@@ -456,7 +439,11 @@ static int uv__udp_send(uv_udp_send_t* req,
   memcpy(req->bufs, bufs, bufcnt * sizeof(bufs[0]));
 
   ngx_queue_insert_tail(&handle->write_queue, &req->queue);
-  uv__udp_start_write_watcher(handle);
+
+  uv__udp_start_watcher(handle,
+                        &handle->write_watcher,
+                        uv__udp_sendmsg,
+                        UV__IO_WRITE);
 
   return 0;
 }
@@ -530,21 +517,6 @@ int uv_udp_set_membership(uv_udp_t* handle, const char* multicast_addr,
 }
 
 
-#define X(name, level, option)                                                \
-  int uv_udp_set_##name(uv_udp_t* handle, int flag) {                         \
-    if (setsockopt(handle->fd, level, option, &flag, sizeof(flag))) {         \
-      uv__set_sys_error(handle->loop, errno);                                 \
-      return -1;                                                              \
-    }                                                                         \
-    return 0;                                                                 \
-  }
-
-X(broadcast, SOL_SOCKET, SO_BROADCAST)
-X(ttl, IPPROTO_IP, IP_TTL)
-
-#undef X
-
-
 static int uv__setsockopt_maybe_char(uv_udp_t* handle, int option, int val) {
 #if __sun
   char arg = val;
@@ -552,17 +524,30 @@ static int uv__setsockopt_maybe_char(uv_udp_t* handle, int option, int val) {
   int arg = val;
 #endif
 
-#if __sun
-  if (val < 0 || val > 255) {
-    uv__set_sys_error(handle->loop, EINVAL);
-    return -1;
-  }
-#endif
+  if (val < 0 || val > 255)
+    return uv__set_sys_error(handle->loop, EINVAL);
 
-  if (setsockopt(handle->fd, IPPROTO_IP, option, &arg, sizeof(arg))) {
-    uv__set_sys_error(handle->loop, errno);
-    return -1;
-  }
+  if (setsockopt(handle->fd, IPPROTO_IP, option, &arg, sizeof(arg)))
+    return uv__set_sys_error(handle->loop, errno);
+
+  return 0;
+}
+
+
+int uv_udp_set_broadcast(uv_udp_t* handle, int on) {
+  if (setsockopt(handle->fd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on)))
+    return uv__set_sys_error(handle->loop, errno);
+
+  return 0;
+}
+
+
+int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
+  if (ttl < 1 || ttl > 255)
+    return uv__set_sys_error(handle->loop, EINVAL);
+
+  if (setsockopt(handle->fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)))
+    return uv__set_sys_error(handle->loop, errno);
 
   return 0;
 }
@@ -648,7 +633,7 @@ int uv_udp_recv_start(uv_udp_t* handle,
     return -1;
   }
 
-  if (ev_is_active(&handle->read_watcher)) {
+  if (uv__io_active(&handle->read_watcher)) {
     uv__set_artificial_error(handle->loop, UV_EALREADY);
     return -1;
   }
@@ -658,14 +643,18 @@ int uv_udp_recv_start(uv_udp_t* handle,
 
   handle->alloc_cb = alloc_cb;
   handle->recv_cb = recv_cb;
-  uv__udp_start_read_watcher(handle);
+
+  uv__udp_start_watcher(handle,
+                        &handle->read_watcher,
+                        uv__udp_recvmsg,
+                        UV__IO_READ);
 
   return 0;
 }
 
 
 int uv_udp_recv_stop(uv_udp_t* handle) {
-  uv__udp_stop_read_watcher(handle);
+  uv__udp_stop_watcher(handle, &handle->read_watcher);
   handle->alloc_cb = NULL;
   handle->recv_cb = NULL;
   return 0;

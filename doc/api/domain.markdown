@@ -119,7 +119,7 @@ Returns a new Domain object.
 The Domain class encapsulates the functionality of routing errors and
 uncaught exceptions to the active Domain object.
 
-Domain is a child class of EventEmitter.  To handle the errors that it
+Domain is a child class of [EventEmitter][].  To handle the errors that it
 catches, listen to its `error` event.
 
 ### domain.run(fn)
@@ -227,13 +227,16 @@ with a single error handler in a single place.
     var d = domain.create();
 
     function readSomeFile(filename, cb) {
-      fs.readFile(filename, d.intercept(function(er, data) {
+      fs.readFile(filename, d.intercept(function(data) {
+        // note, the first argument is never passed to the
+        // callback since it is assumed to be the 'Error' argument
+        // and thus intercepted by the domain.
+
         // if this throws, it will also be passed to the domain
-        // additionally, we know that 'er' will always be null,
         // so the error-handling logic can be moved to the 'error'
         // event on the domain instead of being repeated throughout
         // the program.
-        return cb(er, JSON.parse(data));
+        return cb(null, JSON.parse(data));
       }));
     }
 
@@ -255,7 +258,11 @@ The intention of calling `dispose` is generally to prevent cascading
 errors when a critical part of the Domain context is found to be in an
 error state.
 
+Once the domain is disposed the `dispose` event will emit.
+
 Note that IO might still be performed.  However, to the highest degree
 possible, once a domain is disposed, further errors from the emitters in
 that set will be ignored.  So, even if some remaining actions are still
 in flight, Node.js will not communicate further about them.
+
+[EventEmitter]: events.html#events_class_events_eventemitter

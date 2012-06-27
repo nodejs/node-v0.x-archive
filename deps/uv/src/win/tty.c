@@ -25,8 +25,10 @@
 #include <stdint.h>
 
 #include "uv.h"
-#include "../uv-common.h"
 #include "internal.h"
+#include "handle-inl.h"
+#include "stream-inl.h"
+#include "req-inl.h"
 
 
 #define UNICODE_REPLACEMENT_CHARACTER (0xfffd)
@@ -110,10 +112,9 @@ int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, uv_file fd, int readable) {
     LeaveCriticalSection(&uv_tty_output_lock);
   }
 
-  uv_stream_init(loop, (uv_stream_t*) tty);
+  uv_stream_init(loop, (uv_stream_t*) tty, UV_TTY);
   uv_connection_init((uv_stream_t*) tty);
 
-  tty->type = UV_TTY;
   tty->handle = win_handle;
   tty->read_line_handle = NULL;
   tty->read_line_buffer = uv_null_buf_;
@@ -462,8 +463,9 @@ void uv_process_tty_read_raw_req(uv_loop_t* loop, uv_tty_t* handle,
 
   /* Fetch the number of events  */
   if (!GetNumberOfConsoleInputEvents(handle->handle, &records_left)) {
-    handle->flags &= ~UV_HANDLE_READING;
     uv__set_sys_error(loop, GetLastError());
+    handle->flags &= ~UV_HANDLE_READING;
+    DECREASE_ACTIVE_COUNT(loop, handle);
     handle->read_cb((uv_stream_t*)handle, -1, uv_null_buf_);
     goto out;
   }
@@ -483,6 +485,7 @@ void uv_process_tty_read_raw_req(uv_loop_t* loop, uv_tty_t* handle,
                              &records_read)) {
         uv__set_sys_error(loop, GetLastError());
         handle->flags &= ~UV_HANDLE_READING;
+        DECREASE_ACTIVE_COUNT(loop, handle);
         handle->read_cb((uv_stream_t*) handle, -1, buf);
         goto out;
       }
@@ -583,6 +586,7 @@ void uv_process_tty_read_raw_req(uv_loop_t* loop, uv_tty_t* handle,
         if (!char_len) {
           uv__set_sys_error(loop, GetLastError());
           handle->flags &= ~UV_HANDLE_READING;
+          DECREASE_ACTIVE_COUNT(loop, handle);
           handle->read_cb((uv_stream_t*) handle, -1, buf);
           goto out;
         }
@@ -688,9 +692,10 @@ void uv_process_tty_read_line_req(uv_loop_t* loop, uv_tty_t* handle,
   if (!REQ_SUCCESS(req)) {
     /* Read was not successful */
     if ((handle->flags & UV_HANDLE_READING) &&
-        !(handle->flags & UV_HANDLE_TTY_RAW)) {
+        handle->read_line_handle != NULL) {
       /* Real error */
       handle->flags &= ~UV_HANDLE_READING;
+      DECREASE_ACTIVE_COUNT(loop, handle);
       uv__set_sys_error(loop, GET_REQ_ERROR(req));
       handle->read_cb((uv_stream_t*) handle, -1, buf);
     } else {
@@ -738,6 +743,7 @@ int uv_tty_read_start(uv_tty_t* handle, uv_alloc_cb alloc_cb,
   uv_loop_t* loop = handle->loop;
 
   handle->flags |= UV_HANDLE_READING;
+  INCREASE_ACTIVE_COUNT(loop, handle);
   handle->read_cb = read_cb;
   handle->alloc_cb = alloc_cb;
 
@@ -762,7 +768,12 @@ int uv_tty_read_start(uv_tty_t* handle, uv_alloc_cb alloc_cb,
 
 
 int uv_tty_read_stop(uv_tty_t* handle) {
-  handle->flags &= ~UV_HANDLE_READING;
+  uv_loop_t* loop = handle->loop;
+
+  if (handle->flags & UV_HANDLE_READING) {
+    handle->flags &= ~UV_HANDLE_READING;
+    DECREASE_ACTIVE_COUNT(loop, handle);
+  }
 
   /* Cancel raw read */
   if ((handle->flags & UV_HANDLE_READ_PENDING) &&
@@ -772,7 +783,7 @@ int uv_tty_read_stop(uv_tty_t* handle) {
     DWORD written;
     memset(&record, 0, sizeof record);
     if (!WriteConsoleInputW(handle->handle, &record, 1, &written)) {
-      uv__set_sys_error(handle->loop, GetLastError());
+      uv__set_sys_error(loop, GetLastError());
       return -1;
     }
   }
@@ -960,9 +971,6 @@ static int uv_tty_reset(uv_tty_t* handle, DWORD* error) {
 
 static int uv_tty_clear(uv_tty_t* handle, int dir, char entire_screen,
     DWORD* error) {
-  unsigned short argc = handle->ansi_csi_argc;
-  unsigned short* argv = handle->ansi_csi_argv;
-
   CONSOLE_SCREEN_BUFFER_INFO info;
   COORD start, end;
   DWORD count, written;
@@ -1683,7 +1691,7 @@ int uv_tty_write(uv_loop_t* loop, uv_write_t* req, uv_tty_t* handle,
 
   handle->reqs_pending++;
   handle->write_reqs_pending++;
-  uv_ref(loop);
+  REGISTER_HANDLE_REQ(loop, handle, req);
 
   req->queued_bytes = 0;
 
@@ -1703,6 +1711,7 @@ void uv_process_tty_write_req(uv_loop_t* loop, uv_tty_t* handle,
   uv_write_t* req) {
 
   handle->write_queue_size -= req->queued_bytes;
+  UNREGISTER_HANDLE_REQ(loop, handle, req);
 
   if (req->cb) {
     uv__set_sys_error(loop, GET_REQ_ERROR(req));
@@ -1716,7 +1725,6 @@ void uv_process_tty_write_req(uv_loop_t* loop, uv_tty_t* handle,
   }
 
   DECREASE_PENDING_REQ_COUNT(handle);
-  uv_unref(loop);
 }
 
 
@@ -1725,6 +1733,8 @@ void uv_tty_close(uv_tty_t* handle) {
 
   uv_tty_read_stop(handle);
   CloseHandle(handle->handle);
+
+  uv__handle_start(handle);
 
   if (handle->reqs_pending == 0) {
     uv_want_endgame(handle->loop, (uv_handle_t*) handle);
@@ -1736,6 +1746,8 @@ void uv_tty_endgame(uv_loop_t* loop, uv_tty_t* handle) {
   if ((handle->flags && UV_HANDLE_CONNECTION) &&
       handle->shutdown_req != NULL &&
       handle->write_reqs_pending == 0) {
+    UNREGISTER_HANDLE_REQ(loop, handle, handle->shutdown_req);
+
     /* TTY shutdown is really just a no-op */
     if (handle->shutdown_req->cb) {
       if (handle->flags & UV_HANDLE_CLOSING) {
@@ -1748,7 +1760,6 @@ void uv_tty_endgame(uv_loop_t* loop, uv_tty_t* handle) {
 
     handle->shutdown_req = NULL;
 
-    uv_unref(loop);
     DECREASE_PENDING_REQ_COUNT(handle);
     return;
   }
@@ -1764,13 +1775,8 @@ void uv_tty_endgame(uv_loop_t* loop, uv_tty_t* handle) {
     assert(handle->read_raw_wait == NULL);
 
     assert(!(handle->flags & UV_HANDLE_CLOSED));
-    handle->flags |= UV_HANDLE_CLOSED;
-
-    if (handle->close_cb) {
-      handle->close_cb((uv_handle_t*)handle);
-    }
-
-    uv_unref(loop);
+    uv__handle_stop(handle);
+    uv__handle_close(handle);
   }
 }
 

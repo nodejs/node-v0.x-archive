@@ -50,7 +50,9 @@ static int uv__bind(uv_tcp_t* tcp,
       goto out;
     }
 
-    if (uv__stream_open((uv_stream_t*)tcp, tcp->fd, UV_READABLE | UV_WRITABLE)) {
+    if (uv__stream_open((uv_stream_t*)tcp,
+                        tcp->fd,
+                        UV_STREAM_READABLE | UV_STREAM_WRITABLE)) {
       close(tcp->fd);
       tcp->fd = -1;
       status = -2;
@@ -181,7 +183,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
       return -1;
     }
 
-    if (uv__stream_open((uv_stream_t*)tcp, tcp->fd, UV_READABLE)) {
+    if (uv__stream_open((uv_stream_t*)tcp, tcp->fd, UV_STREAM_READABLE)) {
       close(tcp->fd);
       tcp->fd = -1;
       return -1;
@@ -199,9 +201,8 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   tcp->connection_cb = cb;
 
   /* Start listening for connections. */
-  ev_io_set(&tcp->read_watcher, tcp->fd, EV_READ);
-  ev_set_cb(&tcp->read_watcher, uv__server_io);
-  ev_io_start(tcp->loop->ev, &tcp->read_watcher);
+  uv__io_set(&tcp->read_watcher, uv__server_io, tcp->fd, UV__IO_READ);
+  uv__io_start(tcp->loop, &tcp->read_watcher);
 
   return 0;
 }

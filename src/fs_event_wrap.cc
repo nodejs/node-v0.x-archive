@@ -30,18 +30,6 @@ namespace node {
 
 static Persistent<String> onchange_sym;
 
-#define UNWRAP                                                              \
-  assert(!args.Holder().IsEmpty());                                         \
-  assert(args.Holder()->InternalFieldCount() > 0);                          \
-  FSEventWrap* wrap =                                                       \
-      static_cast<FSEventWrap*>(args.Holder()->GetPointerFromInternalField(0)); \
-  if (!wrap) {                                                              \
-    uv_err_t err;                                                           \
-    err.code = UV_EBADF;                                                    \
-    SetErrno(err);                                                          \
-    return scope.Close(Integer::New(-1));                                   \
-  }
-
 class FSEventWrap: public HandleWrap {
 public:
   static void Initialize(Handle<Object> target);
@@ -103,7 +91,7 @@ Handle<Value> FSEventWrap::New(const Arguments& args) {
 Handle<Value> FSEventWrap::Start(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(FSEventWrap)
 
   if (args.Length() < 1 || !args[0]->IsString()) {
     return ThrowException(Exception::TypeError(String::New("Bad arguments")));
@@ -115,7 +103,7 @@ Handle<Value> FSEventWrap::Start(const Arguments& args) {
   if (r == 0) {
     // Check for persistent argument
     if (!args[1]->IsTrue()) {
-      uv_unref(uv_default_loop());
+      uv_unref(reinterpret_cast<uv_handle_t*>(&wrap->handle_));
     }
     wrap->initialized_ = true;
   } else {
@@ -178,7 +166,7 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
 Handle<Value> FSEventWrap::Close(const Arguments& args) {
   HandleScope scope;
 
-  UNWRAP
+  UNWRAP(FSEventWrap)
 
   if (!wrap->initialized_)
     return Undefined();

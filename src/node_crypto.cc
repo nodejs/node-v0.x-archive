@@ -29,7 +29,6 @@
 
 #include <string.h>
 #ifdef _MSC_VER
-#define snprintf _snprintf
 #define strcasecmp _stricmp
 #endif
 
@@ -43,6 +42,7 @@
 #else
 # include <pthread.h>
 #endif
+
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
 # define OPENSSL_CONST const
@@ -151,6 +151,7 @@ void SecureContext::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setSessionIdContext",
                                SecureContext::SetSessionIdContext);
   NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
+  NODE_SET_PROTOTYPE_METHOD(t, "loadPKCS12", SecureContext::LoadPKCS12);
 
   target->Set(String::NewSymbol("SecureContext"), t->GetFunction());
 }
@@ -296,7 +297,14 @@ Handle<Value> SecureContext::SetKey(const Arguments& args) {
 
   if (!key) {
     BIO_free(bio);
-    return False();
+    unsigned long err = ERR_get_error();
+    if (!err) {
+      return ThrowException(Exception::Error(
+          String::New("PEM_read_bio_PrivateKey")));
+    }
+    char string[120];
+    ERR_error_string_n(err, string, sizeof string);
+    return ThrowException(Exception::Error(String::New(string)));
   }
 
   SSL_CTX_use_PrivateKey(sc->ctx_, key);
@@ -575,6 +583,83 @@ Handle<Value> SecureContext::Close(const Arguments& args) {
   SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
   sc->FreeCTXMem();
   return False();
+}
+
+//Takes .pfx or .p12 and password in string or buffer format
+Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
+  HandleScope scope;
+
+  BIO* in = NULL;
+  PKCS12* p12 = NULL;
+  EVP_PKEY* pkey = NULL;
+  X509* cert = NULL;
+  STACK_OF(X509)* extraCerts = NULL;
+  char* pass = NULL;
+  bool ret = false;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  if (args.Length() < 1) {
+    return ThrowException(Exception::TypeError(
+          String::New("Bad parameter")));
+  }
+
+  in = LoadBIO(args[0]);
+  if (in == NULL) {
+    return ThrowException(Exception::Error(
+          String::New("Unable to load BIO")));
+  }
+
+  if (args.Length() >= 2) {
+    ASSERT_IS_STRING_OR_BUFFER(args[1]);
+
+    int passlen = DecodeBytes(args[1], BINARY);
+    if (passlen < 0) {
+      BIO_free(in);
+      return ThrowException(Exception::TypeError(
+            String::New("Bad password")));
+    }
+    pass = new char[passlen + 1];
+    int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
+
+    assert(pass_written == passlen);
+    pass[passlen] = '\0';
+  }
+
+  if (d2i_PKCS12_bio(in, &p12) &&
+      PKCS12_parse(p12, pass, &pkey, &cert, &extraCerts) &&
+      SSL_CTX_use_certificate(sc->ctx_, cert) &&
+      SSL_CTX_use_PrivateKey(sc->ctx_, pkey))
+  {
+    // set extra certs
+    while (X509* x509 = sk_X509_pop(extraCerts)) {
+      if (!sc->ca_store_) {
+        sc->ca_store_ = X509_STORE_new();
+        SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
+      }
+
+      X509_STORE_add_cert(sc->ca_store_, x509);
+      SSL_CTX_add_client_CA(sc->ctx_, x509);
+    }
+
+    EVP_PKEY_free(pkey);
+    X509_free(cert);
+    sk_X509_free(extraCerts);
+
+    ret = true;
+  }
+
+  PKCS12_free(p12);
+  BIO_free(in);
+  delete[] pass;
+
+  if (!ret) {
+    unsigned long err = ERR_get_error();
+    const char *str = ERR_reason_error_string(err);
+    return ThrowException(Exception::Error(String::New(str)));
+  }
+
+  return True();
 }
 
 
@@ -2032,10 +2117,12 @@ class Cipher : public ObjectWrap {
 
     Cipher *cipher = ObjectWrap::Unwrap<Cipher>(args.This());
 
-    cipher->incomplete_base64=NULL;
+    cipher->incomplete_base64 = NULL;
 
-    if (args.Length() <= 1 || !args[0]->IsString() ||
-       (!args[1]->IsString() && !Buffer::HasInstance(args[1]))) {
+    if (args.Length() <= 1
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key")));
     }
@@ -2067,11 +2154,13 @@ class Cipher : public ObjectWrap {
 
     HandleScope scope;
 
-    cipher->incomplete_base64=NULL;
+    cipher->incomplete_base64 = NULL;
 
-    if (args.Length() <= 2 || !args[0]->IsString() ||
-       (!args[1]->IsString() && !Buffer::HasInstance(args[1])) ||
-       (!args[2]->IsString() && !Buffer::HasInstance(args[2]))) {
+    if (args.Length() <= 2
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
+        || !(args[2]->IsString() || Buffer::HasInstance(args[2])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key, and iv as argument")));
     }
@@ -2433,10 +2522,13 @@ class Decipher : public ObjectWrap {
 
     HandleScope scope;
 
-    cipher->incomplete_utf8=NULL;
-    cipher->incomplete_hex_flag=false;
+    cipher->incomplete_utf8 = NULL;
+    cipher->incomplete_hex_flag = false;
 
-    if (args.Length() <= 1 || !args[0]->IsString() || !args[1]->IsString()) {
+    if (args.Length() <= 1
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key as argument")));
     }
@@ -2471,10 +2563,14 @@ class Decipher : public ObjectWrap {
 
     HandleScope scope;
 
-    cipher->incomplete_utf8=NULL;
-    cipher->incomplete_hex_flag=false;
+    cipher->incomplete_utf8 = NULL;
+    cipher->incomplete_hex_flag = false;
 
-    if (args.Length() <= 2 || !args[0]->IsString() || !args[1]->IsString() || !args[2]->IsString()) {
+    if (args.Length() <= 2
+        || !args[0]->IsString()
+        || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
+        || !(args[2]->IsString() || Buffer::HasInstance(args[2])))
+    {
       return ThrowException(Exception::Error(String::New(
         "Must give cipher-type, key, and iv as argument")));
     }
@@ -3824,6 +3920,15 @@ class DiffieHellman : public ObjectWrap {
     BN_free(key);
 
     Handle<Value> output;
+
+    // DH_size returns number of bytes in a prime number
+    // DH_compute_key returns number of bytes in a remainder of exponent, which
+    // may have less bytes than a prime number. Therefore add 0-padding to the
+    // allocated buffer.
+    if (size != dataSize) {
+      assert(dataSize > size);
+      memset(data + size, 0, dataSize - size);
+    }
 
     if (size == -1) {
       int checkResult;

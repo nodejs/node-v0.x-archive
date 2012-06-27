@@ -266,6 +266,10 @@ assert.equal(size, 4);
 assert.equal(charsWritten, 2);
 assert.deepEqual(f, new Buffer([0x42, 0x30, 0x44, 0x30, 0x00]));
 
+var f = new Buffer('\uD83D\uDC4D', 'utf-16le'); // THUMBS UP SIGN (U+1F44D)
+assert.equal(f.length, 4);
+assert.deepEqual(f, new Buffer('3DD84DDC', 'hex'));
+
 
 var arrayIsh = {0: 0, 1: 1, 2: 2, 3: 3, length: 4};
 var g = new Buffer(arrayIsh);
@@ -720,3 +724,6 @@ var a = Buffer(3);
 var b = Buffer('xxx');
 a.write('aaaaaaaa', 'base64');
 assert.equal(b.toString(), 'xxx');
+
+// issue GH-3416
+Buffer(Buffer(0), 0, 0);

@@ -4,7 +4,7 @@
 
 A stream is an abstract interface implemented by various objects in Node.
 For example a request to an HTTP server is a stream, as is stdout. Streams
-are readable, writable, or both. All streams are instances of `EventEmitter`.
+are readable, writable, or both. All streams are instances of [EventEmitter][]
 
 You can load up the Stream base class by doing `require('stream')`.
 
@@ -42,18 +42,18 @@ Emitted if there was an error receiving data.
 
 `function () { }`
 
-Emitted when the underlying file descriptor has been closed. Not all streams
-will emit this.  (For example, an incoming HTTP request will not emit
-`'close'`.)
+Emitted when the underlying resource (for example, the backing file descriptor)
+has been closed. Not all streams will emit this.
 
 ### stream.readable
 
 A boolean that is `true` by default, but turns `false` after an `'error'`
 occurred, the stream came to an `'end'`, or `destroy()` was called.
 
-### stream.setEncoding(encoding)
-Makes the data event emit a string instead of a `Buffer`. `encoding` can be
-`'utf8'`, `'ascii'`, or `'base64'`.
+### stream.setEncoding([encoding])
+
+Makes the `'data'` event emit a string instead of a `Buffer`. `encoding` can be
+`'utf8'`, `'utf16le'` (`'ucs2'`), `'ascii'`, or `'hex'`. Defaults to `'utf8'`.
 
 ### stream.pause()
 
@@ -72,11 +72,6 @@ Resumes the incoming `'data'` events after a `pause()`.
 ### stream.destroy()
 
 Closes the underlying file descriptor. Stream will not emit any more events.
-
-
-### stream.destroySoon()
-
-After the write queue is drained, close the file descriptor.
 
 ### stream.pipe(destination, [options])
 
@@ -187,3 +182,5 @@ Any queued write data will not be sent.
 After the write queue is drained, close the file descriptor. `destroySoon()`
 can still destroy straight away, as long as there is no data left in the queue
 for writes.
+
+[EventEmitter]: events.html#events_class_events_eventemitter

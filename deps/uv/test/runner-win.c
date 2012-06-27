@@ -19,6 +19,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <fcntl.h>
 #include <io.h>
 #include <malloc.h>
 #include <stdio.h>
@@ -43,6 +44,10 @@ void platform_init(int argc, char **argv) {
   /* Disable the "application crashed" popup. */
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX |
       SEM_NOOPENFILEERRORBOX);
+
+  _setmode(0, _O_BINARY);
+  _setmode(1, _O_BINARY);
+  _setmode(2, _O_BINARY);
 
   /* Disable stdio output buffering. */
   setvbuf(stdout, NULL, _IONBF, 0);
@@ -271,69 +276,6 @@ void rewind_cursor() {
     /* If clear_line fails (stdout is not a console), print a newline. */
     fprintf(stderr, "\n");
   }
-}
-
-
-typedef struct {
-  void (*entry)(void* arg);
-  void* arg;
-} thread_info_t;
-
-
-static unsigned __stdcall create_thread_helper(void* info) {
-  /* Copy thread info locally, then free it */
-  void (*entry)(void* arg) = ((thread_info_t*) info)->entry;
-  void* arg = ((thread_info_t*) info)->arg;
-
-  free(info);
-
-  /* Run the actual thread proc */
-  entry(arg);
-
-  /* Finalize */
-  _endthreadex(0);
-  return 0;
-}
-
-
-/* Create a thread. Returns the thread identifier, or 0 on failure. */
-uintptr_t uv_create_thread(void (*entry)(void* arg), void* arg) {
-  uintptr_t result;
-  thread_info_t* info;
-
-  info = (thread_info_t*) malloc(sizeof *info);
-  if (info == NULL) {
-    return 0;
-  }
-
-  info->entry = entry;
-  info->arg = arg;
-
-  result = _beginthreadex(NULL,
-                          0,
-                          &create_thread_helper,
-                          (void*) info,
-                          0,
-                          NULL);
-
-  if (result == 0) {
-    free(info);
-    return 0;
-  }
-
-  return result;
-}
-
-
-/* Wait for a thread to terminate. Should return 0 if the thread ended, -1 on
- * error.
- */
-int uv_wait_thread(uintptr_t thread_id) {
-  if (WaitForSingleObject((HANDLE)thread_id, INFINITE) != WAIT_OBJECT_0) {
-    return -1;
-  }
-
-  return 0;
 }
 
 

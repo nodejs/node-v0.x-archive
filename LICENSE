@@ -196,7 +196,7 @@ maintained libraries. The externally maintained libraries used by Node are:
   """
 
 - C-Ares, an asynchronous DNS client, located at deps/uv/src/ares. C-Ares license
-  follows
+  follows:
   """
     /* Copyright 1998 by the Massachusetts Institute of Technology.
      *
@@ -215,7 +215,7 @@ maintained libraries. The externally maintained libraries used by Node are:
 
 - OpenSSL located at deps/openssl. OpenSSL is cryptographic software written
   by Eric Young (eay@cryptsoft.com) to provide SSL/TLS encryption. OpenSSL's
-  license follows
+  license follows:
   """
     /* ====================================================================
      * Copyright (c) 1998-2011 The OpenSSL Project.  All rights reserved.
@@ -225,7 +225,7 @@ maintained libraries. The externally maintained libraries used by Node are:
      * are met:
      *
      * 1. Redistributions of source code must retain the above copyright
-     *    notice, this list of conditions and the following disclaimer. 
+     *    notice, this list of conditions and the following disclaimer.
      *
      * 2. Redistributions in binary form must reproduce the above copyright
      *    notice, this list of conditions and the following disclaimer in
@@ -296,11 +296,11 @@ maintained libraries. The externally maintained libraries used by Node are:
     AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-    IN THE SOFTWARE. 
+    IN THE SOFTWARE.
   """
 
 - Closure Linter is located at tools/closure_linter. Closure's license
-  follows
+  follows:
   """
     # Copyright (c) 2007, Google Inc.
     # All rights reserved.
@@ -403,7 +403,7 @@ maintained libraries. The externally maintained libraries used by Node are:
     * Available under MIT license <http://mths.be/mit>
   """
 
-- tools/gyp GYP is a meta-build system. GYP's license follows:
+- tools/gyp. GYP is a meta-build system. GYP's license follows:
   """
     Copyright (c) 2009 Google Inc. All rights reserved.
 
@@ -434,7 +434,7 @@ maintained libraries. The externally maintained libraries used by Node are:
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   """
 
-- Zlib at deps/zlib. zlib's license follows
+- Zlib at deps/zlib. zlib's license follows:
   """
     /* zlib.h -- interface of the 'zlib' general purpose compression library
       version 1.2.4, March 14th, 2010
@@ -463,8 +463,8 @@ maintained libraries. The externally maintained libraries used by Node are:
     */
   """
 
-- npm is a package manager program located at deps/npm. 
-  npm's license follows: 
+- npm is a package manager program located at deps/npm.
+  npm's license follows:
   """
     Copyright 2009-2012, Isaac Z. Schlueter (the "Original Author")
     All rights reserved.
@@ -517,6 +517,11 @@ maintained libraries. The externally maintained libraries used by Node are:
     "npm Logo" created by Mathias Pettersson and Brian Hammond,
     used with permission.
 
+    "Gubblebum Blocky" font
+    Copyright (c) 2007 by Tjarda Koster, http://jelloween.deviantart.com
+    included for use in the npm website and documentation,
+    used with permission.
+
     This program uses "node-uuid", Copyright (c) 2010 Robert Kieffer,
     according to the terms of the MIT license.
 
@@ -527,8 +532,8 @@ maintained libraries. The externally maintained libraries used by Node are:
     according to the terms of the MIT/X11 license.
   """
 
-- tools/doc/node_modules/marked Marked is a Markdown parser. Marked's
-  license follows
+- tools/doc/node_modules/marked. Marked is a Markdown parser. Marked's
+  license follows:
   """
     Copyright (c) 2011-2012, Christopher Jeffrey (https://github.com/chjj/)
 
@@ -549,4 +554,50 @@ maintained libraries. The externally maintained libraries used by Node are:
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
+  """
+
+- test/gc/node_modules/weak. Node-weak is a node.js addon that provides garbage
+  collector notifications. Node-weak's license follows:
+  """
+    Copyright (c) 2011, Ben Noordhuis <info@bnoordhuis.nl>
+
+    Permission to use, copy, modify, and/or distribute this software for any
+    purpose with or without fee is hereby granted, provided that the above
+    copyright notice and this permission notice appear in all copies.
+
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+    WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+    MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+    ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+    WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+    ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  """
+
+- src/ngx-queue.h. ngx-queue.h is taken from the nginx source tree. nginx's
+  license follows:
+  """
+    Copyright (C) 2002-2012 Igor Sysoev
+    Copyright (C) 2011,2012 Nginx, Inc.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions
+    are met:
+    1. Redistributions of source code must retain the above copyright
+       notice, this list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright
+       notice, this list of conditions and the following disclaimer in the
+       documentation and/or other materials provided with the distribution.
+
+    THIS SOFTWARE IS PROVIDED BY AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+    ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED.  IN NO EVENT SHALL AUTHOR OR CONTRIBUTORS BE LIABLE
+    FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+    DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+    OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+    LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+    OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+    SUCH DAMAGE.
   """

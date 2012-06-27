@@ -29,7 +29,13 @@
 
   function startup() {
     var EventEmitter = NativeModule.require('events').EventEmitter;
-    process.__proto__ = EventEmitter.prototype;
+
+    process.__proto__ = Object.create(EventEmitter.prototype, {
+      constructor: {
+        value: process.constructor
+      }
+    });
+
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
     startup.globalVariables();
@@ -78,6 +84,9 @@
       if (process.env.NODE_UNIQUE_ID) {
         var cluster = NativeModule.require('cluster');
         cluster._setupWorker();
+
+        // Make sure it's not accidentally inherited by child processes.
+        delete process.env.NODE_UNIQUE_ID;
       }
 
       var Module = NativeModule.require('module');
@@ -219,35 +228,27 @@
 
   startup.processNextTick = function() {
     var nextTickQueue = [];
+    var nextTickIndex = 0;
 
     process._tickCallback = function() {
-      var l = nextTickQueue.length;
-      if (l === 0) return;
+      var nextTickLength = nextTickQueue.length;
+      if (nextTickLength === 0) return;
 
-      var q = nextTickQueue;
-      nextTickQueue = [];
-
-      try {
-        for (var i = 0; i < l; i++) {
-          var tock = q[i];
-          var callback = tock.callback;
-          if (tock.domain) {
-            if (tock.domain._disposed) continue;
-            tock.domain.enter();
-          }
-          callback();
-          if (tock.domain) tock.domain.exit();
+      while (nextTickIndex < nextTickLength) {
+        var tock = nextTickQueue[nextTickIndex++];
+        var callback = tock.callback;
+        if (tock.domain) {
+          if (tock.domain._disposed) continue;
+          tock.domain.enter();
+        }
+        callback();
+        if (tock.domain) {
+          tock.domain.exit();
         }
       }
-      catch (e) {
-        if (i + 1 < l) {
-          nextTickQueue = q.slice(i + 1).concat(nextTickQueue);
-        }
-        if (nextTickQueue.length) {
-          process._needTickCallback();
-        }
-        throw e; // process.nextTick error, or 'error' event on first tick
-      }
+
+      nextTickQueue.splice(0, nextTickIndex);
+      nextTickIndex = 0;
     };
 
     process.nextTick = function(callback) {
@@ -399,6 +400,14 @@
       // know yet.  Call pause() explicitly to unref() it.
       stdin.pause();
 
+      // when piping stdin to a destination stream,
+      // let the data begin to flow.
+      var pipe = stdin.pipe;
+      stdin.pipe = function(dest, opts) {
+        stdin.resume();
+        return pipe.call(stdin, dest, opts);
+      };
+
       return stdin;
     });
 
@@ -409,11 +418,9 @@
   };
 
   startup.processKillAndExit = function() {
-    var exiting = false;
-
     process.exit = function(code) {
-      if (!exiting) {
-        exiting = true;
+      if (!process._exiting) {
+        process._exiting = true;
         process.emit('exit', code || 0);
       }
       process.reallyExit(code || 0);
@@ -437,6 +444,8 @@
       if (r) {
         throw errnoException(errno, 'kill');
       }
+
+      return true;
     };
   };
 
@@ -489,7 +498,12 @@
     // If we were spawned with env NODE_CHANNEL_FD then load that up and
     // start parsing data from that stream.
     if (process.env.NODE_CHANNEL_FD) {
-      assert(parseInt(process.env.NODE_CHANNEL_FD) >= 0);
+      var fd = parseInt(process.env.NODE_CHANNEL_FD, 10);
+      assert(fd >= 0);
+
+      // Make sure it's not accidentally inherited by child processes.
+      delete process.env.NODE_CHANNEL_FD;
+
       var cp = NativeModule.require('child_process');
 
       // Load tcp_wrap to avoid situation where we might immediately receive
@@ -497,7 +511,7 @@
       // FIXME is this really necessary?
       process.binding('tcp_wrap');
 
-      cp._forkChild();
+      cp._forkChild(fd);
       assert(process.send);
     }
   }
@@ -592,35 +606,6 @@
 
   NativeModule.prototype.cache = function() {
     NativeModule._cache[this.id] = this;
-  };
-
-  // Wrap a core module's method in a wrapper that will warn on first use
-  // and then return the result of invoking the original function. After
-  // first being called the original method is restored.
-  NativeModule.prototype.deprecate = function(method, message) {
-    var original = this.exports[method];
-    var self = this;
-    var warned = false;
-    message = message || '';
-
-    Object.defineProperty(this.exports, method, {
-      enumerable: false,
-      value: function() {
-        if (!warned) {
-          warned = true;
-          message = self.id + '.' + method + ' is deprecated. ' + message;
-
-          var moduleIdCheck = new RegExp('\\b' + self.id + '\\b');
-          if (moduleIdCheck.test(process.env.NODE_DEBUG))
-            console.trace(message);
-          else
-            console.error(message);
-
-          self.exports[method] = original;
-        }
-        return original.apply(this, arguments);
-      }
-    });
   };
 
   startup();

@@ -27,8 +27,9 @@
 #include <string.h>
 
 #include "uv.h"
-#include "../uv-common.h"
 #include "internal.h"
+#include "handle-inl.h"
+#include "req-inl.h"
 
 
 /* The only event loop we support right now */
@@ -44,17 +45,21 @@ static void uv_init(void) {
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX |
     SEM_NOOPENFILEERRORBOX);
 
+  /* Fetch winapi function pointers. This must be done first because other */
+  /* intialization code might need these function pointers to be loaded. */
+  uv_winapi_init();
+
   /* Initialize winsock */
   uv_winsock_init();
-
-  /* Fetch winapi function pointers */
-  uv_winapi_init();
 
   /* Initialize FS */
   uv_fs_init();
 
   /* Initialize console */
   uv_console_init();
+
+  /* Initialize utilities */
+  uv__util_init();
 }
 
 
@@ -65,16 +70,17 @@ static void uv_loop_init(uv_loop_t* loop) {
     uv_fatal_error(GetLastError(), "CreateIoCompletionPort");
   }
 
-  loop->refs = 0;
-
   uv_update_time(loop);
+
+  ngx_queue_init(&loop->handle_queue);
+  ngx_queue_init(&loop->active_reqs);
+  loop->active_handles = 0;
 
   loop->pending_reqs_tail = NULL;
 
   loop->endgame_handles = NULL;
 
   RB_INIT(&loop->timers);
-  RB_INIT(&loop->uv_ares_handles_);
 
   loop->check_handles = NULL;
   loop->prepare_handles = NULL;
@@ -84,22 +90,31 @@ static void uv_loop_init(uv_loop_t* loop) {
   loop->next_check_handle = NULL;
   loop->next_idle_handle = NULL;
 
-  loop->ares_active_sockets = 0;
-  loop->ares_chan = NULL;
+  memset(&loop->poll_peer_sockets, 0, sizeof loop->poll_peer_sockets);
+
+  loop->channel = NULL;
+  RB_INIT(&loop->ares_handles);
 
   loop->active_tcp_streams = 0;
   loop->active_udp_streams = 0;
 
   loop->last_err = uv_ok_;
+
+  memset(&loop->counters, 0, sizeof loop->counters);
 }
 
 
 static void uv_default_loop_init(void) {
   /* Initialize libuv itself first */
-  uv_once(&uv_init_guard_, uv_init);
+  uv__once_init();
 
   /* Initialize the main loop */
   uv_loop_init(&uv_default_loop_);
+}
+
+
+void uv__once_init(void) {
+  uv_once(&uv_init_guard_, uv_init);
 }
 
 
@@ -113,7 +128,7 @@ uv_loop_t* uv_loop_new(void) {
   uv_loop_t* loop;
 
   /* Initialize libuv itself first */
-  uv_once(&uv_init_guard_, uv_init);
+  uv__once_init();
 
   loop = (uv_loop_t*)malloc(sizeof(uv_loop_t));
 
@@ -128,23 +143,16 @@ uv_loop_t* uv_loop_new(void) {
 
 void uv_loop_delete(uv_loop_t* loop) {
   if (loop != &uv_default_loop_) {
+    int i;
+    for (i = 0; i < ARRAY_SIZE(loop->poll_peer_sockets); i++) {
+      SOCKET sock = loop->poll_peer_sockets[i];
+      if (sock != 0 && sock != INVALID_SOCKET) {
+        closesocket(sock);
+      }
+    }
+
     free(loop);
   }
-}
-
-
-int uv_loop_refcount(const uv_loop_t* loop) {
-  return loop->refs;
-}
-
-
-void uv_ref(uv_loop_t* loop) {
-  loop->refs++;
-}
-
-
-void uv_unref(uv_loop_t* loop) {
-  loop->refs--;
 }
 
 
@@ -214,6 +222,11 @@ static void uv_poll_ex(uv_loop_t* loop, int block) {
   }
 }
 
+#define UV_LOOP_ALIVE(loop)                                                   \
+    ((loop)->active_handles > 0 ||                                            \
+     !ngx_queue_empty(&(loop)->active_reqs) ||                                \
+     (loop)->endgame_handles != NULL)
+
 #define UV_LOOP_ONCE(loop, poll)                                              \
   do {                                                                        \
     uv_update_time((loop));                                                   \
@@ -228,7 +241,7 @@ static void uv_poll_ex(uv_loop_t* loop, int block) {
     uv_process_reqs((loop));                                                  \
     uv_process_endgames((loop));                                              \
                                                                               \
-    if ((loop)->refs <= 0) {                                                  \
+    if (!UV_LOOP_ALIVE((loop))) {                                             \
       break;                                                                  \
     }                                                                         \
                                                                               \
@@ -237,13 +250,13 @@ static void uv_poll_ex(uv_loop_t* loop, int block) {
     poll((loop), (loop)->idle_handles == NULL &&                              \
                  (loop)->pending_reqs_tail == NULL &&                         \
                  (loop)->endgame_handles == NULL &&                           \
-                 (loop)->refs > 0);                                           \
+                 UV_LOOP_ALIVE((loop)));                                      \
                                                                               \
     uv_check_invoke((loop));                                                  \
   } while (0);
 
 #define UV_LOOP(loop, poll)                                                   \
-  while ((loop)->refs > 0) {                                                  \
+  while (UV_LOOP_ALIVE((loop))) {                                             \
     UV_LOOP_ONCE(loop, poll)                                                  \
   }
 
@@ -254,7 +267,7 @@ int uv_run_once(uv_loop_t* loop) {
   } else {
     UV_LOOP_ONCE(loop, uv_poll);
   }
-  return 0;
+  return UV_LOOP_ALIVE(loop);
 }
 
 
@@ -265,6 +278,6 @@ int uv_run(uv_loop_t* loop) {
     UV_LOOP(loop, uv_poll);
   }
 
-  assert(loop->refs == 0);
+  assert(!UV_LOOP_ALIVE((loop)));
   return 0;
 }

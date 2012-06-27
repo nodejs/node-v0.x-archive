@@ -85,7 +85,9 @@
 
 namespace node {
 
-int Start(int argc, char *argv[]);
+NODE_EXTERN extern bool no_deprecation;
+
+NODE_EXTERN int Start(int argc, char *argv[]);
 
 char** Init(int argc, char *argv[]);
 v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
@@ -144,19 +146,7 @@ ssize_t DecodeWrite(char *buf,
                     v8::Handle<v8::Value>,
                     enum encoding encoding = BINARY);
 
-// Use different stat structs & calls on windows and posix;
-// on windows, _stati64 is utf-8 and big file aware.
-#if __POSIX__
-# define NODE_STAT        stat
-# define NODE_FSTAT       fstat
-# define NODE_STAT_STRUCT struct stat
-#else // _WIN32
-# define NODE_STAT        _stati64
-# define NODE_FSTAT       _fstati64
-# define NODE_STAT_STRUCT struct _stati64
-#endif
-
-v8::Local<v8::Object> BuildStatsObject(NODE_STAT_STRUCT *s);
+v8::Local<v8::Object> BuildStatsObject(const uv_statbuf_t* s);
 
 
 /**
@@ -250,6 +240,11 @@ node_module_struct* get_builtin_module(const char *name);
 #define NODE_MODULE_DECL(modname) \
   extern "C" node::node_module_struct modname ## _module;
 
+/* Called after the event loop exits but before the VM is disposed.
+ * Callbacks are run in reverse order of registration, i.e. newest first.
+ */
+NODE_EXTERN void AtExit(void (*cb)(void* arg), void* arg = 0);
+
 NODE_EXTERN void SetErrno(uv_err_t err);
 NODE_EXTERN v8::Handle<v8::Value>
 MakeCallback(const v8::Handle<v8::Object> object,
@@ -268,5 +263,12 @@ MakeCallback(const v8::Handle<v8::Object> object,
              const v8::Handle<v8::Function> callback,
              int argc,
              v8::Handle<v8::Value> argv[]);
+
 }  // namespace node
+
+#if !defined(NODE_WANT_INTERNALS) && !defined(_WIN32)
+# include "ev-emul.h"
+# include "eio-emul.h"
+#endif
+
 #endif  // SRC_NODE_H_

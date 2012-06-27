@@ -9,8 +9,7 @@ this module with `require('net');`
 ## net.createServer([options], [connectionListener])
 
 Creates a new TCP server. The `connectionListener` argument is
-automatically set as a listener for the ['connection'](#event_connection_)
-event.
+automatically set as a listener for the ['connection'][] event.
 
 `options` is an object with the following defaults:
 
@@ -20,7 +19,7 @@ event.
 If `allowHalfOpen` is `true`, then the socket won't automatically send a FIN
 packet when the other end of the socket sends a FIN packet. The socket becomes
 non-readable, but still writable. You should call the `end()` method explicitly.
-See ['end'](#event_end_) event for more information.
+See ['end'][] event for more information.
 
 Here is an example of a echo server which listens for connections
 on port 8124:
@@ -55,8 +54,7 @@ Use `nc` to connect to a UNIX domain socket server:
 ## net.createConnection(options, [connectionListener])
 
 Constructs a new socket object and opens the socket to the given location.
-When the socket is established, the ['connect'](#event_connect_) event will be
-emitted.
+When the socket is established, the ['connect'][] event will be emitted.
 
 For TCP sockets, `options` argument should be an object which specifies:
 
@@ -74,11 +72,10 @@ Common options are:
 
   - `allowHalfOpen`: if `true`, the socket won't automatically send
     a FIN packet when the other end of the socket sends a FIN packet.
-    Defaults to `false`.
-    See ['end'](#event_end_) event for more information.
+    Defaults to `false`.  See ['end'][] event for more information.
 
 The `connectListener` parameter will be added as an listener for the
-['connect'](#event_connect_) event.
+['connect'][] event.
 
 Here is an example of a client of echo server as described previously:
 
@@ -107,14 +104,14 @@ changed to
 Creates a TCP connection to `port` on `host`. If `host` is omitted,
 `'localhost'` will be assumed.
 The `connectListener` parameter will be added as an listener for the
-['connect'](#event_connect_) event.
+['connect'][] event.
 
 ## net.connect(path, [connectListener])
 ## net.createConnection(path, [connectListener])
 
 Creates unix socket connection to `path`.
 The `connectListener` parameter will be added as an listener for the
-['connect'](#event_connect_) event.
+['connect'][] event.
 
 ## Class: net.Server
 
@@ -133,9 +130,8 @@ The actual length will be determined by your OS through sysctl settings such as
 parameter is 511 (not 512).
 
 This function is asynchronous.  When the server has been bound,
-['listening'](#event_listening_) event will be emitted.
-the last parameter `listeningListener` will be added as an listener for the
-['listening'](#event_listening_) event.
+['listening'][] event will be emitted.  The last parameter `listeningListener`
+will be added as an listener for the ['listening'][] event.
 
 One issue some users run into is getting `EADDRINUSE` errors. This means that
 another server is already running on the requested port. One way of handling this
@@ -157,6 +153,24 @@ would be to wait a second and then try again. This can be done with
 ### server.listen(path, [listeningListener])
 
 Start a UNIX socket server listening for connections on the given `path`.
+
+This function is asynchronous.  When the server has been bound,
+['listening'][] event will be emitted.  The last parameter `listeningListener`
+will be added as an listener for the ['listening'][] event.
+
+### server.listen(handle, [listeningListener])
+
+* `handle` {Object}
+* `listeningListener` {Function}
+
+The `handle` object can be set to either a server or socket (anything
+with an underlying `_handle` member), or a `{fd: <n>}` object.
+
+This will cause the server to accept connections on the specified
+handle, but it is presumed that the file descriptor or handle has
+already been bound to a port or domain socket.
+
+Listening on a file descriptor is not supported on Windows.
 
 This function is asynchronous.  When the server has been bound,
 ['listening'](#event_listening_) event will be emitted.
@@ -198,12 +212,16 @@ Don't call `server.address()` until the `'listening'` event has been emitted.
 Set this property to reject connections when the server's connection count gets
 high.
 
+It is not recommended to use this option once a socket has been sent to a child
+with `child_process.fork()`.
+
 ### server.connections
 
 The number of concurrent connections on the server.
 
+This becomes `null` when sending a socket to a child with `child_process.fork()`.
 
-`net.Server` is an `EventEmitter` with the following events:
+`net.Server` is an [EventEmitter][] with the following events:
 
 ### Event: 'listening'
 
@@ -262,13 +280,12 @@ Normally this method is not needed, as `net.createConnection` opens the
 socket. Use this only if you are implementing a custom Socket or if a
 Socket is closed and you want to reuse it to connect to another server.
 
-This function is asynchronous. When the ['connect'](#event_connect_) event is
-emitted the socket is established. If there is a problem connecting, the
-`'connect'` event will not be emitted, the `'error'` event will be emitted with
-the exception.
+This function is asynchronous. When the ['connect'][] event is emitted the
+socket is established. If there is a problem connecting, the `'connect'` event
+will not be emitted, the `'error'` event will be emitted with the exception.
 
 The `connectListener` parameter will be added as an listener for the
-['connect'](#event_connect_) event.
+['connect'][] event.
 
 
 ### socket.bufferSize
@@ -292,8 +309,8 @@ Users who experience large or growing `bufferSize` should attempt to
 
 ### socket.setEncoding([encoding])
 
-Sets the encoding (either `'ascii'`, `'utf8'`, or `'base64'`) for data that is
-received. Defaults to `null`.
+Set the encoding for the socket as a Readable Stream. See
+[stream.setEncoding()][] for more information.
 
 ### socket.write(data, [encoding], [callback])
 
@@ -387,7 +404,7 @@ The amount of received bytes.
 The amount of bytes sent.
 
 
-`net.Socket` instances are EventEmitters with the following events:
+`net.Socket` instances are [EventEmitter][] with the following events:
 
 ### Event: 'connect'
 
@@ -400,8 +417,7 @@ See `connect()`.
 
 Emitted when data is received.  The argument `data` will be a `Buffer` or
 `String`.  Encoding of data is set by `socket.setEncoding()`.
-(See the [Readable Stream](stream.html#readable_stream) section for more
-information.)
+(See the [Readable Stream][] section for more information.)
 
 Note that the __data will be lost__ if there is no listener when a `Socket`
 emits a `'data'` event.
@@ -460,3 +476,10 @@ Returns true if input is a version 4 IP address, otherwise returns false.
 
 Returns true if input is a version 6 IP address, otherwise returns false.
 
+['connect']: #net_event_connect
+['connection']: #net_event_connection
+['end']: #net_event_end
+[EventEmitter]: events.html#events_class_events_eventemitter
+['listening']: #net_event_listening
+[Readable Stream]: stream.html#stream_readable_stream
+[stream.setEncoding()]: stream.html#stream_stream_setencoding_encoding

@@ -22,34 +22,9 @@
 #include <assert.h>
 
 #include "uv.h"
-#include "../uv-common.h"
 #include "internal.h"
-
-
-void uv_stream_init(uv_loop_t* loop, uv_stream_t* handle) {
-  handle->write_queue_size = 0;
-  handle->loop = loop;
-  handle->flags = 0;
-
-  loop->counters.handle_init++;
-  loop->counters.stream_init++;
-
-  uv_ref(loop);
-}
-
-
-void uv_connection_init(uv_stream_t* handle) {
-  handle->flags |= UV_HANDLE_CONNECTION;
-  handle->write_reqs_pending = 0;
-
-  uv_req_init(handle->loop, (uv_req_t*) &(handle->read_req));
-  handle->read_req.event_handle = NULL;
-  handle->read_req.wait_handle = INVALID_HANDLE_VALUE;
-  handle->read_req.type = UV_READ;
-  handle->read_req.data = handle;
-
-  handle->shutdown_req = NULL;
-}
+#include "handle-inl.h"
+#include "req-inl.h"
 
 
 int uv_listen(uv_stream_t* stream, int backlog, uv_connection_cb cb) {
@@ -109,8 +84,11 @@ int uv_read2_start(uv_stream_t* handle, uv_alloc_cb alloc_cb,
 int uv_read_stop(uv_stream_t* handle) {
   if (handle->type == UV_TTY) {
     return uv_tty_read_stop((uv_tty_t*) handle);
-  } else {
+  } else if (handle->flags & UV_HANDLE_READING) {
     handle->flags &= ~UV_HANDLE_READING;
+    DECREASE_ACTIVE_COUNT(handle->loop, handle);
+    return 0;
+  } else {
     return 0;
   }
 }
@@ -171,7 +149,7 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* handle, uv_shutdown_cb cb) {
   handle->flags |= UV_HANDLE_SHUTTING;
   handle->shutdown_req = req;
   handle->reqs_pending++;
-  uv_ref(loop);
+  REGISTER_HANDLE_REQ(loop, handle, req);
 
   uv_want_endgame(loop, (uv_handle_t*)handle);
 
@@ -179,23 +157,11 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* handle, uv_shutdown_cb cb) {
 }
 
 
-size_t uv_count_bufs(uv_buf_t bufs[], int count) {
-  size_t bytes = 0;
-  int i;
-
-  for (i = 0; i < count; i++) {
-    bytes += (size_t)bufs[i].len;
-  }
-
-  return bytes;
-}
-
-
-int uv_is_readable(uv_stream_t* handle) {
+int uv_is_readable(const uv_stream_t* handle) {
   return !(handle->flags & UV_HANDLE_EOF);
 }
 
 
-int uv_is_writable(uv_stream_t* handle) {
+int uv_is_writable(const uv_stream_t* handle) {
   return !(handle->flags & UV_HANDLE_SHUTTING);
 }

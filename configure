@@ -115,6 +115,16 @@ parser.add_option("--without-dtrace",
     dest="without_dtrace",
     help="Build without DTrace")
 
+parser.add_option("--with-etw",
+    action="store_true",
+    dest="with_etw",
+    help="Build with ETW (default is true on Windows)")
+
+parser.add_option("--without-etw",
+    action="store_true",
+    dest="without_etw",
+    help="Build without ETW")
+
 # CHECKME does this still work with recent releases of V8?
 parser.add_option("--gdb",
     action="store_true",
@@ -125,6 +135,11 @@ parser.add_option("--dest-cpu",
     action="store",
     dest="dest_cpu",
     help="CPU architecture to build for. Valid values are: arm, ia32, x64")
+
+parser.add_option("--no-ifaddrs",
+    action="store_true",
+    dest="no_ifaddrs",
+    help="Use on deprecated SunOS systems that do not support ifaddrs.h")
 
 (options, args) = parser.parse_args()
 
@@ -154,10 +169,20 @@ def pkg_config(pkg):
 def host_arch_cc():
   """Host architecture check using the CC command."""
 
-  p = subprocess.Popen(CC.split() + ['-dM', '-E', '-'],
-                       stdin=subprocess.PIPE,
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE)
+  try:
+    p = subprocess.Popen(CC.split() + ['-dM', '-E', '-'],
+                         stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+  except OSError:
+    print '''Node.js configure error: No acceptable C compiler found!
+
+        Please make sure you have a C compiler installed on your system and/or
+        consider adjusting the CC environment variable if you installed
+        it in a non-standard prefix.
+        '''
+    sys.exit()
+
   p.stdin.write('\n')
   out = p.communicate()[0]
 
@@ -214,18 +239,22 @@ def host_arch():
 def target_arch():
   return host_arch()
 
-
-def gcc_version():
+def compiler_version():
   try:
     proc = subprocess.Popen([CC, '-v'], stderr=subprocess.PIPE)
   except OSError:
     return None
-  # TODO parse clang output
-  version = proc.communicate()[1].split('\n')[-2]
-  match = re.match('gcc version (\d+)\.(\d+)\.(\d+)', version)
-  if not match: return None
-  return ['LLVM' in version] + map(int, match.groups())
-
+  lines = proc.communicate()[1].split('\n')
+  version_line = None
+  for i, line in enumerate(lines):
+    if 'version' in line:
+      version_line = line
+  if not version_line:
+    return None
+  version = version_line.split("version")[1].strip().split()[0].split(".")
+  if not version:
+    return None
+  return ('LLVM' in version_line, 'clang' in CC, tuple(version))
 
 def configure_node(o):
   # TODO add gdb
@@ -236,14 +265,17 @@ def configure_node(o):
   o['variables']['target_arch'] = options.dest_cpu or target_arch()
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
 
-  # turn off strict aliasing if gcc < 4.6.0 unless it's llvm-gcc
+  is_llvm, is_clang, cc_version = compiler_version()
+
+  # turn off strict aliasing if gcc >= 4.5.0 && < 4.6.0 unless it's clang
   # see http://gcc.gnu.org/bugzilla/show_bug.cgi?id=45883
   # see http://code.google.com/p/v8/issues/detail?id=884
-  o['variables']['strict_aliasing'] = b(
-    'clang' in CC or gcc_version() >= [False, 4, 6, 0])
+  no_strict_aliasing = (4,5,0) <= cc_version < (4,6,0) and not is_clang
+  o['variables']['node_no_strict_aliasing'] = int(no_strict_aliasing)
+  o['variables']['v8_no_strict_aliasing'] = int(no_strict_aliasing)
 
   # clang has always supported -fvisibility=hidden, right?
-  if 'clang' not in CC and gcc_version() < [False, 4, 0, 0]:
+  if not is_clang and cc_version < (4,0,0):
     o['variables']['visibility'] = ''
 
   # By default, enable DTrace on SunOS systems. Don't allow it on other
@@ -251,10 +283,21 @@ def configure_node(o):
   # SunOS, and we haven't implemented it.)
   if sys.platform.startswith('sunos'):
     o['variables']['node_use_dtrace'] = b(not options.without_dtrace);
+    # Strict aliasing causes problems with the V8 snapshots on SunOS
+    o['variables']['strict_aliasing'] = b(False);
   elif b(options.with_dtrace) == 'true':
     raise Exception('DTrace is currently only supported on SunOS systems.')
   else:
     o['variables']['node_use_dtrace'] = 'false'
+
+
+  # By default, enable ETW on Windows.
+  if sys.platform.startswith('win32'):
+    o['variables']['node_use_etw'] = b(not options.without_etw);
+  elif b(options.with_etw) == 'true':
+    raise Exception('ETW is only supported on Windows.')
+  else:
+    o['variables']['node_use_etw'] = 'false'
 
 
 def configure_libz(o):
@@ -293,11 +336,14 @@ def configure_openssl(o):
   if options.without_ssl:
     return
 
+  if options.no_ifaddrs:
+    o['defines'] += ['SUNOS_NO_IFADDRS']
+
   if options.no_ssl2:
     o['defines'] += ['OPENSSL_NO_SSL2=1']
 
   if not options.openssl_use_sys:
-    o['variables']['node_use_system_openssl'] = b(False)
+    o['variables']['node_shared_openssl'] = b(False)
   else:
     out = pkg_config('openssl')
     (libs, cflags) = out if out else ('', '')
@@ -312,7 +358,7 @@ def configure_openssl(o):
     else:
       o['cflags'] += cflags.split()
 
-    o['variables']['node_use_system_openssl'] = b(
+    o['variables']['node_shared_openssl'] = b(
       libs or cflags or options.openssl_libpath or options.openssl_includes)
 
 

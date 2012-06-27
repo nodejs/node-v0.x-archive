@@ -3,7 +3,7 @@
 <!-- type=global -->
 
 The `process` object is a global object and can be accessed from anywhere.
-It is an instance of `EventEmitter`.
+It is an instance of [EventEmitter][].
 
 
 ## Event: 'exit'
@@ -190,49 +190,65 @@ The shell that executed node should see the exit code as 1.
 
 ## process.getgid()
 
+Note: this function is only available on POSIX platforms (i.e. not Windows)
+
 Gets the group identity of the process. (See getgid(2).)
 This is the numerical group id, not the group name.
 
-    console.log('Current gid: ' + process.getgid());
+    if (process.getgid) {
+      console.log('Current gid: ' + process.getgid());
+    }
 
 
 ## process.setgid(id)
+
+Note: this function is only available on POSIX platforms (i.e. not Windows)
 
 Sets the group identity of the process. (See setgid(2).)  This accepts either
 a numerical ID or a groupname string. If a groupname is specified, this method
 blocks while resolving it to a numerical ID.
 
-    console.log('Current gid: ' + process.getgid());
-    try {
-      process.setgid(501);
-      console.log('New gid: ' + process.getgid());
-    }
-    catch (err) {
-      console.log('Failed to set gid: ' + err);
+    if (process.getgid && process.setgid) {
+      console.log('Current gid: ' + process.getgid());
+      try {
+        process.setgid(501);
+        console.log('New gid: ' + process.getgid());
+      }
+      catch (err) {
+        console.log('Failed to set gid: ' + err);
+      }
     }
 
 
 ## process.getuid()
 
+Note: this function is only available on POSIX platforms (i.e. not Windows)
+
 Gets the user identity of the process. (See getuid(2).)
 This is the numerical userid, not the username.
 
-    console.log('Current uid: ' + process.getuid());
+    if (process.getuid) {
+      console.log('Current uid: ' + process.getuid());
+    }
 
 
 ## process.setuid(id)
+
+Note: this function is only available on POSIX platforms (i.e. not Windows)
 
 Sets the user identity of the process. (See setuid(2).)  This accepts either
 a numerical ID or a username string.  If a username is specified, this method
 blocks while resolving it to a numerical ID.
 
-    console.log('Current uid: ' + process.getuid());
-    try {
-      process.setuid(501);
-      console.log('New uid: ' + process.getuid());
-    }
-    catch (err) {
-      console.log('Failed to set uid: ' + err);
+    if (process.getuid && process.setuid) {
+      console.log('Current uid: ' + process.getuid());
+      try {
+        process.setuid(501);
+        console.log('New uid: ' + process.getuid());
+      }
+      catch (err) {
+        console.log('Failed to set uid: ' + err);
+      }
     }
 
 
@@ -279,17 +295,10 @@ An example of the possible output looks like:
          node_shared_zlib: 'false',
          node_use_dtrace: 'false',
          node_use_openssl: 'true',
-         node_use_system_openssl: 'false',
+         node_shared_openssl: 'false',
          strict_aliasing: 'true',
          target_arch: 'x64',
          v8_use_snapshot: 'true' } }
-
-## process.installPrefix
-
-A compiled-in property that exposes `NODE_PREFIX`.
-
-    console.log('Prefix: ' + process.installPrefix);
-
 
 ## process.kill(pid, [signal])
 
@@ -336,7 +345,8 @@ What processor architecture you're running on: `'arm'`, `'ia32'`, or `'x64'`.
 
 ## process.platform
 
-What platform you're running on. `'linux2'`, `'darwin'`, etc.
+What platform you're running on:
+`'darwin'`, `'freebsd'`, `'linux'`, `'solaris'` or `'win32'`
 
     console.log('This platform is ' + process.platform);
 
@@ -408,3 +418,5 @@ a diff reading, useful for benchmarks and measuring intervals:
       console.log('benchmark took %d seconds and %d nanoseconds', t[0], t[1]);
       // benchmark took 1 seconds and 6962306 nanoseconds
     }, 1000);
+
+[EventEmitter]: events.html#events_class_events_eventemitter

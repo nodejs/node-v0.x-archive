@@ -22,17 +22,22 @@
 #include <assert.h>
 
 #include "uv.h"
-#include "../uv-common.h"
 #include "internal.h"
 
 
+/* Ntdll function pointers */
 sRtlNtStatusToDosError pRtlNtStatusToDosError;
 sNtDeviceIoControlFile pNtDeviceIoControlFile;
 sNtQueryInformationFile pNtQueryInformationFile;
 sNtSetInformationFile pNtSetInformationFile;
+sNtQuerySystemInformation pNtQuerySystemInformation;
+
+
+/* Kernel32 function pointers */
 sGetQueuedCompletionStatusEx pGetQueuedCompletionStatusEx;
 sSetFileCompletionNotificationModes pSetFileCompletionNotificationModes;
 sCreateSymbolicLinkW pCreateSymbolicLinkW;
+sCancelIoEx pCancelIoEx;
 sInitializeSRWLock pInitializeSRWLock;
 sAcquireSRWLockShared pAcquireSRWLockShared;
 sAcquireSRWLockExclusive pAcquireSRWLockExclusive;
@@ -79,6 +84,13 @@ void uv_winapi_init() {
     uv_fatal_error(GetLastError(), "GetProcAddress");
   }
 
+  pNtQuerySystemInformation = (sNtQuerySystemInformation) GetProcAddress(
+      ntdll_module,
+      "NtQuerySystemInformation");
+  if (pNtQuerySystemInformation == NULL) {
+    uv_fatal_error(GetLastError(), "GetProcAddress");
+  }
+
   kernel32_module = GetModuleHandleA("kernel32.dll");
   if (kernel32_module == NULL) {
     uv_fatal_error(GetLastError(), "GetModuleHandleA");
@@ -93,6 +105,9 @@ void uv_winapi_init() {
 
   pCreateSymbolicLinkW = (sCreateSymbolicLinkW)
     GetProcAddress(kernel32_module, "CreateSymbolicLinkW");
+
+  pCancelIoEx = (sCancelIoEx)
+    GetProcAddress(kernel32_module, "CancelIoEx");
 
   pInitializeSRWLock = (sInitializeSRWLock)
     GetProcAddress(kernel32_module, "InitializeSRWLock");

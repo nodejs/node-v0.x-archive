@@ -28,11 +28,6 @@
 /*
  * Ntdll headers
  */
-#ifndef _NTDEF_
-  typedef LONG NTSTATUS;
-  typedef NTSTATUS *PNTSTATUS;
-#endif
-
 #ifndef STATUS_SEVERITY_SUCCESS
 # define STATUS_SEVERITY_SUCCESS 0x0
 #endif
@@ -4079,8 +4074,8 @@
         (FACILITY_NTWIN32 << 16) | ERROR_SEVERITY_WARNING)))
 
 /* from ntifs.h */
-/* MinGW already has it */
-#if defined(_MSC_VER) || defined(__MINGW64__)
+/* MinGW already has it, mingw-w64 does not. */
+#if defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR)
   typedef struct _REPARSE_DATA_BUFFER {
     ULONG  ReparseTag;
     USHORT ReparseDataLength;
@@ -4140,6 +4135,10 @@ typedef struct _FILE_BASIC_INFORMATION {
 typedef struct _FILE_MODE_INFORMATION {
   ULONG Mode;
 } FILE_MODE_INFORMATION, *PFILE_MODE_INFORMATION;
+
+typedef struct _FILE_END_OF_FILE_INFORMATION {
+  LARGE_INTEGER  EndOfFile;
+} FILE_END_OF_FILE_INFORMATION, *PFILE_END_OF_FILE_INFORMATION;
 
 #define FILE_SYNCHRONOUS_IO_ALERT               0x00000010
 #define FILE_SYNCHRONOUS_IO_NONALERT            0x00000020
@@ -4202,6 +4201,19 @@ typedef enum _FILE_INFORMATION_CLASS {
   FileRemoteProtocolInformation,
   FileMaximumInformation
 } FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;
+
+typedef struct _SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION {
+    LARGE_INTEGER IdleTime;
+    LARGE_INTEGER KernelTime;
+    LARGE_INTEGER UserTime;
+    LARGE_INTEGER DpcTime;
+    LARGE_INTEGER InterruptTime;
+    ULONG InterruptCount;
+} SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION, *PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION;
+
+#ifndef SystemProcessorPerformanceInformation
+# define SystemProcessorPerformanceInformation 8
+#endif
 
 #ifndef DEVICE_TYPE
 # define DEVICE_TYPE DWORD
@@ -4319,6 +4331,12 @@ typedef NTSTATUS (NTAPI *sNtSetInformationFile)
                   ULONG Length,
                   FILE_INFORMATION_CLASS FileInformationClass);
 
+typedef NTSTATUS (NTAPI *sNtQuerySystemInformation)
+                 (UINT SystemInformationClass,
+                  PVOID SystemInformation,
+                  ULONG SystemInformationLength,
+                  PULONG ReturnLength);
+
 
 /*
  * Kernel32 headers
@@ -4335,7 +4353,7 @@ typedef NTSTATUS (NTAPI *sNtSetInformationFile)
 # define SYMBOLIC_LINK_FLAG_DIRECTORY 0x1
 #endif
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
   typedef struct _OVERLAPPED_ENTRY {
       ULONG_PTR lpCompletionKey;
       LPOVERLAPPED lpOverlapped;
@@ -4374,6 +4392,10 @@ typedef BOOLEAN (WINAPI* sCreateSymbolicLinkW)
                  LPCWSTR lpTargetFileName,
                  DWORD dwFlags);
 
+typedef BOOL (WINAPI* sCancelIoEx)
+             (HANDLE hFile,
+              LPOVERLAPPED lpOverlapped);
+
 typedef VOID (WINAPI* sInitializeSRWLock)
              (PSRWLOCK SRWLock);
 
@@ -4397,17 +4419,19 @@ typedef VOID (WINAPI* sReleaseSRWLockExclusive)
 
 
 
-/* Ntapi function pointers */
+/* Ntdll function pointers */
 extern sRtlNtStatusToDosError pRtlNtStatusToDosError;
 extern sNtDeviceIoControlFile pNtDeviceIoControlFile;
 extern sNtQueryInformationFile pNtQueryInformationFile;
 extern sNtSetInformationFile pNtSetInformationFile;
+extern sNtQuerySystemInformation pNtQuerySystemInformation;
 
 
 /* Kernel32 function pointers */
 extern sGetQueuedCompletionStatusEx pGetQueuedCompletionStatusEx;
 extern sSetFileCompletionNotificationModes pSetFileCompletionNotificationModes;
 extern sCreateSymbolicLinkW pCreateSymbolicLinkW;
+extern sCancelIoEx pCancelIoEx;
 extern sInitializeSRWLock pInitializeSRWLock;
 extern sAcquireSRWLockShared pAcquireSRWLockShared;
 extern sAcquireSRWLockExclusive pAcquireSRWLockExclusive;

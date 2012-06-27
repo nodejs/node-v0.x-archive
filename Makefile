@@ -42,12 +42,14 @@ uninstall:
 clean:
 	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node blog.html email.md
 	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
+	-rm -rf node_modules
 
 distclean:
 	-rm -rf out
 	-rm -f config.gypi
 	-rm -f config.mk
 	-rm -rf node node_g blog.html email.md
+	-rm -rf node_modules
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
@@ -59,9 +61,18 @@ test-http1: all
 test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
-test-all: all
-	python tools/test.py --mode=debug,release
-	$(MAKE) test-npm
+test/gc/node_modules/weak/build:
+	@if [ ! -f node ]; then make all; fi
+	./node deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
+		--directory="$(shell pwd)/test/gc/node_modules/weak" \
+		--nodedir="$(shell pwd)"
+
+test-gc: all test/gc/node_modules/weak/build
+	$(PYTHON) tools/test.py --mode=release gc
+
+test-all: all test/gc/node_modules/weak/build
+	$(PYTHON) tools/test.py --mode=debug,release
+	make test-npm
 
 test-all-http1: all
 	$(PYTHON) tools/test.py --mode=debug,release --use-http1
@@ -119,7 +130,13 @@ website_files = \
 	out/doc/changelog.html \
 	$(doc_images)
 
-doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/
+doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/ blog
+
+blogclean:
+	rm -rf out/blog
+
+blog: doc/blog out/Release/node tools/blog
+	out/Release/node tools/blog/generate.js doc/blog/ out/blog/ doc/blog.html doc/rss.xml
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -143,11 +160,14 @@ out/doc/api/%.html: doc/api/%.markdown
 	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
 
 email.md: ChangeLog tools/email-footer.md
-	bash tools/changelog-head.sh > $@
+	bash tools/changelog-head.sh | sed 's|^\* #|* \\#|g' > $@
 	cat tools/email-footer.md | sed -e 's|__VERSION__|'$(VERSION)'|g' >> $@
 
 blog.html: email.md
 	cat $< | ./node tools/doc/node_modules/.bin/marked > $@
+
+blog-upload: blog
+	rsync -r out/blog/ node@nodejs.org:~/web/nodejs.org/blog/
 
 website-upload: doc
 	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
@@ -197,6 +217,17 @@ $(PKG):
 		--out $(PKG)
 
 $(TARBALL): node out/doc
+	@if [ "$(shell git status --porcelain | egrep -v '^\?\? ')" = "" ]; then \
+		exit 0 ; \
+	else \
+	  echo "" >&2 ; \
+		echo "The git repository is not clean." >&2 ; \
+		echo "Please commit changes before building release tarball." >&2 ; \
+		echo "" >&2 ; \
+		git status --porcelain | egrep -v '^\?\?' >&2 ; \
+		echo "" >&2 ; \
+		exit 1 ; \
+	fi
 	@if [ $(shell ./node --version) = "$(VERSION)" ]; then \
 		exit 0; \
 	else \
@@ -207,11 +238,12 @@ $(TARBALL): node out/doc
 		exit 1 ; \
 	fi
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
-	mkdir -p $(TARNAME)/doc
+	mkdir -p $(TARNAME)/doc/api
 	cp doc/node.1 $(TARNAME)/doc/node.1
-	cp -r out/doc/api $(TARNAME)/doc/api
+	cp -r out/doc/api/* $(TARNAME)/doc/api/
 	rm -rf $(TARNAME)/deps/v8/test # too big
 	rm -rf $(TARNAME)/doc/images # too big
+	find $(TARNAME)/ -type l | xargs rm # annoying on windows
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
 	gzip -f -9 $(TARNAME).tar
@@ -237,4 +269,4 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload pkg
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload pkg blog blogclean
