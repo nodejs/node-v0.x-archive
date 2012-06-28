@@ -20,6 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "node.h"
+#include "node_internals.h"
 #include "req_wrap.h"
 #include "handle_wrap.h"
 
@@ -1234,26 +1235,17 @@ void DisplayExceptionLine (TryCatch &try_catch) {
     String::Utf8Value sourceline(message->GetSourceLine());
     const char* sourceline_string = *sourceline;
 
-    // HACK HACK HACK
-    //
-    // FIXME
-    //
-    // Because of how CommonJS modules work, all scripts are wrapped with a
+    // This removes from the printed error messages the module wrap prefix:
     // "function (function (exports, __filename, ...) {"
-    // to provide script local variables.
-    //
-    // When reporting errors on the first line of a script, this wrapper
-    // function is leaked to the user. This HACK is to remove it. The length
-    // of the wrapper is 62. That wrapper is defined in src/node.js
-    //
-    // If that wrapper is ever changed, then this number also has to be
-    // updated. Or - someone could clean this up so that the two peices
-    // don't need to be changed.
-    //
+    // that is around all scripts that are run as modules.
+
     // Even better would be to get support into V8 for wrappers that
     // shouldn't be reported to users.
-    int offset = linenum == 1 ? 62 : 0;
-
+    int offset = 0;
+    if (linenum == 1 && 0 == strncmp(sourceline_string, MODULE_WRAP_PREFIX,
+        sizeof(MODULE_WRAP_PREFIX) - 1)) {
+      offset += sizeof(MODULE_WRAP_PREFIX) - 1;
+    }
     fprintf(stderr, "%s\n", sourceline_string + offset);
     // Print wavy underline (GetUnderline is deprecated).
     int start = message->GetStartColumn();
@@ -2216,6 +2208,12 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   process->Set(String::NewSymbol("pid"), Integer::New(getpid()));
   process->Set(String::NewSymbol("features"), GetFeatures());
+
+  //Add in the module wrap signatures
+  process->Set(String::NewSymbol("_moduleWrapPrefix"), String::New(MODULE_WRAP_PREFIX),
+               static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
+  process->Set(String::NewSymbol("_moduleWrapSuffix"), String::New(MODULE_WRAP_SUFFIX),
+               static_cast<PropertyAttribute>(DontEnum | DontDelete | ReadOnly));
 
   // -e, --eval
   if (eval_string) {
