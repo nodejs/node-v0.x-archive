@@ -1,0 +1,19 @@
+before 
+
+myfilename.js:1
+invalidJsHere ?= 1;
+               ^
+
+vm.js:*
+  var ns = new binding.NodeScript(code, ctx, filename);
+           ^
+SyntaxError: Unexpected token =
+    at new Script (vm.js:*)
+    at Function.Script.createScript (vm.js:*)
+    at Object.<anonymous> (*/vm_display_errors.js:*)
+    at Module._compile (module.js:*)
+    at Object.Module._extensions..js (module.js:*)
+    at Module.load (module.js:*)
+    at Function.Module._load (module.js:*)
+    at Module.runMain (module.js:*)
+    at process.startup.processNextTick.process._tickCallback (node.js:*)

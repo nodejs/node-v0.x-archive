@@ -393,10 +393,12 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
     script = output_flag == returnResult ? Script::Compile(code, filename)
                                          : Script::New(code, filename);
     if (script.IsEmpty()) {
-      // FIXME UGLY HACK TO DISPLAY SYNTAX ERRORS.
+      //V8 TryCatch.ReThrow is broken.  Calling it resets the stack trace to
+      //the place where ReThrow was called.  This makes it impossible to get a stack
+      //trace after the an error has been rethrown.  Until this V8 bug is fixed, this
+      //display_error argument makes it possible to log the location information.
       if (display_error) DisplayExceptionLine(try_catch);
 
-      // Hack because I can't get a proper stacktrace on SyntaxError
       return try_catch.ReThrow();
     }
   } else {

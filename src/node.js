@@ -590,8 +590,8 @@
   };
 
   NativeModule.wrapper = [
-    '(function (exports, require, module, __filename, __dirname) { ',
-    '\n});'
+  	process._moduleWrapPrefix,
+  	process._moduleWrapSuffix
   ];
 
   NativeModule.prototype.compile = function() {
