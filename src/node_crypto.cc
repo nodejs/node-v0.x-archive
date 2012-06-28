@@ -1975,6 +1975,33 @@ int local_EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx,
 }
 
 
+class BinaryData {
+ public:
+  char* buf;
+  ssize_t buf_len;
+
+  BinaryData(const Local<Value> arg, const enum encoding enc, ssize_t len)
+      : buf_len(len),
+        clean(false) {
+    if (Buffer::HasInstance(arg)) {
+      Local<Object> buffer = arg->ToObject();
+      buf = Buffer::Data(buffer);
+      buf_len = Buffer::Length(buffer);
+    } else {
+      buf = new char[len];
+      ssize_t written = DecodeWrite(buf, len, arg, enc);
+      assert(written == len);
+      clean = true;
+    }
+  }
+
+  ~BinaryData() {
+    if (clean) delete [] buf;
+  }
+ private:
+  bool clean;
+};
+
 class Cipher : public ObjectWrap {
  public:
   static void Initialize (v8::Handle<v8::Object> target) {
@@ -2108,15 +2135,11 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_buf_len];
-    ssize_t key_written = DecodeWrite(key_buf, key_buf_len, args[1], BINARY);
-    assert(key_written == key_buf_len);
+    BinaryData key = BinaryData(args[1], BINARY, key_buf_len);
 
     String::Utf8Value cipherType(args[0]);
 
-    bool r = cipher->CipherInit(*cipherType, key_buf, key_buf_len);
-
-    delete [] key_buf;
+    bool r = cipher->CipherInit(*cipherType, key.buf, key.buf_len);
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInit error")));
@@ -2158,20 +2181,14 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    char* key_buf = new char[key_len];
-    ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
-    assert(key_written == key_len);
-
-    char* iv_buf = new char[iv_len];
-    ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
-    assert(iv_written == iv_len);
+    BinaryData key = BinaryData(args[1], BINARY, key_len);
+    BinaryData iv = BinaryData(args[2], BINARY, iv_len);
 
     String::Utf8Value cipherType(args[0]);
 
-    bool r = cipher->CipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
-
-    delete [] key_buf;
-    delete [] iv_buf;
+    bool r = cipher->CipherInitIv(*cipherType,
+                                  key.buf, key.buf_len,
+                                  iv.buf, iv.buf_len);
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("CipherInitIv error")));
@@ -2195,21 +2212,11 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    unsigned char *out=0;
-    int out_len=0, r;
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
+    unsigned char *out = 0;
+    int out_len = 0;
+    BinaryData data = BinaryData(args[0], enc, len);
 
-      r = cipher->CipherUpdate(buffer_data, buffer_length, &out, &out_len);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = cipher->CipherUpdate(buf, len,&out,&out_len);
-      delete [] buf;
-    }
+    int r = cipher->CipherUpdate(data.buf, data.buf_len, &out, &out_len);
 
     if (!r) {
       delete [] out;
@@ -2217,9 +2224,11 @@ class Cipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    Local<Value> outString;
-    if (out_len==0) {
-      outString=String::New("");
+    Handle<Value> output;
+    if (args[2]->IsNull()) {
+      output = Buffer::New((char*) out, out_len)->handle_;
+    } else if (out_len==0) {
+      output = String::New("");
     } else {
       char* out_hexdigest;
       int out_hex_len;
@@ -2227,7 +2236,7 @@ class Cipher : public ObjectWrap {
       if (enc == HEX) {
         // Hex encoding
         HexEncode(out, out_len, &out_hexdigest, &out_hex_len);
-        outString = Encode(out_hexdigest, out_hex_len, BINARY);
+        output = Encode(out_hexdigest, out_hex_len, BINARY);
         delete [] out_hexdigest;
       } else if (enc == BASE64) {
         // Base64 encoding
@@ -2257,10 +2266,10 @@ class Cipher : public ObjectWrap {
         }
 
         base64(out, out_len, &out_hexdigest, &out_hex_len);
-        outString = Encode(out_hexdigest, out_hex_len, BINARY);
+        output = Encode(out_hexdigest, out_hex_len, BINARY);
         delete [] out_hexdigest;
       } else if (enc == BINARY) {
-        outString = Encode(out, out_len, BINARY);
+        output = Encode(out, out_len, BINARY);
       } else {
         fprintf(stderr, "node-crypto : Cipher .update encoding "
                         "can be binary, hex or base64\n");
@@ -2269,7 +2278,7 @@ class Cipher : public ObjectWrap {
 
     if (out) delete [] out;
 
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   static Handle<Value> SetAutoPadding(const Arguments& args) {
@@ -2290,7 +2299,7 @@ class Cipher : public ObjectWrap {
     int out_len = -1;
     char* out_hexdigest;
     int out_hex_len;
-    Local<Value> outString ;
+    Handle<Value> output ;
 
     int r = cipher->CipherFinal(&out_value, &out_len);
 
@@ -2309,38 +2318,42 @@ class Cipher : public ObjectWrap {
       }
     }
 
-    enum encoding enc = ParseEncoding(args[0], BINARY);
-    if (enc == HEX) {
-      // Hex encoding
-      HexEncode(out_value, out_len, &out_hexdigest, &out_hex_len);
-      outString = Encode(out_hexdigest, out_hex_len, BINARY);
-      delete [] out_hexdigest;
-    } else if (enc == BASE64) {
-      // Check to see if we need to add in previous base64 overhang
-      if (cipher->incomplete_base64!=NULL){
-        unsigned char* complete_base64 = new unsigned char[out_len+cipher->incomplete_base64_len+1];
-        memcpy(complete_base64, cipher->incomplete_base64, cipher->incomplete_base64_len);
-        memcpy(&complete_base64[cipher->incomplete_base64_len], out_value, out_len);
-        delete [] out_value;
-
-        delete [] cipher->incomplete_base64;
-        cipher->incomplete_base64=NULL;
-
-        out_value=complete_base64;
-        out_len += cipher->incomplete_base64_len;
-      }
-      base64(out_value, out_len, &out_hexdigest, &out_hex_len);
-      outString = Encode(out_hexdigest, out_hex_len, BINARY);
-      delete [] out_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(out_value, out_len, BINARY);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) out_value, out_len)->handle_;
     } else {
-      fprintf(stderr, "node-crypto : Cipher .final encoding "
-                      "can be binary, hex or base64\n");
+      enum encoding enc = ParseEncoding(args[0], BINARY);
+      if (enc == HEX) {
+        // Hex encoding
+        HexEncode(out_value, out_len, &out_hexdigest, &out_hex_len);
+        output = Encode(out_hexdigest, out_hex_len, BINARY);
+        delete [] out_hexdigest;
+      } else if (enc == BASE64) {
+        // Check to see if we need to add in previous base64 overhang
+        if (cipher->incomplete_base64!=NULL){
+          unsigned char* complete_base64 = new unsigned char[out_len+cipher->incomplete_base64_len+1];
+          memcpy(complete_base64, cipher->incomplete_base64, cipher->incomplete_base64_len);
+          memcpy(&complete_base64[cipher->incomplete_base64_len], out_value, out_len);
+          delete [] out_value;
+
+          delete [] cipher->incomplete_base64;
+          cipher->incomplete_base64=NULL;
+
+          out_value=complete_base64;
+          out_len += cipher->incomplete_base64_len;
+        }
+        base64(out_value, out_len, &out_hexdigest, &out_hex_len);
+        output = Encode(out_hexdigest, out_hex_len, BINARY);
+        delete [] out_hexdigest;
+      } else if (enc == BINARY) {
+        output = Encode(out_value, out_len, BINARY);
+      } else {
+        fprintf(stderr, "node-crypto : Cipher .final encoding "
+                        "can be binary, hex or base64\n");
+      }
     }
 
     delete [] out_value;
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   Cipher () : ObjectWrap ()
@@ -2613,22 +2626,12 @@ class Decipher : public ObjectWrap {
             "node`DecodeBytes() failed")));
     }
 
-    char* buf;
     // if alloc_buf then buf must be deleted later
     bool alloc_buf = false;
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
 
-      buf = buffer_data;
-      len = buffer_length;
-    } else {
-      alloc_buf = true;
-      buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], BINARY);
-      assert(written == len);
-    }
+    BinaryData data = BinaryData(args[0], BINARY, len);
+    char* buf = data.buf;
+    len = data.buf_len;
 
     char* ciphertext;
     int ciphertext_len;
@@ -2641,10 +2644,7 @@ class Decipher : public ObjectWrap {
         char* complete_hex = new char[len+2];
         memcpy(complete_hex, &cipher->incomplete_hex, 1);
         memcpy(complete_hex+1, buf, len);
-        if (alloc_buf) {
-          delete [] buf;
-          alloc_buf = false;
-        }
+        alloc_buf = true;
         buf = complete_hex;
         len += 1;
       }
@@ -2666,9 +2666,6 @@ class Decipher : public ObjectWrap {
 
     } else if (enc == BASE64) {
       unbase64((unsigned char*)buf, len, (char **)&ciphertext, &ciphertext_len);
-      if (alloc_buf) {
-        delete [] buf;
-      }
       buf = ciphertext;
       len = ciphertext_len;
       alloc_buf = true;
@@ -2691,9 +2688,11 @@ class Decipher : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    Local<Value> outString;
-    if (out_len==0) {
-      outString=String::New("");
+    Handle<Value> output;
+    if (args[2]->IsNull()) {
+      output = Buffer::New((char*) out, out_len)->handle_;
+    } else if (out_len==0) {
+      output = String::New("");
     } else {
       enum encoding enc = ParseEncoding(args[2], BINARY);
       if (enc == UTF8) {
@@ -2717,16 +2716,16 @@ class Decipher : public ObjectWrap {
           cipher->incomplete_utf8 = new unsigned char[cipher->incomplete_utf8_len+1];
           memcpy(cipher->incomplete_utf8, &out[utf8_len], cipher->incomplete_utf8_len);
         }
-        outString = Encode(out, utf8_len, enc);
+        output = Encode(out, utf8_len, enc);
       } else {
-        outString = Encode(out, out_len, enc);
+        output = Encode(out, out_len, enc);
       }
     }
 
     if (out) delete [] out;
 
     if (alloc_buf) delete [] buf;
-    return scope.Close(outString);
+    return scope.Close(output);
 
   }
 
@@ -2747,7 +2746,7 @@ class Decipher : public ObjectWrap {
 
     unsigned char* out_value = NULL;
     int out_len = -1;
-    Local<Value> outString;
+    Handle<Value> output;
 
     int r = cipher->DecipherFinal<TOLERATE_PADDING>(&out_value, &out_len);
 
@@ -2765,8 +2764,10 @@ class Decipher : public ObjectWrap {
       }
     }
 
-    if (args.Length() == 0 || !args[0]->IsString()) {
-      outString = Encode(out_value, out_len, BINARY);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) out_value, out_len)->handle_;
+    } else if (args.Length() == 0 || !args[0]->IsString()) {
+      output = Encode(out_value, out_len, BINARY);
     } else {
       enum encoding enc = ParseEncoding(args[0]);
       if (enc == UTF8) {
@@ -2779,17 +2780,17 @@ class Decipher : public ObjectWrap {
           delete [] cipher->incomplete_utf8;
           cipher->incomplete_utf8=NULL;
 
-          outString = Encode(complete_out, cipher->incomplete_utf8_len+out_len, enc);
+          output = Encode(complete_out, cipher->incomplete_utf8_len+out_len, enc);
           delete [] complete_out;
         } else {
-          outString = Encode(out_value, out_len, enc);
+          output = Encode(out_value, out_len, enc);
         }
       } else {
-        outString = Encode(out_value, out_len, enc);
+        output = Encode(out_value, out_len, enc);
       }
     }
     delete [] out_value;
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   Decipher () : ObjectWrap () {
@@ -2891,23 +2892,8 @@ class Hmac : public ObjectWrap {
 
     String::Utf8Value hashType(args[0]);
 
-    bool r;
-
-    if( Buffer::HasInstance(args[1])) {
-      Local<Object> buffer_obj = args[1]->ToObject();
-      char* buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
-      assert(written == len);
-
-      r = hmac->HmacInit(*hashType, buf, len);
-
-      delete [] buf;
-    }
+    BinaryData key = BinaryData(args[1], BINARY, len);
+    bool r = hmac->HmacInit(*hashType, key.buf, key.buf_len);
 
     if (!r) {
       return ThrowException(Exception::Error(String::New("hmac error")));
@@ -2930,21 +2916,8 @@ class Hmac : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
-
-    if( Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = hmac->HmacUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = hmac->HmacUpdate(buf, len);
-      delete [] buf;
-    }
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = hmac->HmacUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("HmacUpdate fail"));
@@ -2963,31 +2936,35 @@ class Hmac : public ObjectWrap {
     unsigned int md_len = 0;
     char* md_hexdigest;
     int md_hex_len;
-    Local<Value> outString;
+    Handle<Value> output;
 
     int r = hmac->HmacDigest(&md_value, &md_len);
     if (md_len == 0 || r == 0) {
       return scope.Close(String::New(""));
     }
 
-    enum encoding enc = ParseEncoding(args[0], BINARY);
-    if (enc == HEX) {
-      // Hex encoding
-      HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BASE64) {
-      base64(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(md_value, md_len, BINARY);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) md_value, md_len)->handle_;
     } else {
-      fprintf(stderr, "node-crypto : Hmac .digest encoding "
-                      "can be binary, hex or base64\n");
+      enum encoding enc = ParseEncoding(args[0], BINARY);
+      if (enc == HEX) {
+        // Hex encoding
+        HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BASE64) {
+        base64(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BINARY) {
+        output = Encode(md_value, md_len, BINARY);
+      } else {
+        fprintf(stderr, "node-crypto : Hmac .digest encoding "
+                        "can be binary, hex or base64\n");
+      }
     }
     delete [] md_value;
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   Hmac () : ObjectWrap () {
@@ -3076,20 +3053,8 @@ class Hash : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
-
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-      r = hash->HashUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = hash->HashUpdate(buf, len);
-      delete[] buf;
-    }
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = hash->HashUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("HashUpdate fail"));
@@ -3119,30 +3084,34 @@ class Hash : public ObjectWrap {
       return scope.Close(String::New(""));
     }
 
-    Local<Value> outString;
+    Handle<Value> output;
 
-    enum encoding enc = ParseEncoding(args[0], BINARY);
-    if (enc == HEX) {
-      // Hex encoding
-      char* md_hexdigest;
-      int md_hex_len;
-      HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BASE64) {
-      char* md_hexdigest;
-      int md_hex_len;
-      base64(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(md_value, md_len, BINARY);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) md_value, md_len)->handle_;
     } else {
-      fprintf(stderr, "node-crypto : Hash .digest encoding "
-                      "can be binary, hex or base64\n");
+      enum encoding enc = ParseEncoding(args[0], BINARY);
+      if (enc == HEX) {
+        // Hex encoding
+        char* md_hexdigest;
+        int md_hex_len;
+        HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BASE64) {
+        char* md_hexdigest;
+        int md_hex_len;
+        base64(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BINARY) {
+        output = Encode(md_value, md_len, BINARY);
+      } else {
+        fprintf(stderr, "node-crypto : Hash .digest encoding "
+                        "can be binary, hex or base64\n");
+      }
     }
 
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   Hash () : ObjectWrap () {
@@ -3267,21 +3236,8 @@ class Sign : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
-
-    if (Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = sign->SignUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = sign->SignUpdate(buf, len);
-      delete [] buf;
-    }
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = sign->SignUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("SignUpdate fail"));
@@ -3300,7 +3256,7 @@ class Sign : public ObjectWrap {
     unsigned int md_len;
     char* md_hexdigest;
     int md_hex_len;
-    Local<Value> outString;
+    Handle<Value> output;
 
     md_len = 8192; // Maximum key size is 8192 bits
     md_value = new unsigned char[md_len];
@@ -3327,26 +3283,30 @@ class Sign : public ObjectWrap {
       return scope.Close(String::New(""));
     }
 
-    enum encoding enc = ParseEncoding(args[1], BINARY);
-    if (enc == HEX) {
-      // Hex encoding
-      HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BASE64) {
-      base64(md_value, md_len, &md_hexdigest, &md_hex_len);
-      outString = Encode(md_hexdigest, md_hex_len, BINARY);
-      delete [] md_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(md_value, md_len, BINARY);
+    if (args[1]->IsNull()) {
+      output = Buffer::New((char*) md_value, md_len)->handle_;
     } else {
-      outString = String::New("");
-      fprintf(stderr, "node-crypto : Sign .sign encoding "
-                      "can be binary, hex or base64\n");
+      enum encoding enc = ParseEncoding(args[1], BINARY);
+      if (enc == HEX) {
+        // Hex encoding
+        HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BASE64) {
+        base64(md_value, md_len, &md_hexdigest, &md_hex_len);
+        output = Encode(md_hexdigest, md_hex_len, BINARY);
+        delete [] md_hexdigest;
+      } else if (enc == BINARY) {
+        output = Encode(md_value, md_len, BINARY);
+      } else {
+        output = String::New("");
+        fprintf(stderr, "node-crypto : Sign .sign encoding "
+                        "can be binary, hex or base64\n");
+      }
     }
 
     delete [] md_value;
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   Sign () : ObjectWrap () {
@@ -3519,21 +3479,8 @@ class Verify : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    int r;
-
-    if(Buffer::HasInstance(args[0])) {
-      Local<Object> buffer_obj = args[0]->ToObject();
-      char *buffer_data = Buffer::Data(buffer_obj);
-      size_t buffer_length = Buffer::Length(buffer_obj);
-
-      r = verify->VerifyUpdate(buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[0], enc);
-      assert(written == len);
-      r = verify->VerifyUpdate(buf, len);
-      delete [] buf;
-    }
+    BinaryData data = BinaryData(args[0], enc, len);
+    int r = verify->VerifyUpdate(data.buf, data.buf_len);
 
     if (!r) {
       Local<Value> exception = Exception::TypeError(String::New("VerifyUpdate fail"));
@@ -3570,34 +3517,32 @@ class Verify : public ObjectWrap {
       return ThrowException(exception);
     }
 
-    unsigned char* hbuf = new unsigned char[hlen];
-    ssize_t hwritten = DecodeWrite((char *)hbuf, hlen, args[1], BINARY);
-    assert(hwritten == hlen);
     unsigned char* dbuf;
     int dlen;
+
+    BinaryData signature = BinaryData(args[1], BINARY, hlen);
 
     int r=-1;
 
     enum encoding enc = ParseEncoding(args[2], BINARY);
     if (enc == HEX) {
       // Hex encoding
-      HexDecode(hbuf, hlen, (char **)&dbuf, &dlen);
+      HexDecode((unsigned char*) signature.buf, signature.buf_len, (char **)&dbuf, &dlen);
       r = verify->VerifyFinal(kbuf, klen, dbuf, dlen);
       delete [] dbuf;
     } else if (enc == BASE64) {
       // Base64 encoding
-      unbase64(hbuf, hlen, (char **)&dbuf, &dlen);
+      unbase64((unsigned char*) signature.buf, signature.buf_len, (char **)&dbuf, &dlen);
       r = verify->VerifyFinal(kbuf, klen, dbuf, dlen);
       delete [] dbuf;
-    } else if (enc == BINARY) {
-      r = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
+    } else if (enc == BINARY || Buffer::HasInstance(args[1])) {
+      r = verify->VerifyFinal(kbuf, klen, (unsigned char*) signature.buf, signature.buf_len);
     } else {
       fprintf(stderr, "node-crypto : Verify .verify encoding "
                       "can be binary, hex or base64\n");
     }
 
     delete [] kbuf;
-    delete [] hbuf;
 
     return Boolean::New(r && r != -1);
   }
@@ -3778,21 +3723,23 @@ class DiffieHellman : public ObjectWrap {
             String::New("Key generation failed")));
     }
 
-    Local<Value> outString;
+    Handle<Value> output;
 
     int dataSize = BN_num_bytes(diffieHellman->dh->pub_key);
     char* data = new char[dataSize];
     BN_bn2bin(diffieHellman->dh->pub_key,
         reinterpret_cast<unsigned char*>(data));
 
-    if (args.Length() > 0 && args[0]->IsString()) {
-      outString = EncodeWithEncoding(args[0], data, dataSize);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) data, dataSize)->handle_;
+    } else if (args.Length() > 0 && args[0]->IsString()) {
+      output = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      output = Encode(data, dataSize, BINARY);
     }
     delete[] data;
 
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   static Handle<Value> GetPrime(const Arguments& args) {
@@ -3809,17 +3756,19 @@ class DiffieHellman : public ObjectWrap {
     char* data = new char[dataSize];
     BN_bn2bin(diffieHellman->dh->p, reinterpret_cast<unsigned char*>(data));
 
-    Local<Value> outString;
+    Handle<Value> output;
 
-    if (args.Length() > 0 && args[0]->IsString()) {
-      outString = EncodeWithEncoding(args[0], data, dataSize);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) data, dataSize)->handle_;
+    } else if (args.Length() > 0 && args[0]->IsString()) {
+      output = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      output = Encode(data, dataSize, BINARY);
     }
 
     delete[] data;
 
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   static Handle<Value> GetGenerator(const Arguments& args) {
@@ -3836,17 +3785,19 @@ class DiffieHellman : public ObjectWrap {
     char* data = new char[dataSize];
     BN_bn2bin(diffieHellman->dh->g, reinterpret_cast<unsigned char*>(data));
 
-    Local<Value> outString;
+    Handle<Value> output;
 
-    if (args.Length() > 0 && args[0]->IsString()) {
-      outString = EncodeWithEncoding(args[0], data, dataSize);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) data, dataSize)->handle_;
+    } else if (args.Length() > 0 && args[0]->IsString()) {
+      output = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      output = Encode(data, dataSize, BINARY);
     }
 
     delete[] data;
 
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   static Handle<Value> GetPublicKey(const Arguments& args) {
@@ -3869,17 +3820,19 @@ class DiffieHellman : public ObjectWrap {
     BN_bn2bin(diffieHellman->dh->pub_key,
         reinterpret_cast<unsigned char*>(data));
 
-    Local<Value> outString;
+    Handle<Value> output;
 
-    if (args.Length() > 0 && args[0]->IsString()) {
-      outString = EncodeWithEncoding(args[0], data, dataSize);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) data, dataSize)->handle_;
+    } else if (args.Length() > 0 && args[0]->IsString()) {
+      output = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      output = Encode(data, dataSize, BINARY);
     }
 
     delete[] data;
 
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   static Handle<Value> GetPrivateKey(const Arguments& args) {
@@ -3902,17 +3855,19 @@ class DiffieHellman : public ObjectWrap {
     BN_bn2bin(diffieHellman->dh->priv_key,
         reinterpret_cast<unsigned char*>(data));
 
-    Local<Value> outString;
+    Handle<Value> output;
 
-    if (args.Length() > 0 && args[0]->IsString()) {
-      outString = EncodeWithEncoding(args[0], data, dataSize);
+    if (args[0]->IsNull()) {
+      output = Buffer::New((char*) data, dataSize)->handle_;
+    } else if (args.Length() > 0 && args[0]->IsString()) {
+      output = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      output = Encode(data, dataSize, BINARY);
     }
 
     delete[] data;
 
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   static Handle<Value> ComputeSecret(const Arguments& args) {
@@ -3964,7 +3919,7 @@ class DiffieHellman : public ObjectWrap {
       key, diffieHellman->dh);
     BN_free(key);
 
-    Local<Value> outString;
+    Handle<Value> output;
 
     // DH_size returns number of bytes in a prime number
     // DH_compute_key returns number of bytes in a remainder of exponent, which
@@ -3993,17 +3948,19 @@ class DiffieHellman : public ObjectWrap {
         return ThrowException(Exception::Error(String::New("Invalid key")));
       }
     } else {
-      if (args.Length() > 2 && args[2]->IsString()) {
-        outString = EncodeWithEncoding(args[2], data, dataSize);
+      if (args.Length() > 2 && args[2]->IsNull()) {
+        output = Buffer::New((char*) data, dataSize)->handle_;
+      } else if (args.Length() > 2 && args[2]->IsString()) {
+        output = EncodeWithEncoding(args[2], data, dataSize);
       } else if (args.Length() > 1 && args[1]->IsString()) {
-        outString = EncodeWithEncoding(args[1], data, dataSize);
+        output = EncodeWithEncoding(args[1], data, dataSize);
       } else {
-        outString = Encode(data, dataSize, BINARY);
+        output = Encode(data, dataSize, BINARY);
       }
     }
 
     delete[] data;
-    return scope.Close(outString);
+    return scope.Close(output);
   }
 
   static Handle<Value> SetPublicKey(const Arguments& args) {
