@@ -268,7 +268,7 @@ The method takes an optional callback argument which will be called when finishe
 
 * {Object}
 
-In the cluster all living worker objects are stored in this object by there
+In the cluster all living worker objects are stored in this object using their
 `id` as the key. This makes it easy to loop through all living workers.
 
     // Go through all workers
