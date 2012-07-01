@@ -16,6 +16,10 @@ It is important to note that your callback will probably not be called in exactl
 the callback will fire, nor of the ordering things will fire in. The callback will
 be called as close as possible to the time specified.
 
+Note also that the current implementation limits the maximum value of `delay`
+to 2^31-1 milliseconds, or roughly 24.9 days. Attempting to schedule a callback
+further into the future will result in undefined behavior.
+
 ## clearTimeout(timeoutId)
 
 Prevents a timeout from triggering.
