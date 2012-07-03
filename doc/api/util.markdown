@@ -80,7 +80,7 @@ The default is to only recurse twice.  To make it recurse indefinitely, pass
 in `null` for `depth`.
 
 If `colors` is `true`, the output will be styled with ANSI color codes.
-Colors are customizable globally via `util.inspect.styles` and
+Colors are customizable globally through the `util.inspect.styles` and
 `util.inspect.colors` objects.
 Defaults to `false`.
 
