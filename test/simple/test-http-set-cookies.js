@@ -27,13 +27,16 @@ var nresponses = 0;
 
 var server = http.createServer(function(req, res) {
   if (req.url == '/one') {
-    res.writeHead(200, [['set-cookie', 'A'],
-                        ['content-type', 'text/plain']]);
+    res.writeHead(200, {
+      'set-cookie': 'A',
+      'content-type': 'text/plain'
+    });
     res.end('one\n');
   } else {
-    res.writeHead(200, [['set-cookie', 'A'],
-                        ['set-cookie', 'B'],
-                        ['content-type', 'text/plain']]);
+    res.writeHead(200, {
+      'set-cookie': ['A', 'B'],
+      'content-type': 'text/plain'
+    });
     res.end('two\n');
   }
 });
