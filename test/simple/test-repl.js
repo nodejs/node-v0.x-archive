@@ -150,7 +150,14 @@ function error_test() {
       expect: '1' },
     // npm prompt error message
     { client: client_unix, send: 'npm install foobar',
-      expect: expect_npm }
+      expect: expect_npm },
+    // function(){} shouldn't throw an error. (#3515)
+    { client: client_unix, send: 'function(){}',
+      expect: prompt_multiline },
+    { client: client_unix, send: '\n',
+      expect: prompt_multiline },
+    { client: client_unix, send: '.break',
+      expect: prompt_unix }
   ]);
 }
 
