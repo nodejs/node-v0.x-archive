@@ -34,7 +34,8 @@ socket.setEncoding(null);
 
 socket.on('connect', function() {
   socket.on('data', function(data) {
-    assert.ok(typeof data === 'object', 'Encoding expected to be disabled after "socket.setEncoding(null)"');
+    assert.ok(typeof data === 'object',
+		'Encoding expected to be disabled after "socket.setEncoding(null)"');
     socket.end();
     server.close();
   });
