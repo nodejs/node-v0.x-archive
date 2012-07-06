@@ -47,24 +47,14 @@ srv.listen(common.PORT, function() {
     host: 'localhost',
     port: common.PORT,
     path: '/',
-    headers: [
-      ['accept', 'abc'],
-      ['accept', 'def'],
-      ['Accept', 'ghijklmnopqrst'],
-      ['host', 'foo'],
-      ['Host', 'bar'],
-      ['hOst', 'baz'],
-      ['www-authenticate', 'foo'],
-      ['WWW-Authenticate', 'bar'],
-      ['WWW-AUTHENTICATE', 'baz'],
-      ['x-foo', 'bingo'],
-      ['x-bar', 'banjo'],
-      ['x-bar', 'bango'],
-      ['sec-websocket-protocol', 'chat'],
-      ['sec-websocket-protocol', 'share'],
-      ['sec-websocket-extensions', 'foo; 1'],
-      ['sec-websocket-extensions', 'bar; 2'],
-      ['sec-websocket-extensions', 'baz']
-    ]
+    headers: {
+      accept: ['abc', 'def', 'ghijklmnopqrst'],
+      host: ['foo', 'bar', 'baz'],
+      'www-authenticate': ['foo', 'bar', 'baz'],
+      'x-foo': ['bingo'],
+      'x-bar': ['banjo', 'bango'],
+      'sec-websocket-protocol': ['chat', 'share'],
+      'sec-websocket-extensions': ['foo; 1', 'bar; 2', 'baz']
+    }
   });
 });
