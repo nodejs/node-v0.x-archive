@@ -32,6 +32,9 @@ ipch/
 *.sdf
 *.opensdf
 
+# xcode stuff
+*.xcodeproj
+
 /config.mk
 /config.gypi
 *-nodegyp*
