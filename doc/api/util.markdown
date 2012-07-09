@@ -80,9 +80,12 @@ The default is to only recurse twice.  To make it recurse indefinitely, pass
 in `null` for `depth`.
 
 If `colors` is `true`, the output will be styled with ANSI color codes.
-Colors are customizable globally through the `util.inspect.styles` and
-`util.inspect.colors` objects.
 Defaults to `false`.
+
+Colors are customizable globally through the `util.inspect.styles` object.
+Each value is an array with 2 strings - opening and closing ANSI escape sequence.
+Used properties are: `special`, `number`, `boolean`, `undefined`, `null`, `string`, `date` and `regexp`.
+Special case is `name` which is not defined by default.
 
 Example of inspecting all properties of the `util` object:
 
