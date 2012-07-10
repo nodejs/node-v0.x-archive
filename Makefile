@@ -120,19 +120,19 @@ $(apidoc_dirs):
 out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
 	cp $< $@
 
-out/doc/changelog.html: ChangeLog doc/changelog-head.html doc/changelog-foot.html tools/build-changelog.sh
+out/doc/changelog.html: ChangeLog doc/changelog-head.html doc/changelog-foot.html tools/build-changelog.sh node
 	bash tools/build-changelog.sh
 
-out/doc/%.html: doc/%.html
+out/doc/%.html: doc/%.html node
 	cat $< | sed -e 's|__VERSION__|'$(VERSION)'|g' > $@
 
 out/doc/%: doc/%
 	cp -r $< $@
 
-out/doc/api/%.json: doc/api/%.markdown
+out/doc/api/%.json: doc/api/%.markdown node
 	out/Release/node tools/doc/generate.js --format=json $< > $@
 
-out/doc/api/%.html: doc/api/%.markdown
+out/doc/api/%.html: doc/api/%.markdown node
 	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
 
 email.md: ChangeLog tools/email-footer.md
@@ -207,7 +207,7 @@ $(PKG):
 		--doc tools/osx-pkg.pmdoc \
 		--out $(PKG)
 
-$(TARBALL): node out/doc
+$(TARBALL): node doc
 	@if [ "$(shell git status --porcelain | egrep -v '^\?\? ')" = "" ]; then \
 		exit 0 ; \
 	else \
