@@ -53,6 +53,8 @@
 
     startup.resolveArgv0();
 
+    startup.loadNoderc();
+
     // There are various modes that Node can run in. The most common two
     // are running from a script and running the REPL - but there are a few
     // others like the debugger or running --eval arguments. Here we decide
@@ -529,6 +531,20 @@
     if (!isWindows && argv0.indexOf('/') !== -1 && argv0.charAt(0) !== '/') {
       var path = NativeModule.require('path');
       process.argv[0] = path.join(cwd, process.argv[0]);
+    }
+  };
+
+  // look for .noderc and load it
+  startup.loadNoderc = function() {
+    // NODERC environment variable have highest priority
+    var noderc = process.env['NODERC'];
+    if (noderc) {
+      var Module = NativeModule.require('module');
+      try {
+        Module._load(noderc, null, false);
+      } catch (err) {
+        // do nothing, maybe report error
+      }
     }
   };
 
