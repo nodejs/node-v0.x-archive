@@ -35,7 +35,7 @@ using namespace v8::internal;
 // Use a testing allocator that clears memory before deletion.
 class ZeroingAllocationPolicy {
  public:
-  static void* New(size_t size) {
+  void* New(size_t size) {
     // Stash the size in the first word to use for Delete.
     size_t true_size = size + sizeof(size_t);
     size_t* result = reinterpret_cast<size_t*>(malloc(true_size));

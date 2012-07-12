@@ -303,7 +303,7 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   masm.positions_recorder()->StartGDBJITLineInfoRecording();
 #endif
 
-  FullCodeGenerator cgen(&masm, info);
+  FullCodeGenerator cgen(&masm, info, isolate->zone());
   cgen.Generate();
   if (cgen.HasStackOverflow()) {
     ASSERT(!isolate->has_pending_exception());
@@ -440,14 +440,14 @@ void FullCodeGenerator::PrepareForBailoutForId(unsigned id, State state) {
     }
   }
 #endif  // DEBUG
-  bailout_entries_.Add(entry);
+  bailout_entries_.Add(entry, zone());
 }
 
 
 void FullCodeGenerator::RecordTypeFeedbackCell(
     unsigned id, Handle<JSGlobalPropertyCell> cell) {
   TypeFeedbackCellEntry entry = { id, cell };
-  type_feedback_cells_.Add(entry);
+  type_feedback_cells_.Add(entry, zone());
 }
 
 
@@ -456,7 +456,7 @@ void FullCodeGenerator::RecordStackCheck(unsigned ast_id) {
   // state.
   ASSERT(masm_->pc_offset() > 0);
   BailoutEntry entry = { ast_id, static_cast<unsigned>(masm_->pc_offset()) };
-  stack_checks_.Add(entry);
+  stack_checks_.Add(entry, zone());
 }
 
 
@@ -570,7 +570,7 @@ void FullCodeGenerator::DoTest(const TestContext* context) {
 void FullCodeGenerator::VisitDeclarations(
     ZoneList<Declaration*>* declarations) {
   ZoneList<Handle<Object> >* saved_globals = globals_;
-  ZoneList<Handle<Object> > inner_globals(10);
+  ZoneList<Handle<Object> > inner_globals(10, zone());
   globals_ = &inner_globals;
 
   AstVisitor::VisitDeclarations(declarations);

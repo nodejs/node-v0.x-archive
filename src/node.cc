@@ -26,7 +26,7 @@
 #include "uv.h"
 
 #include "v8-debug.h"
-#ifdef HAVE_DTRACE
+#if defined HAVE_DTRACE || defined HAVE_ETW
 # include "node_dtrace.h"
 #endif
 
@@ -69,7 +69,6 @@ typedef int mode_t;
 #include "node_http_parser.h"
 #ifdef __POSIX__
 # include "node_signal_watcher.h"
-# include "node_stat_watcher.h"
 #endif
 #include "node_constants.h"
 #include "node_javascript.h"
@@ -121,12 +120,16 @@ static Persistent<String> disposed_symbol;
 
 static bool print_eval = false;
 static bool force_repl = false;
+static bool trace_deprecation = false;
 static char *eval_string = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
 static bool debug_wait_connect = false;
 static int debug_port=5858;
 static int max_stack_size = 0;
+
+// used by C++ modules as well
+bool no_deprecation = false;
 
 static uv_check_t check_tick_watcher;
 static uv_prepare_t prepare_tick_watcher;
@@ -1095,12 +1098,16 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
   } else if (strcasecmp(*encoding, "hex") == 0) {
     return HEX;
   } else if (strcasecmp(*encoding, "raw") == 0) {
-    fprintf(stderr, "'raw' (array of integers) has been removed. "
-                    "Use 'binary'.\n");
+    if (!no_deprecation) {
+      fprintf(stderr, "'raw' (array of integers) has been removed. "
+                      "Use 'binary'.\n");
+    }
     return BINARY;
   } else if (strcasecmp(*encoding, "raws") == 0) {
-    fprintf(stderr, "'raws' encoding has been renamed to 'binary'. "
-                    "Please update your code.\n");
+    if (!no_deprecation) {
+      fprintf(stderr, "'raws' encoding has been renamed to 'binary'. "
+                      "Please update your code.\n");
+    }
     return BINARY;
   } else {
     return _default;
@@ -1952,8 +1959,8 @@ static Handle<Value> EnvGetter(Local<String> property,
     return scope.Close(String::New(reinterpret_cast<uint16_t*>(buffer), result));
   }
 #endif
-  // Not found
-  return Undefined();
+  // Not found.  Fetch from prototype.
+  return scope.Close(info.Data().As<Object>()->Get(property));
 }
 
 
@@ -2123,8 +2130,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   Local<FunctionTemplate> process_template = FunctionTemplate::New();
 
-  process = Persistent<Object>::New(process_template->GetFunction()->NewInstance());
+  process_template->SetClassName(String::NewSymbol("process"));
 
+  process = Persistent<Object>::New(process_template->GetFunction()->NewInstance());
 
   process->SetAccessor(String::New("title"),
                        ProcessTitleGetter,
@@ -2132,11 +2140,6 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   // process.version
   process->Set(String::NewSymbol("version"), String::New(NODE_VERSION));
-
-#ifdef NODE_PREFIX
-  // process.installPrefix
-  process->Set(String::NewSymbol("installPrefix"), String::New(NODE_PREFIX));
-#endif
 
   // process.moduleLoadList
   module_load_list = Persistent<Array>::New(Array::New());
@@ -2207,7 +2210,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
                                        EnvQuery,
                                        EnvDeleter,
                                        EnvEnumerator,
-                                       Undefined());
+                                       Object::New());
   Local<Object> env = envTemplate->NewInstance();
   process->Set(String::NewSymbol("env"), env);
 
@@ -2227,6 +2230,16 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   // -i, --interactive
   if (force_repl) {
     process->Set(String::NewSymbol("_forceRepl"), True());
+  }
+
+  // --no-deprecation
+  if (no_deprecation) {
+    process->Set(String::NewSymbol("noDeprecation"), True());
+  }
+
+  // --trace-deprecation
+  if (trace_deprecation) {
+    process->Set(String::NewSymbol("traceDeprecation"), True());
   }
 
   size_t size = 2*PATH_MAX;
@@ -2325,7 +2338,7 @@ void Load(Handle<Object> process_l) {
   Local<Object> global = v8::Context::GetCurrent()->Global();
   Local<Value> args[1] = { Local<Value>::New(process_l) };
 
-#ifdef HAVE_DTRACE
+#if defined HAVE_DTRACE || defined HAVE_ETW
   InitDTrace(global);
 #endif
 
@@ -2376,8 +2389,9 @@ static void PrintHelp() {
          "  -p, --print          print result of --eval\n"
          "  -i, --interactive    always enter the REPL even if stdin\n"
          "                       does not appear to be a terminal\n"
+         "  --no-deprecation     silence deprecation warnings\n"
+         "  --trace-deprecation  show stack traces on deprecations\n"
          "  --v8-options         print v8 command line options\n"
-         "  --vars               print various compiled-in variables\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
          "\n"
          "Environment variables:\n"
@@ -2407,14 +2421,6 @@ static void ParseArgs(int argc, char **argv) {
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
       exit(0);
-    } else if (strcmp(arg, "--vars") == 0) {
-#ifdef NODE_PREFIX
-      printf("NODE_PREFIX: %s\n", NODE_PREFIX);
-#endif
-#ifdef NODE_CFLAGS
-      printf("NODE_CFLAGS: %s\n", NODE_CFLAGS);
-#endif
-      exit(0);
     } else if (strstr(arg, "--max-stack-size=") == arg) {
       const char *p = 0;
       p = 1 + strchr(arg, '=');
@@ -2442,6 +2448,12 @@ static void ParseArgs(int argc, char **argv) {
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--v8-options") == 0) {
       argv[i] = const_cast<char*>("--help");
+    } else if (strcmp(arg, "--no-deprecation") == 0) {
+      argv[i] = const_cast<char*>("");
+      no_deprecation = true;
+    } else if (strcmp(arg, "--trace-deprecation") == 0) {
+      argv[i] = const_cast<char*>("");
+      trace_deprecation = true;
     } else if (argv[i][0] != '-') {
       break;
     }
@@ -2697,6 +2709,9 @@ static Handle<Value> DebugEnd(const Arguments& args) {
 char** Init(int argc, char *argv[]) {
   // Initialize prog_start_time to get relative uptime.
   uv_uptime(&prog_start_time);
+
+  // Make inherited handles noninheritable.
+  uv_disable_stdio_inheritance();
 
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);

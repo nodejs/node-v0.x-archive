@@ -3,7 +3,7 @@
 <!-- type=global -->
 
 The `process` object is a global object and can be accessed from anywhere.
-It is an instance of `EventEmitter`.
+It is an instance of [EventEmitter][].
 
 
 ## Event: 'exit'
@@ -295,17 +295,10 @@ An example of the possible output looks like:
          node_shared_zlib: 'false',
          node_use_dtrace: 'false',
          node_use_openssl: 'true',
-         node_use_system_openssl: 'false',
+         node_shared_openssl: 'false',
          strict_aliasing: 'true',
          target_arch: 'x64',
          v8_use_snapshot: 'true' } }
-
-## process.installPrefix
-
-A compiled-in property that exposes `NODE_PREFIX`.
-
-    console.log('Prefix: ' + process.installPrefix);
-
 
 ## process.kill(pid, [signal])
 
@@ -425,3 +418,5 @@ a diff reading, useful for benchmarks and measuring intervals:
       console.log('benchmark took %d seconds and %d nanoseconds', t[0], t[1]);
       // benchmark took 1 seconds and 6962306 nanoseconds
     }, 1000);
+
+[EventEmitter]: events.html#events_class_events_eventemitter

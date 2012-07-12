@@ -41,6 +41,55 @@ Running node will now share port 8000 between the workers:
 This feature was introduced recently, and may change in future versions.
 Please try it out and provide feedback.
 
+Also note that, on Windows, it is not yet possible to set up a named pipe
+server in a worker.
+
+## How It Works
+
+<!--type=misc-->
+
+The worker processes are spawned using the `child_process.fork` method,
+so that they can communicate with the parent via IPC and pass server
+handles back and forth.
+
+When you call `server.listen(...)` in a worker, it serializes the
+arguments and passes the request to the master process.  If the master
+process already has a listening server matching the worker's
+requirements, then it passes the handle to the worker.  If it does not
+already have a listening server matching that requirement, then it will
+create one, and pass the handle to the child.
+
+This causes potentially surprising behavior in three edge cases:
+
+1. `server.listen({fd: 7})` Because the message is passed to the master,
+   file descriptor 7 **in the parent** will be listened on, and the
+   handle passed to the worker, rather than listening to the worker's
+   idea of what the number 7 file descriptor references.
+2. `server.listen(handle)` Listening on handles explicitly will cause
+   the worker to use the supplied handle, rather than talk to the master
+   process.  If the worker already has the handle, then it's presumed
+   that you know what you are doing.
+3. `server.listen(0)` Normally, this will case servers to listen on a
+   random port.  However, in a cluster, each worker will receive the
+   same "random" port each time they do `listen(0)`.  In essence, the
+   port is random the first time, but predictable thereafter.  If you
+   want to listen on a unique port, generate a port number based on the
+   cluster worker ID.
+
+When multiple processes are all `accept()`ing on the same underlying
+resource, the operating system load-balances across them very
+efficiently.  There is no routing logic in Node.js, or in your program,
+and no shared state between the workers.  Therefore, it is important to
+design your program such that it does not rely too heavily on in-memory
+data objects for things like sessions and login.
+
+Because workers are all separate processes, they can be killed or
+re-spawned depending on your program's needs, without affecting other
+workers.  As long as there are some workers still alive, the server will
+continue to accept connections.  Node does not automatically manage the
+number of workers for you, however.  It is your responsibility to manage
+the worker pool for your application's needs.
+
 ## cluster.settings
 
 * {Object}
@@ -82,13 +131,13 @@ This can be used to log worker activity, or to create your own timeout.
     }
 
     cluster.on('fork', function(worker) {
-      timeouts[worker.uniqueID] = setTimeout(errorMsg, 2000);
+      timeouts[worker.id] = setTimeout(errorMsg, 2000);
     });
     cluster.on('listening', function(worker, address) {
-      clearTimeout(timeouts[worker.uniqueID]);
+      clearTimeout(timeouts[worker.id]);
     });
     cluster.on('exit', function(worker, code, signal) {
-      clearTimeout(timeouts[worker.uniqueID]);
+      clearTimeout(timeouts[worker.id]);
       errorMsg();
     });
 
@@ -137,13 +186,13 @@ the process is stuck in a cleanup or if there are long-living
 connections.
 
     cluster.on('disconnect', function(worker) {
-      console.log('The worker #' + worker.uniqueID + ' has disconnected');
+      console.log('The worker #' + worker.id + ' has disconnected');
     });
 
 ## Event: 'exit'
 
 * `worker` {Worker object}
-* `code` {Number} the exit code, if it exited normally. 
+* `code` {Number} the exit code, if it exited normally.
 * `signal` {String} the name of the signal (eg. `'SIGHUP'`) that caused
   the process to be killed.
 
@@ -184,7 +233,7 @@ Example:
       args : ["--use", "https"],
       silent : true
     });
-    cluster.autoFork();
+    cluster.fork();
 
 ## cluster.fork([env])
 
@@ -219,13 +268,13 @@ The method takes an optional callback argument which will be called when finishe
 
 * {Object}
 
-In the cluster, all living worker objects are stored in this object with their
-`uniqueID` as the key. This makes it easy to loop through all living workers.
+In the cluster, all living worker objects are stored in this object by there
+`id` as the key. This makes it easy to loop through all living workers.
 
     // Go through all workers
     function eachWorker(callback) {
-      for (var uniqueID in cluster.workers) {
-        callback(cluster.workers[uniqueID]);
+      for (var id in cluster.workers) {
+        callback(cluster.workers[id]);
       }
     }
     eachWorker(function(worker) {
@@ -233,10 +282,10 @@ In the cluster, all living worker objects are stored in this object with their
     });
 
 Should you wish to reference a worker over a communication channel, using
-the worker's uniqueID is the easiest way to find the worker.
+the worker's unique id is the easiest way to find the worker.
 
-    socket.on('data', function(uniqueID) {
-      var worker = cluster.workers[uniqueID];
+    socket.on('data', function(id) {
+      var worker = cluster.workers[id];
     });
 
 ## Class: Worker
@@ -245,12 +294,12 @@ A Worker object contains all public information and method about a worker.
 In the master it can be obtained using `cluster.workers`. In a worker
 it can be obtained using `cluster.worker`.
 
-### worker.uniqueID
+### worker.id
 
 * {String}
 
 Each new worker is given its own unique id, this id is stored in the
-`uniqueID`.
+`id`.
 
 While a worker is alive, this is the key that indexes it in
 cluster.workers
@@ -386,9 +435,13 @@ in the master process using the message system:
       }
 
       // Start workers and listen for messages containing notifyRequest
-      cluster.autoFork();
-      Object.keys(cluster.workers).forEach(function(uniqueID) {
-        cluster.workers[uniqueID].on('message', messageHandler);
+      var numCPUs = require('os').cpus().length;
+      for (var i = 0; i < numCPUs; i++) {
+        cluster.fork();
+      }
+
+      Object.keys(cluster.workers).forEach(function(id) {
+        cluster.workers[id].on('message', messageHandler);
       });
 
     } else {
@@ -434,12 +487,12 @@ on the specified worker.
 
 ### Event: 'exit'
 
-* `code` {Number} the exit code, if it exited normally. 
+* `code` {Number} the exit code, if it exited normally.
 * `signal` {String} the name of the signal (eg. `'SIGHUP'`) that caused
   the process to be killed.
 
 Emitted by the individual worker instance, when the underlying child process
-is terminated.  See [child_process event: 'exit'](child_process.html#child_process_event_exit). 
+is terminated.  See [child_process event: 'exit'](child_process.html#child_process_event_exit).
 
     var worker = cluster.fork();
     worker.on('exit', function(code, signal) {

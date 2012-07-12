@@ -66,21 +66,26 @@ Heap::Heap()
     : isolate_(NULL),
 // semispace_size_ should be a power of 2 and old_generation_size_ should be
 // a multiple of Page::kPageSize.
-#if defined(ANDROID)
-#define LUMP_OF_MEMORY (128 * KB)
-      code_range_size_(0),
-#elif defined(V8_TARGET_ARCH_X64)
+#if defined(V8_TARGET_ARCH_X64)
 #define LUMP_OF_MEMORY (2 * MB)
       code_range_size_(512*MB),
 #else
 #define LUMP_OF_MEMORY MB
       code_range_size_(0),
 #endif
+#if defined(ANDROID)
+      reserved_semispace_size_(4 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
+      max_semispace_size_(4 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
+      initial_semispace_size_(Page::kPageSize),
+      max_old_generation_size_(192*MB),
+      max_executable_size_(max_old_generation_size_),
+#else
       reserved_semispace_size_(8 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
       max_semispace_size_(8 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
       initial_semispace_size_(Page::kPageSize),
       max_old_generation_size_(700ul * LUMP_OF_MEMORY),
       max_executable_size_(256l * LUMP_OF_MEMORY),
+#endif
 
 // Variables set based on semispace_size_ and old_generation_size_ in
 // ConfigureHeap (survived_since_last_expansion_, external_allocation_limit_)
@@ -3017,8 +3022,8 @@ MaybeObject* Heap::AllocateSharedFunctionInfo(Object* name) {
   share->set_initial_map(undefined_value(), SKIP_WRITE_BARRIER);
   share->set_this_property_assignments(undefined_value(), SKIP_WRITE_BARRIER);
   share->set_ast_node_count(0);
-  share->set_deopt_counter(FLAG_deopt_every_n_times);
-  share->set_ic_age(0);
+  share->set_stress_deopt_counter(FLAG_deopt_every_n_times);
+  share->set_counters(0);
 
   // Set integer fields (smi or int, depending on the architecture).
   share->set_length(0);
@@ -3666,7 +3671,8 @@ MaybeObject* Heap::AllocateFunctionPrototype(JSFunction* function) {
   Map* new_map;
   ASSERT(object_function->has_initial_map());
   { MaybeObject* maybe_map =
-        object_function->initial_map()->CopyDropTransitions();
+        object_function->initial_map()->CopyDropTransitions(
+            DescriptorArray::MAY_BE_SHARED);
     if (!maybe_map->To<Map>(&new_map)) return maybe_map;
   }
   Object* prototype;
@@ -3814,7 +3820,8 @@ MaybeObject* Heap::AllocateInitialMap(JSFunction* fun) {
       fun->shared()->ForbidInlineConstructor();
     } else {
       DescriptorArray* descriptors;
-      { MaybeObject* maybe_descriptors_obj = DescriptorArray::Allocate(count);
+      { MaybeObject* maybe_descriptors_obj =
+            DescriptorArray::Allocate(count, DescriptorArray::MAY_BE_SHARED);
         if (!maybe_descriptors_obj->To<DescriptorArray>(&descriptors)) {
           return maybe_descriptors_obj;
         }

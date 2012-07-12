@@ -37,6 +37,7 @@ using v8::Object;
 using v8::Persistent;
 using v8::String;
 using v8::Value;
+using v8::V8;
 
 
 namespace node {
@@ -49,10 +50,11 @@ SlabAllocator::SlabAllocator(unsigned int size) {
 
 SlabAllocator::~SlabAllocator() {
   if (!initialized_) return;
-  slab_sym_.Clear();
+  if (V8::IsDead()) return;
   slab_sym_.Dispose();
-  slab_.Clear();
+  slab_sym_.Clear();
   slab_.Dispose();
+  slab_.Clear();
 }
 
 
@@ -92,8 +94,8 @@ char* SlabAllocator::Allocate(Handle<Object> obj, unsigned int size) {
   }
 
   if (slab_.IsEmpty() || offset_ + size > size_) {
-    slab_.Clear();
     slab_.Dispose();
+    slab_.Clear();
     slab_ = Persistent<Object>::New(NewSlab(size_));
     offset_ = 0;
     last_ptr_ = NULL;

@@ -571,6 +571,9 @@ void LCodeGen::CallCodeGeneric(Handle<Code> code,
                                LInstruction* instr,
                                SafepointMode safepoint_mode) {
   ASSERT(instr != NULL);
+  // Block literal pool emission to ensure nop indicating no inlined smi code
+  // is in the correct position.
+  Assembler::BlockConstPoolScope block_const_pool(masm());
   LPointerMap* pointers = instr->pointer_map();
   RecordPosition(pointers->position());
   __ Call(code, mode);
@@ -631,14 +634,15 @@ void LCodeGen::RegisterEnvironmentForDeoptimization(LEnvironment* environment,
         ++jsframe_count;
       }
     }
-    Translation translation(&translations_, frame_count, jsframe_count);
+    Translation translation(&translations_, frame_count, jsframe_count,
+                            zone());
     WriteTranslation(environment, &translation);
     int deoptimization_index = deoptimizations_.length();
     int pc_offset = masm()->pc_offset();
     environment->Register(deoptimization_index,
                           translation.index(),
                           (mode == Safepoint::kLazyDeopt) ? pc_offset : -1);
-    deoptimizations_.Add(environment);
+    deoptimizations_.Add(environment, zone());
   }
 }
 
@@ -670,7 +674,7 @@ void LCodeGen::DeoptimizeIf(Condition cc, LEnvironment* environment) {
     // jump entry if this is the case.
     if (deopt_jump_table_.is_empty() ||
         (deopt_jump_table_.last().address != entry)) {
-      deopt_jump_table_.Add(JumpTableEntry(entry));
+      deopt_jump_table_.Add(JumpTableEntry(entry), zone());
     }
     __ b(cc, &deopt_jump_table_.last().label);
   }
@@ -715,7 +719,7 @@ int LCodeGen::DefineDeoptimizationLiteral(Handle<Object> literal) {
   for (int i = 0; i < deoptimization_literals_.length(); ++i) {
     if (deoptimization_literals_[i].is_identical_to(literal)) return i;
   }
-  deoptimization_literals_.Add(literal);
+  deoptimization_literals_.Add(literal, zone());
   return result;
 }
 
@@ -761,14 +765,14 @@ void LCodeGen::RecordSafepoint(
   for (int i = 0; i < operands->length(); i++) {
     LOperand* pointer = operands->at(i);
     if (pointer->IsStackSlot()) {
-      safepoint.DefinePointerSlot(pointer->index());
+      safepoint.DefinePointerSlot(pointer->index(), zone());
     } else if (pointer->IsRegister() && (kind & Safepoint::kWithRegisters)) {
-      safepoint.DefinePointerRegister(ToRegister(pointer));
+      safepoint.DefinePointerRegister(ToRegister(pointer), zone());
     }
   }
   if (kind & Safepoint::kWithRegisters) {
     // Register cp always contains a pointer to the context.
-    safepoint.DefinePointerRegister(cp);
+    safepoint.DefinePointerRegister(cp, zone());
   }
 }
 
@@ -780,7 +784,7 @@ void LCodeGen::RecordSafepoint(LPointerMap* pointers,
 
 
 void LCodeGen::RecordSafepoint(Safepoint::DeoptMode deopt_mode) {
-  LPointerMap empty_pointers(RelocInfo::kNoPosition);
+  LPointerMap empty_pointers(RelocInfo::kNoPosition, zone());
   RecordSafepoint(&empty_pointers, deopt_mode);
 }
 
@@ -1190,7 +1194,7 @@ void LCodeGen::DoDivI(LDivI* instr) {
 
   // Call the stub. The numbers in r0 and r1 have
   // to be tagged to Smis. If that is not possible, deoptimize.
-  DeferredDivI* deferred = new DeferredDivI(this, instr);
+  DeferredDivI* deferred = new(zone()) DeferredDivI(this, instr);
 
   __ TrySmiTag(left, &deoptimize, scratch);
   __ TrySmiTag(right, &deoptimize, scratch);
@@ -1684,6 +1688,9 @@ void LCodeGen::DoArithmeticT(LArithmeticT* instr) {
   ASSERT(ToRegister(instr->result()).is(r0));
 
   BinaryOpStub stub(instr->op(), NO_OVERWRITE);
+  // Block literal pool emission to ensure nop indicating no inlined smi code
+  // is in the correct position.
+  Assembler::BlockConstPoolScope block_const_pool(masm());
   CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
   __ nop();  // Signals no inlined code.
 }
@@ -2296,7 +2303,7 @@ void LCodeGen::DoInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr) {
   };
 
   DeferredInstanceOfKnownGlobal* deferred;
-  deferred = new DeferredInstanceOfKnownGlobal(this, instr);
+  deferred = new(zone()) DeferredInstanceOfKnownGlobal(this, instr);
 
   Label done, false_result;
   Register object = ToRegister(instr->InputAt(0));
@@ -2315,20 +2322,25 @@ void LCodeGen::DoInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr) {
   Label cache_miss;
   Register map = temp;
   __ ldr(map, FieldMemOperand(object, HeapObject::kMapOffset));
-  __ bind(deferred->map_check());  // Label for calculating code patching.
-  // We use Factory::the_hole_value() on purpose instead of loading from the
-  // root array to force relocation to be able to later patch with
-  // the cached map.
-  Handle<JSGlobalPropertyCell> cell =
-      factory()->NewJSGlobalPropertyCell(factory()->the_hole_value());
-  __ mov(ip, Operand(Handle<Object>(cell)));
-  __ ldr(ip, FieldMemOperand(ip, JSGlobalPropertyCell::kValueOffset));
-  __ cmp(map, Operand(ip));
-  __ b(ne, &cache_miss);
-  // We use Factory::the_hole_value() on purpose instead of loading from the
-  // root array to force relocation to be able to later patch
-  // with true or false.
-  __ mov(result, Operand(factory()->the_hole_value()));
+  {
+    // Block constant pool emission to ensure the positions of instructions are
+    // as expected by the patcher. See InstanceofStub::Generate().
+    Assembler::BlockConstPoolScope block_const_pool(masm());
+    __ bind(deferred->map_check());  // Label for calculating code patching.
+    // We use Factory::the_hole_value() on purpose instead of loading from the
+    // root array to force relocation to be able to later patch with
+    // the cached map.
+    Handle<JSGlobalPropertyCell> cell =
+        factory()->NewJSGlobalPropertyCell(factory()->the_hole_value());
+    __ mov(ip, Operand(Handle<Object>(cell)));
+    __ ldr(ip, FieldMemOperand(ip, JSGlobalPropertyCell::kValueOffset));
+    __ cmp(map, Operand(ip));
+    __ b(ne, &cache_miss);
+    // We use Factory::the_hole_value() on purpose instead of loading from the
+    // root array to force relocation to be able to later patch
+    // with true or false.
+    __ mov(result, Operand(factory()->the_hole_value()));
+  }
   __ b(&done);
 
   // The inlined call site cache did not match. Check null and string before
@@ -2559,12 +2571,12 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
 void LCodeGen::EmitLoadFieldOrConstantFunction(Register result,
                                                Register object,
                                                Handle<Map> type,
-                                               Handle<String> name) {
+                                               Handle<String> name,
+                                               LEnvironment* env) {
   LookupResult lookup(isolate());
   type->LookupInDescriptors(NULL, *name, &lookup);
-  ASSERT(lookup.IsFound() &&
-         (lookup.type() == FIELD || lookup.type() == CONSTANT_FUNCTION));
-  if (lookup.type() == FIELD) {
+  ASSERT(lookup.IsFound() || lookup.IsCacheable());
+  if (lookup.IsFound() && lookup.type() == FIELD) {
     int index = lookup.GetLocalFieldIndexFromMap(*type);
     int offset = index * kPointerSize;
     if (index < 0) {
@@ -2576,9 +2588,23 @@ void LCodeGen::EmitLoadFieldOrConstantFunction(Register result,
       __ ldr(result, FieldMemOperand(object, JSObject::kPropertiesOffset));
       __ ldr(result, FieldMemOperand(result, offset + FixedArray::kHeaderSize));
     }
-  } else {
+  } else if (lookup.IsFound() && lookup.type() == CONSTANT_FUNCTION) {
     Handle<JSFunction> function(lookup.GetConstantFunctionFromMap(*type));
     __ LoadHeapObject(result, function);
+  } else {
+    // Negative lookup.
+    // Check prototypes.
+    Handle<HeapObject> current(HeapObject::cast((*type)->prototype()));
+    Heap* heap = type->GetHeap();
+    while (*current != heap->null_value()) {
+      __ LoadHeapObject(result, current);
+      __ ldr(result, FieldMemOperand(result, HeapObject::kMapOffset));
+      __ cmp(result, Operand(Handle<Map>(current->map())));
+      DeoptimizeIf(ne, env);
+      current =
+          Handle<HeapObject>(HeapObject::cast(current->map()->prototype()));
+    }
+    __ LoadRoot(result, Heap::kUndefinedValueRootIndex);
   }
 }
 
@@ -2586,7 +2612,7 @@ void LCodeGen::EmitLoadFieldOrConstantFunction(Register result,
 void LCodeGen::DoLoadNamedFieldPolymorphic(LLoadNamedFieldPolymorphic* instr) {
   Register object = ToRegister(instr->object());
   Register result = ToRegister(instr->result());
-  Register scratch = scratch0();
+  Register object_map = scratch0();
 
   int map_count = instr->hydrogen()->types()->length();
   bool need_generic = instr->hydrogen()->need_generic();
@@ -2597,18 +2623,24 @@ void LCodeGen::DoLoadNamedFieldPolymorphic(LLoadNamedFieldPolymorphic* instr) {
   }
   Handle<String> name = instr->hydrogen()->name();
   Label done;
-  __ ldr(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+  __ ldr(object_map, FieldMemOperand(object, HeapObject::kMapOffset));
   for (int i = 0; i < map_count; ++i) {
     bool last = (i == map_count - 1);
     Handle<Map> map = instr->hydrogen()->types()->at(i);
-    __ cmp(scratch, Operand(map));
+    Label check_passed;
+    __ CompareMap(
+        object_map, map, &check_passed, ALLOW_ELEMENT_TRANSITION_MAPS);
     if (last && !need_generic) {
       DeoptimizeIf(ne, instr->environment());
-      EmitLoadFieldOrConstantFunction(result, object, map, name);
+      __ bind(&check_passed);
+      EmitLoadFieldOrConstantFunction(
+          result, object, map, name, instr->environment());
     } else {
       Label next;
       __ b(ne, &next);
-      EmitLoadFieldOrConstantFunction(result, object, map, name);
+      __ bind(&check_passed);
+      EmitLoadFieldOrConstantFunction(
+          result, object, map, name, instr->environment());
       __ b(&done);
       __ bind(&next);
     }
@@ -2752,9 +2784,14 @@ void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
 
   // Check for the hole value.
   if (instr->hydrogen()->RequiresHoleCheck()) {
-    __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
-    __ cmp(result, scratch);
-    DeoptimizeIf(eq, instr->environment());
+    if (IsFastSmiElementsKind(instr->hydrogen()->elements_kind())) {
+      __ tst(result, Operand(kSmiTagMask));
+      DeoptimizeIf(ne, instr->environment());
+    } else {
+      __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
+      __ cmp(result, scratch);
+      DeoptimizeIf(eq, instr->environment());
+    }
   }
 }
 
@@ -3257,7 +3294,7 @@ void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
   } else {
     // Representation is tagged.
     DeferredMathAbsTaggedHeapNumber* deferred =
-        new DeferredMathAbsTaggedHeapNumber(this, instr);
+        new(zone()) DeferredMathAbsTaggedHeapNumber(this, instr);
     Register input = ToRegister(instr->InputAt(0));
     // Smi check.
     __ JumpIfNotSmi(input, deferred->entry());
@@ -3434,7 +3471,7 @@ void LCodeGen::DoRandom(LRandom* instr) {
     LRandom* instr_;
   };
 
-  DeferredDoRandom* deferred = new DeferredDoRandom(this, instr);
+  DeferredDoRandom* deferred = new(zone()) DeferredDoRandom(this, instr);
 
   // Having marked this instruction as a call we can use any
   // registers.
@@ -3675,6 +3712,18 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   if (!instr->transition().is_null()) {
     __ mov(scratch, Operand(instr->transition()));
     __ str(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+    if (instr->hydrogen()->NeedsWriteBarrierForMap()) {
+      Register temp = ToRegister(instr->TempAt(0));
+      // Update the write barrier for the map field.
+      __ RecordWriteField(object,
+                          HeapObject::kMapOffset,
+                          scratch,
+                          temp,
+                          kLRHasBeenSaved,
+                          kSaveFPRegs,
+                          OMIT_REMEMBERED_SET,
+                          OMIT_SMI_CHECK);
+    }
   }
 
   // Do the store.
@@ -3967,7 +4016,7 @@ void LCodeGen::DoStringCharCodeAt(LStringCharCodeAt* instr) {
   };
 
   DeferredStringCharCodeAt* deferred =
-      new DeferredStringCharCodeAt(this, instr);
+      new(zone()) DeferredStringCharCodeAt(this, instr);
 
   StringCharLoadGenerator::Generate(masm(),
                                     ToRegister(instr->string()),
@@ -4022,7 +4071,7 @@ void LCodeGen::DoStringCharFromCode(LStringCharFromCode* instr) {
   };
 
   DeferredStringCharFromCode* deferred =
-      new DeferredStringCharFromCode(this, instr);
+      new(zone()) DeferredStringCharFromCode(this, instr);
 
   ASSERT(instr->hydrogen()->value()->representation().IsInteger32());
   Register char_code = ToRegister(instr->char_code());
@@ -4096,7 +4145,7 @@ void LCodeGen::DoNumberTagI(LNumberTagI* instr) {
   Register src = ToRegister(instr->InputAt(0));
   Register dst = ToRegister(instr->result());
 
-  DeferredNumberTagI* deferred = new DeferredNumberTagI(this, instr);
+  DeferredNumberTagI* deferred = new(zone()) DeferredNumberTagI(this, instr);
   __ SmiTag(dst, src, SetCC);
   __ b(vs, deferred->entry());
   __ bind(deferred->exit());
@@ -4167,7 +4216,7 @@ void LCodeGen::DoNumberTagD(LNumberTagD* instr) {
   Register temp1 = ToRegister(instr->TempAt(0));
   Register temp2 = ToRegister(instr->TempAt(1));
 
-  DeferredNumberTagD* deferred = new DeferredNumberTagD(this, instr);
+  DeferredNumberTagD* deferred = new(zone()) DeferredNumberTagD(this, instr);
   if (FLAG_inline_new) {
     __ LoadRoot(scratch, Heap::kHeapNumberMapRootIndex);
     __ AllocateHeapNumber(reg, temp1, temp2, scratch, deferred->entry());
@@ -4369,7 +4418,7 @@ void LCodeGen::DoTaggedToI(LTaggedToI* instr) {
 
   Register input_reg = ToRegister(input);
 
-  DeferredTaggedToI* deferred = new DeferredTaggedToI(this, instr);
+  DeferredTaggedToI* deferred = new(zone()) DeferredTaggedToI(this, instr);
 
   // Optimistically untag the input.
   // If the input is a HeapObject, SmiUntag will set the carry flag.
@@ -4629,7 +4678,8 @@ void LCodeGen::DoAllocateObject(LAllocateObject* instr) {
     LAllocateObject* instr_;
   };
 
-  DeferredAllocateObject* deferred = new DeferredAllocateObject(this, instr);
+  DeferredAllocateObject* deferred =
+      new(zone()) DeferredAllocateObject(this, instr);
 
   Register result = ToRegister(instr->result());
   Register scratch = ToRegister(instr->TempAt(0));
@@ -5139,6 +5189,8 @@ void LCodeGen::EnsureSpaceForLazyDeopt() {
   int current_pc = masm()->pc_offset();
   int patch_size = Deoptimizer::patch_size();
   if (current_pc < last_lazy_deopt_pc_ + patch_size) {
+    // Block literal pool emission for duration of padding.
+    Assembler::BlockConstPoolScope block_const_pool(masm());
     int padding_size = last_lazy_deopt_pc_ + patch_size - current_pc;
     ASSERT_EQ(0, padding_size % Assembler::kInstrSize);
     while (padding_size > 0) {
@@ -5233,7 +5285,7 @@ void LCodeGen::DoStackCheck(LStackCheck* instr) {
     ASSERT(instr->hydrogen()->is_backwards_branch());
     // Perform stack overflow check if this goto needs it before jumping.
     DeferredStackCheck* deferred_stack_check =
-        new DeferredStackCheck(this, instr);
+        new(zone()) DeferredStackCheck(this, instr);
     __ LoadRoot(ip, Heap::kStackLimitRootIndex);
     __ cmp(sp, Operand(ip));
     __ b(lo, deferred_stack_check->entry());

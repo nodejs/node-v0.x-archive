@@ -262,7 +262,7 @@ bool Rewriter::Rewrite(CompilationInfo* info) {
       Statement* result_statement =
           processor.factory()->NewReturnStatement(result_proxy);
       result_statement->set_statement_pos(position);
-      body->Add(result_statement);
+      body->Add(result_statement, info->isolate()->zone());
     }
   }
 

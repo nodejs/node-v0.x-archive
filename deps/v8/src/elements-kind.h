@@ -86,6 +86,17 @@ ElementsKind GetFastElementsKindFromSequenceIndex(int sequence_index);
 int GetSequenceIndexFromFastElementsKind(ElementsKind elements_kind);
 
 
+inline bool IsDictionaryElementsKind(ElementsKind kind) {
+  return kind == DICTIONARY_ELEMENTS;
+}
+
+
+inline bool IsExternalArrayElementsKind(ElementsKind kind) {
+  return kind >= FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND &&
+      kind <= LAST_EXTERNAL_ARRAY_ELEMENTS_KIND;
+}
+
+
 inline bool IsFastElementsKind(ElementsKind kind) {
   ASSERT(FIRST_FAST_ELEMENTS_KIND == 0);
   return kind <= FAST_HOLEY_DOUBLE_ELEMENTS;

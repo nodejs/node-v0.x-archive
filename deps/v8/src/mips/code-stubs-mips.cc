@@ -3130,7 +3130,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
       } else {
         // Tail call that writes the int32 in a2 to the heap number in v0, using
         // a3 and a0 as scratch. v0 is preserved and returned.
-        __ mov(a0, t1);
+        __ mov(v0, t1);
         WriteInt32ToHeapNumberStub stub(a2, v0, a3, a0);
         __ TailCallStub(&stub);
       }

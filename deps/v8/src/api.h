@@ -200,6 +200,8 @@ class Utils {
       v8::internal::Handle<v8::internal::ObjectTemplateInfo> obj);
   static inline Local<Signature> ToLocal(
       v8::internal::Handle<v8::internal::SignatureInfo> obj);
+  static inline Local<AccessorSignature> AccessorSignatureToLocal(
+      v8::internal::Handle<v8::internal::FunctionTemplateInfo> obj);
   static inline Local<TypeSwitch> ToLocal(
       v8::internal::Handle<v8::internal::TypeSwitchInfo> obj);
 
@@ -233,6 +235,8 @@ class Utils {
       OpenHandle(const v8::Context* context);
   static inline v8::internal::Handle<v8::internal::SignatureInfo>
       OpenHandle(const v8::Signature* sig);
+  static inline v8::internal::Handle<v8::internal::FunctionTemplateInfo>
+      OpenHandle(const v8::AccessorSignature* sig);
   static inline v8::internal::Handle<v8::internal::TypeSwitchInfo>
       OpenHandle(const v8::TypeSwitch* that);
   static inline v8::internal::Handle<v8::internal::Foreign>
@@ -276,6 +280,7 @@ MAKE_TO_LOCAL(ToLocal, Foreign, External)
 MAKE_TO_LOCAL(ToLocal, FunctionTemplateInfo, FunctionTemplate)
 MAKE_TO_LOCAL(ToLocal, ObjectTemplateInfo, ObjectTemplate)
 MAKE_TO_LOCAL(ToLocal, SignatureInfo, Signature)
+MAKE_TO_LOCAL(AccessorSignatureToLocal, FunctionTemplateInfo, AccessorSignature)
 MAKE_TO_LOCAL(ToLocal, TypeSwitchInfo, TypeSwitch)
 MAKE_TO_LOCAL(MessageToLocal, Object, Message)
 MAKE_TO_LOCAL(StackTraceToLocal, JSArray, StackTrace)
@@ -300,6 +305,7 @@ MAKE_OPEN_HANDLE(Template, TemplateInfo)
 MAKE_OPEN_HANDLE(FunctionTemplate, FunctionTemplateInfo)
 MAKE_OPEN_HANDLE(ObjectTemplate, ObjectTemplateInfo)
 MAKE_OPEN_HANDLE(Signature, SignatureInfo)
+MAKE_OPEN_HANDLE(AccessorSignature, FunctionTemplateInfo)
 MAKE_OPEN_HANDLE(TypeSwitch, TypeSwitchInfo)
 MAKE_OPEN_HANDLE(Data, Object)
 MAKE_OPEN_HANDLE(RegExp, JSRegExp)

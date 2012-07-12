@@ -23,6 +23,7 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "handle-inl.h"
 
 
 void uv_loop_watcher_endgame(uv_loop_t* loop, uv_handle_t* handle) {
@@ -37,8 +38,7 @@ void uv_loop_watcher_endgame(uv_loop_t* loop, uv_handle_t* handle) {
 
 #define UV_LOOP_WATCHER_DEFINE(name, NAME)                                    \
   int uv_##name##_init(uv_loop_t* loop, uv_##name##_t* handle) {              \
-    uv_handle_init(loop, (uv_handle_t*) handle);                              \
-    handle->type = UV_##NAME;                                                 \
+    uv__handle_init(loop, (uv_handle_t*) handle, UV_##NAME);                  \
     loop->counters.name##_init++;                                             \
                                                                               \
     return 0;                                                                 \

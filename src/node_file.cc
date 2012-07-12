@@ -22,9 +22,7 @@
 #include "node.h"
 #include "node_file.h"
 #include "node_buffer.h"
-#ifdef __POSIX__
-# include "node_stat_watcher.h"
-#endif
+#include "node_stat_watcher.h"
 #include "req_wrap.h"
 
 #include <fcntl.h>
@@ -158,10 +156,7 @@ static void After(uv_fs_t *req) {
       case UV_FS_STAT:
       case UV_FS_LSTAT:
       case UV_FS_FSTAT:
-        {
-          NODE_STAT_STRUCT *s = reinterpret_cast<NODE_STAT_STRUCT*>(req->ptr);
-          argv[1] = BuildStatsObject(s);
-        }
+        argv[1] = BuildStatsObject(static_cast<const uv_statbuf_t*>(req->ptr));
         break;
 
       case UV_FS_READLINK:
@@ -284,7 +279,7 @@ static Persistent<String> atime_symbol;
 static Persistent<String> mtime_symbol;
 static Persistent<String> ctime_symbol;
 
-Local<Object> BuildStatsObject(NODE_STAT_STRUCT *s) {
+Local<Object> BuildStatsObject(const uv_statbuf_t* s) {
   HandleScope scope;
 
   if (dev_symbol.IsEmpty()) {
@@ -362,7 +357,8 @@ static Handle<Value> Stat(const Arguments& args) {
     ASYNC_CALL(stat, args[1], *path)
   } else {
     SYNC_CALL(stat, *path, *path)
-    return scope.Close(BuildStatsObject((NODE_STAT_STRUCT*)SYNC_REQ.ptr));
+    return scope.Close(
+        BuildStatsObject(static_cast<const uv_statbuf_t*>(SYNC_REQ.ptr)));
   }
 }
 
@@ -378,7 +374,8 @@ static Handle<Value> LStat(const Arguments& args) {
     ASYNC_CALL(lstat, args[1], *path)
   } else {
     SYNC_CALL(lstat, *path, *path)
-    return scope.Close(BuildStatsObject((NODE_STAT_STRUCT*)SYNC_REQ.ptr));
+    return scope.Close(
+        BuildStatsObject(static_cast<const uv_statbuf_t*>(SYNC_REQ.ptr)));
   }
 }
 
@@ -395,7 +392,8 @@ static Handle<Value> FStat(const Arguments& args) {
     ASYNC_CALL(fstat, args[1], fd)
   } else {
     SYNC_CALL(fstat, 0, fd)
-    return scope.Close(BuildStatsObject((NODE_STAT_STRUCT*)SYNC_REQ.ptr));
+    return scope.Close(
+        BuildStatsObject(static_cast<const uv_statbuf_t*>(SYNC_REQ.ptr)));
   }
 }
 
@@ -984,9 +982,7 @@ void InitFs(Handle<Object> target) {
 
   oncomplete_sym = NODE_PSYMBOL("oncomplete");
 
-#ifdef __POSIX__
   StatWatcher::Initialize(target);
-#endif
 }
 
 }  // end namespace node

@@ -565,7 +565,7 @@ TEST(HeapSnapshotJSONSerialization) {
   // Get node and edge "member" offsets.
   v8::Local<v8::Value> meta_analysis_result = CompileRun(
       "var meta = parsed.snapshot.meta;\n"
-      "var edges_index_offset = meta.node_fields.indexOf('edges_index');\n"
+      "var edge_count_offset = meta.node_fields.indexOf('edge_count');\n"
       "var node_fields_count = meta.node_fields.length;\n"
       "var edge_fields_count = meta.edge_fields.length;\n"
       "var edge_type_offset = meta.edge_fields.indexOf('type');\n"
@@ -575,7 +575,13 @@ TEST(HeapSnapshotJSONSerialization) {
       "    meta.edge_types[edge_type_offset].indexOf('property');\n"
       "var shortcut_type ="
       "    meta.edge_types[edge_type_offset].indexOf('shortcut');\n"
-      "parsed.nodes.concat(0, 0, 0, 0, 0, 0, parsed.edges.length);");
+      "var node_count = parsed.nodes.length / node_fields_count;\n"
+      "var first_edge_indexes = parsed.first_edge_indexes = [];\n"
+      "for (var i = 0, first_edge_index = 0; i < node_count; ++i) {\n"
+      "  first_edge_indexes[i] = first_edge_index;\n"
+      "  first_edge_index += edge_fields_count *\n"
+      "      parsed.nodes[i * node_fields_count + edge_count_offset];\n"
+      "}\n");
   CHECK(!meta_analysis_result.IsEmpty());
 
   // A helper function for processing encoded nodes.
@@ -584,8 +590,9 @@ TEST(HeapSnapshotJSONSerialization) {
       "  var nodes = parsed.nodes;\n"
       "  var edges = parsed.edges;\n"
       "  var strings = parsed.strings;\n"
-      "  for (var i = nodes[pos + edges_index_offset],\n"
-      "      count = nodes[pos + node_fields_count + edges_index_offset];\n"
+      "  var node_ordinal = pos / node_fields_count;\n"
+      "  for (var i = parsed.first_edge_indexes[node_ordinal],\n"
+      "      count = parsed.first_edge_indexes[node_ordinal + 1];\n"
       "      i < count; i += edge_fields_count) {\n"
       "    if (edges[i + edge_type_offset] === prop_type\n"
       "        && strings[edges[i + edge_name_offset]] === prop_name)\n"
@@ -598,8 +605,7 @@ TEST(HeapSnapshotJSONSerialization) {
       "GetChildPosByProperty(\n"
       "  GetChildPosByProperty(\n"
       "    GetChildPosByProperty("
-      "      parsed.edges[parsed.nodes[edges_index_offset]"
-      "                   + edge_to_node_offset],"
+      "      parsed.edges[edge_to_node_offset],"
       "      \"b\", property_type),\n"
       "    \"x\", property_type),"
       "  \"s\", property_type)");
@@ -691,9 +697,13 @@ class TestStatsStream : public v8::OutputStream {
 
 }  // namespace
 
-static TestStatsStream GetHeapStatsUpdate() {
+static TestStatsStream GetHeapStatsUpdate(
+    v8::SnapshotObjectId* object_id = NULL) {
   TestStatsStream stream;
-  v8::HeapProfiler::PushHeapObjectsStats(&stream);
+  v8::SnapshotObjectId last_seen_id =
+      v8::HeapProfiler::PushHeapObjectsStats(&stream);
+  if (object_id)
+    *object_id = last_seen_id;
   CHECK_EQ(1, stream.eos_signaled());
   return stream;
 }
@@ -710,9 +720,10 @@ TEST(HeapSnapshotObjectsStats) {
     HEAP->CollectAllGarbage(i::Heap::kNoGCFlags);
   }
 
+  v8::SnapshotObjectId initial_id;
   {
     // Single chunk of data expected in update. Initial data.
-    TestStatsStream stats_update = GetHeapStatsUpdate();
+    TestStatsStream stats_update = GetHeapStatsUpdate(&initial_id);
     CHECK_EQ(1, stats_update.intervals_count());
     CHECK_EQ(1, stats_update.updates_written());
     CHECK_LT(0, stats_update.entries_size());
@@ -720,13 +731,18 @@ TEST(HeapSnapshotObjectsStats) {
   }
 
   // No data expected in update because nothing has happened.
-  CHECK_EQ(0, GetHeapStatsUpdate().updates_written());
+  v8::SnapshotObjectId same_id;
+  CHECK_EQ(0, GetHeapStatsUpdate(&same_id).updates_written());
+  CHECK_EQ_SNAPSHOT_OBJECT_ID(initial_id, same_id);
+
   {
+    v8::SnapshotObjectId additional_string_id;
     v8::HandleScope inner_scope_1;
     v8_str("string1");
     {
       // Single chunk of data with one new entry expected in update.
-      TestStatsStream stats_update = GetHeapStatsUpdate();
+      TestStatsStream stats_update = GetHeapStatsUpdate(&additional_string_id);
+      CHECK_LT(same_id, additional_string_id);
       CHECK_EQ(1, stats_update.intervals_count());
       CHECK_EQ(1, stats_update.updates_written());
       CHECK_LT(0, stats_update.entries_size());
@@ -735,7 +751,9 @@ TEST(HeapSnapshotObjectsStats) {
     }
 
     // No data expected in update because nothing happened.
-    CHECK_EQ(0, GetHeapStatsUpdate().updates_written());
+    v8::SnapshotObjectId last_id;
+    CHECK_EQ(0, GetHeapStatsUpdate(&last_id).updates_written());
+    CHECK_EQ_SNAPSHOT_OBJECT_ID(additional_string_id, last_id);
 
     {
       v8::HandleScope inner_scope_2;

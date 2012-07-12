@@ -394,6 +394,7 @@ Git urls can be of the form:
 
     git://github.com/user/project.git#commit-ish
     git+ssh://user@hostname:project.git#commit-ish
+    git+ssh://user@hostname/project.git#commit-ish
     git+http://user@hostname/project/blah.git#commit-ish
     git+https://user@hostname/project/blah.git#commit-ish
 
@@ -420,10 +421,39 @@ Array of package names that will be bundled when publishing the package.
 
 If this is spelled `"bundleDependencies"`, then that is also honorable.
 
+## optionalDependencies
+
+If a dependency can be used, but you would like npm to proceed if it
+cannot be found or fails to install, then you may put it in the
+`optionalDependencies` hash.  This is a map of package name to version
+or url, just like the `dependencies` hash.  The difference is that
+failure is tolerated.
+
+It is still your program's responsibility to handle the lack of the
+dependency.  For example, something like this:
+
+    try {
+      var foo = require('foo')
+      var fooVersion = require('foo/package.json').version
+    } catch (er) {
+      foo = null
+    }
+    if ( notGoodFooVersion(fooVersion) ) {
+      foo = null
+    }
+
+    // .. then later in your program ..
+
+    if (foo) {
+      foo.doFooThings()
+    }
+
+Entries in `optionalDependencies` will override entries of the same name in
+`dependencies`, so it's usually best to only put in one place.
+
 ## engines
 
-You can specify the version of
-node that your stuff works on:
+You can specify the version of node that your stuff works on:
 
     { "engines" : { "node" : ">=0.1.27 <0.1.30" } }
 
@@ -438,6 +468,22 @@ You can also use the "engines" field to specify which versions of npm
 are capable of properly installing your program.  For example:
 
     { "engines" : { "npm" : "~1.0.20" } }
+
+Note that, unless the user has set the `engine-strict` config flag, this
+field is advisory only.
+
+## engineStrict
+
+If you are sure that your module will *definitely not* run properly on
+versions of Node/npm other than those specified in the `engines` hash,
+then you can set `"engineStrict": true` in your package.json file.
+This will override the user's `engine-strict` config setting.
+
+Please do not do this unless you are really very very sure.  If your
+engines hash is something overly restrictive, you can quite easily and
+inadvertently lock yourself into obscurity and prevent your users from
+updating to new versions of Node.  Consider this choice carefully.  If
+people abuse it, it will be removed in a future version of npm.
 
 ## os
 

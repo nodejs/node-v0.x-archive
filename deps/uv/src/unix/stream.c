@@ -561,12 +561,19 @@ static void uv__read(uv_stream_t* stream) {
   struct msghdr msg;
   struct cmsghdr* cmsg;
   char cmsg_space[64];
+  int count;
+
+  /* Prevent loop starvation when the data comes in as fast as (or faster than)
+   * we can read it. XXX Need to rearm fd if we switch to edge-triggered I/O.
+   */
+  count = 32;
 
   /* XXX: Maybe instead of having UV_STREAM_READING we just test if
    * tcp->read_cb is NULL or not?
    */
-  while ((stream->read_cb || stream->read2_cb) &&
-         stream->flags & UV_STREAM_READING) {
+  while ((stream->read_cb || stream->read2_cb)
+      && (stream->flags & UV_STREAM_READING)
+      && (count-- > 0)) {
     assert(stream->alloc_cb);
     buf = stream->alloc_cb((uv_handle_t*)stream, 64 * 1024);
 
@@ -701,7 +708,7 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
       stream->flags & UV_STREAM_SHUT ||
       stream->flags & UV_CLOSED ||
       stream->flags & UV_CLOSING) {
-    uv__set_sys_error(stream->loop, EINVAL);
+    uv__set_artificial_error(stream->loop, UV_ENOTCONN);
     return -1;
   }
 
@@ -777,9 +784,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
   if (error == EINPROGRESS)
     return;
 
-  if (error == 0)
-    uv__io_start(stream->loop, &stream->read_watcher);
-
   stream->connect_req = NULL;
   uv__req_unregister(stream->loop, req);
 
@@ -787,76 +791,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
     uv__set_sys_error(stream->loop, error);
     req->cb(req, error ? -1 : 0);
   }
-}
-
-
-int uv__connect(uv_connect_t* req, uv_stream_t* stream, struct sockaddr* addr,
-    socklen_t addrlen, uv_connect_cb cb) {
-  int sockfd;
-  int r;
-
-  if (stream->fd <= 0) {
-    if ((sockfd = uv__socket(addr->sa_family, SOCK_STREAM, 0)) == -1) {
-      uv__set_sys_error(stream->loop, errno);
-      return -1;
-    }
-
-    if (uv__stream_open(stream,
-                        sockfd,
-                        UV_STREAM_READABLE | UV_STREAM_WRITABLE)) {
-      close(sockfd);
-      return -2;
-    }
-  }
-
-  uv__req_init(stream->loop, req, UV_CONNECT);
-  req->cb = cb;
-  req->handle = stream;
-  ngx_queue_init(&req->queue);
-
-  if (stream->connect_req) {
-    uv__set_sys_error(stream->loop, EALREADY);
-    return -1;
-  }
-
-  if (stream->type != UV_TCP) {
-    uv__set_sys_error(stream->loop, ENOTSOCK);
-    return -1;
-  }
-
-  stream->connect_req = req;
-
-  do {
-    r = connect(stream->fd, addr, addrlen);
-  }
-  while (r == -1 && errno == EINTR);
-
-  stream->delayed_error = 0;
-
-  if (r != 0 && errno != EINPROGRESS) {
-    switch (errno) {
-      /* If we get a ECONNREFUSED wait until the next tick to report the
-       * error. Solaris wants to report immediately--other unixes want to
-       * wait.
-       *
-       * XXX: do the same for ECONNABORTED?
-       */
-      case ECONNREFUSED:
-        stream->delayed_error = errno;
-        break;
-
-      default:
-        uv__set_sys_error(stream->loop, errno);
-        return -1;
-    }
-  }
-
-  uv__io_start(stream->loop, &stream->write_watcher);
-
-  if (stream->delayed_error)
-    uv__io_feed(stream->loop, &stream->write_watcher, UV__IO_WRITE);
-
-  return 0;
 }
 
 
@@ -890,42 +824,36 @@ int uv_write2(uv_write_t* req, uv_stream_t* stream, uv_buf_t bufs[], int bufcnt,
   req->send_handle = send_handle;
   ngx_queue_init(&req->queue);
 
-  if (bufcnt <= UV_REQ_BUFSML_SIZE) {
+  if (bufcnt <= UV_REQ_BUFSML_SIZE)
     req->bufs = req->bufsml;
-  }
-  else {
+  else
     req->bufs = malloc(sizeof(uv_buf_t) * bufcnt);
-  }
 
   memcpy(req->bufs, bufs, bufcnt * sizeof(uv_buf_t));
   req->bufcnt = bufcnt;
-
-  /*
-   * fprintf(stderr, "cnt: %d bufs: %p bufsml: %p\n", bufcnt, req->bufs, req->bufsml);
-   */
-
   req->write_index = 0;
   stream->write_queue_size += uv__buf_count(bufs, bufcnt);
 
   /* Append the request to write_queue. */
   ngx_queue_insert_tail(&stream->write_queue, &req->queue);
 
-  assert(!ngx_queue_empty(&stream->write_queue));
-
   /* If the queue was empty when this function began, we should attempt to
    * do the write immediately. Otherwise start the write_watcher and wait
    * for the fd to become writable.
    */
-  if (empty_queue) {
+  if (stream->connect_req) {
+    /* Still connecting, do nothing. */
+  }
+  else if (empty_queue) {
     uv__write(stream);
-  } else {
+  }
+  else {
     /*
      * blocking streams should never have anything in the queue.
      * if this assert fires then somehow the blocking stream isn't being
-     * sufficently flushed in uv__write.
+     * sufficiently flushed in uv__write.
      */
     assert(!(stream->flags & UV_STREAM_BLOCKING));
-
     uv__io_start(stream->loop, &stream->write_watcher);
   }
 

@@ -31,7 +31,7 @@ out/Debug/node:
 	$(MAKE) -C out BUILDTYPE=Debug
 
 out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
-	tools/gyp_node -f make
+	$(PYTHON) tools/gyp_node -f make
 
 install: all
 	out/Release/node tools/installer.js install $(DESTDIR)
@@ -61,16 +61,16 @@ test-http1: all
 test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
-node_modules/weak:
+test/gc/node_modules/weak/build:
 	@if [ ! -f node ]; then make all; fi
-	@if [ ! -d node_modules ]; then mkdir -p node_modules; fi
-	./node deps/npm/bin/npm-cli.js install weak \
-		--prefix="$(shell pwd)" --unsafe-perm # go ahead and run as root.
+	./node deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
+		--directory="$(shell pwd)/test/gc/node_modules/weak" \
+		--nodedir="$(shell pwd)"
 
-test-gc: all node_modules/weak
+test-gc: all test/gc/node_modules/weak/build
 	$(PYTHON) tools/test.py --mode=release gc
 
-test-all: all node_modules/weak
+test-all: all test/gc/node_modules/weak/build
 	$(PYTHON) tools/test.py --mode=debug,release
 	make test-npm
 
@@ -130,7 +130,13 @@ website_files = \
 	out/doc/changelog.html \
 	$(doc_images)
 
-doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/
+doc: program $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/ blog
+
+blogclean:
+	rm -rf out/blog
+
+blog: doc/blog out/Release/node tools/blog
+	out/Release/node tools/blog/generate.js doc/blog/ out/blog/ doc/blog.html doc/rss.xml
 
 $(apidoc_dirs):
 	mkdir -p $@
@@ -159,6 +165,9 @@ email.md: ChangeLog tools/email-footer.md
 
 blog.html: email.md
 	cat $< | ./node tools/doc/node_modules/.bin/marked > $@
+
+blog-upload: blog
+	rsync -r out/blog/ node@nodejs.org:~/web/nodejs.org/blog/
 
 website-upload: doc
 	rsync -r out/doc/ node@nodejs.org:~/web/nodejs.org/
@@ -208,6 +217,17 @@ $(PKG):
 		--out $(PKG)
 
 $(TARBALL): node out/doc
+	@if [ "$(shell git status --porcelain | egrep -v '^\?\? ')" = "" ]; then \
+		exit 0 ; \
+	else \
+	  echo "" >&2 ; \
+		echo "The git repository is not clean." >&2 ; \
+		echo "Please commit changes before building release tarball." >&2 ; \
+		echo "" >&2 ; \
+		git status --porcelain | egrep -v '^\?\?' >&2 ; \
+		echo "" >&2 ; \
+		exit 1 ; \
+	fi
 	@if [ $(shell ./node --version) = "$(VERSION)" ]; then \
 		exit 0; \
 	else \
@@ -218,11 +238,12 @@ $(TARBALL): node out/doc
 		exit 1 ; \
 	fi
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
-	mkdir -p $(TARNAME)/doc
+	mkdir -p $(TARNAME)/doc/api
 	cp doc/node.1 $(TARNAME)/doc/node.1
-	cp -r out/doc/api $(TARNAME)/doc/api
+	cp -r out/doc/api/* $(TARNAME)/doc/api/
 	rm -rf $(TARNAME)/deps/v8/test # too big
 	rm -rf $(TARNAME)/doc/images # too big
+	find $(TARNAME)/ -type l | xargs rm # annoying on windows
 	tar -cf $(TARNAME).tar $(TARNAME)
 	rm -rf $(TARNAME)
 	gzip -f -9 $(TARNAME).tar
@@ -248,4 +269,4 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload pkg
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all program staticlib dynamiclib test test-all website-upload pkg blog blogclean

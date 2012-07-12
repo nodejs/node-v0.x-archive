@@ -2760,7 +2760,7 @@ void MacroAssembler::CompareMap(Register obj,
       Map* current_map = *map;
       while (CanTransitionToMoreGeneralFastElementsKind(kind, packed)) {
         kind = GetNextMoreGeneralFastElementsKind(kind, packed);
-        current_map = current_map->LookupElementsTransitionMap(kind, NULL);
+        current_map = current_map->LookupElementsTransitionMap(kind);
         if (!current_map) break;
         j(equal, early_success, Label::kNear);
         Cmp(FieldOperand(obj, HeapObject::kMapOffset),

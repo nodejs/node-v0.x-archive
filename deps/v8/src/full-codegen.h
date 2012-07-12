@@ -77,7 +77,8 @@ class FullCodeGenerator: public AstVisitor {
     TOS_REG
   };
 
-  FullCodeGenerator(MacroAssembler* masm, CompilationInfo* info)
+  FullCodeGenerator(MacroAssembler* masm, CompilationInfo* info,
+                    Zone* zone)
       : masm_(masm),
         info_(info),
         scope_(info->scope()),
@@ -86,11 +87,12 @@ class FullCodeGenerator: public AstVisitor {
         globals_(NULL),
         context_(NULL),
         bailout_entries_(info->HasDeoptimizationSupport()
-                         ? info->function()->ast_node_count() : 0),
-        stack_checks_(2),  // There's always at least one.
+                         ? info->function()->ast_node_count() : 0, zone),
+        stack_checks_(2, zone),  // There's always at least one.
         type_feedback_cells_(info->HasDeoptimizationSupport()
-                             ? info->function()->ast_node_count() : 0),
-        ic_total_count_(0) { }
+                             ? info->function()->ast_node_count() : 0, zone),
+        ic_total_count_(0),
+        zone_(zone) { }
 
   static bool MakeCode(CompilationInfo* info);
 
@@ -107,6 +109,8 @@ class FullCodeGenerator: public AstVisitor {
     UNREACHABLE();
     return NULL;
   }
+
+  Zone* zone() const { return zone_; }
 
  private:
   class Breakable;
@@ -236,7 +240,7 @@ class FullCodeGenerator: public AstVisitor {
   // The finally block of a try/finally statement.
   class Finally : public NestedStatement {
    public:
-    static const int kElementCount = 2;
+    static const int kElementCount = 5;
 
     explicit Finally(FullCodeGenerator* codegen) : NestedStatement(codegen) { }
     virtual ~Finally() {}
@@ -786,6 +790,7 @@ class FullCodeGenerator: public AstVisitor {
   int ic_total_count_;
   Handle<FixedArray> handler_table_;
   Handle<JSGlobalPropertyCell> profiling_counter_;
+  Zone* zone_;
 
   friend class NestedStatement;
 
@@ -796,16 +801,16 @@ class FullCodeGenerator: public AstVisitor {
 // A map from property names to getter/setter pairs allocated in the zone.
 class AccessorTable: public TemplateHashMap<Literal,
                                             ObjectLiteral::Accessors,
-                                            ZoneListAllocationPolicy> {
+                                            ZoneAllocationPolicy> {
  public:
   explicit AccessorTable(Zone* zone) :
-      TemplateHashMap<Literal,
-                      ObjectLiteral::Accessors,
-                      ZoneListAllocationPolicy>(Literal::Match),
+      TemplateHashMap<Literal, ObjectLiteral::Accessors,
+                      ZoneAllocationPolicy>(Literal::Match,
+                                            ZoneAllocationPolicy(zone)),
       zone_(zone) { }
 
   Iterator lookup(Literal* literal) {
-    Iterator it = find(literal, true);
+    Iterator it = find(literal, true, ZoneAllocationPolicy(zone_));
     if (it->second == NULL) it->second = new(zone_) ObjectLiteral::Accessors();
     return it;
   }

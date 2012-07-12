@@ -684,6 +684,7 @@ void AccessorInfo::AccessorInfoVerify() {
   VerifyPointer(name());
   VerifyPointer(data());
   VerifyPointer(flag());
+  VerifyPointer(expected_receiver_type());
 }
 
 
@@ -928,21 +929,6 @@ bool DescriptorArray::IsConsistentWithBackPointers(Map* current_map) {
           return false;
         }
         break;
-      case ELEMENTS_TRANSITION: {
-        Object* object = GetValue(i);
-        if (!CheckOneBackPointer(current_map, object)) {
-          return false;
-        }
-        if (object->IsFixedArray()) {
-          FixedArray* array = FixedArray::cast(object);
-          for (int i = 0; i < array->length(); ++i) {
-            if (!CheckOneBackPointer(current_map, array->get(i))) {
-              return false;
-            }
-          }
-        }
-        break;
-      }
       case CALLBACKS: {
         Object* object = GetValue(i);
         if (object->IsAccessorPair()) {
@@ -1013,14 +999,9 @@ void NormalizedMapCache::NormalizedMapCacheVerify() {
 void Map::ZapInstanceDescriptors() {
   DescriptorArray* descriptors = instance_descriptors();
   if (descriptors == GetHeap()->empty_descriptor_array()) return;
-  FixedArray* contents = FixedArray::cast(
-      descriptors->get(DescriptorArray::kContentArrayIndex));
   MemsetPointer(descriptors->data_start(),
                 GetHeap()->the_hole_value(),
                 descriptors->length());
-  MemsetPointer(contents->data_start(),
-                GetHeap()->the_hole_value(),
-                contents->length());
 }
 
 

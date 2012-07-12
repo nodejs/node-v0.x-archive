@@ -63,7 +63,7 @@ class RegExpMacroAssembler {
     kCheckStackLimit = true
   };
 
-  RegExpMacroAssembler();
+  explicit RegExpMacroAssembler(Zone* zone);
   virtual ~RegExpMacroAssembler();
   // The maximal number of pushes between stack checks. Users must supply
   // kCheckStackLimit flag to push operations (instead of kNoStackLimitCheck)
@@ -128,10 +128,6 @@ class RegExpMacroAssembler {
   // array, and if the found byte is non-zero, we jump to the on_bit_set label.
   virtual void CheckBitInTable(Handle<ByteArray> table, Label* on_bit_set) = 0;
 
-  virtual void CheckNotRegistersEqual(int reg1,
-                                      int reg2,
-                                      Label* on_not_equal) = 0;
-
   // Checks whether the given offset from the current position is before
   // the end of the string.  May overwrite the current character.
   virtual void CheckPosition(int cp_offset, Label* on_outside_input) {
@@ -184,14 +180,21 @@ class RegExpMacroAssembler {
   void set_slow_safe(bool ssc) { slow_safe_compiler_ = ssc; }
   bool slow_safe() { return slow_safe_compiler_; }
 
+  enum GlobalMode { NOT_GLOBAL, GLOBAL, GLOBAL_NO_ZERO_LENGTH_CHECK };
   // Set whether the regular expression has the global flag.  Exiting due to
   // a failure in a global regexp may still mean success overall.
-  void set_global(bool global) { global_ = global; }
-  bool global() { return global_; }
+  inline void set_global_mode(GlobalMode mode) { global_mode_ = mode; }
+  inline bool global() { return global_mode_ != NOT_GLOBAL; }
+  inline bool global_with_zero_length_check() {
+    return global_mode_ == GLOBAL;
+  }
+
+  Zone* zone() const { return zone_; }
 
  private:
   bool slow_safe_compiler_;
-  bool global_;
+  bool global_mode_;
+  Zone* zone_;
 };
 
 
@@ -213,7 +216,7 @@ class NativeRegExpMacroAssembler: public RegExpMacroAssembler {
   //        capture positions.
   enum Result { RETRY = -2, EXCEPTION = -1, FAILURE = 0, SUCCESS = 1 };
 
-  NativeRegExpMacroAssembler();
+  explicit NativeRegExpMacroAssembler(Zone* zone);
   virtual ~NativeRegExpMacroAssembler();
   virtual bool CanReadUnaligned();
 

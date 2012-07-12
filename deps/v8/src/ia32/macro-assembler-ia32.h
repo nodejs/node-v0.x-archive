@@ -90,6 +90,13 @@ class MacroAssembler: public Assembler {
                      Label* condition_met,
                      Label::Distance condition_met_distance = Label::kFar);
 
+  void CheckPageFlagForMap(
+      Handle<Map> map,
+      int mask,
+      Condition cc,
+      Label* condition_met,
+      Label::Distance condition_met_distance = Label::kFar);
+
   // Check if object is in new space.  Jumps if the object is not in new space.
   // The register scratch can be object itself, but scratch will be clobbered.
   void JumpIfNotInNewSpace(Register object,
@@ -193,6 +200,16 @@ class MacroAssembler: public Assembler {
       SaveFPRegsMode save_fp,
       RememberedSetAction remembered_set_action = EMIT_REMEMBERED_SET,
       SmiCheck smi_check = INLINE_SMI_CHECK);
+
+  // For page containing |object| mark the region covering the object's map
+  // dirty. |object| is the object being stored into, |map| is the Map object
+  // that was stored.
+  void RecordWriteForMap(
+      Register object,
+      Handle<Map> map,
+      Register scratch1,
+      Register scratch2,
+      SaveFPRegsMode save_fp);
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
   // ---------------------------------------------------------------------------

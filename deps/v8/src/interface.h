@@ -53,12 +53,12 @@ class Interface : public ZoneObject {
     return &value_interface;
   }
 
-  static Interface* NewUnknown() {
-    return new Interface(NONE);
+  static Interface* NewUnknown(Zone* zone) {
+    return new(zone) Interface(NONE);
   }
 
-  static Interface* NewModule() {
-    return new Interface(MODULE);
+  static Interface* NewModule(Zone* zone) {
+    return new(zone) Interface(MODULE);
   }
 
   // ---------------------------------------------------------------------------
@@ -66,13 +66,13 @@ class Interface : public ZoneObject {
 
   // Add a name to the list of exports. If it already exists, unify with
   // interface, otherwise insert unless this is closed.
-  void Add(Handle<String> name, Interface* interface, bool* ok) {
-    DoAdd(name.location(), name->Hash(), interface, ok);
+  void Add(Handle<String> name, Interface* interface, Zone* zone, bool* ok) {
+    DoAdd(name.location(), name->Hash(), interface, zone, ok);
   }
 
   // Unify with another interface. If successful, both interface objects will
   // represent the same type, and changes to one are reflected in the other.
-  void Unify(Interface* that, bool* ok);
+  void Unify(Interface* that, Zone* zone, bool* ok);
 
   // Determine this interface to be a value interface.
   void MakeValue(bool* ok) {
@@ -116,7 +116,7 @@ class Interface : public ZoneObject {
   Handle<JSModule> Instance() { return Chase()->instance_; }
 
   // Look up an exported name. Returns NULL if not (yet) defined.
-  Interface* Lookup(Handle<String> name);
+  Interface* Lookup(Handle<String> name, Zone* zone);
 
   // ---------------------------------------------------------------------------
   // Iterators.
@@ -187,8 +187,9 @@ class Interface : public ZoneObject {
     return result;
   }
 
-  void DoAdd(void* name, uint32_t hash, Interface* interface, bool* ok);
-  void DoUnify(Interface* that, bool* ok);
+  void DoAdd(void* name, uint32_t hash, Interface* interface, Zone* zone,
+             bool* ok);
+  void DoUnify(Interface* that, bool* ok, Zone* zone);
 };
 
 } }  // namespace v8::internal

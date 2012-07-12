@@ -35,6 +35,7 @@ namespace internal {
 
 RegExpMacroAssemblerTracer::RegExpMacroAssemblerTracer(
     RegExpMacroAssembler* assembler) :
+  RegExpMacroAssembler(assembler->zone()),
   assembler_(assembler) {
   unsigned int type = assembler->Implementation();
   ASSERT(type < 5);
@@ -379,17 +380,6 @@ void RegExpMacroAssemblerTracer::CheckNotBackReferenceIgnoreCase(
   PrintF(" CheckNotBackReferenceIgnoreCase(register=%d, label[%08x]);\n",
          start_reg, LabelToInt(on_no_match));
   assembler_->CheckNotBackReferenceIgnoreCase(start_reg, on_no_match);
-}
-
-
-void RegExpMacroAssemblerTracer::CheckNotRegistersEqual(int reg1,
-                                                        int reg2,
-                                                        Label* on_not_equal) {
-  PrintF(" CheckNotRegistersEqual(reg1=%d, reg2=%d, label[%08x]);\n",
-         reg1,
-         reg2,
-         LabelToInt(on_not_equal));
-  assembler_->CheckNotRegistersEqual(reg1, reg2, on_not_equal);
 }
 
 

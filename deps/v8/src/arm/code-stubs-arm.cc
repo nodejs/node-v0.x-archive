@@ -3737,9 +3737,13 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Compute the return address in lr to return to after the jump below. Pc is
   // already at '+ 8' from the current instruction but return is after three
   // instructions so add another 4 to pc to get the return address.
-  masm->add(lr, pc, Operand(4));
-  __ str(lr, MemOperand(sp, 0));
-  masm->Jump(r5);
+  {
+    // Prevent literal pool emission before return address.
+    Assembler::BlockConstPoolScope block_const_pool(masm);
+    masm->add(lr, pc, Operand(4));
+    __ str(lr, MemOperand(sp, 0));
+    masm->Jump(r5);
+  }
 
   if (always_allocate) {
     // It's okay to clobber r2 and r3 here. Don't mess with r0 and r1
@@ -3956,14 +3960,21 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Jump to a faked try block that does the invoke, with a faked catch
   // block that sets the pending exception.
   __ jmp(&invoke);
-  __ bind(&handler_entry);
-  handler_offset_ = handler_entry.pos();
-  // Caught exception: Store result (exception) in the pending exception
-  // field in the JSEnv and return a failure sentinel.  Coming in here the
-  // fp will be invalid because the PushTryHandler below sets it to 0 to
-  // signal the existence of the JSEntry frame.
-  __ mov(ip, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
-                                       isolate)));
+
+  // Block literal pool emission whilst taking the position of the handler
+  // entry. This avoids making the assumption that literal pools are always
+  // emitted after an instruction is emitted, rather than before.
+  {
+    Assembler::BlockConstPoolScope block_const_pool(masm);
+    __ bind(&handler_entry);
+    handler_offset_ = handler_entry.pos();
+    // Caught exception: Store result (exception) in the pending exception
+    // field in the JSEnv and return a failure sentinel.  Coming in here the
+    // fp will be invalid because the PushTryHandler below sets it to 0 to
+    // signal the existence of the JSEntry frame.
+    __ mov(ip, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
+                                         isolate)));
+  }
   __ str(r0, MemOperand(ip));
   __ mov(r0, Operand(reinterpret_cast<int32_t>(Failure::Exception())));
   __ b(&exit);
@@ -4006,9 +4017,13 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Branch and link to JSEntryTrampoline.  We don't use the double underscore
   // macro for the add instruction because we don't want the coverage tool
-  // inserting instructions here after we read the pc.
-  __ mov(lr, Operand(pc));
-  masm->add(pc, ip, Operand(Code::kHeaderSize - kHeapObjectTag));
+  // inserting instructions here after we read the pc. We block literal pool
+  // emission for the same reason.
+  {
+    Assembler::BlockConstPoolScope block_const_pool(masm);
+    __ mov(lr, Operand(pc));
+    masm->add(pc, ip, Operand(Code::kHeaderSize - kHeapObjectTag));
+  }
 
   // Unlink this frame from the handler chain.
   __ PopTryHandler();
@@ -6812,6 +6827,10 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
                                     Register target) {
   __ mov(lr, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
                      RelocInfo::CODE_TARGET));
+
+  // Prevent literal pool emission during calculation of return address.
+  Assembler::BlockConstPoolScope block_const_pool(masm);
+
   // Push return address (accessible to GC through exit frame pc).
   // Note that using pc with str is deprecated.
   Label start;
@@ -7172,8 +7191,13 @@ void RecordWriteStub::Generate(MacroAssembler* masm) {
   // forth between a compare instructions (a nop in this position) and the
   // real branch when we start and stop incremental heap marking.
   // See RecordWriteStub::Patch for details.
-  __ b(&skip_to_incremental_noncompacting);
-  __ b(&skip_to_incremental_compacting);
+  {
+    // Block literal pool emission, as the position of these two instructions
+    // is assumed by the patching code.
+    Assembler::BlockConstPoolScope block_const_pool(masm);
+    __ b(&skip_to_incremental_noncompacting);
+    __ b(&skip_to_incremental_compacting);
+  }
 
   if (remembered_set_action_ == EMIT_REMEMBERED_SET) {
     __ RememberedSetHelper(object_,

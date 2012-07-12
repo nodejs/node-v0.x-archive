@@ -92,7 +92,7 @@ if (cmd === 'install') {
   copy([
     // Node
     'src/node.h', 'src/node_buffer.h', 'src/node_object_wrap.h',
-    'src/node_version.h',
+    'src/node_version.h', 'src/ev-emul.h', 'src/eio-emul.h',
     // v8
     'deps/v8/include/v8-debug.h', 'deps/v8/include/v8-preparser.h',
     'deps/v8/include/v8-profiler.h', 'deps/v8/include/v8-testing.h',
@@ -100,6 +100,14 @@ if (cmd === 'install') {
     // uv
     'deps/uv/include/uv.h'
   ], 'include/node/');
+
+  // man page
+  copy(['doc/node.1'], 'share/man/man1/');
+
+  // dtrace
+  if (!process.platform.match(/^linux/)) {
+    copy(['src/node.d'], 'lib/dtrace/');
+  }
 
   // Private uv headers
   copy([
@@ -126,17 +134,29 @@ if (cmd === 'install') {
 
   // Install npm (eventually)
   if (variables.node_install_npm) {
-    copy('deps/npm', 'lib/node_modules/npm');
-    queue.push('ln -sf ../lib/node_modules/npm/bin/npm-cli.js ' +
-               path.join(dest_dir, node_prefix, 'bin/npm'));
-    queue.push([shebang, '#!' + path.join(node_prefix, 'bin/node'),
-               path.join(dest_dir, node_prefix,
-                         'lib/node_modules/npm/bin/npm-cli.js')]);
+    // Frequently, in development, the installed npm is a symbolic
+    // link to the development folder, and so installing this is
+    // a bit annoying.  If it's a symlink, skip it.
+    var isSymlink = false;
+    try {
+      var st = fs.lstatSync(path.resolve(node_prefix, 'lib/node_modules/npm'));
+      isSymlink = st.isSymbolicLink();
+    } catch (e) {}
+
+    if (!isSymlink) {
+      copy('deps/npm', 'lib/node_modules/npm');
+      queue.push('ln -sf ../lib/node_modules/npm/bin/npm-cli.js ' +
+                 path.join(dest_dir, node_prefix, 'bin/npm'));
+      queue.push([shebang, '#!' + path.join(node_prefix, 'bin/node'),
+                 path.join(dest_dir, node_prefix,
+                           'lib/node_modules/npm/bin/npm-cli.js')]);
+    }
   }
 } else {
   remove([
      'bin/node', 'bin/npm', 'bin/node-waf',
-     'include/node/*', 'lib/node_modules', 'lib/node'
+     'include/node/*', 'lib/node_modules', 'lib/node',
+     'lib/dtrace/node.d', 'share/man/man1/node.1'
   ]);
 }
 

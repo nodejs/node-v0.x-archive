@@ -338,6 +338,7 @@ class Factory {
 
   Handle<Object> NewError(const char* maker, const char* type,
                           Handle<JSArray> args);
+  Handle<String> EmergencyNewError(const char* type, Handle<JSArray> args);
   Handle<Object> NewError(const char* maker, const char* type,
                           Vector< Handle<Object> > args);
   Handle<Object> NewError(const char* type,

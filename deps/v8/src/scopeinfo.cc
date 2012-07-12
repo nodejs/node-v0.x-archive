@@ -38,10 +38,10 @@ namespace v8 {
 namespace internal {
 
 
-Handle<ScopeInfo> ScopeInfo::Create(Scope* scope) {
+Handle<ScopeInfo> ScopeInfo::Create(Scope* scope, Zone* zone) {
   // Collect stack and context locals.
-  ZoneList<Variable*> stack_locals(scope->StackLocalCount());
-  ZoneList<Variable*> context_locals(scope->ContextLocalCount());
+  ZoneList<Variable*> stack_locals(scope->StackLocalCount(), zone);
+  ZoneList<Variable*> context_locals(scope->ContextLocalCount(), zone);
   scope->CollectStackAndContextLocals(&stack_locals, &context_locals);
   const int stack_local_count = stack_locals.length();
   const int context_local_count = context_locals.length();

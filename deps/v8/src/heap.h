@@ -1597,7 +1597,7 @@ class Heap {
   }
 
   void AgeInlineCaches() {
-    ++global_ic_age_;
+    global_ic_age_ = (global_ic_age_ + 1) & SharedFunctionInfo::ICAgeBits::kMax;
   }
 
  private:

@@ -26,6 +26,9 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "handle-inl.h"
+#include "stream-inl.h"
+#include "req-inl.h"
 
 
 #define UNICODE_REPLACEMENT_CHARACTER (0xfffd)
@@ -109,10 +112,9 @@ int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, uv_file fd, int readable) {
     LeaveCriticalSection(&uv_tty_output_lock);
   }
 
-  uv_stream_init(loop, (uv_stream_t*) tty);
+  uv_stream_init(loop, (uv_stream_t*) tty, UV_TTY);
   uv_connection_init((uv_stream_t*) tty);
 
-  tty->type = UV_TTY;
   tty->handle = win_handle;
   tty->read_line_handle = NULL;
   tty->read_line_buffer = uv_null_buf_;
@@ -690,7 +692,7 @@ void uv_process_tty_read_line_req(uv_loop_t* loop, uv_tty_t* handle,
   if (!REQ_SUCCESS(req)) {
     /* Read was not successful */
     if ((handle->flags & UV_HANDLE_READING) &&
-        !(handle->flags & UV_HANDLE_TTY_RAW)) {
+        handle->read_line_handle != NULL) {
       /* Real error */
       handle->flags &= ~UV_HANDLE_READING;
       DECREASE_ACTIVE_COUNT(loop, handle);

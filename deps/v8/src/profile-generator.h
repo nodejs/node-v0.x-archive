@@ -72,6 +72,7 @@ class StringsStorage {
   const char* GetName(int index);
   inline const char* GetFunctionName(String* name);
   inline const char* GetFunctionName(const char* name);
+  size_t GetUsedMemorySize() const;
 
  private:
   static const int kMaxNameSize = 1024;
@@ -649,7 +650,8 @@ class HeapObjectsMap {
   }
 
   void StopHeapObjectsTracking();
-  void PushHeapObjectsStats(OutputStream* stream);
+  SnapshotObjectId PushHeapObjectsStats(OutputStream* stream);
+  size_t GetUsedMemorySize() const;
 
   static SnapshotObjectId GenerateId(v8::RetainedObjectInfo* info);
   static inline SnapshotObjectId GetNthGcSubrootId(int delta);
@@ -707,7 +709,7 @@ class HeapSnapshotsCollection {
   ~HeapSnapshotsCollection();
 
   bool is_tracking_objects() { return is_tracking_objects_; }
-  void PushHeapObjectsStats(OutputStream* stream) {
+  SnapshotObjectId PushHeapObjectsStats(OutputStream* stream) {
     return ids_.PushHeapObjectsStats(stream);
   }
   void StartHeapObjectsTracking() { is_tracking_objects_ = true; }
@@ -734,6 +736,7 @@ class HeapSnapshotsCollection {
   SnapshotObjectId last_assigned_id() const {
     return ids_.last_assigned_id();
   }
+  size_t GetUsedMemorySize() const;
 
  private:
   INLINE(static bool HeapSnapshotsMatch(void* key1, void* key2)) {
@@ -1072,10 +1075,10 @@ class HeapSnapshotJSONSerializer {
   int GetStringId(const char* s);
   int entry_index(HeapEntry* e) { return e->index() * kNodeFieldsCount; }
   void SerializeEdge(HeapGraphEdge* edge, bool first_edge);
-  void SerializeEdges(const List<HeapEntry>& nodes);
+  void SerializeEdges();
   void SerializeImpl();
-  void SerializeNode(HeapEntry* entry, int edges_index);
-  void SerializeNodes(const List<HeapEntry>& nodes);
+  void SerializeNode(HeapEntry* entry);
+  void SerializeNodes();
   void SerializeSnapshot();
   void SerializeString(const unsigned char* s);
   void SerializeStrings();

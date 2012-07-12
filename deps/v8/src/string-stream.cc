@@ -291,7 +291,7 @@ void StringStream::ClearMentionedObjectCache() {
   isolate->set_string_stream_current_security_token(NULL);
   if (isolate->string_stream_debug_object_cache() == NULL) {
     isolate->set_string_stream_debug_object_cache(
-        new List<HeapObject*, PreallocatedStorage>(0));
+        new List<HeapObject*, PreallocatedStorageAllocationPolicy>(0));
   }
   isolate->string_stream_debug_object_cache()->Clear();
 }

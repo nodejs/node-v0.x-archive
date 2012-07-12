@@ -103,7 +103,6 @@ class RegExpMacroAssemblerIrregexp: public RegExpMacroAssembler {
   virtual void CheckNotBackReference(int start_reg, Label* on_no_match);
   virtual void CheckNotBackReferenceIgnoreCase(int start_reg,
                                                Label* on_no_match);
-  virtual void CheckNotRegistersEqual(int reg1, int reg2, Label* on_not_equal);
   virtual void CheckCharacters(Vector<const uc16> str,
                                int cp_offset,
                                Label* on_failure,

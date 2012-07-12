@@ -25,15 +25,7 @@
 #include "uv.h"
 #include "internal.h"
 #include "tree.h"
-
-
-#undef NANOSEC
-#define NANOSEC 1000000000
-
-
-/* The resolution of the high-resolution clock. */
-static uint64_t uv_hrtime_frequency_ = 0;
-static uv_once_t uv_hrtime_init_guard_ = UV_ONCE_INIT;
+#include "handle-inl.h"
 
 
 void uv_update_time(uv_loop_t* loop) {
@@ -58,43 +50,6 @@ int64_t uv_now(uv_loop_t* loop) {
 }
 
 
-static void uv_hrtime_init(void) {
-  LARGE_INTEGER frequency;
-
-  if (!QueryPerformanceFrequency(&frequency)) {
-    uv_hrtime_frequency_ = 0;
-    return;
-  }
-
-  uv_hrtime_frequency_ = frequency.QuadPart;
-}
-
-
-uint64_t uv_hrtime(void) {
-  LARGE_INTEGER counter;
-
-  uv_once(&uv_hrtime_init_guard_, uv_hrtime_init);
-
-  /* If the performance frequency is zero, there's no support. */
-  if (!uv_hrtime_frequency_) {
-    /* uv__set_sys_error(loop, ERROR_NOT_SUPPORTED); */
-    return 0;
-  }
-
-  if (!QueryPerformanceCounter(&counter)) {
-    /* uv__set_sys_error(loop, GetLastError()); */
-    return 0;
-  }
-
-  /* Because we have no guarantee about the order of magnitude of the */
-  /* performance counter frequency, and there may not be much headroom to */
-  /* multiply by NANOSEC without overflowing, we use 128-bit math instead. */
-  return ((uint64_t) counter.LowPart * NANOSEC / uv_hrtime_frequency_) +
-         (((uint64_t) counter.HighPart * NANOSEC / uv_hrtime_frequency_)
-         << 32);
-}
-
-
 static int uv_timer_compare(uv_timer_t* a, uv_timer_t* b) {
   if (a->due < b->due)
     return -1;
@@ -112,8 +67,7 @@ RB_GENERATE_STATIC(uv_timer_tree_s, uv_timer_s, tree_entry, uv_timer_compare);
 
 
 int uv_timer_init(uv_loop_t* loop, uv_timer_t* handle) {
-  uv_handle_init(loop, (uv_handle_t*) handle);
-  handle->type = UV_TIMER;
+  uv__handle_init(loop, (uv_handle_t*) handle, UV_TIMER);
   handle->timer_cb = NULL;
   handle->repeat = 0;
 
@@ -135,6 +89,7 @@ void uv_timer_endgame(uv_loop_t* loop, uv_timer_t* handle) {
 int uv_timer_start(uv_timer_t* handle, uv_timer_cb timer_cb, int64_t timeout,
     int64_t repeat) {
   uv_loop_t* loop = handle->loop;
+  uv_timer_t* old;
 
   if (handle->flags & UV_HANDLE_ACTIVE) {
     RB_REMOVE(uv_timer_tree_s, &loop->timers, handle);
@@ -146,9 +101,8 @@ int uv_timer_start(uv_timer_t* handle, uv_timer_cb timer_cb, int64_t timeout,
   handle->flags |= UV_HANDLE_ACTIVE;
   uv__handle_start(handle);
 
-  if (RB_INSERT(uv_timer_tree_s, &loop->timers, handle) != NULL) {
-    uv_fatal_error(ERROR_INVALID_DATA, "RB_INSERT");
-  }
+  old = RB_INSERT(uv_timer_tree_s, &loop->timers, handle);
+  assert(old == NULL);
 
   return 0;
 }

@@ -408,17 +408,6 @@ void RegExpMacroAssemblerIrregexp::CheckNotBackReferenceIgnoreCase(
 }
 
 
-void RegExpMacroAssemblerIrregexp::CheckNotRegistersEqual(int reg1,
-                                                          int reg2,
-                                                          Label* on_not_equal) {
-  ASSERT(reg1 >= 0);
-  ASSERT(reg1 <= kMaxRegister);
-  Emit(BC_CHECK_NOT_REGS_EQUAL, reg1);
-  Emit32(reg2);
-  EmitOrLink(on_not_equal);
-}
-
-
 void RegExpMacroAssemblerIrregexp::CheckCharacters(
   Vector<const uc16> str,
   int cp_offset,

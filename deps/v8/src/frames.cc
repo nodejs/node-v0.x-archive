@@ -469,6 +469,20 @@ StackFrame::Type StackFrame::GetCallerState(State* state) const {
 }
 
 
+Address StackFrame::UnpaddedFP() const {
+#if defined(V8_TARGET_ARCH_IA32)
+  if (!is_optimized()) return fp();
+  int32_t alignment_state = Memory::int32_at(
+    fp() + JavaScriptFrameConstants::kDynamicAlignmentStateOffset);
+
+  return (alignment_state == kAlignmentPaddingPushed) ?
+    (fp() + kPointerSize) : fp();
+#else
+  return fp();
+#endif
+}
+
+
 Code* EntryFrame::unchecked_code() const {
   return HEAP->raw_unchecked_js_entry_code();
 }
@@ -1394,11 +1408,11 @@ class field##_Wrapper : public ZoneObject {                      \
 STACK_FRAME_TYPE_LIST(DEFINE_WRAPPER)
 #undef DEFINE_WRAPPER
 
-static StackFrame* AllocateFrameCopy(StackFrame* frame) {
+static StackFrame* AllocateFrameCopy(StackFrame* frame, Zone* zone) {
 #define FRAME_TYPE_CASE(type, field) \
   case StackFrame::type: { \
     field##_Wrapper* wrapper = \
-        new field##_Wrapper(*(reinterpret_cast<field*>(frame))); \
+        new(zone) field##_Wrapper(*(reinterpret_cast<field*>(frame))); \
     return &wrapper->frame_; \
   }
 
@@ -1410,11 +1424,11 @@ static StackFrame* AllocateFrameCopy(StackFrame* frame) {
   return NULL;
 }
 
-Vector<StackFrame*> CreateStackMap() {
-  ZoneList<StackFrame*> list(10);
+Vector<StackFrame*> CreateStackMap(Zone* zone) {
+  ZoneList<StackFrame*> list(10, zone);
   for (StackFrameIterator it; !it.done(); it.Advance()) {
-    StackFrame* frame = AllocateFrameCopy(it.frame());
-    list.Add(frame);
+    StackFrame* frame = AllocateFrameCopy(it.frame(), zone);
+    list.Add(frame, zone);
   }
   return list.ToVector();
 }

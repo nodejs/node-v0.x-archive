@@ -1867,26 +1867,53 @@ void Marker<T>::MarkDescriptorArray(DescriptorArray* descriptors) {
   // Empty descriptor array is marked as a root before any maps are marked.
   ASSERT(descriptors != descriptors->GetHeap()->empty_descriptor_array());
 
-  // The DescriptorArray contains a pointer to its contents array, but the
-  // contents array will be marked black and hence not be visited again.
-  if (!base_marker()->MarkObjectAndPush(descriptors)) return;
-  FixedArray* contents = FixedArray::cast(
-      descriptors->get(DescriptorArray::kContentArrayIndex));
-  ASSERT(contents->length() >= 2);
-  ASSERT(Marking::IsWhite(Marking::MarkBitFrom(contents)));
-  base_marker()->MarkObjectWithoutPush(contents);
+  if (!base_marker()->MarkObjectWithoutPush(descriptors)) return;
+  Object** descriptor_start = descriptors->data_start();
 
-  // Contents contains (value, details) pairs.  If the descriptor contains a
-  // transition (value is a Map), we don't mark the value as live.  It might
-  // be set to the NULL_DESCRIPTOR in ClearNonLiveTransitions later.
-  for (int i = 0; i < contents->length(); i += 2) {
-    PropertyDetails details(Smi::cast(contents->get(i + 1)));
+  // Since the descriptor array itself is not pushed for scanning, all fields
+  // that point to objects manually have to be pushed, marked, and their slots
+  // recorded.
+  if (descriptors->HasEnumCache()) {
+    Object** enum_cache_slot = descriptors->GetEnumCacheSlot();
+    Object* enum_cache = *enum_cache_slot;
+    base_marker()->MarkObjectAndPush(
+        reinterpret_cast<HeapObject*>(enum_cache));
+    mark_compact_collector()->RecordSlot(descriptor_start,
+                                         enum_cache_slot,
+                                         enum_cache);
+  }
 
-    Object** slot = contents->data_start() + i;
-    if (!(*slot)->IsHeapObject()) continue;
-    HeapObject* value = HeapObject::cast(*slot);
+  // TODO(verwaest) Make sure we free unused transitions.
+  if (descriptors->elements_transition_map() != NULL) {
+    Object** transitions_slot = descriptors->GetTransitionsSlot();
+    Object* transitions = *transitions_slot;
+    base_marker()->MarkObjectAndPush(
+        reinterpret_cast<HeapObject*>(transitions));
+    mark_compact_collector()->RecordSlot(descriptor_start,
+                                         transitions_slot,
+                                         transitions);
+  }
 
-    mark_compact_collector()->RecordSlot(slot, slot, *slot);
+  // If the descriptor contains a transition (value is a Map), we don't mark the
+  // value as live. It might be set to the NULL_DESCRIPTOR in
+  // ClearNonLiveTransitions later.
+  for (int i = 0; i < descriptors->number_of_descriptors(); ++i) {
+    Object** key_slot = descriptors->GetKeySlot(i);
+    Object* key = *key_slot;
+    if (key->IsHeapObject()) {
+      base_marker()->MarkObjectAndPush(reinterpret_cast<HeapObject*>(key));
+      mark_compact_collector()->RecordSlot(descriptor_start, key_slot, key);
+    }
+
+    Object** value_slot = descriptors->GetValueSlot(i);
+    if (!(*value_slot)->IsHeapObject()) continue;
+    HeapObject* value = HeapObject::cast(*value_slot);
+
+    mark_compact_collector()->RecordSlot(descriptor_start,
+                                         value_slot,
+                                         value);
+
+    PropertyDetails details(descriptors->GetDetails(i));
 
     switch (details.type()) {
       case NORMAL:
@@ -1904,12 +1931,6 @@ void Marker<T>::MarkDescriptorArray(DescriptorArray* descriptors) {
           MarkAccessorPairSlot(accessors, AccessorPair::kGetterOffset);
           MarkAccessorPairSlot(accessors, AccessorPair::kSetterOffset);
         }
-        break;
-      case ELEMENTS_TRANSITION:
-        // For maps with multiple elements transitions, the transition maps are
-        // stored in a FixedArray. Keep the fixed array alive but not the maps
-        // that it refers to.
-        if (value->IsFixedArray()) base_marker()->MarkObjectWithoutPush(value);
         break;
       case MAP_TRANSITION:
       case CONSTANT_TRANSITION:

@@ -39,17 +39,6 @@ S15.12.2_A1: FAIL
 # V8 Bug: http://code.google.com/p/v8/issues/detail?id=691
 11.2.3-3_3: FAIL
 
-# Prototypal inheritance of properties does not maintain accessibility.
-# The [[CanPut]] operation should traverse the prototype chain to
-# determine whether given property is writable or not.
-# V8 Bug: http://code.google.com/p/v8/issues/detail?id=1475
-8.14.4-8-b_1: FAIL
-8.14.4-8-b_2: FAIL
-15.2.3.6-4-405: FAIL
-15.2.3.6-4-410: FAIL
-15.2.3.6-4-415: FAIL
-15.2.3.6-4-420: FAIL
-
 ##################### DELIBERATE INCOMPATIBILITIES #####################
 
 # We deliberately treat arguments to parseInt() with a leading zero as

@@ -119,8 +119,10 @@ namespace internal {
 
 RegExpMacroAssemblerMIPS::RegExpMacroAssemblerMIPS(
     Mode mode,
-    int registers_to_save)
-    : masm_(new MacroAssembler(Isolate::Current(), NULL, kRegExpCodeSize)),
+    int registers_to_save,
+    Zone* zone)
+    : NativeRegExpMacroAssembler(zone),
+      masm_(new MacroAssembler(Isolate::Current(), NULL, kRegExpCodeSize)),
       mode_(mode),
       num_registers_(registers_to_save),
       num_saved_registers_(registers_to_save),
@@ -446,13 +448,6 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReference(
   // Move current character position to position after match.
   __ Subu(current_input_offset(), a2, end_of_input_address());
   __ bind(&fallthrough);
-}
-
-
-void RegExpMacroAssemblerMIPS::CheckNotRegistersEqual(int reg1,
-                                                      int reg2,
-                                                      Label* on_not_equal) {
-  UNIMPLEMENTED_MIPS();
 }
 
 
@@ -788,7 +783,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
         for (int i = 0; i < num_saved_registers_; i += 2) {
           __ lw(a2, register_location(i));
           __ lw(a3, register_location(i + 1));
-          if (global()) {
+          if (i == 0 && global_with_zero_length_check()) {
             // Keep capture start in a4 for the zero-length check later.
             __ mov(t7, a2);
           }
@@ -830,17 +825,22 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
 
         // Prepare a0 to initialize registers with its value in the next run.
         __ lw(a0, MemOperand(frame_pointer(), kInputStartMinusOne));
-        // Special case for zero-length matches.
-        // t7: capture start index
-        // Not a zero-length match, restart.
-        __ Branch(
-            &load_char_start_regexp, ne, current_input_offset(), Operand(t7));
-        // Offset from the end is zero if we already reached the end.
-        __ Branch(&exit_label_, eq, current_input_offset(), Operand(zero_reg));
-        // Advance current position after a zero-length match.
-        __ Addu(current_input_offset(),
-                current_input_offset(),
-                Operand((mode_ == UC16) ? 2 : 1));
+
+        if (global_with_zero_length_check()) {
+          // Special case for zero-length matches.
+          // t7: capture start index
+          // Not a zero-length match, restart.
+          __ Branch(
+              &load_char_start_regexp, ne, current_input_offset(), Operand(t7));
+          // Offset from the end is zero if we already reached the end.
+          __ Branch(&exit_label_, eq, current_input_offset(),
+                    Operand(zero_reg));
+          // Advance current position after a zero-length match.
+          __ Addu(current_input_offset(),
+                  current_input_offset(),
+                  Operand((mode_ == UC16) ? 2 : 1));
+        }
+
         __ Branch(&load_char_start_regexp);
       } else {
         __ li(v0, Operand(SUCCESS));

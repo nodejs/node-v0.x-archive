@@ -29,7 +29,13 @@
 
   function startup() {
     var EventEmitter = NativeModule.require('events').EventEmitter;
-    process.__proto__ = EventEmitter.prototype;
+
+    process.__proto__ = Object.create(EventEmitter.prototype, {
+      constructor: {
+        value: process.constructor
+      }
+    });
+
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
     startup.globalVariables();
@@ -394,6 +400,14 @@
       // know yet.  Call pause() explicitly to unref() it.
       stdin.pause();
 
+      // when piping stdin to a destination stream,
+      // let the data begin to flow.
+      var pipe = stdin.pipe;
+      stdin.pipe = function(dest, opts) {
+        stdin.resume();
+        return pipe.call(stdin, dest, opts);
+      };
+
       return stdin;
     });
 
@@ -430,6 +444,8 @@
       if (r) {
         throw errnoException(errno, 'kill');
       }
+
+      return true;
     };
   };
 
@@ -590,35 +606,6 @@
 
   NativeModule.prototype.cache = function() {
     NativeModule._cache[this.id] = this;
-  };
-
-  // Wrap a core module's method in a wrapper that will warn on first use
-  // and then return the result of invoking the original function. After
-  // first being called the original method is restored.
-  NativeModule.prototype.deprecate = function(method, message) {
-    var original = this.exports[method];
-    var self = this;
-    var warned = false;
-    message = message || '';
-
-    Object.defineProperty(this.exports, method, {
-      enumerable: false,
-      value: function() {
-        if (!warned) {
-          warned = true;
-          message = self.id + '.' + method + ' is deprecated. ' + message;
-
-          var moduleIdCheck = new RegExp('\\b' + self.id + '\\b');
-          if (moduleIdCheck.test(process.env.NODE_DEBUG))
-            console.trace(message);
-          else
-            console.error(message);
-
-          self.exports[method] = original;
-        }
-        return original.apply(this, arguments);
-      }
-    });
   };
 
   startup();

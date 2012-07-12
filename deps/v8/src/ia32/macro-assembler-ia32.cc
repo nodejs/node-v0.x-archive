@@ -237,6 +237,68 @@ void MacroAssembler::RecordWriteField(
 }
 
 
+void MacroAssembler::RecordWriteForMap(
+    Register object,
+    Handle<Map> map,
+    Register scratch1,
+    Register scratch2,
+    SaveFPRegsMode save_fp) {
+  Label done;
+
+  Register address = scratch1;
+  Register value = scratch2;
+  if (emit_debug_code()) {
+    Label ok;
+    lea(address, FieldOperand(object, HeapObject::kMapOffset));
+    test_b(address, (1 << kPointerSizeLog2) - 1);
+    j(zero, &ok, Label::kNear);
+    int3();
+    bind(&ok);
+  }
+
+  ASSERT(!object.is(value));
+  ASSERT(!object.is(address));
+  ASSERT(!value.is(address));
+  if (emit_debug_code()) {
+    AbortIfSmi(object);
+  }
+
+  if (!FLAG_incremental_marking) {
+    return;
+  }
+
+  // A single check of the map's pages interesting flag suffices, since it is
+  // only set during incremental collection, and then it's also guaranteed that
+  // the from object's page's interesting flag is also set.  This optimization
+  // relies on the fact that maps can never be in new space.
+  ASSERT(!isolate()->heap()->InNewSpace(*map));
+  CheckPageFlagForMap(map,
+                      MemoryChunk::kPointersToHereAreInterestingMask,
+                      zero,
+                      &done,
+                      Label::kNear);
+
+  // Delay the initialization of |address| and |value| for the stub until it's
+  // known that the will be needed. Up until this point their values are not
+  // needed since they are embedded in the operands of instructions that need
+  // them.
+  lea(address, FieldOperand(object, HeapObject::kMapOffset));
+  mov(value, Immediate(map));
+  RecordWriteStub stub(object, value, address, OMIT_REMEMBERED_SET, save_fp);
+  CallStub(&stub);
+
+  bind(&done);
+
+  // Clobber clobbered input registers when running with the debug-code flag
+  // turned on to provoke errors.
+  if (emit_debug_code()) {
+    mov(value, Immediate(BitCast<int32_t>(kZapValue)));
+    mov(scratch1, Immediate(BitCast<int32_t>(kZapValue)));
+    mov(scratch2, Immediate(BitCast<int32_t>(kZapValue)));
+  }
+}
+
+
 void MacroAssembler::RecordWrite(Register object,
                                  Register address,
                                  Register value,
@@ -504,7 +566,7 @@ void MacroAssembler::CompareMap(Register obj,
       Map* current_map = *map;
       while (CanTransitionToMoreGeneralFastElementsKind(kind, packed)) {
         kind = GetNextMoreGeneralFastElementsKind(kind, packed);
-        current_map = current_map->LookupElementsTransitionMap(kind, NULL);
+        current_map = current_map->LookupElementsTransitionMap(kind);
         if (!current_map) break;
         j(equal, early_success, Label::kNear);
         cmp(FieldOperand(obj, HeapObject::kMapOffset),
@@ -2613,6 +2675,28 @@ void MacroAssembler::CheckPageFlag(
            static_cast<uint8_t>(mask));
   } else {
     test(Operand(scratch, MemoryChunk::kFlagsOffset), Immediate(mask));
+  }
+  j(cc, condition_met, condition_met_distance);
+}
+
+
+void MacroAssembler::CheckPageFlagForMap(
+    Handle<Map> map,
+    int mask,
+    Condition cc,
+    Label* condition_met,
+    Label::Distance condition_met_distance) {
+  ASSERT(cc == zero || cc == not_zero);
+  Page* page = Page::FromAddress(map->address());
+  ExternalReference reference(ExternalReference::page_flags(page));
+  // The inlined static address check of the page's flags relies
+  // on maps never being compacted.
+  ASSERT(!isolate()->heap()->mark_compact_collector()->
+         IsOnEvacuationCandidate(*map));
+  if (mask < (1 << kBitsPerByte)) {
+    test_b(Operand::StaticVariable(reference), static_cast<uint8_t>(mask));
+  } else {
+    test(Operand::StaticVariable(reference), Immediate(mask));
   }
   j(cc, condition_met, condition_met_distance);
 }

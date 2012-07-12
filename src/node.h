@@ -85,7 +85,9 @@
 
 namespace node {
 
-int Start(int argc, char *argv[]);
+NODE_EXTERN extern bool no_deprecation;
+
+NODE_EXTERN int Start(int argc, char *argv[]);
 
 char** Init(int argc, char *argv[]);
 v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
@@ -144,19 +146,7 @@ ssize_t DecodeWrite(char *buf,
                     v8::Handle<v8::Value>,
                     enum encoding encoding = BINARY);
 
-// Use different stat structs & calls on windows and posix;
-// on windows, _stati64 is utf-8 and big file aware.
-#if __POSIX__
-# define NODE_STAT        stat
-# define NODE_FSTAT       fstat
-# define NODE_STAT_STRUCT struct stat
-#else // _WIN32
-# define NODE_STAT        _stati64
-# define NODE_FSTAT       _fstati64
-# define NODE_STAT_STRUCT struct _stati64
-#endif
-
-v8::Local<v8::Object> BuildStatsObject(NODE_STAT_STRUCT *s);
+v8::Local<v8::Object> BuildStatsObject(const uv_statbuf_t* s);
 
 
 /**
@@ -273,5 +263,12 @@ MakeCallback(const v8::Handle<v8::Object> object,
              const v8::Handle<v8::Function> callback,
              int argc,
              v8::Handle<v8::Value> argv[]);
+
 }  // namespace node
+
+#if !defined(NODE_WANT_INTERNALS) && !defined(_WIN32)
+# include "ev-emul.h"
+# include "eio-emul.h"
+#endif
+
 #endif  // SRC_NODE_H_

@@ -112,9 +112,6 @@ def BuildOptions():
   result.add_option("--nostress",
                     help="Don't run crankshaft --always-opt --stress-op test",
                     default=False, action="store_true")
-  result.add_option("--crankshaft",
-                    help="Run with the --crankshaft flag",
-                    default=False, action="store_true")
   result.add_option("--shard-count",
                     help="Split testsuites into this number of shards",
                     default=1, type="int")
@@ -199,8 +196,6 @@ def PassOnOptions(options):
     result += ['--stress-only']
   if options.nostress:
     result += ['--nostress']
-  if options.crankshaft:
-    result += ['--crankshaft']
   if options.shard_count != 1:
     result += ['--shard-count=%s' % options.shard_count]
   if options.shard_run != 1:
@@ -245,9 +240,6 @@ def Main():
                          ['--arch=' + arch] +
                          ['--mode=' + mode] +
                          ['--shell=' + shell])
-      # TODO(jkummerow): This print is temporary.
-      print "Executing: %s" % cmdline
-
       child = subprocess.Popen(cmdline,
                                shell=True,
                                cwd=workspace,

@@ -65,6 +65,9 @@ namespace v8 {
 namespace internal {
 
 
+static const int kPackedSizeNotKnown = -1;
+
+
 // First argument in list is the accessor class, the second argument is the
 // accessor ElementsKind, and the third is the backing store class.  Use the
 // fast element handler for smi-only arrays.  The implementation is currently
@@ -326,6 +329,76 @@ static void CopyDoubleToDoubleElements(FixedDoubleArray* from,
 }
 
 
+static void CopySmiToDoubleElements(FixedArray* from,
+                                    uint32_t from_start,
+                                    FixedDoubleArray* to,
+                                    uint32_t to_start,
+                                    int raw_copy_size) {
+  int copy_size = raw_copy_size;
+  if (raw_copy_size < 0) {
+    ASSERT(raw_copy_size == ElementsAccessor::kCopyToEnd ||
+           raw_copy_size == ElementsAccessor::kCopyToEndAndInitializeToHole);
+    copy_size = from->length() - from_start;
+    if (raw_copy_size == ElementsAccessor::kCopyToEndAndInitializeToHole) {
+      for (int i = to_start + copy_size; i < to->length(); ++i) {
+        to->set_the_hole(i);
+      }
+    }
+  }
+  ASSERT((copy_size + static_cast<int>(to_start)) <= to->length() &&
+         (copy_size + static_cast<int>(from_start)) <= from->length());
+  if (copy_size == 0) return;
+  Object* the_hole = from->GetHeap()->the_hole_value();
+  for (uint32_t from_end = from_start + static_cast<uint32_t>(copy_size);
+       from_start < from_end; from_start++, to_start++) {
+    Object* hole_or_smi = from->get(from_start);
+    if (hole_or_smi == the_hole) {
+      to->set_the_hole(to_start);
+    } else {
+      to->set(to_start, Smi::cast(hole_or_smi)->value());
+    }
+  }
+}
+
+
+static void CopyPackedSmiToDoubleElements(FixedArray* from,
+                                          uint32_t from_start,
+                                          FixedDoubleArray* to,
+                                          uint32_t to_start,
+                                          int packed_size,
+                                          int raw_copy_size) {
+  int copy_size = raw_copy_size;
+  uint32_t to_end;
+  if (raw_copy_size < 0) {
+    ASSERT(raw_copy_size == ElementsAccessor::kCopyToEnd ||
+           raw_copy_size == ElementsAccessor::kCopyToEndAndInitializeToHole);
+    copy_size = from->length() - from_start;
+    if (raw_copy_size == ElementsAccessor::kCopyToEndAndInitializeToHole) {
+      to_end = to->length();
+    } else {
+      to_end = to_start + static_cast<uint32_t>(copy_size);
+    }
+  } else {
+    to_end = to_start + static_cast<uint32_t>(copy_size);
+  }
+  ASSERT(static_cast<int>(to_end) <= to->length());
+  ASSERT(packed_size >= 0 && packed_size <= copy_size);
+  ASSERT((copy_size + static_cast<int>(to_start)) <= to->length() &&
+         (copy_size + static_cast<int>(from_start)) <= from->length());
+  if (copy_size == 0) return;
+  for (uint32_t from_end = from_start + static_cast<uint32_t>(packed_size);
+       from_start < from_end; from_start++, to_start++) {
+    Object* smi = from->get(from_start);
+    ASSERT(!smi->IsTheHole());
+    to->set(to_start, Smi::cast(smi)->value());
+  }
+
+  while (to_start < to_end) {
+    to->set_the_hole(to_start++);
+  }
+}
+
+
 static void CopyObjectToDoubleElements(FixedArray* from,
                                        uint32_t from_start,
                                        FixedDoubleArray* to,
@@ -345,12 +418,14 @@ static void CopyObjectToDoubleElements(FixedArray* from,
   ASSERT((copy_size + static_cast<int>(to_start)) <= to->length() &&
          (copy_size + static_cast<int>(from_start)) <= from->length());
   if (copy_size == 0) return;
-  for (int i = 0; i < copy_size; i++) {
-    Object* hole_or_object = from->get(i + from_start);
-    if (hole_or_object->IsTheHole()) {
-      to->set_the_hole(i + to_start);
+  Object* the_hole = from->GetHeap()->the_hole_value();
+  for (uint32_t from_end = from_start + copy_size;
+       from_start < from_end; from_start++, to_start++) {
+    Object* hole_or_object = from->get(from_start);
+    if (hole_or_object == the_hole) {
+      to->set_the_hole(to_start);
     } else {
-      to->set(i + to_start, hole_or_object->Number());
+      to->set(to_start, hole_or_object->Number());
     }
   }
 }
@@ -527,6 +602,7 @@ class ElementsAccessorBase : public ElementsAccessor {
                                                        FixedArrayBase* to,
                                                        ElementsKind to_kind,
                                                        uint32_t to_start,
+                                                       int packed_size,
                                                        int copy_size) {
     UNREACHABLE();
     return NULL;
@@ -539,14 +615,27 @@ class ElementsAccessorBase : public ElementsAccessor {
                                                     uint32_t to_start,
                                                     int copy_size,
                                                     FixedArrayBase* from) {
+    int packed_size = kPackedSizeNotKnown;
     if (from == NULL) {
       from = from_holder->elements();
+    }
+
+    if (from_holder) {
+      ElementsKind elements_kind = from_holder->GetElementsKind();
+      bool is_packed = IsFastPackedElementsKind(elements_kind) &&
+          from_holder->IsJSArray();
+      if (is_packed) {
+        packed_size = Smi::cast(JSArray::cast(from_holder)->length())->value();
+        if (copy_size >= 0 && packed_size > copy_size) {
+          packed_size = copy_size;
+        }
+      }
     }
     if (from->length() == 0) {
       return from;
     }
     return ElementsAccessorSubclass::CopyElementsImpl(
-        from, from_start, to, to_kind, to_start, copy_size);
+        from, from_start, to, to_kind, to_start, packed_size, copy_size);
   }
 
   MUST_USE_RESULT virtual MaybeObject* AddElementsToFixedArray(
@@ -849,15 +938,30 @@ class FastSmiOrObjectElementsAccessor
                                        FixedArrayBase* to,
                                        ElementsKind to_kind,
                                        uint32_t to_start,
+                                       int packed_size,
                                        int copy_size) {
     if (IsFastSmiOrObjectElementsKind(to_kind)) {
       CopyObjectToObjectElements(
           FixedArray::cast(from), KindTraits::Kind, from_start,
           FixedArray::cast(to), to_kind, to_start, copy_size);
     } else if (IsFastDoubleElementsKind(to_kind)) {
-      CopyObjectToDoubleElements(
-          FixedArray::cast(from), from_start,
-          FixedDoubleArray::cast(to), to_start, copy_size);
+      if (IsFastSmiElementsKind(KindTraits::Kind)) {
+        if (IsFastPackedElementsKind(KindTraits::Kind) &&
+            packed_size != kPackedSizeNotKnown) {
+          CopyPackedSmiToDoubleElements(
+              FixedArray::cast(from), from_start,
+              FixedDoubleArray::cast(to), to_start,
+              packed_size, copy_size);
+        } else {
+          CopySmiToDoubleElements(
+              FixedArray::cast(from), from_start,
+              FixedDoubleArray::cast(to), to_start, copy_size);
+        }
+      } else {
+        CopyObjectToDoubleElements(
+            FixedArray::cast(from), from_start,
+            FixedDoubleArray::cast(to), to_start, copy_size);
+      }
     } else {
       UNREACHABLE();
     }
@@ -952,6 +1056,7 @@ class FastDoubleElementsAccessor
                                        FixedArrayBase* to,
                                        ElementsKind to_kind,
                                        uint32_t to_start,
+                                       int packed_size,
                                        int copy_size) {
     switch (to_kind) {
       case FAST_SMI_ELEMENTS:
@@ -1265,6 +1370,7 @@ class DictionaryElementsAccessor
                                                        FixedArrayBase* to,
                                                        ElementsKind to_kind,
                                                        uint32_t to_start,
+                                                       int packed_size,
                                                        int copy_size) {
     switch (to_kind) {
       case FAST_SMI_ELEMENTS:
@@ -1417,6 +1523,7 @@ class NonStrictArgumentsElementsAccessor : public ElementsAccessorBase<
                                                        FixedArrayBase* to,
                                                        ElementsKind to_kind,
                                                        uint32_t to_start,
+                                                       int packed_size,
                                                        int copy_size) {
     FixedArray* parameter_map = FixedArray::cast(from);
     FixedArray* arguments = FixedArray::cast(parameter_map->get(1));

@@ -130,3 +130,12 @@ assertEquals("4, 2!", str);
 var str = "Beasts of England, beasts of Ireland";
 str = str.replace(/(.*)/g, function(match) { return '~'; });
 assertEquals("~~", str);
+
+// Test zero-length matches that have non-zero-length sub-captures that do not
+// start at the match start position.
+str = "up up up up";
+str = str.replace(/\b(?=u(p))/g, function(match, capture) {
+                                    return capture.length;
+                                  });
+
+assertEquals("1up 1up 1up 1up", str);

@@ -988,13 +988,25 @@ void LoadIC::UpdateCaches(LookupResult* lookup,
         }
         break;
       case CALLBACKS: {
-        Handle<Object> callback_object(lookup->GetCallbackObject());
-        if (!callback_object->IsAccessorInfo()) return;
-        Handle<AccessorInfo> callback =
-            Handle<AccessorInfo>::cast(callback_object);
-        if (v8::ToCData<Address>(callback->getter()) == 0) return;
-        code = isolate()->stub_cache()->ComputeLoadCallback(
-            name, receiver, holder, callback);
+        Handle<Object> callback(lookup->GetCallbackObject());
+        if (callback->IsAccessorInfo()) {
+          Handle<AccessorInfo> info = Handle<AccessorInfo>::cast(callback);
+          if (v8::ToCData<Address>(info->getter()) == 0) return;
+          if (!info->IsCompatibleReceiver(*receiver)) return;
+          code = isolate()->stub_cache()->ComputeLoadCallback(
+              name, receiver, holder, info);
+        } else if (callback->IsAccessorPair()) {
+          Handle<Object> getter(Handle<AccessorPair>::cast(callback)->getter());
+          if (!getter->IsJSFunction()) return;
+          if (holder->IsGlobalObject()) return;
+          if (!receiver->HasFastProperties()) return;
+          code = isolate()->stub_cache()->ComputeLoadViaGetter(
+              name, receiver, holder, Handle<JSFunction>::cast(getter));
+        } else {
+          ASSERT(callback->IsForeign());
+          // No IC support for old-style native accessors.
+          return;
+        }
         break;
       }
       case INTERCEPTOR:
@@ -1256,6 +1268,7 @@ void KeyedLoadIC::UpdateCaches(LookupResult* lookup,
         Handle<AccessorInfo> callback =
             Handle<AccessorInfo>::cast(callback_object);
         if (v8::ToCData<Address>(callback->getter()) == 0) return;
+        if (!callback->IsCompatibleReceiver(*receiver)) return;
         code = isolate()->stub_cache()->ComputeKeyedLoadCallback(
             name, receiver, holder, callback);
         break;
@@ -1408,7 +1421,11 @@ MaybeObject* StoreIC::Store(State state,
   }
 
   // Set the property.
-  return receiver->SetProperty(*name, *value, NONE, strict_mode);
+  return receiver->SetProperty(*name,
+                               *value,
+                               NONE,
+                               strict_mode,
+                               JSReceiver::CERTAINLY_NOT_STORE_FROM_KEYED);
 }
 
 
@@ -1433,6 +1450,7 @@ void StoreIC::UpdateCaches(LookupResult* lookup,
   // Compute the code stub for this store; used for rewriting to
   // monomorphic state and making sure that the code stub is in the
   // stub cache.
+  Handle<JSObject> holder(lookup->holder());
   Handle<Code> code;
   switch (type) {
     case FIELD:
@@ -1460,18 +1478,30 @@ void StoreIC::UpdateCaches(LookupResult* lookup,
         code = isolate()->stub_cache()->ComputeStoreGlobal(
             name, global, cell, strict_mode);
       } else {
-        if (lookup->holder() != *receiver) return;
+        if (!holder.is_identical_to(receiver)) return;
         code = isolate()->stub_cache()->ComputeStoreNormal(strict_mode);
       }
       break;
     case CALLBACKS: {
-      Handle<Object> callback_object(lookup->GetCallbackObject());
-      if (!callback_object->IsAccessorInfo()) return;
-      Handle<AccessorInfo> callback =
-          Handle<AccessorInfo>::cast(callback_object);
-      if (v8::ToCData<Address>(callback->setter()) == 0) return;
-      code = isolate()->stub_cache()->ComputeStoreCallback(
-          name, receiver, callback, strict_mode);
+      Handle<Object> callback(lookup->GetCallbackObject());
+      if (callback->IsAccessorInfo()) {
+        Handle<AccessorInfo> info = Handle<AccessorInfo>::cast(callback);
+        if (v8::ToCData<Address>(info->setter()) == 0) return;
+        ASSERT(info->IsCompatibleReceiver(*receiver));
+        code = isolate()->stub_cache()->ComputeStoreCallback(
+            name, receiver, info, strict_mode);
+      } else if (callback->IsAccessorPair()) {
+        Handle<Object> setter(Handle<AccessorPair>::cast(callback)->setter());
+        if (!setter->IsJSFunction()) return;
+        if (holder->IsGlobalObject()) return;
+        if (!receiver->HasFastProperties()) return;
+        code = isolate()->stub_cache()->ComputeStoreViaSetter(
+            name, receiver, Handle<JSFunction>::cast(setter), strict_mode);
+      } else {
+        ASSERT(callback->IsForeign());
+        // No IC support for old-style native accessors.
+        return;
+      }
       break;
     }
     case INTERCEPTOR:
@@ -1481,7 +1511,6 @@ void StoreIC::UpdateCaches(LookupResult* lookup,
       break;
     case CONSTANT_FUNCTION:
     case CONSTANT_TRANSITION:
-    case ELEMENTS_TRANSITION:
       return;
     case HANDLER:
     case NULL_DESCRIPTOR:
@@ -1563,38 +1592,43 @@ Handle<Code> KeyedIC::ComputeStub(Handle<JSObject> receiver,
   }
 
   bool monomorphic = false;
+  bool is_transition_stub = IsTransitionStubKind(stub_kind);
+  Handle<Map> receiver_map(receiver->map());
+  Handle<Map> monomorphic_map = receiver_map;
   MapHandleList target_receiver_maps;
-  if (ic_state != UNINITIALIZED && ic_state != PREMONOMORPHIC) {
+  if (ic_state == UNINITIALIZED || ic_state == PREMONOMORPHIC) {
+    // Optimistically assume that ICs that haven't reached the MONOMORPHIC state
+    // yet will do so and stay there.
+    monomorphic = true;
+  } else {
     GetReceiverMapsForStub(Handle<Code>(target()), &target_receiver_maps);
-  }
-  if (!IsTransitionStubKind(stub_kind)) {
-    if (ic_state == UNINITIALIZED || ic_state == PREMONOMORPHIC) {
-      monomorphic = true;
-    } else {
-      if (ic_state == MONOMORPHIC) {
-        // The first time a receiver is seen that is a transitioned version of
-        // the previous monomorphic receiver type, assume the new ElementsKind
-        // is the monomorphic type. This benefits global arrays that only
-        // transition once, and all call sites accessing them are faster if they
-        // remain monomorphic. If this optimistic assumption is not true, the IC
-        // will miss again and it will become polymorphic and support both the
-        // untransitioned and transitioned maps.
-        monomorphic = IsMoreGeneralElementsKindTransition(
-            target_receiver_maps.at(0)->elements_kind(),
-            receiver->GetElementsKind());
-      }
+    if (ic_state == MONOMORPHIC && (is_transition_stub || stub_kind == LOAD)) {
+      // The first time a receiver is seen that is a transitioned version of the
+      // previous monomorphic receiver type, assume the new ElementsKind is the
+      // monomorphic type. This benefits global arrays that only transition
+      // once, and all call sites accessing them are faster if they remain
+      // monomorphic. If this optimistic assumption is not true, the IC will
+      // miss again and it will become polymorphic and support both the
+      // untransitioned and transitioned maps.
+      monomorphic = IsMoreGeneralElementsKindTransition(
+          target_receiver_maps.at(0)->elements_kind(),
+          receiver->GetElementsKind());
     }
   }
 
   if (monomorphic) {
+    if (is_transition_stub) {
+      monomorphic_map = ComputeTransitionedMap(receiver, stub_kind);
+      ASSERT(*monomorphic_map != *receiver_map);
+      stub_kind = GetNoTransitionStubKind(stub_kind);
+    }
     return ComputeMonomorphicStub(
-        receiver, stub_kind, strict_mode, generic_stub);
+        monomorphic_map, stub_kind, strict_mode, generic_stub);
   }
   ASSERT(target() != *generic_stub);
 
   // Determine the list of receiver maps that this call site has seen,
   // adding the map that was just encountered.
-  Handle<Map> receiver_map(receiver->map());
   bool map_added =
       AddOneReceiverMapIfMissing(&target_receiver_maps, receiver_map);
   if (IsTransitionStubKind(stub_kind)) {
@@ -1655,16 +1689,16 @@ Handle<Code> KeyedIC::ComputeMonomorphicStubWithoutMapCheck(
 }
 
 
-Handle<Code> KeyedIC::ComputeMonomorphicStub(Handle<JSObject> receiver,
+Handle<Code> KeyedIC::ComputeMonomorphicStub(Handle<Map> receiver_map,
                                              StubKind stub_kind,
                                              StrictModeFlag strict_mode,
                                              Handle<Code> generic_stub) {
-  if (receiver->HasFastSmiOrObjectElements() ||
-      receiver->HasExternalArrayElements() ||
-      receiver->HasFastDoubleElements() ||
-      receiver->HasDictionaryElements()) {
+  ElementsKind elements_kind = receiver_map->elements_kind();
+  if (IsFastElementsKind(elements_kind) ||
+      IsExternalArrayElementsKind(elements_kind) ||
+      IsDictionaryElementsKind(elements_kind)) {
     return isolate()->stub_cache()->ComputeKeyedLoadOrStoreElement(
-        receiver, stub_kind, strict_mode);
+        receiver_map, stub_kind, strict_mode);
   } else {
     return generic_stub;
   }
@@ -1940,7 +1974,6 @@ void KeyedStoreIC::UpdateCaches(LookupResult* lookup,
     case CALLBACKS:
     case INTERCEPTOR:
     case CONSTANT_TRANSITION:
-    case ELEMENTS_TRANSITION:
       // Always rewrite to the generic case so that we do not
       // repeatedly try to rewrite.
       code = (strict_mode == kStrictMode)

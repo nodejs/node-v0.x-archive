@@ -35,9 +35,10 @@
 namespace v8 {
 namespace internal {
 
-RegExpMacroAssembler::RegExpMacroAssembler()
+RegExpMacroAssembler::RegExpMacroAssembler(Zone* zone)
   : slow_safe_compiler_(false),
-    global_(false) {
+    global_mode_(NOT_GLOBAL),
+    zone_(zone) {
 }
 
 
@@ -56,8 +57,8 @@ bool RegExpMacroAssembler::CanReadUnaligned() {
 
 #ifndef V8_INTERPRETED_REGEXP  // Avoid unused code, e.g., on ARM.
 
-NativeRegExpMacroAssembler::NativeRegExpMacroAssembler()
-    : RegExpMacroAssembler() {
+NativeRegExpMacroAssembler::NativeRegExpMacroAssembler(Zone* zone)
+    : RegExpMacroAssembler(zone) {
 }
 
 

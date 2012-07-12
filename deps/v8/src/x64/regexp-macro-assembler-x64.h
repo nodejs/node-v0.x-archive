@@ -41,7 +41,7 @@ namespace internal {
 
 class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
  public:
-  RegExpMacroAssemblerX64(Mode mode, int registers_to_save);
+  RegExpMacroAssemblerX64(Mode mode, int registers_to_save, Zone* zone);
   virtual ~RegExpMacroAssemblerX64();
   virtual int stack_limit_slack();
   virtual void AdvanceCurrentPosition(int by);
@@ -66,7 +66,6 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
   virtual void CheckNotBackReference(int start_reg, Label* on_no_match);
   virtual void CheckNotBackReferenceIgnoreCase(int start_reg,
                                                Label* on_no_match);
-  virtual void CheckNotRegistersEqual(int reg1, int reg2, Label* on_not_equal);
   virtual void CheckNotCharacter(uint32_t c, Label* on_not_equal);
   virtual void CheckNotCharacterAfterAnd(uint32_t c,
                                          uint32_t mask,
@@ -241,7 +240,7 @@ class RegExpMacroAssemblerX64: public NativeRegExpMacroAssembler {
   void BranchOrBacktrack(Condition condition, Label* to);
 
   void MarkPositionForCodeRelativeFixup() {
-    code_relative_fixup_positions_.Add(masm_.pc_offset());
+    code_relative_fixup_positions_.Add(masm_.pc_offset(), zone());
   }
 
   void FixupCodeRelativePositions();

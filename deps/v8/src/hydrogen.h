@@ -77,7 +77,7 @@ class HBasicBlock: public ZoneObject {
     return &deleted_phis_;
   }
   void RecordDeletedPhi(int merge_index) {
-    deleted_phis_.Add(merge_index);
+    deleted_phis_.Add(merge_index, zone());
   }
   HBasicBlock* dominator() const { return dominator_; }
   HEnvironment* last_environment() const { return last_environment_; }
@@ -158,7 +158,7 @@ class HBasicBlock: public ZoneObject {
     dominates_loop_successors_ = true;
   }
 
-  inline Zone* zone();
+  inline Zone* zone() const;
 
 #ifdef DEBUG
   void Verify();
@@ -212,12 +212,12 @@ class HPredecessorIterator BASE_EMBEDDED {
 
 class HLoopInformation: public ZoneObject {
  public:
-  explicit HLoopInformation(HBasicBlock* loop_header)
-      : back_edges_(4),
+  HLoopInformation(HBasicBlock* loop_header, Zone* zone)
+      : back_edges_(4, zone),
         loop_header_(loop_header),
-        blocks_(8),
+        blocks_(8, zone),
         stack_check_(NULL) {
-    blocks_.Add(loop_header);
+    blocks_.Add(loop_header, zone);
   }
   virtual ~HLoopInformation() {}
 
@@ -244,10 +244,10 @@ class HLoopInformation: public ZoneObject {
 class BoundsCheckTable;
 class HGraph: public ZoneObject {
  public:
-  explicit HGraph(CompilationInfo* info);
+  HGraph(CompilationInfo* info, Zone* zone);
 
   Isolate* isolate() { return isolate_; }
-  Zone* zone() { return isolate_->zone(); }
+  Zone* zone() const { return zone_; }
 
   const ZoneList<HBasicBlock*>* blocks() const { return &blocks_; }
   const ZoneList<HPhi*>* phi_list() const { return phi_list_; }
@@ -280,7 +280,7 @@ class HGraph: public ZoneObject {
 
   void CollectPhis();
 
-  Handle<Code> Compile(CompilationInfo* info);
+  Handle<Code> Compile(CompilationInfo* info, Zone* zone);
 
   void set_undefined_constant(HConstant* constant) {
     undefined_constant_.set(constant);
@@ -304,7 +304,7 @@ class HGraph: public ZoneObject {
   int GetMaximumValueID() const { return values_.length(); }
   int GetNextBlockID() { return next_block_id_++; }
   int GetNextValueID(HValue* value) {
-    values_.Add(value);
+    values_.Add(value, zone());
     return values_.length() - 1;
   }
   HValue* LookupValue(int id) const {
@@ -334,6 +334,14 @@ class HGraph: public ZoneObject {
 
   void set_osr_values(ZoneList<HUnknownOSRValue*>* values) {
     osr_values_.set(values);
+  }
+
+  void MarkRecursive() {
+    is_recursive_ = true;
+  }
+
+  bool is_recursive() const {
+    return is_recursive_;
   }
 
  private:
@@ -380,11 +388,15 @@ class HGraph: public ZoneObject {
   SetOncePointer<HBasicBlock> osr_loop_entry_;
   SetOncePointer<ZoneList<HUnknownOSRValue*> > osr_values_;
 
+  Zone* zone_;
+
+  bool is_recursive_;
+
   DISALLOW_COPY_AND_ASSIGN(HGraph);
 };
 
 
-Zone* HBasicBlock::zone() { return graph_->zone(); }
+Zone* HBasicBlock::zone() const { return graph_->zone(); }
 
 
 // Type of stack frame an environment might refer to.
@@ -395,7 +407,8 @@ class HEnvironment: public ZoneObject {
  public:
   HEnvironment(HEnvironment* outer,
                Scope* scope,
-               Handle<JSFunction> closure);
+               Handle<JSFunction> closure,
+               Zone* zone);
 
   HEnvironment* DiscardInlined(bool drop_extra) {
     HEnvironment* outer = outer_;
@@ -462,7 +475,7 @@ class HEnvironment: public ZoneObject {
   void Push(HValue* value) {
     ASSERT(value != NULL);
     ++push_count_;
-    values_.Add(value);
+    values_.Add(value, zone());
   }
 
   HValue* Pop() {
@@ -519,13 +532,16 @@ class HEnvironment: public ZoneObject {
   void PrintTo(StringStream* stream);
   void PrintToStd();
 
+  Zone* zone() const { return zone_; }
+
  private:
-  explicit HEnvironment(const HEnvironment* other);
+  HEnvironment(const HEnvironment* other, Zone* zone);
 
   HEnvironment(HEnvironment* outer,
                Handle<JSFunction> closure,
                FrameType frame_type,
-               int arguments);
+               int arguments,
+               Zone* zone);
 
   // Create an artificial stub environment (e.g. for argument adaptor or
   // constructor stub).
@@ -563,6 +579,7 @@ class HEnvironment: public ZoneObject {
   int pop_count_;
   int push_count_;
   int ast_id_;
+  Zone* zone_;
 };
 
 
@@ -607,7 +624,7 @@ class AstContext {
 
   HGraphBuilder* owner() const { return owner_; }
 
-  inline Zone* zone();
+  inline Zone* zone() const;
 
   // We want to be able to assert, in a context-specific way, that the stack
   // height makes sense when the context is filled.
@@ -821,7 +838,7 @@ class HGraphBuilder: public AstVisitor {
     BreakAndContinueScope* next_;
   };
 
-  HGraphBuilder(CompilationInfo* info, TypeFeedbackOracle* oracle);
+  HGraphBuilder(CompilationInfo* info, TypeFeedbackOracle* oracle, Zone* zone);
 
   HGraph* CreateGraph();
 
@@ -1144,7 +1161,7 @@ class HGraphBuilder: public AstVisitor {
                                 Handle<Map> receiver_map,
                                 bool smi_and_map_check);
 
-  Zone* zone() { return zone_; }
+  Zone* zone() const { return zone_; }
 
   // The translation state of the currently-being-translated function.
   FunctionState* function_state_;
@@ -1176,12 +1193,12 @@ class HGraphBuilder: public AstVisitor {
 };
 
 
-Zone* AstContext::zone() { return owner_->zone(); }
+Zone* AstContext::zone() const { return owner_->zone(); }
 
 
 class HValueMap: public ZoneObject {
  public:
-  HValueMap()
+  explicit HValueMap(Zone* zone)
       : array_size_(0),
         lists_size_(0),
         count_(0),
@@ -1189,15 +1206,15 @@ class HValueMap: public ZoneObject {
         array_(NULL),
         lists_(NULL),
         free_list_head_(kNil) {
-    ResizeLists(kInitialSize);
-    Resize(kInitialSize);
+    ResizeLists(kInitialSize, zone);
+    Resize(kInitialSize, zone);
   }
 
   void Kill(GVNFlagSet flags);
 
-  void Add(HValue* value) {
+  void Add(HValue* value, Zone* zone) {
     present_flags_.Add(value->gvn_flags());
-    Insert(value);
+    Insert(value, zone);
   }
 
   HValue* Lookup(HValue* value) const;
@@ -1221,9 +1238,9 @@ class HValueMap: public ZoneObject {
 
   HValueMap(Zone* zone, const HValueMap* other);
 
-  void Resize(int new_size);
-  void ResizeLists(int new_size);
-  void Insert(HValue* value);
+  void Resize(int new_size, Zone* zone);
+  void ResizeLists(int new_size, Zone* zone);
+  void Insert(HValue* value, Zone* zone);
   uint32_t Bound(uint32_t value) const { return value & (array_size_ - 1); }
 
   int array_size_;
@@ -1242,6 +1259,7 @@ class HSideEffectMap BASE_EMBEDDED {
  public:
   HSideEffectMap();
   explicit HSideEffectMap(HSideEffectMap* other);
+  HSideEffectMap& operator= (const HSideEffectMap& other);
 
   void Kill(GVNFlagSet flags);
 
@@ -1375,7 +1393,7 @@ class HTracer: public Malloced {
     WriteChars(filename, "", 0, false);
   }
 
-  void TraceLiveRange(LiveRange* range, const char* type);
+  void TraceLiveRange(LiveRange* range, const char* type, Zone* zone);
   void Trace(const char* name, HGraph* graph, LChunk* chunk);
   void FlushToFile();
 

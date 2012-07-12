@@ -206,6 +206,11 @@ class StackFrame BASE_EMBEDDED {
   Address fp() const { return state_.fp; }
   Address caller_sp() const { return GetCallerStackPointer(); }
 
+  // If this frame is optimized and was dynamically aligned return its old
+  // unaligned frame pointer.  When the frame is deoptimized its FP will shift
+  // up one word and become unaligned.
+  Address UnpaddedFP() const;
+
   Address pc() const { return *pc_address(); }
   void set_pc(Address pc) { *pc_address() = pc; }
 
@@ -888,7 +893,7 @@ class StackFrameLocator BASE_EMBEDDED {
 
 // Reads all frames on the current stack and copies them into the current
 // zone memory.
-Vector<StackFrame*> CreateStackMap();
+Vector<StackFrame*> CreateStackMap(Zone* zone);
 
 } }  // namespace v8::internal
 

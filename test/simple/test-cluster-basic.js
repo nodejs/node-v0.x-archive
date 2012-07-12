@@ -112,6 +112,7 @@ else if (cluster.isMaster) {
 
   //Create worker
   worker = cluster.fork();
+  assert.equal(worker.id, 1);
   assert.ok(worker instanceof cluster.Worker,
       'the worker is not a instance of the Worker constructor');
 
@@ -135,7 +136,8 @@ else if (cluster.isMaster) {
           assert.equal(arguments.length, 1);
           var expect = { address: '127.0.0.1',
                          port: common.PORT,
-                         addressType: 4 };
+                         addressType: 4,
+                         fd: undefined };
           assert.deepEqual(arguments[0], expect);
           break;
 

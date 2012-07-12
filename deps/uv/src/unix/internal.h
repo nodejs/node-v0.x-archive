@@ -139,8 +139,6 @@ int uv__stream_open(uv_stream_t*, int fd, int flags);
 void uv__stream_destroy(uv_stream_t* stream);
 void uv__server_io(uv_loop_t* loop, uv__io_t* watcher, int events);
 int uv__accept(int sockfd);
-int uv__connect(uv_connect_t* req, uv_stream_t* stream, struct sockaddr* addr,
-    socklen_t addrlen, uv_connect_cb cb);
 
 /* tcp */
 int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb);
@@ -168,8 +166,12 @@ void uv__timer_close(uv_timer_t* handle);
 void uv__udp_close(uv_udp_t* handle);
 void uv__udp_finish_close(uv_udp_t* handle);
 
-#define UV__F_IPC        (1 << 0)
-#define UV__F_NONBLOCK   (1 << 1)
+#ifdef UV__O_NONBLOCK
+# define UV__F_NONBLOCK UV__O_NONBLOCK
+#else
+# define UV__F_NONBLOCK 1
+#endif
+
 int uv__make_socketpair(int fds[2], int flags);
 int uv__make_pipe(int fds[2], int flags);
 

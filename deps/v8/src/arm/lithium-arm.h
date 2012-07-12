@@ -333,8 +333,10 @@ class LGap: public LTemplateInstruction<0, 0, 0> {
     LAST_INNER_POSITION = AFTER
   };
 
-  LParallelMove* GetOrCreateParallelMove(InnerPosition pos)  {
-    if (parallel_moves_[pos] == NULL) parallel_moves_[pos] = new LParallelMove;
+  LParallelMove* GetOrCreateParallelMove(InnerPosition pos, Zone* zone)  {
+    if (parallel_moves_[pos] == NULL) {
+      parallel_moves_[pos] = new(zone) LParallelMove(zone);
+    }
     return parallel_moves_[pos];
   }
 
@@ -1684,11 +1686,12 @@ class LSmiUntag: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LStoreNamedField: public LTemplateInstruction<0, 2, 0> {
+class LStoreNamedField: public LTemplateInstruction<0, 2, 1> {
  public:
-  LStoreNamedField(LOperand* obj, LOperand* val) {
+  LStoreNamedField(LOperand* obj, LOperand* val, LOperand* temp) {
     inputs_[0] = obj;
     inputs_[1] = val;
+    temps_[0] = temp;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreNamedField, "store-named-field")
@@ -2266,8 +2269,10 @@ class LChunk: public ZoneObject {
   }
 
   void AddInlinedClosure(Handle<JSFunction> closure) {
-    inlined_closures_.Add(closure);
+    inlined_closures_.Add(closure, zone());
   }
+
+  Zone* zone() const { return graph_->zone(); }
 
  private:
   int spill_slot_count_;
@@ -2285,7 +2290,7 @@ class LChunkBuilder BASE_EMBEDDED {
       : chunk_(NULL),
         info_(info),
         graph_(graph),
-        zone_(graph->isolate()->zone()),
+        zone_(graph->zone()),
         status_(UNUSED),
         current_instruction_(NULL),
         current_block_(NULL),

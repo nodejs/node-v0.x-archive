@@ -1267,30 +1267,25 @@ MaybeObject* JSObject::EnsureCanContainElements(Object** objects,
   if (current_kind == FAST_HOLEY_ELEMENTS) return this;
   Heap* heap = GetHeap();
   Object* the_hole = heap->the_hole_value();
-  Object* heap_number_map = heap->heap_number_map();
   for (uint32_t i = 0; i < count; ++i) {
     Object* current = *objects++;
     if (current == the_hole) {
       is_holey = true;
       target_kind = GetHoleyElementsKind(target_kind);
     } else if (!current->IsSmi()) {
-      if (mode == ALLOW_CONVERTED_DOUBLE_ELEMENTS &&
-          HeapObject::cast(current)->map() == heap_number_map &&
-          IsFastSmiElementsKind(target_kind)) {
-        if (is_holey) {
-          target_kind = FAST_HOLEY_DOUBLE_ELEMENTS;
-        } else {
-          target_kind = FAST_DOUBLE_ELEMENTS;
-        }
-      } else {
-        if (!current->IsNumber()) {
+      if (mode == ALLOW_CONVERTED_DOUBLE_ELEMENTS && current->IsNumber()) {
+        if (IsFastSmiElementsKind(target_kind)) {
           if (is_holey) {
-            target_kind = FAST_HOLEY_ELEMENTS;
-            break;
+            target_kind = FAST_HOLEY_DOUBLE_ELEMENTS;
           } else {
-            target_kind = FAST_ELEMENTS;
+            target_kind = FAST_DOUBLE_ELEMENTS;
           }
         }
+      } else if (is_holey) {
+        target_kind = FAST_HOLEY_ELEMENTS;
+        break;
+      } else {
+        target_kind = FAST_ELEMENTS;
       }
     }
   }
@@ -1611,13 +1606,22 @@ bool JSObject::HasFastProperties() {
 }
 
 
-int JSObject::MaxFastProperties() {
+bool JSObject::TooManyFastProperties(int properties,
+                                     JSObject::StoreFromKeyed store_mode) {
   // Allow extra fast properties if the object has more than
-  // kMaxFastProperties in-object properties. When this is the case,
+  // kFastPropertiesSoftLimit in-object properties. When this is the case,
   // it is very unlikely that the object is being used as a dictionary
   // and there is a good chance that allowing more map transitions
   // will be worth it.
-  return Max(map()->inobject_properties(), kMaxFastProperties);
+  int inobject = map()->inobject_properties();
+
+  int limit;
+  if (store_mode == CERTAINLY_NOT_STORE_FROM_KEYED) {
+    limit = Max(inobject, kMaxFastProperties);
+  } else {
+    limit = Max(inobject, kFastPropertiesSoftLimit);
+  }
+  return properties > limit;
 }
 
 
@@ -1871,9 +1875,14 @@ Object** FixedArray::data_start() {
 
 bool DescriptorArray::IsEmpty() {
   ASSERT(this->IsSmi() ||
-         this->length() > kFirstIndex ||
+         this->MayContainTransitions() ||
          this == HEAP->empty_descriptor_array());
-  return this->IsSmi() || length() <= kFirstIndex;
+  return this->IsSmi() || length() < kFirstIndex;
+}
+
+
+bool DescriptorArray::MayContainTransitions() {
+  return length() >= kTransitionsIndex;
 }
 
 
@@ -1883,7 +1892,7 @@ int DescriptorArray::bit_field3_storage() {
 }
 
 void DescriptorArray::set_bit_field3_storage(int value) {
-  ASSERT(!IsEmpty());
+  ASSERT(this->MayContainTransitions());
   WRITE_FIELD(this, kBitField3StorageOffset, Smi::FromInt(value));
 }
 
@@ -1907,7 +1916,7 @@ int DescriptorArray::Search(String* name) {
   // Fast case: do linear search for small arrays.
   const int kMaxElementsForLinearSearch = 8;
   if (StringShape(name).IsSymbol() && nof < kMaxElementsForLinearSearch) {
-    return LinearSearch(name, nof);
+    return LinearSearch(EXPECT_SORTED, name, nof);
   }
 
   // Slow case: perform binary search.
@@ -1925,22 +1934,74 @@ int DescriptorArray::SearchWithCache(String* name) {
 }
 
 
+Map* DescriptorArray::elements_transition_map() {
+  if (!this->MayContainTransitions()) {
+    return NULL;
+  }
+  Object* transition_map = get(kTransitionsIndex);
+  if (transition_map == Smi::FromInt(0)) {
+    return NULL;
+  } else {
+    return Map::cast(transition_map);
+  }
+}
+
+
+void DescriptorArray::set_elements_transition_map(
+    Map* transition_map, WriteBarrierMode mode) {
+  ASSERT(this->length() > kTransitionsIndex);
+  Heap* heap = GetHeap();
+  WRITE_FIELD(this, kTransitionsOffset, transition_map);
+  CONDITIONAL_WRITE_BARRIER(
+      heap, this, kTransitionsOffset, transition_map, mode);
+  ASSERT(DescriptorArray::cast(this));
+}
+
+
+Object** DescriptorArray::GetKeySlot(int descriptor_number) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  return HeapObject::RawField(
+      reinterpret_cast<HeapObject*>(this),
+      OffsetOfElementAt(ToKeyIndex(descriptor_number)));
+}
+
+
 String* DescriptorArray::GetKey(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
   return String::cast(get(ToKeyIndex(descriptor_number)));
 }
 
 
+Object** DescriptorArray::GetValueSlot(int descriptor_number) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  return HeapObject::RawField(
+      reinterpret_cast<HeapObject*>(this),
+      OffsetOfElementAt(ToValueIndex(descriptor_number)));
+}
+
+
 Object* DescriptorArray::GetValue(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
-  return GetContentArray()->get(ToValueIndex(descriptor_number));
+  return get(ToValueIndex(descriptor_number));
+}
+
+
+void DescriptorArray::SetNullValueUnchecked(int descriptor_number, Heap* heap) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  set_null_unchecked(heap, ToValueIndex(descriptor_number));
 }
 
 
 PropertyDetails DescriptorArray::GetDetails(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
-  Object* details = GetContentArray()->get(ToDetailsIndex(descriptor_number));
+  Object* details = get(ToDetailsIndex(descriptor_number));
   return PropertyDetails(Smi::cast(details));
+}
+
+
+void DescriptorArray::SetDetailsUnchecked(int descriptor_number, Smi* value) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  set_unchecked(ToDetailsIndex(descriptor_number), value);
 }
 
 
@@ -1982,7 +2043,6 @@ bool DescriptorArray::IsTransitionOnly(int descriptor_number) {
   switch (GetType(descriptor_number)) {
     case MAP_TRANSITION:
     case CONSTANT_TRANSITION:
-    case ELEMENTS_TRANSITION:
       return true;
     case CALLBACKS: {
       Object* value = GetValue(descriptor_number);
@@ -2024,11 +2084,10 @@ void DescriptorArray::Set(int descriptor_number,
   NoIncrementalWriteBarrierSet(this,
                                ToKeyIndex(descriptor_number),
                                desc->GetKey());
-  FixedArray* content_array = GetContentArray();
-  NoIncrementalWriteBarrierSet(content_array,
+  NoIncrementalWriteBarrierSet(this,
                                ToValueIndex(descriptor_number),
                                desc->GetValue());
-  NoIncrementalWriteBarrierSet(content_array,
+  NoIncrementalWriteBarrierSet(this,
                                ToDetailsIndex(descriptor_number),
                                desc->GetDetails().AsSmi());
 }
@@ -2037,11 +2096,10 @@ void DescriptorArray::Set(int descriptor_number,
 void DescriptorArray::NoIncrementalWriteBarrierSwapDescriptors(
     int first, int second) {
   NoIncrementalWriteBarrierSwap(this, ToKeyIndex(first), ToKeyIndex(second));
-  FixedArray* content_array = GetContentArray();
-  NoIncrementalWriteBarrierSwap(content_array,
+  NoIncrementalWriteBarrierSwap(this,
                                 ToValueIndex(first),
                                 ToValueIndex(second));
-  NoIncrementalWriteBarrierSwap(content_array,
+  NoIncrementalWriteBarrierSwap(this,
                                 ToDetailsIndex(first),
                                 ToDetailsIndex(second));
 }
@@ -2052,7 +2110,6 @@ DescriptorArray::WhitenessWitness::WhitenessWitness(DescriptorArray* array)
   marking_->EnterNoMarkingScope();
   if (array->number_of_descriptors() > 0) {
     ASSERT(Marking::Color(array) == Marking::WHITE_OBJECT);
-    ASSERT(Marking::Color(array->GetContentArray()) == Marking::WHITE_OBJECT);
   }
 }
 
@@ -3427,6 +3484,16 @@ Object* Map::GetBackPointer() {
 }
 
 
+Map* Map::elements_transition_map() {
+  return instance_descriptors()->elements_transition_map();
+}
+
+
+void Map::set_elements_transition_map(Map* transitioned_map) {
+  return instance_descriptors()->set_elements_transition_map(transitioned_map);
+}
+
+
 void Map::SetBackPointer(Object* value, WriteBarrierMode mode) {
   Heap* heap = GetHeap();
   ASSERT(instance_type() >= FIRST_JS_RECEIVER_TYPE);
@@ -3486,10 +3553,7 @@ ACCESSORS(Map, constructor, Object, kConstructorOffset)
 
 ACCESSORS(JSFunction, shared, SharedFunctionInfo, kSharedFunctionInfoOffset)
 ACCESSORS(JSFunction, literals_or_bindings, FixedArray, kLiteralsOffset)
-ACCESSORS(JSFunction,
-          next_function_link,
-          Object,
-          kNextFunctionLinkOffset)
+ACCESSORS(JSFunction, next_function_link, Object, kNextFunctionLinkOffset)
 
 ACCESSORS(GlobalObject, builtins, JSBuiltinsObject, kBuiltinsOffset)
 ACCESSORS(GlobalObject, global_context, Context, kGlobalContextOffset)
@@ -3502,6 +3566,8 @@ ACCESSORS(AccessorInfo, setter, Object, kSetterOffset)
 ACCESSORS(AccessorInfo, data, Object, kDataOffset)
 ACCESSORS(AccessorInfo, name, Object, kNameOffset)
 ACCESSORS_TO_SMI(AccessorInfo, flag, kFlagOffset)
+ACCESSORS(AccessorInfo, expected_receiver_type, Object,
+          kExpectedReceiverTypeOffset)
 
 ACCESSORS(AccessorPair, getter, Object, kGetterOffset)
 ACCESSORS(AccessorPair, setter, Object, kSetterOffset)
@@ -3592,7 +3658,7 @@ ACCESSORS(SharedFunctionInfo, debug_info, Object, kDebugInfoOffset)
 ACCESSORS(SharedFunctionInfo, inferred_name, String, kInferredNameOffset)
 ACCESSORS(SharedFunctionInfo, this_property_assignments, Object,
           kThisPropertyAssignmentsOffset)
-SMI_ACCESSORS(SharedFunctionInfo, ic_age, kICAgeOffset)
+SMI_ACCESSORS(SharedFunctionInfo, ast_node_count, kAstNodeCountOffset)
 
 
 BOOL_ACCESSORS(FunctionTemplateInfo, flag, hidden_prototype,
@@ -3641,8 +3707,10 @@ SMI_ACCESSORS(SharedFunctionInfo, compiler_hints,
 SMI_ACCESSORS(SharedFunctionInfo, this_property_assignments_count,
               kThisPropertyAssignmentsCountOffset)
 SMI_ACCESSORS(SharedFunctionInfo, opt_count, kOptCountOffset)
-SMI_ACCESSORS(SharedFunctionInfo, ast_node_count, kAstNodeCountOffset)
-SMI_ACCESSORS(SharedFunctionInfo, deopt_counter, kDeoptCounterOffset)
+SMI_ACCESSORS(SharedFunctionInfo, counters, kCountersOffset)
+SMI_ACCESSORS(SharedFunctionInfo,
+              stress_deopt_counter,
+              kStressDeoptCounterOffset)
 #else
 
 #define PSEUDO_SMI_ACCESSORS_LO(holder, name, offset)             \
@@ -3694,8 +3762,10 @@ PSEUDO_SMI_ACCESSORS_LO(SharedFunctionInfo,
                         kThisPropertyAssignmentsCountOffset)
 PSEUDO_SMI_ACCESSORS_HI(SharedFunctionInfo, opt_count, kOptCountOffset)
 
-PSEUDO_SMI_ACCESSORS_LO(SharedFunctionInfo, ast_node_count, kAstNodeCountOffset)
-PSEUDO_SMI_ACCESSORS_HI(SharedFunctionInfo, deopt_counter, kDeoptCounterOffset)
+PSEUDO_SMI_ACCESSORS_LO(SharedFunctionInfo, counters, kCountersOffset)
+PSEUDO_SMI_ACCESSORS_HI(SharedFunctionInfo,
+                        stress_deopt_counter,
+                        kStressDeoptCounterOffset)
 #endif
 
 
@@ -3896,9 +3966,61 @@ void SharedFunctionInfo::set_code_age(int code_age) {
 }
 
 
+int SharedFunctionInfo::ic_age() {
+  return ICAgeBits::decode(counters());
+}
+
+
+void SharedFunctionInfo::set_ic_age(int ic_age) {
+  set_counters(ICAgeBits::update(counters(), ic_age));
+}
+
+
+int SharedFunctionInfo::deopt_count() {
+  return DeoptCountBits::decode(counters());
+}
+
+
+void SharedFunctionInfo::set_deopt_count(int deopt_count) {
+  set_counters(DeoptCountBits::update(counters(), deopt_count));
+}
+
+
+void SharedFunctionInfo::increment_deopt_count() {
+  int value = counters();
+  int deopt_count = DeoptCountBits::decode(value);
+  deopt_count = (deopt_count + 1) & DeoptCountBits::kMax;
+  set_counters(DeoptCountBits::update(value, deopt_count));
+}
+
+
+int SharedFunctionInfo::opt_reenable_tries() {
+  return OptReenableTriesBits::decode(counters());
+}
+
+
+void SharedFunctionInfo::set_opt_reenable_tries(int tries) {
+  set_counters(OptReenableTriesBits::update(counters(), tries));
+}
+
+
 bool SharedFunctionInfo::has_deoptimization_support() {
   Code* code = this->code();
   return code->kind() == Code::FUNCTION && code->has_deoptimization_support();
+}
+
+
+void SharedFunctionInfo::TryReenableOptimization() {
+  int tries = opt_reenable_tries();
+  set_opt_reenable_tries((tries + 1) & OptReenableTriesBits::kMax);
+  // We reenable optimization whenever the number of tries is a large
+  // enough power of 2.
+  if (tries >= 16 && (((tries - 1) & tries) == 0)) {
+    set_optimization_disabled(false);
+    set_opt_count(0);
+    set_deopt_count(0);
+    code()->set_optimizable(true);
+  }
 }
 
 
@@ -4024,15 +4146,12 @@ MaybeObject* JSFunction::set_initial_map_and_cache_transitions(
     maps->set(kind, current_map);
     for (int i = GetSequenceIndexFromFastElementsKind(kind) + 1;
          i < kFastElementsKindCount; ++i) {
-      ElementsKind transitioned_kind = GetFastElementsKindFromSequenceIndex(i);
-      MaybeObject* maybe_new_map = current_map->CopyDropTransitions();
-      Map* new_map = NULL;
-      if (!maybe_new_map->To<Map>(&new_map)) return maybe_new_map;
-      new_map->set_elements_kind(transitioned_kind);
-      maybe_new_map = current_map->AddElementsTransition(transitioned_kind,
-                                                         new_map);
-      if (maybe_new_map->IsFailure()) return maybe_new_map;
-      maps->set(transitioned_kind, new_map);
+      Map* new_map;
+      ElementsKind next_kind = GetFastElementsKindFromSequenceIndex(i);
+      MaybeObject* maybe_new_map =
+          current_map->CreateNextElementsTransition(next_kind);
+      if (!maybe_new_map->To(&new_map)) return maybe_new_map;
+      maps->set(next_kind, new_map);
       current_map = new_map;
     }
     global_context->set_js_array_maps(maps);
@@ -4073,6 +4192,7 @@ Object* JSFunction::prototype() {
   if (map()->has_non_instance_prototype()) return map()->constructor();
   return instance_prototype();
 }
+
 
 bool JSFunction::should_have_prototype() {
   return map()->function_with_prototype();
@@ -4709,6 +4829,13 @@ PropertyAttributes AccessorInfo::property_attributes() {
 
 void AccessorInfo::set_property_attributes(PropertyAttributes attributes) {
   set_flag(Smi::FromInt(AttributesField::update(flag()->value(), attributes)));
+}
+
+
+bool AccessorInfo::IsCompatibleReceiver(Object* receiver) {
+  Object* function_template = expected_receiver_type();
+  if (!function_template->IsFunctionTemplateInfo()) return true;
+  return receiver->IsInstanceOf(FunctionTemplateInfo::cast(function_template));
 }
 
 

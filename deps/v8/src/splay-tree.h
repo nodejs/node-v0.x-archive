@@ -50,7 +50,7 @@ namespace internal {
 // Forward defined as
 // template <typename Config, class Allocator = FreeStoreAllocationPolicy>
 //     class SplayTree;
-template <typename Config, class Allocator>
+template <typename Config, class AllocationPolicy>
 class SplayTree {
  public:
   typedef typename Config::Key Key;
@@ -58,13 +58,21 @@ class SplayTree {
 
   class Locator;
 
-  SplayTree() : root_(NULL) { }
+  SplayTree(AllocationPolicy allocator = AllocationPolicy())
+      : root_(NULL), allocator_(allocator) { }
   ~SplayTree();
 
-  INLINE(void* operator new(size_t size)) {
-    return Allocator::New(static_cast<int>(size));
+  INLINE(void* operator new(size_t size,
+                            AllocationPolicy allocator = AllocationPolicy())) {
+    return allocator.New(static_cast<int>(size));
   }
-  INLINE(void operator delete(void* p, size_t)) { return Allocator::Delete(p); }
+  INLINE(void operator delete(void* p)) {
+    AllocationPolicy::Delete(p);
+  }
+  // Please the MSVC compiler.  We should never have to execute this.
+  INLINE(void operator delete(void* p, AllocationPolicy policy)) {
+    UNREACHABLE();
+  }
 
   // Inserts the given key in this tree with the given value.  Returns
   // true if a node was inserted, otherwise false.  If found the locator
@@ -112,11 +120,16 @@ class SplayTree {
           left_(NULL),
           right_(NULL) { }
 
-    INLINE(void* operator new(size_t size)) {
-      return Allocator::New(static_cast<int>(size));
+    INLINE(void* operator new(size_t size, AllocationPolicy allocator)) {
+      return allocator.New(static_cast<int>(size));
     }
-    INLINE(void operator delete(void* p, size_t)) {
-      return Allocator::Delete(p);
+    INLINE(void operator delete(void* p)) {
+      return AllocationPolicy::Delete(p);
+    }
+    // Please the MSVC compiler.  We should never have to execute
+    // this.
+    INLINE(void operator delete(void* p, AllocationPolicy allocator)) {
+      UNREACHABLE();
     }
 
     Key key() { return key_; }
@@ -184,7 +197,7 @@ class SplayTree {
   class NodeDeleter BASE_EMBEDDED {
    public:
     NodeDeleter() { }
-    void Call(Node* node) { delete node; }
+    void Call(Node* node) { AllocationPolicy::Delete(node); }
 
    private:
     DISALLOW_COPY_AND_ASSIGN(NodeDeleter);
@@ -194,6 +207,7 @@ class SplayTree {
   void ForEachNode(Callback* callback);
 
   Node* root_;
+  AllocationPolicy allocator_;
 
   DISALLOW_COPY_AND_ASSIGN(SplayTree);
 };

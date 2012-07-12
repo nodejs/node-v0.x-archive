@@ -109,6 +109,10 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
     uv__poll_close((uv_poll_t*)handle);
     break;
 
+  case UV_FS_POLL:
+    uv__fs_poll_close((uv_fs_poll_t*)handle);
+    break;
+
   default:
     assert(0);
   }
@@ -133,6 +137,9 @@ static void uv__finish_close(uv_handle_t* handle) {
     case UV_ASYNC:
     case UV_TIMER:
     case UV_PROCESS:
+    case UV_FS_EVENT:
+    case UV_FS_POLL:
+    case UV_POLL:
       break;
 
     case UV_NAMED_PIPE:
@@ -146,12 +153,6 @@ static void uv__finish_close(uv_handle_t* handle) {
 
     case UV_UDP:
       uv__udp_finish_close((uv_udp_t*)handle);
-      break;
-
-    case UV_FS_EVENT:
-      break;
-
-    case UV_POLL:
       break;
 
     default:
@@ -226,24 +227,25 @@ void uv_loop_delete(uv_loop_t* loop) {
 }
 
 
-static void uv__poll(uv_loop_t* loop, unsigned int timeout) {
-  /* bump the loop's refcount, otherwise libev does
-   * a zero timeout poll and we end up busy looping
-   */
-  ev_ref(loop->ev);
-  ev_run(loop->ev, timeout / 1000.);
-  ev_unref(loop->ev);
-}
-
-
 static unsigned int uv__poll_timeout(uv_loop_t* loop) {
-  if (!uv__has_active_handles(loop))
+  if (!uv__has_active_handles(loop) && !uv__has_active_reqs(loop))
     return 0;
 
   if (!ngx_queue_empty(&loop->idle_handles))
     return 0;
 
+  if (loop->closing_handles)
+    return 0;
+
   return uv__next_timeout(loop);
+}
+
+
+static void uv__poll(uv_loop_t* loop) {
+  void ev__run(EV_P_ ev_tstamp waittime);
+  ev_invoke_pending(loop->ev);
+  ev__run(loop->ev, uv__poll_timeout(loop) / 1000.);
+  ev_invoke_pending(loop->ev);
 }
 
 
@@ -251,18 +253,10 @@ static int uv__run(uv_loop_t* loop) {
   uv_update_time(loop);
   uv__run_timers(loop);
   uv__run_idle(loop);
-
-  if (uv__has_active_handles(loop) || uv__has_active_reqs(loop)) {
-    uv__run_prepare(loop);
-    /* Need to poll even if there are no active handles left, otherwise
-     * uv_work_t reqs won't complete...
-     */
-    uv__poll(loop, uv__poll_timeout(loop));
-    uv__run_check(loop);
-  }
-
+  uv__run_prepare(loop);
+  uv__poll(loop);
+  uv__run_check(loop);
   uv__run_closing_handles(loop);
-
   return uv__has_active_handles(loop) || uv__has_active_reqs(loop);
 }
 
@@ -275,18 +269,6 @@ int uv_run(uv_loop_t* loop) {
 
 int uv_run_once(uv_loop_t* loop) {
   return uv__run(loop);
-}
-
-
-void uv__handle_init(uv_loop_t* loop, uv_handle_t* handle,
-    uv_handle_type type) {
-  loop->counters.handle_init++;
-
-  handle->loop = loop;
-  handle->type = type;
-  handle->flags = UV__HANDLE_REF; /* ref the loop when active */
-  handle->next_closing = NULL;
-  ngx_queue_insert_tail(&loop->handle_queue, &handle->handle_queue);
 }
 
 
@@ -444,6 +426,11 @@ int uv__accept(int sockfd) {
 
   while (1) {
 #if __linux__
+    static int no_accept4;
+
+    if (no_accept4)
+      goto skip;
+
     peerfd = uv__accept4(sockfd,
                          NULL,
                          NULL,
@@ -457,6 +444,9 @@ int uv__accept(int sockfd) {
 
     if (errno != ENOSYS)
       break;
+
+    no_accept4 = 1;
+skip:
 #endif
 
     peerfd = accept(sockfd, NULL, NULL);
@@ -481,55 +471,69 @@ int uv__accept(int sockfd) {
 
 
 int uv__nonblock(int fd, int set) {
+  int r;
+
 #if FIONBIO
-  return ioctl(fd, FIONBIO, &set);
+  do
+    r = ioctl(fd, FIONBIO, &set);
+  while (r == -1 && errno == EINTR);
+
+  return r;
 #else
   int flags;
 
-  if ((flags = fcntl(fd, F_GETFL)) == -1) {
+  do
+    r = fcntl(fd, F_GETFL);
+  while (r == -1 && errno == EINTR);
+
+  if (r == -1)
     return -1;
-  }
 
-  if (set) {
-    flags |= O_NONBLOCK;
-  } else {
-    flags &= ~O_NONBLOCK;
-  }
+  if (set)
+    flags = r | O_NONBLOCK;
+  else
+    flags = r & ~O_NONBLOCK;
 
-  if (fcntl(fd, F_SETFL, flags) == -1) {
-    return -1;
-  }
+  do
+    r = fcntl(fd, F_SETFL, flags);
+  while (r == -1 && errno == EINTR);
 
-  return 0;
+  return r;
 #endif
 }
 
 
 int uv__cloexec(int fd, int set) {
+  int flags;
+  int r;
+
 #if __linux__
   /* Linux knows only FD_CLOEXEC so we can safely omit the fcntl(F_GETFD)
    * syscall. CHECKME: That's probably true for other Unices as well.
    */
-  return fcntl(fd, F_SETFD, set ? FD_CLOEXEC : 0);
+  if (set)
+    flags = FD_CLOEXEC;
+  else
+    flags = 0;
 #else
-  int flags;
+  do
+    r = fcntl(fd, F_GETFD);
+  while (r == -1 && errno == EINTR);
 
-  if ((flags = fcntl(fd, F_GETFD)) == -1) {
+  if (r == -1)
     return -1;
-  }
 
-  if (set) {
-    flags |= FD_CLOEXEC;
-  } else {
-    flags &= ~FD_CLOEXEC;
-  }
-
-  if (fcntl(fd, F_SETFD, flags) == -1) {
-    return -1;
-  }
-
-  return 0;
+  if (set)
+    flags = r | FD_CLOEXEC;
+  else
+    flags = r & ~FD_CLOEXEC;
 #endif
+
+  do
+    r = fcntl(fd, F_SETFD, flags);
+  while (r == -1 && errno == EINTR);
+
+  return r;
 }
 
 
@@ -588,6 +592,18 @@ uv_err_t uv_chdir(const char* dir) {
   } else {
     return uv__new_sys_error(errno);
   }
+}
+
+
+void uv_disable_stdio_inheritance(void) {
+  int fd;
+
+  /* Set the CLOEXEC flag on all open descriptors. Unconditionally try the
+   * first 16 file descriptors. After that, bail out after the first error.
+   */
+  for (fd = 0; ; fd++)
+    if (uv__cloexec(fd, 1) && fd > 15)
+      break;
 }
 
 

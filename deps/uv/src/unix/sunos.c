@@ -28,7 +28,7 @@
 #include <assert.h>
 #include <errno.h>
 
-#ifdef SUNOS_HAVE_IFADDRS
+#ifndef SUNOS_NO_IFADDRS
 # include <ifaddrs.h>
 #endif
 #include <net/if.h>
@@ -215,6 +215,7 @@ void uv__fs_event_close(uv_fs_event_t* handle) {
   free(handle->filename);
   handle->filename = NULL;
   handle->fo.fo_name = NULL;
+  uv__handle_stop(handle);
 }
 
 #else /* !HAVE_PORTS_FS */
@@ -331,14 +332,6 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   lookup_instance = 0;
   while ((ksp = kstat_lookup(kc, (char *)"cpu_info", lookup_instance, NULL))) {
     if (kstat_read(kc, ksp, NULL) == -1) {
-      /*
-       * It is deeply annoying, but some kstats can return errors
-       * under otherwise routine conditions.  (ACPI is one
-       * offender; there are surely others.)  To prevent these
-       * fouled kstats from completely ruining our day, we assign
-       * an "error" member to the return value that consists of
-       * the strerror().
-       */
       cpu_info->speed = 0;
       cpu_info->model = NULL;
     } else {
@@ -348,7 +341,7 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 
       knp = (kstat_named_t *) kstat_data_lookup(ksp, (char *)"brand");
       assert(knp->data_type == KSTAT_DATA_STRING);
-      cpu_info->model = KSTAT_NAMED_STR_PTR(knp);
+      cpu_info->model = strdup(KSTAT_NAMED_STR_PTR(knp));
     }
 
     lookup_instance++;
@@ -407,7 +400,7 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
 
 uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
   int* count) {
-#ifndef SUNOS_HAVE_IFADDRS
+#ifdef SUNOS_NO_IFADDRS
   return uv__new_artificial_error(UV_ENOSYS);
 #else
   struct ifaddrs *addrs, *ent;
@@ -466,7 +459,7 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
   freeifaddrs(addrs);
 
   return uv_ok_;
-#endif  /* SUNOS_HAVE_IFADDRS */
+#endif  /* SUNOS_NO_IFADDRS */
 }
 
 

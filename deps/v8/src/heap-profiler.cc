@@ -97,7 +97,7 @@ void HeapProfiler::StopHeapObjectsTracking() {
 }
 
 
-void HeapProfiler::PushHeapObjectsStats(v8::OutputStream* stream) {
+SnapshotObjectId HeapProfiler::PushHeapObjectsStats(v8::OutputStream* stream) {
   ASSERT(Isolate::Current()->heap_profiler() != NULL);
   return Isolate::Current()->heap_profiler()->PushHeapObjectsStatsImpl(stream);
 }
@@ -158,13 +158,21 @@ void HeapProfiler::StartHeapObjectsTrackingImpl() {
 }
 
 
-void HeapProfiler::PushHeapObjectsStatsImpl(OutputStream* stream) {
-  snapshots_->PushHeapObjectsStats(stream);
+SnapshotObjectId HeapProfiler::PushHeapObjectsStatsImpl(OutputStream* stream) {
+  return snapshots_->PushHeapObjectsStats(stream);
 }
 
 
 void HeapProfiler::StopHeapObjectsTrackingImpl() {
   snapshots_->StopHeapObjectsTracking();
+}
+
+
+size_t HeapProfiler::GetMemorySizeUsedByProfiler() {
+  HeapProfiler* profiler = Isolate::Current()->heap_profiler();
+  ASSERT(profiler != NULL);
+  size_t size = profiler->snapshots_->GetUsedMemorySize();
+  return size;
 }
 
 

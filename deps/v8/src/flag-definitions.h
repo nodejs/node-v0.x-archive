@@ -132,6 +132,8 @@ public:
 
 // Flags for language modes and experimental language features.
 DEFINE_bool(use_strict, false, "enforce strict mode")
+DEFINE_bool(es5_readonly, false,
+            "activate correct semantics for inheriting readonliness")
 DEFINE_bool(es52_globals, false,
             "activate new semantics for global var declarations")
 
@@ -196,7 +198,7 @@ DEFINE_bool(trap_on_deopt, false, "put a break point before deoptimizing")
 DEFINE_bool(deoptimize_uncommon_cases, true, "deoptimize uncommon cases")
 DEFINE_bool(polymorphic_inlining, true, "polymorphic inlining")
 DEFINE_bool(use_osr, true, "use on-stack replacement")
-DEFINE_bool(array_bounds_checks_elimination, true,
+DEFINE_bool(array_bounds_checks_elimination, false,
             "perform array bounds checks elimination")
 DEFINE_bool(array_index_dehoisting, false,
             "perform array index dehoisting")

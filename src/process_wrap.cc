@@ -67,6 +67,9 @@ class ProcessWrap : public HandleWrap {
     NODE_SET_PROTOTYPE_METHOD(constructor, "spawn", Spawn);
     NODE_SET_PROTOTYPE_METHOD(constructor, "kill", Kill);
 
+    NODE_SET_PROTOTYPE_METHOD(constructor, "ref", HandleWrap::Ref);
+    NODE_SET_PROTOTYPE_METHOD(constructor, "unref", HandleWrap::Unref);
+
     target->Set(String::NewSymbol("Process"), constructor->GetFunction());
   }
 
@@ -103,7 +106,8 @@ class ProcessWrap : public HandleWrap {
       if (type->Equals(String::NewSymbol("ignore"))) {
         options->stdio[i].flags = UV_IGNORE;
       } else if (type->Equals(String::NewSymbol("pipe"))) {
-        options->stdio[i].flags = UV_CREATE_PIPE;
+        options->stdio[i].flags = static_cast<uv_stdio_flags>(
+            UV_CREATE_PIPE | UV_READABLE_PIPE | UV_WRITABLE_PIPE);
         options->stdio[i].data.stream = reinterpret_cast<uv_stream_t*>(
             PipeWrap::Unwrap(stdio
                 ->Get(String::NewSymbol("handle")).As<Object>())->UVHandle());
@@ -231,6 +235,11 @@ class ProcessWrap : public HandleWrap {
     if (js_options->Get(String::NewSymbol("windowsVerbatimArguments"))->
           IsTrue()) {
       options.flags |= UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS;
+    }
+
+    //options.detached
+    if (js_options->Get(String::NewSymbol("detached"))->IsTrue()) {
+      options.flags |= UV_PROCESS_DETACHED;
     }
 
     int r = uv_spawn(uv_default_loop(), &wrap->process_, options);

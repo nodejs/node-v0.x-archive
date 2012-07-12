@@ -49,6 +49,8 @@ class HeapProfiler {
   static void SetUp();
   static void TearDown();
 
+  static size_t GetMemorySizeUsedByProfiler();
+
   static HeapSnapshot* TakeSnapshot(const char* name,
                                     int type,
                                     v8::ActivityControl* control);
@@ -58,7 +60,7 @@ class HeapProfiler {
 
   static void StartHeapObjectsTracking();
   static void StopHeapObjectsTracking();
-  static void PushHeapObjectsStats(OutputStream* stream);
+  static SnapshotObjectId PushHeapObjectsStats(OutputStream* stream);
   static int GetSnapshotsCount();
   static HeapSnapshot* GetSnapshot(int index);
   static HeapSnapshot* FindSnapshot(unsigned uid);
@@ -89,7 +91,7 @@ class HeapProfiler {
 
   void StartHeapObjectsTrackingImpl();
   void StopHeapObjectsTrackingImpl();
-  void PushHeapObjectsStatsImpl(OutputStream* stream);
+  SnapshotObjectId PushHeapObjectsStatsImpl(OutputStream* stream);
 
   HeapSnapshotsCollection* snapshots_;
   unsigned next_snapshot_uid_;

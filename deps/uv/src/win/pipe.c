@@ -26,6 +26,9 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "handle-inl.h"
+#include "stream-inl.h"
+#include "req-inl.h"
 
 
 /* A zero-size buffer for use by uv_pipe_read */
@@ -71,9 +74,8 @@ static void uv_unique_pipe_name(char* ptr, char* name, size_t size) {
 
 
 int uv_pipe_init(uv_loop_t* loop, uv_pipe_t* handle, int ipc) {
-  uv_stream_init(loop, (uv_stream_t*)handle);
+  uv_stream_init(loop, (uv_stream_t*)handle, UV_NAMED_PIPE);
 
-  handle->type = UV_NAMED_PIPE;
   handle->reqs_pending = 0;
   handle->handle = INVALID_HANDLE_VALUE;
   handle->name = NULL;

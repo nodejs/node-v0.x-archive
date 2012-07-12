@@ -117,10 +117,12 @@ namespace internal {
 
 RegExpMacroAssemblerX64::RegExpMacroAssemblerX64(
     Mode mode,
-    int registers_to_save)
-    : masm_(Isolate::Current(), NULL, kRegExpCodeSize),
+    int registers_to_save,
+    Zone* zone)
+    : NativeRegExpMacroAssembler(zone),
+      masm_(Isolate::Current(), NULL, kRegExpCodeSize),
       no_root_array_scope_(&masm_),
-      code_relative_fixup_positions_(4),
+      code_relative_fixup_positions_(4, zone),
       mode_(mode),
       num_registers_(registers_to_save),
       num_saved_registers_(registers_to_save),
@@ -527,15 +529,6 @@ void RegExpMacroAssemblerX64::CheckNotBackReference(
 }
 
 
-void RegExpMacroAssemblerX64::CheckNotRegistersEqual(int reg1,
-                                                     int reg2,
-                                                     Label* on_not_equal) {
-  __ movq(rax, register_location(reg1));
-  __ cmpq(rax, register_location(reg2));
-  BranchOrBacktrack(not_equal, on_not_equal);
-}
-
-
 void RegExpMacroAssemblerX64::CheckNotCharacter(uint32_t c,
                                                 Label* on_not_equal) {
   __ cmpl(current_character(), Immediate(c));
@@ -926,7 +919,7 @@ Handle<HeapObject> RegExpMacroAssemblerX64::GetCode(Handle<String> source) {
       }
       for (int i = 0; i < num_saved_registers_; i++) {
         __ movq(rax, register_location(i));
-        if (i == 0 && global()) {
+        if (i == 0 && global_with_zero_length_check()) {
           // Keep capture start in rdx for the zero-length check later.
           __ movq(rdx, rax);
         }
@@ -958,20 +951,23 @@ Handle<HeapObject> RegExpMacroAssemblerX64::GetCode(Handle<String> source) {
       // Prepare rax to initialize registers with its value in the next run.
       __ movq(rax, Operand(rbp, kInputStartMinusOne));
 
-      // Special case for zero-length matches.
-      // rdx: capture start index
-      __ cmpq(rdi, rdx);
-      // Not a zero-length match, restart.
-      __ j(not_equal, &load_char_start_regexp);
-      // rdi (offset from the end) is zero if we already reached the end.
-      __ testq(rdi, rdi);
-      __ j(zero, &exit_label_, Label::kNear);
-      // Advance current position after a zero-length match.
-      if (mode_ == UC16) {
-        __ addq(rdi, Immediate(2));
-      } else {
-        __ incq(rdi);
+      if (global_with_zero_length_check()) {
+        // Special case for zero-length matches.
+        // rdx: capture start index
+        __ cmpq(rdi, rdx);
+        // Not a zero-length match, restart.
+        __ j(not_equal, &load_char_start_regexp);
+        // rdi (offset from the end) is zero if we already reached the end.
+        __ testq(rdi, rdi);
+        __ j(zero, &exit_label_, Label::kNear);
+        // Advance current position after a zero-length match.
+        if (mode_ == UC16) {
+          __ addq(rdi, Immediate(2));
+        } else {
+          __ incq(rdi);
+        }
       }
+
       __ jmp(&load_char_start_regexp);
     } else {
       __ movq(rax, Immediate(SUCCESS));

@@ -23,6 +23,8 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "handle-inl.h"
+#include "req-inl.h"
 
 
 /* Atomic set operation on char */
@@ -67,8 +69,7 @@ void uv_async_endgame(uv_loop_t* loop, uv_async_t* handle) {
 int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
   uv_req_t* req;
 
-  uv_handle_init(loop, (uv_handle_t*) handle);
-  handle->type = UV_ASYNC;
+  uv__handle_init(loop, (uv_handle_t*) handle, UV_ASYNC);
   handle->async_sent = 0;
   handle->async_cb = async_cb;
 

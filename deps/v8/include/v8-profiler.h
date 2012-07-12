@@ -448,11 +448,12 @@ class V8EXPORT HeapProfiler {
    * reports updates for all previous time intervals via the OutputStream
    * object. Updates on each time interval are provided as a stream of the
    * HeapStatsUpdate structure instances.
+   * The return value of the function is the last seen heap object Id.
    *
    * StartHeapObjectsTracking must be called before the first call to this
    * method.
    */
-  static void PushHeapObjectsStats(OutputStream* stream);
+  static SnapshotObjectId PushHeapObjectsStats(OutputStream* stream);
 
   /**
    * Stops tracking of heap objects population statistics, cleans up all
@@ -481,6 +482,9 @@ class V8EXPORT HeapProfiler {
 
   /** Returns the number of currently existing persistent handles. */
   static int GetPersistentHandleCount();
+
+  /** Returns memory used for profiler internal data and snapshots. */
+  static size_t GetMemorySizeUsedByProfiler();
 };
 
 

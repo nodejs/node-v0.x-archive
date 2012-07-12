@@ -1,3 +1,47 @@
+2012-06-13: Version 3.11.10
+
+        Implemented heap profiler memory usage reporting.
+
+        Preserved error message during finally block in try..finally.
+        (Chromium issue 129171)
+
+        Fixed EnsureCanContainElements to properly handle double values.
+        (issue 2170)
+
+        Improved heuristics to keep objects in fast mode with inherited
+        constructors.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-06-06: Version 3.11.9
+
+        Implemented ES5-conformant semantics for inherited setters and read-only
+        properties. Currently behind --es5_readonly flag, because it breaks
+        WebKit bindings.
+
+        Exposed last seen heap object id via v8 public api.
+
+        Performance and stability improvements on all platforms.
+
+
+2012-05-31: Version 3.11.8
+
+        Avoid overdeep recursion in regexp where a guarded expression with a
+        minimum repetition count is inside another quantifier.
+        (Chromium issue 129926)
+
+        Fixed missing write barrier in store field stub.
+        (issues 2143, 1465, Chromium issue 129355)
+
+        Proxies: Fixed receiver for setters inherited from proxies.
+        Proxies: Fixed ToStringArray function so that it does not reject some
+        keys.
+        (issue 1543)
+
+        Performance and stability improvements on all platforms.
+
+
 2012-05-29: Version 3.11.7
 
         Get better function names in stack traces.

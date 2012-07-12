@@ -19,16 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if 0 /* commenting out to build via gyp faster */
-#include "node_config.h"
-#endif
-
 #ifndef NODE_VERSION_H
 #define NODE_VERSION_H
 
 #define NODE_MAJOR_VERSION 0
-#define NODE_MINOR_VERSION 7
-#define NODE_PATCH_VERSION 10
+#define NODE_MINOR_VERSION 9
+#define NODE_PATCH_VERSION 0
 #define NODE_VERSION_IS_RELEASE 0
 
 #ifndef NODE_STRINGIFY

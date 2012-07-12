@@ -411,9 +411,9 @@ LChunk::LChunk(CompilationInfo* info, HGraph* graph)
     : spill_slot_count_(0),
       info_(info),
       graph_(graph),
-      instructions_(32),
-      pointer_maps_(8),
-      inlined_closures_(1) {
+      instructions_(32, graph->zone()),
+      pointer_maps_(8, graph->zone()),
+      inlined_closures_(1, graph->zone()) {
 }
 
 
@@ -427,9 +427,9 @@ int LChunk::GetNextSpillIndex(bool is_double) {
 LOperand* LChunk::GetNextSpillSlot(bool is_double)  {
   int index = GetNextSpillIndex(is_double);
   if (is_double) {
-    return LDoubleStackSlot::Create(index);
+    return LDoubleStackSlot::Create(index, zone());
   } else {
-    return LStackSlot::Create(index);
+    return LStackSlot::Create(index, zone());
   }
 }
 
@@ -474,23 +474,23 @@ void LChunk::AddInstruction(LInstruction* instr, HBasicBlock* block) {
   LInstructionGap* gap = new(graph_->zone()) LInstructionGap(block);
   int index = -1;
   if (instr->IsControl()) {
-    instructions_.Add(gap);
+    instructions_.Add(gap, zone());
     index = instructions_.length();
-    instructions_.Add(instr);
+    instructions_.Add(instr, zone());
   } else {
     index = instructions_.length();
-    instructions_.Add(instr);
-    instructions_.Add(gap);
+    instructions_.Add(instr, zone());
+    instructions_.Add(gap, zone());
   }
   if (instr->HasPointerMap()) {
-    pointer_maps_.Add(instr->pointer_map());
+    pointer_maps_.Add(instr->pointer_map(), zone());
     instr->pointer_map()->set_lithium_position(index);
   }
 }
 
 
 LConstantOperand* LChunk::DefineConstantOperand(HConstant* constant) {
-  return LConstantOperand::Create(constant->id());
+  return LConstantOperand::Create(constant->id(), zone());
 }
 
 
@@ -529,7 +529,8 @@ int LChunk::NearestGapPos(int index) const {
 
 
 void LChunk::AddGapMove(int index, LOperand* from, LOperand* to) {
-  GetGapAt(index)->GetOrCreateParallelMove(LGap::START)->AddMove(from, to);
+  GetGapAt(index)->GetOrCreateParallelMove(
+      LGap::START, zone())->AddMove(from, to, zone());
 }
 
 
@@ -762,7 +763,7 @@ LInstruction* LChunkBuilder::MarkAsCall(LInstruction* instr,
 
 LInstruction* LChunkBuilder::AssignPointerMap(LInstruction* instr) {
   ASSERT(!instr->HasPointerMap());
-  instr->set_pointer_map(new(zone()) LPointerMap(position_));
+  instr->set_pointer_map(new(zone()) LPointerMap(position_, zone()));
   return instr;
 }
 
@@ -985,7 +986,8 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
       hydrogen_env->parameter_count(),
       argument_count_,
       value_count,
-      outer);
+      outer,
+      zone());
   int argument_index = *argument_index_accumulator;
   for (int i = 0; i < value_count; ++i) {
     if (hydrogen_env->is_special_index(i)) continue;
@@ -1344,7 +1346,8 @@ HValue* LChunkBuilder::SimplifiedDivisorForMathFloorOfDiv(HValue* divisor) {
     HConstant* constant_val = HConstant::cast(divisor);
     int32_t int32_val = constant_val->Integer32Value();
     if (LChunkBuilder::HasMagicNumberForDivisor(int32_val)) {
-      return constant_val->CopyToRepresentation(Representation::Integer32());
+      return constant_val->CopyToRepresentation(Representation::Integer32(),
+                                                divisor->block()->zone());
     }
   }
   return NULL;
@@ -1360,7 +1363,7 @@ LInstruction* LChunkBuilder::DoMathFloorOfDiv(HMathFloorOfDiv* instr) {
            HConstant::cast(right)->HasInteger32Value() &&
            HasMagicNumberForDivisor(HConstant::cast(right)->Integer32Value()));
     return AssignEnvironment(DefineAsRegister(
-          new LMathFloorOfDiv(dividend, divisor, remainder)));
+          new(zone()) LMathFloorOfDiv(dividend, divisor, remainder)));
 }
 
 
@@ -1657,7 +1660,8 @@ LInstruction* LChunkBuilder::DoValueOf(HValueOf* instr) {
 
 LInstruction* LChunkBuilder::DoDateField(HDateField* instr) {
   LOperand* object = UseFixed(instr->value(), r0);
-  LDateField* result = new LDateField(object, FixedTemp(r1), instr->index());
+  LDateField* result =
+      new(zone()) LDateField(object, FixedTemp(r1), instr->index());
   return MarkAsCall(DefineFixed(result, r0), instr);
 }
 
@@ -1706,10 +1710,9 @@ LInstruction* LChunkBuilder::DoChange(HChange* instr) {
     } else {
       ASSERT(to.IsInteger32());
       LOperand* value = UseRegisterAtStart(instr->value());
-      bool needs_check = !instr->value()->type().IsSmi();
       LInstruction* res = NULL;
-      if (!needs_check) {
-        res = DefineAsRegister(new(zone()) LSmiUntag(value, needs_check));
+      if (instr->value()->type().IsSmi()) {
+        res = DefineAsRegister(new(zone()) LSmiUntag(value, false));
       } else {
         LOperand* temp1 = TempRegister();
         LOperand* temp2 = instr->CanTruncateToInt32() ? TempRegister()
@@ -2105,16 +2108,28 @@ LInstruction* LChunkBuilder::DoTransitionElementsKind(
 
 LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
   bool needs_write_barrier = instr->NeedsWriteBarrier();
+  bool needs_write_barrier_for_map = !instr->transition().is_null() &&
+      instr->NeedsWriteBarrierForMap();
 
-  LOperand* obj = needs_write_barrier
-      ? UseTempRegister(instr->object())
-      : UseRegisterAtStart(instr->object());
+  LOperand* obj;
+  if (needs_write_barrier) {
+    obj = instr->is_in_object()
+        ? UseRegister(instr->object())
+        : UseTempRegister(instr->object());
+  } else {
+    obj = needs_write_barrier_for_map
+        ? UseRegister(instr->object())
+        : UseRegisterAtStart(instr->object());
+  }
 
   LOperand* val = needs_write_barrier
       ? UseTempRegister(instr->value())
       : UseRegister(instr->value());
 
-  return new(zone()) LStoreNamedField(obj, val);
+  // We need a temporary register for write barrier of the map field.
+  LOperand* temp = needs_write_barrier_for_map ? TempRegister() : NULL;
+
+  return new(zone()) LStoreNamedField(obj, val, temp);
 }
 
 
@@ -2157,7 +2172,8 @@ LInstruction* LChunkBuilder::DoStringLength(HStringLength* instr) {
 
 
 LInstruction* LChunkBuilder::DoAllocateObject(HAllocateObject* instr) {
-  LAllocateObject* result = new LAllocateObject(TempRegister(), TempRegister());
+  LAllocateObject* result =
+      new(zone()) LAllocateObject(TempRegister(), TempRegister());
   return AssignPointerMap(DefineAsRegister(result));
 }
 

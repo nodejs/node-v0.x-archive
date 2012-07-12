@@ -47,7 +47,7 @@ class RegExpMacroAssemblerMIPS: public RegExpMacroAssembler {
 #else  // V8_INTERPRETED_REGEXP
 class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
  public:
-  RegExpMacroAssemblerMIPS(Mode mode, int registers_to_save);
+  RegExpMacroAssemblerMIPS(Mode mode, int registers_to_save, Zone* zone);
   virtual ~RegExpMacroAssemblerMIPS();
   virtual int stack_limit_slack();
   virtual void AdvanceCurrentPosition(int by);
@@ -72,7 +72,6 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
   virtual void CheckNotBackReference(int start_reg, Label* on_no_match);
   virtual void CheckNotBackReferenceIgnoreCase(int start_reg,
                                                Label* on_no_match);
-  virtual void CheckNotRegistersEqual(int reg1, int reg2, Label* on_not_equal);
   virtual void CheckNotCharacter(uint32_t c, Label* on_not_equal);
   virtual void CheckNotCharacterAfterAnd(uint32_t c,
                                          uint32_t mask,

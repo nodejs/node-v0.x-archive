@@ -990,6 +990,12 @@ Local<Signature> Signature::New(Handle<FunctionTemplate> receiver,
 }
 
 
+Local<AccessorSignature> AccessorSignature::New(
+      Handle<FunctionTemplate> receiver) {
+  return Utils::AccessorSignatureToLocal(Utils::OpenHandle(*receiver));
+}
+
+
 Local<TypeSwitch> TypeSwitch::New(Handle<FunctionTemplate> type) {
   Handle<FunctionTemplate> types[1] = { type };
   return TypeSwitch::New(1, types);
@@ -1057,7 +1063,8 @@ static i::Handle<i::AccessorInfo> MakeAccessorInfo(
       AccessorSetter setter,
       v8::Handle<Value> data,
       v8::AccessControl settings,
-      v8::PropertyAttribute attributes) {
+      v8::PropertyAttribute attributes,
+      v8::Handle<AccessorSignature> signature) {
   i::Handle<i::AccessorInfo> obj = FACTORY->NewAccessorInfo();
   ASSERT(getter != NULL);
   SET_FIELD_WRAPPED(obj, set_getter, getter);
@@ -1069,6 +1076,9 @@ static i::Handle<i::AccessorInfo> MakeAccessorInfo(
   if (settings & ALL_CAN_WRITE) obj->set_all_can_write(true);
   if (settings & PROHIBITS_OVERWRITING) obj->set_prohibits_overwriting(true);
   obj->set_property_attributes(static_cast<PropertyAttributes>(attributes));
+  if (!signature.IsEmpty()) {
+    obj->set_expected_receiver_type(*Utils::OpenHandle(*signature));
+  }
   return obj;
 }
 
@@ -1079,7 +1089,8 @@ void FunctionTemplate::AddInstancePropertyAccessor(
       AccessorSetter setter,
       v8::Handle<Value> data,
       v8::AccessControl settings,
-      v8::PropertyAttribute attributes) {
+      v8::PropertyAttribute attributes,
+      v8::Handle<AccessorSignature> signature) {
   i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
   if (IsDeadCheck(isolate,
                   "v8::FunctionTemplate::AddInstancePropertyAccessor()")) {
@@ -1088,9 +1099,9 @@ void FunctionTemplate::AddInstancePropertyAccessor(
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
 
-  i::Handle<i::AccessorInfo> obj = MakeAccessorInfo(name,
-                                                    getter, setter, data,
-                                                    settings, attributes);
+  i::Handle<i::AccessorInfo> obj = MakeAccessorInfo(name, getter, setter, data,
+                                                    settings, attributes,
+                                                    signature);
   i::Handle<i::Object> list(Utils::OpenHandle(this)->property_accessors());
   if (list->IsUndefined()) {
     list = NeanderArray().value();
@@ -1275,7 +1286,8 @@ void ObjectTemplate::SetAccessor(v8::Handle<String> name,
                                  AccessorSetter setter,
                                  v8::Handle<Value> data,
                                  AccessControl settings,
-                                 PropertyAttribute attribute) {
+                                 PropertyAttribute attribute,
+                                 v8::Handle<AccessorSignature> signature) {
   i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
   if (IsDeadCheck(isolate, "v8::ObjectTemplate::SetAccessor()")) return;
   ENTER_V8(isolate);
@@ -1289,7 +1301,8 @@ void ObjectTemplate::SetAccessor(v8::Handle<String> name,
                                                     setter,
                                                     data,
                                                     settings,
-                                                    attribute);
+                                                    attribute,
+                                                    signature);
 }
 
 
@@ -3079,9 +3092,10 @@ bool Object::SetAccessor(Handle<String> name,
   ON_BAILOUT(isolate, "v8::Object::SetAccessor()", return false);
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
-  i::Handle<i::AccessorInfo> info = MakeAccessorInfo(name,
-                                                     getter, setter, data,
-                                                     settings, attributes);
+  v8::Handle<AccessorSignature> signature;
+  i::Handle<i::AccessorInfo> info = MakeAccessorInfo(name, getter, setter, data,
+                                                     settings, attributes,
+                                                     signature);
   bool fast = Utils::OpenHandle(this)->HasFastProperties();
   i::Handle<i::Object> result = i::SetAccessor(Utils::OpenHandle(this), info);
   if (result.is_null() || result->IsUndefined()) return false;
@@ -6229,7 +6243,7 @@ void HeapProfiler::StopHeapObjectsTracking() {
 }
 
 
-void HeapProfiler::PushHeapObjectsStats(OutputStream* stream) {
+SnapshotObjectId HeapProfiler::PushHeapObjectsStats(OutputStream* stream) {
   i::Isolate* isolate = i::Isolate::Current();
   IsDeadCheck(isolate, "v8::HeapProfiler::PushHeapObjectsStats");
   return i::HeapProfiler::PushHeapObjectsStats(stream);
@@ -6253,6 +6267,11 @@ void HeapProfiler::DefineWrapperClass(uint16_t class_id,
 int HeapProfiler::GetPersistentHandleCount() {
   i::Isolate* isolate = i::Isolate::Current();
   return isolate->global_handles()->NumberOfGlobalHandles();
+}
+
+
+size_t HeapProfiler::GetMemorySizeUsedByProfiler() {
+  return i::HeapProfiler::GetMemorySizeUsedByProfiler();
 }
 
 

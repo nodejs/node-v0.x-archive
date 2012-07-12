@@ -171,11 +171,11 @@ void LEnvironment::PrintTo(StringStream* stream) {
 }
 
 
-void LPointerMap::RecordPointer(LOperand* op) {
+void LPointerMap::RecordPointer(LOperand* op, Zone* zone) {
   // Do not record arguments as pointers.
   if (op->IsStackSlot() && op->index() < 0) return;
   ASSERT(!op->IsDoubleRegister() && !op->IsDoubleStackSlot());
-  pointer_operands_.Add(op);
+  pointer_operands_.Add(op, zone);
 }
 
 
@@ -192,11 +192,11 @@ void LPointerMap::RemovePointer(LOperand* op) {
 }
 
 
-void LPointerMap::RecordUntagged(LOperand* op) {
+void LPointerMap::RecordUntagged(LOperand* op, Zone* zone) {
   // Do not record arguments as pointers.
   if (op->IsStackSlot() && op->index() < 0) return;
   ASSERT(!op->IsDoubleRegister() && !op->IsDoubleStackSlot());
-  untagged_operands_.Add(op);
+  untagged_operands_.Add(op, zone);
 }
 
 

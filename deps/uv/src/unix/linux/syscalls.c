@@ -49,6 +49,26 @@
 # endif
 #endif /* __NR_accept4 */
 
+#ifndef __NR_eventfd
+# if __x86_64__
+#  define __NR_eventfd 284
+# elif __i386__
+#  define __NR_eventfd 323
+# elif __arm__
+#  define __NR_eventfd (UV_SYSCALL_BASE + 351)
+# endif
+#endif /* __NR_eventfd */
+
+#ifndef __NR_eventfd2
+# if __x86_64__
+#  define __NR_eventfd2 290
+# elif __i386__
+#  define __NR_eventfd2 328
+# elif __arm__
+#  define __NR_eventfd2 (UV_SYSCALL_BASE + 356)
+# endif
+#endif /* __NR_eventfd2 */
+
 #ifndef __NR_inotify_init
 # if __x86_64__
 #  define __NR_inotify_init 253
@@ -115,7 +135,7 @@
 # elif __i386__
 #  define __NR_sendmmsg 345
 # elif __arm__
-#  define __NR_recvmmsg (UV_SYSCALL_BASE + 374)
+#  define __NR_sendmmsg (UV_SYSCALL_BASE + 374)
 # endif
 #endif /* __NR_sendmmsg */
 
@@ -132,15 +152,45 @@
 
 int uv__accept4(int fd, struct sockaddr* addr, socklen_t* addrlen, int flags) {
 #if __i386__
-  unsigned long args[] = {
-    (unsigned long) fd,
-    (unsigned long) addr,
-    (unsigned long) addrlen,
-    (unsigned long) flags
-  };
-  return syscall(__NR_socketcall, 18 /* SYS_ACCEPT4 */, args);
+  unsigned long args[4];
+  int r;
+
+  args[0] = (unsigned long) fd;
+  args[1] = (unsigned long) addr;
+  args[2] = (unsigned long) addrlen;
+  args[3] = (unsigned long) flags;
+
+  r = syscall(__NR_socketcall, 18 /* SYS_ACCEPT4 */, args);
+
+  /* socketcall() raises EINVAL when SYS_ACCEPT4 is not supported but so does
+   * a bad flags argument. Try to distinguish between the two cases.
+   */
+  if (r == -1)
+    if (errno == EINVAL)
+      if ((flags & ~(UV__SOCK_CLOEXEC|UV__SOCK_NONBLOCK)) == 0)
+        errno = ENOSYS;
+
+  return r;
 #elif __NR_accept4
   return syscall(__NR_accept4, fd, addr, addrlen, flags);
+#else
+  return errno = ENOSYS, -1;
+#endif
+}
+
+
+int uv__eventfd(unsigned int count) {
+#if __NR_eventfd
+  return syscall(__NR_eventfd, count);
+#else
+  return errno = ENOSYS, -1;
+#endif
+}
+
+
+int uv__eventfd2(unsigned int count, int flags) {
+#if __NR_eventfd2
+  return syscall(__NR_eventfd2, count, flags);
 #else
   return errno = ENOSYS, -1;
 #endif

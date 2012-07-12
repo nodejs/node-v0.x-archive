@@ -130,6 +130,8 @@ Synchronous fchmod(2).
 Asynchronous lchmod(2). No arguments other than a possible exception
 are given to the completion callback.
 
+Only available on Mac OS X.
+
 ## fs.lchmodSync(path, mode)
 
 Synchronous lchmod(2).
@@ -355,13 +357,7 @@ without waiting for the callback. For this scenario,
 
 ## fs.writeSync(fd, buffer, offset, length, position)
 
-Synchronous version of buffer-based `fs.write()`. Returns the number of bytes
-written.
-
-## fs.writeSync(fd, str, position, [encoding])
-
-Synchronous version of string-based `fs.write()`. `encoding` defaults to
-`'utf8'`. Returns the number of _bytes_ written.
+Synchronous version of `fs.write()`. Returns the number of bytes written.
 
 ## fs.read(fd, buffer, offset, length, position, [callback])
 
@@ -380,13 +376,7 @@ The callback is given the three arguments, `(err, bytesRead, buffer)`.
 
 ## fs.readSync(fd, buffer, offset, length, position)
 
-Synchronous version of buffer-based `fs.read`. Returns the number of
-`bytesRead`.
-
-## fs.readSync(fd, length, position, encoding)
-
-Legacy synchronous version of string-based `fs.read`. Returns an array with the
-data from the file specified and number of bytes read, `[string, bytesRead]`.
+Synchronous version of `fs.read`. Returns the number of `bytesRead`.
 
 ## fs.readFile(filename, [encoding], [callback])
 
@@ -456,8 +446,7 @@ The second argument is optional. The `options` if provided should be an object
 containing two members a boolean, `persistent`, and `interval`. `persistent`
 indicates whether the process should continue to run as long as files are
 being watched. `interval` indicates how often the target should be polled,
-in milliseconds. (On Linux systems with inotify, `interval` is ignored.) The
-default is `{ persistent: true, interval: 0 }`.
+in milliseconds. The default is `{ persistent: true, interval: 5007 }`.
 
 The `listener` gets two arguments the current stat object and the previous
 stat object:

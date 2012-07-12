@@ -83,9 +83,11 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_SIGNAL_REFUSED:              return UV_EIO;
     case ERROR_FILE_NOT_FOUND:              return UV_ENOENT;
     case ERROR_INVALID_NAME:                return UV_ENOENT;
+    case ERROR_INVALID_REPARSE_DATA:        return UV_ENOENT;
     case ERROR_MOD_NOT_FOUND:               return UV_ENOENT;
     case ERROR_PATH_NOT_FOUND:              return UV_ENOENT;
     case ERROR_ACCESS_DENIED:               return UV_EPERM;
+    case ERROR_PRIVILEGE_NOT_HELD:          return UV_EPERM;
     case ERROR_NOACCESS:                    return UV_EACCES;
     case WSAEACCES:                         return UV_EACCES;
     case ERROR_ADDRESS_ALREADY_ASSOCIATED:  return UV_EADDRINUSE;
@@ -110,6 +112,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_OPERATION_ABORTED:           return UV_EINTR;
     case WSAEINTR:                          return UV_EINTR;
     case ERROR_INVALID_DATA:                return UV_EINVAL;
+    case ERROR_SYMLINK_NOT_SUPPORTED:       return UV_EINVAL;
     case WSAEINVAL:                         return UV_EINVAL;
     case ERROR_CANT_RESOLVE_FILENAME:       return UV_ELOOP;
     case ERROR_TOO_MANY_OPEN_FILES:         return UV_EMFILE;
@@ -132,6 +135,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_NOT_SUPPORTED:               return UV_ENOTSUP;
     case ERROR_INSUFFICIENT_BUFFER:         return UV_EINVAL;
     case ERROR_INVALID_FLAGS:               return UV_EBADF;
+    case ERROR_INVALID_HANDLE:              return UV_EBADF;
     case ERROR_INVALID_PARAMETER:           return UV_EINVAL;
     case ERROR_NO_UNICODE_TRANSLATION:      return UV_ECHARSET;
     case ERROR_BROKEN_PIPE:                 return UV_EOF;

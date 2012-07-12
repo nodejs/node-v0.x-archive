@@ -2000,7 +2000,15 @@ void MacroAssembler::CompareMap(Register obj,
                                 Label* early_success,
                                 CompareMapMode mode) {
   ldr(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
-  cmp(scratch, Operand(map));
+  CompareMap(scratch, map, early_success, mode);
+}
+
+
+void MacroAssembler::CompareMap(Register obj_map,
+                                Handle<Map> map,
+                                Label* early_success,
+                                CompareMapMode mode) {
+  cmp(obj_map, Operand(map));
   if (mode == ALLOW_ELEMENT_TRANSITION_MAPS) {
     ElementsKind kind = map->elements_kind();
     if (IsFastElementsKind(kind)) {
@@ -2008,10 +2016,10 @@ void MacroAssembler::CompareMap(Register obj,
       Map* current_map = *map;
       while (CanTransitionToMoreGeneralFastElementsKind(kind, packed)) {
         kind = GetNextMoreGeneralFastElementsKind(kind, packed);
-        current_map = current_map->LookupElementsTransitionMap(kind, NULL);
+        current_map = current_map->LookupElementsTransitionMap(kind);
         if (!current_map) break;
         b(eq, early_success);
-        cmp(scratch, Operand(Handle<Map>(current_map)));
+        cmp(obj_map, Operand(Handle<Map>(current_map)));
       }
     }
   }
@@ -2870,7 +2878,8 @@ void MacroAssembler::LoadTransitionedArrayMapConditional(
                  Context::SlotOffset(Context::JS_ARRAY_MAPS_INDEX)));
   size_t offset = expected_kind * kPointerSize +
       FixedArrayBase::kHeaderSize;
-  cmp(map_in_out, scratch);
+  ldr(ip, FieldMemOperand(scratch, offset));
+  cmp(map_in_out, ip);
   b(ne, no_map_match);
 
   // Use the transitioned cached map.

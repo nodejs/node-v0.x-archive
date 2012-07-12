@@ -336,7 +336,8 @@ HUseListNode* HValue::RemoveUse(HValue* value, int index) {
   // Do not reuse use list nodes in debug mode, zap them.
   if (current != NULL) {
     HUseListNode* temp =
-        new HUseListNode(current->value(), current->index(), NULL);
+        new(block()->zone())
+        HUseListNode(current->value(), current->index(), NULL);
     current->Zap();
     current = temp;
   }
@@ -495,8 +496,8 @@ void HValue::RegisterUse(int index, HValue* new_value) {
 
   if (new_value != NULL) {
     if (removed == NULL) {
-      new_value->use_list_ =
-          new HUseListNode(this, index, new_value->use_list_);
+      new_value->use_list_ = new(new_value->block()->zone()) HUseListNode(
+          this, index, new_value->use_list_);
     } else {
       removed->set_tail(new_value->use_list_);
       new_value->use_list_ = removed;
@@ -964,7 +965,7 @@ HValue* HUnaryMathOperation::Canonicalize() {
           !HInstruction::cast(new_right)->IsLinked()) {
         HInstruction::cast(new_right)->InsertBefore(this);
       }
-      HMathFloorOfDiv* instr =  new HMathFloorOfDiv(context(),
+      HMathFloorOfDiv* instr =  new(block()->zone()) HMathFloorOfDiv(context(),
           new_left,
           new_right);
       // Replace this HMathFloor instruction by the new HMathFloorOfDiv.
@@ -1251,7 +1252,7 @@ void HPhi::PrintTo(StringStream* stream) {
 
 
 void HPhi::AddInput(HValue* value) {
-  inputs_.Add(NULL);
+  inputs_.Add(NULL, value->block()->zone());
   SetOperandAt(OperandCount() - 1, value);
   // Mark phis that may have 'arguments' directly or indirectly as an operand.
   if (!CheckFlag(kIsArguments) && value->CheckFlag(kIsArguments)) {
@@ -1298,14 +1299,33 @@ void HPhi::InitRealUses(int phi_id) {
   for (HUseIterator it(uses()); !it.Done(); it.Advance()) {
     HValue* value = it.value();
     if (!value->IsPhi()) {
-      Representation rep = value->RequiredInputRepresentation(it.index());
+      Representation rep = value->ObservedInputRepresentation(it.index());
       non_phi_uses_[rep.kind()] += value->LoopWeight();
+      if (FLAG_trace_representation) {
+        PrintF("%d %s is used by %d %s as %s\n",
+               this->id(),
+               this->Mnemonic(),
+               value->id(),
+               value->Mnemonic(),
+               rep.Mnemonic());
+      }
     }
   }
 }
 
 
 void HPhi::AddNonPhiUsesFrom(HPhi* other) {
+  if (FLAG_trace_representation) {
+    PrintF("adding to %d %s uses of %d %s: i%d d%d t%d\n",
+           this->id(),
+           this->Mnemonic(),
+           other->id(),
+           other->Mnemonic(),
+           other->non_phi_uses_[Representation::kInteger32],
+           other->non_phi_uses_[Representation::kDouble],
+           other->non_phi_uses_[Representation::kTagged]);
+  }
+
   for (int i = 0; i < Representation::kNumRepresentations; i++) {
     indirect_uses_[i] += other->non_phi_uses_[i];
   }
@@ -1316,6 +1336,12 @@ void HPhi::AddIndirectUsesTo(int* dest) {
   for (int i = 0; i < Representation::kNumRepresentations; i++) {
     dest[i] += indirect_uses_[i];
   }
+}
+
+
+void HPhi::ResetInteger32Uses() {
+  non_phi_uses_[Representation::kInteger32] = 0;
+  indirect_uses_[Representation::kInteger32] = 0;
 }
 
 
@@ -1372,18 +1398,18 @@ HConstant::HConstant(Handle<Object> handle, Representation r)
 }
 
 
-HConstant* HConstant::CopyToRepresentation(Representation r) const {
+HConstant* HConstant::CopyToRepresentation(Representation r, Zone* zone) const {
   if (r.IsInteger32() && !has_int32_value_) return NULL;
   if (r.IsDouble() && !has_double_value_) return NULL;
-  return new HConstant(handle_, r);
+  return new(zone) HConstant(handle_, r);
 }
 
 
-HConstant* HConstant::CopyToTruncatedInt32() const {
+HConstant* HConstant::CopyToTruncatedInt32(Zone* zone) const {
   if (!has_double_value_) return NULL;
   int32_t truncated = NumberToInt32(*handle_);
-  return new HConstant(FACTORY->NewNumberFromInt(truncated),
-                       Representation::Integer32());
+  return new(zone) HConstant(FACTORY->NewNumberFromInt(truncated),
+                             Representation::Integer32());
 }
 
 
@@ -1592,18 +1618,51 @@ void HLoadNamedField::PrintDataTo(StringStream* stream) {
 }
 
 
+// Returns true if an instance of this map can never find a property with this
+// name in its prototype chain.  This means all prototypes up to the top are
+// fast and don't have the name in them.  It would be good if we could optimize
+// polymorphic loads where the property is sometimes found in the prototype
+// chain.
+static bool PrototypeChainCanNeverResolve(
+    Handle<Map> map, Handle<String> name) {
+  Isolate* isolate = map->GetIsolate();
+  Object* current = map->prototype();
+  while (current != isolate->heap()->null_value()) {
+    if (current->IsJSGlobalProxy() ||
+        current->IsGlobalObject() ||
+        !current->IsJSObject() ||
+        JSObject::cast(current)->IsAccessCheckNeeded() ||
+        !JSObject::cast(current)->HasFastProperties()) {
+      return false;
+    }
+
+    LookupResult lookup(isolate);
+    JSObject::cast(current)->map()->LookupInDescriptors(NULL, *name, &lookup);
+    if (lookup.IsFound()) {
+      if (lookup.type() != MAP_TRANSITION) return false;
+    } else if (!lookup.IsCacheable()) {
+      return false;
+    }
+
+    current = JSObject::cast(current)->GetPrototype();
+  }
+  return true;
+}
+
+
 HLoadNamedFieldPolymorphic::HLoadNamedFieldPolymorphic(HValue* context,
                                                        HValue* object,
                                                        SmallMapList* types,
-                                                       Handle<String> name)
-    : types_(Min(types->length(), kMaxLoadPolymorphism)),
+                                                       Handle<String> name,
+                                                       Zone* zone)
+    : types_(Min(types->length(), kMaxLoadPolymorphism), zone),
       name_(name),
       need_generic_(false) {
   SetOperandAt(0, context);
   SetOperandAt(1, object);
   set_representation(Representation::Tagged());
   SetGVNFlag(kDependsOnMaps);
-  int map_transitions = 0;
+  SmallMapList negative_lookups;
   for (int i = 0;
        i < types->length() && types_.length() < kMaxLoadPolymorphism;
        ++i) {
@@ -1619,28 +1678,39 @@ HLoadNamedFieldPolymorphic::HLoadNamedFieldPolymorphic(HValue* context,
           } else {
             SetGVNFlag(kDependsOnBackingStoreFields);
           }
-          types_.Add(types->at(i));
+          types_.Add(types->at(i), zone);
           break;
         }
         case CONSTANT_FUNCTION:
-          types_.Add(types->at(i));
+          types_.Add(types->at(i), zone);
           break;
         case MAP_TRANSITION:
-          // We should just ignore these since they are not relevant to a load
-          // operation.  This means we will deopt if we actually see this map
-          // from optimized code.
-          map_transitions++;
+          if (PrototypeChainCanNeverResolve(map, name)) {
+            negative_lookups.Add(types->at(i), zone);
+          }
           break;
         default:
           break;
       }
+    } else if (lookup.IsCacheable()) {
+      if (PrototypeChainCanNeverResolve(map, name)) {
+        negative_lookups.Add(types->at(i), zone);
+      }
     }
   }
 
-  if (types_.length() + map_transitions == types->length() &&
-      FLAG_deoptimize_uncommon_cases) {
+  bool need_generic =
+      (types->length() != negative_lookups.length() + types_.length());
+  if (!need_generic && FLAG_deoptimize_uncommon_cases) {
     SetFlag(kUseGVN);
+    for (int i = 0; i < negative_lookups.length(); i++) {
+      types_.Add(negative_lookups.at(i), zone);
+    }
   } else {
+    // We don't have an easy way to handle both a call (to the generic stub) and
+    // a deopt in the same hydrogen instruction, so in this case we don't add
+    // the negative lookups which can deopt - just let the generic stub handle
+    // them.
     SetAllSideEffects();
     need_generic_ = true;
   }
@@ -1685,14 +1755,14 @@ void HLoadKeyedFastElement::PrintDataTo(StringStream* stream) {
   stream->Add("[");
   key()->PrintNameTo(stream);
   stream->Add("]");
-  if (hole_check_mode_ == PERFORM_HOLE_CHECK) {
+  if (RequiresHoleCheck()) {
     stream->Add(" check_hole");
   }
 }
 
 
 bool HLoadKeyedFastElement::RequiresHoleCheck() {
-  if (hole_check_mode_ == OMIT_HOLE_CHECK) {
+  if (IsFastPackedElementsKind(elements_kind())) {
     return false;
   }
 
@@ -1738,12 +1808,11 @@ HValue* HLoadKeyedGeneric::Canonicalize() {
             new(block()->zone()) HCheckMapValue(object(), names_cache->map());
         HInstruction* index = new(block()->zone()) HLoadKeyedFastElement(
             index_cache,
-            key_load->key(),
-            OMIT_HOLE_CHECK);
-        HLoadFieldByIndex* load = new(block()->zone()) HLoadFieldByIndex(
-            object(), index);
+            key_load->key());
         map_check->InsertBefore(this);
         index->InsertBefore(this);
+        HLoadFieldByIndex* load = new(block()->zone()) HLoadFieldByIndex(
+            object(), index);
         load->InsertBefore(this);
         return load;
       }

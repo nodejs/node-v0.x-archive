@@ -73,9 +73,6 @@ class JumpPatchSite BASE_EMBEDDED {
     Assembler::BlockConstPoolScope block_const_pool(masm_);
     __ bind(&patch_site_);
     __ cmp(reg, Operand(reg));
-    // Don't use b(al, ...) as that might emit the constant pool right after the
-    // branch. After patching when the branch is no longer unconditional
-    // execution can continue into the constant pool.
     __ b(eq, target);  // Always taken before patched.
   }
 
@@ -90,6 +87,8 @@ class JumpPatchSite BASE_EMBEDDED {
   }
 
   void EmitPatchInfo() {
+    // Block literal pool emission whilst recording patch site information.
+    Assembler::BlockConstPoolScope block_const_pool(masm_);
     if (patch_site_.is_bound()) {
       int delta_to_patch_site = masm_->InstructionsGeneratedSince(&patch_site_);
       Register reg;
@@ -344,6 +343,8 @@ static const int kBackEdgeDistanceDivisor = 142;
 void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt,
                                        Label* back_edge_target) {
   Comment cmnt(masm_, "[ Stack check");
+  // Block literal pools whilst emitting stack check code.
+  Assembler::BlockConstPoolScope block_const_pool(masm_);
   Label ok;
 
   if (FLAG_count_based_interrupts) {
@@ -808,10 +809,11 @@ void FullCodeGenerator::VisitVariableDeclaration(
   bool hole_init = mode == CONST || mode == CONST_HARMONY || mode == LET;
   switch (variable->location()) {
     case Variable::UNALLOCATED:
-      globals_->Add(variable->name());
+      globals_->Add(variable->name(), zone());
       globals_->Add(variable->binding_needs_init()
                         ? isolate()->factory()->the_hole_value()
-                        : isolate()->factory()->undefined_value());
+                        : isolate()->factory()->undefined_value(),
+                    zone());
       break;
 
     case Variable::PARAMETER:
@@ -867,12 +869,12 @@ void FullCodeGenerator::VisitFunctionDeclaration(
   Variable* variable = proxy->var();
   switch (variable->location()) {
     case Variable::UNALLOCATED: {
-      globals_->Add(variable->name());
+      globals_->Add(variable->name(), zone());
       Handle<SharedFunctionInfo> function =
           Compiler::BuildFunctionInfo(declaration->fun(), script());
       // Check for stack-overflow exception.
       if (function.is_null()) return SetStackOverflow();
-      globals_->Add(function);
+      globals_->Add(function, zone());
       break;
     }
 
@@ -926,8 +928,8 @@ void FullCodeGenerator::VisitModuleDeclaration(ModuleDeclaration* declaration) {
   switch (variable->location()) {
     case Variable::UNALLOCATED: {
       Comment cmnt(masm_, "[ ModuleDeclaration");
-      globals_->Add(variable->name());
-      globals_->Add(instance);
+      globals_->Add(variable->name(), zone());
+      globals_->Add(instance, zone());
       Visit(declaration->module());
       break;
     }
@@ -1603,7 +1605,7 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
   // Mark all computed expressions that are bound to a key that
   // is shadowed by a later occurrence of the same key. For the
   // marked expressions, no store code is emitted.
-  expr->CalculateEmitStore();
+  expr->CalculateEmitStore(zone());
 
   AccessorTable accessor_table(isolate()->zone());
   for (int i = 0; i < expr->properties()->length(); i++) {
@@ -4492,14 +4494,55 @@ void FullCodeGenerator::EnterFinallyBlock() {
   ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
   STATIC_ASSERT(kSmiTag == 0);
   __ add(r1, r1, Operand(r1));  // Convert to smi.
+
+  // Store result register while executing finally block.
+  __ push(r1);
+
+  // Store pending message while executing finally block.
+  ExternalReference pending_message_obj =
+      ExternalReference::address_of_pending_message_obj(isolate());
+  __ mov(ip, Operand(pending_message_obj));
+  __ ldr(r1, MemOperand(ip));
+  __ push(r1);
+
+  ExternalReference has_pending_message =
+      ExternalReference::address_of_has_pending_message(isolate());
+  __ mov(ip, Operand(has_pending_message));
+  __ ldr(r1, MemOperand(ip));
+  __ push(r1);
+
+  ExternalReference pending_message_script =
+      ExternalReference::address_of_pending_message_script(isolate());
+  __ mov(ip, Operand(pending_message_script));
+  __ ldr(r1, MemOperand(ip));
   __ push(r1);
 }
 
 
 void FullCodeGenerator::ExitFinallyBlock() {
   ASSERT(!result_register().is(r1));
+  // Restore pending message from stack.
+  __ pop(r1);
+  ExternalReference pending_message_script =
+      ExternalReference::address_of_pending_message_script(isolate());
+  __ mov(ip, Operand(pending_message_script));
+  __ str(r1, MemOperand(ip));
+
+  __ pop(r1);
+  ExternalReference has_pending_message =
+      ExternalReference::address_of_has_pending_message(isolate());
+  __ mov(ip, Operand(has_pending_message));
+  __ str(r1, MemOperand(ip));
+
+  __ pop(r1);
+  ExternalReference pending_message_obj =
+      ExternalReference::address_of_pending_message_obj(isolate());
+  __ mov(ip, Operand(pending_message_obj));
+  __ str(r1, MemOperand(ip));
+
   // Restore result register from stack.
   __ pop(r1);
+
   // Uncook return address and return.
   __ pop(result_register());
   ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
