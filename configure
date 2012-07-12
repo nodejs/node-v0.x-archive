@@ -245,9 +245,9 @@ def arm_hard_float_abi():
   # __ARM_PCS_VFP.
 
 
-  if cc_version() >= [False, 4, 6, 0]:
+  if compiler_version() >= [False, 4, 6, 0]:
     return "__ARM_PCS_VFP" in cc_macros()
-  elif cc_version() < [False, 4, 5, 0]:
+  elif compiler_version() < [False, 4, 5, 0]:
     return False
   else:
     if "__ARM_PCS_VFP" in cc_macros():
@@ -327,7 +327,11 @@ def configure_node(o):
   # the CPU model right now so we pick a default and hope that it works okay
   # for the majority of users.
   if target_arch == 'arm':
-    o['variables']['armv7'] = 0 # FIXME
+    if options.float_abi:
+      o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.float_abi == "hard")
+    else:
+      o['variables']['v8_use_arm_eabi_hardfloat'] = b(arm_hard_float_abi())
+    o['variables']['armv7'] = 1 if arm_arch_arm7() else 0
 
   # clang has always supported -fvisibility=hidden, right?
   cc_version, is_clang = compiler_version()
@@ -374,12 +378,7 @@ def configure_v8(o):
   o['variables']['v8_use_snapshot'] = b(not options.without_snapshot)
   o['variables']['node_shared_v8'] = b(options.shared_v8)
 
-  if o['variables']['target_arch'] == 'arm':
-    if options.float_abi:
-      o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.float_abi == "hard")
-    else:
-      o['variables']['v8_use_arm_eabi_hardfloat'] = b(arm_hard_float_abi())
-    o['variables']['armv7'] = 1 if arm_arch_arm7() else 0
+  
 
   # assume shared_v8 if one of these is set?
   if options.shared_v8_libpath:
