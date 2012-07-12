@@ -154,7 +154,7 @@ out/doc/%: doc/%
 	cp -r $< $@
 
 out/doc/api/%.json: doc/api/%.markdown node
-	out/Release/node tools/doc/generate.js --format=json $< > $@
+	out/Release/node tools/doc/generate.js --format=json $< --output=$@
 
 out/doc/api/%.html: doc/api/%.markdown node
 	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@

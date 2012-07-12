@@ -23,10 +23,14 @@ module.exports = doJSON;
 
 // Take the lexed input, and return a JSON-encoded object
 // A module looks like this: https://gist.github.com/1777387
-
+var fs = require('fs');
+var path = require('path');
 var marked = require('marked');
 
-function doJSON(input, filename, cb) {
+// It shouldn't be here
+var indexfile = '_index.json';
+
+function doJSON(input, filename, outfile, cb) {
   var root = {source: filename};
   var stack = [root];
   var depth = 0;
@@ -54,6 +58,10 @@ function doJSON(input, filename, cb) {
       if (tok.depth - depth > 1) {
         return cb(new Error('Inappropriate heading level\n'+
                             JSON.stringify(tok)));
+      }
+      // set first heading to title
+      if (current && !current.title) {
+        current.title = tok.text;
       }
 
       // Sometimes we have two headings with a single
@@ -146,9 +154,63 @@ function doJSON(input, filename, cb) {
     finishSection(current, stack[stack.length - 1]);
   }
 
-  return cb(null, root)
+  if (outfile) {
+    writeOututToFile(root, filename, outfile, writeToIndexFile);
+  }
+  else {
+    return cb(null, root)
+  }
 }
 
+// write output object to outfile
+function writeOututToFile(obj, sourcefile, outfile, cb) {
+  fs.writeFile(outfile, JSON.stringify(obj, null, 2), function(err) {
+    if(err) {
+      throw new Error('error saving file - '+ err);
+    }
+    cb(obj, sourcefile, path.join(path.dirname(outfile), indexfile));
+  });
+}
+
+// make an entry into index file
+function writeToIndexFile(root, sourcefile, outfile) {
+  // default type of an index
+  var obj = {"type":"index"};
+  var entry = {"source":sourcefile};
+
+  // check if indexfile already exists
+  if (fs.existsSync(outfile)) {
+    var data = fs.readFileSync(outfile);
+    try {
+      obj = JSON.parse(data.toString());
+    }
+    catch(e) {
+      throw new Error('invalid json data - '+ e);
+    }
+  }
+  // check if index file is valid
+  if (obj.type !== "index") {
+    throw new Error('invalid index file - '+ outfile);
+  }
+  // construct an entry object
+  entry.title = root.title;
+  entry.url = {};
+  entry.url.html = path.basename(sourcefile).replace(/\.(markdown|md)/i, ".html");
+  entry.url.json = entry.url.html.replace(/\.html/i, ".json");
+
+  // append mode
+  if (obj.chapters && typeof obj.chapters === "object") {
+    obj.chapters.push(entry);
+  }
+  else {
+    obj.chapters = [entry];
+  }
+  fs.writeFile(outfile, JSON.stringify(obj, null, 2), function(err) {
+    if(err) {
+      throw new Error('error saving file - '+ err);
+    }
+  });
+}
 
 // go from something like this:
 // [ { type: 'list_item_start' },
