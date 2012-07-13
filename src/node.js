@@ -252,7 +252,16 @@
     };
 
     process.nextTick = function(callback) {
-      var tock = { callback: callback };
+      if(arguments.length === 1) {
+        var tock = { callback: callback };
+      }
+      else {
+        var tock = {
+          callback : function() {
+            callback.apply(undefined, Array.prototype.slice.call(arguments, 1));
+          }
+        };
+      }
       if (process.domain) tock.domain = process.domain;
       nextTickQueue.push(tock);
       process._needTickCallback();
