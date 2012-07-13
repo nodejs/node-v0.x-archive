@@ -26,6 +26,7 @@
 #include "node.h"
 #include "node_buffer.h"
 #include "node_root_certs.h"
+#include "ssl_sess_storage.h"
 
 #include <string.h>
 #ifdef _MSC_VER
@@ -150,6 +151,10 @@ void SecureContext::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setOptions", SecureContext::SetOptions);
   NODE_SET_PROTOTYPE_METHOD(t, "setSessionIdContext",
                                SecureContext::SetSessionIdContext);
+  NODE_SET_PROTOTYPE_METHOD(t, "enableSessionStorage",
+                               SecureContext::EnableSessionStorage);
+  NODE_SET_PROTOTYPE_METHOD(t, "cleanSessionStorage",
+                               SecureContext::CleanSessionStorage);
   NODE_SET_PROTOTYPE_METHOD(t, "close", SecureContext::Close);
   NODE_SET_PROTOTYPE_METHOD(t, "loadPKCS12", SecureContext::LoadPKCS12);
 
@@ -172,7 +177,7 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
 
   OPENSSL_CONST SSL_METHOD *method = SSLv23_method();
 
-  if (args.Length() == 1 && args[0]->IsString()) {
+  if (args.Length() >= 1 && args[0]->IsString()) {
     String::Utf8Value sslmethod(args[0]);
 
     if (strcmp(*sslmethod, "SSLv2_method") == 0) {
@@ -217,9 +222,11 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
   }
 
   sc->ctx_ = SSL_CTX_new(method);
-  // Enable session caching?
-  SSL_CTX_set_session_cache_mode(sc->ctx_, SSL_SESS_CACHE_SERVER);
-  // SSL_CTX_set_session_cache_mode(sc->ctx_,SSL_SESS_CACHE_OFF);
+
+  // Use default openssl's storage
+  sc->storage_ = NULL;
+  SSL_CTX_set_session_cache_mode(sc->ctx_,
+                                 SSL_SESS_CACHE_SERVER);
 
   sc->ca_store_ = NULL;
   return True();
@@ -574,6 +581,47 @@ Handle<Value> SecureContext::SetSessionIdContext(const Arguments& args) {
     }
     return ThrowException(Exception::TypeError(message));
   }
+
+  return True();
+}
+
+Handle<Value> SecureContext::EnableSessionStorage(const Arguments& args) {
+  HandleScope scope;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  if (args.Length() != 1) {
+    return ThrowException(Exception::TypeError(String::New("Bad parameter")));
+  }
+
+  // Return false if session storage was already created
+  if (sc->ctx_ == NULL || sc->storage_ != NULL) return False();
+
+  Local<Object> options = args[0]->ToObject();
+
+  int size = 10 * 1024;
+  int64_t timeout = 5 * 60 * 1e9; // 5 minutes
+
+  Local<Value> size_prop = options->Get(String::NewSymbol("size"));
+  if (size_prop->IsNumber()) size = size_prop->Int32Value();
+  Local<Value> timeout_prop = options->Get(String::NewSymbol("timeout"));
+  if (timeout_prop->IsNumber()) timeout = timeout_prop->IntegerValue() * 1e6;
+
+  // Disable internal session storage, use external one
+  sc->storage_ = SessionStorage::Init(sc->ctx_, size, timeout);
+
+  return True();
+}
+
+Handle<Value> SecureContext::CleanSessionStorage(const Arguments& args) {
+  HandleScope scope;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  // Return false if no session storage was created
+  if (sc->storage_ == NULL) return False();
+
+  sc->storage_->RemoveExpired();
 
   return True();
 }
