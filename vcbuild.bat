@@ -75,6 +75,11 @@ if "%target_arch%"=="x64" set msiplatform=x64
 if defined nosnapshot set nosnapshot_arg=--without-snapshot
 if defined noetw set noetw_arg=--without-etw& set noetw_msi_arg=/p:NoETW=1
 
+:cpplint
+@rem Run cpplint
+python tools/cpplint-wrap.py
+@rem if errorlevel 1 goto exit
+
 :project-gen
 @rem Skip project generation if requested.
 if defined noprojgen goto msbuild

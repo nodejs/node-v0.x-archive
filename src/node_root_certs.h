@@ -3578,9 +3578,9 @@ const char* root_certs[] = {
   "tkYNbn5XOmeUwssfnHdKZ05phkOTOPu220+DkdRgfks+KzgHVZhepA==\n"
   "-----END CERTIFICATE-----\n",
 
-  0 // sentinel
+  0  // sentinel
 };
 
-} // namespace node
+}  // namespace node
 
-#endif // SRC_NODE_ROOT_CERTS_H_
+#endif  // SRC_NODE_ROOT_CERTS_H_

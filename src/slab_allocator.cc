@@ -61,7 +61,7 @@ SlabAllocator::~SlabAllocator() {
 void SlabAllocator::Initialize() {
   HandleScope scope;
   char sym[256];
-  snprintf(sym, sizeof(sym), "slab_%p", this); // namespace object key
+  snprintf(sym, sizeof(sym), "slab_%p", this);  // namespace object key
   offset_ = 0;
   last_ptr_ = NULL;
   initialized_ = true;
@@ -127,4 +127,4 @@ Local<Object> SlabAllocator::Shrink(Handle<Object> obj,
 }
 
 
-} // namespace node
+}  // namespace node

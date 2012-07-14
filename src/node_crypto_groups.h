@@ -1,3 +1,23 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
     These modular groups were literally taken from:
@@ -6,6 +26,8 @@
     They all use 2 as a generator.
 */
 
+#ifndef SRC_NODE_CRYPTO_GROUPS_H_
+#define SRC_NODE_CRYPTO_GROUPS_H_
 
 unsigned char two_generator[] = { 2 };
 
@@ -374,13 +396,23 @@ typedef struct {
 } modp_group;
 
 modp_group modp_groups[] = {
-  { "modp1", group_modp1, sizeof(group_modp1) / sizeof(group_modp1[0]), two_generator, 1 },
-  { "modp2", group_modp2, sizeof(group_modp2) / sizeof(group_modp2[0]), two_generator, 1 },
-  { "modp5", group_modp5, sizeof(group_modp5) / sizeof(group_modp5[0]), two_generator, 1 },
-  { "modp14", group_modp14, sizeof(group_modp14) / sizeof(group_modp14[0]), two_generator, 1 },
-  { "modp15", group_modp15, sizeof(group_modp15) / sizeof(group_modp15[0]), two_generator, 1 },
-  { "modp16", group_modp16, sizeof(group_modp16) / sizeof(group_modp16[0]), two_generator, 1 },
-  { "modp17", group_modp17, sizeof(group_modp17) / sizeof(group_modp17[0]), two_generator, 1 },
-  { "modp18", group_modp18, sizeof(group_modp18) / sizeof(group_modp18[0]), two_generator, 1 },
+  { "modp1", group_modp1,
+    sizeof(group_modp1) / sizeof(group_modp1[0]), two_generator, 1 },
+  { "modp2", group_modp2,
+    sizeof(group_modp2) / sizeof(group_modp2[0]), two_generator, 1 },
+  { "modp5", group_modp5,
+    sizeof(group_modp5) / sizeof(group_modp5[0]), two_generator, 1 },
+  { "modp14", group_modp14,
+    sizeof(group_modp14) / sizeof(group_modp14[0]), two_generator, 1 },
+  { "modp15", group_modp15,
+    sizeof(group_modp15) / sizeof(group_modp15[0]), two_generator, 1 },
+  { "modp16", group_modp16,
+    sizeof(group_modp16) / sizeof(group_modp16[0]), two_generator, 1 },
+  { "modp17", group_modp17,
+    sizeof(group_modp17) / sizeof(group_modp17[0]), two_generator, 1 },
+  { "modp18", group_modp18,
+    sizeof(group_modp18) / sizeof(group_modp18[0]), two_generator, 1 },
   { NULL, NULL, 0, NULL, 0 }
 };
+
+#endif  // SRC_NODE_CRYPTO_GROUPS_H_

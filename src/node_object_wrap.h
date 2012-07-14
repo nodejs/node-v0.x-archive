@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef object_wrap_h
-#define object_wrap_h
+#ifndef SRC_NODE_OBJECT_WRAP_H_
+#define SRC_NODE_OBJECT_WRAP_H_
 
 #include "node.h"
 #include "v8.h"
@@ -28,14 +28,14 @@
 
 namespace node {
 
-class NODE_EXTERN ObjectWrap {
+class NODE_EXTERN ObjectWrap {  // NOLINT(runtime/virtual)
  public:
-  ObjectWrap ( ) {
+  ObjectWrap() {
     refs_ = 0;
   }
 
 
-  virtual ~ObjectWrap ( ) {
+  virtual ~ObjectWrap() {
     if (!handle_.IsEmpty()) {
       assert(handle_.IsNearDeath());
       handle_.ClearWeak();
@@ -47,17 +47,17 @@ class NODE_EXTERN ObjectWrap {
 
 
   template <class T>
-  static inline T* Unwrap (v8::Handle<v8::Object> handle) {
+  static inline T* Unwrap(v8::Handle<v8::Object> handle) {
     assert(!handle.IsEmpty());
     assert(handle->InternalFieldCount() > 0);
     return static_cast<T*>(handle->GetPointerFromInternalField(0));
   }
 
 
-  v8::Persistent<v8::Object> handle_; // ro
+  v8::Persistent<v8::Object> handle_;  // ro
 
  protected:
-  inline void Wrap (v8::Handle<v8::Object> handle) {
+  inline void Wrap(v8::Handle<v8::Object> handle) {
     assert(handle_.IsEmpty());
     assert(handle->InternalFieldCount() > 0);
     handle_ = v8::Persistent<v8::Object>::New(handle);
@@ -66,7 +66,7 @@ class NODE_EXTERN ObjectWrap {
   }
 
 
-  inline void MakeWeak (void) {
+  inline void MakeWeak(void) {
     handle_.MakeWeak(this, WeakCallback);
     handle_.MarkIndependent();
   }
@@ -98,11 +98,11 @@ class NODE_EXTERN ObjectWrap {
   }
 
 
-  int refs_; // ro
+  int refs_;  // ro
 
 
  private:
-  static void WeakCallback (v8::Persistent<v8::Value> value, void *data) {
+  static void WeakCallback(v8::Persistent<v8::Value> value, void *data) {
     ObjectWrap *obj = static_cast<ObjectWrap*>(data);
     assert(value == obj->handle_);
     assert(!obj->refs_);
@@ -111,5 +111,5 @@ class NODE_EXTERN ObjectWrap {
   }
 };
 
-} // namespace node
-#endif // object_wrap_h
+}  // namespace node
+#endif  // SRC_NODE_OBJECT_WRAP_H_

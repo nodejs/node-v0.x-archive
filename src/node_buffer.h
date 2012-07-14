@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_BUFFER_H_
-#define NODE_BUFFER_H_
+#ifndef SRC_NODE_BUFFER_H_
+#define SRC_NODE_BUFFER_H_
 
 #include "node.h"
 #include "node_object_wrap.h"
@@ -73,7 +73,8 @@ class NODE_EXTERN Buffer: public ObjectWrap {
   static bool HasInstance(v8::Handle<v8::Value> val);
 
   static inline char* Data(v8::Handle<v8::Object> obj) {
-    return (char*)obj->GetIndexedPropertiesExternalArrayData();
+    return reinterpret_cast<char*>(
+      obj->GetIndexedPropertiesExternalArrayData());
   }
 
   static inline char* Data(Buffer *b) {
@@ -94,13 +95,13 @@ class NODE_EXTERN Buffer: public ObjectWrap {
   typedef void (*free_callback)(char *data, void *hint);
 
   // C++ API for constructing fast buffer
-  static v8::Handle<v8::Object> New(v8::Handle<v8::String> string);
+  static v8::Handle<v8::Object> New(v8::Handle<v8::String> str);
 
   static void Initialize(v8::Handle<v8::Object> target);
-  static Buffer* New(size_t length); // public constructor
-  static Buffer* New(char *data, size_t len); // public constructor
+  static Buffer* New(size_t length);  // public constructor
+  static Buffer* New(char *data, size_t len);  // public constructor
   static Buffer* New(char *data, size_t length,
-                     free_callback callback, void *hint); // public constructor
+                     free_callback callback, void *hint);  // public constructor
 
   private:
   static v8::Handle<v8::Value> New(const v8::Arguments &args);
@@ -131,4 +132,4 @@ class NODE_EXTERN Buffer: public ObjectWrap {
 
 }  // namespace node buffer
 
-#endif  // NODE_BUFFER_H_
+#endif  // SRC_NODE_BUFFER_H_

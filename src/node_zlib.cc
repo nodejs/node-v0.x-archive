@@ -32,7 +32,20 @@
 
 
 namespace node {
-using namespace v8;
+using v8::Arguments;
+using v8::Exception;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Number;
+using v8::Object;
+using v8::Persistent;
+using v8::String;
+using v8::ThrowException;
+using v8::Undefined;
+using v8::Value;
 
 
 static Persistent<String> callback_sym;
@@ -58,7 +71,8 @@ void InitZlib(v8::Handle<v8::Object> target);
 class ZCtx : public ObjectWrap {
  public:
 
-  ZCtx(node_zlib_mode mode) : ObjectWrap(), dictionary_(NULL), mode_(mode) {}
+  explicit ZCtx(node_zlib_mode mode)
+    : ObjectWrap(), dictionary_(NULL), mode_(mode) {}
 
   ~ZCtx() {
     if (mode_ == DEFLATE || mode_ == GZIP || mode_ == DEFLATERAW) {
@@ -160,14 +174,12 @@ class ZCtx : public ObjectWrap {
         if (ctx->err_ == Z_NEED_DICT) {
           assert(ctx->dictionary_ != NULL && "Stream has no dictionary");
           if (ctx->dictionary_ != NULL) {
-
             // Load it
             ctx->err_ = inflateSetDictionary(&ctx->strm_,
                                              ctx->dictionary_,
                                              ctx->dictionary_len_);
             assert(ctx->err_ == Z_OK && "Failed to set dictionary");
             if (ctx->err_ == Z_OK) {
-
               // And try to decode again
               ctx->err_ = inflate(&ctx->strm_, ctx->flush_);
             }

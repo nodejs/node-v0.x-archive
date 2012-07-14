@@ -24,21 +24,33 @@
 
 #include <stdlib.h>
 
-using namespace v8;
+using v8::Arguments;
+using v8::Exception;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Null;
+using v8::Object;
+using v8::Persistent;
+using v8::String;
+using v8::Undefined;
+using v8::Value;
 
 namespace node {
 
 static Persistent<String> onchange_sym;
 
 class FSEventWrap: public HandleWrap {
-public:
+ public:
   static void Initialize(Handle<Object> target);
   static Handle<Value> New(const Arguments& args);
   static Handle<Value> Start(const Arguments& args);
   static Handle<Value> Close(const Arguments& args);
 
-private:
-  FSEventWrap(Handle<Object> object);
+ private:
+  explicit FSEventWrap(Handle<Object> object);
   virtual ~FSEventWrap();
 
   static void OnEvent(uv_fs_event_t* handle, const char* filename, int events,
@@ -50,7 +62,7 @@ private:
 
 
 FSEventWrap::FSEventWrap(Handle<Object> object): HandleWrap(object,
-                                                    (uv_handle_t*)&handle_) {
+    reinterpret_cast<uv_handle_t*>(&handle_)) {
   handle_.data = reinterpret_cast<void*>(this);
   initialized_ = false;
 }
@@ -99,7 +111,8 @@ Handle<Value> FSEventWrap::Start(const Arguments& args) {
 
   String::Utf8Value path(args[0]);
 
-  int r = uv_fs_event_init(uv_default_loop(), &wrap->handle_, *path, OnEvent, 0);
+  int r = uv_fs_event_init(uv_default_loop(), &wrap->handle_,
+    *path, OnEvent, 0);
   if (r == 0) {
     // Check for persistent argument
     if (!args[1]->IsTrue()) {
@@ -137,14 +150,11 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   if (status) {
     SetErrno(uv_last_error(uv_default_loop()));
     eventStr = String::Empty();
-  }
-  else if (events & UV_RENAME) {
+  } else if (events & UV_RENAME) {
     eventStr = String::New("rename");
-  }
-  else if (events & UV_CHANGE) {
+  } else if (events & UV_CHANGE) {
     eventStr = String::New("change");
-  }
-  else {
+  } else {
     assert(0 && "bad fs events flag");
     abort();
   }
@@ -152,7 +162,7 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   Local<Value> argv[3] = {
     Integer::New(status),
     eventStr,
-    filename ? (Local<Value>)String::New(filename) : Local<Value>::New(v8::Null())
+    filename ? (Local<Value>)String::New(filename) : Local<Value>::New(Null())
   };
 
   if (onchange_sym.IsEmpty()) {
@@ -176,6 +186,6 @@ Handle<Value> FSEventWrap::Close(const Arguments& args) {
 }
 
 
-} // namespace node
+}  // namespace node
 
 NODE_MODULE(node_fs_event_wrap, node::FSEventWrap::Initialize)

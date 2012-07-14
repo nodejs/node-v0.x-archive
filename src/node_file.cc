@@ -39,9 +39,23 @@
 
 namespace node {
 
-using namespace v8;
+using v8::Arguments;
+using v8::Array;
+using v8::Exception;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Null;
+using v8::Number;
+using v8::Object;
+using v8::Persistent;
+using v8::String;
+using v8::Undefined;
+using v8::Value;
 
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define TYPE_ERROR(msg) \
     ThrowException(Exception::TypeError(String::New(msg)));
@@ -50,7 +64,7 @@ using namespace v8;
 
 class FSReqWrap: public ReqWrap<uv_fs_t> {
  public:
-  FSReqWrap(const char* syscall)
+  explicit FSReqWrap(const char* syscall)
     : syscall_(syscall) {
   }
 
@@ -69,11 +83,13 @@ static Persistent<String> oncomplete_sym;
 
 #define ASSERT_OFFSET(a) \
   if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
-    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
+    return ThrowException(Exception::TypeError( \
+      String::New("Not an integer"))); \
   }
 #define ASSERT_TRUNCATE_LENGTH(a) \
   if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
-    return ThrowException(Exception::TypeError(String::New("Not an integer"))); \
+    return ThrowException(Exception::TypeError( \
+      String::New("Not an integer"))); \
   }
 #define GET_OFFSET(a) ((a)->IsNumber() ? (a)->IntegerValue() : -1)
 #define GET_TRUNCATE_LENGTH(a) ((a)->IntegerValue())
@@ -86,7 +102,7 @@ static inline int IsInt64(double x) {
 static void After(uv_fs_t *req) {
   HandleScope scope;
 
-  FSReqWrap* req_wrap = (FSReqWrap*) req->data;
+  FSReqWrap* req_wrap = reinterpret_cast<FSReqWrap*>(req->data);
   assert(&req_wrap->req_ == req);
 
   // there is always at least one argument. "error"
@@ -234,7 +250,8 @@ struct fs_req_wrap {
 
 #define SYNC_CALL(func, path, ...)                                \
   fs_req_wrap req_wrap;                                           \
-  int result = uv_fs_##func(uv_default_loop(), &req_wrap.req, __VA_ARGS__, NULL); \
+  int result = uv_fs_##func(uv_default_loop(), &req_wrap.req,     \
+    __VA_ARGS__, NULL);                                           \
   if (result < 0) {                                               \
     int code = uv_last_error(uv_default_loop()).code;             \
     return ThrowException(UVException(code, #func, "", path));    \
@@ -462,7 +479,7 @@ static Handle<Value> ReadLink(const Arguments& args) {
     ASYNC_CALL(readlink, args[1], *path)
   } else {
     SYNC_CALL(readlink, *path, *path)
-    return scope.Close(String::New((char*)SYNC_REQ.ptr));
+    return scope.Close(String::New(reinterpret_cast<char*>(SYNC_REQ.ptr)));
   }
 }
 
@@ -474,7 +491,7 @@ static Handle<Value> Rename(const Arguments& args) {
   if (len < 2) return TYPE_ERROR("new path required");
   if (!args[0]->IsString()) return TYPE_ERROR("old path must be a string");
   if (!args[1]->IsString()) return TYPE_ERROR("new path must be a string");
-  
+
   String::Utf8Value old_path(args[0]);
   String::Utf8Value new_path(args[1]);
 
@@ -713,7 +730,7 @@ static Handle<Value> Write(const Arguments& args) {
   ASSERT_OFFSET(args[4]);
   int64_t pos = GET_OFFSET(args[4]);
 
-  char * buf = (char*)buffer_data + off;
+  char * buf = reinterpret_cast<char*>(buffer_data) + off;
   Local<Value> cb = args[5];
 
   if (cb->IsFunction()) {
@@ -795,13 +812,13 @@ static Handle<Value> Read(const Arguments& args) {
 static Handle<Value> Chmod(const Arguments& args) {
   HandleScope scope;
 
-  if(args.Length() < 2 || !args[0]->IsString() || !args[1]->IsInt32()) {
+  if (args.Length() < 2 || !args[0]->IsString() || !args[1]->IsInt32()) {
     return THROW_BAD_ARGS;
   }
   String::Utf8Value path(args[0]);
   int mode = static_cast<int>(args[1]->Int32Value());
 
-  if(args[2]->IsFunction()) {
+  if (args[2]->IsFunction()) {
     ASYNC_CALL(chmod, args[2], *path, mode);
   } else {
     SYNC_CALL(chmod, *path, *path, mode);
@@ -816,13 +833,13 @@ static Handle<Value> Chmod(const Arguments& args) {
 static Handle<Value> FChmod(const Arguments& args) {
   HandleScope scope;
 
-  if(args.Length() < 2 || !args[0]->IsInt32() || !args[1]->IsInt32()) {
+  if (args.Length() < 2 || !args[0]->IsInt32() || !args[1]->IsInt32()) {
     return THROW_BAD_ARGS;
   }
   int fd = args[0]->Int32Value();
   int mode = static_cast<int>(args[1]->Int32Value());
 
-  if(args[2]->IsFunction()) {
+  if (args[2]->IsFunction()) {
     ASYNC_CALL(fchmod, args[2], fd, mode);
   } else {
     SYNC_CALL(fchmod, 0, fd, mode);
@@ -957,11 +974,11 @@ void File::Initialize(Handle<Object> target) {
 
   NODE_SET_METHOD(target, "chmod", Chmod);
   NODE_SET_METHOD(target, "fchmod", FChmod);
-  //NODE_SET_METHOD(target, "lchmod", LChmod);
+  // NODE_SET_METHOD(target, "lchmod", LChmod);
 
   NODE_SET_METHOD(target, "chown", Chown);
   NODE_SET_METHOD(target, "fchown", FChown);
-  //NODE_SET_METHOD(target, "lchown", LChown);
+  // NODE_SET_METHOD(target, "lchown", LChown);
 
   NODE_SET_METHOD(target, "utimes", UTimes);
   NODE_SET_METHOD(target, "futimes", FUTimes);

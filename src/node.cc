@@ -80,7 +80,36 @@ typedef int mode_t;
 #include "node_script.h"
 #include "v8_typed_array.h"
 
-using namespace v8;
+using v8::AccessorInfo;
+using v8::Arguments;
+using v8::Array;
+using v8::Boolean;
+using v8::Context;
+using v8::Exception;
+using v8::False;
+using v8::Function;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::HeapStatistics;
+using v8::Integer;
+using v8::Isolate;
+using v8::Local;
+using v8::Locker;
+using v8::Message;
+using v8::None;
+using v8::Number;
+using v8::Object;
+using v8::ObjectTemplate;
+using v8::Persistent;
+using v8::ResourceConstraints;
+using v8::String;
+using v8::True;
+using v8::TryCatch;
+using v8::Uint32;
+using v8::Undefined;
+using v8::V8;
+using v8::Value;
 
 # ifdef __APPLE__
 # include <crt_externs.h>
@@ -125,7 +154,7 @@ static char *eval_string = NULL;
 static int option_end_index = 0;
 static bool use_debug_agent = false;
 static bool debug_wait_connect = false;
-static int debug_port=5858;
+static int debug_port = 5858;
 static int max_stack_size = 0;
 
 // used by C++ modules as well
@@ -180,20 +209,20 @@ static int tick_time_head;
 
 static void CheckStatus(uv_timer_t* watcher, int status);
 
-static void StartGCTimer () {
-  if (!uv_is_active((uv_handle_t*) &gc_timer)) {
+static void StartGCTimer() {
+  if (!uv_is_active(reinterpret_cast<uv_handle_t*>(&gc_timer))) {
     uv_timer_start(&gc_timer, node::CheckStatus, 5000, 5000);
   }
 }
 
-static void StopGCTimer () {
-  if (uv_is_active((uv_handle_t*) &gc_timer)) {
+static void StopGCTimer() {
+  if (uv_is_active(reinterpret_cast<uv_handle_t*>(&gc_timer))) {
     uv_timer_stop(&gc_timer);
   }
 }
 
 static void Idle(uv_idle_t* watcher, int status) {
-  assert((uv_idle_t*) watcher == &gc_idle);
+  assert(reinterpret_cast<uv_idle_t*>(watcher) == &gc_idle);
 
   if (V8::IdleNotification()) {
     uv_idle_stop(&gc_idle);
@@ -211,20 +240,20 @@ static void Check(uv_check_t* watcher, int status) {
 
   StartGCTimer();
 
-  for (int i = 0; i < (int)(GC_WAIT_TIME/FAST_TICK); i++) {
+  for (int i = 0; i < static_cast<int>(GC_WAIT_TIME/FAST_TICK); i++) {
     double d = TICK_TIME(i+1) - TICK_TIME(i+2);
-    //printf("d = %f\n", d);
+    // printf("d = %f\n", d);
     // If in the last 5 ticks the difference between
     // ticks was less than 0.7 seconds, then continue.
     if (d < FAST_TICK) {
-      //printf("---\n");
+      // printf("---\n");
       return;
     }
   }
 
   // Otherwise start the gc!
 
-  //fprintf(stderr, "start idle 2\n");
+  // fprintf(stderr, "start idle 2\n");
   uv_idle_start(&gc_idle, node::Idle);
 }
 
@@ -258,14 +287,14 @@ static void Tick(void) {
 
 
 static void Spin(uv_idle_t* handle, int status) {
-  assert((uv_idle_t*) handle == &tick_spinner);
+  assert(reinterpret_cast<uv_idle_t*>(handle) == &tick_spinner);
   assert(status == 0);
   Tick();
 }
 
 static void StartTickSpinner() {
   need_tick_cb = true;
-  // TODO: this tick_spinner shouldn't be necessary. An ev_prepare should be
+  // TODO(ry): this tick_spinner shouldn't be necessary. An ev_prepare should be
   // sufficent, the problem is only in the case of the very last "tick" -
   // there is nothing left to do in the event loop and libev will exit. The
   // ev_prepare callback isn't called before exiting. Thus we start this
@@ -294,7 +323,6 @@ static void CheckTick(uv_check_t* handle, int status) {
 static inline const char *errno_string(int errorno) {
 #define ERRNO_CASE(e)  case e: return #e;
   switch (errorno) {
-
 #ifdef EACCES
   ERRNO_CASE(EACCES);
 #endif
@@ -619,7 +647,6 @@ static inline const char *errno_string(int errorno) {
 const char *signo_string(int signo) {
 #define SIGNO_CASE(e)  case e: return #e;
   switch (signo) {
-
 #ifdef SIGHUP
   SIGNO_CASE(SIGHUP);
 #endif
@@ -869,7 +896,7 @@ Local<Value> UVException(int errorno,
 
   Local<Object> obj = e->ToObject();
 
-  // TODO errno should probably go
+  // TODO(piscisaureus) errno should probably go
   obj->Set(errno_symbol, Integer::New(errorno));
   obj->Set(code_symbol, estring);
   if (path) obj->Set(errpath_symbol, path_str);
@@ -939,7 +966,7 @@ Local<Value> WinapiErrnoException(int errorno,
 #endif
 
 
-Handle<Value> FromConstructorTemplate(Persistent<FunctionTemplate>& t,
+Handle<Value> FromConstructorTemplate(const Persistent<FunctionTemplate>& t,
                                       const Arguments& args) {
   HandleScope scope;
 
@@ -1006,7 +1033,7 @@ MakeCallback(const Handle<Object> object,
              Handle<Value> argv[]) {
   HandleScope scope;
 
-  // TODO Hook for long stack traces to be made here.
+  // TODO(ry) Hook for long stack traces to be made here.
 
   TryCatch try_catch;
 
@@ -1065,7 +1092,8 @@ void SetErrno(uv_err_t err) {
 
   if (err.code == UV_UNKNOWN) {
     char errno_buf[100];
-    snprintf(errno_buf, 100, "Unknown system errno %d", err.sys_errno_);
+    snprintf(errno_buf, sizeof(errno_buf), "Unknown system errno %d",
+      err.sys_errno_);
     Context::GetCurrent()->Global()->Set(errno_symbol, String::New(errno_buf));
   } else {
     Context::GetCurrent()->Global()->Set(errno_symbol,
@@ -1127,7 +1155,7 @@ Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
       twobytebuf[i] = cbuf[i];
     }
     Local<String> chunk = String::New(twobytebuf, len);
-    delete [] twobytebuf; // TODO use ExternalTwoByteString?
+    delete [] twobytebuf;  // TODO(ry) use ExternalTwoByteString?
     return scope.Close(chunk);
   }
 
@@ -1215,7 +1243,7 @@ ssize_t DecodeWrite(char *buf,
 }
 
 
-void DisplayExceptionLine (TryCatch &try_catch) {
+void DisplayExceptionLine(const TryCatch &try_catch) {
   HandleScope scope;
 
   Handle<Message> message = try_catch.Message();
@@ -1269,7 +1297,7 @@ void DisplayExceptionLine (TryCatch &try_catch) {
 }
 
 
-static void ReportException(TryCatch &try_catch, bool show_line) {
+static void ReportException(const TryCatch &try_catch, bool show_line) {
   HandleScope scope;
 
   if (show_line) DisplayExceptionLine(try_catch);
@@ -1416,13 +1444,13 @@ static Handle<Value> Umask(const Arguments& args) {
     old = umask(0);
     umask((mode_t)old);
 
-  } else if(!args[0]->IsInt32() && !args[0]->IsString()) {
+  } else if (!args[0]->IsInt32() && !args[0]->IsString()) {
     return ThrowException(Exception::TypeError(
           String::New("argument must be an integer or octal string.")));
 
   } else {
     int oct;
-    if(args[0]->IsInt32()) {
+    if (args[0]->IsInt32()) {
       oct = args[0]->Uint32Value();
     } else {
       oct = 0;
@@ -1542,7 +1570,7 @@ static Handle<Value> SetUid(const Arguments& args) {
 }
 
 
-#endif // __POSIX__
+#endif  // __POSIX__
 
 
 v8::Handle<v8::Value> Exit(const v8::Arguments& args) {
@@ -1556,7 +1584,7 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
   assert(watcher == &gc_timer);
 
   // check memory
-  if (!uv_is_active((uv_handle_t*) &gc_idle)) {
+  if (!uv_is_active(reinterpret_cast<uv_handle_t*>(&gc_idle))) {
     HeapStatistics stats;
     V8::GetHeapStatistics(&stats);
     if (stats.total_heap_size() > 1024 * 1024 * 128) {
@@ -1568,10 +1596,10 @@ static void CheckStatus(uv_timer_t* watcher, int status) {
 
   double d = uv_now(uv_default_loop()) - TICK_TIME(3);
 
-  //printfb("timer d = %f\n", d);
+  // printfb("timer d = %f\n", d);
 
   if (d  >= GC_WAIT_TIME - 1.) {
-    //fprintf(stderr, "start idle\n");
+    // fprintf(stderr, "start idle\n");
     uv_idle_start(&gc_idle, node::Idle);
   }
 }
@@ -1726,8 +1754,8 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
     return ThrowException(exception);
   }
 
-  String::Utf8Value filename(args[0]); // Cast
-  Local<Object> target = args[1]->ToObject(); // Cast
+  String::Utf8Value filename(args[0]);  // Cast
+  Local<Object> target = args[1]->ToObject();  // Cast
 
   if (uv_dlopen(*filename, &lib)) {
     Local<String> errmsg = String::New(uv_dlerror(&lib));
@@ -1747,7 +1775,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   if (pos != NULL) {
     base = pos + 1;
   }
-#else // Windows
+#else  // Windows
   for (;;) {
     pos = strpbrk(base, "\\/:");
     if (pos == NULL) {
@@ -1774,7 +1802,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   // Get the init() function from the dynamically shared object.
   node_module_struct *mod;
   if (uv_dlsym(&lib, symbol, reinterpret_cast<void**>(&mod))) {
-    /* Start Compatibility hack: Remove once everyone is using NODE_MODULE macro */
+    // Start Compatibility hack: Remove once everyone is using NODE_MODULE macro
     memset(&compat_mod, 0, sizeof compat_mod);
 
     mod = &compat_mod;
@@ -1812,7 +1840,7 @@ static void OnFatalError(const char* location, const char* message) {
   exit(1);
 }
 
-void FatalException(TryCatch &try_catch) {
+void FatalException(const TryCatch &try_catch) {
   HandleScope scope;
 
   if (listeners_symbol.IsEmpty()) {
@@ -1826,7 +1854,8 @@ void FatalException(TryCatch &try_catch) {
 
   Local<Function> listeners = Local<Function>::Cast(listeners_v);
 
-  Local<String> uncaught_exception_symbol_l = Local<String>::New(uncaught_exception_symbol);
+  Local<String> uncaught_exception_symbol_l =
+    Local<String>::New(uncaught_exception_symbol);
   Local<Value> argv[1] = { uncaught_exception_symbol_l  };
   Local<Value> ret = listeners->Call(process, 1, argv);
 
@@ -1887,7 +1916,7 @@ static Handle<Value> Binding(const Arguments& args) {
 
   // Append a string to process.moduleLoadList
   char buf[1024];
-  snprintf(buf, 1024, "Binding %s", *module_v);
+  snprintf(buf, sizeof(buf), "Binding %s", *module_v);
   uint32_t l = module_load_list->Length();
   module_load_list->Set(l, String::New(buf));
 
@@ -1914,7 +1943,6 @@ static Handle<Value> Binding(const Arguments& args) {
     binding_cache->Set(module, exports);
 
   } else {
-
     return ThrowException(Exception::Error(String::New("No such module")));
   }
 
@@ -1936,7 +1964,7 @@ static void ProcessTitleSetter(Local<String> property,
                                const AccessorInfo& info) {
   HandleScope scope;
   String::Utf8Value title(value);
-  // TODO: protect with a lock
+  // TODO(igorzi): protect with a lock
   uv_set_process_title(*title);
 }
 
@@ -1952,7 +1980,7 @@ static Handle<Value> EnvGetter(Local<String> property,
   }
 #else  // _WIN32
   String::Value key(property);
-  WCHAR buffer[32767]; // The maximum size allowed for environment variables.
+  WCHAR buffer[32767];  // The maximum size allowed for environment variables.
   DWORD result = GetEnvironmentVariableW(reinterpret_cast<WCHAR*>(*key),
                                          buffer,
                                          ARRAY_SIZE(buffer));
@@ -1961,7 +1989,8 @@ static Handle<Value> EnvGetter(Local<String> property,
   // not found.
   if ((result > 0 || GetLastError() == ERROR_SUCCESS) &&
       result < ARRAY_SIZE(buffer)) {
-    return scope.Close(String::New(reinterpret_cast<uint16_t*>(buffer), result));
+    return scope.Close(String::New(reinterpret_cast<uint16_t*>(buffer),
+      result));
   }
 #endif
   // Not found.  Fetch from prototype.
@@ -2025,7 +2054,7 @@ static Handle<Boolean> EnvDeleter(Local<String> property,
 #ifdef __POSIX__
   String::Utf8Value key(property);
   if (!getenv(*key)) return False();
-  unsetenv(*key); // can't check return value, it's void on some platforms
+  unsetenv(*key);  // can't check return value, it's void on some platforms
   return True();
 #else
   String::Value key(property);
@@ -2092,14 +2121,13 @@ static Handle<Object> GetFeatures() {
   Local<Object> obj = Object::New();
   obj->Set(String::NewSymbol("debug"),
 #if defined(DEBUG) && DEBUG
-    True()
+    True());
 #else
-    False()
+    False());
 #endif
-  );
 
   obj->Set(String::NewSymbol("uv"), True());
-  obj->Set(String::NewSymbol("ipv6"), True()); // TODO ping libuv
+  obj->Set(String::NewSymbol("ipv6"), True());  // TODO(bnoordhuis) ping libuv
   obj->Set(String::NewSymbol("tls_npn"), Boolean::New(use_npn));
   obj->Set(String::NewSymbol("tls_sni"), Boolean::New(use_sni));
   obj->Set(String::NewSymbol("tls"),
@@ -2137,7 +2165,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   process_template->SetClassName(String::NewSymbol("process"));
 
-  process = Persistent<Object>::New(process_template->GetFunction()->NewInstance());
+  process = Persistent<Object>::New(
+    process_template->GetFunction()->NewInstance());
+
 
   process->SetAccessor(String::New("title"),
                        ProcessTitleGetter,
@@ -2279,7 +2309,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "setgid", SetGid);
   NODE_SET_METHOD(process, "getgid", GetGid);
-#endif // __POSIX__
+#endif  // __POSIX__
 
   NODE_SET_METHOD(process, "_kill", Kill);
 
@@ -2361,7 +2391,7 @@ static void ParseDebugOpt(const char* arg) {
   const char *p = 0;
 
   use_debug_agent = true;
-  if (!strcmp (arg, "--debug-brk")) {
+  if (!strcmp(arg, "--debug-brk")) {
     debug_wait_connect = true;
     return;
   } else if (!strcmp(arg, "--debug")) {
@@ -2417,7 +2447,7 @@ static void PrintHelp() {
 static void ParseArgs(int argc, char **argv) {
   int i;
 
-  // TODO use parse opts
+  // TODO(ry) use parse opts
   for (i = 1; i < argc; i++) {
     const char *arg = argv[i];
     if (strstr(arg, "--debug") == arg) {
@@ -2505,8 +2535,7 @@ static void EnableDebugSignalHandler(int signal) {
   }
 }
 
-
-static void RegisterSignalHandler(int signal, void (*handler)(int)) {
+static void RegisterSignalHandler(int signal, void (*handler)(int sig)) {
   struct sigaction sa;
 
   memset(&sa, 0, sizeof(sa));
@@ -2535,7 +2564,7 @@ Handle<Value> DebugProcess(const Arguments& args) {
 
   return Undefined();
 }
-#endif // __POSIX__
+#endif  // __POSIX__
 
 
 #ifdef _WIN32
@@ -2598,7 +2627,7 @@ static int RegisterDebugSignalHandler() {
 
   *handler = EnableDebugThreadProc;
 
-  UnmapViewOfFile((void*) handler);
+  UnmapViewOfFile(reinterpret_cast<void*>(handler));
 
   return 0;
 }
@@ -2615,7 +2644,8 @@ static Handle<Value> DebugProcess(const Arguments& args) {
   LPTHREAD_START_ROUTINE* handler = NULL;
 
   if (args.Length() != 1) {
-    rv = ThrowException(Exception::Error(String::New("Invalid number of arguments.")));
+    rv = ThrowException(Exception::Error(
+      String::New("Invalid number of arguments.")));
     goto out;
   }
 
@@ -2678,7 +2708,7 @@ static Handle<Value> DebugProcess(const Arguments& args) {
 
  out:
   if (process != NULL) {
-   CloseHandle(process);
+    CloseHandle(process);
   }
   if (thread != NULL) {
     CloseHandle(thread);
@@ -2692,7 +2722,7 @@ static Handle<Value> DebugProcess(const Arguments& args) {
 
   return Undefined();
 }
-#endif // _WIN32
+#endif  // _WIN32
 
 
 static Handle<Value> DebugPause(const Arguments& args) {
@@ -2747,7 +2777,7 @@ char** Init(int argc, char *argv[]) {
 
     uint32_t *stack_limit = &stack_var - (max_stack_size / sizeof(uint32_t));
     constraints.set_stack_limit(stack_limit);
-    SetResourceConstraints(&constraints); // Must be done before V8::Initialize
+    SetResourceConstraints(&constraints);  // Must be done before V8::Initialize
   }
   V8::SetFlagsFromCommandLine(&v8argc, v8argv, false);
 
@@ -2756,7 +2786,7 @@ char** Init(int argc, char *argv[]) {
   RegisterSignalHandler(SIGPIPE, SIG_IGN);
   RegisterSignalHandler(SIGINT, SignalExit);
   RegisterSignalHandler(SIGTERM, SignalExit);
-#endif // __POSIX__
+#endif  // __POSIX__
 
   uv_prepare_init(uv_default_loop(), &prepare_tick_watcher);
   uv_prepare_start(&prepare_tick_watcher, PrepareTick);
@@ -2790,9 +2820,9 @@ char** Init(int argc, char *argv[]) {
   } else {
 #ifdef _WIN32
     RegisterDebugSignalHandler();
-#else // Posix
+#else  // Posix
     RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
-#endif // __POSIX__
+#endif  // __POSIX__
   }
 
   return argv;
@@ -2852,18 +2882,19 @@ static char **copy_argv(int argc, char **argv) {
   int i;
 
   strlen_sum = 0;
-  for(i = 0; i < argc; i++) {
+  for (i = 0; i < argc; i++) {
     strlen_sum += strlen(argv[i]) + 1;
   }
 
-  argv_copy = (char **) malloc(sizeof(char *) * (argc + 1) + strlen_sum);
+  size_t base_size = sizeof(argv_data) * (argc + 1);
+  argv_copy = reinterpret_cast<char **>(malloc(base_size + strlen_sum));
   if (!argv_copy) {
     return NULL;
   }
 
-  argv_data = (char *) argv_copy + sizeof(char *) * (argc + 1);
+  argv_data = reinterpret_cast<char *>(argv_copy) + base_size;
 
-  for(i = 0; i < argc; i++) {
+  for (i = 0; i < argc; i++) {
     argv_copy[i] = argv_data;
     len = strlen(argv[i]) + 1;
     memcpy(argv_data, argv[i], len);

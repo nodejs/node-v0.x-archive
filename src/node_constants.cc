@@ -38,7 +38,8 @@
 
 namespace node {
 
-using namespace v8;
+using v8::Handle;
+using v8::Object;
 
 void DefineConstants(Handle<Object> target) {
   // file access modes

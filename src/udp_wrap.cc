@@ -40,13 +40,22 @@
 # define uv_inet_pton ares_inet_pton
 # define uv_inet_ntop ares_inet_ntop
 
-#else // __POSIX__
+#else  // __POSIX__
 # include <arpa/inet.h>
 # define uv_inet_pton inet_pton
 # define uv_inet_ntop inet_ntop
 #endif
 
-using namespace v8;
+using v8::False;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Null;
+using v8::Object;
+using v8::Persistent;
+using v8::True;
 
 namespace node {
 
@@ -61,16 +70,16 @@ static Persistent<String> onmessage_sym;
 static SlabAllocator* slab_allocator;
 
 
-static void DeleteSlabAllocator(void*) {
+static void DeleteSlabAllocator(void* ptr) {
   delete slab_allocator;
   slab_allocator = NULL;
 }
 
 
 UDPWrap::UDPWrap(Handle<Object> object): HandleWrap(object,
-                                                    (uv_handle_t*)&handle_) {
+    reinterpret_cast<uv_handle_t*>(&handle_)) {
   int r = uv_udp_init(uv_default_loop(), &handle_);
-  assert(r == 0); // can't fail anyway
+  assert(r == 0);  // can't fail anyway
   handle_.data = reinterpret_cast<void*>(this);
 }
 
@@ -169,7 +178,7 @@ Handle<Value> UDPWrap::Bind6(const Arguments& args) {
 #define X(name, fn)                                                           \
   Handle<Value> UDPWrap::name(const Arguments& args) {                        \
     HandleScope scope;                                                        \
-    UNWRAP(UDPWrap)                                                                    \
+    UNWRAP(UDPWrap)                                                           \
     assert(args.Length() == 1);                                               \
     int flag = args[0]->Int32Value();                                         \
     int r = fn(&wrap->handle_, flag);                                         \
@@ -266,8 +275,7 @@ Handle<Value> UDPWrap::DoSend(const Arguments& args, int family) {
     SetErrno(uv_last_error(uv_default_loop()));
     delete req_wrap;
     return Null();
-  }
-  else {
+  } else {
     return scope.Close(req_wrap->object_);
   }
 }
@@ -331,7 +339,7 @@ Handle<Value> UDPWrap::GetSockName(const Arguments& args) {
 }
 
 
-// TODO share with StreamWrap::AfterWrite() in stream_wrap.cc
+// TODO(bnoordhuis): share with StreamWrap::AfterWrite() in stream_wrap.cc
 void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
   HandleScope scope;
 
@@ -409,6 +417,6 @@ uv_udp_t* UDPWrap::UVHandle() {
 }
 
 
-} // namespace node
+}  // namespace node
 
 NODE_MODULE(node_udp_wrap, node::UDPWrap::Initialize)

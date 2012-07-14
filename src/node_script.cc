@@ -111,19 +111,18 @@ void CloneObject(Handle<Object> recv,
   if (cloneObjectMethod.IsEmpty()) {
     Local<Function> cloneObjectMethod_ = Local<Function>::Cast(
       Script::Compile(String::New(
-        "(function(source, target) {\n\
-           Object.getOwnPropertyNames(source).forEach(function(key) {\n\
-           try {\n\
-             var desc = Object.getOwnPropertyDescriptor(source, key);\n\
-             if (desc.value === source) desc.value = target;\n\
-             Object.defineProperty(target, key, desc);\n\
-           } catch (e) {\n\
-            // Catch sealed properties errors\n\
-           }\n\
-         });\n\
-        })"
-      ), String::New("binding:script"))->Run()
-    );
+        "(function(source, target) {\n"
+           "Object.getOwnPropertyNames(source).forEach(function(key) {\n"
+           "try {\n"
+             "var desc = Object.getOwnPropertyDescriptor(source, key);\n"
+             "if (desc.value === source) desc.value = target;\n"
+             "Object.defineProperty(target, key, desc);\n"
+           "} catch (e) {\n"
+             "// Catch sealed properties errors\n"
+           "}\n"
+         "});\n"
+        "})"),
+      String::New("binding:script"))->Run());
     cloneObjectMethod = Persistent<Function>::New(cloneObjectMethod_);
   }
 
@@ -321,8 +320,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
 
   const int sandbox_index = input_flag == compileCode ? 1 : 0;
   if (context_flag == userContext
-    && !WrappedContext::InstanceOf(args[sandbox_index]))
-  {
+    && !WrappedContext::InstanceOf(args[sandbox_index])) {
     return ThrowException(Exception::TypeError(
           String::New("needs a 'context' argument.")));
   }

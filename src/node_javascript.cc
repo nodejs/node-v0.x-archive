@@ -28,7 +28,10 @@
 #include <strings.h>
 #endif
 
-using namespace v8;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Local;
+using v8::String;
 
 namespace node {
 
@@ -42,7 +45,8 @@ void DefineJavaScript(v8::Handle<v8::Object> target) {
   for (int i = 0; natives[i].name; i++) {
     if (natives[i].source != node_native) {
       Local<String> name = String::New(natives[i].name);
-      Handle<String> source = BUILTIN_ASCII_ARRAY(natives[i].source, natives[i].source_len);
+      Handle<String> source = BUILTIN_ASCII_ARRAY(natives[i].source,
+        natives[i].source_len);
       target->Set(name, source);
     }
   }

@@ -50,7 +50,22 @@
 
 namespace node {
 
-using namespace v8;
+using v8::Arguments;
+using v8::Exception;
+using v8::FunctionTemplate;
+using v8::GCCallbackFlags;
+using v8::GCEpilogueCallback;
+using v8::GCPrologueCallback;
+using v8::GCType;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Local;
+using v8::Object;
+using v8::Persistent;
+using v8::String;
+using v8::ThrowException;
+using v8::Undefined;
+using v8::Value;
 
 #define SLURP_STRING(obj, member, valp) \
   if (!(obj)->IsObject()) { \
@@ -151,7 +166,7 @@ Handle<Value> DTRACE_NET_SOCKET_READ(const Arguments& args) {
   SLURP_CONNECTION(args[0], conn);
 
   if (!args[1]->IsNumber()) {
-    return (ThrowException(Exception::Error(String::New("expected " 
+    return (ThrowException(Exception::Error(String::New("expected "
       "argument 1 to be number of bytes"))));
   }
 
@@ -172,7 +187,7 @@ Handle<Value> DTRACE_NET_SOCKET_WRITE(const Arguments& args) {
   SLURP_CONNECTION(args[0], conn);
 
   if (!args[1]->IsNumber()) {
-    return (ThrowException(Exception::Error(String::New("expected " 
+    return (ThrowException(Exception::Error(String::New("expected "
       "argument 1 to be number of bytes"))));
   }
 
@@ -327,5 +342,4 @@ void InitDTrace(Handle<Object> target) {
   v8::V8::AddGCEpilogueCallback((GCEpilogueCallback)dtrace_gc_done);
 #endif
 }
-
 }

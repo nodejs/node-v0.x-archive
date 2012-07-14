@@ -46,12 +46,14 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 // g++ in strict mode complains loudly about the system offsetof() macro
 // because it uses NULL as the base address.
 # define offset_of(type, member) \
-  ((intptr_t) ((char *) &(((type *) 8)->member) - 8))
+  ((intptr_t) \
+    (reinterpret_cast<char *>(&(reinterpret_cast<type *>(8)->member)) - 8))
 #endif
 
 #ifndef container_of
 # define container_of(ptr, type, member) \
-  ((type *) ((char *) (ptr) - offset_of(type, member)))
+  (reinterpret_cast<type *>(reinterpret_cast<char *>(ptr) - \
+    offset_of(type, member)))
 #endif
 
 #ifndef ARRAY_SIZE
@@ -94,6 +96,6 @@ inline static v8::Handle<v8::Value> ThrowRangeError(const char* errmsg) {
     abort();                                                                \
   }
 
-} // namespace node
+}  // namespace node
 
-#endif // SRC_NODE_INTERNALS_H_
+#endif  // SRC_NODE_INTERNALS_H_

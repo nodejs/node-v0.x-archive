@@ -48,8 +48,7 @@
 
 namespace node {
 
-node_module_struct* get_builtin_module(const char *name)
-{
+node_module_struct* get_builtin_module(const char *name) {
   char buf[128];
   node_module_struct *cur = NULL;
   snprintf(buf, sizeof(buf), "node_%s", name);
@@ -65,4 +64,4 @@ node_module_struct* get_builtin_module(const char *name)
   return NULL;
 }
 
-}; // namespace node
+};  // namespace node

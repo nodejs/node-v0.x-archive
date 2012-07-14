@@ -20,8 +20,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef NODE_EV_EMUL_H_
-#define NODE_EV_EMUL_H_
+#ifndef SRC_EV_EMUL_H_
+#define SRC_EV_EMUL_H_
 
 #include "uv.h"
 
@@ -78,13 +78,14 @@ extern "C" {
 #define ev_set_priority(...)
 
 #define ev_is_active(w)                                                       \
-  (uv_is_active((uv_handle_t*) &(w)->handle))
+  (uv_is_active(reinterpret_cast<uv_handle_t*>(&(w))->handle))
 
 #define ev_now(...)                                                           \
   (uv_hrtime() / 1e9)
 
 #define __uv_container_of(ptr, type, field)                                   \
-  ((type*) ((char*) (ptr) - offsetof(type, field)))
+  (reinterpret_cast<type*>(                                                   \
+    reinterpret_cast<char*>(ptr) - offsetof(type, field)))
 
 #define __uv_warn_of(old_, new_)                                              \
   do {                                                                        \
@@ -256,4 +257,4 @@ inline static void __ev_unref(void) {
 }
 #endif
 
-#endif /* NODE_EV_EMUL_H_ */
+#endif  // SRC_EV_EMUL_H_

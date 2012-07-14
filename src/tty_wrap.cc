@@ -61,7 +61,8 @@ void TTYWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "readStop", StreamWrap::ReadStop);
 
   NODE_SET_PROTOTYPE_METHOD(t, "writeBuffer", StreamWrap::WriteBuffer);
-  NODE_SET_PROTOTYPE_METHOD(t, "writeAsciiString", StreamWrap::WriteAsciiString);
+  NODE_SET_PROTOTYPE_METHOD(t, "writeAsciiString",
+    StreamWrap::WriteAsciiString);
   NODE_SET_PROTOTYPE_METHOD(t, "writeUtf8String", StreamWrap::WriteUtf8String);
   NODE_SET_PROTOTYPE_METHOD(t, "writeUcs2String", StreamWrap::WriteUcs2String);
 
@@ -178,7 +179,7 @@ Handle<Value> TTYWrap::New(const Arguments& args) {
 
 
 TTYWrap::TTYWrap(Handle<Object> object, int fd, bool readable)
-    : StreamWrap(object, (uv_stream_t*)&handle_) {
+    : StreamWrap(object, reinterpret_cast<uv_stream_t*>(&handle_)) {
   uv_tty_init(uv_default_loop(), &handle_, fd, readable);
 }
 

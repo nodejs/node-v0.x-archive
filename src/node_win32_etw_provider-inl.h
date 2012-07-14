@@ -19,15 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_ETW_INL_H_
-#define SRC_ETW_INL_H_
+#ifndef SRC_NODE_WIN32_ETW_PROVIDER_INL_H_
+#define SRC_NODE_WIN32_ETW_PROVIDER_INL_H_
 
 #include "node_win32_etw_provider.h"
 #include "node_etw_provider.h"
 
 namespace node {
-
-using namespace v8;
 
 // From node_win32_etw_provider.cc
 extern REGHANDLE node_provider;
@@ -61,11 +59,11 @@ extern int events_enabled;
   ETW_WRITE_INT32_DATA(descriptors, &type);                                   \
   ETW_WRITE_INT32_DATA(descriptors + 1, &flags);
 
-#define ETW_WRITE_EVENT(eventDescriptor, dataDescriptors)                     \
-  DWORD status = event_write(node_provider,                                   \
-                             &eventDescriptor,                                \
-                             sizeof(dataDescriptors)/sizeof(*dataDescriptors),\
-                             dataDescriptors);                                \
+#define ETW_WRITE_EVENT(eventDescriptor, dataDescriptors)                      \
+  DWORD status = event_write(node_provider,                                    \
+                             &eventDescriptor,                                 \
+                             sizeof(dataDescriptors)/sizeof(*dataDescriptors), \
+                             dataDescriptors);                                 \
   assert(status == ERROR_SUCCESS);
 
 
@@ -142,4 +140,4 @@ bool NODE_NET_STREAM_END_ENABLED() { return events_enabled > 0; }
 bool NODE_NET_SOCKET_READ_ENABLED() { return events_enabled > 0; }
 bool NODE_NET_SOCKET_WRITE_ENABLED() { return events_enabled > 0; }
 }
-#endif  // SRC_ETW_INL_H_
+#endif  // SRC_NODE_WIN32_ETW_PROVIDER_INL_H_

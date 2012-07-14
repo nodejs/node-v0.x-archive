@@ -87,7 +87,7 @@ class ProcessWrap : public HandleWrap {
     return scope.Close(args.This());
   }
 
-  ProcessWrap(Handle<Object> object) : HandleWrap(object, NULL) { }
+  explicit ProcessWrap(Handle<Object> object) : HandleWrap(object, NULL) { }
   ~ProcessWrap() { }
 
   static void ParseStdioOptions(Local<Object> js_options,
@@ -183,7 +183,7 @@ class ProcessWrap : public HandleWrap {
           String::New("options.gid should be a number")));
     }
 
-    // TODO is this possible to do without mallocing ?
+    // TODO(ry): is this possible to do without mallocing ?
 
     // options.file
     Local<Value> file_v = js_options->Get(String::NewSymbol("file"));
@@ -220,7 +220,7 @@ class ProcessWrap : public HandleWrap {
     if (!env_v.IsEmpty() && env_v->IsArray()) {
       Local<Array> env = Local<Array>::Cast(env_v);
       int envc = env->Length();
-      options.env = new char*[envc + 1]; // Heap allocated to detect errors.
+      options.env = new char*[envc + 1];  // Heap allocated to detect errors.
       for (int i = 0; i < envc; i++) {
         String::Utf8Value pair(env->Get(i));
         options.env[i] = strdup(*pair);
@@ -237,7 +237,7 @@ class ProcessWrap : public HandleWrap {
       options.flags |= UV_PROCESS_WINDOWS_VERBATIM_ARGUMENTS;
     }
 
-    //options.detached
+    // options.detached
     if (js_options->Get(String::NewSymbol("detached"))->IsTrue()) {
       options.flags |= UV_PROCESS_DETACHED;
     }
@@ -246,9 +246,8 @@ class ProcessWrap : public HandleWrap {
 
     if (r) {
       SetErrno(uv_last_error(uv_default_loop()));
-    }
-    else {
-      wrap->SetHandle((uv_handle_t*)&wrap->process_);
+    } else {
+      wrap->SetHandle(reinterpret_cast<uv_handle_t*>(&wrap->process_));
       assert(wrap->process_.data == wrap);
       wrap->object_->Set(String::New("pid"), Integer::New(wrap->process_.pid));
     }

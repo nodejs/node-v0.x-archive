@@ -19,8 +19,8 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef HANDLE_WRAP_H_
-#define HANDLE_WRAP_H_
+#ifndef SRC_HANDLE_WRAP_H_
+#define SRC_HANDLE_WRAP_H_
 
 #include "ngx-queue.h"
 
@@ -75,4 +75,4 @@ class HandleWrap {
 }  // namespace node
 
 
-#endif  // HANDLE_WRAP_H_
+#endif  // SRC_HANDLE_WRAP_H_
