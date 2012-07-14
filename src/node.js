@@ -45,6 +45,7 @@
     startup.processAssert();
     startup.processConfig();
     startup.processNextTick();
+    startup.processMakeCallback();
     startup.processStdio();
     startup.processKillAndExit();
     startup.processSignalHandlers();
@@ -224,7 +225,24 @@
       if (value === 'false') return false;
       return value;
     });
-  }
+  };
+
+  startup.processMakeCallback = function() {
+    process._makeCallback = function(obj, fn, args) {
+      var domain = obj.domain;
+      if (domain) {
+        if (domain._disposed) return;
+        domain.enter();
+      }
+
+      var ret = fn.apply(obj, args);
+
+      if (domain) domain.exit();
+
+      process._tickCallback();
+      return ret;
+    };
+  };
 
   startup.processNextTick = function() {
     var nextTickQueue = [];
