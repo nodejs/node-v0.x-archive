@@ -246,27 +246,51 @@
 
   startup.processNextTick = function() {
     var nextTickQueue = [];
-    var nextTickIndex = 0;
+
+    // the maximum number of times it'll process something like
+    // nextTick(function f(){nextTick(f)})
+    // It's unlikely, but not illegal, to hit this limit.  When
+    // that happens, it yields to libuv's tick spinner.
+    // This is a loop counter, not a stack depth, so we aren't using
+    // up lots of memory here.  I/O can sneak in before nextTick if this
+    // limit is hit, which is not ideal, but not terrible.
+    process.maxTickDepth = 1000;
+
+    var tickDepth = 0;
 
     process._tickCallback = function() {
       var nextTickLength = nextTickQueue.length;
-      if (nextTickLength === 0) return;
-
-      while (nextTickIndex < nextTickLength) {
-        var tock = nextTickQueue[nextTickIndex++];
-        var callback = tock.callback;
-        if (tock.domain) {
-          if (tock.domain._disposed) continue;
-          tock.domain.enter();
-        }
-        callback();
-        if (tock.domain) {
-          tock.domain.exit();
-        }
+      var nextTickIndex = 0;
+      if (nextTickLength === 0) {
+        tickDepth = 0;
+        return;
       }
 
-      nextTickQueue.splice(0, nextTickIndex);
-      nextTickIndex = 0;
+      // always do this at least once.  otherwise if process.maxTickDepth
+      // is set to some negative value, we'd never process any of them.
+      do {
+        tickDepth++;
+        nextTickLength = nextTickQueue.length;
+        while (nextTickIndex < nextTickLength) {
+          var tock = nextTickQueue[nextTickIndex++];
+          var callback = tock.callback;
+          if (tock.domain) {
+            if (tock.domain._disposed) continue;
+            tock.domain.enter();
+          }
+          callback();
+          if (tock.domain) {
+            tock.domain.exit();
+          }
+        }
+
+        nextTickQueue.splice(0, nextTickIndex);
+        nextTickIndex = 0;
+        // continue until the max depth or we run out of tocks.
+      } while (tickDepth < process.maxTickDepth &&
+               nextTickQueue.length > 0);
+
+      tickDepth = 0;
     };
 
     process.nextTick = function(callback) {
