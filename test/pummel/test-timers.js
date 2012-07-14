@@ -44,6 +44,15 @@ setTimeout(function() {
   setTimeout_called = true;
 }, 1000);
 
+assert.doesNotThrow(function() {
+  var copy = Date;
+  Date = 'Not a Date';
+  interval_count = 0;
+  setInterval(function() { clearInterval(this); }, 100);
+  setTimeout(function() { return true; }, 100);
+  Date = copy;
+}, TypeError);
+
 // this timer shouldn't execute
 var id = setTimeout(function() { assert.equal(true, false); }, 500);
 clearTimeout(id);
