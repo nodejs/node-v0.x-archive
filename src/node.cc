@@ -2471,7 +2471,7 @@ static uv_async_t dispatch_debug_messages_async;
 
 
 // Called from the main thread.
-static void DipacthDebugMessageAsyncCallback(uv_async_t* handle, int status) {
+static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle, int status) {
     v8::Debug::ProcessDebugMessages();
 }
 
@@ -2492,7 +2492,7 @@ static void EnableDebug(bool wait_connect) {
 
   uv_async_init(uv_default_loop(),
                 &dispatch_debug_messages_async,
-                DipacthDebugMessageAsyncCallback);
+                DispatchDebugMessagesAsyncCallback);
 
   // Start the debug thread and it's associated TCP server on port 5858.
   bool r = v8::Debug::EnableAgent("node " NODE_VERSION,
