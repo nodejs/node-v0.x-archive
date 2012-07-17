@@ -38,7 +38,7 @@ var server = tls.Server(options, function(socket) {
   }
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var client1 = tls.connect({port: common.PORT}, function() {
     ++clientConnected;
     client1.end();

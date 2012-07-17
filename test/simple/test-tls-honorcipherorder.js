@@ -45,7 +45,7 @@ function test(honorCipherOrder, clientCipher, expectedCipher, cb) {
   var server = tls.createServer(soptions, function(cleartextStream) {
     nconns++;
   });
-  server.listen(common.PORT, localhost, function() {
+  server.listen(common.PORT, 'localhost', localhost, function() {
     var coptions = {secureProtocol: SSL_Method};
     if (clientCipher) {
       coptions.ciphers = clientCipher;

@@ -42,7 +42,7 @@ var srv = http.createServer(function(req, res) {
   srv.close();
 });
 
-srv.listen(common.PORT, function() {
+srv.listen(common.PORT, 'localhost', function() {
   http.get({
     host: 'localhost',
     port: common.PORT,

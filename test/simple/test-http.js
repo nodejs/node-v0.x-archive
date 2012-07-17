@@ -61,7 +61,7 @@ var server = http.Server(function(req, res) {
 
   //assert.equal('127.0.0.1', res.connection.remoteAddress);
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 server.on('listening', function() {
   var agent = new http.Agent({ port: common.PORT, maxSockets: 1 });

@@ -43,7 +43,7 @@ var server = tls.createServer(options, function(socket) {
     common.debug(data.toString());
     assert.equal(data, 'ok');
   });
-}).listen(common.PORT, function() {
+}).listen(common.PORT, 'localhost', function() {
   unauthorized();
 });
 

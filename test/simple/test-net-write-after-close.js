@@ -44,7 +44,7 @@ var server = net.createServer(function(socket) {
   }, 250);
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var client = net.connect(common.PORT, function() {
     client.end();
   });

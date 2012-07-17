@@ -39,7 +39,7 @@ var server = tls.createServer(function(s) {
   s.pipe(s);
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var c = net.createConnection(common.PORT);
 
   c.on('connect', function() {

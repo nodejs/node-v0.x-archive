@@ -33,7 +33,7 @@ var server = http.Server(function(req, res) {
 
 var responseClose = false;
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var client = http.get({
     port: common.PORT,
     headers: { connection: 'keep-alive' }

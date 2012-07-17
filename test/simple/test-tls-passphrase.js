@@ -45,7 +45,7 @@ var server = tls.Server({
 });
 
 var connectCount = 0;
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var c = tls.connect({
     port: common.PORT,
     key: key,

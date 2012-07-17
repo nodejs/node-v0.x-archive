@@ -41,7 +41,7 @@ var s = http.createServer(function(req, res) {
   );
 });
 
-s.listen(common.PORT, runTest);
+s.listen(common.PORT, 'localhost', runTest);
 
 function runTest() {
   http.get({ port: common.PORT }, function(response) {

@@ -35,7 +35,7 @@ var server = http.createServer(function(req, res) {
   res.writeHead(200);
   res.end('FAIL'); // broken: sends FAIL from hot path.
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 var responseComplete = false;
 

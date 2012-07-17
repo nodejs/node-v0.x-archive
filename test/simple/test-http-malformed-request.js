@@ -40,7 +40,7 @@ var server = http.createServer(function(req, res) {
 
   if (++nrequests_completed == nrequests_expected) server.close();
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 server.on('listening', function() {
   var c = net.createConnection(common.PORT);

@@ -46,7 +46,7 @@ var responses = 0;
 var server = net.createServer(function(socket) {
   socket.write(SERVER_RESPONSES[requests]);
   ++requests;
-}).listen(common.PORT, function() {
+}).listen(common.PORT, 'localhost', function() {
   function makeRequest() {
     var req = http.get({port: common.PORT}, function(res) {
       assert.equal(req.shouldKeepAlive, SHOULD_KEEP_ALIVE[responses],

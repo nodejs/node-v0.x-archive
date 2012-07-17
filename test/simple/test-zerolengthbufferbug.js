@@ -36,7 +36,7 @@ var server = http.createServer(function(req, res) {
 var gotResponse = false;
 var resBodySize = 0;
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   http.get({ port: common.PORT }, function(res) {
     gotResponse = true;
 

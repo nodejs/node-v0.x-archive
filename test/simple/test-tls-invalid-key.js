@@ -46,7 +46,7 @@ server.on('clientError', function(err) {
   server.close();
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var client = tls.connect(common.PORT, function() {
     assert(false);
   });

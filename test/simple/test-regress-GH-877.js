@@ -37,7 +37,7 @@ var server = http.createServer(function(req, res) {
 
 var addrString = '127.0.0.1:' + common.PORT;
 
-server.listen(common.PORT, '127.0.0.1', function() {
+server.listen(common.PORT, 'localhost', '127.0.0.1', function() {
   for (var i = 0; i < N; i++) {
     var options = {
       host: '127.0.0.1',

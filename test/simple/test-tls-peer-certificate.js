@@ -41,7 +41,7 @@ var verified = false;
 var server = tls.createServer(options, function(cleartext) {
   cleartext.end('World');
 });
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var socket = tls.connect({port: common.PORT}, function() {
     var peerCert = socket.getPeerCertificate();
     common.debug(util.inspect(peerCert));

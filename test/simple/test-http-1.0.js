@@ -45,7 +45,7 @@ function test(handler, request_generator, response_validator) {
   var timer = setTimeout(cleanup, 1000);
   process.on('exit', cleanup);
 
-  server.listen(port);
+  server.listen(port, 'localhost');
   server.on('listening', function() {
     var c = net.createConnection(port);
 

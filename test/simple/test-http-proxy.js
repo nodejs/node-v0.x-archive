@@ -99,10 +99,10 @@ function startReq() {
 }
 
 common.debug('listen proxy');
-proxy.listen(PROXY_PORT, startReq);
+proxy.listen(PROXY_PORT, 'localhost', startReq);
 
 common.debug('listen backend');
-backend.listen(BACKEND_PORT, startReq);
+backend.listen(BACKEND_PORT, 'localhost', startReq);
 
 process.on('exit', function() {
   assert.equal(body, 'hello world\n');

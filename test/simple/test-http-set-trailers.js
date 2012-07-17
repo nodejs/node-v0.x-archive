@@ -31,7 +31,7 @@ var server = http.createServer(function(req, res) {
   res.addTrailers({'x-foo': 'bar'});
   res.end('stuff' + '\n');
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 
 // first, we test an HTTP/1.0 request.

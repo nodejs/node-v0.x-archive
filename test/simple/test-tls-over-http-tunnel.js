@@ -98,9 +98,9 @@ var proxy = net.createServer(function(clientSocket) {
   });
 });
 
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
-proxy.listen(proxyPort, function() {
+proxy.listen(proxyPort, 'localhost', function() {
   console.log('CLIENT: Making CONNECT request');
 
   var req = http.request({

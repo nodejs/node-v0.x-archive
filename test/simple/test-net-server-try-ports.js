@@ -47,18 +47,18 @@ server2.on('error', function() {
 });
 
 
-server1.listen(common.PORT, function() {
+server1.listen(common.PORT, 'localhost', function() {
   console.error('server1 listening');
   server1listening = true;
   // This should make server2 emit EADDRINUSE
-  server2.listen(common.PORT);
+  server2.listen(common.PORT, 'localhost');
 
   // Wait a bit, now try again.
   // TODO, the listen callback should report if there was an error.
   // Then we could avoid this very unlikely but potential race condition
   // here.
   setTimeout(function() {
-    server2.listen(common.PORT + 1, function() {
+    server2.listen(common.PORT + 1, 'localhost', function() {
       console.error('server2 listening');
       server2listening = true;
 

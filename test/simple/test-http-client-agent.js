@@ -38,7 +38,7 @@ var server = http.Server(function(req, res) {
     res.end('Hello, World!');
   }
 });
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   for (var i = 0; i < max; ++i) {
     request(i);
   }

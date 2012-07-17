@@ -25,7 +25,7 @@ var common = require('../common'),
     thrown = false,
     socket = dgram.createSocket('udp4');
 
-socket.bind(common.PORT);
+socket.bind(common.PORT, '127.0.0.1');
 socket.setMulticastTTL(16);
 
 //Try to set an invalid TTL (valid ttl is > 0 and < 256)

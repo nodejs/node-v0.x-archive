@@ -48,7 +48,7 @@ server.on('close', function() {
   events.push('server');
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   net.createConnection(common.PORT);
   net.createConnection(common.PORT);
 });

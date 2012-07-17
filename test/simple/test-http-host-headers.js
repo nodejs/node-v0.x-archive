@@ -69,8 +69,8 @@ function testHttp() {
     }
   }
 
-  httpServer.listen(common.PORT, function(er) {
-    console.error('listening on ' + common.PORT);
+  httpServer.listen(common.PORT, 'localhost', function(er) {
+    console.error('listening on ' + common.PORT, 'localhost');
 
     if (er) throw er;
 
@@ -121,7 +121,7 @@ function testHttps() {
     }
   }
 
-  httpsServer.listen(common.PORT, function(er) {
+  httpsServer.listen(common.PORT, 'localhost', function(er) {
     if (er) throw er;
 
     https.get({ method: 'GET',

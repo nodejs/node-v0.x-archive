@@ -44,7 +44,7 @@ var server = tls.Server(options, function(s) {
   s.end();
 });
 
-server.listen(common.PORT, '127.0.0.1', function() {
+server.listen(common.PORT, 'localhost', '127.0.0.1', function() {
   assert.equal(server.address().address, '127.0.0.1');
   assert.equal(server.address().port, common.PORT);
 

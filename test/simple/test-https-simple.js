@@ -51,7 +51,7 @@ var server = https.createServer(options, function(req, res) {
 });
 
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var cmd = 'curl --insecure https://127.0.0.1:' + common.PORT + '/';
   console.error('executing %j', cmd);
   exec(cmd, function(err, stdout, stderr) {

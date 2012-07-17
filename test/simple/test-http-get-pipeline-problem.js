@@ -53,7 +53,7 @@ var server = http.Server(function(req, res) {
 });
 
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   for (var i = 0; i < total; i++) {
     (function() {
       var x = i;

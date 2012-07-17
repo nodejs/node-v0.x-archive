@@ -72,7 +72,7 @@ var gotHeaders = false;
 var gotEnd = false;
 var bodyBuffer = '';
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   console.log('1) Making Request');
   var req = https.get({ port: common.PORT }, function(res) {
     server.close();

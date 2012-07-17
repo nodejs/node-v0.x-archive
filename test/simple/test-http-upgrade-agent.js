@@ -50,7 +50,7 @@ var srv = net.createServer(function(c) {
 
 var gotUpgrade = false;
 
-srv.listen(common.PORT, '127.0.0.1', function() {
+srv.listen(common.PORT, 'localhost', '127.0.0.1', function() {
 
   var options = {
     port: common.PORT,

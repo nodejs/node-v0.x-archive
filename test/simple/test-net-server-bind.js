@@ -41,7 +41,7 @@ server0.listen(function() {
 var address1;
 var server1 = net.createServer(function(socket) { });
 
-server1.listen(common.PORT);
+server1.listen(common.PORT, 'localhost');
 
 setTimeout(function() {
   address1 = server1.address();
@@ -55,7 +55,7 @@ setTimeout(function() {
 var address2;
 var server2 = net.createServer(function(socket) { });
 
-server2.listen(common.PORT + 1, function() {
+server2.listen(common.PORT + 1, 'localhost', function() {
   address2 = server2.address();
   console.log('address2 %j', address2);
   server2.close();
@@ -67,7 +67,7 @@ server2.listen(common.PORT + 1, function() {
 var address3;
 var server3 = net.createServer(function(socket) { });
 
-server3.listen(common.PORT + 2, '0.0.0.0', 127, function() {
+server3.listen(common.PORT + 2, 'localhost', 127, function() {
   address3 = server3.address();
   console.log('address3 %j', address3);
   server3.close();
@@ -79,7 +79,7 @@ server3.listen(common.PORT + 2, '0.0.0.0', 127, function() {
 var address4;
 var server4 = net.createServer(function(socket) { });
 
-server4.listen(common.PORT + 3, 127, function() {
+server4.listen(common.PORT + 3, 'localhost', 127, function() {
   address4 = server4.address();
   console.log('address4 %j', address4);
   server4.close();

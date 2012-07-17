@@ -36,7 +36,7 @@ var server = new net.Server(function(c) {
   c.destroy();
 });
 
-server.listen(common.PORT, /* backlog */ 9, function() {
+server.listen(common.PORT, 'localhost', /* backlog */ 9, function() {
   console.log('PARENT send child server handle');
   n.send({ hello: 'world' }, server._handle);
 });

@@ -71,7 +71,7 @@ var server = http.createServer(function (req, res) {
     throw new Error('this kills domain B, not A');
   }));
 
-}).listen(common.PORT);
+}).listen(common.PORT, 'localhost');
 
 var c = domain.create();
 var req = http.get({ host: 'localhost', port: common.PORT })

@@ -32,7 +32,7 @@ var server = http.Server(function(req, res) {
 
 var dataCount = 0, endCount = 0;
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var opts = {
     port: common.PORT,
     headers: { connection: 'close' }

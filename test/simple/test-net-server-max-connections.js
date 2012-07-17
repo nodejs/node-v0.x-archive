@@ -41,7 +41,7 @@ var server = net.createServer(function(connection) {
   waits.push(function() { connection.end(); });
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   makeConnection(0);
 });
 

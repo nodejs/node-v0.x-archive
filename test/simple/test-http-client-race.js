@@ -33,7 +33,7 @@ var server = http.createServer(function(req, res) {
                 {'Content-Type': 'text/plain', 'Content-Length': body.length});
   res.end(body);
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 var body1 = '';
 var body2 = '';

@@ -169,7 +169,7 @@ function test_standard_http() {
 
 var server = createTestServer();
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   // All tests get chained after this:
   test_upgrade_with_listener(server);
 });

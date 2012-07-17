@@ -28,7 +28,7 @@ var server = net.createServer(function(s) {
   s.end();
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var c = net.createConnection(common.PORT);
   c.on('close', function() {
     assert.strictEqual(c._handle, null);

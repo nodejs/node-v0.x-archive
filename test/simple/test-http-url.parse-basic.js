@@ -45,7 +45,7 @@ var server = http.createServer(function(request, response) {
   server.close();
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   // make the request
   var clientRequest = http.request(testURL);
   // since there is a little magic with the agent

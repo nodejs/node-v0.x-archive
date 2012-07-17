@@ -33,7 +33,7 @@ var server = http.createServer(function(req, res) {
   });
   res.end(testResBody);
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 
 server.addListener('listening', function() {

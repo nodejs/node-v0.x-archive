@@ -32,7 +32,7 @@ server_ipv4.on('error', function(e) {
   console.log('Error on ipv4 socket: ' + e.toString());
 });
 
-server_ipv4.listen(common.PORT, localhost_ipv4, function() {
+server_ipv4.listen(common.PORT, 'localhost', localhost_ipv4, function() {
   var address_ipv4 = server_ipv4.address();
   assert.strictEqual(address_ipv4.address, localhost_ipv4);
   assert.strictEqual(address_ipv4.port, common.PORT);
@@ -49,7 +49,7 @@ server_ipv6.on('error', function(e) {
   console.log('Error on ipv6 socket: ' + e.toString());
 });
 
-server_ipv6.listen(common.PORT, localhost_ipv6, function() {
+server_ipv6.listen(common.PORT, 'localhost', localhost_ipv6, function() {
   var address_ipv6 = server_ipv6.address();
   assert.strictEqual(address_ipv6.address, localhost_ipv6);
   assert.strictEqual(address_ipv6.port, common.PORT);

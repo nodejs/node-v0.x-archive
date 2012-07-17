@@ -48,7 +48,7 @@ var responses = 0;
 var N = 10;
 var M = 10;
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   for (var i = 0; i < N; i++) {
     setTimeout(function() {
       for (var j = 0; j < M; j++) {

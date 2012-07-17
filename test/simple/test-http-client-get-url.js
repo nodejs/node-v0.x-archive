@@ -35,7 +35,7 @@ var server = http.createServer(function(req, res) {
   seen_req = true;
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   http.get('http://127.0.0.1:' + common.PORT + '/foo?bar');
 });
 

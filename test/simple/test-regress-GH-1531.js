@@ -41,7 +41,7 @@ var server = https.createServer(options, function(req, res) {
   res.end('hello world\n');
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   https.get({
     path: '/',
     port: common.PORT,

@@ -51,7 +51,7 @@ var server = http.createServer(function(req, res) {
   }
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   // just make a request, other tests handle responses
   http.get({port: common.PORT}, function() {
     // lazy serial test, becuase we can only call end once per request

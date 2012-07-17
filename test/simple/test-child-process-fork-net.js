@@ -111,7 +111,7 @@ if (process.argv[2] === 'child') {
       console.log('PARENT: server listening');
       child.send({what: 'server'}, server);
     });
-    server.listen(common.PORT);
+    server.listen(common.PORT, 'localhost');
 
     // handle client messages
     var messageHandlers = function(msg) {
@@ -163,7 +163,7 @@ if (process.argv[2] === 'child') {
     //
     // An isolated test for this would be lovely, but for now, this
     // will have to do.
-    server.listen(common.PORT + 1, function() {
+    server.listen(common.PORT + 1, 'localhost', function() {
       console.error('testSocket, listening');
       var connect = net.connect(common.PORT + 1);
       var store = '';

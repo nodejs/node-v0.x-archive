@@ -41,7 +41,7 @@ var s = http.createServer(function(req, res) {
   res.end('hello world\n');
 });
 
-s.listen(common.PORT, nextTest);
+s.listen(common.PORT, 'localhost', nextTest);
 
 
 function nextTest() {

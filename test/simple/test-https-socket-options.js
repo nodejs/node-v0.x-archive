@@ -52,7 +52,7 @@ var server_http = http.createServer(function(req, res) {
 });
 
 
-server_http.listen(common.PORT, function() {
+server_http.listen(common.PORT, 'localhost', function() {
   var req = http.request({ port: common.PORT }, function(res) {
     server_http.close();
   });
@@ -71,8 +71,8 @@ var server_https = https.createServer(options, function(req, res) {
   res.end(body);
 });
 
-server_https.listen(common.PORT+1, function() {
-  var req = https.request({ port: common.PORT+1 }, function(res) {
+server_https.listen(common.PORT + 1, 'localhost', function() {
+  var req = https.request({ port: common.PORT + 1 }, function(res) {
     server_https.close();
   });
   // These methods should exist on the request and get passed down to the socket

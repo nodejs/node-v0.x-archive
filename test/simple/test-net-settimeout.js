@@ -31,7 +31,7 @@ var T = 100;
 var server = net.createServer(function(c) {
   c.write('hello');
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 var socket = net.createConnection(common.PORT, 'localhost');
 

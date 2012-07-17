@@ -49,7 +49,7 @@ if (process.argv[2] === 'child') {
     process.send('ready');
   });
 
-  server.listen(common.PORT);
+  server.listen(common.PORT, 'localhost');
 
 } else {
   // testcase

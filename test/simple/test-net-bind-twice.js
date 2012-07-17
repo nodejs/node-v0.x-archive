@@ -34,10 +34,10 @@ function dontCall() {
 }
 
 var server1 = net.createServer(dontCall);
-server1.listen(common.PORT, '127.0.0.1', function() {});
+server1.listen(common.PORT, 'localhost', '127.0.0.1', function() {});
 
 var server2 = net.createServer(dontCall);
-server2.listen(common.PORT, '127.0.0.1', dontCall);
+server2.listen(common.PORT, 'localhost', '127.0.0.1', dontCall);
 
 server2.on('error', function(e) {
   assert.equal(e.code, 'EADDRINUSE');

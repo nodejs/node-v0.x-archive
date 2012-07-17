@@ -26,7 +26,7 @@ var TCP = process.binding('tcp_wrap').TCP;
 
 var server = new TCP();
 
-var r = server.bind('0.0.0.0', common.PORT);
+var r = server.bind('127.0.0.1', common.PORT);
 assert.equal(0, r);
 
 server.listen(128);

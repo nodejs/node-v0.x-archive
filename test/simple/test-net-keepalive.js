@@ -34,7 +34,7 @@ var echoServer = net.createServer(function(connection) {
     connection.end();
   });
 });
-echoServer.listen(common.PORT);
+echoServer.listen(common.PORT, 'localhost');
 
 echoServer.on('listening', function() {
   var clientConnection = net.createConnection(common.PORT);

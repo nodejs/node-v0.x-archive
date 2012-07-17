@@ -44,7 +44,7 @@ var server = https.createServer(options, function(req, res) {
   req.pipe(res);
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var resumed = false;
   var req = https.request({
     port: common.PORT,

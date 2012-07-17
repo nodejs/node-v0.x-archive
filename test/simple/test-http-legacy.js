@@ -65,7 +65,7 @@ var server = http.createServer(function(req, res) {
   //assert.equal('127.0.0.1', res.connection.remoteAddress);
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var client = http.createClient(common.PORT);
   var req = client.request('/hello', {'Accept': '*/*', 'Foo': 'bar'});
   setTimeout(function() {

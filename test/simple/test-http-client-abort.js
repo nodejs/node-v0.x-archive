@@ -53,7 +53,7 @@ var responses = 0;
 var N = http.Agent.defaultMaxSockets - 1;
 var requests = [];
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   console.log('Server listening.');
 
   for (var i = 0; i < N; i++) {

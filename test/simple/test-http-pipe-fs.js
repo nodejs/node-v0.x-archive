@@ -36,7 +36,7 @@ var server = http.createServer(function(req, res) {
     res.writeHead(200);
     res.end();
   });
-}).listen(common.PORT, function() {
+}).listen(common.PORT, 'localhost', function() {
   http.globalAgent.maxSockets = 1;
 
   for (var i = 0; i < 2; ++i) {

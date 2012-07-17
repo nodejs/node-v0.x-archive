@@ -61,7 +61,7 @@ var server = https.createServer(options, function(req, res) {
 });
 
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var cmd = 'curl --insecure https://127.0.0.1:' + common.PORT + '/';
   cmd += ' --cert ' + join(common.fixturesDir, 'foafssl.crt');
   cmd += ' --key ' + join(common.fixturesDir, 'foafssl.key');

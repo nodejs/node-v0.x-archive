@@ -34,7 +34,7 @@ var server = http.createServer(function(req, res) {
   });
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   console.log('Server running at http://127.0.0.1:' + common.PORT + '/');
 
   var errorTimer = setTimeout(function() {

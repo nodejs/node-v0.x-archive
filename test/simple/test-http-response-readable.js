@@ -28,7 +28,7 @@ var testServer = new http.Server(function(req, res) {
   res.end('Hello world');
 });
 
-testServer.listen(common.PORT, function() {
+testServer.listen(common.PORT, 'localhost', function() {
   http.get({ port: common.PORT }, function(res) {
     assert.equal(res.readable, true, 'res.readable initially true');
     res.on('end', function() {

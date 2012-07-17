@@ -33,7 +33,7 @@ var server = http.createServer(function(req, res) {
 
 var agent = new http.Agent({maxSockets: 1});
 
-server.listen(port, function() {
+server.listen(port, 'localhost', function() {
 
   for (var i = 0; i < 11; ++i) {
     createRequest().end();

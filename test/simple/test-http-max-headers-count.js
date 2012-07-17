@@ -52,7 +52,7 @@ var server = http.createServer(function(req, res) {
 });
 server.maxHeadersCount = max;
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var maxAndExpected = [ // for client
     [20, 20],
     [1200, 1200],

@@ -73,7 +73,7 @@ var serverResults = [],
 var server = tls.createServer(serverOptions, function(c) {
   serverResults.push(c.npnProtocol);
 });
-server.listen(serverPort, startTest);
+server.listen(serverPort, 'localhost', startTest);
 
 function startTest() {
   function connectClient(options, callback) {

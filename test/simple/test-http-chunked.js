@@ -37,7 +37,7 @@ var server = http.createServer(function(req, res) {
   res.writeHead(200, {'Content-Type': 'text/plain; charset=utf8'});
   res.end(UTF8_STRING, 'utf8');
 });
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var data = '';
   var get = http.get({
     path: '/',

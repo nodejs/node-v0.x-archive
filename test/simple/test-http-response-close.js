@@ -39,7 +39,7 @@ var server = http.createServer(function(req, res) {
     responseGotEnd = true;
   });
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 server.on('listening', function() {
   console.error('make req');

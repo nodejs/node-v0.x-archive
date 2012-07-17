@@ -27,7 +27,7 @@ var server = http.createServer(function(req, res) {
   assert(false); // should not be called
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var req = http.request({method: 'GET', host: '127.0.0.1', port: common.PORT});
 
   req.on('error', function(ex) {
