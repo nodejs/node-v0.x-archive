@@ -46,11 +46,16 @@ function expect(activeHandles, activeRequests) {
   expect(2, 1); // client handle doesn't shut down until next tick
 })();
 
+// Force the nextTicks to be deferred to a later time.
+process.maxTickDepth = 1;
+
 process.nextTick(function() {
   process.nextTick(function() {
     process.nextTick(function() {
-      // the handles should be gone but the connect req could still be alive
-      assert.equal(process._getActiveHandles().length, 0);
+      process.nextTick(function() {
+        // the handles should be gone but the connect req could still be alive
+        assert.equal(process._getActiveHandles().length, 0);
+      });
     });
   });
 });
