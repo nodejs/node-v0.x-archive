@@ -2472,13 +2472,13 @@ static uv_async_t dispatch_debug_messages_async;
 
 // Called from the main thread.
 static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle, int status) {
-    v8::Debug::ProcessDebugMessages();
+  v8::Debug::ProcessDebugMessages();
 }
 
 
 // Called from V8 Debug Agent TCP thread.
 static void DispatchMessagesDebugAgentCallback() {
-    uv_async_send(&dispatch_debug_messages_async);
+  uv_async_send(&dispatch_debug_messages_async);
 }
 
 
