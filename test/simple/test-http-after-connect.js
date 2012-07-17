@@ -44,7 +44,7 @@ server.on('connect', function(req, socket, firstBodyChunk) {
     socket.end();
   });
 });
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var req = http.request({
     port: common.PORT,
     method: 'CONNECT',

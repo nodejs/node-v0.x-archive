@@ -75,7 +75,7 @@ function runAb(opts, callback) {
   });
 }
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   runAb('-c 1 -n 10', function() {
     console.log('-c 1 -n 10 okay');
 

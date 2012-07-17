@@ -39,7 +39,7 @@ var http = require('http');
     res.write('world\n');
     res.end();
   });
-  server.listen(port);
+  server.listen(port, 'localhost');
 
   server.on('listening', function() {
     var c = net.createConnection(port);

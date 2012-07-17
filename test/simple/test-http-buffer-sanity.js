@@ -65,7 +65,7 @@ var web = http.Server(function(req, res) {
 
 var gotThanks = false;
 
-web.listen(common.PORT, function() {
+web.listen(common.PORT, 'localhost', function() {
   console.log('Making request');
 
   var req = http.request({

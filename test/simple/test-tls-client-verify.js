@@ -96,7 +96,7 @@ function testServers(index, servers, clientOptions, cb) {
     s.end('hello world\n');
   });
 
-  server.listen(common.PORT, function() {
+  server.listen(common.PORT, 'localhost', function() {
     var b = '';
 
     console.error('connecting...');

@@ -30,7 +30,7 @@ var server = http.createServer(function(req, res) {
   res.end();
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var req;
   for (var i = 0; i < 4; i += 1) {
     req = http.get({ port: common.PORT, path: '/busy/' + i });

@@ -41,7 +41,7 @@ socket_ipv4.on('error', function(e) {
   socket_ipv4.close();
 });
 
-socket_ipv4.bind(common.PORT, localhost_ipv4);
+socket_ipv4.bind(common.PORT, 'localhost', localhost_ipv4);
 
 // IPv6 Test
 var localhost_ipv6 = '::1';
@@ -61,4 +61,4 @@ socket_ipv6.on('error', function(e) {
   socket_ipv6.close();
 });
 
-socket_ipv6.bind(common.PORT, localhost_ipv6);
+socket_ipv6.bind(common.PORT, 'localhost', localhost_ipv6);

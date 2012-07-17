@@ -27,7 +27,7 @@ var received = '';
 
 var server = net.createServer(function(socket) {
   socket.pipe(socket);
-}).listen(common.PORT, function() {
+}).listen(common.PORT, 'localhost', function() {
   var conn = net.connect(common.PORT);
   conn.setEncoding('utf8');
   conn.write('before');

@@ -89,7 +89,7 @@ var server = tls.createServer(serverOptions, function(c) {
 server.addContext('a.example.com', SNIContexts['a.example.com']);
 server.addContext('*.test.com', SNIContexts['asterisk.test.com']);
 
-server.listen(serverPort, startTest);
+server.listen(serverPort, 'localhost', startTest);
 
 function startTest() {
   function connectClient(options, callback) {

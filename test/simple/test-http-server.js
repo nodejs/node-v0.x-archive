@@ -67,7 +67,7 @@ var server = http.createServer(function(req, res) {
   }, 1);
 
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 server.httpAllowHalfOpen = true;
 

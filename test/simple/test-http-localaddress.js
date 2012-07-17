@@ -38,7 +38,7 @@ var server = http.createServer(function (req, res) {
   });
 });
 
-server.listen(common.PORT, "127.0.0.1", function() {
+server.listen(common.PORT, 'localhost', "127.0.0.1", function() {
   var options = { host: 'localhost',
     port: common.PORT,
     path: '/',

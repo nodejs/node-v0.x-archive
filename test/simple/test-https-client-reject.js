@@ -41,7 +41,7 @@ var server = https.createServer(options, function(req, res) {
   ++reqCount;
   res.writeHead(200);
   res.end();
-}).listen(common.PORT, function() {
+}).listen(common.PORT, 'localhost', function() {
   unauthorized();
 });
 

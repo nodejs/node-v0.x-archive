@@ -169,7 +169,7 @@ function tcp_test() {
     repl.start(prompt_tcp, socket);
   });
 
-  server_tcp.listen(common.PORT, function() {
+  server_tcp.listen(common.PORT, 'localhost', function() {
     var read_buffer = '';
 
     client_tcp = net.createConnection(common.PORT);

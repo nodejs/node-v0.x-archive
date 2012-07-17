@@ -84,7 +84,7 @@ function parent() {
   var server = net.createServer(function(conn) {
     console.error('connection on parent');
     conn.end('hello from parent\n');
-  }).listen(PORT, function() {
+  }).listen(PORT, 'localhost', function() {
     console.error('server listening on %d', PORT);
 
     var spawn = require('child_process').spawn;

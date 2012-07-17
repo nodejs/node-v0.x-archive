@@ -86,6 +86,6 @@ var server = http.createServer(function(req, res) {
 
 });
 
-server.listen(common.PORT, maybeMakeRequest);
+server.listen(common.PORT, 'localhost', maybeMakeRequest);
 
 console.log('Server running at http://localhost:8080');

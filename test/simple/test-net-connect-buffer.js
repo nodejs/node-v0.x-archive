@@ -49,7 +49,7 @@ var tcp = net.Server(function(s) {
   });
 });
 
-tcp.listen(common.PORT, function() {
+tcp.listen(common.PORT, 'localhost', function() {
   var socket = net.Stream();
 
   console.log('Connecting to socket ');

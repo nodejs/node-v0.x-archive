@@ -62,7 +62,7 @@ var server = require('net').Server(function(s) {
   });
 });
 
-server.listen(common.PORT, makeConnection);
+server.listen(common.PORT, 'localhost', makeConnection);
 
 process.on('exit', function() {
   assert.equal(1, shutdownCount);

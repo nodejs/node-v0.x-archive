@@ -29,7 +29,7 @@ var http = require('http');
 // reproduceable on the first packet on the first connection to a server.
 
 var server = http.createServer(function(req, res) {});
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 server.on('listening', function() {
   net.createConnection(common.PORT).on('connect', function() {

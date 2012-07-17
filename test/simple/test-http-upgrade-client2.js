@@ -37,7 +37,7 @@ server.on('upgrade', function(req, socket, head) {
 
 var successCount = 0;
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
 
   function upgradeRequest(fn) {
     console.log('req');

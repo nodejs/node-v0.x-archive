@@ -74,7 +74,7 @@ server.on('close', function() {
     clearTimeout(timer);
   }
 });
-server.bind(server_port);
+server.bind(server_port, '127.0.0.1');
 
 timer = setTimeout(function() {
   throw new Error('Timeout');

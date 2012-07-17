@@ -55,7 +55,7 @@ function doTest() {
     ++requestCount;
     cleartext.end();
   });
-  server.listen(common.PORT, function() {
+  server.listen(common.PORT, 'localhost', function() {
     var client = spawn('openssl', [
       's_client',
       '-connect', 'localhost:' + common.PORT,

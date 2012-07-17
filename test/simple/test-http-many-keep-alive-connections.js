@@ -39,7 +39,7 @@ server.once('connection', function(c) {
   connection = c;
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var callee = arguments.callee;
   var request = http.get({
     port: common.PORT,

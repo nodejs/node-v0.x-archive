@@ -71,7 +71,7 @@ var web = http.Server(function(req, res) {
     process.exit(1);
   });
 });
-web.listen(webPort, startClient);
+web.listen(webPort, 'localhost', startClient);
 
 
 
@@ -101,7 +101,7 @@ var tcp = net.Server(function(s) {
     process.exit(1);
   });
 });
-tcp.listen(tcpPort, startClient);
+tcp.listen(tcpPort, 'localhost', startClient);
 
 
 function startClient() {

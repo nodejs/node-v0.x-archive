@@ -272,7 +272,7 @@ function runTest(testIndex) {
     }
   }
 
-  server.listen(common.PORT, function() {
+  server.listen(common.PORT, 'localhost', function() {
     if (tcase.debug) {
       console.error('TLS server running on port ' + common.PORT);
     } else {

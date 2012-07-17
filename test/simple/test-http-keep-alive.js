@@ -36,7 +36,7 @@ var name = 'localhost:' + common.PORT;
 var agent = new http.Agent({maxSockets: 1});
 var headers = {'connection': 'keep-alive'};
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   http.get({
     path: '/', headers: headers, port: common.PORT, agent: agent
   }, function(response) {

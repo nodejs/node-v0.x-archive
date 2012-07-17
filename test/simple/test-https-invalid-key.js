@@ -46,7 +46,7 @@ server.on('clientError', function(err) {
   server.close();
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var req = https.get({port: common.PORT}, function(res) {
     assert(false);
   });

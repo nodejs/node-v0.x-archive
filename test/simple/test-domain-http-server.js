@@ -58,10 +58,10 @@ var server = http.createServer(function(req, res) {
   });
 });
 
-server.listen(common.PORT, next);
+server.listen(common.PORT, 'localhost', next);
 
 function next() {
-  console.log('listening on localhost:%d', common.PORT);
+  console.log('listening on localhost:%d', common.PORT, 'localhost');
 
   // now hit it a few times
   var dom = domain.create();

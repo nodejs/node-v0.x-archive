@@ -36,7 +36,7 @@ var server = net.createServer(function(socket) {
   });
 });
 
-server.listen(common.PORT, 'localhost', function() {
+server.listen(common.PORT, 'localhost', 'localhost', function() {
   var client = net.createConnection(common.PORT, 'localhost');
   var client2 = net.createConnection(common.PORT);
   client.on('connect', function() {

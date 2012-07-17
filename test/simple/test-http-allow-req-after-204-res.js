@@ -62,4 +62,4 @@ function nextRequest() {
   request.end();
 }
 
-server.listen(common.PORT, nextRequest);
+server.listen(common.PORT, 'localhost', nextRequest);

@@ -28,7 +28,7 @@ var server = net.createServer(function(socket) {
   socket.end();
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var client = net.createConnection(common.PORT);
   server.close();
   // server connection event has not yet fired

@@ -36,7 +36,7 @@ var srv = net.createServer(function(c) {
 
 var parseError = false;
 
-srv.listen(common.PORT, '127.0.0.1', function() {
+srv.listen(common.PORT, 'localhost', '127.0.0.1', function() {
   var req = http.request({
     host: '127.0.0.1',
     port: common.PORT,

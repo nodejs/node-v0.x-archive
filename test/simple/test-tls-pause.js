@@ -43,7 +43,7 @@ var server = tls.Server(options, function(socket) {
   socket.pipe(socket);
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var resumed = false;
   var client = tls.connect({port: common.PORT}, function() {
     client.pause();

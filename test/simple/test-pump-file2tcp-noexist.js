@@ -45,7 +45,7 @@ var server = net.createServer(function(stream) {
   });
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var conn = net.createConnection(common.PORT);
   conn.setEncoding('utf8');
   conn.on('data', function(chunk) {

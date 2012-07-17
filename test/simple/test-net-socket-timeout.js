@@ -26,7 +26,7 @@ var assert = require('assert');
 var timedout = false;
 
 var server = net.Server();
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var socket = net.createConnection(common.PORT);
   socket.setTimeout(100, function() {
     timedout = true;

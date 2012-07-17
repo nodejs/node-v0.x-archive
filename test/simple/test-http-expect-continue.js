@@ -48,7 +48,7 @@ server.on('checkContinue', function(req, res) {
     handler(req, res);
   }, 100);
 });
-server.listen(common.PORT);
+server.listen(common.PORT, 'localhost');
 
 
 

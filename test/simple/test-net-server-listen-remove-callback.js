@@ -32,12 +32,12 @@ server.on('close', function() {
   assert.equal(0, listeners.length);
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   server.close();
 });
 
 server.once('close', function() {
-  server.listen(common.PORT + 1, function() {
+  server.listen(common.PORT + 1, 'localhost', function() {
     server.close();
   });
 });

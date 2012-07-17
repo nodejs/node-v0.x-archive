@@ -44,7 +44,7 @@ process.on('exit', function() {
 });
 
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   http.get({ port: common.PORT }, function(res) {
     assert.equal(200, res.statusCode);
     res.setEncoding('ascii');

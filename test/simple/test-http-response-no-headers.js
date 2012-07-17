@@ -46,7 +46,7 @@ function test(httpVersion, callback) {
     });
   });
 
-  server.listen(common.PORT, '127.0.0.1', function() {
+  server.listen(common.PORT, 'localhost', '127.0.0.1', function() {
     var options = {
       host: '127.0.0.1',
       port: common.PORT

@@ -30,7 +30,7 @@ var server = http.Server(function(req, res) {
   res.writeHead(200, {'Content-Type': 'text/plain'});
   res.end('hello world\n');
 });
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var req = http.get({port: common.PORT}, function(res) {
     res.on('end', function() {
       assert.ok(!req.end());

@@ -53,7 +53,7 @@ server.on('listening', pingping);
 
 function serverOn() {
   console.error('Server ON');
-  server.listen(common.PORT);
+  server.listen(common.PORT, 'localhost');
 }
 
 

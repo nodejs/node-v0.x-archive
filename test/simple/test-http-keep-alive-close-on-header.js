@@ -36,7 +36,7 @@ var server = http.createServer(function(req, res) {
 var connectCount = 0;
 
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var agent = new http.Agent({ maxSockets: 1 });
   var request = http.request({
     method: 'GET',

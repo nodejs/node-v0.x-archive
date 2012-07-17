@@ -40,7 +40,7 @@ var tcp = net.Server(function(s) {
   });
 });
 
-tcp.listen(common.PORT, function() {
+tcp.listen(common.PORT, 'localhost', function() {
   var socket = net.createConnection(tcpPort);
 
   socket.on('connect', function() {

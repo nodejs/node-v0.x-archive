@@ -29,7 +29,7 @@ var server = http.createServer(function(req, res) {
   res.end('Hello');
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   http.globalAgent.maxSockets = 1;
   var parser;
   for (var i = 0; i < N; ++i) {

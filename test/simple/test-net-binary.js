@@ -50,7 +50,7 @@ var echoServer = net.Server(function(connection) {
     connection.end();
   });
 });
-echoServer.listen(common.PORT);
+echoServer.listen(common.PORT, 'localhost');
 
 var recv = '';
 

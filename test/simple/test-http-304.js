@@ -33,7 +33,7 @@ var s = http.createServer(function(request, response) {
   response.end();
 });
 
-s.listen(common.PORT, function() {
+s.listen(common.PORT, 'localhost', function() {
   childProcess.exec('curl -i http://127.0.0.1:' + common.PORT + '/',
                     function(err, stdout, stderr) {
                       if (err) throw err;

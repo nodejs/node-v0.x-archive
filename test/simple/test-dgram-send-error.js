@@ -43,7 +43,7 @@ var socket = dgram.createSocket('udp4');
 
 socket.on('message', onMessage);
 socket.on('listening', doSend);
-socket.bind(common.PORT);
+socket.bind(common.PORT, 'localhost');
 
 function onMessage(message, info) {
   packetsReceived++;

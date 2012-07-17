@@ -33,7 +33,7 @@ var server = net.createServer({allowHalfOpen: true}, function(socket) {
   socket.end();
 });
 
-server.listen(common.PORT, function() {
+server.listen(common.PORT, 'localhost', function() {
   var client = net.connect({
     host: '127.0.0.1',
     port: common.PORT,
