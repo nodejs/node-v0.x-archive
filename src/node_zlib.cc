@@ -211,7 +211,8 @@ class ZCtx : public ObjectWrap {
     // call the write() cb
     assert(ctx->handle_->Get(callback_sym)->IsFunction() &&
            "Invalid callback");
-    Local<Value> args[2] = { avail_in, avail_out };
+    Local<Value> args[3] = { Local<Value>::New(Number::New(ctx->err_)),
+                             avail_in, avail_out };
     MakeCallback(ctx->handle_, callback_sym, ARRAY_SIZE(args), args);
 
     ctx->Unref();
