@@ -130,7 +130,7 @@ if (cmd === 'install') {
     // a bit annoying.  If it's a symlink, skip it.
     var isSymlink = false;
     var exists = true;
-    var npmDir = path.resolve(node_prefix, 'lib/node_modules/npm');
+    var npmDir = path.join(dest_dir, node_prefix, 'lib/node_modules/npm');
     try {
       var st = fs.lstatSync(npmDir);
       isSymlink = st.isSymbolicLink();
