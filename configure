@@ -169,10 +169,6 @@ parser.add_option("--with-float-abi",
     dest="float_abi",
     help="Specifies which floating-point ABI to use. Valid values are: soft, softfp, hard")
 
-parser.add_option("--with-armv7",
-    action="store_true",
-    dest="use_armv7",
-    help="Optimise v8 for armv7")
 
 (options, args) = parser.parse_args()
 
@@ -230,6 +226,14 @@ def cc_macros():
       k[key] = val
   return k
 
+def arm_arch_arm7():
+  """Check for ARMv7 instructions"""
+  cc_macros_cache = cc_macros()
+  return "__ARM_ARCH_7__" in cc_macros_cache or \
+        "__ARM_ARCH_7A__" in cc_macros_cache or \
+        "__ARM_ARCH_7R__" in cc_macros_cache or \
+        "__ARM_ARCH_7M__" in cc_macros_cache
+
 def arm_hard_float_abi():
   """Check for hardfloat or softfloat eabi on ARM"""
   # GCC versions 4.6 and above define __ARM_PCS or __ARM_PCS_VFP to specify
@@ -243,7 +247,7 @@ def arm_hard_float_abi():
 
   if cc_version() >= [False, 4, 6, 0]:
     return "__ARM_PCS_VFP" in cc_macros()
-  elif c_version() < [False, 4, 5, 0]:
+  elif cc_version() < [False, 4, 5, 0]:
     return False
   else:
     if "__ARM_PCS_VFP" in cc_macros():
@@ -375,8 +379,7 @@ def configure_v8(o):
       o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.float_abi == "hard")
     else:
       o['variables']['v8_use_arm_eabi_hardfloat'] = b(arm_hard_float_abi())
-    # todo: auto-detect armv7 variable
-    o['variables']['armv7'] = b(options.use_armv7)   
+    o['variables']['armv7'] = b(arm_arch_arm7())
 
   # assume shared_v8 if one of these is set?
   if options.shared_v8_libpath:
