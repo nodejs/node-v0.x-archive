@@ -164,10 +164,10 @@ parser.add_option("--no-ifaddrs",
     dest="no_ifaddrs",
     help="Use on deprecated SunOS systems that do not support ifaddrs.h")
 
-parser.add_option("--with-hardfloat",
-    action="store_true",
-    dest="use_hardfloat",
-    help="Use ARM EABI calling convention where double arguments are passed in VFP registers")
+parser.add_option("--with-float-abi",
+    action="store",
+    dest="float_abi",
+    help="Specifies which floating-point ABI to use. Valid values are: soft, softfp, hard")
 
 parser.add_option("--with-armv7",
     action="store_true",
@@ -198,9 +198,8 @@ def pkg_config(pkg):
 
   return (libs, cflags)
 
-
-def host_arch_cc():
-  """Host architecture check using the CC command."""
+def cc_macros():
+  """Checks predefined macros using the CC command."""
 
   try:
     p = subprocess.Popen(CC.split() + ['-dM', '-E', '-'],
@@ -215,7 +214,7 @@ def host_arch_cc():
         it in a non-standard prefix.
         '''
     sys.exit()
-
+  
   p.stdin.write('\n')
   out = p.communicate()[0]
 
@@ -229,6 +228,39 @@ def host_arch_cc():
       key = lst[1]
       val = lst[2]
       k[key] = val
+  return k
+
+def arm_hard_float_abi():
+  """Check for hardfloat or softfloat eabi on ARM"""
+  # GCC versions 4.6 and above define __ARM_PCS or __ARM_PCS_VFP to specify
+  # the Floating Point ABI used (PCS stands for Procedure Call Standard).
+  # We use these as well as a couple of other defines to statically determine
+  # what FP ABI used.
+  # GCC versions 4.4 and below don't support hard-fp.
+  # GCC versions 4.5 may support hard-fp without defining __ARM_PCS or
+  # __ARM_PCS_VFP.
+
+
+  if cc_version() >= [False, 4, 6, 0]:
+    return "__ARM_PCS_VFP" in cc_macros()
+  elif c_version() < [False, 4, 5, 0]:
+    return False
+  else:
+    if "__ARM_PCS_VFP" in cc_macros():
+      return True
+    elif "__ARM_PCS" in cc_macros() or "__SOFTFP" in cc_macros() or not "__VFP_FP__" in cc_macros():
+      return False
+    else:
+      print '''Node.js configure error: Your version of GCC does not report the FP ABI compiled for
+
+        Please manually specify which floating-point ABI to use with the --with-float-abi option. 
+        '''
+      sys.exit()
+
+def host_arch_cc():
+  """Host architecture check using the CC command."""
+
+  k = cc_macros()
 
   matchup = {
     '__x86_64__'  : 'x64',
@@ -338,9 +370,12 @@ def configure_v8(o):
   o['variables']['v8_use_snapshot'] = b(not options.without_snapshot)
   o['variables']['node_shared_v8'] = b(options.shared_v8)
 
-  # todo: auto-detect these variables when not cross-compiling
   if o['variables']['target_arch'] == 'arm':
-    o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.use_hardfloat)
+    if options.float_abi:
+      o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.float_abi == "hard")
+    else:
+      o['variables']['v8_use_arm_eabi_hardfloat'] = b(arm_hard_float_abi())
+    # todo: auto-detect armv7 variable
     o['variables']['armv7'] = b(options.use_armv7)   
 
   # assume shared_v8 if one of these is set?
