@@ -31,22 +31,31 @@ var interval_fired = false,
 var LONG_TIME = 10 * 1000;
 var SHORT_TIME = 100;
 
+var activeHandles = process.activeHandles;
 setInterval(function() {
   interval_fired = true;
 }, LONG_TIME).unref();
+assert.strictEqual(activeHandles, process.activeHandles,
+                   'activeHandels should not be changed');
 
 setTimeout(function() {
   timeout_fired = true;
 }, LONG_TIME).unref();
+assert.strictEqual(activeHandles, process.activeHandles,
+                   'activeHandels should not be changed');
 
 interval = setInterval(function() {
   unref_interval = true;
   clearInterval(interval);
 }, SHORT_TIME).unref();
+assert.strictEqual(activeHandles, process.activeHandles,
+                   'activeHandels should not be changed');
 
 setTimeout(function() {
   unref_timer = true;
 }, SHORT_TIME).unref();
+assert.strictEqual(activeHandles, process.activeHandles,
+                   'activeHandels should not be changed');
 
 check_unref = setInterval(function() {
   if (checks > 5 || (unref_interval && unref_timer))

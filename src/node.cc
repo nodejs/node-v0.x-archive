@@ -1346,6 +1346,10 @@ Handle<Value> GetActiveHandles(const Arguments& args) {
   return scope.Close(ary);
 }
 
+Handle<Value> ActiveHandlesGetter(Local<String> property,
+				  const AccessorInfo& info) {
+  return Integer::New(uv_default_loop()->active_handles);
+}
 
 static Handle<Value> Abort(const Arguments& args) {
   abort();
@@ -2243,6 +2247,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
                        DebugPortGetter,
                        DebugPortSetter);
 
+  process->SetAccessor(String::New("activeHandles"),
+		       ActiveHandlesGetter);
 
   // define various internal methods
   NODE_SET_METHOD(process, "_getActiveRequests", GetActiveRequests);

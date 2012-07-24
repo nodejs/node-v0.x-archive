@@ -27,7 +27,9 @@ var closed = false;
 
 var s = net.Server();
 s.listen(common.PIPE);
+var activeHandles = process.activeHandles;
 s.unref();
+assert.strictEqual(activeHandles - 1, process.activeHandles);
 
 setTimeout(function() {
   closed = true;
