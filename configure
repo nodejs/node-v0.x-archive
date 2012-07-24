@@ -323,9 +323,8 @@ def configure_node(o):
   o['variables']['host_arch'] = host_arch
   o['variables']['target_arch'] = target_arch
 
-  # V8 on ARM requires that armv7 is set. We don't have a good way to detect
-  # the CPU model right now so we pick a default and hope that it works okay
-  # for the majority of users.
+  # V8 on ARM requires that armv7 is set. CPU Model detected by 
+  # the presence of __ARM_ARCH_7__ and the like defines in compiler
   if target_arch == 'arm':
     if options.float_abi:
       o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.float_abi == "hard")
