@@ -379,7 +379,7 @@ def configure_v8(o):
       o['variables']['v8_use_arm_eabi_hardfloat'] = b(options.float_abi == "hard")
     else:
       o['variables']['v8_use_arm_eabi_hardfloat'] = b(arm_hard_float_abi())
-    o['variables']['armv7'] = b(arm_arch_arm7())
+    o['variables']['armv7'] = 1 if arm_arch_arm7() else 0
 
   # assume shared_v8 if one of these is set?
   if options.shared_v8_libpath:
