@@ -27,7 +27,10 @@ var closed = false;
 
 var s = dgram.createSocket('udp4');
 s.bind();
+var activeHandles = process.activeHandles;
 s.unref();
+assert.strictEqual(activeHandles - 1, process.activeHandles,
+                   'activeHandels should be decremented');
 
 setTimeout(function() {
   closed = true;

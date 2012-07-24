@@ -501,4 +501,10 @@ a diff reading, useful for benchmarks and measuring intervals:
       // benchmark took 1 seconds and 6962306 nanoseconds
     }, 1000);
 
+## process.activeHandles
+
+The total number of active handles in the current event loop. The handles of
+`dgram`, `server`, `socket` and `timers` can be controlled to be active or
+inactive with their `ref()` and `unref()` methods.
+
 [EventEmitter]: events.html#events_class_events_eventemitter
