@@ -169,7 +169,6 @@ parser.add_option("--with-arm-float-abi",
     dest="arm_float_abi",
     help="Specifies which floating-point ABI to use. Valid values are: soft, softfp, hard")
 
-
 (options, args) = parser.parse_args()
 
 
