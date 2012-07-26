@@ -211,7 +211,7 @@ def cc_macros():
         it in a non-standard prefix.
         '''
     sys.exit()
-  
+
   p.stdin.write('\n')
   out = p.communicate()[0]
 
@@ -261,8 +261,8 @@ def arm_hard_float_abi():
     print '''Node.js configure error: Your version of GCC does not report
       the Floating-Point ABI to compile for your hardware
 
-      Please manually specify which floating-point ABI to use with the 
-      --with-arm-float-abi option. 
+      Please manually specify which floating-point ABI to use with the
+      --with-arm-float-abi option.
       '''
     sys.exit()
 
@@ -329,7 +329,7 @@ def configure_node(o):
   o['variables']['host_arch'] = host_arch
   o['variables']['target_arch'] = target_arch
 
-  # V8 on ARM requires that armv7 is set. CPU Model detected by 
+  # V8 on ARM requires that armv7 is set. CPU Model detected by
   # the presence of __ARM_ARCH_7__ and the like defines in compiler
   if target_arch == 'arm':
     if options.arm_float_abi:
