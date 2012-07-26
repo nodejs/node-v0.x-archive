@@ -248,12 +248,14 @@ def arm_hard_float_abi():
   # __ARM_PCS_VFP.
 
   if compiler_version() >= (4, 6, 0):
-    return "__ARM_PCS_VFP" in cc_macros()
+    return '__ARM_PCS_VFP' in cc_macros()
   elif compiler_version() < (4, 5, 0):
     return False
-  elif "__ARM_PCS_VFP" in cc_macros():
+  elif '__ARM_PCS_VFP' in cc_macros():
     return True
-  elif "__ARM_PCS" in cc_macros() or "__SOFTFP" in cc_macros() or not "__VFP_FP__" in cc_macros():
+  elif '__ARM_PCS' in cc_macros() or \
+        '__SOFTFP' in cc_macros() or \
+        not '__VFP_FP__' in cc_macros():
     return False
   else:
     print '''Node.js configure error: Your version of GCC does not report
