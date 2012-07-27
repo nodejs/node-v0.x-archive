@@ -24,7 +24,6 @@ var common = require('../common');
 var assert = require('assert');
 var events = require('events');
 
-
 function listener() {}
 function listener2() {}
 
@@ -35,7 +34,6 @@ assert.deepEqual(e1.listeners('foo'), [listener]);
 e1.removeAllListeners('foo');
 assert.deepEqual(e1.listeners('foo'), []);
 assert.deepEqual(fooListeners, [listener]);
-
 
 var e2 = new events.EventEmitter();
 e2.on('foo', listener);
@@ -52,4 +50,3 @@ var e3ListenersCopy = e3.listeners('foo');
 e3.on('foo', listener2);
 assert.deepEqual(e3.listeners('foo'), [listener, listener2]);
 assert.deepEqual(e3ListenersCopy, [listener]);
-
