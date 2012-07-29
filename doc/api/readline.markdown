@@ -115,6 +115,45 @@ Example usage:
       console.log('Oh, so your favorite food is ' + answer);
     });
 
+### rl.setEchoMode(mode)
+	
+Sets how subsequent input characters are echoed to the output.
+
+ - `true` - Default output mode. Echo input chars to the output.
+ - `false` - Supressed output mode. e.g. for hiding password entry.
+ - `string` - Masked output mode. mode[0] is emitted in place of input char, e.g. for masking password entry.
+	
+Example usage:
+
+Supress password output completely:
+ 
+    interface.setEchoMode(true);
+	interface.question('username: ', function(answer) {
+	  console.log(["Your username is: ", answer].join(''));
+
+      interface.setEchoMode(false); //supress output
+	  interface.question('password: ', function(answer) {
+  	    console.log(["Your password is: ", answer].join(''));
+        
+		interface.setEchoMode(true);	//restore echo
+	  }
+    });
+ 
+Mask password output: 
+ 
+    interface.setEchoMode(true);
+	interface.question('username: ', function(answer) {
+	  console.log(["Your username is: ", answer].join(''));
+
+      interface.setEchoMode("*"); 
+	  interface.question('password: ', function(answer) {
+  	    console.log(["Your password is: ", answer].join(''));
+
+	    interface.setEchoMode(true); //restore echo
+	  }
+    });
+ 
+	
 ### rl.pause()
 
 Pauses the readline `input` stream, allowing it to be resumed later if needed.
