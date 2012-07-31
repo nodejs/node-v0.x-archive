@@ -23,7 +23,6 @@ var common = require('../common');
 var assert = require('assert');
 var events = require('events');
 
-
 var count = 0;
 
 function listener1() {
@@ -43,19 +42,25 @@ function listener3() {
 
 var e1 = new events.EventEmitter();
 e1.on('hello', listener1);
+e1.on('removeListener', common.mustCall(function(name, cb) {
+  assert.equal(name, 'hello');
+  assert.equal(cb, listener1);
+}));
 e1.removeListener('hello', listener1);
 assert.deepEqual([], e1.listeners('hello'));
 
 var e2 = new events.EventEmitter();
 e2.on('hello', listener1);
+e2.on('removeListener', assert.fail);
 e2.removeListener('hello', listener2);
 assert.deepEqual([listener1], e2.listeners('hello'));
 
 var e3 = new events.EventEmitter();
 e3.on('hello', listener1);
 e3.on('hello', listener2);
+e3.on('removeListener', common.mustCall(function(name, cb) {
+  assert.equal(name, 'hello');
+  assert.equal(cb, listener1);
+}));
 e3.removeListener('hello', listener1);
 assert.deepEqual([listener2], e3.listeners('hello'));
-
-
-
