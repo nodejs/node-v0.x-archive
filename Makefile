@@ -193,14 +193,12 @@ docclean:
 
 VERSION=v$(shell $(PYTHON) tools/getnodeversion.py)
 PLATFORM=$(shell uname | tr '[:upper:]' '[:lower:]')
-ifeq ($(DESTCPU),x64)
-ARCH=x86_64
-else
-ifeq ($(DESTCPU),ia32)
-ARCH=i386
-else
-ARCH=$(shell uname -m)
+ifeq ($(DESTCPU),)
+DESTCPU=$(shell ./node -pe process.arch)
 endif
+ARCH=$(DESTCPU)
+ifeq ($(ARCH),ia32)
+ARCH=x86
 endif
 TARNAME=node-$(VERSION)
 TARBALL=$(TARNAME).tar.gz
