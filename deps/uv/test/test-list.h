@@ -56,6 +56,7 @@ TEST_DECLARE   (tcp_close)
 TEST_DECLARE   (tcp_flags)
 TEST_DECLARE   (tcp_write_error)
 TEST_DECLARE   (tcp_write_to_half_open_connection)
+TEST_DECLARE   (tcp_unexpected_read)
 TEST_DECLARE   (tcp_bind6_error_addrinuse)
 TEST_DECLARE   (tcp_bind6_error_addrnotavail)
 TEST_DECLARE   (tcp_bind6_error_fault)
@@ -118,7 +119,6 @@ TEST_DECLARE   (get_memory)
 TEST_DECLARE   (hrtime)
 TEST_DECLARE   (getaddrinfo_basic)
 TEST_DECLARE   (getaddrinfo_concurrent)
-TEST_DECLARE   (gethostbyname)
 TEST_DECLARE   (getsockname_tcp)
 TEST_DECLARE   (getsockname_udp)
 TEST_DECLARE   (fail_always)
@@ -252,6 +252,7 @@ TASK_LIST_START
   TEST_ENTRY  (tcp_flags)
   TEST_ENTRY  (tcp_write_error)
   TEST_ENTRY  (tcp_write_to_half_open_connection)
+  TEST_ENTRY  (tcp_unexpected_read)
 
   TEST_ENTRY  (tcp_bind6_error_addrinuse)
   TEST_ENTRY  (tcp_bind6_error_addrnotavail)
@@ -341,8 +342,6 @@ TASK_LIST_START
 
   TEST_ENTRY  (getaddrinfo_basic)
   TEST_ENTRY  (getaddrinfo_concurrent)
-
-  TEST_ENTRY  (gethostbyname)
 
   TEST_ENTRY  (getsockname_tcp)
   TEST_ENTRY  (getsockname_udp)

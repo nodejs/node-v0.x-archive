@@ -30,16 +30,14 @@ extern "C" {
 #ifdef _WIN32
   /* Windows - set up dll import/export decorators. */
 # if defined(BUILDING_UV_SHARED)
-    /* Building shared library. Export everything from c-ares as well. */
+    /* Building shared library. */
 #   define UV_EXTERN __declspec(dllexport)
-#   define CARES_BUILDING_LIBRARY 1
 # elif defined(USING_UV_SHARED)
-    /* Using shared library. Use shared c-ares as well. */
+    /* Using shared library. */
 #   define UV_EXTERN __declspec(dllimport)
 # else
-    /* Building static library. Build c-ares statically as well. */
+    /* Building static library. */
 #   define UV_EXTERN /* nothing */
-#   define CARES_STATICLIB 1
 # endif
 #elif __GNUC__ >= 4
 # define UV_EXTERN __attribute__((visibility("default")))
@@ -54,8 +52,6 @@ extern "C" {
 
 #include <stdint.h> /* int64_t */
 #include <sys/types.h> /* size_t */
-
-#include "ares.h"
 
 #if defined(__unix__) || defined(__POSIX__) || defined(__APPLE__)
 # include "uv-private/uv-unix.h"
@@ -121,7 +117,8 @@ extern "C" {
   XX( 54, ENOSPC, "no space left on device") \
   XX( 55, EIO, "i/o error") \
   XX( 56, EROFS, "read-only file system" ) \
-  XX( 57, ENODEV, "no such device" )
+  XX( 57, ENODEV, "no such device" ) \
+  XX( 58, ECANCELED, "operation canceled" )
 
 
 #define UV_ERRNO_GEN(val, name, s) UV_##name = val,
@@ -160,7 +157,6 @@ typedef enum {
 #define XX(uc, lc) UV_##uc,
   UV_HANDLE_TYPE_MAP(XX)
 #undef XX
-  UV_ARES_TASK,
   UV_FILE,
   UV_HANDLE_TYPE_MAX
 } uv_handle_type;
@@ -177,7 +173,6 @@ typedef enum {
 
 /* Handle types. */
 typedef struct uv_loop_s uv_loop_t;
-typedef struct uv_ares_task_s uv_ares_task_t;
 typedef struct uv_err_s uv_err_t;
 typedef struct uv_handle_s uv_handle_t;
 typedef struct uv_stream_s uv_stream_t;
@@ -427,6 +422,10 @@ UV_EXTERN void uv_walk(uv_loop_t* loop, uv_walk_cb walk_cb, void* arg);
  * Note that handles that wrap file descriptors are closed immediately but
  * close_cb will still be deferred to the next iteration of the event loop.
  * It gives you a chance to free up any resources associated with the handle.
+ *
+ * In-progress requests, like uv_connect_t or uv_write_t, are cancelled and
+ * have their callbacks called asynchronously with status=-1 and the error code
+ * set to UV_ECANCELED.
  */
 UV_EXTERN void uv_close(uv_handle_t* handle, uv_close_cb close_cb);
 
@@ -528,9 +527,12 @@ UV_EXTERN int uv_read2_start(uv_stream_t*, uv_alloc_cb alloc_cb,
  *     { .base = "4", .len = 1 }
  *   };
  *
+ *   uv_write_t req1;
+ *   uv_write_t req2;
+ *
  *   // writes "1234"
- *   uv_write(req, stream, a, 2);
- *   uv_write(req, stream, b, 2);
+ *   uv_write(&req1, stream, a, 2);
+ *   uv_write(&req2, stream, b, 2);
  *
  */
 UV_EXTERN int uv_write(uv_write_t* req, uv_stream_t* handle,
@@ -1129,14 +1131,6 @@ UV_EXTERN void uv_timer_set_repeat(uv_timer_t* timer, int64_t repeat);
 UV_EXTERN int64_t uv_timer_get_repeat(uv_timer_t* timer);
 
 
-/* c-ares integration initialize and terminate */
-UV_EXTERN  int uv_ares_init_options(uv_loop_t*,
-    ares_channel *channelptr, struct ares_options *options, int optmask);
-
-/* TODO remove the loop argument from this function? */
-UV_EXTERN void uv_ares_destroy(uv_loop_t*, ares_channel channel);
-
-
 /*
  * uv_getaddrinfo_t is a subclass of uv_req_t
  *
@@ -1614,6 +1608,12 @@ UV_EXTERN struct sockaddr_in6 uv_ip6_addr(const char* ip, int port);
 UV_EXTERN int uv_ip4_name(struct sockaddr_in* src, char* dst, size_t size);
 UV_EXTERN int uv_ip6_name(struct sockaddr_in6* src, char* dst, size_t size);
 
+/* Cross-platform IPv6-capable implementation of the 'standard' inet_ntop */
+/* and inet_pton functions. On success they return UV_OK. If an error */
+/* the target of the `dst` pointer is unmodified. */
+uv_err_t uv_inet_ntop(int af, const void* src, char* dst, size_t size);
+uv_err_t uv_inet_pton(int af, const char* src, void* dst);
+
 /* Gets the executable path */
 UV_EXTERN int uv_exepath(char* buffer, size_t* size);
 
@@ -1772,13 +1772,6 @@ struct uv_counters_s {
 
 struct uv_loop_s {
   UV_LOOP_PRIVATE_FIELDS
-  ares_channel channel;
-  /* While the channel is active this timer is called once per second to be */
-  /* sure that we're always calling ares_process. See the warning above the */
-  /* definition of ares_timeout(). */
-  uv_timer_t ares_timer; \
-  /* RB_HEAD(uv__ares_tasks, uv_ares_task_t) */
-  struct uv__ares_tasks { uv_ares_task_t* rbh_root; } ares_handles;
   /* Diagnostic counters */
   uv_counters_t counters;
   /* The last error */
