@@ -31,6 +31,8 @@ _UpgradeReport_Files/
 ipch/
 *.sdf
 *.opensdf
+src/res/node_perfctr_provider*.*
+!src/res/node_perfctr_provider.man
 
 /config.mk
 /config.gypi
