@@ -44,7 +44,7 @@ function FakeStream() {
 FakeStream.prototype = Object.create(Stream.prototype);
 
 FakeStream.prototype.write = function(chunk) {
-  console.error(this.ID, 'write', this.wait);
+//  console.error(this.ID, 'write', this.wait);
   if (this.wait) {
     process.nextTick(this.emit.bind(this, 'drain'));
   }
@@ -76,14 +76,14 @@ for (var i = 0; i < chunkSize; i++) {
 for (var i = 0; i < cnt; i++) {
   var r = new FakeStream();
   r.on('close', function() {
-    console.error(this.ID, 'read close');
+//    console.error(this.ID, 'read close');
     rclosed++;
   });
   rr.push(r);
 
   var w = new FakeStream();
   w.on('close', function() {
-    console.error(this.ID, 'write close');
+//    console.error(this.ID, 'write close');
     wclosed++;
   });
   ww.push(w);
