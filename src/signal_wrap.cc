@@ -72,17 +72,15 @@ class SignalWrap : public HandleWrap {
     assert(args.IsConstructCall());
 
     HandleScope scope;
-    SignalWrap *wrap = new SignalWrap(args.This());
-    assert(wrap);
+    SignalWrap* wrap = new SignalWrap(args.This());
 
     return scope.Close(args.This());
   }
 
   SignalWrap(Handle<Object> object)
-      : HandleWrap(object, (uv_handle_t*) &handle_) {
+      : HandleWrap(object, reinterpret_cast<uv_handle_t*>(&handle_)) {
     int r = uv_signal_init(uv_default_loop(), &handle_);
     assert(r == 0);
-    handle_.data = this;
   }
 
   ~SignalWrap() {
@@ -117,7 +115,7 @@ class SignalWrap : public HandleWrap {
   static void OnSignal(uv_signal_t* handle, int signum) {
     HandleScope scope;
 
-    SignalWrap* wrap = static_cast<SignalWrap*>(handle->data);
+    SignalWrap* wrap = container_of(handle, SignalWrap, handle_);
     assert(wrap);
 
     Local<Value> argv[1] = { Integer::New(signum) };
