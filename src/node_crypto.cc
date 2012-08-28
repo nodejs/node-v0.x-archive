@@ -3018,6 +3018,7 @@ class Hash : public ObjectWrap {
 
     NODE_SET_PROTOTYPE_METHOD(t, "update", HashUpdate);
     NODE_SET_PROTOTYPE_METHOD(t, "digest", HashDigest);
+	NODE_SET_PROTOTYPE_METHOD(t, "clear", HashClear);
 
     target->Set(String::NewSymbol("Hash"), t->GetFunction());
   }
@@ -3027,12 +3028,10 @@ class Hash : public ObjectWrap {
     if(!md) return false;
     EVP_MD_CTX_init(&mdctx);
     EVP_DigestInit_ex(&mdctx, md, NULL);
-    initialised_ = true;
     return true;
   }
 
   int HashUpdate(char* data, int len) {
-    if (!initialised_) return 0;
     EVP_DigestUpdate(&mdctx, data, len);
     return 1;
   }
@@ -3102,17 +3101,16 @@ class Hash : public ObjectWrap {
     HandleScope scope;
 
     Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
-
-    if (!hash->initialised_) {
-      return ThrowException(Exception::Error(String::New("Not initialized")));
-    }
-
-    unsigned char md_value[EVP_MAX_MD_SIZE];
-    unsigned int md_len;
-
-    EVP_DigestFinal_ex(&hash->mdctx, md_value, &md_len);
-    EVP_MD_CTX_cleanup(&hash->mdctx);
-    hash->initialised_ = false;
+	
+	unsigned char md_value[EVP_MAX_MD_SIZE];
+	unsigned int md_len;
+	EVP_MD_CTX tmpmdctx;
+	
+	EVP_MD_CTX_copy(&tmpmdctx,&hash->mdctx);
+	
+	EVP_DigestFinal_ex(&tmpmdctx, md_value, &md_len);
+	
+	EVP_MD_CTX_cleanup(&tmpmdctx);
 
     if (md_len == 0) {
       return scope.Close(String::New(""));
@@ -3143,22 +3141,27 @@ class Hash : public ObjectWrap {
 
     return scope.Close(outString);
   }
+  
+  static Handle<Value> HashClear(const Arguments& args) {
+    HandleScope scope;
+
+    Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
+	
+	EVP_MD_CTX_cleanup(&hash->mdctx);
+	
+	return scope.Close(String::New(""));
+  }
 
   Hash () : ObjectWrap () {
-    initialised_ = false;
   }
 
   ~Hash () {
-    if (initialised_) {
-      EVP_MD_CTX_cleanup(&mdctx);
-    }
   }
 
  private:
 
   EVP_MD_CTX mdctx; /* coverity[member_decl] */
   const EVP_MD *md; /* coverity[member_decl] */
-  bool initialised_;
 };
 
 class Sign : public ObjectWrap {
