@@ -66,7 +66,7 @@ Returned by `crypto.createHash`.
 Updates the hash content with the given `data`, the encoding of which is given
 in `input_encoding` and can be `'utf8'`, `'ascii'` or `'binary'`.
 Defaults to `'binary'`.
-This can be called many times with new data as it is streamed.
+This can be called many times with new data as it is streamed, digests can be called while data are being streamed too, then updates can be continued after.
 
 ### hash.digest([encoding])
 
@@ -74,8 +74,9 @@ Calculates the digest of all of the passed data to be hashed.
 The `encoding` can be `'hex'`, `'binary'` or `'base64'`.
 Defaults to `'binary'`.
 
-Note: `hash` object can not be used after `digest()` method been called.
+### hash.clear()
 
+Clear the hash, it can not be used any longer after.
 
 ## crypto.createHmac(algorithm, key)
 
