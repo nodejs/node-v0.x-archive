@@ -239,7 +239,7 @@
 
   startup.processMakeCallback = function() {
     process._makeCallback = function(obj, fn, args) {
-      var domain = obj.domain;
+      var domain = obj._domain;
       if (domain) {
         if (domain._disposed) return;
         domain.enter();
@@ -316,9 +316,9 @@
         while (nextTickIndex < nextTickLength) {
           var tock = nextTickQueue[nextTickIndex++];
           var callback = tock.callback;
-          if (tock.domain) {
-            if (tock.domain._disposed) continue;
-            tock.domain.enter();
+          if (tock._domain) {
+            if (tock._domain._disposed) continue;
+            tock._domain.enter();
           }
           var threw = true;
           try {
@@ -329,8 +329,8 @@
             // so we can't clear the tickDepth at this point.
             if (threw) tickDone(tickDepth);
           }
-          if (tock.domain) {
-            tock.domain.exit();
+          if (tock._domain) {
+            tock._domain.exit();
           }
         }
         nextTickQueue.splice(0, nextTickIndex);
@@ -349,7 +349,7 @@
       if (process._exiting) return;
 
       var tock = { callback: callback };
-      if (process.domain) tock.domain = process.domain;
+      if (process._domain) tock._domain = process._domain;
       nextTickQueue.push(tock);
       if (nextTickQueue.length) {
         process._needTickCallback();

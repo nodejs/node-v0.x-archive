@@ -2863,7 +2863,7 @@ int Start(int argc, char *argv[]) {
     Context::Scope context_scope(context);
 
     process_symbol = NODE_PSYMBOL("process");
-    domain_symbol = NODE_PSYMBOL("domain");
+    domain_symbol = NODE_PSYMBOL("_domain");
 
     // Use original argv, as we're just copying values out of it.
     Handle<Object> process_l = SetupProcessObject(argc, argv);
