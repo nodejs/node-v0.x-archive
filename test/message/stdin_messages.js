@@ -28,7 +28,6 @@ var spawn = require('child_process').spawn;
 function run(cmd, strict, cb) {
   var args = [];
   if (strict) args.push('--use_strict');
-  args.push('-p');
   var child = spawn(process.execPath, args);
   child.stdout.pipe(process.stdout);
   child.stderr.pipe(process.stdout);

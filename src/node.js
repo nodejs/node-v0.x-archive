@@ -143,6 +143,9 @@
         process.stdin.resume();
         process.stdin.setEncoding('utf8');
 
+        // Always print result to console.log 
+        process._print_eval = true;
+
         var code = '';
         process.stdin.on('data', function(d) {
           code += d;
