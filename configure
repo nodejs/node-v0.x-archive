@@ -165,6 +165,12 @@ parser.add_option("--with-arm-float-abi",
     help="Specifies which floating-point ABI to use. Valid values are: "
          "soft, softfp, hard")
 
+parser.add_option("--output-type",
+    action="store",
+    dest="output_type",
+    help="""Type of output binary to build. Valid values are:
+        executable, static_library, shared_library (default: 'executable')""")
+
 (options, args) = parser.parse_args()
 
 
@@ -317,6 +323,7 @@ def configure_node(o):
   o['variables']['node_prefix'] = os.path.expanduser(options.prefix or '')
   o['variables']['node_install_npm'] = b(not options.without_npm)
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
+  o['variables']['output_type'] = options.output_type or 'executable'
 
   host_arch = host_arch_win() if os.name == 'nt' else host_arch_cc()
   target_arch = options.dest_cpu or host_arch
