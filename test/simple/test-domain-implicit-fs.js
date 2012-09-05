@@ -27,9 +27,10 @@ var assert = require('assert');
 var domain = require('domain');
 var events = require('events');
 var caught = 0;
-var expectCaught = 1;
+var expectCaught = 2;
 
 var d = new domain.Domain();
+var d2 = new domain.Domain();
 var e = new events.EventEmitter();
 
 d.on('error', function(er) {
@@ -41,6 +42,17 @@ d.on('error', function(er) {
   assert.strictEqual(er.code, 'ENOENT');
   assert.ok(/\bthis file does not exist\b/i.test(er.path));
   assert.strictEqual(typeof er.errno, 'number');
+
+  caught++;
+});
+
+d2.on('error', function(er) {
+  console.error('caught', er);
+
+  assert.strictEqual(er.domain, d2);
+  assert.strictEqual(er.domain_thrown, true);
+  assert.ok(!er.domain_emitter);
+  assert.strictEqual(er.message, 'TEST');
 
   caught++;
 });
@@ -66,6 +78,17 @@ d.run(function() {
       fs.open('this file does not exist', 'r', function(er) {
         if (er) throw er;
         throw new Error('should not get here!');
+      });
+    });
+  }, 100);
+});
+
+d2.run(function() {
+  setTimeout(function() {
+    var fs = require('fs');
+    fs.readdir(__dirname, function() {
+      fs.open('this file does not exist', 'r', function(er) {
+        throw new Error('TEST');
       });
     });
   }, 100);
