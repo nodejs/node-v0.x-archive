@@ -1081,13 +1081,32 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
                       "Please update your code.\n");
     }
     return BINARY;
+  } else if (strcasecmp(*encoding, "buffer") == 0) {
+    return BUFFER;
   } else {
     return _default;
   }
 }
 
+void EncodeBufferFree(char* data, void* hint) {
+  delete[] data;
+}
+
 Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
   HandleScope scope;
+
+  if (encoding == BUFFER) {
+    if (!len) {
+      Buffer* buffer = Buffer::New(0);
+      return scope.Close(Local<Object>::New(buffer->handle_));
+    }
+
+    char* _buffer = new char[len];
+    memcpy(_buffer, buf, len);
+
+    Buffer* buffer = Buffer::New(_buffer, len, EncodeBufferFree, NULL);
+    return scope.Close(Local<Object>::New(buffer->handle_));
+  }
 
   if (!len) return scope.Close(String::Empty());
 
