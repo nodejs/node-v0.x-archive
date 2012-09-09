@@ -133,6 +133,7 @@ def files(action):
           'deps/uv/include/uv-private/ngx-queue.h',
           'deps/uv/include/uv-private/tree.h',
           'deps/uv/include/uv-private/uv-unix.h',
+          'deps/uv/include/uv-private/uv-linux.h',
           'deps/uv/include/uv-private/uv-win.h'],
           'include/node/uv-private/')
   action(['doc/node.1'], 'share/man/man1/')
