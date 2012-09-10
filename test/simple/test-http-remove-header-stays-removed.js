@@ -28,11 +28,12 @@ var server = http.createServer(function(request, response) {
   // removed headers should stay removed, even if node automatically adds them
   // to the output:
   response.removeHeader('connection');
+  response.removeHeader('transfer-encoding');
   
   // make sure that removing and then setting still works:
   response.removeHeader('date');
   response.setHeader('date', 'coffee o clock');
-  
+
   response.end('beep boop\n');
 
   this.close();
