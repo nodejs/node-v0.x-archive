@@ -265,7 +265,7 @@ you can use the `require('querystring').parse` function, or pass
 
 ### request.headers
 
-Read only.
+Read only. Keys are lowercased; Values are not modified: as stated in [RFC 2616 Sec. 4.2](http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2), "field names are case-insensitive."
 
 ### request.trailers
 
