@@ -64,7 +64,7 @@ Returned by `crypto.createHash`.
 ### hash.update(data, [input_encoding])
 
 Updates the hash content with the given `data`, the encoding of which is given
-in `input_encoding` and can be `'utf8'`, `'ascii'` or `'binary'`.
+in `input_encoding` and can be `'utf8'`, `'ascii'`, `'buffer'` or `'binary'`.
 Defaults to `'binary'`.
 This can be called many times with new data as it is streamed.
 
@@ -134,18 +134,18 @@ Returned by `crypto.createCipher` and `crypto.createCipheriv`.
 ### cipher.update(data, [input_encoding], [output_encoding])
 
 Updates the cipher with `data`, the encoding of which is given in
-`input_encoding` and can be `'utf8'`, `'ascii'` or `'binary'`.
+`input_encoding` and can be `'utf8'`, `'ascii'`, `'buffer'` or `'binary'`.
 Defaults to `'binary'`.
 
 The `output_encoding` specifies the output format of the enciphered data,
-and can be `'binary'`, `'base64'` or `'hex'`. Defaults to `'binary'`.
+and can be `'binary'`, `'base64'`, `'buffer'` or `'hex'`. Defaults to `'binary'`.
 
 Returns the enciphered contents, and can be called many times with new data as it is streamed.
 
 ### cipher.final([output_encoding])
 
 Returns any remaining enciphered contents, with `output_encoding` being one of:
-`'binary'`, `'base64'` or `'hex'`. Defaults to `'binary'`.
+`'binary'`, `'base64'`, `'buffer'` or `'hex'`. Defaults to `'binary'`.
 
 Note: `cipher` object can not be used after `final()` method been called.
 
