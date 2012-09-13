@@ -137,14 +137,15 @@ Buffer* Buffer::New(size_t length) {
 }
 
 
-Buffer* Buffer::New(char* data, size_t length) {
+Buffer* Buffer::New(const char* data, size_t length) {
   HandleScope scope;
 
   Local<Value> arg = Integer::NewFromUnsigned(0);
   Local<Object> obj = constructor_template->GetFunction()->NewInstance(1, &arg);
 
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(obj);
-  buffer->Replace(data, length, NULL, NULL);
+  // if replace have no callback, it's copied
+  buffer->Replace(data, length);
 
   return buffer;
 }
@@ -198,6 +199,8 @@ Buffer::~Buffer() {
 }
 
 
+// if replace have no callback, data must be copied
+// const_cast in Buffer::New require this
 void Buffer::Replace(char *data, size_t length,
                      free_callback callback, void *hint) {
   HandleScope scope;
