@@ -105,7 +105,7 @@ class NODE_EXTERN Buffer: public ObjectWrap {
 
   // public constructor
   static Buffer* New(size_t length);
-  // public constructor - data are copied
+  // public constructor - data is copied
   static Buffer* New(const char *data, size_t len);
   // public constructor
   static Buffer* New(char *data, size_t length,
@@ -130,9 +130,6 @@ class NODE_EXTERN Buffer: public ObjectWrap {
 
   Buffer(v8::Handle<v8::Object> wrapper, size_t length);
 
-  inline void Replace(const char *data, size_t length) {
-    Replace(const_cast<char*>(data), length, NULL, NULL);
-  };
   void Replace(char *data, size_t length, free_callback callback, void *hint);
 
   size_t length_;

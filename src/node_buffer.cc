@@ -145,7 +145,7 @@ Buffer* Buffer::New(const char* data, size_t length) {
 
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(obj);
   // if replace have no callback, it's copied
-  buffer->Replace(data, length);
+  buffer->Replace(const_cast<char*>(data), length, NULL, NULL);
 
   return buffer;
 }
@@ -199,8 +199,8 @@ Buffer::~Buffer() {
 }
 
 
-// if replace have no callback, data must be copied
-// const_cast in Buffer::New require this
+// if replace doesn't have a callback, data must be copied
+// const_cast in Buffer::New requires this
 void Buffer::Replace(char *data, size_t length,
                      free_callback callback, void *hint) {
   HandleScope scope;
