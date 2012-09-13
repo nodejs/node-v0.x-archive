@@ -1096,16 +1096,9 @@ Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
   HandleScope scope;
 
   if (encoding == BUFFER) {
-    if (!len) {
-      Buffer* buffer = Buffer::New(0);
-      return scope.Close(Local<Object>::New(buffer->handle_));
-    }
-
-    char* _buffer = new char[len];
-    memcpy(_buffer, buf, len);
-
-    Buffer* buffer = Buffer::New(_buffer, len, EncodeBufferFree, NULL);
-    return scope.Close(Local<Object>::New(buffer->handle_));
+    Buffer* buffer = Buffer::New(len);
+    memcpy(Buffer::Data(buffer), buf, len);
+    return scope.Close(buffer->handle_);
   }
 
   if (!len) return scope.Close(String::Empty());
