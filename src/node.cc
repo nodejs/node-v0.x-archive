@@ -1088,10 +1088,6 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
   }
 }
 
-void EncodeBufferFree(char* data, void* hint) {
-  delete[] data;
-}
-
 Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
   HandleScope scope;
 
