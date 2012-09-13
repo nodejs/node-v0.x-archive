@@ -147,7 +147,7 @@
           'libraries': [ '-lm' ]
         }],
         [ 'OS=="mac"', {
-          'sources': [ 'src/unix/darwin.c', 'src/unix/fsevents.c' ],
+          'sources': [ 'src/unix/darwin.c' ],
           'direct_dependent_settings': {
             'libraries': [
               '$(SDKROOT)/System/Library/Frameworks/CoreServices.framework',

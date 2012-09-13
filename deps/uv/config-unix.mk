@@ -60,7 +60,6 @@ CPPFLAGS += -D_DARWIN_USE_64_BIT_INODE=1
 LINKFLAGS+=-framework CoreServices
 OBJS += src/unix/darwin.o
 OBJS += src/unix/kqueue.o
-OBJS += src/unix/fsevents.o
 endif
 
 ifeq (Linux,$(uname_S))
