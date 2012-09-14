@@ -737,7 +737,8 @@
             ['v8_postmortem_support=="true"', {
               'sources': [
                 '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
-              ]
+              ],
+              'dependencies': ['postmortem-metadata']
             }],
           ],
         },
