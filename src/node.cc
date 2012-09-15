@@ -1569,6 +1569,8 @@ static Handle<Value> GetGroups(const Arguments& args) {
   int ngroups = 0, i = 0;
 
   groupList = calloc(NGROUPS_MAX, sizeof(gid_t));
+  assert(groupList != NULL);
+
   ngroups = getgroups(NGROUPS_MAX, groupList);
   assert(ngroups != -1);
 
