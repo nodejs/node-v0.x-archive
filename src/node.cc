@@ -1568,10 +1568,12 @@ static Handle<Value> GetGroups(const Arguments& args) {
   gid_t *groupList;
   int ngroups = 0, i = 0;
 
-  groupList = calloc(NGROUPS_MAX, sizeof(gid_t));
+  ngroups = sysctl(_SC_NGROUPS_MAX);
+
+  groupList = calloc(ngroups, sizeof(gid_t));
   assert(groupList != NULL);
 
-  ngroups = getgroups(NGROUPS_MAX, groupList);
+  ngroups = getgroups(ngroups, groupList);
   assert(ngroups != -1);
 
   Local<Array> groupsArray = Array::New(ngroups);
