@@ -369,6 +369,7 @@ var a0 = crypto.createHash('sha1').update('Test123').digest('hex');
 var a1 = crypto.createHash('md5').update('Test123').digest('binary');
 var a2 = crypto.createHash('sha256').update('Test123').digest('base64');
 var a3 = crypto.createHash('sha512').update('Test123').digest(); // binary
+var a4 = crypto.createHash('sha512').update('Test123').digest('buffer');
 
 assert.equal(a0, '8308651804facb7b9af8ffc53a33a22d6a1c8ac2', 'Test SHA1');
 assert.equal(a1, 'h\u00ea\u00cb\u0097\u00d8o\fF!\u00fa+\u000e\u0017\u00ca' +
@@ -381,6 +382,12 @@ assert.equal(a3, '\u00c1(4\u00f1\u0003\u001fd\u0097!O\'\u00d4C/&Qz\u00d4' +
                  '\u00d7\u00d6\u00a2\u00a8\u0085\u00e3<\u0083\u009c\u0093' +
                  '\u00c2\u0006\u00da0\u00a1\u00879(G\u00ed\'',
              'Test SHA512 as assumed binary');
+assert.ok(a4 instanceof Buffer, 'Test SHA512 if output is Buffer');
+assert.deepEqual(a4,
+             new Buffer('c12834f1031f6497214f27d4432f26517ad494156cb8'+
+                        '8d512bdb1dc4b57db2d692a3dfa269a19b0a0a2a0fd7'+
+                        'd6a2a885e33c839c93c206da30a187392847ed27', 'hex'),
+             'Test SHA512 as assumed buffer');
 
 // Test multiple updates to same hash
 var h1 = crypto.createHash('sha1').update('Test123').digest('hex');
