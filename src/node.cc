@@ -1565,11 +1565,12 @@ static Handle<Value> SetUid(const Arguments& args) {
 
 static Handle<Value> GetGroups(const Arguments& args) {
   HandleScope scope;
-  gid_t groupList[NGROUPS_MAX];
+  gid_t *groupList;
   int ngroups = 0, i = 0;
 
-  memset(&groupList, 0x0, sizeof(gid_t) * NGROUPS_MAX);
+  groupList = calloc(NGROUPS_MAX, sizeof(gid_t));
   ngroups = getgroups(NGROUPS_MAX, groupList);
+  assert(ngroups != -1);
 
   Local<Array> groupsArray = Array::New(ngroups);
 
