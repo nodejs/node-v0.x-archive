@@ -1069,6 +1069,8 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
     return BINARY;
   } else if (strcasecmp(*encoding, "hex") == 0) {
     return HEX;
+  } else if (strcasecmp(*encoding, "buffer") == 0) {
+    return BUFFER;
   } else if (strcasecmp(*encoding, "raw") == 0) {
     if (!no_deprecation) {
       fprintf(stderr, "'raw' (array of integers) has been removed. "
@@ -1081,8 +1083,6 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
                       "Please update your code.\n");
     }
     return BINARY;
-  } else if (strcasecmp(*encoding, "buffer") == 0) {
-    return BUFFER;
   } else {
     return _default;
   }
@@ -1092,9 +1092,7 @@ Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
   HandleScope scope;
 
   if (encoding == BUFFER) {
-    Buffer* buffer = Buffer::New(len);
-    memcpy(Buffer::Data(buffer), buf, len);
-    return scope.Close(buffer->handle_);
+    return scope.Close(Buffer::New(static_cast<const char*>(buf), len)->handle_);
   }
 
   if (!len) return scope.Close(String::Empty());
