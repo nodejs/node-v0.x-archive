@@ -2420,11 +2420,11 @@ class Cipher : public ObjectWrap {
         base64(out, out_len, &out_hexdigest, &out_hex_len);
         outString = Encode(out_hexdigest, out_hex_len, BINARY);
         delete [] out_hexdigest;
-      } else if (enc == BINARY) {
-        outString = Encode(out, out_len, BINARY);
+      } else if (enc == BINARY || enc == BUFFER) {
+        outString = Encode(out, out_len, enc);
       } else {
         fprintf(stderr, "node-crypto : Cipher .update encoding "
-                        "can be binary, hex or base64\n");
+                        "can be binary, hex, base64 or buffer\n");
       }
     }
 
@@ -2493,11 +2493,11 @@ class Cipher : public ObjectWrap {
       base64(out_value, out_len, &out_hexdigest, &out_hex_len);
       outString = Encode(out_hexdigest, out_hex_len, BINARY);
       delete [] out_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(out_value, out_len, BINARY);
+    } else if (enc == BINARY || enc == BUFFER) {
+      outString = Encode(out_value, out_len, enc);
     } else {
       fprintf(stderr, "node-crypto : Cipher .final encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
 
     delete [] out_value;
@@ -2826,12 +2826,12 @@ class Decipher : public ObjectWrap {
       len = ciphertext_len;
       alloc_buf = true;
 
-    } else if (enc == BINARY) {
+    } else if (enc == BINARY || enc == BUFFER) {
       // Binary - do nothing
 
     } else {
       fprintf(stderr, "node-crypto : Decipher .update encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
 
     unsigned char *out=0;
@@ -3132,11 +3132,11 @@ class Hmac : public ObjectWrap {
       base64(md_value, md_len, &md_hexdigest, &md_hex_len);
       outString = Encode(md_hexdigest, md_hex_len, BINARY);
       delete [] md_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(md_value, md_len, BINARY);
+    } else if (enc == BINARY || enc == BUFFER) {
+      outString = Encode(md_value, md_len, enc);
     } else {
       fprintf(stderr, "node-crypto : Hmac .digest encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
     delete [] md_value;
     return scope.Close(outString);
@@ -3287,11 +3287,11 @@ class Hash : public ObjectWrap {
       base64(md_value, md_len, &md_hexdigest, &md_hex_len);
       outString = Encode(md_hexdigest, md_hex_len, BINARY);
       delete [] md_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(md_value, md_len, BINARY);
+    } else if (enc == BINARY || enc == BUFFER) {
+      outString = Encode(md_value, md_len, enc);
     } else {
       fprintf(stderr, "node-crypto : Hash .digest encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
 
     return scope.Close(outString);
@@ -3489,12 +3489,12 @@ class Sign : public ObjectWrap {
       base64(md_value, md_len, &md_hexdigest, &md_hex_len);
       outString = Encode(md_hexdigest, md_hex_len, BINARY);
       delete [] md_hexdigest;
-    } else if (enc == BINARY) {
-      outString = Encode(md_value, md_len, BINARY);
+    } else if (enc == BINARY || enc == BUFFER) {
+      outString = Encode(md_value, md_len, enc);
     } else {
       outString = String::New("");
       fprintf(stderr, "node-crypto : Sign .sign encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
 
     delete [] md_value;
@@ -3741,11 +3741,11 @@ class Verify : public ObjectWrap {
       unbase64(hbuf, hlen, (char **)&dbuf, &dlen);
       r = verify->VerifyFinal(kbuf, klen, dbuf, dlen);
       delete [] dbuf;
-    } else if (enc == BINARY) {
+    } else if (enc == BINARY || enc == BUFFER) {
       r = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
     } else {
       fprintf(stderr, "node-crypto : Verify .verify encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
 
     delete [] kbuf;
@@ -4297,11 +4297,11 @@ class DiffieHellman : public ObjectWrap {
     } else if (enc == BASE64) {
       unbase64((unsigned char*)*buf, len, &retbuf, &retlen);
 
-    } else if (enc == BINARY) {
+    } else if (enc == BINARY || enc == BUFFER) {
       // Binary - do nothing
     } else {
       fprintf(stderr, "node-crypto : Diffie-Hellman parameter encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
 
     if (retbuf != 0) {
@@ -4331,11 +4331,11 @@ class DiffieHellman : public ObjectWrap {
       base64(reinterpret_cast<unsigned char*>(buf), len, &retbuf, &retlen);
       outString = Encode(retbuf, retlen, BINARY);
       delete [] retbuf;
-    } else if (enc == BINARY) {
-      outString = Encode(buf, len, BINARY);
+    } else if (enc == BINARY || enc == BUFFER) {
+      outString = Encode(buf, len, enc);
     } else {
       fprintf(stderr, "node-crypto : Diffie-Hellman parameter encoding "
-                      "can be binary, hex or base64\n");
+                      "can be binary, hex, base64 or buffer\n");
     }
 
     return scope.Close(outString);
