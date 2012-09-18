@@ -644,9 +644,9 @@ class QueryNaptrWrap: public QueryWrap {
 
       Local<Object> naptr_record = Object::New();
 
-      naptr_record->Set(flags_symbol, String::New(naptr_current->flags));
-      naptr_record->Set(service_symbol, String::New(naptr_current->service));
-      naptr_record->Set(regexp_symbol, String::New(naptr_current->regexp));
+      naptr_record->Set(flags_symbol, String::New(reinterpret_cast<char*>(naptr_current->flags)));
+      naptr_record->Set(service_symbol, String::New(reinterpret_cast<char*>(naptr_current->service)));
+      naptr_record->Set(regexp_symbol, String::New(reinterpret_cast<char*>(naptr_current->regexp)));
       naptr_record->Set(replacement_symbol, String::New(naptr_current->replacement));
       naptr_record->Set(order_symbol, Integer::New(naptr_current->order));
       naptr_record->Set(preference_symbol, Integer::New(naptr_current->preference));
