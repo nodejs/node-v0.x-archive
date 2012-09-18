@@ -400,7 +400,7 @@ or
 
 ### response.headersSent
 
-Boolean (read-only). True if headers was sent, false otherwise.
+Boolean (read-only). True if headers were sent, false otherwise.
 
 ### response.sendDate
 
