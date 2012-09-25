@@ -5,23 +5,23 @@
 #ifndef OPENSSL_SYSNAME_WIN32
 # define OPENSSL_SYSNAME_WIN32
 #endif
+
 #ifndef OPENSSL_DOING_MAKEDEPEND
 
-
-#ifndef OPENSSL_NO_CAMELLIA
-# define OPENSSL_NO_CAMELLIA
-#endif
 #ifndef OPENSSL_NO_CAPIENG
 # define OPENSSL_NO_CAPIENG
 #endif
-#ifndef OPENSSL_NO_CMS
-# define OPENSSL_NO_CMS
+#ifndef OPENSSL_NO_EC_NISTP_64_GCC_128
+# define OPENSSL_NO_EC_NISTP_64_GCC_128
 #endif
 #ifndef OPENSSL_NO_GMP
 # define OPENSSL_NO_GMP
 #endif
-#ifndef OPENSSL_NO_IDEA
-# define OPENSSL_NO_IDEA
+#ifndef OPENSSL_NO_GOST
+# define OPENSSL_NO_GOST
+#endif
+#ifndef OPENSSL_NO_HW_PADLOCK
+# define OPENSSL_NO_HW_PADLOCK
 #endif
 #ifndef OPENSSL_NO_JPAKE
 # define OPENSSL_NO_JPAKE
@@ -29,8 +29,8 @@
 #ifndef OPENSSL_NO_KRB5
 # define OPENSSL_NO_KRB5
 #endif
-#ifndef OPENSSL_NO_MDC2
-# define OPENSSL_NO_MDC2
+#ifndef OPENSSL_NO_MD2
+# define OPENSSL_NO_MD2
 #endif
 #ifndef OPENSSL_NO_RC5
 # define OPENSSL_NO_RC5
@@ -38,17 +38,20 @@
 #ifndef OPENSSL_NO_RFC3779
 # define OPENSSL_NO_RFC3779
 #endif
-#ifndef OPENSSL_NO_SEED
-# define OPENSSL_NO_SEED
+#ifndef OPENSSL_NO_SCTP
+# define OPENSSL_NO_SCTP
 #endif
-#ifndef OPENSSL_NO_ASM
-# define OPENSSL_NO_ASM
+#ifndef OPENSSL_NO_STORE
+# define OPENSSL_NO_STORE
 #endif
 
 #endif /* OPENSSL_DOING_MAKEDEPEND */
 
 #ifndef OPENSSL_THREADS
 # define OPENSSL_THREADS
+#endif
+#ifndef OPENSSL_NO_DYNAMIC_ENGINE
+# define OPENSSL_NO_DYNAMIC_ENGINE
 #endif
 
 /* The OPENSSL_NO_* macros are also defined as NO_* if the application
@@ -62,17 +65,29 @@
 # if defined(OPENSSL_NO_CAPIENG) && !defined(NO_CAPIENG)
 #  define NO_CAPIENG
 # endif
+# if defined(OPENSSL_NO_CAST) && !defined(NO_CAST)
+#  define NO_CAST
+# endif
 # if defined(OPENSSL_NO_CMS) && !defined(NO_CMS)
 #  define NO_CMS
 # endif
+# if defined(OPENSSL_NO_FIPS) && !defined(NO_FIPS)
+#  define NO_FIPS
+# endif
 # if defined(OPENSSL_NO_GMP) && !defined(NO_GMP)
 #  define NO_GMP
+# endif
+# if defined(OPENSSL_NO_IDEA) && !defined(NO_IDEA)
+#  define NO_IDEA
 # endif
 # if defined(OPENSSL_NO_JPAKE) && !defined(NO_JPAKE)
 #  define NO_JPAKE
 # endif
 # if defined(OPENSSL_NO_KRB5) && !defined(NO_KRB5)
 #  define NO_KRB5
+# endif
+# if defined(OPENSSL_NO_MD2) && !defined(NO_MD2)
+#  define NO_MD2
 # endif
 # if defined(OPENSSL_NO_MDC2) && !defined(NO_MDC2)
 #  define NO_MDC2
@@ -85,6 +100,18 @@
 # endif
 # if defined(OPENSSL_NO_SEED) && !defined(NO_SEED)
 #  define NO_SEED
+# endif
+# if defined(OPENSSL_NO_SHA0) && !defined(NO_SHA0)
+#  define NO_SHA0
+# endif
+# if defined(OPENSSL_NO_STORE) && !defined(NO_STORE)
+#  define NO_STORE
+# endif
+# if defined(OPENSSL_NO_WHRLPOOL) && !defined(NO_WHRLPOOL)
+#  define NO_WHRLPOOL
+# endif
+# if defined(OPENSSL_NO_MDC2) && !defined(NO_MDC2)
+#  define NO_MDC2
 # endif
 #endif
 
