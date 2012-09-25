@@ -239,7 +239,11 @@
       ],
       'msvs_settings': {
         'VCLinkerTool': {
-          'SubSystem': 1, # /subsystem:console
+          # Make node.exe re-export all openssl symbols, so binary modules
+          # can link against it
+          'ModuleDefinitionFile': './deps/openssl/export/win32/openssl.def',
+          # Executable should run in the console subsystem.
+          'SubSystem': 1
         },
       },
     },
