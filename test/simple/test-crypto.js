@@ -72,6 +72,15 @@ assert.throws(function() {
   crypto.createCredentials({pfx:'sample', passphrase:'test'});
 }, 'not enough data');
 
+//Cert, Key Read Tests
+assert.equal(certPem, credentials.context.cert.toString('ascii'));
+assert.equal(keyPem, credentials.context.pkey.toString('ascii'));
+assert.doesNotThrow(function() {
+  var c = crypto.createCredentials({pfx:certPfx, passphrase:'sample'});
+  assert.equal(certPem, c.context.cert.toString('ascii'));
+  assert.equal(keyPem, c.context.pkey.toString('ascii'));
+});
+
 // Test HMAC
 var h1 = crypto.createHmac('sha1', 'Node')
                .update('some data')

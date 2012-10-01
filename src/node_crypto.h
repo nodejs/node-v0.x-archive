@@ -59,14 +59,22 @@ class SecureContext : ObjectWrap {
   SSL_CTX *ctx_;
   // TODO: ca_store_ should probably be removed, it's not used anywhere.
   X509_STORE *ca_store_;
+  
+  Buffer *cert_, *pkey_;
 
  protected:
   static const int kMaxSessionSize = 10 * 1024;
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
   static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetKey(v8::Local<v8::String> property, 
+                                      const v8::AccessorInfo &info);
   static v8::Handle<v8::Value> SetKey(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetCert(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetCert(v8::Local<v8::String> property, 
+                                       const v8::AccessorInfo &info);
+  static void SetCert(v8::Local<v8::String> property, 
+                      v8::Local<v8::Value> value, 
+                      const v8::AccessorInfo& info);
   static v8::Handle<v8::Value> AddCACert(const v8::Arguments& args);
   static v8::Handle<v8::Value> AddCRL(const v8::Arguments& args);
   static v8::Handle<v8::Value> AddRootCerts(const v8::Arguments& args);
@@ -85,6 +93,8 @@ class SecureContext : ObjectWrap {
   SecureContext() : ObjectWrap() {
     ctx_ = NULL;
     ca_store_ = NULL;
+    cert_ = NULL;
+    pkey_ = NULL;
   }
 
   void FreeCTXMem() {
