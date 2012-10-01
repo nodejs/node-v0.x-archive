@@ -283,3 +283,12 @@ if (isWindows) {
     // posix
     assert.equal(path.sep, '/');
 }
+
+// path.delimiter tests
+if (isWindows) {
+    // windows
+    assert.equal(path.delimiter, ';');
+} else {
+    // posix
+    assert.equal(path.delimiter, ':');
+}
