@@ -135,8 +135,6 @@ int uv_udp_init(uv_loop_t* loop, uv_udp_t* handle) {
   handle->recv_req.type = UV_UDP_RECV;
   handle->recv_req.data = handle;
 
-  loop->counters.udp_init++;
-
   return 0;
 }
 
@@ -145,7 +143,7 @@ void uv_udp_close(uv_loop_t* loop, uv_udp_t* handle) {
   uv_udp_recv_stop(handle);
   closesocket(handle->socket);
 
-  uv__handle_start(handle);
+  uv__handle_closing(handle);
 
   if (handle->reqs_pending == 0) {
     uv_want_endgame(loop, (uv_handle_t*) handle);
@@ -154,10 +152,9 @@ void uv_udp_close(uv_loop_t* loop, uv_udp_t* handle) {
 
 
 void uv_udp_endgame(uv_loop_t* loop, uv_udp_t* handle) {
-  if (handle->flags & UV_HANDLE_CLOSING &&
+  if (handle->flags & UV__HANDLE_CLOSING &&
       handle->reqs_pending == 0) {
     assert(!(handle->flags & UV_HANDLE_CLOSED));
-    uv__handle_stop(handle);
     uv__handle_close(handle);
   }
 }
@@ -652,6 +649,28 @@ int uv_udp_set_broadcast(uv_udp_t* handle, int value) {
     uv__set_sys_error(handle->loop, WSAGetLastError());
     return -1;
   }
+  return 0;
+}
+
+
+int uv_udp_open(uv_udp_t* handle, uv_os_sock_t sock) {
+  int r;
+  DWORD yes = 1;
+
+  if (uv_udp_set_socket(handle->loop, handle, sock) == -1) {
+    return -1;
+  }
+
+  r = setsockopt(handle->socket,
+                 SOL_SOCKET,
+                 SO_REUSEADDR,
+                 (char*) &yes,
+                 sizeof yes);
+  if (r == SOCKET_ERROR) {
+    uv__set_sys_error(handle->loop, WSAGetLastError());
+    return -1;
+  }
+
   return 0;
 }
 

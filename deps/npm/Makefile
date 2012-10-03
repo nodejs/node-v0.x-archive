@@ -92,7 +92,7 @@ doc/cli/index.md: $(markdowns) scripts/index-build.js scripts/doc-build.sh packa
 	node scripts/index-build.js > $@
 
 node_modules/.bin/ronn:
-	node cli.js install https://github.com/isaacs/ronnjs/tarball/master
+	node cli.js install
 
 doc: man
 
@@ -120,14 +120,14 @@ doc-publish: doc
 		html/api/ \
 		node@npmjs.org:/home/node/npm-www/api
 	rsync -vazu --stats --no-implied-dirs --delete \
-		html/webfonts/ \
+		html/static/webfonts/ \
 		node@npmjs.org:/home/node/npm-www/static/webfonts
 	rsync -vazu --stats --no-implied-dirs --delete \
-		html/style.css \
+		html/static/style.css \
 		node@npmjs.org:/home/node/npm-www/static/
 
 zip-publish: release
-	scp release/* izs.me:/var/www/izs.me/static/public/npm/
+	scp release/* node@nodejs.org:dist/npm/
 
 release:
 	@bash scripts/release.sh

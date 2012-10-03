@@ -36,6 +36,7 @@ function ls (args, silent, cb) {
   readInstalled(dir, npm.config.get("depth"), function (er, data) {
     var bfs = bfsify(data, args)
       , lite = getLite(bfs)
+
     if (er || silent) return cb(er, data, lite)
 
     var long = npm.config.get("long")
@@ -58,7 +59,12 @@ function ls (args, silent, cb) {
       out = makeArchy(bfs, long, dir)
     }
     console.log(out)
-    cb(null, data, lite)
+
+    // if any errors were found, then complain and exit status 1
+    if (lite.problems && lite.problems.length) {
+      er = lite.problems.join('\n')
+    }
+    cb(er, data, lite)
   })
 }
 
@@ -210,14 +216,13 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
     if (depth < npm.config.get("depth")) {
       // just missing
       var p = parent.link || parent.path
-      log.warn("unmet dependency", "%s in %s", d+" "+data, p)
       var unmet = "UNMET DEPENDENCY"
       if (color) {
         unmet = "\033[31;40m" + unmet + "\033[0m"
       }
       data = unmet + " " + d + " " + data
     } else {
-      data = d+"@"+ data +" (max depth reached)"
+      data = d+"@"+ data
     }
     return data
   }
@@ -249,6 +254,7 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
     if (dir === data.path) out.label += "\n" + dir
     out.label += "\n" + getExtras(data, dir)
   } else if (dir === data.path) {
+    if (out.label) out.label += " "
     out.label += dir
   }
 
@@ -302,7 +308,6 @@ function makeParseable_ (data, long, dir, depth, parent, d) {
   if (typeof data === "string") {
     if (data.depth < npm.config.get("depth")) {
       var p = parent.link || parent.path
-      log.warn("unmet dependency", "%s in %s", d+" "+data, p)
       data = npm.config.get("long")
            ? path.resolve(parent.path, "node_modules", d)
            + ":"+d+"@"+JSON.stringify(data)+":INVALID:MISSING"

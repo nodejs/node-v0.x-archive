@@ -33,6 +33,7 @@ var httpsOptions = {
 };
 
 var testURL = url.parse('https://localhost:' + common.PORT);
+testURL.rejectUnauthorized = false;
 
 function check(request) {
   // assert that I'm https

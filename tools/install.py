@@ -62,6 +62,7 @@ def try_copy(path, dst):
   source_path, target_path = mkpaths(path, dst)
   print 'installing %s' % target_path
   try_mkdir_r(os.path.dirname(target_path))
+  try_unlink(target_path) # prevent ETXTBSY errors
   return shutil.copy2(source_path, target_path)
 
 def try_remove(path, dst):
@@ -73,61 +74,8 @@ def try_remove(path, dst):
 def install(paths, dst): map(lambda path: try_copy(path, dst), paths)
 def uninstall(paths, dst): map(lambda path: try_remove(path, dst), paths)
 
-def waf_files(action):
-  action(['tools/node-waf'], 'bin/node-waf')
-  action(['tools/wafadmin/ansiterm.py',
-          'tools/wafadmin/Build.py',
-          'tools/wafadmin/Configure.py',
-          'tools/wafadmin/Constants.py',
-          'tools/wafadmin/Environment.py',
-          'tools/wafadmin/__init__.py',
-          'tools/wafadmin/Logs.py',
-          'tools/wafadmin/Node.py',
-          'tools/wafadmin/Options.py',
-          'tools/wafadmin/pproc.py',
-          'tools/wafadmin/py3kfixes.py',
-          'tools/wafadmin/Runner.py',
-          'tools/wafadmin/Scripting.py',
-          'tools/wafadmin/TaskGen.py',
-          'tools/wafadmin/Task.py',
-          'tools/wafadmin/Tools/ar.py',
-          'tools/wafadmin/Tools/cc.py',
-          'tools/wafadmin/Tools/ccroot.py',
-          'tools/wafadmin/Tools/compiler_cc.py',
-          'tools/wafadmin/Tools/compiler_cxx.py',
-          'tools/wafadmin/Tools/compiler_d.py',
-          'tools/wafadmin/Tools/config_c.py',
-          'tools/wafadmin/Tools/cxx.py',
-          'tools/wafadmin/Tools/dmd.py',
-          'tools/wafadmin/Tools/d.py',
-          'tools/wafadmin/Tools/gas.py',
-          'tools/wafadmin/Tools/gcc.py',
-          'tools/wafadmin/Tools/gdc.py',
-          'tools/wafadmin/Tools/gnu_dirs.py',
-          'tools/wafadmin/Tools/gob2.py',
-          'tools/wafadmin/Tools/gxx.py',
-          'tools/wafadmin/Tools/icc.py',
-          'tools/wafadmin/Tools/icpc.py',
-          'tools/wafadmin/Tools/__init__.py',
-          'tools/wafadmin/Tools/intltool.py',
-          'tools/wafadmin/Tools/libtool.py',
-          'tools/wafadmin/Tools/misc.py',
-          'tools/wafadmin/Tools/nasm.py',
-          'tools/wafadmin/Tools/node_addon.py',
-          'tools/wafadmin/Tools/osx.py',
-          'tools/wafadmin/Tools/preproc.py',
-          'tools/wafadmin/Tools/python.py',
-          'tools/wafadmin/Tools/suncc.py',
-          'tools/wafadmin/Tools/suncxx.py',
-          'tools/wafadmin/Tools/unittestw.py',
-          'tools/wafadmin/Tools/winres.py',
-          'tools/wafadmin/Tools/xlc.py',
-          'tools/wafadmin/Tools/xlcxx.py',
-          'tools/wafadmin/Utils.py'],
-          'lib/node/')
-
 def update_shebang(path, shebang):
-  print 'updating shebang of %s' % path
+  print 'updating shebang of %s to %s' % (path, shebang)
   s = open(path, 'r').read()
   s = re.sub(r'#!.*\n', '#!' + shebang + '\n', s)
   open(path, 'w').write(s)
@@ -152,32 +100,20 @@ def npm_files(action):
     action([link_path], 'bin/npm')
   elif action == install:
     try_symlink('../lib/node_modules/npm/bin/npm-cli.js', link_path)
-    update_shebang(link_path, node_prefix + '/bin/node')
+    if os.environ.get('PORTABLE'):
+      # This crazy hack is necessary to make the shebang execute the copy
+      # of node relative to the same directory as the npm script. The precompiled
+      # binary tarballs use a prefix of "/" which gets translated to "/bin/node"
+      # in the regular shebang modifying logic, which is incorrect since the
+      # precompiled bundle should be able to be extracted anywhere and "just work"
+      shebang = '/bin/sh\n// 2>/dev/null; exec "`dirname "$0"`/node" "$0" "$@"'
+    else:
+      shebang = os.path.join(node_prefix, 'bin/node')
+    update_shebang(link_path, shebang)
   else:
     assert(0) # unhandled action type
 
 def files(action):
-  action(['deps/uv/include/uv.h',
-          'deps/v8/include/v8-debug.h',
-          'deps/v8/include/v8-preparser.h',
-          'deps/v8/include/v8-profiler.h',
-          'deps/v8/include/v8-testing.h',
-          'deps/v8/include/v8.h',
-          'deps/v8/include/v8stdint.h',
-          'src/eio-emul.h',
-          'src/ev-emul.h',
-          'src/node.h',
-          'src/node_buffer.h',
-          'src/node_object_wrap.h',
-          'src/node_version.h'],
-          'include/node/')
-  action(['deps/uv/include/uv-private/eio.h',
-          'deps/uv/include/uv-private/ev.h',
-          'deps/uv/include/uv-private/ngx-queue.h',
-          'deps/uv/include/uv-private/tree.h',
-          'deps/uv/include/uv-private/uv-unix.h',
-          'deps/uv/include/uv-private/uv-win.h'],
-          'include/node/uv-private/')
   action(['doc/node.1'], 'share/man/man1/')
   action(['out/Release/node'], 'bin/node')
 
@@ -186,8 +122,7 @@ def files(action):
   # with dtrace support now (oracle's "unbreakable" linux)
   action(['src/node.d'], 'lib/dtrace/')
 
-  if variables.get('node_install_waf'): waf_files(action)
-  if variables.get('node_install_npm'): npm_files(action)
+  if 'true' == variables.get('node_install_npm'): npm_files(action)
 
 def run(args):
   global dst_dir, node_prefix, target_defaults, variables
@@ -200,7 +135,7 @@ def run(args):
   target_defaults = conf['target_defaults']
 
   # argv[2] is a custom install prefix for packagers (think DESTDIR)
-  dst_dir = node_prefix = variables.get('node_prefix', '/usr/local')
+  dst_dir = node_prefix = variables.get('node_prefix') or '/usr/local'
   if len(args) > 2: dst_dir = abspath(args[2] + '/' + dst_dir)
 
   cmd = args[1] if len(args) > 1 else 'install'

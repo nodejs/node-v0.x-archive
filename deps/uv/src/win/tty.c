@@ -82,6 +82,8 @@ static int uv_tty_virtual_width = -1;
 
 static CRITICAL_SECTION uv_tty_output_lock;
 
+static HANDLE uv_tty_output_handle = INVALID_HANDLE_VALUE;
+
 
 void uv_console_init() {
   InitializeCriticalSection(&uv_tty_output_lock);
@@ -89,54 +91,79 @@ void uv_console_init() {
 
 
 int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, uv_file fd, int readable) {
-  HANDLE win_handle;
-  CONSOLE_SCREEN_BUFFER_INFO info;
+  HANDLE handle = INVALID_HANDLE_VALUE;
+  DWORD original_console_mode = 0;
+  CONSOLE_SCREEN_BUFFER_INFO screen_buffer_info;
 
-  loop->counters.tty_init++;
-
-  win_handle = (HANDLE) _get_osfhandle(fd);
-  if (win_handle == INVALID_HANDLE_VALUE) {
-    uv__set_sys_error(loop, ERROR_INVALID_HANDLE);
+  handle = (HANDLE) _get_osfhandle(fd);
+  if (handle == INVALID_HANDLE_VALUE) {
+    uv__set_artificial_error(loop, UV_EBADF);
     return -1;
   }
 
-  if (!GetConsoleMode(win_handle, &tty->original_console_mode)) {
-    uv__set_sys_error(loop, GetLastError());
-    return -1;
-  }
+  if (readable) {
+     /* Try to obtain the original console mode fromt he input handle. */
+    if (!GetConsoleMode(handle, &original_console_mode)) {
+      uv__set_sys_error(loop, GetLastError());
+      return -1;
+    }
 
-  /* Initialize virtual window size; if it fails, assume that this is stdin. */
-  if (GetConsoleScreenBufferInfo(win_handle, &info)) {
+  } else {
+    /* Obtain the screen buffer info with the output handle. */
+    if (!GetConsoleScreenBufferInfo(handle, &screen_buffer_info)) {
+      uv__set_sys_error(loop, GetLastError());
+      return -1;
+    }
+
+    /* Obtain the the tty_output_lock because the virtual window state is */
+    /* shared between all uv_tty_t handles. */
     EnterCriticalSection(&uv_tty_output_lock);
-    uv_tty_update_virtual_window(&info);
+
+    /* Store the global tty output handle. This handle is used by TTY read */
+    /* streams to update the virtual window when a CONSOLE_BUFFER_SIZE_EVENT */
+    /* is received. */
+    uv_tty_output_handle = handle;
+
+    uv_tty_update_virtual_window(&screen_buffer_info);
+
     LeaveCriticalSection(&uv_tty_output_lock);
   }
+
 
   uv_stream_init(loop, (uv_stream_t*) tty, UV_TTY);
   uv_connection_init((uv_stream_t*) tty);
 
-  tty->handle = win_handle;
-  tty->read_line_handle = NULL;
-  tty->read_line_buffer = uv_null_buf_;
-  tty->read_raw_wait = NULL;
+  tty->handle = handle;
   tty->reqs_pending = 0;
   tty->flags |= UV_HANDLE_BOUND;
 
-  /* Init keycode-to-vt100 mapper state. */
-  tty->last_key_len = 0;
-  tty->last_key_offset = 0;
-  tty->last_utf16_high_surrogate = 0;
-  memset(&tty->last_input_record, 0, sizeof tty->last_input_record);
+  if (readable) {
+    /* Initialize TTY input specific fields. */
+    tty->original_console_mode = original_console_mode;
+    tty->flags |= UV_HANDLE_TTY_READABLE | UV_HANDLE_READABLE;
+    tty->read_line_handle = NULL;
+    tty->read_line_buffer = uv_null_buf_;
+    tty->read_raw_wait = NULL;
 
-  /* Init utf8-to-utf16 conversion state. */
-  tty->utf8_bytes_left = 0;
-  tty->utf8_codepoint = 0;
+    /* Init keycode-to-vt100 mapper state. */
+    tty->last_key_len = 0;
+    tty->last_key_offset = 0;
+    tty->last_utf16_high_surrogate = 0;
+    memset(&tty->last_input_record, 0, sizeof tty->last_input_record);
+  } else {
+    /* TTY output specific fields. */
+    tty->flags |= UV_HANDLE_WRITABLE;
 
-  /* Initialize eol conversion state */
-  tty->previous_eol = 0;
+    /* Init utf8-to-utf16 conversion state. */
+    tty->utf8_bytes_left = 0;
+    tty->utf8_codepoint = 0;
 
-  /* Init ANSI parser state. */
-  tty->ansi_parser_state = ANSI_NORMAL;
+    /* Initialize eol conversion state */
+    tty->previous_eol = 0;
+
+    /* Init ANSI parser state. */
+    tty->ansi_parser_state = ANSI_NORMAL;
+  }
 
   return 0;
 }
@@ -147,6 +174,11 @@ int uv_tty_set_mode(uv_tty_t* tty, int mode) {
   unsigned char was_reading;
   uv_alloc_cb alloc_cb;
   uv_read_cb read_cb;
+
+  if (!(tty->flags & UV_HANDLE_TTY_READABLE)) {
+    uv__set_artificial_error(tty->loop, UV_EINVAL);
+    return -1;
+  }
 
   if (!!mode == !!(tty->flags & UV_HANDLE_TTY_RAW)) {
     return 0;
@@ -444,6 +476,7 @@ void uv_process_tty_read_raw_req(uv_loop_t* loop, uv_tty_t* handle,
   off_t buf_used;
 
   assert(handle->type == UV_TTY);
+  assert(handle->flags & UV_HANDLE_TTY_READABLE);
   handle->flags &= ~UV_HANDLE_READ_PENDING;
 
   if (!(handle->flags & UV_HANDLE_READING) ||
@@ -491,7 +524,25 @@ void uv_process_tty_read_raw_req(uv_loop_t* loop, uv_tty_t* handle,
       }
       records_left--;
 
-      /* Ignore events that are not keyboard events */
+      /* If the window was resized, recompute the virtual window size. This */
+      /* will trigger a SIGWINCH signal if the window size changed in an */
+      /* way that matters to libuv. */
+      if (handle->last_input_record.EventType == WINDOW_BUFFER_SIZE_EVENT) {
+        CONSOLE_SCREEN_BUFFER_INFO info;
+
+        EnterCriticalSection(&uv_tty_output_lock);
+
+        if (uv_tty_output_handle != INVALID_HANDLE_VALUE &&
+            GetConsoleScreenBufferInfo(uv_tty_output_handle, &info)) {
+          uv_tty_update_virtual_window(&info);
+        }
+
+        LeaveCriticalSection(&uv_tty_output_lock);
+
+        continue;
+      }
+
+      /* Ignore other events that are not key or resize events. */
       if (handle->last_input_record.EventType != KEY_EVENT) {
         continue;
       }
@@ -683,6 +734,7 @@ void uv_process_tty_read_line_req(uv_loop_t* loop, uv_tty_t* handle,
   uv_buf_t buf;
 
   assert(handle->type == UV_TTY);
+  assert(handle->flags & UV_HANDLE_TTY_READABLE);
 
   buf = handle->read_line_buffer;
 
@@ -726,6 +778,8 @@ void uv_process_tty_read_line_req(uv_loop_t* loop, uv_tty_t* handle,
 
 void uv_process_tty_read_req(uv_loop_t* loop, uv_tty_t* handle,
     uv_req_t* req) {
+  assert(handle->type == UV_TTY);
+  assert(handle->flags & UV_HANDLE_TTY_READABLE);
 
   /* If the read_line_buffer member is zero, it must have been an raw read. */
   /* Otherwise it was a line-buffered read. */
@@ -741,6 +795,11 @@ void uv_process_tty_read_req(uv_loop_t* loop, uv_tty_t* handle,
 int uv_tty_read_start(uv_tty_t* handle, uv_alloc_cb alloc_cb,
     uv_read_cb read_cb) {
   uv_loop_t* loop = handle->loop;
+
+  if (!(handle->flags & UV_HANDLE_TTY_READABLE)) {
+    uv__set_artificial_error(handle->loop, UV_EINVAL);
+    return -1;
+  }
 
   handle->flags |= UV_HANDLE_READING;
   INCREASE_ACTIVE_COUNT(loop, handle);
@@ -770,10 +829,8 @@ int uv_tty_read_start(uv_tty_t* handle, uv_alloc_cb alloc_cb,
 int uv_tty_read_stop(uv_tty_t* handle) {
   uv_loop_t* loop = handle->loop;
 
-  if (handle->flags & UV_HANDLE_READING) {
-    handle->flags &= ~UV_HANDLE_READING;
-    DECREASE_ACTIVE_COUNT(loop, handle);
-  }
+  handle->flags &= ~UV_HANDLE_READING;
+  DECREASE_ACTIVE_COUNT(loop, handle);
 
   /* Cancel raw read */
   if ((handle->flags & UV_HANDLE_READ_PENDING) &&
@@ -801,8 +858,11 @@ int uv_tty_read_stop(uv_tty_t* handle) {
 
 
 static void uv_tty_update_virtual_window(CONSOLE_SCREEN_BUFFER_INFO* info) {
-  uv_tty_virtual_height = info->srWindow.Bottom - info->srWindow.Top + 1;
+  int old_virtual_width = uv_tty_virtual_width;
+  int old_virtual_height = uv_tty_virtual_height;
+
   uv_tty_virtual_width = info->dwSize.X;
+  uv_tty_virtual_height = info->srWindow.Bottom - info->srWindow.Top + 1;
 
   /* Recompute virtual window offset row. */
   if (uv_tty_virtual_offset == -1) {
@@ -819,6 +879,14 @@ static void uv_tty_update_virtual_window(CONSOLE_SCREEN_BUFFER_INFO* info) {
   }
   if (uv_tty_virtual_offset < 0) {
     uv_tty_virtual_offset = 0;
+  }
+
+  /* If the virtual window size changed, emit a SIGWINCH signal. Don't emit */
+  /* if this was the first time the virtual window size was computed. */
+  if (old_virtual_width != -1 && old_virtual_height != -1 &&
+      (uv_tty_virtual_width != old_virtual_width ||
+       uv_tty_virtual_height != old_virtual_height)) {
+    uv__signal_dispatch(SIGWINCH);
   }
 }
 
@@ -943,10 +1011,10 @@ static int uv_tty_reset(uv_tty_t* handle, DWORD* error) {
   count = info.dwSize.X * info.dwSize.Y;
 
   if (!(FillConsoleOutputCharacterW(handle->handle,
-                              L'\x20',
-                              count,
-                              origin,
-                              &written) &&
+                                    L'\x20',
+                                    count,
+                                    origin,
+                                    &written) &&
         FillConsoleOutputAttribute(handle->handle,
                                    char_attrs,
                                    written,
@@ -1678,12 +1746,6 @@ int uv_tty_write(uv_loop_t* loop, uv_write_t* req, uv_tty_t* handle,
     uv_buf_t bufs[], int bufcnt, uv_write_cb cb) {
   DWORD error;
 
-  if ((handle->flags & UV_HANDLE_SHUTTING) ||
-      (handle->flags & UV_HANDLE_CLOSING)) {
-    uv__set_sys_error(loop, WSAESHUTDOWN);
-    return -1;
-  }
-
   uv_req_init(loop, (uv_req_t*) req);
   req->type = UV_WRITE;
   req->handle = (uv_stream_t*) handle;
@@ -1719,7 +1781,7 @@ void uv_process_tty_write_req(uv_loop_t* loop, uv_tty_t* handle,
   }
 
   handle->write_reqs_pending--;
-  if (handle->flags & UV_HANDLE_SHUTTING &&
+  if (handle->shutdown_req != NULL &&
       handle->write_reqs_pending == 0) {
     uv_want_endgame(loop, (uv_handle_t*)handle);
   }
@@ -1729,12 +1791,13 @@ void uv_process_tty_write_req(uv_loop_t* loop, uv_tty_t* handle,
 
 
 void uv_tty_close(uv_tty_t* handle) {
-  handle->flags |= UV_HANDLE_SHUTTING;
-
-  uv_tty_read_stop(handle);
   CloseHandle(handle->handle);
 
-  uv__handle_start(handle);
+  if (handle->flags & UV_HANDLE_READING)
+    uv_tty_read_stop(handle);
+
+  handle->flags &= ~(UV_HANDLE_READABLE | UV_HANDLE_WRITABLE);
+  uv__handle_closing(handle);
 
   if (handle->reqs_pending == 0) {
     uv_want_endgame(handle->loop, (uv_handle_t*) handle);
@@ -1743,14 +1806,14 @@ void uv_tty_close(uv_tty_t* handle) {
 
 
 void uv_tty_endgame(uv_loop_t* loop, uv_tty_t* handle) {
-  if ((handle->flags && UV_HANDLE_CONNECTION) &&
+  if (!(handle->flags && UV_HANDLE_TTY_READABLE) &&
       handle->shutdown_req != NULL &&
       handle->write_reqs_pending == 0) {
     UNREGISTER_HANDLE_REQ(loop, handle, handle->shutdown_req);
 
     /* TTY shutdown is really just a no-op */
     if (handle->shutdown_req->cb) {
-      if (handle->flags & UV_HANDLE_CLOSING) {
+      if (handle->flags & UV__HANDLE_CLOSING) {
         uv__set_artificial_error(loop, UV_ECANCELED);
         handle->shutdown_req->cb(handle->shutdown_req, -1);
       } else {
@@ -1764,18 +1827,19 @@ void uv_tty_endgame(uv_loop_t* loop, uv_tty_t* handle) {
     return;
   }
 
-  if (handle->flags & UV_HANDLE_CLOSING &&
+  if (handle->flags & UV__HANDLE_CLOSING &&
       handle->reqs_pending == 0) {
     /* The console handle duplicate used for line reading should be destroyed */
     /* by uv_tty_read_stop. */
-    assert(handle->read_line_handle == NULL);
+    assert(!(handle->flags & UV_HANDLE_TTY_READABLE) ||
+           handle->read_line_handle == NULL);
 
     /* The wait handle used for raw reading should be unregistered when the */
     /* wait callback runs. */
-    assert(handle->read_raw_wait == NULL);
+    assert(!(handle->flags & UV_HANDLE_TTY_READABLE) ||
+           handle->read_raw_wait == NULL);
 
     assert(!(handle->flags & UV_HANDLE_CLOSED));
-    uv__handle_stop(handle);
     uv__handle_close(handle);
   }
 }

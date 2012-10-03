@@ -43,9 +43,10 @@ var server = https.createServer(options, function(req, res) {
 
 server.listen(common.PORT, function() {
   https.get({
+    agent: false,
     path: '/',
     port: common.PORT,
-    agent: false
+    rejectUnauthorized: false
   }, function(res) {
     console.error(res.statusCode);
     gotCallback = true;

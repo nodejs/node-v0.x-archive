@@ -31,7 +31,7 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* handle, int events);
 
 
 __attribute__((always_inline))
-inline static int uv__async_make_pending(volatile sig_atomic_t* ptr) {
+static int uv__async_make_pending(volatile sig_atomic_t* ptr) {
   /* Do a cheap read first. */
   if (*ptr)
     return 1;
@@ -55,7 +55,7 @@ inline static int uv__async_make_pending(volatile sig_atomic_t* ptr) {
   return __sync_val_compare_and_swap(ptr, 0, 1) != 0;
 #else
   *ptr = 1;
-  return 1;
+  return 0;
 #endif
 }
 
@@ -65,8 +65,6 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
     return uv__set_sys_error(loop, errno);
 
   uv__handle_init(loop, (uv_handle_t*)handle, UV_ASYNC);
-  loop->counters.async_init++;
-
   handle->async_cb = async_cb;
   handle->pending = 0;
 

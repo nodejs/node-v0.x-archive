@@ -1,4 +1,112 @@
-2012.07.20, Version 0.9.0 (Unstable)
+2012.09.17, Version 0.9.2 (Unstable)
+
+* http_parser: upgrade to ad3b631
+
+* openssl: upgrade 1.0.1c
+
+* darwin: use FSEvents to watch directory changes (Fedor Indutny)
+
+* unix: support missing API on NetBSD (Shigeki Ohtsu)
+
+* unix: fix EMFILE busy loop (Ben Noordhuis)
+
+* windows: un-break writable tty handles (Bert Belder)
+
+* windows: map WSAESHUTDOWN to UV_EPIPE (Bert Belder)
+
+* windows: make spawn with custom environment work again (Bert Belder)
+
+* windows: map ERROR_DIRECTORY to UV_ENOENT (Bert Belder)
+
+* tls, https: validate server certificate by default (Ben Noordhuis)
+
+* tls, https: throw exception on missing key/cert (Ben Noordhuis)
+
+* tls: async session storage (Fedor Indutny)
+
+* installer: don't install header files (Ben Noordhuis)
+
+* buffer: implement Buffer.prototype.toJSON() (Nathan Rajlich)
+
+* buffer: added support for writing NaN and Infinity (koichik)
+
+* http: make http.ServerResponse emit 'end' (Ben Noordhuis)
+
+* build: ./configure --ninja (Ben Noordhuis, Timothy J Fontaine)
+
+* installer: fix --without-npm (Ben Noordhuis)
+
+* cli: make -p equivalent to -pe (Ben Noordhuis)
+
+* url: Go much faster by using Url class (isaacs)
+
+
+2012.08.28, Version 0.9.1 (Unstable), e6ce259d2caf338fec991c2dd447de763ce99ab7
+
+* buffer: Add Buffer.isEncoding(enc) to test for valid encoding values (isaacs)
+
+* Raise UV_ECANCELED on premature close. (Ben Noordhuis)
+
+* Remove c-ares from libuv, move to a top-level node dependency (Bert Belder)
+
+* ref/unref for all HandleWraps, timers, servers, and sockets (Timothy J Fontaine)
+
+* addon: remove node-waf, superseded by node-gyp (Ben Noordhuis)
+
+* child_process: emit error on exec failure (Ben Noordhuis)
+
+* cluster: do not use internal server API (Andreas Madsen)
+
+* constants: add O_DIRECT (Ian Babrou)
+
+* crypto: add sync interface to crypto.pbkdf2() (Ben Noordhuis)
+
+* darwin: emulate fdatasync() (Fedor Indutny)
+
+* dgram: make .bind() always asynchronous (Ben Noordhuis)
+
+* events: Make emitter.listeners() side-effect free (isaacs, Joe Andaverde)
+
+* fs: Throw early on invalid encoding args (isaacs)
+
+* fs: fix naming of truncate/ftruncate functions (isaacs)
+
+* http: bubble up parser errors to ClientRequest (Brian White)
+
+* linux: improve cpuinfo parser on ARM and MIPS (Ben Noordhuis)
+
+* net: add support for IPv6 addresses ending in :: (Josh Erickson)
+
+* net: support Server.listen(Pipe) (Andreas Madsen)
+
+* node: don't scan add-on for "init" symbol (Ben Noordhuis)
+
+* remove process.uvCounters() (Ben Noordhuis)
+
+* repl: console writes to repl rather than process stdio (Nathan Rajlich)
+
+* timers: implement setImmediate (Timothy J Fontaine)
+
+* tls: fix segfault in pummel/test-tls-ci-reneg-attack (Ben Noordhuis)
+
+* tools: Move gyp addon tools to node-gyp (Nathan Rajlich)
+
+* unix: preliminary signal handler support (Ben Noordhuis)
+
+* unix: remove dependency on ev_child (Ben Noordhuis)
+
+* unix: work around darwin bug, don't poll() on pipe (Fedor Indutny)
+
+* util: Formally deprecate util.pump() (Ben Noordhuis)
+
+* windows: make active and closing handle state independent (Bert Belder)
+
+* windows: report spawn errors to the exit callback (Bert Belder)
+
+* windows: signal handling support with uv_signal_t (Bert Belder)
+
+
+2012.07.20, Version 0.9.0 (Unstable), f9b237f478c372fd55e4590d7399dcd8f25f3603
 
 * punycode: update to v1.1.1 (Mathias Bynens)
 
@@ -21,7 +129,169 @@
 * Fix #3521 Make process.env more like a regular Object (isaacs)
 
 
-2012.08.02, Version 0.8.5 (Stable)
+2012.09.27, Version 0.8.11 (Stable), e1f39468fa580c1e4cb15fac621f87944ee625dc
+
+* fs: Fix stat() size reporting for large files (Ben Noordhuis)
+
+
+2012.09.25, Version 0.8.10 (Stable)
+
+* npm: Upgrade to 1.1.62
+
+* repl: make invalid RegExps throw in the REPL (Nathan Rajlich)
+
+* v8: loosen artificial mmap constraint (Bryan Cantrill)
+
+* process: fix setuid() and setgid() error reporting (Ben Noordhuis)
+
+* domain: Properly exit() on domain disposal (isaacs)
+
+* fs: fix watchFile() missing deletion events (Ben Noordhuis)
+
+* fs: fix assert in fs.watch() (Ben Noordhuis)
+
+* fs: don't segfault on deeply recursive stat() (Ben Noordhuis)
+
+* http: Remove timeout handler when data arrives (Frédéric Germain)
+
+* http: make the client "res" object gets the same domain as "req" (Nathan Rajlich)
+
+* windows: don't blow up when an invalid FD is used (Bert Belder)
+
+* unix: map EDQUOT to UV_ENOSPC (Charlie McConnell)
+
+* linux: improve /proc/cpuinfo parser (Ben Noordhuis)
+
+* win/tty: reset background brightness when color is set to default (Bert Belder)
+
+* unix: put child process stdio fds in blocking mode (Ben Noordhuis)
+
+* unix: fix EMFILE busy loop (Ben Noordhuis)
+
+* sunos: don't set TCP_KEEPALIVE (Ben Noordhuis)
+
+* tls: Use slab allocator for memory management (Fedor Indutny)
+
+* openssl: Use optimized assembly code for x86 and x64 (Bert Belder)
+
+
+2012.09.11, Version 0.8.9 (Stable), b88c3902b241cf934e75443b934f2033ad3915b1
+
+* v8: upgrade to 3.11.10.22
+
+* GYP: upgrade to r1477
+
+* npm: Upgrade to 1.1.61
+
+* npm: Don't create world-writable files (isaacs)
+
+* windows: fix single-accept mode for shared server sockets (Bert Belder)
+
+* windows: fix uninitialized memory access in uv_update_time() (Bert Belder)
+
+* windows: don't throw when a signal handler is attached (Bert Belder)
+
+* unix: fix memory leak in udp (Ben Noordhuis)
+
+* unix: map errno ESPIPE (Ben Noordhuis)
+
+* unix, windows: fix memory corruption in fs-poll.c (Ben Noordhuis)
+
+* sunos: fix os.cpus() on x86_64 (Ben Noordhuis)
+
+* child process: fix processes with IPC channel don't emit 'close' (Bert Belder)
+
+* build: add a "--dest-os" option to force a gyp "flavor" (Nathan Rajlich)
+
+* build: set `process.platform` to "sunos" on SunOS (Nathan Rajlich)
+
+* build: fix `make -j` fails after `make clean` (Bearice Ren)
+
+* build: fix openssl configuration for "arm" builds (Nathan Rajlich)
+
+* tls: support unix domain socket/named pipe in tls.connect (Shigeki Ohtsu)
+
+* https: make https.get() accept a URL (koichik)
+
+* http: respect HTTP/1.0 TE header (Ben Noordhuis)
+
+* crypto, tls: Domainify setSNICallback, pbkdf2, randomBytes (Ben Noordhuis)
+
+* stream.pipe: Don't call destroy() unless it's a function (isaacs)
+
+
+2012.08.22, Version 0.8.8 (Stable), a299c97bbc701f4d460e91214d7bfe7a9589d361
+
+* V8: upgrade to 3.11.10.19
+
+* npm: upgrade to 1.1.59
+
+* windows: fix uninitialized memory access in uv_update_time() (Bert Belder)
+
+* unix, windows: fix memory corruption in fs-poll.c (Ben Noordhuis)
+
+* unix: fix integer overflow in uv_hrtime (Tim Holy)
+
+* sunos: fix uv_cpu_info() on x86_64 (Ben Noordhuis)
+
+* tls: update default cipher list (Ben Noordhuis)
+
+* unix: Fix llvm and older gcc duplicate symbol warnings (Bert Belder)
+
+* fs: fix use after free in stat watcher (Ben Noordhuis)
+
+* build: Fix using manually compiled gcc on OS X (Nathan Rajlich)
+
+* windows: make junctions work again (Bert Belder)
+
+
+2012.08.15, Version 0.8.7 (Stable), f640c5d35cba96634cd8176a525a1d876e361a61
+
+* npm: Upgrade to 1.1.49
+
+* website: download page (Golo Roden)
+
+* crypto: fix uninitialized memory access in openssl (Ben Noordhuis)
+
+* buffer, crypto: fix buffer decoding (Ben Noordhuis)
+
+* build: compile with -fno-tree-vrp when gcc >= 4.0 (Ben Noordhuis)
+
+* tls: handle multiple CN fields when verifying cert (Ben Noordhuis)
+
+* doc: remove unused util from child_process (Kyle Robinson Young)
+
+* build: rework -fvisibility=hidden detection (Ben Noordhuis)
+
+* windows: don't duplicate invalid stdio handles (Bert Belder)
+
+* windows: fix typos in process-stdio.c (Bert Belder)
+
+
+2012.08.07, Version 0.8.6 (Stable), 0544a586ca6b6b900a42e164033dbf350765700a
+
+* npm: Upgrade to v1.1.48
+
+* Add 'make binary' to build binary tarballs for all Unixes (Nathan Rajlich)
+
+* zlib: Emit 'close' on destroy(). (Dominic Tarr)
+
+* child_process: Fix stdout=null when stdio=['pipe'] (Tyler Neylon)
+
+* installer: prevent ETXTBSY errors (Ben Noordhuis)
+
+* installer: honor --without-npm, default install path (Ben Noordhuis)
+
+* net: make pause work with connecting sockets (Bert Belder)
+
+* installer: fix cross-compile installs (Ben Noordhuis)
+
+* net: fix .listen({fd:0}) (Ben Noordhuis)
+
+* windows: map WSANO_DATA to UV_ENOENT (Bert Belder)
+
+
+2012.08.02, Version 0.8.5 (Stable), 9b86a4453f0c76f2707a75c0b2343aba33ec63bc
 
 * node: tag Encode and friends NODE_EXTERN (Ben Noordhuis)
 

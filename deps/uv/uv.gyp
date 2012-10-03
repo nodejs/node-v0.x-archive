@@ -59,6 +59,7 @@
           'sources': [
             'include/uv-private/uv-win.h',
             'src/win/async.c',
+            'src/win/atomicops-inl.h',
             'src/win/core.c',
             'src/win/dl.c',
             'src/win/error.c',
@@ -76,6 +77,7 @@
             'src/win/process-stdio.c',
             'src/win/req.c',
             'src/win/req-inl.h',
+            'src/win/signal.c',
             'src/win/stream.c',
             'src/win/stream-inl.h',
             'src/win/tcp.c',
@@ -109,6 +111,10 @@
             'include/uv-private/eio.h',
             'include/uv-private/ev.h',
             'include/uv-private/uv-unix.h',
+            'include/uv-private/uv-linux.h',
+            'include/uv-private/uv-sunos.h',
+            'include/uv-private/uv-darwin.h',
+            'include/uv-private/uv-bsd.h',
             'src/unix/async.c',
             'src/unix/core.c',
             'src/unix/dl.c',
@@ -127,6 +133,7 @@
             'src/unix/pipe.c',
             'src/unix/poll.c',
             'src/unix/process.c',
+            'src/unix/signal.c',
             'src/unix/stream.c',
             'src/unix/tcp.c',
             'src/unix/thread.c',
@@ -140,7 +147,7 @@
           'libraries': [ '-lm' ]
         }],
         [ 'OS=="mac"', {
-          'sources': [ 'src/unix/darwin.c' ],
+          'sources': [ 'src/unix/darwin.c', 'src/unix/fsevents.c' ],
           'direct_dependent_settings': {
             'libraries': [
               '$(SDKROOT)/System/Library/Frameworks/CoreServices.framework',
@@ -183,6 +190,21 @@
             ],
           },
         }],
+        [ 'OS=="aix"', {
+          'include_dirs': [ 'src/ares/config_aix' ],
+          'sources': [ 'src/unix/aix.c' ],
+          'defines': [
+            '_ALL_SOURCE',
+            '_XOPEN_SOURCE=500',
+            'EV_CONFIG_H="config_aix.h"',
+            'EIO_CONFIG_H="config_aix.h"',
+          ],
+          'direct_dependent_settings': {
+            'libraries': [
+              '-lperfstat',
+            ],
+          },
+        }],
         [ 'OS=="freebsd"', {
           'sources': [ 'src/unix/freebsd.c' ],
           'defines': [
@@ -201,6 +223,18 @@
             'EV_CONFIG_H="config_openbsd.h"',
             'EIO_CONFIG_H="config_openbsd.h"',
           ],
+        }],
+        [ 'OS=="netbsd"', {
+          'sources': [ 'src/unix/netbsd.c' ],
+          'defines': [
+            'EV_CONFIG_H="config_netbsd.h"',
+            'EIO_CONFIG_H="config_netbsd.h"',
+          ],
+          'direct_dependent_settings': {
+            'libraries': [
+              '-lkvm',
+            ],
+          },
         }],
         [ 'OS=="mac" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
           'sources': [ 'src/unix/kqueue.c' ],
@@ -221,13 +255,14 @@
         'test/test-get-loadavg.c',
         'test/task.h',
         'test/test-util.c',
+        'test/test-active.c',
         'test/test-async.c',
-        'test/test-error.c',
         'test/test-callback-stack.c',
         'test/test-callback-order.c',
         'test/test-connection-fail.c',
         'test/test-cwd-and-chdir.c',
         'test/test-delayed-accept.c',
+        'test/test-error.c',
         'test/test-fail-always.c',
         'test/test-fs.c',
         'test/test-fs-event.c',
@@ -256,6 +291,7 @@
         'test/test-semaphore.c',
         'test/test-shutdown-close.c',
         'test/test-shutdown-eof.c',
+        'test/test-signal.c',
         'test/test-spawn.c',
         'test/test-fs-poll.c',
         'test/test-stdio-over-pipes.c',
@@ -269,22 +305,24 @@
         'test/test-tcp-connect-error.c',
         'test/test-tcp-connect-timeout.c',
         'test/test-tcp-connect6-error.c',
+        'test/test-tcp-open.c',
         'test/test-tcp-write-error.c',
         'test/test-tcp-write-to-half-open-connection.c',
         'test/test-tcp-writealot.c',
         'test/test-tcp-unexpected-read.c',
         'test/test-threadpool.c',
         'test/test-mutexes.c',
+        'test/test-signal.c',
         'test/test-thread.c',
         'test/test-timer-again.c',
         'test/test-timer.c',
         'test/test-tty.c',
         'test/test-udp-dgram-too-big.c',
         'test/test-udp-ipv6.c',
+        'test/test-udp-open.c',
         'test/test-udp-options.c',
         'test/test-udp-send-and-recv.c',
         'test/test-udp-multicast-join.c',
-        'test/test-counters-init.c',
         'test/test-dlerror.c',
         'test/test-udp-multicast-ttl.c',
       ],
@@ -308,6 +346,12 @@
             '_XOPEN_SOURCE=500',
           ],
         }],
+        [ 'OS=="aix"', {     # make test-fs.c compile, needs _POSIX_C_SOURCE
+          'defines': [
+            '_ALL_SOURCE',
+            '_XOPEN_SOURCE=500',
+          ],
+        }],
       ],
       'msvs-settings': {
         'VCLinkerTool': {
@@ -328,6 +372,7 @@
         'test/benchmark-list.h',
         'test/benchmark-loop-count.c',
         'test/benchmark-million-timers.c',
+        'test/benchmark-multi-accept.c',
         'test/benchmark-ping-pongs.c',
         'test/benchmark-pound.c',
         'test/benchmark-pump.c',
@@ -335,7 +380,7 @@
         'test/benchmark-spawn.c',
         'test/benchmark-thread.c',
         'test/benchmark-tcp-write-batch.c',
-        'test/benchmark-udp-packet-storm.c',
+        'test/benchmark-udp-pummel.c',
         'test/dns-server.c',
         'test/echo-server.c',
         'test/blackhole-server.c',

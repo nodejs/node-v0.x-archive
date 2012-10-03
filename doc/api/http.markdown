@@ -265,7 +265,16 @@ you can use the `require('querystring').parse` function, or pass
 
 ### request.headers
 
-Read only.
+Read only map of header names and values. Header names are lower-cased.
+Example:
+
+    // Prints something like:
+    //
+    // { 'user-agent': 'curl/7.22.0',
+    //   host: '127.0.0.1:8000',
+    //   accept: '*/*' }
+    console.log(request.headers);
+
 
 ### request.trailers
 
@@ -312,6 +321,17 @@ passed as the second parameter to the `'request'` event.
 The response implements the [Writable Stream][] interface. This is an
 [EventEmitter][] with the following events:
 
+### Event: 'end'
+
+`function () { }`
+
+Emitted when the response has been sent. More specifically, this event is
+emitted when the last segment of the response headers and body have been
+handed off to the operating system for transmission over the network. It
+does not imply that the client has received anything yet.
+
+After this event, no more events will be emitted on the response object.
+
 ### Event: 'close'
 
 `function () { }`
@@ -354,7 +374,7 @@ which has been transmitted are equal or not.
 ### response.statusCode
 
 When using implicit headers (not calling `response.writeHead()` explicitly), this property
-controls the status code that will be send to the client when the headers get
+controls the status code that will be sent to the client when the headers get
 flushed.
 
 Example:
@@ -377,6 +397,10 @@ Example:
 or
 
     response.setHeader("Set-Cookie", ["type=ninja", "language=javascript"]);
+
+### response.headersSent
+
+Boolean (read-only). True if headers were sent, false otherwise.
 
 ### response.sendDate
 
@@ -452,7 +476,7 @@ emit trailers, with a list of the header fields in its value. E.g.,
 ### response.end([data], [encoding])
 
 This method signals to the server that all of the response headers and body
-has been sent; that server should consider this message complete.
+have been sent; that server should consider this message complete.
 The method, `response.end()`, MUST be called on each
 response.
 

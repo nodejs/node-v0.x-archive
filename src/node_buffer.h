@@ -72,16 +72,21 @@ class NODE_EXTERN Buffer: public ObjectWrap {
 
   static bool HasInstance(v8::Handle<v8::Value> val);
 
-  static inline char* Data(v8::Handle<v8::Object> obj) {
-    return (char*)obj->GetIndexedPropertiesExternalArrayData();
+  static inline char* Data(v8::Handle<v8::Value> val) {
+    assert(val->IsObject());
+    void* data = val.As<v8::Object>()->GetIndexedPropertiesExternalArrayData();
+    return reinterpret_cast<char*>(data);
   }
 
   static inline char* Data(Buffer *b) {
     return Buffer::Data(b->handle_);
   }
 
-  static inline size_t Length(v8::Handle<v8::Object> obj) {
-    return (size_t)obj->GetIndexedPropertiesExternalArrayDataLength();
+  static inline size_t Length(v8::Handle<v8::Value> val) {
+    assert(val->IsObject());
+    int len = val.As<v8::Object>()
+              ->GetIndexedPropertiesExternalArrayDataLength();
+    return static_cast<size_t>(len);
   }
 
   static inline size_t Length(Buffer *b) {
@@ -97,10 +102,14 @@ class NODE_EXTERN Buffer: public ObjectWrap {
   static v8::Handle<v8::Object> New(v8::Handle<v8::String> string);
 
   static void Initialize(v8::Handle<v8::Object> target);
-  static Buffer* New(size_t length); // public constructor
-  static Buffer* New(char *data, size_t len); // public constructor
+
+  // public constructor
+  static Buffer* New(size_t length);
+  // public constructor - data is copied
+  static Buffer* New(const char *data, size_t len);
+  // public constructor
   static Buffer* New(char *data, size_t length,
-                     free_callback callback, void *hint); // public constructor
+                     free_callback callback, void *hint);
 
   private:
   static v8::Handle<v8::Value> New(const v8::Arguments &args);

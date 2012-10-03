@@ -40,6 +40,7 @@ TEST_DECLARE   (pipe_ping_pong)
 TEST_DECLARE   (delayed_accept)
 TEST_DECLARE   (multiple_listen)
 TEST_DECLARE   (tcp_writealot)
+TEST_DECLARE   (tcp_open)
 TEST_DECLARE   (tcp_connect_error_after_write)
 TEST_DECLARE   (tcp_shutdown_after_write)
 TEST_DECLARE   (tcp_bind_error_addrinuse)
@@ -69,6 +70,7 @@ TEST_DECLARE   (udp_dgram_too_big)
 TEST_DECLARE   (udp_dual_stack)
 TEST_DECLARE   (udp_ipv6_only)
 TEST_DECLARE   (udp_options)
+TEST_DECLARE   (udp_open)
 TEST_DECLARE   (pipe_bind_error_addrinuse)
 TEST_DECLARE   (pipe_bind_error_addrnotavail)
 TEST_DECLARE   (pipe_bind_error_inval)
@@ -111,6 +113,7 @@ TEST_DECLARE   (pipe_ref2)
 TEST_DECLARE   (pipe_ref3)
 TEST_DECLARE   (pipe_ref4)
 TEST_DECLARE   (process_ref)
+TEST_DECLARE   (active)
 TEST_DECLARE   (async)
 TEST_DECLARE   (get_currentexe)
 TEST_DECLARE   (process_title)
@@ -123,6 +126,7 @@ TEST_DECLARE   (getsockname_tcp)
 TEST_DECLARE   (getsockname_udp)
 TEST_DECLARE   (fail_always)
 TEST_DECLARE   (pass_always)
+TEST_DECLARE   (spawn_fails)
 TEST_DECLARE   (spawn_exit_code)
 TEST_DECLARE   (spawn_stdout)
 TEST_DECLARE   (spawn_stdin)
@@ -174,11 +178,12 @@ TEST_DECLARE   (thread_rwlock)
 TEST_DECLARE   (thread_create)
 TEST_DECLARE   (strlcpy)
 TEST_DECLARE   (strlcat)
-TEST_DECLARE   (counters_init)
 TEST_DECLARE   (dlerror)
 TEST_DECLARE   (poll_duplex)
 TEST_DECLARE   (poll_unidirectional)
 TEST_DECLARE   (poll_close)
+TEST_DECLARE   (we_get_signal)
+TEST_DECLARE   (we_get_signals)
 #ifdef _WIN32
 TEST_DECLARE   (spawn_detect_pipe_name_collisions_on_windows)
 TEST_DECLARE   (argument_escaping)
@@ -234,6 +239,9 @@ TASK_LIST_START
   TEST_ENTRY  (tcp_writealot)
   TEST_HELPER (tcp_writealot, tcp4_echo_server)
 
+  TEST_ENTRY  (tcp_open)
+  TEST_HELPER (tcp_open, tcp4_echo_server)
+
   TEST_ENTRY  (tcp_shutdown_after_write)
   TEST_HELPER (tcp_shutdown_after_write, tcp4_echo_server)
 
@@ -267,6 +275,9 @@ TASK_LIST_START
   TEST_ENTRY  (udp_options)
   TEST_ENTRY  (udp_multicast_join)
   TEST_ENTRY  (udp_multicast_ttl)
+
+  TEST_ENTRY  (udp_open)
+  TEST_HELPER (udp_open, udp4_echo_server)
 
   TEST_ENTRY  (pipe_bind_error_addrinuse)
   TEST_ENTRY  (pipe_bind_error_addrnotavail)
@@ -326,6 +337,8 @@ TASK_LIST_START
   TEST_ENTRY  (loop_handles)
   TEST_ENTRY  (walk_handles)
 
+  TEST_ENTRY  (active)
+
   TEST_ENTRY  (async)
 
   TEST_ENTRY  (get_currentexe)
@@ -350,6 +363,7 @@ TASK_LIST_START
   TEST_ENTRY  (poll_unidirectional)
   TEST_ENTRY  (poll_close)
 
+  TEST_ENTRY  (spawn_fails)
   TEST_ENTRY  (spawn_exit_code)
   TEST_ENTRY  (spawn_stdout)
   TEST_ENTRY  (spawn_stdin)
@@ -364,6 +378,10 @@ TASK_LIST_START
   TEST_ENTRY  (spawn_stdout_to_file)
   TEST_ENTRY  (fs_poll)
   TEST_ENTRY  (kill)
+
+  TEST_ENTRY  (we_get_signal)
+  TEST_ENTRY  (we_get_signals)
+
 #ifdef _WIN32
   TEST_ENTRY  (spawn_detect_pipe_name_collisions_on_windows)
   TEST_ENTRY  (argument_escaping)
@@ -411,7 +429,6 @@ TASK_LIST_START
   TEST_ENTRY  (thread_create)
   TEST_ENTRY  (strlcpy)
   TEST_ENTRY  (strlcat)
-  TEST_ENTRY  (counters_init)
   TEST_ENTRY  (dlerror)
 #if 0
   /* These are for testing the test runner. */

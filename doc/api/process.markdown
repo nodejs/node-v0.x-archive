@@ -298,7 +298,6 @@ An example of the possible output looks like:
       variables:
        { host_arch: 'x64',
          node_install_npm: 'true',
-         node_install_waf: 'true',
          node_prefix: '',
          node_shared_v8: 'false',
          node_shared_zlib: 'false',
@@ -355,7 +354,7 @@ What processor architecture you're running on: `'arm'`, `'ia32'`, or `'x64'`.
 ## process.platform
 
 What platform you're running on:
-`'darwin'`, `'freebsd'`, `'linux'`, `'solaris'` or `'win32'`
+`'darwin'`, `'freebsd'`, `'linux'`, `'sunos'` or `'win32'`
 
     console.log('This platform is ' + process.platform);
 

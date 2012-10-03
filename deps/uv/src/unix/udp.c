@@ -86,6 +86,10 @@ void uv__udp_finish_close(uv_udp_t* handle) {
     req = ngx_queue_data(q, uv_udp_send_t, queue);
     uv__req_unregister(handle->loop, req);
 
+    if (req->bufs != req->bufsml)
+      free(req->bufs);
+    req->bufs = NULL;
+
     if (req->send_cb) {
       /* FIXME proper error code like UV_EABORTED */
       uv__set_artificial_error(handle->loop, UV_EINTR);
@@ -171,6 +175,7 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
 
     if (req->bufs != req->bufsml)
       free(req->bufs);
+    req->bufs = NULL;
 
     if (req->send_cb == NULL)
       continue;
@@ -311,17 +316,15 @@ static int uv__bind(uv_udp_t* handle,
     goto out;
   }
 
-  /* Check for already active socket. */
-  if (handle->fd != -1) {
-    uv__set_artificial_error(handle->loop, UV_EALREADY);
-    goto out;
+  if (handle->fd == -1) {
+    if ((fd = uv__socket(domain, SOCK_DGRAM, 0)) == -1) {
+      uv__set_sys_error(handle->loop, errno);
+      goto out;
+    }
+    handle->fd = fd;
   }
 
-  if ((fd = uv__socket(domain, SOCK_DGRAM, 0)) == -1) {
-    uv__set_sys_error(handle->loop, errno);
-    goto out;
-  }
-
+  fd = handle->fd;
   yes = 1;
   if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
     uv__set_sys_error(handle->loop, errno);
@@ -362,12 +365,13 @@ static int uv__bind(uv_udp_t* handle,
     goto out;
   }
 
-  handle->fd = fd;
   status = 0;
 
 out:
-  if (status)
-    close(fd);
+  if (status) {
+    close(handle->fd);
+    handle->fd = -1;
+  }
 
   errno = saved_errno;
   return status;
@@ -375,7 +379,7 @@ out:
 
 
 static int uv__udp_maybe_deferred_bind(uv_udp_t* handle, int domain) {
-  struct sockaddr_storage taddr;
+  unsigned char taddr[sizeof(struct sockaddr_in6)];
   socklen_t addrlen;
 
   assert(domain == AF_INET || domain == AF_INET6);
@@ -418,6 +422,8 @@ static int uv__udp_send(uv_udp_send_t* req,
                         struct sockaddr* addr,
                         socklen_t addrlen,
                         uv_udp_send_cb send_cb) {
+  assert(bufcnt > 0);
+
   if (uv__udp_maybe_deferred_bind(handle, addr->sa_family))
     return -1;
 
@@ -429,7 +435,7 @@ static int uv__udp_send(uv_udp_send_t* req,
   req->handle = handle;
   req->bufcnt = bufcnt;
 
-  if (bufcnt <= UV_REQ_BUFSML_SIZE) {
+  if (bufcnt <= (int) ARRAY_SIZE(req->bufsml)) {
     req->bufs = req->bufsml;
   }
   else if ((req->bufs = malloc(bufcnt * sizeof(bufs[0]))) == NULL) {
@@ -453,8 +459,6 @@ int uv_udp_init(uv_loop_t* loop, uv_udp_t* handle) {
   memset(handle, 0, sizeof *handle);
 
   uv__handle_init(loop, (uv_handle_t*)handle, UV_UDP);
-  loop->counters.udp_init++;
-
   handle->fd = -1;
   ngx_queue_init(&handle->write_queue);
   ngx_queue_init(&handle->write_completed_queue);
@@ -478,6 +482,51 @@ int uv__udp_bind6(uv_udp_t* handle, struct sockaddr_in6 addr, unsigned flags) {
                   (struct sockaddr*)&addr,
                   sizeof addr,
                   flags);
+}
+
+
+int uv_udp_open(uv_udp_t* handle, uv_os_sock_t sock) {
+  int saved_errno;
+  int status;
+  int yes;
+
+  saved_errno = errno;
+  status = -1;
+
+  /* Check for already active socket. */
+  if (handle->fd != -1) {
+    uv__set_artificial_error(handle->loop, UV_EALREADY);
+    goto out;
+  }
+
+  yes = 1;
+  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+    uv__set_sys_error(handle->loop, errno);
+    goto out;
+  }
+
+  /* On the BSDs, SO_REUSEADDR lets you reuse an address that's in the TIME_WAIT
+   * state (i.e. was until recently tied to a socket) while SO_REUSEPORT lets
+   * multiple processes bind to the same address. Yes, it's something of a
+   * misnomer but then again, SO_REUSEADDR was already taken.
+   *
+   * None of the above applies to Linux: SO_REUSEADDR implies SO_REUSEPORT on
+   * Linux and hence it does not have SO_REUSEPORT at all.
+   */
+#ifdef SO_REUSEPORT
+  yes = 1;
+  if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof yes) == -1) {
+    uv__set_sys_error(handle->loop, errno);
+    goto out;
+  }
+#endif
+
+  handle->fd = sock;
+  status = 0;
+
+out:
+  errno = saved_errno;
+  return status;
 }
 
 

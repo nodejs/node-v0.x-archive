@@ -65,6 +65,13 @@ Allocates a new buffer using an `array` of octets.
 Allocates a new buffer containing the given `str`.
 `encoding` defaults to `'utf8'`.
 
+### Class Method: Buffer.isEncoding(encoding)
+
+* `encoding` {String} The encoding string to test
+
+Returns true if the `encoding` is a valid encoding argument, or false
+otherwise.
+
 ### buf.write(string, [offset], [length], [encoding])
 
 * `string` String - data to be written to buffer
@@ -100,6 +107,25 @@ Decodes and returns a string from buffer data encoded with `encoding`
 
 See `buffer.write()` example, above.
 
+
+### buf.toJSON()
+
+Returns a JSON-representation of the Buffer instance, which is identical to the
+output for JSON Arrays. `JSON.stringify` implicitly calls this function when
+stringifying a Buffer instance.
+
+Example:
+
+    var buf = new Buffer('test');
+    var json = JSON.stringify(buf);
+
+    console.log(json);
+    // '[116,101,115,116]'
+
+    var copy = new Buffer(JSON.parse(json));
+
+    console.log(copy);
+    // <Buffer 74 65 73 74>
 
 ### buf[index]
 

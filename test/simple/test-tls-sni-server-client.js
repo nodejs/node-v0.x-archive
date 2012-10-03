@@ -64,19 +64,22 @@ var clientsOptions = [{
   key: loadPEM('agent1-key'),
   cert: loadPEM('agent1-cert'),
   ca: [loadPEM('ca1-cert')],
-  servername: 'a.example.com'
+  servername: 'a.example.com',
+  rejectUnauthorized: false
 },{
   port: serverPort,
   key: loadPEM('agent2-key'),
   cert: loadPEM('agent2-cert'),
   ca: [loadPEM('ca2-cert')],
-  servername: 'b.test.com'
+  servername: 'b.test.com',
+  rejectUnauthorized: false
 },{
   port: serverPort,
   key: loadPEM('agent3-key'),
   cert: loadPEM('agent3-cert'),
   ca: [loadPEM('ca1-cert')],
-  servername: 'c.wrong.com'
+  servername: 'c.wrong.com',
+  rejectUnauthorized: false
 }];
 
 var serverResults = [],

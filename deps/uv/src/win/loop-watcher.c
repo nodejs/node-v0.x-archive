@@ -27,10 +27,9 @@
 
 
 void uv_loop_watcher_endgame(uv_loop_t* loop, uv_handle_t* handle) {
-  if (handle->flags & UV_HANDLE_CLOSING) {
+  if (handle->flags & UV__HANDLE_CLOSING) {
     assert(!(handle->flags & UV_HANDLE_CLOSED));
     handle->flags |= UV_HANDLE_CLOSED;
-    uv__handle_stop(handle);
     uv__handle_close(handle);
   }
 }
@@ -39,7 +38,6 @@ void uv_loop_watcher_endgame(uv_loop_t* loop, uv_handle_t* handle) {
 #define UV_LOOP_WATCHER_DEFINE(name, NAME)                                    \
   int uv_##name##_init(uv_loop_t* loop, uv_##name##_t* handle) {              \
     uv__handle_init(loop, (uv_handle_t*) handle, UV_##NAME);                  \
-    loop->counters.name##_init++;                                             \
                                                                               \
     return 0;                                                                 \
   }                                                                           \

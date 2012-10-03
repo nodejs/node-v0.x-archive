@@ -23,44 +23,15 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "atomicops-inl.h"
 #include "handle-inl.h"
 #include "req-inl.h"
 
 
-/* Atomic set operation on char */
-#ifdef _MSC_VER /* MSVC */
-
-/* _InterlockedOr8 is supported by MSVC on x32 and x64. It is  slightly less */
-/* efficient than InterlockedExchange, but InterlockedExchange8 does not */
-/* exist, and interlocked operations on larger targets might require the */
-/* target to be aligned. */
-#pragma intrinsic(_InterlockedOr8)
-
-static char __declspec(inline) uv_atomic_exchange_set(char volatile* target) {
-  return _InterlockedOr8(target, 1);
-}
-
-#else /* GCC */
-
-/* Mingw-32 version, hopefully this works for 64-bit gcc as well. */
-static inline char uv_atomic_exchange_set(char volatile* target) {
-  const char one = 1;
-  char old_value;
-  __asm__ __volatile__ ("lock xchgb %0, %1\n\t"
-                        : "=r"(old_value), "=m"(*target)
-                        : "0"(one), "m"(*target)
-                        : "memory");
-  return old_value;
-}
-
-#endif
-
-
 void uv_async_endgame(uv_loop_t* loop, uv_async_t* handle) {
-  if (handle->flags & UV_HANDLE_CLOSING &&
+  if (handle->flags & UV__HANDLE_CLOSING &&
       !handle->async_sent) {
     assert(!(handle->flags & UV_HANDLE_CLOSED));
-    uv__handle_stop(handle);
     uv__handle_close(handle);
   }
 }
@@ -78,8 +49,6 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
   req->type = UV_WAKEUP;
   req->data = handle;
 
-  loop->counters.async_init++;
-
   uv__handle_start(handle);
 
   return 0;
@@ -91,7 +60,7 @@ void uv_async_close(uv_loop_t* loop, uv_async_t* handle) {
     uv_want_endgame(loop, (uv_handle_t*) handle);
   }
 
-  uv__handle_start(handle);
+  uv__handle_closing(handle);
 }
 
 
@@ -105,9 +74,9 @@ int uv_async_send(uv_async_t* handle) {
 
   /* The user should make sure never to call uv_async_send to a closing */
   /* or closed handle. */
-  assert(!(handle->flags & UV_HANDLE_CLOSING));
+  assert(!(handle->flags & UV__HANDLE_CLOSING));
 
-  if (!uv_atomic_exchange_set(&handle->async_sent)) {
+  if (!uv__atomic_exchange_set(&handle->async_sent)) {
     POST_COMPLETION_FOR_REQ(loop, &handle->async_req);
   }
 
@@ -122,7 +91,7 @@ void uv_process_async_wakeup_req(uv_loop_t* loop, uv_async_t* handle,
 
   handle->async_sent = 0;
 
-  if (!(handle->flags & UV_HANDLE_CLOSING)) {
+  if (!(handle->flags & UV__HANDLE_CLOSING)) {
     handle->async_cb((uv_async_t*) handle, 0);
   } else {
     uv_want_endgame(loop, (uv_handle_t*)handle);
