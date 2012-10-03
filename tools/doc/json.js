@@ -27,16 +27,21 @@ var fs = require('fs');
 var path = require('path');
 var marked = require('marked');
 
-// It shouldn't be here
-var indexfile = '_index.json';
-
 function doJSON(input, filename, outfile, cb) {
   var root = {source: filename};
+  // Default index file
+  var indexfile = "index.json";
   var stack = [root];
   var depth = 0;
   var current = root;
   var state = null;
   var lexed = marked.lexer(input);
+  
+  // If outfile is same as index file do nothing
+  if (outfile && outfile.slice(-indexfile.length) === indexfile) {
+    return;
+  }
+
   lexed.forEach(function (tok) {
     var type = tok.type;
     var text = tok.text;
@@ -155,7 +160,7 @@ function doJSON(input, filename, outfile, cb) {
   }
 
   if (outfile) {
-    writeOututToFile(root, filename, outfile, writeToIndexFile);
+    writeOututToFile(root, filename, outfile, indexfile, writeToIndexFile);
   }
   else {
     return cb(null, root)
@@ -163,7 +168,7 @@ function doJSON(input, filename, outfile, cb) {
 }
 
 // write output object to outfile
-function writeOututToFile(obj, sourcefile, outfile, cb) {
+function writeOututToFile(obj, sourcefile, outfile, indexfile, cb) {
   fs.writeFile(outfile, JSON.stringify(obj, null, 2), function(err) {
     if(err) {
       throw new Error('error saving file - '+ err);
@@ -194,9 +199,8 @@ function writeToIndexFile(root, sourcefile, outfile) {
   }
   // construct an entry object
   entry.title = root.title;
-  entry.url = {};
-  entry.url.html = path.basename(sourcefile).replace(/\.(markdown|md)/i, ".html");
-  entry.url.json = entry.url.html.replace(/\.html/i, ".json");
+  entry.html = path.basename(sourcefile).replace(/\.(markdown|md)/i, ".html");
+  entry.json = entry.html.replace(/\.html/i, ".json");
 
   // append mode
   if (obj.chapters && typeof obj.chapters === "object") {
