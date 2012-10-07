@@ -4517,6 +4517,29 @@ void RandomBytesFree(char* data, void* hint) {
 
 
 template <RandomBytesGenerator generator>
+void RandomBytesWorkZero(RandomBytesRequest* req)
+{
+  assert(!"implement for this random generator");
+}
+
+
+template <>
+void RandomBytesWorkZero<RAND_bytes>(RandomBytesRequest* req)
+{
+  // RAND_bytes() returns 0 on error
+  req->error_ = ERR_get_error();
+}
+
+
+template <>
+void RandomBytesWorkZero<RAND_pseudo_bytes>(RandomBytesRequest* req)
+{
+  // RAND_pseudo_bytes() returns 0 when the result is not
+  // cryptographically strong - which sucks but is not an error
+}
+
+
+template <RandomBytesGenerator generator>
 void RandomBytesWork(uv_work_t* work_req) {
   RandomBytesRequest* req =
       container_of(work_req, RandomBytesRequest, work_req_);
@@ -4525,11 +4548,7 @@ void RandomBytesWork(uv_work_t* work_req) {
 
   switch (r) {
   case 0:
-    // RAND_bytes() returns 0 on error, RAND_pseudo_bytes() returns 0
-    // when the result is not cryptographically strong - the latter
-    // sucks but is not an error
-    if (generator == RAND_bytes)
-      req->error_ = ERR_get_error();
+    RandomBytesWorkZero<generator>(req);
     break;
 
   case -1:
