@@ -112,6 +112,7 @@ extern "C" {
 #define BIO_TYPE_DESCRIPTOR	0x0100	/* socket, fd, connect or accept */
 #define BIO_TYPE_FILTER		0x0200
 #define BIO_TYPE_SOURCE_SINK	0x0400
+#define BIO_TYPE_NO_EX_DATA	0x0800
 
 /* BIO_FILENAME_READ|BIO_CLOSE to open or close on free.
  * BIO_set_fp(in,stdin,BIO_NOCLOSE); */
