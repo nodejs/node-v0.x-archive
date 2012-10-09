@@ -9,6 +9,7 @@
     'node_shared_v8%': 'false',
     'node_shared_zlib%': 'false',
     'node_use_openssl%': 'true',
+    'node_use_systemtap%': 'false',
     'node_shared_openssl%': 'false',
     'library_files': [
       'src/node.js',
@@ -146,7 +147,6 @@
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
         }],
-
         [ 'node_use_dtrace=="true"', {
           'defines': [ 'HAVE_DTRACE=1' ],
           'dependencies': [ 'node_dtrace_header' ],
@@ -167,6 +167,17 @@
               'sources': [ 'src/node_dtrace_ustack.cc' ]
             }
           ] ],
+        } ],
+        [ 'node_use_systemtap=="true"', {
+          'defines': [ 'HAVE_SYSTEMTAP=1', 'STAP_SDT_V1' ],
+          'dependencies': [ 'node_systemtap_header' ],
+          'dependencies': [ 'node_systemtap_object' ],
+          'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
+          'libraries': [ '<(PRODUCT_DIR)/obj.target/node/src/node_systemtap_sema.o' ],
+          'sources': [
+            'src/node_systemtap.cc',
+            'src/node_systemtap.h',
+          ],
         } ],
         [ 'node_use_etw=="true"', {
           'defines': [ 'HAVE_ETW=1' ],
@@ -282,7 +293,7 @@
           # action?
 
           'conditions': [
-            [ 'node_use_dtrace=="true" or node_use_etw=="true"', {
+            [ 'node_use_dtrace=="true" or node_use_etw=="true" or node_use_systemtap=="true"', {
               'action': [
                 'python',
                 'tools/js2c.py',
@@ -295,7 +306,6 @@
                 'tools/js2c.py',
                 '<@(_outputs)',
                 '<@(_inputs)',
-                'src/macros.py'
               ],
             }]
           ],
@@ -313,6 +323,40 @@
               'inputs': [ 'src/node_provider.d' ],
               'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/node_provider.h' ],
               'action': [ 'dtrace', '-h', '-xnolibs', '-s', '<@(_inputs)',
+                '-o', '<@(_outputs)' ]
+            }
+          ]
+        } ]
+      ]
+    },
+    {
+      'target_name': 'node_systemtap_header',
+      'type': 'none',
+      'conditions': [
+        [ 'node_use_systemtap=="true"', {
+          'actions': [
+            {
+              'action_name': 'node_systemtap_header',
+              'inputs': [ 'src/node_systemtap.d' ],
+              'outputs': [ 'src/node_systemtap.h' ],
+              'action': [ 'dtrace', '-h', '-C', '-s', '<@(_inputs)',
+                '-o', '<@(_outputs)' ]
+            } 
+          ]
+        } ]
+      ]
+    },
+    {
+      'target_name': 'node_systemtap_object',
+      'type': 'none',
+      'conditions': [
+        [ 'node_use_systemtap=="true"', {
+          'actions': [                                   
+            {
+              'action_name': 'node_systemtap_o',
+              'inputs': [ 'src/node_systemtap.d' ],
+              'outputs': [ '<(PRODUCT_DIR)/obj.target/node/src/node_systemtap_sema.o' ],
+              'action': [ 'dtrace', '-G', '-s', '<@(_inputs)',
                 '-o', '<@(_outputs)' ]
             }
           ]
