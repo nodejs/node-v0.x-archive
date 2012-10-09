@@ -67,22 +67,22 @@ function writeShim_ (from, to, prog, args, cb) {
   shTarget = shTarget.split("\\").join("/")
   args = args || ""
   if (!prog) {
-    prog = "\"%~dp0\\" + target + "\""
+    prog = "\"%~dp0" + target + "\""
     shProg = "\"$basedir/" + shTarget + "\""
     args = ""
     target = ""
     shTarget = ""
   } else {
-    longProg = "\"%~dp0\\" + prog + ".exe\""
+    longProg = "\"%~dp0" + prog + ".exe\""
     shLongProg = "\"$basedir/" + prog + "\""
-    target = "\"%~dp0\\" + target + "\""
+    target = "\"%~dp0" + target + "\""
     shTarget = "\"$basedir/" + shTarget + "\""
   }
 
-  // @IF EXIST "%~dp0\node.exe" (
-  //   "%~dp0\node.exe" "%~dp0\.\node_modules\npm\bin\npm-cli.js" %*
+  // @IF EXIST "%~dp0node.exe" (
+  //   "%~dp0node.exe" "%~dp0node_modules\npm\bin\npm-cli.js" %*
   // ) ELSE (
-  //   node "%~dp0\.\node_modules\npm\bin\npm-cli.js" %*
+  //   node "%~dp0node_modules\npm\bin\npm-cli.js" %*
   // )
   var cmd
   if (longProg) {
