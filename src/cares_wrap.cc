@@ -812,6 +812,19 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
   delete req_wrap;
 }
 
+static Handle<Value> isIP(const Arguments& args) {
+  HandleScope scope;
+  char address_buffer[sizeof(struct in6_addr)];
+
+  String::AsciiValue ascii(args[0]);
+  const char * ip = *ascii;
+  if (uv_inet_pton(AF_INET, ip, &address_buffer).code == UV_OK) {
+    return scope.Close(v8::Integer::New(4));
+  } else if (uv_inet_pton(AF_INET6, ip, &address_buffer).code == UV_OK) {
+    return scope.Close(v8::Integer::New(6));
+  }
+  return scope.Close(v8::Integer::New(0));
+}
 
 static Handle<Value> GetAddrInfo(const Arguments& args) {
   HandleScope scope;
@@ -886,7 +899,8 @@ static void Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "getHostByName", QueryWithFamily<GetHostByNameWrap>);
 
   NODE_SET_METHOD(target, "getaddrinfo", GetAddrInfo);
-
+  NODE_SET_METHOD(target, "isIP", isIP);
+  
   target->Set(String::NewSymbol("AF_INET"), Integer::New(AF_INET));
   target->Set(String::NewSymbol("AF_INET6"), Integer::New(AF_INET6));
   target->Set(String::NewSymbol("AF_UNSPEC"), Integer::New(AF_UNSPEC));
