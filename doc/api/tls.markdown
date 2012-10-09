@@ -367,10 +367,12 @@ SNI.
 
 ### Event: 'clientError'
 
-`function (exception) { }`
+`function (exception, reserved) { }`
 
 When a client connection emits an 'error' event before secure connection is
 established - it will be forwarded here.
+
+The `reserved` argument must be ignored.
 
 
 ### Event: 'newSession'

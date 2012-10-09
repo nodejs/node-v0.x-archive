@@ -127,9 +127,12 @@ sent to the server on that socket.
 
 ### Event: 'clientError'
 
-`function (exception) { }`
+`function (exception, reserved) { }`
 
 If a client connection emits an 'error' event - it will forwarded here.
+
+The `reserved` argument must be ignored.
+
 
 ### server.listen(port, [hostname], [backlog], [callback])
 
