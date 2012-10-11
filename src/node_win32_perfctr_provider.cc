@@ -135,10 +135,14 @@ void InitPerfCountersWin32() {
   PERF_PROVIDER_CONTEXT ProviderContext;
 
   // create instance name using pid
-  wchar_t Inst[32];
+#define INST_MAX_LEN       32
+#define INST_PREFIX_LEN    5
+#define INST_PREFIX        L"node_"
+
+  wchar_t Inst[INST_MAX_LEN];
   DWORD pid = GetCurrentProcessId();
-  wcscpy_s(Inst, 32, L"node_");
-  _itow_s(pid, Inst + 5, 32 - 5, 10);
+  wcscpy_s(Inst, INST_MAX_LEN, INST_PREFIX);
+  _itow_s(pid, Inst + INST_PREFIX_LEN, INST_MAX_LEN - INST_PREFIX_LEN, 10);
 
   advapimod = LoadLibrary("advapi32.dll");
   if (advapimod) {
@@ -176,11 +180,11 @@ void InitPerfCountersWin32() {
       return;
     }
 
-    Status = PerfSetCounterSetInfo(NodeCounterProvider,
+    Status = perfctr_setCounterSetInfo(NodeCounterProvider,
                 &CtrSet_node_perfctr_provider_1_1.CtSet_node_perfctr_provider_1_1,
                 dwCtrSet_node_perfctr_provider_1_1);
     if (Status != ERROR_SUCCESS) {
-      PerfStopProvider(NodeCounterProvider);
+      perfctr_stopProvider(NodeCounterProvider);
       NodeCounterProvider = NULL;
       return;
     }
@@ -190,7 +194,7 @@ void InitPerfCountersWin32() {
                             Inst,
                             1);
     if (perfctr_instance == NULL) {
-      PerfStopProvider(NodeCounterProvider);
+      perfctr_stopProvider(NodeCounterProvider);
       NodeCounterProvider = NULL;
     }
   }
