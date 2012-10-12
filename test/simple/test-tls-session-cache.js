@@ -23,11 +23,18 @@ if (!process.versions.openssl) {
   console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
 }
-require('child_process').exec('openssl version', function(err) {
+require('child_process').exec('openssl version', function(err, data) {
   if (err !== null) {
     console.error('Skipping because openssl command is not available.');
     process.exit(0);
   }
+
+  //'openssl s_client' of VC-WIN needs keypress action to complete input 
+  if (process.platform === 'win32' && /VC-WIN/.test(data)) {
+    console.error('Skipping. Use openssl command of Cygwin or MinGW instead.');
+    process.exit(0);
+  }
+
   doTest();
 });
 

@@ -34,121 +34,143 @@ var fs = require('fs');
 var crypto = require('crypto');
 var tls = require('tls');
 var spawn = require('child_process').spawn;
+var exec = require('child_process').exec;
 
-var connections = 0;
-var key = fs.readFileSync(join(common.fixturesDir, 'agent.key')).toString();
-var cert = fs.readFileSync(join(common.fixturesDir, 'agent.crt')).toString();
+checkOpenSSL(doTest);
 
-function log(a) {
-  console.error('***server*** ' + a);
+function checkOpenSSL(cb) {
+  exec('openssl version -p', function(err, data) {
+    if (err) {
+      console.error('Skipping because openssl command is not available.');
+      process.exit(0);
+    }
+
+    //'openssl s_client' of VC-WIN needs keypress action to complete input 
+    if (process.platform === 'win32' && /VC-WIN/.test(data)) {
+      console.error('Skipping. Use openssl command of Cygwin or MinGW instead.');
+      process.exit(0);
+    }
+    
+    cb();
+  });
 }
 
-var server = net.createServer(function(socket) {
-  connections++;
-  log('connection fd=' + socket.fd);
-  var sslcontext = crypto.createCredentials({key: key, cert: cert});
-  sslcontext.context.setCiphers('RC4-SHA:AES128-SHA:AES256-SHA');
+function doTest() {
+  var connections = 0;
+  var key = fs.readFileSync(join(common.fixturesDir, 'agent.key')).toString();
+  var cert = fs.readFileSync(join(common.fixturesDir, 'agent.crt')).toString();
 
-  var pair = tls.createSecurePair(sslcontext, true);
+  function log(a) {
+    console.error('***server*** ' + a);
+  }
 
-  assert.ok(pair.encrypted.writable);
-  assert.ok(pair.cleartext.writable);
+  var server = net.createServer(function(socket) {
+    connections++;
+    log('connection fd=' + socket.fd);
+    var sslcontext = crypto.createCredentials({key: key, cert: cert});
+    sslcontext.context.setCiphers('RC4-SHA:AES128-SHA:AES256-SHA');
 
-  pair.encrypted.pipe(socket);
-  socket.pipe(pair.encrypted);
+    var pair = tls.createSecurePair(sslcontext, true);
 
-  log('i set it secure');
+    assert.ok(pair.encrypted.writable);
+    assert.ok(pair.cleartext.writable);
 
-  pair.on('secure', function() {
-    log('connected+secure!');
-    pair.cleartext.write('hello\r\n');
-    log(pair.cleartext.getPeerCertificate());
-    log(pair.cleartext.getCipher());
+    pair.encrypted.pipe(socket);
+    socket.pipe(pair.encrypted);
+
+    log('i set it secure');
+
+    pair.on('secure', function() {
+      log('connected+secure!');
+      pair.cleartext.write('hello\r\n');
+      log(pair.cleartext.getPeerCertificate());
+      log(pair.cleartext.getCipher());
+    });
+
+    pair.cleartext.on('data', function(data) {
+      log('read bytes ' + data.length);
+      pair.cleartext.write(data);
+    });
+
+    socket.on('end', function() {
+      log('socket end');
+    });
+
+    pair.cleartext.on('error', function(err) {
+      log('got error: ');
+      log(err);
+      log(err.stack);
+      socket.destroy();
+    });
+
+    pair.encrypted.on('error', function(err) {
+      log('encrypted error: ');
+      log(err);
+      log(err.stack);
+      socket.destroy();
+    });
+
+    socket.on('error', function(err) {
+      log('socket error: ');
+      log(err);
+      log(err.stack);
+      socket.destroy();
+    });
+
+    socket.on('close', function(err) {
+      log('socket closed');
+    });
+
+    pair.on('error', function(err) {
+      log('secure error: ');
+      log(err);
+      log(err.stack);
+      socket.destroy();
+    });
   });
 
-  pair.cleartext.on('data', function(data) {
-    log('read bytes ' + data.length);
-    pair.cleartext.write(data);
+  var gotHello = false;
+  var sentWorld = false;
+  var gotWorld = false;
+  var opensslExitCode = -1;
+
+  server.listen(common.PORT, function() {
+    // To test use: openssl s_client -connect localhost:8000
+    var client = spawn('openssl', ['s_client', '-connect', '127.0.0.1:' +
+                                   common.PORT]);
+
+
+    var out = '';
+
+    client.stdout.setEncoding('utf8');
+    client.stdout.on('data', function(d) {
+      out += d;
+
+      if (!gotHello && /hello/.test(out)) {
+        gotHello = true;
+        client.stdin.write('world\r\n');
+        sentWorld = true;
+      }
+
+      if (!gotWorld && /world/.test(out)) {
+        gotWorld = true;
+        client.stdin.end();
+      }
+    });
+
+    client.stdout.pipe(process.stdout, { end: false });
+
+    client.on('exit', function(code) {
+      opensslExitCode = code;
+      server.close();
+    });
   });
 
-  socket.on('end', function() {
-    log('socket end');
+  process.on('exit', function() {
+    assert.equal(1, connections);
+    assert.ok(gotHello);
+    assert.ok(sentWorld);
+    assert.ok(gotWorld);
+    assert.equal(0, opensslExitCode);
   });
-
-  pair.cleartext.on('error', function(err) {
-    log('got error: ');
-    log(err);
-    log(err.stack);
-    socket.destroy();
-  });
-
-  pair.encrypted.on('error', function(err) {
-    log('encrypted error: ');
-    log(err);
-    log(err.stack);
-    socket.destroy();
-  });
-
-  socket.on('error', function(err) {
-    log('socket error: ');
-    log(err);
-    log(err.stack);
-    socket.destroy();
-  });
-
-  socket.on('close', function(err) {
-    log('socket closed');
-  });
-
-  pair.on('error', function(err) {
-    log('secure error: ');
-    log(err);
-    log(err.stack);
-    socket.destroy();
-  });
-});
-
-var gotHello = false;
-var sentWorld = false;
-var gotWorld = false;
-var opensslExitCode = -1;
-
-server.listen(common.PORT, function() {
-  // To test use: openssl s_client -connect localhost:8000
-  var client = spawn('openssl', ['s_client', '-connect', '127.0.0.1:' +
-        common.PORT]);
-
-
-  var out = '';
-
-  client.stdout.setEncoding('utf8');
-  client.stdout.on('data', function(d) {
-    out += d;
-
-    if (!gotHello && /hello/.test(out)) {
-      gotHello = true;
-      client.stdin.write('world\r\n');
-      sentWorld = true;
-    }
-
-    if (!gotWorld && /world/.test(out)) {
-      gotWorld = true;
-      client.stdin.end();
-    }
-  });
-
-  client.stdout.pipe(process.stdout, { end: false });
-
-  client.on('exit', function(code) {
-    opensslExitCode = code;
-    server.close();
-  });
-});
-
-process.on('exit', function() {
-  assert.equal(1, connections);
-  assert.ok(gotHello);
-  assert.ok(sentWorld);
-  assert.ok(gotWorld);
-  assert.equal(0, opensslExitCode);
-});
+}

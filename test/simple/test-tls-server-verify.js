@@ -108,7 +108,25 @@ var assert = require('assert');
 var fs = require('fs');
 var tls = require('tls');
 var spawn = require('child_process').spawn;
+var exec = require('child_process').exec;
 
+
+function checkOpenSSL(cb) {
+  exec('openssl version -p', function(err, data) {
+    if (err) {
+      console.error('Skipping because openssl command is not available.');
+      process.exit(0);
+    }
+
+    //'openssl s_client' of VC-WIN needs keypress action to complete input 
+    if (process.platform === 'win32' && /VC-WIN/.test(data)) {
+      console.error('Skipping. Use openssl command of Cygwin or MinGW instead.');
+      process.exit(0);
+    }
+    
+    cb();
+  });
+}
 
 function filenamePEM(n) {
   return require('path').join(common.fixturesDir, 'keys', n + '.pem');
@@ -279,12 +297,12 @@ function runTest(testIndex) {
       runNextClient(0);
     }
   });
+
+  process.on('exit', function() {
+    assert.equal(successfulTests, testCases.length);
+  });
 }
 
-
-runTest(0);
-
-
-process.on('exit', function() {
-  assert.equal(successfulTests, testCases.length);
+checkOpenSSL(function() {
+  runTest(0);
 });
