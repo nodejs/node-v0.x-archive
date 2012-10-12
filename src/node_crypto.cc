@@ -21,6 +21,7 @@
 
 #include "node_crypto.h"
 #include "node_crypto_groups.h"
+#include "lring_bio.h"
 #include "v8.h"
 
 #include "node.h"
@@ -275,7 +276,7 @@ int SecureContext::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
 // Takes a string or buffer and loads it into a BIO.
 // Caller responsible for BIO_free-ing the returned object.
 static BIO* LoadBIO (Handle<Value> v) {
-  BIO *bio = BIO_new(BIO_s_mem());
+  BIO *bio = BIO_new(BIO_lring());
   if (!bio) return NULL;
 
   HandleScope scope;
@@ -533,7 +534,7 @@ Handle<Value> SecureContext::AddRootCerts(const Arguments& args) {
     root_cert_store = X509_STORE_new();
 
     for (int i = 0; root_certs[i]; i++) {
-      BIO *bp = BIO_new(BIO_s_mem());
+      BIO *bp = BIO_new(BIO_lring());
 
       if (!BIO_write(bp, root_certs[i], strlen(root_certs[i]))) {
         BIO_free(bp);
@@ -610,7 +611,7 @@ Handle<Value> SecureContext::SetSessionIdContext(const Arguments& args) {
     Local<String> message;
     BIO* bio;
     BUF_MEM* mem;
-    if ((bio = BIO_new(BIO_s_mem()))) {
+    if ((bio = BIO_new(BIO_lring()))) {
       ERR_print_errors(bio);
       BIO_get_mem_ptr(bio, &mem);
       message = String::New(mem->data, mem->length);
@@ -919,7 +920,7 @@ int Connection::HandleSSLError(const char* func, int rv) {
     // understood. And we should be somehow propagating these errors up
     // into JavaScript. There is no test which demonstrates this problem.
     // https://github.com/joyent/node/issues/1719
-    if ((bio = BIO_new(BIO_s_mem()))) {
+    if ((bio = BIO_new(BIO_lring()))) {
       ERR_print_errors(bio);
       BIO_get_mem_ptr(bio, &mem);
       Local<Value> e = Exception::Error(String::New(mem->data, mem->length));
@@ -1176,8 +1177,8 @@ Handle<Value> Connection::New(const Arguments& args) {
   bool is_server = args[1]->BooleanValue();
 
   p->ssl_ = SSL_new(sc->ctx_);
-  p->bio_read_ = BIO_new(BIO_s_mem());
-  p->bio_write_ = BIO_new(BIO_s_mem());
+  p->bio_read_ = BIO_new(BIO_lring());
+  p->bio_write_ = BIO_new(BIO_lring());
 
   SSL_set_app_data(p->ssl_, p);
 
@@ -1490,7 +1491,7 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
   Local<Object> info = Object::New();
   X509* peer_cert = SSL_get_peer_certificate(ss->ssl_);
   if (peer_cert != NULL) {
-    BIO* bio = BIO_new(BIO_s_mem());
+    BIO* bio = BIO_new(BIO_lring());
     BUF_MEM* mem;
     if (X509_NAME_print_ex(bio, X509_get_subject_name(peer_cert), 0,
                            X509_NAME_FLAGS) > 0) {
@@ -2045,7 +2046,7 @@ static void HexDecode(unsigned char *input,
 
 void base64(unsigned char *input, int length, char** buf64, int* buf64_len) {
   BIO *b64 = BIO_new(BIO_f_base64());
-  BIO *bmem = BIO_new(BIO_s_mem());
+  BIO *bmem = BIO_new(BIO_lring());
   b64 = BIO_push(b64, bmem);
   BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
   int len = BIO_write(b64, input, length);
@@ -3346,7 +3347,7 @@ class Sign : public ObjectWrap {
 
     BIO *bp = NULL;
     EVP_PKEY* pkey;
-    bp = BIO_new(BIO_s_mem());
+    bp = BIO_new(BIO_lring());
     if(!BIO_write(bp, key_pem, key_pemLen)) return 0;
 
     pkey = PEM_read_bio_PrivateKey( bp, NULL, NULL, NULL );
@@ -3550,7 +3551,7 @@ class Verify : public ObjectWrap {
     X509 *x509 = NULL;
     int r = 0;
 
-    bp = BIO_new(BIO_s_mem());
+    bp = BIO_new(BIO_lring());
     if (bp == NULL) {
       ERR_print_errors_fp(stderr);
       return 0;
