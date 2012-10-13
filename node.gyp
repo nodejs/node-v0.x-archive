@@ -60,12 +60,14 @@
         'deps/cares/cares.gyp:cares',
         'deps/http_parser/http_parser.gyp:http_parser',
         'deps/uv/uv.gyp:libuv',
+        'deps/lring/lring.gyp:lring',
         'node_js2c#host',
       ],
 
       'include_dirs': [
         'src',
         'deps/uv/src/ares',
+        'deps/lring/include',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
 
@@ -101,6 +103,7 @@
         'src/node.h',
         'src/node_buffer.h',
         'src/node_constants.h',
+        'src/lring_bio.h',
         'src/node_crypto.h',
         'src/node_extensions.h',
         'src/node_file.h',
@@ -138,7 +141,7 @@
       'conditions': [
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
-          'sources': [ 'src/node_crypto.cc' ],
+          'sources': [ 'src/lring_bio.cc', 'src/node_crypto.cc' ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {
               'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
