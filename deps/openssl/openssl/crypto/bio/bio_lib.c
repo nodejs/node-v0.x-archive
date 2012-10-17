@@ -97,11 +97,13 @@ int BIO_set(BIO *bio, BIO_METHOD *method)
 	bio->references=1;
 	bio->num_read=0L;
 	bio->num_write=0L;
-	CRYPTO_new_ex_data(CRYPTO_EX_INDEX_BIO, bio, &bio->ex_data);
+	if ((method->type & BIO_TYPE_NO_EX_DATA) == 0)
+		CRYPTO_new_ex_data(CRYPTO_EX_INDEX_BIO, bio, &bio->ex_data);
 	if (method->create != NULL)
 		if (!method->create(bio))
 			{
-			CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, bio,
+			if ((method->type & BIO_TYPE_NO_EX_DATA) == 0)
+					CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, bio,
 					&bio->ex_data);
 			return(0);
 			}
@@ -130,7 +132,8 @@ int BIO_free(BIO *a)
 		((i=(int)a->callback(a,BIO_CB_FREE,NULL,0,0L,1L)) <= 0))
 			return(i);
 
-	CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, a, &a->ex_data);
+	if ((a->method->type & BIO_TYPE_NO_EX_DATA) == 0)
+		CRYPTO_free_ex_data(CRYPTO_EX_INDEX_BIO, a, &a->ex_data);
 
 	if ((a->method == NULL) || (a->method->destroy == NULL)) return(1);
 	a->method->destroy(a);
@@ -542,8 +545,9 @@ BIO *BIO_dup_chain(BIO *in)
 			}
 
 		/* copy app data */
-		if (!CRYPTO_dup_ex_data(CRYPTO_EX_INDEX_BIO, &new_bio->ex_data,
-					&bio->ex_data))
+		if ((bio->method->type & BIO_TYPE_NO_EX_DATA) == 0)
+			if (!CRYPTO_dup_ex_data(CRYPTO_EX_INDEX_BIO, &new_bio->ex_data,
+						&bio->ex_data))
 			goto err;
 
 		if (ret == NULL)
@@ -579,12 +583,16 @@ int BIO_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
 
 int BIO_set_ex_data(BIO *bio, int idx, void *data)
 	{
-	return(CRYPTO_set_ex_data(&(bio->ex_data),idx,data));
+	if ((bio->method->type & BIO_TYPE_NO_EX_DATA) == 0)
+		return(CRYPTO_set_ex_data(&(bio->ex_data),idx,data));
+	return -1;
 	}
 
 void *BIO_get_ex_data(BIO *bio, int idx)
 	{
-	return(CRYPTO_get_ex_data(&(bio->ex_data),idx));
+	if ((bio->method->type & BIO_TYPE_NO_EX_DATA) == 0)
+		return(CRYPTO_get_ex_data(&(bio->ex_data),idx));
+	return NULL;
 	}
 
 unsigned long BIO_number_read(BIO *bio)

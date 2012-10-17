@@ -629,6 +629,10 @@ int CRYPTO_add_lock(int *pointer, int amount, int type, const char *file,
 		}
 	else
 		{
+#if defined(__GNUC__) && \
+    ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 1))
+		return __sync_add_and_fetch(pointer, amount);
+#else
 		CRYPTO_lock(CRYPTO_LOCK|CRYPTO_WRITE,type,file,line);
 
 		ret= *pointer+amount;
@@ -645,6 +649,7 @@ int CRYPTO_add_lock(int *pointer, int amount, int type, const char *file,
 #endif
 		*pointer=ret;
 		CRYPTO_lock(CRYPTO_UNLOCK|CRYPTO_WRITE,type,file,line);
+#endif
 		}
 	return(ret);
 	}
