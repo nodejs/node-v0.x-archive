@@ -243,6 +243,7 @@ there is no IPC channel keeping it alive. When calling this method the
 
 * `command` {String} The command to run
 * `args` {Array} List of string arguments
+  * Note that when passing strings with spaces, spaces must be escaped with a preceeding backslash.
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
   * `stdio` {Array|String} Child's stdio configuration. (See below)
