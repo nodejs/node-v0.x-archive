@@ -368,7 +368,7 @@ for (var i = 0, l = rfc2202_sha1.length; i < l; i++) {
 var a0 = crypto.createHash('sha1').update('Test123').digest('hex');
 var a1 = crypto.createHash('md5').update('Test123').digest('binary');
 var a2 = crypto.createHash('sha256').update('Test123').digest('base64');
-var a3 = crypto.createHash('sha512').update('Test123').digest(); // binary
+var a3 = crypto.createHash('sha512').update('Test123').digest('binary');
 var a4 = crypto.createHash('sha1').update('Test123').digest('buffer');
 
 assert.equal(a0, '8308651804facb7b9af8ffc53a33a22d6a1c8ac2', 'Test SHA1');
@@ -421,11 +421,11 @@ assert.strictEqual(verified, true, 'sign and verify (base 64)');
 
 var s2 = crypto.createSign('RSA-SHA256')
                .update('Test123')
-               .sign(keyPem); // binary
+               .sign(keyPem, 'binary');
 var verified = crypto.createVerify('RSA-SHA256')
                      .update('Test')
                      .update('123')
-                     .verify(certPem, s2); // binary
+                     .verify(certPem, s2, 'binary');
 assert.strictEqual(verified, true, 'sign and verify (binary)');
 
 var s3 = crypto.createSign('RSA-SHA1')
@@ -554,10 +554,10 @@ var privkey1 = dh1.getPrivateKey();
 dh3.setPublicKey(key1);
 dh3.setPrivateKey(privkey1);
 
-assert.equal(dh1.getPrime(), dh3.getPrime());
-assert.equal(dh1.getGenerator(), dh3.getGenerator());
-assert.equal(dh1.getPublicKey(), dh3.getPublicKey());
-assert.equal(dh1.getPrivateKey(), dh3.getPrivateKey());
+assert.deepEqual(dh1.getPrime(), dh3.getPrime());
+assert.deepEqual(dh1.getGenerator(), dh3.getGenerator());
+assert.deepEqual(dh1.getPublicKey(), dh3.getPublicKey());
+assert.deepEqual(dh1.getPrivateKey(), dh3.getPrivateKey());
 
 var secret3 = dh3.computeSecret(key2, 'hex', 'base64');
 

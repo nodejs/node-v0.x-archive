@@ -2382,7 +2382,7 @@ class Cipher : public ObjectWrap {
     Local<Value> outString;
     char* out_hexdigest;
     int out_hex_len;
-    enum encoding out_enc = ParseEncoding(args[2], BINARY);
+    enum encoding out_enc = ParseEncoding(args[2], BUFFER);
     if (out_enc == HEX) {
       // Hex encoding
       HexEncode(out, out_len, &out_hexdigest, &out_hex_len);
@@ -2466,7 +2466,7 @@ class Cipher : public ObjectWrap {
       }
     }
 
-    enum encoding enc = ParseEncoding(args[0], BINARY);
+    enum encoding enc = ParseEncoding(args[0], BUFFER);
     if (enc == HEX) {
       // Hex encoding
       HexEncode(out_value, out_len, &out_hexdigest, &out_hex_len);
@@ -2784,7 +2784,7 @@ class Decipher : public ObjectWrap {
     char* ciphertext;
     int ciphertext_len;
 
-    enum encoding enc = ParseEncoding(args[1], BINARY);
+    enum encoding enc = ParseEncoding(args[1], BUFFER);
     if (enc == HEX) {
       // Hex encoding
       // Do we have a previous hex carry over?
@@ -2841,7 +2841,7 @@ class Decipher : public ObjectWrap {
     }
 
     Local<Value> outString;
-    enum encoding out_enc = ParseEncoding(args[2], BINARY);
+    enum encoding out_enc = ParseEncoding(args[2], BUFFER);
     if (out_enc == UTF8) {
       // See if we have any overhang from last utf8 partial ending
       if (cipher->incomplete_utf8!=NULL) {
@@ -2909,9 +2909,9 @@ class Decipher : public ObjectWrap {
     }
 
     if (args.Length() == 0 || !args[0]->IsString()) {
-      outString = Encode(out_value, out_len, BINARY);
+      outString = Encode(out_value, out_len, BUFFER);
     } else {
-      enum encoding enc = ParseEncoding(args[0], BINARY);
+      enum encoding enc = ParseEncoding(args[0], BUFFER);
       if (enc == UTF8) {
         // See if we have any overhang from last utf8 partial ending
         if (cipher->incomplete_utf8!=NULL) {
@@ -3114,7 +3114,7 @@ class Hmac : public ObjectWrap {
       md_len = 0;
     }
 
-    enum encoding enc = ParseEncoding(args[0], BINARY);
+    enum encoding enc = ParseEncoding(args[0], BUFFER);
     if (enc == HEX) {
       // Hex encoding
       HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
@@ -3261,7 +3261,7 @@ class Hash : public ObjectWrap {
 
     Local<Value> outString;
 
-    enum encoding enc = ParseEncoding(args[0], BINARY);
+    enum encoding enc = ParseEncoding(args[0], BUFFER);
     if (enc == HEX) {
       // Hex encoding
       char* md_hexdigest;
@@ -3466,7 +3466,7 @@ class Sign : public ObjectWrap {
 
     delete [] buf;
 
-    enum encoding enc = ParseEncoding(args[1], BINARY);
+    enum encoding enc = ParseEncoding(args[1], BUFFER);
     if (enc == HEX) {
       // Hex encoding
       HexEncode(md_value, md_len, &md_hexdigest, &md_hex_len);
@@ -3717,7 +3717,7 @@ class Verify : public ObjectWrap {
 
     int r=-1;
 
-    enum encoding enc = ParseEncoding(args[2], BINARY);
+    enum encoding enc = ParseEncoding(args[2], BUFFER);
     if (enc == HEX) {
       // Hex encoding
       HexDecode(hbuf, hlen, (char **)&dbuf, &dlen);
@@ -3927,7 +3927,7 @@ class DiffieHellman : public ObjectWrap {
     if (args.Length() > 0 && args[0]->IsString()) {
       outString = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      outString = Encode(data, dataSize, BUFFER);
     }
     delete[] data;
 
@@ -3953,7 +3953,7 @@ class DiffieHellman : public ObjectWrap {
     if (args.Length() > 0 && args[0]->IsString()) {
       outString = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      outString = Encode(data, dataSize, BUFFER);
     }
 
     delete[] data;
@@ -3980,7 +3980,7 @@ class DiffieHellman : public ObjectWrap {
     if (args.Length() > 0 && args[0]->IsString()) {
       outString = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      outString = Encode(data, dataSize, BUFFER);
     }
 
     delete[] data;
@@ -4013,7 +4013,7 @@ class DiffieHellman : public ObjectWrap {
     if (args.Length() > 0 && args[0]->IsString()) {
       outString = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      outString = Encode(data, dataSize, BUFFER);
     }
 
     delete[] data;
@@ -4046,7 +4046,7 @@ class DiffieHellman : public ObjectWrap {
     if (args.Length() > 0 && args[0]->IsString()) {
       outString = EncodeWithEncoding(args[0], data, dataSize);
     } else {
-      outString = Encode(data, dataSize, BINARY);
+      outString = Encode(data, dataSize, BUFFER);
     }
 
     delete[] data;
@@ -4137,7 +4137,7 @@ class DiffieHellman : public ObjectWrap {
       } else if (args.Length() > 1 && args[1]->IsString()) {
         outString = EncodeWithEncoding(args[1], data, dataSize);
       } else {
-        outString = Encode(data, dataSize, BINARY);
+        outString = Encode(data, dataSize, BUFFER);
       }
     }
 
@@ -4284,7 +4284,7 @@ class DiffieHellman : public ObjectWrap {
     } else if (enc == BASE64) {
       unbase64((unsigned char*)*buf, len, &retbuf, &retlen);
 
-    } else if (enc == BINARY) {
+    } else if (enc == BINARY || enc == BUFFER) {
       // Binary - do nothing
     } else {
       fprintf(stderr, "node-crypto : Diffie-Hellman parameter encoding "
