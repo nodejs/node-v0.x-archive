@@ -1421,9 +1421,11 @@ typedef enum {
   UV_FS_READ,
   UV_FS_WRITE,
   UV_FS_SENDFILE,
+  UV_FS_STATVFS,
   UV_FS_STAT,
   UV_FS_LSTAT,
   UV_FS_FSTAT,
+  UV_FS_FSTATVFS,
   UV_FS_FTRUNCATE,
   UV_FS_UTIME,
   UV_FS_FUTIME,
@@ -1485,7 +1487,13 @@ UV_EXTERN int uv_fs_readdir(uv_loop_t* loop, uv_fs_t* req,
 UV_EXTERN int uv_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path,
     uv_fs_cb cb);
 
+UV_EXTERN int uv_fs_statvfs(uv_loop_t* loop, uv_fs_t* req, const char* path,
+    uv_fs_cb cb);
+
 UV_EXTERN int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file,
+    uv_fs_cb cb);
+
+UV_EXTERN int uv_fs_fstatvfs(uv_loop_t* loop, uv_fs_t* req, uv_file file,
     uv_fs_cb cb);
 
 UV_EXTERN int uv_fs_rename(uv_loop_t* loop, uv_fs_t* req, const char* path,

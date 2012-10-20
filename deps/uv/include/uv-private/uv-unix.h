@@ -28,6 +28,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <fcntl.h>
 
 #include <sys/socket.h>
@@ -98,6 +99,7 @@ typedef struct {
 typedef int uv_file;
 typedef int uv_os_sock_t;
 typedef struct stat uv_statbuf_t;
+typedef struct statvfs uv_statvfsbuf_t;
 
 #define UV_ONCE_INIT PTHREAD_ONCE_INIT
 
@@ -281,6 +283,7 @@ typedef struct {
   double mtime;                                                               \
   struct uv__work work_req;                                                   \
   struct stat statbuf;                                                        \
+  struct statvfs statvfsbuf;                                                  \
 
 #define UV_WORK_PRIVATE_FIELDS                                                \
   struct uv__work work_req;
