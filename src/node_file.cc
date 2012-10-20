@@ -66,6 +66,7 @@ static Persistent<String> errno_symbol;
 static Persistent<String> buf_symbol;
 static Persistent<String> oncomplete_sym;
 
+static Local<Object> BuildStatVfsObject(const uv_statvfsbuf_t* s);
 
 #define ASSERT_OFFSET(a) \
   if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
@@ -158,6 +159,13 @@ static void After(uv_fs_t *req) {
       case UV_FS_FSTAT:
         argv[1] = BuildStatsObject(static_cast<const uv_statbuf_t*>(req->ptr));
         break;
+
+#ifdef __POSIX__
+      case UV_FS_FSTATVFS:
+      case UV_FS_STATVFS:
+        argv[1] = BuildStatVfsObject(static_cast<const uv_statvfsbuf_t*>(req->ptr));
+        break;
+#endif
 
       case UV_FS_READLINK:
         argv[1] = String::New(static_cast<char*>(req->ptr));
@@ -375,6 +383,100 @@ static Handle<Value> Stat(const Arguments& args) {
   }
 }
 
+#ifdef __POSIX__
+static Persistent<FunctionTemplate> statvfs_constructor_template;
+
+static Persistent<String> bsize_symbol;
+static Persistent<String> frsize_symbol;
+static Persistent<String> bfree_symbol;
+static Persistent<String> bavail_symbol;
+static Persistent<String> files_symbol;
+static Persistent<String> ffree_symbol;
+static Persistent<String> favail_symbol;
+static Persistent<String> fsid_symbol;
+static Persistent<String> flag_symbol;
+static Persistent<String> namemax_symbol;
+
+Local<Object> BuildStatVfsObject(const uv_statvfsbuf_t* s) {
+  HandleScope scope;
+
+  if (bsize_symbol.IsEmpty()) {
+    bsize_symbol = NODE_PSYMBOL("bsize");
+    frsize_symbol = NODE_PSYMBOL("frsize");
+    bfree_symbol = NODE_PSYMBOL("bfree");
+    bavail_symbol = NODE_PSYMBOL("bavail");
+    files_symbol = NODE_PSYMBOL("files");
+    ffree_symbol = NODE_PSYMBOL("ffree");
+    favail_symbol = NODE_PSYMBOL("favail");
+    fsid_symbol = NODE_PSYMBOL("fsid");
+    flag_symbol = NODE_PSYMBOL("flag");
+    namemax_symbol = NODE_PSYMBOL("namemax");
+  }
+
+  if (blocks_symbol.IsEmpty()) {
+    blocks_symbol = NODE_PSYMBOL("blocks");
+  }
+  Local<Object> statvfs =
+    statvfs_constructor_template->GetFunction()->NewInstance();
+
+  if (statvfs.IsEmpty()) return Local<Object>();
+
+#define X(name)                                                               \
+  {                                                                           \
+    Local<Value> val = Integer::New(s->f_##name);                             \
+    if (val.IsEmpty()) return Local<Object>();                                \
+    statvfs->Set(name##_symbol, val);                                         \
+  }
+  X(bsize)
+  X(frsize)
+  X(blocks)
+  X(bfree)
+  X(bavail)
+  X(files)
+  X(ffree)
+  X(favail)
+  X(fsid)
+  X(flag)
+  X(namemax)
+#undef X
+  return scope.Close(statvfs);
+}
+
+static Handle<Value> StatVfs(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 1) return TYPE_ERROR("path required");
+  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+
+  String::Utf8Value path(args[0]);
+
+  if (args[1]->IsFunction()) {
+    ASYNC_CALL(statvfs, args[1], *path)
+  } else {
+    SYNC_CALL(statvfs, *path, *path)
+    return scope.Close(
+        BuildStatVfsObject(static_cast<const uv_statvfsbuf_t*>(SYNC_REQ.ptr)));
+  }
+}
+
+static Handle<Value> FStatVfs(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 1 || !args[0]->IsInt32()) {
+    return THROW_BAD_ARGS;
+  }
+
+  int fd = args[0]->Int32Value();
+
+  if (args[1]->IsFunction()) {
+    ASYNC_CALL(fstatvfs, args[1], fd)
+  } else {
+    SYNC_CALL(fstatvfs, 0, fd)
+    return scope.Close(
+        BuildStatVfsObject(static_cast<const uv_statvfsbuf_t*>(SYNC_REQ.ptr)));
+  }
+}
+#endif
 static Handle<Value> LStat(const Arguments& args) {
   HandleScope scope;
 
@@ -487,7 +589,7 @@ static Handle<Value> Rename(const Arguments& args) {
   if (len < 2) return TYPE_ERROR("new path required");
   if (!args[0]->IsString()) return TYPE_ERROR("old path must be a string");
   if (!args[1]->IsString()) return TYPE_ERROR("new path must be a string");
-  
+
   String::Utf8Value old_path(args[0]);
   String::Utf8Value new_path(args[1]);
 
@@ -979,6 +1081,11 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "utimes", UTimes);
   NODE_SET_METHOD(target, "futimes", FUTimes);
 
+#ifdef __POSIX__
+  NODE_SET_METHOD(target, "statvfs", StatVfs);
+  NODE_SET_METHOD(target, "fstatvfs", FStatVfs);
+#endif
+
   errno_symbol = NODE_PSYMBOL("errno");
   encoding_symbol = NODE_PSYMBOL("node:encoding");
   buf_symbol = NODE_PSYMBOL("__buf");
@@ -991,6 +1098,8 @@ void InitFs(Handle<Object> target) {
   stats_constructor_template = Persistent<FunctionTemplate>::New(stat_templ);
   target->Set(String::NewSymbol("Stats"),
                stats_constructor_template->GetFunction());
+  Local<FunctionTemplate> statvfs_templ = FunctionTemplate::New();
+  statvfs_constructor_template = Persistent<FunctionTemplate>::New(statvfs_templ);
   File::Initialize(target);
 
   oncomplete_sym = NODE_PSYMBOL("oncomplete");

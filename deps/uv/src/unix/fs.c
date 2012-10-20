@@ -477,6 +477,7 @@ static void uv__fs_work(struct uv__work* w) {
     X(FCHOWN, fchown(req->file, req->uid, req->gid));
     X(FDATASYNC, uv__fs_fdatasync(req));
     X(FSTAT, fstat(req->file, &req->statbuf));
+    X(FSTATVFS, fstatvfs(req->file, &req->statvfsbuf));
     X(FSYNC, fsync(req->file));
     X(FTRUNCATE, ftruncate(req->file, req->off));
     X(FUTIME, uv__fs_futime(req));
@@ -491,6 +492,7 @@ static void uv__fs_work(struct uv__work* w) {
     X(RMDIR, rmdir(req->path));
     X(SENDFILE, uv__fs_sendfile(req));
     X(STAT, stat(req->path, &req->statbuf));
+    X(STATVFS, statvfs(req->path, &req->statvfsbuf));
     X(SYMLINK, symlink(req->path, req->new_path));
     X(UNLINK, unlink(req->path));
     X(UTIME, uv__fs_utime(req));
@@ -509,6 +511,11 @@ static void uv__fs_work(struct uv__work* w) {
                  req->fs_type == UV_FS_FSTAT ||
                  req->fs_type == UV_FS_LSTAT)) {
     req->ptr = &req->statbuf;
+  }
+
+  if (r == 0 && (req->fs_type == UV_FS_STATVFS ||
+                 req->fs_type == UV_FS_FSTATVFS)) {
+    req->ptr = &req->statvfsbuf;
   }
 }
 
@@ -597,6 +604,12 @@ int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
 
 int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
   INIT(FSTAT);
+  req->file = file;
+  POST;
+}
+
+int uv_fs_fstatvfs(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
+  INIT(FSTATVFS);
   req->file = file;
   POST;
 }
@@ -756,6 +769,11 @@ int uv_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
   POST;
 }
 
+int uv_fs_statvfs(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
+  INIT(STATVFS);
+  PATH;
+  POST;
+}
 
 int uv_fs_symlink(uv_loop_t* loop,
                   uv_fs_t* req,
@@ -812,7 +830,7 @@ void uv_fs_req_cleanup(uv_fs_t* req) {
   req->path = NULL;
   req->new_path = NULL;
 
-  if (req->ptr != &req->statbuf)
+  if (req->ptr != &req->statbuf && req->ptr != &req->statvfsbuf)
     free(req->ptr);
   req->ptr = NULL;
 }
