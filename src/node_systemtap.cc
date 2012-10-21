@@ -1,3 +1,27 @@
+/*
+# Copyright (C) 2012 Jan C. Wynholds
+# MIT license
+# 
+
+Permission is hereby granted, free of charge, to any person obtaining a 
+copy of this software and associated documentation files (the "Software"), 
+to deal in the Software without restriction, including without limitation 
+the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+and/or sell copies of the Software, and to permit persons to whom 
+the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included 
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+DEALINGS IN THE SOFTWARE.
+*/
+
 #include <string.h>
 #include <node.h>
 #include <v8.h>
@@ -31,77 +55,75 @@ namespace node {
 
 using namespace v8;
 
-#define SLURP_STRING(obj, member, valp) \
-  if (!(obj)->IsObject()) { \
-    return (ThrowException(Exception::Error(String::New("expected " \
-      "object for " #obj " to contain string member " #member)))); \
-  } \
-  String::Utf8Value _##member(obj->Get(String::New(#member))->ToString()); \
-  if ((*(const char **)valp = *_##member) == NULL) \
+#define SLURP_STRING(obj, member, valp)                                        \
+  if (!(obj)->IsObject()) {                                                    \
+    return (ThrowException(Exception::Error(String::New("expected "            \
+      "object for " #obj " to contain string member " #member))));             \
+  }                                                                            \
+  String::Utf8Value _##member(obj->Get(String::New(#member))->ToString());     \
+  if ((*(const char **)valp = *_##member) == NULL)                             \
     *(const char **)valp = "<unknown>";
 
-#define SLURP_INT(obj, member, valp) \
-  if (!(obj)->IsObject()) { \
-    return (ThrowException(Exception::Error(String::New("expected " \
-      "object for " #obj " to contain integer member " #member)))); \
-  } \
+#define SLURP_INT(obj, member, valp)                                           \
+  if (!(obj)->IsObject()) {                                                    \
+    return (ThrowException(Exception::Error(String::New("expected "            \
+      "object for " #obj " to contain integer member " #member))));            \
+  }                                                                            \
   *valp = obj->Get(String::New(#member))->ToInteger()->Value();
 
-#define SLURP_OBJECT(obj, member, valp) \
-  if (!(obj)->IsObject()) { \
-    return (ThrowException(Exception::Error(String::New("expected " \
-      "object for " #obj " to contain object member " #member)))); \
-  } \
+#define SLURP_OBJECT(obj, member, valp)                                        \
+  if (!(obj)->IsObject()) {                                                    \
+    return (ThrowException(Exception::Error(String::New("expected "            \
+      "object for " #obj " to contain object member " #member))));             \
+  }                                                                            \
   *valp = Local<Object>::Cast(obj->Get(String::New(#member)));
 
-#define SLURP_CONNECTION(arg, conn) \
-  if (!(arg)->IsObject()) { \
-    return (ThrowException(Exception::Error(String::New("expected " \
-      "argument " #arg " to be a connection object")))); \
-  } \
-  node_dtrace_connection_t conn; \
-  Local<Object> _##conn = Local<Object>::Cast(arg); \
-  SLURP_INT(_##conn, fd, &conn.fd); \
-  SLURP_STRING(_##conn, remoteAddress, &conn.remote); \
-  SLURP_INT(_##conn, remotePort, &conn.port); \
+#define SLURP_CONNECTION(arg, conn)                                            \
+  if (!(arg)->IsObject()) {                                                    \
+    return (ThrowException(Exception::Error(String::New("expected "            \
+      "argument " #arg " to be a connection object"))));                       \
+  }                                                                            \
+  node_dtrace_connection_t conn;                                               \
+  Local<Object> _##conn = Local<Object>::Cast(arg);                            \
+  SLURP_INT(_##conn, fd, &conn.fd);                                            \
+  SLURP_STRING(_##conn, remoteAddress, &conn.remote);                          \
+  SLURP_INT(_##conn, remotePort, &conn.port);                                  \
   SLURP_INT(_##conn, bufferSize, &conn.buffered);
 
-#define SLURP_CONNECTION_HTTP_CLIENT(arg, conn) \
-  if (!(arg)->IsObject()) { \
-    return (ThrowException(Exception::Error(String::New("expected " \
-      "argument " #arg " to be a connection object")))); \
-  } \
-  node_dtrace_connection_t conn; \
-  Local<Object> _##conn = Local<Object>::Cast(arg); \
-  SLURP_INT(_##conn, fd, &conn.fd); \
-  SLURP_STRING(_##conn, host, &conn.remote); \
-  SLURP_INT(_##conn, port, &conn.port); \
+#define SLURP_CONNECTION_HTTP_CLIENT(arg, conn)                                \
+  if (!(arg)->IsObject()) {                                                    \
+    return (ThrowException(Exception::Error(String::New("expected "            \
+      "argument " #arg " to be a connection object"))));                       \
+  }                                                                            \
+  node_dtrace_connection_t conn;                                               \
+  Local<Object> _##conn = Local<Object>::Cast(arg);                            \
+  SLURP_INT(_##conn, fd, &conn.fd);                                            \
+  SLURP_STRING(_##conn, host, &conn.remote);                                   \
+  SLURP_INT(_##conn, port, &conn.port);                                        \
   SLURP_INT(_##conn, bufferSize, &conn.buffered);
 
-#define SLURP_CONNECTION_HTTP_CLIENT_RESPONSE(arg0, arg1, conn) \
-  if (!(arg0)->IsObject()) { \
-    return (ThrowException(Exception::Error(String::New("expected " \
-      "argument " #arg0 " to be a connection object")))); \
-  } \
-  if (!(arg1)->IsObject()) { \
-    return (ThrowException(Exception::Error(String::New("expected " \
-      "argument " #arg1 " to be a connection object")))); \
-  } \
-  node_dtrace_connection_t conn; \
-  Local<Object> _##conn = Local<Object>::Cast(arg0); \
-  SLURP_INT(_##conn, fd, &conn.fd); \
-  SLURP_INT(_##conn, bufferSize, &conn.buffered); \
-  _##conn = Local<Object>::Cast(arg1); \
-  SLURP_STRING(_##conn, host, &conn.remote); \
+#define SLURP_CONNECTION_HTTP_CLIENT_RESPONSE(arg0, arg1, conn)                \
+  if (!(arg0)->IsObject()) {                                                   \
+    return (ThrowException(Exception::Error(String::New("expected "            \
+      "argument " #arg0 " to be a connection object"))));                      \
+  }                                                                            \
+  if (!(arg1)->IsObject()) {                                                   \
+    return (ThrowException(Exception::Error(String::New("expected "            \
+      "argument " #arg1 " to be a connection object"))));                      \
+  }                                                                            \
+  node_dtrace_connection_t conn;                                               \
+  Local<Object> _##conn = Local<Object>::Cast(arg0);                           \
+  SLURP_INT(_##conn, fd, &conn.fd);                                            \
+  SLURP_INT(_##conn, bufferSize, &conn.buffered);                              \
+  _##conn = Local<Object>::Cast(arg1);                                         \
+  SLURP_STRING(_##conn, host, &conn.remote);                                   \
   SLURP_INT(_##conn, port, &conn.port);
 
 Handle<Value> DTRACE_NET_SERVER_CONNECTION(const Arguments& args) {
-
   HandleScope scope;
-
   // process("node").mark("net__server__connection");
   SLURP_CONNECTION(args[0], conn);
-  NODE_NET_SERVER_CONNECTION( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_NET_SERVER_CONNECTION(conn.fd, conn.remote, conn.port, conn.buffered);
 
   return Undefined();
 }
@@ -112,7 +134,7 @@ Handle<Value> DTRACE_NET_STREAM_END(const Arguments& args) {
 
   SLURP_CONNECTION(args[0], conn);
   // process("node").mark("net__stream__end");
-  NODE_NET_STREAM_END( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_NET_STREAM_END(conn.fd, conn.remote, conn.port, conn.buffered);
 
   return Undefined();
 }
@@ -132,7 +154,7 @@ Handle<Value> DTRACE_NET_SOCKET_READ(const Arguments& args) {
   nbytes = args[1]->Int32Value();
 
   // process("node").mark("net__socket__read");
-  NODE_NET_SOCKET_READ( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_NET_SOCKET_READ(conn.fd, conn.remote, conn.port, conn.buffered);
 
   return Undefined();
 }
@@ -152,7 +174,7 @@ Handle<Value> DTRACE_NET_SOCKET_WRITE(const Arguments& args) {
   nbytes = args[1]->Int32Value();
 
   // process("node").mark("net__socket__read");
-  NODE_NET_SOCKET_WRITE( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_NET_SOCKET_WRITE(conn.fd, conn.remote, conn.port, conn.buffered);
 
   return Undefined();
 }
@@ -185,7 +207,7 @@ Handle<Value> DTRACE_HTTP_SERVER_REQUEST(const Arguments& args) {
 
   SLURP_CONNECTION(args[1], conn);
   // process("node").mark("http__server__request");
-  NODE_HTTP_SERVER_REQUEST( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_HTTP_SERVER_REQUEST(conn.fd, conn.remote, conn.port, conn.buffered);
   return Undefined();
 }
 
@@ -195,7 +217,7 @@ Handle<Value> DTRACE_HTTP_SERVER_RESPONSE(const Arguments& args) {
 
   SLURP_CONNECTION(args[0], conn);
   // process("node").mark("http__server__response");
-  NODE_HTTP_SERVER_RESPONSE( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_HTTP_SERVER_RESPONSE(conn.fd, conn.remote, conn.port, conn.buffered);
 
   return Undefined();
 }
@@ -232,7 +254,7 @@ Handle<Value> DTRACE_HTTP_CLIENT_REQUEST(const Arguments& args) {
 
   SLURP_CONNECTION_HTTP_CLIENT(args[1], conn);
   // process("node").mark("http__client__request");
-  NODE_HTTP_CLIENT_REQUEST( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_HTTP_CLIENT_REQUEST(conn.fd, conn.remote, conn.port, conn.buffered);
   return Undefined();
 }
 
@@ -242,7 +264,7 @@ Handle<Value> DTRACE_HTTP_CLIENT_RESPONSE(const Arguments& args) {
 
   SLURP_CONNECTION_HTTP_CLIENT_RESPONSE(args[0], args[1], conn);
   // process("node").mark("http__client__response");
-  NODE_HTTP_CLIENT_RESPONSE( conn.fd, conn.remote, conn.port, conn.buffered );
+  NODE_HTTP_CLIENT_RESPONSE(conn.fd, conn.remote, conn.port, conn.buffered);
 
   return Undefined();
 }

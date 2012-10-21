@@ -293,7 +293,10 @@
           # action?
 
           'conditions': [
-            [ 'node_use_dtrace=="true" or node_use_etw=="true" or node_use_systemtap=="true"', {
+            [ 'node_use_dtrace=="true"'
+              ' or node_use_etw=="true"'
+              ' or node_use_systemtap=="true"', 
+            {
               'action': [
                 'python',
                 'tools/js2c.py',
@@ -306,6 +309,7 @@
                 'tools/js2c.py',
                 '<@(_outputs)',
                 '<@(_inputs)',
+                'src/macros.py'
               ],
             }]
           ],
