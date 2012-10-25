@@ -220,7 +220,7 @@ TEST(function test_resolveSrv(done) {
 });
 
 TEST(function test_resolveNaptr(done) {
-  var req = dns.resolveNaptr('sip.voice.google.com', function(err, result) {
+  var req = dns.resolveNaptr('sip2sip.info', function(err, result) {
     if (err) throw err;
 
     assert.ok(result.length > 0);
