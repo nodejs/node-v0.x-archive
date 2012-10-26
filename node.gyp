@@ -169,11 +169,13 @@
           ] ],
         } ],
         [ 'node_use_systemtap=="true"', {
-          'defines': [ 'HAVE_SYSTEMTAP=1', 'STAP_SDT_V1' ],
+          'defines': [ 'HAVE_SYSTEMTAP=1', 'STAP_SDT_V1=1' ],
           'dependencies': [ 'node_systemtap_header' ],
+          'dependencies': [ 'node_systemtap_object' ],
           'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
+          'libraries': [ '<(PRODUCT_DIR)/obj.target/node/src/node_systemtap_sema.o' ],
           'sources': [
-            'src/node_systemtap.cc',
+            'src/node_dtrace.cc',
             'src/node_systemtap.h',
           ],
         } ],
@@ -342,6 +344,23 @@
               'inputs': [ 'src/node_systemtap.d' ],
               'outputs': [ 'src/node_systemtap.h' ],
               'action': [ 'dtrace', '-h', '-C', '-s', '<@(_inputs)',
+                '-o', '<@(_outputs)' ]
+            } 
+          ]
+        } ]
+      ]
+    },
+    {
+      'target_name': 'node_systemtap_object',
+      'type': 'none',
+      'conditions': [
+        [ 'node_use_systemtap=="true"', {
+          'actions': [
+            {
+              'action_name': 'node_systemtap_object',
+              'inputs': [ 'src/node_systemtap.d' ],
+              'outputs': [ '<(PRODUCT_DIR)/obj.target/node/src/node_systemtap_sema.o' ],
+              'action': [ 'dtrace', '-G', '-s', '<@(_inputs)',
                 '-o', '<@(_outputs)' ]
             } 
           ]

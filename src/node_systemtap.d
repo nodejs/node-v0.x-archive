@@ -33,9 +33,9 @@ DEALINGS IN THE SOFTWARE.
 
 
 provider node {
-    probe http__client__request(int, string, int, int);
+    probe http__client__request(string, int, string, int, int);
     probe http__client__response(int, string, int, int);
-    probe http__server__request(int, string, int, int);
+    probe http__server__request(string, int, string, int, int);
     probe http__server__response(int, string, int, int);
     probe net__server__connection(int, string, int, int);
     probe net__socket__read(int, string, int, int);
