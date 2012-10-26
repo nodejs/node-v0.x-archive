@@ -21,16 +21,26 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 DEALINGS IN THE SOFTWARE.
 
-# 1. compiled in probes 
+# Hints:
+# This .d defines compiled in probes 
 #     probes are handles (untyped pointers)
-#     forward declared objs (dtrace_connection_t) are defined 
-#     in node_systemtap.cc
-# http_client_request ( int fd, string host, int port, int buffersize)
-# http_client_response ( int fd, string host, int port, int buffersize)
-# http_server_request 
-# 2. write .stp scripts (node.stp and node_v8ustack.stp)
+#     v8 forward declared objs (dtrace_connection_t) are defined 
+#     in node_dtrace.cc which builds an InitDtrace object which
+#     gets populated with the probes
+#     The probes gather the following:
+#     PROBE_REQUEST(req, fd, remote, port, buffered)
+#     PROBE_OTHER(fd, remote, port, buffered)
+# 2. other notes:
+#     using any PROBE_ENABLED() macros in dtrace.cc sdt broke it
+#     can only pass strings/ints/primitives not dtrace_connection_t
+#          conn or other structs
+# TODO: write .stp scripts (node.stp, node_v8ustack.stp + ???)
 */
 
+/*  
+    PROBE_REQUEST(req, fd, remote, port, buffered)
+    PROBE_OTHER(fd, remote, port, buffered)
+*/
 
 provider node {
     probe http__client__request(string, int, string, int, int);

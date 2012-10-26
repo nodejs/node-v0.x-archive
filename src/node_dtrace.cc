@@ -30,9 +30,6 @@
 #include "node_win32_etw_provider.h"
 #include "node_win32_etw_provider-inl.h"
 #elif HAVE_SYSTEMTAP
-// _ENABLED systemtap runtime
-// TODO: macros for &conn to conn.fd etc
-// TODO: cleanup testing and commit
 #include <string.h>
 #include <node.h>
 #include <v8.h>
@@ -138,7 +135,8 @@ Handle<Value> DTRACE_NET_SERVER_CONNECTION(const Arguments& args) {
 
   SLURP_CONNECTION(args[0], conn);
 #ifdef HAVE_SYSTEMTAP
-  NODE_NET_SERVER_CONNECTION(conn.fd, conn.remote, conn.port, conn.buffered);
+  NODE_NET_SERVER_CONNECTION(conn.fd, conn.remote, conn.port, \
+                             conn.buffered);
 #else
   NODE_NET_SERVER_CONNECTION(&conn);
 #endif
@@ -251,7 +249,8 @@ Handle<Value> DTRACE_HTTP_SERVER_REQUEST(const Arguments& args) {
   SLURP_CONNECTION(args[1], conn);
 
 #ifdef HAVE_SYSTEMTAP
-  NODE_HTTP_SERVER_REQUEST(&req, conn.fd, conn.remote, conn.port, conn.buffered);
+  NODE_HTTP_SERVER_REQUEST(&req, conn.fd, conn.remote, conn.port, \
+                           conn.buffered);
 #else
   NODE_HTTP_SERVER_REQUEST(&req, &conn);
 #endif
@@ -313,7 +312,8 @@ Handle<Value> DTRACE_HTTP_CLIENT_REQUEST(const Arguments& args) {
 
   SLURP_CONNECTION_HTTP_CLIENT(args[1], conn);
 #ifdef HAVE_SYSTEMTAP
-  NODE_HTTP_CLIENT_REQUEST(&req, conn.fd, conn.remote, conn.port, conn.buffered);
+  NODE_HTTP_CLIENT_REQUEST(&req, conn.fd, conn.remote, conn.port, \
+                           conn.buffered);
 #else
   NODE_HTTP_CLIENT_REQUEST(&req, &conn);
 #endif
