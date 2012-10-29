@@ -425,9 +425,12 @@ def configure(conf):
   conf.define("HAVE_CONFIG_H", 1)
 
   if sys.platform.startswith("sunos"):
-    conf.env.append_value ('CCFLAGS', '-threads')
-    conf.env.append_value ('CXXFLAGS', '-threads')
-    #conf.env.append_value ('LINKFLAGS', ' -threads')
+    # In gcc 4.2 '-pthread' was added as an alias for '-pthreads'. We use
+    # '-pthreads' to not break older gcc versions.
+    threadflags='-pthreads'
+    conf.env.append_value ('CCFLAGS', threadflags)
+    conf.env.append_value ('CXXFLAGS', threadflags)
+    conf.env.append_value ('LINKFLAGS', threadflags)
   elif not sys.platform.startswith("cygwin") and not sys.platform.startswith("win32"):
     threadflags='-pthread'
     conf.env.append_value ('CCFLAGS', threadflags)
