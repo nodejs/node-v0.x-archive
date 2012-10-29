@@ -424,11 +424,7 @@ def configure(conf):
 
   conf.define("HAVE_CONFIG_H", 1)
 
-  if sys.platform.startswith("sunos"):
-    conf.env.append_value ('CCFLAGS', '-threads')
-    conf.env.append_value ('CXXFLAGS', '-threads')
-    #conf.env.append_value ('LINKFLAGS', ' -threads')
-  elif not sys.platform.startswith("cygwin") and not sys.platform.startswith("win32"):
+  if not sys.platform.startswith("cygwin") and not sys.platform.startswith("win32"):
     threadflags='-pthread'
     conf.env.append_value ('CCFLAGS', threadflags)
     conf.env.append_value ('CXXFLAGS', threadflags)
