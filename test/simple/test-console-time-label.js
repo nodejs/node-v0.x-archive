@@ -42,3 +42,12 @@ global.process.stdout.write = stdout_write;
 assert(/^label: [0-9]+ms\n/.test(strings.shift()), 'simple timeEnd');
 assert(/^label hello: [0-9]+ms\n/.test(strings.shift()), 'timeEnd with one extra arg');
 assert(/^label hello world: [0-9]+ms\n/.test(strings.shift()), 'timeEnd with more then one extra arg');
+
+assert.throws(function () {
+  console.timeEnd('no such label');
+});
+
+assert.doesNotThrow(function () {
+  console.time('valid label');
+  console.timeEnd('valid label');
+});
