@@ -39,7 +39,7 @@ Uses `util.inspect` on `obj` and prints resulting string to stdout.
 
 Mark a time.
 
-## console.timeEnd(label)
+## console.timeEnd(label, [...])
 
 Finish timer, record output. Example:
 
@@ -48,6 +48,15 @@ Finish timer, record output. Example:
       ;
     }
     console.timeEnd('100-elements');
+
+You can also use `printf`-like labels. See [util.format()][] for more information.
+    
+    console.time('%d-elements');
+    for (var i = 0; i < 100; i++) {
+      ;
+    }
+    console.timeEnd('%d-elements', 100);
+
 
 ## console.trace(label)
 
