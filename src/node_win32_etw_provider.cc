@@ -44,12 +44,14 @@ struct v8tags {
 // The v8 CODE_ADDED event name has a prefix indicating the type of event.
 // Many of these are internal to v8.
 // The trace_codes array specifies which types are written.
- struct v8tags trace_codes[] = {
-    { "LazyCompile:", sizeof("LazyCompile:") - 1 },
-    { "Script:", sizeof("Script:") - 1 },
-    { "Function:", sizeof("Function:") - 1 },
-    { "RegExp:", sizeof("RegExp:") - 1 },
-    { "Eval:", sizeof("Eval:") - 1 }
+struct v8tags trace_codes[] = {
+#define MAKE_V8TAG(s) { s, sizeof(s) - 1 }
+  MAKE_V8TAG("LazyCompile:"),
+  MAKE_V8TAG("Script:"),
+  MAKE_V8TAG("Function:"),
+  MAKE_V8TAG("RegExp:"),
+  MAKE_V8TAG("Eval:")
+#undef MAKE_V8TAG
 };
 
 /* Below are some code prefixes which are not being written.
