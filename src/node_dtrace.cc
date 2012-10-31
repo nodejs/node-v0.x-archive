@@ -56,6 +56,7 @@
 #define NODE_GC_START(arg0, arg1)
 #define NODE_GC_DONE(arg0, arg1)
 #endif
+
 namespace node {
 
 using namespace v8;
@@ -169,20 +170,17 @@ Handle<Value> DTRACE_NET_SOCKET_READ(const Arguments& args) {
 #endif
 
   HandleScope scope;
-  int nbytes;
 
   SLURP_CONNECTION(args[0], conn);
-
-  if (!args[1]->IsNumber()) {
-    return (ThrowException(Exception::Error(String::New("expected " 
-      "argument 1 to be number of bytes"))));
-  }
-
-  nbytes = args[1]->Int32Value();
 
 #ifdef HAVE_SYSTEMTAP
   NODE_NET_SOCKET_READ(conn.fd, conn.remote, conn.port, conn.buffered);
 #else
+  if (!args[1]->IsNumber()) {
+    return (ThrowException(Exception::Error(String::New("expected " 
+      "argument 1 to be number of bytes"))));
+  }
+  int nbytes = args[1]->Int32Value();
   NODE_NET_SOCKET_READ(&conn, nbytes);
 #endif
 
@@ -196,20 +194,17 @@ Handle<Value> DTRACE_NET_SOCKET_WRITE(const Arguments& args) {
 #endif
 
   HandleScope scope;
-  int nbytes;
 
   SLURP_CONNECTION(args[0], conn);
-
-  if (!args[1]->IsNumber()) {
-    return (ThrowException(Exception::Error(String::New("expected " 
-      "argument 1 to be number of bytes"))));
-  }
-
-  nbytes = args[1]->Int32Value();
 
 #ifdef HAVE_SYSTEMTAP
   NODE_NET_SOCKET_WRITE(conn.fd, conn.remote, conn.port, conn.buffered);
 #else
+  if (!args[1]->IsNumber()) {
+    return (ThrowException(Exception::Error(String::New("expected " 
+      "argument 1 to be number of bytes"))));
+  }
+  int nbytes = args[1]->Int32Value();
   NODE_NET_SOCKET_WRITE(&conn, nbytes);
 #endif
 
@@ -337,7 +332,7 @@ Handle<Value> DTRACE_HTTP_CLIENT_RESPONSE(const Arguments& args) {
   return Undefined();
 }
 
-#define NODE_PROBE(name) #name, name
+#define NODE_PROBE(name) #name, name, Persistent<FunctionTemplate>()
 
 static int dtrace_gc_start(GCType type, GCCallbackFlags flags) {
 #ifdef HAVE_SYSTEMTAP
@@ -374,11 +369,10 @@ void InitDTrace(Handle<Object> target) {
     { NODE_PROBE(DTRACE_HTTP_SERVER_REQUEST) },
     { NODE_PROBE(DTRACE_HTTP_SERVER_RESPONSE) },
     { NODE_PROBE(DTRACE_HTTP_CLIENT_REQUEST) },
-    { NODE_PROBE(DTRACE_HTTP_CLIENT_RESPONSE) },
-    { NULL }
+    { NODE_PROBE(DTRACE_HTTP_CLIENT_RESPONSE) }
   };
 
-  for (int i = 0; tab[i].name != NULL; i++) {
+  for (unsigned int i = 0; i < ARRAY_SIZE(tab); i++) {
     tab[i].templ = Persistent<FunctionTemplate>::New(
         FunctionTemplate::New(tab[i].func));
     target->Set(String::NewSymbol(tab[i].name), tab[i].templ->GetFunction());
