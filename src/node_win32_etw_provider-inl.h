@@ -39,6 +39,11 @@ extern int events_enabled;
                       data,                                                   \
                       (strlen(data) + 1) * sizeof(char));
 
+#define ETW_WRITE_STRING_DATA_LENGTH(data_descriptor, data, data_len_bytes)   \
+  EventDataDescCreate(data_descriptor,                                        \
+                      data,                                                   \
+                      data_len_bytes);
+
 #define ETW_WRITE_INT32_DATA(data_descriptor, data)  \
   EventDataDescCreate(data_descriptor, data, sizeof(int32_t));
 
@@ -55,6 +60,11 @@ extern int events_enabled;
   EventDataDescCreate(data_descriptor,                                        \
                       data,                                                   \
                       (wcslen(data) + 1) * sizeof(wchar_t));
+
+#define ETW_WRITE_WSTRING_DATA_LENGTH(data_descriptor, data, data_len_bytes)  \
+  EventDataDescCreate(data_descriptor,                                        \
+                      data,                                                   \
+                      data_len_bytes);
 
 #define ETW_WRITE_NET_CONNECTION(descriptors, conn)                           \
   ETW_WRITE_INT32_DATA(descriptors, &conn->fd);                               \
@@ -89,7 +99,8 @@ extern int events_enabled;
                                       sourceId,                               \
                                       line,                                   \
                                       col,                                    \
-                                      name)                                   \
+                                      name,                                   \
+                                      name_len_bytes)                         \
     ETW_WRITE_ADDRESS_DATA(descriptors, &context);                            \
     ETW_WRITE_ADDRESS_DATA(descriptors + 1, &startAddr);                      \
     ETW_WRITE_INT64_DATA(descriptors + 2, &size);                             \
@@ -99,7 +110,7 @@ extern int events_enabled;
     ETW_WRITE_INT64_DATA(descriptors + 6, &sourceId);                         \
     ETW_WRITE_INT32_DATA(descriptors + 7, &line);                             \
     ETW_WRITE_INT32_DATA(descriptors + 8, &col);                              \
-    ETW_WRITE_WSTRING_DATA(descriptors + 9, name);
+    ETW_WRITE_WSTRING_DATA_LENGTH(descriptors + 9, name, name_len_bytes);
 
 
 #define ETW_WRITE_EVENT(eventDescriptor, dataDescriptors)                     \
@@ -240,7 +251,8 @@ void NODE_V8SYMBOL_ADD(LPCSTR symbol,
                                   sourceid,
                                   line,
                                   col,
-                                  symbuf);
+                                  symbuf,
+                                  symbol_len * sizeof(symbuf[0]));
     ETW_WRITE_EVENT(MethodLoad, descriptors);
   }
 }
