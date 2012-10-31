@@ -34,6 +34,8 @@ DEALINGS IN THE SOFTWARE.
 #     using any PROBE_ENABLED() macros in dtrace.cc sdt broke it
 #     can only pass strings/ints/primitives not dtrace_connection_t
 #          conn or other structs
+#     verify probe existence by using
+#          $ stap -l 'process("out/Release/node").mark("*")'
 # TODO: write .stp scripts (node.stp, node_v8ustack.stp + ???)
 */
 
