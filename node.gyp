@@ -174,7 +174,7 @@
           'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
           'sources': [
             'src/node_dtrace.cc',
-            'src/node_systemtap.h',
+            '<(SHARED_INTERMEDIATE_DIR)/node_systemtap.h',
           ],
         } ],
         [ 'node_use_etw=="true"', {
@@ -340,7 +340,7 @@
             {
               'action_name': 'node_systemtap_header',
               'inputs': [ 'src/node_systemtap.d' ],
-              'outputs': [ 'src/node_systemtap.h' ],
+              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/node_systemtap.h' ],
               'action': [ 'dtrace', '-h', '-C', '-s', '<@(_inputs)',
                 '-o', '<@(_outputs)' ]
             } 
