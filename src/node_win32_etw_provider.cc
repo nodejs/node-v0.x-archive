@@ -37,8 +37,8 @@ int events_enabled;
 static uv_async_t dispatch_etw_events_change_async;
 
 struct v8tags {
-    const char *prefix;
-    size_t prelen;
+  char prefix[32 - sizeof(size_t)];
+  size_t prelen;
 };
 
 // The v8 CODE_ADDED event name has a prefix indicating the type of event.
@@ -74,12 +74,12 @@ struct v8tags {
 // If prefix is not in filtered list return -1,
 // else return length of prefix and marker.
 int FilterCodeEvents(const char* name, size_t len) {
-  for (int i = 0; i < (sizeof(trace_codes) / sizeof(trace_codes[0])); i++) {
-    int prelen = trace_codes[i].prelen;
+  for (int i = 0; i < ARRAY_SIZE(trace_codes); i++) {
+    size_t prelen = trace_codes[i].prelen;
     if (prelen < len) {
       if (strncmp(name, trace_codes[i].prefix, prelen) == 0) {
         if (name[prelen] == V8_MARKER1 || name[prelen] == V8_MARKER2)
-            prelen++;
+          prelen++;
         return prelen;
       }
     }
@@ -122,13 +122,13 @@ void CodeAddressNotification(const JitCodeEvent* jevent) {
 //       event callbacks are received in the same thread. Attempts
 //       to write ETW events in this thread will fail.
 void etw_events_change_async(uv_async_t* handle, int status) {
-    if (events_enabled > 0) {
-      NODE_V8SYMBOL_RESET();
-      V8::SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting,
-                                CodeAddressNotification);
-    } else {
-      V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
-    }
+  if (events_enabled > 0) {
+    NODE_V8SYMBOL_RESET();
+    V8::SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting,
+                               CodeAddressNotification);
+  } else {
+    V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
+  }
 }
 
 
