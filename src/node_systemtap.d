@@ -19,29 +19,23 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/*
-# Hints:
-# This .d defines compiled in probes 
-#     probes are handles (untyped pointers)
-#     v8 forward declared objs (dtrace_connection_t) are defined 
-#     in node_dtrace.cc which builds an InitDtrace object which
-#     gets populated with the probes
-#     The probes gather the following:
-#     PROBE_REQUEST(req, fd, remote, port, buffered)
-#     PROBE_OTHER(fd, remote, port, buffered)
-# 2. other notes:
-#     using any PROBE_ENABLED() macros in dtrace.cc sdt broke it
-#     can only pass strings/ints/primitives not dtrace_connection_t
-#          conn or other structs
-#     verify probe existence by using
-#          $ stap -l 'process("out/Release/node").mark("*")'
-# TODO: write .stp scripts (node.stp, node_v8ustack.stp + ???)
-*/
+// Hints:
+// This .d defines compiled in probes 
+//     probes are handles (untyped pointers)
+//     v8 forward declared objs (dtrace_connection_t) are defined 
+//     in node_dtrace.cc which builds an InitDtrace object which
+//     gets populated with the probes
+//     The probes gather the following:
+//     PROBE_REQUEST(req, fd, remote, port, buffered)
+//     PROBE_OTHER(fd, remote, port, buffered)
+// other notes:
+//     using any PROBE_ENABLED() macros in dtrace.cc sdt broke it
+//     can only pass strings/ints/primitives not dtrace_connection_t
+//          conn or other structs
+//     verify probe existence by using
+//          $ stap -l 'process("out/Release/node").mark("*")'
+// TODO: write .stp scripts (node.stp, node_v8ustack.stp + ???)
 
-/*  
-    PROBE_REQUEST(req, fd, remote, port, buffered)
-    PROBE_OTHER(fd, remote, port, buffered)
-*/
 
 provider node {
     probe http__client__request(string, int, string, int, int);
