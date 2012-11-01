@@ -39,11 +39,6 @@ extern int events_enabled;
                       data,                                                   \
                       (strlen(data) + 1) * sizeof(char));
 
-#define ETW_WRITE_STRING_DATA_LENGTH(data_descriptor, data, data_len_bytes)   \
-  EventDataDescCreate(data_descriptor,                                        \
-                      data,                                                   \
-                      data_len_bytes);
-
 #define ETW_WRITE_INT32_DATA(data_descriptor, data)  \
   EventDataDescCreate(data_descriptor, data, sizeof(int32_t));
 
@@ -55,11 +50,6 @@ extern int events_enabled;
 
 #define ETW_WRITE_INT16_DATA(data_descriptor, data)  \
   EventDataDescCreate(data_descriptor, data, sizeof(int16_t));
-
-#define ETW_WRITE_WSTRING_DATA(data_descriptor, data)                         \
-  EventDataDescCreate(data_descriptor,                                        \
-                      data,                                                   \
-                      (wcslen(data) + 1) * sizeof(wchar_t));
 
 #define ETW_WRITE_WSTRING_DATA_LENGTH(data_descriptor, data, data_len_bytes)  \
   EventDataDescCreate(data_descriptor,                                        \
@@ -212,19 +202,22 @@ void NODE_V8SYMBOL_RESET() {
   }
 }
 
+#define SETSYMBUF(s)  \
+  wcscpy(symbuf, s);  \
+  symbol_len = ARRAY_SIZE(s) - 1;
 
 void NODE_V8SYMBOL_ADD(LPCSTR symbol,
-                        int symbol_len,
-                        const void* addr1,
-                        int len) {
+                       int symbol_len,
+                       const void* addr1,
+                       int len) {
   if (events_enabled > 0) {
     wchar_t symbuf[128];
     if (symbol == NULL) {
-      wcscpy(symbuf, L"NULL");
+      SETSYMBUF(L"NULL");
     } else {
       symbol_len = MultiByteToWideChar(CP_ACP, 0, symbol, symbol_len, symbuf, 128);
       if (symbol_len == 0) {
-        wcscpy(symbuf, L"Invalid");
+        SETSYMBUF(L"Invalid");
       } else {
         if (symbol_len > 127) {
           symbol_len = 127;
@@ -256,6 +249,7 @@ void NODE_V8SYMBOL_ADD(LPCSTR symbol,
     ETW_WRITE_EVENT(MethodLoad, descriptors);
   }
 }
+#undef SETSYMBUF
 
 
 bool NODE_HTTP_SERVER_REQUEST_ENABLED() { return events_enabled > 0; }

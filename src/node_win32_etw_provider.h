@@ -70,9 +70,9 @@ INLINE void NODE_V8SYMBOL_REMOVE(const void* addr1, const void* addr2);
 INLINE void NODE_V8SYMBOL_MOVE(const void* addr1, const void* addr2);
 INLINE void NODE_V8SYMBOL_RESET();
 INLINE void NODE_V8SYMBOL_ADD(LPCSTR symbol,
-                                int symbol_len,
-                                const void* addr1,
-                                int len);
+                              int symbol_len,
+                              const void* addr1,
+                              int len);
 
 INLINE bool NODE_HTTP_SERVER_REQUEST_ENABLED();
 INLINE bool NODE_HTTP_SERVER_RESPONSE_ENABLED();
