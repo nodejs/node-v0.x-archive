@@ -384,9 +384,9 @@ def configure_node(o):
   # SunOS, and we haven't implemented it.)
   if sys.platform.startswith('sunos'):
     o['variables']['node_use_dtrace'] = b(not options.without_dtrace)
-  elif sys.platform.startswith('linux') and options.with_dtrace:
+  elif sys.platform.startswith('linux'):
     o['variables']['node_use_dtrace'] = 'false'
-    o['variables']['node_use_systemtap'] = b(not options.without_dtrace)
+    o['variables']['node_use_systemtap'] = b(options.with_dtrace)
     if options.systemtap_includes:
       o['include_dirs'] += [options.systemtap_includes]
   elif b(options.with_dtrace) == 'true':
