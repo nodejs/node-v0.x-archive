@@ -232,6 +232,7 @@ namespace internal {
   F(FunctionIsBuiltin, 1, 1) \
   F(GetScript, 1, 1) \
   F(CollectStackTrace, 3, 1) \
+  F(GetOverflowedRawStackTrace, 1, 1) \
   F(GetV8Version, 0, 1) \
   \
   F(ClassOf, 1, 1) \

@@ -701,7 +701,10 @@ class Isolate {
       int frame_limit,
       StackTrace::StackTraceOptions options);
 
-  void CaptureAndSetCurrentStackTraceFor(Handle<JSObject> error_object);
+  Handle<JSArray> CaptureSimpleStackTrace(Handle<JSObject> error_object,
+                                          Handle<Object> caller,
+                                          int limit);
+  void CaptureAndSetDetailedStackTrace(Handle<JSObject> error_object);
 
   // Returns if the top context may access the given global object. If
   // the result is false, the pending exception is guaranteed to be
