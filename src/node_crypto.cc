@@ -890,8 +890,9 @@ int Connection::HandleBIOError(BIO *bio, const char* func, int rv) {
 }
 
 
-int Connection::HandleSSLError(const char* func, int rv) {
-  if (rv >= 0) return rv;
+int Connection::HandleSSLError(const char* func, int rv, bool zeroIsAnError) {
+  if (rv > 0) return rv;
+  if ((rv == 0) && !zeroIsAnError) return rv;
 
   int err = SSL_get_error(ssl_, rv);
 
@@ -1358,7 +1359,7 @@ Handle<Value> Connection::ClearOut(const Arguments& args) {
   }
 
   int bytes_read = SSL_read(ss->ssl_, buffer_data + off, len);
-  ss->HandleSSLError("SSL_read:ClearOut", bytes_read);
+  ss->HandleSSLError("SSL_read:ClearOut", bytes_read, false);
   ss->SetShutdownFlags();
 
   return scope.Close(Integer::New(bytes_read));
@@ -1718,7 +1719,19 @@ Handle<Value> Connection::Shutdown(const Arguments& args) {
   if (ss->ssl_ == NULL) return False();
   int rv = SSL_shutdown(ss->ssl_);
 
-  ss->HandleSSLError("SSL_shutdown", rv);
+  if (rv == 0) {
+    // from http://openssl.org/docs/ssl/SSL_shutdown.html:
+    //
+    //    The shutdown is not yet finished. Call SSL_shutdown() for a second time, 
+    //    if a bidirectional shutdown shall be performed. The output of SSL_get_error(3) 
+    //    may be misleading, as an erroneous SSL_ERROR_SYSCALL may be flagged even though 
+    //    no error occurred.
+    //
+    // Do we need bidirectional shutdown? I guess "yes", but someone more experienced should make decision. 
+    rv = SSL_shutdown(ss->ssl_);
+  } 
+
+  ss->HandleSSLError("SSL_shutdown", rv, false);
   ss->SetShutdownFlags();
 
   return scope.Close(Integer::New(rv));

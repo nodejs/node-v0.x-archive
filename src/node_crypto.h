@@ -214,7 +214,7 @@ class Connection : ObjectWrap {
 #endif
 
   int HandleBIOError(BIO *bio, const char* func, int rv);
-  int HandleSSLError(const char* func, int rv);
+  int HandleSSLError(const char* func, int rv, bool zeroIsAnError = true);
 
   void ClearError();
   void SetShutdownFlags();
