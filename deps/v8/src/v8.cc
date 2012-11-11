@@ -44,6 +44,10 @@
 #include "serialize.h"
 #include "store-buffer.h"
 
+#if defined(POSTMORTEM_SUPPORT)
+#include <debug-support.h>
+#endif
+
 namespace v8 {
 namespace internal {
 
