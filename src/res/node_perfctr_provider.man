@@ -12,8 +12,8 @@
           <counterSet symbol="NodeCounterSet"
                       guid="{3A22A8EC-297C-48AC-AB15-33EC93033FD8}"
                       uri="Microsoft.Windows.System.PerfCounters.NodeCounterSet"
-                      name="Node Counters"
-                      description="Node performance counters"
+                      name="Node.js"
+                      description="Node.js performance counters"
                       instances="multiple">
 
             <counter id="1"
