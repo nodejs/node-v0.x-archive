@@ -169,20 +169,20 @@ void InitPerfCountersWin32() {
     perfctr_decrementULongLongValue = (PerfDecrementULongLongCounterValueFunc)
       GetProcAddress(advapimod, "PerfDecrementULongLongCounterValue");
 
-    ZeroMemory(&ProviderContext, sizeof(PERF_PROVIDER_CONTEXT));
-    ProviderContext.ContextSize = sizeof(PERF_PROVIDER_CONTEXT);
+    ZeroMemory(&ProviderContext, sizeof(ProviderContext));
+    ProviderContext.ContextSize = sizeof(ProviderContext);
 
     Status = perfctr_startProvider(&ProviderGuid_node_perfctr_provider_1,
-                                 &ProviderContext,
-                                 &NodeCounterProvider);
+                                   &ProviderContext,
+                                   &NodeCounterProvider);
     if (Status != ERROR_SUCCESS) {
       NodeCounterProvider = NULL;
       return;
     }
 
     Status = perfctr_setCounterSetInfo(NodeCounterProvider,
-                &CtrSet_node_perfctr_provider_1_1.CtSet_node_perfctr_provider_1_1,
-                dwCtrSet_node_perfctr_provider_1_1);
+                                       &CtrSet_node_perfctr_provider_1_1.CtSet_node_perfctr_provider_1_1,
+                                       dwCtrSet_node_perfctr_provider_1_1);
     if (Status != ERROR_SUCCESS) {
       perfctr_stopProvider(NodeCounterProvider);
       NodeCounterProvider = NULL;
@@ -190,9 +190,9 @@ void InitPerfCountersWin32() {
     }
 
     perfctr_instance = perfctr_createInstance(NodeCounterProvider,
-                            &CtrSetGuid_node_perfctr_provider_1_1,
-                            Inst,
-                            1);
+                                              &CtrSetGuid_node_perfctr_provider_1_1,
+                                              Inst,
+                                              1);
     if (perfctr_instance == NULL) {
       perfctr_stopProvider(NodeCounterProvider);
       NodeCounterProvider = NULL;
@@ -224,6 +224,7 @@ void NODE_COUNT_HTTP_SERVER_REQUEST() {
   }
 }
 
+
 void NODE_COUNT_HTTP_SERVER_RESPONSE() {
   if (NodeCounterProvider != NULL && perfctr_incrementULongValue != NULL) {
     perfctr_incrementULongValue(NodeCounterProvider,
@@ -232,6 +233,7 @@ void NODE_COUNT_HTTP_SERVER_RESPONSE() {
                                 1);
   }
 }
+
 
 void NODE_COUNT_HTTP_CLIENT_REQUEST() {
   if (NodeCounterProvider != NULL && perfctr_incrementULongValue != NULL) {
@@ -242,6 +244,7 @@ void NODE_COUNT_HTTP_CLIENT_REQUEST() {
   }
 }
 
+
 void NODE_COUNT_HTTP_CLIENT_RESPONSE() {
   if (NodeCounterProvider != NULL && perfctr_incrementULongValue != NULL) {
     perfctr_incrementULongValue(NodeCounterProvider,
@@ -250,6 +253,7 @@ void NODE_COUNT_HTTP_CLIENT_RESPONSE() {
                                 1);
   }
 }
+
 
 void NODE_COUNT_SERVER_CONN_OPEN() {
   if (NodeCounterProvider != NULL && perfctr_incrementULongValue != NULL) {
@@ -260,6 +264,7 @@ void NODE_COUNT_SERVER_CONN_OPEN() {
   }
 }
 
+
 void NODE_COUNT_SERVER_CONN_CLOSE() {
   if (NodeCounterProvider != NULL && perfctr_decrementULongValue != NULL) {
     perfctr_decrementULongValue(NodeCounterProvider,
@@ -268,6 +273,7 @@ void NODE_COUNT_SERVER_CONN_CLOSE() {
                                 1);
   }
 }
+
 
 void NODE_COUNT_NET_BYTES_SENT(int bytes) {
   if (NodeCounterProvider != NULL && perfctr_incrementULongLongValue != NULL) {
@@ -278,14 +284,16 @@ void NODE_COUNT_NET_BYTES_SENT(int bytes) {
   }
 }
 
+
 void NODE_COUNT_NET_BYTES_RECV(int bytes) {
   if (NodeCounterProvider != NULL && perfctr_incrementULongLongValue != NULL) {
     perfctr_incrementULongLongValue(NodeCounterProvider,
-                                perfctr_instance,
-                                NODE_COUNTER_NET_BYTES_RECV,
-                                static_cast<ULONGLONG>(bytes));
+                                    perfctr_instance,
+                                    NODE_COUNTER_NET_BYTES_RECV,
+                                    static_cast<ULONGLONG>(bytes));
   }
 }
+
 
 uint64_t NODE_COUNT_GET_GC_RAWTIME() {
   LARGE_INTEGER timegc;
@@ -296,30 +304,33 @@ uint64_t NODE_COUNT_GET_GC_RAWTIME() {
   }
 }
 
+
 void NODE_COUNT_GC_PERCENTTIME(unsigned int percent) {
   if (NodeCounterProvider != NULL && perfctr_setULongValue != NULL) {
     perfctr_setULongValue(NodeCounterProvider,
-                                perfctr_instance,
-                                NODE_COUNTER_GC_PERCENTTIME,
-                                percent);
+                          perfctr_instance,
+                          NODE_COUNTER_GC_PERCENTTIME,
+                          percent);
   }
 }
+
 
 void NODE_COUNT_PIPE_BYTES_SENT(int bytes) {
   if (NodeCounterProvider != NULL && perfctr_incrementULongLongValue != NULL) {
     perfctr_incrementULongLongValue(NodeCounterProvider,
-                                perfctr_instance,
-                                NODE_COUNTER_PIPE_BYTES_SENT,
-                                static_cast<ULONGLONG>(bytes));
+                                    perfctr_instance,
+                                    NODE_COUNTER_PIPE_BYTES_SENT,
+                                    static_cast<ULONGLONG>(bytes));
   }
 }
+
 
 void NODE_COUNT_PIPE_BYTES_RECV(int bytes) {
   if (NodeCounterProvider != NULL && perfctr_incrementULongLongValue != NULL) {
     perfctr_incrementULongLongValue(NodeCounterProvider,
-                                perfctr_instance,
-                                NODE_COUNTER_PIPE_BYTES_RECV,
-                                static_cast<ULONGLONG>(bytes));
+                                    perfctr_instance,
+                                    NODE_COUNTER_PIPE_BYTES_RECV,
+                                    static_cast<ULONGLONG>(bytes));
   }
 }
 

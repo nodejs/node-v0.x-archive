@@ -39,7 +39,6 @@ static uint64_t counter_gc_end_time;
   *valp = Local<Object>::Cast(obj->Get(String::New(#member)));
 
 
-
 Handle<Value> COUNTER_NET_SERVER_CONNECTION(const Arguments& args) {
   NODE_COUNT_SERVER_CONN_OPEN();
   return Undefined();
