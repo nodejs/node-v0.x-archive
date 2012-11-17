@@ -444,7 +444,7 @@ def configure_node(o):
     o['variables']['node_use_systemtap'] = b(options.with_dtrace)
     if options.systemtap_includes:
       o['include_dirs'] += [options.systemtap_includes]
-  elif b(options.with_dtrace) == 'true':
+  elif options.with_dtrace:
     raise Exception(
        'DTrace is currently only supported on SunOS or Linux systems.')
   else:
@@ -457,7 +457,7 @@ def configure_node(o):
   # By default, enable ETW on Windows.
   if sys.platform.startswith('win32'):
     o['variables']['node_use_etw'] = b(not options.without_etw);
-  elif b(options.with_etw) == 'true':
+  elif options.with_etw:
     raise Exception('ETW is only supported on Windows.')
   else:
     o['variables']['node_use_etw'] = 'false'
@@ -465,7 +465,7 @@ def configure_node(o):
   # By default, enable Performance counters on Windows.
   if sys.platform.startswith('win32'):
     o['variables']['node_use_perfctr'] = b(not options.without_perfctr);
-  elif b(options.with_perfctr) == 'true':
+  elif options.with_perfctr:
     raise Exception('Performance counter is only supported on Windows.')
   else:
     o['variables']['node_use_perfctr'] = 'false'
