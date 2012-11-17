@@ -131,8 +131,8 @@ namespace node {
 EXTERN_C DECLSPEC_SELECTANY HANDLE NodeCounterProvider = NULL;
 
 void InitPerfCountersWin32() {
-  ULONG Status;
-  PERF_PROVIDER_CONTEXT ProviderContext;
+  ULONG status;
+  PERF_PROVIDER_CONTEXT providerContext;
 
   // create instance name using pid
 #define INST_MAX_LEN       32
@@ -169,21 +169,21 @@ void InitPerfCountersWin32() {
     perfctr_decrementULongLongValue = (PerfDecrementULongLongCounterValueFunc)
       GetProcAddress(advapimod, "PerfDecrementULongLongCounterValue");
 
-    ZeroMemory(&ProviderContext, sizeof(ProviderContext));
-    ProviderContext.ContextSize = sizeof(ProviderContext);
+    ZeroMemory(&providerContext, sizeof(providerContext));
+    providerContext.ContextSize = sizeof(providerContext);
 
-    Status = perfctr_startProvider(&NodeCounterSetGuid,
-                                   &ProviderContext,
+    status = perfctr_startProvider(&NodeCounterSetGuid,
+                                   &providerContext,
                                    &NodeCounterProvider);
-    if (Status != ERROR_SUCCESS) {
+    if (status != ERROR_SUCCESS) {
       NodeCounterProvider = NULL;
       return;
     }
 
-    Status = perfctr_setCounterSetInfo(NodeCounterProvider,
+    status = perfctr_setCounterSetInfo(NodeCounterProvider,
                                        &NodeCounterSetInfo.CounterSet,
                                        sizeof(NodeCounterSetInfo));
-    if (Status != ERROR_SUCCESS) {
+    if (status != ERROR_SUCCESS) {
       perfctr_stopProvider(NodeCounterProvider);
       NodeCounterProvider = NULL;
       return;
@@ -278,9 +278,9 @@ void NODE_COUNT_SERVER_CONN_CLOSE() {
 void NODE_COUNT_NET_BYTES_SENT(int bytes) {
   if (NodeCounterProvider != NULL && perfctr_incrementULongLongValue != NULL) {
     perfctr_incrementULongLongValue(NodeCounterProvider,
-                                perfctr_instance,
-                                NODE_COUNTER_NET_BYTES_SENT,
-                                static_cast<ULONGLONG>(bytes));
+                                    perfctr_instance,
+                                    NODE_COUNTER_NET_BYTES_SENT,
+                                    static_cast<ULONGLONG>(bytes));
   }
 }
 
@@ -298,9 +298,9 @@ void NODE_COUNT_NET_BYTES_RECV(int bytes) {
 uint64_t NODE_COUNT_GET_GC_RAWTIME() {
   LARGE_INTEGER timegc;
   if (QueryPerformanceCounter(&timegc)) {
-      return timegc.QuadPart;
+    return timegc.QuadPart;
   } else {
-      return static_cast<uint64_t>(GetTickCount());
+    return static_cast<uint64_t>(GetTickCount());
   }
 }
 

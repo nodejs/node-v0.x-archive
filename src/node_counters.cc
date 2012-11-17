@@ -19,8 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "node_counters.h"
 #include <string.h>
+#include <stdint.h>
+
+#include "node_counters.h"
 
 
 namespace node {
@@ -75,14 +77,14 @@ Handle<Value> COUNTER_HTTP_CLIENT_RESPONSE(const Arguments& args) {
 }
 
 
-static int counter_gc_start(GCType type, GCCallbackFlags flags) {
+static void counter_gc_start(GCType type, GCCallbackFlags flags) {
   counter_gc_start_time = NODE_COUNT_GET_GC_RAWTIME();
 
-  return 0;
+  return;
 }
 
 
-static int counter_gc_done(GCType type, GCCallbackFlags flags) {
+static void counter_gc_done(GCType type, GCCallbackFlags flags) {
   uint64_t endgc = NODE_COUNT_GET_GC_RAWTIME();
   if (endgc != 0) {
     uint64_t totalperiod = endgc - counter_gc_end_time;
@@ -96,7 +98,7 @@ static int counter_gc_done(GCType type, GCCallbackFlags flags) {
     }
   }
 
-  return 0;
+  return;
 }
 
 
@@ -104,7 +106,7 @@ static int counter_gc_done(GCType type, GCCallbackFlags flags) {
 
 void InitPerfCounters(Handle<Object> target) {
   static struct {
-    const char *name;
+    const char* name;
     Handle<Value> (*func)(const Arguments&);
     Persistent<FunctionTemplate> templ;
   } tab[] = {
@@ -113,11 +115,10 @@ void InitPerfCounters(Handle<Object> target) {
     { NODE_PROBE(COUNTER_HTTP_SERVER_REQUEST) },
     { NODE_PROBE(COUNTER_HTTP_SERVER_RESPONSE) },
     { NODE_PROBE(COUNTER_HTTP_CLIENT_REQUEST) },
-    { NODE_PROBE(COUNTER_HTTP_CLIENT_RESPONSE) },
-    { NULL }
+    { NODE_PROBE(COUNTER_HTTP_CLIENT_RESPONSE) }
   };
 
-  for (int i = 0; tab[i].name != NULL; i++) {
+  for (int i = 0; i < ARRAY_SIZE(tab); i++) {
     tab[i].templ = Persistent<FunctionTemplate>::New(
         FunctionTemplate::New(tab[i].func));
     target->Set(String::NewSymbol(tab[i].name), tab[i].templ->GetFunction());
@@ -131,8 +132,8 @@ void InitPerfCounters(Handle<Object> target) {
   counter_gc_start_time = NODE_COUNT_GET_GC_RAWTIME();
   counter_gc_end_time = counter_gc_start_time;
 
-  v8::V8::AddGCPrologueCallback((GCPrologueCallback)counter_gc_start);
-  v8::V8::AddGCEpilogueCallback((GCEpilogueCallback)counter_gc_done);
+  v8::V8::AddGCPrologueCallback(counter_gc_start);
+  v8::V8::AddGCEpilogueCallback(counter_gc_done);
 }
 
 
