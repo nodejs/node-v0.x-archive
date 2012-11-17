@@ -325,39 +325,30 @@
       'actions': [
         {
           'action_name': 'node_js2c',
-
           'inputs': [
             '<@(library_files)',
             './config.gypi',
           ],
-
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/node_natives.h',
           ],
           'conditions': [
-            [ 'node_use_dtrace=="true"'
-              ' or node_use_etw=="true"'
-              ' or node_use_systemtap=="true"',
-            {
-              'action': [
-                'python',
-                'tools/js2c.py',
-                '<@(_outputs)',
-                '<@(_inputs)',
-              ],
-            }, { # No Dtrace
-              'action': [
-                'python',
-                'tools/js2c.py',
-                '<@(_outputs)',
-                '<@(_inputs)',
-                'src/macros.py'
-              ],
-            }],
-            # if not perfctr add perfctr_macros.py to inputs
+            [ 'node_use_dtrace=="false"'
+              ' and node_use_etw=="false"'
+              ' and node_use_systemtap=="false"',
+              {
+                'inputs': ['src/macros.py']
+              }
+            ],
             [ 'node_use_perfctr=="false"', {
               'inputs': [ 'src/perfctr_macros.py' ]
             }]
+          ],
+          'action': [
+            'python',
+            'tools/js2c.py',
+            '<@(_outputs)',
+            '<@(_inputs)',
           ],
         },
       ],
