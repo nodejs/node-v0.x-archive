@@ -172,7 +172,7 @@ void InitPerfCountersWin32() {
     ZeroMemory(&ProviderContext, sizeof(ProviderContext));
     ProviderContext.ContextSize = sizeof(ProviderContext);
 
-    Status = perfctr_startProvider(&ProviderGuid_node_perfctr_provider_1,
+    Status = perfctr_startProvider(&NodeCounterSetGuid,
                                    &ProviderContext,
                                    &NodeCounterProvider);
     if (Status != ERROR_SUCCESS) {
@@ -181,8 +181,8 @@ void InitPerfCountersWin32() {
     }
 
     Status = perfctr_setCounterSetInfo(NodeCounterProvider,
-                                       &CtrSet_node_perfctr_provider_1_1.CtSet_node_perfctr_provider_1_1,
-                                       dwCtrSet_node_perfctr_provider_1_1);
+                                       &NodeCounterSetInfo.CounterSet,
+                                       sizeof(NodeCounterSetInfo));
     if (Status != ERROR_SUCCESS) {
       perfctr_stopProvider(NodeCounterProvider);
       NodeCounterProvider = NULL;
@@ -190,7 +190,7 @@ void InitPerfCountersWin32() {
     }
 
     perfctr_instance = perfctr_createInstance(NodeCounterProvider,
-                                              &CtrSetGuid_node_perfctr_provider_1_1,
+                                              &NodeCounterSetGuid,
                                               Inst,
                                               1);
     if (perfctr_instance == NULL) {

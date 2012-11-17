@@ -306,22 +306,15 @@
               'action_name': 'node_perfctr_man',
               'inputs': [ 'src/res/node_perfctr_provider.man' ],
               'outputs': [
-                'src/res/node_perfctr_provider.rc',
-                'src/res/node_perfctr_provider.h',
-                'src/res/node_perfctr_provider_r.h'
+                '<(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.h',
+                '<(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.rc',
               ],
-              'action': [ 'ctrpp -legacy <@(_inputs)' ]
+              'action': [ 'ctrpp <@(_inputs) '
+                          '-o <(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.h '
+                          '-rc <(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.rc'
+              ]
             },
           ],
-          'copies': [
-            {
-              'destination': '<(SHARED_INTERMEDIATE_DIR)',
-              'files': [
-                'src/res/node_perfctr_provider.rc',
-                'src/res/node_perfctr_provider.h',
-                'src/res/node_perfctr_provider_r.h'
-              ],
-            } ]
         } ]
       ]
     },
