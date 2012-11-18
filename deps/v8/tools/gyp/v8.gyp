@@ -744,8 +744,14 @@
               ],
             }],
             ['v8_postmortem_support=="true"', {
+              'defines': [
+                'POSTMORTEM_SUPPORT'
+              ],
+              'include_dirs': [
+                '<(SHARED_INTERMEDIATE_DIR)'
+              ],
               'sources': [
-                '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+                '<(SHARED_INTERMEDIATE_DIR)/debug-support.h',
               ],
               'dependencies': ['postmortem-metadata']
             }],
@@ -841,7 +847,7 @@
                   '<@(heapobject_files)',
                 ],
                 'outputs': [
-                  '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+                  '<(SHARED_INTERMEDIATE_DIR)/debug-support.h',
                 ],
                 'action': [
                   'python',
