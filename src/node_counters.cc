@@ -105,6 +105,8 @@ static void counter_gc_done(GCType type, GCCallbackFlags flags) {
 #define NODE_PROBE(name) #name, name
 
 void InitPerfCounters(Handle<Object> target) {
+  HandleScope scope;
+
   static struct {
     const char* name;
     Handle<Value> (*func)(const Arguments&);
