@@ -19,10 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
-#include <stdint.h>
-
 #include "node_counters.h"
+
+#include "uv.h"
+
+#include <string.h>
 
 
 namespace node {
