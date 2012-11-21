@@ -39,7 +39,8 @@ static Persistent<String> callback_sym;
 static Persistent<String> onerror_sym;
 
 enum node_zlib_mode {
-  DEFLATE = 1,
+  NONE,
+  DEFLATE,
   INFLATE,
   GZIP,
   GUNZIP,
@@ -60,16 +61,41 @@ class ZCtx : public ObjectWrap {
 
   ZCtx(node_zlib_mode mode) : ObjectWrap(), dictionary_(NULL), mode_(mode) {}
 
+
   ~ZCtx() {
+    Close();
+  }
+
+
+  void Close() {
+    assert(!write_in_progress_ && "write in progress");
+    assert(init_done_ && "close before init");
+    assert(mode_ <= UNZIP);
+
     if (mode_ == DEFLATE || mode_ == GZIP || mode_ == DEFLATERAW) {
       (void)deflateEnd(&strm_);
+      V8::AdjustAmountOfExternalAllocatedMemory(-kDeflateContextSize);
     } else if (mode_ == INFLATE || mode_ == GUNZIP || mode_ == INFLATERAW ||
                mode_ == UNZIP) {
       (void)inflateEnd(&strm_);
+      V8::AdjustAmountOfExternalAllocatedMemory(-kInflateContextSize);
     }
+    mode_ = NONE;
 
-    if (dictionary_ != NULL) delete[] dictionary_;
+    if (dictionary_ != NULL) {
+      delete[] dictionary_;
+      dictionary_ = NULL;
+    }
   }
+
+
+  static Handle<Value> Close(const Arguments& args) {
+    HandleScope scope;
+    ZCtx *ctx = ObjectWrap::Unwrap<ZCtx>(args.This());
+    ctx->Close();
+    return scope.Close(Undefined());
+  }
+
 
   // write(flush, in, in_off, in_len, out, out_off, out_len)
   static Handle<Value> Write(const Arguments& args) {
@@ -78,6 +104,7 @@ class ZCtx : public ObjectWrap {
 
     ZCtx *ctx = ObjectWrap::Unwrap<ZCtx>(args.This());
     assert(ctx->init_done_ && "write before init");
+    assert(ctx->mode_ != NONE && "already finalized");
 
     assert(!ctx->write_in_progress_ && "write already in progress");
     ctx->write_in_progress_ = true;
@@ -341,12 +368,14 @@ class ZCtx : public ObjectWrap {
                                  ctx->windowBits_,
                                  ctx->memLevel_,
                                  ctx->strategy_);
+        V8::AdjustAmountOfExternalAllocatedMemory(kDeflateContextSize);
         break;
       case INFLATE:
       case GUNZIP:
       case INFLATERAW:
       case UNZIP:
         ctx->err_ = inflateInit2(&ctx->strm_, ctx->windowBits_);
+        V8::AdjustAmountOfExternalAllocatedMemory(kInflateContextSize);
         break;
       default:
         assert(0 && "wtf?");
@@ -407,6 +436,8 @@ class ZCtx : public ObjectWrap {
   }
 
  private:
+  static const int kDeflateContextSize = 16384; // approximate
+  static const int kInflateContextSize = 10240; // approximate
 
   bool init_done_;
 
@@ -441,6 +472,7 @@ void InitZlib(Handle<Object> target) {
 
   NODE_SET_PROTOTYPE_METHOD(z, "write", ZCtx::Write);
   NODE_SET_PROTOTYPE_METHOD(z, "init", ZCtx::Init);
+  NODE_SET_PROTOTYPE_METHOD(z, "close", ZCtx::Close);
   NODE_SET_PROTOTYPE_METHOD(z, "reset", ZCtx::Reset);
 
   z->SetClassName(String::NewSymbol("Zlib"));

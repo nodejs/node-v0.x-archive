@@ -26,6 +26,12 @@ endif
 
 CPPFLAGS += -Iinclude -Iinclude/uv-private
 
+ifeq (Darwin,$(uname_S))
+SOEXT = dylib
+else
+SOEXT = so
+endif
+
 ifneq (,$(findstring MINGW,$(uname_S)))
 include config-mingw.mk
 else
@@ -35,34 +41,25 @@ endif
 TESTS=test/blackhole-server.c test/echo-server.c test/test-*.c
 BENCHMARKS=test/blackhole-server.c test/echo-server.c test/dns-server.c test/benchmark-*.c
 
-all: uv.a
+all: libuv.a
 
-test/run-tests$(E): test/*.h test/run-tests.c $(RUNNER_SRC) test/runner-unix.c $(TESTS) uv.a
-	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o test/run-tests test/run-tests.c \
-		test/runner.c $(RUNNER_SRC) $(TESTS) uv.a $(RUNNER_LIBS) $(RUNNER_LINKFLAGS)
+test/run-tests$(E): test/run-tests.c test/runner.c $(RUNNER_SRC) $(TESTS) libuv.$(SOEXT)
+	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o $@ $^ $(RUNNER_LIBS) $(RUNNER_LINKFLAGS)
 
-test/run-benchmarks$(E): test/*.h test/run-benchmarks.c test/runner.c $(RUNNER_SRC) $(BENCHMARKS) uv.a
-	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o test/run-benchmarks test/run-benchmarks.c \
-		 test/runner.c $(RUNNER_SRC) $(BENCHMARKS) uv.a $(RUNNER_LIBS) $(RUNNER_LINKFLAGS)
+test/run-benchmarks$(E): test/run-benchmarks.c test/runner.c $(RUNNER_SRC) $(BENCHMARKS) libuv.$(SOEXT)
+	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o $@ $^ $(RUNNER_LIBS) $(RUNNER_LINKFLAGS)
 
 test/echo.o: test/echo.c test/echo.h
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c test/echo.c -o test/echo.o
 
 
 .PHONY: clean clean-platform distclean distclean-platform test bench
 
 
 test: test/run-tests$(E)
-	test/run-tests
-
-#test-%:	test/run-tests$(E)
-#	test/run-tests $(@:test-%=%)
+	$<
 
 bench: test/run-benchmarks$(E)
-	test/run-benchmarks
-
-#bench-%:	test/run-benchmarks$(E)
-#	test/run-benchmarks $(@:bench-%=%)
+	$<
 
 clean: clean-platform
 	$(RM) -f src/*.o *.a test/run-tests$(E) test/run-benchmarks$(E)

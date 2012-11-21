@@ -205,7 +205,7 @@ static void destroy_connection_context(connection_context_t* context) {
 
 static void connection_poll_cb(uv_poll_t* handle, int status, int events) {
   connection_context_t* context = (connection_context_t*) handle->data;
-  int new_events;
+  unsigned int new_events;
   int r;
 
   ASSERT(status == 0);
@@ -556,6 +556,8 @@ static void start_poll_test() {
          spurious_writable_wakeups > 20);
 
   ASSERT(closed_connections == NUM_CLIENTS * 2);
+
+  MAKE_VALGRIND_HAPPY();
 }
 
 

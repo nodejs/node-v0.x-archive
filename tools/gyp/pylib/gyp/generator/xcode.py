@@ -7,6 +7,7 @@ import gyp.common
 import gyp.xcodeproj_file
 import errno
 import os
+import sys
 import posixpath
 import re
 import shutil
@@ -145,7 +146,6 @@ class XcodeProject(object):
       xccl = CreateXCConfigurationList(configurations)
       self.project.SetProperty('buildConfigurationList', xccl)
     except:
-      import sys
       sys.stderr.write("Problem with gyp file %s\n" % self.gyp_path)
       raise
 
@@ -526,7 +526,7 @@ def AddSourceToTarget(source, type, pbxp, xct):
 
   basename = posixpath.basename(source)
   (root, ext) = posixpath.splitext(basename)
-  if ext != '':
+  if ext:
     ext = ext[1:].lower()
 
   if ext in source_extensions and type != 'none':
@@ -587,6 +587,25 @@ def EscapeXCodeArgument(s):
   return '"' + s + '"'
 
 
+
+def PerformBuild(data, configurations, params):
+  options = params['options']
+
+  for build_file, build_file_dict in data.iteritems():
+    (build_file_root, build_file_ext) = os.path.splitext(build_file)
+    if build_file_ext != '.gyp':
+      continue
+    xcodeproj_path = build_file_root + options.suffix + '.xcodeproj'
+    if options.generator_output:
+      xcodeproj_path = os.path.join(options.generator_output, xcodeproj_path)
+
+  for config in configurations:
+    arguments = ['xcodebuild', '-project', xcodeproj_path]
+    arguments += ['-configuration', config]
+    print "Building [%s]: %s" % (config, arguments)
+    subprocess.check_call(arguments)
+
+
 def GenerateOutput(target_list, target_dicts, data, params):
   options = params['options']
   generator_flags = params.get('generator_flags', {})
@@ -614,11 +633,13 @@ def GenerateOutput(target_list, target_dicts, data, params):
     if project_version:
       xcp.project_file.SetXcodeVersion(project_version)
 
-    main_group = pbxp.GetProperty('mainGroup')
-    build_group = gyp.xcodeproj_file.PBXGroup({'name': 'Build'})
-    main_group.AppendChild(build_group)
-    for included_file in build_file_dict['included_files']:
-      build_group.AddOrGetFileByPath(included_file, False)
+    # Add gyp/gypi files to project
+    if not generator_flags.get('standalone'):
+      main_group = pbxp.GetProperty('mainGroup')
+      build_group = gyp.xcodeproj_file.PBXGroup({'name': 'Build'})
+      main_group.AppendChild(build_group)
+      for included_file in build_file_dict['included_files']:
+        build_group.AddOrGetFileByPath(included_file, False)
 
   xcode_targets = {}
   xcode_target_to_target_dict = {}

@@ -125,6 +125,24 @@ try {
 }
 assert.strictEqual('sourceStart out of bounds', caught_error.message);
 
+// invalid encoding for Buffer.toString
+caught_error = null;
+try {
+  var copied = b.toString('invalid');
+} catch (err) {
+  caught_error = err;
+}
+assert.strictEqual('Unknown encoding: invalid', caught_error.message);
+
+// invalid encoding for Buffer.write
+caught_error = null;
+try {
+  var copied = b.write('test string', 0, 5, 'invalid');
+} catch (err) {
+  caught_error = err;
+}
+assert.strictEqual('Unknown encoding: invalid', caught_error.message);
+
 // a too-low sourceEnd will get caught by earlier checks
 
 // try to copy ending after the end of b
@@ -247,24 +265,26 @@ var f = new Buffer('über', 'ascii');
 console.error('f.length: %d     (should be 4)', f.length);
 assert.deepEqual(f, new Buffer([252, 98, 101, 114]));
 
-var f = new Buffer('über', 'ucs2');
-console.error('f.length: %d     (should be 8)', f.length);
-assert.deepEqual(f, new Buffer([252, 0, 98, 0, 101, 0, 114, 0]));
+['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
+  var f = new Buffer('über', encoding);
+  console.error('f.length: %d     (should be 8)', f.length);
+  assert.deepEqual(f, new Buffer([252, 0, 98, 0, 101, 0, 114, 0]));
 
-var f = new Buffer('привет', 'ucs2');
-console.error('f.length: %d     (should be 12)', f.length);
-assert.deepEqual(f, new Buffer([63, 4, 64, 4, 56, 4, 50, 4, 53, 4, 66, 4]));
-assert.equal(f.toString('ucs2'), 'привет');
+  var f = new Buffer('привет', encoding);
+  console.error('f.length: %d     (should be 12)', f.length);
+  assert.deepEqual(f, new Buffer([63, 4, 64, 4, 56, 4, 50, 4, 53, 4, 66, 4]));
+  assert.equal(f.toString(encoding), 'привет');
 
-var f = new Buffer([0, 0, 0, 0, 0]);
-assert.equal(f.length, 5);
-var size = f.write('あいうえお', 'ucs2');
-var charsWritten = Buffer._charsWritten; // Copy value out.
-console.error('bytes written to buffer: %d     (should be 4)', size);
-console.error('chars written to buffer: %d     (should be 2)', charsWritten);
-assert.equal(size, 4);
-assert.equal(charsWritten, 2);
-assert.deepEqual(f, new Buffer([0x42, 0x30, 0x44, 0x30, 0x00]));
+  var f = new Buffer([0, 0, 0, 0, 0]);
+  assert.equal(f.length, 5);
+  var size = f.write('あいうえお', encoding);
+  var charsWritten = Buffer._charsWritten; // Copy value out.
+  console.error('bytes written to buffer: %d     (should be 4)', size);
+  console.error('chars written to buffer: %d     (should be 2)', charsWritten);
+  assert.equal(size, 4);
+  assert.equal(charsWritten, 2);
+  assert.deepEqual(f, new Buffer([0x42, 0x30, 0x44, 0x30, 0x00]));
+});
 
 var f = new Buffer('\uD83D\uDC4D', 'utf-16le'); // THUMBS UP SIGN (U+1F44D)
 assert.equal(f.length, 4);
@@ -456,7 +476,9 @@ assert.equal('bcde', b.slice(1).toString());
 // byte length
 assert.equal(14, Buffer.byteLength('Il était tué'));
 assert.equal(14, Buffer.byteLength('Il était tué', 'utf8'));
-assert.equal(24, Buffer.byteLength('Il était tué', 'ucs2'));
+['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
+  assert.equal(24, Buffer.byteLength('Il était tué', encoding));
+});
 assert.equal(12, Buffer.byteLength('Il était tué', 'ascii'));
 assert.equal(12, Buffer.byteLength('Il était tué', 'binary'));
 
@@ -581,9 +603,11 @@ for (var i = 0; i < 16; i++) assert.equal(0, b[i]);
 for (; i < 32; i++) assert.equal(1, b[i]);
 for (; i < b.length; i++) assert.equal(0, b[i]);
 
-var b = new SlowBuffer(10);
-b.write('あいうえお', 'ucs2');
-assert.equal(b.toString('ucs2'), 'あいうえお');
+['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
+  var b = new SlowBuffer(10);
+  b.write('あいうえお', encoding);
+  assert.equal(b.toString(encoding), 'あいうえお');
+});
 
 // Binary encoding should write only one byte per character.
 var b = Buffer([0xde, 0xad, 0xbe, 0xef]);
@@ -599,6 +623,24 @@ assert.equal(0xee, b[0]);
 assert.equal(0xad, b[1]);
 assert.equal(0xbe, b[2]);
 assert.equal(0xef, b[3]);
+
+// testing invalid encoding on SlowBuffer.toString
+caught_error = null;
+try {
+  var copied = b.toString('invalid');
+} catch (err) {
+  caught_error = err;
+}
+assert.strictEqual('Unknown encoding: invalid', caught_error.message);
+
+// testing invalid encoding on SlowBuffer.write
+caught_error = null;
+try {
+  var copied = b.write('some string', 0, 5, 'invalid');
+} catch (err) {
+  caught_error = err;
+}
+assert.strictEqual('Unknown encoding: invalid', caught_error.message);
 
 
 // This should not segfault the program.
@@ -670,14 +712,16 @@ assert.equal(buf[1], 0xAB);
 assert.equal(buf[2], 0xCD);
 assert.equal(buf[3], 0xFF);
 
-buf.fill(0xFF);
-written = buf.write('abcd', 0, 2, 'ucs2');
-console.log(buf);
-assert.equal(written, 2);
-assert.equal(buf[0], 0x61);
-assert.equal(buf[1], 0x00);
-assert.equal(buf[2], 0xFF);
-assert.equal(buf[3], 0xFF);
+['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
+  buf.fill(0xFF);
+  written = buf.write('abcd', 0, 2, encoding);
+  console.log(buf);
+  assert.equal(written, 2);
+  assert.equal(buf[0], 0x61);
+  assert.equal(buf[1], 0x00);
+  assert.equal(buf[2], 0xFF);
+  assert.equal(buf[3], 0xFF);
+});
 
 // test for buffer overrun
 buf = new Buffer([0, 0, 0, 0, 0]); // length: 5
@@ -690,8 +734,10 @@ assert.equal(buf[4], 0);
 buf = new Buffer(9);
 buf.write('あいうえ', 'utf8'); // 3bytes * 4
 assert.equal(Buffer._charsWritten, 3);
-buf.write('あいうえお', 'ucs2'); // 2bytes * 5
-assert.equal(Buffer._charsWritten, 4);
+['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
+  buf.write('あいうえお', encoding); // 2bytes * 5
+  assert.equal(Buffer._charsWritten, 4);
+});
 buf.write('0123456789', 'ascii');
 assert.equal(Buffer._charsWritten, 9);
 buf.write('0123456789', 'binary');
@@ -727,3 +773,28 @@ assert.equal(b.toString(), 'xxx');
 
 // issue GH-3416
 Buffer(Buffer(0), 0, 0);
+
+
+[ 'hex',
+  'utf8',
+  'utf-8',
+  'ascii',
+  'binary',
+  'base64',
+  'ucs2',
+  'ucs-2',
+  'utf16le',
+  'utf-16le' ].forEach(function(enc) {
+    assert.equal(Buffer.isEncoding(enc), true);
+  });
+
+[ 'utf9',
+  'utf-7',
+  'Unicode-FTW',
+  'new gnu gun'  ].forEach(function(enc) {
+    assert.equal(Buffer.isEncoding(enc), false);
+  });
+
+
+// GH-3905
+assert.equal(JSON.stringify(Buffer('test')), '[116,101,115,116]');

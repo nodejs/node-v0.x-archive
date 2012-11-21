@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (c) 2011 Google Inc. All rights reserved.
+# Copyright (c) 2012 Google Inc. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -12,6 +12,7 @@ import re
 import shlex
 import sys
 import traceback
+from gyp.common import GypError
 
 # Default debug modes for GYP
 debug = {}
@@ -39,13 +40,14 @@ def FindBuildFiles():
   files = os.listdir(os.getcwd())
   build_files = []
   for file in files:
-    if file[-len(extension):] == extension:
+    if file.endswith(extension):
       build_files.append(file)
   return build_files
 
 
 def Load(build_files, format, default_variables={},
-         includes=[], depth='.', params=None, check=False, circular_check=True):
+         includes=[], depth='.', params=None, check=False,
+         circular_check=True):
   """
   Loads one or more specified build files.
   default_variables and includes will be copied before use.
@@ -66,7 +68,22 @@ def Load(build_files, format, default_variables={},
   # avoiding collisions with user and automatic variables.
   default_variables['GENERATOR'] = format
 
-  generator_name = 'gyp.generator.' + format
+  # Format can be a custom python file, or by default the name of a module
+  # within gyp.generator.
+  if format.endswith('.py'):
+    generator_name = os.path.splitext(format)[0]
+    path, generator_name = os.path.split(generator_name)
+
+    # Make sure the path to the custom generator is in sys.path
+    # Don't worry about removing it once we are done.  Keeping the path
+    # to each generator that is used in sys.path is likely harmless and
+    # arguably a good idea.
+    path = os.path.abspath(path)
+    if path not in sys.path:
+      sys.path.insert(0, path)
+  else:
+    generator_name = 'gyp.generator.' + format
+
   # These parameters are passed in order (as opposed to by key)
   # because ActivePython cannot handle key parameters to __import__.
   generator = __import__(generator_name, globals(), locals(), generator_name)
@@ -108,7 +125,8 @@ def Load(build_files, format, default_variables={},
 
   # Process the input specific to this generator.
   result = gyp.input.Load(build_files, default_variables, includes[:],
-                          depth, generator_input_info, check, circular_check)
+                          depth, generator_input_info, check, circular_check,
+                          params['parallel'])
   return [generator] + result
 
 def NameValueListToDict(name_value_list):
@@ -157,7 +175,10 @@ def RegenerateAppendFlag(flag, values, predicate, env_name, options):
   flags = []
   if options.use_environment and env_name:
     for flag_value in ShlexEnv(env_name):
-      flags.append(FormatOpt(flag, predicate(flag_value)))
+      value = FormatOpt(flag, predicate(flag_value))
+      if value in flags:
+        flags.remove(value)
+      flags.append(value)
   if values:
     for flag_value in values:
       flags.append(FormatOpt(flag, predicate(flag_value)))
@@ -254,7 +275,7 @@ class RegeneratableOptionParser(optparse.OptionParser):
     values._regeneration_metadata = self.__regeneratable_options
     return values, args
 
-def main(args):
+def gyp_main(args):
   my_name = os.path.basename(sys.argv[0])
 
   parser = RegeneratableOptionParser()
@@ -292,9 +313,14 @@ def main(args):
                     help='do not read options from environment variables')
   parser.add_option('--check', dest='check', action='store_true',
                     help='check format of gyp files')
+  parser.add_option('--parallel', action='store_true',
+                    env_name='GYP_PARALLEL',
+                    help='Use multiprocessing for speed (experimental)')
   parser.add_option('--toplevel-dir', dest='toplevel_dir', action='store',
                     default=None, metavar='DIR', type='path',
                     help='directory to use as the root of the source tree')
+  parser.add_option('--build', dest='configs', action='append',
+                    help='configuration for build after project generation')
   # --no-circular-check disables the check for circular relationships between
   # .gyp files.  These relationships should not exist, but they've only been
   # observed to be harmful with the Xcode generator.  Chromium's .gyp files
@@ -349,6 +375,9 @@ def main(args):
     if g_o:
       options.generator_output = g_o
 
+  if not options.parallel and options.use_environment:
+    options.parallel = bool(os.environ.get('GYP_PARALLEL'))
+
   for mode in options.debug:
     gyp.debug[mode] = 1
 
@@ -366,9 +395,8 @@ def main(args):
   if not build_files:
     build_files = FindBuildFiles()
   if not build_files:
-    print >>sys.stderr, (usage + '\n\n%s: error: no build_file') % \
-                        (my_name, my_name)
-    return 1
+    raise GypError((usage + '\n\n%s: error: no build_file') %
+                   (my_name, my_name))
 
   # TODO(mark): Chromium-specific hack!
   # For Chromium, the gyp "depth" variable should always be a relative path
@@ -393,10 +421,9 @@ def main(args):
         break
 
     if not options.depth:
-      raise Exception, \
-            'Could not automatically locate src directory.  This is a ' + \
-            'temporary Chromium feature that will be removed.  Use ' + \
-            '--depth as a workaround.'
+      raise GypError('Could not automatically locate src directory.  This is'
+                     'a temporary Chromium feature that will be removed.  Use'
+                     '--depth as a workaround.')
 
   # If toplevel-dir is not set, we assume that depth is the root of our source
   # tree.
@@ -461,7 +488,8 @@ def main(args):
               'cwd': os.getcwd(),
               'build_files_arg': build_files_arg,
               'gyp_binary': sys.argv[0],
-              'home_dot_gyp': home_dot_gyp}
+              'home_dot_gyp': home_dot_gyp,
+              'parallel': options.parallel}
 
     # Start with the default variables from the command line.
     [generator, flat_list, targets, data] = Load(build_files, format,
@@ -479,9 +507,23 @@ def main(args):
     # generate targets in the order specified in flat_list.
     generator.GenerateOutput(flat_list, targets, data, params)
 
+    if options.configs:
+      valid_configs = targets[flat_list[0]]['configurations'].keys()
+      for conf in options.configs:
+        if conf not in valid_configs:
+          raise GypError('Invalid config specified via --build: %s' % conf)
+      generator.PerformBuild(data, options.configs, params)
+
   # Done
   return 0
 
+
+def main(args):
+  try:
+    return gyp_main(args)
+  except GypError, e:
+    sys.stderr.write("gyp: %s\n" % e)
+    return 1
 
 if __name__ == '__main__':
   sys.exit(main(sys.argv[1:]))

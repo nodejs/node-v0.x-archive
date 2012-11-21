@@ -36,8 +36,13 @@ typedef intptr_t ssize_t;
 
 #include <process.h>
 #include <signal.h>
-#include <stdint.h>
 #include <sys/stat.h>
+
+#if defined(_MSC_VER) && _MSC_VER < 1600
+# include "uv-private/stdint-msvc2008.h"
+#else
+# include <stdint.h>
+#endif
 
 #include "tree.h"
 #include "ngx-queue.h"
@@ -66,6 +71,12 @@ typedef intptr_t ssize_t;
 #define SIGHUP                1
 #define SIGKILL               9
 #define SIGWINCH             28
+
+/* The CRT defines SIGABRT_COMPAT as 6, which equals SIGABRT on many */
+/* unix-like platforms. However MinGW doesn't define it, so we do. */
+#ifndef SIGABRT_COMPAT
+# define SIGABRT_COMPAT       6
+#endif
 
 /*
  * Guids and typedefs for winsock extension functions
@@ -165,6 +176,10 @@ typedef int (WSAAPI* LPFN_WSARECVFROM)
   typedef NTSTATUS *PNTSTATUS;
 #endif
 
+#ifndef RTL_CONDITION_VARIABLE_INIT
+  typedef PVOID CONDITION_VARIABLE, *PCONDITION_VARIABLE;
+#endif
+
 typedef struct _AFD_POLL_HANDLE_INFO {
   HANDLE Handle;
   ULONG Events;
@@ -202,6 +217,23 @@ typedef HANDLE uv_sem_t;
 
 typedef CRITICAL_SECTION uv_mutex_t;
 
+/* This condition variable implementation is based on the SetEvent solution
+ * (section 3.2) at http://www.cs.wustl.edu/~schmidt/win32-cv-1.html
+ * We could not use the SignalObjectAndWait solution (section 3.4) because
+ * it want the 2nd argument (type uv_mutex_t) of uv_cond_wait() and
+ * uv_cond_timedwait() to be HANDLEs, but we use CRITICAL_SECTIONs.
+ */
+
+typedef union {
+  CONDITION_VARIABLE cond_var;
+  struct {
+    unsigned int waiters_count;
+    CRITICAL_SECTION waiters_count_lock;
+    HANDLE signal_event;
+    HANDLE broadcast_event;
+  } fallback;
+} uv_cond_t;
+
 typedef union {
   /* srwlock_ has type SRWLOCK, but not all toolchains define this type in */
   /* windows.h. */
@@ -213,14 +245,19 @@ typedef union {
   } fallback_;
 } uv_rwlock_t;
 
-#define UV_ONCE_INIT { 0, NULL, NULL }
+typedef struct {
+  unsigned int n;
+  unsigned int count;
+  uv_mutex_t mutex;
+  uv_sem_t turnstile1;
+  uv_sem_t turnstile2;
+} uv_barrier_t;
+
+#define UV_ONCE_INIT { 0, NULL }
 
 typedef struct uv_once_s {
   unsigned char ran;
-  /* The actual event handle must be aligned to sizeof(HANDLE), so in */
-  /* practice it might overlap padding a little. */
   HANDLE event;
-  HANDLE padding;
 } uv_once_t;
 
 /* Platform-specific definitions for uv_spawn support. */

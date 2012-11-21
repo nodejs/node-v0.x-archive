@@ -9,6 +9,7 @@
     'msvs_multi_core_compile': '0',  # we do enable multicore compiles, but not using the V8 way
     'gcc_version%': 'unknown',
     'clang%': 0,
+    'python%': 'python',
 
     # Turn on optimizations that may trigger compiler bugs.
     # Use at your own risk. Do *NOT* report bugs if this option is enabled.
@@ -45,6 +46,9 @@
             'LinkIncremental': 2, # enable incremental linking
           },
         },
+        'xcode_settings': {
+          'GCC_OPTIMIZATION_LEVEL': '0', # stop gyp from defaulting to -Os
+        },
       },
       'Release': {
         'conditions': [
@@ -66,8 +70,11 @@
               }, {
                 'cflags!': [ '-ffunction-sections', '-fdata-sections' ],
               }],
-              ['clang==1 or gcc_version >= 40', {
+              ['clang == 0 and gcc_version >= 40', {
                 'cflags': [ '-fno-tree-vrp' ],
+              }],
+              ['clang == 0 and gcc_version <= 44', {
+                'cflags': [ '-fno-tree-sink' ],
               }],
             ],
           }],
@@ -151,11 +158,6 @@
           'BUILDING_V8_SHARED=1',
           'BUILDING_UV_SHARED=1',
         ],
-      }, {
-        'defines': [
-          '_LARGEFILE_SOURCE',
-          '_FILE_OFFSET_BITS=64',
-        ],
       }],
       [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', '-pthread', ],
@@ -189,8 +191,6 @@
           'GCC_ENABLE_CPP_RTTI': 'NO',              # -fno-rtti
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
           'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
-          'GCC_VERSION': '4.2',
-          'GCC_WARN_ABOUT_MISSING_NEWLINE': 'YES',  # -Wnewline-eof
           'PREBINDING': 'NO',                       # No -Wl,-prebind
           'MACOSX_DEPLOYMENT_TARGET': '10.5',       # -mmacosx-version-min=10.5
           'USE_HEADERMAP': 'NO',

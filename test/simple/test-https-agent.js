@@ -19,9 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-
-
 if (!process.versions.openssl) {
   console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
@@ -52,7 +49,11 @@ server.listen(common.PORT, function() {
   for (var i = 0; i < N; i++) {
     setTimeout(function() {
       for (var j = 0; j < M; j++) {
-        https.get({ port: common.PORT, path: '/' }, function(res) {
+        https.get({
+          path: '/',
+          port: common.PORT,
+          rejectUnauthorized: false
+        }, function(res) {
           console.log(res.statusCode);
           if (++responses == N * M) server.close();
         }).on('error', function(e) {

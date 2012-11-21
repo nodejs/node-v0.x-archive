@@ -45,11 +45,14 @@ var server = https.createServer(options, function (req, res) {
 });
 
 server.listen(common.PORT, "127.0.0.1", function() {
-  var options = { host: 'localhost',
+  var options = {
+    host: 'localhost',
     port: common.PORT,
     path: '/',
     method: 'GET',
-    localAddress: '127.0.0.2' };
+    localAddress: '127.0.0.2',
+    rejectUnauthorized: false
+  };
 
   var req = https.request(options, function(res) {
     res.on('end', function() {

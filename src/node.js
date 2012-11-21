@@ -280,8 +280,18 @@
       }
     }
 
-    process._tickCallback = function(fromSpinner) {
+    function maxTickWarn() {
+      // XXX Remove all this maxTickDepth stuff in 0.11
+      var msg = '(node) warning: Recursive process.nextTick detected. ' +
+                'This will break in the next version of node. ' +
+                'Please use setImmediate for recursive deferral.';
+      if (process.traceDeprecation)
+        console.trace(msg);
+      else
+        console.error(msg);
+    }
 
+    process._tickCallback = function(fromSpinner) {
       // if you add a nextTick in a domain's error handler, then
       // it's possible to cycle indefinitely.  Normally, the tickDone
       // in the finally{} block below will prevent this, however if
@@ -347,6 +357,9 @@
       // on the way out, don't bother.
       // it won't get fired anyway.
       if (process._exiting) return;
+
+      if (tickDepth >= process.maxTickDepth)
+        maxTickWarn();
 
       var tock = { callback: callback };
       if (process.domain) tock.domain = process.domain;
@@ -560,6 +573,10 @@
   };
 
   startup.processSignalHandlers = function() {
+    // Not supported on Windows.
+    if (process.platform === 'win32')
+      return;
+
     // Load events module in order to access prototype elements on process like
     // process.addListener.
     var signalWraps = {};
@@ -580,13 +597,13 @@
 
         wrap.unref();
 
-        wrap.onsignal = function () { process.emit(type); };
+        wrap.onsignal = function() { process.emit(type); };
 
         var signum = startup.lazyConstants()[type];
         var r = wrap.start(signum);
         if (r) {
           wrap.close();
-          throw errnoException(errno, "uv_signal_start");
+          throw errnoException(errno, 'uv_signal_start');
         }
 
         signalWraps[type] = wrap;

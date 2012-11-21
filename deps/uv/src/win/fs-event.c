@@ -138,9 +138,6 @@ int uv_fs_event_init(uv_loop_t* loop, uv_fs_event_t* handle,
   WCHAR* dir = NULL, *dir_to_watch, *filenamew = NULL;
   WCHAR short_path[MAX_PATH];
 
-  /* We don't support any flags yet. */
-  assert(!flags);
-
   uv_fs_event_init_handle(loop, handle, filename, cb);
 
   /* Convert name to UTF16. */
@@ -301,7 +298,7 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
 
   /* If we're closing, don't report any callbacks, and just push the handle */
   /* onto the endgame queue. */
-  if (handle->flags & UV_HANDLE_CLOSING) {
+  if (handle->flags & UV__HANDLE_CLOSING) {
     uv_want_endgame(loop, (uv_handle_t*) handle);
     return;
   };
@@ -443,7 +440,7 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
         }
 
         offset = file_info->NextEntryOffset;
-      } while (offset && !(handle->flags & UV_HANDLE_CLOSING));
+      } while (offset && !(handle->flags & UV__HANDLE_CLOSING));
     } else {
       handle->cb(handle, NULL, UV_CHANGE, 0);
     }
@@ -452,7 +449,7 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
     handle->cb(handle, NULL, 0, -1);
   }
 
-  if (!(handle->flags & UV_HANDLE_CLOSING)) {
+  if (!(handle->flags & UV__HANDLE_CLOSING)) {
     uv_fs_event_queue_readdirchanges(loop, handle);
   } else {
     uv_want_endgame(loop, (uv_handle_t*)handle);
@@ -470,15 +467,14 @@ void uv_fs_event_close(uv_loop_t* loop, uv_fs_event_t* handle) {
     uv_want_endgame(loop, (uv_handle_t*)handle);
   }
 
-  uv__handle_start(handle);
+  uv__handle_closing(handle);
 }
 
 
 void uv_fs_event_endgame(uv_loop_t* loop, uv_fs_event_t* handle) {
-  if (handle->flags & UV_HANDLE_CLOSING &&
+  if (handle->flags & UV__HANDLE_CLOSING &&
       !handle->req_pending) {
     assert(!(handle->flags & UV_HANDLE_CLOSED));
-    uv__handle_stop(handle);
 
     if (handle->buffer) {
       _aligned_free(handle->buffer);

@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import gyp
 
 
 class VisualStudioVersion(object):
@@ -16,7 +17,7 @@ class VisualStudioVersion(object):
 
   def __init__(self, short_name, description,
                solution_version, project_version, flat_sln, uses_vcxproj,
-               path, sdk_based):
+               path, sdk_based, default_toolset=None):
     self.short_name = short_name
     self.description = description
     self.solution_version = solution_version
@@ -25,6 +26,7 @@ class VisualStudioVersion(object):
     self.uses_vcxproj = uses_vcxproj
     self.path = path
     self.sdk_based = sdk_based
+    self.default_toolset = default_toolset
 
   def ShortName(self):
     return self.short_name
@@ -59,6 +61,11 @@ class VisualStudioVersion(object):
   def ToolPath(self, tool):
     """Returns the path to a given compiler tool. """
     return os.path.normpath(os.path.join(self.path, "VC/bin", tool))
+
+  def DefaultToolset(self):
+    """Returns the msbuild toolset version that will be used in the absence
+    of a user override."""
+    return self.default_toolset
 
   def SetupScript(self, target_arch):
     """Returns a command (with arguments) to be used to set up the
@@ -187,7 +194,27 @@ def _CreateVersion(name, path, sdk_based=False):
   autodetected if GYP_MSVS_VERSION is not explicitly specified. If a version is
   passed in that doesn't match a value in versions python will throw a error.
   """
+  if path:
+    path = os.path.normpath(path)
   versions = {
+      '2012': VisualStudioVersion('2012',
+                                  'Visual Studio 2012',
+                                  solution_version='12.00',
+                                  project_version='4.0',
+                                  flat_sln=False,
+                                  uses_vcxproj=True,
+                                  path=path,
+                                  sdk_based=sdk_based,
+                                  default_toolset='v110'),
+      '2012e': VisualStudioVersion('2012e',
+                                   'Visual Studio 2012',
+                                   solution_version='12.00',
+                                   project_version='4.0',
+                                   flat_sln=True,
+                                   uses_vcxproj=True,
+                                   path=path,
+                                   sdk_based=sdk_based,
+                                   default_toolset='v110'),
       '2010': VisualStudioVersion('2010',
                                   'Visual Studio 2010',
                                   solution_version='11.00',
@@ -240,6 +267,14 @@ def _CreateVersion(name, path, sdk_based=False):
   return versions[str(name)]
 
 
+def _ConvertToCygpath(path):
+  """Convert to cygwin path if we are using cygwin."""
+  if sys.platform == 'cygwin':
+    p = subprocess.Popen(['cygpath', path], stdout=subprocess.PIPE)
+    path = p.communicate()[0].strip()
+  return path
+
+
 def _DetectVisualStudioVersions(versions_to_check, force_express):
   """Collect the list of installed visual studio versions.
 
@@ -252,9 +287,11 @@ def _DetectVisualStudioVersions(versions_to_check, force_express):
       2005(e) - Visual Studio 2005 (8)
       2008(e) - Visual Studio 2008 (9)
       2010(e) - Visual Studio 2010 (10)
+      2012(e) - Visual Studio 2012 (11)
     Where (e) is e for express editions of MSVS and blank otherwise.
   """
-  version_to_year = {'8.0': '2005', '9.0': '2008', '10.0': '2010'}
+  version_to_year = {
+      '8.0': '2005', '9.0': '2008', '10.0': '2010', '11.0': '2012'}
   versions = []
   for version in versions_to_check:
     # Old method of searching for which VS version is installed
@@ -268,6 +305,7 @@ def _DetectVisualStudioVersions(versions_to_check, force_express):
       path = _RegistryGetValue(keys[index], 'InstallDir')
       if not path:
         continue
+      path = _ConvertToCygpath(path)
       # Check for full.
       full_path = os.path.join(path, 'devenv.exe')
       express_path = os.path.join(path, 'vcexpress.exe')
@@ -288,6 +326,7 @@ def _DetectVisualStudioVersions(versions_to_check, force_express):
       path = _RegistryGetValue(keys[index], version)
       if not path:
         continue
+      path = _ConvertToCygpath(path)
       versions.append(_CreateVersion(version_to_year[version] + 'e',
           os.path.join(path, '..'), sdk_based=True))
 
@@ -306,13 +345,15 @@ def SelectVisualStudioVersion(version='auto'):
   if version == 'auto':
     version = os.environ.get('GYP_MSVS_VERSION', 'auto')
   version_map = {
-    'auto': ('10.0', '9.0', '8.0'),
+    'auto': ('10.0', '9.0', '8.0', '11.0'),
     '2005': ('8.0',),
     '2005e': ('8.0',),
     '2008': ('9.0',),
     '2008e': ('9.0',),
     '2010': ('10.0',),
     '2010e': ('10.0',),
+    '2012': ('11.0',),
+    '2012e': ('11.0',),
   }
   version = str(version)
   versions = _DetectVisualStudioVersions(version_map[version], 'e' in version)

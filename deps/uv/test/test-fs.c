@@ -19,9 +19,6 @@
  * IN THE SOFTWARE.
  */
 
-/* FIXME we shouldn't need to branch in this file */
-#define UNIX (defined(__unix__) || defined(__POSIX__) || defined(__APPLE__))
-
 #include "uv.h"
 #include "task.h"
 
@@ -30,8 +27,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-
-#if UNIX
+/* FIXME we shouldn't need to branch in this file */
+#if defined(__unix__) || defined(__POSIX__) || \
+    defined(__APPLE__) || defined(_AIX)
 #include <unistd.h> /* unlink, rmdir, etc. */
 #else
 # include <direct.h>
@@ -55,6 +53,7 @@ typedef struct {
 } utime_check_t;
 
 
+static int dummy_cb_count;
 static int close_cb_count;
 static int create_cb_count;
 static int open_cb_count;
@@ -126,6 +125,12 @@ void check_permission(const char* filename, int mode) {
 #endif
 
   uv_fs_req_cleanup(&req);
+}
+
+
+static void dummy_cb(uv_fs_t* req) {
+  (void) req;
+  dummy_cb_count++;
 }
 
 
@@ -477,6 +482,7 @@ TEST_IMPL(fs_file_noent) {
 
   /* TODO add EACCES test */
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -503,6 +509,7 @@ TEST_IMPL(fs_file_nametoolong) {
   uv_run(loop);
   ASSERT(open_cb_count == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -531,6 +538,7 @@ TEST_IMPL(fs_file_loop) {
 
   unlink("test_symlink");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -545,7 +553,7 @@ static void check_utime(const char* path, double atime, double mtime) {
   ASSERT(req.result == 0);
   s = req.ptr;
 
-#if _WIN32
+#if defined(_WIN32) || defined(_AIX)
   ASSERT(s->st_atime == atime);
   ASSERT(s->st_mtime == mtime);
 #elif !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
@@ -648,6 +656,7 @@ TEST_IMPL(fs_file_async) {
   unlink("test_file");
   unlink("test_file2");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -732,6 +741,7 @@ TEST_IMPL(fs_file_sync) {
   unlink("test_file");
   unlink("test_file2");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -789,7 +799,7 @@ TEST_IMPL(fs_async_dir) {
   ASSERT(r == 0);
   uv_run(loop);
 
-  r = uv_fs_stat(loop, &stat_req, "test_dir\\", stat_cb);
+  r = uv_fs_stat(loop, &stat_req, "test_dir/", stat_cb);
   ASSERT(r == 0);
   uv_run(loop);
 
@@ -797,7 +807,7 @@ TEST_IMPL(fs_async_dir) {
   ASSERT(r == 0);
   uv_run(loop);
 
-  r = uv_fs_lstat(loop, &stat_req, "test_dir\\", stat_cb);
+  r = uv_fs_lstat(loop, &stat_req, "test_dir/", stat_cb);
   ASSERT(r == 0);
   uv_run(loop);
 
@@ -823,6 +833,7 @@ TEST_IMPL(fs_async_dir) {
   unlink("test_dir/file2");
   rmdir("test_dir");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -886,6 +897,7 @@ TEST_IMPL(fs_async_sendfile) {
   unlink("test_file");
   unlink("test_file2");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -941,6 +953,7 @@ TEST_IMPL(fs_fstat) {
   /* Cleanup. */
   unlink("test_file");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1037,6 +1050,7 @@ TEST_IMPL(fs_chmod) {
   /* Cleanup. */
   unlink("test_file");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1099,6 +1113,7 @@ TEST_IMPL(fs_chown) {
   /* Cleanup. */
   unlink("test_file");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1181,6 +1196,30 @@ TEST_IMPL(fs_link) {
   unlink("test_file_link");
   unlink("test_file_link2");
 
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+
+
+TEST_IMPL(fs_readlink) {
+  uv_fs_t req;
+
+  loop = uv_default_loop();
+  ASSERT(0 == uv_fs_readlink(loop, &req, "no_such_file", dummy_cb));
+  ASSERT(0 == uv_run(loop));
+  ASSERT(dummy_cb_count == 1);
+  ASSERT(req.ptr == NULL);
+  ASSERT(req.result == -1);
+  ASSERT(req.errorno == UV_ENOENT);
+  uv_fs_req_cleanup(&req);
+
+  ASSERT(-1 == uv_fs_readlink(loop, &req, "no_such_file", NULL));
+  ASSERT(req.ptr == NULL);
+  ASSERT(req.result == -1);
+  ASSERT(req.errorno == UV_ENOENT);
+  uv_fs_req_cleanup(&req);
+
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1253,6 +1292,8 @@ TEST_IMPL(fs_symlink) {
 
   r = uv_fs_symlink(loop, &req, "test_file_symlink", "test_file_symlink_symlink", 0, NULL);
   ASSERT(r != -1);
+  uv_fs_req_cleanup(&req);
+
   r = uv_fs_readlink(loop, &req, "test_file_symlink_symlink", NULL);
   ASSERT(r != -1);
   ASSERT(strcmp(req.ptr, "test_file_symlink") == 0);
@@ -1280,6 +1321,8 @@ TEST_IMPL(fs_symlink) {
 
   r = uv_fs_symlink(loop, &req, "test_file_symlink2", "test_file_symlink2_symlink", 0, NULL);
   ASSERT(r != -1);
+  uv_fs_req_cleanup(&req);
+
   r = uv_fs_readlink(loop, &req, "test_file_symlink2_symlink", readlink_cb);
   ASSERT(r != -1);
   uv_run(loop);
@@ -1298,6 +1341,7 @@ TEST_IMPL(fs_symlink) {
   unlink("test_file_symlink2");
   unlink("test_file_symlink2_symlink");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1409,6 +1453,7 @@ TEST_IMPL(fs_symlink_dir) {
   rmdir("test_dir");
   rmdir("test_dir_symlink");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1459,6 +1504,7 @@ TEST_IMPL(fs_utime) {
   /* Cleanup. */
   unlink(path);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1490,6 +1536,7 @@ TEST_IMPL(fs_stat_root) {
   r = uv_fs_stat(loop, &stat_req, "\\\\?\\C:\\", NULL);
   ASSERT(r == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 #endif
@@ -1549,6 +1596,7 @@ TEST_IMPL(fs_futime) {
   /* Cleanup. */
   unlink(path);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1565,6 +1613,7 @@ TEST_IMPL(fs_stat_missing_path) {
   ASSERT(uv_last_error(loop).code == UV_ENOENT);
   uv_fs_req_cleanup(&req);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1596,6 +1645,7 @@ TEST_IMPL(fs_readdir_empty_dir) {
   uv_fs_rmdir(loop, &req, path, NULL);
   uv_fs_req_cleanup(&req);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1610,6 +1660,7 @@ TEST_IMPL(fs_readdir_file) {
   r = uv_fs_readdir(loop, &readdir_req, path, 0, NULL);
   ASSERT(r == -1);
   ASSERT(uv_last_error(loop).code == UV_ENOTDIR);
+  uv_fs_req_cleanup(&readdir_req);
 
   r = uv_fs_readdir(loop, &readdir_req, path, 0, file_readdir_cb);
   ASSERT(r == 0);
@@ -1618,6 +1669,7 @@ TEST_IMPL(fs_readdir_file) {
   uv_run(loop);
   ASSERT(readdir_cb_count == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1647,6 +1699,7 @@ TEST_IMPL(fs_open_dir) {
   uv_run(loop);
   ASSERT(open_cb_count == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1715,6 +1768,7 @@ TEST_IMPL(fs_file_open_append) {
   /* Cleanup */
   unlink("test_file");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1783,6 +1837,7 @@ TEST_IMPL(fs_rename_to_existing_file) {
   unlink("test_file");
   unlink("test_file2");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -1839,5 +1894,6 @@ TEST_IMPL(fs_read_file_eof) {
   /* Cleanup */
   unlink("test_file");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

@@ -46,6 +46,10 @@ npm-index(1) -- Index of all npm documentation
 
  Manage the npm configuration file
 
+## npm-dedupe(1)
+
+ Reduce duplication
+
 ## npm-deprecate(1)
 
  Deprecate a version of a package
@@ -102,7 +106,7 @@ npm-index(1) -- Index of all npm documentation
 
  Symlink a package folder
 
-## npm-list(1)
+## npm-ls(1)
 
  List installed packages
 

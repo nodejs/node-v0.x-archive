@@ -299,6 +299,9 @@ An example of the possible output looks like:
        { host_arch: 'x64',
          node_install_npm: 'true',
          node_prefix: '',
+         node_shared_cares: 'false',
+         node_shared_http_parser: 'false',
+         node_shared_libuv: 'false',
          node_shared_v8: 'false',
          node_shared_zlib: 'false',
          node_use_dtrace: 'false',
@@ -354,7 +357,7 @@ What processor architecture you're running on: `'arm'`, `'ia32'`, or `'x64'`.
 ## process.platform
 
 What platform you're running on:
-`'darwin'`, `'freebsd'`, `'linux'`, `'solaris'` or `'win32'`
+`'darwin'`, `'freebsd'`, `'linux'`, `'sunos'` or `'win32'`
 
     console.log('This platform is ' + process.platform);
 
@@ -489,14 +492,15 @@ primary use is for measuring performance between intervals.
 You may pass in the result of a previous call to `process.hrtime()` to get
 a diff reading, useful for benchmarks and measuring intervals:
 
-    var t = process.hrtime();
+    var time = process.hrtime();
     // [ 1800216, 927643717 ]
 
     setTimeout(function() {
-      t = process.hrtime(t);
+      var diff = process.hrtime(time);
       // [ 1, 6962306 ]
 
-      console.log('benchmark took %d seconds and %d nanoseconds', t[0], t[1]);
+      console.log('benchmark took %d seconds and %d nanoseconds',
+                  diff[0], diff[1]);
       // benchmark took 1 seconds and 6962306 nanoseconds
     }, 1000);
 

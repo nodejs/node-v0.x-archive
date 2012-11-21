@@ -30,7 +30,7 @@ static int N = 1000;
 static int done;
 
 static uv_process_t process;
-static uv_process_options_t options = { 0 };
+static uv_process_options_t options;
 static char exepath[1024];
 static size_t exepath_size = 1024;
 static char* args[3];
@@ -158,5 +158,6 @@ BENCHMARK_IMPL(spawn) {
   LOGF("spawn: %.0f spawns/s\n",
        (double) N / (double) (end_time - start_time) * 1000.0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

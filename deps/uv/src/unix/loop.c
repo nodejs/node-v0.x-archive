@@ -29,31 +29,36 @@
 
 int uv__loop_init(uv_loop_t* loop, int default_loop) {
   unsigned int i;
-  int flags;
 
-#if HAVE_KQUEUE
-  flags = EVBACKEND_KQUEUE;
-#else
-  flags = EVFLAG_AUTO;
-#endif
+  uv__signal_global_once_init();
 
   memset(loop, 0, sizeof(*loop));
-
   RB_INIT(&loop->timer_handles);
+  ngx_queue_init(&loop->wq);
   ngx_queue_init(&loop->active_reqs);
   ngx_queue_init(&loop->idle_handles);
   ngx_queue_init(&loop->async_handles);
   ngx_queue_init(&loop->check_handles);
   ngx_queue_init(&loop->prepare_handles);
   ngx_queue_init(&loop->handle_queue);
+
+  loop->nfds = 0;
+  loop->watchers = NULL;
+  loop->nwatchers = 0;
+  ngx_queue_init(&loop->pending_queue);
+  ngx_queue_init(&loop->watcher_queue);
+
   loop->closing_handles = NULL;
-  loop->signal_ctx = NULL;
   loop->time = uv_hrtime() / 1000000;
   loop->async_pipefd[0] = -1;
   loop->async_pipefd[1] = -1;
-  loop->ev = (default_loop ? ev_default_loop : ev_loop_new)(flags);
-  ev_set_userdata(loop->ev, loop);
-  eio_channel_init(&loop->uv_eio_channel, loop);
+  loop->signal_pipefd[0] = -1;
+  loop->signal_pipefd[1] = -1;
+  loop->backend_fd = -1;
+  loop->emfile_fd = -1;
+
+  if (uv__platform_loop_init(loop, default_loop))
+    return -1;
 
   uv_signal_init(loop, &loop->child_watcher);
   uv__handle_unref(&loop->child_watcher);
@@ -62,15 +67,55 @@ int uv__loop_init(uv_loop_t* loop, int default_loop) {
   for (i = 0; i < ARRAY_SIZE(loop->process_handles); i++)
     ngx_queue_init(loop->process_handles + i);
 
-  if (uv__platform_loop_init(loop, default_loop))
-    return -1;
+  if (uv_mutex_init(&loop->wq_mutex))
+    abort();
+
+  if (uv_async_init(loop, &loop->wq_async, uv__work_done))
+    abort();
+
+  uv__handle_unref(&loop->wq_async);
+  loop->wq_async.flags |= UV__HANDLE_INTERNAL;
 
   return 0;
 }
 
 
 void uv__loop_delete(uv_loop_t* loop) {
+  uv__signal_loop_cleanup(loop);
   uv__platform_loop_delete(loop);
-  uv__signal_unregister(loop);
-  ev_loop_destroy(loop->ev);
+
+  if (loop->async_pipefd[0] != -1) {
+    close(loop->async_pipefd[0]);
+    loop->async_pipefd[0] = -1;
+  }
+
+  if (loop->async_pipefd[1] != -1) {
+    close(loop->async_pipefd[1]);
+    loop->async_pipefd[1] = -1;
+  }
+
+  if (loop->emfile_fd != -1) {
+    close(loop->emfile_fd);
+    loop->emfile_fd = -1;
+  }
+
+  if (loop->backend_fd != -1) {
+    close(loop->backend_fd);
+    loop->backend_fd = -1;
+  }
+
+  uv_mutex_lock(&loop->wq_mutex);
+  assert(ngx_queue_empty(&loop->wq) && "thread pool work queue not empty!");
+  uv_mutex_unlock(&loop->wq_mutex);
+  uv_mutex_destroy(&loop->wq_mutex);
+
+#if 0
+  assert(ngx_queue_empty(&loop->pending_queue));
+  assert(ngx_queue_empty(&loop->watcher_queue));
+  assert(loop->nfds == 0);
+#endif
+
+  free(loop->watchers);
+  loop->watchers = NULL;
+  loop->nwatchers = 0;
 }

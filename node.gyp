@@ -6,9 +6,14 @@
     'werror': '',
     'node_use_dtrace%': 'false',
     'node_use_etw%': 'false',
+    'node_use_perfctr%': 'false',
     'node_shared_v8%': 'false',
     'node_shared_zlib%': 'false',
+    'node_shared_http_parser%': 'false',
+    'node_shared_cares%': 'false',
+    'node_shared_libuv%': 'false',
     'node_use_openssl%': 'true',
+    'node_use_systemtap%': 'false',
     'node_shared_openssl%': 'false',
     'library_files': [
       'src/node.js',
@@ -57,9 +62,6 @@
       'type': 'executable',
 
       'dependencies': [
-        'deps/cares/cares.gyp:cares',
-        'deps/http_parser/http_parser.gyp:http_parser',
-        'deps/uv/uv.gyp:uv',
         'node_js2c#host',
       ],
 
@@ -146,7 +148,6 @@
         }, {
           'defines': [ 'HAVE_OPENSSL=0' ]
         }],
-
         [ 'node_use_dtrace=="true"', {
           'defines': [ 'HAVE_DTRACE=1' ],
           'dependencies': [ 'node_dtrace_header' ],
@@ -168,6 +169,15 @@
             }
           ] ],
         } ],
+        [ 'node_use_systemtap=="true"', {
+          'defines': [ 'HAVE_SYSTEMTAP=1', 'STAP_SDT_V1=1' ],
+          'dependencies': [ 'node_systemtap_header' ],
+          'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
+          'sources': [
+            'src/node_dtrace.cc',
+            '<(SHARED_INTERMEDIATE_DIR)/node_systemtap.h',
+          ],
+        } ],
         [ 'node_use_etw=="true"', {
           'defines': [ 'HAVE_ETW=1' ],
           'dependencies': [ 'node_etw' ],
@@ -180,6 +190,17 @@
             '<(SHARED_INTERMEDIATE_DIR)/node_etw_provider.rc',
           ]
         } ],
+        [ 'node_use_perfctr=="true"', {
+          'defines': [ 'HAVE_PERFCTR=1' ],
+          'dependencies': [ 'node_perfctr' ],
+          'sources': [
+            'src/node_win32_perfctr_provider.h',
+            'src/node_win32_perfctr_provider.cc',
+            'src/node_counters.cc',
+            'src/node_counters.h',
+            '<(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.rc',
+          ]
+        } ],
         [ 'node_shared_v8=="false"', {
           'sources': [
             'deps/v8/include/v8.h',
@@ -190,6 +211,18 @@
 
         [ 'node_shared_zlib=="false"', {
           'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+        }],
+
+        [ 'node_shared_http_parser=="false"', {
+          'dependencies': [ 'deps/http_parser/http_parser.gyp:http_parser' ],
+        }],
+
+        [ 'node_shared_cares=="false"', {
+          'dependencies': [ 'deps/cares/cares.gyp:cares' ],
+        }],
+
+        [ 'node_shared_libuv=="false"', {
+          'dependencies': [ 'deps/uv/uv.gyp:libuv' ],
         }],
 
         [ 'OS=="win"', {
@@ -211,6 +244,9 @@
           'defines!': [
             'PLATFORM="mac"',
           ],
+          'xcode_settings': {
+            'DEAD_CODE_STRIPPING': 'YES',
+          },
           'defines': [
             # we need to use node's preferred "darwin" rather than gyp's preferred "mac"
             'PLATFORM="darwin"',
@@ -227,9 +263,17 @@
             '-lkstat',
             '-lumem',
           ],
+          'defines!': [
+            'PLATFORM="solaris"',
+          ],
+          'defines': [
+            # we need to use node's preferred "sunos"
+            # rather than gyp's preferred "solaris"
+            'PLATFORM="sunos"',
+          ],
         }],
       ],
-      'msvs-settings': {
+      'msvs_settings': {
         'VCLinkerTool': {
           'SubSystem': 1, # /subsystem:console
         },
@@ -245,10 +289,36 @@
             {
               'action_name': 'node_etw',
               'inputs': [ 'src/res/node_etw_provider.man' ],
-              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
-              'action': [ 'mc <@(_inputs) -h <@(_outputs) -r <@(_outputs)' ]
+              'outputs': [
+                '<(SHARED_INTERMEDIATE_DIR)/node_etw_provider.rc',
+                '<(SHARED_INTERMEDIATE_DIR)/node_etw_provider.h',
+              ],
+              'action': [ 'mc <@(_inputs) -h <(SHARED_INTERMEDIATE_DIR) -r <(SHARED_INTERMEDIATE_DIR)' ]
             }
           ]
+        } ]
+      ]
+    },
+    # generate perf counter header and resource files
+    {
+      'target_name': 'node_perfctr',
+      'type': 'none',
+      'conditions': [
+        [ 'node_use_perfctr=="true"', {
+          'actions': [
+            {
+              'action_name': 'node_perfctr_man',
+              'inputs': [ 'src/res/node_perfctr_provider.man' ],
+              'outputs': [
+                '<(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.h',
+                '<(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.rc',
+              ],
+              'action': [ 'ctrpp <@(_inputs) '
+                          '-o <(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.h '
+                          '-rc <(SHARED_INTERMEDIATE_DIR)/node_perfctr_provider.rc'
+              ]
+            },
+          ],
         } ]
       ]
     },
@@ -259,38 +329,31 @@
       'actions': [
         {
           'action_name': 'node_js2c',
-
           'inputs': [
             '<@(library_files)',
             './config.gypi',
           ],
-
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/node_natives.h',
           ],
-
-          # FIXME can the following conditions be shorted by just setting
-          # macros.py into some variable which then gets included in the
-          # action?
-
           'conditions': [
-            [ 'node_use_dtrace=="true" or node_use_etw=="true"', {
-              'action': [
-                'python',
-                'tools/js2c.py',
-                '<@(_outputs)',
-                '<@(_inputs)',
+            [ 'node_use_dtrace=="false"'
+              ' and node_use_etw=="false"'
+              ' and node_use_systemtap=="false"',
+            {
+                'inputs': ['src/macros.py']
+              }
               ],
-            }, { # No Dtrace
-              'action': [
-                'python',
-                'tools/js2c.py',
-                '<@(_outputs)',
-                '<@(_inputs)',
-                'src/macros.py'
-              ],
+            [ 'node_use_perfctr=="false"', {
+              'inputs': [ 'src/perfctr_macros.py' ]
             }]
           ],
+              'action': [
+                '<(python)',
+                'tools/js2c.py',
+                '<@(_outputs)',
+                '<@(_inputs)',
+              ],
         },
       ],
     }, # end node_js2c
@@ -305,6 +368,23 @@
               'inputs': [ 'src/node_provider.d' ],
               'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/node_provider.h' ],
               'action': [ 'dtrace', '-h', '-xnolibs', '-s', '<@(_inputs)',
+                '-o', '<@(_outputs)' ]
+            }
+          ]
+        } ]
+      ]
+    },
+    {
+      'target_name': 'node_systemtap_header',
+      'type': 'none',
+      'conditions': [
+        [ 'node_use_systemtap=="true"', {
+          'actions': [
+            {
+              'action_name': 'node_systemtap_header',
+              'inputs': [ 'src/node_systemtap.d' ],
+              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/node_systemtap.h' ],
+              'action': [ 'dtrace', '-h', '-C', '-s', '<@(_inputs)',
                 '-o', '<@(_outputs)' ]
             }
           ]
@@ -373,4 +453,3 @@
     }
   ] # end targets
 }
-

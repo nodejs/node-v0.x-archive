@@ -24,8 +24,13 @@
 
 #include <stdio.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdlib.h>
+
+#if defined(_MSC_VER) && _MSC_VER < 1600
+# include "uv-private/stdint-msvc2008.h"
+#else
+# include <stdint.h>
+#endif
 
 #define TEST_PORT 9123
 #define TEST_PORT_2 9124
@@ -91,6 +96,11 @@ typedef enum {
   }                                                       \
  } while (0)
 
+/* This macro cleans up the main loop. This is used to avoid valgrind
+ * warnings about memory being "leaked" by the main event loop.
+ */
+#define MAKE_VALGRIND_HAPPY()  \
+  uv_loop_delete(uv_default_loop())
 
 /* Just sugar for wrapping the main() for a task or helper. */
 #define TEST_IMPL(name)   \

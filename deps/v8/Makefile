@@ -24,6 +24,7 @@
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+PYTHON ?= python
 
 
 # Variable default definitions. Override them by exporting them in your shell.
@@ -34,7 +35,8 @@ TESTJOBS ?= -j16
 GYPFLAGS ?=
 TESTFLAGS ?=
 ANDROID_NDK_ROOT ?=
-ANDROID_TOOL_PREFIX = $(ANDROID_NDK_ROOT)/toolchain/bin/arm-linux-androideabi
+ANDROID_TOOLCHAIN ?=
+ANDROID_V8 ?= /data/local/v8
 
 # Special build flags. Use them like this: "make library=shared"
 
@@ -60,6 +62,13 @@ endif
 # snapshot=off
 ifeq ($(snapshot), off)
   GYPFLAGS += -Dv8_use_snapshot='false'
+endif
+# extrachecks=on/off
+ifeq ($(extrachecks), on)
+  GYPFLAGS += -Dv8_enable_extra_checks=1
+endif
+ifeq ($(extrachecks), off)
+  GYPFLAGS += -Dv8_enable_extra_checks=0
 endif
 # gdbjit=on
 ifeq ($(gdbjit), on)
@@ -95,6 +104,16 @@ endif
 ifeq ($(strictaliasing), off)
   GYPFLAGS += -Dv8_no_strict_aliasing=1
 endif
+# regexp=interpreted
+ifeq ($(regexp), interpreted)
+  GYPFLAGS += -Dv8_interpreted_regexp=1
+endif
+# hardfp=on
+ifeq ($(hardfp), on)
+  GYPFLAGS += -Dv8_use_arm_eabi_hardfloat=true
+endif
+
+GYPFLAGS += "-Dpython=$(PYTHON)"
 
 # ----------------- available targets: --------------------
 # - "dependencies": pulls in external dependencies (currently: GYP)
@@ -103,7 +122,7 @@ endif
 # - every combination <arch>.<mode>, e.g. "ia32.release"
 # - "native": current host's architecture, release mode
 # - any of the above with .check appended, e.g. "ia32.release.check"
-# - "android": cross-compile for Android/ARM (release mode)
+# - "android": cross-compile for Android/ARM
 # - default (no target specified): build all DEFAULT_ARCHES and MODES
 # - "check": build all targets and run all tests
 # - "<arch>.clean" for any <arch> in ARCHES
@@ -113,9 +132,10 @@ endif
 
 # Architectures and modes to be compiled. Consider these to be internal
 # variables, don't override them (use the targets instead).
-ARCHES = ia32 x64 arm mips
+ARCHES = ia32 x64 arm mipsel
 DEFAULT_ARCHES = ia32 x64 arm
 MODES = release debug
+ANDROID_ARCHES = android_ia32 android_arm
 
 # List of files that trigger Makefile regeneration:
 GYPFILES = build/all.gyp build/common.gypi build/standalone.gypi \
@@ -124,15 +144,19 @@ GYPFILES = build/all.gyp build/common.gypi build/standalone.gypi \
 
 # Generates all combinations of ARCHES and MODES, e.g. "ia32.release".
 BUILDS = $(foreach mode,$(MODES),$(addsuffix .$(mode),$(ARCHES)))
+ANDROID_BUILDS = $(foreach mode,$(MODES), \
+                   $(addsuffix .$(mode),$(ANDROID_ARCHES)))
 # Generates corresponding test targets, e.g. "ia32.release.check".
 CHECKS = $(addsuffix .check,$(BUILDS))
+ANDROID_CHECKS = $(addsuffix .check,$(ANDROID_BUILDS))
 # File where previously used GYPFLAGS are stored.
 ENVFILE = $(OUTDIR)/environment
 
 .PHONY: all check clean dependencies $(ENVFILE).new native \
         $(ARCHES) $(MODES) $(BUILDS) $(CHECKS) $(addsuffix .clean,$(ARCHES)) \
         $(addsuffix .check,$(MODES)) $(addsuffix .check,$(ARCHES)) \
-        must-set-ANDROID_NDK_ROOT
+        $(ANDROID_ARCHES) $(ANDROID_BUILDS) $(ANDROID_CHECKS) \
+        must-set-ANDROID_NDK_ROOT_OR_TOOLCHAIN
 
 # Target definitions. "all" is the default.
 all: $(MODES)
@@ -142,6 +166,10 @@ all: $(MODES)
 buildbot:
 	$(MAKE) -C "$(OUTDIR)" BUILDTYPE=$(BUILDTYPE) \
 	        builddir="$(abspath $(OUTDIR))/$(BUILDTYPE)"
+
+mips mips.release mips.debug:
+	@echo "V8 does not support big-endian MIPS builds at the moment," \
+	      "please use little-endian builds (mipsel)."
 
 # Compile targets. MODES and ARCHES are convenience targets.
 .SECONDEXPANSION:
@@ -154,7 +182,7 @@ $(BUILDS): $(OUTDIR)/Makefile.$$(basename $$@)
 	@$(MAKE) -C "$(OUTDIR)" -f Makefile.$(basename $@) \
 	         CXX="$(CXX)" LINK="$(LINK)" \
 	         BUILDTYPE=$(shell echo $(subst .,,$(suffix $@)) | \
-	                     python -c "print raw_input().capitalize()") \
+	                     $(PYTHON) -c "print raw_input().capitalize()") \
 	         builddir="$(shell pwd)/$(OUTDIR)/$@"
 
 native: $(OUTDIR)/Makefile.native
@@ -162,17 +190,15 @@ native: $(OUTDIR)/Makefile.native
 	         CXX="$(CXX)" LINK="$(LINK)" BUILDTYPE=Release \
 	         builddir="$(shell pwd)/$(OUTDIR)/$@"
 
-# TODO(jkummerow): add "android.debug" when we need it.
-android android.release: $(OUTDIR)/Makefile.android
-	@$(MAKE) -C "$(OUTDIR)" -f Makefile.android \
-	        CXX="$(ANDROID_TOOL_PREFIX)-g++" \
-	        AR="$(ANDROID_TOOL_PREFIX)-ar" \
-	        RANLIB="$(ANDROID_TOOL_PREFIX)-ranlib" \
-	        CC="$(ANDROID_TOOL_PREFIX)-gcc" \
-	        LD="$(ANDROID_TOOL_PREFIX)-ld" \
-	        LINK="$(ANDROID_TOOL_PREFIX)-g++" \
-	        BUILDTYPE=Release \
-	        builddir="$(shell pwd)/$(OUTDIR)/android.release"
+$(ANDROID_ARCHES): $(addprefix $$@.,$(MODES))
+
+$(ANDROID_BUILDS): $(GYPFILES) $(ENVFILE) build/android.gypi \
+                   must-set-ANDROID_NDK_ROOT_OR_TOOLCHAIN Makefile.android
+	@$(MAKE) -f Makefile.android $@ \
+	        ARCH="$(basename $@)" \
+	        MODE="$(subst .,,$(suffix $@))" \
+	        OUTDIR="$(OUTDIR)" \
+	        GYPFLAGS="$(GYPFLAGS)"
 
 # Test targets.
 check: all
@@ -192,12 +218,25 @@ $(CHECKS): $$(basename $$@)
 	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR) \
 	    --arch-and-mode=$(basename $@) $(TESTFLAGS)
 
+$(addsuffix .sync, $(ANDROID_BUILDS)): $$(basename $$@)
+	@tools/android-sync.sh $(basename $@) $(OUTDIR) \
+	                       $(shell pwd) $(ANDROID_V8)
+
+$(addsuffix .check, $(ANDROID_BUILDS)): $$(basename $$@).sync
+	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR) \
+	     --arch-and-mode=$(basename $@) \
+	     --timeout=600 \
+	     --special-command="tools/android-run.py @"
+
+$(addsuffix .check, $(ANDROID_ARCHES)): \
+                $(addprefix $$(basename $$@).,$(MODES)).check
+
 native.check: native
 	@tools/test-wrapper-gypbuild.py $(TESTJOBS) --outdir=$(OUTDIR)/native \
 	    --arch-and-mode=. $(TESTFLAGS)
 
 # Clean targets. You can clean each architecture individually, or everything.
-$(addsuffix .clean,$(ARCHES)) android.clean:
+$(addsuffix .clean, $(ARCHES) $(ANDROID_ARCHES)):
 	rm -f $(OUTDIR)/Makefile.$(basename $@)
 	rm -rf $(OUTDIR)/$(basename $@).release
 	rm -rf $(OUTDIR)/$(basename $@).debug
@@ -208,34 +247,27 @@ native.clean:
 	rm -rf $(OUTDIR)/native
 	find $(OUTDIR) -regex '.*\(host\|target\).native\.mk' -delete
 
-clean: $(addsuffix .clean,$(ARCHES)) native.clean android.clean
+clean: $(addsuffix .clean, $(ARCHES) $(ANDROID_ARCHES)) native.clean
 
 # GYP file generation targets.
-MAKEFILES = $(addprefix $(OUTDIR)/Makefile.,$(ARCHES))
-$(MAKEFILES): $(GYPFILES) $(ENVFILE)
+OUT_MAKEFILES = $(addprefix $(OUTDIR)/Makefile.,$(ARCHES))
+$(OUT_MAKEFILES): $(GYPFILES) $(ENVFILE)
 	GYP_GENERATORS=make \
-	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
+	$(PYTHON) build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
 	              -Ibuild/standalone.gypi --depth=. \
 	              -Dv8_target_arch=$(subst .,,$(suffix $@)) \
 	              -S.$(subst .,,$(suffix $@)) $(GYPFLAGS)
 
 $(OUTDIR)/Makefile.native: $(GYPFILES) $(ENVFILE)
 	GYP_GENERATORS=make \
-	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
+	$(PYTHON) build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
 	              -Ibuild/standalone.gypi --depth=. -S.native $(GYPFLAGS)
 
-$(OUTDIR)/Makefile.android: $(GYPFILES) $(ENVFILE) build/android.gypi \
-                            must-set-ANDROID_NDK_ROOT
-	GYP_GENERATORS=make \
-	CC="${ANDROID_TOOL_PREFIX}-gcc" \
-	CXX="${ANDROID_TOOL_PREFIX}-g++" \
-	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
-	              -Ibuild/standalone.gypi --depth=. -Ibuild/android.gypi \
-	              -S.android $(GYPFLAGS)
-
-must-set-ANDROID_NDK_ROOT:
+must-set-ANDROID_NDK_ROOT_OR_TOOLCHAIN:
 ifndef ANDROID_NDK_ROOT
-	  $(error ANDROID_NDK_ROOT is not set)
+ifndef ANDROID_TOOLCHAIN
+	  $(error ANDROID_NDK_ROOT or ANDROID_TOOLCHAIN must be set))
+endif
 endif
 
 # Replaces the old with the new environment file if they're different, which

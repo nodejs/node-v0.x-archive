@@ -107,12 +107,14 @@ static int test_async(int nthreads) {
     ASSERT(ctx->main_seen == (unsigned int) NUM_PINGS);
   }
 
-  printf("%.2f sec (%s/sec)\n",
+  printf("async%d: %.2f sec (%s/sec)\n",
+         nthreads,
          time / 1e9,
          fmt(NUM_PINGS / (time / 1e9)));
 
   free(threads);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 

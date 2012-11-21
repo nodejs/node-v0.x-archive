@@ -127,9 +127,12 @@ sent to the server on that socket.
 
 ### Event: 'clientError'
 
-`function (exception) { }`
+`function (exception, socket) { }`
 
 If a client connection emits an 'error' event - it will forwarded here.
+
+`socket` is the `net.Socket` object that the error originated from.
+
 
 ### server.listen(port, [hostname], [backlog], [callback])
 
@@ -156,10 +159,10 @@ This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'][] event.  See also [net.Server.listen(path)][].
 
 
-### server.listen(handle, [listeningListener])
+### server.listen(handle, [callback])
 
 * `handle` {Object}
-* `listeningListener` {Function}
+* `callback` {Function}
 
 The `handle` object can be set to either a server or socket (anything
 with an underlying `_handle` member), or a `{fd: <n>}` object.
@@ -172,9 +175,9 @@ Listening on a file descriptor is not supported on Windows.
 
 This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'](net.html#event_listening_) event.
-See also [net.Server.listen()](net.html#server.listen).
+See also [net.Server.listen()](net.html#net_server_listen_handle_callback).
 
-### server.close([cb])
+### server.close([callback])
 
 Stops the server from accepting new connections.  See [net.Server.close()][].
 
@@ -265,7 +268,16 @@ you can use the `require('querystring').parse` function, or pass
 
 ### request.headers
 
-Read only.
+Read only map of header names and values. Header names are lower-cased.
+Example:
+
+    // Prints something like:
+    //
+    // { 'user-agent': 'curl/7.22.0',
+    //   host: '127.0.0.1:8000',
+    //   accept: '*/*' }
+    console.log(request.headers);
+
 
 ### request.trailers
 
@@ -354,7 +366,7 @@ which has been transmitted are equal or not.
 ### response.statusCode
 
 When using implicit headers (not calling `response.writeHead()` explicitly), this property
-controls the status code that will be send to the client when the headers get
+controls the status code that will be sent to the client when the headers get
 flushed.
 
 Example:
@@ -377,6 +389,10 @@ Example:
 or
 
     response.setHeader("Set-Cookie", ["type=ninja", "language=javascript"]);
+
+### response.headersSent
+
+Boolean (read-only). True if headers were sent, false otherwise.
 
 ### response.sendDate
 
@@ -452,7 +468,7 @@ emit trailers, with a list of the header fields in its value. E.g.,
 ### response.end([data], [encoding])
 
 This method signals to the server that all of the response headers and body
-has been sent; that server should consider this message complete.
+have been sent; that server should consider this message complete.
 The method, `response.end()`, MUST be called on each
 response.
 
@@ -857,16 +873,23 @@ Note that the __data will be lost__ if there is no listener when a
 
 `function () { }`
 
-Emitted exactly once for each message. No arguments. After
-emitted no other events will be emitted on the response.
+Emitted exactly once for each response. After that, no more `'data'` events
+will be emitted on the response.
+
 
 ### Event: 'close'
 
-`function (err) { }`
+`function () { }`
 
 Indicates that the underlaying connection was terminated before
-`end` event was emitted.
-See [http.ServerRequest][]'s `'close'` event for more information.
+`response.end()` was called or able to flush.
+
+Just like `'end'`, this event occurs only once per response, and no more
+`'data'` events will fire afterwards. See [http.ServerResponse][]'s `'close'`
+event for more information.
+
+Note: `'close'` can fire after `'end'`, but not vice versa.
+
 
 ### response.statusCode
 
@@ -908,9 +931,9 @@ Resumes a paused response.
 [http.request()]: #http_http_request_options_callback
 [http.ServerRequest]: #http_class_http_serverrequest
 ['listening']: net.html#net_event_listening
-[net.Server.close()]: net.html#net_server_close_cb
-[net.Server.listen(path)]: net.html#net_server_listen_path_listeninglistener
-[net.Server.listen(port)]: net.html#net_server_listen_port_host_backlog_listeninglistener
+[net.Server.close()]: net.html#net_server_close_callback
+[net.Server.listen(path)]: net.html#net_server_listen_path_callback
+[net.Server.listen(port)]: net.html#net_server_listen_port_host_backlog_callback
 [Readable Stream]: stream.html#stream_readable_stream
 [socket.setKeepAlive()]: net.html#net_socket_setkeepalive_enable_initialdelay
 [socket.setNoDelay()]: net.html#net_socket_setnodelay_nodelay

@@ -43,7 +43,8 @@ var server = https.createServer(options, function() {
     host: 'localhost',
     port: common.PORT,
     path: '/',
-    method: 'GET'
+    method: 'GET',
+    rejectUnauthorized: false
   });
   req.setTimeout(10);
   req.end();

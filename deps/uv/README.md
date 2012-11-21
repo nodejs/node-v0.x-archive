@@ -1,8 +1,8 @@
 # libuv [![Build Status](https://secure.travis-ci.org/joyent/libuv.png)](http://travis-ci.org/joyent/libuv)
 
 libuv is a new platform layer for Node. Its purpose is to abstract IOCP on
-Windows and libev on Unix systems. We intend to eventually contain all
-platform differences in this library.
+Windows and epoll/kqueue/event ports/etc. on Unix systems. We intend to
+eventually contain all platform differences in this library.
 
 http://nodejs.org/
 
@@ -36,6 +36,9 @@ http://nodejs.org/
 
  * IPC and socket sharing between processes `uv_write2`
 
+## Community
+
+ * [Mailing list](http://groups.google.com/group/libuv)
 
 ## Documentation
 
@@ -43,6 +46,10 @@ http://nodejs.org/
    &mdash; API documentation in the form of detailed header comments.
  * [An Introduction to libuv](http://nikhilm.github.com/uvbook/) &mdash; An
    overview of libuv with tutorials.
+ * [LXJS 2012 talk](http://www.youtube.com/watch?v=nGn60vDSxQ4) - High-level
+   introductory talk about libuv.
+ * [Tests and benchmarks](https://github.com/joyent/libuv/tree/master/test) -
+   API specification and usage examples.
 
 ## Build Instructions
 
@@ -77,6 +84,9 @@ Macintosh users run
     ./gyp_uv -f xcode
     xcodebuild -project uv.xcodeproj -configuration Release -target All
 
+Note for Linux users: compile your project with `-D_GNU_SOURCE` when you
+include `uv.h`. GYP builds take care of that automatically. If you use
+autotools, add a `AC_GNU_SOURCE` declaration to your `configure.ac`.
 
 ## Supported Platforms
 

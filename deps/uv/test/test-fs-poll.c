@@ -76,7 +76,9 @@ static void poll_cb(uv_fs_poll_t* handle,
                     int status,
                     const uv_statbuf_t* prev,
                     const uv_statbuf_t* curr) {
-  const static uv_statbuf_t zero_statbuf;
+  uv_statbuf_t zero_statbuf;
+
+  memset(&zero_statbuf, 0, sizeof(zero_statbuf));
 
   ASSERT(handle == &poll_handle);
   ASSERT(uv_is_active((uv_handle_t*)handle));
@@ -140,7 +142,7 @@ TEST_IMPL(fs_poll) {
   ASSERT(poll_cb_called == 5);
   ASSERT(timer_cb_called == 2);
   ASSERT(close_cb_called == 1);
-  uv_loop_delete(loop);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

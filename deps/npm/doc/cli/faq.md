@@ -3,7 +3,7 @@ npm-faq(1) -- Frequently Asked Questions
 
 ## Where can I find these docs in HTML?
 
-<http://npmjs.org/doc/>, or run:
+<https://npmjs.org/doc/>, or run:
 
     npm config set viewer browser
 
@@ -144,7 +144,7 @@ command.)
 
 In those cases, you can do this:
 
-    curl http://npmjs.org/install.sh | sh
+    curl https://npmjs.org/install.sh | sh
 
 ## What is a `package`?
 
@@ -177,9 +177,9 @@ an argument to `git checkout`.  The default is `master`.
 
 You don't.  Try one of these:
 
-* <http://github.com/isaacs/nave>
-* <http://github.com/visionmedia/n>
-* <http://github.com/creationix/nvm>
+* <https://github.com/isaacs/nave>
+* <https://github.com/visionmedia/n>
+* <https://github.com/creationix/nvm>
 
 ## How can I use npm for development?
 
@@ -211,19 +211,28 @@ means that publishes go over HTTP by default in those versions of node.
 
 ## I forgot my password, and can't publish.  How do I reset it?
 
-Go to <http://admin.npmjs.org/reset>.
+Go to <https://npmjs.org/forgot>.
 
 ## I get ECONNREFUSED a lot.  What's up?
 
 Either the registry is down, or node's DNS isn't able to reach out.
 
-To check if the registry is down, open up
-<http://registry.npmjs.org/>
+To check if the registry is down, open up <http://registry.npmjs.org/>
 in a web browser.  This will also tell you if you are just unable to
 access the internet for some reason.
 
 If the registry IS down, let me know by emailing or posting an issue.
 We'll have someone kick it or something.
+
+## Why no namespaces?
+
+Please see this discussion: <https://github.com/isaacs/npm/issues/798>
+
+tl;dr - It doesn't actually make things better, and can make them worse.
+
+If you want to namespace your own packages, you may: simply use the
+`-` character to separate the names.  npm is a mostly anarchic system.
+There is not sufficient need to impose namespace rules on everyone.
 
 ## Who does npm?
 
@@ -236,7 +245,7 @@ We'll have someone kick it or something.
 Discuss it on the mailing list, or post an issue.
 
 * <npm-@googlegroups.com>
-* <http://github.com/isaacs/npm/issues>
+* <https://github.com/isaacs/npm/issues>
 
 ## Why does npm hate me?
 

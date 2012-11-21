@@ -90,7 +90,8 @@ TEST_IMPL(timer) {
   uv_timer_t once_timers[10];
   uv_timer_t *once;
   uv_timer_t repeat, never;
-  int i, r;
+  unsigned int i;
+  int r;
 
   start_time = uv_now(uv_default_loop());
   ASSERT(0 < start_time);
@@ -129,6 +130,7 @@ TEST_IMPL(timer) {
 
   ASSERT(500 <= uv_now(uv_default_loop()) - start_time);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -148,5 +150,6 @@ TEST_IMPL(timer_start_twice) {
 
   ASSERT(once_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

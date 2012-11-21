@@ -244,8 +244,9 @@ class XcodeSettings(object):
   def _SdkPath(self):
     sdk_root = self.GetPerTargetSetting('SDKROOT', default='macosx10.5')
     if sdk_root.startswith('macosx'):
-      sdk_root = 'MacOSX' + sdk_root[len('macosx'):]
-    return os.path.join(self._GetSdkBaseDir(), '%s.sdk' % sdk_root)
+      return os.path.join(self._GetSdkBaseDir(),
+                          'MacOSX' + sdk_root[len('macosx'):] + '.sdk')
+    return sdk_root
 
   def GetCflags(self, configname):
     """Returns flags that need to be added to .c, .cc, .m, and .mm
@@ -335,7 +336,7 @@ class XcodeSettings(object):
     config = self.spec['configurations'][self.configname]
     framework_dirs = config.get('mac_framework_dirs', [])
     for directory in framework_dirs:
-      cflags.append('-F ' + directory.replace('$(SDKROOT)', sdk_root))
+      cflags.append('-F' + directory.replace('$(SDKROOT)', sdk_root))
 
     self.configname = None
     return cflags
@@ -553,8 +554,29 @@ class XcodeSettings(object):
     for rpath in self._Settings().get('LD_RUNPATH_SEARCH_PATHS', []):
       ldflags.append('-Wl,-rpath,' + rpath)
 
+    config = self.spec['configurations'][self.configname]
+    framework_dirs = config.get('mac_framework_dirs', [])
+    for directory in framework_dirs:
+      ldflags.append('-F' + directory.replace('$(SDKROOT)', self._SdkPath()))
+
     self.configname = None
     return ldflags
+
+  def GetLibtoolflags(self, configname):
+    """Returns flags that need to be passed to the static linker.
+
+    Args:
+        configname: The name of the configuration to get ld flags for.
+    """
+    self.configname = configname
+    libtoolflags = []
+
+    for libtoolflag in self._Settings().get('OTHER_LDFLAGS', []):
+      libtoolflags.append(libtoolflag)
+    # TODO(thakis): ARCHS?
+
+    self.configname = None
+    return libtoolflags
 
   def GetPerTargetSettings(self):
     """Gets a list of all the per-target settings. This will only fetch keys
@@ -917,6 +939,11 @@ def _GetXcodeEnv(xcode_settings, built_products_dir, srcroot, configuration,
     'TARGET_BUILD_DIR' : built_products_dir,
     'TEMP_DIR' : '${TMPDIR}',
   }
+  if xcode_settings.GetPerTargetSetting('SDKROOT'):
+    env['SDKROOT'] = xcode_settings._SdkPath()
+  else:
+    env['SDKROOT'] = ''
+
   if spec['type'] in (
       'executable', 'static_library', 'shared_library', 'loadable_module'):
     env['EXECUTABLE_NAME'] = xcode_settings.GetExecutableName()

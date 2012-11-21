@@ -74,6 +74,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_DISK_CORRUPT:                return UV_EIO;
     case ERROR_EOM_OVERFLOW:                return UV_EIO;
     case ERROR_FILEMARK_DETECTED:           return UV_EIO;
+    case ERROR_GEN_FAILURE:                 return UV_EIO;
     case ERROR_INVALID_BLOCK_LENGTH:        return UV_EIO;
     case ERROR_IO_DEVICE:                   return UV_EIO;
     case ERROR_NO_DATA_DETECTED:            return UV_EIO;
@@ -81,6 +82,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_OPEN_FAILED:                 return UV_EIO;
     case ERROR_SETMARK_DETECTED:            return UV_EIO;
     case ERROR_SIGNAL_REFUSED:              return UV_EIO;
+    case ERROR_DIRECTORY:                   return UV_ENOENT;
     case ERROR_FILE_NOT_FOUND:              return UV_ENOENT;
     case ERROR_INVALID_NAME:                return UV_ENOENT;
     case ERROR_INVALID_REPARSE_DATA:        return UV_ENOENT;
@@ -143,6 +145,7 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_BAD_PIPE:                    return UV_EPIPE;
     case ERROR_NO_DATA:                     return UV_EPIPE;
     case ERROR_PIPE_NOT_CONNECTED:          return UV_EPIPE;
+    case WSAESHUTDOWN:                      return UV_EPIPE;
     case ERROR_PIPE_BUSY:                   return UV_EBUSY;
     case ERROR_SEM_TIMEOUT:                 return UV_ETIMEDOUT;
     case WSAETIMEDOUT:                      return UV_ETIMEDOUT;

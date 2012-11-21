@@ -394,8 +394,7 @@ template<class BaseMarker> class Marker {
   // Mark pointers in a Map and its DescriptorArray together, possibly
   // treating transitions or back pointers weak.
   void MarkMapContents(Map* map);
-  void MarkDescriptorArray(DescriptorArray* descriptors);
-  void MarkAccessorPairSlot(AccessorPair* accessors, int offset);
+  void MarkTransitionArray(TransitionArray* transitions);
 
  private:
   BaseMarker* base_marker() {
@@ -553,6 +552,7 @@ class MarkCompactCollector {
 
   void RecordRelocSlot(RelocInfo* rinfo, Object* target);
   void RecordCodeEntrySlot(Address slot, Code* target);
+  void RecordCodeTargetPatch(Address pc, Code* target);
 
   INLINE(void RecordSlot(Object** anchor_slot, Object** slot, Object* object));
 
@@ -612,8 +612,6 @@ class MarkCompactCollector {
 
   bool was_marked_incrementally_;
 
-  bool flush_monomorphic_ics_;
-
   // A pointer to the current stack-allocated GC tracer object during a full
   // collection (NULL before and after).
   GCTracer* tracer_;
@@ -636,7 +634,7 @@ class MarkCompactCollector {
 
   friend class RootMarkingVisitor;
   friend class MarkingVisitor;
-  friend class StaticMarkingVisitor;
+  friend class MarkCompactMarkingVisitor;
   friend class CodeMarkingVisitor;
   friend class SharedFunctionInfoMarkingVisitor;
   friend class Marker<IncrementalMarking>;

@@ -24,7 +24,5 @@
 
 #define UV_PLATFORM_FS_EVENT_FIELDS                                           \
   uv__io_t event_watcher;                                                     \
-  int fflags;                                                                 \
-  int fd;                                                                     \
 
 #endif /* UV_BSD_H */

@@ -52,19 +52,22 @@ var clientsOptions = [{
   key: serverOptions.key,
   cert: serverOptions.cert,
   crl: serverOptions.crl,
-  NPNProtocols: ['a', 'b', 'c']
+  NPNProtocols: ['a', 'b', 'c'],
+  rejectUnauthorized: false
 },{
   port: serverPort,
   key: serverOptions.key,
   cert: serverOptions.cert,
   crl: serverOptions.crl,
-  NPNProtocols: ['c', 'b', 'e']
+  NPNProtocols: ['c', 'b', 'e'],
+  rejectUnauthorized: false
 },{
   port: serverPort,
   key: serverOptions.key,
   cert: serverOptions.cert,
   crl: serverOptions.crl,
-  NPNProtocols: ['first-priority-unsupported', 'x', 'y']
+  NPNProtocols: ['first-priority-unsupported', 'x', 'y'],
+  rejectUnauthorized: false
 }];
 
 var serverResults = [],

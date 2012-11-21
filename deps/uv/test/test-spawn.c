@@ -152,6 +152,8 @@ TEST_IMPL(spawn_fails) {
   ASSERT(0 != uv_is_active((uv_handle_t*)&process));
   ASSERT(0 == uv_run(uv_default_loop()));
   ASSERT(uv_last_error(uv_default_loop()).code == UV_ENOENT);
+
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -170,6 +172,7 @@ TEST_IMPL(spawn_exit_code) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -202,6 +205,7 @@ TEST_IMPL(spawn_stdout) {
   printf("output is: %s", output);
   ASSERT(strcmp("hello world\n", output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -254,6 +258,7 @@ TEST_IMPL(spawn_stdout_to_file) {
   /* Cleanup. */
   unlink("stdout_file");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -296,6 +301,7 @@ TEST_IMPL(spawn_stdin) {
   ASSERT(close_cb_called == 3); /* Once for process twice for the pipe. */
   ASSERT(strcmp(buffer, output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -330,6 +336,7 @@ TEST_IMPL(spawn_stdio_greater_than_3) {
   printf("output from stdio[3] is: %s", output);
   ASSERT(strcmp("fourth stdio!\n", output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -351,6 +358,7 @@ TEST_IMPL(spawn_ignored_stdio) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -375,8 +383,50 @@ TEST_IMPL(spawn_and_kill) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 2); /* Once for process and once for timer. */
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
+
+
+TEST_IMPL(spawn_preserve_env) {
+  int r;
+  uv_pipe_t out;
+  uv_stdio_container_t stdio[2];
+
+  init_process_options("spawn_helper7", exit_cb);
+
+  uv_pipe_init(uv_default_loop(), &out, 0);
+  options.stdio = stdio;
+  options.stdio[0].flags = UV_IGNORE;
+  options.stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+  options.stdio[1].data.stream = (uv_stream_t*) &out;
+  options.stdio_count = 2;
+
+  r = putenv("ENV_TEST=testval");
+  ASSERT(r == 0);
+
+  /* Explicitly set options.env to NULL to test for env clobbering. */
+  options.env = NULL;
+
+  r = uv_spawn(uv_default_loop(), &process, options);
+  ASSERT(r == 0);
+
+  r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
+  ASSERT(r == 0);
+
+  r = uv_run(uv_default_loop());
+  ASSERT(r == 0);
+
+  ASSERT(exit_cb_called == 1);
+  ASSERT(close_cb_called == 2);
+
+  printf("output is: %s", output);
+  ASSERT(strcmp("testval", output) == 0);
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+
 
 TEST_IMPL(spawn_detached) {
   int r;
@@ -402,6 +452,7 @@ TEST_IMPL(spawn_detached) {
   err = uv_kill(process.pid, 15);
   ASSERT(err.code == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -459,6 +510,7 @@ TEST_IMPL(spawn_and_kill_with_std) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 5); /* process x 1, timer x 1, stdio x 3. */
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -505,6 +557,7 @@ TEST_IMPL(spawn_and_ping) {
   ASSERT(exit_cb_called == 1);
   ASSERT(strcmp(output, "TEST") == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -538,6 +591,7 @@ TEST_IMPL(kill) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -585,6 +639,7 @@ TEST_IMPL(spawn_detect_pipe_name_collisions_on_windows) {
   printf("output is: %s", output);
   ASSERT(strcmp("hello world\n", output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -667,7 +722,7 @@ TEST_IMPL(argument_escaping) {
   return 0;
 }
 
-WCHAR* make_program_env(char** env_block);
+uv_err_t make_program_env(char** env_block, WCHAR** dst_ptr);
 
 TEST_IMPL(environment_creation) {
   int i;
@@ -682,8 +737,9 @@ TEST_IMPL(environment_creation) {
 
   WCHAR expected[512];
   WCHAR* ptr = expected;
-  WCHAR* result;
+  uv_err_t result;
   WCHAR* str;
+  WCHAR* env;
 
   for (i = 0; i < sizeof(environment) / sizeof(environment[0]) - 1; i++) {
     ptr += uv_utf8_to_utf16(environment[i], ptr, expected + sizeof(expected) - ptr);
@@ -700,13 +756,14 @@ TEST_IMPL(environment_creation) {
   ++ptr;
   *ptr = '\0';
 
-  result = make_program_env(environment);
+  result = make_program_env(environment, &env);
+  ASSERT(result.code == UV_OK);
 
-  for (str = result; *str; str += wcslen(str) + 1) {
+  for (str = env; *str; str += wcslen(str) + 1) {
     wprintf(L"%s\n", str);
   }
 
-  ASSERT(wcscmp(expected, result) == 0);
+  ASSERT(wcscmp(expected, env) == 0);
 
   return 0;
 }
@@ -742,6 +799,7 @@ TEST_IMPL(spawn_setuid_setgid) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 #endif
@@ -775,6 +833,7 @@ TEST_IMPL(spawn_setuid_fails) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -806,6 +865,7 @@ TEST_IMPL(spawn_setgid_fails) {
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 #endif
@@ -837,6 +897,7 @@ TEST_IMPL(spawn_setuid_fails) {
 
   ASSERT(close_cb_called == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -858,6 +919,7 @@ TEST_IMPL(spawn_setgid_fails) {
 
   ASSERT(close_cb_called == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 #endif

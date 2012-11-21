@@ -61,8 +61,7 @@
               'libraries': [ '-lreadline', ],
               'sources': [ 'd8-readline.cc' ],
             }],
-            ['(OS=="linux" or OS=="mac" or OS=="freebsd" or OS=="netbsd" \
-               or OS=="openbsd" or OS=="solaris" or OS=="android")', {
+            [ 'OS!="win"', {
               'sources': [ 'd8-posix.cc', ]
             }],
             [ 'OS=="win"', {
@@ -99,7 +98,7 @@
             '<(SHARED_INTERMEDIATE_DIR)/d8-js.cc',
           ],
           'action': [
-            'python',
+            '<(python)',
             '../tools/js2c.py',
             '<@(_outputs)',
             'D8',

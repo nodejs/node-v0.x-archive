@@ -30,6 +30,7 @@
 
 #include <net/if.h>
 #include <sys/param.h>
+#include <sys/prctl.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -57,6 +58,7 @@
 #endif
 
 static char buf[MAXPATHLEN + 1];
+static void* args_mem;
 
 static struct {
   char *str;
@@ -69,18 +71,187 @@ static void read_times(unsigned int numcpus, uv_cpu_info_t* ci);
 static unsigned long read_cpufreq(unsigned int cpunum);
 
 
+__attribute__((destructor))
+static void free_args_mem(void) {
+  free(args_mem); /* keep valgrind happy */
+}
+
+
 int uv__platform_loop_init(uv_loop_t* loop, int default_loop) {
-  loop->inotify_watchers = NULL;
+  int fd;
+
+  fd = uv__epoll_create1(UV__EPOLL_CLOEXEC);
+
+  /* epoll_create1() can fail either because it's not implemented (old kernel)
+   * or because it doesn't understand the EPOLL_CLOEXEC flag.
+   */
+  if (fd == -1 && (errno == ENOSYS || errno == EINVAL)) {
+    fd = uv__epoll_create(256);
+
+    if (fd != -1)
+      uv__cloexec(fd, 1);
+  }
+
+  loop->backend_fd = fd;
   loop->inotify_fd = -1;
+  loop->inotify_watchers = NULL;
+
+  if (fd == -1)
+    return -1;
+
   return 0;
 }
 
 
 void uv__platform_loop_delete(uv_loop_t* loop) {
   if (loop->inotify_fd == -1) return;
-  uv__io_stop(loop, &loop->inotify_read_watcher);
+  uv__io_stop(loop, &loop->inotify_read_watcher, UV__POLLIN);
   close(loop->inotify_fd);
   loop->inotify_fd = -1;
+}
+
+
+void uv__io_poll(uv_loop_t* loop, int timeout) {
+  struct uv__epoll_event events[1024];
+  struct uv__epoll_event* pe;
+  struct uv__epoll_event e;
+  ngx_queue_t* q;
+  uv__io_t* w;
+  uint64_t base;
+  uint64_t diff;
+  int nevents;
+  int count;
+  int nfds;
+  int fd;
+  int op;
+  int i;
+
+  if (loop->nfds == 0) {
+    assert(ngx_queue_empty(&loop->watcher_queue));
+    return;
+  }
+
+  while (!ngx_queue_empty(&loop->watcher_queue)) {
+    q = ngx_queue_head(&loop->watcher_queue);
+    ngx_queue_remove(q);
+    ngx_queue_init(q);
+
+    w = ngx_queue_data(q, uv__io_t, watcher_queue);
+    assert(w->pevents != 0);
+    assert(w->fd >= 0);
+    assert(w->fd < (int) loop->nwatchers);
+
+    /* Filter out no-op changes. This is for compatibility with the event ports
+     * backend, see the comment in uv__io_start().
+     */
+    if (w->events == w->pevents)
+      continue;
+
+    e.events = w->pevents;
+    e.data = w->fd;
+
+    if (w->events == 0)
+      op = UV__EPOLL_CTL_ADD;
+    else
+      op = UV__EPOLL_CTL_MOD;
+
+    /* XXX Future optimization: do EPOLL_CTL_MOD lazily if we stop watching
+     * events, skip the syscall and squelch the events after epoll_wait().
+     */
+    if (uv__epoll_ctl(loop->backend_fd, op, w->fd, &e)) {
+      if (errno != EEXIST)
+        abort();
+
+      assert(op == UV__EPOLL_CTL_ADD);
+
+      /* We've reactivated a file descriptor that's been watched before. */
+      if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_MOD, w->fd, &e))
+        abort();
+    }
+
+    w->events = w->pevents;
+  }
+
+  assert(timeout >= -1);
+  base = loop->time;
+  count = 48; /* Benchmarks suggest this gives the best throughput. */
+
+  for (;;) {
+    nfds = uv__epoll_wait(loop->backend_fd,
+                          events,
+                          ARRAY_SIZE(events),
+                          timeout);
+
+    if (nfds == 0) {
+      assert(timeout != -1);
+      return;
+    }
+
+    if (nfds == -1) {
+      if (errno != EINTR)
+        abort();
+
+      if (timeout == -1)
+        continue;
+
+      if (timeout == 0)
+        return;
+
+      /* Interrupted by a signal. Update timeout and poll again. */
+      goto update_timeout;
+    }
+
+    nevents = 0;
+
+    for (i = 0; i < nfds; i++) {
+      pe = events + i;
+      fd = pe->data;
+
+      assert(fd >= 0);
+      assert((unsigned) fd < loop->nwatchers);
+
+      w = loop->watchers[fd];
+
+      if (w == NULL) {
+        /* File descriptor that we've stopped watching, disarm it. */
+        if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, pe))
+          if (errno != EBADF && errno != ENOENT)
+            abort();
+
+        continue;
+      }
+
+      w->cb(loop, w, pe->events);
+      nevents++;
+    }
+
+    if (nevents != 0) {
+      if (nfds == ARRAY_SIZE(events) && --count != 0) {
+        /* Poll for more events but don't block this time. */
+        timeout = 0;
+        continue;
+      }
+      return;
+    }
+
+    if (timeout == 0)
+      return;
+
+    if (timeout == -1)
+      continue;
+
+update_timeout:
+    assert(timeout > 0);
+
+    diff = uv_hrtime() / 1000000;
+    assert(diff >= base);
+    diff -= base;
+
+    if (diff >= (uint64_t) timeout)
+      return;
+
+    timeout -= diff;
+  }
 }
 
 
@@ -147,11 +318,12 @@ char** uv_setup_args(int argc, char** argv) {
   size += (argc + 1) * sizeof(char **);
   size += (envc + 1) * sizeof(char **);
 
-  if ((s = (char *) malloc(size)) == NULL) {
+  if (NULL == (s = malloc(size))) {
     process_title.str = NULL;
     process_title.len = 0;
     return argv;
   }
+  args_mem = s;
 
   new_argv = (char **) s;
   new_env = new_argv + argc + 1;
@@ -177,6 +349,10 @@ uv_err_t uv_set_process_title(const char* title) {
   /* No need to terminate, last char is always '\0'. */
   if (process_title.len)
     strncpy(process_title.str, title, process_title.len - 1);
+
+#if defined(PR_SET_NAME)
+  prctl(PR_SET_NAME, title);
+#endif
 
   return uv_ok_;
 }
@@ -331,9 +507,12 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   if (ci == NULL)
     return uv__new_sys_error(ENOMEM);
 
-  read_speeds(numcpus, ci);
   read_models(numcpus, ci);
   read_times(numcpus, ci);
+
+  /* read_models() on x86 also reads the CPU speed from /proc/cpuinfo */
+  if (ci[0].speed == 0)
+    read_speeds(numcpus, ci);
 
   *cpu_infos = ci;
   *count = numcpus;
@@ -350,18 +529,26 @@ static void read_speeds(unsigned int numcpus, uv_cpu_info_t* ci) {
 }
 
 
+/* Also reads the CPU frequency on x86. The other architectures only have
+ * a BogoMIPS field, which may not be very accurate.
+ */
 static void read_models(unsigned int numcpus, uv_cpu_info_t* ci) {
 #if defined(__i386__) || defined(__x86_64__)
-  static const char marker[] = "model name\t: ";
+  static const char model_marker[] = "model name\t: ";
+  static const char speed_marker[] = "cpu MHz\t\t: ";
 #elif defined(__arm__)
-  static const char marker[] = "Processor\t: ";
+  static const char model_marker[] = "Processor\t: ";
+  static const char speed_marker[] = "";
 #elif defined(__mips__)
-  static const char marker[] = "cpu model\t\t: ";
+  static const char model_marker[] = "cpu model\t\t: ";
+  static const char speed_marker[] = "";
 #else
 # warning uv_cpu_info() is not supported on this architecture.
-  static const char marker[] = "(dummy)";
+  static const char model_marker[] = "";
+  static const char speed_marker[] = "";
 #endif
-  unsigned int num;
+  unsigned int model_idx;
+  unsigned int speed_idx;
   char buf[1024];
   char* model;
   FILE* fp;
@@ -370,18 +557,27 @@ static void read_models(unsigned int numcpus, uv_cpu_info_t* ci) {
   if (fp == NULL)
     return;
 
-  num = 0;
+  model_idx = 0;
+  speed_idx = 0;
 
   while (fgets(buf, sizeof(buf), fp)) {
-    if (num >= numcpus)
-      break;
-
-    if (strncmp(buf, marker, sizeof(marker) - 1))
+    if (model_marker[0] != '\0' &&
+        model_idx < numcpus &&
+        strncmp(buf, model_marker, sizeof(model_marker) - 1) == 0)
+    {
+      model = buf + sizeof(model_marker) - 1;
+      model = strndup(model, strlen(model) - 1); /* strip newline */
+      ci[model_idx++].model = model;
       continue;
+    }
 
-    model = buf + sizeof(marker) - 1;
-    model = strndup(model, strlen(model) - 1); /* strip newline */
-    ci[num++].model = model;
+    if (speed_marker[0] != '\0' &&
+        speed_idx < numcpus &&
+        strncmp(buf, speed_marker, sizeof(speed_marker) - 1) == 0)
+    {
+      ci[speed_idx++].speed = atoi(buf + sizeof(speed_marker) - 1);
+      continue;
+    }
   }
   fclose(fp);
 }
@@ -469,8 +665,9 @@ static unsigned long read_cpufreq(unsigned int cpunum) {
   if (fp == NULL)
     return 0;
 
-  val = 0;
-  fscanf(fp, "%lu", &val);
+  if (fscanf(fp, "%lu", &val) != 1)
+    val = 0;
+
   fclose(fp);
 
   return val;

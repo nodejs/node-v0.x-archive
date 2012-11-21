@@ -38,8 +38,14 @@ var server = tls.createServer(options, function(socket) {
   serverConnected = true;
   socket.end('Hello');
 }).listen(common.PORT, function() {
-  var socket = net.connect(common.PORT, function() {
-    var client = tls.connect({socket: socket}, function() {
+  var socket = net.connect({
+    port: common.PORT,
+    rejectUnauthorized: false
+  }, function() {
+    var client = tls.connect({
+      rejectUnauthorized: false,
+      socket: socket
+    }, function() {
       clientConnected = true;
       var data = '';
       client.on('data', function(chunk) {

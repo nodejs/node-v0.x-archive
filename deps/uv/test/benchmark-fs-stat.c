@@ -45,7 +45,7 @@ struct async_req {
 
 static void warmup(const char* path) {
   uv_fs_t reqs[MAX_CONCURRENT_REQS];
-  int i;
+  unsigned int i;
 
   /* warm up the thread pool */
   for (i = 0; i < ARRAY_SIZE(reqs); i++)
@@ -131,5 +131,6 @@ BENCHMARK_IMPL(fs_stat) {
   warmup(path);
   sync_bench(path);
   async_bench(path);
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

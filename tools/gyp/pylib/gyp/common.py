@@ -27,6 +27,13 @@ class memoize(object):
       return result
 
 
+class GypError(Exception):
+  """Error class representing an error, which is to be presented
+  to the user.  The main entry point will catch and display this.
+  """
+  pass
+
+
 def ExceptionAppend(e, msg):
   """Append a message to the given exception's message."""
   if not e.args:
@@ -93,6 +100,15 @@ def ResolveTarget(build_file, target, toolset):
 def BuildFile(fully_qualified_target):
   # Extracts the build file from the fully qualified target.
   return ParseQualifiedTarget(fully_qualified_target)[0]
+
+
+def GetEnvironFallback(var_list, default):
+  """Look up a key in the environment, with fallback to secondary keys
+  and finally falling back to a default value."""
+  for var in var_list:
+    if var in os.environ:
+      return os.environ[var]
+  return default
 
 
 def QualifiedTarget(build_file, target, toolset):
@@ -352,13 +368,20 @@ def GetFlavor(params):
     'cygwin': 'win',
     'win32': 'win',
     'darwin': 'mac',
-    'sunos5': 'solaris',
-    'freebsd7': 'freebsd',
-    'freebsd8': 'freebsd',
-    'freebsd9': 'freebsd',
   }
-  flavor = flavors.get(sys.platform, 'linux')
-  return params.get('flavor', flavor)
+
+  if 'flavor' in params:
+    return params['flavor']
+  if sys.platform in flavors:
+    return flavors[sys.platform]
+  if sys.platform.startswith('sunos'):
+    return 'solaris'
+  if sys.platform.startswith('freebsd'):
+    return 'freebsd'
+  if sys.platform.startswith('dragonfly'):
+    return 'dragonflybsd'
+
+  return 'linux'
 
 
 def CopyTool(flavor, out_path):
