@@ -42,9 +42,9 @@ encoding method.  Here are the different string encodings.
 
 `Buffer` can also be used with Typed Array Views and DataViews.
 
-    buff = new Buffer(4);
-    ui16 = new Uint16Array(buff);
-    view = new DataView(buff);
+    var buff = new Buffer(4);
+    var ui16 = new Uint16Array(buff);
+    var view = new DataView(buff);
 
     ui16[0] = 1;
     ui16[1] = 2;
