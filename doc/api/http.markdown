@@ -300,6 +300,7 @@ information.
 
 Pauses request from emitting events.  Useful to throttle back an upload.
 
+Note: Data events may still be fired after the request is paused, see [this discussion](groups.google.com/group/nodejs/browse_thread/thread/cafe8397e3bec189) for more information.
 
 ### request.resume()
 
