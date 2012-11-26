@@ -1531,17 +1531,18 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
 
     EVP_PKEY *pkey = NULL;
     RSA *rsa = NULL;
-    if( NULL != (pkey = X509_get_pubkey(peer_cert))
-        && NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
-        BN_print(bio, rsa->n);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(modulus_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
+    if (NULL != X509_get_pubkey(peer_cert) &&
+        EVP_PKEY_RSA == EVP_PKEY_type(pkey->type) &&
+        NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
+      BN_print(bio, rsa->n);
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(modulus_symbol, String::New(mem->data, mem->length) );
+      (void) BIO_reset(bio);
 
-        BN_print(bio, rsa->e);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(exponent_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
+      BN_print(bio, rsa->e);
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(exponent_symbol, String::New(mem->data, mem->length) );
+      (void) BIO_reset(bio);
     }
 
     ASN1_TIME_print(bio, X509_get_notBefore(peer_cert));
