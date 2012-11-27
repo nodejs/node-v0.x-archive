@@ -39,6 +39,22 @@ var Stream = require('stream').Stream;
   assert.strictEqual(gotErr, err);
 })();
 
+(function testErrorDestListenerCatches() {
+  var source = new Stream();
+  var dest = new Stream();
+
+  source.pipe(dest);
+
+  var gotErr = null;
+  dest.on('error', function(err) {
+    gotErr = err;
+  });
+
+  var err = new Error('This stream turned into bacon.');
+  source.emit('error', err);
+  assert.strictEqual(gotErr, err);
+})();
+
 (function testErrorWithoutListenerThrows() {
   var source = new Stream();
   var dest = new Stream();
