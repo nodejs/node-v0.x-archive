@@ -27,6 +27,7 @@
 #include "node_object_wrap.h"
 #include "v8.h"
 
+#include <openssl/objects.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -52,6 +53,11 @@ static X509_STORE* root_cert_store;
 // Forward declaration
 class Connection;
 
+template <typename KeyType> struct BitLenKey {
+  int bit_len;
+  KeyType *key;
+};
+
 class SecureContext : ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
@@ -60,11 +66,16 @@ class SecureContext : ObjectWrap {
   // TODO: ca_store_ should probably be removed, it's not used anywhere.
   X509_STORE *ca_store_;
 
+  int ecdhe_keys_len;
+  BitLenKey<EC_KEY> *ecdhe_keys;
+
  protected:
   static const int kMaxSessionSize = 10 * 1024;
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
   static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetECDHECurves(const v8::Arguments& args);
+  static v8::Handle<v8::Value> ClearECDHECurves(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetKey(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetCert(const v8::Arguments& args);
   static v8::Handle<v8::Value> AddCACert(const v8::Arguments& args);
@@ -85,7 +96,10 @@ class SecureContext : ObjectWrap {
   SecureContext() : ObjectWrap() {
     ctx_ = NULL;
     ca_store_ = NULL;
+    ecdhe_keys = NULL;
   }
+
+  void _ClearECDHECurves(void);
 
   void FreeCTXMem() {
     if (ctx_) {
@@ -106,6 +120,7 @@ class SecureContext : ObjectWrap {
 
   ~SecureContext() {
     FreeCTXMem();
+    _ClearECDHECurves();
   }
 
  private:
