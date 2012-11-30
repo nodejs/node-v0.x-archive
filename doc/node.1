@@ -29,6 +29,17 @@ node \- Server-side JavaScript
 [
 .I arguments
 ]
+.br
+.B node debug
+[
+.B \-e
+.I command
+|
+.I script.js
+]
+[
+.I arguments
+]
 
 Execute without arguments to start the REPL.
 
@@ -61,6 +72,16 @@ and servers.
   --v8-options           print v8 command line options
 
   --max-stack-size=val   set max v8 stack size (bytes)
+
+  --debug                enable remote debugging on port 5858
+                         useful for long-running scripts
+
+  --debug-brk            enable remote debugging on port 5858
+                         and break on first line. Useful for
+                         short-running scripts
+
+  debug                  run the script and start a command
+                         line debugger
 
 
 .SH ENVIRONMENT VARIABLES
