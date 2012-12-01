@@ -1598,12 +1598,13 @@ static Handle<Value> InitGroups(const Arguments& args) {
           String::New("initgroups requires 1 argument")));
   }
 
-  int err = 0;
   gid_t gid = 0;
   String::Utf8Value pwnam(args[0]);
   struct passwd pwd, *pwdp = NULL;
 
-  if ((err = getpwnam_r(*pwnam, &pwd, getbuf, ARRAY_SIZE(getbuf), &pwdp)) ||
+  errno = 0;
+
+  if (getpwnam_r(*pwnam, &pwd, getbuf, ARRAY_SIZE(getbuf), &pwdp) ||
       pwdp == NULL) {
     if (errno == 0)
       return ThrowException(Exception::Error(
