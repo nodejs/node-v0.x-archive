@@ -1594,7 +1594,7 @@ static Handle<Value> InitGroups(const Arguments& args) {
   HandleScope scope;
 
   if (args.Length() < 1) {
-    return ThrowException(Exception::Error(
+    return ThrowError(Exception::Error(
           String::New("initgroups requires 1 argument")));
   }
 
