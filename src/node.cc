@@ -1568,7 +1568,10 @@ static Handle<Value> GetGroups(const Arguments& args) {
   gid_t* groupList;
   int ngroups = 0;
 
-  ngroups = sysctl(_SC_NGROUPS_MAX);
+  /* _SC_NGROUPS_MAX can sometimes lie. Use a static value that is more than
+   * large enough to accomodate any reasonable amount of groups.
+   */
+  ngroups = 1024;
 
   groupList = calloc(ngroups, sizeof(gid_t));
   assert(groupList != NULL);
