@@ -20,6 +20,11 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+if (process.platform === 'win32') {
+  console.log('Platform not supported, skipping test.');
+  process.exit();
+}
+
 var common = require('../common');
 var assert = require('assert');
 var exec = require('child_process').exec;
