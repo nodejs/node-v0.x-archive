@@ -1565,8 +1565,8 @@ static Handle<Value> SetUid(const Arguments& args) {
 
 static Handle<Value> GetGroups(const Arguments& args) {
   HandleScope scope;
-  gid_t *groupList;
-  int ngroups = 0, i = 0;
+  gid_t* groupList;
+  int ngroups = 0;
 
   ngroups = sysctl(_SC_NGROUPS_MAX);
 
@@ -1578,7 +1578,7 @@ static Handle<Value> GetGroups(const Arguments& args) {
 
   Local<Array> groupsArray = Array::New(ngroups);
 
-  for (i = 0; i < ngroups; i++) {
+  for (int i = 0; i < ngroups; i++) {
     groupsArray->Set(i, Integer::New(groupList[i]));
   }
 
