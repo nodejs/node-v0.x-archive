@@ -1585,6 +1585,7 @@ static Handle<Value> GetGroups(const Arguments& args) {
     groupsArray->Set(i, Integer::New(groupList[i]));
   }
 
+  free(groupList);
   return scope.Close(groupsArray);
 }
 
