@@ -277,75 +277,58 @@ class Connection : ObjectWrap {
   friend class SecureContext;
 };
 
-class Cipher : public ObjectWrap {
+enum CipherType {
+  kCipher,
+  kDecipher
+};
+
+template <CipherType Type>
+class CipherBase : public ObjectWrap {
  public:
-  static void Initialize(v8::Handle<v8::Object> target);
+  CipherBase() : cipher_(NULL), initialized_(false) {
+  }
+
+  ~CipherBase() {
+    if (!initialized_) return;
+    EVP_CIPHER_CTX_cleanup(&ctx_);
+  }
 
   bool Init(char* cipherType, char* key_buf, int key_buf_len);
   bool InitIv(char* cipherType,
-                    char* key,
-                    int key_len,
-                    char* iv,
-                    int iv_len);
-  int Update(char* data, int len, unsigned char** out, int* out_len);
+              char* key,
+              int key_len,
+              char* iv,
+              int iv_len);
   int SetAutoPadding(bool auto_padding);
+  int Update(char* data, int len, unsigned char** out, int* out_len);
   int Final(unsigned char** out, int* out_len);
 
  protected:
-
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
   static v8::Handle<v8::Value> Init(const v8::Arguments& args);
   static v8::Handle<v8::Value> InitIv(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
   static v8::Handle<v8::Value> Final(const v8::Arguments& args);
 
-  Cipher() : ObjectWrap(), initialized_(false) {
-  }
-
-  ~Cipher() {
-    if (!initialized_) return;
-    EVP_CIPHER_CTX_cleanup(&ctx);
-  }
-
- private:
-  EVP_CIPHER_CTX ctx; /* coverity[member_decl] */
-  const EVP_CIPHER* cipher; /* coverity[member_decl] */
+  EVP_CIPHER_CTX ctx_; /* coverity[member_decl] */
+  const EVP_CIPHER* cipher_; /* coverity[member_decl] */
   bool initialized_;
 };
 
-class Decipher : public ObjectWrap {
+class Cipher : public CipherBase<kCipher> {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool Init(char* cipherType, char* key_buf, int key_buf_len);
-  bool InitIv(char* cipherType, char* key, int key_len, char* iv, int iv_len);
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+};
 
-  int Update(char* data, int len, unsigned char** out, int* out_len);
-  int SetAutoPadding(bool auto_padding);
-  int Final(unsigned char** out, int* out_len);
+class Decipher : public CipherBase<kDecipher> {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
 
  protected:
-
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
-  static v8::Handle<v8::Value> InitIv(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Final(const v8::Arguments& args);
-
-  Decipher() : ObjectWrap(), initialized_(false) {
-  }
-
-  ~Decipher() {
-    if (!initialized_) return;
-    EVP_CIPHER_CTX_cleanup(&ctx);
-  }
-
- private:
-  EVP_CIPHER_CTX ctx;
-  const EVP_CIPHER* cipher_;
-  bool initialized_;
 };
 
 class Hmac : public ObjectWrap {
