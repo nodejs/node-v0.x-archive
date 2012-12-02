@@ -281,24 +281,24 @@ class Cipher : public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool CipherInit(char* cipherType, char* key_buf, int key_buf_len);
-  bool CipherInitIv(char* cipherType,
+  bool Init(char* cipherType, char* key_buf, int key_buf_len);
+  bool InitIv(char* cipherType,
                     char* key,
                     int key_len,
                     char* iv,
                     int iv_len);
-  int CipherUpdate(char* data, int len, unsigned char** out, int* out_len);
+  int Update(char* data, int len, unsigned char** out, int* out_len);
   int SetAutoPadding(bool auto_padding);
-  int CipherFinal(unsigned char** out, int* out_len);
+  int Final(unsigned char** out, int* out_len);
 
  protected:
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> CipherInit(const v8::Arguments& args);
-  static v8::Handle<v8::Value> CipherInitIv(const v8::Arguments& args);
-  static v8::Handle<v8::Value> CipherUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> InitIv(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
-  static v8::Handle<v8::Value> CipherFinal(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Final(const v8::Arguments& args);
 
   Cipher() : ObjectWrap(), initialized_(false) {
   }
@@ -318,25 +318,21 @@ class Decipher : public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool DecipherInit(char* cipherType, char* key_buf, int key_buf_len);
-  bool DecipherInitIv(char* cipherType,
-                      char* key,
-                      int key_len,
-                      char* iv,
-                      int iv_len);
+  bool Init(char* cipherType, char* key_buf, int key_buf_len);
+  bool InitIv(char* cipherType, char* key, int key_len, char* iv, int iv_len);
 
-  int DecipherUpdate(char* data, int len, unsigned char** out, int* out_len);
+  int Update(char* data, int len, unsigned char** out, int* out_len);
   int SetAutoPadding(bool auto_padding);
-  int DecipherFinal(unsigned char** out, int* out_len);
+  int Final(unsigned char** out, int* out_len);
 
  protected:
 
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> DecipherInit(const v8::Arguments& args);
-  static v8::Handle<v8::Value> DecipherInitIv(const v8::Arguments& args);
-  static v8::Handle<v8::Value> DecipherUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> InitIv(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
-  static v8::Handle<v8::Value> DecipherFinal(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Final(const v8::Arguments& args);
 
   Decipher() : ObjectWrap(), initialized_(false) {
   }
