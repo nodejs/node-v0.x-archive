@@ -133,11 +133,11 @@ class ClientHelloParser {
     kEnded
   };
 
-  ClientHelloParser(Connection* c) : conn_(c),
-                                     state_(kWaiting),
-                                     offset_(0),
-                                     body_offset_(0),
-                                     written_(0) {
+  explicit ClientHelloParser(Connection* c) : conn_(c),
+                                              state_(kWaiting),
+                                              offset_(0),
+                                              body_offset_(0),
+                                              written_(0) {
   }
 
   size_t Write(const uint8_t* data, size_t len);
@@ -255,9 +255,9 @@ class Connection : ObjectWrap {
 #endif
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-   if (!sniObject_.IsEmpty()) sniObject_.Dispose();
-   if (!sniContext_.IsEmpty()) sniContext_.Dispose();
-   if (!servername_.IsEmpty()) servername_.Dispose();
+    if (!sniObject_.IsEmpty()) sniObject_.Dispose();
+    if (!sniContext_.IsEmpty()) sniContext_.Dispose();
+    if (!servername_.IsEmpty()) servername_.Dispose();
 #endif
   }
 
@@ -352,17 +352,17 @@ class Hmac : public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool HmacInit(char* hashType, char* key, int key_len);
-  int HmacUpdate(char* data, int len);
-  int HmacDigest(unsigned char** md_value, unsigned int* md_len);
+  bool Init(char* hashType, char* key, int key_len);
+  int Update(char* data, int len);
+  int Digest(unsigned char** md_value, unsigned int* md_len);
 
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> HmacInit(const v8::Arguments& args);
-  static v8::Handle<v8::Value> HmacUpdate(const v8::Arguments& args);
-  static v8::Handle<v8::Value> HmacDigest(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Digest(const v8::Arguments& args);
 
-  Hmac() : ObjectWrap (), initialized_(false) {
+  Hmac() : ObjectWrap(), initialized_(false) {
   }
 
   ~Hmac() {
@@ -380,15 +380,15 @@ class Hash : public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool HashInit (const char* hashType);
-  int HashUpdate(char* data, int len);
+  bool Init(const char* hashType);
+  int Update(char* data, int len);
 
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> HashUpdate(const v8::Arguments& args);
-  static v8::Handle<v8::Value> HashDigest(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Digest(const v8::Arguments& args);
 
-  Hash() : ObjectWrap (), initialized_(false) {
+  Hash() : ObjectWrap(), initialized_(false) {
   }
 
   ~Hash() {
@@ -406,19 +406,19 @@ class Sign : public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool SignInit(const char* signType);
-  int SignUpdate(char* data, int len);
+  bool Init(const char* signType);
+  int Update(char* data, int len);
 
-  int SignFinal(unsigned char** md_value,
+  int Final(unsigned char** md_value,
                 unsigned int* md_len,
                 char* key_pem,
                 int key_pemLen);
 
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SignInit(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SignUpdate(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SignFinal(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Final(const v8::Arguments& args);
 
   Sign() : ObjectWrap(), initialized_(false) {
   }
@@ -438,18 +438,18 @@ class Verify : public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool VerifyInit(const char* verifyType);
-  int VerifyUpdate(char* data, int len);
-  int VerifyFinal(char* key_pem,
+  bool Init(const char* verifyType);
+  int Update(char* data, int len);
+  int Final(char* key_pem,
                   int key_pemLen,
                   unsigned char* sig,
                   int siglen);
 
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> VerifyInit(const v8::Arguments& args);
-  static v8::Handle<v8::Value> VerifyUpdate(const v8::Arguments& args);
-  static v8::Handle<v8::Value> VerifyFinal(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Final(const v8::Arguments& args);
 
   Verify() : ObjectWrap(), initialized_(false) {
   }

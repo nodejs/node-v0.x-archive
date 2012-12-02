@@ -277,7 +277,7 @@ int SecureContext::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
 
 // Takes a string or buffer and loads it into a BIO.
 // Caller responsible for BIO_free-ing the returned object.
-static BIO* LoadBIO (Handle<Value> v) {
+static BIO* LoadBIO(Handle<Value> v) {
   BIO* bio = BIO_new(BIO_s_mem());
   if (!bio) return NULL;
 
@@ -618,7 +618,7 @@ Handle<Value> SecureContext::Close(const Arguments& args) {
 }
 
 
-//Takes .pfx or .p12 and password in string or buffer format
+// Takes .pfx or .p12 and password in string or buffer format
 Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
   HandleScope scope;
 
@@ -1038,7 +1038,6 @@ int Connection::AdvertiseNextProtoCallback_(SSL* s,
                                             const unsigned char** data,
                                             unsigned int* len,
                                             void* arg) {
-
   Connection* p = static_cast<Connection*>(SSL_get_app_data(s));
 
   if (p->npnProtos_.IsEmpty()) {
@@ -1505,17 +1504,17 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
 
     EVP_PKEY* pkey = NULL;
     RSA* rsa = NULL;
-    if( NULL != (pkey = X509_get_pubkey(peer_cert))
-        && NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
-        BN_print(bio, rsa->n);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(modulus_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
+    if((pkey = X509_get_pubkey(peer_cert)) != NULL &&
+       (rsa = EVP_PKEY_get1_RSA(pkey)) != NULL) {
+      BN_print(bio, rsa->n);
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(modulus_symbol, String::New(mem->data, mem->length) );
+      (void) BIO_reset(bio);
 
-        BN_print(bio, rsa->e);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(exponent_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
+      BN_print(bio, rsa->e);
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(exponent_symbol, String::New(mem->data, mem->length) );
+      (void) BIO_reset(bio);
     }
 
     if (pkey != NULL) {
@@ -1633,7 +1632,7 @@ Handle<Value> Connection::SetSession(const Arguments& args) {
   const unsigned char* p = reinterpret_cast<const unsigned char*>(sbuf);
   SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, wlen);
 
-  delete [] sbuf;
+  delete[] sbuf;
 
   if (!sess)
     return Undefined();
@@ -2113,7 +2112,7 @@ int Cipher::SetAutoPadding(bool auto_padding) {
 int Cipher::Final(unsigned char** out, int* out_len) {
   if (!initialized_) return 0;
   *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
-  int r = EVP_CipherFinal_ex(&ctx,*out, out_len);
+  int r = EVP_CipherFinal_ex(&ctx, *out, out_len);
   EVP_CIPHER_CTX_cleanup(&ctx);
   initialized_ = false;
   return r;
@@ -2207,7 +2206,7 @@ Handle<Value> Cipher::InitIv(const Arguments& args) {
 
   String::Utf8Value cipherType(args[0]);
 
-  bool r = cipher->InitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
+  bool r = cipher->InitIv(*cipherType, key_buf, key_len, iv_buf, iv_len);
 
   delete[] key_buf;
   delete[] iv_buf;
@@ -2236,8 +2235,8 @@ Handle<Value> Cipher::Update(const Arguments& args) {
 
   if (!r) {
     delete[] out;
-    Local<Value> exception = Exception::TypeError(String::New("DecipherUpdate fail"));
-    return ThrowException(exception);
+    return ThrowException(Exception::TypeError(
+        String::New("DecipherUpdate fail")));
   }
 
   Local<Value> outString;
@@ -2316,7 +2315,8 @@ bool Decipher::Init(char* cipherType, char* key_buf, int key_buf_len) {
     return false;
   }
 
-  unsigned char key[EVP_MAX_KEY_LENGTH],iv[EVP_MAX_IV_LENGTH];
+  unsigned char key[EVP_MAX_KEY_LENGTH];
+  unsigned char iv[EVP_MAX_IV_LENGTH];
   int key_len = EVP_BytesToKey(cipher_,
                                EVP_md5(),
                                NULL,
@@ -2411,7 +2411,7 @@ int Decipher::Final(unsigned char** out, int* out_len) {
   }
 
   *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
-  r = EVP_CipherFinal_ex(&ctx,*out,out_len);
+  r = EVP_CipherFinal_ex(&ctx, *out,out_len);
   EVP_CIPHER_CTX_cleanup(&ctx);
   initialized_ = false;
   return r;
@@ -2454,7 +2454,7 @@ Handle<Value> Decipher::Init(const Arguments& args) {
 
   String::Utf8Value cipherType(args[0]);
 
-  bool r = cipher->Init(*cipherType, key_buf,key_len);
+  bool r = cipher->Init(*cipherType, key_buf, key_len);
 
   delete[] key_buf;
 
@@ -2505,13 +2505,14 @@ Handle<Value> Decipher::InitIv(const Arguments& args) {
 
   String::Utf8Value cipherType(args[0]);
 
-  bool r = cipher->InitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
+  bool r = cipher->InitIv(*cipherType, key_buf, key_len, iv_buf, iv_len);
 
   delete[] key_buf;
   delete[] iv_buf;
 
   if (!r) {
-    return ThrowException(Exception::Error(String::New("DecipherInitIv error")));
+    return ThrowException(Exception::Error(
+        String::New("DecipherInitIv error")));
   }
 
   return args.This();
@@ -2603,15 +2604,15 @@ void Hmac::Initialize(Handle<Object> target) {
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "init", HmacInit);
-  NODE_SET_PROTOTYPE_METHOD(t, "update", HmacUpdate);
-  NODE_SET_PROTOTYPE_METHOD(t, "digest", HmacDigest);
+  NODE_SET_PROTOTYPE_METHOD(t, "init", Init);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", Update);
+  NODE_SET_PROTOTYPE_METHOD(t, "digest", Digest);
 
   target->Set(String::NewSymbol("Hmac"), t->GetFunction());
 }
 
 
-bool Hmac::HmacInit(char* hashType, char* key, int key_len) {
+bool Hmac::Init(char* hashType, char* key, int key_len) {
   md = EVP_get_digestbyname(hashType);
   if (!md) {
     fprintf(stderr, "node-crypto : Unknown message digest %s\n", hashType);
@@ -2624,14 +2625,14 @@ bool Hmac::HmacInit(char* hashType, char* key, int key_len) {
 }
 
 
-int Hmac::HmacUpdate(char* data, int len) {
+int Hmac::Update(char* data, int len) {
   if (!initialized_) return 0;
   HMAC_Update(&ctx, reinterpret_cast<unsigned char*>(data), len);
   return 1;
 }
 
 
-int Hmac::HmacDigest(unsigned char** md_value, unsigned int* md_len) {
+int Hmac::Digest(unsigned char** md_value, unsigned int* md_len) {
   if (!initialized_) return 0;
   *md_value = new unsigned char[EVP_MAX_MD_SIZE];
   HMAC_Final(&ctx, *md_value, md_len);
@@ -2650,7 +2651,7 @@ Handle<Value> Hmac::New(const Arguments& args) {
 }
 
 
-Handle<Value> Hmac::HmacInit(const Arguments& args) {
+Handle<Value> Hmac::Init(const Arguments& args) {
   HandleScope scope;
 
   Hmac* hmac = ObjectWrap::Unwrap<Hmac>(args.This());
@@ -2676,15 +2677,15 @@ Handle<Value> Hmac::HmacInit(const Arguments& args) {
     char* buffer_data = Buffer::Data(args[1]);
     size_t buffer_length = Buffer::Length(args[1]);
 
-    r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
+    r = hmac->Init(*hashType, buffer_data, buffer_length);
   } else {
     char* buf = new char[len];
     ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
     assert(written == len);
 
-    r = hmac->HmacInit(*hashType, buf, len);
+    r = hmac->Init(*hashType, buf, len);
 
-    delete [] buf;
+    delete[] buf;
   }
 
   if (!r) {
@@ -2695,7 +2696,7 @@ Handle<Value> Hmac::HmacInit(const Arguments& args) {
 }
 
 
-Handle<Value> Hmac::HmacUpdate(const Arguments& args) {
+Handle<Value> Hmac::Update(const Arguments& args) {
   HandleScope scope;
 
   Hmac* hmac = ObjectWrap::Unwrap<Hmac>(args.This());
@@ -2707,7 +2708,7 @@ Handle<Value> Hmac::HmacUpdate(const Arguments& args) {
   char* buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
 
-  r = hmac->HmacUpdate(buffer_data, buffer_length);
+  r = hmac->Update(buffer_data, buffer_length);
 
   if (!r) {
     Local<Value> exception = Exception::TypeError(
@@ -2719,7 +2720,7 @@ Handle<Value> Hmac::HmacUpdate(const Arguments& args) {
 }
 
 
-Handle<Value> Hmac::HmacDigest(const Arguments& args) {
+Handle<Value> Hmac::Digest(const Arguments& args) {
   HandleScope scope;
 
   Hmac* hmac = ObjectWrap::Unwrap<Hmac>(args.This());
@@ -2728,7 +2729,7 @@ Handle<Value> Hmac::HmacDigest(const Arguments& args) {
   unsigned int md_len = 0;
   Local<Value> outString;
 
-  int r = hmac->HmacDigest(&md_value, &md_len);
+  int r = hmac->Digest(&md_value, &md_len);
   if (r == 0) {
     md_value = NULL;
     md_len = 0;
@@ -2748,14 +2749,14 @@ void Hash::Initialize(Handle<Object> target) {
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "update", HashUpdate);
-  NODE_SET_PROTOTYPE_METHOD(t, "digest", HashDigest);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", Update);
+  NODE_SET_PROTOTYPE_METHOD(t, "digest", Digest);
 
   target->Set(String::NewSymbol("Hash"), t->GetFunction());
 }
 
 
-bool Hash::HashInit(const char* hashType) {
+bool Hash::Init(const char* hashType) {
   md = EVP_get_digestbyname(hashType);
   if (!md) return false;
   EVP_MD_CTX_init(&mdctx);
@@ -2765,7 +2766,7 @@ bool Hash::HashInit(const char* hashType) {
 }
 
 
-int Hash::HashUpdate(char* data, int len) {
+int Hash::Update(char* data, int len) {
   if (!initialized_) return 0;
   EVP_DigestUpdate(&mdctx, data, len);
   return 1;
@@ -2783,7 +2784,7 @@ Handle<Value> Hash::New(const Arguments& args) {
   String::Utf8Value hashType(args[0]);
 
   Hash* hash = new Hash();
-  if (!hash->HashInit(*hashType)) {
+  if (!hash->Init(*hashType)) {
     delete hash;
     return ThrowException(Exception::Error(String::New(
       "Digest method not supported")));
@@ -2794,7 +2795,7 @@ Handle<Value> Hash::New(const Arguments& args) {
 }
 
 
-Handle<Value> Hash::HashUpdate(const Arguments& args) {
+Handle<Value> Hash::Update(const Arguments& args) {
   HandleScope scope;
 
   Hash* hash = ObjectWrap::Unwrap<Hash>(args.This());
@@ -2805,7 +2806,7 @@ Handle<Value> Hash::HashUpdate(const Arguments& args) {
 
   char* buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
-  r = hash->HashUpdate(buffer_data, buffer_length);
+  r = hash->Update(buffer_data, buffer_length);
 
   if (!r) {
     return ThrowException(Exception::TypeError(String::New("HashUpdate fail")));
@@ -2815,7 +2816,7 @@ Handle<Value> Hash::HashUpdate(const Arguments& args) {
 }
 
 
-Handle<Value> Hash::HashDigest(const Arguments& args) {
+Handle<Value> Hash::Digest(const Arguments& args) {
   HandleScope scope;
 
   Hash* hash = ObjectWrap::Unwrap<Hash>(args.This());
@@ -2846,15 +2847,15 @@ void Sign::Initialize(Handle<Object> target) {
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "init", SignInit);
-  NODE_SET_PROTOTYPE_METHOD(t, "update", SignUpdate);
-  NODE_SET_PROTOTYPE_METHOD(t, "sign", SignFinal);
+  NODE_SET_PROTOTYPE_METHOD(t, "init", Init);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", Update);
+  NODE_SET_PROTOTYPE_METHOD(t, "sign", Final);
 
   target->Set(String::NewSymbol("Sign"), t->GetFunction());
 }
 
 
-bool Sign::SignInit(const char* signType) {
+bool Sign::Init(const char* signType) {
   md = EVP_get_digestbyname(signType);
   if (!md) {
     printf("Unknown message digest %s\n", signType);
@@ -2867,17 +2868,17 @@ bool Sign::SignInit(const char* signType) {
 }
 
 
-int Sign::SignUpdate(char* data, int len) {
+int Sign::Update(char* data, int len) {
   if (!initialized_) return 0;
   EVP_SignUpdate(&mdctx, data, len);
   return 1;
 }
 
 
-int Sign::SignFinal(unsigned char** md_value,
-                    unsigned int* md_len,
-                    char* key_pem,
-                    int key_pemLen) {
+int Sign::Final(unsigned char** md_value,
+                unsigned int* md_len,
+                char* key_pem,
+                int key_pemLen) {
   if (!initialized_) return 0;
 
   BIO* bp = NULL;
@@ -2887,7 +2888,7 @@ int Sign::SignFinal(unsigned char** md_value,
 
   if (!BIO_write(bp, key_pem, key_pemLen)) return 0;
 
-  pkey = PEM_read_bio_PrivateKey( bp, NULL, NULL, NULL );
+  pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
   if (pkey == NULL) return 0;
 
   EVP_SignFinal(&mdctx, *md_value, md_len, pkey);
@@ -2909,7 +2910,7 @@ Handle<Value> Sign::New(const Arguments& args) {
 }
 
 
-Handle<Value> Sign::SignInit(const Arguments& args) {
+Handle<Value> Sign::Init(const Arguments& args) {
   HandleScope scope;
 
   Sign* sign = ObjectWrap::Unwrap<Sign>(args.This());
@@ -2921,7 +2922,7 @@ Handle<Value> Sign::SignInit(const Arguments& args) {
 
   String::Utf8Value signType(args[0]);
 
-  bool r = sign->SignInit(*signType);
+  bool r = sign->Init(*signType);
 
   if (!r) {
     return ThrowException(Exception::Error(String::New("SignInit error")));
@@ -2931,7 +2932,7 @@ Handle<Value> Sign::SignInit(const Arguments& args) {
 }
 
 
-Handle<Value> Sign::SignUpdate(const Arguments& args) {
+Handle<Value> Sign::Update(const Arguments& args) {
   HandleScope scope;
 
   Sign* sign = ObjectWrap::Unwrap<Sign>(args.This());
@@ -2943,7 +2944,7 @@ Handle<Value> Sign::SignUpdate(const Arguments& args) {
   char* buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
 
-  r = sign->SignUpdate(buffer_data, buffer_length);
+  r = sign->Update(buffer_data, buffer_length);
 
   if (!r) {
     return ThrowException(Exception::TypeError(String::New("SignUpdate fail")));
@@ -2953,7 +2954,7 @@ Handle<Value> Sign::SignUpdate(const Arguments& args) {
 }
 
 
-Handle<Value> Sign::SignFinal(const Arguments& args) {
+Handle<Value> Sign::Final(const Arguments& args) {
   HandleScope scope;
 
   Sign* sign = ObjectWrap::Unwrap<Sign>(args.This());
@@ -2972,7 +2973,7 @@ Handle<Value> Sign::SignFinal(const Arguments& args) {
   ssize_t written = DecodeWrite(buf, len, args[0], BUFFER);
   assert(written == len);
 
-  int r = sign->SignFinal(&md_value, &md_len, buf, len);
+  int r = sign->Final(&md_value, &md_len, buf, len);
   if (r == 0) {
     md_value = NULL;
     md_len = r;
@@ -2994,15 +2995,15 @@ void Verify::Initialize(v8::Handle<v8::Object> target) {
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "init", VerifyInit);
-  NODE_SET_PROTOTYPE_METHOD(t, "update", VerifyUpdate);
-  NODE_SET_PROTOTYPE_METHOD(t, "verify", VerifyFinal);
+  NODE_SET_PROTOTYPE_METHOD(t, "init", Init);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", Update);
+  NODE_SET_PROTOTYPE_METHOD(t, "verify", Final);
 
   target->Set(String::NewSymbol("Verify"), t->GetFunction());
 }
 
 
-bool Verify::VerifyInit(const char* verifyType) {
+bool Verify::Init(const char* verifyType) {
   md = EVP_get_digestbyname(verifyType);
   if (!md) {
     fprintf(stderr, "node-crypto : Unknown message digest %s\n", verifyType);
@@ -3016,17 +3017,17 @@ bool Verify::VerifyInit(const char* verifyType) {
 }
 
 
-int Verify::VerifyUpdate(char* data, int len) {
+int Verify::Update(char* data, int len) {
   if (!initialized_) return 0;
   EVP_VerifyUpdate(&mdctx, data, len);
   return 1;
 }
 
 
-int Verify::VerifyFinal(char* key_pem,
-                        int key_pemLen,
-                        unsigned char* sig,
-                        int siglen) {
+int Verify::Final(char* key_pem,
+                  int key_pemLen,
+                  unsigned char* sig,
+                  int siglen) {
   if (!initialized_) return 0;
 
   EVP_PKEY* pkey = NULL;
@@ -3104,7 +3105,7 @@ Handle<Value> Verify::New(const Arguments& args) {
 }
 
 
-Handle<Value> Verify::VerifyInit(const Arguments& args) {
+Handle<Value> Verify::Init(const Arguments& args) {
   HandleScope scope;
 
   Verify* verify = ObjectWrap::Unwrap<Verify>(args.This());
@@ -3116,7 +3117,7 @@ Handle<Value> Verify::VerifyInit(const Arguments& args) {
 
   String::Utf8Value verifyType(args[0]);
 
-  bool r = verify->VerifyInit(*verifyType);
+  bool r = verify->Init(*verifyType);
 
   if (!r) {
     return ThrowException(Exception::Error(String::New("VerifyInit error")));
@@ -3126,7 +3127,7 @@ Handle<Value> Verify::VerifyInit(const Arguments& args) {
 }
 
 
-Handle<Value> Verify::VerifyUpdate(const Arguments& args) {
+Handle<Value> Verify::Update(const Arguments& args) {
   HandleScope scope;
 
   Verify* verify = ObjectWrap::Unwrap<Verify>(args.This());
@@ -3138,18 +3139,18 @@ Handle<Value> Verify::VerifyUpdate(const Arguments& args) {
   char* buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
 
-  r = verify->VerifyUpdate(buffer_data, buffer_length);
+  r = verify->Update(buffer_data, buffer_length);
 
   if (!r) {
-    Local<Value> exception = Exception::TypeError(String::New("VerifyUpdate fail"));
-    return ThrowException(exception);
+    return ThrowException(Exception::TypeError(
+        String::New("VerifyUpdate fail")));
   }
 
   return args.This();
 }
 
 
-Handle<Value> Verify::VerifyFinal(const Arguments& args) {
+Handle<Value> Verify::Final(const Arguments& args) {
   HandleScope scope;
 
   Verify* verify = ObjectWrap::Unwrap<Verify>(args.This());
@@ -3176,12 +3177,15 @@ Handle<Value> Verify::VerifyFinal(const Arguments& args) {
   }
 
   unsigned char* hbuf = new unsigned char[hlen];
-  ssize_t hwritten = DecodeWrite((char*)hbuf, hlen, args[1], BINARY);
+  ssize_t hwritten = DecodeWrite(reinterpret_cast<char*>(hbuf),
+                                 hlen,
+                                 args[1],
+                                 BINARY);
   assert(hwritten == hlen);
 
   int r = -1;
 
-  r = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
+  r = verify->Final(kbuf, klen, hbuf, hlen);
 
   delete[] kbuf;
   delete[] hbuf;
@@ -3270,15 +3274,17 @@ Handle<Value> DiffieHellman::DiffieHellmanGroup(const Arguments& args) {
 
   modp_group* it = modp_groups;
 
-  while(it->name != NULL) {
+  while (it->name != NULL) {
     if (!strcasecmp(*group_name, it->name))
-        break;
+      break;
     it++;
   }
 
   if (it->name != NULL) {
-    diffieHellman->Init(it->prime, it->prime_size,
-            it->gen, it->gen_size);
+    diffieHellman->Init(it->prime,
+                        it->prime_size,
+                        it->gen,
+                        it->gen_size);
   } else {
     return ThrowException(Exception::Error(
         String::New("Unknown group")));
@@ -3806,8 +3812,7 @@ void RandomBytesCheck(RandomBytesRequest* req, Local<Value> argv[2]) {
 
     argv[0] = Exception::Error(String::New(errmsg));
     argv[1] = Local<Value>::New(Null());
-  }
-  else {
+  } else {
     // avoids the malloc + memcpy
     Buffer* buffer = Buffer::New(req->data_, req->size_, RandomBytesFree, NULL);
     argv[0] = Local<Value>::New(Null());
@@ -3858,8 +3863,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
                   RandomBytesAfter);
 
     return req->obj_;
-  }
-  else {
+  } else {
     Local<Value> argv[2];
     RandomBytesWork<pseudoRandom>(&req->work_req_);
     RandomBytesCheck(req, argv);
