@@ -277,21 +277,24 @@ class Connection : ObjectWrap {
   friend class SecureContext;
 };
 
-enum CipherType {
-  kCipher,
-  kDecipher
-};
-
-template <CipherType Type>
 class CipherBase : public ObjectWrap {
  public:
-  CipherBase() : cipher_(NULL), initialized_(false) {
+  enum CipherType {
+    kCipher,
+    kDecipher
+  };
+
+  CipherBase(CipherType type) : type_(type),
+                                cipher_(NULL),
+                                initialized_(false) {
   }
 
   ~CipherBase() {
     if (!initialized_) return;
     EVP_CIPHER_CTX_cleanup(&ctx_);
   }
+
+  static void Initialize(v8::Handle<v8::Object> target);
 
   bool Init(char* cipherType, char* key_buf, int key_buf_len);
   bool InitIv(char* cipherType,
@@ -304,31 +307,17 @@ class CipherBase : public ObjectWrap {
   int Final(unsigned char** out, int* out_len);
 
  protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
   static v8::Handle<v8::Value> Init(const v8::Arguments& args);
   static v8::Handle<v8::Value> InitIv(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
   static v8::Handle<v8::Value> Update(const v8::Arguments& args);
   static v8::Handle<v8::Value> Final(const v8::Arguments& args);
 
+  CipherType type_;
   EVP_CIPHER_CTX ctx_; /* coverity[member_decl] */
   const EVP_CIPHER* cipher_; /* coverity[member_decl] */
   bool initialized_;
-};
-
-class Cipher : public CipherBase<kCipher> {
- public:
-  static void Initialize(v8::Handle<v8::Object> target);
-
- protected:
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
-};
-
-class Decipher : public CipherBase<kDecipher> {
- public:
-  static void Initialize(v8::Handle<v8::Object> target);
-
- protected:
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
 };
 
 class Hmac : public ObjectWrap {
