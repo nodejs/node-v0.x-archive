@@ -1563,6 +1563,65 @@ static Handle<Value> SetUid(const Arguments& args) {
 }
 
 
+static Handle<Value> GetGroups(const Arguments& args) {
+  HandleScope scope;
+  gid_t* groupList;
+  int ngroups = 0;
+
+  /* _SC_NGROUPS_MAX can sometimes lie. Use a static value that is more than
+   * large enough to accomodate any reasonable amount of groups.
+   */
+  ngroups = 1024;
+
+  groupList = calloc(ngroups, sizeof(gid_t));
+  assert(groupList != NULL);
+
+  ngroups = getgroups(ngroups, groupList);
+  assert(ngroups != -1);
+
+  Local<Array> groupsArray = Array::New(ngroups);
+
+  for (int i = 0; i < ngroups; i++) {
+    groupsArray->Set(i, Integer::New(groupList[i]));
+  }
+
+  free(groupList);
+  return scope.Close(groupsArray);
+}
+
+
+static Handle<Value> InitGroups(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() < 1) {
+    return ThrowError(Exception::Error(
+          String::New("initgroups requires 1 argument")));
+  }
+
+  gid_t gid = 0;
+  String::Utf8Value pwnam(args[0]);
+  struct passwd pwd, *pwdp = NULL;
+
+  errno = 0;
+
+  if (getpwnam_r(*pwnam, &pwd, getbuf, ARRAY_SIZE(getbuf), &pwdp) ||
+      pwdp == NULL) {
+    if (errno == 0)
+      return ThrowException(Exception::Error(
+        String::New("initgroups user does not exist")));
+    else
+      return ThrowException(ErrnoException(errno, "getpwnam_r"));
+  }
+
+  gid = pwd.pw_gid;
+
+  if ((err = initgroups(*pwnam, gid)) == -1)
+    return ThrowException(ErrnoException(errno, "initgroups"));
+
+  return Undefined();
+}
+
+
 #endif // __POSIX__
 
 
@@ -2250,6 +2309,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "setgid", SetGid);
   NODE_SET_METHOD(process, "getgid", GetGid);
+  NODE_SET_METHOD(process, "getgroups", GetGroups);
+  NODE_SET_METHOD(process, "initgroups", InitGroups);
 #endif // __POSIX__
 
   NODE_SET_METHOD(process, "_kill", Kill);
