@@ -68,6 +68,6 @@ n.on('message', function(m) {
 
 process.on('exit', function() {
   assert.equal(10, socketCloses);
-  assert.ok(messageCount > 1);
+  assert.ok(messageCount >= 1);
 });
 
