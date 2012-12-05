@@ -580,13 +580,11 @@ Handle<Value> SecureContext::SetOptions(const Arguments& args) {
 
   SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
 
-  if (args.Length() != 1 || !args[0]->IsUint32()) {
+  if (args.Length() != 1 || !args[0]->IntegerValue()) {
     return ThrowException(Exception::TypeError(String::New("Bad parameter")));
   }
 
-  unsigned int opts = args[0]->Uint32Value();
-
-  SSL_CTX_set_options(sc->ctx_, opts);
+  SSL_CTX_set_options(sc->ctx_, args[0]->IntegerValue());
 
   return True();
 }
@@ -1532,6 +1530,15 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
         BIO_get_mem_ptr(bio, &mem);
         info->Set(exponent_symbol, String::New(mem->data, mem->length) );
         (void) BIO_reset(bio);
+    }
+
+    if (pkey != NULL) {
+      EVP_PKEY_free(pkey);
+      pkey = NULL;
+    }
+    if (rsa != NULL) {
+      RSA_free(rsa);
+      rsa = NULL;
     }
 
     ASN1_TIME_print(bio, X509_get_notBefore(peer_cert));

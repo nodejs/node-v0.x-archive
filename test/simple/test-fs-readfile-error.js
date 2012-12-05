@@ -21,25 +21,35 @@
 
 var common = require('../common');
 var assert = require('assert');
+var exec = require('child_process').exec;
 var path = require('path');
-var testTxt = path.join(common.fixturesDir, 'x.txt');
-var fs = require('fs');
 
-setTimeout(function() {
-  // put this in a timeout, just so it doesn't get bunched up with the
-  // require() calls..
-  var N = 30;
-  for (var i = 0; i < N; i++) {
-    console.log('start ' + i);
-    fs.readFile(testTxt, function(err, data) {
-      if (err) {
-        console.log('error! ' + e);
-        process.exit(1);
-      } else {
-        console.log('finish');
-      }
-    });
-  }
-}, 100);
+var callbacks = 0;
 
+function test(env, cb) {
+  var filename = path.join(common.fixturesDir, 'test-fs-readfile-error.js');
+  var execPath = process.execPath + ' ' + filename;
+  var options = { env: env || {} };
+  exec(execPath, options, function(err, stdout, stderr) {
+    assert(err);
+    assert.equal(stdout, '');
+    assert.notEqual(stderr, '');
+    cb('' + stderr);
+  });
+}
 
+test({ NODE_DEBUG: '' }, function(data) {
+  assert(/EISDIR/.test(data));
+  assert(!/test-fs-readfile-error/.test(data));
+  callbacks++;
+});
+
+test({ NODE_DEBUG: 'fs' }, function(data) {
+  assert(/EISDIR/.test(data));
+  assert(/test-fs-readfile-error/.test(data));
+  callbacks++;
+});
+
+process.on('exit', function() {
+  assert.equal(callbacks, 2);
+});
