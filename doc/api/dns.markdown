@@ -3,12 +3,13 @@
     Stability: 3 - Stable
 
 Use `require('dns')` to access this module. All methods in the dns module
-use C-Ares except for `dns.lookup` which uses `getaddrinfo(3)` in a thread
-pool. C-Ares is much faster than `getaddrinfo` but the system resolver is
-more constant with how other programs operate. When a user does
-`net.connect(80, 'google.com')` or `http.get({ host: 'google.com' })` the
-`dns.lookup` method is used. Users who need to do a large number of look ups
-quickly should use the methods that go through C-Ares.
+use C-Ares except for `dns.lookup` and `dns.lookupAll` which use
+`getaddrinfo(3)` in a thread pool. C-Ares is much faster than `getaddrinfo`
+but the system resolver is more constant with how other programs operate.
+When a user does `net.connect(80, 'google.com')` or
+`http.get({ host: 'google.com' })` the `dns.lookupAll` method is used.
+Users who need to do a large number of look ups quickly should use the
+methods that go through C-Ares.
 
 Here is an example which resolves `'www.google.com'` then reverse
 resolves the IP addresses which are returned.
@@ -41,7 +42,39 @@ both Ip v4 and v6 address family.
 The callback has arguments `(err, address, family)`.  The `address` argument
 is a string representation of a IP v4 or v6 address. The `family` argument
 is either the integer 4 or 6 and denotes the family of `address` (not
-necessarily the value initially passed to `lookup`).
+necessarily the value initially passed to `lookup`).  
+
+On error, `err` is an `Error` object, where `err.code` is the error code.
+Keep in mind that `err.code` will be set to `'ENOENT'` not only when
+the domain does not exist but also when the lookup fails in other ways
+such as no available file descriptors.
+
+
+## dns.lookupAll(domain, [family], callback)
+
+The same as `dns.lookup()`, but returns all A (IPv4) or AAAA (IPv6) records for
+`domain`.
+
+The `family` can be the integer `4` or `6` to limit returned records to
+either A (IPv4) or AAAA (IPv6), respectively.
+
+The callback differs from `dns.lookup()` by receiving arguments `(err, addresses)`.
+The `addresses` argument will be an array of address objects, each one with an `ip`
+key and a `family` key denoting the address family (either `4` or `6`).  Below is
+an example of the `addresses` data returned for a lookup of `google.com`:
+
+    [ { ip: '74.125.237.130', family: 4 },
+      { ip: '74.125.237.131', family: 4 },
+      { ip: '74.125.237.132', family: 4 },
+      { ip: '74.125.237.133', family: 4 },
+      { ip: '74.125.237.134', family: 4 },
+      { ip: '74.125.237.135', family: 4 },
+      { ip: '74.125.237.136', family: 4 },
+      { ip: '74.125.237.137', family: 4 },
+      { ip: '74.125.237.142', family: 4 },
+      { ip: '74.125.237.128', family: 4 },
+      { ip: '74.125.237.129', family: 4 },
+      { ip: '2404:6800:4006:804::1004', family: 6 } ]
 
 On error, `err` is an `Error` object, where `err.code` is the error code.
 Keep in mind that `err.code` will be set to `'ENOENT'` not only when
