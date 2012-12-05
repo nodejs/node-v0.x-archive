@@ -122,6 +122,9 @@ function error_test() {
     // Floating point numbers are not interpreted as REPL commands.
     { client: client_unix, send: '.1234',
       expect: '0.1234' },
+    // Expressions staring with floating point numbers are not interpreted as REPL commands as well.
+    { client: client_unix, send: '.2 + .2',
+      expect: '0.4' },
     // Can parse valid JSON
     { client: client_unix, send: 'JSON.parse(\'{"valid": "json"}\');',
       expect: '{ valid: \'json\' }'},
