@@ -66,7 +66,7 @@
         NativeModule.require('_third_party_main');
       });
 
-    } else if (process.argv[1] == 'debug') {
+    } else if (process.argv[1] === 'debug') {
       // Start the debugger agent
       var d = NativeModule.require('_debugger');
       d.start();
@@ -126,10 +126,10 @@
           useGlobal: true,
           ignoreUndefined: false
         };
-        if (parseInt(process.env['NODE_NO_READLINE'], 10)) {
+        if (parseInt(process.env.NODE_NO_READLINE, 10)) {
           opts.terminal = false;
         }
-        if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
+        if (parseInt(process.env.NODE_DISABLE_COLORS, 10)) {
           opts.useColors = false;
         }
         var repl = Module.requireRepl().start(opts);
@@ -224,7 +224,7 @@
       if (value === 'false') return false;
       return value;
     });
-  }
+  };
 
   startup.processNextTick = function() {
     var nextTickQueue = [];
@@ -530,7 +530,7 @@
       cp._forkChild(fd);
       assert(process.send);
     }
-  }
+  };
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();
@@ -566,7 +566,7 @@
   NativeModule._cache = {};
 
   NativeModule.require = function(id) {
-    if (id == 'native_module') {
+    if (id === 'native_module') {
       return NativeModule;
     }
 
@@ -591,15 +591,15 @@
 
   NativeModule.getCached = function(id) {
     return NativeModule._cache[id];
-  }
+  };
 
   NativeModule.exists = function(id) {
     return NativeModule._source.hasOwnProperty(id);
-  }
+  };
 
   NativeModule.getSource = function(id) {
     return NativeModule._source[id];
-  }
+  };
 
   NativeModule.wrap = function(script) {
     return NativeModule.wrapper[0] + script + NativeModule.wrapper[1];
