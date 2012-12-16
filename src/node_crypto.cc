@@ -126,13 +126,15 @@ void SecureContext::Initialize(Handle<Object> target) {
 
   Local<FunctionTemplate> t = FunctionTemplate::New(SecureContext::New);
   secure_context_constructor = Persistent<FunctionTemplate>::New(t);
+  Local<ObjectTemplate> o = t->InstanceTemplate();
 
-  t->InstanceTemplate()->SetInternalFieldCount(1);
+  o->SetInternalFieldCount(1);
+  o->SetAccessor(String::New("cert"), SecureContext::GetCert, SecureContext::SetCert);
+  o->SetAccessor(String::New("pkey"), SecureContext::GetKey, NULL);
   t->SetClassName(String::NewSymbol("SecureContext"));
 
   NODE_SET_PROTOTYPE_METHOD(t, "init", SecureContext::Init);
   NODE_SET_PROTOTYPE_METHOD(t, "setKey", SecureContext::SetKey);
-  NODE_SET_PROTOTYPE_METHOD(t, "setCert", SecureContext::SetCert);
   NODE_SET_PROTOTYPE_METHOD(t, "addCACert", SecureContext::AddCACert);
   NODE_SET_PROTOTYPE_METHOD(t, "addCRL", SecureContext::AddCRL);
   NODE_SET_PROTOTYPE_METHOD(t, "addRootCerts", SecureContext::AddRootCerts);
@@ -318,6 +320,14 @@ static X509* LoadX509 (Handle<Value> v) {
   return x509;
 }
 
+Handle<Value> SecureContext::GetKey(Local<String> property, 
+                                    const AccessorInfo &info) {
+    SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(info.Holder());
+    if (sc->pkey_)
+        return sc->pkey_->handle_;
+    return Null();
+}
+
 
 Handle<Value> SecureContext::SetKey(const Arguments& args) {
   HandleScope scope;
@@ -334,6 +344,10 @@ Handle<Value> SecureContext::SetKey(const Arguments& args) {
 
   BIO *bio = LoadBIO(args[0]);
   if (!bio) return False();
+
+  BUF_MEM *bio_buf;
+  BIO_get_mem_ptr(bio, &bio_buf);
+  sc->pkey_ = Buffer::New(bio_buf->data, bio_buf->length);
 
   String::Utf8Value passphrase(args[1]);
 
@@ -426,35 +440,45 @@ end:
 }
 
 
-Handle<Value> SecureContext::SetCert(const Arguments& args) {
+Handle<Value> SecureContext::GetCert(Local<String> property, 
+                                     const AccessorInfo &info) {
+    SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(info.Holder());
+    if (sc->cert_)
+        return sc->cert_->handle_;
+    return Null();
+}
+
+
+void SecureContext::SetCert(Local<String> property, 
+                            Local<Value> value,
+                            const AccessorInfo& info) {
   HandleScope scope;
 
-  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(info.Holder());
 
-  if (args.Length() != 1) {
-    return ThrowException(Exception::TypeError(
-          String::New("Bad parameter")));
-  }
 
-  BIO* bio = LoadBIO(args[0]);
-  if (!bio) return False();
+  BIO* bio = LoadBIO(value);
+  if (!bio) return;
+
+  BUF_MEM *bio_buf;
+  BIO_get_mem_ptr(bio, &bio_buf);
+
+  sc->cert_ = Buffer::New(bio_buf->data, bio_buf->length);
 
   int rv = SSL_CTX_use_certificate_chain(sc->ctx_, bio);
-
   BIO_free(bio);
 
   if (!rv) {
     unsigned long err = ERR_get_error();
     if (!err) {
-      return ThrowException(Exception::Error(
+      ThrowException(Exception::Error(
           String::New("SSL_CTX_use_certificate_chain")));
+      return;
     }
     char string[120];
     ERR_error_string_n(err, string, sizeof string);
-    return ThrowException(Exception::Error(String::New(string)));
+    ThrowException(Exception::Error(String::New(string)));
   }
-
-  return True();
 }
 
 
@@ -684,6 +708,24 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
       X509_STORE_add_cert(sc->ca_store_, x509);
       SSL_CTX_add_client_CA(sc->ctx_, x509);
     }
+
+    BIO *bio_out = BIO_new(BIO_s_mem());
+    if (PEM_write_bio_X509(bio_out, cert)) {
+        BUF_MEM *bio_buf;
+        BIO_get_mem_ptr(bio_out, &bio_buf);
+        sc->cert_ = Buffer::New(bio_buf->data, bio_buf->length);
+    }
+    BIO_free(bio_out);
+    
+    bio_out = BIO_new(BIO_s_mem());
+    if (PEM_ASN1_write_bio((i2d_of_void*)i2d_PrivateKey, 
+                ((pkey->type == EVP_PKEY_DSA)?  PEM_STRING_DSA:PEM_STRING_RSA), bio_out, 
+                (void *)pkey, NULL, NULL, 0, NULL, NULL)) {
+        BUF_MEM *bio_buf;
+        BIO_get_mem_ptr(bio_out, &bio_buf);
+        sc->pkey_ = Buffer::New(bio_buf->data, bio_buf->length);
+    }
+    BIO_free(bio_out);
 
     EVP_PKEY_free(pkey);
     X509_free(cert);
