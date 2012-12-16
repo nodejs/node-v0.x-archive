@@ -33,6 +33,9 @@
 # include <sys/mman.h>  // mmap
 # include <unistd.h>    // sysconf
 # include <stdio.h>     // perror
+# ifndef MAP_ANONYMOUS
+#  define MAP_ANONYMOUS MAP_ANON
+# endif
 #endif
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
