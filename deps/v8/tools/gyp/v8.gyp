@@ -752,8 +752,11 @@
               ],
             }],
             ['v8_postmortem_support=="true"', {
+              'include_dirs': [
+                '<(SHARED_INTERMEDIATE_DIR)'
+              ],
               'sources': [
-                '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+                '../../src/debug-support.cc'
               ],
               'dependencies': ['postmortem-metadata']
             }],
@@ -837,6 +840,7 @@
           'type': 'none',
           'variables': {
             'heapobject_files': [
+                '../../src/frames.h',
                 '../../src/objects.h',
                 '../../src/objects-inl.h',
             ],
@@ -849,7 +853,7 @@
                   '<@(heapobject_files)',
                 ],
                 'outputs': [
-                  '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
+                  '<(SHARED_INTERMEDIATE_DIR)/debug-support.h',
                 ],
                 'action': [
                   '<(python)',

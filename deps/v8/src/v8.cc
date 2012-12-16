@@ -44,6 +44,12 @@
 #include "serialize.h"
 #include "store-buffer.h"
 
+#ifdef POSTMORTEM_SUPPORT
+#define V8DBG_STRUCT
+#define V8DBG_INIT
+#include "debug-support.h"
+#endif
+
 namespace v8 {
 namespace internal {
 
@@ -282,6 +288,9 @@ void V8::InitializeOncePerProcessImpl() {
   SetUpJSCallerSavedCodeData();
   SamplerRegistry::SetUp();
   ExternalReference::SetUp();
+#ifdef POSTMORTEM_SUPPORT
+  __v8dbg_init(&v8dbg);
+#endif
 }
 
 void V8::InitializeOncePerProcess() {

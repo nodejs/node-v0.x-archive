@@ -121,6 +121,9 @@
       ['v8_object_print==1', {
         'defines': ['OBJECT_PRINT',],
       }],
+      ['v8_postmortem_support=="true"', {
+        'defines': ['POSTMORTEM_SUPPORT',],
+      }],
       ['v8_enable_gdbjit==1', {
         'defines': ['ENABLE_GDB_JIT_INTERFACE',],
       }],
