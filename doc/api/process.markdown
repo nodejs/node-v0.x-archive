@@ -383,6 +383,13 @@ The PID of the process.
 
 Getter/setter to set what is displayed in 'ps'.
 
+Note: For Windows platform change ONLY console windows title, because OS specification don't provide method change "process name" on-the-fly.
+Note: For Windows Interix Service (UNIX simulation in Windows) 'ps' don't work properly.
+Note: For Linux change "process name" avaible only since Linux Kernel 2.6.9 or greater, otherwise function don't have effect.
+Note: For Linux "process name" string can't be length more 16 bytes.
+Note: This is build-in function and can't be overload or override via Object.defineProperty.
+Known issue: For Linux return full string of process, but setup as "process name" only first 16 bytes.
+Known issue: For Linux not check Latin1 (ASCII/ANSI) string charset, using non-ASCII(ANSI) charset may create problem on system with different encoding and without UTF-8 support. 
 
 ## process.arch
 
