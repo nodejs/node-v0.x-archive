@@ -381,6 +381,9 @@ The PID of the process.
 
 ## process.title
 
+Note: this function is only available on POSIX platforms (i.e. not Windows)
+Note: For Windows platform change ONLY console windows title, because OS specification don't provide method change "process name" on-the-fly.
+Note: For Windows Interix Service (UNIX simulation in Windows) 'ps' don't work properly.
 Getter/setter to set what is displayed in 'ps'.
 
 
