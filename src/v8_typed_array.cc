@@ -130,7 +130,7 @@ class ArrayBuffer {
 
   static v8::Handle<v8::Value> slice(const v8::Arguments& args) {
     if (args.Length() < 1)
-       return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     unsigned int length =
         args.This()->Get(v8::String::New("byteLength"))->Uint32Value();
@@ -594,7 +594,7 @@ class DataView {
       return ThrowTypeError("Constructor cannot be called as a function.");
 
     if (args.Length() < 1)
-      return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     if (!args[0]->IsObject())
       return ThrowError("Object must be an ArrayBuffer.");
@@ -608,16 +608,16 @@ class DataView {
     unsigned int byte_offset = args[1]->Uint32Value();
 
     if (args[1]->Int32Value() < 0 || byte_offset >= byte_length)
-      return ThrowRangeError("byteOffset out of range.");
+      return ThrowRangeError("Size is too large (or is negative).");
 
     if (!args[2]->IsUndefined()) {
       if (args[2]->Int32Value() < 0)
-        return ThrowRangeError("byteLength out of range.");
+        return ThrowRangeError("Size is too large (or is negative).");
       unsigned int new_byte_length = args[2]->Uint32Value();
       if (new_byte_length > byte_length)
-        return ThrowRangeError("byteLength out of range.");
+        return ThrowRangeError("Size is too large (or is negative).");
       if (byte_offset + new_byte_length > byte_length)
-        return ThrowRangeError("byteOffset/byteLength out of range.");
+        return ThrowRangeError("Size is too large (or is negative).");
       byte_length = new_byte_length;
     } else {
       // Adjust the original byte_length from total length to length to end.
@@ -675,7 +675,7 @@ class DataView {
   template <typename T>
   static v8::Handle<v8::Value> getGeneric(const v8::Arguments& args) {
     if (args.Length() < 1)
-      return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     unsigned int index = args[0]->Uint32Value();
     bool little_endian = args[1]->BooleanValue();
@@ -687,7 +687,7 @@ class DataView {
 
     // TODO(deanm): integer overflow.
     if (index + sizeof(T) > static_cast<unsigned int>(size))
-      return ThrowError("Index out of range.");
+      return ThrowError("IndexSizeError: DOM Exception 1");
 
     void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
     return cTypeToValue<T>(getValue<T>(ptr, index, !little_endian));
@@ -696,7 +696,7 @@ class DataView {
   template <typename T>
   static v8::Handle<v8::Value> setGeneric(const v8::Arguments& args) {
     if (args.Length() < 2)
-      return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     unsigned int index = args[0]->Int32Value();
     bool little_endian = args[2]->BooleanValue();
@@ -708,7 +708,7 @@ class DataView {
 
     // TODO(deanm): integer overflow.
     if (index + sizeof(T) > static_cast<unsigned int>(size))
-      return ThrowError("Index out of range.");
+      return ThrowError("IndexSizeError: DOM Exception 1");
 
     void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
     setValue<T>(ptr, index, valueToCType<T>(args[1]), !little_endian);
