@@ -153,13 +153,13 @@ sub[1] = 0x34;
 assert.equal(uint8[2], 0x12);
 assert.equal(uint8[3], 0x34);
 
-// test .set(index, value), .set(arr, offset) and .get(index)
+// test .set(index, value), .set(arr, offset)
 uint8.set(1, 0x09);
 uint8.set([0x0a, 0x0b], 2);
 
-assert.equal(uint8.get(1), 0x09);
-assert.equal(uint8.get(2), 0x0a);
-assert.equal(uint8.get(3), 0x0b);
+assert.equal(uint8[1], 0x09);
+assert.equal(uint8[2], 0x0a);
+assert.equal(uint8[3], 0x0b);
 
 // test clamped array
 var uint8c = new Uint8ClampedArray(buffer);
