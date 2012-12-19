@@ -154,7 +154,7 @@ assert.equal(uint8[2], 0x12);
 assert.equal(uint8[3], 0x34);
 
 // test .set(index, value), .set(arr, offset)
-uint8.set(1, 0x09);
+uint8[1] = 0x09;
 uint8.set([0x0a, 0x0b], 2);
 
 assert.equal(uint8[1], 0x09);
@@ -169,8 +169,8 @@ uint8c[1] = 257;
 assert.equal(uint8c[0], 0);
 assert.equal(uint8c[1], 255);
 
-uint8c.set(0, -10);
-uint8c.set(1, 260);
+uint8c[0] = -10;
+uint8c[1] = 260;
 
 assert.equal(uint8c[0], 0);
 assert.equal(uint8c[1], 255);
