@@ -153,7 +153,7 @@ void AES_xts_decrypt(const char *inp,char *out,size_t len,
 			const unsigned char iv[16]);
 #endif
 
-#if	defined(AES_ASM) && !defined(I386_ONLY) &&	(  \
+#if	0 && defined(AES_ASM) && !defined(I386_ONLY) &&	(  \
 	((defined(__i386)	|| defined(__i386__)	|| \
 	  defined(_M_IX86)) && defined(OPENSSL_IA32_SSE2))|| \
 	defined(__x86_64)	|| defined(__x86_64__)	|| \
