@@ -192,7 +192,6 @@ class TypedArray {
     v8::Local<v8::Signature> default_signature = v8::Signature::New(ft_cache);
 
     static BatchedMethods methods[] = {
-      { "get", &TypedArray<TBytes, TEAType>::get },
       { "set", &TypedArray<TBytes, TEAType>::set },
       { "slice", &TypedArray<TBytes, TEAType>::subarray },
       { "subarray", &TypedArray<TBytes, TEAType>::subarray },
@@ -323,16 +322,6 @@ class TypedArray {
                      (v8::PropertyAttribute)(v8::ReadOnly|v8::DontDelete));
 
     return args.This();
-  }
-
-  static v8::Handle<v8::Value> get(const v8::Arguments& args) {
-    if (args.Length() < 1)
-      return ThrowError("Wrong number of arguments.");
-
-    if (args[0]->IsNumber())
-      return args.This()->Get(args[0]->Uint32Value());
-
-    return v8::Undefined();
   }
 
   static v8::Handle<v8::Value> set(const v8::Arguments& args) {
