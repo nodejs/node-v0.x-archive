@@ -399,11 +399,11 @@ class TypedArray {
 
     if (begin < 0) begin = length + begin;
     if (begin < 0) begin = 0;
-    if ((unsigned)begin > length) begin = length;
+    if (static_cast<unsigned int>(begin) > length) begin = length;
 
     if (end < 0) end = length + end;
     if (end < 0) end = 0;
-    if ((unsigned)end > length) end = length;
+    if (static_cast<unsigned int>(end) > length) end = length;
 
     if (begin > end) begin = end;
 
@@ -685,7 +685,8 @@ class DataView {
     int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
                element_size;
 
-    if (index + sizeof(T) > (unsigned)size)  // TODO(deanm): integer overflow.
+    // TODO(deanm): integer overflow.
+    if (index + sizeof(T) > static_cast<unsigned int>(size))
       return ThrowError("Index out of range.");
 
     void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
@@ -705,7 +706,8 @@ class DataView {
     int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
                element_size;
 
-    if (index + sizeof(T) > (unsigned)size)  // TODO(deanm): integer overflow.
+    // TODO(deanm): integer overflow.
+    if (index + sizeof(T) > static_cast<unsigned int>(size))
       return ThrowError("Index out of range.");
 
     void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
