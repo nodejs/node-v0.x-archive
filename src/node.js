@@ -231,7 +231,7 @@
           return true;
 
         er.domain = domain;
-        er.domain_thrown = true;
+        er.domainThrown = true;
         // wrap this in a try/catch so we don't get infinite throwing
         try {
           caught = domain.emit('error', er);
