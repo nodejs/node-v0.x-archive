@@ -234,6 +234,14 @@
         er.domainThrown = true;
         // wrap this in a try/catch so we don't get infinite throwing
         try {
+          // One of three things will happen here.
+          //
+          // 1. There is a handler, caught = true
+          // 2. There is no handler, caught = false
+          // 3. It throws, caught = false
+          //
+          // If caught is false after this, then there's no need to exit()
+          // the domain, because we're going to crash the process anyway.
           caught = domain.emit('error', er);
           domain.exit();
         } catch (er2) {
