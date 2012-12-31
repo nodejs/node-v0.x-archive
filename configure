@@ -612,7 +612,7 @@ def configure_winsdk(o):
     return
 
   print "ctrpp not found in WinSDK path--using pre-gen files from tools/msvs/genfiles."
-  return
+
 
 output = {
   'variables': { 'python': sys.executable },
