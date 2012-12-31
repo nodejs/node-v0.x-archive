@@ -322,8 +322,8 @@ Exclusive mode (`O_EXCL`) ensures that `path` is newly created. `fs.open()`
 fails if a file by that name already exists. On POSIX systems, symlinks are
 not followed. Exclusive mode may or may not work with network file systems.
 
-Note that on some systems writes with specified offset to file
-that is opened in `a+` mode may corrupt files.
+Note that on linux writes with specified offset to file
+that is opened in append mode will ignore specified offset.
 
 ## fs.openSync(path, flags, [mode])
 
