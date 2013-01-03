@@ -298,7 +298,7 @@ Example: A very elaborate way to run 'ps ax | grep ssh'
       console.log('ps stderr: ' + data);
     });
 
-    ps.on('exit', function (code) {
+    ps.on('close', function (code) {
       if (code !== 0) {
         console.log('ps process exited with code ' + code);
       }
@@ -313,7 +313,7 @@ Example: A very elaborate way to run 'ps ax | grep ssh'
       console.log('grep stderr: ' + data);
     });
 
-    grep.on('exit', function (code) {
+    grep.on('close', function (code) {
       if (code !== 0) {
         console.log('grep process exited with code ' + code);
       }
