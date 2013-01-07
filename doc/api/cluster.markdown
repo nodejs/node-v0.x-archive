@@ -469,7 +469,7 @@ on the specified worker.
 
     cluster.fork().on('online', function() {
       // Worker is online
-    };
+    });
 
 ### Event: 'listening'
 
@@ -480,7 +480,7 @@ on the specified worker.
 
     cluster.fork().on('listening', function(address) {
       // Worker is listening
-    };
+    });
 
 ### Event: 'disconnect'
 
@@ -489,7 +489,7 @@ on the specified worker.
 
     cluster.fork().on('disconnect', function() {
       // Worker has disconnected
-    };
+    });
 
 ### Event: 'exit'
 
@@ -509,4 +509,4 @@ is terminated.  See [child_process event: 'exit'](child_process.html#child_proce
       } else {
         console.log("worker success!");
       }
-    };
+    });
