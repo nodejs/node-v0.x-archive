@@ -57,9 +57,22 @@
 #define V8_TYPED_ARRAY_BSWAP32 _byteswap_ulong
 #define V8_TYPED_ARRAY_BSWAP64 _byteswap_uint64
 #else
-// We should be able to assume GCC here (and can use ULL constants, etc).
+// On LLVM based compilers we can feature test, but for GCC we unfortunately
+// have to rely on the version.  Additionally __builtin_bswap32/64 were added
+// in GCC 4.3, but __builtin_bswap16 was not added until GCC 4.8.
+// We should be able to assume GCC/LLVM here (and can use ULL constants, etc).
 // Fallback swap macros taken from QEMU bswap.h
-#if defined(__has_builtin) && __has_builtin(__builtin_bswap64)
+#ifdef __has_builtin
+#define V8_TYPED_ARRAY_BSWAP_HAS_BUILTIN(x) __has_builtin(x)
+#define V8_TYPED_ARRAY_BSWAP_HAS_BUILTIN16(x) __has_builtin(x)
+#else
+#define V8_TYPED_ARRAY_BSWAP_HAS_BUILTIN(x) (defined(__GNUC__) && \
+    (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3)))
+#define V8_TYPED_ARRAY_BSWAP_HAS_BUILTIN16(x) (defined(__GNUC__) && \
+    (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)))
+#endif
+
+#if V8_TYPED_ARRAY_BSWAP_HAS_BUILTIN(__builtin_bswap64)
 #define V8_TYPED_ARRAY_BSWAP64 __builtin_bswap64
 #else
 #define V8_TYPED_ARRAY_BSWAP64(x) \
@@ -77,7 +90,7 @@
 })
 #endif
 
-#if defined(__has_builtin) && __has_builtin(__builtin_bswap32)
+#if V8_TYPED_ARRAY_BSWAP_HAS_BUILTIN(__builtin_bswap32)
 #define V8_TYPED_ARRAY_BSWAP32 __builtin_bswap32
 #else
 #define V8_TYPED_ARRAY_BSWAP32(x) \
@@ -91,7 +104,7 @@
 })
 #endif
 
-#if defined(__has_builtin) && __has_builtin(__builtin_bswap16)
+#if V8_TYPED_ARRAY_BSWAP_HAS_BUILTIN16(__builtin_bswap16)
 #define V8_TYPED_ARRAY_BSWAP16 __builtin_bswap16
 #else
 #define V8_TYPED_ARRAY_BSWAP16(x) \
