@@ -664,9 +664,10 @@ class DataView {
     int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
                element_size;
 
-    // TODO(deanm): integer overflow.
-    if (index + sizeof(T) > static_cast<unsigned int>(size))
+    if (size <= 0 || static_cast<unsigned int>(size) < sizeof(T) ||
+        index > static_cast<unsigned int>(size) - sizeof(T)) {
       return ThrowError("IndexSizeError: DOM Exception 1");
+    }
 
     void* ptr = reinterpret_cast<char*>(
         args.This()->GetIndexedPropertiesExternalArrayData()) + index;
@@ -697,9 +698,10 @@ class DataView {
     int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
                element_size;
 
-    // TODO(deanm): integer overflow.
-    if (index + sizeof(T) > static_cast<unsigned int>(size))
+    if (size <= 0 || static_cast<unsigned int>(size) < sizeof(T) ||
+        index > static_cast<unsigned int>(size) - sizeof(T)) {
       return ThrowError("IndexSizeError: DOM Exception 1");
+    }
 
     void* ptr = reinterpret_cast<char*>(
         args.This()->GetIndexedPropertiesExternalArrayData()) + index;
