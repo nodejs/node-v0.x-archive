@@ -131,7 +131,7 @@ class ArrayBuffer {
 
   static v8::Handle<v8::Value> slice(const v8::Arguments& args) {
     if (args.Length() < 1)
-       return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     unsigned int length =
         args.This()->Get(v8::String::New("byteLength"))->Uint32Value();
@@ -217,7 +217,6 @@ class TypedArray {
     v8::Local<v8::Signature> default_signature = v8::Signature::New(ft_cache);
 
     static BatchedMethods methods[] = {
-      { "get", &TypedArray<TBytes, TEAType>::get },
       { "set", &TypedArray<TBytes, TEAType>::set },
       { "slice", &TypedArray<TBytes, TEAType>::subarray },
       { "subarray", &TypedArray<TBytes, TEAType>::subarray },
@@ -350,77 +349,63 @@ class TypedArray {
     return args.This();
   }
 
-  static v8::Handle<v8::Value> get(const v8::Arguments& args) {
-    if (args.Length() < 1)
-      return ThrowError("Wrong number of arguments.");
-
-    if (args[0]->IsNumber())
-      return args.This()->Get(args[0]->Uint32Value());
-
-    return v8::Undefined();
-  }
-
   static v8::Handle<v8::Value> set(const v8::Arguments& args) {
     if (args.Length() < 1)
-      return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
-    //if (!args[0]->IsObject())
-    //  return ThrowTypeError("Type error.");
+    if (!args[0]->IsObject())
+      return ThrowTypeError("Invalid argument");
 
-    if (args[0]->IsNumber()) {  // index, <type> value
-      args.This()->Set(args[0]->Uint32Value(), args[1]);
-    } else if (args[0]->IsObject()) {
-      v8::Handle<v8::Object> obj = v8::Handle<v8::Object>::Cast(args[0]);
+    v8::Handle<v8::Object> obj = v8::Handle<v8::Object>::Cast(args[0]);
 
-      if (TypedArray<TBytes, TEAType>::HasInstance(obj)) {  // ArrayBufferView.
-        if (args[1]->Int32Value() < 0)
-          return ThrowRangeError("Offset may not be negative.");
+    if (TypedArray<TBytes, TEAType>::HasInstance(obj)) {  // ArrayBufferView.
+      if (args[1]->Int32Value() < 0)
+        return ThrowRangeError("Offset may not be negative.");
 
-        unsigned int offset = args[1]->Uint32Value();
-        unsigned int src_length =
-            obj->Get(v8::String::New("length"))->Uint32Value();
-        unsigned int dst_length =
-            args.This()->Get(v8::String::New("length"))->Uint32Value();
-        if (offset > dst_length)
-          return ThrowRangeError("Offset out of range.");
+      unsigned int offset = args[1]->Uint32Value();
+      unsigned int src_length =
+          obj->Get(v8::String::New("length"))->Uint32Value();
+      unsigned int dst_length =
+          args.This()->Get(v8::String::New("length"))->Uint32Value();
+      if (offset > dst_length)
+        return ThrowRangeError("Offset out of range.");
 
-        if (src_length > dst_length - offset)
-          return ThrowRangeError("Offset/length out of range.");
+      if (src_length > dst_length - offset)
+        return ThrowRangeError("Index is out of range.");
 
-        // We don't want to get the buffer pointer, because that means we'll have
-        // to just do the calculations for byteOffset / byteLength again.
-        // Instead just use the pointer on the external array data.
-        void* src_ptr = obj->GetIndexedPropertiesExternalArrayData();
-        void* dst_ptr = args.This()->GetIndexedPropertiesExternalArrayData();
+      // We don't want to get the buffer pointer, because that means we'll have
+      // to just do the calculations for byteOffset / byteLength again.
+      // Instead just use the pointer on the external array data.
+      void* src_ptr = obj->GetIndexedPropertiesExternalArrayData();
+      void* dst_ptr = args.This()->GetIndexedPropertiesExternalArrayData();
 
-        // From the spec:
-        // If the input array is a TypedArray, the two arrays may use the same
-        // underlying ArrayBuffer. In this situation, setting the values takes
-        // place as if all the data is first copied into a temporary buffer that
-        // does not overlap either of the arrays, and then the data from the
-        // temporary buffer is copied into the current array.
-        memmove(reinterpret_cast<char*>(dst_ptr) + offset * TBytes, src_ptr,
-            src_length * TBytes);
-      } else {  // type[]
-        if (args[1]->Int32Value() < 0)
-          return ThrowRangeError("Offset may not be negative.");
+      // From the spec:
+      // If the input array is a TypedArray, the two arrays may use the same
+      // underlying ArrayBuffer. In this situation, setting the values takes
+      // place as if all the data is first copied into a temporary buffer that
+      // does not overlap either of the arrays, and then the data from the
+      // temporary buffer is copied into the current array.
+      memmove(reinterpret_cast<char*>(dst_ptr) + offset * TBytes, src_ptr,
+          src_length * TBytes);
+    } else {  // type[]
+      if (args[1]->Int32Value() < 0)
+        return ThrowRangeError("Offset may not be negative.");
 
-        unsigned int src_length =
-            obj->Get(v8::String::New("length"))->Uint32Value();
-        unsigned int dst_length =
-            args.This()->Get(v8::String::New("length"))->Uint32Value();
-        unsigned int offset = args[1]->Uint32Value();
+      unsigned int src_length =
+          obj->Get(v8::String::New("length"))->Uint32Value();
+      unsigned int dst_length =
+          args.This()->Get(v8::String::New("length"))->Uint32Value();
+      unsigned int offset = args[1]->Uint32Value();
 
-        if (offset > dst_length)
-          return ThrowRangeError("Offset out of range.");
+      if (offset > dst_length)
+        return ThrowRangeError("Offset out of range.");
 
-        if (src_length > dst_length - offset)
-          return ThrowRangeError("Offset/length out of range.");
+      if (src_length > dst_length - offset)
+        return ThrowRangeError("Index is out of range.");
 
-        for (uint32_t i = 0; i < src_length; ++i) {
-          // Use the v8 setter to deal with typing.  Maybe slow?
-          args.This()->Set(i + offset, obj->Get(i));
-        }
+      for (uint32_t i = 0; i < src_length; ++i) {
+        // Use the v8 setter to deal with typing.  Maybe slow?
+        args.This()->Set(i + offset, obj->Get(i));
       }
     }
 
@@ -439,11 +424,11 @@ class TypedArray {
 
     if (begin < 0) begin = length + begin;
     if (begin < 0) begin = 0;
-    if ((unsigned)begin > length) begin = length;
+    if (static_cast<unsigned int>(begin) > length) begin = length;
 
     if (end < 0) end = length + end;
     if (end < 0) end = 0;
-    if ((unsigned)end > length) end = length;
+    if (static_cast<unsigned int>(end) > length) end = length;
 
     if (begin > end) begin = end;
 
@@ -617,7 +602,7 @@ class DataView {
       return ThrowTypeError("Constructor cannot be called as a function.");
 
     if (args.Length() < 1)
-      return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     if (!args[0]->IsObject())
       return ThrowError("Object must be an ArrayBuffer.");
@@ -631,16 +616,16 @@ class DataView {
     unsigned int byte_offset = args[1]->Uint32Value();
 
     if (args[1]->Int32Value() < 0 || byte_offset >= byte_length)
-      return ThrowRangeError("byteOffset out of range.");
+      return ThrowRangeError("Size is too large (or is negative).");
 
     if (!args[2]->IsUndefined()) {
       if (args[2]->Int32Value() < 0)
-        return ThrowRangeError("byteLength out of range.");
+        return ThrowRangeError("Size is too large (or is negative).");
       unsigned int new_byte_length = args[2]->Uint32Value();
       if (new_byte_length > byte_length)
-        return ThrowRangeError("byteLength out of range.");
+        return ThrowRangeError("Size is too large (or is negative).");
       if (byte_offset + new_byte_length > byte_length)
-        return ThrowRangeError("byteOffset/byteLength out of range.");
+        return ThrowRangeError("Size is too large (or is negative).");
       byte_length = new_byte_length;
     } else {
       // Adjust the original byte_length from total length to length to end.
@@ -669,7 +654,7 @@ class DataView {
   template <typename T>
   static v8::Handle<v8::Value> getGeneric(const v8::Arguments& args) {
     if (args.Length() < 1)
-      return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     unsigned int index = args[0]->Uint32Value();
     bool little_endian = args[1]->BooleanValue();
@@ -679,8 +664,9 @@ class DataView {
     int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
                element_size;
 
-    if (index + sizeof(T) > (unsigned)size)  // TODO(deanm): integer overflow.
-      return ThrowError("Index out of range.");
+    // TODO(deanm): integer overflow.
+    if (index + sizeof(T) > static_cast<unsigned int>(size))
+      return ThrowError("IndexSizeError: DOM Exception 1");
 
     void* ptr = reinterpret_cast<char*>(
         args.This()->GetIndexedPropertiesExternalArrayData()) + index;
@@ -701,7 +687,7 @@ class DataView {
   template <typename T>
   static v8::Handle<v8::Value> setGeneric(const v8::Arguments& args) {
     if (args.Length() < 2)
-      return ThrowError("Wrong number of arguments.");
+      return ThrowTypeError("Not enough arguments");
 
     unsigned int index = args[0]->Int32Value();
     bool little_endian = args[2]->BooleanValue();
@@ -711,8 +697,9 @@ class DataView {
     int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
                element_size;
 
-    if (index + sizeof(T) > (unsigned)size)  // TODO(deanm): integer overflow.
-      return ThrowError("Index out of range.");
+    // TODO(deanm): integer overflow.
+    if (index + sizeof(T) > static_cast<unsigned int>(size))
+      return ThrowError("IndexSizeError: DOM Exception 1");
 
     void* ptr = reinterpret_cast<char*>(
         args.This()->GetIndexedPropertiesExternalArrayData()) + index;
