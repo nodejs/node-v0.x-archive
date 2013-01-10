@@ -50,6 +50,8 @@
     # probing when running on the target.
     'v8_can_use_vfp2_instructions%': 'false',
     'v8_can_use_vfp3_instructions%': 'false',
+    'arm_neon%': 0,
+    'arm_fpu%': 'vfpv3',
 
     # Similar to vfp but on MIPS.
     'v8_can_use_fpu_instructions%': 'true',
