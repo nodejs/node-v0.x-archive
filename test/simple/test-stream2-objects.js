@@ -26,7 +26,10 @@ var assert = require('assert');
 
 // tiny node-tap lookalike.
 var tests = [];
+var count = 0;
+
 function test(name, fn) {
+  count++;
   tests.push([name, fn]);
 }
 
@@ -41,9 +44,17 @@ function run() {
   fn({
     same: assert.deepEqual,
     equal: assert.equal,
-    end: run
+    end: function () {
+      count--;
+      run();
+    }
   });
 }
+
+// ensure all tests have run
+process.on("exit", function () {
+  assert.equal(count, 0);
+});
 
 process.nextTick(run);
 
@@ -61,13 +72,21 @@ function toArray(callback) {
   return stream;
 }
 
+function fromArray(list) {
+  var r = new Readable();
+  list.forEach(function (chunk) {
+    r.push(chunk);
+  });
+  r.push(null);
+  r._read = noop;
+
+  return r
+}
+
 function noop() {}
 
 test('can read objects from stream', function (t) {
-  var r = new Readable();
-  r.push({ one: "1" });
-  r.push({ two: "2" });
-  r._read = noop;
+  var r = fromArray([{ one: "1"}, { two: "2" }]);
 
   var v1 = r.read();
   var v2 = r.read();
@@ -81,11 +100,7 @@ test('can read objects from stream', function (t) {
 })
 
 test('can pipe objects into stream', function (t) {
-  var r = new Readable();
-  r.push({ one: "1" });
-  r.push({ two: "2" });
-  r.push(null);
-  r._read = noop;
+  var r = fromArray([{ one: "1"}, { two: "2" }]);
 
   r.pipe(toArray(function (list) {
     assert.deepEqual(list, [
@@ -96,3 +111,36 @@ test('can pipe objects into stream', function (t) {
     t.end();
   }));
 });
+
+test('read(n) is ignored', function (t) {
+  var r = fromArray([{ one: "1"}, { two: "2" }]);
+
+  var value = r.read(2);
+
+  assert.deepEqual(value, { one: "1" });
+
+  t.end();
+});
+
+// test('can read objects from _read (sync)', function (t) {
+//   var r = new Readable();
+//   var list = [{ one: "1"}, { two: "2" }];
+//   r._read = function (n, cb) {
+//     var item = list.shift()
+//     console.log("ITEM", item)
+//     cb(null, item || null)
+//   };
+
+//   r.on("end", function () {
+//     console.log("ENDED");
+//   })
+
+//   r.pipe(toArray(function (list) {
+//     assert.deepEqual(list, [
+//       { one: "1" },
+//       { two: "2" }
+//     ]);
+
+//     t.end();
+//   }));
+// })

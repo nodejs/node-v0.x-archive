@@ -96,7 +96,10 @@ TestWriter.prototype.end = function(c) {
 
 // tiny node-tap lookalike.
 var tests = [];
+var count = 0;
+
 function test(name, fn) {
+  count++;
   tests.push([name, fn]);
 }
 
@@ -111,15 +114,25 @@ function run() {
   fn({
     same: assert.deepEqual,
     equal: assert.equal,
-    end: run
+    end: function () {
+      count--;
+      run();
+    }
   });
 }
+
+// ensure all tests have run
+process.on("exit", function () {
+  assert.equal(count, 0);
+});
 
 process.nextTick(run);
 
 
 test('a most basic test', function(t) {
   var r = new TestReader(20);
+
+  console.log("CALLED 1");
 
   var reads = [];
   var expect = [ 'x',
@@ -162,6 +175,7 @@ test('a most basic test', function(t) {
 
 test('pipe', function(t) {
   var r = new TestReader(5);
+  console.log("CALLED 2");
 
   var expect = [ 'xxxxx',
                  'xxxxx',
@@ -189,6 +203,7 @@ test('pipe', function(t) {
 [1,2,3,4,5,6,7,8,9].forEach(function(SPLIT) {
   test('unpipe', function(t) {
     var r = new TestReader(5);
+    console.log("CALLED 3");
 
     // unpipe after 3 writes, then write to another stream instead.
     var expect = [ 'xxxxx',
@@ -207,6 +222,7 @@ test('pipe', function(t) {
 
     var writes = SPLIT;
     w[0].on('write', function() {
+      console.log("written 0", arguments)
       if (--writes === 0) {
         r.unpipe();
         t.equal(r._readableState.pipes, null);
@@ -216,11 +232,16 @@ test('pipe', function(t) {
       }
     });
 
+    w[1].on('write', function () {
+      console.log("written 1", arguments)
+    })
+
     var ended = 0;
 
     var ended0 = false;
     var ended1 = false;
     w[0].on('end', function(results) {
+      console.log("W[0] end")
       t.equal(ended0, false);
       ended0 = true;
       ended++;
@@ -228,6 +249,7 @@ test('pipe', function(t) {
     });
 
     w[1].on('end', function(results) {
+      console.log("W[1] end")
       t.equal(ended1, false);
       ended1 = true;
       ended++;
@@ -244,6 +266,7 @@ test('pipe', function(t) {
 // both writers should get the same exact data.
 test('multipipe', function(t) {
   var r = new TestReader(5);
+  console.log("CALLED 4");
   var w = [ new TestWriter, new TestWriter ];
 
   var expect = [ 'xxxxx',
@@ -275,6 +298,7 @@ test('multipipe', function(t) {
 [1,2,3,4,5,6,7,8,9].forEach(function(SPLIT) {
   test('multi-unpipe', function(t) {
     var r = new TestReader(5);
+    console.log("CALLED 5");
 
     // unpipe after 3 writes, then write to another stream instead.
     var expect = [ 'xxxxx',
@@ -316,5 +340,27 @@ test('multipipe', function(t) {
 
     r.pipe(w[0]);
     r.pipe(w[2]);
+  });
+});
+
+test('sync _read ending', function (t) {
+  console.log("CALLED");
+  var r = new R();
+  var called = false;
+  r._read = function (n, cb) {
+    cb(null, null);
+  };
+
+  r.once('end', function () {
+    console.log("ENDED")
+    called = true;
+  })
+
+  r.read();
+
+  setTimeout(function () {
+    assert.ok(false);
+    assert.equal(called, true);
+    t.end();
   });
 });
