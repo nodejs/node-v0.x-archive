@@ -67,14 +67,32 @@ test('can read objects from stream', function (t) {
   var r = new Readable();
   r.push({ one: "1" });
   r.push({ two: "2" });
-  r._read = noop
+  r._read = noop;
+
+  var v1 = r.read();
+  var v2 = r.read();
+  var v3 = r.read();
+
+  assert.deepEqual(v1, { one: "1" });
+  assert.deepEqual(v2, { two: "2" });
+  assert.deepEqual(v3, null);
+
+  t.end();
+})
+
+test('can pipe objects into stream', function (t) {
+  var r = new Readable();
+  r.push({ one: "1" });
+  r.push({ two: "2" });
+  r.push(null);
+  r._read = noop;
 
   r.pipe(toArray(function (list) {
     assert.deepEqual(list, [
       { one: "1" },
       { two: "2" }
     ]);
-  }));
 
-  t.end();
+    t.end();
+  }));
 });
