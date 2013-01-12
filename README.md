@@ -50,3 +50,7 @@ Resources for Newcomers
   - [community](https://github.com/joyent/node/wiki/Community)
   - [contributing](https://github.com/joyent/node/wiki/Contributing)
   - [big list of all the helpful wiki pages](https://github.com/joyent/node/wiki/_pages)
+
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/joyent/node/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+
