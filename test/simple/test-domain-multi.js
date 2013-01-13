@@ -30,6 +30,7 @@ var events = require('events');
 var caughtA = false;
 var caughtB = false;
 var caughtC = false;
+var caughtD = false;
 
 
 var a = domain.create();
@@ -91,9 +92,36 @@ c.on('error', function(er) {
   console.error('Error on c', er.message);
 });
 
+
+var d = domain.create();
+var dSub = domain.create();
+
+// add the D domein to the A domain
+a.add(d);
+
+// add the sub domain to the D domain
+d.add(dSub);
+
+d.on('error', function(er) {
+  caughtD = true;
+  console.error('Error on d', er.message);
+});
+dSub.on('error', function(er) {
+  console.error('Error on sub domain of d', er.message);
+  undefinedMethod();
+});
+
+d.run(function() {
+  dSub.run(function() {
+    undefinedMethod();
+  });
+});
+
+
 process.on('exit', function() {
   assert.equal(caughtA, false);
   assert.equal(caughtB, true)
   assert.equal(caughtC, true)
+  assert.equal(caughtD, true)
   console.log('ok - Errors went where they were supposed to go');
 });
