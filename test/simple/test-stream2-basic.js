@@ -132,8 +132,6 @@ process.nextTick(run);
 test('a most basic test', function(t) {
   var r = new TestReader(20);
 
-  console.log("CALLED 1");
-
   var reads = [];
   var expect = [ 'x',
                  'xx',
@@ -175,7 +173,6 @@ test('a most basic test', function(t) {
 
 test('pipe', function(t) {
   var r = new TestReader(5);
-  console.log("CALLED 2");
 
   var expect = [ 'xxxxx',
                  'xxxxx',
@@ -203,7 +200,6 @@ test('pipe', function(t) {
 [1,2,3,4,5,6,7,8,9].forEach(function(SPLIT) {
   test('unpipe', function(t) {
     var r = new TestReader(5);
-    console.log("CALLED 3");
 
     // unpipe after 3 writes, then write to another stream instead.
     var expect = [ 'xxxxx',
@@ -222,7 +218,6 @@ test('pipe', function(t) {
 
     var writes = SPLIT;
     w[0].on('write', function() {
-      console.log("written 0", arguments)
       if (--writes === 0) {
         r.unpipe();
         t.equal(r._readableState.pipes, null);
@@ -232,16 +227,11 @@ test('pipe', function(t) {
       }
     });
 
-    w[1].on('write', function () {
-      console.log("written 1", arguments)
-    })
-
     var ended = 0;
 
     var ended0 = false;
     var ended1 = false;
     w[0].on('end', function(results) {
-      console.log("W[0] end")
       t.equal(ended0, false);
       ended0 = true;
       ended++;
@@ -249,7 +239,6 @@ test('pipe', function(t) {
     });
 
     w[1].on('end', function(results) {
-      console.log("W[1] end")
       t.equal(ended1, false);
       ended1 = true;
       ended++;
@@ -266,7 +255,6 @@ test('pipe', function(t) {
 // both writers should get the same exact data.
 test('multipipe', function(t) {
   var r = new TestReader(5);
-  console.log("CALLED 4");
   var w = [ new TestWriter, new TestWriter ];
 
   var expect = [ 'xxxxx',
@@ -298,7 +286,6 @@ test('multipipe', function(t) {
 [1,2,3,4,5,6,7,8,9].forEach(function(SPLIT) {
   test('multi-unpipe', function(t) {
     var r = new TestReader(5);
-    console.log("CALLED 5");
 
     // unpipe after 3 writes, then write to another stream instead.
     var expect = [ 'xxxxx',
@@ -343,8 +330,79 @@ test('multipipe', function(t) {
   });
 });
 
+test('back pressure respected', function (t) {
+  function noop() {}
+
+  var r = new R();
+  var counter = 0;
+  r.push(["one"]);
+  r.push(["two"]);
+  r.push(["three"]);
+  r.push(["four"]);
+  r.push(null);
+  r._read = noop;
+
+  var w1 = new R();
+  w1.write = function (chunk) {
+    assert.equal(chunk[0], "one");
+    w1.emit("close");
+    process.nextTick(function () {
+      r.pipe(w2);
+      r.pipe(w3);
+    })
+  };
+  w1.end = noop;
+
+  r.pipe(w1);
+
+  var expected = ["two", "two", "three", "three", "four", "four"];
+
+  var w2 = new R();
+  w2.write = function (chunk) {
+    assert.equal(chunk[0], expected.shift());
+    assert.equal(counter, 0);
+
+    counter++;
+
+    if (chunk[0] === "four") {
+      return true;
+    }
+
+    setTimeout(function () {
+      counter--;
+      w2.emit("drain");
+    }, 10);
+
+    return false;
+  }
+  w2.end = noop;
+
+  var w3 = new R();
+  w3.write = function (chunk) {
+    assert.equal(chunk[0], expected.shift());
+    assert.equal(counter, 1);
+
+    counter++;
+
+    if (chunk[0] === "four") {
+      return true;
+    }
+
+    setTimeout(function () {
+      counter--;
+      w3.emit("drain");
+    }, 50);
+
+    return false;
+  };
+  w3.end = function () {
+    assert.equal(counter, 2);
+    assert.equal(expected.length, 0);
+    t.end();
+  };
+})
+
 test('sync _read ending', function (t) {
-  console.log("CALLED");
   var r = new R();
   var called = false;
   r._read = function (n, cb) {
@@ -352,15 +410,13 @@ test('sync _read ending', function (t) {
   };
 
   r.once('end', function () {
-    console.log("ENDED")
     called = true;
   })
 
   r.read();
 
-  setTimeout(function () {
-    assert.ok(false);
+  process.nextTick(function () {
     assert.equal(called, true);
     t.end();
-  });
+  })
 });

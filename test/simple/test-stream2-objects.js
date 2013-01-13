@@ -122,25 +122,57 @@ test('read(n) is ignored', function (t) {
   t.end();
 });
 
-// test('can read objects from _read (sync)', function (t) {
-//   var r = new Readable();
-//   var list = [{ one: "1"}, { two: "2" }];
-//   r._read = function (n, cb) {
-//     var item = list.shift()
-//     console.log("ITEM", item)
-//     cb(null, item || null)
-//   };
+test('can read objects from _read (sync)', function (t) {
+  var r = new Readable();
+  var list = [{ one: "1"}, { two: "2" }];
+  r._read = function (n, cb) {
+    var item = list.shift()
+    cb(null, item || null)
+  };
 
-//   r.on("end", function () {
-//     console.log("ENDED");
-//   })
+  r.pipe(toArray(function (list) {
+    assert.deepEqual(list, [
+      { one: "1" },
+      { two: "2" }
+    ]);
 
-//   r.pipe(toArray(function (list) {
-//     assert.deepEqual(list, [
-//       { one: "1" },
-//       { two: "2" }
-//     ]);
+    t.end();
+  }));
+});
 
-//     t.end();
-//   }));
-// })
+test('can read objects from _read (async)', function (t) {
+  var r = new Readable();
+  var list = [{ one: "1"}, { two: "2" }];
+  r._read = function (n, cb) {
+    var item = list.shift()
+    process.nextTick(function () {
+      cb(null, item || null)
+    });
+  };
+
+  r.pipe(toArray(function (list) {
+    assert.deepEqual(list, [
+      { one: "1" },
+      { two: "2" }
+    ]);
+
+    t.end();
+  }));
+});
+
+test('can read strings as objects', function (t) {
+  var r = new Readable({
+    isObjectStream: true
+  });
+  var list = ["one", "two", "three"];
+  list.forEach(function (str) {
+    r.push(str);
+  });
+  r.push(null);
+
+  r.pipe(toArray(function (array) {
+    assert.deepEqual(array, list)
+
+    t.end();
+  }));
+});
