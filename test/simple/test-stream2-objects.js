@@ -22,6 +22,7 @@
 
 var common = require('../common.js')
 var Readable = require('_stream_readable');
+var Writable = require('_stream_writable');
 var assert = require('assert');
 
 // tiny node-tap lookalike.
@@ -59,7 +60,7 @@ process.on("exit", function () {
 process.nextTick(run);
 
 function toArray(callback) {
-  var stream = new Readable();
+  var stream = new Writable();
   var list = [];
   stream.write = function (chunk) {
     // console.log("toArray.write", chunk)
@@ -394,3 +395,92 @@ test('stream of strings converted to objects halfway through', function (t) {
     t.end();
   }));
 });
+
+test('can write objects to stream', function (t) {
+  var w = new Writable();
+
+  w._write = function (chunk, cb) {
+    assert.deepEqual(chunk, { foo: "bar" });
+    cb();
+  };
+
+  w.on("finish", function () {
+    t.end();
+  });
+
+  w.write({ foo: "bar" });
+  w.end();
+});
+
+test('can write multiple objects to stream', function (t) {
+  var w = new Writable();
+  var list = [];
+
+  w._write = function (chunk, cb) {
+    list.push(chunk);
+    cb();
+  };
+
+  w.on("finish", function () {
+    assert.deepEqual(list, [0, 1, 2, 3, 4]);
+
+    t.end();
+  });
+
+  w.write(0);
+  w.write(1);
+  w.write(2);
+  w.write(3);
+  w.write(4);
+  w.end();
+});
+
+test('can write strings as objects', function (t) {
+  var w = new Writable({
+    isObjectStream: true
+  });
+  var list = [];
+
+  w._write = function (chunk, cb) {
+    list.push(chunk);
+    process.nextTick(cb);
+  };
+
+  w.on("finish", function () {
+    assert.deepEqual(list, ["0", "1", "2", "3", "4"]);
+
+    t.end();
+  });
+
+  w.write("0");
+  w.write("1");
+  w.write("2");
+  w.write("3");
+  w.write("4");
+  w.end();
+});
+
+test('buffers finish until cb is called', function (t) {
+  var w = new Writable({
+    isObjectStream: true
+  });
+  var called = false;
+
+  w._write = function (chunk, cb) {
+    assert.equal(chunk, "foo")
+
+    process.nextTick(function () {
+      called = true
+      cb();
+    })
+  };
+
+  w.on("finish", function () {
+    assert.equal(called, true);
+
+    t.end();
+  })
+
+  w.write("foo");
+  w.end();
+})
