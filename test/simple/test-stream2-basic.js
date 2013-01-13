@@ -400,6 +400,36 @@ test('back pressure respected', function (t) {
     assert.equal(expected.length, 0);
     t.end();
   };
+});
+
+test('read(0) for ended streams', function (t) {
+  var r = new R();
+  var written = false;
+  var ended = false;
+  r._read = function () {};
+
+  r.push(new Buffer("foo"));
+  r.push(null);
+
+  var v = r.read(0);
+
+  assert.equal(v, null);
+
+  var w = new R();
+
+  w.write = function (buffer) {
+    written = true;
+    assert.equal(ended, false);
+    assert.equal(buffer.toString(), "foo")
+  };
+
+  w.end = function () {
+    ended = true;
+    assert.equal(written, true);
+    t.end();
+  };
+
+  r.pipe(w);
 })
 
 test('sync _read ending', function (t) {

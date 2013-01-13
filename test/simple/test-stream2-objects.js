@@ -164,6 +164,7 @@ test('can read strings as objects', function (t) {
   var r = new Readable({
     isObjectStream: true
   });
+  r._read = noop;
   var list = ["one", "two", "three"];
   list.forEach(function (str) {
     r.push(str);
@@ -176,3 +177,77 @@ test('can read strings as objects', function (t) {
     t.end();
   }));
 });
+
+test('read(0) for object streams', function (t) {
+  var r = new Readable({
+    isObjectStream: true
+  });
+  r._read = noop;
+
+  r.push("foobar");
+  r.push(null);
+
+  var v = r.read(0);
+
+  r.pipe(toArray(function (array) {
+    assert.deepEqual(array, ["foobar"])
+
+    t.end();
+  }))
+})
+
+test('low watermark _read', function (t) {
+  var r = new Readable({
+    lowWaterMark: 2,
+    highWaterMark: 6,
+    isObjectStream: true
+  });
+
+  var calls = 0;
+
+  r._read = function (n, cb) {
+    calls++;
+    cb(null, "foo");
+  };
+
+  // touch to cause it
+  r.read(0)
+
+  r.push(null)
+
+  r.pipe(toArray(function (list) {
+    assert.deepEqual(list, ["foo", "foo", "foo"]);
+
+    t.end();
+  }));
+});
+
+test('high watermark _read', function (t) {
+  var r = new Readable({
+    lowWaterMark: 0,
+    highWaterMark: 6,
+    isObjectStream: true
+  });
+  var calls = 0;
+  var list = ["1", "2", "3", "4", "5", "6", "7", "8"];
+
+  r._read = function () {
+    calls++;
+  };
+
+  list.forEach(function (c) {
+    r.push(c);
+  });
+
+  var v = r.read()
+
+  assert.equal(calls, 0);
+  assert.equal(v, "1");
+
+  var v2 = r.read();
+
+  assert.equal(calls, 1);
+  assert.equal(v2, "2");
+
+  t.end();
+})
