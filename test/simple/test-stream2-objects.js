@@ -342,9 +342,55 @@ test('low watermark push', function (t) {
 });
 
 test('stream of buffers converted to object halfway through', function (t) {
-  t.end();
+  var r = new Readable()
+  r._read = noop
+
+  r.push(new Buffer("fus"));
+  r.push(new Buffer("do"));
+  r.push(new Buffer("rah"));
+
+  var str = r.read(4);
+
+  assert.equal(str, "fusd");
+
+  r.push({ foo: "bar" });
+  r.push(null);
+
+  r.pipe(toArray(function (list) {
+    assert.deepEqual(list, [
+      new Buffer("o"),
+      new Buffer("rah"),
+      { foo: "bar"}
+    ]);
+
+    t.end();
+  }));
 });
 
 test('stream of strings converted to objects halfway through', function (t) {
-  t.end();
+  var r = new Readable({
+    encoding: "utf8"
+  })
+  r._read = noop
+
+  r.push("fus");
+  r.push("do");
+  r.push("rah");
+
+  var str = r.read(4);
+
+  assert.equal(str, "fusd");
+
+  r.push({ foo: "bar" });
+  r.push(null);
+
+  r.pipe(toArray(function (list) {
+    assert.deepEqual(list, [
+      "o",
+      "rah",
+      { foo: "bar"}
+    ]);
+
+    t.end();
+  }));
 });
