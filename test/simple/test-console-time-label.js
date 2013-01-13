@@ -20,17 +20,8 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-
-
 var common = require('../common');
 var assert = require('assert');
-
-assert.ok(process.stdout.writable);
-assert.ok(process.stderr.writable);
-// Support legacy API
-assert.equal('number', typeof process.stdout.fd);
-assert.equal('number', typeof process.stderr.fd);
-
 
 var stdout_write = global.process.stdout.write;
 var strings = [];
@@ -38,15 +29,25 @@ global.process.stdout.write = function(string) {
   strings.push(string);
 };
 
-console.log('foo');
-console.log('foo', 'bar');
-console.log('%s %s', 'foo', 'bar', 'hop');
-console.log({slashes: '\\\\'});
+console.time('label');
+console.timeEnd('label');
+
+console.time('label %s');
+console.timeEnd('label %s', 'hello');
+
+console.time('label %s %s');
+console.timeEnd('label %s %s', 'hello', 'world');
 
 global.process.stdout.write = stdout_write;
-assert.equal('foo\n', strings.shift());
-assert.equal('foo bar\n', strings.shift());
-assert.equal('foo bar hop\n', strings.shift());
-assert.equal("{ slashes: '\\\\\\\\' }\n", strings.shift());
+assert(/^label: [0-9]+ms\n/.test(strings.shift()), 'simple timeEnd');
+assert(/^label hello: [0-9]+ms\n/.test(strings.shift()), 'timeEnd with one extra arg');
+assert(/^label hello world: [0-9]+ms\n/.test(strings.shift()), 'timeEnd with more then one extra arg');
 
-process.stderr.write('hello world');
+assert.throws(function () {
+  console.timeEnd('no such label');
+});
+
+assert.doesNotThrow(function () {
+  console.time('valid label');
+  console.timeEnd('valid label');
+});
