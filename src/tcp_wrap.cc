@@ -120,7 +120,7 @@ void TCPWrap::Initialize(Handle<Object> target) {
 TCPWrap* TCPWrap::Unwrap(Local<Object> obj) {
   assert(!obj.IsEmpty());
   assert(obj->InternalFieldCount() > 0);
-  return static_cast<TCPWrap*>(obj->GetPointerFromInternalField(0));
+  return static_cast<TCPWrap*>(obj->GetAlignedPointerFromInternalField(0));
 }
 
 
@@ -170,7 +170,7 @@ Handle<Value> TCPWrap::GetSockName(const Arguments& args) {
 
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
-    return Null();
+    return Null(node_isolate);
   }
 
   const sockaddr* addr = reinterpret_cast<const sockaddr*>(&address);
@@ -191,7 +191,7 @@ Handle<Value> TCPWrap::GetPeerName(const Arguments& args) {
 
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
-    return Null();
+    return Null(node_isolate);
   }
 
   const sockaddr* addr = reinterpret_cast<const sockaddr*>(&address);
@@ -209,7 +209,7 @@ Handle<Value> TCPWrap::SetNoDelay(const Arguments& args) {
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
 
-  return Undefined();
+  return Undefined(node_isolate);
 }
 
 
@@ -225,7 +225,7 @@ Handle<Value> TCPWrap::SetKeepAlive(const Arguments& args) {
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
 
-  return Undefined();
+  return Undefined(node_isolate);
 }
 
 
@@ -241,7 +241,7 @@ Handle<Value> TCPWrap::SetSimultaneousAccepts(const Arguments& args) {
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
 
-  return Undefined();
+  return Undefined(node_isolate);
 }
 #endif
 
@@ -260,7 +260,7 @@ Handle<Value> TCPWrap::Bind(const Arguments& args) {
   // Error starting the tcp.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 
@@ -278,7 +278,7 @@ Handle<Value> TCPWrap::Bind6(const Arguments& args) {
   // Error starting the tcp.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 
@@ -294,7 +294,7 @@ Handle<Value> TCPWrap::Listen(const Arguments& args) {
   // Error starting the tcp.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 
@@ -316,8 +316,8 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
 
     // Unwrap the client javascript object.
     assert(client_obj->InternalFieldCount() > 0);
-    TCPWrap* client_wrap =
-        static_cast<TCPWrap*>(client_obj->GetPointerFromInternalField(0));
+    TCPWrap* client_wrap = static_cast<TCPWrap*>(
+        client_obj->GetAlignedPointerFromInternalField(0));
 
     if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
 
@@ -325,7 +325,7 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
     argv[0] = client_obj;
   } else {
     SetErrno(uv_last_error(uv_default_loop()));
-    argv[0] = Local<Value>::New(Null());
+    argv[0] = Local<Value>::New(node_isolate, Null(node_isolate));
   }
 
   MakeCallback(wrap->object_, onconnection_sym, ARRAY_SIZE(argv), argv);
@@ -347,11 +347,11 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
   }
 
   Local<Value> argv[5] = {
-    Integer::New(status),
-    Local<Value>::New(wrap->object_),
-    Local<Value>::New(req_wrap->object_),
-    Local<Value>::New(v8::True()),
-    Local<Value>::New(v8::True())
+    Integer::New(status, node_isolate),
+    Local<Value>::New(node_isolate, wrap->object_),
+    Local<Value>::New(node_isolate, req_wrap->object_),
+    Local<Value>::New(node_isolate, v8::True(node_isolate)),
+    Local<Value>::New(node_isolate, v8::True(node_isolate))
   };
 
   MakeCallback(req_wrap->object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
@@ -383,7 +383,7 @@ Handle<Value> TCPWrap::Connect(const Arguments& args) {
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
     delete req_wrap;
-    return scope.Close(v8::Null());
+    return scope.Close(v8::Null(node_isolate));
   } else {
     return scope.Close(req_wrap->object_);
   }
@@ -410,7 +410,7 @@ Handle<Value> TCPWrap::Connect6(const Arguments& args) {
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
     delete req_wrap;
-    return scope.Close(v8::Null());
+    return scope.Close(v8::Null(node_isolate));
   } else {
     return scope.Close(req_wrap->object_);
   }
@@ -448,7 +448,7 @@ Local<Object> AddressToJS(const sockaddr* addr) {
     port = ntohs(a6->sin6_port);
     info->Set(address_sym, String::New(ip));
     info->Set(family_sym, ipv6_sym);
-    info->Set(port_sym, Integer::New(port));
+    info->Set(port_sym, Integer::New(port, node_isolate));
     break;
 
   case AF_INET:
@@ -457,11 +457,11 @@ Local<Object> AddressToJS(const sockaddr* addr) {
     port = ntohs(a4->sin_port);
     info->Set(address_sym, String::New(ip));
     info->Set(family_sym, ipv4_sym);
-    info->Set(port_sym, Integer::New(port));
+    info->Set(port_sym, Integer::New(port, node_isolate));
     break;
 
   default:
-    info->Set(address_sym, String::Empty());
+    info->Set(address_sym, String::Empty(node_isolate));
   }
 
   return scope.Close(info);

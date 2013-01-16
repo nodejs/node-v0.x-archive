@@ -66,6 +66,11 @@ static uv_loop_t default_loop_struct;
 static uv_loop_t* default_loop_ptr;
 
 
+uint64_t uv_hrtime(void) {
+  return uv__hrtime();
+}
+
+
 void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
   assert(!(handle->flags & (UV_CLOSING | UV_CLOSED)));
 
@@ -248,7 +253,12 @@ void uv_loop_delete(uv_loop_t* loop) {
 }
 
 
-static unsigned int uv__poll_timeout(uv_loop_t* loop) {
+int uv_backend_fd(const uv_loop_t* loop) {
+  return loop->backend_fd;
+}
+
+
+int uv_backend_timeout(const uv_loop_t* loop) {
   if (!uv__has_active_handles(loop) && !uv__has_active_reqs(loop))
     return 0;
 
@@ -262,32 +272,42 @@ static unsigned int uv__poll_timeout(uv_loop_t* loop) {
 }
 
 
-static int uv__run(uv_loop_t* loop) {
-  uv_update_time(loop);
-  uv__run_timers(loop);
-  uv__run_idle(loop);
-  uv__run_prepare(loop);
-  uv__run_pending(loop);
-  uv__io_poll(loop, uv__poll_timeout(loop));
-  uv__run_check(loop);
-  uv__run_closing_handles(loop);
-  return uv__has_active_handles(loop) || uv__has_active_reqs(loop);
+static int uv__loop_alive(uv_loop_t* loop) {
+  return uv__has_active_handles(loop) ||
+         uv__has_active_reqs(loop) ||
+         loop->closing_handles != NULL;
+}
+
+
+int uv_run2(uv_loop_t* loop, uv_run_mode mode) {
+  int r;
+
+  if (!uv__loop_alive(loop))
+    return 0;
+
+  do {
+    uv__update_time(loop);
+    uv__run_timers(loop);
+    uv__run_idle(loop);
+    uv__run_prepare(loop);
+    uv__run_pending(loop);
+    uv__io_poll(loop, (mode & UV_RUN_NOWAIT ? 0 : uv_backend_timeout(loop)));
+    uv__run_check(loop);
+    uv__run_closing_handles(loop);
+    r = uv__loop_alive(loop);
+  } while (r && !(mode & (UV_RUN_ONCE | UV_RUN_NOWAIT)));
+
+  return r;
 }
 
 
 int uv_run(uv_loop_t* loop) {
-  while (uv__run(loop));
-  return 0;
-}
-
-
-int uv_run_once(uv_loop_t* loop) {
-  return uv__run(loop);
+  return uv_run2(loop, UV_RUN_DEFAULT);
 }
 
 
 void uv_update_time(uv_loop_t* loop) {
-  loop->time = uv_hrtime() / 1000000;
+  uv__update_time(loop);
 }
 
 
@@ -325,6 +345,13 @@ int uv__socket(int domain, int type, int protocol) {
     sockfd = -1;
   }
 
+#if defined(SO_NOSIGPIPE)
+  {
+    int on = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+  }
+#endif
+
 out:
   return sockfd;
 }
@@ -336,7 +363,7 @@ int uv__accept(int sockfd) {
   assert(sockfd >= 0);
 
   while (1) {
-#if __linux__
+#if defined(__linux__)
     static int no_accept4;
 
     if (no_accept4)
@@ -417,6 +444,10 @@ int uv__nonblock(int fd, int set) {
   if (r == -1)
     return -1;
 
+  /* Bail out now if already set/clear. */
+  if (!!(r & O_NONBLOCK) == !!set)
+    return 0;
+
   if (set)
     flags = r | O_NONBLOCK;
   else
@@ -440,6 +471,10 @@ int uv__cloexec(int fd, int set) {
 
   if (r == -1)
     return -1;
+
+  /* Bail out now if already set/clear. */
+  if (!!(r & FD_CLOEXEC) == !!set)
+    return 0;
 
   if (set)
     flags = r | FD_CLOEXEC;
@@ -471,24 +506,6 @@ int uv__dup(int fd) {
   }
 
   return fd;
-}
-
-
-/* TODO move to uv-common.c? */
-size_t uv__strlcpy(char* dst, const char* src, size_t size) {
-  const char *org;
-
-  if (size == 0) {
-    return 0;
-  }
-
-  org = src;
-  while (--size && *src) {
-    *dst++ = *src++;
-  }
-  *dst = '\0';
-
-  return src - org;
 }
 
 
@@ -629,9 +646,6 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   w->pevents &= ~events;
 
   if (w->pevents == 0) {
-    ngx_queue_remove(&w->pending_queue);
-    ngx_queue_init(&w->pending_queue);
-
     ngx_queue_remove(&w->watcher_queue);
     ngx_queue_init(&w->watcher_queue);
 
@@ -645,6 +659,12 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   }
   else if (ngx_queue_empty(&w->watcher_queue))
     ngx_queue_insert_tail(&loop->watcher_queue, &w->watcher_queue);
+}
+
+
+void uv__io_close(uv_loop_t* loop, uv__io_t* w) {
+  uv__io_stop(loop, w, UV__POLLIN | UV__POLLOUT);
+  ngx_queue_remove(&w->pending_queue);
 }
 
 

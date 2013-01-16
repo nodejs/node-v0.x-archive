@@ -1,4 +1,115 @@
-2012.10.24, Version 0.9.3 (Unstable)
+2013.01.11, Version 0.9.6 (Unstable)
+
+* V8: update to 3.15.11.5
+
+* node: remove ev-emul.h (Ben Noordhuis)
+
+* path: make basename and extname ignore trailing slashes (Bert Belder)
+
+* typed arrays: fix sunos signed/unsigned char issue (Ben Noordhuis)
+
+* child_process: Fix {stdio:'inherit'} regression (Ben Noordhuis)
+
+* child_process: Fix pipe() from child stdio streams  (Maciej Małecki)
+
+* child_process: make fork() execPath configurable (Bradley Meck)
+
+* stream: Add readable.push(chunk) method (isaacs)
+
+* dtrace: x64 ustack helper (Fedor Indutny)
+
+* repl: fix floating point number parsing (Nirk Niggler)
+
+* repl: allow overriding builtins (Ben Noordhuis)
+
+* net: add localAddress and localPort to Socket (James Hight)
+
+* fs: make pool size coincide with ReadStream bufferSize (Shigeki Ohtsu)
+
+* typed arrays: implement load and store swizzling (Dean McNamee)
+
+* windows: fix perfctr crash on XP and 2003 (Scott Blomquist)
+
+* dgram: fix double implicit bind error (Ben Noordhuis)
+
+
+2012.12.30, Version 0.9.5 (Unstable), 01994e8119c24f2284bac0779b32acb49c95bee7
+
+* assert: improve support for new execution contexts (lukebayes)
+
+* domain: use camelCase instead of snake_case (isaacs)
+
+* domain: Do not use uncaughtException handler (isaacs)
+
+* fs: make 'end' work with ReadStream without 'start' (Ben Noordhuis)
+
+* https: optimize createConnection() (Ryunosuke SATO)
+
+* buffer: speed up base64 encoding by 20% (Ben Noordhuis)
+
+* doc: Colorize API stabilitity index headers in docs (Luke Arduini)
+
+* net: socket.readyState corrections (bentaber)
+
+* http: Performance enhancements for http under streams2 (isaacs)
+
+* stream: fix to emit end event on http.ClientResponse (Shigeki Ohtsu)
+
+* stream: fix event handler leak in readstream pipe and unpipe (Andreas Madsen)
+
+* build: Support ./configure --tag switch (Maciej Małecki)
+
+* repl: don't touch `require.cache` (Nathan Rajlich)
+
+* node: Emit 'exit' event when exiting for an uncaught exception (isaacs)
+
+
+2012.12.21, Version 0.9.4 (Unstable), d86d83c75f6343b5368bb7bd328b4466a035e1d4
+
+* streams: Update all streaming interfaces to use new classes (isaacs)
+
+* node: remove idle gc (Ben Noordhuis)
+
+* http: protect against response splitting attacks (Bert Belder)
+
+* fs: Raise error when null bytes detected in paths (isaacs)
+
+* fs: fix 'object is not a function' callback errors (Ben Noordhuis)
+
+* fs: add autoClose=true option to fs.createReadStream (Farid Neshat)
+
+* process: add getgroups(), setgroups(), initgroups() (Ben Noordhuis)
+
+* openssl: optimized asm code on x86 and x64 (Bert Belder)
+
+* crypto: fix leak in GetPeerCertificate (Fedor Indutny)
+
+* add systemtap support (Jan Wynholds)
+
+* windows: add ETW and PerfCounters support (Scott Blomquist)
+
+* windows: fix normalization of UNC paths (Bert Belder)
+
+* crypto: fix ssl error handling (Sergey Kholodilov)
+
+* node: remove eio-emul.h (Ben Noordhuis)
+
+* os: add os.endianness() function (Nathan Rajlich)
+
+* readline: don't emit "line" events with a trailing '\n' char (Nathan Rajlich)
+
+* build: add configure option to generate xcode build files (Timothy J Fontaine)
+
+* build: allow linking against system libuv, cares, http_parser (Stephen Gallagher)
+
+* typed arrays: add slice() support to ArrayBuffer (Anthony Pesch)
+
+* debugger: exit and kill child on SIGTERM or SIGHUP (Fedor Indutny)
+
+* url: url.format escapes delimiters in path and query (J. Lee Coltrane)
+
+
+2012.10.24, Version 0.9.3 (Unstable), 1ed4c6776e4f52956918b70565502e0f8869829d
 
 * V8: Upgrade to 3.13.7.4
 
@@ -33,7 +144,7 @@
 * streams: fix pipe is destructed by 'end' from destination (koichik)
 
 
-2012.09.17, Version 0.9.2 (Unstable)
+2012.09.17, Version 0.9.2 (Unstable), 6e2055889091a424fbb5c500bc3ab9c05d1c28b4
 
 * http_parser: upgrade to ad3b631
 
@@ -164,7 +275,81 @@
 * Fix #3521 Make process.env more like a regular Object (isaacs)
 
 
-2012.10.12, Version 0.8.12 (Stable)
+2013.01.09, Version 0.8.17 (Stable), c50c33e9397d7a0a8717e8ce7530572907c054ad
+
+* npm: Upgrade to v1.2.0
+  - peerDependencies (Domenic Denicola)
+  - node-gyp v0.8.2 (Nathan Rajlich)
+  - Faster installs from github user/project shorthands (Nathan Zadoks)
+
+* typed arrays: fix 32 bit size/index overflow (Ben Noordhuis)
+
+* http: Improve performance of single-packet responses (Ben Noordhuis)
+
+* install: fix openbsd man page location (Ben Noordhuis)
+
+* http: bubble up parser errors to ClientRequest (Brian White)
+
+
+2012.12.13, Version 0.8.16 (Stable), 1c9c6277d5cfcaaac8569c0c8f7daa64292048a9
+
+* npm: Upgrade to 1.1.69
+
+* fs: fix WriteStream/ReadStream fd leaks (Ben Noordhuis)
+
+* crypto: fix leak in GetPeerCertificate (Fedor Indutny)
+
+* buffer: Don't double-negate numeric buffer arg (Trevor Norris)
+
+* net: More accurate IP address validation and IPv6 dotted notation. (Joshua Erickson)
+
+
+2012.11.26, Version 0.8.15 (Stable), fdf91afb494a7a2fff2913d817f589c191a2c88f
+
+* npm: Upgrade to 1.1.66 (isaacs)
+
+* linux: use /proc/cpuinfo for CPU frequency (Ben Noordhuis)
+
+* windows: map WSAESHUTDOWN to UV_EPIPE (Ben Noordhuis)
+
+* windows: map ERROR_GEN_FAILURE to UV_EIO (Bert Belder)
+
+* unix: do not set environ unless one is provided (Charlie McConnell)
+
+* domains: don't crash if domain is set to null (Bert Belder)
+
+* windows: fix the x64 debug build (Bert Belder)
+
+* net, tls: fix connect() resource leak (Ben Noordhuis)
+
+
+2012.10.25, Version 0.8.14 (Stable), b00527fcf05c3d9f/b5d5d790f9472906a59fe218
+
+* events: Don't clobber pre-existing _events obj in EE ctor (isaacs)
+
+
+2012.10.25, Version 0.8.13 (Stable), ff4c974873f9a7cc6a5b042eb9b6389bb8dde6d6
+
+* V8: Upgrade to 3.11.10.25
+
+* npm: Upgrade to 1.1.65
+
+* url: parse hostnames that start with - or _ (Ben Noordhuis)
+
+* repl: Fix Windows 8 terminal issue (Bert Belder)
+
+* typed arrays: use signed char for signed int8s (Aaron Jacobs)
+
+* crypto: fix bugs in DiffieHellman (Ben Noordhuis)
+
+* configure: turn on VFPv3 on ARMv7 (Ben Noordhuis)
+
+* Re-enable OpenSSL UI for entering passphrases via tty (Ben Noordhuis)
+
+* repl: ensure each REPL instance gets its own "context" (Nathan Rajlich)
+
+
+2012.10.12, Version 0.8.12 (Stable), 38c72d4e29574dec5205bcf23c2a85efe65331a4
 
 * npm: Upgrade to 1.1.63
 
@@ -190,7 +375,7 @@
 * fs: Fix stat() size reporting for large files (Ben Noordhuis)
 
 
-2012.09.25, Version 0.8.10 (Stable)
+2012.09.25, Version 0.8.10 (Stable), 0bc273da4fcaa79b209ed755ad249a3e7be626a6
 
 * npm: Upgrade to 1.1.62
 
@@ -952,7 +1137,7 @@
 * Bug fixes
 
 
-2012.07.10 Version 0.6.20 (maintenance)
+2012.07.10 Version 0.6.20 (maintenance), 952e513379169ec1b40909d1db056e9bf4294899
 
 * npm: Upgrade to 1.1.37 (isaacs)
 
@@ -1315,7 +1500,7 @@
 * crypto: don't ignore DH init errors (Ben Noordhuis)
 
 
-2011.12.14, Version 0.6.6
+2011.12.14, Version 0.6.6 (stable), 9a059ea69e1f6ebd8899246682d8ca257610b8ab
 
 * npm update to 1.1.0-beta-4 (Isaac Z. Schlueter)
 
@@ -1552,7 +1737,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Upgrade GYP to r1081
 
 
-2011.10.10, Version 0.5.9 (unstable)
+2011.10.10, Version 0.5.9 (unstable), 3bd9b08fb125b606f97a4079b147accfdeebb07d
 
 * fs.watch interface backed by kqueue, inotify, and ReadDirectoryChangesW
   (Igor Zinkovsky, Ben Noordhuis)
@@ -1636,7 +1821,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * #1719 Drain OpenSSL error queue
 
 
-2011.09.08, Version 0.5.6 (unstable)
+2011.09.08, Version 0.5.6 (unstable), b49bec55806574a47403771bce1ee379c2b09ca2
 
 * #345, #1635, #1648 Documentation improvements (Thomas Shinnick,
   Abimanyu Raja, AJ ONeal, Koichi Kobayashi, Michael Jackson, Logan Smyth,
@@ -1924,7 +2109,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * DTrace probes: support X-Forwarded-For (Dave Pacheco)
 
 
-2011.09.15, Version 0.4.12 (stable)
+2011.09.15, Version 0.4.12 (stable), 771ba34ca7b839add2ef96879e1ffc684813cf7c
 
 * Improve docs
 
@@ -1973,7 +2158,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Doc improvments (koichik, Logan Smyth, Ben Noordhuis, Arnout Kazemier)
 
 
-2011.07.19, Version 0.4.10 (stable)
+2011.07.19, Version 0.4.10 (stable), 1b8dd65d6e3b82b6863ef38835cc436c5d30c1d5
 
 * #394 Fix Buffer drops last null character in UTF-8
 
@@ -2000,7 +2185,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Doc improvements
 
 
-2011.06.29, Version 0.4.9 (stable)
+2011.06.29, Version 0.4.9 (stable), de44eafd7854d06cd85006f509b7051e8540589b
 
 * Improve documentation
 
@@ -2074,7 +2259,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Upgrade V8 to 3.1.8.16.
 
 
-2011.04.22, Version 0.4.7 (stable)
+2011.04.22, Version 0.4.7 (stable), c85455a954411b38232e79752d4abb61bb75031b
 
 * Don't emit error on ECONNRESET from read() #670
 
@@ -2092,7 +2277,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Improve docs.
 
 
-2011.04.13, Version 0.4.6 (stable)
+2011.04.13, Version 0.4.6 (stable), 58002d56bc79410c5ff397fc0e1ffec0665db38a
 
 * Don't error on ENOTCONN from shutdown() #670
 
@@ -2122,7 +2307,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Upgrade v8 to 3.1.8.10
 
 
-2011.04.01, Version 0.4.5 (stable)
+2011.04.01, Version 0.4.5 (stable), 787a343b588de26784fef97f953420b53a6e1d73
 
 * Fix listener leak in stream.pipe() (Mikeal Rogers)
 
@@ -2255,7 +2440,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Upgrade V8 to 3.1.5, libev to 4.4.
 
 
-2011.02.10, Version 0.4.0 (stable)
+2011.02.10, Version 0.4.0 (stable), eb155ea6f6a6aa341aa8c731dca8da545c6a4008
 
 * require() improvements (isaacs)
   - understand package.json (isaacs)
@@ -2288,7 +2473,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Upgrade V8 to 3.1.2
 
 
-2011.02.04, Version 0.3.8 (unstable)
+2011.02.04, Version 0.3.8 (unstable), 9493b7563bff31525b4080df5aeef09747782d5e
 
 * Add req.abort() for client side requests.
 
@@ -2310,7 +2495,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 
 * Upgrade V8 to 3.1.1
 
-2011.01.27, Version 0.3.7 (unstable)
+2011.01.27, Version 0.3.7 (unstable), d8579c6afdbe868de6dffa8db78bbe4ba2d03e0e
 
 * Expose agent in http and https client. (Mikeal Rogers)
 
@@ -2372,7 +2557,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Don't stat() on cached modules. (Felix Geisendörfer)
 
 
-2011.01.08, Version 0.3.4 (unstable)
+2011.01.08, Version 0.3.4 (unstable), 73f53e12e4a5b9ef7dbb4792bd5f8ad403094441
 
 * Primordial mingw build (Bert Belder)
 
@@ -2590,7 +2775,7 @@ koichik, Maciej Małecki, Guglielmo Ferri, isaacs)
 * Upgrade V8 to 2.3.8
 
 
-2010.08.13, Version 0.1.104
+2010.08.13, Version 0.1.104, b14dd49222687c12f3e8eac597cff4f2674f84e8
 
 * Various bug fixes (console, querystring, require)
 

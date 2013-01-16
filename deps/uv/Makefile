@@ -44,10 +44,10 @@ BENCHMARKS=test/blackhole-server.c test/echo-server.c test/dns-server.c test/ben
 all: libuv.a
 
 test/run-tests$(E): test/run-tests.c test/runner.c $(RUNNER_SRC) $(TESTS) libuv.$(SOEXT)
-	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o $@ $^ $(RUNNER_LIBS) $(RUNNER_LINKFLAGS)
+	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o $@ $^ $(RUNNER_LIBS) $(RUNNER_LDFLAGS)
 
 test/run-benchmarks$(E): test/run-benchmarks.c test/runner.c $(RUNNER_SRC) $(BENCHMARKS) libuv.$(SOEXT)
-	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o $@ $^ $(RUNNER_LIBS) $(RUNNER_LINKFLAGS)
+	$(CC) $(CPPFLAGS) $(RUNNER_CFLAGS) -o $@ $^ $(RUNNER_LIBS) $(RUNNER_LDFLAGS)
 
 test/echo.o: test/echo.c test/echo.h
 
@@ -62,7 +62,7 @@ bench: test/run-benchmarks$(E)
 	$<
 
 clean: clean-platform
-	$(RM) -f src/*.o *.a test/run-tests$(E) test/run-benchmarks$(E)
+	$(RM) -f *.a *.so test/run-tests$(E) test/run-benchmarks$(E)
 
 distclean: distclean-platform
-	$(RM) -f src/*.o *.a test/run-tests$(E) test/run-benchmarks$(E)
+	$(RM) -f *.a *.so test/run-tests$(E) test/run-benchmarks$(E)

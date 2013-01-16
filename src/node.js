@@ -38,6 +38,9 @@
 
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
+    // do this good and early, since it handles errors.
+    startup.processFatal();
+
     startup.globalVariables();
     startup.globalTimeouts();
     startup.globalConsole();
@@ -140,7 +143,6 @@
 
       } else {
         // Read all of stdin - execute it.
-        process.stdin.resume();
         process.stdin.setEncoding('utf8');
 
         var code = '';
@@ -210,6 +212,55 @@
       startup._lazyConstants = process.binding('constants');
     }
     return startup._lazyConstants;
+  };
+
+  startup.processFatal = function() {
+    // call into the active domain, or emit uncaughtException,
+    // and exit if there are no listeners.
+    process._fatalException = function(er) {
+      var caught = false;
+      if (process.domain) {
+        var domain = process.domain;
+
+        // ignore errors on disposed domains.
+        //
+        // XXX This is a bit stupid.  We should probably get rid of
+        // domain.dispose() altogether.  It's almost always a terrible
+        // idea.  --isaacs
+        if (domain._disposed)
+          return true;
+
+        er.domain = domain;
+        er.domainThrown = true;
+        // wrap this in a try/catch so we don't get infinite throwing
+        try {
+          // One of three things will happen here.
+          //
+          // 1. There is a handler, caught = true
+          // 2. There is no handler, caught = false
+          // 3. It throws, caught = false
+          //
+          // If caught is false after this, then there's no need to exit()
+          // the domain, because we're going to crash the process anyway.
+          caught = domain.emit('error', er);
+          domain.exit();
+        } catch (er2) {
+          caught = false;
+        }
+      } else {
+        caught = process.emit('uncaughtException', er);
+      }
+      // if someone handled it, then great.  otherwise, die in C++ land
+      // since that means that we'll exit the process, emit the 'exit' event
+      if (!caught) {
+        try {
+          process.emit('exit', 1);
+        } catch (er) {
+          // nothing to be done about it at this point.
+        }
+      }
+      return caught;
+    };
   };
 
   var assert;
@@ -431,13 +482,18 @@
 
       case 'PIPE':
         var net = NativeModule.require('net');
-        stream = new net.Stream(fd);
+        stream = new net.Socket({
+          fd: fd,
+          readable: false,
+          writable: true
+        });
 
-        // FIXME Should probably have an option in net.Stream to create a
+        // FIXME Should probably have an option in net.Socket to create a
         // stream from an existing fd which is writable only. But for now
         // we'll just add this hack and set the `readable` member to false.
         // Test: ./node test/fixtures/echo.js < /etc/passwd
         stream.readable = false;
+        stream.read = null;
         stream._type = 'pipe';
 
         // FIXME Hack to have stream not keep the event loop alive.
@@ -497,18 +553,26 @@
       switch (tty_wrap.guessHandleType(fd)) {
         case 'TTY':
           var tty = NativeModule.require('tty');
-          stdin = new tty.ReadStream(fd);
+          stdin = new tty.ReadStream(fd, {
+            highWaterMark: 0,
+            lowWaterMark: 0,
+            readable: true,
+            writable: false
+          });
           break;
 
         case 'FILE':
           var fs = NativeModule.require('fs');
-          stdin = new fs.ReadStream(null, {fd: fd});
+          stdin = new fs.ReadStream(null, { fd: fd });
           break;
 
         case 'PIPE':
           var net = NativeModule.require('net');
-          stdin = new net.Stream(fd);
-          stdin.readable = true;
+          stdin = new net.Socket({
+            fd: fd,
+            readable: true,
+            writable: false
+          });
           break;
 
         default:
@@ -520,16 +584,23 @@
       stdin.fd = fd;
 
       // stdin starts out life in a paused state, but node doesn't
-      // know yet.  Call pause() explicitly to unref() it.
-      stdin.pause();
+      // know yet.  Explicitly to readStop() it to put it in the
+      // not-reading state.
+      if (stdin._handle && stdin._handle.readStop) {
+        stdin._handle.reading = false;
+        stdin._readableState.reading = false;
+        stdin._handle.readStop();
+      }
 
-      // when piping stdin to a destination stream,
-      // let the data begin to flow.
-      var pipe = stdin.pipe;
-      stdin.pipe = function(dest, opts) {
-        stdin.resume();
-        return pipe.call(stdin, dest, opts);
-      };
+      // if the user calls stdin.pause(), then we need to stop reading
+      // immediately, so that the process can close down.
+      stdin.on('pause', function() {
+        if (!stdin._handle)
+          return;
+        stdin._readableState.reading = false;
+        stdin._handle.reading = false;
+        stdin._handle.readStop();
+      });
 
       return stdin;
     });
@@ -701,8 +772,8 @@
 
     var nativeModule = new NativeModule(id);
 
-    nativeModule.compile();
     nativeModule.cache();
+    nativeModule.compile();
 
     return nativeModule.exports;
   };

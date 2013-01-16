@@ -78,7 +78,7 @@ void TTYWrap::Initialize(Handle<Object> target) {
 TTYWrap* TTYWrap::Unwrap(Local<Object> obj) {
   assert(!obj.IsEmpty());
   assert(obj->InternalFieldCount() > 0);
-  return static_cast<TTYWrap*>(obj->GetPointerFromInternalField(0));
+  return static_cast<TTYWrap*>(obj->GetAlignedPointerFromInternalField(0));
 }
 
 
@@ -109,7 +109,7 @@ Handle<Value> TTYWrap::GuessHandleType(const Arguments& args) {
 
     default:
       assert(0);
-      return v8::Undefined();
+      return v8::Undefined(node_isolate);
   }
 }
 
@@ -118,7 +118,12 @@ Handle<Value> TTYWrap::IsTTY(const Arguments& args) {
   HandleScope scope;
   int fd = args[0]->Int32Value();
   assert(fd >= 0);
-  return uv_guess_handle(fd) == UV_TTY ? v8::True() : v8::False();
+
+  if (uv_guess_handle(fd) == UV_TTY) {
+    return v8::True(node_isolate);
+  }
+
+  return v8::False(node_isolate);
 }
 
 
@@ -132,12 +137,12 @@ Handle<Value> TTYWrap::GetWindowSize(const Arguments& args) {
 
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
-    return v8::Undefined();
+    return v8::Undefined(node_isolate);
   }
 
   Local<v8::Array> a = v8::Array::New(2);
-  a->Set(0, Integer::New(width));
-  a->Set(1, Integer::New(height));
+  a->Set(0, Integer::New(width, node_isolate));
+  a->Set(1, Integer::New(height, node_isolate));
 
   return scope.Close(a);
 }
@@ -154,7 +159,7 @@ Handle<Value> TTYWrap::SetRawMode(const Arguments& args) {
     SetErrno(uv_last_error(uv_default_loop()));
   }
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 

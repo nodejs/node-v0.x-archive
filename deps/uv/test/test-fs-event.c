@@ -26,7 +26,11 @@
 #include <fcntl.h>
 
 #ifndef HAVE_KQUEUE
-# if __APPLE__ || __DragonFly__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__
+# if defined(__APPLE__) ||                                                    \
+     defined(__DragonFly__) ||                                                \
+     defined(__FreeBSD__) ||                                                  \
+     defined(__OpenBSD__) ||                                                  \
+     defined(__NetBSD__)
 #  define HAVE_KQUEUE 1
 # endif
 #endif
@@ -296,6 +300,37 @@ TEST_IMPL(fs_event_watch_file_current_dir) {
   return 0;
 }
 
+TEST_IMPL(fs_event_no_callback_after_close) {
+  uv_loop_t* loop = uv_default_loop();
+  int r;
+
+  /* Setup */
+  remove("watch_dir/file1");
+  remove("watch_dir/");
+  create_dir(loop, "watch_dir");
+  create_file(loop, "watch_dir/file1");
+
+  r = uv_fs_event_init(loop,
+                       &fs_event,
+                       "watch_dir/file1",
+                       fs_event_cb_file,
+                       0);
+  ASSERT(r != -1);
+
+  uv_close((uv_handle_t*)&fs_event, close_cb);
+  touch_file(loop, "watch_dir/file1");
+  uv_run(loop);
+
+  ASSERT(fs_event_cb_called == 0);
+  ASSERT(close_cb_called == 1);
+
+  /* Cleanup */
+  remove("watch_dir/file1");
+  remove("watch_dir/");
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
 
 TEST_IMPL(fs_event_no_callback_on_close) {
   uv_loop_t* loop = uv_default_loop();
@@ -400,7 +435,7 @@ TEST_IMPL(fs_event_close_with_pending_event) {
   return 0;
 }
 
-#if HAVE_KQUEUE
+#if defined(HAVE_KQUEUE)
 
 /* kqueue doesn't register fs events if you don't have an active watcher.
  * The file descriptor needs to be part of the kqueue set of interest and

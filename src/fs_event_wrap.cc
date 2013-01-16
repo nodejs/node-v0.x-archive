@@ -51,7 +51,7 @@ private:
 
 FSEventWrap::FSEventWrap(Handle<Object> object): HandleWrap(object,
                                                     (uv_handle_t*)&handle_) {
-  handle_.data = reinterpret_cast<void*>(this);
+  handle_.data = static_cast<void*>(this);
   initialized_ = false;
 }
 
@@ -110,7 +110,7 @@ Handle<Value> FSEventWrap::Start(const Arguments& args) {
     SetErrno(uv_last_error(uv_default_loop()));
   }
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 
@@ -119,7 +119,7 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   HandleScope scope;
   Local<String> eventStr;
 
-  FSEventWrap* wrap = reinterpret_cast<FSEventWrap*>(handle->data);
+  FSEventWrap* wrap = static_cast<FSEventWrap*>(handle->data);
 
   assert(wrap->object_.IsEmpty() == false);
 
@@ -136,7 +136,7 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   // unreasonable, right? Still, we should revisit this before v1.0.
   if (status) {
     SetErrno(uv_last_error(uv_default_loop()));
-    eventStr = String::Empty();
+    eventStr = String::Empty(node_isolate);
   }
   else if (events & UV_RENAME) {
     eventStr = String::New("rename");
@@ -150,9 +150,10 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   }
 
   Local<Value> argv[3] = {
-    Integer::New(status),
+    Integer::New(status, node_isolate),
     eventStr,
-    filename ? (Local<Value>)String::New(filename) : Local<Value>::New(v8::Null())
+    filename ? static_cast<Local<Value> >(String::New(filename))
+             : Local<Value>::New(node_isolate, v8::Null(node_isolate))
   };
 
   if (onchange_sym.IsEmpty()) {
@@ -171,10 +172,12 @@ Handle<Value> FSEventWrap::Close(const Arguments& args) {
   // and legal, HandleWrap::Close() deals with them the same way.
   assert(!args.Holder().IsEmpty());
   assert(args.Holder()->InternalFieldCount() > 0);
-  void* ptr = args.Holder()->GetPointerFromInternalField(0);
+  void* ptr = args.Holder()->GetAlignedPointerFromInternalField(0);
   FSEventWrap* wrap = static_cast<FSEventWrap*>(ptr);
 
-  if (wrap == NULL || wrap->initialized_ == false) return Undefined();
+  if (wrap == NULL || wrap->initialized_ == false) {
+    return Undefined(node_isolate);
+  }
   wrap->initialized_ = false;
 
   return HandleWrap::Close(args);

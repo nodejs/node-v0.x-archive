@@ -90,7 +90,7 @@
     }                                                                         \
     else {                                                                    \
       uv__fs_work(&(req)->work_req);                                          \
-      uv__fs_done(&(req)->work_req);                                          \
+      uv__fs_done(&(req)->work_req, 0);                                       \
       return (req)->result;                                                   \
     }                                                                         \
   }                                                                           \
@@ -381,6 +381,7 @@ static ssize_t uv__fs_sendfile(uv_fs_t* req) {
         errno == EIO ||
         errno == ENOTSOCK ||
         errno == EXDEV) {
+      errno = 0;
       return uv__fs_sendfile_emul(req);
     }
 
@@ -412,6 +413,7 @@ static ssize_t uv__fs_sendfile(uv_fs_t* req) {
         errno == EIO ||
         errno == ENOTSOCK ||
         errno == EXDEV) {
+      errno = 0;
       return uv__fs_sendfile_emul(req);
     }
 
@@ -516,7 +518,7 @@ static void uv__fs_work(struct uv__work* w) {
 }
 
 
-static void uv__fs_done(struct uv__work* w) {
+static void uv__fs_done(struct uv__work* w, int status) {
   uv_fs_t* req;
 
   req = container_of(w, uv_fs_t, work_req);
@@ -525,6 +527,12 @@ static void uv__fs_done(struct uv__work* w) {
   if (req->errorno != 0) {
     req->errorno = uv_translate_sys_error(req->errorno);
     uv__set_artificial_error(req->loop, req->errorno);
+  }
+
+  if (status == -UV_ECANCELED) {
+    assert(req->errorno == 0);
+    req->errorno = UV_ECANCELED;
+    uv__set_artificial_error(req->loop, UV_ECANCELED);
   }
 
   if (req->cb != NULL)

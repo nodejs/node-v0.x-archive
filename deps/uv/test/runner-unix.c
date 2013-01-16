@@ -24,6 +24,7 @@
 
 #include <stdint.h> /* uintptr_t */
 
+#include <errno.h>
 #include <unistd.h> /* usleep */
 #include <string.h> /* strdup */
 #include <stdio.h>
@@ -146,8 +147,11 @@ static void* dowait(void* data) {
 
   if (args->pipe[1] >= 0) {
     /* Write a character to the main thread to notify it about this. */
-    char c = 0;
-    write(args->pipe[1], &c, 1);
+    ssize_t r;
+
+    do
+      r = write(args->pipe[1], "", 1);
+    while (r == -1 && errno == EINTR);
   }
 
   return NULL;
@@ -309,7 +313,7 @@ void process_cleanup(process_info_t *p) {
 
 
 /* Move the console cursor one line up and back to the first column. */
-void rewind_cursor() {
+void rewind_cursor(void) {
   fprintf(stderr, "\033[2K\r");
 }
 

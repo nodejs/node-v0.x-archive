@@ -265,6 +265,11 @@ parser.add_option("--xcode",
     dest="use_xcode",
     help="Generate build files for use with xcode")
 
+parser.add_option("--tag",
+    action="store",
+    dest="tag",
+    help="Custom build tag")
+
 (options, args) = parser.parse_args()
 
 
@@ -329,6 +334,11 @@ def is_arch_armv7():
           '__ARM_ARCH_7A__' in cc_macros_cache or
           '__ARM_ARCH_7R__' in cc_macros_cache or
           '__ARM_ARCH_7M__' in cc_macros_cache)
+
+
+def is_arm_neon():
+  """Check for ARM NEON support"""
+  return '__ARM_NEON__' in cc_macros()
 
 
 def arm_hard_float_abi():
@@ -417,14 +427,15 @@ def configure_arm(o):
     hard_float = options.arm_float_abi == 'hard'
   else:
     hard_float = arm_hard_float_abi()
-  o['variables']['v8_use_arm_eabi_hardfloat'] = b(hard_float)
 
   armv7 = is_arch_armv7()
-  if armv7:
-    # CHECKME VFPv3 implies ARMv7+ but is the reverse true as well?
-    o['variables']['arm_fpu'] = 'vfpv3'
-    o['variables']['arm_neon'] = 0
+  # CHECKME VFPv3 implies ARMv7+ but is the reverse true as well?
+  fpu = 'vfpv3' if armv7 else 'vfpv2'
+
   o['variables']['armv7'] = int(armv7)
+  o['variables']['arm_fpu'] = fpu
+  o['variables']['arm_neon'] = int(is_arm_neon())
+  o['variables']['v8_use_arm_eabi_hardfloat'] = b(hard_float)
 
 
 def configure_node(o):
@@ -489,6 +500,11 @@ def configure_node(o):
     raise Exception('Performance counter is only supported on Windows.')
   else:
     o['variables']['node_use_perfctr'] = 'false'
+
+  if options.tag:
+    o['variables']['node_tag'] = '-' + options.tag
+  else:
+    o['variables']['node_tag'] = ''
 
 
 def configure_libz(o):
@@ -590,6 +606,20 @@ def configure_openssl(o):
       o['cflags'] += cflags.split()
 
 
+def configure_winsdk(o):
+  if not sys.platform.startswith('win32'):
+    return
+
+  winsdk_dir = os.environ.get("WindowsSdkDir")
+
+  if winsdk_dir and os.path.isfile(winsdk_dir + '\\bin\\ctrpp.exe'):
+    print "Found ctrpp in WinSDK--will build generated files into tools/msvs/genfiles."
+    o['variables']['node_has_winsdk'] = 'true'
+    return
+
+  print "ctrpp not found in WinSDK path--using pre-gen files from tools/msvs/genfiles."
+
+
 output = {
   'variables': { 'python': sys.executable },
   'include_dirs': [],
@@ -605,6 +635,7 @@ configure_cares(output)
 configure_libuv(output)
 configure_v8(output)
 configure_openssl(output)
+configure_winsdk(output)
 
 # variables should be a root level element,
 # move everything else to target_defaults

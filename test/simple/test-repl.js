@@ -122,6 +122,9 @@ function error_test() {
     // Floating point numbers are not interpreted as REPL commands.
     { client: client_unix, send: '.1234',
       expect: '0.1234' },
+    // Floating point expressions are not interpreted as REPL commands
+		{ client: client_unix, send: '.1+.1',
+      expect: '0.2' },
     // Can parse valid JSON
     { client: client_unix, send: 'JSON.parse(\'{"valid": "json"}\');',
       expect: '{ valid: \'json\' }'},
@@ -169,7 +172,11 @@ function error_test() {
     { client: client_unix, send: '(function () {\n\nreturn 1;\n})()',
       expect: '1' },
     { client: client_unix, send: '{\n\na: 1\n}',
-      expect: '{ a: 1 }' }
+      expect: '{ a: 1 }' },
+    { client: client_unix, send: 'url.format("http://google.com")',
+      expect: 'http://google.com/' },
+    { client: client_unix, send: 'var path = 42; path',
+      expect: '42' }
   ]);
 }
 

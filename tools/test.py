@@ -221,6 +221,31 @@ class DotsProgressIndicator(SimpleProgressIndicator):
       sys.stdout.flush()
 
 
+class TapProgressIndicator(SimpleProgressIndicator):
+
+  def Starting(self):
+    print '1..%i' % len(self.cases)
+    self._done = 0
+
+  def AboutToRun(self, case):
+    pass
+
+  def HasRun(self, output):
+    self._done += 1
+    command = basename(output.command[1])
+    if output.UnexpectedOutput():
+      print 'not ok %i - %s' % (self._done, command)
+      for l in output.output.stderr.split(os.linesep):
+        print '#' + l
+      for l in output.output.stdout.split(os.linesep):
+        print '#' + l
+    else:
+      print 'ok %i - %s' % (self._done, command)
+
+  def Done(self):
+    pass
+
+
 class CompactProgressIndicator(ProgressIndicator):
 
   def __init__(self, cases, templates):
@@ -311,6 +336,7 @@ PROGRESS_INDICATORS = {
   'verbose': VerboseProgressIndicator,
   'dots': DotsProgressIndicator,
   'color': ColorProgressIndicator,
+  'tap': TapProgressIndicator,
   'mono': MonochromeProgressIndicator
 }
 
@@ -374,10 +400,20 @@ class TestCase(object):
 
   def Run(self):
     self.BeforeRun()
+
     try:
       result = self.RunCommand(self.GetCommand())
     finally:
-      self.AfterRun(result)
+      # Tests can leave the tty in non-blocking mode. If the test runner
+      # tries to print to stdout/stderr after that and the tty buffer is
+      # full, it'll die with a EAGAIN OSError. Ergo, put the tty back in
+      # blocking mode before proceeding.
+      if sys.platform != 'win32':
+        from fcntl import fcntl, F_GETFL, F_SETFL
+        from os import O_NONBLOCK
+        for fd in 0,1,2: fcntl(fd, F_SETFL, ~O_NONBLOCK & fcntl(fd, F_GETFL))
+
+    self.AfterRun(result)
     return result
 
   def Cleanup(self):
@@ -631,6 +667,7 @@ class LiteralTestSuite(TestSuite):
       if not name or name.match(test_name):
         full_path = current_path + [test_name]
         test.AddTestsToList(result, full_path, path, context, mode)
+    result.sort(cmp=lambda a, b: cmp(a.GetName(), b.GetName()))
     return result
 
   def GetTestStatus(self, context, sections, defs):
@@ -1140,7 +1177,7 @@ def BuildOptions():
   result.add_option("-S", dest="scons_flags", help="Flag to pass through to scons",
       default=[], action="append")
   result.add_option("-p", "--progress",
-      help="The style of progress indicator (verbose, dots, color, mono)",
+      help="The style of progress indicator (verbose, dots, color, mono, tap)",
       choices=PROGRESS_INDICATORS.keys(), default="mono")
   result.add_option("--no-build", help="Don't build requirements",
       default=True, action="store_true")
