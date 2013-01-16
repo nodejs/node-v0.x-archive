@@ -1729,7 +1729,6 @@ Handle<Value> Connection::Shutdown(const Arguments& args) {
 
   if (ss->ssl_ == NULL) return False(node_isolate);
   int rv = SSL_shutdown(ss->ssl_);
-  ss->HandleSSLError("SSL_shutdown", rv, kZeroIsNotAnError);
   ss->SetShutdownFlags();
 
   return scope.Close(Integer::New(rv, node_isolate));
