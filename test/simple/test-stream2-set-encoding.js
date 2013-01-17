@@ -22,7 +22,7 @@
 
 var common = require('../common.js');
 var assert = require('assert');
-var R = require('_stream_readable');
+var R = require('stream/readable');
 var util = require('util');
 
 // tiny node-tap lookalike.
