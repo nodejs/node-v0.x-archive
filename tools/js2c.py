@@ -304,7 +304,7 @@ def JS2C(source, target):
     lines = CompressScript(lines, do_jsmin)
     data = ToCArray(s, lines)
     name = ToModuleName(s)
-    id = name.replace("/", "_")#os.path.basename(str(s)).split('.')[0]
+    id = name.replace("/", "_")
     if delay: id = id[:-6]
     if delay:
       delay_ids.append((id, len(lines)))
