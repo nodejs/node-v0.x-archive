@@ -34,8 +34,12 @@ var server = http.createServer(function(req, res) {
   assert.deepEqual({
     host: 'mapdevel.trolologames.ru:443',
     origin: 'http://mapdevel.trolologames.ru',
-    cookie: ''
+    cookie: '',
+    'content-length': '12'
   }, req.headers);
+
+  req.setEncoding('utf8');
+  req.on('data', console.error);
 });
 
 
@@ -44,16 +48,13 @@ server.listen(common.PORT, function() {
 
   c.on('connect', function() {
     common.error('client wrote message');
-    c.write('GET /blah HTTP/1.1\r\n' +
-            'Host: mapdevel.trolologames.ru:443\r\n' +
-            'Cookie:\r\n' +
-            'Origin: http://mapdevel.trolologames.ru\r\n' +
-            '\r\n\r\nhello world'
+    c.end('GET /blah HTTP/1.1\r\n' +
+          'Host: mapdevel.trolologames.ru:443\r\n' +
+          'Cookie:\r\n' +
+          'Origin: http://mapdevel.trolologames.ru\r\n' +
+          'Content-Length: 12\r\n' +
+          '\r\nhello, world'
     );
-  });
-
-  c.on('end', function() {
-    c.end();
   });
 
   c.on('close', function() {
