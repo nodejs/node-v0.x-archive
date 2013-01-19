@@ -31,8 +31,8 @@ var tests = [
   { host: 'a.com', cert: { subject: { CN: 'b.com' } }, result: false },
   { host: 'a.com', cert: { subject: { CN: 'a.com.' } }, result: true },
 
-  // No wildcards in CN
-  { host: 'b.a.com', cert: { subject: { CN: '*.a.com' } }, result: false },
+  // Allow wildcards in CN
+  { host: 'b.a.com', cert: { subject: { CN: '*.a.com' } }, result: true },
 
   // Multiple CN fields
   {
