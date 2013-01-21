@@ -101,8 +101,8 @@ function next(er, input) {
   switch (format) {
     case 'json':
       require('./json.js')(input, inputFile, function(er, obj) {
-        console.log(JSON.stringify(obj, null, 2));
         if (er) throw er;
+        console.log(JSON.stringify(obj, null, 2));
       });
       break;
 
