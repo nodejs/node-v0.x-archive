@@ -24,6 +24,7 @@ class UDPWrap: public HandleWrap {
   static v8::Handle<v8::Value> DropMembership(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetMulticastTTL(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetMulticastLoopback(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetMulticastInterface(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetBroadcast(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetTTL(const v8::Arguments& args);
   static UDPWrap* Unwrap(v8::Local<v8::Object> obj);
