@@ -21,7 +21,7 @@
 
 var assert = require('assert');
 var common = require('../common.js');
-var fromList = require('stream/readable')._fromList;
+var fromList = require('stream').Readable._fromList;
 
 // tiny node-tap lookalike.
 var tests = [];

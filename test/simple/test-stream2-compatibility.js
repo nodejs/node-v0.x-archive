@@ -21,7 +21,7 @@
 
 
 var common = require('../common.js');
-var R = require('stream/readable');
+var R = require('stream').Readable;
 var assert = require('assert');
 
 var util = require('util');
