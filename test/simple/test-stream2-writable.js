@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var common = require('../common.js');
-var W = require('_stream_writable');
+var W = require('stream').Writable;
 var assert = require('assert');
 
 var util = require('util');
