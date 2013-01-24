@@ -237,7 +237,7 @@ static const struct _native natives[] = {
 
 
 NATIVE_DECLARATION = """\
-  { "%(id)s", %(id)s_native, sizeof(%(id)s_native)-1 },
+  { "%(name)s", %(id)s_native, sizeof(%(id)s_native)-1 },
 """
 
 SOURCE_DECLARATION = """\
@@ -258,6 +258,17 @@ GET_DELAY_SCRIPT_SOURCE_CASE = """\
 GET_DELAY_SCRIPT_NAME_CASE = """\
     if (index == %(i)i) return Vector<const char>("%(name)s", %(length)i);
 """
+
+# The paths where node modules can be found (strip off these paths)
+MODULE_PATHS = ['lib/', 'src/']
+def ToModuleName(name):
+  for path in MODULE_PATHS:
+    index = name.find(path)
+    if index > -1:
+      name = name[index + len(path):]
+      break
+  name = name.split('.')[0]
+  return name
 
 def JS2C(source, target):
   ids = []
@@ -292,7 +303,8 @@ def JS2C(source, target):
     lines = ExpandMacros(lines, macros)
     lines = CompressScript(lines, do_jsmin)
     data = ToCArray(s, lines)
-    id = os.path.basename(str(s)).split('.')[0]
+    name = ToModuleName(s)
+    id = name.replace("/", "_")
     if delay: id = id[:-6]
     if delay:
       delay_ids.append((id, len(lines)))
@@ -300,7 +312,7 @@ def JS2C(source, target):
       ids.append((id, len(lines)))
     source_lines.append(SOURCE_DECLARATION % { 'id': id, 'data': data })
     source_lines_empty.append(SOURCE_DECLARATION % { 'id': id, 'data': 0 })
-    native_lines.append(NATIVE_DECLARATION % { 'id': id })
+    native_lines.append(NATIVE_DECLARATION % { 'name': name, 'id': id })
   
   # Build delay support functions
   get_index_cases = [ ]
