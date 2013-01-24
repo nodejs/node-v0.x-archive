@@ -19,36 +19,25 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
-
 var common = require('../common');
 var assert = require('assert');
 var fs = require('fs');
 var http = require('http');
-var https = require('https');
-
-var options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
-};
 
 var body = 'hello world\n';
 
-var httpsServer = https.createServer(options, function(req, res) {
+var httpServer = http.createServer(function(req, res) {
   req.on('end', function() {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end(body);
     assert(typeof(req.connection.bytesWritten) !== undefined);
     assert(req.connection.bytesWritten > 0);
   });
-  httpsServer.close(); 
+  httpServer.close(); 
 });
 
-httpsServer.listen(common.PORT + 1, function() {
-  var req = https.request({ port: common.PORT + 1 }, function(res) {
+httpServer.listen(common.PORT, function() {
+  var req = http.request({ port: common.PORT }, function(res) {
   });
   req.end();
 });
