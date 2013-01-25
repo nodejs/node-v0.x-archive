@@ -1,97 +1,89 @@
-const LEN      = 1e7;
-const noAssert = process.argv[3] == 'true' ? true
-                  : process.argv[3] == 'false' ? false
-                  : undefined;
+var Timer = require('bench-timer');
+var params = Timer.parse(process.argv);
 
-var timer = require('./_bench_timer');
-
-var buff = (process.argv[2] == 'slow') ?
-      (new require('buffer').SlowBuffer(8)) :
-      (new Buffer(8));
-var i;
+var ITER = params.iter || 1e7;
+var noAssert = params.noassert;
+var Buff = params.slow ? require('buffer').SlowBuffer : Buffer;
+var buff = Buff(8);
 
 buff.writeDoubleLE(0, 0, noAssert);
 
-timer('readUInt8', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readUInt8', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readUInt8(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readUInt16LE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readUInt16LE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readUInt16LE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readUInt16BE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readUInt16BE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readUInt16BE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readUInt32LE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readUInt32LE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readUInt32LE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readUInt32BE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readUInt32BE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readUInt32BE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readInt8', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readInt8', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readInt8(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readInt16LE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readInt16LE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readInt16LE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readInt16BE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readInt16BE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readInt16BE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readInt32LE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readInt32LE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readInt32LE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readInt32BE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readInt32BE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readInt32BE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readFloatLE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readFloatLE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readFloatLE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readFloatBE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readFloatBE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readFloatBE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readDoubleLE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readDoubleLE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readDoubleLE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
 
-timer('readDoubleBE', function() {
-  for (i = 0; i < LEN; i++) {
+Timer('readDoubleBE', function() {
+  for (var i = 0; i < ITER; i++)
     buff.readDoubleBE(0, noAssert);
-  }
-});
+}).oncomplete(oncomplete, ITER);
+
+
+function oncomplete(name, hrtime, iter) {
+  var t = hrtime[0] * 1e3 + hrtime[1] / 1e6;
+  var m = Timer.maxNameLength();
+  name += ': ';
+  while (name.length < m + 2)
+    name += ' ';
+  console.log('%s%s/ms', name, Math.floor(iter / t));
+}
