@@ -26,7 +26,7 @@
     <Icon Id="node.exe" SourceFile="$(var.RepoDir)\src\res\node.ico"/>
     <Property Id="ARPPRODUCTICON" Value="node.exe" />
     <Property Id="ApplicationFolderName" Value="nodejs" />
-    <Property Id="WIXUI_INSTALLDIR" Value="APPLICATIONFOLDER" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
 
@@ -35,7 +35,7 @@
       </Directory>
 
       <Directory Id="$(var.ProgramFilesFolderId)">
-        <Directory Id="APPLICATIONFOLDER" Name="nodejs">
+        <Directory Id="INSTALLDIR" Name="nodejs">
           <Directory Id="NodeModulesFolder" Name="node_modules">
             <Directory Id="NPMFolder" Name="npm">
               <Component Id="npmrc" Guid="55B2B03F-8F32-4D62-A54A-FA428615591D">
@@ -47,12 +47,12 @@
             <File Id="filenodeexe" KeyPath="yes" Source="$(var.SourceDir)\node.exe" />
             <?if $(var.NoETW) != 1 ?>
             <File Id="node_etw_provider_man" Name="node_etw_provider.man" Source="$(var.RepoDir)\src\res\node_etw_provider.man" >
-              <util:EventManifest MessageFile="[APPLICATIONFOLDER]node.exe" ResourceFile="[APPLICATIONFOLDER]node.exe"/>
+              <util:EventManifest MessageFile="[INSTALLDIR]node.exe" ResourceFile="[INSTALLDIR]node.exe"/>
             </File>
             <?endif?>
             <?if $(var.NoPerfCtr) != 1 ?>
             <File Id="node_perfctr_provider_man" Name="node_perfctr_provider.man" Source="$(var.RepoDir)\src\res\node_perfctr_provider.man" >
-              <util:PerfCounterManifest ResourceFileDirectory="[APPLICATIONFOLDER]"/>
+              <util:PerfCounterManifest ResourceFileDirectory="[INSTALLDIR]"/>
             </File>
             <?endif?>
             <Environment Id="npm_env"
@@ -66,7 +66,7 @@
                          Name="PATH"
                          Part="last"
                          System="yes"
-                         Value="[APPLICATIONFOLDER]" />
+                         Value="[INSTALLDIR]" />
           </Component>
           <Component Id="npmcmd" Guid="31e9986d-74cd-44e1-878c-194d3e997d32">
             <File Id="filenpmcmd" KeyPath="yes" Source="$(var.NPMSourceDir)\bin\npm.cmd" />
@@ -111,13 +111,13 @@
     <DirectoryRef Id="ApplicationProgramsFolder">
       <Component Id="ApplicationShortcut" Guid="9b1ab94a-8f54-4f19-a5c4-b890de474162">
         <Shortcut Id="ApplicationStartMenuShortcut" Name="Node.js"
-                  Description="$(var.ProductDescription)" Target="[APPLICATIONFOLDER]node.exe"
-                  WorkingDirectory="APPLICATIONFOLDER"/>
+                  Description="$(var.ProductDescription)" Target="[INSTALLDIR]node.exe"
+                  WorkingDirectory="INSTALLDIR"/>
         <Shortcut Id="NodePromptStartMenuShortcut" Name="Node.js command prompt"
                   Description="Node.js Command Prompt" Target="[%ComSpec]"
-                  Arguments='/k "[APPLICATIONFOLDER]nodejsvars.bat"'
+                  Arguments='/k "[INSTALLDIR]nodejsvars.bat"'
                   Show="normal"
-                  WorkingDirectory="APPLICATIONFOLDER"/>
+                  WorkingDirectory="INSTALLDIR"/>
         <Shortcut Id="UninstallProduct"
                   Name="Uninstall Node.js"
                   Target="[SystemFolder]msiexec.exe"
