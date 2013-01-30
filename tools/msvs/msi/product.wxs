@@ -25,6 +25,8 @@
 
     <Icon Id="node.exe" SourceFile="$(var.RepoDir)\src\res\node.ico"/>
     <Property Id="ARPPRODUCTICON" Value="node.exe" />
+    <Property Id="ApplicationFolderName" Value="nodejs" />
+    <Property Id="WIXUI_INSTALLDIR" Value="APPLICATIONFOLDER" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
 
@@ -33,7 +35,7 @@
       </Directory>
 
       <Directory Id="$(var.ProgramFilesFolderId)">
-        <Directory Id="APPLICATIONROOTDIRECTORY" Name="nodejs">
+        <Directory Id="APPLICATIONFOLDER" Name="nodejs">
           <Directory Id="NodeModulesFolder" Name="node_modules">
             <Directory Id="NPMFolder" Name="npm">
               <Component Id="npmrc" Guid="55B2B03F-8F32-4D62-A54A-FA428615591D">
@@ -45,12 +47,12 @@
             <File Id="filenodeexe" KeyPath="yes" Source="$(var.SourceDir)\node.exe" />
             <?if $(var.NoETW) != 1 ?>
             <File Id="node_etw_provider_man" Name="node_etw_provider.man" Source="$(var.RepoDir)\src\res\node_etw_provider.man" >
-              <util:EventManifest MessageFile="[APPLICATIONROOTDIRECTORY]node.exe" ResourceFile="[APPLICATIONROOTDIRECTORY]node.exe"/>
+              <util:EventManifest MessageFile="[APPLICATIONFOLDER]node.exe" ResourceFile="[APPLICATIONFOLDER]node.exe"/>
             </File>
             <?endif?>
             <?if $(var.NoPerfCtr) != 1 ?>
             <File Id="node_perfctr_provider_man" Name="node_perfctr_provider.man" Source="$(var.RepoDir)\src\res\node_perfctr_provider.man" >
-              <util:PerfCounterManifest ResourceFileDirectory="[APPLICATIONROOTDIRECTORY]"/>
+              <util:PerfCounterManifest ResourceFileDirectory="[APPLICATIONFOLDER]"/>
             </File>
             <?endif?>
             <Environment Id="npm_env"
@@ -64,7 +66,7 @@
                          Name="PATH"
                          Part="last"
                          System="yes"
-                         Value="[APPLICATIONROOTDIRECTORY]" />
+                         Value="[APPLICATIONFOLDER]" />
           </Component>
           <Component Id="npmcmd" Guid="31e9986d-74cd-44e1-878c-194d3e997d32">
             <File Id="filenpmcmd" KeyPath="yes" Source="$(var.NPMSourceDir)\bin\npm.cmd" />
@@ -109,13 +111,13 @@
     <DirectoryRef Id="ApplicationProgramsFolder">
       <Component Id="ApplicationShortcut" Guid="9b1ab94a-8f54-4f19-a5c4-b890de474162">
         <Shortcut Id="ApplicationStartMenuShortcut" Name="Node.js"
-                  Description="$(var.ProductDescription)" Target="[APPLICATIONROOTDIRECTORY]node.exe"
-                  WorkingDirectory="APPLICATIONROOTDIRECTORY"/>
+                  Description="$(var.ProductDescription)" Target="[APPLICATIONFOLDER]node.exe"
+                  WorkingDirectory="APPLICATIONFOLDER"/>
         <Shortcut Id="NodePromptStartMenuShortcut" Name="Node.js command prompt"
                   Description="Node.js Command Prompt" Target="[%ComSpec]"
-                  Arguments='/k "[APPLICATIONROOTDIRECTORY]nodejsvars.bat"'
+                  Arguments='/k "[APPLICATIONFOLDER]nodejsvars.bat"'
                   Show="normal"
-                  WorkingDirectory="APPLICATIONROOTDIRECTORY"/>
+                  WorkingDirectory="APPLICATIONFOLDER"/>
         <Shortcut Id="UninstallProduct"
                   Name="Uninstall Node.js"
                   Target="[SystemFolder]msiexec.exe"
@@ -191,11 +193,19 @@
       <DialogRef Id="UserExit" />
       <DialogRef Id="WelcomeDlg" />
       <DialogRef Id="LicenseAgreementDlg"/>
+      <DialogRef Id="InstallDirDlg"/>
+      <DialogRef Id="BrowseDlg"/>
+      <DialogRef Id="InvalidDirDlg"/>
 
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">NOT Installed</Publish>
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">Installed AND PATCH</Publish>
       <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="CustomizeDlg">LicenseAccepted = "1"</Publish>
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg">LicenseAccepted = "1"</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="CustomizeDlg" Order="20">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="SetTargetPath" Value="[WIXUI_INSTALLDIR]" Order="10">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="ChangeFolder" Property="_BrowseProperty" Value="[WIXUI_INSTALLDIR]" Order="10">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="ChangeFolder" Event="SpawnDialog" Value="BrowseDlg" Order="20">1</Publish>
       <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999">1</Publish>
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="CustomizeDlg" Order="1">NOT Installed OR WixUI_InstallMode = "Change"</Publish>
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2">Installed AND NOT PATCH</Publish>
@@ -206,7 +216,7 @@
       <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
       <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg">1</Publish>
       <Publish Dialog="CustomizeDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="1">Installed</Publish>
-      <Publish Dialog="CustomizeDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" Order="2">NOT Installed</Publish>
+      <Publish Dialog="CustomizeDlg" Control="Back" Event="NewDialog" Value="InstallDirDlg" Order="2">NOT Installed</Publish>
       <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
 
       <Property Id="ARPNOMODIFY" Value="1" />
