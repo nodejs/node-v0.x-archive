@@ -312,7 +312,14 @@ dist-upload: $(TARBALL) $(PKG)
 	scp $(PKG) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARNAME).pkg
 
 bench:
-	 benchmark/http_simple_bench.sh
+	@echo
+	@echo "Net Benchmarks (may take a while)"
+	@echo "---------------------------------"
+	@for t in benchmark/net/*; do ./node $$t --iter 20 --make; done
+	@echo
+	@echo "Buffer Benchmarks"
+	@echo "-----------------"
+	@for t in benchmark/buffer/*; do ./node $$t; echo; done
 
 bench-idle:
 	./node benchmark/idle_server.js &
