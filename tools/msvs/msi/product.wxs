@@ -131,7 +131,7 @@
         <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
         <RegistryValue Root="HKCU" Key="Software\Joyent\$(var.ProductName)" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
       </Component>
-      <Component Id="InternetShortcuts" Guid="3351B877-49BA-4BC0-BF5E-21BA623FD07C">        
+      <Component Id="InternetShortcuts" Guid="3351B877-49BA-4BC0-BF5E-21BA623FD07C">
         <util:InternetShortcut Id="OnlineWebsiteShortcut"
                   Name="Node.js website"
                   Target="http://nodejs.org"
@@ -227,7 +227,6 @@
 
       <Property Id="ARPNOMODIFY" Value="1" />
       <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Node.js has been succesfully installed. To run Node.js open command prompt (cmd.exe), and run 'node'." />
-
     </UI>
 
     <UIRef Id="WixUI_Common" />
