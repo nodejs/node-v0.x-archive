@@ -28,6 +28,11 @@
     <Property Id="ApplicationFolderName" Value="nodejs" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
 
+    <Property Id="INSTALLDIR">
+      <RegistrySearch Id='InstallPathRegistry' Type='raw'
+        Root='HKCU' Key='SOFTWARE\Joyent\node.js' Name='Path' />
+    </Property>
+
     <Directory Id="TARGETDIR" Name="SourceDir">
 
       <Directory Id="ProgramMenuFolder">
@@ -83,10 +88,10 @@
             <File Id="filenodejsvars" KeyPath="yes" Source="$(var.RepoDir)\tools\msvs\nodejsvars.bat" />
           </Component>
           <Component Id="noderegistry" Guid="35379DFF-1437-4DE2-98D0-16483480DD44" >
-            <RegistryKey Root="HKMU" Key="Software" Action="none" >
-              <RegistryKey Key="Joyent" Action="create" >
-                <RegistryKey Key="node.js" Action="create">
-                  <RegistryValue Name="Path" Type="string" Value="[NodeRoot]" KeyPath="yes" />
+            <RegistryKey Root="HKCU" Key="Software">
+              <RegistryKey Key="Joyent">
+                <RegistryKey Key="node.js">
+                  <RegistryValue Name="Path" Type="string" Value="[INSTALLDIR]" KeyPath="yes" />
                   <RegistryValue Name="Version" Type="string" Value="$(var.ProductVersion)" />
                 </RegistryKey>
               </RegistryKey>
@@ -98,7 +103,7 @@
       <Directory Id="AppDataFolder">
         <Directory Id="NPMAppData" Name="npm">
           <Component Id="npmappdata_folder" Guid="994B1F7F-60CD-4792-A96D-63BC7FFF29BF" Permanent="yes">
-            <RegistryKey Action="none" Key="dummy" Root="HKCU" >
+            <RegistryKey Key="dummy" Root="HKCU" >
               <RegistryValue Type="integer"  Value="1" KeyPath="yes" />
             </RegistryKey >
             <CreateFolder/>
@@ -151,6 +156,7 @@
       <ComponentRef Id="nodepdb"/>
       <?endif?>
       <ComponentRef Id="nodejsvars" />
+      <ComponentRef Id="noderegistry" />
     </ComponentGroup>
 
     <ComponentGroup Id="application.shortcuts">
