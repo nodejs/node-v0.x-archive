@@ -144,7 +144,6 @@
       </Component>
     </DirectoryRef>
 
-
     <ComponentGroup Id="allfiles">
       <ComponentRef Id="nodeexe"/>
       <ComponentRef Id="npmcmd"/>
@@ -172,11 +171,11 @@
       <ComponentGroupRef Id="Product.Generated" />
     </Feature>
 
-    <Feature Id="nodejs.shortcuts" Title="node.js shortcuts" Description="$(var.ProductDescription) Shortcuts">
-      <Feature Id="feature.application.shortcuts" Title="Application Shortcuts" Level="1"  Description="$(var.ProductDescription) standard application shortcuts">
+    <Feature Id="nodejs.shortcuts" Title="node.js shortcuts" Level="1" Description="$(var.ProductDescription) Shortcuts">
+      <Feature Id="nodejs.shortcuts.application" Title="Application Shortcuts" Level="1"  Description="$(var.ProductDescription) standard application shortcuts">
         <ComponentGroupRef Id="application.shortcuts"/>
       </Feature>
-      <Feature Id="feature.internet.shortcuts" Title="Internet Shortcuts" Level="1"  Description="$(var.ProductDescription) internet shortcuts to the project's website and online documentation for this version">
+      <Feature Id="nodejs.shortcuts.internet" Title="Internet Shortcuts" Level="1"  Description="$(var.ProductDescription) internet shortcuts to the project's website and online documentation for this version">
         <ComponentGroupRef Id="internet.shortcuts"/>
       </Feature>
     </Feature>
