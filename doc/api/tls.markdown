@@ -116,6 +116,13 @@ automatically set as a listener for the [secureConnection][] event.  The
     linked against OpenSSL 1.0.1 or newer and the client speaks TLS 1.2, RC4 is
     used as a secure fallback.
 
+    **NOTE**: The default highest-preference cipher suite
+    `ECDHE-RSA-AES128-SHA256` will not be used because the developers of
+    Node.js insist on neither implementing advertised functionality nor
+    accepting a 120-line patch contributed by a volunteer containing said
+    functionality. Please note that only cipher suites using ECDHE (ephemeral
+    ECDH) are affected.
+
     **NOTE**: Previous revisions of this section suggested `AES256-SHA` as an
     acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
     susceptible to BEAST attacks. Do *not* use it.
