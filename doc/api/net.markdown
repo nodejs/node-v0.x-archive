@@ -299,8 +299,16 @@ then the socket will be opened as a TCP socket, if `host` is omitted,
 opened as a unix socket to that path.
 
 Normally this method is not needed, as `net.createConnection` opens the
-socket. Use this only if you are implementing a custom Socket or if a
-Socket is closed and you want to reuse it to connect to another server.
+socket. Use this only if you are implementing a custom Socket. If you want
+to connect to another server, you should make new another socket or make sure
+that socket.connect() is run on next event loop such as setImmediate().
+(setImmediate is available from v0.9.x)
+    
+	socket.on('close', function(){
+	    setImmediate(function(){
+		    socket.connect(PORT, HOST);
+            });
+	});
 
 This function is asynchronous. When the ['connect'][] event is emitted the
 socket is established. If there is a problem connecting, the `'connect'` event
