@@ -301,12 +301,13 @@ opened as a unix socket to that path.
 Normally this method is not needed, as `net.createConnection` opens the
 socket. Use this only if you are implementing a custom Socket. If you want
 to connect to another server, you should make new another socket or make sure
-that socket.connect() is run on next event loop such as process.nextTick().
+that socket.connect() is run on next event loop such as setImmediate().
+(setImmediate is available from v0.9.x)
     
 	socket.on('close', function(){
-	    process.nextTick(function(){
-		    socket.connect(anyport, anyhost);
-		});
+	    setImmediate(function(){
+		    socket.connect(PORT, HOST);
+            });
 	});
 
 This function is asynchronous. When the ['connect'][] event is emitted the
