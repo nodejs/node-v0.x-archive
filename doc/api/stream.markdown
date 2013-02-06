@@ -189,6 +189,7 @@ var myReader = new Readable().wrap(oreader);
 myReader.on('readable', function() {
   myReader.read(); // etc.
 });
+myReader.read(0);
 ```
 
 ### Event: 'readable'
@@ -198,6 +199,10 @@ number of bytes that are required to be considered "readable" depends
 on the `lowWaterMark` option set in the constructor.
 
 When this event emits, call the `read()` method to consume the data.
+
+Note, the first `'readable'` event will not emit until `stream.read()`
+has been called at least once.  It is often useful to call
+`stream.read(0)` to start the process.
 
 ### Event: 'end'
 
