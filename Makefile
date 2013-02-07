@@ -41,22 +41,22 @@ node_g: config.gypi out/Makefile
 	ln -fs out/Debug/node $@
 endif
 
-out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
+out/Makefile: $(srcdir)common.gypi $(srcdir)deps/uv/uv.gyp $(srcdir)deps/http_parser/http_parser.gyp $(srcdir)deps/zlib/zlib.gyp $(srcdir)deps/v8/build/common.gypi $(srcdir)deps/v8/tools/gyp/v8.gyp $(srcdir)node.gyp config.gypi
 ifeq ($(USE_NINJA),1)
 	touch out/Makefile
-	$(PYTHON) tools/gyp_node -f ninja
+	$(PYTHON) $(srcdir)tools/gyp_node -f ninja
 else
-	$(PYTHON) tools/gyp_node -f make
+	$(PYTHON) $(srcdir)tools/gyp_node -f make
 endif
 
-config.gypi: configure
-	$(PYTHON) ./configure
+config.gypi: $(srcdir)configure
+	$(PYTHON) $(srcdir)configure
 
 install: all
-	$(PYTHON) tools/install.py $@ $(DESTDIR)
+	$(PYTHON) $(srcdir)tools/install.py $@ $(DESTDIR)
 
 uninstall:
-	$(PYTHON) tools/install.py $@ $(DESTDIR)
+	$(PYTHON) $(srcdir)tools/install.py $@ $(DESTDIR)
 
 clean:
 	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node blog.html email.md
@@ -69,16 +69,17 @@ distclean:
 	-rm -f config.mk
 	-rm -rf node node_g blog.html email.md
 	-rm -rf node_modules
+	-rm -f Makefile
 
 test: all
-	$(PYTHON) tools/test.py --mode=release simple message
+	$(PYTHON) $(srcdir)tools/test.py --mode=release simple message
 	$(MAKE) jslint
 
 test-http1: all
-	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
+	$(PYTHON) $(srcdir)tools/test.py --mode=release --use-http1 simple message
 
 test-valgrind: all
-	$(PYTHON) tools/test.py --mode=release --valgrind simple message
+	$(PYTHON) $(srcdir)tools/test.py --mode=release --valgrind simple message
 
 test/gc/node_modules/weak/build:
 	@if [ ! -f node ]; then make all; fi
@@ -87,35 +88,35 @@ test/gc/node_modules/weak/build:
 		--nodedir="$(shell pwd)"
 
 test-gc: all test/gc/node_modules/weak/build
-	$(PYTHON) tools/test.py --mode=release gc
+	$(PYTHON) $(srcdir)tools/test.py --mode=release gc
 
 test-all: all test/gc/node_modules/weak/build
-	$(PYTHON) tools/test.py --mode=debug,release
+	$(PYTHON) $(srcdir)tools/test.py --mode=debug,release
 	make test-npm
 
 test-all-http1: all
-	$(PYTHON) tools/test.py --mode=debug,release --use-http1
+	$(PYTHON) $(srcdir)tools/test.py --mode=debug,release --use-http1
 
 test-all-valgrind: all
-	$(PYTHON) tools/test.py --mode=debug,release --valgrind
+	$(PYTHON) $(srcdir)tools/test.py --mode=debug,release --valgrind
 
 test-release: all
-	$(PYTHON) tools/test.py --mode=release
+	$(PYTHON) $(srcdir)tools/test.py --mode=release
 
 test-debug: all
-	$(PYTHON) tools/test.py --mode=debug
+	$(PYTHON) $(srcdir)tools/test.py --mode=debug
 
 test-message: all
-	$(PYTHON) tools/test.py message
+	$(PYTHON) $(srcdir)tools/test.py message
 
 test-simple: all
-	$(PYTHON) tools/test.py simple
+	$(PYTHON) $(srcdir)tools/test.py simple
 
 test-pummel: all
-	$(PYTHON) tools/test.py pummel
+	$(PYTHON) $(srcdir)tools/test.py pummel
 
 test-internet: all
-	$(PYTHON) tools/test.py internet
+	$(PYTHON) $(srcdir)tools/test.py internet
 
 test-npm: node
 	./node deps/npm/test/run.js
@@ -123,7 +124,7 @@ test-npm: node
 test-npm-publish: node
 	npm_package_config_publishtest=true ./node deps/npm/test/run.js
 
-apidoc_sources = $(wildcard doc/api/*.markdown)
+apidoc_sources = $(wildcard $(srcdir)doc/api/*.markdown)
 apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html)) \
           $(addprefix out/,$(apidoc_sources:.markdown=.json))
 
@@ -150,41 +151,41 @@ website_files = \
 	out/doc/changelog.html \
 	$(doc_images)
 
-doc: $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/ blog node
+doc: $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) $(srcdir)tools/doc/ blog node
 
 blogclean:
 	rm -rf out/blog
 
-blog: doc/blog out/Release/node tools/blog
-	out/Release/node tools/blog/generate.js doc/blog/ out/blog/ doc/blog.html doc/rss.xml
+blog: $(srcdir)doc/blog out/Release/node $(srcdir)tools/blog
+	out/Release/node $(srcdir)tools/blog/generate.js $(srcdir)doc/blog/ out/blog/ $(srcdir)doc/blog.html $(srcdir)doc/rss.xml
 
 $(apidoc_dirs):
 	mkdir -p $@
 
-out/doc/api/assets/%: doc/api_assets/% out/doc/api/assets/
+out/doc/api/assets/%: $(srcdir)doc/api_assets/% out/doc/api/assets/
 	cp $< $@
 
-out/doc/changelog.html: ChangeLog doc/changelog-head.html doc/changelog-foot.html tools/build-changelog.sh node
-	bash tools/build-changelog.sh
+out/doc/changelog.html: $(srcdir)ChangeLog $(srcdir)doc/changelog-head.html $(srcdir)doc/changelog-foot.html $(srcdir)tools/build-changelog.sh node
+	bash $(srcdir)tools/build-changelog.sh
 
-out/doc/%.html: doc/%.html node
+out/doc/%.html: $(srcdir)doc/%.html node
 	cat $< | sed -e 's|__VERSION__|'$(VERSION)'|g' > $@
 
-out/doc/%: doc/%
+out/doc/%: $(srcdir)doc/%
 	cp -r $< $@
 
-out/doc/api/%.json: doc/api/%.markdown node
-	out/Release/node tools/doc/generate.js --format=json $< > $@
+out/doc/api/%.json: $(srcdir)doc/api/%.markdown node
+	out/Release/node $(srcdir)tools/doc/generate.js --format=json $< > $@
 
 out/doc/api/%.html: doc/api/%.markdown node
-	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
+	out/Release/node $(srcdir)tools/doc/generate.js --format=html --template=$(srcdir)doc/template.html $< > $@
 
-email.md: ChangeLog tools/email-footer.md
-	bash tools/changelog-head.sh | sed 's|^\* #|* \\#|g' > $@
-	cat tools/email-footer.md | sed -e 's|__VERSION__|'$(VERSION)'|g' >> $@
+email.md: $(srcdir)ChangeLog $(srcdir)tools/email-footer.md
+	bash $(srcdir)tools/changelog-head.sh | sed 's|^\* #|* \\#|g' > $@
+	cat $(srcdir)tools/email-footer.md | sed -e 's|__VERSION__|'$(VERSION)'|g' >> $@
 
-blog.html: email.md
-	cat $< | ./node tools/doc/node_modules/.bin/marked > $@
+blog.html: $(srcdir)email.md
+	cat $< | ./node $(srcdir)tools/doc/node_modules/.bin/marked > $@
 
 blog-upload: blog
 	rsync -r out/blog/ node@nodejs.org:~/web/nodejs.org/blog/
@@ -205,8 +206,8 @@ docopen: out/doc/api/all.html
 docclean:
 	-rm -rf out/doc
 
-VERSION=v$(shell $(PYTHON) tools/getnodeversion.py)
-RELEASE=$(shell $(PYTHON) tools/getnodeisrelease.py)
+VERSION=v$(shell $(PYTHON) $(srcdir)tools/getnodeversion.py)
+RELEASE=$(shell $(PYTHON) $(srcdir)tools/getnodeisrelease.py)
 PLATFORM=$(shell uname | tr '[:upper:]' '[:lower:]')
 ifeq ($(findstring x86_64,$(shell uname -m)),x86_64)
 DESTCPU ?= x64
@@ -260,12 +261,12 @@ pkg: $(PKG)
 $(PKG): release-only
 	rm -rf $(PKGDIR)
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --prefix=$(PKGDIR)/32/usr/local --without-snapshot --dest-cpu=ia32
+	$(PYTHON) $(srcdir)configure --prefix=$(PKGDIR)/32/usr/local --without-snapshot --dest-cpu=ia32
 	$(MAKE) install V=$(V)
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --prefix=$(PKGDIR)/usr/local --without-snapshot --dest-cpu=x64
+	$(PYTHON) $(srcdir)configure --prefix=$(PKGDIR)/usr/local --without-snapshot --dest-cpu=x64
 	$(MAKE) install V=$(V)
-	SIGN="$(SIGN)" PKGDIR="$(PKGDIR)" bash tools/osx-codesign.sh
+	SIGN="$(SIGN)" PKGDIR="$(PKGDIR)" bash $(srcdir)tools/osx-codesign.sh
 	lipo $(PKGDIR)/32/usr/local/bin/node \
 		$(PKGDIR)/usr/local/bin/node \
 		-output $(PKGDIR)/usr/local/bin/node-universal \
@@ -274,14 +275,14 @@ $(PKG): release-only
 	rm -rf $(PKGDIR)/32
 	$(packagemaker) \
 		--id "org.nodejs.Node" \
-		--doc tools/osx-pkg.pmdoc \
+		--doc $(srcdir)tools/osx-pkg.pmdoc \
 		--out $(PKG)
-	SIGN="$(SIGN)" PKG="$(PKG)" bash tools/osx-productsign.sh
+	SIGN="$(SIGN)" PKG="$(PKG)" bash $(srcdir)tools/osx-productsign.sh
 
 $(TARBALL): release-only node doc
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
 	mkdir -p $(TARNAME)/doc/api
-	cp doc/node.1 $(TARNAME)/doc/node.1
+	cp $(srcdir)doc/node.1 $(TARNAME)/doc/node.1
 	cp -r out/doc/api/* $(TARNAME)/doc/api/
 	rm -rf $(TARNAME)/deps/v8/test # too big
 	rm -rf $(TARNAME)/doc/images # too big
@@ -295,11 +296,11 @@ tar: $(TARBALL)
 $(BINARYTAR): release-only
 	rm -rf $(BINARYNAME)
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --prefix=/ --without-snapshot --dest-cpu=$(DESTCPU) $(CONFIG_FLAGS)
+	$(PYTHON) $(srcdir)configure --prefix=/ --without-snapshot --dest-cpu=$(DESTCPU) $(CONFIG_FLAGS)
 	$(MAKE) install DESTDIR=$(BINARYNAME) V=$(V) PORTABLE=1
-	cp README.md $(BINARYNAME)
-	cp LICENSE $(BINARYNAME)
-	cp ChangeLog $(BINARYNAME)
+	cp $(srcdir)README.md $(BINARYNAME)
+	cp $(srcdir)LICENSE $(BINARYNAME)
+	cp $(srcdir)ChangeLog $(BINARYNAME)
 	tar -cf $(BINARYNAME).tar $(BINARYNAME)
 	rm -rf $(BINARYNAME)
 	gzip -f -9 $(BINARYNAME).tar
@@ -312,21 +313,21 @@ dist-upload: $(TARBALL) $(PKG)
 	scp $(PKG) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARNAME).pkg
 
 bench:
-	 benchmark/http_simple_bench.sh
+	 $(srcdir)benchmark/http_simple_bench.sh
 
 bench-idle:
-	./node benchmark/idle_server.js &
+	./node $(srcdir)benchmark/idle_server.js &
 	sleep 1
-	./node benchmark/idle_clients.js &
+	./node $(srcdir)benchmark/idle_clients.js &
 
 jslintfix:
-	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/fixjsstyle.py --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
+	PYTHONPATH=$(srcdir)tools/closure_linter/ $(PYTHON) $(srcdir)tools/closure_linter/closure_linter/fixjsstyle.py --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 jslint:
-	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
+	PYTHONPATH=$(srcdir)tools/closure_linter/ $(PYTHON) $(srcdir)tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 cpplint:
-	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
+	@$(PYTHON) $(srcdir)tools/cpplint.py $(wildcard $(srcdir)src/*.cc $(srcdir)src/*.h $(srcdir)src/*.c)
 
 lint: jslint cpplint
 
