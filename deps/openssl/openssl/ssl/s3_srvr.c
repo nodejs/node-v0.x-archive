@@ -539,14 +539,7 @@ int ssl3_accept(SSL *s)
 				 * the client uses its key from the certificate
 				 * for key exchange.
 				 */
-#if defined(OPENSSL_NO_TLSEXT) || defined(OPENSSL_NO_NEXTPROTONEG)
 				s->state=SSL3_ST_SR_FINISHED_A;
-#else
-				if (s->s3->next_proto_neg_seen)
-					s->state=SSL3_ST_SR_NEXT_PROTO_A;
-				else
-					s->state=SSL3_ST_SR_FINISHED_A;
-#endif
 				s->init_num = 0;
 				}
 			else
@@ -589,26 +582,9 @@ int ssl3_accept(SSL *s)
 			ret=ssl3_get_cert_verify(s);
 			if (ret <= 0) goto end;
 
-#if defined(OPENSSL_NO_TLSEXT) || defined(OPENSSL_NO_NEXTPROTONEG)
 			s->state=SSL3_ST_SR_FINISHED_A;
-#else
-			if (s->s3->next_proto_neg_seen)
-				s->state=SSL3_ST_SR_NEXT_PROTO_A;
-			else
-				s->state=SSL3_ST_SR_FINISHED_A;
-#endif
 			s->init_num=0;
 			break;
-
-#if !defined(OPENSSL_NO_TLSEXT) && !defined(OPENSSL_NO_NEXTPROTONEG)
-		case SSL3_ST_SR_NEXT_PROTO_A:
-		case SSL3_ST_SR_NEXT_PROTO_B:
-			ret=ssl3_get_next_proto(s);
-			if (ret <= 0) goto end;
-			s->init_num = 0;
-			s->state=SSL3_ST_SR_FINISHED_A;
-			break;
-#endif
 
 		case SSL3_ST_SR_FINISHED_A:
 		case SSL3_ST_SR_FINISHED_B:
@@ -680,16 +656,7 @@ int ssl3_accept(SSL *s)
 			if (ret <= 0) goto end;
 			s->state=SSL3_ST_SW_FLUSH;
 			if (s->hit)
-				{
-#if defined(OPENSSL_NO_TLSEXT) || defined(OPENSSL_NO_NEXTPROTONEG)
 				s->s3->tmp.next_state=SSL3_ST_SR_FINISHED_A;
-#else
-				if (s->s3->next_proto_neg_seen)
-					s->s3->tmp.next_state=SSL3_ST_SR_NEXT_PROTO_A;
-				else
-					s->s3->tmp.next_state=SSL3_ST_SR_FINISHED_A;
-#endif
-				}
 			else
 				s->s3->tmp.next_state=SSL_ST_OK;
 			s->init_num=0;
@@ -789,14 +756,6 @@ int ssl3_check_client_hello(SSL *s)
 	int ok;
 	long n;
 
-	/* We only allow the client to restart the handshake once per
-	 * negotiation. */
-	if (s->s3->flags & SSL3_FLAGS_SGC_RESTART_DONE)
-		{
-		SSLerr(SSL_F_SSL3_CHECK_CLIENT_HELLO, SSL_R_MULTIPLE_SGC_RESTARTS);
-		return -1;
-		}
-
 	/* this function is called when we really expect a Certificate message,
 	 * so permit appropriate message length */
 	n=s->method->ssl_get_message(s,
@@ -809,6 +768,13 @@ int ssl3_check_client_hello(SSL *s)
 	s->s3->tmp.reuse_message = 1;
 	if (s->s3->tmp.message_type == SSL3_MT_CLIENT_HELLO)
 		{
+		/* We only allow the client to restart the handshake once per
+		 * negotiation. */
+		if (s->s3->flags & SSL3_FLAGS_SGC_RESTART_DONE)
+			{
+			SSLerr(SSL_F_SSL3_CHECK_CLIENT_HELLO, SSL_R_MULTIPLE_SGC_RESTARTS);
+			return -1;
+			}
 		/* Throw away what we have done so far in the current handshake,
 		 * which will now be aborted. (A full SSL_clear would be too much.) */
 #ifndef OPENSSL_NO_DH
@@ -917,12 +883,6 @@ int ssl3_get_client_hello(SSL *s)
 	 */
 	if ((s->new_session && (s->options & SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION)))
 		{
-	        if (!s->session_creation_enabled)
-			{
-			ssl3_send_alert(s,SSL3_AL_FATAL,SSL_AD_HANDSHAKE_FAILURE);
-			SSLerr(SSL_F_SSL3_GET_CLIENT_HELLO,SSL_R_SESSION_MAY_NOT_BE_CREATED);
-			goto err;
-		}
 		if (!ssl_get_new_session(s,1))
 			goto err;
 		}
@@ -937,12 +897,6 @@ int ssl3_get_client_hello(SSL *s)
 			goto err;
 		else /* i == 0 */
 			{
-		        if (!s->session_creation_enabled)
-				{
-				ssl3_send_alert(s,SSL3_AL_FATAL,SSL_AD_HANDSHAKE_FAILURE);
-				SSLerr(SSL_F_SSL3_GET_CLIENT_HELLO,SSL_R_SESSION_MAY_NOT_BE_CREATED);
-				goto err;
-				}
 			if (!ssl_get_new_session(s,1))
 				goto err;
 			}
@@ -1109,7 +1063,7 @@ int ssl3_get_client_hello(SSL *s)
 			goto f_err;
 			}
 		}
-		if (ssl_check_clienthello_tlsext(s) <= 0) {
+		if (ssl_check_clienthello_tlsext_early(s) <= 0) {
 			SSLerr(SSL_F_SSL3_GET_CLIENT_HELLO,SSL_R_CLIENTHELLO_TLSEXT);
 			goto err;
 		}
@@ -1327,6 +1281,16 @@ int ssl3_get_client_hello(SSL *s)
 	 * s->hit		- session reuse flag
 	 * s->tmp.new_cipher	- the new cipher to use.
 	 */
+
+	/* Handles TLS extensions that we couldn't check earlier */
+	if (s->version >= SSL3_VERSION)
+		{
+		if (ssl_check_clienthello_tlsext_late(s) <= 0)
+			{
+			SSLerr(SSL_F_SSL3_GET_CLIENT_HELLO, SSL_R_CLIENTHELLO_TLSEXT);
+			goto err;
+			}
+		}
 
 	if (ret < 0) ret=1;
 	if (0)
@@ -2774,7 +2738,7 @@ int ssl3_get_cert_verify(SSL *s)
 	if (s->s3->tmp.message_type != SSL3_MT_CERTIFICATE_VERIFY)
 		{
 		s->s3->tmp.reuse_message=1;
-		if ((peer != NULL) && (type | EVP_PKT_SIGN))
+		if ((peer != NULL) && (type & EVP_PKT_SIGN))
 			{
 			al=SSL_AD_UNEXPECTED_MESSAGE;
 			SSLerr(SSL_F_SSL3_GET_CERT_VERIFY,SSL_R_MISSING_VERIFY_MESSAGE);
@@ -3254,72 +3218,4 @@ int ssl3_send_cert_status(SSL *s)
 	/* SSL3_ST_SW_CERT_STATUS_B */
 	return(ssl3_do_write(s,SSL3_RT_HANDSHAKE));
 	}
-
-# ifndef OPENSSL_NO_NPN
-/* ssl3_get_next_proto reads a Next Protocol Negotiation handshake message. It
- * sets the next_proto member in s if found */
-int ssl3_get_next_proto(SSL *s)
-	{
-	int ok;
-	unsigned proto_len, padding_len;
-	long n;
-	const unsigned char *p;
-
-	/* Clients cannot send a NextProtocol message if we didn't see the
-	 * extension in their ClientHello */
-	if (!s->s3->next_proto_neg_seen)
-		{
-		SSLerr(SSL_F_SSL3_GET_NEXT_PROTO,SSL_R_GOT_NEXT_PROTO_WITHOUT_EXTENSION);
-		return -1;
-		}
-
-	n=s->method->ssl_get_message(s,
-		SSL3_ST_SR_NEXT_PROTO_A,
-		SSL3_ST_SR_NEXT_PROTO_B,
-		SSL3_MT_NEXT_PROTO,
-		514,  /* See the payload format below */
-		&ok);
-
-	if (!ok)
-		return((int)n);
-
-	/* s->state doesn't reflect whether ChangeCipherSpec has been received
-	 * in this handshake, but s->s3->change_cipher_spec does (will be reset
-	 * by ssl3_get_finished). */
-	if (!s->s3->change_cipher_spec)
-		{
-		SSLerr(SSL_F_SSL3_GET_NEXT_PROTO,SSL_R_GOT_NEXT_PROTO_BEFORE_A_CCS);
-		return -1;
-		}
-
-	if (n < 2)
-		return 0;  /* The body must be > 1 bytes long */
-
-	p=(unsigned char *)s->init_msg;
-
-	/* The payload looks like:
-	 *   uint8 proto_len;
-	 *   uint8 proto[proto_len];
-	 *   uint8 padding_len;
-	 *   uint8 padding[padding_len];
-	 */
-	proto_len = p[0];
-	if (proto_len + 2 > s->init_num)
-		return 0;
-	padding_len = p[proto_len + 1];
-	if (proto_len + padding_len + 2 != s->init_num)
-		return 0;
-
-	s->next_proto_negotiated = OPENSSL_malloc(proto_len);
-	if (!s->next_proto_negotiated)
-		{
-		SSLerr(SSL_F_SSL3_GET_NEXT_PROTO,ERR_R_MALLOC_FAILURE);
-		return 0;
-		}
-	memcpy(s->next_proto_negotiated, p + 1, proto_len);
-	s->next_proto_negotiated_len = proto_len;
-
-	return 1;
-	}
-# endif
 #endif

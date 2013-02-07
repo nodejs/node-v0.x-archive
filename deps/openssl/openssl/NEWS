@@ -5,6 +5,29 @@
   This file gives a brief overview of the major changes between each OpenSSL
   release. For more details please read the CHANGES file.
 
+  Major changes between OpenSSL 1.0.0j and OpenSSL 1.0.0k:
+
+      o Fix for SSL/TLS/DTLS CBC plaintext recovery attack CVE-2013-0169
+      o Fix OCSP bad key DoS attack CVE-2013-0166
+
+  Major changes between OpenSSL 1.0.0i and OpenSSL 1.0.0j:
+
+      o Fix DTLS record length checking bug CVE-2012-2333
+
+  Major changes between OpenSSL 1.0.0h and OpenSSL 1.0.0i:
+
+      o Fix for ASN1 overflow bug CVE-2012-2110
+
+  Major changes between OpenSSL 1.0.0g and OpenSSL 1.0.0h:
+
+      o Fix for CMS/PKCS#7 MMA CVE-2012-0884
+      o Corrected fix for CVE-2011-4619
+      o Various DTLS fixes.
+
+  Major changes between OpenSSL 1.0.0f and OpenSSL 1.0.0g:
+
+      o Fix for DTLS DoS issue CVE-2012-0050
+
   Major changes between OpenSSL 1.0.0e and OpenSSL 1.0.0f:
 
       o Fix for DTLS plaintext recovery attack CVE-2011-4108

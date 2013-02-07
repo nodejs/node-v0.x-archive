@@ -42,6 +42,7 @@
         'openssl/ssl/s2_pkt.c',
         'openssl/ssl/s2_srvr.c',
         'openssl/ssl/s3_both.c',
+        'openssl/ssl/s3_cbc.c',
         'openssl/ssl/s3_clnt.c',
         'openssl/ssl/s3_enc.c',
         'openssl/ssl/s3_lib.c',
@@ -782,7 +783,7 @@
                 'asm/x64-win32-masm/whrlpool/wp-x86_64.asm',
                 'asm/x64-win32-masm/x86_64cpuid.asm',
                 # Non-generated asm
-                'openssl/crypto/bn/asm/x86_64-win32-masm.asm',
+                ### 'openssl/crypto/bn/asm/x86_64-win32-masm.asm',
                 # No asm available
                 'openssl/crypto/cast/c_enc.c',
                 'openssl/crypto/des/des_enc.c',

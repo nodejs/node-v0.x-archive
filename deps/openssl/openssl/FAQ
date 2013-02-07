@@ -284,7 +284,7 @@ current directory in this case, but this has changed with 0.9.6a.)
 Check out the CA.pl(1) manual page. This provides a simple wrapper round
 the 'req', 'verify', 'ca' and 'pkcs12' utilities. For finer control check
 out the manual pages for the individual utilities and the certificate
-extensions documentation (currently in doc/openssl.txt).
+extensions documentation (in ca(1), req(1), x509v3_config(5) )
 
 
 * Why can't I create certificate requests?

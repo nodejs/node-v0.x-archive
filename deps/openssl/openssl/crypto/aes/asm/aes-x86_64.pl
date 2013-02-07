@@ -36,7 +36,7 @@ $0 =~ m/(.*[\/\\])[^\/\\]+$/; $dir=$1;
 ( $xlate="${dir}../../perlasm/x86_64-xlate.pl" and -f $xlate) or
 die "can't locate x86_64-xlate.pl";
 
-open STDOUT,"| $^X $xlate $flavour $output";
+open STDOUT,"| \"$^X\" $xlate $flavour $output";
 
 $verticalspin=1;	# unlike 32-bit version $verticalspin performs
 			# ~15% better on both AMD and Intel cores
@@ -1674,8 +1674,8 @@ AES_cbc_encrypt:
 	jb	.Lcbc_slow_prologue
 	test	\$15,%rdx
 	jnz	.Lcbc_slow_prologue
-	#bt	\$28,%r10d
-	#jc	.Lcbc_slow_prologue
+	bt	\$28,%r10d
+	jc	.Lcbc_slow_prologue
 
 	# allocate aligned stack frame...
 	lea	-88-248(%rsp),$key

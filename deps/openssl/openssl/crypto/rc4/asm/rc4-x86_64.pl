@@ -69,7 +69,7 @@ $0 =~ m/(.*[\/\\])[^\/\\]+$/; $dir=$1;
 ( $xlate="${dir}../../perlasm/x86_64-xlate.pl" and -f $xlate) or
 die "can't locate x86_64-xlate.pl";
 
-open STDOUT,"| $^X $xlate $flavour $output";
+open STDOUT,"| \"$^X\" $xlate $flavour $output";
 
 $dat="%rdi";	    # arg1
 $len="%rsi";	    # arg2
