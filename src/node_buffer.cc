@@ -913,14 +913,24 @@ bool Buffer::HasInstance(Handle<Value> val) {
   if (!val->IsObject()) return false;
   Local<Object> obj = val->ToObject();
 
-  if (obj->GetIndexedPropertiesExternalArrayDataType() == kExternalUnsignedByteArray)
-    return true;
+  ExternalArrayType type = obj->GetIndexedPropertiesExternalArrayDataType();
+  if (type != kExternalUnsignedByteArray)
+    return false;
 
   // Also check for SlowBuffers that are empty.
   if (constructor_template->HasInstance(obj))
     return true;
 
-  return false;
+  static Persistent<Function> buffer_constructor;
+  if (buffer_constructor.IsEmpty()) {
+    HandleScope scope;
+    Local<Object> global = Context::GetCurrent()->Global();
+    Local<Value> buffer = global->Get(String::New("Buffer"));
+    assert(buffer->IsFunction());
+    buffer_constructor = Persistent<Function>::New(buffer.As<Function>());
+  }
+
+  return obj->GetConstructor()->StrictEquals(buffer_constructor);
 }
 
 
