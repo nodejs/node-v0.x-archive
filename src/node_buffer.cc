@@ -61,6 +61,7 @@ using namespace v8;
 static Persistent<String> length_symbol;
 static Persistent<String> chars_written_sym;
 static Persistent<String> write_sym;
+static Persistent<Function> fast_buffer_constructor;
 Persistent<FunctionTemplate> Buffer::constructor_template;
 
 
@@ -921,16 +922,15 @@ bool Buffer::HasInstance(Handle<Value> val) {
   if (constructor_template->HasInstance(obj))
     return true;
 
-  static Persistent<Function> buffer_constructor;
-  if (buffer_constructor.IsEmpty()) {
-    HandleScope scope;
-    Local<Object> global = Context::GetCurrent()->Global();
-    Local<Value> buffer = global->Get(String::New("Buffer"));
-    assert(buffer->IsFunction());
-    buffer_constructor = Persistent<Function>::New(buffer.As<Function>());
-  }
+  assert(!fast_buffer_constructor.IsEmpty());
+  return obj->GetConstructor()->StrictEquals(fast_buffer_constructor);
+}
 
-  return obj->GetConstructor()->StrictEquals(buffer_constructor);
+
+Handle<Value> SetFastBufferConstructor(const Arguments& args) {
+  assert(args[0]->IsFunction());
+  fast_buffer_constructor = Persistent<Function>::New(args[0].As<Function>());
+  return Undefined();
 }
 
 
@@ -1046,6 +1046,8 @@ void Buffer::Initialize(Handle<Object> target) {
                   Buffer::MakeFastBuffer);
 
   target->Set(String::NewSymbol("SlowBuffer"), constructor_template->GetFunction());
+  target->Set(String::NewSymbol("setFastBufferConstructor"),
+              FunctionTemplate::New(SetFastBufferConstructor)->GetFunction());
 
   HeapProfiler::DefineWrapperClass(BUFFER_CLASS_ID, WrapperInfo);
 }
