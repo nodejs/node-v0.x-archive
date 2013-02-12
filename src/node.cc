@@ -2367,9 +2367,7 @@ void Load(Handle<Object> process_l) {
   process_symbol = NODE_PSYMBOL("process");
   domain_symbol = NODE_PSYMBOL("domain");
 
-  // Compile, execute the src/node.js file. (Which was included as static C
-  // string in node_natives.h. 'natve_node' is the string containing that
-  // source code.)
+  // Compile, execute the src/node.js file.
 
   // The node.js file returns a function 'f'
   atexit(AtExit);
