@@ -48,6 +48,11 @@ exports.libDir = path.join(exports.srcDir, 'lib');
 exports.tmpDir = path.join(exports.testDir, 'tmp');
 exports.PORT = 12346;
 
+// ensure test directories exist
+[exports.testDir, exports.tmpDir].forEach( function(val, index, array) {
+ if (!fs.existsSync(val)) fs.mkdirSync(val);
+});
+
 if (process.platform === 'win32') {
   exports.PIPE = '\\\\.\\pipe\\libuv-test';
 } else {
