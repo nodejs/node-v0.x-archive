@@ -132,8 +132,8 @@ function test_simple_absolute_symlink(callback) {
 
   console.log('using type=%s', type);
 
-  var entry = tmpAbsDir + '/symlink',
-      expected = fixturesAbsDir + '/nested-index/one';
+  var entry = path.join(tmpAbsDir, 'symlink'),
+      expected = path.join(fixturesAbsDir, 'nested-index', 'one');
   [
     [entry, expected]
   ].forEach(function(t) {
@@ -324,8 +324,13 @@ function test_deep_symlink_mix(callback) {
     -> /node/test/fixtures/nested-index/two/realpath-c
   /node/test/fixtures/nested-index/two/realpath-c -> ../../cycles/root.js
   /node/test/fixtures/cycles/root.js (hard)
+
+  must use build location when creating links. Makefile target 'test-nested-index'
+  will copy the static entries over to the build location if necessary.
   */
-  var entry = tmp('node-test-realpath-f1');
+  var buildFixturesAbsDir = path.join(common.buildDir, 'test', 'fixtures');
+
+  var entry = path.join('test', 'tmp', 'node-test-realpath-f1');
   try { fs.unlinkSync(tmp('node-test-realpath-d2/foo')); } catch (e) {}
   try { fs.rmdirSync(tmp('node-test-realpath-d2')); } catch (e) {}
   fs.mkdirSync(tmp('node-test-realpath-d2'), 0700);
@@ -334,14 +339,14 @@ function test_deep_symlink_mix(callback) {
       [entry, '../tmp/node-test-realpath-d1/foo'],
       [tmp('node-test-realpath-d1'), '../tmp/node-test-realpath-d2'],
       [tmp('node-test-realpath-d2/foo'), '../node-test-realpath-f2'],
-      [tmp('node-test-realpath-f2'), fixturesAbsDir +
+      [tmp('node-test-realpath-f2'), buildFixturesAbsDir +
            '/nested-index/one/realpath-c'],
-      [fixturesAbsDir + '/nested-index/one/realpath-c', fixturesAbsDir +
+      [buildFixturesAbsDir + '/nested-index/one/realpath-c', buildFixturesAbsDir +
             '/nested-index/two/realpath-c'],
-      [fixturesAbsDir + '/nested-index/two/realpath-c',
+      [buildFixturesAbsDir + '/nested-index/two/realpath-c',
         '../../../tmp/cycles/root.js']
     ].forEach(function(t) {
-      //common.debug('setting up '+t[0]+' -> '+t[1]);
+      common.debug('setting up '+t[0]+' -> '+t[1]);
       try { fs.unlinkSync(t[0]); } catch (e) {}
       fs.symlinkSync(t[1], t[0]);
       unlink.push(t[0]);

@@ -30,7 +30,7 @@ assert(process.hasOwnProperty('config'));
 // ensure that `process.config` is an Object
 assert(Object(process.config) === process.config);
 
-var configPath = path.resolve(__dirname, '..', '..', 'config.gypi');
+var configPath = path.resolve(common.testDir, '..', 'config.gypi');
 var config = fs.readFileSync(configPath, 'utf8');
 
 // clean up comment at the first line
