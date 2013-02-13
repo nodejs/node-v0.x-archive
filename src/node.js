@@ -309,17 +309,16 @@
   startup.processNextTick = function() {
     var _needTickCallback = process._needTickCallback;
     var nextTickQueue = [];
-    var nextTickQueueLength = 0;
-    var nextTickIndex = 0;
-    var tickDepth = 0;
     var usingDomains = false;
     var needSpinner = true;
     var inTick = false;
+    // order is [nextTickQueueLength, nextTickIndex, tickDepth]
+    var infoBox = process._tickInfoBox;
 
     process._tickCallback = _tickCallback;
     process._tickFromSpinner = _tickFromSpinner;
     // needs to be accessible from cc land
-    process._tickWDCallback = _tickWDCallback;
+    process._tickDomainCallback = _tickDomainCallback;
     process.nextTick = nextTick;
 
     // the maximum number of times it'll process something like
@@ -332,13 +331,13 @@
     process.maxTickDepth = 1000;
 
     function tickDone(tickDepth_) {
-      if (nextTickQueueLength !== 0) {
-        if (nextTickQueueLength <= nextTickIndex) {
+      if (infoBox[0] !== 0) {
+        if (infoBox[0] <= infoBox[1]) {
           nextTickQueue = [];
-          nextTickQueueLength = 0;
+          infoBox[0] = 0;
         } else {
-          nextTickQueue.splice(0, nextTickIndex);
-          nextTickQueueLength = nextTickQueue.length;
+          nextTickQueue.splice(0, infoBox[1]);
+          infoBox[0] = nextTickQueue.length;
           if (needSpinner) {
             _needTickCallback();
             needSpinner = false;
@@ -346,8 +345,8 @@
         }
       }
       inTick = false;
-      nextTickIndex = 0;
-      tickDepth = tickDepth_;
+      infoBox[1] = 0;
+      infoBox[2] = tickDepth_;
     }
 
     function maxTickWarn() {
@@ -364,44 +363,43 @@
     function _tickFromSpinner() {
       needSpinner = true;
       // coming from spinner, reset!
-      if (tickDepth !== 0)
-        tickDepth = 0;
+      if (infoBox[2] !== 0)
+        infoBox[2] = 0;
       // no callbacks to run
-      if (nextTickQueueLength === 0)
-        return nextTickIndex = tickDepth = 0;
-      if (nextTickQueue[nextTickQueueLength - 1].domain)
-        _tickWDCallback();
+      if (infoBox[0] === 0)
+        return infoBox[1] = infoBox[2] = 0;
+      if (nextTickQueue[infoBox[0] - 1].domain)
+        _tickDomainCallback();
       else
         _tickCallback();
     }
 
-    // run callback that have no domain
-    // this is very hot, so has been super optimized
-    // this will be overridden if user uses domains
+    // run callbacks that have no domain
+    // using domains will cause this to be overridden
     function _tickCallback() {
       var callback, nextTickLength, threw;
 
       if (inTick) return;
-      if (nextTickQueueLength === 0) {
-        nextTickIndex = 0;
-        tickDepth = 0;
+      if (infoBox[0] === 0) {
+        infoBox[1] = 0;
+        infoBox[2] = 0;
         return;
       }
       inTick = true;
 
-      while (tickDepth++ < process.maxTickDepth) {
-        nextTickLength = nextTickQueueLength;
-        if (nextTickIndex === nextTickLength)
+      while (infoBox[2]++ < process.maxTickDepth) {
+        nextTickLength = infoBox[0];
+        if (infoBox[1] === nextTickLength)
           return tickDone(0);
 
-        while (nextTickIndex < nextTickLength) {
-          callback = nextTickQueue[nextTickIndex++].callback;
+        while (infoBox[1] < nextTickLength) {
+          callback = nextTickQueue[infoBox[1]++].callback;
           threw = true;
           try {
             callback();
             threw = false;
           } finally {
-            if (threw) tickDone(tickDepth);
+            if (threw) tickDone(infoBox[2]);
           }
         }
       }
@@ -409,7 +407,7 @@
       tickDone(0);
     }
 
-    function _tickWDCallback() {
+    function _tickDomainCallback() {
       var nextTickLength, tock, callback, threw;
 
       // if you add a nextTick in a domain's error handler, then
@@ -418,7 +416,7 @@
       // that error handler ALSO triggers multiple MakeCallbacks, then
       // it'll try to keep clearing the queue, since the finally block
       // fires *before* the error hits the top level and is handled.
-      if (tickDepth >= process.maxTickDepth)
+      if (infoBox[2] >= process.maxTickDepth)
         return _needTickCallback();
 
       if (inTick) return;
@@ -428,13 +426,13 @@
       // is set to some negative value, or if there were repeated errors
       // preventing tickDepth from being cleared, we'd never process any
       // of them.
-      while (tickDepth++ < process.maxTickDepth) {
-        nextTickLength = nextTickQueueLength;
-        if (nextTickIndex === nextTickLength)
+      while (infoBox[2]++ < process.maxTickDepth) {
+        nextTickLength = infoBox[0];
+        if (infoBox[1] === nextTickLength)
           return tickDone(0);
 
-        while (nextTickIndex < nextTickLength) {
-          tock = nextTickQueue[nextTickIndex++];
+        while (infoBox[1] < nextTickLength) {
+          tock = nextTickQueue[infoBox[1]++];
           callback = tock.callback;
           if (tock.domain) {
             if (tock.domain._disposed) continue;
@@ -447,7 +445,7 @@
           } finally {
             // finally blocks fire before the error hits the top level,
             // so we can't clear the tickDepth at this point.
-            if (threw) tickDone(tickDepth);
+            if (threw) tickDone(infoBox[2]);
           }
           if (tock.domain) {
             tock.domain.exit();
@@ -462,7 +460,7 @@
       // on the way out, don't bother. it won't get fired anyway.
       if (process._exiting)
         return;
-      if (tickDepth >= process.maxTickDepth)
+      if (infoBox[2] >= process.maxTickDepth)
         maxTickWarn();
 
       var obj = { callback: callback };
@@ -470,13 +468,13 @@
         obj.domain = process.domain;
         // user has opt'd to use domains, so override default functionality
         if (!usingDomains) {
-          process._tickCallback = _tickWDCallback;
+          process._tickCallback = _tickDomainCallback;
           usingDomains = true;
         }
       }
 
       nextTickQueue.push(obj);
-      nextTickQueueLength++;
+      infoBox[0]++;
     }
   };
 
