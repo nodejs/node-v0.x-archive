@@ -71,9 +71,15 @@ distclean:
 	-rm -rf node_modules
 	-rm -f Makefile
 
-test: all
+test: all test-nested-index
 	$(PYTHON) $(srcdir)tools/test.py --mode=release simple message
 	$(MAKE) jslint
+
+test-nested-index:
+	@if [ ! -d $(builddir)test/fixtures/nested-index ]; then \
+		mkdir -p $(builddir)test/fixtures; \
+		cp -a $(srcdir)test/fixtures/nested-index $(builddir)test/fixtures; \
+	fi
 
 test-http1: all
 	$(PYTHON) $(srcdir)tools/test.py --mode=release --use-http1 simple message
