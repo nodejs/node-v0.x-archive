@@ -339,7 +339,9 @@ bench-array: all
 bench-buffer: all
 	@$(NODE) benchmark/common.js buffers
 
-bench: bench-misc bench-net bench-http bench-fs bench-array bench-buffer bench-tls
+bench-all: bench bench-misc bench-array bench-buffer
+
+bench: bench-net bench-http bench-fs bench-tls
 
 bench-http-simple:
 	 benchmark/http_simple_bench.sh
@@ -360,4 +362,4 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all website-upload pkg blog blogclean tar binary release-only
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all website-upload pkg blog blogclean tar binary release-only bench-http-simple bench-idle bench-all bench bench-misc bench-array bench-buffer bench-net bench-http bench-fs bench-tls
