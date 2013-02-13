@@ -21,10 +21,30 @@
 
 var path = require('path');
 var assert = require('assert');
+var fs = require('fs');
 
-exports.testDir = path.dirname(__filename);
-exports.fixturesDir = path.join(exports.testDir, 'fixtures');
-exports.libDir = path.join(exports.testDir, '../lib');
+/* Must make an assumption here, namely, that the host executable is in a
+   descedent path of the build directory. This allows us to walk up the
+   ancestory looking for the signature of the build root.
+   This could be upset by symlinks to an executable outside the build
+   directory.
+ */
+var walk = process.execPath;
+while (walk != path.sep && !fs.existsSync(path.join(walk, 'config.gypi'))) {
+ walk = path.dirname(walk);
+}
+exports.buildDir = walk;
+
+// Find the root of the source tree
+var walk = path.dirname(__filename);
+while (walk != path.sep && !fs.existsSync(path.join(walk, 'common.gypi'))) {
+ walk = path.dirname(walk);
+}
+exports.srcDir = walk;
+
+exports.testDir = path.join(exports.buildDir, 'test');
+exports.fixturesDir = path.join(exports.srcDir, 'test', 'fixtures');
+exports.libDir = path.join(exports.srcDir, 'lib');
 exports.tmpDir = path.join(exports.testDir, 'tmp');
 exports.PORT = 12346;
 
