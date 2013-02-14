@@ -2,6 +2,7 @@
 
 BUILDTYPE ?= Release
 PYTHON ?= python
+override PYTHON := NODE_BUILDDIR=$(builddir) $(PYTHON)
 NINJA ?= ninja
 DESTDIR ?=
 SIGN ?=
