@@ -129,7 +129,7 @@ sent to the server on that socket.
 
 `function (exception, socket) { }`
 
-If a client connection emits an 'error' event - it will forwarded here.
+If a client connection emits an 'error' event, it will be forwarded here.
 
 `socket` is the `net.Socket` object that the error originated from.
 
@@ -201,7 +201,7 @@ The response implements the [Writable Stream][] interface. This is an
 
 `function () { }`
 
-Indicates that the underlaying connection was terminated before
+Indicates that the underlying connection was terminated before
 `response.end()` was called or able to flush.
 
 ### response.writeContinue()
@@ -229,7 +229,7 @@ be called before `response.end()` is called.
 If you call `response.write()` or `response.end()` before calling this, the
 implicit/mutable headers will be calculated and call this function for you.
 
-Note: that Content-Length is given in bytes not characters. The above example
+Note that Content-Length is given in bytes not characters. The above example
 works because the string `'hello world'` contains only single byte characters.
 If the body contains higher coded characters then `Buffer.byteLength()`
 should be used to determine the number of bytes in a given encoding.
@@ -317,7 +317,7 @@ first chunk of body.
 
 Returns `true` if the entire data was flushed successfully to the kernel
 buffer. Returns `false` if all or part of the data was queued in user memory.
-`'drain'` will be emitted when the buffer is again free.
+`'drain'` will be emitted when the buffer is free again.
 
 ### response.addTrailers(headers)
 
