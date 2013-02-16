@@ -61,64 +61,15 @@ function Benchmark(fn, options) {
 // benchmark an http server.
 Benchmark.prototype.http = function(p, args, cb) {
   var self = this;
-  makeWrk(function(er) {
-    if (er)
-      benchAb(self, p, args, cb);
-    else
-      benchWrk(self, p, args, cb);
-  });
-};
-
-function makeWrk(cb) {
-  // wrk doesn't work on sunos
-  if (process.platform === 'sunos')
-    return cb(new Error('work does not compile on sunos'));
-
-  var spawn = require('child_process').spawn;
-  var wrk = path.resolve(__dirname, '..', 'tools', 'wrk');
-  var child = spawn('make', ['-C', wrk], { stdio: [null, null, 2] });
-
-  child.on('exit', function(code, signal) {
-    if (code)
-      cb(new Error('wrk failed to compile'));
-    else
-      cb();
-  });
-}
-
-function benchAb(self, p, args_, cb) {
-  // have to modify the args somewhat, since ab is different.
-  var flags = {};
-  var args = ['-k', '-r'];
-  for (var i = 0; i < args_.length; i += 2) {
-    var k = args_[i];
-    var v = args_[i + 1];
-    switch (k) {
-      case '-r':
-        args.push('-n', v);
-        break;
-      case '-t': // no correllary
-        break;
-      case '-c': // high concurrency gets unstable
-        v = Math.max(+v, 150);
-        args.push(k, v);
-    }
-  }
-  benchHttp(self, 'ab', /Requests per second: +([0-9\.]+)/, p, args, cb);
-}
-
-function benchWrk(self, p, args, cb) {
   var wrk = path.resolve(__dirname, '..', 'tools', 'wrk', 'wrk');
-  benchHttp(self, wrk, /Requests\/sec:[ \t]+([0-9\.]+)/, p, args, cb);
-}
-
-function benchHttp(self, cmd, regexp, p, args, cb) {
+  var regexp = /Requests\/sec:[ \t]+([0-9\.]+)/;
   var spawn = require('child_process').spawn;
   var url = 'http://127.0.0.1:' + exports.PORT + p;
-  args.push(url);
+
+  args = args.concat(url);
 
   var out = '';
-  var child = spawn(cmd, args);
+  var child = spawn(wrk, args);
 
   child.stdout.setEncoding('utf8');
 
@@ -131,14 +82,14 @@ function benchHttp(self, cmd, regexp, p, args, cb) {
       cb(code);
 
     if (code) {
-      console.error('cmd failed with ' + code);
+      console.error('wrk failed with ' + code);
       process.exit(code)
     }
     var m = out.match(regexp);
     var qps = m && +m[1];
     if (!qps) {
       console.error('%j', out);
-      console.error('cmd produced strange output');
+      console.error('wrk produced strange output');
       process.exit(1);
     }
     self.report(+qps);
