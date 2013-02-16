@@ -1942,11 +1942,18 @@ def GenerateOutput(target_list, target_dicts, data, params):
     base_path = gyp.common.RelativePath(os.path.dirname(build_file),
                                         options.depth)
     # We write the file in the base_path directory.
-    output_file = os.path.join(options.depth, base_path, base_name)
+    if not os.path.abspath(build_file).startswith(os.getcwd()):
+      output_path = gyp.common.RelativePath(os.path.dirname(build_file), options.toplevel_dir)
+      output_file = os.path.join(output_path, base_name)
+      gyp.DebugOutput(gyp.DEBUG_GENERAL, "toplevel='%s', output_path='%s'" % (options.toplevel_dir, output_path))
+    else:
+      output_file = os.path.join(options.depth, base_path, base_name)
+    
     if options.generator_output:
       output_file = os.path.join(options.generator_output, output_file)
     base_path = gyp.common.RelativePath(os.path.dirname(build_file),
                                         options.toplevel_dir)
+    gyp.DebugOutput(gyp.DEBUG_GENERAL, "('%s', '%s') = '%s', '%s'" % (build_file, base_name, base_path, output_file))
     return base_path, output_file
 
   # TODO:  search for the first non-'Default' target.  This can go
@@ -1964,12 +1971,17 @@ def GenerateOutput(target_list, target_dicts, data, params):
 
   srcdir = '.'
   makefile_name = 'Makefile' + options.suffix
-  makefile_path = os.path.join(options.toplevel_dir, makefile_name)
+  makefile_path = os.path.abspath(os.path.join(builddir_name, makefile_name))
   if options.generator_output:
     global srcdir_prefix
     makefile_path = os.path.join(options.generator_output, makefile_path)
-    srcdir = gyp.common.RelativePath(srcdir, options.generator_output)
+    if options.toplevel_dir:
+      srcdir = options.toplevel_dir
+    else:
+      srcdir = gyp.common.RelativePath(srcdir, options.generator_output)
     srcdir_prefix = '$(srcdir)/'
+
+  gyp.DebugOutput(gyp.DEBUG_GENERAL, "\n builddir=name'%s'\n makefile_path='%s'\n options.generator_output='%s'\n srcdir='%s'\n srcdir_prefix='%s'" % (builddir_name, makefile_path, options.generator_output if options.generator_output else '', srcdir, srcdir_prefix))
 
   flock_command= 'flock'
   header_params = {

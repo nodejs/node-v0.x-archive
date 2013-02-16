@@ -28,6 +28,7 @@ if (module.parent) {
 var common = require('../common.js'),
     assert = require('assert'),
     child = require('child_process'),
+    path = require('path'),
     nodejs = '"' + process.execPath + '"';
 
 
@@ -73,7 +74,7 @@ child.exec(nodejs + ' --eval "require(\'' + filename + '\')"',
     });
 
 // module path resolve bug, regression test
-child.exec(nodejs + ' --eval "require(\'./test/simple/test-cli-eval.js\')"',
+child.exec(nodejs + ' --eval "require(\'' + path.join(common.srcDir, './test/simple/test-cli-eval.js') + '\')"',
     function(status, stdout, stderr) {
       assert.equal(status.code, 42);
     });

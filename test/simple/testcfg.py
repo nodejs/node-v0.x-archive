@@ -46,7 +46,7 @@ class SimpleTestCase(test.TestCase):
     self.file = file
     self.config = config
     self.mode = mode
-    self.tmpdir = join(dirname(self.config.root), 'tmp')
+    self.tmpdir = join(os.getenv('NODE_BUILDDIR', dirname(self.config.root)), 'test', 'tmp')
   
   def AfterRun(self, result):
     # delete the whole tmp dir

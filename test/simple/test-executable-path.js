@@ -26,13 +26,13 @@ var match = false;
 
 var isDebug = process.features.debug;
 
-var debugPaths = [path.normalize(path.join(__dirname, '..', '..',
+var debugPaths = [path.normalize(path.join(common.buildDir,
                                            'out', 'Debug', 'node')),
-                  path.normalize(path.join(__dirname, '..', '..',
+                  path.normalize(path.join(common.buildDir,
                                            'Debug', 'node'))];
-var defaultPaths = [path.normalize(path.join(__dirname, '..', '..',
+var defaultPaths = [path.normalize(path.join(common.buildDir,
                                              'out', 'Release', 'node')),
-                    path.normalize(path.join(__dirname, '..', '..',
+                    path.normalize(path.join(common.buildDir,
                                              'Release', 'node'))];
 
 console.error('debugPaths: ' + debugPaths);

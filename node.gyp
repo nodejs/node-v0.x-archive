@@ -333,7 +333,7 @@
           'action_name': 'node_js2c',
           'inputs': [
             '<@(library_files)',
-            './config.gypi',
+            '$(abs_builddir)/../../config.gypi',
           ],
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/node_natives.h',

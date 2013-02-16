@@ -6,13 +6,16 @@ import sys
 
 script_dir = os.path.dirname(__file__)
 node_root  = os.path.normpath(os.path.join(script_dir, os.pardir))
+toplevel_dir = os.path.abspath(node_root)
+build_dir = os.path.relpath(os.getcwd(), os.path.abspath(script_dir)) if os.getcwd() != node_root else node_root
+out_dir = os.path.join(os.getcwd(), 'out')
 
 sys.path.insert(0, os.path.join(node_root, 'tools', 'gyp', 'pylib'))
 import gyp
 
 # Directory within which we want all generated files (including Makefiles)
 # to be written.
-output_dir = os.path.join(os.path.abspath(node_root), 'out')
+output_dir = os.path.join(os.getcwd(), 'out')
 
 def run_gyp(args):
   rc = gyp.main(args)
@@ -29,11 +32,11 @@ if __name__ == '__main__':
   if sys.platform == 'win32':
     args.append(os.path.join(node_root, 'node.gyp'))
     common_fn  = os.path.join(node_root, 'common.gypi')
-    options_fn = os.path.join(node_root, 'config.gypi')
+    options_fn = os.path.join(os.path.abspath(os.path.join(script_dir, build_dir)), 'config.gypi')
   else:
     args.append(os.path.join(os.path.abspath(node_root), 'node.gyp'))
     common_fn  = os.path.join(os.path.abspath(node_root), 'common.gypi')
-    options_fn = os.path.join(os.path.abspath(node_root), 'config.gypi')
+    options_fn = os.path.join(os.path.abspath(os.path.join(script_dir, build_dir)), 'config.gypi')
 
   if os.path.exists(common_fn):
     args.extend(['-I', common_fn])
@@ -41,7 +44,7 @@ if __name__ == '__main__':
   if os.path.exists(options_fn):
     args.extend(['-I', options_fn])
 
-  args.append('--depth=' + node_root)
+  args.append('--depth=' + (node_root if node_root == build_dir else '.'))
 
   # There's a bug with windows which doesn't allow this feature.
   if sys.platform != 'win32' and 'ninja' not in args:
@@ -53,5 +56,6 @@ if __name__ == '__main__':
 
   args.append('-Dcomponent=static_library')
   args.append('-Dlibrary=static_library')
+  args.append('--toplevel-dir=' + toplevel_dir)
   gyp_args = list(args)
   run_gyp(gyp_args)
