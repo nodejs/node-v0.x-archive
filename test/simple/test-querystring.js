@@ -128,7 +128,7 @@ qsColonTestCases.forEach(function(testCase) {
 
 // test that the brackets test cases can do the same
 qsBracketsTestCases.forEach(function(testCase) {
-  assert.deepEqual(testCase[2], qs.parse(testCase[0], undefined, undefined, {brackets: true}));
+  assert.deepEqual(testCase[2], qs.parse(testCase[0], {brackets: true}));
 });
 
 // test the weird objects, that they get parsed properly
@@ -166,7 +166,7 @@ qsColonTestCases.forEach(function(testCase) {
 });
 
 qsBracketsTestCases.forEach(function(testCase) {
-  assert.equal(testCase[1], qs.stringify(testCase[2], undefined, undefined, undefined, true));
+  assert.equal(testCase[1], qs.stringify(testCase[2], {brackets: true}));
 });
 
 qsWeirdObjects.forEach(function(testCase) {
