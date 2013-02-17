@@ -71,6 +71,13 @@ var qsColonTestCases = [
   ['foo:baz:bar', 'foo:baz%3Abar', {'foo': 'baz:bar'}]
 ];
 
+// [ wonkyQS, canonicalQS, obj ]
+var qsBracketsTestCases = [
+  ['A[]=1&A[]=2&A[]=3', 'A%5B%5D=1&A%5B%5D=2&A%5B%5D=3', {A: ['1','2','3']}],
+  ['B[C][D]=2&B[C][E]=3', 'B%5BC%5D%5BD%5D=2&B%5BC%5D%5BE%5D=3', {B: {C: {D: '2', E: '3'}}}],
+  ['A[][]=1&A[][]=2&A[][]=3', 'A%5B%5D%5B%5D=1&A%5B%5D%5B%5D=2&A%5B%5D%5B%5D=3', {A: [['1'],['2'],['3']]}]
+];
+
 // [wonkyObj, qs, canonicalObj]
 var extendedFunction = function() {};
 extendedFunction.prototype = {a: 'b'};
@@ -119,6 +126,11 @@ qsColonTestCases.forEach(function(testCase) {
   assert.deepEqual(testCase[2], qs.parse(testCase[0], ';', ':'));
 });
 
+// test that the brackets test cases can do the same
+qsBracketsTestCases.forEach(function(testCase) {
+  assert.deepEqual(testCase[2], qs.parse(testCase[0], undefined, undefined, {brackets: true}));
+});
+
 // test the weird objects, that they get parsed properly
 qsWeirdObjects.forEach(function(testCase) {
   assert.deepEqual(testCase[2], qs.parse(testCase[1]));
@@ -151,6 +163,10 @@ qsTestCases.forEach(function(testCase) {
 
 qsColonTestCases.forEach(function(testCase) {
   assert.equal(testCase[1], qs.stringify(testCase[2], ';', ':'));
+});
+
+qsBracketsTestCases.forEach(function(testCase) {
+  assert.equal(testCase[1], qs.stringify(testCase[2], undefined, undefined, undefined, true));
 });
 
 qsWeirdObjects.forEach(function(testCase) {
