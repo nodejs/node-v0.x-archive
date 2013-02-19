@@ -50,12 +50,11 @@ function doTest() {
     requestCert: true
   };
   var requestCount = 0;
-  var errorCount = 0;
   var session;
 
   var server = tls.createServer(options, function(cleartext) {
     cleartext.on('error', function() {
-      errorCount++;
+      // Just ignore
     });
     ++requestCount;
     cleartext.end();
@@ -98,6 +97,5 @@ function doTest() {
 
     // initial request + reconnect requests (5 times)
     assert.equal(requestCount, 6);
-    assert.equal(errorCount, 4);
   });
 }
