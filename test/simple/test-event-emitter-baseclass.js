@@ -22,23 +22,10 @@
 var common = require('../common');
 var assert = require('assert');
 var EventEmitter = require('events').EventEmitter;
-var util = require('util');
 
-util.inherits(MyEE, EventEmitter);
-
-function MyEE(cb) {
-  this.on('foo', cb);
-  process.nextTick(this.emit.bind(this, 'foo'));
-  EventEmitter.call(this);
-}
-
-var called = false;
-var myee = new MyEE(function() {
-  called = true;
-});
+var ee = new require('events').EventEmitter();
 
 process.on('exit', function() {
-  assert(called);
-  assert(myee instanceof EventEmitter);
+  assert(ee instanceof EventEmitter);
   console.log('ok');
 });
