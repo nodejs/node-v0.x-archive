@@ -484,7 +484,7 @@
       nextTickQueue.push(obj);
       infoBox[length]++;
     }
-  };
+  }
 
   function evalScript(name) {
     var Module = NativeModule.require('module');
@@ -784,7 +784,7 @@
       cp._forkChild(fd);
       assert(process.send);
     }
-  }
+  };
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();
@@ -845,15 +845,15 @@
 
   NativeModule.getCached = function(id) {
     return NativeModule._cache[id];
-  }
+  };
 
   NativeModule.exists = function(id) {
     return NativeModule._source.hasOwnProperty(id);
-  }
+  };
 
   NativeModule.getSource = function(id) {
     return NativeModule._source[id];
-  }
+  };
 
   NativeModule.wrap = function(script) {
     return NativeModule.wrapper[0] + script + NativeModule.wrapper[1];
