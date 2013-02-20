@@ -484,7 +484,7 @@
       nextTickQueue.push(obj);
       infoBox[length]++;
     }
-  }
+  };
 
   function evalScript(name) {
     var Module = NativeModule.require('module');
