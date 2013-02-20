@@ -204,11 +204,6 @@ extern "C" {
 /* Temporary extension type */
 #define TLSEXT_TYPE_renegotiate                 0xff01
 
-#ifndef OPENSSL_NO_NEXTPROTONEG
-/* This is not an IANA defined extension number */
-#define TLSEXT_TYPE_next_proto_neg		13172
-#endif
-
 /* NameType value from RFC 3546 */
 #define TLSEXT_NAMETYPE_host_name 0
 /* status request value from RFC 3546 */
@@ -227,9 +222,6 @@ extern "C" {
 
 const char *SSL_get_servername(const SSL *s, const int type) ;
 int SSL_get_servername_type(const SSL *s) ;
-int SSL_export_keying_material(SSL *s, unsigned char *out, size_t olen,
-	const char *label, size_t llen, const unsigned char *p, size_t plen,
-	int use_context);
 
 #define SSL_set_tlsext_host_name(s,name) \
 SSL_ctrl(s,SSL_CTRL_SET_TLSEXT_HOSTNAME,TLSEXT_NAMETYPE_host_name,(char *)name)

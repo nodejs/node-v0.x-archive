@@ -485,15 +485,16 @@ int dtls1_accept(SSL *s)
 			ret = ssl3_check_client_hello(s);
 			if (ret <= 0)
 				goto end;
-			dtls1_stop_timer(s);
 			if (ret == 2)
+				{
+				dtls1_stop_timer(s);
 				s->state = SSL3_ST_SR_CLNT_HELLO_C;
+				}
 			else {
 				/* could be sent for a DH cert, even if we
 				 * have not asked for it :-) */
 				ret=ssl3_get_client_certificate(s);
 				if (ret <= 0) goto end;
-				dtls1_stop_timer(s);
 				s->init_num=0;
 				s->state=SSL3_ST_SR_KEY_EXCH_A;
 			}
@@ -503,7 +504,6 @@ int dtls1_accept(SSL *s)
 		case SSL3_ST_SR_KEY_EXCH_B:
 			ret=ssl3_get_client_key_exchange(s);
 			if (ret <= 0) goto end;
-			dtls1_stop_timer(s);
 			s->state=SSL3_ST_SR_CERT_VRFY_A;
 			s->init_num=0;
 
@@ -540,7 +540,6 @@ int dtls1_accept(SSL *s)
 			/* we should decide if we expected this one */
 			ret=ssl3_get_cert_verify(s);
 			if (ret <= 0) goto end;
-			dtls1_stop_timer(s);
 
 			s->state=SSL3_ST_SR_FINISHED_A;
 			s->init_num=0;
@@ -772,7 +771,7 @@ int dtls1_send_server_hello(SSL *s)
 		p=s->s3->server_random;
 		Time=(unsigned long)time(NULL);			/* Time */
 		l2n(Time,p);
-		RAND_pseudo_bytes(p,SSL3_RANDOM_SIZE-sizeof(Time));
+		RAND_pseudo_bytes(p,SSL3_RANDOM_SIZE-4);
 		/* Do the message type and length last */
 		d=p= &(buf[DTLS1_HM_HEADER_LENGTH]);
 
