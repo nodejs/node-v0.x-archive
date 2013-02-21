@@ -1533,6 +1533,7 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
     EVP_PKEY *pkey = NULL;
     RSA *rsa = NULL;
     if( NULL != (pkey = X509_get_pubkey(peer_cert))
+        && EVP_PKEY_RSA == EVP_PKEY_id(pkey)
         && NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
         BN_print(bio, rsa->n);
         BIO_get_mem_ptr(bio, &mem);
