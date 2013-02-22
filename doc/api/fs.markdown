@@ -181,7 +181,11 @@ to the completion callback.
 `type` argument can be either `'dir'`, `'file'`, or `'junction'` (default is `'file'`).  It is only 
 used on Windows (ignored on other platforms).
 Note that Windows junction points require the destination path to be absolute.  When using
-`'junction'`, the `destination` argument will automatically be normalized to absolute path.
+`'junction'`, the `destination` argument will automatically be normalized to absolute path. 
+
+There's partial support in Windows. Junctions work for every windows version we
+support. But directory and file type symlinks only work with Vista or newer, and
+you have to run as admin to be able to create them.
 
 ## fs.symlinkSync(destination, path, [type])
 
