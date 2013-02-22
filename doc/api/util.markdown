@@ -227,3 +227,18 @@ through the `constructor.super_` property.
         console.log('Received data: "' + data + '"');
     })
     stream.write("It works!"); // Received data: "It works!"
+
+## util.extend(origin, [...])
+
+Copy properties from any number of other objects onto the `origin` object.
+This is a shallow copy only, nested objects are not traversed.
+The origin object is returned.
+
+    var util = require("util");
+    
+    var original = { key: 'value' };
+    var copy = {};
+    
+    util.extend(copy, original);
+    copy.key;
+      // "value"
