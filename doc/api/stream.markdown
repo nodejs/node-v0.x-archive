@@ -108,7 +108,7 @@ initialized.
 ### readable.\_read(size, callback)
 
 * `size` {Number} Number of bytes to read asynchronously
-* `callback` {Function} Called with an error or with data
+* `callback` {Function} Optional, called with an error or with data
 
 All Readable stream implementations must provide a `_read` method
 to fetch data from the underlying resource.
@@ -117,9 +117,13 @@ Note: **This function MUST NOT be called directly.**  It should be
 implemented by child classes, and called by the internal Readable
 class methods only.
 
-Call the callback using the standard `callback(error, data)` pattern.
-When no more data can be fetched, call `callback(null, null)` to
-signal the EOF.
+If a callback is provided, `_read` will not be called again until the
+callback has been called using the standard `callback(error, data)`
+pattern. When no more data can be fetched, call `callback(null, null)`
+to signal the EOF.
+
+If no callback is provided, all data and EOF signalling must be fed to
+the Readable by using the `push()` method.
 
 This method is prefixed with an underscore because it is internal to
 the class that defines it, and should not be called directly by user
@@ -162,7 +166,7 @@ source.onend = function() {
 };
 
 // _read will be called when the stream wants to pull more data in
-stream._read = function(size, cb) {
+stream._read = function() {
   source.readStart();
 };
 ```
