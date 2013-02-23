@@ -75,7 +75,7 @@ class NODE_EXTERN Buffer: public ObjectWrap {
   static inline char* Data(v8::Handle<v8::Value> val) {
     assert(val->IsObject());
     void* data = val.As<v8::Object>()->GetIndexedPropertiesExternalArrayData();
-    return reinterpret_cast<char*>(data);
+    return static_cast<char*>(data);
   }
 
   static inline char* Data(Buffer *b) {
@@ -118,11 +118,21 @@ class NODE_EXTERN Buffer: public ObjectWrap {
   static v8::Handle<v8::Value> Base64Slice(const v8::Arguments &args);
   static v8::Handle<v8::Value> Utf8Slice(const v8::Arguments &args);
   static v8::Handle<v8::Value> Ucs2Slice(const v8::Arguments &args);
+  static v8::Handle<v8::Value> HexSlice(const v8::Arguments &args);
   static v8::Handle<v8::Value> BinaryWrite(const v8::Arguments &args);
   static v8::Handle<v8::Value> Base64Write(const v8::Arguments &args);
   static v8::Handle<v8::Value> AsciiWrite(const v8::Arguments &args);
   static v8::Handle<v8::Value> Utf8Write(const v8::Arguments &args);
   static v8::Handle<v8::Value> Ucs2Write(const v8::Arguments &args);
+  static v8::Handle<v8::Value> HexWrite(const v8::Arguments &args);
+  static v8::Handle<v8::Value> ReadFloatLE(const v8::Arguments &args);
+  static v8::Handle<v8::Value> ReadFloatBE(const v8::Arguments &args);
+  static v8::Handle<v8::Value> ReadDoubleLE(const v8::Arguments &args);
+  static v8::Handle<v8::Value> ReadDoubleBE(const v8::Arguments &args);
+  static v8::Handle<v8::Value> WriteFloatLE(const v8::Arguments &args);
+  static v8::Handle<v8::Value> WriteFloatBE(const v8::Arguments &args);
+  static v8::Handle<v8::Value> WriteDoubleLE(const v8::Arguments &args);
+  static v8::Handle<v8::Value> WriteDoubleBE(const v8::Arguments &args);
   static v8::Handle<v8::Value> ByteLength(const v8::Arguments &args);
   static v8::Handle<v8::Value> MakeFastBuffer(const v8::Arguments &args);
   static v8::Handle<v8::Value> Fill(const v8::Arguments &args);

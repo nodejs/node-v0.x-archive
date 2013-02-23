@@ -156,9 +156,13 @@ function errorHandler (er) {
   case "EPUBLISHCONFLICT":
     er.code = "EPUBLISHCONFLICT"
     log.error("publish fail", ["Cannot publish over existing version."
-              ,"Bump the 'version' field, set the --force flag, or"
-              ,"    npm unpublish '"+er.pkgid+"'"
-              ,"and try again"
+              ,"Update the 'version' field in package.json and try again."
+              ,""
+              ,"If the previous version was published in error, see:"
+              ,"    npm help unpublish"
+              ,""
+              ,"To automatically increment version numbers, see:"
+              ,"    npm help version"
               ].join("\n"))
     break
 
@@ -201,6 +205,14 @@ function errorHandler (er) {
     log.error("need auth", [er.message
               ,"You need to authorize this machine using `npm adduser`"
               ].join("\n"))
+    break
+
+  case "EPEERINVALID":
+    var peerErrors = Object.keys(er.peersDepending).map(function (peer) {
+      return "Peer " + peer + " wants " + er.packageName + "@"
+        + er.peersDepending[peer]
+    })
+    log.error("peerinvalid", [er.message].concat(peerErrors).join("\n"))
     break
 
   case "ENOTSUP":

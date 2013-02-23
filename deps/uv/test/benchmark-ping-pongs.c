@@ -24,7 +24,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h> /* strlen */
 
 /* Run the benchmark for this many ms */
 #define TIME 5000
@@ -103,8 +102,7 @@ static void pinger_write_ping(pinger_t* pinger) {
   uv_write_t* req;
   uv_buf_t buf;
 
-  buf.base = (char*)&PING;
-  buf.len = strlen(PING);
+  buf = uv_buf_init(PING, sizeof(PING) - 1);
 
   req = malloc(sizeof *req);
   if (uv_write(req, (uv_stream_t*) &pinger->tcp, &buf, 1, pinger_write_cb)) {
@@ -176,7 +174,7 @@ static void pinger_connect_cb(uv_connect_t* req, int status) {
 }
 
 
-static void pinger_new() {
+static void pinger_new(void) {
   int r;
   struct sockaddr_in client_addr = uv_ip4_addr("0.0.0.0", 0);
   struct sockaddr_in server_addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
@@ -205,7 +203,7 @@ BENCHMARK_IMPL(ping_pongs) {
   start_time = uv_now(loop);
 
   pinger_new();
-  uv_run(loop);
+  uv_run(loop, UV_RUN_DEFAULT);
 
   ASSERT(completed_pingers == 1);
 

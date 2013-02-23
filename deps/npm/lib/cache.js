@@ -51,14 +51,16 @@ adding a local tarball:
 */
 
 exports = module.exports = cache
-exports.read = read
-exports.clean = clean
-exports.unpack = unpack
-exports.lock = lock
-exports.unlock = unlock
+cache.read = read
+cache.clean = clean
+cache.unpack = unpack
+cache.lock = lock
+cache.unlock = unlock
 
 var mkdir = require("mkdirp")
   , exec = require("./utils/exec.js")
+  , spawn = require("child_process").spawn
+  , once = require("once")
   , fetch = require("./utils/fetch.js")
   , npm = require("./npm.js")
   , fs = require("graceful-fs")
@@ -77,6 +79,7 @@ var mkdir = require("mkdirp")
   , lockFile = require("lockfile")
   , crypto = require("crypto")
   , retry = require("retry")
+  , zlib = require("zlib")
 
 cache.usage = "npm cache add <tarball file>"
             + "\nnpm cache add <folder>"
@@ -136,6 +139,8 @@ function read (name, ver, forceBypass, cb) {
   }
 
   readJson(jsonFile, function (er, data) {
+    er = needVersion(er, data)
+    if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     if (er) return addNamed(name, ver, c)
     deprCheck(data)
     c(er, data)
@@ -150,7 +155,7 @@ function ls (args, cb) {
   if (0 === prefix.indexOf(process.env.HOME)) {
     prefix = "~" + prefix.substr(process.env.HOME.length)
   }
-  ls_(args, npm.config.get("depth"), function(er, files) {
+  ls_(args, npm.config.get("depth"), function (er, files) {
     console.log(files.map(function (f) {
       return path.join(prefix, f)
     }).join("\n").trim())
@@ -187,7 +192,7 @@ function clean (args, cb) {
 // npm cache add <pkg> <ver>
 // npm cache add <tarball>
 // npm cache add <folder>
-exports.add = function (pkg, ver, scrub, cb) {
+cache.add = function (pkg, ver, scrub, cb) {
   if (typeof cb !== "function") cb = scrub, scrub = false
   if (typeof cb !== "function") cb = ver, ver = null
   if (scrub) {
@@ -229,7 +234,7 @@ function add (args, cb) {
     spec = args[0]
   }
 
-  log.silly("cache add", "name=%j spec=%j args=%j", name, spec, args)
+  log.verbose("cache add", "name=%j spec=%j args=%j", name, spec, args)
 
 
   if (!name && !spec) return cb(usage)
@@ -278,9 +283,11 @@ function fetchAndShaCheck (u, tmp, shasum, cb) {
       log.error("fetch failed", u)
       return cb(er, response)
     }
-    if (!shasum) return cb()
+    if (!shasum) return cb(null, response)
     // validate that the url we just downloaded matches the expected shasum.
-    sha.check(tmp, shasum, cb)
+    sha.check(tmp, shasum, function (er) {
+      return cb(er, response, shasum)
+    })
   })
 }
 
@@ -297,6 +304,10 @@ function addRemoteTarball (u, shasum, name, cb_) {
   if (iF.length > 1) return
 
   function cb (er, data) {
+    if (data) {
+      data._from = u
+      data._resolved = u
+    }
     unlock(u, function () {
       var c
       while (c = iF.shift()) c(er, data)
@@ -304,46 +315,55 @@ function addRemoteTarball (u, shasum, name, cb_) {
     })
   }
 
+  var tmp = path.join(npm.tmp, Date.now()+"-"+Math.random(), "tmp.tgz")
+
   lock(u, function (er) {
     if (er) return cb(er)
 
     log.verbose("addRemoteTarball", [u, shasum])
-    var tmp = path.join(npm.tmp, Date.now()+"-"+Math.random(), "tmp.tgz")
     mkdir(path.dirname(tmp), function (er) {
       if (er) return cb(er)
-      // Tuned to spread 3 attempts over about a minute.
-      // See formula at <https://github.com/tim-kos/node-retry>.
-      var operation = retry.operation
-        ( { retries: npm.config.get("fetch-retries")
-          , factor: npm.config.get("fetch-retry-factor")
-          , minTimeout: npm.config.get("fetch-retry-mintimeout")
-          , maxTimeout: npm.config.get("fetch-retry-maxtimeout") })
-
-      operation.attempt(function (currentAttempt) {
-        log.info("retry", "fetch attempt " + currentAttempt
-          + " at " + (new Date()).toLocaleTimeString())
-        fetchAndShaCheck(u, tmp, shasum, function (er, response) {
-          // Only retry on 408, 5xx or no `response`.
-          var statusCode = response && response.statusCode
-          var statusRetry = !statusCode || (statusCode === 408 || statusCode >= 500)
-          if (er && statusRetry && operation.retry(er)) {
-            log.info("retry", "will retry, error on last attempt: " + er)
-            return
-          }
-          done(er)
-        })
-      })
+      addRemoteTarball_(u, tmp, shasum, done)
     })
-    function done (er) {
-      if (er) return cb(er)
-      addLocalTarball(tmp, name, cb)
-    }
+  })
+
+  function done (er, resp, shasum) {
+    if (er) return cb(er)
+    addLocalTarball(tmp, name, shasum, cb)
+  }
+}
+
+function addRemoteTarball_(u, tmp, shasum, cb) {
+  // Tuned to spread 3 attempts over about a minute.
+  // See formula at <https://github.com/tim-kos/node-retry>.
+  var operation = retry.operation
+    ( { retries: npm.config.get("fetch-retries")
+      , factor: npm.config.get("fetch-retry-factor")
+      , minTimeout: npm.config.get("fetch-retry-mintimeout")
+      , maxTimeout: npm.config.get("fetch-retry-maxtimeout") })
+
+  operation.attempt(function (currentAttempt) {
+    log.info("retry", "fetch attempt " + currentAttempt
+      + " at " + (new Date()).toLocaleTimeString())
+    fetchAndShaCheck(u, tmp, shasum, function (er, response, shasum) {
+      // Only retry on 408, 5xx or no `response`.
+      var sc = response && response.statusCode
+      var statusRetry = !sc || (sc === 408 || sc >= 500)
+      if (er && statusRetry && operation.retry(er)) {
+        log.info("retry", "will retry, error on last attempt: " + er)
+        return
+      }
+      cb(er, response, shasum)
+    })
   })
 }
 
-// For now, this is kind of dumb.  Just basically treat git as
-// yet another "fetch and scrub" kind of thing.
-// Clone to temp folder, then proceed with the addLocal stuff.
+// 1. cacheDir = path.join(cache,'_git-remotes',sha1(u))
+// 2. checkGitDir(cacheDir) ? 4. : 3. (rm cacheDir if necessary)
+// 3. git clone --mirror u cacheDir
+// 4. cd cacheDir && git fetch -a origin
+// 5. git archive /tmp/random.tgz
+// 6. addLocalTarball(/tmp/random.tgz) <gitref> --format=tar --prefix=package/
 function addRemoteGit (u, parsed, name, cb_) {
   if (typeof cb_ !== "function") cb_ = name, name = null
 
@@ -360,6 +380,8 @@ function addRemoteGit (u, parsed, name, cb_) {
     })
   }
 
+  var p, co // cachePath, git-ref we want to check out
+
   lock(u, function (er) {
     if (er) return cb(er)
 
@@ -370,6 +392,7 @@ function addRemoteGit (u, parsed, name, cb_) {
     // it needs the ssh://
     // If the path is like ssh://foo:some/path then it works, but
     // only if you remove the ssh://
+    var origUrl = u
     u = u.replace(/^git\+/, "")
          .replace(/#.*$/, "")
 
@@ -378,34 +401,126 @@ function addRemoteGit (u, parsed, name, cb_) {
       u = u.replace(/^ssh:\/\//, "")
     }
 
+    var v = crypto.createHash("sha1").update(u).digest("hex").slice(0, 8)
+    v = u.replace(/[^a-zA-Z0-9]+/g, '-') + '-' + v
+
     log.verbose("addRemoteGit", [u, co])
 
-    var tmp = path.join(npm.tmp, Date.now()+"-"+Math.random())
-    mkdir(path.dirname(tmp), function (er) {
+    p = path.join(npm.config.get("cache"), "_git-remotes", v)
+
+    checkGitDir(p, u, co, origUrl, cb)
+  })
+}
+
+function checkGitDir (p, u, co, origUrl, cb) {
+  fs.stat(p, function (er, s) {
+    if (er) return cloneGitRemote(p, u, co, origUrl, cb)
+    if (!s.isDirectory()) return rm(p, function (er){
       if (er) return cb(er)
-      exec( npm.config.get("git"), ["clone", u, tmp], gitEnv(), false
-          , function (er, code, stdout, stderr) {
-        stdout = (stdout + "\n" + stderr).trim()
-        if (er) {
-          log.error("git clone " + u, stdout)
-          return cb(er)
-        }
-        log.verbose("git clone "+u, stdout)
-        exec( npm.config.get("git"), ["checkout", co], gitEnv(), false, tmp
-            , function (er, code, stdout, stderr) {
-          stdout = (stdout + "\n" + stderr).trim()
-          if (er) {
-            log.error("git checkout " + co, stdout)
-            return cb(er)
-          }
-          log.verbose("git checkout " + co, stdout)
-          addLocalDirectory(tmp, cb)
+      cloneGitRemote(p, u, co, origUrl, cb)
+    })
+
+    var git = npm.config.get("git")
+    var args = ["config", "--get", "remote.origin.url"]
+    var env = gitEnv()
+
+    exec(git, args, env, false, p, function (er, code, stdout, stderr) {
+      stdoutTrimmed = (stdout + "\n" + stderr).trim()
+      if (er || u !== stdout.trim()) {
+        log.warn( "`git config --get remote.origin.url` returned "
+                + "wrong result ("+u+")", stdoutTrimmed )
+        return rm(p, function (er){
+          if (er) return cb(er)
+          cloneGitRemote(p, u, co, origUrl, cb)
         })
-      })
+      }
+      log.verbose("git remote.origin.url", stdoutTrimmed)
+      archiveGitRemote(p, u, co, origUrl, cb)
     })
   })
 }
 
+function cloneGitRemote (p, u, co, origUrl, cb) {
+  mkdir(p, function (er) {
+    if (er) return cb(er)
+    exec( npm.config.get("git"), ["clone", "--mirror", u, p], gitEnv(), false
+        , function (er, code, stdout, stderr) {
+      stdout = (stdout + "\n" + stderr).trim()
+      if (er) {
+        log.error("git clone " + u, stdout)
+        return cb(er)
+      }
+      log.verbose("git clone " + u, stdout)
+      archiveGitRemote(p, u, co, origUrl, cb)
+    })
+  })
+}
+
+function archiveGitRemote (p, u, co, origUrl, cb) {
+  var git = npm.config.get("git")
+  var archive = ["fetch", "-a", "origin"]
+  var resolve = ["rev-list", "-n1", co]
+  var env = gitEnv()
+
+  var errState = null
+  var n = 0
+  var resolved = null
+  var tmp
+
+  exec(git, archive, env, false, p, function (er, code, stdout, stderr) {
+    stdout = (stdout + "\n" + stderr).trim()
+    if (er) {
+      log.error("git fetch -a origin ("+u+")", stdout)
+      return next(er)
+    }
+    log.verbose("git fetch -a origin ("+u+")", stdout)
+    tmp = path.join(npm.tmp, Date.now()+"-"+Math.random(), "tmp.tgz")
+    next()
+  })
+
+  exec(git, resolve, env, false, p, function (er, code, stdout, stderr) {
+    stdout = (stdout + "\n" + stderr).trim()
+    if (er) {
+      log.error("Failed resolving git HEAD (" + u + ")", stderr)
+      return next(er)
+    }
+    log.verbose("git rev-list -n1 " + co, stdout)
+    var parsed = url.parse(origUrl)
+    parsed.hash = stdout
+    resolved = url.format(parsed)
+    log.verbose('resolved git url', resolved)
+    next()
+  })
+
+  function next (er) {
+    if (errState) return
+    if (er) return cb(errState = er)
+
+    if (++n < 2) return
+
+    mkdir(path.dirname(tmp), function (er) {
+      if (er) return cb(er)
+      var gzip = zlib.createGzip({ level: 9 })
+      var git = npm.config.get("git")
+      var args = ["archive", co, "--format=tar", "--prefix=package/"]
+      var out = fs.createWriteStream(tmp)
+      var env = gitEnv()
+      cb = once(cb)
+      var cp = spawn(git, args, { env: env, cwd: p })
+      cp.on("error", cb)
+      cp.stderr.on("data", function(chunk) {
+        log.silly(chunk.toString(), "git archive")
+      })
+
+      cp.stdout.pipe(gzip).pipe(out).on("close", function() {
+        addLocalTarball(tmp, function(er, data) {
+          if (data) data._resolved = resolved
+          cb(er, data)
+        })
+      })
+    })
+  }
+}
 
 var gitEnv_
 function gitEnv () {
@@ -414,7 +529,7 @@ function gitEnv () {
   if (gitEnv_) return gitEnv_
   gitEnv_ = {}
   for (var k in process.env) {
-    if (!~['GIT_PROXY_COMMAND'].indexOf(k) && k.match(/^GIT/)) continue
+    if (!~['GIT_PROXY_COMMAND','GIT_SSH'].indexOf(k) && k.match(/^GIT/)) continue
     gitEnv_[k] = process.env[k]
   }
   return gitEnv_
@@ -435,6 +550,7 @@ function addNamed (name, x, data, cb_) {
   if (iF.length > 1) return
 
   function cb (er, data) {
+    if (data && !data._fromGithub) data._from = k
     unlock(k, function () {
       var c
       while (c = iF.shift()) c(er, data)
@@ -601,6 +717,8 @@ function addNameVersion (name, ver, data, cb) {
       if (!er) readJson( path.join( npm.cache, name, ver
                                   , "package", "package.json" )
                        , function (er, data) {
+          er = needVersion(er, data)
+          if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
           if (er) return fetchit()
           return cb(null, data)
         })
@@ -618,6 +736,11 @@ function addNameVersion (name, ver, data, cb) {
       tb.protocol = url.parse(npm.config.get("registry")).protocol
       delete tb.href
       tb = url.format(tb)
+      // only add non-shasum'ed packages if --forced.
+      // only ancient things would lack this for good reasons nowadays.
+      if (!dist.shasum && !npm.config.get("force")) {
+        return cb(new Error("package lacks shasum: " + data._id))
+      }
       return addRemoteTarball( tb
                              , dist.shasum
                              , name+"-"+ver
@@ -641,6 +764,7 @@ function addLocal (p, name, cb_) {
         log.error("addLocal", "Could not install %s", p)
         return cb_(er)
       }
+      if (data && !data._fromGithub) data._from = p
       return cb_(er, data)
     })
   }
@@ -667,22 +791,32 @@ function maybeGithub (p, name, er, cb) {
   var u = "git://github.com/" + p
     , up = url.parse(u)
   log.info("maybeGithub", "Attempting to fetch %s from %s", p, u)
+
   return addRemoteGit(u, up, name, function (er2, data) {
     if (er2) return cb(er)
+    data._from = u
+    data._fromGithub = true
     return cb(null, data)
   })
 }
 
-function addLocalTarball (p, name, cb) {
-  if (typeof cb !== "function") cb = name, name = ""
+function addLocalTarball (p, name, shasum, cb_) {
+  if (typeof cb_ !== "function") cb_ = shasum, shasum = null
+  if (typeof cb_ !== "function") cb_ = name, name = ""
   // if it's a tar, and not in place,
   // then unzip to .tmp, add the tmp folder, and clean up tmp
-  if (p.indexOf(npm.tmp) === 0) return addTmpTarball(p, name, cb)
+  if (p.indexOf(npm.tmp) === 0)
+    return addTmpTarball(p, name, shasum, cb_)
 
   if (p.indexOf(npm.cache) === 0) {
-    if (path.basename(p) !== "package.tgz") return cb(new Error(
+    if (path.basename(p) !== "package.tgz") return cb_(new Error(
       "Not a valid cache tarball name: "+p))
-    return addPlacedTarball(p, name, cb)
+    return addPlacedTarball(p, name, shasum, cb_)
+  }
+
+  function cb (er, data) {
+    if (data) data._resolved = p
+    return cb_(er, data)
   }
 
   // just copy it over and then add the temp tarball file.
@@ -704,7 +838,7 @@ function addLocalTarball (p, name, cb) {
       log.verbose("chmod", tmp, npm.modes.file.toString(8))
       fs.chmod(tmp, npm.modes.file, function (er) {
         if (er) return cb(er)
-        addTmpTarball(tmp, name, cb)
+        addTmpTarball(tmp, name, shasum, cb)
       })
     })
     from.pipe(to)
@@ -767,15 +901,74 @@ function makeCacheDir (cb) {
 
 
 
-function addPlacedTarball (p, name, cb) {
+function addPlacedTarball (p, name, shasum, cb) {
   if (!cb) cb = name, name = ""
   getCacheStat(function (er, cs) {
     if (er) return cb(er)
-    return addPlacedTarball_(p, name, cs.uid, cs.gid, cb)
+    return addPlacedTarball_(p, name, cs.uid, cs.gid, shasum, cb)
   })
 }
 
-function addPlacedTarball_ (p, name, uid, gid, cb) {
+// Resolved sum is the shasum from the registry dist object, but
+// *not* necessarily the shasum of this tarball, because for stupid
+// historical reasons, npm re-packs each package an extra time through
+// a temp directory, so all installed packages are actually built with
+// *this* version of npm, on this machine.
+//
+// Once upon a time, this meant that we could change package formats
+// around and fix junk that might be added by incompatible tar
+// implementations.  Then, for a while, it was a way to correct bs
+// added by bugs in our own tar implementation.  Now, it's just
+// garbage, but cleaning it up is a pain, and likely to cause issues
+// if anything is overlooked, so it's not high priority.
+//
+// If you're bored, and looking to make npm go faster, and you've
+// already made it this far in this file, here's a better methodology:
+//
+// cache.add should really be cache.place.  That is, it should take
+// a set of arguments like it does now, but then also a destination
+// folder.
+//
+// cache.add('foo@bar', '/path/node_modules/foo', cb)
+//
+// 1. Resolve 'foo@bar' to some specific:
+//   - git url
+//   - local folder
+//   - local tarball
+//   - tarball url
+// 2. If resolved through the registry, then pick up the dist.shasum
+// along the way.
+// 3. Acquire request() stream fetching bytes: FETCH
+// 4. FETCH.pipe(tar unpack stream to dest)
+// 5. FETCH.pipe(shasum generator)
+// When the tar and shasum streams both finish, make sure that the
+// shasum matches dist.shasum, and if not, clean up and bail.
+//
+// publish(cb)
+//
+// 1. read package.json
+// 2. get root package object (for rev, and versions)
+// 3. update root package doc with version info
+// 4. remove _attachments object
+// 5. remove versions object
+// 5. jsonify, remove last }
+// 6. get stream: registry.put(/package)
+// 7. write trailing-}-less JSON
+// 8. write "_attachments":
+// 9. JSON.stringify(attachments), remove trailing }
+// 10. Write start of attachments (stubs)
+// 11. JSON(filename)+':{"type":"application/octet-stream","data":"'
+// 12. acquire tar packing stream, PACK
+// 13. PACK.pipe(PUT)
+// 14. PACK.pipe(shasum generator)
+// 15. when PACK finishes, get shasum
+// 16. PUT.write('"}},') (finish _attachments
+// 17. update "versions" object with current package version
+// (including dist.shasum and dist.tarball)
+// 18. write '"versions":' + JSON(versions)
+// 19. write '}}' (versions, close main doc)
+
+function addPlacedTarball_ (p, name, uid, gid, resolvedSum, cb) {
   // now we know it's in place already as .cache/name/ver/package.tgz
   // unpack to .cache/name/ver/package/, read the package.json,
   // and fire cb with the json data.
@@ -813,13 +1006,15 @@ function addPlacedTarball_ (p, name, uid, gid, cb) {
           return cb(er)
         }
         readJson(path.join(folder, "package.json"), function (er, data) {
+          er = needVersion(er, data)
           if (er) {
             log.error("addPlacedTarball", "Couldn't read json in %j"
                      , folder)
             return cb(er)
           }
+
           data.dist = data.dist || {}
-          if (shasum) data.dist.shasum = shasum
+          data.dist.shasum = shasum
           deprCheck(data)
           asyncMap([p], function (f, cb) {
             log.verbose("chmod", f, npm.modes.file.toString(8))
@@ -847,13 +1042,17 @@ function addPlacedTarball_ (p, name, uid, gid, cb) {
   }
 }
 
-function addLocalDirectory (p, name, cb) {
+// At this point, if shasum is set, it's something that we've already
+// read and checked.  Just stashing it in the data at this point.
+function addLocalDirectory (p, name, shasum, cb) {
+  if (typeof cb !== "function") cb = shasum, shasum = ""
   if (typeof cb !== "function") cb = name, name = ""
   // if it's a folder, then read the package.json,
   // tar it to the proper place, and add the cache tar
   if (p.indexOf(npm.cache) === 0) return cb(new Error(
     "Adding a cache directory to the cache will make the world implode."))
   readJson(path.join(p, "package.json"), function (er, data) {
+    er = needVersion(er, data)
     if (er) return cb(er)
     deprCheck(data)
     var random = Date.now() + "-" + Math.random()
@@ -881,7 +1080,7 @@ function addLocalDirectory (p, name, cb) {
 
           chownr(made || tgz, cs.uid, cs.gid, function (er) {
             if (er) return cb(er)
-            addLocalTarball(tgz, name, cb)
+            addLocalTarball(tgz, name, shasum, cb)
           })
         })
       })
@@ -889,7 +1088,7 @@ function addLocalDirectory (p, name, cb) {
   })
 }
 
-function addTmpTarball (tgz, name, cb) {
+function addTmpTarball (tgz, name, shasum, cb) {
   if (!cb) cb = name, name = ""
   getCacheStat(function (er, cs) {
     if (er) return cb(er)
@@ -901,7 +1100,7 @@ function addTmpTarball (tgz, name, cb) {
       if (er) {
         return cb(er)
       }
-      addLocalDirectory(path.resolve(contents, "package"), name, cb)
+      addLocalDirectory(path.resolve(contents, "package"), name, shasum, cb)
     })
   })
 }
@@ -950,6 +1149,7 @@ function lockFileName (u) {
 }
 
 var madeCache = false
+var myLocks = {}
 function lock (u, cb) {
   // the cache dir needs to exist already for this.
   if (madeCache) then()
@@ -964,10 +1164,22 @@ function lock (u, cb) {
                , wait: npm.config.get("cache-lock-wait") }
     var lf = lockFileName(u)
     log.verbose("lock", u, lf)
-    lockFile.lock(lf, opts, cb)
+    lockFile.lock(lf, opts, function(er) {
+      if (!er) myLocks[lf] = true
+      cb(er)
+    })
   }
 }
 
 function unlock (u, cb) {
+  var lf = lockFileName(u)
+  if (!myLocks[lf]) return process.nextTick(cb)
+  myLocks[lf] = false
   lockFile.unlock(lockFileName(u), cb)
+}
+
+function needVersion(er, data) {
+  return er ? er
+       : (data && !data.version) ? new Error("No version provided")
+       : null
 }

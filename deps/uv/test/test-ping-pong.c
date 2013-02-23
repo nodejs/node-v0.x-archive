@@ -24,7 +24,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h> /* strlen */
 
 static int completed_pingers = 0;
 
@@ -47,8 +46,6 @@ typedef struct {
   uv_connect_t connect_req;
   char read_buffer[BUFSIZE];
 } pinger_t;
-
-void pinger_try_read(pinger_t* pinger);
 
 
 static uv_buf_t alloc_cb(uv_handle_t* handle, size_t size) {
@@ -77,11 +74,9 @@ static void pinger_write_ping(pinger_t* pinger) {
   uv_write_t *req;
   uv_buf_t buf;
 
-  buf.base = (char*)&PING;
-  buf.len = strlen(PING);
+  buf = uv_buf_init(PING, sizeof(PING) - 1);
 
-  req = malloc(sizeof(uv_write_t));
-
+  req = malloc(sizeof(*req));
   if (uv_write(req, (uv_stream_t*)&pinger->stream.tcp, &buf, 1, pinger_after_write)) {
     FATAL("uv_write failed");
   }
@@ -148,7 +143,7 @@ static void pinger_on_connect(uv_connect_t *req, int status) {
 
 
 /* same ping-pong test, but using IPv6 connection */
-static void tcp_pinger_v6_new() {
+static void tcp_pinger_v6_new(void) {
   int r;
   struct sockaddr_in6 server_addr = uv_ip6_addr("::1", TEST_PORT);
   pinger_t *pinger;
@@ -173,7 +168,7 @@ static void tcp_pinger_v6_new() {
 }
 
 
-static void tcp_pinger_new() {
+static void tcp_pinger_new(void) {
   int r;
   struct sockaddr_in server_addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
   pinger_t *pinger;
@@ -198,7 +193,7 @@ static void tcp_pinger_new() {
 }
 
 
-static void pipe_pinger_new() {
+static void pipe_pinger_new(void) {
   int r;
   pinger_t *pinger;
 
@@ -224,7 +219,7 @@ static void pipe_pinger_new() {
 
 TEST_IMPL(tcp_ping_pong) {
   tcp_pinger_new();
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(completed_pingers == 1);
 
@@ -235,7 +230,7 @@ TEST_IMPL(tcp_ping_pong) {
 
 TEST_IMPL(tcp_ping_pong_v6) {
   tcp_pinger_v6_new();
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(completed_pingers == 1);
 
@@ -246,7 +241,7 @@ TEST_IMPL(tcp_ping_pong_v6) {
 
 TEST_IMPL(pipe_ping_pong) {
   pipe_pinger_new();
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(completed_pingers == 1);
 

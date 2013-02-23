@@ -59,8 +59,31 @@ In busy processes, the programmer is _strongly encouraged_ to use the
 asynchronous versions of these calls. The synchronous versions will block
 the entire process until they complete--halting all connections.
 
-Relative path to filename can be used, remember however that this path will be relative
-to `process.cwd()`.
+Relative path to filename can be used, remember however that this path will be
+relative to `process.cwd()`.
+
+Most fs functions let you omit the callback argument. If you do, a default
+callback is used that rethrows errors. To get a trace to the original call
+site, set the NODE_DEBUG environment variable:
+
+    $ cat script.js
+    function bad() {
+      require('fs').readFile('/');
+    }
+    bad();
+
+    $ env NODE_DEBUG=fs node script.js
+    fs.js:66
+            throw err;
+                  ^
+    Error: EISDIR, read
+        at rethrow (fs.js:61:21)
+        at maybeCallback (fs.js:79:42)
+        at Object.fs.readFile (fs.js:153:18)
+        at bad (/path/to/script.js:2:17)
+        at Object.<anonymous> (/path/to/script.js:5:1)
+        <etc.>
+
 
 ## fs.rename(oldPath, newPath, [callback])
 
@@ -611,12 +634,19 @@ Returns a new ReadStream object (See `Readable Stream`).
       encoding: null,
       fd: null,
       mode: 0666,
-      bufferSize: 64 * 1024
+      bufferSize: 64 * 1024,
+      autoClose: true
     }
 
 `options` can include `start` and `end` values to read a range of bytes from
 the file instead of the entire file.  Both `start` and `end` are inclusive and
 start at 0. The `encoding` can be `'utf8'`, `'ascii'`, or `'base64'`.
+
+If `autoClose` is false, then the file descriptor won't be closed, even if
+there's an error.  It is your responsiblity to close it and make sure
+there's no file descriptor leak.  If `autoClose` is set to true (default
+behavior), on `error` or `end` the file descriptor will be closed
+automatically.
 
 An example to read the last 10 bytes of a file which is 100 bytes long:
 

@@ -90,7 +90,7 @@
     }                                                                         \
     else {                                                                    \
       uv__fs_work(&(req)->work_req);                                          \
-      uv__fs_done(&(req)->work_req);                                          \
+      uv__fs_done(&(req)->work_req, 0);                                       \
       return (req)->result;                                                   \
     }                                                                         \
   }                                                                           \
@@ -113,12 +113,55 @@ static ssize_t uv__fs_futime(uv_fs_t* req) {
   /* utimesat() has nanosecond resolution but we stick to microseconds
    * for the sake of consistency with other platforms.
    */
+  static int no_utimesat;
   struct timespec ts[2];
+  struct timeval tv[2];
+  char path[sizeof("/proc/self/fd/") + 3 * sizeof(int)];
+  int r;
+
+  if (no_utimesat)
+    goto skip;
+
   ts[0].tv_sec  = req->atime;
   ts[0].tv_nsec = (unsigned long)(req->atime * 1000000) % 1000000 * 1000;
   ts[1].tv_sec  = req->mtime;
   ts[1].tv_nsec = (unsigned long)(req->mtime * 1000000) % 1000000 * 1000;
-  return uv__utimesat(req->file, NULL, ts, 0);
+
+  r = uv__utimesat(req->file, NULL, ts, 0);
+  if (r == 0)
+    return r;
+
+  if (errno != ENOSYS)
+    return r;
+
+  no_utimesat = 1;
+
+skip:
+
+  tv[0].tv_sec  = req->atime;
+  tv[0].tv_usec = (unsigned long)(req->atime * 1000000) % 1000000;
+  tv[1].tv_sec  = req->mtime;
+  tv[1].tv_usec = (unsigned long)(req->mtime * 1000000) % 1000000;
+  snprintf(path, sizeof(path), "/proc/self/fd/%d", (int) req->file);
+
+  r = utimes(path, tv);
+  if (r == 0)
+    return r;
+
+  switch (errno) {
+  case ENOENT:
+    if (fcntl(req->file, F_GETFL) == -1 && errno == EBADF)
+      break;
+    /* Fall through. */
+
+  case EACCES:
+  case ENOTDIR:
+    errno = ENOSYS;
+    break;
+  }
+
+  return r;
+
 #elif defined(__APPLE__)                                                      \
     || defined(__DragonFly__)                                                 \
     || defined(__FreeBSD__)                                                   \
@@ -144,11 +187,7 @@ static ssize_t uv__fs_read(uv_fs_t* req) {
 }
 
 
-#if defined(__APPLE__) || defined(__OpenBSD__)
-static int uv__fs_readdir_filter(struct dirent* dent) {
-#else
 static int uv__fs_readdir_filter(const struct dirent* dent) {
-#endif
   return strcmp(dent->d_name, ".") != 0 && strcmp(dent->d_name, "..") != 0;
 }
 
@@ -381,6 +420,7 @@ static ssize_t uv__fs_sendfile(uv_fs_t* req) {
         errno == EIO ||
         errno == ENOTSOCK ||
         errno == EXDEV) {
+      errno = 0;
       return uv__fs_sendfile_emul(req);
     }
 
@@ -412,6 +452,7 @@ static ssize_t uv__fs_sendfile(uv_fs_t* req) {
         errno == EIO ||
         errno == ENOTSOCK ||
         errno == EXDEV) {
+      errno = 0;
       return uv__fs_sendfile_emul(req);
     }
 
@@ -516,7 +557,7 @@ static void uv__fs_work(struct uv__work* w) {
 }
 
 
-static void uv__fs_done(struct uv__work* w) {
+static void uv__fs_done(struct uv__work* w, int status) {
   uv_fs_t* req;
 
   req = container_of(w, uv_fs_t, work_req);
@@ -525,6 +566,12 @@ static void uv__fs_done(struct uv__work* w) {
   if (req->errorno != 0) {
     req->errorno = uv_translate_sys_error(req->errorno);
     uv__set_artificial_error(req->loop, req->errorno);
+  }
+
+  if (status == -UV_ECANCELED) {
+    assert(req->errorno == 0);
+    req->errorno = UV_ECANCELED;
+    uv__set_artificial_error(req->loop, UV_ECANCELED);
   }
 
   if (req->cb != NULL)

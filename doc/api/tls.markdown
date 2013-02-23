@@ -120,6 +120,12 @@ automatically set as a listener for the [secureConnection][] event.  The
     acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
     susceptible to BEAST attacks. Do *not* use it.
 
+  - `handshakeTimeout`: Abort the connection if the SSL/TLS handshake does not
+    finish in this many milliseconds. The default is 120 seconds.
+
+    A `'clientError'` is emitted on the `tls.Server` object whenever a handshake
+    times out.
+
   - `honorCipherOrder` : When choosing a cipher, use the server's preferences
     instead of the client preferences.
 
@@ -206,6 +212,15 @@ You can test this server by connecting to it with `openssl s_client`:
 
 
     openssl s_client -connect 127.0.0.1:8000
+
+
+## tls.SLAB_BUFFER_SIZE
+
+Size of slab buffer used by all tls servers and clients.
+Default: `10 * 1024 * 1024`.
+
+
+Don't change the defaults unless you know what you are doing.
 
 
 ## tls.connect(options, [callback])
@@ -433,6 +448,15 @@ gets high.
 
 The number of concurrent connections on the server.
 
+
+## Class: CryptoStream
+
+This is an encrypted stream.
+
+### cryptoStream.bytesWritten
+
+A proxy to the underlying socket's bytesWritten accessor, this will return
+the total bytes written to the socket, *including the TLS overhead*.
 
 ## Class: tls.CleartextStream
 

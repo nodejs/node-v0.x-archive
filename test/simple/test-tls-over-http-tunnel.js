@@ -162,6 +162,12 @@ proxy.listen(proxyPort, function() {
         proxy.close();
         server.close();
       });
+    }).on('error', function(er) {
+      // We're ok with getting ECONNRESET in this test, but it's
+      // timing-dependent, and thus unreliable. Any other errors
+      // are just failures, though.
+      if (er.code !== 'ECONNRESET')
+        throw er;
     }).end();
   }
 });

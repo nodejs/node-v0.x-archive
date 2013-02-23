@@ -261,6 +261,43 @@ blocks while resolving it to a numerical ID.
     }
 
 
+## process.getgroups()
+
+Note: this function is only available on POSIX platforms (i.e. not Windows)
+
+Returns an array with the supplementary group IDs. POSIX leaves it unspecified
+if the effective group ID is included but node.js ensures it always is.
+
+
+## process.setgroups(groups)
+
+Note: this function is only available on POSIX platforms (i.e. not Windows)
+
+Sets the supplementary group IDs. This is a privileged operation, meaning you
+need to be root or have the CAP_SETGID capability.
+
+The list can contain group IDs, group names or both.
+
+
+## process.initgroups(user, extra_group)
+
+Note: this function is only available on POSIX platforms (i.e. not Windows)
+
+Reads /etc/group and initializes the group access list, using all groups of
+which the user is a member. This is a privileged operation, meaning you need
+to be root or have the CAP_SETGID capability.
+
+`user` is a user name or user ID. `extra_group` is a group name or group ID.
+
+Some care needs to be taken when dropping privileges. Example:
+
+    console.log(process.getgroups());         // [ 0 ]
+    process.initgroups('bnoordhuis', 1000);   // switch user
+    console.log(process.getgroups());         // [ 27, 30, 46, 1000, 0 ]
+    process.setgid(1000);                     // drop root gid
+    console.log(process.getgroups());         // [ 27, 30, 46, 1000 ]
+
+
 ## process.version
 
 A compiled-in property that exposes `NODE_VERSION`.
@@ -493,15 +530,14 @@ You may pass in the result of a previous call to `process.hrtime()` to get
 a diff reading, useful for benchmarks and measuring intervals:
 
     var time = process.hrtime();
-    // [ 1800216, 927643717 ]
+    // [ 1800216, 25 ]
 
     setTimeout(function() {
       var diff = process.hrtime(time);
-      // [ 1, 6962306 ]
+      // [ 1, 552 ]
 
-      console.log('benchmark took %d seconds and %d nanoseconds',
-                  diff[0], diff[1]);
-      // benchmark took 1 seconds and 6962306 nanoseconds
+      console.log('benchmark took %d nanoseconds', diff[0] * 1e9 + diff[1]);
+      // benchmark took 1000000527 nanoseconds
     }, 1000);
 
 [EventEmitter]: events.html#events_class_events_eventemitter

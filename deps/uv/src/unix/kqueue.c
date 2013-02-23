@@ -141,6 +141,12 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
                   ARRAY_SIZE(events),
                   timeout == -1 ? NULL : &spec);
 
+    /* Update loop->time unconditionally. It's tempting to skip the update when
+     * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
+     * operating system didn't reschedule our process while in the syscall.
+     */
+    SAVE_ERRNO(uv__update_time(loop));
+
     if (nfds == 0) {
       assert(timeout != -1);
       return;
@@ -191,24 +197,30 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       revents = 0;
 
       if (ev->filter == EVFILT_READ) {
-        if (w->events & UV__POLLIN)
+        if (w->events & UV__POLLIN) {
           revents |= UV__POLLIN;
-        else {
+          w->rcount = ev->data;
+        } else {
           /* TODO batch up */
           struct kevent events[1];
           EV_SET(events + 0, fd, ev->filter, EV_DELETE, 0, 0, 0);
-          if (kevent(loop->backend_fd, events, 1, NULL, 0, NULL)) abort();
+          if (kevent(loop->backend_fd, events, 1, NULL, 0, NULL))
+            if (errno != ENOENT)
+              abort();
         }
       }
 
       if (ev->filter == EVFILT_WRITE) {
-        if (w->events & UV__POLLOUT)
+        if (w->events & UV__POLLOUT) {
           revents |= UV__POLLOUT;
-        else {
+          w->wcount = ev->data;
+        } else {
           /* TODO batch up */
           struct kevent events[1];
           EV_SET(events + 0, fd, ev->filter, EV_DELETE, 0, 0, 0);
-          if (kevent(loop->backend_fd, events, 1, NULL, 0, NULL)) abort();
+          if (kevent(loop->backend_fd, events, 1, NULL, 0, NULL))
+            if (errno != ENOENT)
+              abort();
         }
       }
 
@@ -240,10 +252,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 update_timeout:
     assert(timeout > 0);
 
-    diff = uv_hrtime() / 1000000;
-    assert(diff >= base);
-    diff -= base;
-
+    diff = loop->time - base;
     if (diff >= (uint64_t) timeout)
       return;
 

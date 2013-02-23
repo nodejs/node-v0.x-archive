@@ -29,6 +29,29 @@
 
 var a = new Int32Array(1024);
 
+// Test that we do not assert if the accessed index has not an int32 rep.
+var v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+function test_do_not_assert_on_non_int32(vector, base) {
+  var r = 0;
+  var a1 = base + 1;
+  var a2 = base + 2;
+  var a3 = base + 3;
+  var a4 = base + 4;
+  if (a1 == 2) {
+    r += vector[a1];
+    r += vector[a4];
+    r += vector[a2];
+    r += vector[a3];
+  }
+  return r;
+}
+test_do_not_assert_on_non_int32(v,1);
+test_do_not_assert_on_non_int32(v,1);
+test_do_not_assert_on_non_int32(v,"a");
+test_do_not_assert_on_non_int32(v,"a");
+%OptimizeFunctionOnNextCall(test_do_not_assert_on_non_int32);
+test_do_not_assert_on_non_int32(v,0);
+
 function test_base(base,cond) {
   a[base + 1] = 1;
   a[base + 4] = 2;
@@ -153,6 +176,30 @@ short_test(short_a, 50);
 short_a.length = 10;
 short_test(a, 0);
 assertTrue(%GetOptimizationStatus(short_test) != 1);
+
+
+// A test for when we would modify a phi index.
+var data_phi = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+function test_phi(a, base, check) {
+  var index;
+  if (check) {
+    index = base + 1;
+  } else {
+    index = base + 2;
+  }
+  var result = a[index];
+  result += a[index + 1];
+  result += a[index - 1];
+  return result;
+}
+var result_phi = 0;
+result_phi = test_phi(data_phi, 3,  true);
+assertEquals(12, result_phi);
+result_phi = test_phi(data_phi, 3,  true);
+assertEquals(12, result_phi);
+%OptimizeFunctionOnNextCall(test_phi);
+result_phi = test_phi(data_phi, 3,  true);
+assertEquals(12, result_phi);
 
 
 gc();

@@ -37,7 +37,7 @@ also be accepted.
 * `strict-ssl` {Boolean} Whether or not to be strict with SSL
   certificates.  Default = `true`
 * `user-agent` {String} User agent header to send.  Default =
-  `"node/{process.version}"`
+  `"node/{process.version} {process.platform} {process.arch}"`
 * `log` {Object} The logger to use.  Defaults to `require("npmlog")` if
   that works, otherwise logs are disabled.
 * `fetch-retries` {Number} Number of times to retry on GET failures.
@@ -117,6 +117,13 @@ Star or unstar a package.
 Note that the user does not have to be the package owner to star or
 unstar a package, though other writes do require that the user be the
 package owner.
+
+# client.stars(username, cb)
+
+* `username` {String} Name of user to fetch starred packages for.
+* `cb` {Function}
+
+View your own or another user's starred packages.
 
 # client.tag(project, version, tag, cb)
 

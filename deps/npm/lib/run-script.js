@@ -25,6 +25,7 @@ runScript.completion = function (opts, cb) {
     // or a package, in which case, complete against its scripts
     var json = path.join(npm.prefix, "package.json")
     return readJson(json, function (er, d) {
+      if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
       if (er) d = {}
       var scripts = Object.keys(d.scripts || {})
       console.error("local scripts", scripts)
@@ -35,6 +36,7 @@ runScript.completion = function (opts, cb) {
       var pkgDir = path.resolve( pref, "node_modules"
                                , argv[2], "package.json" )
       readJson(pkgDir, function (er, d) {
+        if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
         if (er) d = {}
         var scripts = Object.keys(d.scripts || {})
         return cb(null, scripts)
@@ -55,6 +57,7 @@ runScript.completion = function (opts, cb) {
 
   if (npm.config.get("global")) scripts = [], next()
   else readJson(path.join(npm.prefix, "package.json"), function (er, d) {
+    if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     d = d || {}
     scripts = Object.keys(d.scripts || {})
     next()
@@ -67,6 +70,7 @@ runScript.completion = function (opts, cb) {
 }
 
 function runScript (args, cb) {
+  if (!args.length) return cb(runScript.usage)
   var pkgdir = args.length === 1 ? process.cwd()
              : path.resolve(npm.dir, args[0])
     , cmd = args.pop()

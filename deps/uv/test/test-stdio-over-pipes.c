@@ -34,7 +34,8 @@ static int close_cb_called;
 static int exit_cb_called;
 static int on_read_cb_called;
 static int after_write_cb_called;
-uv_pipe_t out, in;
+static uv_pipe_t in;
+static uv_pipe_t out;
 static uv_loop_t* loop;
 #define OUTPUT_SIZE 1024
 static char output[OUTPUT_SIZE];
@@ -137,7 +138,7 @@ TEST_IMPL(stdio_over_pipes) {
   r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(on_read_cb_called > 1);
@@ -182,7 +183,7 @@ static uv_buf_t on_read_alloc(uv_handle_t* handle, size_t suggested_size) {
 }
 
 
-int stdio_over_pipes_helper() {
+int stdio_over_pipes_helper(void) {
   /* Write several buffers to test that the write order is preserved. */
   char* buffers[] = {
     "he",
@@ -225,7 +226,7 @@ int stdio_over_pipes_helper() {
     ASSERT(r == 0);
   }
 
-  uv_run(loop);
+  uv_run(loop, UV_RUN_DEFAULT);
 
   ASSERT(after_write_called == 7);
   ASSERT(on_pipe_read_called == 0);
@@ -238,7 +239,7 @@ int stdio_over_pipes_helper() {
     on_pipe_read);
   ASSERT(r == 0);
 
-  uv_run(loop);
+  uv_run(loop, UV_RUN_DEFAULT);
 
   ASSERT(after_write_called == 7);
   ASSERT(on_pipe_read_called == 1);

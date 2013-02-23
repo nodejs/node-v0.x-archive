@@ -6,7 +6,7 @@ Provides a few basic operating-system related utility functions.
 
 Use `require('os')` to access this module.
 
-## os.tmpDir()
+## os.tmpdir()
 
 Returns the operating system's default directory for temp files.
 
@@ -52,7 +52,9 @@ Returns the amount of free system memory in bytes.
 
 ## os.cpus()
 
-Returns an array of objects containing information about each CPU/core installed: model, speed (in MHz), and times (an object containing the number of CPU ticks spent in: user, nice, sys, idle, and irq).
+Returns an array of objects containing information about each CPU/core
+installed: model, speed (in MHz), and times (an object containing the number of
+milliseconds the CPU/core spent in: user, nice, sys, idle, and irq).
 
 Example inspection of os.cpus:
 

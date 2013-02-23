@@ -21,8 +21,10 @@
 
 #include <stdlib.h>  // calloc, etc
 #include <string.h>  // memmove
+#include <stdint.h>
 
 #include "v8_typed_array.h"
+#include "v8_typed_array_bswap.h"
 #include "node_buffer.h"
 #include "node.h"
 #include "v8.h"
@@ -32,25 +34,6 @@ namespace {
 using node::ThrowRangeError;
 using node::ThrowTypeError;
 using node::ThrowError;
-
-int SizeOfArrayElementForType(v8::ExternalArrayType type) {
-  switch (type) {
-    case v8::kExternalByteArray:
-    case v8::kExternalUnsignedByteArray:
-      return 1;
-    case v8::kExternalShortArray:
-    case v8::kExternalUnsignedShortArray:
-      return 2;
-    case v8::kExternalIntArray:
-    case v8::kExternalUnsignedIntArray:
-    case v8::kExternalFloatArray:
-      return 4;
-    case v8::kExternalDoubleArray:
-      return 8;
-    default:
-      return 0;
-  }
-}
 
 struct BatchedMethods {
   const char* name;
@@ -90,7 +73,7 @@ class ArrayBuffer {
     v8::Object* obj = v8::Object::Cast(*value);
 
     void* ptr = obj->GetIndexedPropertiesExternalArrayData();
-    int element_size = SizeOfArrayElementForType(
+    int element_size = v8_typed_array::SizeOfArrayElementForType(
         obj->GetIndexedPropertiesExternalArrayDataType());
     int size =
         obj->GetIndexedPropertiesExternalArrayDataLength() * element_size;
@@ -105,7 +88,7 @@ class ArrayBuffer {
 
   static v8::Handle<v8::Value> V8New(const v8::Arguments& args) {
     if (!args.IsConstructCall())
-      return ThrowTypeError("Constructor cannot be called as a function.");
+      return node::FromConstructorTemplate(GetTemplate(), args);
 
     // To match Chrome, we allow "new ArrayBuffer()".
     // if (args.Length() != 1)
@@ -125,7 +108,7 @@ class ArrayBuffer {
     if (!buf)
       return ThrowError("Unable to allocate ArrayBuffer.");
 
-    args.This()->SetPointerInInternalField(0, buf);
+    args.This()->SetAlignedPointerInInternalField(0, buf);
 
     args.This()->Set(v8::String::New("byteLength"),
                      v8::Integer::NewFromUnsigned(num_bytes),
@@ -176,8 +159,8 @@ class ArrayBuffer {
 
     if (buffer.IsEmpty()) return v8::Undefined();  // constructor failed
 
-    void* src = args.This()->GetPointerFromInternalField(0);
-    void* dest = buffer->GetPointerFromInternalField(0);
+    void* src = args.This()->GetAlignedPointerFromInternalField(0);
+    void* dest = buffer->GetAlignedPointerFromInternalField(0);
     memcpy(dest, static_cast<char*>(src) + begin, slice_length);
 
     return buffer;
@@ -187,6 +170,30 @@ class ArrayBuffer {
 static bool checkAlignment(size_t val, unsigned int bytes) {
   return (val & (bytes - 1)) == 0;  // Handles bytes == 0.
 }
+
+template <v8::ExternalArrayType TEAType>
+struct TEANameTrait {
+  static const char* const name;
+};
+
+template <> const char* const
+    TEANameTrait<v8::kExternalByteArray>::name = "Int8Array";
+template <> const char* const
+    TEANameTrait<v8::kExternalUnsignedByteArray>::name = "Uint8Array";
+template <> const char* const
+    TEANameTrait<v8::kExternalPixelArray>::name = "Uint8ClampedArray";
+template <> const char* const
+    TEANameTrait<v8::kExternalShortArray>::name = "Int16Array";
+template <> const char* const
+    TEANameTrait<v8::kExternalUnsignedShortArray>::name = "Uint16Array";
+template <> const char* const
+    TEANameTrait<v8::kExternalIntArray>::name = "Int32Array";
+template <> const char* const
+    TEANameTrait<v8::kExternalUnsignedIntArray>::name = "Uint32Array";
+template <> const char* const
+    TEANameTrait<v8::kExternalFloatArray>::name = "Float32Array";
+template <> const char* const
+    TEANameTrait<v8::kExternalDoubleArray>::name = "Float64Array";
 
 template <unsigned int TBytes, v8::ExternalArrayType TEAType>
 class TypedArray {
@@ -199,7 +206,7 @@ class TypedArray {
     v8::HandleScope scope;
     ft_cache = v8::Persistent<v8::FunctionTemplate>::New(
         v8::FunctionTemplate::New(&TypedArray<TBytes, TEAType>::V8New));
-    ft_cache->SetClassName(v8::String::New(TypeName()));
+    ft_cache->SetClassName(v8::String::New(TEANameTrait<TEAType>::name));
     v8::Local<v8::ObjectTemplate> instance = ft_cache->InstanceTemplate();
     instance->SetInternalFieldCount(0);
 
@@ -234,7 +241,7 @@ class TypedArray {
  private:
   static v8::Handle<v8::Value> V8New(const v8::Arguments& args) {
     if (!args.IsConstructCall())
-      return ThrowTypeError("Constructor cannot be called as a function.");
+      return node::FromConstructorTemplate(GetTemplate(), args);
 
     // To match Chrome, we allow "new Float32Array()".
     // if (args.Length() != 1)
@@ -244,9 +251,7 @@ class TypedArray {
     unsigned int length = 0;
     unsigned int byte_offset = 0;
 
-    // [m1k3] added support for Buffer constructor
-    if (node::Buffer::HasInstance(args[0])
-        || ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
+    if (ArrayBuffer::HasInstance(args[0])) {  // ArrayBuffer constructor.
       buffer = v8::Local<v8::Object>::Cast(args[0]);
       size_t buflen =
           buffer->GetIndexedPropertiesExternalArrayDataLength();
@@ -293,7 +298,7 @@ class TypedArray {
                  GetFunction()->NewInstance(1, argv);
       if (buffer.IsEmpty()) return v8::Undefined(); // constructor failed
 
-      void* buf = buffer->GetPointerFromInternalField(0);
+      void* buf = buffer->GetAlignedPointerFromInternalField(0);
       args.This()->SetIndexedPropertiesToExternalArrayData(
           buf, TEAType, length);
       // TODO(deanm): check for failure.
@@ -322,7 +327,7 @@ class TypedArray {
                  GetFunction()->NewInstance(1, argv);
       if (buffer.IsEmpty()) return v8::Undefined(); // constructor failed
 
-      void* buf = buffer->GetPointerFromInternalField(0);
+      void* buf = buffer->GetAlignedPointerFromInternalField(0);
       args.This()->SetIndexedPropertiesToExternalArrayData(
           buf, TEAType, length);
       // TODO(deanm): check for failure.
@@ -451,23 +456,6 @@ class TypedArray {
         v8::Integer::New(end - begin)};
     return TypedArray<TBytes, TEAType>::GetTemplate()->
         GetFunction()->NewInstance(3, argv);
-  }
-
-  static const char* TypeName() {
-    switch (TEAType) {
-      case v8::kExternalByteArray: return "Int8Array";
-      case v8::kExternalUnsignedByteArray: return "Uint8Array";
-      case v8::kExternalShortArray: return "Int16Array";
-      case v8::kExternalUnsignedShortArray: return "Uint16Array";
-      case v8::kExternalIntArray: return "Int32Array";
-      case v8::kExternalUnsignedIntArray: return "Uint32Array";
-      case v8::kExternalFloatArray: return "Float32Array";
-      case v8::kExternalDoubleArray: return "Float64Array";
-      case v8::kExternalPixelArray: return "Uint8ClampedArray";
-    }
-    abort();
-    // Please the compiler
-    return "";
   }
 };
 
@@ -625,7 +613,7 @@ class DataView {
  private:
   static v8::Handle<v8::Value> V8New(const v8::Arguments& args) {
     if (!args.IsConstructCall())
-      return ThrowTypeError("Constructor cannot be called as a function.");
+      return node::FromConstructorTemplate(GetTemplate(), args);
 
     if (args.Length() < 1)
       return ThrowError("Wrong number of arguments.");
@@ -634,7 +622,7 @@ class DataView {
       return ThrowError("Object must be an ArrayBuffer.");
 
     v8::Handle<v8::Object> buffer = v8::Handle<v8::Object>::Cast(args[0]);
-    if (!buffer->HasIndexedPropertiesInExternalArrayData())
+    if (!ArrayBuffer::HasInstance(buffer))
       return ThrowError("Object must be an ArrayBuffer.");
 
     unsigned int byte_length =
@@ -677,53 +665,42 @@ class DataView {
     return args.This();
   }
 
-  // TODO(deanm): This isn't beautiful or optimal.
-  static void swizzle(char* buf, size_t len) {
-    for (size_t i = 0; i < len / 2; ++i) {
-      char t = buf[i];
-      buf[i] = buf[len - i - 1];
-      buf[len - i - 1] = t;
-    }
-  }
-
-  template <typename T>
-  static T getValue(void* ptr, unsigned int index, bool swiz) {
-    char buf[sizeof(T)];
-    memcpy(buf, reinterpret_cast<char*>(ptr) + index, sizeof(T));
-    if (swiz)
-      swizzle(buf, sizeof(T));
-    T val;
-    memcpy(&val, buf, sizeof(T));
-    return val;
-  }
-
-  template <typename T>
-  static void setValue(void* ptr, unsigned int index, T val, bool swiz) {
-    char buf[sizeof(T)];
-    memcpy(buf, &val, sizeof(T));
-    if (swiz)
-      swizzle(buf, sizeof(T));
-    memcpy(reinterpret_cast<char*>(ptr) + index, buf, sizeof(T));
-  }
-
   template <typename T>
   static v8::Handle<v8::Value> getGeneric(const v8::Arguments& args) {
     if (args.Length() < 1)
       return ThrowError("Wrong number of arguments.");
 
     unsigned int index = args[0]->Uint32Value();
-    bool little_endian = args[1]->BooleanValue();
+    // NOTE(deanm): args[1]->BooleanValue when the argument was not passed in
+    // gives us the right answer, but seems to be very slow.  This seems to be
+    // the cost of calling BooleanValue() on undefined.
+    bool little_endian = args.Length() > 1 ? args[1]->BooleanValue() : false;
     // TODO(deanm): All of these things should be cacheable.
-    int element_size = SizeOfArrayElementForType(
+    int element_size = v8_typed_array::SizeOfArrayElementForType(
         args.This()->GetIndexedPropertiesExternalArrayDataType());
-    int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
-               element_size;
+    assert(element_size > 0);
+    int size = args.This()->GetIndexedPropertiesExternalArrayDataLength();
+    assert(size >= 0);
 
-    if (index + sizeof(T) > (unsigned)size)  // TODO(deanm): integer overflow.
+    if (static_cast<uint64_t>(index) + sizeof(T) >
+        static_cast<uint64_t>(size) * element_size) {
       return ThrowError("Index out of range.");
+    }
 
-    void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
-    return cTypeToValue<T>(getValue<T>(ptr, index, !little_endian));
+    void* ptr = reinterpret_cast<char*>(
+        args.This()->GetIndexedPropertiesExternalArrayData()) + index;
+
+    T val;
+#if V8_TYPED_ARRAY_LITTLE_ENDIAN
+    if (!little_endian) {
+#else
+    if (little_endian) {
+#endif
+      val = v8_typed_array::LoadAndSwapBytes<T>(ptr);
+    } else {
+      memcpy(&val, ptr, sizeof(T));
+    }
+    return cTypeToValue<T>(val);
   }
 
   template <typename T>
@@ -732,18 +709,35 @@ class DataView {
       return ThrowError("Wrong number of arguments.");
 
     unsigned int index = args[0]->Int32Value();
-    bool little_endian = args[2]->BooleanValue();
+    // NOTE(deanm): args[1]->BooleanValue when the argument was not passed in
+    // gives us the right answer, but seems to be very slow.  This seems to be
+    // the cost of calling BooleanValue() on undefined.
+    bool little_endian = args.Length() > 2 ? args[2]->BooleanValue() : false;
     // TODO(deanm): All of these things should be cacheable.
-    int element_size = SizeOfArrayElementForType(
+    int element_size = v8_typed_array::SizeOfArrayElementForType(
         args.This()->GetIndexedPropertiesExternalArrayDataType());
-    int size = args.This()->GetIndexedPropertiesExternalArrayDataLength() *
-               element_size;
+    assert(element_size > 0);
+    int size = args.This()->GetIndexedPropertiesExternalArrayDataLength();
+    assert(size >= 0);
 
-    if (index + sizeof(T) > (unsigned)size)  // TODO(deanm): integer overflow.
+    if (static_cast<uint64_t>(index) + sizeof(T) >
+        static_cast<uint64_t>(size) * element_size) {
       return ThrowError("Index out of range.");
+    }
 
-    void* ptr = args.This()->GetIndexedPropertiesExternalArrayData();
-    setValue<T>(ptr, index, valueToCType<T>(args[1]), !little_endian);
+    void* ptr = reinterpret_cast<char*>(
+        args.This()->GetIndexedPropertiesExternalArrayData()) + index;
+
+    T val = valueToCType<T>(args[1]);
+#if V8_TYPED_ARRAY_LITTLE_ENDIAN
+    if (!little_endian) {
+#else
+    if (little_endian) {
+#endif
+      v8_typed_array::SwapBytesAndStore<T>(ptr, val);
+    } else {
+      memcpy(ptr, &val, sizeof(T));
+    }
     return v8::Undefined();
   }
 
@@ -844,6 +838,24 @@ void AttachBindings(v8::Handle<v8::Object> obj) {
            DataView::GetTemplate()->GetFunction());
 }
 
-}  // namespace v8_typed_array
+int SizeOfArrayElementForType(v8::ExternalArrayType type) {
+  switch (type) {
+    case v8::kExternalByteArray:
+    case v8::kExternalUnsignedByteArray:
+    case v8::kExternalPixelArray:
+      return 1;
+    case v8::kExternalShortArray:
+    case v8::kExternalUnsignedShortArray:
+      return 2;
+    case v8::kExternalIntArray:
+    case v8::kExternalUnsignedIntArray:
+    case v8::kExternalFloatArray:
+      return 4;
+    case v8::kExternalDoubleArray:
+      return 8;
+    default:
+      return 0;
+  }
+}
 
-NODE_MODULE(node_typed_array, v8_typed_array::AttachBindings)
+}  // namespace v8_typed_array

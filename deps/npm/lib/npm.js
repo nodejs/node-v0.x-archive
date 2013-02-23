@@ -97,6 +97,7 @@ var commandCache = {}
               , "se" : "search"
               , "author" : "owner"
               , "home" : "docs"
+              , "issues": "bugs"
               , "unstar": "star" // same function
               , "apihelp" : "help"
               , "login": "adduser"
@@ -126,6 +127,7 @@ var commandCache = {}
 
               , "publish"
               , "star"
+              , "stars"
               , "tag"
               , "adduser"
               , "unpublish"
@@ -241,6 +243,9 @@ npm.load = function (cli, cb_) {
 
   function cb (er) {
     if (loadErr) return
+    if (npm.config.get("force")) {
+      log.warn("using --force", "I sure hope you know what you are doing.")
+    }
     npm.config.loaded = true
     loaded = true
     loadCb(loadErr = er)

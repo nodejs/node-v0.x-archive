@@ -63,6 +63,17 @@ exports.ddCommand = function(filename, kilobytes) {
 };
 
 
+exports.spawnCat = function(options) {
+  var spawn = require('child_process').spawn;
+
+  if (process.platform === 'win32') {
+    return spawn('more', [], options);
+  } else {
+    return spawn('cat', [], options);
+  }
+};
+
+
 exports.spawnPwd = function(options) {
   var spawn = require('child_process').spawn;
 
@@ -152,7 +163,9 @@ process.on('exit', function() {
 var mustCallChecks = [];
 
 
-function runCallChecks() {
+function runCallChecks(exitCode) {
+  if (exitCode !== 0) return;
+
   var failed = mustCallChecks.filter(function(context) {
     return context.actual !== context.expected;
   });

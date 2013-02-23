@@ -68,7 +68,7 @@ function ls (args, silent, cb) {
   })
 }
 
-// only include 
+// only include
 function filter (data, args) {
 
 }
@@ -95,19 +95,24 @@ function getLite (data, noname) {
                       + " " + (data.path || "") )
   }
 
-  if (data._from) {
-    var from = data._from
-    if (from.indexOf(data.name + "@") === 0) {
-      from = from.substr(data.name.length + 1)
-    }
-    var u = url.parse(from)
-    if (u.protocol) lite.from = from
-  }
+  if (data._from)
+    lite.from = data._from
+
+  if (data._resolved)
+    lite.resolved = data._resolved
 
   if (data.invalid) {
     lite.invalid = true
     lite.problems = lite.problems || []
     lite.problems.push( "invalid: "
+                      + data.name + "@" + data.version
+                      + " " + (data.path || "") )
+  }
+
+  if (data.peerInvalid) {
+    lite.peerInvalid = true
+    lite.problems = lite.problems || []
+    lite.problems.push( "peer invalid: "
                       + data.name + "@" + data.version
                       + " " + (data.path || "") )
   }
@@ -244,6 +249,12 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
               + (color ? "\033[0m" : "")
   }
 
+  if (data.peerInvalid) {
+    out.label += " " + (color ? "\033[31;40m" : "")
+              + "peer invalid"
+              + (color ? "\033[0m" : "")
+  }
+
   if (data.extraneous && data.path !== dir) {
     out.label += " " + (color ? "\033[32;40m" : "")
               + "extraneous"
@@ -331,4 +342,5 @@ function makeParseable_ (data, long, dir, depth, parent, d) {
        + ":" + (data.realPath !== data.path ? data.realPath : "")
        + (data.extraneous ? ":EXTRANEOUS" : "")
        + (data.invalid ? ":INVALID" : "")
+       + (data.peerInvalid ? ":PEERINVALID" : "")
 }

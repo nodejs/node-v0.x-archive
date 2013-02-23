@@ -30,6 +30,29 @@ var f = __filename;
 
 assert.equal(path.basename(f), 'test-path.js');
 assert.equal(path.basename(f, '.js'), 'test-path');
+assert.equal(path.basename(''), '');
+assert.equal(path.basename('/dir/basename.ext'), 'basename.ext');
+assert.equal(path.basename('/basename.ext'), 'basename.ext');
+assert.equal(path.basename('basename.ext'), 'basename.ext');
+assert.equal(path.basename('basename.ext/'), 'basename.ext');
+assert.equal(path.basename('basename.ext//'), 'basename.ext');
+
+if (isWindows) {
+  // On Windows a backslash acts as a path separator.
+  assert.equal(path.basename('\\dir\\basename.ext'), 'basename.ext');
+  assert.equal(path.basename('\\basename.ext'), 'basename.ext');
+  assert.equal(path.basename('basename.ext'), 'basename.ext');
+  assert.equal(path.basename('basename.ext\\'), 'basename.ext');
+  assert.equal(path.basename('basename.ext\\\\'), 'basename.ext');
+
+} else {
+  // On unix a backslash is just treated as any other character.
+  assert.equal(path.basename('\\dir\\basename.ext'), '\\dir\\basename.ext');
+  assert.equal(path.basename('\\basename.ext'), '\\basename.ext');
+  assert.equal(path.basename('basename.ext'), 'basename.ext');
+  assert.equal(path.basename('basename.ext\\'), 'basename.ext\\');
+  assert.equal(path.basename('basename.ext\\\\'), 'basename.ext\\\\');
+}
 
 // POSIX filenames may include control characters
 // c.f. http://www.dwheeler.com/essays/fixing-unix-linux-filenames.html
@@ -46,7 +69,9 @@ assert.equal(path.dirname(f).substr(-11),
 assert.equal(path.dirname('/a/b/'), '/a');
 assert.equal(path.dirname('/a/b'), '/a');
 assert.equal(path.dirname('/a'), '/');
+assert.equal(path.dirname(''), '.');
 assert.equal(path.dirname('/'), '/');
+assert.equal(path.dirname('////'), '/');
 
 if (isWindows) {
   assert.equal(path.dirname('c:\\'), 'c:\\');
@@ -114,18 +139,34 @@ assert.equal(path.extname('..file..'), '.');
 assert.equal(path.extname('...'), '.');
 assert.equal(path.extname('...ext'), '.ext');
 assert.equal(path.extname('....'), '.');
-assert.equal(path.extname('file.ext/'), '');
+assert.equal(path.extname('file.ext/'), '.ext');
+assert.equal(path.extname('file.ext//'), '.ext');
+assert.equal(path.extname('file/'), '');
+assert.equal(path.extname('file//'), '');
+assert.equal(path.extname('file./'), '.');
+assert.equal(path.extname('file.//'), '.');
 
 if (isWindows) {
   // On windows, backspace is a path separator.
   assert.equal(path.extname('.\\'), '');
   assert.equal(path.extname('..\\'), '');
-  assert.equal(path.extname('file.ext\\'), '');
+  assert.equal(path.extname('file.ext\\'), '.ext');
+  assert.equal(path.extname('file.ext\\\\'), '.ext');
+  assert.equal(path.extname('file\\'), '');
+  assert.equal(path.extname('file\\\\'), '');
+  assert.equal(path.extname('file.\\'), '.');
+  assert.equal(path.extname('file.\\\\'), '.');
+
 } else {
   // On unix, backspace is a valid name component like any other character.
   assert.equal(path.extname('.\\'), '');
   assert.equal(path.extname('..\\'), '.\\');
   assert.equal(path.extname('file.ext\\'), '.ext\\');
+  assert.equal(path.extname('file.ext\\\\'), '.ext\\\\');
+  assert.equal(path.extname('file\\'), '');
+  assert.equal(path.extname('file\\\\'), '');
+  assert.equal(path.extname('file.\\'), '.\\');
+  assert.equal(path.extname('file.\\\\'), '.\\\\');
 }
 
 // path.join tests
@@ -177,9 +218,7 @@ var joinTests =
      [['/', '//foo'], '/foo'],
      [['/', '', '/foo'], '/foo'],
      [['', '/', 'foo'], '/foo'],
-     [['', '/', '/foo'], '/foo'],
-     // filtration of non-strings.
-     [['x', true, 7, 'y', null, {}], 'x/y']
+     [['', '/', '/foo'], '/foo']
     ];
 
 // Windows-specific join tests
@@ -243,6 +282,16 @@ joinTests.forEach(function(test) {
   // assert.equal(actual, expected, message);
 });
 assert.equal(failures.length, 0, failures.join(''));
+var joinThrowTests = [true, false, 7, null, {}, undefined, [], NaN];
+joinThrowTests.forEach(function(test) {
+  assert.throws(function() {
+    path.join(test);
+  }, TypeError);
+  assert.throws(function() {
+    path.resolve(test);
+  }, TypeError);
+});
+
 
 // path normalize tests
 if (isWindows) {

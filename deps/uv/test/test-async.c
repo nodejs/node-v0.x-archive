@@ -35,7 +35,7 @@ static int prepare_cb_called;
 static int close_cb_called;
 
 
-void thread_cb(void *arg) {
+static void thread_cb(void *arg) {
   int n;
   int r;
 
@@ -122,7 +122,7 @@ TEST_IMPL(async) {
   r = uv_async_init(uv_default_loop(), &async, async_cb);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(prepare_cb_called > 0);

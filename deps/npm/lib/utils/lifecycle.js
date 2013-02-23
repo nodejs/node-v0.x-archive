@@ -48,6 +48,8 @@ function lifecycle (pkg, stage, wd, unsafe, failOk, cb) {
     // set the env variables, then run scripts as a child process.
     var env = makeEnv(pkg)
     env.npm_lifecycle_event = stage
+    env.npm_node_execpath = env.NODE = env.NODE || process.execPath
+    env.npm_execpath = require.main.filename
 
     // "nobody" typically doesn't have permission to write to /tmp
     // even if it's never used, sh freaks out.
@@ -68,6 +70,12 @@ function lifecycle_ (pkg, stage, wd, env, unsafe, failOk, cb) {
   var pathArr = []
     , p = wd.split("node_modules")
     , acc = path.resolve(p.shift())
+
+  // first add the directory containing the `node` executable currently
+  // running, so that any lifecycle script that invoke "node" will execute
+  // this same one.
+  pathArr.unshift(path.dirname(process.execPath))
+
   p.forEach(function (pp) {
     pathArr.unshift(path.join(acc, "node_modules", ".bin"))
     acc = path.join(acc, "node_modules", pp)
@@ -77,10 +85,6 @@ function lifecycle_ (pkg, stage, wd, env, unsafe, failOk, cb) {
   // we also unshift the bundled node-gyp-bin folder so that
   // the bundled one will be used for installing things.
   pathArr.unshift(path.join(__dirname, "..", "..", "bin", "node-gyp-bin"))
-
-  // add the directory containing the `node` executable currently running, so
-  // that any lifecycle script that invoke "node" will execute this same one.
-  pathArr.unshift(path.dirname(process.execPath))
 
   if (env[PATH]) pathArr.push(env[PATH])
   env[PATH] = pathArr.join(process.platform === "win32" ? ";" : ":")
@@ -217,6 +221,9 @@ function makeEnv (data, prefix, env) {
 
   for (var i in data) if (i.charAt(0) !== "_") {
     var envKey = (prefix+i).replace(/[^a-zA-Z0-9_]/g, '_')
+    if (i === "readme") {
+      continue
+    }
     if (data[i] && typeof(data[i]) === "object") {
       try {
         // quick and dirty detection for cyclical structures

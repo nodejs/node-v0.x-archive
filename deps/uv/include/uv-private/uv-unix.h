@@ -41,30 +41,6 @@
 #include <pthread.h>
 #include <signal.h>
 
-struct uv__io_s;
-struct uv_loop_s;
-
-typedef void (*uv__io_cb)(struct uv_loop_s* loop,
-                          struct uv__io_s* w,
-                          unsigned int events);
-typedef struct uv__io_s uv__io_t;
-
-struct uv__io_s {
-  uv__io_cb cb;
-  ngx_queue_t pending_queue;
-  ngx_queue_t watcher_queue;
-  unsigned int pevents; /* Pending event mask i.e. mask at next tick. */
-  unsigned int events;  /* Current event mask. */
-  int fd;
-};
-
-struct uv__work {
-  void (*work)(struct uv__work *w);
-  void (*done)(struct uv__work *w);
-  struct uv_loop_s* loop;
-  ngx_queue_t wq;
-};
-
 #if defined(__linux__)
 # include "uv-linux.h"
 #elif defined(__sun)
@@ -78,6 +54,38 @@ struct uv__work {
 # include "uv-bsd.h"
 #endif
 
+struct uv__io_s;
+struct uv_loop_s;
+
+#ifndef UV_IO_PRIVATE_PLATFORM_FIELDS
+# define UV_IO_PRIVATE_PLATFORM_FIELDS /* empty */
+#endif
+
+#define UV_IO_PRIVATE_FIELDS                                                  \
+  UV_IO_PRIVATE_PLATFORM_FIELDS                                               \
+
+typedef void (*uv__io_cb)(struct uv_loop_s* loop,
+                          struct uv__io_s* w,
+                          unsigned int events);
+typedef struct uv__io_s uv__io_t;
+
+struct uv__io_s {
+  uv__io_cb cb;
+  ngx_queue_t pending_queue;
+  ngx_queue_t watcher_queue;
+  unsigned int pevents; /* Pending event mask i.e. mask at next tick. */
+  unsigned int events;  /* Current event mask. */
+  int fd;
+  UV_IO_PRIVATE_FIELDS
+};
+
+struct uv__work {
+  void (*work)(struct uv__work *w);
+  void (*done)(struct uv__work *w, int status);
+  struct uv_loop_s* loop;
+  ngx_queue_t wq;
+};
+
 #ifndef UV_PLATFORM_SEM_T
 # define UV_PLATFORM_SEM_T sem_t
 #endif
@@ -88,6 +96,10 @@ struct uv__work {
 
 #ifndef UV_PLATFORM_FS_EVENT_FIELDS
 # define UV_PLATFORM_FS_EVENT_FIELDS /* empty */
+#endif
+
+#ifndef UV_STREAM_PRIVATE_PLATFORM_FIELDS
+# define UV_STREAM_PRIVATE_PLATFORM_FIELDS /* empty */
 #endif
 
 /* Note: May be cast to struct iovec. See writev(2). */
@@ -166,6 +178,7 @@ typedef struct {
   uv__io_t signal_io_watcher;                                                 \
   uv_signal_t child_watcher;                                                  \
   int emfile_fd;                                                              \
+  uint64_t timer_counter;                                                     \
   UV_PLATFORM_LOOP_FIELDS                                                     \
 
 #define UV_REQ_TYPE_PRIVATE /* empty */
@@ -209,6 +222,7 @@ typedef struct {
   uv_connection_cb connection_cb;                                             \
   int delayed_error;                                                          \
   int accepted_fd;                                                            \
+  UV_STREAM_PRIVATE_PLATFORM_FIELDS                                           \
 
 #define UV_TCP_PRIVATE_FIELDS /* empty */
 
@@ -252,7 +266,8 @@ typedef struct {
   } tree_entry;                                                               \
   uv_timer_cb timer_cb;                                                       \
   uint64_t timeout;                                                           \
-  uint64_t repeat;
+  uint64_t repeat;                                                            \
+  uint64_t start_id;
 
 #define UV_GETADDRINFO_PRIVATE_FIELDS                                         \
   struct uv__work work_req;                                                   \
@@ -280,7 +295,6 @@ typedef struct {
   double atime;                                                               \
   double mtime;                                                               \
   struct uv__work work_req;                                                   \
-  struct stat statbuf;                                                        \
 
 #define UV_WORK_PRIVATE_FIELDS                                                \
   struct uv__work work_req;

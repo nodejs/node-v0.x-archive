@@ -54,7 +54,7 @@ RB_GENERATE_STATIC(uv__signal_tree_s,
                    uv__signal_compare)
 
 
-static void uv__signal_global_init() {
+static void uv__signal_global_init(void) {
   if (uv__make_pipe(uv__signal_lock_pipefd, 0))
     abort();
 
@@ -69,7 +69,7 @@ void uv__signal_global_once_init(void) {
 
 
 
-static int uv__signal_lock() {
+static int uv__signal_lock(void) {
   int r;
   char data;
 
@@ -81,7 +81,7 @@ static int uv__signal_lock() {
 }
 
 
-static int uv__signal_unlock() {
+static int uv__signal_unlock(void) {
   int r;
   char data = 42;
 
@@ -133,10 +133,12 @@ inline static uv_signal_t* uv__signal_first_handle(int signum) {
 }
 
 
-void uv__signal_handler(int signum) {
+static void uv__signal_handler(int signum) {
   uv__signal_msg_t msg;
   uv_signal_t* handle;
+  int saved_errno;
 
+  saved_errno = errno;
   memset(&msg, 0, sizeof msg);
 
   uv__signal_lock();
@@ -165,6 +167,7 @@ void uv__signal_handler(int signum) {
   }
 
   uv__signal_unlock();
+  errno = saved_errno;
 }
 
 

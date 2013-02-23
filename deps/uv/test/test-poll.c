@@ -72,7 +72,7 @@ static int valid_writable_wakeups = 0;
 static int spurious_writable_wakeups = 0;
 
 
-static int got_eagain() {
+static int got_eagain(void) {
 #ifdef _WIN32
   return WSAGetLastError() == WSAEWOULDBLOCK;
 #else
@@ -495,7 +495,7 @@ static void server_poll_cb(uv_poll_t* handle, int status, int events) {
 }
 
 
-static void start_server() {
+static void start_server(void) {
   uv_os_sock_t sock;
   server_context_t* context;
   int r;
@@ -511,7 +511,7 @@ static void start_server() {
 }
 
 
-static void start_client() {
+static void start_client(void) {
   uv_os_sock_t sock;
   connection_context_t* context;
   struct sockaddr_in server_addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
@@ -531,7 +531,7 @@ static void start_client() {
 }
 
 
-static void start_poll_test() {
+static void start_poll_test(void) {
   int i, r;
 
 #ifdef _WIN32
@@ -547,7 +547,7 @@ static void start_poll_test() {
   for (i = 0; i < NUM_CLIENTS; i++)
     start_client();
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   /* Assert that at most five percent of the writable wakeups was spurious. */

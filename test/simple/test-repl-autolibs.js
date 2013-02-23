@@ -48,8 +48,9 @@ function test1(){
   putIn.write = function (data) {
     gotWrite = true;
     if (data.length) {
+
       // inspect output matches repl output
-      assert.equal(data, util.inspect(require('fs'), null, null, false) + '\n');
+      assert.equal(data, util.inspect(require('fs'), null, 2, false) + '\n');
       // globally added lib matches required lib
       assert.equal(global.fs, require('fs'));
       test2();
@@ -66,7 +67,7 @@ function test2(){
     gotWrite = true;
     if (data.length) {
       // repl response error message
-      assert.equal(data.indexOf('A different'), 0);
+      assert.equal(data, '{}\n');
       // original value wasn't overwritten
       assert.equal(val, global.url);
     }

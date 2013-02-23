@@ -36,11 +36,15 @@ work the same.
 `$HOME/.npmrc` (or the `userconfig` param, if set above)
 
 This file is an ini-file formatted list of `key = value` parameters.
+Environment variables can be replaced using `${VARIABLE_NAME}`. For example:
+
+    prefix = ${HOME}/.npm-packages
 
 ### Global config file
 
 `$PREFIX/etc/npmrc` (or the `globalconfig` param, if set above):
-This file is an ini-file formatted list of `key = value` parameters
+This file is an ini-file formatted list of `key = value` parameters.
+Environment variables can be replaced as above.
 
 ### Built-in config file
 
@@ -167,6 +171,18 @@ then the user could change the behavior by doing:
 Force npm to always require authentication when accessing the registry,
 even for `GET` requests.
 
+### bin-links
+
+* Default: `true`
+* Type: Boolean
+
+Tells npm to create symlinks (or `.cmd` shims on Windows) for package
+executables.
+
+Set to false to have it not do this.  This can be used to work around
+the fact that some file systems don't support symlinks, even on
+ostensibly Unix systems.
+
 ### browser
 
 * Default: OS X: `"open"`, others: `"google-chrome"`
@@ -228,7 +244,7 @@ explicitly used, and that only GET requests use the cache.
 
 ### cache-min
 
-* Default: 0
+* Default: 10
 * Type: Number
 
 The minimum time (in seconds) to keep items in the registry cache before
@@ -357,10 +373,10 @@ Operates in "global" mode, so that packages are installed into the
 `prefix` folder instead of the current working directory.  See
 `npm-folders(1)` for more on the differences in behavior.
 
-* packages are installed into the `prefix/node_modules` folder, instead of the
+* packages are installed into the `{prefix}/lib/node_modules` folder, instead of the
   current working directory.
-* bin files are linked to `prefix/bin`
-* man pages are linked to `prefix/share/man`
+* bin files are linked to `{prefix}/bin`
+* man pages are linked to `{prefix}/share/man`
 
 ### globalconfig
 
@@ -398,7 +414,7 @@ A proxy to use for outgoing https requests.
 
 ### user-agent
 
-* Default: npm/{npm.version} node/{process.version}
+* Default: node/{process.version} {process.platform} {process.arch}
 * Type: String
 
 Sets a User-Agent to the request header
@@ -568,7 +584,7 @@ standard output.
 
 ### prefix
 
-* Default: node's process.installPrefix
+* Default: see npm-folders(1)
 * Type: path
 
 The location to install global items.  If set on the command line, then

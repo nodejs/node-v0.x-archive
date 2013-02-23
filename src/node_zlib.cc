@@ -93,7 +93,7 @@ class ZCtx : public ObjectWrap {
     HandleScope scope;
     ZCtx *ctx = ObjectWrap::Unwrap<ZCtx>(args.This());
     ctx->Close();
-    return scope.Close(Undefined());
+    return scope.Close(Undefined(node_isolate));
   }
 
 
@@ -109,7 +109,19 @@ class ZCtx : public ObjectWrap {
     assert(!ctx->write_in_progress_ && "write already in progress");
     ctx->write_in_progress_ = true;
 
+    assert(!args[0]->IsUndefined() && "must provide flush value");
+
     unsigned int flush = args[0]->Uint32Value();
+
+    if (flush != Z_NO_FLUSH &&
+        flush != Z_PARTIAL_FLUSH &&
+        flush != Z_SYNC_FLUSH &&
+        flush != Z_FULL_FLUSH &&
+        flush != Z_FINISH &&
+        flush != Z_BLOCK) {
+      assert(0 && "Invalid flush value");
+    }
+
     Bytef *in;
     Bytef *out;
     size_t in_off, in_len, out_off, out_len;
@@ -184,20 +196,22 @@ class ZCtx : public ObjectWrap {
         ctx->err_ = inflate(&ctx->strm_, ctx->flush_);
 
         // If data was encoded with dictionary
-        if (ctx->err_ == Z_NEED_DICT) {
-          assert(ctx->dictionary_ != NULL && "Stream has no dictionary");
-          if (ctx->dictionary_ != NULL) {
+        if (ctx->err_ == Z_NEED_DICT && ctx->dictionary_ != NULL) {
 
-            // Load it
-            ctx->err_ = inflateSetDictionary(&ctx->strm_,
-                                             ctx->dictionary_,
-                                             ctx->dictionary_len_);
-            assert(ctx->err_ == Z_OK && "Failed to set dictionary");
-            if (ctx->err_ == Z_OK) {
+          // Load it
+          ctx->err_ = inflateSetDictionary(&ctx->strm_,
+                                           ctx->dictionary_,
+                                           ctx->dictionary_len_);
+          if (ctx->err_ == Z_OK) {
 
-              // And try to decode again
-              ctx->err_ = inflate(&ctx->strm_, ctx->flush_);
-            }
+            // And try to decode again
+            ctx->err_ = inflate(&ctx->strm_, ctx->flush_);
+          } else if (ctx->err_ == Z_DATA_ERROR) {
+
+            // Both inflateSetDictionary() and inflate() return Z_DATA_ERROR.
+            // Make it possible for After() to tell a bad dictionary from bad
+            // input.
+            ctx->err_ = Z_NEED_DICT;
           }
         }
         break;
@@ -213,7 +227,9 @@ class ZCtx : public ObjectWrap {
   }
 
   // v8 land!
-  static void After(uv_work_t* work_req) {
+  static void After(uv_work_t* work_req, int status) {
+    assert(status == 0);
+
     HandleScope scope;
     ZCtx *ctx = container_of(work_req, ZCtx, work_req_);
 
@@ -224,14 +240,21 @@ class ZCtx : public ObjectWrap {
       case Z_BUF_ERROR:
         // normal statuses, not fatal
         break;
+      case Z_NEED_DICT:
+        if (ctx->dictionary_ == NULL) {
+          ZCtx::Error(ctx, "Missing dictionary");
+        } else {
+          ZCtx::Error(ctx, "Bad dictionary");
+        }
+        return;
       default:
         // something else.
         ZCtx::Error(ctx, "Zlib error");
         return;
     }
 
-    Local<Integer> avail_out = Integer::New(ctx->strm_.avail_out);
-    Local<Integer> avail_in = Integer::New(ctx->strm_.avail_in);
+    Local<Integer> avail_out = Integer::New(ctx->strm_.avail_out, node_isolate);
+    Local<Integer> avail_in = Integer::New(ctx->strm_.avail_in, node_isolate);
 
     ctx->write_in_progress_ = false;
 
@@ -256,7 +279,8 @@ class ZCtx : public ObjectWrap {
            "Invalid error handler");
     HandleScope scope;
     Local<Value> args[2] = { String::New(msg),
-                             Local<Value>::New(Number::New(ctx->err_)) };
+                             Local<Value>::New(node_isolate,
+                                               Number::New(ctx->err_)) };
     MakeCallback(ctx->handle_, onerror_sym, ARRAY_SIZE(args), args);
 
     // no hope of rescue.
@@ -318,7 +342,7 @@ class ZCtx : public ObjectWrap {
     Init(ctx, level, windowBits, memLevel, strategy,
          dictionary, dictionary_len);
     SetDictionary(ctx);
-    return Undefined();
+    return Undefined(node_isolate);
   }
 
   static Handle<Value> Reset(const Arguments &args) {
@@ -328,7 +352,7 @@ class ZCtx : public ObjectWrap {
 
     Reset(ctx);
     SetDictionary(ctx);
-    return Undefined();
+    return Undefined(node_isolate);
   }
 
   static void Init(ZCtx *ctx, int level, int windowBits, int memLevel,
@@ -481,6 +505,7 @@ void InitZlib(Handle<Object> target) {
   callback_sym = NODE_PSYMBOL("callback");
   onerror_sym = NODE_PSYMBOL("onerror");
 
+  // valid flush values.
   NODE_DEFINE_CONSTANT(target, Z_NO_FLUSH);
   NODE_DEFINE_CONSTANT(target, Z_PARTIAL_FLUSH);
   NODE_DEFINE_CONSTANT(target, Z_SYNC_FLUSH);

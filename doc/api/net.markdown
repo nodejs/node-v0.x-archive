@@ -229,11 +229,21 @@ with `child_process.fork()`.
 
 ### server.connections
 
+This function is **deprecated**; please use [server.getConnections()][] instead.
 The number of concurrent connections on the server.
 
-This becomes `null` when sending a socket to a child with `child_process.fork()`.
+This becomes `null` when sending a socket to a child with
+`child_process.fork()`. To poll forks and get current number of active
+connections use asynchronous `server.getConnections` instead.
 
 `net.Server` is an [EventEmitter][] with the following events:
+
+### server.getConnections(callback)
+
+Asynchronously get the number of concurrent connections on the server. Works
+when sockets were sent to forks.
+
+Callback should take two arguments `err` and `count`.
 
 ### Event: 'listening'
 
@@ -289,8 +299,7 @@ then the socket will be opened as a TCP socket, if `host` is omitted,
 opened as a unix socket to that path.
 
 Normally this method is not needed, as `net.createConnection` opens the
-socket. Use this only if you are implementing a custom Socket or if a
-Socket is closed and you want to reuse it to connect to another server.
+socket. Use this only if you are implementing a custom Socket.
 
 This function is asynchronous. When the ['connect'][] event is emitted the
 socket is established. If there is a problem connecting, the `'connect'` event
@@ -417,6 +426,17 @@ The string representation of the remote IP address. For example,
 ### socket.remotePort
 
 The numeric representation of the remote port. For example,
+`80` or `21`.
+
+### socket.localAddress
+
+The string representation of the local IP address the remote client is
+connecting on. For example, if you are listening on `'0.0.0.0'` and the
+client connects on `'192.168.1.1'`, the value would be `'192.168.1.1'`.
+
+### socket.localPort
+
+The numeric representation of the local port. For example,
 `80` or `21`.
 
 ### socket.bytesRead

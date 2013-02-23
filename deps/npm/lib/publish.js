@@ -32,6 +32,8 @@ function publish (args, isRetry, cb) {
   var arg = args[0]
   // if it's a local folder, then run the prepublish there, first.
   readJson(path.resolve(arg, "package.json"), function (er, data) {
+    er = needVersion(er, data)
+    if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     // error is ok.  could be publishing a url or tarball
     // however, that means that we will not have automatically run
     // the prepublish script, since that gets run when adding a folder
@@ -41,8 +43,13 @@ function publish (args, isRetry, cb) {
   })
 }
 
-function cacheAddPublish (arg, didPre, isRetry, cb) {
-  npm.commands.cache.add(arg, function (er, data) {
+// didPre in this case means that we already ran the prepublish script,
+// and that the "dir" is an actual directory, and not something silly
+// like a tarball or name@version thing.
+// That means that we can run publish/postpublish in the dir, rather than
+// in the cache dir.
+function cacheAddPublish (dir, didPre, isRetry, cb) {
+  npm.commands.cache.add(dir, function (er, data) {
     if (er) return cb(er)
     log.silly("publish", data)
     var cachedir = path.resolve( npm.cache
@@ -51,9 +58,9 @@ function cacheAddPublish (arg, didPre, isRetry, cb) {
                                , "package" )
     chain
       ( [ !didPre && [lifecycle, data, "prepublish", cachedir]
-        , [publish_, arg, data, isRetry, cachedir]
-        , [lifecycle, data, "publish", cachedir]
-        , [lifecycle, data, "postpublish", cachedir] ]
+        , [publish_, dir, data, isRetry, cachedir]
+        , [lifecycle, data, "publish", didPre ? dir : cachedir]
+        , [lifecycle, data, "postpublish", didPre ? dir : cachedir] ]
       , cb )
   })
 }
@@ -98,4 +105,10 @@ function publish_ (arg, data, isRetry, cachedir, cb) {
     console.log("+ " + data._id)
     cb()
   })
+}
+
+function needVersion(er, data) {
+  return er ? er
+       : (data && !data.version) ? new Error("No version provided")
+       : null
 }
