@@ -334,13 +334,13 @@ test('back pressure respected', function (t) {
   function noop() {}
 
   var r = new R();
+  r._read = noop;
   var counter = 0;
   r.push(["one"]);
   r.push(["two"]);
   r.push(["three"]);
   r.push(["four"]);
   r.push(null);
-  r._read = noop;
 
   var w1 = new R();
   w1.write = function (chunk) {
@@ -449,19 +449,4 @@ test('sync _read ending', function (t) {
     assert.equal(called, true);
     t.end();
   })
-});
-
-assert.throws(function() {
-  var bad = new R({
-    highWaterMark: 10,
-    lowWaterMark: 1000
-  });
-});
-
-assert.throws(function() {
-  var W = require('stream').Writable;
-  var bad = new W({
-    highWaterMark: 10,
-    lowWaterMark: 1000
-  });
 });
