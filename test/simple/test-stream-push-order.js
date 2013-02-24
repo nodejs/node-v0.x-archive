@@ -37,7 +37,12 @@ s._read = function (n, cb) {
 
   var two = list.shift();
   s.push(one);
-  cb(null, two);
+  if (list.length === 4)
+    setImmediate(function() {
+      cb(null, two);
+    });
+  else
+    cb(null, two);
 };
 
 var v = s.read(0);
