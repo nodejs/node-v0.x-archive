@@ -26,7 +26,8 @@ exports.testDir = path.dirname(__filename);
 exports.fixturesDir = path.join(exports.testDir, 'fixtures');
 exports.libDir = path.join(exports.testDir, '../lib');
 exports.tmpDir = path.join(exports.testDir, 'tmp');
-exports.PORT = 12346;
+exports.PORT = process.env.NODE_COMMON_PORT;
+exports.PORT = isNaN(exports.PORT) ? 12346 : parseInt(exports.PORT);
 
 if (process.platform === 'win32') {
   exports.PIPE = '\\\\.\\pipe\\libuv-test';
