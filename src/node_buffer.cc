@@ -629,6 +629,11 @@ Handle<Value> Buffer::AsciiWrite(const Arguments &args) {
     return ThrowTypeError("Offset is out of bounds");
   }
 
+  // Avoid calling WriteAscii on empty buffer, data_ is NULL in such case and
+  // old v8 versions (like 3.14) doesn't handle this well.
+  if (length == 0)
+    return scope.Close(Integer::New(0, node_isolate));
+
   size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
                                              : args[2]->Uint32Value();
   max_length = MIN(length, MIN(buffer->length_ - offset, max_length));
