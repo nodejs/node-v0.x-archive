@@ -357,17 +357,6 @@
       infoBox[depth] = tickDepth_;
     }
 
-    function maxTickWarn() {
-      // XXX Remove all this maxTickDepth stuff in 0.11
-      var msg = '(node) warning: Recursive process.nextTick detected. ' +
-                'This will break in the next version of node. ' +
-                'Please use setImmediate for recursive deferral.';
-      if (process.traceDeprecation)
-        console.trace(msg);
-      else
-        console.error(msg);
-    }
-
     function _tickFromSpinner() {
       needSpinner = true;
       // coming from spinner, reset!
@@ -418,22 +407,14 @@
     function _tickDomainCallback() {
       var nextTickLength, tock, callback, threw;
 
-      // if you add a nextTick in a domain's error handler, then
-      // it's possible to cycle indefinitely.  Normally, the tickDone
-      // in the finally{} block below will prevent this, however if
-      // that error handler ALSO triggers multiple MakeCallbacks, then
-      // it'll try to keep clearing the queue, since the finally block
-      // fires *before* the error hits the top level and is handled.
+      // calling nextTick in a domain's error handle can cause it
+      // to cycle indefinitely. this forces it to break out.
       if (infoBox[depth] >= process.maxTickDepth)
         return _needTickCallback();
 
       if (inTick) return;
       inTick = true;
 
-      // always do this at least once.  otherwise if process.maxTickDepth
-      // is set to some negative value, or if there were repeated errors
-      // preventing depth from being cleared, we'd never process any
-      // of them.
       while (infoBox[depth]++ < process.maxTickDepth) {
         nextTickLength = infoBox[length];
         if (infoBox[index] === nextTickLength)
@@ -451,9 +432,8 @@
             callback();
             threw = false;
           } finally {
-            // finally blocks fire before the error hits the top level,
-            // so we can't clear the depth at this point.
-            if (threw) tickDone(infoBox[depth]);
+            if (threw)
+              tickDone(infoBox[depth]);
           }
           if (tock.domain) {
             tock.domain.exit();
@@ -468,8 +448,6 @@
       // on the way out, don't bother. it won't get fired anyway.
       if (process._exiting)
         return;
-      if (infoBox[depth] >= process.maxTickDepth)
-        maxTickWarn();
 
       var obj = { callback: callback };
       if (process.domain !== null) {
