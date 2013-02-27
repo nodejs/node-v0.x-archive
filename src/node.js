@@ -204,9 +204,12 @@
   };
 
   startup.globalConsole = function() {
-    global.__defineGetter__('console', function() {
+    var descriptor = {};
+    descriptor.get = function() {
       return NativeModule.require('console');
-    });
+    };
+
+    Object.defineProperty(global, 'console', descriptor);
   };
 
 
