@@ -376,10 +376,7 @@
       // no callbacks to run
       if (infoBox[length] === 0)
         return infoBox[index] = infoBox[depth] = 0;
-      if (nextTickQueue[infoBox[length] - 1].domain)
-        _tickDomainCallback();
-      else
-        _tickCallback();
+      process._tickCallback();
     }
 
     // run callbacks that have no domain
@@ -396,6 +393,8 @@
       inTick = true;
 
       while (infoBox[depth]++ < process.maxTickDepth) {
+        if (usingDomains)
+          return tickDone(0);
         nextTickLength = infoBox[length];
         if (infoBox[index] === nextTickLength)
           return tickDone(0);
