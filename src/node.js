@@ -114,10 +114,8 @@
         setTimeout(Module.runMain, debugTimeout);
 
       } else {
-        // REMOVEME: nextTick should not be necessary. This hack to get
-        // test/simple/test-exception-handler2.js working.
         // Main entry point into most programs:
-        process.nextTick(Module.runMain);
+        Module.runMain();
       }
 
     } else {
@@ -156,8 +154,6 @@
         });
       }
     }
-
-    process._needTickCallback();
   }
 
   startup.globalVariables = function() {
@@ -309,7 +305,6 @@
   startup.processNextTick = function() {
     var _needTickCallback = process._needTickCallback;
     var nextTickQueue = [];
-    var usingDomains = false;
     var needSpinner = true;
     var inTick = false;
 
@@ -328,6 +323,7 @@
     // needs to be accessible from cc land
     process._tickDomainCallback = _tickDomainCallback;
     process.nextTick = nextTick;
+    process._nextDomainTick = _nextDomainTick;
 
     // the maximum number of times it'll process something like
     // nextTick(function f(){nextTick(f)})
@@ -376,10 +372,7 @@
       // no callbacks to run
       if (infoBox[length] === 0)
         return infoBox[index] = infoBox[depth] = 0;
-      if (nextTickQueue[infoBox[length] - 1].domain)
-        _tickDomainCallback();
-      else
-        _tickCallback();
+      process._tickCallback();
     }
 
     // run callbacks that have no domain
@@ -471,15 +464,25 @@
       if (infoBox[depth] >= process.maxTickDepth)
         maxTickWarn();
 
-      var obj = { callback: callback };
-      if (process.domain !== null) {
-        obj.domain = process.domain;
-        // user has opt'd to use domains, so override default functionality
-        if (!usingDomains) {
-          process._tickCallback = _tickDomainCallback;
-          usingDomains = true;
-        }
+      var obj = { callback: callback, domain: null };
+
+      nextTickQueue.push(obj);
+      infoBox[length]++;
+
+      if (needSpinner) {
+        _needTickCallback();
+        needSpinner = false;
       }
+    }
+
+    function _nextDomainTick(callback) {
+      // on the way out, don't bother. it won't get fired anyway.
+      if (process._exiting)
+        return;
+      if (infoBox[depth] >= process.maxTickDepth)
+        maxTickWarn();
+
+      var obj = { callback: callback, domain: process.domain };
 
       nextTickQueue.push(obj);
       infoBox[length]++;
