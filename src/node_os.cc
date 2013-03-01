@@ -236,8 +236,8 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
     o->Set(String::New("address"), String::New(ip));
     o->Set(String::New("family"), family);
     if (interfaces[i].address.address4.sin_family == AF_INET6) {
-      o->Set(String::New("scopeid"),
-          Number::New(interfaces[i].address.address6.sin6_scope_id));
+      uint32_t scopeid = interfaces[i].address.address6.sin6_scope_id;
+      o->Set(String::New("scopeid"), Integer::NewFromUnsigned(scopeid));
     }
 
     const bool internal = interfaces[i].is_internal;
