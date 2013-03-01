@@ -200,7 +200,8 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
   HandleScope scope;
   uv_interface_address_t* interfaces;
   int count, i;
-  char ip[INET6_ADDRSTRLEN], netmask[INET6_ADDRSTRLEN];
+  char ip[INET6_ADDRSTRLEN];
+  char netmask[INET6_ADDRSTRLEN];
   Local<Object> ret, o;
   Local<String> name, family;
   Local<Array> ifarr;
@@ -222,8 +223,8 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
     }
 
     if (interfaces[i].address.address4.sin_family == AF_INET) {
-      uv_ip4_name(&interfaces[i].address.address4,ip, sizeof(ip));
-      uv_ip4_name(&interfaces[i].netmask.address4,netmask, sizeof(netmask));
+      uv_ip4_name(&interfaces[i].address.address4, ip, sizeof(ip));
+      uv_ip4_name(&interfaces[i].netmask.address4, netmask, sizeof(netmask));
       family = String::New("IPv4");
     } else if (interfaces[i].address.address4.sin_family == AF_INET6) {
       uv_ip6_name(&interfaces[i].address.address6, ip, sizeof(ip));
