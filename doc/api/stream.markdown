@@ -169,7 +169,7 @@ source.onend = function() {
 };
 
 // _read will be called when the stream wants to pull more data in
-stream._read = function(size, cb) {
+stream._read = function() {
   source.readStart();
 };
 ```
