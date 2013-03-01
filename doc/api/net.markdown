@@ -388,16 +388,19 @@ algorithm, they buffer data before sending it off. Setting `true` for
 `noDelay` will immediately fire off data each time `socket.write()` is called.
 `noDelay` defaults to `true`.
 
-### socket.setKeepAlive([enable], [initialDelay])
+### socket.setKeepAlive([enable], [initialDelay], [probeInterval], [failureCount])
 
-Enable/disable keep-alive functionality, and optionally set the initial
-delay before the first keepalive probe is sent on an idle socket.
+Enable/disable keep-alive functionality, and optionally set keep-alive options.
+Options default to `0`, which leaves the value unchanged from the default
+(or previous) setting.
 `enable` defaults to `false`.
 
 Set `initialDelay` (in milliseconds) to set the delay between the last
-data packet received and the first keepalive probe. Setting 0 for
-initialDelay will leave the value unchanged from the default
-(or previous) setting. Defaults to `0`.
+data packet received and the first keepalive probe.
+Set `probeInterval` (in milliseconds) to set the interval between the
+keep-alive probes sent after the initial probe.
+Set `failureCount` to set the maximum number of probes that can fail before
+the OS closes the connection. Ignored on Windows.
 
 ### socket.address()
 
