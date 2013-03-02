@@ -331,7 +331,12 @@ Users who experience large or growing `bufferSize` should attempt to
 ### socket.setEncoding([encoding])
 
 Set the encoding for the socket as a Readable Stream. See
-[stream.setEncoding()][] for more information.
+[readable.setEncoding()][] for more information.
+
+### socket.read([size])
+
+Call this method to consume data once the `'readable'` event is
+emitted. (See [readable.read()][] for more information.)
 
 ### socket.write(data, [encoding], [callback])
 
@@ -360,12 +365,15 @@ case of errors (parse error or so).
 
 ### socket.pause()
 
-Pauses the reading of data. That is, `'data'` events will not be emitted.
-Useful to throttle back an upload.
+Pauses the reading of data. Note that calling `pause()` will switch
+the socket into "old mode". (See [Compatibility][] for more
+information.)
 
 ### socket.resume()
 
-Resumes reading after a call to `pause()`.
+Resumes reading after a call to `pause()`. Note that calling
+`resume()` will switch the socket into "old mode". (See
+[Compatibility][] for more information.)
 
 ### socket.setTimeout(timeout, [callback])
 
@@ -455,6 +463,12 @@ The amount of bytes sent.
 Emitted when a socket connection is successfully established.
 See `connect()`.
 
+### Event: 'readable'
+
+When there is data ready to be consumed. When this event emits, call
+the `read()` method to consume the data. (See [Readable Stream][]
+section for more information.)
+
 ### Event: 'data'
 
 * {Buffer object}
@@ -463,8 +477,8 @@ Emitted when data is received.  The argument `data` will be a `Buffer` or
 `String`.  Encoding of data is set by `socket.setEncoding()`.
 (See the [Readable Stream][] section for more information.)
 
-Note that the __data will be lost__ if there is no listener when a `Socket`
-emits a `'data'` event.
+Note that adding a `'data'` event listener will switch the socket
+into "old mode". (See [Compatibility][] for more information.)
 
 ### Event: 'end'
 
@@ -525,5 +539,7 @@ Returns true if input is a version 6 IP address, otherwise returns false.
 ['end']: #net_event_end
 [EventEmitter]: events.html#events_class_events_eventemitter
 ['listening']: #net_event_listening
-[Readable Stream]: stream.html#stream_readable_stream
-[stream.setEncoding()]: stream.html#stream_stream_setencoding_encoding
+[Readable Stream]: stream.html#stream_class_stream_readable
+[readable.setEncoding()]: stream.html#stream_readable_setencoding_encoding
+[Compatibility]: stream.html#stream_compatibility
+[readable.read()]: stream.html#stream_readable_read_size

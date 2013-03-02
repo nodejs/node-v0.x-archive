@@ -646,7 +646,7 @@ be found in the [MDN JavaScript Reference][MDN-Date] page.
 
 ## fs.createReadStream(path, [options])
 
-Returns a new ReadStream object (See `Readable Stream`).
+Returns a new ReadStream object (See [Readable Stream][]).
 
 `options` is an object with the following defaults:
 
@@ -675,7 +675,7 @@ An example to read the last 10 bytes of a file which is 100 bytes long:
 
 ## Class: fs.ReadStream
 
-`ReadStream` is a [Readable Stream](stream.html#stream_readable_stream).
+`ReadStream` is a [Readable Stream][].
 
 ### Event: 'open'
 
@@ -686,7 +686,7 @@ Emitted when the ReadStream's file is opened.
 
 ## fs.createWriteStream(path, [options])
 
-Returns a new WriteStream object (See `Writable Stream`).
+Returns a new WriteStream object (See [Writable Stream][]).
 
 `options` is an object with the following defaults:
 
@@ -701,7 +701,7 @@ default mode `w`.
 
 ## fs.WriteStream
 
-`WriteStream` is a [Writable Stream](stream.html#stream_writable_stream).
+`WriteStream` is a [Writable Stream][].
 
 ### Event: 'open'
 
@@ -735,3 +735,6 @@ See more details in [fs.watch](#fs_fs_watch_filename_options_listener).
 * `error` {Error object}
 
 Emitted when an error occurs.
+
+[Readable Stream]: stream.html#stream_class_stream_readable
+[Writable Stream]: stream.html#stream_class_stream_writable

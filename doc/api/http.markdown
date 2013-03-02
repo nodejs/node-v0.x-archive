@@ -733,6 +733,14 @@ respectively. It may be used to access response status, headers and data.
 It implements the [Readable Stream][] interface. `http.IncomingMessage` is an
 [EventEmitter][] with the following events:
 
+### Event: 'readable'
+
+`function () { }`
+
+When there is message body ready to be consumed. When this event emits,
+call the `read()` method to consume the data. (See [Readable Stream][]
+section for more information.)
+
 ### Event: 'data'
 
 `function (chunk) { }`
@@ -741,8 +749,9 @@ Emitted when a piece of the message body is received. The chunk is a string if
 an encoding has been set with `message.setEncoding()`, otherwise it's
 a [Buffer][].
 
-Note that the __data will be lost__ if there is no listener when a
-`IncomingMessage` emits a `'data'` event.
+Note that adding a `'data'` event listener will switch the
+`http.IncomingMessage` into "old mode". (See [Compatibility][] for more
+information.)
 
 ### Event: 'end'
 
@@ -770,8 +779,8 @@ In case of server request, the HTTP version sent by the client. In the case of
 client response, the HTTP version of the connected-to server.
 Probably either `'1.1'` or `'1.0'`.
 
-Also `response.httpVersionMajor` is the first integer and
-`response.httpVersionMinor` is the second.
+Also `message.httpVersionMajor` is the first integer and
+`message.httpVersionMinor` is the second.
 
 ### message.headers
 
@@ -793,18 +802,27 @@ The request/response trailers object. Only populated after the 'end' event.
 
 ### message.setEncoding([encoding])
 
-Set the encoding for data emitted by the `'data'` event. See [stream.setEncoding()][] for more
-information.
+Set the encoding for data emitted by the `'data'` event. See
+[readable.setEncoding()][] for more information.
 
 Should be set before any `'data'` events have been emitted.
 
+### message.read([size])
+
+Call this method to consume data once the `'readable'` event is
+emitted. (See [readable.read()][] for more information.)
+
 ### message.pause()
 
-Pauses request/response from emitting events.  Useful to throttle back a download.
+Pauses request/response from emitting events. Note that calling
+`pause()` will switch the `http.IncomingMessage` into "old mode".
+(See [Compatibility][] for more information.)
 
 ### message.resume()
 
-Resumes a paused request/response.
+Resumes a paused request/response. Note that calling `resume()` will
+switch the `http.IncomingMessage` into "old mode". (See
+[Compatibility][] for more information.)
 
 ### message.method
 
@@ -824,7 +842,7 @@ present in the actual HTTP request. If the request is:
     Accept: text/plain\r\n
     \r\n
 
-Then `request.url` will be:
+Then `message.url` will be:
 
     '/status?name=ryan'
 
@@ -855,10 +873,10 @@ The 3-digit HTTP response status code. E.G. `404`.
 
 ### message.socket
 
-The `net.Socket` object associated with the connection.
+The [net.Socket][] object associated with the connection.
 
-With HTTPS support, use request.connection.verifyPeer() and
-request.connection.getPeerCertificate() to obtain the client's
+With HTTPS support, use `message.socket.verifyPeer()` and
+`message.socket.getPeerCertificate()` to obtain the client's
 authentication details.
 
 
@@ -873,10 +891,13 @@ authentication details.
 [net.Server.close()]: net.html#net_server_close_callback
 [net.Server.listen(path)]: net.html#net_server_listen_path_callback
 [net.Server.listen(port)]: net.html#net_server_listen_port_host_backlog_callback
-[Readable Stream]: stream.html#stream_readable_stream
+[net.Socket]: net.html#net_class_net_socket
+[Readable Stream]: stream.html#stream_class_stream_readable
 [socket.setKeepAlive()]: net.html#net_socket_setkeepalive_enable_initialdelay
 [socket.setNoDelay()]: net.html#net_socket_setnodelay_nodelay
 [socket.setTimeout()]: net.html#net_socket_settimeout_timeout_callback
-[stream.setEncoding()]: stream.html#stream_stream_setencoding_encoding
+[readable.setEncoding()]: stream.html#stream_readable_setencoding_encoding
 [url.parse()]: url.html#url_url_parse_urlstr_parsequerystring_slashesdenotehost
-[Writable Stream]: stream.html#stream_writable_stream
+[Writable Stream]: stream.html#stream_class_stream_writable
+[Compatibility]: stream.html#stream_compatibility
+[readable.read()]: stream.html#stream_readable_read_size

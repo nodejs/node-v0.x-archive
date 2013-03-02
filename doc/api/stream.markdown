@@ -135,7 +135,8 @@ becomes available.  There is no need, for example to "wait" until
 
 ### readable.push(chunk)
 
-* `chunk` {Buffer | null | String} Chunk of data to push into the read queue
+* `chunk` {Buffer | String | Object | null} Chunk of data to push into
+  the read queue
 * return {Boolean} Whether or not more pushes should be performed
 
 Note: **This function should be called by Readable implementors, NOT
@@ -151,6 +152,10 @@ event fires.
 The `push()` method will explicitly insert some data into the read
 queue.  If it is called with `null` then it will signal the end of the
 data.
+
+Note that the stream will become the "object mode" if the `push()` is
+called with the value other than a `Buffer`, a string, `undefined`,
+and `null`. 
 
 In some cases, you may be wrapping a lower-level source which has some
 sort of pause/resume mechanism, and a data callback.  In those cases,
@@ -327,8 +332,9 @@ also writable, it may be possible to continue writing.
 
 ### Event: 'data'
 
-The `'data'` event emits either a `Buffer` (by default) or a string if
-`setEncoding()` was used.
+The `'data'` event emits either a `Buffer` (by default), a string (if
+`setEncoding()` was used), or an object (if the stream is in the
+"object mode").
 
 Note that adding a `'data'` event listener will switch the Readable
 stream into "old mode", where data is emitted as soon as it is
@@ -346,7 +352,7 @@ descriptor) has been closed. Not all streams will emit this.
 ### readable.setEncoding(encoding)
 
 Makes the `'data'` event emit a string instead of a `Buffer`. `encoding`
-can be `'utf8'`, `'utf16le'` (`'ucs2'`), `'ascii'`, or `'hex'`.
+can be `'utf8'`, `'utf16le'` (`'ucs2'`), `'ascii'`, `'hex'`, or `base64`.
 
 The encoding can also be set by specifying an `encoding` field to the
 constructor.
@@ -354,7 +360,7 @@ constructor.
 ### readable.read([size])
 
 * `size` {Number | null} Optional number of bytes to read.
-* Return: {Buffer | String | null}
+* Return: {Buffer | String | Object | null}
 
 Note: **This function SHOULD be called by Readable stream users.**
 
@@ -363,7 +369,8 @@ emitted.
 
 The `size` argument will set a minimum number of bytes that you are
 interested in.  If not set, then the entire content of the internal
-buffer is returned.
+buffer is returned. Note that when the stream is in the "object mode",
+`size` arguments is ignored and it is always assumed to be 1.
 
 If there is no data to consume, or if there are fewer bytes in the
 internal buffer than the `size` argument, then `null` is returned, and
