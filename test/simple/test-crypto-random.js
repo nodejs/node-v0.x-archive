@@ -37,8 +37,7 @@ process.setMaxListeners(256);
 [crypto.randomBytes,
   crypto.pseudoRandomBytes
 ].forEach(function(f) {
-  [-1,
-    undefined,
+  [ undefined,
     null,
     false,
     true,
@@ -49,10 +48,17 @@ process.setMaxListeners(256);
     assert.throws(function() { f(value, function() {}); });
   });
 
-  [0, 1, 2, 4, 16, 256, 1024].forEach(function(len) {
+  [ -1, 0x3fffffff + 1 ].forEach(function(value) {
+    assert.throws(function() { f(value); });
+    f(value, function(er) {
+      assert(er);
+    });
+  });
+
+  [0, 1, 1.5, 2, 4, 16, 256, 1024].forEach(function(len) {
     f(len, checkCall(function(ex, buf) {
       assert.equal(null, ex);
-      assert.equal(len, buf.length);
+      assert.equal(Math.floor(len), buf.length);
       assert.ok(Buffer.isBuffer(buf));
     }));
   });
@@ -67,6 +73,7 @@ function checkCall(cb, desc) {
   });
 
   return function() {
-    return called_ = true, cb.apply(cb, Array.prototype.slice.call(arguments));
+    called_ = true;
+    return cb.apply(cb, arguments);
   };
 }

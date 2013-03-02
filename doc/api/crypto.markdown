@@ -464,6 +464,23 @@ Generates cryptographically strong pseudo-random data. Usage:
       // handle error
     }
 
+Note that this function will throw an error if the size argument is
+not a number.
+
+An exception will be raised (either thrown, or returned to the
+callback) if the size value is negative, or larger than 0x3fffffff.
+
+## crypto.pseudoRandomBytes(size, [callback])
+
+Generates non-cryptographically strong pseudo-random data.  Usage is
+identical to `crypto.randomBytes`, above.
+
+Note that this function will throw an error if the size argument is
+not a number.
+
+An exception will be raised (either thrown, or returned to the
+callback) if the size value is negative, or larger than 0x3fffffff.
+
 ## crypto.DEFAULT_ENCODING
 
 The default encoding to use for functions that can take either strings

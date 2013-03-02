@@ -3937,7 +3937,7 @@ Handle<Value> RandomBytes(const Arguments& args) {
   // maybe allow a buffer to write to? cuts down on object creation
   // when generating random data in a loop
   if (!args[0]->IsUint32()) {
-    Local<String> s = String::New("Argument #1 must be number > 0");
+    Local<String> s = String::New("Argument #1 must be uint32");
     return ThrowException(Exception::TypeError(s));
   }
 
