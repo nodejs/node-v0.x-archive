@@ -59,6 +59,17 @@ var f = new events.EventEmitter();
 f.setMaxListeners(0);
 
 
+// people actually do this.
+// if it was not a locked part of node's API,
+// then this would throw.  Perhaps in 2.0.
+var e = new events.EventEmitter();
+var nonStringEventFired = false;
+e.on(1, function() {
+  nonStringEventFired = true;
+});
+e.emit({toString: function() { return '1'; }});
+assert(nonStringEventFired);
+
 process.on('exit', function() {
   assert.deepEqual(['hello', 'foo'], events_new_listener_emited);
   assert.deepEqual([hello, foo], listeners_new_listener_emited);
