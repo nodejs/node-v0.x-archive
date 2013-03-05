@@ -436,8 +436,8 @@ Resumes the incoming `'data'` events after a `pause()`.
 A `Writable` Stream has the following methods, members, and events.
 
 Note that `stream.Writable` is an abstract class designed to be
-extended with an underlying implementation of the `_write(chunk, cb)`
-method. (See below.)
+extended with an underlying implementation of the
+`_write(chunk, encoding, cb)` method. (See below.)
 
 ### new stream.Writable([options])
 
@@ -451,10 +451,16 @@ In classes that extend the Writable class, make sure to call the
 constructor so that the buffering settings can be properly
 initialized.
 
-### writable.\_write(chunk, callback)
+### writable.\_write(chunk, encoding, callback)
 
-* `chunk` {Buffer | Array} The data to be written
-* `callback` {Function} Called with an error, or null when finished
+* `chunk` {Buffer | String} The chunk to be written.  Will always
+  be a buffer unless the `decodeStrings` option was set to `false`.
+* `encoding` {String} If the chunk is a string, then this is the
+  encoding type.  Ignore chunk is a buffer.  Note that chunk will
+  **always** be a buffer unless the `decodeStrings` option is
+  explicitly set to `false`.
+* `callback` {Function} Call this function (optionally with an error
+  argument) when you are done processing the supplied chunk.
 
 All Writable stream implementations must provide a `_write` method to
 send data to the underlying resource.
@@ -467,9 +473,12 @@ Call the callback using the standard `callback(error)` pattern to
 signal that the write completed successfully or with an error.
 
 If the `decodeStrings` flag is set in the constructor options, then
-`chunk` will be an array rather than a Buffer.  This is to support
+`chunk` may be a string rather than a Buffer, and `encoding` will
+indicate the sort of string that it is.  This is to support
 implementations that have an optimized handling for certain string
-data encodings.
+data encodings.  If you do not explicitly set the `decodeStrings`
+option to `false`, then you can safely ignore the `encoding` argument,
+and assume that `chunk` will always be a Buffer.
 
 This method is prefixed with an underscore because it is internal to
 the class that defines it, and should not be called directly by user
@@ -543,13 +552,13 @@ TCP socket connection.
 
 Note that `stream.Duplex` is an abstract class designed to be
 extended with an underlying implementation of the `_read(size)`
-and `_write(chunk, callback)` methods as you would with a Readable or
+and `_write(chunk, encoding, callback)` methods as you would with a Readable or
 Writable stream class.
 
 Since JavaScript doesn't have multiple prototypal inheritance, this
 class prototypally inherits from Readable, and then parasitically from
 Writable.  It is thus up to the user to implement both the lowlevel
-`_read(n)` method as well as the lowlevel `_write(chunk,cb)` method
+`_read(n)` method as well as the lowlevel `_write(chunk, encoding, cb)` method
 on extension duplex classes.
 
 ### new stream.Duplex(options)
@@ -589,11 +598,12 @@ In classes that extend the Transform class, make sure to call the
 constructor so that the buffering settings can be properly
 initialized.
 
-### transform.\_transform(chunk, outputFn, callback)
+### transform.\_transform(chunk, encoding, callback)
 
-* `chunk` {Buffer} The chunk to be transformed.
-* `outputFn` {Function} Call this function with any output data to be
-  passed to the readable interface.
+* `chunk` {Buffer | String} The chunk to be transformed.  Will always
+  be a buffer unless the `decodeStrings` option was set to `false`.
+* `encoding` {String} If the chunk is a string, then this is the
+  encoding type.  (Ignore if `decodeStrings` chunk is a buffer.)
 * `callback` {Function} Call this function (optionally with an error
   argument) when you are done processing the supplied chunk.
 
@@ -609,20 +619,21 @@ Transform class, to handle the bytes being written, and pass them off
 to the readable portion of the interface.  Do asynchronous I/O,
 process things, and so on.
 
+Call `transform.push(outputChunk)` 0 or more times to generate output
+from this input chunk, depending on how much data you want to output
+as a result of this chunk.
+
 Call the callback function only when the current chunk is completely
-consumed.  Note that this may mean that you call the `outputFn` zero
-or more times, depending on how much data you want to output as a
-result of this chunk.
+consumed.  Note that there may or may not be output as a result of any
+particular input chunk.
 
 This method is prefixed with an underscore because it is internal to
 the class that defines it, and should not be called directly by user
 programs.  However, you **are** expected to override this method in
 your own extension classes.
 
-### transform.\_flush(outputFn, callback)
+### transform.\_flush(callback)
 
-* `outputFn` {Function} Call this function with any output data to be
-  passed to the readable interface.
 * `callback` {Function} Call this function (optionally with an error
   argument) when you are done flushing any remaining data.
 
@@ -639,8 +650,9 @@ can with what is left, so that the data will be complete.
 In those cases, you can implement a `_flush` method, which will be
 called at the very end, after all the written data is consumed, but
 before emitting `end` to signal the end of the readable side.  Just
-like with `_transform`, call `outputFn` zero or more times, as
-appropriate, and call `callback` when the flush operation is complete.
+like with `_transform`, call `transform.push(chunk)` zero or more
+times, as appropriate, and call `callback` when the flush operation is
+complete.
 
 This method is prefixed with an underscore because it is internal to
 the class that defines it, and should not be called directly by user
@@ -671,7 +683,7 @@ function SimpleProtocol(options) {
 SimpleProtocol.prototype = Object.create(
   Transform.prototype, { constructor: { value: SimpleProtocol }});
 
-SimpleProtocol.prototype._transform = function(chunk, output, done) {
+SimpleProtocol.prototype._transform = function(chunk, encoding, done) {
   if (!this._inBody) {
     // check if the chunk has a \n\n
     var split = -1;
@@ -707,11 +719,11 @@ SimpleProtocol.prototype._transform = function(chunk, output, done) {
       this.emit('header', this.header);
 
       // now, because we got some extra data, emit this first.
-      output(b);
+      this.push(b);
     }
   } else {
     // from there on, just provide the data to our consumer as-is.
-    output(b);
+    this.push(b);
   }
   done();
 };

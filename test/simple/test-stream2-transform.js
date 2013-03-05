@@ -67,9 +67,9 @@ test('writable side consumption', function(t) {
   });
 
   var transformed = 0;
-  tx._transform = function(chunk, output, cb) {
+  tx._transform = function(chunk, encoding, cb) {
     transformed += chunk.length;
-    output(chunk);
+    tx.push(chunk);
     cb();
   };
 
@@ -82,7 +82,7 @@ test('writable side consumption', function(t) {
   t.equal(transformed, 10);
   t.equal(tx._transformState.writechunk.length, 5);
   t.same(tx._writableState.buffer.map(function(c) {
-    return c[0].length;
+    return c.chunk.length;
   }), [6, 7, 8, 9, 10]);
 
   t.end();
@@ -106,10 +106,10 @@ test('passthrough', function(t) {
 
 test('simple transform', function(t) {
   var pt = new Transform;
-  pt._transform = function(c, output, cb) {
+  pt._transform = function(c, e, cb) {
     var ret = new Buffer(c.length);
     ret.fill('x');
-    output(ret);
+    pt.push(ret);
     cb();
   };
 
@@ -128,9 +128,9 @@ test('simple transform', function(t) {
 
 test('async passthrough', function(t) {
   var pt = new Transform;
-  pt._transform = function(chunk, output, cb) {
+  pt._transform = function(chunk, encoding, cb) {
     setTimeout(function() {
-      output(chunk);
+      pt.push(chunk);
       cb();
     }, 10);
   };
@@ -154,11 +154,11 @@ test('assymetric transform (expand)', function(t) {
   var pt = new Transform;
 
   // emit each chunk 2 times.
-  pt._transform = function(chunk, output, cb) {
+  pt._transform = function(chunk, encoding, cb) {
     setTimeout(function() {
-      output(chunk);
+      pt.push(chunk);
       setTimeout(function() {
-        output(chunk);
+        pt.push(chunk);
         cb();
       }, 10)
     }, 10);
@@ -189,24 +189,24 @@ test('assymetric transform (compress)', function(t) {
   // or whatever's left.
   pt.state = '';
 
-  pt._transform = function(chunk, output, cb) {
+  pt._transform = function(chunk, encoding, cb) {
     if (!chunk)
       chunk = '';
     var s = chunk.toString();
     setTimeout(function() {
       this.state += s.charAt(0);
       if (this.state.length === 3) {
-        output(new Buffer(this.state));
+        pt.push(new Buffer(this.state));
         this.state = '';
       }
       cb();
     }.bind(this), 10);
   };
 
-  pt._flush = function(output, cb) {
+  pt._flush = function(cb) {
     // just output whatever we have.
     setTimeout(function() {
-      output(new Buffer(this.state));
+      pt.push(new Buffer(this.state));
       this.state = '';
       cb();
     }.bind(this), 10);
@@ -359,9 +359,9 @@ test('passthrough facaded', function(t) {
 test('object transform (json parse)', function(t) {
   console.error('json parse stream');
   var jp = new Transform({ objectMode: true });
-  jp._transform = function(data, output, cb) {
+  jp._transform = function(data, encoding, cb) {
     try {
-      output(JSON.parse(data));
+      jp.push(JSON.parse(data));
       cb();
     } catch (er) {
       cb(er);
@@ -399,9 +399,9 @@ test('object transform (json parse)', function(t) {
 test('object transform (json stringify)', function(t) {
   console.error('json parse stream');
   var js = new Transform({ objectMode: true });
-  js._transform = function(data, output, cb) {
+  js._transform = function(data, encoding, cb) {
     try {
-      output(JSON.stringify(data));
+      js.push(JSON.stringify(data));
       cb();
     } catch (er) {
       cb(er);
