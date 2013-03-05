@@ -317,6 +317,7 @@ class MacroAssembler: public Assembler {
   void PopSafepointRegisters() { Popad(); }
   // Store the value in register src in the safepoint register stack
   // slot for register dst.
+  void StoreToSafepointRegisterSlot(Register dst, const Immediate& imm);
   void StoreToSafepointRegisterSlot(Register dst, Register src);
   void LoadFromSafepointRegisterSlot(Register dst, Register src);
 
@@ -774,6 +775,11 @@ class MacroAssembler: public Assembler {
   // Move if the registers are not identical.
   void Move(Register target, Register source);
 
+  // Support for constant splitting.
+  bool IsUnsafeInt(const int x);
+  void SafeMove(Register dst, Smi* src);
+  void SafePush(Smi* src);
+
   // Bit-field support.
   void TestBit(const Operand& dst, int bit_index);
 
@@ -817,7 +823,7 @@ class MacroAssembler: public Assembler {
   void Call(ExternalReference ext);
   void Call(Handle<Code> code_object,
             RelocInfo::Mode rmode,
-            unsigned ast_id = kNoASTId);
+            TypeFeedbackId ast_id = TypeFeedbackId::None());
 
   // The size of the code generated for different call instructions.
   int CallSize(Address destination, RelocInfo::Mode rmode) {
@@ -936,32 +942,45 @@ class MacroAssembler: public Assembler {
 
   void ClampDoubleToUint8(XMMRegister input_reg,
                           XMMRegister temp_xmm_reg,
-                          Register result_reg,
-                          Register temp_reg);
+                          Register result_reg);
+
+  void LoadUint32(XMMRegister dst, Register src, XMMRegister scratch);
 
   void LoadInstanceDescriptors(Register map, Register descriptors);
+  void EnumLength(Register dst, Register map);
+  void NumberOfOwnDescriptors(Register dst, Register map);
 
-  // Abort execution if argument is not a number. Used in debug code.
-  void AbortIfNotNumber(Register object);
+  template<typename Field>
+  void DecodeField(Register reg) {
+    static const int shift = Field::kShift + kSmiShift;
+    static const int mask = Field::kMask >> Field::kShift;
+    shr(reg, Immediate(shift));
+    and_(reg, Immediate(mask));
+    shl(reg, Immediate(kSmiShift));
+  }
 
-  // Abort execution if argument is a smi. Used in debug code.
-  void AbortIfSmi(Register object);
+  // Abort execution if argument is not a number, enabled via --debug-code.
+  void AssertNumber(Register object);
 
-  // Abort execution if argument is not a smi. Used in debug code.
-  void AbortIfNotSmi(Register object);
-  void AbortIfNotSmi(const Operand& object);
+  // Abort execution if argument is a smi, enabled via --debug-code.
+  void AssertNotSmi(Register object);
+
+  // Abort execution if argument is not a smi, enabled via --debug-code.
+  void AssertSmi(Register object);
+  void AssertSmi(const Operand& object);
 
   // Abort execution if a 64 bit register containing a 32 bit payload does not
-  // have zeros in the top 32 bits.
-  void AbortIfNotZeroExtended(Register reg);
+  // have zeros in the top 32 bits, enabled via --debug-code.
+  void AssertZeroExtended(Register reg);
 
-  // Abort execution if argument is a string. Used in debug code.
-  void AbortIfNotString(Register object);
+  // Abort execution if argument is not a string, enabled via --debug-code.
+  void AssertString(Register object);
 
-  // Abort execution if argument is not the root value with the given index.
-  void AbortIfNotRootValue(Register src,
-                           Heap::RootListIndex root_value_index,
-                           const char* message);
+  // Abort execution if argument is not the root value with the given index,
+  // enabled via --debug-code.
+  void AssertRootValue(Register src,
+                       Heap::RootListIndex root_value_index,
+                       const char* message);
 
   // ---------------------------------------------------------------------------
   // Exception handling
@@ -1128,8 +1147,8 @@ class MacroAssembler: public Assembler {
   void LoadContext(Register dst, int context_chain_length);
 
   // Conditionally load the cached Array transitioned map of type
-  // transitioned_kind from the global context if the map in register
-  // map_in_out is the cached Array map in the global context of
+  // transitioned_kind from the native context if the map in register
+  // map_in_out is the cached Array map in the native context of
   // expected_kind.
   void LoadTransitionedArrayMapConditional(
       ElementsKind expected_kind,
@@ -1155,7 +1174,7 @@ class MacroAssembler: public Assembler {
   // Runtime calls
 
   // Call a code stub.
-  void CallStub(CodeStub* stub, unsigned ast_id = kNoASTId);
+  void CallStub(CodeStub* stub, TypeFeedbackId ast_id = TypeFeedbackId::None());
 
   // Tail call a code stub (jump).
   void TailCallStub(CodeStub* stub);
@@ -1323,6 +1342,8 @@ class MacroAssembler: public Assembler {
   // modified. It may be the "smi 1 constant" register.
   Register GetSmiConstant(Smi* value);
 
+  intptr_t RootRegisterDelta(ExternalReference other);
+
   // Moves the smi value to the destination register.
   void LoadSmiConstant(Register dst, Smi* value);
 
@@ -1442,7 +1463,7 @@ inline Operand ContextOperand(Register context, int index) {
 
 
 inline Operand GlobalObjectOperand() {
-  return ContextOperand(rsi, Context::GLOBAL_INDEX);
+  return ContextOperand(rsi, Context::GLOBAL_OBJECT_INDEX);
 }
 
 

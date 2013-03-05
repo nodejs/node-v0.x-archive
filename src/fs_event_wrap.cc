@@ -51,7 +51,7 @@ private:
 
 FSEventWrap::FSEventWrap(Handle<Object> object): HandleWrap(object,
                                                     (uv_handle_t*)&handle_) {
-  handle_.data = reinterpret_cast<void*>(this);
+  handle_.data = static_cast<void*>(this);
   initialized_ = false;
 }
 
@@ -119,7 +119,7 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   HandleScope scope;
   Local<String> eventStr;
 
-  FSEventWrap* wrap = reinterpret_cast<FSEventWrap*>(handle->data);
+  FSEventWrap* wrap = static_cast<FSEventWrap*>(handle->data);
 
   assert(wrap->object_.IsEmpty() == false);
 
@@ -152,7 +152,8 @@ void FSEventWrap::OnEvent(uv_fs_event_t* handle, const char* filename,
   Local<Value> argv[3] = {
     Integer::New(status),
     eventStr,
-    filename ? (Local<Value>)String::New(filename) : Local<Value>::New(v8::Null())
+    filename ? static_cast<Local<Value> >(String::New(filename))
+             : Local<Value>::New(v8::Null())
   };
 
   if (onchange_sym.IsEmpty()) {
@@ -174,7 +175,9 @@ Handle<Value> FSEventWrap::Close(const Arguments& args) {
   void* ptr = args.Holder()->GetPointerFromInternalField(0);
   FSEventWrap* wrap = static_cast<FSEventWrap*>(ptr);
 
-  if (wrap == NULL || wrap->initialized_ == false) return Undefined();
+  if (wrap == NULL || wrap->initialized_ == false) {
+    return Undefined();
+  }
   wrap->initialized_ = false;
 
   return HandleWrap::Close(args);

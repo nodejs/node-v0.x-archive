@@ -50,7 +50,8 @@ server.listen(common.PORT, function() {
     port: common.PORT,
     key: key,
     passphrase: 'passphrase',
-    cert: cert
+    cert: cert,
+    rejectUnauthorized: false
   }, function() {
     ++connectCount;
   });
@@ -64,7 +65,8 @@ assert.throws(function() {
     port: common.PORT,
     key: key,
     passphrase: 'invalid',
-    cert: cert
+    cert: cert,
+    rejectUnauthorized: false
   });
 });
 

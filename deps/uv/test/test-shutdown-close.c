@@ -37,9 +37,9 @@ static int close_cb_called = 0;
 
 
 static void shutdown_cb(uv_shutdown_t* req, int status) {
+  int err = uv_last_error(uv_default_loop()).code;
   ASSERT(req == &shutdown_req);
-  ASSERT(status == 0 ||
-         (status == -1 && uv_last_error(uv_default_loop()).code == UV_EINTR));
+  ASSERT(status == 0 || (status == -1 && err == UV_ECANCELED));
   shutdown_cb_called++;
 }
 
@@ -74,13 +74,14 @@ TEST_IMPL(shutdown_close_tcp) {
   ASSERT(r == 0);
   r = uv_tcp_connect(&connect_req, &h, addr, connect_cb);
   ASSERT(r == 0);
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(connect_cb_called == 1);
   ASSERT(shutdown_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -92,12 +93,13 @@ TEST_IMPL(shutdown_close_pipe) {
   r = uv_pipe_init(uv_default_loop(), &h, 0);
   ASSERT(r == 0);
   uv_pipe_connect(&connect_req, &h, TEST_PIPENAME, connect_cb);
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(connect_cb_called == 1);
   ASSERT(shutdown_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

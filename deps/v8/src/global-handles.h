@@ -131,6 +131,7 @@ class GlobalHandles {
                 WeakReferenceCallback callback);
 
   static void SetWrapperClassId(Object** location, uint16_t class_id);
+  static uint16_t GetWrapperClassId(Object** location);
 
   // Returns the current number of weak handles.
   int NumberOfWeakHandles() { return number_of_weak_handles_; }
@@ -153,6 +154,8 @@ class GlobalHandles {
 
   // Clear the weakness of a global handle.
   void MarkIndependent(Object** location);
+
+  static bool IsIndependent(Object** location);
 
   // Tells whether global handle is near death.
   static bool IsNearDeath(Object** location);

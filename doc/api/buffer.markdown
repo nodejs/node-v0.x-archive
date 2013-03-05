@@ -40,22 +40,16 @@ encoding method.  Here are the different string encodings.
 
 * `'hex'` - Encode each byte as two hexadecimal characters.
 
-`Buffer` can also be used with Typed Array Views and DataViews.
+A `Buffer` object can also be used with typed arrays.  The buffer object is
+cloned to an `ArrayBuffer` that is used as the backing store for the typed
+array.  The memory of the buffer and the `ArrayBuffer` is not shared.
 
-    var buff = new Buffer(4);
-    var ui16 = new Uint16Array(buff);
-    var view = new DataView(buff);
+NOTE: Node.js v0.8 simply retained a reference to the buffer in `array.buffer`
+instead of cloning it.
 
-    ui16[0] = 1;
-    ui16[1] = 2;
-    console.log(buff);
-
-    view.setInt16(0, 1);       // set big-endian int16 at byte offset 0
-    view.setInt16(2, 2, true); // set little-endian int16 at byte offset 2
-    console.log(buff);
-
-    // <Buffer 01 00 02 00>
-    // <Buffer 00 01 02 00>
+While more efficient, it introduces subtle incompatibilities with the typed
+arrays specification.  `ArrayBuffer#slice()` makes a copy of the slice while
+`Buffer#slice()` creates a view.
 
 ## Class: Buffer
 
@@ -81,6 +75,13 @@ Allocates a new buffer using an `array` of octets.
 
 Allocates a new buffer containing the given `str`.
 `encoding` defaults to `'utf8'`.
+
+### Class Method: Buffer.isEncoding(encoding)
+
+* `encoding` {String} The encoding string to test
+
+Returns true if the `encoding` is a valid encoding argument, or false
+otherwise.
 
 ### buf.write(string, [offset], [length], [encoding])
 
@@ -117,6 +118,25 @@ Decodes and returns a string from buffer data encoded with `encoding`
 
 See `buffer.write()` example, above.
 
+
+### buf.toJSON()
+
+Returns a JSON-representation of the Buffer instance, which is identical to the
+output for JSON Arrays. `JSON.stringify` implicitly calls this function when
+stringifying a Buffer instance.
+
+Example:
+
+    var buf = new Buffer('test');
+    var json = JSON.stringify(buf);
+
+    console.log(json);
+    // '[116,101,115,116]'
+
+    var copy = new Buffer(JSON.parse(json));
+
+    console.log(copy);
+    // <Buffer 74 65 73 74>
 
 ### buf[index]
 
@@ -213,6 +233,9 @@ Does copy between buffers. The source and target regions can be overlapped.
 `targetStart` and `sourceStart` default to `0`.
 `sourceEnd` defaults to `buffer.length`.
 
+All values passed that are `undefined`/`NaN` or are out of bounds are set equal
+to their respective defaults.
+
 Example: build two Buffers, then copy `buf1` from byte 16 through byte 19
 into `buf2`, starting at the 8th byte in `buf2`.
 
@@ -237,7 +260,7 @@ into `buf2`, starting at the 8th byte in `buf2`.
 
 Returns a new buffer which references the same memory as the old, but offset
 and cropped by the `start` (defaults to `0`) and `end` (defaults to
-`buffer.length`) indexes.
+`buffer.length`) indexes.  Negative indexes start from the end of the buffer.
 
 **Modifying the new buffer slice will modify memory in the original buffer!**
 
@@ -600,7 +623,7 @@ complement signed integer into `buffer`.
 * `noAssert` Boolean, Optional, Default: false
 
 Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid 32 bit float.
+format. Note, behavior is unspecified if `value` is not a 32 bit float.
 
 Set `noAssert` to true to skip validation of `value` and `offset`. This means
 that `value` may be too large for the specific function and `offset` may be

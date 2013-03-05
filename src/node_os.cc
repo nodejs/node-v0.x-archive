@@ -41,6 +41,14 @@ namespace node {
 
 using namespace v8;
 
+static Handle<Value> GetEndianness(const Arguments& args) {
+  HandleScope scope;
+  int i = 1;
+  bool big = (*(char *)&i) == 0;
+  Local<String> endianness = String::New(big ? "BE" : "LE");
+  return scope.Close(endianness);
+}
+
 static Handle<Value> GetHostname(const Arguments& args) {
   HandleScope scope;
   char s[255];
@@ -116,19 +124,20 @@ static Handle<Value> GetCPUInfo(const Arguments& args) {
   for (i = 0; i < count; i++) {
     Local<Object> times_info = Object::New();
     times_info->Set(String::New("user"),
-      Number::New(cpu_infos[i].cpu_times.user));
+      Integer::New(cpu_infos[i].cpu_times.user));
     times_info->Set(String::New("nice"),
-      Number::New(cpu_infos[i].cpu_times.nice));
+      Integer::New(cpu_infos[i].cpu_times.nice));
     times_info->Set(String::New("sys"),
-      Number::New(cpu_infos[i].cpu_times.sys));
+      Integer::New(cpu_infos[i].cpu_times.sys));
     times_info->Set(String::New("idle"),
-      Number::New(cpu_infos[i].cpu_times.idle));
+      Integer::New(cpu_infos[i].cpu_times.idle));
     times_info->Set(String::New("irq"),
-      Number::New(cpu_infos[i].cpu_times.irq));
+      Integer::New(cpu_infos[i].cpu_times.irq));
 
     Local<Object> cpu_info = Object::New();
     cpu_info->Set(String::New("model"), String::New(cpu_infos[i].model));
-    cpu_info->Set(String::New("speed"), Integer::New(cpu_infos[i].speed));
+    cpu_info->Set(String::New("speed"),
+                  Integer::New(cpu_infos[i].speed));
     cpu_info->Set(String::New("times"), times_info);
     (*cpus)->Set(i,cpu_info);
   }
@@ -198,9 +207,8 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
 
   uv_err_t err = uv_interface_addresses(&interfaces, &count);
 
-  if (err.code != UV_OK) {
-    return Undefined();
-  }
+  if (err.code != UV_OK)
+    return ThrowException(UVException(err.code, "uv_interface_addresses"));
 
   ret = Object::New();
 
@@ -227,8 +235,10 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
     o = Object::New();
     o->Set(String::New("address"), String::New(ip));
     o->Set(String::New("family"), family);
-    o->Set(String::New("internal"), interfaces[i].is_internal ?
-	True() : False());
+
+    const bool internal = interfaces[i].is_internal;
+    o->Set(String::New("internal"),
+           internal ? True() : False());
 
     ifarr->Set(ifarr->Length(), o);
   }
@@ -242,6 +252,7 @@ static Handle<Value> GetInterfaceAddresses(const Arguments& args) {
 void OS::Initialize(v8::Handle<v8::Object> target) {
   HandleScope scope;
 
+  NODE_SET_METHOD(target, "getEndianness", GetEndianness);
   NODE_SET_METHOD(target, "getHostname", GetHostname);
   NODE_SET_METHOD(target, "getLoadAvg", GetLoadAvg);
   NODE_SET_METHOD(target, "getUptime", GetUptime);

@@ -318,12 +318,15 @@ const FPURegister f31 = { 31 };
 
 // Register aliases.
 // cp is assumed to be a callee saved register.
-static const Register& kLithiumScratchReg = s3;  // Scratch register.
-static const Register& kLithiumScratchReg2 = s4;  // Scratch register.
-static const Register& kRootRegister = s6;  // Roots array pointer.
-static const Register& cp = s7;     // JavaScript context pointer.
-static const DoubleRegister& kLithiumScratchDouble = f30;
-static const FPURegister& kDoubleRegZero = f28;
+// Defined using #define instead of "static const Register&" because Clang
+// complains otherwise when a compilation unit that includes this header
+// doesn't use the variables.
+#define kRootRegister s6
+#define cp s7
+#define kLithiumScratchReg s3
+#define kLithiumScratchReg2 s4
+#define kLithiumScratchDouble f30
+#define kDoubleRegZero f28
 
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.
@@ -525,6 +528,9 @@ class Assembler : public AssemblerBase {
   // Overrides the default provided by FLAG_debug_code.
   void set_emit_debug_code(bool value) { emit_debug_code_ = value; }
 
+  // Dummy for cross platform compatibility.
+  void set_predictable_code_size(bool value) { }
+
   // GetCode emits any pending (non-emitted) code and fills the descriptor
   // desc. GetCode() is idempotent; it returns the same result if no other
   // Assembler functions are invoked in between GetCode() calls.
@@ -567,6 +573,10 @@ class Assembler : public AssemblerBase {
   // Read/Modify the code target address in the branch/call instruction at pc.
   static Address target_address_at(Address pc);
   static void set_target_address_at(Address pc, Address target);
+
+  // Return the code target address at a call site from the return address
+  // of that call in the instruction stream.
+  inline static Address target_address_from_return_address(Address pc);
 
   static void JumpLabelToJumpRegister(Address pc);
 
@@ -628,6 +638,8 @@ class Assembler : public AssemblerBase {
   // register.
   static const int kPcLoadDelta = 4;
 
+  static const int kPatchDebugBreakSlotReturnOffset = 4 * kInstrSize;
+
   // Number of instructions used for the JS return sequence. The constant is
   // used by the debugger to patch the JS return sequence.
   static const int kJSReturnSequenceInstructions = 7;
@@ -660,10 +672,13 @@ class Assembler : public AssemblerBase {
     FIRST_IC_MARKER = PROPERTY_ACCESS_INLINED
   };
 
-  // Type == 0 is the default non-marking type.
+  // Type == 0 is the default non-marking nop. For mips this is a
+  // sll(zero_reg, zero_reg, 0). We use rt_reg == at for non-zero
+  // marking, to avoid conflict with ssnop and ehb instructions.
   void nop(unsigned int type = 0) {
     ASSERT(type < 32);
-    sll(zero_reg, zero_reg, type, true);
+    Register nop_rt_reg = (type == 0) ? zero_reg : at;
+    sll(zero_reg, nop_rt_reg, type, true);
   }
 
 
@@ -909,17 +924,17 @@ class Assembler : public AssemblerBase {
 
   // Record the AST id of the CallIC being compiled, so that it can be placed
   // in the relocation information.
-  void SetRecordedAstId(unsigned ast_id) {
-    ASSERT(recorded_ast_id_ == kNoASTId);
+  void SetRecordedAstId(TypeFeedbackId ast_id) {
+    ASSERT(recorded_ast_id_.IsNone());
     recorded_ast_id_ = ast_id;
   }
 
-  unsigned RecordedAstId() {
-    ASSERT(recorded_ast_id_ != kNoASTId);
+  TypeFeedbackId RecordedAstId() {
+    ASSERT(!recorded_ast_id_.IsNone());
     return recorded_ast_id_;
   }
 
-  void ClearRecordedAstId() { recorded_ast_id_ = kNoASTId; }
+  void ClearRecordedAstId() { recorded_ast_id_ = TypeFeedbackId::None(); }
 
   // Record a comment relocation entry that can be used by a disassembler.
   // Use --code-comments to enable.
@@ -1016,7 +1031,7 @@ class Assembler : public AssemblerBase {
   // Relocation for a type-recording IC has the AST id added to it.  This
   // member variable is a way to pass the information from the call site to
   // the relocation info.
-  unsigned recorded_ast_id_;
+  TypeFeedbackId recorded_ast_id_;
 
   bool emit_debug_code() const { return emit_debug_code_; }
 

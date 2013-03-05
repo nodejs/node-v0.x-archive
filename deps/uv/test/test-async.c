@@ -35,7 +35,7 @@ static int prepare_cb_called;
 static int close_cb_called;
 
 
-void thread_cb(void *arg) {
+static void thread_cb(void *arg) {
   int n;
   int r;
 
@@ -50,6 +50,21 @@ void thread_cb(void *arg) {
 
     r = uv_async_send(&async);
     ASSERT(r == 0);
+
+    /* Work around a bug in Valgrind.
+     *
+     * Valgrind runs threads not in parallel but sequentially, i.e. one after
+     * the other. It also doesn't preempt them, instead it depends on threads
+     * yielding voluntarily by making a syscall.
+     *
+     * That never happens here: the pipe that is associated with the async
+     * handle is written to once but that's too early for Valgrind's scheduler
+     * to kick in. Afterwards, the thread busy-loops, starving the main thread.
+     * Therefore, we yield.
+     *
+     * This behavior has been observed with Valgrind 3.7.0 and 3.9.0.
+     */
+    uv_sleep(0);
   }
 }
 
@@ -107,12 +122,15 @@ TEST_IMPL(async) {
   r = uv_async_init(uv_default_loop(), &async, async_cb);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(prepare_cb_called > 0);
   ASSERT(async_cb_called == 3);
   ASSERT(close_cb_called == 2);
 
+  ASSERT(0 == uv_thread_join(&thread));
+
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

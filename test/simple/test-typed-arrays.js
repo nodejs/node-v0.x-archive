@@ -47,34 +47,22 @@ var assert = require('assert');
   assert.equal(obj.toString(), expected);
   assert.equal(Object.prototype.toString.call(obj), expected);
 
-  obj = new DataView(obj);
+  obj = new DataView(obj.buffer || obj);
   assert.equal(obj.toString(), '[object DataView]');
   assert.equal(Object.prototype.toString.call(obj), '[object DataView]');
+
+  // Calling constructor as function should work.
+  clazz(32);
 });
 
-// initialize a zero-filled buffer
-var buffer = new Buffer(16);
-buffer.fill(0);
+// Calling constructor as function should work.
+DataView(ArrayBuffer(32));
 
-// only one of these instantiations should succeed, as the other ones will be
-// unaligned
-var errors = 0;
-var offset;
-for (var i = 0; i < 8; i++) {
-  try {
-    new Float64Array(buffer, i);
-    offset = i;
-  } catch (e) {
-    errors += 1;
-  }
-}
-
-assert.equal(errors, 7);
-
-var uint8 = new Uint8Array(buffer, offset);
-var uint16 = new Uint16Array(buffer, offset);
-var uint16slice = new Uint16Array(buffer, offset + 2, 2);
-var uint32 = new Uint32Array(buffer, offset);
+var buffer = new ArrayBuffer(16);
+var uint8 = new Uint8Array(buffer);
+var uint16 = new Uint16Array(buffer);
+var uint16slice = new Uint16Array(buffer, 2, 2);
+var uint32 = new Uint32Array(buffer);
 
 assert.equal(uint8.BYTES_PER_ELEMENT, 1);
 assert.equal(uint16.BYTES_PER_ELEMENT, 2);
@@ -82,14 +70,14 @@ assert.equal(uint16slice.BYTES_PER_ELEMENT, 2);
 assert.equal(uint32.BYTES_PER_ELEMENT, 4);
 
 // now change the underlying buffer
-buffer[offset    ] = 0x08;
-buffer[offset + 1] = 0x09;
-buffer[offset + 2] = 0x0a;
-buffer[offset + 3] = 0x0b;
-buffer[offset + 4] = 0x0c;
-buffer[offset + 5] = 0x0d;
-buffer[offset + 6] = 0x0e;
-buffer[offset + 7] = 0x0f;
+buffer[0] = 0x08;
+buffer[1] = 0x09;
+buffer[2] = 0x0a;
+buffer[3] = 0x0b;
+buffer[4] = 0x0c;
+buffer[5] = 0x0d;
+buffer[6] = 0x0e;
+buffer[7] = 0x0f;
 
 /*
   This is what we expect the variables to look like at this point (on
@@ -192,3 +180,70 @@ assert.throws(function() {
   var buf = new DataView(new ArrayBuffer(8));
   buf.setFloat64(0xffffffff, 0.0, true);
 }, /Index out of range/);
+
+// DataView::setGeneric() default endianness regression test,
+// see https://github.com/joyent/node/issues/4626
+(function() {
+  var buf = new Uint8Array(2);
+  var view = new DataView(buf.buffer);
+  view.setUint16(0, 1);
+  assert.equal(view.getUint16(0), 1);
+})();
+
+(function() {
+  // Typed array should make a copy of the buffer object, i.e. it's not shared.
+  var b = new Buffer([0]);
+  var a = new Uint8Array(b);
+  assert.notEqual(a.buffer, b);
+  assert.equal(a[0], 0);
+  assert.equal(b[0], 0);
+  a[0] = 1;
+  assert.equal(a[0], 1);
+  assert.equal(b[0], 0);
+  a[0] = 0;
+  b[0] = 1;
+  assert.equal(a[0], 0);
+  assert.equal(b[0], 1);
+})();
+
+(function() {
+  // Backing store should not be shared.
+  var a = new Uint8Array(1);
+  var b = new Uint8Array(a);
+  a[0] = 0;
+  b[0] = 1;
+  assert.equal(a[0], 0);
+  assert.equal(b[0], 1);
+  assert.notEqual(a, b.buffer);
+  assert.notEqual(a.buffer, b.buffer);
+})();
+
+(function() {
+  // Backing store should not be shared.
+  var a = new Uint8Array(2);
+  var b = new Uint16Array(a);
+  a[0] = 0;
+  a[1] = 0;
+  b[0] = 257;
+  assert.equal(a[0], 0);
+  assert.equal(a[1], 0);
+  assert.equal(b[0], 257);
+  assert.notEqual(a, b.buffer);
+  assert.notEqual(a.buffer, b.buffer);
+})();
+
+(function() {
+  // Backing store should be shared.
+  var abuf = new ArrayBuffer(32);
+  var a = new Uint8Array(abuf);
+  var b = new Uint8Array(abuf);
+  a[0] = 0;
+  b[0] = 1;
+  assert.equal(a[0], 1);
+  assert.equal(b[0], 1);
+  assert.equal(a.buffer, b.buffer);
+})();
+
+assert.throws(function() {
+  new DataView(new Int8Array(1));
+});

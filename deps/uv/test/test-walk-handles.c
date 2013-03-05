@@ -64,7 +64,7 @@ TEST_IMPL(walk_handles) {
 
   /* Start event loop, expect to see the timer handle in walk_cb. */
   ASSERT(seen_timer_handle == 0);
-  r = uv_run(loop);
+  r = uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(r == 0);
   ASSERT(seen_timer_handle == 1);
 
@@ -73,5 +73,6 @@ TEST_IMPL(walk_handles) {
   uv_walk(loop, walk_cb, magic_cookie);
   ASSERT(seen_timer_handle == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

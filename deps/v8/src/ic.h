@@ -631,6 +631,18 @@ class StoreIC: public IC {
 };
 
 
+enum KeyedStoreCheckMap {
+  kDontCheckMap,
+  kCheckMap
+};
+
+
+enum KeyedStoreIncrementLength {
+  kDontIncrementLength,
+  kIncrementLength
+};
+
+
 class KeyedStoreIC: public KeyedIC {
  public:
   explicit KeyedStoreIC(Isolate* isolate) : KeyedIC(isolate) {
@@ -638,7 +650,7 @@ class KeyedStoreIC: public KeyedIC {
   }
 
   MUST_USE_RESULT MaybeObject* Store(State state,
-                                   StrictModeFlag strict_mode,
+                                     StrictModeFlag strict_mode,
                                      Handle<Object> object,
                                      Handle<Object> name,
                                      Handle<Object> value,

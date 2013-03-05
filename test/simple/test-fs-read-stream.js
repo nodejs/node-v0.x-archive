@@ -34,7 +34,7 @@ var fs = require('fs');
 var fn = path.join(common.fixturesDir, 'elipses.txt');
 var rangeFile = path.join(common.fixturesDir, 'x.txt');
 
-var callbacks = { open: 0, end: 0, close: 0, destroy: 0 };
+var callbacks = { open: 0, end: 0, close: 0 };
 
 var paused = false;
 
@@ -60,12 +60,10 @@ file.on('data', function(data) {
 
   paused = true;
   file.pause();
-  assert.ok(file.paused);
 
   setTimeout(function() {
     paused = false;
     file.resume();
-    assert.ok(!file.paused);
   }, 10);
 });
 
@@ -77,20 +75,8 @@ file.on('end', function(chunk) {
 
 file.on('close', function() {
   callbacks.close++;
-  assert.ok(!file.readable);
 
   //assert.equal(fs.readFileSync(fn), fileContent);
-});
-
-var file2 = fs.createReadStream(fn);
-file2.destroy(function(err) {
-  assert.ok(!err);
-  callbacks.destroy++;
-
-  file2.destroy(function(err) {
-    assert.ok(!err);
-    callbacks.destroy++;
-  });
 });
 
 var file3 = fs.createReadStream(fn, {encoding: 'utf8'});
@@ -112,12 +98,10 @@ file3.on('close', function() {
 process.on('exit', function() {
   assert.equal(1, callbacks.open);
   assert.equal(1, callbacks.end);
-  assert.equal(2, callbacks.destroy);
-
   assert.equal(2, callbacks.close);
-
   assert.equal(30000, file.length);
   assert.equal(10000, file3.length);
+  console.error('ok');
 });
 
 var file4 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1, end: 2});
@@ -167,3 +151,41 @@ stream.on('end', function() {
 var pauseRes = fs.createReadStream(rangeFile);
 pauseRes.pause();
 pauseRes.resume();
+
+var file7 = fs.createReadStream(rangeFile, {autoClose: false });
+file7.on('data', function() {});
+file7.on('end', function() {
+  process.nextTick(function() {
+    assert(!file7.closed);
+    assert(!file7.destroyed);
+    file7Next();
+  });
+});
+
+function file7Next(){
+  // This will tell us if the fd is usable again or not.
+  file7 = fs.createReadStream(null, {fd: file7.fd, start: 0 });
+  file7.data = '';
+  file7.on('data', function(data) {
+    file7.data += data;
+  });
+  file7.on('end', function(err) {
+    assert.equal(file7.data, 'xyz\n');
+    process.nextTick(function() {
+      assert(file7.closed);
+      assert(file7.destroyed);
+    });
+  });
+}
+
+// Just to make sure autoClose won't close the stream because of error.
+var file8 = fs.createReadStream(null, {fd: 13337, autoClose: false });
+file8.on('data', function() {});
+file8.on('error', common.mustCall(function() {}));
+file8.on('end', function() {
+  process.nextTick(function() {
+    assert(!file8.closed);
+    assert(!file8.destroyed);
+    assert(file8.fd);
+  });
+});

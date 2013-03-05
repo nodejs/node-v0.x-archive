@@ -81,6 +81,7 @@ else if (cluster.isMaster) {
   var check = function(type, result) {
     checks[type].receive = true;
     checks[type].correct = result;
+    console.error('check', checks);
 
     var missing = false;
     forEach(checks, function(type) {
@@ -88,6 +89,7 @@ else if (cluster.isMaster) {
     });
 
     if (missing === false) {
+      console.error('end client');
       client.end();
     }
   };
@@ -121,7 +123,7 @@ else if (cluster.isMaster) {
 
     // When the connection ends kill worker and shutdown process
     client.on('end', function() {
-      worker.destroy();
+      worker.kill();
     });
 
     worker.on('exit', function() {

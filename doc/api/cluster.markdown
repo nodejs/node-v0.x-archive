@@ -33,10 +33,11 @@ all share server ports.
 
 Running node will now share port 8000 between the workers:
 
-    % node server.js
-    Worker 2438 online
-    Worker 2437 online
-
+    % NODE_DEBUG=cluster node server.js
+    23521,Master Worker 23524 online
+    23521,Master Worker 23526 online
+    23521,Master Worker 23523 online
+    23521,Master Worker 23528 online
 
 This feature was introduced recently, and may change in future versions.
 Please try it out and provide feedback.
@@ -177,8 +178,9 @@ on more than one address.
 
 * `worker` {Worker object}
 
-When a workers IPC channel has disconnected this event is emitted. This will happen
-when the worker dies, usually after calling `.destroy()`.
+When a workers IPC channel has disconnected this event is emitted.
+This will happen when the worker dies, usually after calling
+`.kill()`.
 
 When calling `.disconnect()`, there may be a delay between the
 `disconnect` and `exit` events.  This event can be used to detect if
@@ -322,8 +324,9 @@ See: [Child Process module](child_process.html)
 
 * {Boolean}
 
-This property is a boolean. It is set when a worker dies after calling `.destroy()`
-or immediately after calling the `.disconnect()` method. Until then it is `undefined`.
+This property is a boolean. It is set when a worker dies after calling
+`.kill()` or immediately after calling the `.disconnect()` method.
+Until then it is `undefined`.
 
 ### worker.send(message, [sendHandle])
 
@@ -347,7 +350,10 @@ This example will echo back all messages from the master:
       });
     }
 
-### worker.destroy()
+### worker.kill([signal='SIGTERM'])
+
+* `signal` {String} Name of the kill signal to send to the worker
+  process.
 
 This function will kill the worker, and inform the master to not spawn a
 new worker.  The boolean `suicide` lets you distinguish between voluntary
@@ -359,9 +365,11 @@ and accidental exit.
       }
     });
 
-    // destroy worker
-    worker.destroy();
+    // kill worker
+    worker.kill();
 
+This method is aliased as `worker.destroy()` for backwards
+compatibility.
 
 ### worker.disconnect()
 
@@ -374,7 +382,7 @@ the worker finally die.
 
 Because there might be long living connections, it is useful to implement a timeout.
 This example ask the worker to disconnect and after 2 seconds it will destroy the
-server. An alternative would be to execute `worker.destroy()` after 2 seconds, but
+server. An alternative would be to execute `worker.kill()` after 2 seconds, but
 that would normally not allow the worker to do any cleanup if needed.
 
     if (cluster.isMaster) {
@@ -469,7 +477,7 @@ on the specified worker.
 
     cluster.fork().on('online', function() {
       // Worker is online
-    };
+    });
 
 ### Event: 'listening'
 
@@ -480,7 +488,7 @@ on the specified worker.
 
     cluster.fork().on('listening', function(address) {
       // Worker is listening
-    };
+    });
 
 ### Event: 'disconnect'
 
@@ -489,7 +497,7 @@ on the specified worker.
 
     cluster.fork().on('disconnect', function() {
       // Worker has disconnected
-    };
+    });
 
 ### Event: 'exit'
 
@@ -509,4 +517,4 @@ is terminated.  See [child_process event: 'exit'](child_process.html#child_proce
       } else {
         console.log("worker success!");
       }
-    };
+    });

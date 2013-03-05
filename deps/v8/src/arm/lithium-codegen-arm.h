@@ -43,26 +43,25 @@ class SafepointGenerator;
 
 class LCodeGen BASE_EMBEDDED {
  public:
-  LCodeGen(LChunk* chunk, MacroAssembler* assembler, CompilationInfo* info,
-           Zone* zone)
-      : chunk_(chunk),
+  LCodeGen(LChunk* chunk, MacroAssembler* assembler, CompilationInfo* info)
+      : zone_(info->zone()),
+        chunk_(static_cast<LPlatformChunk*>(chunk)),
         masm_(assembler),
         info_(info),
         current_block_(-1),
         current_instruction_(-1),
         instructions_(chunk->instructions()),
-        deoptimizations_(4, zone),
-        deopt_jump_table_(4, zone),
-        deoptimization_literals_(8, zone),
+        deoptimizations_(4, info->zone()),
+        deopt_jump_table_(4, info->zone()),
+        deoptimization_literals_(8, info->zone()),
         inlined_function_count_(0),
         scope_(info->scope()),
         status_(UNUSED),
-        translations_(zone),
-        deferred_(8, zone),
+        translations_(info->zone()),
+        deferred_(8, info->zone()),
         osr_pc_offset_(-1),
         last_lazy_deopt_pc_(0),
-        safepoints_(zone),
-        zone_(zone),
+        safepoints_(info->zone()),
         resolver_(this),
         expected_safepoint_kind_(Safepoint::kSimple) {
     PopulateDeoptimizationLiteralsWithInlinedFunctions();
@@ -111,11 +110,17 @@ class LCodeGen BASE_EMBEDDED {
   void FinishCode(Handle<Code> code);
 
   // Deferred code support.
-  template<int T>
-  void DoDeferredBinaryOpStub(LTemplateInstruction<1, 2, T>* instr,
+  void DoDeferredBinaryOpStub(LPointerMap* pointer_map,
+                              LOperand* left_argument,
+                              LOperand* right_argument,
                               Token::Value op);
   void DoDeferredNumberTagD(LNumberTagD* instr);
-  void DoDeferredNumberTagI(LNumberTagI* instr);
+
+  enum IntegerSignedness { SIGNED_INT32, UNSIGNED_INT32 };
+  void DoDeferredNumberTagI(LInstruction* instr,
+                            LOperand* value,
+                            IntegerSignedness signedness);
+
   void DoDeferredTaggedToI(LTaggedToI* instr);
   void DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr);
   void DoDeferredStackCheck(LStackCheck* instr);
@@ -133,8 +138,20 @@ class LCodeGen BASE_EMBEDDED {
   void DoParallelMove(LParallelMove* move);
   void DoGap(LGap* instr);
 
+  MemOperand PrepareKeyedOperand(Register key,
+                                 Register base,
+                                 bool key_is_constant,
+                                 int constant_key,
+                                 int element_size,
+                                 int shift_size,
+                                 int additional_index,
+                                 int additional_offset);
+
   // Emit frame translation commands for an environment.
-  void WriteTranslation(LEnvironment* environment, Translation* translation);
+  void WriteTranslation(LEnvironment* environment,
+                        Translation* translation,
+                        int* arguments_index,
+                        int* arguments_count);
 
   // Declare methods that deal with the individual node types.
 #define DECLARE_DO(type) void Do##type(L##type* node);
@@ -158,7 +175,7 @@ class LCodeGen BASE_EMBEDDED {
     return info()->is_classic_mode() ? kNonStrictMode : kStrictMode;
   }
 
-  LChunk* chunk() const { return chunk_; }
+  LPlatformChunk* chunk() const { return chunk_; }
   Scope* scope() const { return scope_; }
   HGraph* graph() const { return chunk_->graph(); }
 
@@ -178,7 +195,7 @@ class LCodeGen BASE_EMBEDDED {
   int GetStackSlotCount() const { return chunk()->spill_slot_count(); }
   int GetParameterCount() const { return scope()->num_parameters(); }
 
-  void Abort(const char* format, ...);
+  void Abort(const char* reason);
   void Comment(const char* format, ...);
 
   void AddDeferredCode(LDeferredCode* code) { deferred_.Add(code, zone()); }
@@ -196,14 +213,18 @@ class LCodeGen BASE_EMBEDDED {
     RECORD_SAFEPOINT_WITH_REGISTERS_AND_NO_ARGUMENTS
   };
 
-  void CallCode(Handle<Code> code,
-                RelocInfo::Mode mode,
-                LInstruction* instr);
+  void CallCode(
+      Handle<Code> code,
+      RelocInfo::Mode mode,
+      LInstruction* instr,
+      TargetAddressStorageMode storage_mode = CAN_INLINE_TARGET_ADDRESS);
 
-  void CallCodeGeneric(Handle<Code> code,
-                       RelocInfo::Mode mode,
-                       LInstruction* instr,
-                       SafepointMode safepoint_mode);
+  void CallCodeGeneric(
+      Handle<Code> code,
+      RelocInfo::Mode mode,
+      LInstruction* instr,
+      SafepointMode safepoint_mode,
+      TargetAddressStorageMode storage_mode = CAN_INLINE_TARGET_ADDRESS);
 
   void CallRuntime(const Runtime::Function* function,
                    int num_arguments,
@@ -244,7 +265,10 @@ class LCodeGen BASE_EMBEDDED {
 
   void AddToTranslation(Translation* translation,
                         LOperand* op,
-                        bool is_tagged);
+                        bool is_tagged,
+                        bool is_uint32,
+                        int arguments_index,
+                        int arguments_count);
   void PopulateDeoptimizationData(Handle<Code> code);
   int DefineDeoptimizationLiteral(Handle<Object> literal);
 
@@ -288,6 +312,10 @@ class LCodeGen BASE_EMBEDDED {
                         bool deoptimize_on_undefined,
                         bool deoptimize_on_minus_zero,
                         LEnvironment* env);
+
+  void DeoptIfTaggedButNotSmi(LEnvironment* environment,
+                              HValue* value,
+                              LOperand* operand);
 
   // Emits optimized code for typeof x == "y".  Modifies input register.
   // Returns the condition on which a final split to
@@ -350,7 +378,8 @@ class LCodeGen BASE_EMBEDDED {
 
   void EnsureSpaceForLazyDeopt();
 
-  LChunk* const chunk_;
+  Zone* zone_;
+  LPlatformChunk* const chunk_;
   MacroAssembler* const masm_;
   CompilationInfo* const info_;
 
@@ -371,8 +400,6 @@ class LCodeGen BASE_EMBEDDED {
   // Builder that keeps track of safepoints in the code. The table
   // itself is emitted at the end of the generated code.
   SafepointTableBuilder safepoints_;
-
-  Zone* zone_;
 
   // Compiler from a set of parallel moves to a sequential list of moves.
   LGapResolver resolver_;

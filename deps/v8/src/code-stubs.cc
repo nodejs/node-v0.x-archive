@@ -142,7 +142,9 @@ Handle<Code> CodeStub::GetCode() {
   }
 
   Activate(code);
-  ASSERT(!NeedsImmovableCode() || heap->lo_space()->Contains(code));
+  ASSERT(!NeedsImmovableCode() ||
+         heap->lo_space()->Contains(code) ||
+         heap->code_space()->FirstPage()->Contains(code->address()));
   return Handle<Code>(code, isolate);
 }
 
@@ -194,7 +196,7 @@ bool ICCompareStub::FindCodeInSpecialCache(Code** code_out) {
         flags));
   if (probe->IsCode()) {
     *code_out = Code::cast(*probe);
-    ASSERT(op_ == (*code_out)->compare_operation());
+    ASSERT(op_ == (*code_out)->compare_operation() + Token::EQ);
     return true;
   }
   return false;
@@ -477,5 +479,27 @@ void ElementsTransitionAndStoreStub::Generate(MacroAssembler* masm) {
   masm->bind(&fail);
   KeyedStoreIC::GenerateRuntimeSetProperty(masm, strict_mode_);
 }
+
+
+FunctionEntryHook ProfileEntryHookStub::entry_hook_ = NULL;
+
+
+void ProfileEntryHookStub::EntryHookTrampoline(intptr_t function,
+                                               intptr_t stack_pointer) {
+  if (entry_hook_ != NULL)
+    entry_hook_(function, stack_pointer);
+}
+
+
+bool ProfileEntryHookStub::SetFunctionEntryHook(FunctionEntryHook entry_hook) {
+  // We don't allow setting a new entry hook over one that's
+  // already active, as the hooks won't stack.
+  if (entry_hook != 0 && entry_hook_ != 0)
+    return false;
+
+  entry_hook_ = entry_hook;
+  return true;
+}
+
 
 } }  // namespace v8::internal

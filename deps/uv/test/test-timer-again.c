@@ -31,7 +31,7 @@ static int repeat_2_cb_allowed = 0;
 
 static uv_timer_t dummy, repeat_1, repeat_2;
 
-static int64_t start_time;
+static uint64_t start_time;
 
 
 static void close_cb(uv_handle_t* handle) {
@@ -127,7 +127,7 @@ TEST_IMPL(timer_again) {
   ASSERT(r == 0);
   ASSERT(uv_timer_get_repeat(&repeat_2) == 100);
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(repeat_1_cb_called == 10);
   ASSERT(repeat_2_cb_called == 2);
@@ -137,5 +137,6 @@ TEST_IMPL(timer_again) {
        (long int)(uv_now(uv_default_loop()) - start_time));
   ASSERT(700 <= uv_now(uv_default_loop()) - start_time);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

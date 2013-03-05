@@ -28,54 +28,87 @@
 
 
 int uv__loop_init(uv_loop_t* loop, int default_loop) {
-#if HAVE_KQUEUE
-  int flags = EVBACKEND_KQUEUE;
-#else
-  int flags = EVFLAG_AUTO;
-#endif
+  unsigned int i;
+
+  uv__signal_global_once_init();
 
   memset(loop, 0, sizeof(*loop));
-
-  RB_INIT(&loop->ares_handles);
   RB_INIT(&loop->timer_handles);
+  ngx_queue_init(&loop->wq);
   ngx_queue_init(&loop->active_reqs);
   ngx_queue_init(&loop->idle_handles);
   ngx_queue_init(&loop->async_handles);
   ngx_queue_init(&loop->check_handles);
   ngx_queue_init(&loop->prepare_handles);
   ngx_queue_init(&loop->handle_queue);
-  loop->closing_handles = NULL;
-  loop->channel = NULL;
-  loop->time = uv_hrtime() / 1000000;
-  loop->async_pipefd[0] = -1;
-  loop->async_pipefd[1] = -1;
-  loop->ev = (default_loop ? ev_default_loop : ev_loop_new)(flags);
-  ev_set_userdata(loop->ev, loop);
-  eio_channel_init(&loop->uv_eio_channel, loop);
 
-#if __linux__
-  loop->inotify_watchers = NULL;
-  loop->inotify_fd = -1;
-#endif
-#if HAVE_PORTS_FS
-  loop->fs_fd = -1;
-#endif
+  loop->nfds = 0;
+  loop->watchers = NULL;
+  loop->nwatchers = 0;
+  ngx_queue_init(&loop->pending_queue);
+  ngx_queue_init(&loop->watcher_queue);
+
+  loop->closing_handles = NULL;
+  loop->time = uv__hrtime() / 1000000;
+  uv__async_init(&loop->async_watcher);
+  loop->signal_pipefd[0] = -1;
+  loop->signal_pipefd[1] = -1;
+  loop->backend_fd = -1;
+  loop->emfile_fd = -1;
+
+  loop->timer_counter = 0;
+  loop->stop_flag = 0;
+
+  if (uv__platform_loop_init(loop, default_loop))
+    return -1;
+
+  uv_signal_init(loop, &loop->child_watcher);
+  uv__handle_unref(&loop->child_watcher);
+  loop->child_watcher.flags |= UV__HANDLE_INTERNAL;
+
+  for (i = 0; i < ARRAY_SIZE(loop->process_handles); i++)
+    ngx_queue_init(loop->process_handles + i);
+
+  if (uv_mutex_init(&loop->wq_mutex))
+    abort();
+
+  if (uv_async_init(loop, &loop->wq_async, uv__work_done))
+    abort();
+
+  uv__handle_unref(&loop->wq_async);
+  loop->wq_async.flags |= UV__HANDLE_INTERNAL;
+
   return 0;
 }
 
 
 void uv__loop_delete(uv_loop_t* loop) {
-  uv_ares_destroy(loop, loop->channel);
-  ev_loop_destroy(loop->ev);
-#if __linux__
-  if (loop->inotify_fd != -1) {
-    uv__io_stop(loop, &loop->inotify_read_watcher);
-    close(loop->inotify_fd);
-    loop->inotify_fd = -1;
+  uv__signal_loop_cleanup(loop);
+  uv__platform_loop_delete(loop);
+  uv__async_stop(loop, &loop->async_watcher);
+
+  if (loop->emfile_fd != -1) {
+    close(loop->emfile_fd);
+    loop->emfile_fd = -1;
   }
+
+  if (loop->backend_fd != -1) {
+    close(loop->backend_fd);
+    loop->backend_fd = -1;
+  }
+
+  uv_mutex_lock(&loop->wq_mutex);
+  assert(ngx_queue_empty(&loop->wq) && "thread pool work queue not empty!");
+  uv_mutex_unlock(&loop->wq_mutex);
+  uv_mutex_destroy(&loop->wq_mutex);
+
+#if 0
+  assert(ngx_queue_empty(&loop->pending_queue));
+  assert(ngx_queue_empty(&loop->watcher_queue));
+  assert(loop->nfds == 0);
 #endif
-#if HAVE_PORTS_FS
-  if (loop->fs_fd != -1)
-    close(loop->fs_fd);
-#endif
+
+  free(loop->watchers);
+  loop->watchers = NULL;
+  loop->nwatchers = 0;
 }

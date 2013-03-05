@@ -49,7 +49,6 @@ static uv_statbuf_t zero_statbuf;
 
 int uv_fs_poll_init(uv_loop_t* loop, uv_fs_poll_t* handle) {
   uv__handle_init(loop, (uv_handle_t*)handle, UV_FS_POLL);
-  loop->counters.fs_poll_init++;
   return 0;
 }
 
@@ -104,11 +103,15 @@ int uv_fs_poll_stop(uv_fs_poll_t* handle) {
   ctx = handle->poll_ctx;
   assert(ctx != NULL);
   assert(ctx->parent_handle != NULL);
-
   ctx->parent_handle = NULL;
-  uv_timer_stop(&ctx->timer_handle);
-
   handle->poll_ctx = NULL;
+
+  /* Close the timer if it's active. If it's inactive, there's a stat request
+   * in progress and poll_cb will take care of the cleanup.
+   */
+  if (uv__is_active(&ctx->timer_handle))
+    uv_close((uv_handle_t*)&ctx->timer_handle, timer_close_cb);
+
   uv__handle_stop(handle);
 
   return 0;
@@ -124,12 +127,7 @@ static void timer_cb(uv_timer_t* timer, int status) {
   struct poll_ctx* ctx;
 
   ctx = container_of(timer, struct poll_ctx, timer_handle);
-
-  if (ctx->parent_handle == NULL) { /* handle has been stopped or closed */
-    uv_close((uv_handle_t*)&ctx->timer_handle, timer_close_cb);
-    return;
-  }
-
+  assert(ctx->parent_handle != NULL);
   assert(ctx->parent_handle->poll_ctx == ctx);
   ctx->start_time = uv_now(ctx->loop);
 
@@ -160,7 +158,7 @@ static void poll_cb(uv_fs_t* req) {
     goto out;
   }
 
-  statbuf = req->ptr;
+  statbuf = &req->statbuf;
 
   if (ctx->busy_polling != 0)
     if (ctx->busy_polling < 0 || !statbuf_eq(&ctx->statbuf, statbuf))
@@ -171,6 +169,11 @@ static void poll_cb(uv_fs_t* req) {
 
 out:
   uv_fs_req_cleanup(req);
+
+  if (ctx->parent_handle == NULL) { /* handle has been stopped by callback */
+    uv_close((uv_handle_t*)&ctx->timer_handle, timer_close_cb);
+    return;
+  }
 
   /* Reschedule timer, subtract the delay from doing the stat(). */
   interval = ctx->interval;
@@ -187,15 +190,15 @@ static void timer_close_cb(uv_handle_t* handle) {
 
 
 static int statbuf_eq(const uv_statbuf_t* a, const uv_statbuf_t* b) {
-#ifdef _WIN32
+#if defined(_WIN32)
   return a->st_mtime == b->st_mtime
       && a->st_size == b->st_size
       && a->st_mode == b->st_mode;
 #else
 
   /* Jump through a few hoops to get sub-second granularity on Linux. */
-# if __linux__
-#  if __USE_MISC /* _BSD_SOURCE || _SVID_SOURCE */
+# if defined(__linux__)
+#  if defined(__USE_MISC) /* _BSD_SOURCE || _SVID_SOURCE */
   if (a->st_ctim.tv_nsec != b->st_ctim.tv_nsec) return 0;
   if (a->st_mtim.tv_nsec != b->st_mtim.tv_nsec) return 0;
 #  else
@@ -205,7 +208,7 @@ static int statbuf_eq(const uv_statbuf_t* a, const uv_statbuf_t* b) {
 # endif
 
   /* Jump through different hoops on OS X. */
-# if __APPLE__
+# if defined(__APPLE__)
 #  if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
   if (a->st_ctimespec.tv_nsec != b->st_ctimespec.tv_nsec) return 0;
   if (a->st_mtimespec.tv_nsec != b->st_mtimespec.tv_nsec) return 0;
@@ -231,15 +234,14 @@ static int statbuf_eq(const uv_statbuf_t* a, const uv_statbuf_t* b) {
 }
 
 
-#ifdef _WIN32
+#if defined(_WIN32)
 
 #include "win/internal.h"
 #include "win/handle-inl.h"
 
 void uv__fs_poll_endgame(uv_loop_t* loop, uv_fs_poll_t* handle) {
-  assert(handle->flags & UV_HANDLE_CLOSING);
+  assert(handle->flags & UV__HANDLE_CLOSING);
   assert(!(handle->flags & UV_HANDLE_CLOSED));
-  uv__handle_stop(handle);
   uv__handle_close(handle);
 }
 

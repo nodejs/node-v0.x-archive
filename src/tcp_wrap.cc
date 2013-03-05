@@ -28,20 +28,6 @@
 
 #include <stdlib.h>
 
-// Temporary hack: libuv should provide uv_inet_pton and uv_inet_ntop.
-#if defined(__MINGW32__) || defined(_MSC_VER)
-  extern "C" {
-#   include <inet_net_pton.h>
-#   include <inet_ntop.h>
-  }
-# define uv_inet_pton ares_inet_pton
-# define uv_inet_ntop ares_inet_ntop
-
-#else // __POSIX__
-# include <arpa/inet.h>
-# define uv_inet_pton inet_pton
-# define uv_inet_ntop inet_ntop
-#endif
 
 namespace node {
 
@@ -53,9 +39,10 @@ using v8::Handle;
 using v8::HandleScope;
 using v8::Integer;
 using v8::Local;
-using v8::Object;
 using v8::Null;
+using v8::Object;
 using v8::Persistent;
+using v8::PropertyAttribute;
 using v8::String;
 using v8::TryCatch;
 using v8::Undefined;
@@ -94,7 +81,19 @@ void TCPWrap::Initialize(Handle<Object> target) {
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
+  enum PropertyAttribute attributes =
+      static_cast<PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
+  t->InstanceTemplate()->SetAccessor(String::New("fd"),
+                                     StreamWrap::GetFD,
+                                     NULL,
+                                     Handle<Value>(),
+                                     v8::DEFAULT,
+                                     attributes);
+
   NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
+
+  NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
+  NODE_SET_PROTOTYPE_METHOD(t, "unref", HandleWrap::Unref);
 
   NODE_SET_PROTOTYPE_METHOD(t, "readStart", StreamWrap::ReadStart);
   NODE_SET_PROTOTYPE_METHOD(t, "readStop", StreamWrap::ReadStop);
@@ -327,8 +326,8 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
 
     // Unwrap the client javascript object.
     assert(client_obj->InternalFieldCount() > 0);
-    TCPWrap* client_wrap =
-        static_cast<TCPWrap*>(client_obj->GetPointerFromInternalField(0));
+    TCPWrap* client_wrap = static_cast<TCPWrap*>(
+        client_obj->GetPointerFromInternalField(0));
 
     if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
 

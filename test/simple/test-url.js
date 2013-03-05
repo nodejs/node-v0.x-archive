@@ -748,6 +748,12 @@ for (var u in parseTests) {
       spaced = url.parse('     \t  ' + u + '\n\t');
       expected = parseTests[u];
 
+  Object.keys(actual).forEach(function (i) {
+    if (expected[i] === undefined && actual[i] === null) {
+      expected[i] = null;
+    }
+  });
+
   assert.deepEqual(actual, expected);
   assert.deepEqual(spaced, expected);
 
@@ -784,6 +790,11 @@ var parseTestsWithQueryString = {
 for (var u in parseTestsWithQueryString) {
   var actual = url.parse(u, true);
   var expected = parseTestsWithQueryString[u];
+  for (var i in actual) {
+    if (actual[i] === null && expected[i] === undefined) {
+      expected[i] = null;
+    }
+  }
 
   assert.deepEqual(actual, expected);
 }
@@ -932,6 +943,50 @@ var formatTests = {
     'protocol': 'coap',
     'host': '[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:61616',
     'pathname': '/s/stopButton'
+  },
+
+  // encode context-specific delimiters in path and query, but do not touch
+  // other non-delimiter chars like `%`.
+  // <https://github.com/joyent/node/issues/4082>
+
+  // `#`,`?` in path
+  '/path/to/%%23%3F+=&.txt?foo=theA1#bar' : {
+    href : '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
+    pathname: '/path/to/%#?+=&.txt',
+    query: {
+      foo: 'theA1'
+    },
+    hash: "#bar"
+  },
+
+  // `#`,`?` in path + `#` in query
+  '/path/to/%%23%3F+=&.txt?foo=the%231#bar' : {
+    href : '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
+    pathname: '/path/to/%#?+=&.txt',
+    query: {
+      foo: 'the#1'
+    },
+    hash: "#bar"
+  },
+
+  // `?` and `#` in path and search
+  'http://ex.com/foo%3F100%m%23r?abc=the%231?&foo=bar#frag': {
+    href: 'http://ex.com/foo%3F100%m%23r?abc=the%231?&foo=bar#frag',
+    protocol: 'http:',
+    hostname: 'ex.com',
+    hash: '#frag',
+    search: '?abc=the#1?&foo=bar',
+    pathname: '/foo?100%m#r',
+  },
+
+  // `?` and `#` in search only
+  'http://ex.com/fooA100%mBr?abc=the%231?&foo=bar#frag': {
+    href: 'http://ex.com/fooA100%mBr?abc=the%231?&foo=bar#frag',
+    protocol: 'http:',
+    hostname: 'ex.com',
+    hash: '#frag',
+    search: '?abc=the#1?&foo=bar',
+    pathname: '/fooA100%mBr',
   }
 };
 for (var u in formatTests) {
@@ -1316,15 +1371,6 @@ relativeTests.forEach(function(relativeTest) {
   var actual = url.resolveObject(url.parse(relativeTest[0]), relativeTest[1]),
       expected = url.parse(relativeTest[2]);
 
-  //because of evaluation order
-  //resolveObject(parse(x), y) == parse(resolve(x, y)) will differ by
-  //false-ish values.  remove all except host and hostname
-  for (var i in actual) {
-    if (actual[i] === undefined ||
-        (!emptyIsImportant.hasOwnProperty(i) && !actual[i])) {
-      delete actual[i];
-    }
-  }
 
   assert.deepEqual(actual, expected);
 
@@ -1352,16 +1398,6 @@ if (relativeTests2[181][0] === './/g' &&
 relativeTests2.forEach(function(relativeTest) {
   var actual = url.resolveObject(url.parse(relativeTest[1]), relativeTest[0]),
       expected = url.parse(relativeTest[2]);
-
-  //because of evaluation order
-  //resolveObject(parse(x), y) == parse(resolve(x, y)) will differ by
-  //false-ish values.  remove all except host and hostname
-  for (var i in actual) {
-    if (actual[i] === undefined ||
-        (!emptyIsImportant.hasOwnProperty(i) && !actual[i])) {
-      delete actual[i];
-    }
-  }
 
   assert.deepEqual(actual, expected);
 

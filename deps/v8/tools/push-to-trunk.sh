@@ -268,7 +268,6 @@ if [ $START_STEP -le $CURRENT_STEP ] ; then
   echo ">>> Step $CURRENT_STEP: Apply squashed changes."
   rm -f "$TOUCHED_FILES_FILE"
   apply_patch "$PATCH_FILE"
-  stage_files
   rm -f "$PATCH_FILE"
 fi
 
@@ -304,11 +303,22 @@ fi
 let CURRENT_STEP+=1
 if [ $START_STEP -le $CURRENT_STEP ] ; then
   echo ">>> Step $CURRENT_STEP: Commit to SVN."
-  git svn dcommit | tee >(grep -E "^Committed r[0-9]+" \
-                          | sed -e 's/^Committed r\([0-9]\+\)/\1/' \
-                          > "$TRUNK_REVISION_FILE") \
+  git svn dcommit 2>&1 | tee >(grep -E "^Committed r[0-9]+" \
+                               | sed -e 's/^Committed r\([0-9]\+\)/\1/' \
+                               > "$TRUNK_REVISION_FILE") \
     || die "'git svn dcommit' failed."
   TRUNK_REVISION=$(cat "$TRUNK_REVISION_FILE")
+  # Sometimes grepping for the revision fails. No idea why. If you figure
+  # out why it is flaky, please do fix it properly.
+  if [ -z "$TRUNK_REVISION" ] ; then
+    echo "Sorry, grepping for the SVN revision failed. Please look for it in \
+the last command's output above and provide it manually (just the number, \
+without the leading \"r\")."
+    while [ -z "$TRUNK_REVISION" ] ; do
+      echo -n "> "
+      read TRUNK_REVISION
+    done
+  fi
   persist "TRUNK_REVISION"
   rm -f "$TRUNK_REVISION_FILE"
 fi

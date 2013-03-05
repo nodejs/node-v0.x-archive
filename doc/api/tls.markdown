@@ -120,6 +120,12 @@ automatically set as a listener for the [secureConnection][] event.  The
     acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
     susceptible to BEAST attacks. Do *not* use it.
 
+  - `handshakeTimeout`: Abort the connection if the SSL/TLS handshake does not
+    finish in this many milliseconds. The default is 120 seconds.
+
+    A `'clientError'` is emitted on the `tls.Server` object whenever a handshake
+    times out.
+
   - `honorCipherOrder` : When choosing a cipher, use the server's preferences
     instead of the client preferences.
 
@@ -208,6 +214,15 @@ You can test this server by connecting to it with `openssl s_client`:
     openssl s_client -connect 127.0.0.1:8000
 
 
+## tls.SLAB_BUFFER_SIZE
+
+Size of slab buffer used by all tls servers and clients.
+Default: `10 * 1024 * 1024`.
+
+
+Don't change the defaults unless you know what you are doing.
+
+
 ## tls.connect(options, [callback])
 ## tls.connect(port, [host], [options], [callback])
 
@@ -240,7 +255,7 @@ Creates a new client connection to the given `port` and `host` (old API) or
 
   - `rejectUnauthorized`: If `true`, the server certificate is verified against
     the list of supplied CAs. An `'error'` event is emitted if verification
-    fails. Default: `false`.
+    fails. Default: `true`.
 
   - `NPNProtocols`: An array of string or `Buffer` containing supported NPN
     protocols. `Buffer` should have following format: `0x05hello0x05world`,
@@ -367,10 +382,31 @@ SNI.
 
 ### Event: 'clientError'
 
-`function (exception) { }`
+`function (exception, securePair) { }`
 
 When a client connection emits an 'error' event before secure connection is
 established - it will be forwarded here.
+
+`securePair` is the `tls.SecurePair` that the error originated from.
+
+
+### Event: 'newSession'
+
+`function (sessionId, sessionData) { }`
+
+Emitted on creation of TLS session. May be used to store sessions in external
+storage.
+
+
+### Event: 'resumeSession'
+
+`function (sessionId, callback) { }`
+
+Emitted when client wants to resume previous TLS session. Event listener may
+perform lookup in external storage using given `sessionId`, and invoke
+`callback(null, sessionData)` once finished. If session can't be resumed
+(i.e. doesn't exist in storage) one may call `callback(null, null)`. Calling
+`callback(err)` will terminate incoming connection and destroy socket.
 
 
 ### server.listen(port, [host], [callback])
@@ -412,6 +448,15 @@ gets high.
 
 The number of concurrent connections on the server.
 
+
+## Class: CryptoStream
+
+This is an encrypted stream.
+
+### cryptoStream.bytesWritten
+
+A proxy to the underlying socket's bytesWritten accessor, this will return
+the total bytes written to the socket, *including the TLS overhead*.
 
 ## Class: tls.CleartextStream
 

@@ -197,10 +197,9 @@ static bool HasDebugInfo(v8::Handle<v8::Function> fun) {
 // number.
 static int SetBreakPoint(Handle<v8::internal::JSFunction> fun, int position) {
   static int break_point = 0;
-  Handle<v8::internal::SharedFunctionInfo> shared(fun->shared());
   v8::internal::Debug* debug = v8::internal::Isolate::Current()->debug();
   debug->SetBreakPoint(
-      shared,
+      fun,
       Handle<Object>(v8::internal::Smi::FromInt(++break_point)),
       &position);
   return break_point;
@@ -515,7 +514,7 @@ void CheckDebugBreakFunction(DebugLocalContext* env,
   // there
   ClearBreakPoint(bp);
   CHECK(!debug->HasDebugInfo(shared));
-  CHECK(debug->EnsureDebugInfo(shared));
+  CHECK(debug->EnsureDebugInfo(shared, fun));
   TestBreakLocationIterator it2(Debug::GetDebugInfo(shared));
   it2.FindBreakLocationFromPosition(position);
   actual_mode = it2.it()->rinfo()->rmode();
@@ -2382,7 +2381,7 @@ TEST(DebuggerStatementBreakpoint) {
 }
 
 
-// Thest that the evaluation of expressions when a break point is hit generates
+// Test that the evaluation of expressions when a break point is hit generates
 // the correct results.
 TEST(DebugEvaluate) {
   v8::HandleScope scope;
@@ -2497,6 +2496,98 @@ TEST(DebugEvaluate) {
   v8::Debug::SetDebugEventListener(NULL);
   CheckDebuggerUnloaded();
 }
+
+
+int debugEventCount = 0;
+static void CheckDebugEvent(const v8::Debug::EventDetails& eventDetails) {
+  if (eventDetails.GetEvent() == v8::Break) ++debugEventCount;
+}
+
+// Test that the conditional breakpoints work event if code generation from
+// strings is prohibited in the debugee context.
+TEST(ConditionalBreakpointWithCodeGenerationDisallowed) {
+  v8::HandleScope scope;
+  DebugLocalContext env;
+  env.ExposeDebug();
+
+  v8::Debug::SetDebugEventListener2(CheckDebugEvent);
+
+  v8::Local<v8::Function> foo = CompileFunction(&env,
+    "function foo(x) {\n"
+    "  var s = 'String value2';\n"
+    "  return s + x;\n"
+    "}",
+    "foo");
+
+  // Set conditional breakpoint with condition 'true'.
+  CompileRun("debug.Debug.setBreakPoint(foo, 2, 0, 'true')");
+
+  debugEventCount = 0;
+  env->AllowCodeGenerationFromStrings(false);
+  foo->Call(env->Global(), 0, NULL);
+  CHECK_EQ(1, debugEventCount);
+
+  v8::Debug::SetDebugEventListener2(NULL);
+  CheckDebuggerUnloaded();
+}
+
+
+bool checkedDebugEvals = true;
+v8::Handle<v8::Function> checkGlobalEvalFunction;
+v8::Handle<v8::Function> checkFrameEvalFunction;
+static void CheckDebugEval(const v8::Debug::EventDetails& eventDetails) {
+  if (eventDetails.GetEvent() == v8::Break) {
+    ++debugEventCount;
+    v8::HandleScope handleScope;
+
+    v8::Handle<v8::Value> args[] = { eventDetails.GetExecutionState() };
+    CHECK(checkGlobalEvalFunction->Call(
+        eventDetails.GetEventContext()->Global(), 1, args)->IsTrue());
+    CHECK(checkFrameEvalFunction->Call(
+        eventDetails.GetEventContext()->Global(), 1, args)->IsTrue());
+  }
+}
+
+// Test that the evaluation of expressions when a break point is hit generates
+// the correct results in case code generation from strings is disallowed in the
+// debugee context.
+TEST(DebugEvaluateWithCodeGenerationDisallowed) {
+  v8::HandleScope scope;
+  DebugLocalContext env;
+  env.ExposeDebug();
+
+  v8::Debug::SetDebugEventListener2(CheckDebugEval);
+
+  v8::Local<v8::Function> foo = CompileFunction(&env,
+    "var global = 'Global';\n"
+    "function foo(x) {\n"
+    "  var local = 'Local';\n"
+    "  debugger;\n"
+    "  return local + x;\n"
+    "}",
+    "foo");
+  checkGlobalEvalFunction = CompileFunction(&env,
+    "function checkGlobalEval(exec_state) {\n"
+    "  return exec_state.evaluateGlobal('global').value() === 'Global';\n"
+    "}",
+    "checkGlobalEval");
+
+  checkFrameEvalFunction = CompileFunction(&env,
+    "function checkFrameEval(exec_state) {\n"
+    "  return exec_state.frame(0).evaluate('local').value() === 'Local';\n"
+    "}",
+    "checkFrameEval");
+  debugEventCount = 0;
+  env->AllowCodeGenerationFromStrings(false);
+  foo->Call(env->Global(), 0, NULL);
+  CHECK_EQ(1, debugEventCount);
+
+  checkGlobalEvalFunction.Clear();
+  checkFrameEvalFunction.Clear();
+  v8::Debug::SetDebugEventListener2(NULL);
+  CheckDebuggerUnloaded();
+}
+
 
 // Copies a C string to a 16-bit string.  Does not check for buffer overflow.
 // Does not use the V8 engine to convert strings, so it can be used
@@ -4027,14 +4118,11 @@ TEST(StepWithException) {
 
 
 TEST(DebugBreak) {
+#ifdef VERIFY_HEAP
+  i::FLAG_verify_heap = true;
+#endif
   v8::HandleScope scope;
   DebugLocalContext env;
-
-  // This test should be run with option --verify-heap. As --verify-heap is
-  // only available in debug mode only check for it in that case.
-#ifdef DEBUG
-  CHECK(v8::internal::FLAG_verify_heap);
-#endif
 
   // Register a debug event listener which sets the break flag and counts.
   v8::Debug::SetDebugEventListener(DebugEventBreak);
@@ -4274,9 +4362,9 @@ TEST(InterceptorPropertyMirror) {
                  "named_values[%d] instanceof debug.PropertyMirror", i);
     CHECK(CompileRun(buffer.start())->BooleanValue());
 
-    // 5 is PropertyType.Interceptor
     OS::SNPrintF(buffer, "named_values[%d].propertyType()", i);
-    CHECK_EQ(5, CompileRun(buffer.start())->Int32Value());
+    CHECK_EQ(v8::internal::INTERCEPTOR,
+             CompileRun(buffer.start())->Int32Value());
 
     OS::SNPrintF(buffer, "named_values[%d].isNative()", i);
     CHECK(CompileRun(buffer.start())->BooleanValue());
@@ -5834,9 +5922,9 @@ TEST(DebuggerAgent) {
   i::Debugger* debugger = i::Isolate::Current()->debugger();
   // Make sure these ports is not used by other tests to allow tests to run in
   // parallel.
-  const int kPort1 = 5858;
-  const int kPort2 = 5857;
-  const int kPort3 = 5856;
+  const int kPort1 = 5858 + FlagDependentPortOffset();
+  const int kPort2 = 5857 + FlagDependentPortOffset();
+  const int kPort3 = 5856 + FlagDependentPortOffset();
 
   // Make a string with the port2 number.
   const int kPortBufferLen = 6;
@@ -5935,7 +6023,7 @@ void DebuggerAgentProtocolServerThread::Run() {
 TEST(DebuggerAgentProtocolOverflowHeader) {
   // Make sure this port is not used by other tests to allow tests to run in
   // parallel.
-  const int kPort = 5860;
+  const int kPort = 5860 + FlagDependentPortOffset();
   static const char* kLocalhost = "localhost";
 
   // Make a string with the port number.
@@ -7392,5 +7480,52 @@ TEST(Regress131642) {
 
   v8::Debug::SetDebugEventListener(NULL);
 }
+
+
+// Import from test-heap.cc
+int CountNativeContexts();
+
+
+static void NopListener(v8::DebugEvent event,
+                        v8::Handle<v8::Object> exec_state,
+                        v8::Handle<v8::Object> event_data,
+                        v8::Handle<v8::Value> data) {
+}
+
+
+TEST(DebuggerCreatesContextIffActive) {
+  v8::HandleScope scope;
+  DebugLocalContext env;
+  CHECK_EQ(1, CountNativeContexts());
+
+  v8::Debug::SetDebugEventListener(NULL);
+  CompileRun("debugger;");
+  CHECK_EQ(1, CountNativeContexts());
+
+  v8::Debug::SetDebugEventListener(NopListener);
+  CompileRun("debugger;");
+  CHECK_EQ(2, CountNativeContexts());
+
+  v8::Debug::SetDebugEventListener(NULL);
+}
+
+
+TEST(LiveEditEnabled) {
+  v8::internal::FLAG_allow_natives_syntax = true;
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::Debug::SetLiveEditEnabled(true);
+  CompileRun("%LiveEditCompareStrings('', '')");
+}
+
+
+TEST(LiveEditDisabled) {
+  v8::internal::FLAG_allow_natives_syntax = true;
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::Debug::SetLiveEditEnabled(false);
+  CompileRun("%LiveEditCompareStrings('', '')");
+}
+
 
 #endif  // ENABLE_DEBUGGER_SUPPORT

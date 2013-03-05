@@ -78,13 +78,13 @@ class ZCtx : public ObjectWrap {
 
 
   ~ZCtx() {
-    Clear();
+    Close();
   }
 
 
-  void Clear() {
+  void Close() {
     assert(!write_in_progress_ && "write in progress");
-    assert(init_done_ && "clear before init");
+    assert(init_done_ && "close before init");
     assert(mode_ <= UNZIP);
 
     if (mode_ == DEFLATE || mode_ == GZIP || mode_ == DEFLATERAW) {
@@ -104,10 +104,10 @@ class ZCtx : public ObjectWrap {
   }
 
 
-  static Handle<Value> Clear(const Arguments& args) {
+  static Handle<Value> Close(const Arguments& args) {
     HandleScope scope;
     ZCtx *ctx = ObjectWrap::Unwrap<ZCtx>(args.This());
-    ctx->Clear();
+    ctx->Close();
     return scope.Close(Undefined());
   }
 
@@ -125,7 +125,19 @@ class ZCtx : public ObjectWrap {
     ctx->write_in_progress_ = true;
     ctx->Ref();
 
+    assert(!args[0]->IsUndefined() && "must provide flush value");
+
     unsigned int flush = args[0]->Uint32Value();
+
+    if (flush != Z_NO_FLUSH &&
+        flush != Z_PARTIAL_FLUSH &&
+        flush != Z_SYNC_FLUSH &&
+        flush != Z_FULL_FLUSH &&
+        flush != Z_FINISH &&
+        flush != Z_BLOCK) {
+      assert(0 && "Invalid flush value");
+    }
+
     Bytef *in;
     Bytef *out;
     size_t in_off, in_len, out_off, out_len;
@@ -229,7 +241,9 @@ class ZCtx : public ObjectWrap {
   }
 
   // v8 land!
-  static void After(uv_work_t* work_req) {
+  static void After(uv_work_t* work_req, int status) {
+    assert(status == 0);
+
     HandleScope scope;
     ZCtx *ctx = container_of(work_req, ZCtx, work_req_);
 
@@ -496,7 +510,7 @@ void InitZlib(Handle<Object> target) {
 
   NODE_SET_PROTOTYPE_METHOD(z, "write", ZCtx::Write);
   NODE_SET_PROTOTYPE_METHOD(z, "init", ZCtx::Init);
-  NODE_SET_PROTOTYPE_METHOD(z, "clear", ZCtx::Clear);
+  NODE_SET_PROTOTYPE_METHOD(z, "close", ZCtx::Close);
   NODE_SET_PROTOTYPE_METHOD(z, "reset", ZCtx::Reset);
 
   z->SetClassName(String::NewSymbol("Zlib"));
@@ -505,6 +519,7 @@ void InitZlib(Handle<Object> target) {
   callback_sym = NODE_PSYMBOL("callback");
   onerror_sym = NODE_PSYMBOL("onerror");
 
+  // valid flush values.
   NODE_DEFINE_CONSTANT(target, Z_NO_FLUSH);
   NODE_DEFINE_CONSTANT(target, Z_PARTIAL_FLUSH);
   NODE_DEFINE_CONSTANT(target, Z_SYNC_FLUSH);

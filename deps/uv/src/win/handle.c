@@ -59,19 +59,18 @@ uv_handle_type uv_guess_handle(uv_file file) {
 
 int uv_is_active(const uv_handle_t* handle) {
   return (handle->flags & UV__HANDLE_ACTIVE) &&
-        !(handle->flags & UV_HANDLE_CLOSING);
+        !(handle->flags & UV__HANDLE_CLOSING);
 }
 
 
 void uv_close(uv_handle_t* handle, uv_close_cb cb) {
   uv_loop_t* loop = handle->loop;
 
-  if (handle->flags & UV_HANDLE_CLOSING) {
+  if (handle->flags & UV__HANDLE_CLOSING) {
     assert(0);
     return;
   }
 
-  handle->flags |= UV_HANDLE_CLOSING;
   handle->close_cb = cb;
 
   /* Handle-specific close actions */
@@ -98,30 +97,34 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
 
     case UV_TIMER:
       uv_timer_stop((uv_timer_t*)handle);
-      uv__handle_start(handle);
+      uv__handle_closing(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_PREPARE:
       uv_prepare_stop((uv_prepare_t*)handle);
-      uv__handle_start(handle);
+      uv__handle_closing(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_CHECK:
       uv_check_stop((uv_check_t*)handle);
-      uv__handle_start(handle);
+      uv__handle_closing(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_IDLE:
       uv_idle_stop((uv_idle_t*)handle);
-      uv__handle_start(handle);
+      uv__handle_closing(handle);
       uv_want_endgame(loop, handle);
       return;
 
     case UV_ASYNC:
       uv_async_close(loop, (uv_async_t*) handle);
+      return;
+
+    case UV_SIGNAL:
+      uv_signal_close(loop, (uv_signal_t*) handle);
       return;
 
     case UV_PROCESS:
@@ -134,7 +137,7 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
 
     case UV_FS_POLL:
       uv__fs_poll_close((uv_fs_poll_t*) handle);
-      uv__handle_start(handle);
+      uv__handle_closing(handle);
       uv_want_endgame(loop, handle);
       return;
 
@@ -146,5 +149,5 @@ void uv_close(uv_handle_t* handle, uv_close_cb cb) {
 
 
 int uv_is_closing(const uv_handle_t* handle) {
-  return handle->flags & (UV_HANDLE_CLOSING | UV_HANDLE_CLOSED);
+  return handle->flags & (UV__HANDLE_CLOSING | UV_HANDLE_CLOSED);
 }

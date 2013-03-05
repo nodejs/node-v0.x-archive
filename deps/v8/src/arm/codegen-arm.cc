@@ -121,15 +121,34 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   // r5: number of elements (smi-tagged)
 
   // Allocate new FixedDoubleArray.
-  __ mov(lr, Operand(FixedDoubleArray::kHeaderSize));
-  __ add(lr, lr, Operand(r5, LSL, 2));
+  // Use lr as a temporary register.
+  __ mov(lr, Operand(r5, LSL, 2));
+  __ add(lr, lr, Operand(FixedDoubleArray::kHeaderSize + kPointerSize));
   __ AllocateInNewSpace(lr, r6, r7, r9, &gc_required, NO_ALLOCATION_FLAGS);
-  // r6: destination FixedDoubleArray, not tagged as heap object
+  // r6: destination FixedDoubleArray, not tagged as heap object.
+
+  // Align the array conveniently for doubles.
+  // Store a filler value in the unused memory.
+  Label aligned, aligned_done;
+  __ tst(r6, Operand(kDoubleAlignmentMask));
+  __ mov(ip, Operand(masm->isolate()->factory()->one_pointer_filler_map()));
+  __ b(eq, &aligned);
+  // Store at the beginning of the allocated memory and update the base pointer.
+  __ str(ip, MemOperand(r6, kPointerSize, PostIndex));
+  __ b(&aligned_done);
+
+  __ bind(&aligned);
+  // Store the filler at the end of the allocated memory.
+  __ sub(lr, lr, Operand(kPointerSize));
+  __ str(ip, MemOperand(r6, lr));
+
+  __ bind(&aligned_done);
+
   // Set destination FixedDoubleArray's length and map.
   __ LoadRoot(r9, Heap::kFixedDoubleArrayMapRootIndex);
   __ str(r5, MemOperand(r6, FixedDoubleArray::kLengthOffset));
-  __ str(r9, MemOperand(r6, HeapObject::kMapOffset));
   // Update receiver's map.
+  __ str(r9, MemOperand(r6, HeapObject::kMapOffset));
 
   __ str(r3, FieldMemOperand(r2, HeapObject::kMapOffset));
   __ RecordWriteField(r2,

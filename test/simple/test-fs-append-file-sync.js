@@ -36,17 +36,18 @@ var data = '南越国是前203年至前111年存在于岭南地区的一个国�
         '它的建立保证了秦末乱世岭南地区社会秩序的稳定，有效的改善了岭南地区落后的政治、##济现状。\n';
 
 // test that empty file will be created and have content added
-var filename = join(common.fixturesDir, 'append-sync.txt');
+var filename = join(common.tmpDir, 'append-sync.txt');
 
 common.error('appending to ' + filename);
 fs.appendFileSync(filename, data);
 
 var fileData = fs.readFileSync(filename);
+console.error('filedata is a ' + typeof fileData);
 
 assert.equal(Buffer.byteLength(data), fileData.length);
 
 // test that appends data to a non empty file
-var filename2 = join(common.fixturesDir, 'append-sync2.txt');
+var filename2 = join(common.tmpDir, 'append-sync2.txt');
 fs.writeFileSync(filename2, currentFileData);
 
 common.error('appending to ' + filename2);
@@ -58,7 +59,7 @@ assert.equal(Buffer.byteLength(data) + currentFileData.length,
              fileData2.length);
 
 // test that appendFileSync accepts buffers
-var filename3 = join(common.fixturesDir, 'append-sync3.txt');
+var filename3 = join(common.tmpDir, 'append-sync3.txt');
 fs.writeFileSync(filename3, currentFileData);
 
 common.error('appending to ' + filename3);
@@ -71,11 +72,18 @@ var fileData3 = fs.readFileSync(filename3);
 assert.equal(buf.length + currentFileData.length, fileData3.length);
 
 // test that appendFile accepts numbers.
-var filename4 = join(common.fixturesDir, 'append-sync4.txt');
-fs.writeFileSync(filename4, currentFileData);
+var filename4 = join(common.tmpDir, 'append-sync4.txt');
+fs.writeFileSync(filename4, currentFileData, { mode: m });
 
 common.error('appending to ' + filename4);
-fs.appendFileSync(filename4, num);
+var m = 0600;
+fs.appendFileSync(filename4, num, { mode: m });
+
+// windows permissions aren't unix
+if (process.platform !== 'win32') {
+  var st = fs.statSync(filename4);
+  assert.equal(st.mode & 0700, m);
+}
 
 var fileData4 = fs.readFileSync(filename4);
 

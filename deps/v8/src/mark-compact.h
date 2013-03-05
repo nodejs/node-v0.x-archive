@@ -304,6 +304,26 @@ class SlotsBuffer {
     NUMBER_OF_SLOT_TYPES
   };
 
+  static const char* SlotTypeToString(SlotType type) {
+    switch (type) {
+      case EMBEDDED_OBJECT_SLOT:
+        return "EMBEDDED_OBJECT_SLOT";
+      case RELOCATED_CODE_OBJECT:
+        return "RELOCATED_CODE_OBJECT";
+      case CODE_TARGET_SLOT:
+        return "CODE_TARGET_SLOT";
+      case CODE_ENTRY_SLOT:
+        return "CODE_ENTRY_SLOT";
+      case DEBUG_TARGET_SLOT:
+        return "DEBUG_TARGET_SLOT";
+      case JS_RETURN_SLOT:
+        return "JS_RETURN_SLOT";
+      case NUMBER_OF_SLOT_TYPES:
+        return "NUMBER_OF_SLOT_TYPES";
+    }
+    return "UNKNOWN SlotType";
+  }
+
   void UpdateSlots(Heap* heap);
 
   void UpdateSlotsWithFilter(Heap* heap);
@@ -383,31 +403,77 @@ class SlotsBuffer {
 };
 
 
-// -------------------------------------------------------------------------
-// Marker shared between incremental and non-incremental marking
-template<class BaseMarker> class Marker {
+// CodeFlusher collects candidates for code flushing during marking and
+// processes those candidates after marking has completed in order to
+// reset those functions referencing code objects that would otherwise
+// be unreachable. Code objects can be referenced in two ways:
+//    - SharedFunctionInfo references unoptimized code.
+//    - JSFunction references either unoptimized or optimized code.
+// We are not allowed to flush unoptimized code for functions that got
+// optimized or inlined into optimized code, because we might bailout
+// into the unoptimized code again during deoptimization.
+class CodeFlusher {
  public:
-  Marker(BaseMarker* base_marker, MarkCompactCollector* mark_compact_collector)
-      : base_marker_(base_marker),
-        mark_compact_collector_(mark_compact_collector) {}
+  explicit CodeFlusher(Isolate* isolate)
+      : isolate_(isolate),
+        jsfunction_candidates_head_(NULL),
+        shared_function_info_candidates_head_(NULL) {}
 
-  // Mark pointers in a Map and its DescriptorArray together, possibly
-  // treating transitions or back pointers weak.
-  void MarkMapContents(Map* map);
-  void MarkDescriptorArray(DescriptorArray* descriptors);
-  void MarkAccessorPairSlot(AccessorPair* accessors, int offset);
+  void AddCandidate(SharedFunctionInfo* shared_info) {
+    SetNextCandidate(shared_info, shared_function_info_candidates_head_);
+    shared_function_info_candidates_head_ = shared_info;
+  }
+
+  void AddCandidate(JSFunction* function) {
+    ASSERT(function->code() == function->shared()->code());
+    ASSERT(function->next_function_link()->IsUndefined());
+    SetNextCandidate(function, jsfunction_candidates_head_);
+    jsfunction_candidates_head_ = function;
+  }
+
+  void ProcessCandidates() {
+    ProcessSharedFunctionInfoCandidates();
+    ProcessJSFunctionCandidates();
+  }
 
  private:
-  BaseMarker* base_marker() {
-    return base_marker_;
+  void ProcessJSFunctionCandidates();
+  void ProcessSharedFunctionInfoCandidates();
+
+  static JSFunction* GetNextCandidate(JSFunction* candidate) {
+    Object* next_candidate = candidate->next_function_link();
+    return reinterpret_cast<JSFunction*>(next_candidate);
   }
 
-  MarkCompactCollector* mark_compact_collector() {
-    return mark_compact_collector_;
+  static void SetNextCandidate(JSFunction* candidate,
+                               JSFunction* next_candidate) {
+    candidate->set_next_function_link(next_candidate);
   }
 
-  BaseMarker* base_marker_;
-  MarkCompactCollector* mark_compact_collector_;
+  static void ClearNextCandidate(JSFunction* candidate, Object* undefined) {
+    ASSERT(undefined->IsUndefined());
+    candidate->set_next_function_link(undefined, SKIP_WRITE_BARRIER);
+  }
+
+  static SharedFunctionInfo* GetNextCandidate(SharedFunctionInfo* candidate) {
+    Object* next_candidate = candidate->code()->gc_metadata();
+    return reinterpret_cast<SharedFunctionInfo*>(next_candidate);
+  }
+
+  static void SetNextCandidate(SharedFunctionInfo* candidate,
+                               SharedFunctionInfo* next_candidate) {
+    candidate->code()->set_gc_metadata(next_candidate);
+  }
+
+  static void ClearNextCandidate(SharedFunctionInfo* candidate) {
+    candidate->code()->set_gc_metadata(NULL, SKIP_WRITE_BARRIER);
+  }
+
+  Isolate* isolate_;
+  JSFunction* jsfunction_candidates_head_;
+  SharedFunctionInfo* shared_function_info_candidates_head_;
+
+  DISALLOW_COPY_AND_ASSIGN(CodeFlusher);
 };
 
 
@@ -505,7 +571,7 @@ class MarkCompactCollector {
     PRECISE
   };
 
-#ifdef DEBUG
+#ifdef VERIFY_HEAP
   void VerifyMarkbitsAreClean();
   static void VerifyMarkbitsAreClean(PagedSpace* space);
   static void VerifyMarkbitsAreClean(NewSpace* space);
@@ -553,6 +619,7 @@ class MarkCompactCollector {
 
   void RecordRelocSlot(RelocInfo* rinfo, Object* target);
   void RecordCodeEntrySlot(Address slot, Code* target);
+  void RecordCodeTargetPatch(Address pc, Code* target);
 
   INLINE(void RecordSlot(Object** anchor_slot, Object** slot, Object* object));
 
@@ -612,8 +679,6 @@ class MarkCompactCollector {
 
   bool was_marked_incrementally_;
 
-  bool flush_monomorphic_ics_;
-
   // A pointer to the current stack-allocated GC tracer object during a full
   // collection (NULL before and after).
   GCTracer* tracer_;
@@ -636,15 +701,9 @@ class MarkCompactCollector {
 
   friend class RootMarkingVisitor;
   friend class MarkingVisitor;
-  friend class StaticMarkingVisitor;
+  friend class MarkCompactMarkingVisitor;
   friend class CodeMarkingVisitor;
   friend class SharedFunctionInfoMarkingVisitor;
-  friend class Marker<IncrementalMarking>;
-  friend class Marker<MarkCompactCollector>;
-
-  // Mark non-optimize code for functions inlined into the given optimized
-  // code. This will prevent it from being flushed.
-  void MarkInlinedFunctionsCode(Code* code);
 
   // Mark code objects that are active on the stack to prevent them
   // from being flushed.
@@ -658,24 +717,12 @@ class MarkCompactCollector {
   void AfterMarking();
 
   // Marks the object black and pushes it on the marking stack.
-  // Returns true if object needed marking and false otherwise.
-  // This is for non-incremental marking only.
-  INLINE(bool MarkObjectAndPush(HeapObject* obj));
-
-  // Marks the object black and pushes it on the marking stack.
   // This is for non-incremental marking only.
   INLINE(void MarkObject(HeapObject* obj, MarkBit mark_bit));
-
-  // Marks the object black without pushing it on the marking stack.
-  // Returns true if object needed marking and false otherwise.
-  // This is for non-incremental marking only.
-  INLINE(bool MarkObjectWithoutPush(HeapObject* obj));
 
   // Marks the object black assuming that it is not yet marked.
   // This is for non-incremental marking only.
   INLINE(void SetMark(HeapObject* obj, MarkBit mark_bit));
-
-  void ProcessNewlyMarkedObject(HeapObject* obj);
 
   // Mark the heap roots and all objects reachable from them.
   void MarkRoots(RootMarkingVisitor* visitor);
@@ -779,7 +826,6 @@ class MarkCompactCollector {
   MarkingDeque marking_deque_;
   CodeFlusher* code_flusher_;
   Object* encountered_weak_maps_;
-  Marker<MarkCompactCollector> marker_;
 
   List<Page*> evacuation_candidates_;
   List<Code*> invalidated_code_;

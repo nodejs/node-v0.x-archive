@@ -1711,8 +1711,8 @@ HeapEntry* V8HeapExplorer::AddEntry(HeapObject* object) {
                     name->IsString()
                         ? collection_->names()->GetName(String::cast(name))
                         : "");
-  } else if (object->IsGlobalContext()) {
-    return AddEntry(object, HeapEntry::kHidden, "system / GlobalContext");
+  } else if (object->IsNativeContext()) {
+    return AddEntry(object, HeapEntry::kHidden, "system / NativeContext");
   } else if (object->IsContext()) {
     return AddEntry(object, HeapEntry::kHidden, "system / Context");
   } else if (object->IsFixedArray() ||
@@ -1946,8 +1946,8 @@ void V8HeapExplorer::ExtractJSObjectReferences(
                          "builtins", global_obj->builtins(),
                          GlobalObject::kBuiltinsOffset);
     SetInternalReference(global_obj, entry,
-                         "global_context", global_obj->global_context(),
-                         GlobalObject::kGlobalContextOffset);
+                         "native_context", global_obj->native_context(),
+                         GlobalObject::kNativeContextOffset);
     SetInternalReference(global_obj, entry,
                          "global_receiver", global_obj->global_receiver(),
                          GlobalObject::kGlobalReceiverOffset);
@@ -1982,17 +1982,17 @@ void V8HeapExplorer::ExtractContextReferences(int entry, Context* context) {
   EXTRACT_CONTEXT_FIELD(CLOSURE_INDEX, JSFunction, closure);
   EXTRACT_CONTEXT_FIELD(PREVIOUS_INDEX, Context, previous);
   EXTRACT_CONTEXT_FIELD(EXTENSION_INDEX, Object, extension);
-  EXTRACT_CONTEXT_FIELD(GLOBAL_INDEX, GlobalObject, global);
-  if (context->IsGlobalContext()) {
+  EXTRACT_CONTEXT_FIELD(GLOBAL_OBJECT_INDEX, GlobalObject, global);
+  if (context->IsNativeContext()) {
     TagObject(context->jsfunction_result_caches(),
               "(context func. result caches)");
     TagObject(context->normalized_map_cache(), "(context norm. map cache)");
     TagObject(context->runtime_context(), "(runtime context)");
     TagObject(context->data(), "(context data)");
-    GLOBAL_CONTEXT_FIELDS(EXTRACT_CONTEXT_FIELD);
+    NATIVE_CONTEXT_FIELDS(EXTRACT_CONTEXT_FIELD);
 #undef EXTRACT_CONTEXT_FIELD
     for (int i = Context::FIRST_WEAK_SLOT;
-         i < Context::GLOBAL_CONTEXT_SLOTS;
+         i < Context::NATIVE_CONTEXT_SLOTS;
          ++i) {
       SetWeakReference(context, entry, i, context->get(i),
           FixedArray::OffsetOfElementAt(i));
@@ -2007,22 +2007,34 @@ void V8HeapExplorer::ExtractMapReferences(int entry, Map* map) {
   SetInternalReference(map, entry,
                        "constructor", map->constructor(),
                        Map::kConstructorOffset);
-  if (!map->instance_descriptors()->IsEmpty()) {
-    TagObject(map->instance_descriptors(), "(map descriptors)");
+  if (map->HasTransitionArray()) {
+    TransitionArray* transitions = map->transitions();
+
+    Object* back_pointer = transitions->back_pointer_storage();
+    TagObject(transitions->back_pointer_storage(), "(back pointer)");
+    SetInternalReference(transitions, entry,
+                         "backpointer", back_pointer,
+                         TransitionArray::kBackPointerStorageOffset);
+    IndexedReferencesExtractor transitions_refs(this, transitions, entry);
+    transitions->Iterate(&transitions_refs);
+
+    TagObject(transitions, "(transition array)");
     SetInternalReference(map, entry,
-                         "descriptors", map->instance_descriptors(),
-                         Map::kInstanceDescriptorsOrBitField3Offset);
-  }
-  if (map->unchecked_prototype_transitions()->IsFixedArray()) {
-    TagObject(map->prototype_transitions(), "(prototype transitions)");
-    SetInternalReference(map, entry,
-                         "prototype_transitions", map->prototype_transitions(),
-                         Map::kPrototypeTransitionsOrBackPointerOffset);
+                         "transitions", transitions,
+                         Map::kTransitionsOrBackPointerOffset);
   } else {
+    Object* back_pointer = map->GetBackPointer();
+    TagObject(back_pointer, "(back pointer)");
     SetInternalReference(map, entry,
-                         "back_pointer", map->GetBackPointer(),
-                         Map::kPrototypeTransitionsOrBackPointerOffset);
+                         "backpointer", back_pointer,
+                         Map::kTransitionsOrBackPointerOffset);
   }
+  DescriptorArray* descriptors = map->instance_descriptors();
+  TagObject(descriptors, "(map descriptors)");
+  SetInternalReference(map, entry,
+                       "descriptors", descriptors,
+                       Map::kDescriptorsOffset);
+
   SetInternalReference(map, entry,
                        "code_cache", map->code_cache(),
                        Map::kCodeCacheOffset);
@@ -2178,20 +2190,37 @@ void V8HeapExplorer::ExtractClosureReferences(JSObject* js_obj, int entry) {
 void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj, int entry) {
   if (js_obj->HasFastProperties()) {
     DescriptorArray* descs = js_obj->map()->instance_descriptors();
+    int real_size = js_obj->map()->NumberOfOwnDescriptors();
     for (int i = 0; i < descs->number_of_descriptors(); i++) {
+      if (descs->GetDetails(i).descriptor_index() > real_size) continue;
       switch (descs->GetType(i)) {
         case FIELD: {
           int index = descs->GetFieldIndex(i);
+
+          String* k = descs->GetKey(i);
           if (index < js_obj->map()->inobject_properties()) {
-            SetPropertyReference(
-                js_obj, entry,
-                descs->GetKey(i), js_obj->InObjectPropertyAt(index),
-                NULL,
-                js_obj->GetInObjectPropertyOffset(index));
+            Object* value = js_obj->InObjectPropertyAt(index);
+            if (k != heap_->hidden_symbol()) {
+              SetPropertyReference(
+                  js_obj, entry,
+                  k, value,
+                  NULL,
+                  js_obj->GetInObjectPropertyOffset(index));
+            } else {
+              TagObject(value, "(hidden properties)");
+              SetInternalReference(
+                  js_obj, entry,
+                  "hidden_properties", value,
+                  js_obj->GetInObjectPropertyOffset(index));
+            }
           } else {
-            SetPropertyReference(
-                js_obj, entry,
-                descs->GetKey(i), js_obj->FastPropertyAt(index));
+            Object* value = js_obj->FastPropertyAt(index);
+            if (k != heap_->hidden_symbol()) {
+              SetPropertyReference(js_obj, entry, k, value);
+            } else {
+              TagObject(value, "(hidden properties)");
+              SetInternalReference(js_obj, entry, "hidden_properties", value);
+            }
           }
           break;
         }
@@ -2218,9 +2247,10 @@ void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj, int entry) {
         case NORMAL:  // only in slow mode
         case HANDLER:  // only in lookup results, not in descriptors
         case INTERCEPTOR:  // only in lookup results, not in descriptors
-        case MAP_TRANSITION:  // we do not care about transitions here...
-        case CONSTANT_TRANSITION:
-        case NULL_DESCRIPTOR:  // ... and not about "holes"
+          break;
+        case TRANSITION:
+        case NONEXISTENT:
+          UNREACHABLE();
           break;
       }
     }
@@ -2235,7 +2265,7 @@ void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj, int entry) {
         Object* value = target->IsJSGlobalPropertyCell()
             ? JSGlobalPropertyCell::cast(target)->value()
             : target;
-        if (String::cast(k)->length() > 0) {
+        if (k != heap_->hidden_symbol()) {
           SetPropertyReference(js_obj, entry, String::cast(k), value);
         } else {
           TagObject(value, "(hidden properties)");
@@ -2294,11 +2324,12 @@ String* V8HeapExplorer::GetConstructorName(JSObject* object) {
     Object* constructor_prop = NULL;
     LookupResult result(heap->isolate());
     object->LocalLookupRealNamedProperty(heap->constructor_symbol(), &result);
-    if (result.IsProperty()) {
-      constructor_prop = result.GetLazyValue();
-    }
+    if (!result.IsFound()) return object->constructor_name();
+
+    constructor_prop = result.GetLazyValue();
     if (constructor_prop->IsJSFunction()) {
-      Object* maybe_name = JSFunction::cast(constructor_prop)->shared()->name();
+      Object* maybe_name =
+          JSFunction::cast(constructor_prop)->shared()->name();
       if (maybe_name->IsString()) {
         String* name = String::cast(maybe_name);
         if (name->length() > 0) return name;
@@ -2560,20 +2591,6 @@ void V8HeapExplorer::SetPropertyReference(HeapObject* parent_obj,
 }
 
 
-void V8HeapExplorer::SetPropertyShortcutReference(HeapObject* parent_obj,
-                                                  int parent_entry,
-                                                  String* reference_name,
-                                                  Object* child_obj) {
-  HeapEntry* child_entry = GetEntry(child_obj);
-  if (child_entry != NULL) {
-    filler_->SetNamedReference(HeapGraphEdge::kShortcut,
-                               parent_entry,
-                               collection_->names()->GetName(reference_name),
-                               child_entry);
-  }
-}
-
-
 void V8HeapExplorer::SetRootGcRootsReference() {
   filler_->SetIndexedAutoIndexReference(
       HeapGraphEdge::kElement,
@@ -2654,7 +2671,7 @@ class GlobalObjectsEnumerator : public ObjectVisitor {
  public:
   virtual void VisitPointers(Object** start, Object** end) {
     for (Object** p = start; p < end; p++) {
-      if ((*p)->IsGlobalContext()) {
+      if ((*p)->IsNativeContext()) {
         Context* context = Context::cast(*p);
         JSObject* proxy = context->global_proxy();
         if (proxy->IsJSGlobalProxy()) {
@@ -3078,26 +3095,26 @@ bool HeapSnapshotGenerator::GenerateSnapshot() {
       Heap::kMakeHeapIterableMask,
       "HeapSnapshotGenerator::GenerateSnapshot");
 
-#ifdef DEBUG
+#ifdef VERIFY_HEAP
   Heap* debug_heap = Isolate::Current()->heap();
-  ASSERT(!debug_heap->old_data_space()->was_swept_conservatively());
-  ASSERT(!debug_heap->old_pointer_space()->was_swept_conservatively());
-  ASSERT(!debug_heap->code_space()->was_swept_conservatively());
-  ASSERT(!debug_heap->cell_space()->was_swept_conservatively());
-  ASSERT(!debug_heap->map_space()->was_swept_conservatively());
+  CHECK(!debug_heap->old_data_space()->was_swept_conservatively());
+  CHECK(!debug_heap->old_pointer_space()->was_swept_conservatively());
+  CHECK(!debug_heap->code_space()->was_swept_conservatively());
+  CHECK(!debug_heap->cell_space()->was_swept_conservatively());
+  CHECK(!debug_heap->map_space()->was_swept_conservatively());
 #endif
 
   // The following code uses heap iterators, so we want the heap to be
   // stable. It should follow TagGlobalObjects as that can allocate.
   AssertNoAllocation no_alloc;
 
-#ifdef DEBUG
+#ifdef VERIFY_HEAP
   debug_heap->Verify();
 #endif
 
   SetProgressTotal(1);  // 1 pass.
 
-#ifdef DEBUG
+#ifdef VERIFY_HEAP
   debug_heap->Verify();
 #endif
 
@@ -3345,9 +3362,9 @@ static int utoa(unsigned value, const Vector<char>& buffer, int buffer_pos) {
 
 void HeapSnapshotJSONSerializer::SerializeEdge(HeapGraphEdge* edge,
                                                bool first_edge) {
-  // The buffer needs space for 3 unsigned ints, 3 commas and \0
+  // The buffer needs space for 3 unsigned ints, 3 commas, \n and \0
   static const int kBufferSize =
-      MaxDecimalDigitsIn<sizeof(unsigned)>::kUnsigned * 3 + 3 + 1;  // NOLINT
+      MaxDecimalDigitsIn<sizeof(unsigned)>::kUnsigned * 3 + 3 + 2;  // NOLINT
   EmbeddedVector<char, kBufferSize> buffer;
   int edge_name_or_index = edge->type() == HeapGraphEdge::kElement
       || edge->type() == HeapGraphEdge::kHidden
@@ -3362,6 +3379,7 @@ void HeapSnapshotJSONSerializer::SerializeEdge(HeapGraphEdge* edge,
   buffer_pos = utoa(edge_name_or_index, buffer, buffer_pos);
   buffer[buffer_pos++] = ',';
   buffer_pos = utoa(entry_index(edge->to()), buffer, buffer_pos);
+  buffer[buffer_pos++] = '\n';
   buffer[buffer_pos++] = '\0';
   writer_->AddString(buffer.start());
 }

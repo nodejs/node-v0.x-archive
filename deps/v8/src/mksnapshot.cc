@@ -25,6 +25,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <errno.h>
+#include <stdio.h>
 #ifdef COMPRESS_STARTUP_DATA_BZ2
 #include <bzlib.h>
 #endif
@@ -33,6 +35,7 @@
 #include "v8.h"
 
 #include "bootstrapper.h"
+#include "flags.h"
 #include "natives.h"
 #include "platform.h"
 #include "serialize.h"
@@ -163,30 +166,37 @@ class CppByteSink : public PartialSnapshotSink {
   }
 
   void WriteSpaceUsed(
+      const char* prefix,
       int new_space_used,
       int pointer_space_used,
       int data_space_used,
       int code_space_used,
       int map_space_used,
-      int cell_space_used,
-      int large_space_used) {
-    fprintf(fp_, "const int Snapshot::new_space_used_ = %d;\n", new_space_used);
+      int cell_space_used) {
     fprintf(fp_,
-            "const int Snapshot::pointer_space_used_ = %d;\n",
+            "const int Snapshot::%snew_space_used_ = %d;\n",
+            prefix,
+            new_space_used);
+    fprintf(fp_,
+            "const int Snapshot::%spointer_space_used_ = %d;\n",
+            prefix,
             pointer_space_used);
     fprintf(fp_,
-            "const int Snapshot::data_space_used_ = %d;\n",
+            "const int Snapshot::%sdata_space_used_ = %d;\n",
+            prefix,
             data_space_used);
     fprintf(fp_,
-            "const int Snapshot::code_space_used_ = %d;\n",
+            "const int Snapshot::%scode_space_used_ = %d;\n",
+            prefix,
             code_space_used);
-    fprintf(fp_, "const int Snapshot::map_space_used_ = %d;\n", map_space_used);
     fprintf(fp_,
-            "const int Snapshot::cell_space_used_ = %d;\n",
+            "const int Snapshot::%smap_space_used_ = %d;\n",
+            prefix,
+            map_space_used);
+    fprintf(fp_,
+            "const int Snapshot::%scell_space_used_ = %d;\n",
+            prefix,
             cell_space_used);
-    fprintf(fp_,
-            "const int Snapshot::large_space_used_ = %d;\n",
-            large_space_used);
   }
 
   void WritePartialSnapshot() {
@@ -308,6 +318,62 @@ int main(int argc, char** argv) {
             "\nException thrown while compiling natives - see above.\n\n");
     exit(1);
   }
+  if (i::FLAG_extra_code != NULL) {
+    context->Enter();
+    // Capture 100 frames if anything happens.
+    V8::SetCaptureStackTraceForUncaughtExceptions(true, 100);
+    HandleScope scope;
+    const char* name = i::FLAG_extra_code;
+    FILE* file = i::OS::FOpen(name, "rb");
+    if (file == NULL) {
+      fprintf(stderr, "Failed to open '%s': errno %d\n", name, errno);
+      exit(1);
+    }
+
+    fseek(file, 0, SEEK_END);
+    int size = ftell(file);
+    rewind(file);
+
+    char* chars = new char[size + 1];
+    chars[size] = '\0';
+    for (int i = 0; i < size;) {
+      int read = static_cast<int>(fread(&chars[i], 1, size - i, file));
+      if (read < 0) {
+        fprintf(stderr, "Failed to read '%s': errno %d\n", name, errno);
+        exit(1);
+      }
+      i += read;
+    }
+    fclose(file);
+    Local<String> source = String::New(chars);
+    TryCatch try_catch;
+    Local<Script> script = Script::Compile(source);
+    if (try_catch.HasCaught()) {
+      fprintf(stderr, "Failure compiling '%s' (see above)\n", name);
+      exit(1);
+    }
+    script->Run();
+    if (try_catch.HasCaught()) {
+      fprintf(stderr, "Failure running '%s'\n", name);
+      Local<Message> message = try_catch.Message();
+      Local<String> message_string = message->Get();
+      Local<String> message_line = message->GetSourceLine();
+      int len = 2 + message_string->Utf8Length() + message_line->Utf8Length();
+      char* buf = new char(len);
+      message_string->WriteUtf8(buf);
+      fprintf(stderr, "%s at line %d\n", buf, message->GetLineNumber());
+      message_line->WriteUtf8(buf);
+      fprintf(stderr, "%s\n", buf);
+      int from = message->GetStartColumn();
+      int to = message->GetEndColumn();
+      int i;
+      for (i = 0; i < from; i++) fprintf(stderr, " ");
+      for ( ; i <= to; i++) fprintf(stderr, "^");
+      fprintf(stderr, "\n");
+      exit(1);
+    }
+    context->Exit();
+  }
   // Make sure all builtin scripts are cached.
   { HandleScope scope;
     for (int i = 0; i < i::Natives::GetBuiltinsCount(); i++) {
@@ -341,12 +407,20 @@ int main(int argc, char** argv) {
   sink.WritePartialSnapshot();
 
   sink.WriteSpaceUsed(
+      "context_",
       partial_ser.CurrentAllocationAddress(i::NEW_SPACE),
       partial_ser.CurrentAllocationAddress(i::OLD_POINTER_SPACE),
       partial_ser.CurrentAllocationAddress(i::OLD_DATA_SPACE),
       partial_ser.CurrentAllocationAddress(i::CODE_SPACE),
       partial_ser.CurrentAllocationAddress(i::MAP_SPACE),
-      partial_ser.CurrentAllocationAddress(i::CELL_SPACE),
-      partial_ser.CurrentAllocationAddress(i::LO_SPACE));
+      partial_ser.CurrentAllocationAddress(i::CELL_SPACE));
+  sink.WriteSpaceUsed(
+      "",
+      ser.CurrentAllocationAddress(i::NEW_SPACE),
+      ser.CurrentAllocationAddress(i::OLD_POINTER_SPACE),
+      ser.CurrentAllocationAddress(i::OLD_DATA_SPACE),
+      ser.CurrentAllocationAddress(i::CODE_SPACE),
+      ser.CurrentAllocationAddress(i::MAP_SPACE),
+      ser.CurrentAllocationAddress(i::CELL_SPACE));
   return 0;
 }

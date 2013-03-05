@@ -24,8 +24,11 @@
 
 #include "runner.h"
 #include "task.h"
+#include "uv.h"
 
 char executable_path[PATHMAX] = { '\0' };
+
+int tap_output = 0;
 
 
 static void log_progress(int total, int passed, int failed, const char* name) {
@@ -37,8 +40,45 @@ static void log_progress(int total, int passed, int failed, const char* name) {
 }
 
 
+const char* fmt(double d) {
+  static char buf[1024];
+  static char* p;
+  uint64_t v;
+
+  if (p == NULL)
+    p = buf;
+
+  p += 31;
+
+  if (p >= buf + sizeof(buf))
+    return "<buffer too small>";
+
+  v = (uint64_t) d;
+
+#if 0 /* works but we don't care about fractional precision */
+  if (d - v >= 0.01) {
+    *--p = '0' + (uint64_t) (d * 100) % 10;
+    *--p = '0' + (uint64_t) (d * 10) % 10;
+    *--p = '.';
+  }
+#endif
+
+  if (v == 0)
+    *--p = '0';
+
+  while (v) {
+    if (v) *--p = '0' + (v % 10), v /= 10;
+    if (v) *--p = '0' + (v % 10), v /= 10;
+    if (v) *--p = '0' + (v % 10), v /= 10;
+    if (v) *--p = ',';
+  }
+
+  return p;
+}
+
+
 int run_tests(int timeout, int benchmark_output) {
-  int total, passed, failed;
+  int total, passed, failed, current;
   task_entry_t* task;
 
   /* Count the number of tests. */
@@ -49,29 +89,38 @@ int run_tests(int timeout, int benchmark_output) {
     }
   }
 
+  if (tap_output) {
+    LOGF("1..%d\n", total);
+  }
+
   /* Run all tests. */
   passed = 0;
   failed = 0;
+  current = 1;
   for (task = TASKS; task->main; task++) {
     if (task->is_helper) {
       continue;
     }
 
-    rewind_cursor();
-    if (!benchmark_output) {
+    if (!tap_output)
+      rewind_cursor();
+
+    if (!benchmark_output && !tap_output) {
       log_progress(total, passed, failed, task->task_name);
     }
 
-    if (run_test(task->task_name, timeout, benchmark_output) == 0) {
+    if (run_test(task->task_name, timeout, benchmark_output, current) == 0) {
       passed++;
     } else {
       failed++;
     }
+    current++;
   }
 
-  rewind_cursor();
+  if (!tap_output)
+    rewind_cursor();
 
-  if (!benchmark_output) {
+  if (!benchmark_output && !tap_output) {
     log_progress(total, passed, failed, "Done.\n");
   }
 
@@ -79,7 +128,10 @@ int run_tests(int timeout, int benchmark_output) {
 }
 
 
-int run_test(const char* test, int timeout, int benchmark_output) {
+int run_test(const char* test,
+             int timeout,
+             int benchmark_output,
+             int test_count) {
   char errmsg[1024] = "no error";
   process_info_t processes[1024];
   process_info_t *main_proc;
@@ -118,7 +170,8 @@ int run_test(const char* test, int timeout, int benchmark_output) {
 
     if (process_start(task->task_name,
                       task->process_name,
-                      &processes[process_count]) == -1) {
+                      &processes[process_count],
+                      1 /* is_helper */) == -1) {
       snprintf(errmsg,
                sizeof errmsg,
                "Process `%s` failed to start.",
@@ -144,7 +197,8 @@ int run_test(const char* test, int timeout, int benchmark_output) {
 
     if (process_start(task->task_name,
                       task->process_name,
-                      &processes[process_count]) == -1) {
+                      &processes[process_count],
+                      0 /* !is_helper */) == -1) {
       snprintf(errmsg,
                sizeof errmsg,
                "Process `%s` failed to start.",
@@ -201,9 +255,18 @@ out:
     FATAL("process_wait failed");
   }
 
+  if (tap_output) {
+    if (status == 0)
+      LOGF("ok %d - %s\n", test_count, test);
+    else
+      LOGF("not ok %d - %s\n", test_count, test);
+  }
+
   /* Show error and output from processes if the test failed. */
   if (status != 0 || task->show_output) {
-    if (status != 0) {
+    if (tap_output) {
+      LOGF("#");
+    } else if (status != 0) {
       LOGF("\n`%s` failed: %s\n", test, errmsg);
     } else {
       LOGF("\n");
@@ -227,7 +290,10 @@ out:
         break;
       }
     }
-    LOG("=============================================================\n");
+
+    if (!tap_output) {
+      LOG("=============================================================\n");
+    }
 
   /* In benchmark mode show concise output from the main process. */
   } else if (benchmark_output) {
@@ -262,11 +328,13 @@ out:
  */
 int run_test_part(const char* test, const char* part) {
   task_entry_t* task;
+  int r;
 
   for (task = TASKS; task->main; task++) {
-    if (strcmp(test, task->task_name) == 0
-        && strcmp(part, task->process_name) == 0) {
-      return task->main();
+    if (strcmp(test, task->task_name) == 0 &&
+        strcmp(part, task->process_name) == 0) {
+      r = task->main();
+      return r;
     }
   }
 

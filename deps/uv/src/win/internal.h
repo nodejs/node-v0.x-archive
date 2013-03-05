@@ -36,14 +36,14 @@
  */
 
 /* Used by all handles. */
-#define UV_HANDLE_CLOSING                       0x00000001
 #define UV_HANDLE_CLOSED                        0x00000002
 #define UV_HANDLE_ENDGAME_QUEUED                0x00000004
 #define UV_HANDLE_ACTIVE                        0x00000010
 
+/* uv-common.h: #define UV__HANDLE_CLOSING      0x00000001 */
 /* uv-common.h: #define UV__HANDLE_ACTIVE       0x00000040 */
 /* uv-common.h: #define UV__HANDLE_REF          0x00000020 */
-/* reserved: #define UV_HANDLE_INTERNAL         0x00000080 */
+/* uv-common.h: #define UV_HANDLE_INTERNAL      0x00000080 */
 
 /* Used by streams and UDP handles. */
 #define UV_HANDLE_READING                       0x00000100
@@ -52,9 +52,8 @@
 #define UV_HANDLE_LISTENING                     0x00000800
 #define UV_HANDLE_CONNECTION                    0x00001000
 #define UV_HANDLE_CONNECTED                     0x00002000
-#define UV_HANDLE_EOF                           0x00004000
-#define UV_HANDLE_SHUTTING                      0x00008000
-#define UV_HANDLE_SHUT                          0x00010000
+#define UV_HANDLE_READABLE                      0x00008000
+#define UV_HANDLE_WRITABLE                      0x00010000
 #define UV_HANDLE_READ_PENDING                  0x00020000
 #define UV_HANDLE_SYNC_BYPASS_IOCP              0x00040000
 #define UV_HANDLE_ZERO_READ                     0x00080000
@@ -74,9 +73,10 @@
 #define UV_HANDLE_PIPESERVER                    0x02000000
 
 /* Only used by uv_tty_t handles. */
-#define UV_HANDLE_TTY_RAW                       0x01000000
-#define UV_HANDLE_TTY_SAVED_POSITION            0x02000000
-#define UV_HANDLE_TTY_SAVED_ATTRIBUTES          0x04000000
+#define UV_HANDLE_TTY_READABLE                  0x01000000
+#define UV_HANDLE_TTY_RAW                       0x02000000
+#define UV_HANDLE_TTY_SAVED_POSITION            0x04000000
+#define UV_HANDLE_TTY_SAVED_ATTRIBUTES          0x08000000
 
 /* Only used by uv_poll_t handles. */
 #define UV_HANDLE_POLL_SLOW                     0x02000000
@@ -134,7 +134,7 @@ void uv_udp_endgame(uv_loop_t* loop, uv_udp_t* handle);
 /*
  * Pipes
  */
-int uv_stdio_pipe_server(uv_loop_t* loop, uv_pipe_t* handle, DWORD access,
+uv_err_t uv_stdio_pipe_server(uv_loop_t* loop, uv_pipe_t* handle, DWORD access,
     char* name, size_t nameSize);
 
 int uv_pipe_listen(uv_pipe_t* handle, int backlog, uv_connection_cb cb);
@@ -232,10 +232,22 @@ void uv_process_async_wakeup_req(uv_loop_t* loop, uv_async_t* handle,
 
 
 /*
+ * Signal watcher
+ */
+void uv_signals_init();
+int uv__signal_dispatch(int signum);
+
+void uv_signal_close(uv_loop_t* loop, uv_signal_t* handle);
+void uv_signal_endgame(uv_loop_t* loop, uv_signal_t* handle);
+
+void uv_process_signal_req(uv_loop_t* loop, uv_signal_t* handle,
+    uv_req_t* req);
+
+
+/*
  * Spawn
  */
 void uv_process_proc_exit(uv_loop_t* loop, uv_process_t* handle);
-void uv_process_proc_close(uv_loop_t* loop, uv_process_t* handle);
 void uv_process_close(uv_loop_t* loop, uv_process_t* handle);
 void uv_process_endgame(uv_loop_t* loop, uv_process_t* handle);
 
@@ -287,7 +299,7 @@ uv_err_code uv_translate_sys_error(int sys_errno);
 /*
  * Process stdio handles.
  */
-int uv__stdio_create(uv_loop_t* loop, uv_process_options_t* options,
+uv_err_t uv__stdio_create(uv_loop_t* loop, uv_process_options_t* options,
     BYTE** buffer_ptr);
 void uv__stdio_destroy(BYTE* buffer);
 void uv__stdio_noinherit(BYTE* buffer);

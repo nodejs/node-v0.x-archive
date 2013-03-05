@@ -34,7 +34,7 @@ var options = {
   cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem')
 };
 
-var server = tls.createServer(function(s) {
+var server = tls.createServer(options, function(s) {
   s.write('welcome!\n');
   s.pipe(s);
 });

@@ -28,6 +28,9 @@
 
 namespace node {
 
+// Defined in node.cc
+extern v8::Isolate* node_isolate;
+
 #ifdef _WIN32
 // emulate snprintf() on windows, _snprintf() doesn't zero-terminate the buffer
 // on overflow...
@@ -86,13 +89,17 @@ inline static v8::Handle<v8::Value> ThrowRangeError(const char* errmsg) {
 #define UNWRAP(type)                                                        \
   assert(!args.Holder().IsEmpty());                                         \
   assert(args.Holder()->InternalFieldCount() > 0);                          \
-  type* wrap =                                                              \
-      static_cast<type*>(args.Holder()->GetPointerFromInternalField(0));    \
+  type* wrap = static_cast<type*>(                                          \
+      args.Holder()->GetPointerFromInternalField(0));                \
   if (!wrap) {                                                              \
     fprintf(stderr, #type ": Aborting due to unwrap failure at %s:%d\n",    \
             __FILE__, __LINE__);                                            \
     abort();                                                                \
   }
+
+v8::Handle<v8::Value> FromConstructorTemplate(
+    v8::Persistent<v8::FunctionTemplate> t,
+    const v8::Arguments& args);
 
 } // namespace node
 

@@ -38,7 +38,7 @@ static void close_cb(uv_handle_t* handle) {
 
 static void connect_cb(uv_connect_t* req, int status) {
   ASSERT(status == -1);
-  ASSERT(uv_last_error(req->handle->loop).code == UV_EINTR);
+  ASSERT(uv_last_error(req->handle->loop).code == UV_ECANCELED);
   uv_timer_stop(&timer2_handle);
   connect_cb_called++;
 }
@@ -70,11 +70,12 @@ TEST_IMPL(tcp_close_while_connecting) {
   ASSERT(0 == uv_timer_start(&timer1_handle, timer1_cb, 50, 0));
   ASSERT(0 == uv_timer_init(loop, &timer2_handle));
   ASSERT(0 == uv_timer_start(&timer2_handle, timer2_cb, 86400 * 1000, 0));
-  ASSERT(0 == uv_run(loop));
+  ASSERT(0 == uv_run(loop, UV_RUN_DEFAULT));
 
   ASSERT(connect_cb_called == 1);
   ASSERT(timer1_cb_called == 1);
   ASSERT(close_cb_called == 2);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

@@ -269,6 +269,10 @@ MaybeObject* PagedSpace::AllocateRaw(int size_in_bytes) {
     return object;
   }
 
+  ASSERT(!heap()->linear_allocation() ||
+         (anchor_.next_chunk() == &anchor_ &&
+          anchor_.prev_chunk() == &anchor_));
+
   object = free_list_.Allocate(size_in_bytes);
   if (object != NULL) {
     if (identity() == CODE_SPACE) {

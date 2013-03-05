@@ -156,6 +156,11 @@ void RelocInfo::set_target_address(Address target, WriteBarrierMode mode) {
 }
 
 
+Address Assembler::target_address_from_return_address(Address pc) {
+  return pc - kCallTargetAddressOffset;
+}
+
+
 Object* RelocInfo::target_object() {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
   return reinterpret_cast<Object*>(Assembler::target_address_at(pc_));
@@ -208,10 +213,7 @@ Handle<JSGlobalPropertyCell> RelocInfo::target_cell_handle() {
 
 JSGlobalPropertyCell* RelocInfo::target_cell() {
   ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
-  Address address = Memory::Address_at(pc_);
-  Object* object = HeapObject::FromAddress(
-      address - JSGlobalPropertyCell::kValueOffset);
-  return reinterpret_cast<JSGlobalPropertyCell*>(object);
+  return JSGlobalPropertyCell::FromValueAddress(Memory::Address_at(pc_));
 }
 
 

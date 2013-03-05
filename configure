@@ -3,6 +3,7 @@ import optparse
 import os
 import pprint
 import re
+import shlex
 import subprocess
 import sys
 
@@ -28,11 +29,6 @@ parser.add_option("--without-npm",
     action="store_true",
     dest="without_npm",
     help="Don\'t install the bundled npm package manager")
-
-parser.add_option("--without-waf",
-    action="store_true",
-    dest="without_waf",
-    help="Don\'t install node-waf")
 
 parser.add_option("--without-ssl",
     action="store_true",
@@ -103,6 +99,13 @@ parser.add_option("--openssl-libpath",
     dest="shared_openssl_libpath",
     help=optparse.SUPPRESS_HELP)
 
+# TODO document when we've decided on what the tracing API and its options will
+# look like
+parser.add_option("--systemtap-includes",
+    action="store",
+    dest="systemtap_includes",
+    help=optparse.SUPPRESS_HELP)
+
 parser.add_option("--no-ssl2",
     action="store_true",
     dest="no_ssl2",
@@ -128,10 +131,70 @@ parser.add_option("--shared-zlib-libname",
     dest="shared_zlib_libname",
     help="Alternative lib name to link to (default: 'z')")
 
+parser.add_option("--shared-http-parser",
+    action="store_true",
+    dest="shared_http_parser",
+    help="Link to a shared http_parser DLL instead of static linking")
+
+parser.add_option("--shared-http-parser-includes",
+    action="store",
+    dest="shared_http_parser_includes",
+    help="Directory containing http_parser header files")
+
+parser.add_option("--shared-http-parser-libpath",
+    action="store",
+    dest="shared_http_parser_libpath",
+    help="A directory to search for the shared http_parser DLL")
+
+parser.add_option("--shared-http-parser-libname",
+    action="store",
+    dest="shared_http_parser_libname",
+    help="Alternative lib name to link to (default: 'http_parser')")
+
+parser.add_option("--shared-cares",
+    action="store_true",
+    dest="shared_cares",
+    help="Link to a shared cares DLL instead of static linking")
+
+parser.add_option("--shared-cares-includes",
+    action="store",
+    dest="shared_cares_includes",
+    help="Directory containing cares header files")
+
+parser.add_option("--shared-cares-libpath",
+    action="store",
+    dest="shared_cares_libpath",
+    help="A directory to search for the shared cares DLL")
+
+parser.add_option("--shared-cares-libname",
+    action="store",
+    dest="shared_cares_libname",
+    help="Alternative lib name to link to (default: 'cares')")
+
+parser.add_option("--shared-libuv",
+    action="store_true",
+    dest="shared_libuv",
+    help="Link to a shared libuv DLL instead of static linking")
+
+parser.add_option("--shared-libuv-includes",
+    action="store",
+    dest="shared_libuv_includes",
+    help="Directory containing libuv header files")
+
+parser.add_option("--shared-libuv-libpath",
+    action="store",
+    dest="shared_libuv_libpath",
+    help="A directory to search for the shared libuv DLL")
+
+parser.add_option("--shared-libuv-libname",
+    action="store",
+    dest="shared_libuv_libname",
+    help="Alternative lib name to link to (default: 'uv')")
+
 parser.add_option("--with-dtrace",
     action="store_true",
     dest="with_dtrace",
-    help="Build with DTrace (default is true on supported systems)")
+    help="Build with DTrace (default is true on sunos)")
 
 parser.add_option("--without-dtrace",
     action="store_true",
@@ -147,6 +210,16 @@ parser.add_option("--without-etw",
     action="store_true",
     dest="without_etw",
     help="Build without ETW")
+
+parser.add_option("--with-perfctr",
+    action="store_true",
+    dest="with_perfctr",
+    help="Build with performance counters (default is true on Windows)")
+
+parser.add_option("--without-perfctr",
+    action="store_true",
+    dest="without_perfctr",
+    help="Build without performance counters")
 
 # CHECKME does this still work with recent releases of V8?
 parser.add_option("--gdb",
@@ -176,11 +249,21 @@ parser.add_option("--with-arm-float-abi",
     help="Specifies which floating-point ABI to use. Valid values are: "
          "soft, softfp, hard")
 
+parser.add_option("--ninja",
+    action="store_true",
+    dest="use_ninja",
+    help="Generate files for the ninja build system")
+
 # Using --unsafe-optimizations voids your warranty.
 parser.add_option("--unsafe-optimizations",
     action="store_true",
     dest="unsafe_optimizations",
     help=optparse.SUPPRESS_HELP)
+
+parser.add_option("--xcode",
+    action="store_true",
+    dest="use_xcode",
+    help="Generate build files for use with xcode")
 
 parser.add_option("--tag",
     action="store",
@@ -216,7 +299,7 @@ def cc_macros():
   """Checks predefined macros using the CC command."""
 
   try:
-    p = subprocess.Popen(CC.split() + ['-dM', '-E', '-'],
+    p = subprocess.Popen(shlex.split(CC) + ['-dM', '-E', '-'],
                          stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
@@ -236,7 +319,6 @@ def cc_macros():
 
   k = {}
   for line in out:
-    import shlex
     lst = shlex.split(line)
     if len(lst) > 2:
       key = lst[1]
@@ -252,6 +334,11 @@ def is_arch_armv7():
           '__ARM_ARCH_7A__' in cc_macros_cache or
           '__ARM_ARCH_7R__' in cc_macros_cache or
           '__ARM_ARCH_7M__' in cc_macros_cache)
+
+
+def is_arm_neon():
+  """Check for ARM NEON support"""
+  return '__ARM_NEON__' in cc_macros()
 
 
 def arm_hard_float_abi():
@@ -321,13 +408,13 @@ def host_arch_win():
 
 def compiler_version():
   try:
-    proc = subprocess.Popen(CC.split() + ['--version'], stdout=subprocess.PIPE)
+    proc = subprocess.Popen(shlex.split(CC) + ['--version'], stdout=subprocess.PIPE)
   except WindowsError:
     return (0, False)
 
   is_clang = 'clang' in proc.communicate()[0].split('\n')[0]
 
-  proc = subprocess.Popen(CC.split() + ['-dumpversion'], stdout=subprocess.PIPE)
+  proc = subprocess.Popen(shlex.split(CC) + ['-dumpversion'], stdout=subprocess.PIPE)
   version = tuple(map(int, proc.communicate()[0].split('.')))
 
   return (version, is_clang)
@@ -340,22 +427,22 @@ def configure_arm(o):
     hard_float = options.arm_float_abi == 'hard'
   else:
     hard_float = arm_hard_float_abi()
-  o['variables']['v8_use_arm_eabi_hardfloat'] = b(hard_float)
 
   armv7 = is_arch_armv7()
-  if armv7:
-    # CHECKME VFPv3 implies ARMv7+ but is the reverse true as well?
-    o['variables']['arm_fpu'] = 'vfpv3'
-    o['variables']['arm_neon'] = 0
+  # CHECKME VFPv3 implies ARMv7+ but is the reverse true as well?
+  fpu = 'vfpv3' if armv7 else 'vfpv2'
+
   o['variables']['armv7'] = int(armv7)
+  o['variables']['arm_fpu'] = fpu
+  o['variables']['arm_neon'] = int(is_arm_neon())
+  o['variables']['v8_use_arm_eabi_hardfloat'] = b(hard_float)
 
 
 def configure_node(o):
-  # TODO add gdb
+  o['variables']['v8_enable_gdbjit'] = 1 if options.gdb else 0
   o['variables']['v8_no_strict_aliasing'] = 1 # work around compiler bugs
   o['variables']['node_prefix'] = os.path.expanduser(options.prefix or '')
   o['variables']['node_install_npm'] = b(not options.without_npm)
-  o['variables']['node_install_waf'] = b(not options.without_waf)
   o['variables']['node_unsafe_optimizations'] = (
     1 if options.unsafe_optimizations else 0)
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
@@ -383,10 +470,17 @@ def configure_node(o):
   # SunOS, and we haven't implemented it.)
   if sys.platform.startswith('sunos'):
     o['variables']['node_use_dtrace'] = b(not options.without_dtrace)
-  elif b(options.with_dtrace) == 'true':
-    raise Exception('DTrace is currently only supported on SunOS systems.')
+  elif sys.platform.startswith('linux'):
+    o['variables']['node_use_dtrace'] = 'false'
+    o['variables']['node_use_systemtap'] = b(options.with_dtrace)
+    if options.systemtap_includes:
+      o['include_dirs'] += [options.systemtap_includes]
+  elif options.with_dtrace:
+    raise Exception(
+       'DTrace is currently only supported on SunOS or Linux systems.')
   else:
     o['variables']['node_use_dtrace'] = 'false'
+    o['variables']['node_use_systemtap'] = 'false'
 
   if options.no_ifaddrs:
     o['defines'] += ['SUNOS_NO_IFADDRS']
@@ -394,10 +488,18 @@ def configure_node(o):
   # By default, enable ETW on Windows.
   if sys.platform.startswith('win32'):
     o['variables']['node_use_etw'] = b(not options.without_etw);
-  elif b(options.with_etw) == 'true':
+  elif options.with_etw:
     raise Exception('ETW is only supported on Windows.')
   else:
     o['variables']['node_use_etw'] = 'false'
+
+  # By default, enable Performance counters on Windows.
+  if sys.platform.startswith('win32'):
+    o['variables']['node_use_perfctr'] = b(not options.without_perfctr);
+  elif options.with_perfctr:
+    raise Exception('Performance counter is only supported on Windows.')
+  else:
+    o['variables']['node_use_perfctr'] = 'false'
 
   if options.tag:
     o['variables']['node_tag'] = '-' + options.tag
@@ -417,6 +519,48 @@ def configure_libz(o):
     o['libraries'] += ['-lz']
   if options.shared_zlib_includes:
     o['include_dirs'] += [options.shared_zlib_includes]
+
+
+def configure_http_parser(o):
+    o['variables']['node_shared_http_parser'] = b(options.shared_http_parser)
+
+    # assume shared http_parser if one of these is set?
+    if options.shared_http_parser_libpath:
+        o['libraries'] += ['-L%s' % options.shared_http_parser_libpath]
+    if options.shared_http_parser_libname:
+        o['libraries'] += ['-l%s' % options.shared_http_parser_libname]
+    elif options.shared_http_parser:
+        o['libraries'] += ['-lhttp_parser']
+    if options.shared_http_parser_includes:
+        o['include_dirs'] += [options.shared_http_parser_includes]
+
+
+def configure_cares(o):
+    o['variables']['node_shared_cares'] = b(options.shared_cares)
+
+    # assume shared cares if one of these is set?
+    if options.shared_cares_libpath:
+        o['libraries'] += ['-L%s' % options.shared_cares_libpath]
+    if options.shared_cares_libname:
+        o['libraries'] += ['-l%s' % options.shared_cares_libname]
+    elif options.shared_cares:
+        o['libraries'] += ['-lcares']
+    if options.shared_cares_includes:
+        o['include_dirs'] += [options.shared_cares_includes]
+
+
+def configure_libuv(o):
+  o['variables']['node_shared_libuv'] = b(options.shared_libuv)
+
+  # assume shared libuv if one of these is set?
+  if options.shared_libuv_libpath:
+    o['libraries'] += ['-L%s' % options.shared_libuv_libpath]
+  if options.shared_libuv_libname:
+    o['libraries'] += ['-l%s' % options.shared_libuv_libname]
+  elif options.shared_libuv:
+    o['libraries'] += ['-luv']
+  if options.shared_libuv_includes:
+    o['include_dirs'] += [options.shared_libuv_includes]
 
 
 def configure_v8(o):
@@ -462,8 +606,22 @@ def configure_openssl(o):
       o['cflags'] += cflags.split()
 
 
+def configure_winsdk(o):
+  if not sys.platform.startswith('win32'):
+    return
+
+  winsdk_dir = os.environ.get("WindowsSdkDir")
+
+  if winsdk_dir and os.path.isfile(winsdk_dir + '\\bin\\ctrpp.exe'):
+    print "Found ctrpp in WinSDK--will build generated files into tools/msvs/genfiles."
+    o['variables']['node_has_winsdk'] = 'true'
+    return
+
+  print "ctrpp not found in WinSDK path--using pre-gen files from tools/msvs/genfiles."
+
+
 output = {
-  'variables': {},
+  'variables': { 'python': sys.executable },
   'include_dirs': [],
   'libraries': [],
   'defines': [],
@@ -472,8 +630,12 @@ output = {
 
 configure_node(output)
 configure_libz(output)
+configure_http_parser(output)
+configure_cares(output)
+configure_libuv(output)
 configure_v8(output)
 configure_openssl(output)
+configure_winsdk(output)
 
 # variables should be a root level element,
 # move everything else to target_defaults
@@ -494,11 +656,23 @@ def write(filename, data):
 write('config.gypi', "# Do not edit. Generated by the configure script.\n" +
   pprint.pformat(output, indent=2) + "\n")
 
-write('config.mk', "# Do not edit. Generated by the configure script.\n" +
-  ("BUILDTYPE=%s\n" % ('Debug' if options.debug else 'Release')))
+config = {
+  'BUILDTYPE': 'Debug' if options.debug else 'Release',
+  'USE_NINJA': str(int(options.use_ninja or 0)),
+  'USE_XCODE': str(int(options.use_xcode or 0)),
+  'PYTHON': sys.executable,
+}
+config = '\n'.join(map('='.join, config.iteritems())) + '\n'
 
-if os.name == 'nt':
-  gyp_args = ['-f', 'msvs', '-G', 'msvs_version=2010']
+write('config.mk',
+      '# Do not edit. Generated by the configure script.\n' + config)
+
+if options.use_ninja:
+  gyp_args = ['-f', 'ninja']
+elif options.use_xcode:
+  gyp_args = ['-f', 'xcode']
+elif os.name == 'nt':
+  gyp_args = ['-f', 'msvs', '-G', 'msvs_version=auto']
 elif options.dest_os:
   gyp_args = ['-f', 'make-' + options.dest_os]
 else:

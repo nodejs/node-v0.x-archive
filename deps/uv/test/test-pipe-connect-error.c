@@ -68,11 +68,12 @@ TEST_IMPL(pipe_connect_bad_name) {
   ASSERT(r == 0);
   uv_pipe_connect(&req, &client, BAD_PIPENAME, connect_cb);
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(close_cb_called == 1);
   ASSERT(connect_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -87,10 +88,11 @@ TEST_IMPL(pipe_connect_to_file) {
   ASSERT(r == 0);
   uv_pipe_connect(&req, &client, path, connect_cb_file);
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(close_cb_called == 1);
   ASSERT(connect_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

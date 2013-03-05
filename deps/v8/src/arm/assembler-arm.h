@@ -424,8 +424,8 @@ class Operand BASE_EMBEDDED {
   // the instruction this operand is used for is a MOV or MVN instruction the
   // actual instruction to use is required for this calculation. For other
   // instructions instr is ignored.
-  bool is_single_instruction(Instr instr = 0) const;
-  bool must_use_constant_pool() const;
+  bool is_single_instruction(const Assembler* assembler, Instr instr = 0) const;
+  bool must_output_reloc_info(const Assembler* assembler) const;
 
   inline int32_t immediate() const {
     ASSERT(!rm_.is_valid());
@@ -511,6 +511,10 @@ class CpuFeatures : public AllStatic {
     ASSERT(initialized_);
     if (f == VFP3 && !FLAG_enable_vfp3) return false;
     if (f == VFP2 && !FLAG_enable_vfp2) return false;
+    if (f == SUDIV && !FLAG_enable_sudiv) return false;
+    if (f == UNALIGNED_ACCESSES && !FLAG_enable_unaligned_accesses) {
+      return false;
+    }
     return (supported_ & (1u << f)) != 0;
   }
 
@@ -648,6 +652,11 @@ class Assembler : public AssemblerBase {
   // Overrides the default provided by FLAG_debug_code.
   void set_emit_debug_code(bool value) { emit_debug_code_ = value; }
 
+  // Avoids using instructions that vary in size in unpredictable ways between
+  // the snapshot and the running VM.  This is needed by the full compiler so
+  // that it can recompile code with debug support and fix the PC.
+  void set_predictable_code_size(bool value) { predictable_code_size_ = value; }
+
   // GetCode emits any pending (non-emitted) code and fills the descriptor
   // desc. GetCode() is idempotent; it returns the same result if no other
   // Assembler functions are invoked in between GetCode() calls.
@@ -680,12 +689,24 @@ class Assembler : public AssemblerBase {
   void label_at_put(Label* L, int at_offset);
 
   // Return the address in the constant pool of the code target address used by
-  // the branch/call instruction at pc.
-  INLINE(static Address target_address_address_at(Address pc));
+  // the branch/call instruction at pc, or the object in a mov.
+  INLINE(static Address target_pointer_address_at(Address pc));
+
+  // Read/Modify the pointer in the branch/call/move instruction at pc.
+  INLINE(static Address target_pointer_at(Address pc));
+  INLINE(static void set_target_pointer_at(Address pc, Address target));
 
   // Read/Modify the code target address in the branch/call instruction at pc.
   INLINE(static Address target_address_at(Address pc));
   INLINE(static void set_target_address_at(Address pc, Address target));
+
+  // Return the code target address at a call site from the return address
+  // of that call in the instruction stream.
+  INLINE(static Address target_address_from_return_address(Address pc));
+
+  // Given the address of the beginning of a call, return the address
+  // in the instruction stream that the call will return from.
+  INLINE(static Address return_address_from_call_start(Address pc));
 
   // This sets the branch destination (which is in the constant pool on ARM).
   // This is for calls and branches within generated code.
@@ -704,22 +725,6 @@ class Assembler : public AssemblerBase {
 
   // Size of an instruction.
   static const int kInstrSize = sizeof(Instr);
-
-  // Distance between the instruction referring to the address of the call
-  // target and the return address.
-#ifdef USE_BLX
-  // Call sequence is:
-  //  ldr  ip, [pc, #...] @ call address
-  //  blx  ip
-  //                      @ return address
-  static const int kCallTargetAddressOffset = 2 * kInstrSize;
-#else
-  // Call sequence is:
-  //  mov  lr, pc
-  //  ldr  pc, [pc, #...] @ call address
-  //                      @ return address
-  static const int kCallTargetAddressOffset = kInstrSize;
-#endif
 
   // Distance between start of patched return sequence and the emitted address
   // to jump to.
@@ -747,6 +752,12 @@ class Assembler : public AssemblerBase {
   //  mov  lr, pc         @ start of sequence
   //  ldr  pc, [pc, #-4]  @ emited address
   static const int kPatchDebugBreakSlotAddressOffset =  kInstrSize;
+#endif
+
+#ifdef USE_BLX
+  static const int kPatchDebugBreakSlotReturnOffset = 2 * kInstrSize;
+#else
+  static const int kPatchDebugBreakSlotReturnOffset = kInstrSize;
 #endif
 
   // Difference between address of current opcode and value read from pc
@@ -863,6 +874,12 @@ class Assembler : public AssemblerBase {
 
   void mla(Register dst, Register src1, Register src2, Register srcA,
            SBit s = LeaveCC, Condition cond = al);
+
+  void mls(Register dst, Register src1, Register src2, Register srcA,
+           Condition cond = al);
+
+  void sdiv(Register dst, Register src1, Register src2,
+            Condition cond = al);
 
   void mul(Register dst, Register src1, Register src2,
            SBit s = LeaveCC, Condition cond = al);
@@ -1048,6 +1065,7 @@ class Assembler : public AssemblerBase {
 
   void vmov(const DwVfpRegister dst,
             double imm,
+            const Register scratch = no_reg,
             const Condition cond = al);
   void vmov(const SwVfpRegister dst,
             const SwVfpRegister src,
@@ -1167,6 +1185,22 @@ class Assembler : public AssemblerBase {
   // Jump unconditionally to given label.
   void jmp(Label* L) { b(L, al); }
 
+  bool predictable_code_size() const { return predictable_code_size_; }
+
+  static bool use_immediate_embedded_pointer_loads(
+      const Assembler* assembler) {
+#ifdef USE_BLX
+    return CpuFeatures::IsSupported(MOVW_MOVT_IMMEDIATE_LOADS) &&
+        (assembler == NULL || !assembler->predictable_code_size());
+#else
+    // If not using BLX, all loads from the constant pool cannot be immediate,
+    // because the ldr pc, [pc + #xxxx] used for calls must be a single
+    // instruction and cannot be easily distinguished out of context from
+    // other loads that could use movw/movt.
+    return false;
+#endif
+  }
+
   // Check the code size generated from label to here.
   int SizeOfCodeGeneratedSince(Label* label) {
     return pc_offset() - label->pos();
@@ -1206,21 +1240,40 @@ class Assembler : public AssemblerBase {
 
   // Record the AST id of the CallIC being compiled, so that it can be placed
   // in the relocation information.
-  void SetRecordedAstId(unsigned ast_id) {
-    ASSERT(recorded_ast_id_ == kNoASTId);
+  void SetRecordedAstId(TypeFeedbackId ast_id) {
+    ASSERT(recorded_ast_id_.IsNone());
     recorded_ast_id_ = ast_id;
   }
 
-  unsigned RecordedAstId() {
-    ASSERT(recorded_ast_id_ != kNoASTId);
+  TypeFeedbackId RecordedAstId() {
+    ASSERT(!recorded_ast_id_.IsNone());
     return recorded_ast_id_;
   }
 
-  void ClearRecordedAstId() { recorded_ast_id_ = kNoASTId; }
+  void ClearRecordedAstId() { recorded_ast_id_ = TypeFeedbackId::None(); }
 
   // Record a comment relocation entry that can be used by a disassembler.
   // Use --code-comments to enable.
   void RecordComment(const char* msg);
+
+  // Record the emission of a constant pool.
+  //
+  // The emission of constant pool depends on the size of the code generated and
+  // the number of RelocInfo recorded.
+  // The Debug mechanism needs to map code offsets between two versions of a
+  // function, compiled with and without debugger support (see for example
+  // Debug::PrepareForBreakPoints()).
+  // Compiling functions with debugger support generates additional code
+  // (Debug::GenerateSlot()). This may affect the emission of the constant
+  // pools and cause the version of the code with debugger support to have
+  // constant pools generated in different places.
+  // Recording the position and size of emitted constant pools allows to
+  // correctly compute the offset mappings between the different versions of a
+  // function in all situations.
+  //
+  // The parameter indicates the size of the constant pool (in bytes), including
+  // the marker and branch over the data.
+  void RecordConstPool(int size);
 
   // Writes a single byte or word of data in the code stream.  Used
   // for inline tables, e.g., jump-tables. The constant pool should be
@@ -1268,6 +1321,8 @@ class Assembler : public AssemblerBase {
   static Register GetCmpImmediateRegister(Instr instr);
   static int GetCmpImmediateRawImmediate(Instr instr);
   static bool IsNop(Instr instr, int type = NON_MARKING_NOP);
+  static bool IsMovT(Instr instr);
+  static bool IsMovW(Instr instr);
 
   // Constants in pools are accessed via pc relative addressing, which can
   // reach +/-4KB thereby defining a maximum distance between the instruction
@@ -1286,7 +1341,7 @@ class Assembler : public AssemblerBase {
   // Relocation for a type-recording IC has the AST id added to it.  This
   // member variable is a way to pass the information from the call site to
   // the relocation info.
-  unsigned recorded_ast_id_;
+  TypeFeedbackId recorded_ast_id_;
 
   bool emit_debug_code() const { return emit_debug_code_; }
 
@@ -1406,6 +1461,12 @@ class Assembler : public AssemblerBase {
   void GrowBuffer();
   inline void emit(Instr x);
 
+  // 32-bit immediate values
+  void move_32_bit_immediate(Condition cond,
+                             Register rd,
+                             SBit s,
+                             const Operand& x);
+
   // Instruction generation
   void addrmod1(Instr instr, Register rn, Register rd, const Operand& x);
   void addrmod2(Instr instr, Register rd, const MemOperand& x);
@@ -1419,8 +1480,14 @@ class Assembler : public AssemblerBase {
   void link_to(Label* L, Label* appendix);
   void next(Label* L);
 
+  enum UseConstantPoolMode {
+    USE_CONSTANT_POOL,
+    DONT_USE_CONSTANT_POOL
+  };
+
   // Record reloc info for current pc_
-  void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
+  void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0,
+                       UseConstantPoolMode mode = USE_CONSTANT_POOL);
 
   friend class RegExpMacroAssemblerARM;
   friend class RelocInfo;
@@ -1428,7 +1495,10 @@ class Assembler : public AssemblerBase {
   friend class BlockConstPoolScope;
 
   PositionsRecorder positions_recorder_;
+
   bool emit_debug_code_;
+  bool predictable_code_size_;
+
   friend class PositionsRecorder;
   friend class EnsureSpace;
 };
@@ -1439,6 +1509,26 @@ class EnsureSpace BASE_EMBEDDED {
   explicit EnsureSpace(Assembler* assembler) {
     assembler->CheckBuffer();
   }
+};
+
+
+class PredictableCodeSizeScope {
+ public:
+  explicit PredictableCodeSizeScope(Assembler* assembler)
+      : asm_(assembler) {
+    old_value_ = assembler->predictable_code_size();
+    assembler->set_predictable_code_size(true);
+  }
+
+  ~PredictableCodeSizeScope() {
+    if (!old_value_) {
+      asm_->set_predictable_code_size(false);
+    }
+  }
+
+ private:
+  Assembler* asm_;
+  bool old_value_;
 };
 
 

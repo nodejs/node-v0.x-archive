@@ -773,6 +773,7 @@ class FloatingPointHelper : public AllStatic {
                                       Register object,
                                       Destination destination,
                                       DwVfpRegister double_dst,
+                                      DwVfpRegister double_scratch,
                                       Register dst1,
                                       Register dst2,
                                       Register heap_number_map,
@@ -794,7 +795,8 @@ class FloatingPointHelper : public AllStatic {
                                 Register scratch1,
                                 Register scratch2,
                                 Register scratch3,
-                                DwVfpRegister double_scratch,
+                                DwVfpRegister double_scratch0,
+                                DwVfpRegister double_scratch1,
                                 Label* not_int32);
 
   // Generate non VFP3 code to check if a double can be exactly represented by a

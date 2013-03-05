@@ -65,15 +65,9 @@ static void exit_cb_failure_expected(uv_process_t* process, int exit_status,
     int term_signal) {
   printf("exit_cb\n");
   exit_cb_called++;
-  ASSERT(exit_status == 127);
+  ASSERT(exit_status == -1);
   ASSERT(term_signal == 0);
   uv_close((uv_handle_t*)process, close_cb);
-}
-
-
-static void exit_cb_unexpected(uv_process_t* process, int exit_status,
-    int term_signal) {
-  ASSERT(0 && "should not have been called");
 }
 
 
@@ -112,7 +106,7 @@ static uv_buf_t on_alloc(uv_handle_t* handle, size_t suggested_size) {
 }
 
 
-void on_read(uv_stream_t* tcp, ssize_t nread, uv_buf_t buf) {
+static void on_read(uv_stream_t* tcp, ssize_t nread, uv_buf_t buf) {
   uv_err_t err = uv_last_error(uv_default_loop());
 
   if (nread > 0) {
@@ -124,7 +118,7 @@ void on_read(uv_stream_t* tcp, ssize_t nread, uv_buf_t buf) {
 }
 
 
-void write_cb(uv_write_t* req, int status) {
+static void write_cb(uv_write_t* req, int status) {
   ASSERT(status == 0);
   uv_close((uv_handle_t*)req->handle, close_cb);
 }
@@ -151,6 +145,19 @@ static void timer_cb(uv_timer_t* handle, int status) {
 }
 
 
+TEST_IMPL(spawn_fails) {
+  init_process_options("", exit_cb_failure_expected);
+  options.file = options.args[0] = "program-that-had-better-not-exist";
+  ASSERT(0 == uv_spawn(uv_default_loop(), &process, options));
+  ASSERT(0 != uv_is_active((uv_handle_t*)&process));
+  ASSERT(0 == uv_run(uv_default_loop(), UV_RUN_DEFAULT));
+  ASSERT(uv_last_error(uv_default_loop()).code == UV_ENOENT);
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+
+
 TEST_IMPL(spawn_exit_code) {
   int r;
 
@@ -159,12 +166,13 @@ TEST_IMPL(spawn_exit_code) {
   r = uv_spawn(uv_default_loop(), &process, options);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -189,7 +197,7 @@ TEST_IMPL(spawn_stdout) {
   r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
@@ -197,6 +205,7 @@ TEST_IMPL(spawn_stdout) {
   printf("output is: %s", output);
   ASSERT(strcmp("hello world\n", output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -228,7 +237,7 @@ TEST_IMPL(spawn_stdout_to_file) {
   r = uv_spawn(uv_default_loop(), &process, options);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
@@ -249,6 +258,7 @@ TEST_IMPL(spawn_stdout_to_file) {
   /* Cleanup. */
   unlink("stdout_file");
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -284,13 +294,14 @@ TEST_IMPL(spawn_stdin) {
   r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 3); /* Once for process twice for the pipe. */
   ASSERT(strcmp(buffer, output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -317,7 +328,7 @@ TEST_IMPL(spawn_stdio_greater_than_3) {
   r = uv_read_start((uv_stream_t*) &pipe, on_alloc, on_read);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
@@ -325,6 +336,7 @@ TEST_IMPL(spawn_stdio_greater_than_3) {
   printf("output from stdio[3] is: %s", output);
   ASSERT(strcmp("fourth stdio!\n", output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -340,12 +352,13 @@ TEST_IMPL(spawn_ignored_stdio) {
   r = uv_spawn(uv_default_loop(), &process, options);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -364,12 +377,13 @@ TEST_IMPL(spawn_and_kill) {
   r = uv_timer_start(&timer, timer_cb, 500, 0);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 2); /* Once for process and once for timer. */
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -400,7 +414,7 @@ TEST_IMPL(spawn_preserve_env) {
   r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
@@ -409,6 +423,7 @@ TEST_IMPL(spawn_preserve_env) {
   printf("output is: %s", output);
   ASSERT(strcmp("testval", output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -426,7 +441,7 @@ TEST_IMPL(spawn_detached) {
 
   uv_unref((uv_handle_t*)&process);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 0);
@@ -437,6 +452,7 @@ TEST_IMPL(spawn_detached) {
   err = uv_kill(process.pid, 15);
   ASSERT(err.code == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -488,12 +504,13 @@ TEST_IMPL(spawn_and_kill_with_std) {
   r = uv_timer_start(&timer, timer_cb, 500, 0);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 5); /* process x 1, timer x 1, stdio x 3. */
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -534,12 +551,13 @@ TEST_IMPL(spawn_and_ping) {
 
   ASSERT(exit_cb_called == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(strcmp(output, "TEST") == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -567,12 +585,13 @@ TEST_IMPL(kill) {
   err = uv_kill(process.pid, /* SIGTERM */ 15);
   ASSERT(err.code == UV_OK);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -612,7 +631,7 @@ TEST_IMPL(spawn_detect_pipe_name_collisions_on_windows) {
   r = uv_read_start((uv_stream_t*) &out, on_alloc, on_read);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
@@ -620,15 +639,16 @@ TEST_IMPL(spawn_detect_pipe_name_collisions_on_windows) {
   printf("output is: %s", output);
   ASSERT(strcmp("hello world\n", output) == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
 
-wchar_t* make_program_args(char** args, int verbatim_arguments);
-wchar_t* quote_cmd_arg(const wchar_t *source, wchar_t *target);
+uv_err_t make_program_args(char** args, int verbatim_arguments, WCHAR** dst_ptr);
+WCHAR* quote_cmd_arg(const WCHAR *source, WCHAR *target);
 
 TEST_IMPL(argument_escaping) {
-  const wchar_t* test_str[] = {
+  const WCHAR* test_str[] = {
     L"HelloWorld",
     L"Hello World",
     L"Hello\"World",
@@ -640,12 +660,13 @@ TEST_IMPL(argument_escaping) {
     L"c:\\path\\to\\node.exe --eval \"require('c:\\\\path\\\\to\\\\test.js')\""
   };
   const int count = sizeof(test_str) / sizeof(*test_str);
-  wchar_t** test_output;
-  wchar_t* command_line;
-  wchar_t** cracked;
+  WCHAR** test_output;
+  WCHAR* command_line;
+  WCHAR** cracked;
   size_t total_size = 0;
   int i;
   int num_args;
+  uv_err_t result;
 
   char* verbatim[] = {
     "cmd.exe",
@@ -653,18 +674,18 @@ TEST_IMPL(argument_escaping) {
     "c:\\path\\to\\node.exe --eval \"require('c:\\\\path\\\\to\\\\test.js')\"",
     NULL
   };
-  wchar_t* verbatim_output;
-  wchar_t* non_verbatim_output;
+  WCHAR* verbatim_output;
+  WCHAR* non_verbatim_output;
 
-  test_output = calloc(count, sizeof(wchar_t*));
+  test_output = calloc(count, sizeof(WCHAR*));
   for (i = 0; i < count; ++i) {
-    test_output[i] = calloc(2 * (wcslen(test_str[i]) + 2), sizeof(wchar_t));
+    test_output[i] = calloc(2 * (wcslen(test_str[i]) + 2), sizeof(WCHAR));
     quote_cmd_arg(test_str[i], test_output[i]);
     wprintf(L"input : %s\n", test_str[i]);
     wprintf(L"output: %s\n", test_output[i]);
     total_size += wcslen(test_output[i]) + 1;
   }
-  command_line = calloc(total_size + 1, sizeof(wchar_t));
+  command_line = calloc(total_size + 1, sizeof(WCHAR));
   for (i = 0; i < count; ++i) {
     wcscat(command_line, test_output[i]);
     wcscat(command_line, L" ");
@@ -684,8 +705,10 @@ TEST_IMPL(argument_escaping) {
     free(test_output[i]);
   }
 
-  verbatim_output = make_program_args(verbatim, 1);
-  non_verbatim_output = make_program_args(verbatim, 0);
+  result = make_program_args(verbatim, 1, &verbatim_output);
+  ASSERT(result.code == UV_OK);
+  result = make_program_args(verbatim, 0, &non_verbatim_output);
+  ASSERT(result.code == UV_OK);
 
   wprintf(L"    verbatim_output: %s\n", verbatim_output);
   wprintf(L"non_verbatim_output: %s\n", non_verbatim_output);
@@ -699,7 +722,7 @@ TEST_IMPL(argument_escaping) {
   return 0;
 }
 
-wchar_t* make_program_env(char** env_block);
+uv_err_t make_program_env(char** env_block, WCHAR** dst_ptr);
 
 TEST_IMPL(environment_creation) {
   int i;
@@ -712,33 +735,35 @@ TEST_IMPL(environment_creation) {
     NULL
   };
 
-  wchar_t expected[512];
-  wchar_t* ptr = expected;
-  wchar_t* result;
-  wchar_t* str;
+  WCHAR expected[512];
+  WCHAR* ptr = expected;
+  uv_err_t result;
+  WCHAR* str;
+  WCHAR* env;
 
   for (i = 0; i < sizeof(environment) / sizeof(environment[0]) - 1; i++) {
     ptr += uv_utf8_to_utf16(environment[i], ptr, expected + sizeof(expected) - ptr);
   }
 
   memcpy(ptr, L"SYSTEMROOT=", sizeof(L"SYSTEMROOT="));
-  ptr += sizeof(L"SYSTEMROOT=")/sizeof(wchar_t) - 1;
+  ptr += sizeof(L"SYSTEMROOT=")/sizeof(WCHAR) - 1;
   ptr += GetEnvironmentVariableW(L"SYSTEMROOT", ptr, expected + sizeof(expected) - ptr);
   ++ptr;
 
   memcpy(ptr, L"SYSTEMDRIVE=", sizeof(L"SYSTEMDRIVE="));
-  ptr += sizeof(L"SYSTEMDRIVE=")/sizeof(wchar_t) - 1;
+  ptr += sizeof(L"SYSTEMDRIVE=")/sizeof(WCHAR) - 1;
   ptr += GetEnvironmentVariableW(L"SYSTEMDRIVE", ptr, expected + sizeof(expected) - ptr);
   ++ptr;
   *ptr = '\0';
 
-  result = make_program_env(environment);
+  result = make_program_env(environment, &env);
+  ASSERT(result.code == UV_OK);
 
-  for (str = result; *str; str += wcslen(str) + 1) {
+  for (str = env; *str; str += wcslen(str) + 1) {
     wprintf(L"%s\n", str);
   }
 
-  ASSERT(wcscmp(expected, result) == 0);
+  ASSERT(wcscmp(expected, env) == 0);
 
   return 0;
 }
@@ -768,12 +793,13 @@ TEST_IMPL(spawn_setuid_setgid) {
   r = uv_spawn(uv_default_loop(), &process, options);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 #endif
@@ -801,12 +827,13 @@ TEST_IMPL(spawn_setuid_fails) {
   r = uv_spawn(uv_default_loop(), &process, options);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -832,18 +859,27 @@ TEST_IMPL(spawn_setgid_fails) {
   r = uv_spawn(uv_default_loop(), &process, options);
   ASSERT(r == 0);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(exit_cb_called == 1);
   ASSERT(close_cb_called == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 #endif
 
 
 #ifdef _WIN32
+
+static void exit_cb_unexpected(uv_process_t* process,
+                               int exit_status,
+                               int term_signal) {
+  ASSERT(0 && "should not have been called");
+}
+
+
 TEST_IMPL(spawn_setuid_fails) {
   int r;
 
@@ -856,11 +892,12 @@ TEST_IMPL(spawn_setuid_fails) {
   ASSERT(r == -1);
   ASSERT(uv_last_error(uv_default_loop()).code == UV_ENOTSUP);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(close_cb_called == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -877,11 +914,25 @@ TEST_IMPL(spawn_setgid_fails) {
   ASSERT(r == -1);
   ASSERT(uv_last_error(uv_default_loop()).code == UV_ENOTSUP);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(close_cb_called == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 #endif
+
+
+TEST_IMPL(spawn_auto_unref) {
+  init_process_options("spawn_helper1", NULL);
+  ASSERT(0 == uv_spawn(uv_default_loop(), &process, options));
+  ASSERT(0 == uv_run(uv_default_loop(), UV_RUN_DEFAULT));
+  ASSERT(0 == uv_is_closing((uv_handle_t*) &process));
+  uv_close((uv_handle_t*) &process, NULL);
+  ASSERT(0 == uv_run(uv_default_loop(), UV_RUN_DEFAULT));
+  ASSERT(0 != uv_is_closing((uv_handle_t*) &process));
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}

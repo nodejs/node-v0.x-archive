@@ -36,11 +36,6 @@
 static int close_cb_called = 0;
 
 
-static void poll_cb_fail(uv_poll_t* handle, int status, int events) {
-  ASSERT(0 && "poll_fail_cb should never be called");
-}
-
-
 static void close_cb(uv_handle_t* handle) {
   close_cb_called++;
 }
@@ -69,9 +64,10 @@ TEST_IMPL(poll_close) {
     uv_close((uv_handle_t*) &poll_handles[i], close_cb);
   }
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(close_cb_called == NUM_SOCKETS);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

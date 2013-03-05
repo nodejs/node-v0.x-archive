@@ -1103,6 +1103,11 @@ void RegExpMacroAssemblerMIPS::WriteStackPointerToRegister(int reg) {
 }
 
 
+bool RegExpMacroAssemblerMIPS::CanReadUnaligned() {
+  return false;
+}
+
+
 // Private methods:
 
 void RegExpMacroAssemblerMIPS::CallCheckStackGuardState(Register scratch) {

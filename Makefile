@@ -2,8 +2,11 @@
 
 BUILDTYPE ?= Release
 PYTHON ?= python
+NINJA ?= ninja
 DESTDIR ?=
 SIGN ?=
+
+NODE ?= ./node
 
 # Default to verbose builds.
 # To do quiet/pretty builds, run `make V=` to set V to an empty string,
@@ -22,22 +25,34 @@ endif
 # to check for changes.
 .PHONY: node node_g
 
+ifeq ($(USE_NINJA),1)
+node: config.gypi
+	$(NINJA) -C out/Release/
+	ln -fs out/Release/node node
+
+node_g: config.gypi
+	$(NINJA) -C out/Debug/
+	ln -fs out/Debug/node $@
+else
 node: config.gypi out/Makefile
 	$(MAKE) -C out BUILDTYPE=Release V=$(V)
 	ln -fs out/Release/node node
 
 node_g: config.gypi out/Makefile
 	$(MAKE) -C out BUILDTYPE=Debug V=$(V)
-	ln -fs out/Debug/node node_g
-
-config.gypi: configure
-	./configure
-
-out/Debug/node:
-	$(MAKE) -C out BUILDTYPE=Debug V=$(V)
+	ln -fs out/Debug/node $@
+endif
 
 out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
+ifeq ($(USE_NINJA),1)
+	touch out/Makefile
+	$(PYTHON) tools/gyp_node -f ninja
+else
 	$(PYTHON) tools/gyp_node -f make
+endif
+
+config.gypi: configure
+	$(PYTHON) ./configure
 
 install: all
 	$(PYTHON) tools/install.py $@ $(DESTDIR)
@@ -59,7 +74,7 @@ distclean:
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
-	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
+	$(MAKE) jslint
 
 test-http1: all
 	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
@@ -203,9 +218,17 @@ endif
 ifeq ($(DESTCPU),x64)
 ARCH=x64
 else
+ifeq ($(DESTCPU),arm)
+ARCH=arm
+else
 ARCH=x86
 endif
+endif
 TARNAME=node-$(VERSION)
+ifeq ($(NIGHTLY),1)
+TAG = nightly-$(shell date "+%Y%m%d")
+TARNAME=node-$(VERSION)-$(TAG)
+endif
 TARBALL=$(TARNAME).tar.gz
 BINARYNAME=$(TARNAME)-$(PLATFORM)-$(ARCH)
 BINARYTAR=$(BINARYNAME).tar.gz
@@ -228,7 +251,7 @@ release-only:
 		echo "" >&2 ; \
 		exit 1 ; \
 	fi
-	@if [ "$(RELEASE)" = "1" ]; then \
+	@if [ "$(NIGHTLY)" = "1" -o "$(RELEASE)" = "1" ]; then \
 		exit 0; \
 	else \
 	  echo "" >&2 ; \
@@ -243,10 +266,10 @@ pkg: $(PKG)
 $(PKG): release-only
 	rm -rf $(PKGDIR)
 	rm -rf out/deps out/Release
-	./configure --prefix=$(PKGDIR)/32/usr/local --without-snapshot --dest-cpu=ia32
+	$(PYTHON) ./configure --prefix=$(PKGDIR)/32/usr/local --without-snapshot --dest-cpu=ia32 --tag=$(TAG)
 	$(MAKE) install V=$(V)
 	rm -rf out/deps out/Release
-	./configure --prefix=$(PKGDIR)/usr/local --without-snapshot --dest-cpu=x64
+	$(PYTHON) ./configure --prefix=$(PKGDIR)/usr/local --without-snapshot --dest-cpu=x64 --tag=$(TAG)
 	$(MAKE) install V=$(V)
 	SIGN="$(SIGN)" PKGDIR="$(PKGDIR)" bash tools/osx-codesign.sh
 	lipo $(PKGDIR)/32/usr/local/bin/node \
@@ -278,7 +301,7 @@ tar: $(TARBALL)
 $(BINARYTAR): release-only
 	rm -rf $(BINARYNAME)
 	rm -rf out/deps out/Release
-	./configure --prefix=/ --without-snapshot --dest-cpu=$(DESTCPU) $(CONFIG_FLAGS)
+	$(PYTHON) ./configure --prefix=/ --without-snapshot --dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
 	$(MAKE) install DESTDIR=$(BINARYNAME) V=$(V) PORTABLE=1
 	cp README.md $(BINARYNAME)
 	cp LICENSE $(BINARYNAME)
@@ -294,7 +317,44 @@ dist-upload: $(TARBALL) $(PKG)
 	scp $(TARBALL) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARBALL)
 	scp $(PKG) node@nodejs.org:~/web/nodejs.org/dist/$(VERSION)/$(TARNAME).pkg
 
-bench:
+wrkclean:
+	$(MAKE) -C tools/wrk/ clean
+	rm tools/wrk/wrk
+
+wrk: tools/wrk/wrk
+tools/wrk/wrk:
+	$(MAKE) -C tools/wrk/
+
+bench-net: all
+	@$(NODE) benchmark/common.js net
+
+bench-crypto: all
+	@$(NODE) benchmark/common.js crypto
+
+bench-tls: all
+	@$(NODE) benchmark/common.js tls
+
+bench-http: wrk all
+	@$(NODE) benchmark/common.js http
+
+bench-fs: all
+	@$(NODE) benchmark/common.js fs
+
+bench-misc: all
+	@$(MAKE) -C benchmark/misc/function_call/
+	@$(NODE) benchmark/common.js misc
+
+bench-array: all
+	@$(NODE) benchmark/common.js arrays
+
+bench-buffer: all
+	@$(NODE) benchmark/common.js buffers
+
+bench-all: bench bench-misc bench-array bench-buffer
+
+bench: bench-net bench-http bench-fs bench-tls
+
+bench-http-simple:
 	 benchmark/http_simple_bench.sh
 
 bench-idle:
@@ -313,4 +373,4 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all website-upload pkg blog blogclean tar binary release-only
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all website-upload pkg blog blogclean tar binary release-only bench-http-simple bench-idle bench-all bench bench-misc bench-array bench-buffer bench-net bench-http bench-fs bench-tls

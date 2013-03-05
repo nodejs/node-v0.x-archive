@@ -29,12 +29,11 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-static void uv__pipe_accept(uv_loop_t* loop, uv__io_t* w, int events);
+static void uv__pipe_accept(uv_loop_t* loop, uv__io_t* w, unsigned int events);
 
 
 int uv_pipe_init(uv_loop_t* loop, uv_pipe_t* handle, int ipc) {
   uv__stream_init(loop, (uv_stream_t*)handle, UV_NAMED_PIPE);
-  loop->counters.pipe_init++;
   handle->shutdown_req = NULL;
   handle->connect_req = NULL;
   handle->pipe_fname = NULL;
@@ -58,7 +57,7 @@ int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
   bound = 0;
 
   /* Already bound? */
-  if (handle->fd >= 0) {
+  if (uv__stream_fd(handle) >= 0) {
     uv__set_artificial_error(handle->loop, UV_EINVAL);
     goto out;
   }
@@ -90,7 +89,7 @@ int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
 
   /* Success. */
   handle->pipe_fname = pipe_fname; /* Is a strdup'ed copy. */
-  handle->fd = sockfd;
+  handle->io_watcher.fd = sockfd;
   status = 0;
 
 out:
@@ -118,21 +117,18 @@ int uv_pipe_listen(uv_pipe_t* handle, int backlog, uv_connection_cb cb) {
   saved_errno = errno;
   status = -1;
 
-  if (handle->fd == -1) {
+  if (uv__stream_fd(handle) == -1) {
     uv__set_artificial_error(handle->loop, UV_EINVAL);
     goto out;
   }
-  assert(handle->fd >= 0);
+  assert(uv__stream_fd(handle) >= 0);
 
-  if ((status = listen(handle->fd, backlog)) == -1) {
+  if ((status = listen(uv__stream_fd(handle), backlog)) == -1) {
     uv__set_sys_error(handle->loop, errno);
   } else {
     handle->connection_cb = cb;
-    uv__io_init(&handle->read_watcher,
-                uv__pipe_accept,
-                handle->fd,
-                UV__IO_READ);
-    uv__io_start(handle->loop, &handle->read_watcher);
+    handle->io_watcher.cb = uv__pipe_accept;
+    uv__io_start(handle->loop, &handle->io_watcher, UV__POLLIN);
   }
 
 out:
@@ -151,16 +147,17 @@ void uv__pipe_close(uv_pipe_t* handle) {
      */
     unlink(handle->pipe_fname);
     free((void*)handle->pipe_fname);
+    handle->pipe_fname = NULL;
   }
 
   uv__stream_close((uv_stream_t*)handle);
 }
 
 
-void uv_pipe_open(uv_pipe_t* handle, uv_file fd) {
-  uv__stream_open((uv_stream_t*)handle,
-                  fd,
-                  UV_STREAM_READABLE | UV_STREAM_WRITABLE);
+int uv_pipe_open(uv_pipe_t* handle, uv_file fd) {
+  return uv__stream_open((uv_stream_t*)handle,
+                         fd,
+                         UV_STREAM_READABLE | UV_STREAM_WRITABLE);
 }
 
 
@@ -175,11 +172,11 @@ void uv_pipe_connect(uv_connect_t* req,
   int r;
 
   saved_errno = errno;
-  new_sock = (handle->fd == -1);
+  new_sock = (uv__stream_fd(handle) == -1);
   err = -1;
 
   if (new_sock)
-    if ((handle->fd = uv__socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+    if ((handle->io_watcher.fd = uv__socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
       goto out;
 
   memset(&saddr, 0, sizeof saddr);
@@ -187,7 +184,8 @@ void uv_pipe_connect(uv_connect_t* req,
   saddr.sun_family = AF_UNIX;
 
   do {
-    r = connect(handle->fd, (struct sockaddr*)&saddr, sizeof saddr);
+    r = connect(uv__stream_fd(handle),
+                (struct sockaddr*)&saddr, sizeof saddr);
   }
   while (r == -1 && errno == EINTR);
 
@@ -197,12 +195,11 @@ void uv_pipe_connect(uv_connect_t* req,
 
   if (new_sock)
     if (uv__stream_open((uv_stream_t*)handle,
-                        handle->fd,
+                        uv__stream_fd(handle),
                         UV_STREAM_READABLE | UV_STREAM_WRITABLE))
       goto out;
 
-  uv__io_start(handle->loop, &handle->read_watcher);
-  uv__io_start(handle->loop, &handle->write_watcher);
+  uv__io_start(handle->loop, &handle->io_watcher, UV__POLLIN | UV__POLLOUT);
   err = 0;
 
 out:
@@ -216,7 +213,7 @@ out:
 
   /* Force callback to run on next tick in case of error. */
   if (err != 0)
-    uv__io_feed(handle->loop, &handle->write_watcher, UV__IO_WRITE);
+    uv__io_feed(handle->loop, &handle->io_watcher);
 
   /* Mimic the Windows pipe implementation, always
    * return 0 and let the callback handle errors.
@@ -226,17 +223,17 @@ out:
 
 
 /* TODO merge with uv__server_io()? */
-static void uv__pipe_accept(uv_loop_t* loop, uv__io_t* w, int events) {
+static void uv__pipe_accept(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   uv_pipe_t* pipe;
   int saved_errno;
   int sockfd;
 
   saved_errno = errno;
-  pipe = container_of(w, uv_pipe_t, read_watcher);
+  pipe = container_of(w, uv_pipe_t, io_watcher);
 
   assert(pipe->type == UV_NAMED_PIPE);
 
-  sockfd = uv__accept(pipe->fd);
+  sockfd = uv__accept(uv__stream_fd(pipe));
   if (sockfd == -1) {
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
       uv__set_sys_error(pipe->loop, errno);
@@ -247,7 +244,7 @@ static void uv__pipe_accept(uv_loop_t* loop, uv__io_t* w, int events) {
     pipe->connection_cb((uv_stream_t*)pipe, 0);
     if (pipe->accepted_fd == sockfd) {
       /* The user hasn't called uv_accept() yet */
-      uv__io_stop(pipe->loop, &pipe->read_watcher);
+      uv__io_stop(pipe->loop, &pipe->io_watcher, UV__POLLIN);
     }
   }
 

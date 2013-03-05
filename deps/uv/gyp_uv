@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import glob
+import platform
 import os
 import subprocess
 import sys
@@ -16,6 +17,14 @@ try:
 except ImportError:
   print('You need to install gyp in build/gyp first. See the README.')
   sys.exit(42)
+
+
+def host_arch():
+  machine = platform.machine()
+  if machine == 'i386': return 'ia32'
+  if machine == 'x86_64': return 'x64'
+  if machine.startswith('arm'): return 'arm'
+  return machine  # Return as-is and hope for the best.
 
 
 def compiler_version():
@@ -45,6 +54,9 @@ if __name__ == '__main__':
     args.append(os.path.join(uv_root, 'uv.gyp'))
     common_fn  = os.path.join(uv_root, 'common.gypi')
     options_fn = os.path.join(uv_root, 'options.gypi')
+    # we force vs 2010 over 2008 which would otherwise be the default for gyp
+    if not os.environ.get('GYP_MSVS_VERSION'):
+      os.environ['GYP_MSVS_VERSION'] = '2010'
   else:
     args.append(os.path.join(os.path.abspath(uv_root), 'uv.gyp'))
     common_fn  = os.path.join(os.path.abspath(uv_root), 'common.gypi')
@@ -69,9 +81,18 @@ if __name__ == '__main__':
     args.append('-Dgcc_version=%d' % (10 * major + minor))
     args.append('-Dclang=%d' % int(is_clang))
 
-  args.append('-Dtarget_arch=ia32')
-  args.append('-Dcomponent=static_library')
-  args.append('-Dlibrary=static_library')
+  if not any(a.startswith('-Dhost_arch=') for a in args):
+    args.append('-Dhost_arch=%s' % host_arch())
+
+  if not any(a.startswith('-Dtarget_arch=') for a in args):
+    args.append('-Dtarget_arch=%s' % host_arch())
+
+  if not any(a.startswith('-Dlibrary=') for a in args):
+    args.append('-Dlibrary=static_library')
+
+  if not any(a.startswith('-Dcomponent=') for a in args):
+    args.append('-Dcomponent=static_library')
+
   gyp_args = list(args)
   print gyp_args
   run_gyp(gyp_args)

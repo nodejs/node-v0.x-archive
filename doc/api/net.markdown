@@ -207,6 +207,18 @@ Example:
 
 Don't call `server.address()` until the `'listening'` event has been emitted.
 
+### server.unref()
+
+Calling `unref` on a server will allow the program to exit if this is the only
+active server in the event system. If the server is already `unref`d calling
+`unref` again will have no effect.
+
+### server.ref()
+
+Opposite of `unref`, calling `ref` on a previously `unref`d server will *not*
+let the program exit if it's the only server left (the default behavior). If
+the server is `ref`d calling `ref` again will have no effect.
+
 ### server.maxConnections
 
 Set this property to reject connections when the server's connection count gets
@@ -217,11 +229,21 @@ with `child_process.fork()`.
 
 ### server.connections
 
+This function is **deprecated**; please use [server.getConnections()][] instead.
 The number of concurrent connections on the server.
 
-This becomes `null` when sending a socket to a child with `child_process.fork()`.
+This becomes `null` when sending a socket to a child with
+`child_process.fork()`. To poll forks and get current number of active
+connections use asynchronous `server.getConnections` instead.
 
 `net.Server` is an [EventEmitter][] with the following events:
+
+### server.getConnections(callback)
+
+Asynchronously get the number of concurrent connections on the server. Works
+when sockets were sent to forks.
+
+Callback should take two arguments `err` and `count`.
 
 ### Event: 'listening'
 
@@ -384,6 +406,18 @@ socket as reported by the operating system. Returns an object with
 three properties, e.g.
 `{ port: 12346, family: 'IPv4', address: '127.0.0.1' }`
 
+### socket.unref()
+
+Calling `unref` on a socket will allow the program to exit if this is the only
+active socket in the event system. If the socket is already `unref`d calling
+`unref` again will have no effect.
+
+### socket.ref()
+
+Opposite of `unref`, calling `ref` on a previously `unref`d socket will *not*
+let the program exit if it's the only socket left (the default behavior). If
+the socket is `ref`d calling `ref` again will have no effect.
+
 ### socket.remoteAddress
 
 The string representation of the remote IP address. For example,
@@ -392,6 +426,17 @@ The string representation of the remote IP address. For example,
 ### socket.remotePort
 
 The numeric representation of the remote port. For example,
+`80` or `21`.
+
+### socket.localAddress
+
+The string representation of the local IP address the remote client is
+connecting on. For example, if you are listening on `'0.0.0.0'` and the
+client connects on `'192.168.1.1'`, the value would be `'192.168.1.1'`.
+
+### socket.localPort
+
+The numeric representation of the local port. For example,
 `80` or `21`.
 
 ### socket.bytesRead

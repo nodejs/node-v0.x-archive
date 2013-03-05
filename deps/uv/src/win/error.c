@@ -79,6 +79,8 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case ERROR_LOCK_VIOLATION:              return UV_EBUSY;
     case ERROR_PIPE_BUSY:                   return UV_EBUSY;
     case ERROR_SHARING_VIOLATION:           return UV_EBUSY;
+    case ERROR_OPERATION_ABORTED:           return UV_ECANCELED;
+    case WSAEINTR:                          return UV_ECANCELED;
     case ERROR_NO_UNICODE_TRANSLATION:      return UV_ECHARSET;
     case ERROR_CONNECTION_ABORTED:          return UV_ECONNABORTED;
     case WSAECONNABORTED:                   return UV_ECONNABORTED;
@@ -92,8 +94,6 @@ uv_err_code uv_translate_sys_error(int sys_errno) {
     case WSAEFAULT:                         return UV_EFAULT;
     case ERROR_HOST_UNREACHABLE:            return UV_EHOSTUNREACH;
     case WSAEHOSTUNREACH:                   return UV_EHOSTUNREACH;
-    case ERROR_OPERATION_ABORTED:           return UV_EINTR;
-    case WSAEINTR:                          return UV_EINTR;
     case ERROR_INSUFFICIENT_BUFFER:         return UV_EINVAL;
     case ERROR_INVALID_DATA:                return UV_EINVAL;
     case ERROR_INVALID_PARAMETER:           return UV_EINVAL;

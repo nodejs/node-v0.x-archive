@@ -83,6 +83,7 @@
 # endif
 #endif
 
+
 namespace node {
 
 NODE_EXTERN extern bool no_deprecation;
@@ -103,7 +104,7 @@ void EmitExit(v8::Handle<v8::Object> process);
 
 #define NODE_DEFINE_CONSTANT(target, constant)                            \
   (target)->Set(v8::String::NewSymbol(#constant),                         \
-                v8::Integer::New(constant),                               \
+                v8::Number::New(constant),                                \
                 static_cast<v8::PropertyAttribute>(                       \
                     v8::ReadOnly|v8::DontDelete))
 
@@ -127,7 +128,7 @@ void SetPrototypeMethod(target_t target,
 #define NODE_SET_METHOD node::SetMethod
 #define NODE_SET_PROTOTYPE_METHOD node::SetPrototypeMethod
 
-enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
+enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
 NODE_EXTERN void FatalException(v8::TryCatch &try_catch);
@@ -147,18 +148,6 @@ NODE_EXTERN ssize_t DecodeWrite(char *buf,
                                 enum encoding encoding = BINARY);
 
 v8::Local<v8::Object> BuildStatsObject(const uv_statbuf_t* s);
-
-
-/**
- * Call this when your constructor is invoked as a regular function, e.g.
- * Buffer(10) instead of new Buffer(10).
- * @param constructorTemplate Constructor template to instantiate from.
- * @param args The arguments object passed to your constructor.
- * @see v8::Arguments::IsConstructCall
- */
-v8::Handle<v8::Value> FromConstructorTemplate(
-    v8::Persistent<v8::FunctionTemplate>& constructorTemplate,
-    const v8::Arguments& args);
 
 
 static inline v8::Persistent<v8::Function>* cb_persist(
@@ -198,11 +187,15 @@ NODE_EXTERN v8::Local<v8::Value> WinapiErrnoException(int errorno,
 
 const char *signo_string(int errorno);
 
+
+NODE_EXTERN typedef void (* addon_register_func)(
+    v8::Handle<v8::Object> exports, v8::Handle<v8::Value> module);
+
 struct node_module_struct {
   int version;
   void *dso_handle;
   const char *filename;
-  void (*register_func) (v8::Handle<v8::Object> target);
+  node::addon_register_func register_func;
   const char *modname;
 };
 
@@ -212,9 +205,9 @@ node_module_struct* get_builtin_module(const char *name);
  * When this version number is changed, node.js will refuse
  * to load older modules.  This should be done whenever
  * an API is broken in the C++ side, including in v8 or
- * other dependencies
+ * other dependencies.
  */
-#define NODE_MODULE_VERSION (1)
+#define NODE_MODULE_VERSION 0x000B /* v0.11 */
 
 #define NODE_STANDARD_MODULE_STUFF \
           NODE_MODULE_VERSION,     \
@@ -232,7 +225,7 @@ node_module_struct* get_builtin_module(const char *name);
     NODE_MODULE_EXPORT node::node_module_struct modname ## _module =  \
     {                                                                 \
       NODE_STANDARD_MODULE_STUFF,                                     \
-      regfunc,                                                        \
+      (node::addon_register_func)regfunc,                             \
       NODE_STRINGIFY(modname)                                         \
     };                                                                \
   }
@@ -265,10 +258,5 @@ MakeCallback(const v8::Handle<v8::Object> object,
              v8::Handle<v8::Value> argv[]);
 
 }  // namespace node
-
-#if !defined(NODE_WANT_INTERNALS) && !defined(_WIN32)
-# include "ev-emul.h"
-# include "eio-emul.h"
-#endif
 
 #endif  // SRC_NODE_H_

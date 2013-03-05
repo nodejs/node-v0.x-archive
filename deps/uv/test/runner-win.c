@@ -24,9 +24,8 @@
 #include <malloc.h>
 #include <stdio.h>
 #include <process.h>
-#include <windows.h>
 #if !defined(__MINGW32__)
-#include <crtdbg.h>
+# include <crtdbg.h>
 #endif
 
 
@@ -65,7 +64,7 @@ void platform_init(int argc, char **argv) {
 }
 
 
-int process_start(char *name, char *part, process_info_t *p) {
+int process_start(char *name, char *part, process_info_t *p, int is_helper) {
   HANDLE file = INVALID_HANDLE_VALUE;
   HANDLE nul = INVALID_HANDLE_VALUE;
   WCHAR path[MAX_PATH], filename[MAX_PATH];
@@ -111,8 +110,8 @@ int process_start(char *name, char *part, process_info_t *p) {
     goto error;
 
   if (part) {
-    if (_snwprintf((wchar_t*)args,
-                   sizeof(args) / sizeof(wchar_t),
+    if (_snwprintf((WCHAR*)args,
+                   sizeof(args) / sizeof(WCHAR),
                    L"\"%s\" %S %S",
                    image,
                    name,
@@ -120,8 +119,8 @@ int process_start(char *name, char *part, process_info_t *p) {
       goto error;
     }
   } else {
-    if (_snwprintf((wchar_t*)args,
-                   sizeof(args) / sizeof(wchar_t),
+    if (_snwprintf((WCHAR*)args,
+                   sizeof(args) / sizeof(WCHAR),
                    L"\"%s\" %S",
                    image,
                    name) < 0) {

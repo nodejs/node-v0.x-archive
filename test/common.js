@@ -63,6 +63,17 @@ exports.ddCommand = function(filename, kilobytes) {
 };
 
 
+exports.spawnCat = function(options) {
+  var spawn = require('child_process').spawn;
+
+  if (process.platform === 'win32') {
+    return spawn('more', [], options);
+  } else {
+    return spawn('cat', [], options);
+  }
+};
+
+
 exports.spawnPwd = function(options) {
   var spawn = require('child_process').spawn;
 
@@ -81,16 +92,14 @@ process.on('exit', function() {
   if (!exports.globalCheck) return;
   var knownGlobals = [setTimeout,
                       setInterval,
+                      setImmediate,
                       clearTimeout,
                       clearInterval,
+                      clearImmediate,
                       console,
                       Buffer,
                       process,
                       global];
-
-  if (global.errno) {
-    knownGlobals.push(errno);
-  }
 
   if (global.gc) {
     knownGlobals.push(gc);
@@ -105,6 +114,14 @@ process.on('exit', function() {
     knownGlobals.push(DTRACE_NET_SERVER_CONNECTION);
     knownGlobals.push(DTRACE_NET_SOCKET_READ);
     knownGlobals.push(DTRACE_NET_SOCKET_WRITE);
+  }
+  if (global.COUNTER_NET_SERVER_CONNECTION) {
+    knownGlobals.push(COUNTER_NET_SERVER_CONNECTION);
+    knownGlobals.push(COUNTER_NET_SERVER_CONNECTION_CLOSE);
+    knownGlobals.push(COUNTER_HTTP_SERVER_REQUEST);
+    knownGlobals.push(COUNTER_HTTP_SERVER_RESPONSE);
+    knownGlobals.push(COUNTER_HTTP_CLIENT_REQUEST);
+    knownGlobals.push(COUNTER_HTTP_CLIENT_RESPONSE);
   }
 
   if (global.ArrayBuffer) {
@@ -142,7 +159,9 @@ process.on('exit', function() {
 var mustCallChecks = [];
 
 
-function runCallChecks() {
+function runCallChecks(exitCode) {
+  if (exitCode !== 0) return;
+
   var failed = mustCallChecks.filter(function(context) {
     return context.actual !== context.expected;
   });

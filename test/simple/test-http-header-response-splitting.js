@@ -49,15 +49,17 @@ var server = http.createServer(function(req, res) {
   }
   res.end('Hi mars!');
 });
-server.listen(common.PORT);
 
-for (var i = 0; i < 5; i++) {
-  var req = http.get({ port: common.PORT, path: '/' }, function(res) {
-    assert.strictEqual(res.headers.test, 'foo invalid: bar');
-    assert.strictEqual(res.headers.invalid, undefined);
-    responses++;
-  });
-}
+server.listen(common.PORT, function() {
+  for (var i = 0; i < 5; i++) {
+    var req = http.get({ port: common.PORT, path: '/' }, function(res) {
+      assert.strictEqual(res.headers.test, 'foo invalid: bar');
+      assert.strictEqual(res.headers.invalid, undefined);
+      responses++;
+      res.resume();
+    });
+  }
+});
 
 process.on('exit', function() {
   assert.strictEqual(responses, 5);

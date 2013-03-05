@@ -44,3 +44,7 @@ var foo = a.bind(function() {
 for (var i = 0; i < 1000; i++) {
   process.nextTick(foo);
 }
+
+process.on('exit', function(c) {
+  if (!c) console.log('ok');
+});
