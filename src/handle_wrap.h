@@ -70,7 +70,10 @@ class HandleWrap {
     // Using double underscore due to handle_ member in tcp_wrap. Probably
     // tcp_wrap should rename it's member to 'handle'.
     uv_handle_t* handle__;
-    bool unref_;
+    unsigned int flags_;
+
+    static const unsigned int kUnref = 1;
+    static const unsigned int kCloseCallback = 2;
 };
 
 
