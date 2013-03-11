@@ -276,6 +276,43 @@ class Connection : ObjectWrap {
   friend class SecureContext;
 };
 
+class Cipher : public ObjectWrap {
+ public:
+  static void Initialize (v8::Handle<v8::Object> target);
+
+  bool CipherInit(char* cipherType, char* key_buf, int key_buf_len);
+  bool CipherInitIv(char* cipherType,
+                    char* key,
+                    int key_len,
+                    char* iv,
+                    int iv_len);
+  int CipherUpdate(char* data, int len, unsigned char** out, int* out_len);
+  int SetAutoPadding(bool auto_padding);
+  int CipherFinal(unsigned char** out, int *out_len);
+
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> CipherInit(const v8::Arguments& args);
+  static v8::Handle<v8::Value> CipherInitIv(const v8::Arguments& args);
+  static v8::Handle<v8::Value> CipherUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
+  static v8::Handle<v8::Value> CipherFinal(const v8::Arguments& args);
+
+  Cipher() : ObjectWrap(), initialised_(false) {
+  }
+
+  ~Cipher() {
+    if (initialised_) {
+      EVP_CIPHER_CTX_cleanup(&ctx);
+    }
+  }
+
+ private:
+  EVP_CIPHER_CTX ctx; /* coverity[member_decl] */
+  const EVP_CIPHER *cipher; /* coverity[member_decl] */
+  bool initialised_;
+};
+
 void InitCrypto(v8::Handle<v8::Object> target);
 
 }  // namespace crypto
