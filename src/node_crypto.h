@@ -313,6 +313,44 @@ class Cipher : public ObjectWrap {
   bool initialised_;
 };
 
+class Decipher : public ObjectWrap {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
+
+  bool DecipherInit(char* cipherType, char* key_buf, int key_buf_len);
+  bool DecipherInitIv(char* cipherType,
+                      char* key,
+                      int key_len,
+                      char* iv,
+                      int iv_len);
+  int DecipherUpdate(char* data, int len, unsigned char** out, int* out_len);
+  int SetAutoPadding(bool auto_padding);
+  int DecipherFinal(unsigned char** out, int *out_len);
+
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> DecipherInit(const v8::Arguments& args);
+
+  static v8::Handle<v8::Value> DecipherInitIv(const v8::Arguments& args);
+  static v8::Handle<v8::Value> DecipherUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
+  static v8::Handle<v8::Value> DecipherFinal(const v8::Arguments& args);
+
+  Decipher() : ObjectWrap(), initialised_(false) {
+  }
+
+  ~Decipher () {
+    if (initialised_) {
+      EVP_CIPHER_CTX_cleanup(&ctx);
+    }
+  }
+
+ private:
+  EVP_CIPHER_CTX ctx;
+  const EVP_CIPHER *cipher_;
+  bool initialised_;
+};
+
 void InitCrypto(v8::Handle<v8::Object> target);
 
 }  // namespace crypto

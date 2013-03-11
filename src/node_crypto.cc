@@ -2297,313 +2297,299 @@ Handle<Value> Cipher::CipherFinal(const Arguments& args) {
 }
 
 
-class Decipher : public ObjectWrap {
- public:
-  static void
-  Initialize (v8::Handle<v8::Object> target)
-  {
-    HandleScope scope;
+void Decipher::Initialize(v8::Handle<v8::Object> target) {
+  HandleScope scope;
 
-    Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
-    t->InstanceTemplate()->SetInternalFieldCount(1);
+  t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", DecipherInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "initiv", DecipherInitIv);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", DecipherUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "final", DecipherFinal);
-    NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinal); // remove someday
-    NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
+  NODE_SET_PROTOTYPE_METHOD(t, "init", DecipherInit);
+  NODE_SET_PROTOTYPE_METHOD(t, "initiv", DecipherInitIv);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", DecipherUpdate);
+  NODE_SET_PROTOTYPE_METHOD(t, "final", DecipherFinal);
+  NODE_SET_PROTOTYPE_METHOD(t, "finaltol", DecipherFinal); // remove someday
+  NODE_SET_PROTOTYPE_METHOD(t, "setAutoPadding", SetAutoPadding);
 
-    target->Set(String::NewSymbol("Decipher"), t->GetFunction());
+  target->Set(String::NewSymbol("Decipher"), t->GetFunction());
+}
+
+
+bool Decipher::DecipherInit(char* cipherType, char* key_buf, int key_buf_len) {
+  cipher_ = EVP_get_cipherbyname(cipherType);
+
+  if(!cipher_) {
+    fprintf(stderr, "node-crypto : Unknown cipher %s\n", cipherType);
+    return false;
   }
 
-  bool DecipherInit(char* cipherType, char* key_buf, int key_buf_len) {
-    cipher_ = EVP_get_cipherbyname(cipherType);
+  unsigned char key[EVP_MAX_KEY_LENGTH],iv[EVP_MAX_IV_LENGTH];
+  int key_len = EVP_BytesToKey(cipher_,
+                               EVP_md5(),
+                               NULL,
+                               (unsigned char*)(key_buf),
+                               key_buf_len,
+                               1,
+                               key,
+                               iv);
 
-    if(!cipher_) {
-      fprintf(stderr, "node-crypto : Unknown cipher %s\n", cipherType);
-      return false;
-    }
-
-    unsigned char key[EVP_MAX_KEY_LENGTH],iv[EVP_MAX_IV_LENGTH];
-    int key_len = EVP_BytesToKey(cipher_,
-                                 EVP_md5(),
-                                 NULL,
-                                 (unsigned char*)(key_buf),
-                                 key_buf_len,
-                                 1,
-                                 key,
-                                 iv);
-
-    EVP_CIPHER_CTX_init(&ctx);
-    EVP_CipherInit_ex(&ctx, cipher_, NULL, NULL, NULL, false);
-    if (!EVP_CIPHER_CTX_set_key_length(&ctx, key_len)) {
-      fprintf(stderr, "node-crypto : Invalid key length %d\n", key_len);
-      EVP_CIPHER_CTX_cleanup(&ctx);
-      return false;
-    }
-    EVP_CipherInit_ex(&ctx, NULL, NULL,
-      (unsigned char*)key,
-      (unsigned char*)iv, false);
-    initialised_ = true;
-    return true;
-  }
-
-
-  bool DecipherInitIv(char* cipherType,
-                      char* key,
-                      int key_len,
-                      char* iv,
-                      int iv_len) {
-    cipher_ = EVP_get_cipherbyname(cipherType);
-    if(!cipher_) {
-      fprintf(stderr, "node-crypto : Unknown cipher %s\n", cipherType);
-      return false;
-    }
-    /* OpenSSL versions up to 0.9.8l failed to return the correct
-      iv_length (0) for ECB ciphers */
-    if (EVP_CIPHER_iv_length(cipher_) != iv_len &&
-      !(EVP_CIPHER_mode(cipher_) == EVP_CIPH_ECB_MODE && iv_len == 0)) {
-      fprintf(stderr, "node-crypto : Invalid IV length %d\n", iv_len);
-      return false;
-    }
-    EVP_CIPHER_CTX_init(&ctx);
-    EVP_CipherInit_ex(&ctx, cipher_, NULL, NULL, NULL, false);
-    if (!EVP_CIPHER_CTX_set_key_length(&ctx, key_len)) {
-      fprintf(stderr, "node-crypto : Invalid key length %d\n", key_len);
-      EVP_CIPHER_CTX_cleanup(&ctx);
-      return false;
-    }
-    EVP_CipherInit_ex(&ctx, NULL, NULL,
-      (unsigned char*)key,
-      (unsigned char*)iv, false);
-    initialised_ = true;
-    return true;
-  }
-
-  int DecipherUpdate(char* data, int len, unsigned char** out, int* out_len) {
-    if (!initialised_) {
-      *out_len = 0;
-      *out = NULL;
-      return 0;
-    }
-
-    *out_len=len+EVP_CIPHER_CTX_block_size(&ctx);
-    *out= new unsigned char[*out_len];
-
-    return EVP_CipherUpdate(&ctx, *out, out_len, (unsigned char*)data, len);
-  }
-
-  int SetAutoPadding(bool auto_padding) {
-    if (!initialised_) return 0;
-    return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
-  }
-
-  // coverity[alloc_arg]
-  int DecipherFinal(unsigned char** out, int *out_len) {
-    int r;
-
-    if (!initialised_) {
-      *out_len = 0;
-      *out = NULL;
-      return 0;
-    }
-
-    *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
-    r = EVP_CipherFinal_ex(&ctx,*out,out_len);
+  EVP_CIPHER_CTX_init(&ctx);
+  EVP_CipherInit_ex(&ctx, cipher_, NULL, NULL, NULL, false);
+  if (!EVP_CIPHER_CTX_set_key_length(&ctx, key_len)) {
+    fprintf(stderr, "node-crypto : Invalid key length %d\n", key_len);
     EVP_CIPHER_CTX_cleanup(&ctx);
-    initialised_ = false;
-    return r;
+    return false;
+  }
+  EVP_CipherInit_ex(&ctx, NULL, NULL,
+    (unsigned char*)key,
+    (unsigned char*)iv, false);
+  initialised_ = true;
+  return true;
+}
+
+
+bool Decipher::DecipherInitIv(char* cipherType,
+                              char* key,
+                              int key_len,
+                              char* iv,
+                              int iv_len) {
+  cipher_ = EVP_get_cipherbyname(cipherType);
+  if(!cipher_) {
+    fprintf(stderr, "node-crypto : Unknown cipher %s\n", cipherType);
+    return false;
+  }
+  /* OpenSSL versions up to 0.9.8l failed to return the correct
+    iv_length (0) for ECB ciphers */
+  if (EVP_CIPHER_iv_length(cipher_) != iv_len &&
+    !(EVP_CIPHER_mode(cipher_) == EVP_CIPH_ECB_MODE && iv_len == 0)) {
+    fprintf(stderr, "node-crypto : Invalid IV length %d\n", iv_len);
+    return false;
+  }
+  EVP_CIPHER_CTX_init(&ctx);
+  EVP_CipherInit_ex(&ctx, cipher_, NULL, NULL, NULL, false);
+  if (!EVP_CIPHER_CTX_set_key_length(&ctx, key_len)) {
+    fprintf(stderr, "node-crypto : Invalid key length %d\n", key_len);
+    EVP_CIPHER_CTX_cleanup(&ctx);
+    return false;
+  }
+  EVP_CipherInit_ex(&ctx, NULL, NULL,
+    (unsigned char*)key,
+    (unsigned char*)iv, false);
+  initialised_ = true;
+  return true;
+}
+
+
+int Decipher::DecipherUpdate(char* data,
+                             int len,
+                             unsigned char** out,
+                             int* out_len) {
+  if (!initialised_) {
+    *out_len = 0;
+    *out = NULL;
+    return 0;
   }
 
+  *out_len=len+EVP_CIPHER_CTX_block_size(&ctx);
+  *out= new unsigned char[*out_len];
 
- protected:
+  return EVP_CipherUpdate(&ctx, *out, out_len, (unsigned char*)data, len);
+}
 
-  static Handle<Value> New (const Arguments& args) {
-    HandleScope scope;
 
-    Decipher *cipher = new Decipher();
-    cipher->Wrap(args.This());
-    return args.This();
+int Decipher::SetAutoPadding(bool auto_padding) {
+  if (!initialised_) return 0;
+  return EVP_CIPHER_CTX_set_padding(&ctx, auto_padding ? 1 : 0);
+}
+
+
+int Decipher::DecipherFinal(unsigned char** out, int *out_len) {
+  int r;
+
+  if (!initialised_) {
+    *out_len = 0;
+    *out = NULL;
+    return 0;
   }
 
-  static Handle<Value> DecipherInit(const Arguments& args) {
-    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+  *out = new unsigned char[EVP_CIPHER_CTX_block_size(&ctx)];
+  r = EVP_CipherFinal_ex(&ctx,*out,out_len);
+  EVP_CIPHER_CTX_cleanup(&ctx);
+  initialised_ = false;
+  return r;
+}
 
-    HandleScope scope;
 
-    if (args.Length() <= 1
-        || !args[0]->IsString()
-        || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
-    {
-      return ThrowException(Exception::Error(String::New(
-        "Must give cipher-type, key as argument")));
-    }
+Handle<Value> Decipher::New(const Arguments& args) {
+  HandleScope scope;
 
-    ASSERT_IS_BUFFER(args[1]);
-    ssize_t key_len = Buffer::Length(args[1]);
+  Decipher *cipher = new Decipher();
+  cipher->Wrap(args.This());
+  return args.This();
+}
 
-    if (key_len < 0) {
-      Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-      return ThrowException(exception);
-    }
 
-    char* key_buf = new char[key_len];
-    ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
-    assert(key_written == key_len);
+Handle<Value> Decipher::DecipherInit(const Arguments& args) {
+  Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
 
-    String::Utf8Value cipherType(args[0]);
+  HandleScope scope;
 
-    bool r = cipher->DecipherInit(*cipherType, key_buf,key_len);
-
-    delete [] key_buf;
-
-    if (!r) {
-      return ThrowException(Exception::Error(String::New("DecipherInit error")));
-    }
-
-    return args.This();
+  if (args.Length() <= 1
+      || !args[0]->IsString()
+      || !(args[1]->IsString() || Buffer::HasInstance(args[1])))
+  {
+    return ThrowException(Exception::Error(String::New(
+      "Must give cipher-type, key as argument")));
   }
 
-  static Handle<Value> DecipherInitIv(const Arguments& args) {
-    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+  ASSERT_IS_BUFFER(args[1]);
+  ssize_t key_len = Buffer::Length(args[1]);
 
-    HandleScope scope;
-
-    if (args.Length() <= 2
-        || !args[0]->IsString()
-        || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
-        || !(args[2]->IsString() || Buffer::HasInstance(args[2])))
-    {
-      return ThrowException(Exception::Error(String::New(
-        "Must give cipher-type, key, and iv as argument")));
-    }
-
-    ASSERT_IS_BUFFER(args[1]);
-    ssize_t key_len = Buffer::Length(args[1]);
-
-    if (key_len < 0) {
-      Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-      return ThrowException(exception);
-    }
-
-    ASSERT_IS_BUFFER(args[2]);
-    ssize_t iv_len = Buffer::Length(args[2]);
-
-    if (iv_len < 0) {
-      Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-      return ThrowException(exception);
-    }
-
-    char* key_buf = new char[key_len];
-    ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
-    assert(key_written == key_len);
-
-    char* iv_buf = new char[iv_len];
-    ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
-    assert(iv_written == iv_len);
-
-    String::Utf8Value cipherType(args[0]);
-
-    bool r = cipher->DecipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
-
-    delete [] key_buf;
-    delete [] iv_buf;
-
-    if (!r) {
-      return ThrowException(Exception::Error(String::New("DecipherInitIv error")));
-    }
-
-    return args.This();
+  if (key_len < 0) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
   }
 
-  static Handle<Value> DecipherUpdate(const Arguments& args) {
-    HandleScope scope;
+  char* key_buf = new char[key_len];
+  ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
+  assert(key_written == key_len);
 
-    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+  String::Utf8Value cipherType(args[0]);
 
-    ASSERT_IS_BUFFER(args[0]);
+  bool r = cipher->DecipherInit(*cipherType, key_buf,key_len);
 
-    ssize_t len;
+  delete [] key_buf;
 
-    char* buf;
-    // if alloc_buf then buf must be deleted later
-    bool alloc_buf = false;
-    char* buffer_data = Buffer::Data(args[0]);
-    size_t buffer_length = Buffer::Length(args[0]);
-
-    buf = buffer_data;
-    len = buffer_length;
-
-    unsigned char* out=0;
-    int out_len=0;
-    int r = cipher->DecipherUpdate(buf, len, &out, &out_len);
-
-    if (!r) {
-      delete [] out;
-      return ThrowCryptoTypeError(ERR_get_error());
-    }
-
-    Local<Value> outString;
-    outString = Encode(out, out_len, BUFFER);
-
-    if (out) delete [] out;
-
-    if (alloc_buf) delete [] buf;
-    return scope.Close(outString);
-
+  if (!r) {
+    return ThrowException(Exception::Error(String::New("DecipherInit error")));
   }
 
-  static Handle<Value> SetAutoPadding(const Arguments& args) {
-    HandleScope scope;
-    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+  return args.This();
+}
 
-    cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
 
-    return Undefined();
+Handle<Value> Decipher::DecipherInitIv(const Arguments& args) {
+  Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+
+  HandleScope scope;
+
+  if (args.Length() <= 2
+      || !args[0]->IsString()
+      || !(args[1]->IsString() || Buffer::HasInstance(args[1]))
+      || !(args[2]->IsString() || Buffer::HasInstance(args[2])))
+  {
+    return ThrowException(Exception::Error(String::New(
+      "Must give cipher-type, key, and iv as argument")));
   }
 
-  static Handle<Value> DecipherFinal(const Arguments& args) {
-    HandleScope scope;
+  ASSERT_IS_BUFFER(args[1]);
+  ssize_t key_len = Buffer::Length(args[1]);
 
-    Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
-
-    unsigned char* out_value = NULL;
-    int out_len = -1;
-    Local<Value> outString;
-
-    int r = cipher->DecipherFinal(&out_value, &out_len);
-
-    if (out_len <= 0 || r == 0) {
-      delete [] out_value; // allocated even if out_len == 0
-      out_value = NULL;
-      if (r == 0) return ThrowCryptoTypeError(ERR_get_error());
-    }
-
-    outString = Encode(out_value, out_len, BUFFER);
-    delete [] out_value;
-    return scope.Close(outString);
+  if (key_len < 0) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
   }
 
-  Decipher () : ObjectWrap () {
-    initialised_ = false;
+  ASSERT_IS_BUFFER(args[2]);
+  ssize_t iv_len = Buffer::Length(args[2]);
+
+  if (iv_len < 0) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
   }
 
-  ~Decipher () {
-    if (initialised_) {
-      EVP_CIPHER_CTX_cleanup(&ctx);
-    }
+  char* key_buf = new char[key_len];
+  ssize_t key_written = DecodeWrite(key_buf, key_len, args[1], BINARY);
+  assert(key_written == key_len);
+
+  char* iv_buf = new char[iv_len];
+  ssize_t iv_written = DecodeWrite(iv_buf, iv_len, args[2], BINARY);
+  assert(iv_written == iv_len);
+
+  String::Utf8Value cipherType(args[0]);
+
+  bool r = cipher->DecipherInitIv(*cipherType, key_buf,key_len,iv_buf,iv_len);
+
+  delete [] key_buf;
+  delete [] iv_buf;
+
+  if (!r) {
+    return ThrowException(Exception::Error(String::New("DecipherInitIv error")));
   }
 
- private:
-
-  EVP_CIPHER_CTX ctx;
-  const EVP_CIPHER *cipher_;
-  bool initialised_;
-};
+  return args.This();
+}
 
 
+Handle<Value> Decipher::DecipherUpdate(const Arguments& args) {
+  HandleScope scope;
+
+  Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+
+  ASSERT_IS_BUFFER(args[0]);
+
+  ssize_t len;
+
+  char* buf;
+  // if alloc_buf then buf must be deleted later
+  bool alloc_buf = false;
+  char* buffer_data = Buffer::Data(args[0]);
+  size_t buffer_length = Buffer::Length(args[0]);
+
+  buf = buffer_data;
+  len = buffer_length;
+
+  unsigned char* out=0;
+  int out_len=0;
+  int r = cipher->DecipherUpdate(buf, len, &out, &out_len);
+
+  if (!r) {
+    delete [] out;
+    return ThrowCryptoTypeError(ERR_get_error());
+  }
+
+  Local<Value> outString;
+  outString = Encode(out, out_len, BUFFER);
+
+  if (out) delete [] out;
+
+  if (alloc_buf) delete [] buf;
+  return scope.Close(outString);
+
+}
+
+
+Handle<Value> Decipher::SetAutoPadding(const Arguments& args) {
+  HandleScope scope;
+  Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+
+  cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
+
+  return Undefined();
+}
+
+
+Handle<Value> Decipher::DecipherFinal(const Arguments& args) {
+  HandleScope scope;
+
+  Decipher *cipher = ObjectWrap::Unwrap<Decipher>(args.This());
+
+  unsigned char* out_value = NULL;
+  int out_len = -1;
+  Local<Value> outString;
+
+  int r = cipher->DecipherFinal(&out_value, &out_len);
+
+  if (out_len <= 0 || r == 0) {
+    delete [] out_value; // allocated even if out_len == 0
+    out_value = NULL;
+    if (r == 0) return ThrowCryptoTypeError(ERR_get_error());
+  }
+
+  outString = Encode(out_value, out_len, BUFFER);
+  delete [] out_value;
+  return scope.Close(outString);
+}
 
 
 class Hmac : public ObjectWrap {
