@@ -324,28 +324,27 @@ class Hmac : public ObjectWrap {
  public:
   static void Initialize (v8::Handle<v8::Object> target);
 
-  bool HmacInit(char* hashType, char* key, int key_len);
-  int HmacUpdate(char* data, int len);
-  int HmacDigest(unsigned char** md_value, unsigned int *md_len);
-
  protected:
+  v8::Handle<v8::Value> HmacInit(char* hashType, char* key, int key_len);
+  bool HmacUpdate(char* data, int len);
+  bool HmacDigest(unsigned char** md_value, unsigned int* md_len);
+
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
   static v8::Handle<v8::Value> HmacInit(const v8::Arguments& args);
   static v8::Handle<v8::Value> HmacUpdate(const v8::Arguments& args);
   static v8::Handle<v8::Value> HmacDigest(const v8::Arguments& args);
 
-  Hmac() : ObjectWrap(), initialised_(false) {
+  Hmac() : md_(NULL), initialised_(false) {
   }
 
   ~Hmac() {
-    if (initialised_) {
-      HMAC_CTX_cleanup(&ctx);
-    }
+    if (!initialised_) return;
+    HMAC_CTX_cleanup(&ctx_);
   }
 
  private:
-  HMAC_CTX ctx; /* coverity[member_decl] */
-  const EVP_MD *md; /* coverity[member_decl] */
+  HMAC_CTX ctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
   bool initialised_;
 };
 
