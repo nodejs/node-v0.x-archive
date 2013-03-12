@@ -2592,168 +2592,153 @@ Handle<Value> Decipher::DecipherFinal(const Arguments& args) {
 }
 
 
-class Hmac : public ObjectWrap {
- public:
-  static void Initialize (v8::Handle<v8::Object> target) {
-    HandleScope scope;
+void Hmac::Initialize(v8::Handle<v8::Object> target) {
+  HandleScope scope;
 
-    Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
-    t->InstanceTemplate()->SetInternalFieldCount(1);
+  t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", HmacInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", HmacUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "digest", HmacDigest);
+  NODE_SET_PROTOTYPE_METHOD(t, "init", HmacInit);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", HmacUpdate);
+  NODE_SET_PROTOTYPE_METHOD(t, "digest", HmacDigest);
 
-    target->Set(String::NewSymbol("Hmac"), t->GetFunction());
+  target->Set(String::NewSymbol("Hmac"), t->GetFunction());
+}
+
+
+bool Hmac::HmacInit(char* hashType, char* key, int key_len) {
+  md = EVP_get_digestbyname(hashType);
+  if(!md) {
+    fprintf(stderr, "node-crypto : Unknown message digest %s\n", hashType);
+    return false;
+  }
+  HMAC_CTX_init(&ctx);
+  if (key_len == 0) {
+    HMAC_Init(&ctx, "", 0, md);
+  } else {
+    HMAC_Init(&ctx, key, key_len, md);
+  }
+  initialised_ = true;
+  return true;
+
+}
+
+
+int Hmac::HmacUpdate(char* data, int len) {
+  if (!initialised_) return 0;
+  HMAC_Update(&ctx, (unsigned char*)data, len);
+  return 1;
+}
+
+
+int Hmac::HmacDigest(unsigned char** md_value, unsigned int *md_len) {
+  if (!initialised_) return 0;
+  *md_value = new unsigned char[EVP_MAX_MD_SIZE];
+  HMAC_Final(&ctx, *md_value, md_len);
+  HMAC_CTX_cleanup(&ctx);
+  initialised_ = false;
+  return 1;
+}
+
+
+Handle<Value> Hmac::New(const Arguments& args) {
+  HandleScope scope;
+
+  Hmac *hmac = new Hmac();
+  hmac->Wrap(args.This());
+  return args.This();
+}
+
+
+Handle<Value> Hmac::HmacInit(const Arguments& args) {
+  Hmac *hmac = ObjectWrap::Unwrap<Hmac>(args.This());
+
+  HandleScope scope;
+
+  if (args.Length() == 0 || !args[0]->IsString()) {
+    return ThrowException(Exception::Error(String::New(
+      "Must give hashtype string as argument")));
   }
 
-  bool HmacInit(char* hashType, char* key, int key_len) {
-    md = EVP_get_digestbyname(hashType);
-    if(!md) {
-      fprintf(stderr, "node-crypto : Unknown message digest %s\n", hashType);
-      return false;
-    }
-    HMAC_CTX_init(&ctx);
-    if (key_len == 0) {
-      HMAC_Init(&ctx, "", 0, md);
-    } else {
-      HMAC_Init(&ctx, key, key_len, md);
-    }
-    initialised_ = true;
-    return true;
+  ASSERT_IS_BUFFER(args[1]);
+  ssize_t len = Buffer::Length(args[1]);
 
+  if (len < 0) {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
   }
 
-  int HmacUpdate(char* data, int len) {
-    if (!initialised_) return 0;
-    HMAC_Update(&ctx, (unsigned char*)data, len);
-    return 1;
+  String::Utf8Value hashType(args[0]);
+
+  bool r;
+
+  if( Buffer::HasInstance(args[1])) {
+    char* buffer_data = Buffer::Data(args[1]);
+    size_t buffer_length = Buffer::Length(args[1]);
+
+    r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
+  } else {
+    char* buf = new char[len];
+    ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
+    assert(written == len);
+
+    r = hmac->HmacInit(*hashType, buf, len);
+
+    delete [] buf;
   }
 
-  int HmacDigest(unsigned char** md_value, unsigned int *md_len) {
-    if (!initialised_) return 0;
-    *md_value = new unsigned char[EVP_MAX_MD_SIZE];
-    HMAC_Final(&ctx, *md_value, md_len);
-    HMAC_CTX_cleanup(&ctx);
-    initialised_ = false;
-    return 1;
+  if (!r) {
+    return ThrowException(Exception::Error(String::New("hmac error")));
   }
 
+  return args.This();
+}
 
- protected:
 
-  static Handle<Value> New (const Arguments& args) {
-    HandleScope scope;
+Handle<Value> Hmac::HmacUpdate(const Arguments& args) {
+  Hmac *hmac = ObjectWrap::Unwrap<Hmac>(args.This());
 
-    Hmac *hmac = new Hmac();
-    hmac->Wrap(args.This());
-    return args.This();
+  HandleScope scope;
+
+  ASSERT_IS_BUFFER(args[0]);
+
+  int r;
+
+  char* buffer_data = Buffer::Data(args[0]);
+  size_t buffer_length = Buffer::Length(args[0]);
+
+  r = hmac->HmacUpdate(buffer_data, buffer_length);
+
+  if (!r) {
+    Local<Value> exception = Exception::TypeError(String::New("HmacUpdate fail"));
+    return ThrowException(exception);
   }
 
-  static Handle<Value> HmacInit(const Arguments& args) {
-    Hmac *hmac = ObjectWrap::Unwrap<Hmac>(args.This());
+  return args.This();
+}
 
-    HandleScope scope;
 
-    if (args.Length() == 0 || !args[0]->IsString()) {
-      return ThrowException(Exception::Error(String::New(
-        "Must give hashtype string as argument")));
-    }
+Handle<Value> Hmac::HmacDigest(const Arguments& args) {
+  Hmac *hmac = ObjectWrap::Unwrap<Hmac>(args.This());
 
-    ASSERT_IS_BUFFER(args[1]);
-    ssize_t len = Buffer::Length(args[1]);
+  HandleScope scope;
 
-    if (len < 0) {
-      Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-      return ThrowException(exception);
-    }
+  unsigned char* md_value = NULL;
+  unsigned int md_len = 0;
+  Local<Value> outString;
 
-    String::Utf8Value hashType(args[0]);
-
-    bool r;
-
-    if( Buffer::HasInstance(args[1])) {
-      char* buffer_data = Buffer::Data(args[1]);
-      size_t buffer_length = Buffer::Length(args[1]);
-
-      r = hmac->HmacInit(*hashType, buffer_data, buffer_length);
-    } else {
-      char* buf = new char[len];
-      ssize_t written = DecodeWrite(buf, len, args[1], BINARY);
-      assert(written == len);
-
-      r = hmac->HmacInit(*hashType, buf, len);
-
-      delete [] buf;
-    }
-
-    if (!r) {
-      return ThrowException(Exception::Error(String::New("hmac error")));
-    }
-
-    return args.This();
+  int r = hmac->HmacDigest(&md_value, &md_len);
+  if (r == 0) {
+    md_value = NULL;
+    md_len = 0;
   }
 
-  static Handle<Value> HmacUpdate(const Arguments& args) {
-    Hmac *hmac = ObjectWrap::Unwrap<Hmac>(args.This());
+  outString = Encode(md_value, md_len, BUFFER);
 
-    HandleScope scope;
-
-    ASSERT_IS_BUFFER(args[0]);
-
-    int r;
-
-    char* buffer_data = Buffer::Data(args[0]);
-    size_t buffer_length = Buffer::Length(args[0]);
-
-    r = hmac->HmacUpdate(buffer_data, buffer_length);
-
-    if (!r) {
-      Local<Value> exception = Exception::TypeError(String::New("HmacUpdate fail"));
-      return ThrowException(exception);
-    }
-
-    return args.This();
-  }
-
-  static Handle<Value> HmacDigest(const Arguments& args) {
-    Hmac *hmac = ObjectWrap::Unwrap<Hmac>(args.This());
-
-    HandleScope scope;
-
-    unsigned char* md_value = NULL;
-    unsigned int md_len = 0;
-    Local<Value> outString;
-
-    int r = hmac->HmacDigest(&md_value, &md_len);
-    if (r == 0) {
-      md_value = NULL;
-      md_len = 0;
-    }
-
-    outString = Encode(md_value, md_len, BUFFER);
-
-    delete [] md_value;
-    return scope.Close(outString);
-  }
-
-  Hmac () : ObjectWrap () {
-    initialised_ = false;
-  }
-
-  ~Hmac () {
-    if (initialised_) {
-      HMAC_CTX_cleanup(&ctx);
-    }
-  }
-
- private:
-
-  HMAC_CTX ctx; /* coverity[member_decl] */
-  const EVP_MD *md; /* coverity[member_decl] */
-  bool initialised_;
-};
+  delete [] md_value;
+  return scope.Close(outString);
+}
 
 
 class Hash : public ObjectWrap {
