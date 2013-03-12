@@ -2436,38 +2436,19 @@ void Hash::Initialize(v8::Handle<v8::Object> target) {
 }
 
 
-bool Hash::HashInit(const char* hashType) {
-  md = EVP_get_digestbyname(hashType);
-  if(!md) return false;
-  EVP_MD_CTX_init(&mdctx);
-  EVP_DigestInit_ex(&mdctx, md, NULL);
-  initialised_ = true;
-  return true;
-}
-
-
-int Hash::HashUpdate(char* data, int len) {
-  if (!initialised_) return 0;
-  EVP_DigestUpdate(&mdctx, data, len);
-  return 1;
-}
-
-
 Handle<Value> Hash::New(const Arguments& args) {
   HandleScope scope;
 
   if (args.Length() == 0 || !args[0]->IsString()) {
-    return ThrowException(Exception::Error(String::New(
-      "Must give hashtype string as argument")));
+    return ThrowError("Must give hashtype string as argument");
   }
 
   String::Utf8Value hashType(args[0]);
 
-  Hash *hash = new Hash();
+  Hash* hash = new Hash();
   if (!hash->HashInit(*hashType)) {
     delete hash;
-    return ThrowException(Exception::Error(String::New(
-      "Digest method not supported")));
+    return ThrowError("Digest method not supported");
   }
 
   hash->Wrap(args.This());
@@ -2475,22 +2456,39 @@ Handle<Value> Hash::New(const Arguments& args) {
 }
 
 
+bool Hash::HashInit(const char* hashType) {
+  assert(md_ == NULL);
+  md_ = EVP_get_digestbyname(hashType);
+  if (md_ == NULL) return false;
+  EVP_MD_CTX_init(&mdctx_);
+  EVP_DigestInit_ex(&mdctx_, md_, NULL);
+  initialised_ = true;
+  return true;
+}
+
+
+bool Hash::HashUpdate(char* data, int len) {
+  if (!initialised_) return false;
+  EVP_DigestUpdate(&mdctx_, data, len);
+  return true;
+}
+
+
 Handle<Value> Hash::HashUpdate(const Arguments& args) {
   HandleScope scope;
 
-  Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
+  Hash* hash = ObjectWrap::Unwrap<Hash>(args.This());
 
   ASSERT_IS_BUFFER(args[0]);
 
-  int r;
+  bool r;
 
   char* buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
   r = hash->HashUpdate(buffer_data, buffer_length);
 
   if (!r) {
-    Local<Value> exception = Exception::TypeError(String::New("HashUpdate fail"));
-    return ThrowException(exception);
+    return ThrowTypeError("HashUpdate fail");
   }
 
   return args.This();
@@ -2500,24 +2498,22 @@ Handle<Value> Hash::HashUpdate(const Arguments& args) {
 Handle<Value> Hash::HashDigest(const Arguments& args) {
   HandleScope scope;
 
-  Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
+  Hash* hash = ObjectWrap::Unwrap<Hash>(args.This());
 
   if (!hash->initialised_) {
-    return ThrowException(Exception::Error(String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   unsigned char md_value[EVP_MAX_MD_SIZE];
   unsigned int md_len;
 
-  EVP_DigestFinal_ex(&hash->mdctx, md_value, &md_len);
-  EVP_MD_CTX_cleanup(&hash->mdctx);
+  EVP_DigestFinal_ex(&hash->mdctx_, md_value, &md_len);
+  EVP_MD_CTX_cleanup(&hash->mdctx_);
   hash->initialised_ = false;
 
-  Local<Value> outString;
+  Buffer* buf = Buffer::New(reinterpret_cast<char*>(md_value), md_len);
 
-  outString = Encode(md_value, md_len, BUFFER);
-
-  return scope.Close(outString);
+  return scope.Close(buf->handle_);
 }
 
 
