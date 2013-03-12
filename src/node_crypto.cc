@@ -2676,137 +2676,70 @@ void Verify::Initialize(v8::Handle<v8::Object> target) {
 }
 
 
-bool Verify::VerifyInit(const char* verifyType) {
-  md = EVP_get_digestbyname(verifyType);
-  if(!md) {
-    fprintf(stderr, "node-crypto : Unknown message digest %s\n", verifyType);
-    return false;
-  }
-  EVP_MD_CTX_init(&mdctx);
-  EVP_VerifyInit_ex(&mdctx, md, NULL);
-  initialised_ = true;
-  return true;
-}
-
-
-int Verify::VerifyUpdate(char* data, int len) {
-  if (!initialised_) return 0;
-  EVP_VerifyUpdate(&mdctx, data, len);
-  return 1;
-}
-
-
-int Verify::VerifyFinal(char* key_pem,
-                        int key_pemLen,
-                        unsigned char* sig,
-                        int siglen) {
-  if (!initialised_) return 0;
-
-  EVP_PKEY* pkey = NULL;
-  BIO *bp = NULL;
-  X509 *x509 = NULL;
-  int r = 0;
-
-  bp = BIO_new(BIO_s_mem());
-  if (bp == NULL) {
-    ERR_print_errors_fp(stderr);
-    return 0;
-  }
-  if(!BIO_write(bp, key_pem, key_pemLen)) {
-    ERR_print_errors_fp(stderr);
-    return 0;
-  }
-
-  // Check if this is a PKCS#8 or RSA public key before trying as X.509.
-  // Split this out into a separate function once we have more than one
-  // consumer of public keys.
-  if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
-    pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
-    if (pkey == NULL) {
-      ERR_print_errors_fp(stderr);
-      return 0;
-    }
-  } else if (strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
-    RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, NULL, NULL);
-    if (rsa) {
-      pkey = EVP_PKEY_new();
-      if (pkey) EVP_PKEY_set1_RSA(pkey, rsa);
-      RSA_free(rsa);
-    }
-    if (pkey == NULL) {
-      ERR_print_errors_fp(stderr);
-      return 0;
-    }
-  } else {
-    // X.509 fallback
-    x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
-    if (x509 == NULL) {
-      ERR_print_errors_fp(stderr);
-      return 0;
-    }
-
-    pkey = X509_get_pubkey(x509);
-    if (pkey == NULL) {
-      ERR_print_errors_fp(stderr);
-      return 0;
-    }
-  }
-
-  r = EVP_VerifyFinal(&mdctx, sig, siglen, pkey);
-
-  if(pkey != NULL)
-    EVP_PKEY_free (pkey);
-  if (x509 != NULL)
-    X509_free(x509);
-  if (bp != NULL)
-    BIO_free(bp);
-  EVP_MD_CTX_cleanup(&mdctx);
-  initialised_ = false;
-
-  return r;
-}
-
-
 Handle<Value> Verify::New(const Arguments& args) {
   HandleScope scope;
 
-  Verify *verify = new Verify();
+  Verify* verify = new Verify();
   verify->Wrap(args.This());
 
   return args.This();
 }
 
 
-Handle<Value> Verify::VerifyInit(const Arguments& args) {
-  Verify *verify = ObjectWrap::Unwrap<Verify>(args.This());
-
+Handle<Value> Verify::VerifyInit(const char* verify_type) {
   HandleScope scope;
 
+  assert(md_ == NULL);
+  md_ = EVP_get_digestbyname(verify_type);
+  if (md_ == NULL) {
+    return ThrowError("Unknown message digest");
+  }
+
+  EVP_MD_CTX_init(&mdctx_);
+  EVP_VerifyInit_ex(&mdctx_, md_, NULL);
+  initialised_ = true;
+
+  return Null();
+}
+
+
+Handle<Value> Verify::VerifyInit(const Arguments& args) {
+  HandleScope scope;
+
+  Verify* verify = ObjectWrap::Unwrap<Verify>(args.This());
+
   if (args.Length() == 0 || !args[0]->IsString()) {
-    return ThrowException(Exception::Error(String::New(
-      "Must give verifytype string as argument")));
+    return ThrowError("Must give verifytype string as argument");
   }
 
-  String::Utf8Value verifyType(args[0]);
+  String::Utf8Value verify_type(args[0]);
 
-  bool r = verify->VerifyInit(*verifyType);
+  Handle<Value> ret = verify->VerifyInit(*verify_type);
 
-  if (!r) {
-    return ThrowException(Exception::Error(String::New("VerifyInit error")));
+  if (ret->IsNull()) {
+    return args.This();
+  } else {
+    // Exception
+    return scope.Close(ret);
   }
+}
 
-  return args.This();
+
+bool Verify::VerifyUpdate(char* data, int len) {
+  if (!initialised_) return false;
+  EVP_VerifyUpdate(&mdctx_, data, len);
+  return true;
 }
 
 
 Handle<Value> Verify::VerifyUpdate(const Arguments& args) {
   HandleScope scope;
 
-  Verify *verify = ObjectWrap::Unwrap<Verify>(args.This());
+  Verify* verify = ObjectWrap::Unwrap<Verify>(args.This());
 
   ASSERT_IS_BUFFER(args[0]);
 
-  int r;
+  bool r;
 
   char* buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
@@ -2814,52 +2747,100 @@ Handle<Value> Verify::VerifyUpdate(const Arguments& args) {
   r = verify->VerifyUpdate(buffer_data, buffer_length);
 
   if (!r) {
-    Local<Value> exception = Exception::TypeError(String::New("VerifyUpdate fail"));
-    return ThrowException(exception);
+    return ThrowTypeError("VerifyUpdate fail");
   }
 
   return args.This();
 }
 
 
+Handle<Value> Verify::VerifyFinal(char* key_pem,
+                                  int key_pem_len,
+                                  unsigned char* sig,
+                                  int siglen) {
+  HandleScope scope;
+
+  if (!initialised_) {
+    return ThrowError("Verify not initalised");
+  }
+
+  EVP_PKEY* pkey = NULL;
+  BIO* bp = NULL;
+  X509* x509 = NULL;
+  bool fatal = true;
+  int r;
+
+  bp = BIO_new(BIO_s_mem());
+  if (bp == NULL)
+    goto exit;
+
+  if (!BIO_write(bp, key_pem, key_pem_len))
+    goto exit;
+
+  // Check if this is a PKCS#8 or RSA public key before trying as X.509.
+  // Split this out into a separate function once we have more than one
+  // consumer of public keys.
+  if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
+    pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
+    if (pkey == NULL)
+      goto exit;
+  } else if (strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
+    RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, NULL, NULL);
+    if (rsa) {
+      pkey = EVP_PKEY_new();
+      if (pkey) EVP_PKEY_set1_RSA(pkey, rsa);
+      RSA_free(rsa);
+    }
+    if (pkey == NULL)
+      goto exit;
+  } else {
+    // X.509 fallback
+    x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
+    if (x509 == NULL)
+      goto exit;
+
+    pkey = X509_get_pubkey(x509);
+    if (pkey == NULL)
+      goto exit;
+  }
+
+  fatal = false;
+  r = EVP_VerifyFinal(&mdctx_, sig, siglen, pkey);
+
+exit:
+  if (pkey != NULL)
+    EVP_PKEY_free(pkey);
+  if (bp != NULL)
+    BIO_free_all(bp);
+  if (x509 != NULL)
+    X509_free(x509);
+
+  EVP_MD_CTX_cleanup(&mdctx_);
+  initialised_ = false;
+
+  if (fatal) {
+    unsigned long err = ERR_get_error();
+    return ThrowCryptoError(err);
+  }
+
+  return scope.Close(r ? True() : False());
+}
+
+
 Handle<Value> Verify::VerifyFinal(const Arguments& args) {
   HandleScope scope;
 
-  Verify *verify = ObjectWrap::Unwrap<Verify>(args.This());
+  Verify* verify = ObjectWrap::Unwrap<Verify>(args.This());
 
   ASSERT_IS_BUFFER(args[0]);
+  char* kbuf = Buffer::Data(args[0]);
   ssize_t klen = Buffer::Length(args[0]);
 
-  if (klen < 0) {
-    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-    return ThrowException(exception);
-  }
-
-  char* kbuf = new char[klen];
-  ssize_t kwritten = DecodeWrite(kbuf, klen, args[0], BINARY);
-  assert(kwritten == klen);
-
   ASSERT_IS_BUFFER(args[1]);
+  unsigned char* hbuf = reinterpret_cast<unsigned char*>(Buffer::Data(args[1]));
   ssize_t hlen = Buffer::Length(args[1]);
 
-  if (hlen < 0) {
-    delete [] kbuf;
-    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-    return ThrowException(exception);
-  }
-
-  unsigned char* hbuf = new unsigned char[hlen];
-  ssize_t hwritten = DecodeWrite((char*)hbuf, hlen, args[1], BINARY);
-  assert(hwritten == hlen);
-
-  int r=-1;
-
-  r = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
-
-  delete [] kbuf;
-  delete [] hbuf;
-
-  return Boolean::New(r && r != -1);
+  return scope.Close(verify->VerifyFinal(kbuf, klen, hbuf, hlen));
 }
 
 

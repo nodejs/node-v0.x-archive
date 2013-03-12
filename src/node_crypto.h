@@ -409,12 +409,12 @@ class Verify : public ObjectWrap {
  public:
   static void Initialize (v8::Handle<v8::Object> target);
 
-  bool VerifyInit (const char* verifyType);
-  int VerifyUpdate(char* data, int len);
-  int VerifyFinal(char* key_pem,
-                  int key_pemLen,
-                  unsigned char* sig,
-                  int siglen);
+  v8::Handle<v8::Value> VerifyInit(const char* verify_type);
+  bool VerifyUpdate(char* data, int len);
+  v8::Handle<v8::Value> VerifyFinal(char* key_pem,
+                                    int key_pem_len,
+                                    unsigned char* sig,
+                                    int siglen);
 
  protected:
   static v8::Handle<v8::Value> New (const v8::Arguments& args);
@@ -422,18 +422,17 @@ class Verify : public ObjectWrap {
   static v8::Handle<v8::Value> VerifyUpdate(const v8::Arguments& args);
   static v8::Handle<v8::Value> VerifyFinal(const v8::Arguments& args);
 
-  Verify() : ObjectWrap(), initialised_(false) {
+  Verify() : md_(NULL), initialised_(false) {
   }
 
   ~Verify() {
-    if (initialised_) {
-      EVP_MD_CTX_cleanup(&mdctx);
-    }
+    if (!initialised_) return;
+    EVP_MD_CTX_cleanup(&mdctx_);
   }
 
  private:
-  EVP_MD_CTX mdctx; /* coverity[member_decl] */
-  const EVP_MD *md; /* coverity[member_decl] */
+  EVP_MD_CTX mdctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
   bool initialised_;
 
 };
