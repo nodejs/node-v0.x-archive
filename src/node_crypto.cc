@@ -2532,90 +2532,68 @@ void Sign::Initialize(v8::Handle<v8::Object> target) {
 }
 
 
-bool Sign::SignInit(const char* signType) {
-  md = EVP_get_digestbyname(signType);
-  if(!md) {
-    printf("Unknown message digest %s\n", signType);
-    return false;
-  }
-  EVP_MD_CTX_init(&mdctx);
-  EVP_SignInit_ex(&mdctx, md, NULL);
-  initialised_ = true;
-  return true;
-
-}
-
-
-int Sign::SignUpdate(char* data, int len) {
-  if (!initialised_) return 0;
-  EVP_SignUpdate(&mdctx, data, len);
-  return 1;
-}
-
-
-int Sign::SignFinal(unsigned char** md_value,
-                    unsigned int *md_len,
-                    char* key_pem,
-                    int key_pemLen) {
-  if (!initialised_) return 0;
-
-  BIO *bp = NULL;
-  EVP_PKEY* pkey;
-  bp = BIO_new(BIO_s_mem());
-  if(!BIO_write(bp, key_pem, key_pemLen)) return 0;
-
-  pkey = PEM_read_bio_PrivateKey( bp, NULL, NULL, NULL );
-  if (pkey == NULL) return 0;
-
-  EVP_SignFinal(&mdctx, *md_value, md_len, pkey);
-  EVP_MD_CTX_cleanup(&mdctx);
-  initialised_ = false;
-  EVP_PKEY_free(pkey);
-  BIO_free(bp);
-  return 1;
-}
-
-
 Handle<Value> Sign::New(const Arguments& args) {
   HandleScope scope;
 
-  Sign *sign = new Sign();
+  Sign* sign = new Sign();
   sign->Wrap(args.This());
 
   return args.This();
 }
 
 
+Handle<Value> Sign::SignInit(const char* sign_type) {
+  HandleScope scope;
+
+  assert(md_ == NULL);
+  md_ = EVP_get_digestbyname(sign_type);
+  if (!md_) {
+    return ThrowError("Uknown message digest");
+  }
+  EVP_MD_CTX_init(&mdctx_);
+  EVP_SignInit_ex(&mdctx_, md_, NULL);
+  initialised_ = true;
+  return Null();
+}
+
+
 Handle<Value> Sign::SignInit(const Arguments& args) {
   HandleScope scope;
 
-  Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
+  Sign* sign = ObjectWrap::Unwrap<Sign>(args.This());
 
   if (args.Length() == 0 || !args[0]->IsString()) {
-    return ThrowException(Exception::Error(String::New(
-      "Must give signtype string as argument")));
+    return ThrowError("Must give signtype string as argument");
   }
 
-  String::Utf8Value signType(args[0]);
+  String::Utf8Value sign_type(args[0]);
 
-  bool r = sign->SignInit(*signType);
+  Handle<Value> ret = sign->SignInit(*sign_type);
 
-  if (!r) {
-    return ThrowException(Exception::Error(String::New("SignInit error")));
+  if (ret->IsNull()) {
+    return args.This();
+  } else {
+    // Exception
+    return scope.Close(ret);
   }
+}
 
-  return args.This();
+
+bool Sign::SignUpdate(char* data, int len) {
+  if (!initialised_) return false;
+  EVP_SignUpdate(&mdctx_, data, len);
+  return true;
 }
 
 
 Handle<Value> Sign::SignUpdate(const Arguments& args) {
-  Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
-
   HandleScope scope;
+
+  Sign* sign = ObjectWrap::Unwrap<Sign>(args.This());
 
   ASSERT_IS_BUFFER(args[0]);
 
-  int r;
+  bool r;
 
   char* buffer_data = Buffer::Data(args[0]);
   size_t buffer_length = Buffer::Length(args[0]);
@@ -2623,18 +2601,40 @@ Handle<Value> Sign::SignUpdate(const Arguments& args) {
   r = sign->SignUpdate(buffer_data, buffer_length);
 
   if (!r) {
-    Local<Value> exception = Exception::TypeError(String::New("SignUpdate fail"));
-    return ThrowException(exception);
+    return ThrowTypeError("SignUpdate fail");
   }
 
   return args.This();
 }
 
 
-Handle<Value> Sign::SignFinal(const Arguments& args) {
-  Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
+bool Sign::SignFinal(unsigned char** md_value,
+                     unsigned int *md_len,
+                     char* key_pem,
+                     int key_pem_len) {
+  if (!initialised_) return false;
 
+  BIO* bp = NULL;
+  EVP_PKEY* pkey = NULL;
+  bp = BIO_new(BIO_s_mem());
+  if (!BIO_write(bp, key_pem, key_pem_len)) return false;
+
+  pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
+  if (pkey == NULL) return 0;
+
+  EVP_SignFinal(&mdctx_, *md_value, md_len, pkey);
+  EVP_MD_CTX_cleanup(&mdctx_);
+  initialised_ = false;
+  EVP_PKEY_free(pkey);
+  BIO_free(bp);
+  return true;
+}
+
+
+Handle<Value> Sign::SignFinal(const Arguments& args) {
   HandleScope scope;
+
+  Sign* sign = ObjectWrap::Unwrap<Sign>(args.This());
 
   unsigned char* md_value;
   unsigned int md_len;
@@ -2645,23 +2645,19 @@ Handle<Value> Sign::SignFinal(const Arguments& args) {
 
   ASSERT_IS_BUFFER(args[0]);
   ssize_t len = Buffer::Length(args[0]);
+  char* buf = Buffer::Data(args[0]);
 
-  char* buf = new char[len];
-  ssize_t written = DecodeWrite(buf, len, args[0], BUFFER);
-  assert(written == len);
-
-  int r = sign->SignFinal(&md_value, &md_len, buf, len);
-  if (r == 0) {
+  bool r = sign->SignFinal(&md_value, &md_len, buf, len);
+  if (!r) {
+    delete[] md_value;
     md_value = NULL;
-    md_len = r;
+    md_len = 0;
   }
 
-  delete [] buf;
+  Buffer* ret = Buffer::New(reinterpret_cast<char*>(md_value), md_len);
+  delete[] md_value;
 
-  outString = Encode(md_value, md_len, BUFFER);
-
-  delete [] md_value;
-  return scope.Close(outString);
+  return scope.Close(ret->handle_);
 }
 
 

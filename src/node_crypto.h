@@ -378,12 +378,12 @@ class Sign : public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
-  bool SignInit (const char* signType);
-  int SignUpdate(char* data, int len);
-  int SignFinal(unsigned char** md_value,
-                unsigned int *md_len,
-                char* key_pem,
-                int key_pemLen);
+  v8::Handle<v8::Value> SignInit(const char* sign_type);
+  bool SignUpdate(char* data, int len);
+  bool SignFinal(unsigned char** md_value,
+                 unsigned int *md_len,
+                 char* key_pem,
+                 int key_pem_len);
 
  protected:
   static v8::Handle<v8::Value> New(const v8::Arguments& args);
@@ -391,18 +391,17 @@ class Sign : public ObjectWrap {
   static v8::Handle<v8::Value> SignUpdate(const v8::Arguments& args);
   static v8::Handle<v8::Value> SignFinal(const v8::Arguments& args);
 
-  Sign() : ObjectWrap(), initialised_(false) {
+  Sign() : md_(NULL), initialised_(false) {
   }
 
-  ~Sign () {
-    if (initialised_) {
-      EVP_MD_CTX_cleanup(&mdctx);
-    }
+  ~Sign() {
+    if (!initialised_) return;
+    EVP_MD_CTX_cleanup(&mdctx_);
   }
 
  private:
-  EVP_MD_CTX mdctx; /* coverity[member_decl] */
-  const EVP_MD *md; /* coverity[member_decl] */
+  EVP_MD_CTX mdctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
   bool initialised_;
 };
 
