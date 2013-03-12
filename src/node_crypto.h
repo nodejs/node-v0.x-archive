@@ -380,6 +380,33 @@ class Hmac : public ObjectWrap {
   bool initialised_;
 };
 
+class Hash : public ObjectWrap {
+ public:
+  static void Initialize (v8::Handle<v8::Object> target);
+
+  bool HashInit (const char* hashType);
+  int HashUpdate(char* data, int len);
+
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> HashUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> HashDigest(const v8::Arguments& args);
+
+  Hash() : ObjectWrap(), initialised_(false) {
+  }
+
+  ~Hash() {
+    if (initialised_) {
+      EVP_MD_CTX_cleanup(&mdctx);
+    }
+  }
+
+ private:
+  EVP_MD_CTX mdctx; /* coverity[member_decl] */
+  const EVP_MD *md; /* coverity[member_decl] */
+  bool initialised_;
+};
+
 void InitCrypto(v8::Handle<v8::Object> target);
 
 }  // namespace crypto

@@ -2741,120 +2741,104 @@ Handle<Value> Hmac::HmacDigest(const Arguments& args) {
 }
 
 
-class Hash : public ObjectWrap {
- public:
-  static void Initialize (v8::Handle<v8::Object> target) {
-    HandleScope scope;
+void Hash::Initialize(v8::Handle<v8::Object> target) {
+  HandleScope scope;
 
-    Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
-    t->InstanceTemplate()->SetInternalFieldCount(1);
+  t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "update", HashUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "digest", HashDigest);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", HashUpdate);
+  NODE_SET_PROTOTYPE_METHOD(t, "digest", HashDigest);
 
-    target->Set(String::NewSymbol("Hash"), t->GetFunction());
+  target->Set(String::NewSymbol("Hash"), t->GetFunction());
+}
+
+
+bool Hash::HashInit(const char* hashType) {
+  md = EVP_get_digestbyname(hashType);
+  if(!md) return false;
+  EVP_MD_CTX_init(&mdctx);
+  EVP_DigestInit_ex(&mdctx, md, NULL);
+  initialised_ = true;
+  return true;
+}
+
+
+int Hash::HashUpdate(char* data, int len) {
+  if (!initialised_) return 0;
+  EVP_DigestUpdate(&mdctx, data, len);
+  return 1;
+}
+
+
+Handle<Value> Hash::New(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() == 0 || !args[0]->IsString()) {
+    return ThrowException(Exception::Error(String::New(
+      "Must give hashtype string as argument")));
   }
 
-  bool HashInit (const char* hashType) {
-    md = EVP_get_digestbyname(hashType);
-    if(!md) return false;
-    EVP_MD_CTX_init(&mdctx);
-    EVP_DigestInit_ex(&mdctx, md, NULL);
-    initialised_ = true;
-    return true;
+  String::Utf8Value hashType(args[0]);
+
+  Hash *hash = new Hash();
+  if (!hash->HashInit(*hashType)) {
+    delete hash;
+    return ThrowException(Exception::Error(String::New(
+      "Digest method not supported")));
   }
 
-  int HashUpdate(char* data, int len) {
-    if (!initialised_) return 0;
-    EVP_DigestUpdate(&mdctx, data, len);
-    return 1;
+  hash->Wrap(args.This());
+  return args.This();
+}
+
+
+Handle<Value> Hash::HashUpdate(const Arguments& args) {
+  HandleScope scope;
+
+  Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
+
+  ASSERT_IS_BUFFER(args[0]);
+
+  int r;
+
+  char* buffer_data = Buffer::Data(args[0]);
+  size_t buffer_length = Buffer::Length(args[0]);
+  r = hash->HashUpdate(buffer_data, buffer_length);
+
+  if (!r) {
+    Local<Value> exception = Exception::TypeError(String::New("HashUpdate fail"));
+    return ThrowException(exception);
   }
 
+  return args.This();
+}
 
- protected:
 
-  static Handle<Value> New (const Arguments& args) {
-    HandleScope scope;
+Handle<Value> Hash::HashDigest(const Arguments& args) {
+  HandleScope scope;
 
-    if (args.Length() == 0 || !args[0]->IsString()) {
-      return ThrowException(Exception::Error(String::New(
-        "Must give hashtype string as argument")));
-    }
+  Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
 
-    String::Utf8Value hashType(args[0]);
-
-    Hash *hash = new Hash();
-    if (!hash->HashInit(*hashType)) {
-      delete hash;
-      return ThrowException(Exception::Error(String::New(
-        "Digest method not supported")));
-    }
-
-    hash->Wrap(args.This());
-    return args.This();
+  if (!hash->initialised_) {
+    return ThrowException(Exception::Error(String::New("Not initialized")));
   }
 
-  static Handle<Value> HashUpdate(const Arguments& args) {
-    HandleScope scope;
+  unsigned char md_value[EVP_MAX_MD_SIZE];
+  unsigned int md_len;
 
-    Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
+  EVP_DigestFinal_ex(&hash->mdctx, md_value, &md_len);
+  EVP_MD_CTX_cleanup(&hash->mdctx);
+  hash->initialised_ = false;
 
-    ASSERT_IS_BUFFER(args[0]);
+  Local<Value> outString;
 
-    int r;
+  outString = Encode(md_value, md_len, BUFFER);
 
-    char* buffer_data = Buffer::Data(args[0]);
-    size_t buffer_length = Buffer::Length(args[0]);
-    r = hash->HashUpdate(buffer_data, buffer_length);
+  return scope.Close(outString);
+}
 
-    if (!r) {
-      Local<Value> exception = Exception::TypeError(String::New("HashUpdate fail"));
-      return ThrowException(exception);
-    }
-
-    return args.This();
-  }
-
-  static Handle<Value> HashDigest(const Arguments& args) {
-    HandleScope scope;
-
-    Hash *hash = ObjectWrap::Unwrap<Hash>(args.This());
-
-    if (!hash->initialised_) {
-      return ThrowException(Exception::Error(String::New("Not initialized")));
-    }
-
-    unsigned char md_value[EVP_MAX_MD_SIZE];
-    unsigned int md_len;
-
-    EVP_DigestFinal_ex(&hash->mdctx, md_value, &md_len);
-    EVP_MD_CTX_cleanup(&hash->mdctx);
-    hash->initialised_ = false;
-
-    Local<Value> outString;
-
-    outString = Encode(md_value, md_len, BUFFER);
-
-    return scope.Close(outString);
-  }
-
-  Hash () : ObjectWrap () {
-    initialised_ = false;
-  }
-
-  ~Hash () {
-    if (initialised_) {
-      EVP_MD_CTX_cleanup(&mdctx);
-    }
-  }
-
- private:
-
-  EVP_MD_CTX mdctx; /* coverity[member_decl] */
-  const EVP_MD *md; /* coverity[member_decl] */
-  bool initialised_;
-};
 
 class Sign : public ObjectWrap {
  public:
