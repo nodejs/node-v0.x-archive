@@ -472,6 +472,42 @@ class Verify : public ObjectWrap {
 
 };
 
+class DiffieHellman : public ObjectWrap {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
+
+  bool Init(int primeLength);
+  bool Init(unsigned char* p, int p_len);
+  bool Init(unsigned char* p, int p_len, unsigned char* g, int g_len);
+
+ protected:
+  static v8::Handle<v8::Value> DiffieHellmanGroup(const v8::Arguments& args);
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GenerateKeys(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetPrime(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetGenerator(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetPublicKey(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetPrivateKey(const v8::Arguments& args);
+  static v8::Handle<v8::Value> ComputeSecret(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetPublicKey(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetPrivateKey(const v8::Arguments& args);
+
+  DiffieHellman() : ObjectWrap(), initialised_(false), dh(NULL) {
+  }
+
+  ~DiffieHellman() {
+    if (dh != NULL) {
+      DH_free(dh);
+    }
+  }
+
+ private:
+  bool VerifyContext();
+
+  bool initialised_;
+  DH* dh;
+};
+
 void InitCrypto(v8::Handle<v8::Object> target);
 
 }  // namespace crypto
