@@ -2916,8 +2916,7 @@ Handle<Value> DiffieHellman::DiffieHellmanGroup(const Arguments& args) {
   DiffieHellman* diffieHellman = new DiffieHellman();
 
   if (args.Length() != 1 || !args[0]->IsString()) {
-    return ThrowException(Exception::Error(
-        String::New("No group name given")));
+    return ThrowError("No group name given");
   }
 
   String::Utf8Value group_name(args[0]);
@@ -2926,16 +2925,17 @@ Handle<Value> DiffieHellman::DiffieHellmanGroup(const Arguments& args) {
 
   while(it->name != NULL) {
     if (!strcasecmp(*group_name, it->name))
-        break;
+      break;
     it++;
   }
 
   if (it->name != NULL) {
-    diffieHellman->Init(it->prime, it->prime_size,
-            it->gen, it->gen_size);
+    diffieHellman->Init(it->prime,
+                        it->prime_size,
+                        it->gen,
+                        it->gen_size);
   } else {
-    return ThrowException(Exception::Error(
-        String::New("Unknown group")));
+    return ThrowError("Unknown group");
   }
 
   diffieHellman->Wrap(args.This());
@@ -2961,8 +2961,7 @@ Handle<Value> DiffieHellman::New(const Arguments& args) {
   }
 
   if (!initialized) {
-    return ThrowException(Exception::Error(
-          String::New("Initialization failed")));
+    return ThrowError("Initialization failed");
   }
 
   diffieHellman->Wrap(args.This());
@@ -2972,19 +2971,17 @@ Handle<Value> DiffieHellman::New(const Arguments& args) {
 
 
 Handle<Value> DiffieHellman::GenerateKeys(const Arguments& args) {
-  DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
-
   HandleScope scope;
 
+  DiffieHellman* diffieHellman =
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(
-          String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   if (!DH_generate_key(diffieHellman->dh)) {
-    return ThrowException(Exception::Error(
-          String::New("Key generation failed")));
+    return ThrowError("Key generation failed");
   }
 
   Local<Value> outString;
@@ -2992,7 +2989,7 @@ Handle<Value> DiffieHellman::GenerateKeys(const Arguments& args) {
   int dataSize = BN_num_bytes(diffieHellman->dh->pub_key);
   char* data = new char[dataSize];
   BN_bn2bin(diffieHellman->dh->pub_key,
-      reinterpret_cast<unsigned char*>(data));
+            reinterpret_cast<unsigned char*>(data));
 
   outString = Encode(data, dataSize, BUFFER);
   delete[] data;
@@ -3002,13 +2999,13 @@ Handle<Value> DiffieHellman::GenerateKeys(const Arguments& args) {
 
 
 Handle<Value> DiffieHellman::GetPrime(const Arguments& args) {
-  DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
-
   HandleScope scope;
 
+  DiffieHellman* diffieHellman =
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   int dataSize = BN_num_bytes(diffieHellman->dh->p);
@@ -3026,13 +3023,13 @@ Handle<Value> DiffieHellman::GetPrime(const Arguments& args) {
 
 
 Handle<Value> DiffieHellman::GetGenerator(const Arguments& args) {
-  DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
-
   HandleScope scope;
 
+  DiffieHellman* diffieHellman =
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   int dataSize = BN_num_bytes(diffieHellman->dh->g);
@@ -3050,24 +3047,23 @@ Handle<Value> DiffieHellman::GetGenerator(const Arguments& args) {
 
 
 Handle<Value> DiffieHellman::GetPublicKey(const Arguments& args) {
-  DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
-
   HandleScope scope;
 
+  DiffieHellman* diffieHellman =
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   if (diffieHellman->dh->pub_key == NULL) {
-    return ThrowException(Exception::Error(
-          String::New("No public key - did you forget to generate one?")));
+    return ThrowError("No public key - did you forget to generate one?");
   }
 
   int dataSize = BN_num_bytes(diffieHellman->dh->pub_key);
   char* data = new char[dataSize];
   BN_bn2bin(diffieHellman->dh->pub_key,
-      reinterpret_cast<unsigned char*>(data));
+            reinterpret_cast<unsigned char*>(data));
 
   Local<Value> outString;
 
@@ -3080,24 +3076,23 @@ Handle<Value> DiffieHellman::GetPublicKey(const Arguments& args) {
 
 
 Handle<Value> DiffieHellman::GetPrivateKey(const Arguments& args) {
-  DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
-
   HandleScope scope;
 
+  DiffieHellman* diffieHellman =
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
+
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   if (diffieHellman->dh->priv_key == NULL) {
-    return ThrowException(Exception::Error(
-          String::New("No private key - did you forget to generate one?")));
+    return ThrowError("No private key - did you forget to generate one?");
   }
 
   int dataSize = BN_num_bytes(diffieHellman->dh->priv_key);
   char* data = new char[dataSize];
   BN_bn2bin(diffieHellman->dh->priv_key,
-      reinterpret_cast<unsigned char*>(data));
+            reinterpret_cast<unsigned char*>(data));
 
   Local<Value> outString;
 
@@ -3113,29 +3108,30 @@ Handle<Value> DiffieHellman::ComputeSecret(const Arguments& args) {
   HandleScope scope;
 
   DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
 
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
-  BIGNUM* key = 0;
+  BIGNUM* key = NULL;
 
   if (args.Length() == 0) {
-    return ThrowException(Exception::Error(
-          String::New("First argument must be other party's public key")));
+    return ThrowError("First argument must be other party's public key");
   } else {
     ASSERT_IS_BUFFER(args[0]);
     key = BN_bin2bn(
-      reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
-      Buffer::Length(args[0]), 0);
+        reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
+        Buffer::Length(args[0]),
+        0);
   }
 
   int dataSize = DH_size(diffieHellman->dh);
   char* data = new char[dataSize];
 
   int size = DH_compute_key(reinterpret_cast<unsigned char*>(data),
-    key, diffieHellman->dh);
+                            key,
+                            diffieHellman->dh);
 
   if (size == -1) {
     int checkResult;
@@ -3146,19 +3142,17 @@ Handle<Value> DiffieHellman::ComputeSecret(const Arguments& args) {
     delete[] data;
 
     if (!checked) {
-      return ThrowException(Exception::Error(String::New("Invalid key")));
+      return ThrowError("Invalid key");
     } else if (checkResult) {
       if (checkResult & DH_CHECK_PUBKEY_TOO_SMALL) {
-        return ThrowException(Exception::Error(
-              String::New("Supplied key is too small")));
+        return ThrowError("Supplied key is too small");
       } else if (checkResult & DH_CHECK_PUBKEY_TOO_LARGE) {
-        return ThrowException(Exception::Error(
-              String::New("Supplied key is too large")));
+        return ThrowError("Supplied key is too large");
       } else {
-        return ThrowException(Exception::Error(String::New("Invalid key")));
+        return ThrowError("Invalid key");
       }
     } else {
-      return ThrowException(Exception::Error(String::New("Invalid key")));
+      return ThrowError("Invalid key");
     }
   }
 
@@ -3187,19 +3181,17 @@ Handle<Value> DiffieHellman::SetPublicKey(const Arguments& args) {
   HandleScope scope;
 
   DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
 
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   if (args.Length() == 0) {
-    return ThrowException(Exception::Error(
-          String::New("First argument must be public key")));
+    return ThrowError("First argument must be public key");
   } else {
     ASSERT_IS_BUFFER(args[0]);
-    diffieHellman->dh->pub_key =
-      BN_bin2bn(
+    diffieHellman->dh->pub_key = BN_bin2bn(
         reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
         Buffer::Length(args[0]), 0);
   }
@@ -3212,22 +3204,20 @@ Handle<Value> DiffieHellman::SetPrivateKey(const Arguments& args) {
   HandleScope scope;
 
   DiffieHellman* diffieHellman =
-    ObjectWrap::Unwrap<DiffieHellman>(args.This());
+      ObjectWrap::Unwrap<DiffieHellman>(args.This());
 
   if (!diffieHellman->initialised_) {
-    return ThrowException(Exception::Error(
-          String::New("Not initialized")));
+    return ThrowError("Not initialized");
   }
 
   if (args.Length() == 0) {
-    return ThrowException(Exception::Error(
-          String::New("First argument must be private key")));
+    return ThrowError("First argument must be private key");
   } else {
     ASSERT_IS_BUFFER(args[0]);
-    diffieHellman->dh->priv_key =
-      BN_bin2bn(
+    diffieHellman->dh->priv_key = BN_bin2bn(
         reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
-        Buffer::Length(args[0]), 0);
+        Buffer::Length(args[0]),
+        0);
   }
 
   return args.This();
