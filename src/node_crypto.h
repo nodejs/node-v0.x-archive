@@ -407,6 +407,38 @@ class Hash : public ObjectWrap {
   bool initialised_;
 };
 
+class Sign : public ObjectWrap {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
+
+  bool SignInit (const char* signType);
+  int SignUpdate(char* data, int len);
+  int SignFinal(unsigned char** md_value,
+                unsigned int *md_len,
+                char* key_pem,
+                int key_pemLen);
+
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SignInit(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SignUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SignFinal(const v8::Arguments& args);
+
+  Sign() : ObjectWrap(), initialised_(false) {
+  }
+
+  ~Sign () {
+    if (initialised_) {
+      EVP_MD_CTX_cleanup(&mdctx);
+    }
+  }
+
+ private:
+  EVP_MD_CTX mdctx; /* coverity[member_decl] */
+  const EVP_MD *md; /* coverity[member_decl] */
+  bool initialised_;
+};
+
 void InitCrypto(v8::Handle<v8::Object> target);
 
 }  // namespace crypto

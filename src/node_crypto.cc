@@ -2840,168 +2840,153 @@ Handle<Value> Hash::HashDigest(const Arguments& args) {
 }
 
 
-class Sign : public ObjectWrap {
- public:
-  static void
-  Initialize (v8::Handle<v8::Object> target) {
-    HandleScope scope;
+void Sign::Initialize(v8::Handle<v8::Object> target) {
+  HandleScope scope;
 
-    Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> t = FunctionTemplate::New(New);
 
-    t->InstanceTemplate()->SetInternalFieldCount(1);
+  t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "init", SignInit);
-    NODE_SET_PROTOTYPE_METHOD(t, "update", SignUpdate);
-    NODE_SET_PROTOTYPE_METHOD(t, "sign", SignFinal);
+  NODE_SET_PROTOTYPE_METHOD(t, "init", SignInit);
+  NODE_SET_PROTOTYPE_METHOD(t, "update", SignUpdate);
+  NODE_SET_PROTOTYPE_METHOD(t, "sign", SignFinal);
 
-    target->Set(String::NewSymbol("Sign"), t->GetFunction());
+  target->Set(String::NewSymbol("Sign"), t->GetFunction());
+}
+
+
+bool Sign::SignInit(const char* signType) {
+  md = EVP_get_digestbyname(signType);
+  if(!md) {
+    printf("Unknown message digest %s\n", signType);
+    return false;
+  }
+  EVP_MD_CTX_init(&mdctx);
+  EVP_SignInit_ex(&mdctx, md, NULL);
+  initialised_ = true;
+  return true;
+
+}
+
+
+int Sign::SignUpdate(char* data, int len) {
+  if (!initialised_) return 0;
+  EVP_SignUpdate(&mdctx, data, len);
+  return 1;
+}
+
+
+int Sign::SignFinal(unsigned char** md_value,
+                    unsigned int *md_len,
+                    char* key_pem,
+                    int key_pemLen) {
+  if (!initialised_) return 0;
+
+  BIO *bp = NULL;
+  EVP_PKEY* pkey;
+  bp = BIO_new(BIO_s_mem());
+  if(!BIO_write(bp, key_pem, key_pemLen)) return 0;
+
+  pkey = PEM_read_bio_PrivateKey( bp, NULL, NULL, NULL );
+  if (pkey == NULL) return 0;
+
+  EVP_SignFinal(&mdctx, *md_value, md_len, pkey);
+  EVP_MD_CTX_cleanup(&mdctx);
+  initialised_ = false;
+  EVP_PKEY_free(pkey);
+  BIO_free(bp);
+  return 1;
+}
+
+
+Handle<Value> Sign::New(const Arguments& args) {
+  HandleScope scope;
+
+  Sign *sign = new Sign();
+  sign->Wrap(args.This());
+
+  return args.This();
+}
+
+
+Handle<Value> Sign::SignInit(const Arguments& args) {
+  HandleScope scope;
+
+  Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
+
+  if (args.Length() == 0 || !args[0]->IsString()) {
+    return ThrowException(Exception::Error(String::New(
+      "Must give signtype string as argument")));
   }
 
-  bool SignInit (const char* signType) {
-    md = EVP_get_digestbyname(signType);
-    if(!md) {
-      printf("Unknown message digest %s\n", signType);
-      return false;
-    }
-    EVP_MD_CTX_init(&mdctx);
-    EVP_SignInit_ex(&mdctx, md, NULL);
-    initialised_ = true;
-    return true;
+  String::Utf8Value signType(args[0]);
 
+  bool r = sign->SignInit(*signType);
+
+  if (!r) {
+    return ThrowException(Exception::Error(String::New("SignInit error")));
   }
 
-  int SignUpdate(char* data, int len) {
-    if (!initialised_) return 0;
-    EVP_SignUpdate(&mdctx, data, len);
-    return 1;
+  return args.This();
+}
+
+
+Handle<Value> Sign::SignUpdate(const Arguments& args) {
+  Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
+
+  HandleScope scope;
+
+  ASSERT_IS_BUFFER(args[0]);
+
+  int r;
+
+  char* buffer_data = Buffer::Data(args[0]);
+  size_t buffer_length = Buffer::Length(args[0]);
+
+  r = sign->SignUpdate(buffer_data, buffer_length);
+
+  if (!r) {
+    Local<Value> exception = Exception::TypeError(String::New("SignUpdate fail"));
+    return ThrowException(exception);
   }
 
-  int SignFinal(unsigned char** md_value,
-                unsigned int *md_len,
-                char* key_pem,
-                int key_pemLen) {
-    if (!initialised_) return 0;
+  return args.This();
+}
 
-    BIO *bp = NULL;
-    EVP_PKEY* pkey;
-    bp = BIO_new(BIO_s_mem());
-    if(!BIO_write(bp, key_pem, key_pemLen)) return 0;
 
-    pkey = PEM_read_bio_PrivateKey( bp, NULL, NULL, NULL );
-    if (pkey == NULL) return 0;
+Handle<Value> Sign::SignFinal(const Arguments& args) {
+  Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
 
-    EVP_SignFinal(&mdctx, *md_value, md_len, pkey);
-    EVP_MD_CTX_cleanup(&mdctx);
-    initialised_ = false;
-    EVP_PKEY_free(pkey);
-    BIO_free(bp);
-    return 1;
+  HandleScope scope;
+
+  unsigned char* md_value;
+  unsigned int md_len;
+  Local<Value> outString;
+
+  md_len = 8192; // Maximum key size is 8192 bits
+  md_value = new unsigned char[md_len];
+
+  ASSERT_IS_BUFFER(args[0]);
+  ssize_t len = Buffer::Length(args[0]);
+
+  char* buf = new char[len];
+  ssize_t written = DecodeWrite(buf, len, args[0], BUFFER);
+  assert(written == len);
+
+  int r = sign->SignFinal(&md_value, &md_len, buf, len);
+  if (r == 0) {
+    md_value = NULL;
+    md_len = r;
   }
 
+  delete [] buf;
 
- protected:
+  outString = Encode(md_value, md_len, BUFFER);
 
-  static Handle<Value> New (const Arguments& args) {
-    HandleScope scope;
+  delete [] md_value;
+  return scope.Close(outString);
+}
 
-    Sign *sign = new Sign();
-    sign->Wrap(args.This());
-
-    return args.This();
-  }
-
-  static Handle<Value> SignInit(const Arguments& args) {
-    HandleScope scope;
-
-    Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
-
-    if (args.Length() == 0 || !args[0]->IsString()) {
-      return ThrowException(Exception::Error(String::New(
-        "Must give signtype string as argument")));
-    }
-
-    String::Utf8Value signType(args[0]);
-
-    bool r = sign->SignInit(*signType);
-
-    if (!r) {
-      return ThrowException(Exception::Error(String::New("SignInit error")));
-    }
-
-    return args.This();
-  }
-
-  static Handle<Value> SignUpdate(const Arguments& args) {
-    Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
-
-    HandleScope scope;
-
-    ASSERT_IS_BUFFER(args[0]);
-
-    int r;
-
-    char* buffer_data = Buffer::Data(args[0]);
-    size_t buffer_length = Buffer::Length(args[0]);
-
-    r = sign->SignUpdate(buffer_data, buffer_length);
-
-    if (!r) {
-      Local<Value> exception = Exception::TypeError(String::New("SignUpdate fail"));
-      return ThrowException(exception);
-    }
-
-    return args.This();
-  }
-
-  static Handle<Value> SignFinal(const Arguments& args) {
-    Sign *sign = ObjectWrap::Unwrap<Sign>(args.This());
-
-    HandleScope scope;
-
-    unsigned char* md_value;
-    unsigned int md_len;
-    Local<Value> outString;
-
-    md_len = 8192; // Maximum key size is 8192 bits
-    md_value = new unsigned char[md_len];
-
-    ASSERT_IS_BUFFER(args[0]);
-    ssize_t len = Buffer::Length(args[0]);
-
-    char* buf = new char[len];
-    ssize_t written = DecodeWrite(buf, len, args[0], BUFFER);
-    assert(written == len);
-
-    int r = sign->SignFinal(&md_value, &md_len, buf, len);
-    if (r == 0) {
-      md_value = NULL;
-      md_len = r;
-    }
-
-    delete [] buf;
-
-    outString = Encode(md_value, md_len, BUFFER);
-
-    delete [] md_value;
-    return scope.Close(outString);
-  }
-
-  Sign () : ObjectWrap () {
-    initialised_ = false;
-  }
-
-  ~Sign () {
-    if (initialised_) {
-      EVP_MD_CTX_cleanup(&mdctx);
-    }
-  }
-
- private:
-
-  EVP_MD_CTX mdctx; /* coverity[member_decl] */
-  const EVP_MD *md; /* coverity[member_decl] */
-  bool initialised_;
-};
 
 class Verify : public ObjectWrap {
  public:
