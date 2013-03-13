@@ -174,16 +174,16 @@ FakeInput.prototype.end = function() {};
   rli.close();
 
   // wide characters should be treated as two columns.
-  assert.equal(readline.isFullWidthCharCode('a'.charCodeAt(0)), false);
-  assert.equal(readline.isFullWidthCharCode('あ'.charCodeAt(0)), true);
-  assert.equal(readline.isFullWidthCharCode('谢'.charCodeAt(0)), true);
-  assert.equal(readline.isFullWidthCharCode('고'.charCodeAt(0)), true);
-  assert.equal(readline.isFullWidthCharCode(0x1f251), true); // surrogate
-  assert.equal(readline.fullCharCodeAt('ABC', 0), 0x41);
-  assert.equal(readline.fullCharCodeAt('あいう', 1), 0x3044);
-  assert.equal(readline.fullCharCodeAt('\ud800\udc00', 0),  // surrogate
+  assert.equal(readline.isFullWidthCodePoint('a'.charCodeAt(0)), false);
+  assert.equal(readline.isFullWidthCodePoint('あ'.charCodeAt(0)), true);
+  assert.equal(readline.isFullWidthCodePoint('谢'.charCodeAt(0)), true);
+  assert.equal(readline.isFullWidthCodePoint('고'.charCodeAt(0)), true);
+  assert.equal(readline.isFullWidthCodePoint(0x1f251), true); // surrogate
+  assert.equal(readline.codePointAt('ABC', 0), 0x41);
+  assert.equal(readline.codePointAt('あいう', 1), 0x3044);
+  assert.equal(readline.codePointAt('\ud800\udc00', 0),  // surrogate
       0x10000);
-  assert.equal(readline.fullCharCodeAt('\ud800\udc00A', 2), // surrogate
+  assert.equal(readline.codePointAt('\ud800\udc00A', 2), // surrogate
       0x41);
   assert.equal(readline.getStringWidth('abcde'), 5);
   assert.equal(readline.getStringWidth('古池や'), 6);
