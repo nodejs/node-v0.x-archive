@@ -147,6 +147,10 @@ void SecureContext::Initialize(Handle<Object> target) {
   t->SetClassName(String::NewSymbol("SecureContext"));
 
   NODE_SET_PROTOTYPE_METHOD(t, "init", SecureContext::Init);
+  NODE_SET_PROTOTYPE_METHOD(t, "setECDHECurves",
+                               SecureContext::SetECDHECurves);
+  NODE_SET_PROTOTYPE_METHOD(t, "clearECDHECurves",
+                               SecureContext::ClearECDHECurves);
   NODE_SET_PROTOTYPE_METHOD(t, "setKey", SecureContext::SetKey);
   NODE_SET_PROTOTYPE_METHOD(t, "setCert", SecureContext::SetCert);
   NODE_SET_PROTOTYPE_METHOD(t, "addCACert", SecureContext::AddCACert);
@@ -217,12 +221,26 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
       method = TLSv1_server_method();
     } else if (strcmp(*sslmethod, "TLSv1_client_method") == 0) {
       method = TLSv1_client_method();
+    } else if (strcmp(*sslmethod, "TLSv1_1_method") == 0) {
+      method = TLSv1_1_method();
+    } else if (strcmp(*sslmethod, "TLSv1_1_server_method") == 0) {
+      method = TLSv1_1_server_method();
+    } else if (strcmp(*sslmethod, "TLSv1_1_client_method") == 0) {
+      method = TLSv1_1_client_method();
+    } else if (strcmp(*sslmethod, "TLSv1_2_method") == 0) {
+      method = TLSv1_2_method();
+    } else if (strcmp(*sslmethod, "TLSv1_2_server_method") == 0) {
+      method = TLSv1_2_server_method();
+    } else if (strcmp(*sslmethod, "TLSv1_2_client_method") == 0) {
+      method = TLSv1_2_client_method();
     } else {
       return ThrowException(Exception::Error(String::New("Unknown method")));
     }
   }
 
   sc->ctx_ = SSL_CTX_new(method);
+
+  SSL_CTX_set_app_data(sc->ctx_, sc);
 
   // SSL session cache configuration
   SSL_CTX_set_session_cache_mode(sc->ctx_,
@@ -234,6 +252,100 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
 
   sc->ca_store_ = NULL;
   return True();
+}
+
+static EC_KEY *SecureContext_ecdhe_key_cb(SSL *ssl, int is_ex, int bit_len) {
+  SecureContext *sc = (SecureContext *)SSL_CTX_get_app_data(SSL_get_SSL_CTX(ssl));
+
+  assert(NULL != sc->ecdhe_keys);
+
+  for (int i = 0; i < sc->ecdhe_keys_len; i++)
+    if (sc->ecdhe_keys[i].bit_len >= bit_len)
+      return sc->ecdhe_keys[i].key;
+
+  if (0 < sc->ecdhe_keys_len)
+    return sc->ecdhe_keys[sc->ecdhe_keys_len - 1].key;
+
+  return NULL;
+}
+    
+Handle<Value> SecureContext::SetECDHECurves(const Arguments& args) {
+  HandleScope scope;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+  sc->_ClearECDHECurves();
+
+  char err[80];
+  int i = 0;
+
+  sc->ecdhe_keys_len = args.Length();
+  sc->ecdhe_keys = new BitLenKey<EC_KEY>[sc->ecdhe_keys_len];
+
+  for (; i < args.Length(); i++) {
+    String::Utf8Value _curvesn(args[i]);
+    const char *curvesn = *_curvesn;
+
+    int curvenid = OBJ_sn2nid(curvesn);
+    if (NID_undef == curvenid) {
+      snprintf(err, 80, "Invalid curve: %s", curvesn);
+      goto err_obj_sn2nid;
+    }
+
+    EC_KEY *key = EC_KEY_new_by_curve_name(curvenid);
+    if (NULL == key) {
+      snprintf(err, 80, "Failed to generate key for curve: %s", curvesn);
+      goto err_ec_key_new;
+    }
+
+    const EC_GROUP *grp = EC_KEY_get0_group(key);
+    if (NULL == grp) {
+      snprintf(err, 80, "Failed to get group for curve: %s", curvesn);
+      goto err_ec_key_get_group;
+    }
+
+    sc->ecdhe_keys[i].bit_len = EC_GROUP_get_degree(grp);
+    sc->ecdhe_keys[i].key = key;
+  }
+
+  SSL_CTX_set_tmp_ecdh_callback(sc->ctx_, SecureContext_ecdhe_key_cb);
+
+  return True();
+
+err_obj_sn2nid:
+err_ec_key_new:
+  i--;
+
+err_ec_key_get_group:
+  for (; i >= 0; i--)
+    EC_KEY_free(sc->ecdhe_keys[i].key);
+
+  delete sc->ecdhe_keys;
+  sc->ecdhe_keys = NULL;
+
+  return ThrowException(Exception::Error(String::New(err)));
+}
+
+Handle<Value> SecureContext::ClearECDHECurves(const Arguments& args) {
+  HandleScope scope;
+
+  SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
+
+  sc->_ClearECDHECurves();
+
+  return True();
+}
+
+void SecureContext::_ClearECDHECurves(void) {
+  if (NULL == ecdhe_keys)
+    return;
+
+  for (int i = 0; i < ecdhe_keys_len; i++)
+    EC_KEY_free(ecdhe_keys[i].key);
+
+  delete ecdhe_keys;
+  ecdhe_keys = NULL;
+
+  SSL_CTX_set_tmp_ecdh_callback(ctx_, NULL);
 }
 
 
@@ -1541,17 +1653,18 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
 
     EVP_PKEY *pkey = NULL;
     RSA *rsa = NULL;
-    if( NULL != (pkey = X509_get_pubkey(peer_cert))
-        && NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
-        BN_print(bio, rsa->n);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(modulus_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
+    if (NULL != X509_get_pubkey(peer_cert) &&
+        EVP_PKEY_RSA == EVP_PKEY_type(pkey->type) &&
+        NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
+      BN_print(bio, rsa->n);
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(modulus_symbol, String::New(mem->data, mem->length) );
+      (void) BIO_reset(bio);
 
-        BN_print(bio, rsa->e);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(exponent_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
+      BN_print(bio, rsa->e);
+      BIO_get_mem_ptr(bio, &mem);
+      info->Set(exponent_symbol, String::New(mem->data, mem->length) );
+      (void) BIO_reset(bio);
     }
 
     if (pkey != NULL) {
