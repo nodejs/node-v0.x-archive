@@ -113,7 +113,8 @@ function buildPermalink(key, post) {
 
 function writeFile(uri, data, templ) {
   if (!templ) templ = template;
-  data.uri = path.join(data.uri);
+  if (data.uri)
+    data.uri = path.join(data.uri);
   uri = path.join(uri);
   var contents = templ(data);
   var outdir = path.join(output, uri);
@@ -172,22 +173,8 @@ function buildFeeds(data) {
     categories[cat] = paginate(categories[cat], cat);
   }
 
-  // filter non-latest release notices out of main feeds.
-  // still show the first stable release of the family, since
-  // it usually is an important milestone with benchmarks and stuff.
-  var main = posts.filter(function(post) {
-    if (post.version && post.family) {
-      var ver = semver.parse(post.version)
-      if (+ver[2] % 2 === 0 && +ver[3] === 0) {
-        // 0.x.0, where x is event
-        return true;
-      }
-      if (post.version && post.family && post !== releases[post.family][0]) {
-        return false;
-      }
-    }
-    return true;
-  });
+  // show all posts in main feed.
+  var main = posts;
 
   // add previous/next based on main feed.
   main.forEach(function (post, i, posts) {

@@ -30,12 +30,10 @@ function outdated (args, silent, cb) {
   if (typeof cb !== "function") cb = silent, silent = false
   var dir = path.resolve(npm.dir, "..")
   outdated_(args, dir, {}, function (er, list) {
-    function cb_ (er) { cb(er, list) }
-
-    if (er || silent) return cb_(er)
+    if (er || silent) return cb(er, list)
     var outList = list.map(makePretty)
-    require("./utils/output.js").write(outList.join("\n"))
-    cb_()
+    console.log(outList.join("\n"))
+    cb(null, list)
   })
 }
 
@@ -78,6 +76,7 @@ function outdated_ (args, dir, parentHas, cb) {
 
   var deps = null
   readJson(path.resolve(dir, "package.json"), function (er, d) {
+    if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     deps = (er) ? true : (d.dependencies || {})
     return next()
   })
@@ -88,9 +87,13 @@ function outdated_ (args, dir, parentHas, cb) {
       has = Object.create(parentHas)
       return next()
     }
+    pkgs = pkgs.filter(function (p) {
+      return !p.match(/^[\._-]/)
+    })
     asyncMap(pkgs, function (pkg, cb) {
       var jsonFile = path.resolve(dir, "node_modules", pkg, "package.json")
       readJson(jsonFile, function (er, d) {
+        if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
         cb(null, er ? [] : [[d.name, d.version]])
       })
     }, function (er, pvs) {

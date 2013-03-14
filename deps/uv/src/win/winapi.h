@@ -4132,6 +4132,10 @@ typedef struct _FILE_BASIC_INFORMATION {
   DWORD FileAttributes;
 } FILE_BASIC_INFORMATION, *PFILE_BASIC_INFORMATION;
 
+typedef struct _FILE_DISPOSITION_INFORMATION {
+  BOOLEAN DeleteFile;
+} FILE_DISPOSITION_INFORMATION, *PFILE_DISPOSITION_INFORMATION;
+
 typedef struct _FILE_MODE_INFORMATION {
   ULONG Mode;
 } FILE_MODE_INFORMATION, *PFILE_MODE_INFORMATION;
@@ -4375,6 +4379,11 @@ typedef NTSTATUS (NTAPI *sNtQuerySystemInformation)
 # define ENABLE_EXTENDED_FLAGS 0x80
 #endif
 
+/* from winerror.h */
+#ifndef ERROR_SYMLINK_NOT_SUPPORTED
+# define ERROR_SYMLINK_NOT_SUPPORTED 1464
+#endif
+
 typedef BOOL (WINAPI *sGetQueuedCompletionStatusEx)
              (HANDLE CompletionPort,
               LPOVERLAPPED_ENTRY lpCompletionPortEntries,
@@ -4417,6 +4426,25 @@ typedef VOID (WINAPI* sReleaseSRWLockShared)
 typedef VOID (WINAPI* sReleaseSRWLockExclusive)
              (PSRWLOCK SRWLock);
 
+typedef VOID (WINAPI* sInitializeConditionVariable)
+             (PCONDITION_VARIABLE ConditionVariable);
+
+typedef BOOL (WINAPI* sSleepConditionVariableCS)
+             (PCONDITION_VARIABLE ConditionVariable,
+              PCRITICAL_SECTION CriticalSection,
+              DWORD dwMilliseconds);
+
+typedef BOOL (WINAPI* sSleepConditionVariableSRW)
+             (PCONDITION_VARIABLE ConditionVariable,
+              PSRWLOCK SRWLock,
+              DWORD dwMilliseconds,
+              ULONG Flags);
+
+typedef VOID (WINAPI* sWakeAllConditionVariable)
+             (PCONDITION_VARIABLE ConditionVariable);
+
+typedef VOID (WINAPI* sWakeConditionVariable)
+             (PCONDITION_VARIABLE ConditionVariable);
 
 
 /* Ntdll function pointers */
@@ -4439,5 +4467,10 @@ extern sTryAcquireSRWLockShared pTryAcquireSRWLockShared;
 extern sTryAcquireSRWLockExclusive pTryAcquireSRWLockExclusive;
 extern sReleaseSRWLockShared pReleaseSRWLockShared;
 extern sReleaseSRWLockExclusive pReleaseSRWLockExclusive;
+extern sInitializeConditionVariable pInitializeConditionVariable;
+extern sSleepConditionVariableCS pSleepConditionVariableCS;
+extern sSleepConditionVariableSRW pSleepConditionVariableSRW;
+extern sWakeAllConditionVariable pWakeAllConditionVariable;
+extern sWakeConditionVariable pWakeConditionVariable;
 
 #endif /* UV_WIN_WINAPI_H_ */

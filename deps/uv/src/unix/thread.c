@@ -26,6 +26,12 @@
 #include <assert.h>
 #include <errno.h>
 
+#if defined(__APPLE__) && defined(__MACH__)
+#include <sys/time.h>
+#endif /* defined(__APPLE__) && defined(__MACH__) */
+
+#undef NANOSEC
+#define NANOSEC ((uint64_t) 1e9)
 
 int uv_thread_join(uv_thread_t *tid) {
   if (pthread_join(*tid, NULL))
@@ -78,7 +84,7 @@ int uv_mutex_trylock(uv_mutex_t* mutex) {
 
   r = pthread_mutex_trylock(mutex);
 
-  if (r && r != EAGAIN)
+  if (r && r != EBUSY && r != EAGAIN)
     abort();
 
   if (r)
@@ -119,7 +125,7 @@ int uv_rwlock_tryrdlock(uv_rwlock_t* rwlock) {
 
   r = pthread_rwlock_tryrdlock(rwlock);
 
-  if (r && r != EAGAIN)
+  if (r && r != EBUSY && r != EAGAIN)
     abort();
 
   if (r)
@@ -146,7 +152,7 @@ int uv_rwlock_trywrlock(uv_rwlock_t* rwlock) {
 
   r = pthread_rwlock_trywrlock(rwlock);
 
-  if (r && r != EAGAIN)
+  if (r && r != EBUSY && r != EAGAIN)
     abort();
 
   if (r)
@@ -167,6 +173,53 @@ void uv_once(uv_once_t* guard, void (*callback)(void)) {
     abort();
 }
 
+#if defined(__APPLE__) && defined(__MACH__)
+
+int uv_sem_init(uv_sem_t* sem, unsigned int value) {
+  if (semaphore_create(mach_task_self(), sem, SYNC_POLICY_FIFO, value))
+    return -1;
+  else
+    return 0;
+}
+
+
+void uv_sem_destroy(uv_sem_t* sem) {
+  if (semaphore_destroy(mach_task_self(), *sem))
+    abort();
+}
+
+
+void uv_sem_post(uv_sem_t* sem) {
+  if (semaphore_signal(*sem))
+    abort();
+}
+
+
+void uv_sem_wait(uv_sem_t* sem) {
+  int r;
+
+  do
+    r = semaphore_wait(*sem);
+  while (r == KERN_ABORTED);
+
+  if (r != KERN_SUCCESS)
+    abort();
+}
+
+
+int uv_sem_trywait(uv_sem_t* sem) {
+  mach_timespec_t interval;
+
+  interval.tv_sec = 0;
+  interval.tv_nsec = 0;
+
+  if (semaphore_timedwait(*sem, interval) == KERN_SUCCESS)
+    return 0;
+  else
+    return -1;
+}
+
+#else /* !(defined(__APPLE__) && defined(__MACH__)) */
 
 int uv_sem_init(uv_sem_t* sem, unsigned int value) {
   return sem_init(sem, 0, value);
@@ -209,3 +262,170 @@ int uv_sem_trywait(uv_sem_t* sem) {
 
   return r;
 }
+
+#endif /* defined(__APPLE__) && defined(__MACH__) */
+
+
+#if defined(__APPLE__) && defined(__MACH__)
+
+int uv_cond_init(uv_cond_t* cond) {
+  if (pthread_cond_init(cond, NULL))
+    return -1;
+  else
+    return 0;
+}
+
+#else /* !(defined(__APPLE__) && defined(__MACH__)) */
+
+int uv_cond_init(uv_cond_t* cond) {
+  pthread_condattr_t attr;
+
+  if (pthread_condattr_init(&attr))
+    return -1;
+
+  if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC))
+    goto error2;
+
+  if (pthread_cond_init(cond, &attr))
+    goto error2;
+
+  if (pthread_condattr_destroy(&attr))
+    goto error;
+
+  return 0;
+
+error:
+  pthread_cond_destroy(cond);
+error2:
+  pthread_condattr_destroy(&attr);
+  return -1;
+}
+
+#endif /* defined(__APPLE__) && defined(__MACH__) */
+
+void uv_cond_destroy(uv_cond_t* cond) {
+  if (pthread_cond_destroy(cond))
+    abort();
+}
+
+void uv_cond_signal(uv_cond_t* cond) {
+  if (pthread_cond_signal(cond))
+    abort();
+}
+
+void uv_cond_broadcast(uv_cond_t* cond) {
+  if (pthread_cond_broadcast(cond))
+    abort();
+}
+
+void uv_cond_wait(uv_cond_t* cond, uv_mutex_t* mutex) {
+  if (pthread_cond_wait(cond, mutex))
+    abort();
+}
+
+
+int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
+  int r;
+  struct timespec ts;
+
+#if defined(__APPLE__) && defined(__MACH__)
+  ts.tv_sec = timeout / NANOSEC;
+  ts.tv_nsec = timeout % NANOSEC;
+  r = pthread_cond_timedwait_relative_np(cond, mutex, &ts);
+#else
+  timeout += uv__hrtime();
+  ts.tv_sec = timeout / NANOSEC;
+  ts.tv_nsec = timeout % NANOSEC;
+  r = pthread_cond_timedwait(cond, mutex, &ts);
+#endif
+
+
+  if (r == 0)
+    return 0;
+
+  if (r == ETIMEDOUT)
+    return -1;
+
+  abort();
+  return -1; /* Satisfy the compiler. */
+}
+
+
+#if defined(__APPLE__) && defined(__MACH__)
+
+int uv_barrier_init(uv_barrier_t* barrier, unsigned int count) {
+  barrier->n = count;
+  barrier->count = 0;
+
+  if (uv_mutex_init(&barrier->mutex))
+    return -1;
+
+  if (uv_sem_init(&barrier->turnstile1, 0))
+    goto error2;
+
+  if (uv_sem_init(&barrier->turnstile2, 1))
+    goto error;
+
+  return 0;
+
+error:
+  uv_sem_destroy(&barrier->turnstile1);
+error2:
+  uv_mutex_destroy(&barrier->mutex);
+  return -1;
+
+}
+
+
+void uv_barrier_destroy(uv_barrier_t* barrier) {
+  uv_sem_destroy(&barrier->turnstile2);
+  uv_sem_destroy(&barrier->turnstile1);
+  uv_mutex_destroy(&barrier->mutex);
+}
+
+
+void uv_barrier_wait(uv_barrier_t* barrier) {
+  uv_mutex_lock(&barrier->mutex);
+  if (++barrier->count == barrier->n) {
+    uv_sem_wait(&barrier->turnstile2);
+    uv_sem_post(&barrier->turnstile1);
+  }
+  uv_mutex_unlock(&barrier->mutex);
+
+  uv_sem_wait(&barrier->turnstile1);
+  uv_sem_post(&barrier->turnstile1);
+
+  uv_mutex_lock(&barrier->mutex);
+  if (--barrier->count == 0) {
+    uv_sem_wait(&barrier->turnstile1);
+    uv_sem_post(&barrier->turnstile2);
+  }
+  uv_mutex_unlock(&barrier->mutex);
+
+  uv_sem_wait(&barrier->turnstile2);
+  uv_sem_post(&barrier->turnstile2);
+}
+
+#else /* !(defined(__APPLE__) && defined(__MACH__)) */
+
+int uv_barrier_init(uv_barrier_t* barrier, unsigned int count) {
+  if (pthread_barrier_init(barrier, NULL, count))
+    return -1;
+  else
+    return 0;
+}
+
+
+void uv_barrier_destroy(uv_barrier_t* barrier) {
+  if (pthread_barrier_destroy(barrier))
+    abort();
+}
+
+
+void uv_barrier_wait(uv_barrier_t* barrier) {
+  int r = pthread_barrier_wait(barrier);
+  if (r && r != PTHREAD_BARRIER_SERIAL_THREAD)
+    abort();
+}
+
+#endif /* defined(__APPLE__) && defined(__MACH__) */

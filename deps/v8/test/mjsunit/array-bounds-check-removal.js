@@ -29,6 +29,29 @@
 
 var a = new Int32Array(1024);
 
+// Test that we do not assert if the accessed index has not an int32 rep.
+var v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+function test_do_not_assert_on_non_int32(vector, base) {
+  var r = 0;
+  var a1 = base + 1;
+  var a2 = base + 2;
+  var a3 = base + 3;
+  var a4 = base + 4;
+  if (a1 == 2) {
+    r += vector[a1];
+    r += vector[a4];
+    r += vector[a2];
+    r += vector[a3];
+  }
+  return r;
+}
+test_do_not_assert_on_non_int32(v,1);
+test_do_not_assert_on_non_int32(v,1);
+test_do_not_assert_on_non_int32(v,"a");
+test_do_not_assert_on_non_int32(v,"a");
+%OptimizeFunctionOnNextCall(test_do_not_assert_on_non_int32);
+test_do_not_assert_on_non_int32(v,0);
+
 function test_base(base,cond) {
   a[base + 1] = 1;
   a[base + 4] = 2;
@@ -123,7 +146,7 @@ check_test_minus(7,false);
 // ALWAYS: 3
 // NEVER: 4
 
-if (false) {
+// Test that we still deopt on failed bound checks
 test_base(5,true);
 test_base(6,true);
 test_base(5,false);
@@ -139,7 +162,21 @@ test_base(6,false);
 %OptimizeFunctionOnNextCall(test_base);
 test_base(2048,true);
 assertTrue(%GetOptimizationStatus(test_base) != 1);
+
+// Specific test on negative offsets
+var short_a = new Array(100);
+for (var i = 0; i < short_a.length; i++) short_a[i] = 0;
+function short_test(a, i) {
+  a[i + 9] = 0;
+  a[i - 10] = 0;
 }
+short_test(short_a, 50);
+short_test(short_a, 50);
+%OptimizeFunctionOnNextCall(short_test);
+short_a.length = 10;
+short_test(a, 0);
+assertTrue(%GetOptimizationStatus(short_test) != 1);
+
 
 gc();
 

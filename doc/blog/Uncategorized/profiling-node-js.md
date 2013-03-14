@@ -11,8 +11,8 @@ It's incredibly easy to visualize where your Node program spends its time using 
     <li>Run your Node.js program as usual.</li>
     <li>In another terminal, run:
         <pre>
-$ dtrace -o stacks.out -n 'profile-97/execname == "node" &amp;&amp; arg1/{
-    @[jstack(100, 8000)] = count(); } tick-60s { exit(0); }'</pre>
+$ dtrace -n 'profile-97/execname == "node" &amp;&amp; arg1/{
+    @[jstack(150, 8000)] = count(); } tick-60s { exit(0); }' &gt; stacks.out</pre>
         This will sample about 100 times per second for 60 seconds and emit results to stacks.out. <strong>Note that this will sample all running programs called "node".  If you want a specific process, replace <code>execname == "node"</code> with <code>pid == 12345</code> (the process id).</strong>
     </li>
     <li>Use the "stackvis" tool to transform this directly into a flame graph. First, install it:
@@ -32,7 +32,7 @@ This is a visualization of all of the profiled call stacks. This example is from
 That's the summary. There are a few prerequisites:
 
 <ul>
-    <li>You must gather data on a system that supports DTrace with the Node.js ustack helper. For now, this pretty much means <a href="http://illumos.org/">illumos</a>-based systems like <a href="http://smartos.org/">SmartOS</a>, including the Joyent Cloud. <strong>MacOS users:</strong> OS X supports DTrace, but not ustack helpers. The way to get this changed is to contact your Apple developer liason (if you're lucky enough to have one) or <strong>file a bug report at bugreport.apple.com</strong>. I'd suggest referencing existing bugs 5273057 and 11206497. More bugs filed (even if closed as dups) show more interest and make it more likely Apple will choose to fix this.</li>
+    <li>You must gather data on a system that supports DTrace with the Node.js ustack helper. For now, this pretty much means <a href="http://illumos.org/">illumos</a>-based systems like <a href="http://smartos.org/">SmartOS</a>, including the Joyent Cloud. <strong>MacOS users:</strong> OS X supports DTrace, but not ustack helpers. The way to get this changed is to contact your Apple developer liaison (if you're lucky enough to have one) or <strong>file a bug report at bugreport.apple.com</strong>. I'd suggest referencing existing bugs 5273057 and 11206497. More bugs filed (even if closed as dups) show more interest and make it more likely Apple will choose to fix this.</li>
     <li>You must be on 32-bit Node.js 0.6.7 or later, built <code>--with-dtrace</code>. The helper doesn't work with 64-bit Node yet. On illumos (including SmartOS), development releases (the 0.7.x train) include DTrace support by default.</li>
 </ul>
 

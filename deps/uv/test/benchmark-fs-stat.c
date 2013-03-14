@@ -26,7 +26,7 @@
 #include <stdlib.h>
 
 #define NUM_SYNC_REQS         (10 * 1e5)
-#define NUM_ASYNC_REQS        (1 * 1e5)
+#define NUM_ASYNC_REQS        (1 * (int) 1e5)
 #define MAX_CONCURRENT_REQS   32
 
 #define sync_stat(req, path)                                                  \
@@ -43,44 +43,15 @@ struct async_req {
 };
 
 
-static const char* fmt(double d) {
-  uint64_t v;
-  char* p;
-
-  p = (char *) calloc(1, 32) + 31; /* leaks memory */
-  v = d;
-
-#if 0 /* works but we don't care about fractional precision */
-  if (d - v >= 0.01) {
-    *--p = '0' + (uint64_t) (d * 100) % 10;
-    *--p = '0' + (uint64_t) (d * 10) % 10;
-    *--p = '.';
-  }
-#endif
-
-  if (v == 0)
-    *--p = '0';
-
-  while (v) {
-    if (v) *--p = '0' + (v % 10), v /= 10;
-    if (v) *--p = '0' + (v % 10), v /= 10;
-    if (v) *--p = '0' + (v % 10), v /= 10;
-    if (v) *--p = ',';
-  }
-
-  return p;
-}
-
-
 static void warmup(const char* path) {
   uv_fs_t reqs[MAX_CONCURRENT_REQS];
-  int i;
+  unsigned int i;
 
   /* warm up the thread pool */
   for (i = 0; i < ARRAY_SIZE(reqs); i++)
     uv_fs_stat(uv_default_loop(), reqs + i, path, uv_fs_req_cleanup);
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   /* warm up the OS dirent cache */
   for (i = 0; i < 16; i++)
@@ -137,7 +108,7 @@ static void async_bench(const char* path) {
     }
 
     before = uv_hrtime();
-    uv_run(uv_default_loop());
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
     after = uv_hrtime();
 
     printf("%s stats (%d concurrent): %.2fs (%s/s)\n",
@@ -160,5 +131,6 @@ BENCHMARK_IMPL(fs_stat) {
   warmup(path);
   sync_bench(path);
   async_bench(path);
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

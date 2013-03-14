@@ -7,6 +7,13 @@
     'library%': 'static_library',    # allow override to 'shared_library' for DLL/.so builds
     'component%': 'static_library',  # NB. these names match with what V8 expects
     'msvs_multi_core_compile': '0',  # we do enable multicore compiles, but not using the V8 way
+    'gcc_version%': 'unknown',
+    'clang%': 0,
+    'python%': 'python',
+
+    # Turn on optimizations that may trigger compiler bugs.
+    # Use at your own risk. Do *NOT* report bugs if this option is enabled.
+    'node_unsafe_optimizations%': 0,
 
     # Enable V8's post-mortem debugging only on unix flavors.
     'conditions': [
@@ -39,17 +46,37 @@
             'LinkIncremental': 2, # enable incremental linking
           },
         },
+        'xcode_settings': {
+          'GCC_OPTIMIZATION_LEVEL': '0', # stop gyp from defaulting to -Os
+        },
       },
       'Release': {
-        # Do *NOT* enable -ffunction-sections or -fdata-sections again.
-        # We don't link with -Wl,--gc-sections so they're effectively no-ops.
-        # Worse, they trigger very nasty bugs in some versions of gcc, notably
-        # v4.4.6 on x86_64-redhat-linux (i.e. RHEL and CentOS).
-        'cflags!': [ '-ffunction-sections', '-fdata-sections' ],
-        'cflags': [ '-O3' ],
         'conditions': [
           ['target_arch=="x64"', {
             'msvs_configuration_platform': 'x64',
+          }],
+          ['node_unsafe_optimizations==1', {
+            'cflags': [ '-O3', '-ffunction-sections', '-fdata-sections' ],
+            'ldflags': [ '-Wl,--gc-sections' ],
+          }, {
+            'cflags': [ '-O2', '-fno-strict-aliasing' ],
+            'cflags!': [ '-O3', '-fstrict-aliasing' ],
+            'conditions': [
+              # Required by the dtrace post-processor. Unfortunately,
+              # some gcc/binutils combos generate bad code when
+              # -ffunction-sections is enabled. Let's hope for the best.
+              ['OS=="solaris"', {
+                'cflags': [ '-ffunction-sections', '-fdata-sections' ],
+              }, {
+                'cflags!': [ '-ffunction-sections', '-fdata-sections' ],
+              }],
+              ['clang == 0 and gcc_version >= 40', {
+                'cflags': [ '-fno-tree-vrp' ],
+              }],
+              ['clang == 0 and gcc_version <= 44', {
+                'cflags': [ '-fno-tree-sink' ],
+              }],
+            ],
           }],
           ['OS=="solaris"', {
             'cflags': [ '-fno-omit-frame-pointer' ],
@@ -131,16 +158,16 @@
           'BUILDING_V8_SHARED=1',
           'BUILDING_UV_SHARED=1',
         ],
-      }, {
-        'defines': [
-          '_LARGEFILE_SOURCE',
-          '_FILE_OFFSET_BITS=64',
-        ],
       }],
       [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
-        'cflags': [ '-Wall', '-pthread', ],
+        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', '-pthread', ],
         'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
-        'ldflags': [ '-pthread', ],
+        'ldflags': [ '-pthread', '-rdynamic' ],
+        'target_conditions': [
+          ['_type=="static_library"', {
+            'standalone_static_library': 1, # disable thin archive which needs binutils >= 2.19
+          }],
+        ],
         'conditions': [
           [ 'target_arch=="ia32"', {
             'cflags': [ '-m32' ],
@@ -149,9 +176,6 @@
           [ 'target_arch=="x64"', {
             'cflags': [ '-m64' ],
             'ldflags': [ '-m64' ],
-          }],
-          [ 'OS=="linux"', {
-            'ldflags': [ '-rdynamic' ],
           }],
           [ 'OS=="solaris"', {
             'cflags': [ '-pthreads' ],
@@ -172,8 +196,6 @@
           'GCC_ENABLE_CPP_RTTI': 'NO',              # -fno-rtti
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
           'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
-          'GCC_VERSION': '4.2',
-          'GCC_WARN_ABOUT_MISSING_NEWLINE': 'YES',  # -Wnewline-eof
           'PREBINDING': 'NO',                       # No -Wl,-prebind
           'MACOSX_DEPLOYMENT_TARGET': '10.5',       # -mmacosx-version-min=10.5
           'USE_HEADERMAP': 'NO',
@@ -201,6 +223,9 @@
           }],
         ],
       }],
+      ['OS=="freebsd" and node_use_dtrace=="true"', {
+        'libraries': [ '-lelf' ],
+      }]
     ],
   }
 }

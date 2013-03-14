@@ -19,9 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-
-
 if (!process.versions.openssl) {
   console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
@@ -150,7 +147,8 @@ proxy.listen(proxyPort, function() {
       key: key,
       cert: cert,
       socket: socket,  // reuse the socket
-      agent: false
+      agent: false,
+      rejectUnauthorized: false
     }, function(res) {
       assert.equal(200, res.statusCode);
 
@@ -164,6 +162,12 @@ proxy.listen(proxyPort, function() {
         proxy.close();
         server.close();
       });
+    }).on('error', function(er) {
+      // We're ok with getting ECONNRESET in this test, but it's
+      // timing-dependent, and thus unreliable. Any other errors
+      // are just failures, though.
+      if (er.code !== 'ECONNRESET')
+        throw er;
     }).end();
   }
 });

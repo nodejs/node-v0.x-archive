@@ -23,6 +23,11 @@ npm will default some values based on package contents.
   If there is a `wscript` file in the root of your package, npm will
   default the `preinstall` command to compile using node-waf.
 
+* `"scripts":{"preinstall": "node-gyp rebuild"}`
+
+  If there is a `binding.gyp` file in the root of your package, npm will
+  default the `preinstall` command to compile using node-gyp.
+
 * `"contributors": [...]`
 
   If there is an `AUTHORS` file in the root of your package, npm will
@@ -361,8 +366,8 @@ a version in the following fashion.
 For example, the following are equivalent:
 
 * `"~1.2.3" = ">=1.2.3 <1.3.0"`
-* `"~1.2" = ">=1.2.0 <2.0.0"`
-* `"~1" = ">=1.0.0 <2.0.0"`
+* `"~1.2" = ">=1.2.0 <1.3.0"`
+* `"~1" = ">=1.0.0 <1.1.0"`
 
 ### X Version Ranges
 

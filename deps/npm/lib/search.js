@@ -4,7 +4,6 @@ module.exports = exports = search
 var npm = require("./npm.js")
   , registry = npm.registry
   , semver = require("semver")
-  , output
 
 search.usage = "npm search [some search terms ...]"
 
@@ -30,9 +29,9 @@ search.completion = function (opts, cb) {
   })
 }
 
-function search (args, silent, staleness, cb_) {
-  if (typeof cb_ !== "function") cb_ = staleness, staleness = 600
-  if (typeof cb_ !== "function") cb_ = silent, silent = false
+function search (args, silent, staleness, cb) {
+  if (typeof cb !== "function") cb = staleness, staleness = 600
+  if (typeof cb !== "function") cb = silent, silent = false
 
   var searchopts = npm.config.get("searchopts")
     , searchexclude = npm.config.get("searchexclude")
@@ -51,10 +50,9 @@ function search (args, silent, staleness, cb_) {
     // now data is the list of data that we want to show.
     // prettify and print it, and then provide the raw
     // data to the cb.
-    if (er || silent) return cb_(er, data)
-    function cb (er) { return cb_(er, data) }
-    output = output || require("./utils/output.js")
-    output.write(prettify(data, args), cb)
+    if (er || silent) return cb(er, data)
+    console.log(prettify(data, args))
+    cb(null, data)
   })
 }
 
@@ -88,6 +86,7 @@ function stripData (data) {
            })
          , url: !Object.keys(data.versions || {}).length ? data.url : null
          , keywords: data.keywords || []
+         , version: Object.keys(data.versions)[0] || []
          , time: data.time
                  && data.time.modified
                  && (new Date(data.time.modified).toISOString()
@@ -144,18 +143,19 @@ function prettify (data, args) {
   var longest = []
     , spaces
     , maxLen = npm.config.get("description")
-             ? [20, 60, 20, 20, Infinity]
-             : [20, 20, 20, Infinity]
+             ? [20, 60, 20, 20, 10, Infinity]
+             : [20, 20, 20, 10, Infinity]
     , headings = npm.config.get("description")
-               ? ["NAME", "DESCRIPTION", "AUTHOR", "DATE", "KEYWORDS"]
-               : ["NAME", "AUTHOR", "DATE", "KEYWORDS"]
+               ? ["NAME", "DESCRIPTION", "AUTHOR", "DATE", "VERSION", "KEYWORDS"]
+               : ["NAME", "AUTHOR", "DATE", "VERSION", "KEYWORDS"]
     , lines
     , searchsort = (npm.config.get("searchsort") || "NAME").toLowerCase()
     , sortFields = { name: 0
                    , description: 1
                    , author: 2
                    , date: 3
-                   , keywords: 4 }
+                   , version: 4
+                   , keywords: 5 }
     , searchRev = searchsort.charAt(0) === "-"
     , sortField = sortFields[searchsort.replace(/^\-+/, "")]
 
@@ -173,6 +173,7 @@ function prettify (data, args) {
             , data.description || ""
             , data.maintainers.join(" ")
             , data.time
+            , data.version || ""
             , (data.keywords || []).join(" ")
             ]
     l.forEach(function (s, i) {
@@ -183,7 +184,7 @@ function prettify (data, args) {
         l._undent = l._undent || []
         l._undent[i] = len - longest[i]
       }
-      l[i] = l[i].replace(/\s+/g, " ")
+      l[i] = ('' + l[i]).replace(/\s+/g, " ")
     })
     return l
   }).sort(function (a, b) {
@@ -255,7 +256,9 @@ function addColorMarker (str, arg, i) {
 function colorize (line) {
   for (var i = 0; i < cl; i ++) {
     var m = i + 1
-    line = line.split(String.fromCharCode(m)).join("\033["+colors[i]+"m")
+    var color = npm.color ? "\033["+colors[i]+"m" : ""
+    line = line.split(String.fromCharCode(m)).join(color)
   }
-  return line.split("\u0000").join("\033[0m")
+  var uncolor = npm.color ? "\033[0m" : ""
+  return line.split("\u0000").join(uncolor)
 }

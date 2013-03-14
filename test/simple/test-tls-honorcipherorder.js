@@ -46,7 +46,10 @@ function test(honorCipherOrder, clientCipher, expectedCipher, cb) {
     nconns++;
   });
   server.listen(common.PORT, localhost, function() {
-    var coptions = {secureProtocol: SSL_Method};
+    var coptions = {
+      rejectUnauthorized: false,
+      secureProtocol: SSL_Method
+    };
     if (clientCipher) {
       coptions.ciphers = clientCipher;
     }

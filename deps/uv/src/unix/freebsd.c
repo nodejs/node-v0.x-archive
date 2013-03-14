@@ -54,10 +54,19 @@
 static char *process_title;
 
 
-uint64_t uv_hrtime(void) {
+int uv__platform_loop_init(uv_loop_t* loop, int default_loop) {
+  return uv__kqueue_init(loop);
+}
+
+
+void uv__platform_loop_delete(uv_loop_t* loop) {
+}
+
+
+uint64_t uv__hrtime(void) {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
-  return (ts.tv_sec * NANOSEC + ts.tv_nsec);
+  return (((uint64_t) ts.tv_sec) * NANOSEC + ts.tv_nsec);
 }
 
 
@@ -139,9 +148,23 @@ char** uv_setup_args(int argc, char** argv) {
 
 
 uv_err_t uv_set_process_title(const char* title) {
+  int oid[4];
+
   if (process_title) free(process_title);
   process_title = strdup(title);
-  setproctitle(title);
+
+  oid[0] = CTL_KERN;
+  oid[1] = KERN_PROC;
+  oid[2] = KERN_PROC_ARGS;
+  oid[3] = getpid();
+
+  sysctl(oid,
+         ARRAY_SIZE(oid),
+         NULL,
+         NULL,
+         process_title,
+         strlen(process_title) + 1);
+
   return uv_ok_;
 }
 
@@ -212,11 +235,25 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
                multiplier = ((uint64_t)1000L / ticks), cpuspeed, maxcpus,
                cur = 0;
   uv_cpu_info_t* cpu_info;
+  const char* maxcpus_key;
+  const char* cptimes_key;
   char model[512];
   long* cp_times;
   int numcpus;
   size_t size;
   int i;
+
+#if defined(__DragonFly__)
+  /* This is not quite correct but DragonFlyBSD doesn't seem to have anything
+   * comparable to kern.smp.maxcpus or kern.cp_times (kern.cp_time is a total,
+   * not per CPU). At least this stops uv_cpu_info() from failing completely.
+   */
+  maxcpus_key = "hw.ncpu";
+  cptimes_key = "kern.cp_time";
+#else
+  maxcpus_key = "kern.smp.maxcpus";
+  cptimes_key = "kern.cp_times";
+#endif
 
   size = sizeof(model);
   if (sysctlbyname("hw.model", &model, &size, NULL, 0) < 0) {
@@ -239,19 +276,13 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     free(*cpu_infos);
     return uv__new_sys_error(errno);
   }
+
   /* kern.cp_times on FreeBSD i386 gives an array up to maxcpus instead of ncpu */
   size = sizeof(maxcpus);
-#ifdef __DragonFly__
-  if (sysctlbyname("hw.ncpu", &maxcpus, &size, NULL, 0) < 0) {
+  if (sysctlbyname(maxcpus_key, &maxcpus, &size, NULL, 0) < 0) {
     free(*cpu_infos);
     return uv__new_sys_error(errno);
   }
-#else
-  if (sysctlbyname("kern.smp.maxcpus", &maxcpus, &size, NULL, 0) < 0) {
-    free(*cpu_infos);
-    return uv__new_sys_error(errno);
-  }
-#endif
 
   size = maxcpus * CPUSTATES * sizeof(long);
 
@@ -261,7 +292,7 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     return uv__new_sys_error(ENOMEM);
   }
 
-  if (sysctlbyname("kern.cp_times", cp_times, &size, NULL, 0) < 0) {
+  if (sysctlbyname(cptimes_key, cp_times, &size, NULL, 0) < 0) {
     free(cp_times);
     free(*cpu_infos);
     return uv__new_sys_error(errno);

@@ -28,11 +28,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 
-#include <TargetConditionals.h>
-
-#if !TARGET_OS_IPHONE
-#include <CoreServices/CoreServices.h>
-#endif
+#include <CoreFoundation/CFRunLoop.h>
 
 #include <mach/mach.h>
 #include <mach/mach_time.h>
@@ -41,34 +37,152 @@
 #include <sys/sysctl.h>
 #include <unistd.h>  /* sysconf */
 
-static char *process_title;
+/* Forward declarations */
+void uv__cf_loop_runner(void* arg);
+void uv__cf_loop_cb(void* arg);
 
-#if TARGET_OS_IPHONE
-/* see: http://developer.apple.com/library/mac/#qa/qa1398/_index.html */
-uint64_t uv_hrtime() {
-    uint64_t time;
-    uint64_t enano;
-    static mach_timebase_info_data_t sTimebaseInfo;
+typedef struct uv__cf_loop_signal_s uv__cf_loop_signal_t;
+struct uv__cf_loop_signal_s {
+  void* arg;
+  cf_loop_signal_cb cb;
+  ngx_queue_t member;
+};
 
-    time = mach_absolute_time();
 
-    if (0 == sTimebaseInfo.denom) {
-        (void)mach_timebase_info(&sTimebaseInfo);
-    }
+int uv__platform_loop_init(uv_loop_t* loop, int default_loop) {
+  CFRunLoopSourceContext ctx;
+  int r;
 
-    enano = time * sTimebaseInfo.numer / sTimebaseInfo.denom;
+  if (uv__kqueue_init(loop))
+    return -1;
 
-    return enano;
+  loop->cf_loop = NULL;
+  if ((r = uv_mutex_init(&loop->cf_mutex)))
+    return r;
+  if ((r = uv_sem_init(&loop->cf_sem, 0)))
+    return r;
+  ngx_queue_init(&loop->cf_signals);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.info = loop;
+  ctx.perform = uv__cf_loop_cb;
+  loop->cf_cb = CFRunLoopSourceCreate(NULL, 0, &ctx);
+
+  if ((r = uv_thread_create(&loop->cf_thread, uv__cf_loop_runner, loop)))
+    return r;
+
+  /* Synchronize threads */
+  uv_sem_wait(&loop->cf_sem);
+  assert(ACCESS_ONCE(CFRunLoopRef, loop->cf_loop) != NULL);
+
+  return 0;
 }
-#else
-uint64_t uv_hrtime() {
-  uint64_t time;
-  Nanoseconds enano;
-  time = mach_absolute_time(); 
-  enano = AbsoluteToNanoseconds(*(AbsoluteTime *)&time);
-  return (*(uint64_t *)&enano);
+
+
+void uv__platform_loop_delete(uv_loop_t* loop) {
+  ngx_queue_t* item;
+  uv__cf_loop_signal_t* s;
+
+  assert(loop->cf_loop != NULL);
+  CFRunLoopStop(loop->cf_loop);
+  uv_thread_join(&loop->cf_thread);
+  loop->cf_loop = NULL;
+
+  uv_sem_destroy(&loop->cf_sem);
+  uv_mutex_destroy(&loop->cf_mutex);
+
+  /* Free any remaining data */
+  while (!ngx_queue_empty(&loop->cf_signals)) {
+    item = ngx_queue_head(&loop->cf_signals);
+
+    s = ngx_queue_data(item, uv__cf_loop_signal_t, member);
+
+    ngx_queue_remove(item);
+    free(s);
+  }
 }
-#endif
+
+
+void uv__cf_loop_runner(void* arg) {
+  uv_loop_t* loop;
+
+  loop = arg;
+
+  /* Get thread's loop */
+  ACCESS_ONCE(CFRunLoopRef, loop->cf_loop) = CFRunLoopGetCurrent();
+
+  CFRunLoopAddSource(loop->cf_loop,
+                     loop->cf_cb,
+                     kCFRunLoopDefaultMode);
+
+  uv_sem_post(&loop->cf_sem);
+
+  CFRunLoopRun();
+
+  CFRunLoopRemoveSource(loop->cf_loop,
+                        loop->cf_cb,
+                        kCFRunLoopDefaultMode);
+}
+
+
+void uv__cf_loop_cb(void* arg) {
+  uv_loop_t* loop;
+  ngx_queue_t* item;
+  ngx_queue_t split_head;
+  uv__cf_loop_signal_t* s;
+
+  loop = arg;
+
+  uv_mutex_lock(&loop->cf_mutex);
+  ngx_queue_init(&split_head);
+  if (!ngx_queue_empty(&loop->cf_signals)) {
+    ngx_queue_t* split_pos = ngx_queue_next(&loop->cf_signals);
+    ngx_queue_split(&loop->cf_signals, split_pos, &split_head);
+  }
+  uv_mutex_unlock(&loop->cf_mutex);
+
+  while (!ngx_queue_empty(&split_head)) {
+    item = ngx_queue_head(&split_head);
+
+    s = ngx_queue_data(item, uv__cf_loop_signal_t, member);
+    s->cb(s->arg);
+
+    ngx_queue_remove(item);
+    free(s);
+  }
+}
+
+
+void uv__cf_loop_signal(uv_loop_t* loop, cf_loop_signal_cb cb, void* arg) {
+  uv__cf_loop_signal_t* item;
+
+  item = malloc(sizeof(*item));
+  /* XXX: Fail */
+  if (item == NULL)
+    abort();
+
+  item->arg = arg;
+  item->cb = cb;
+
+  uv_mutex_lock(&loop->cf_mutex);
+  ngx_queue_insert_tail(&loop->cf_signals, &item->member);
+  uv_mutex_unlock(&loop->cf_mutex);
+
+  assert(loop->cf_loop != NULL);
+  CFRunLoopSourceSignal(loop->cf_cb);
+  CFRunLoopWakeUp(loop->cf_loop);
+}
+
+
+uint64_t uv__hrtime(void) {
+    mach_timebase_info_data_t info;
+
+    if (mach_timebase_info(&info) != KERN_SUCCESS)
+      abort();
+
+    return mach_absolute_time() * info.numer / info.denom;
+}
+
 
 int uv_exepath(char* buffer, size_t* size) {
   uint32_t usize;
@@ -138,31 +252,6 @@ void uv_loadavg(double avg[3]) {
 }
 
 
-char** uv_setup_args(int argc, char** argv) {
-  process_title = argc ? strdup(argv[0]) : NULL;
-  return argv;
-}
-
-
-uv_err_t uv_set_process_title(const char* title) {
-  /* TODO implement me */
-  return uv__new_artificial_error(UV_ENOSYS);
-}
-
-
-uv_err_t uv_get_process_title(char* buffer, size_t size) {
-  if (process_title) {
-    strncpy(buffer, process_title, size);
-  } else {
-    if (size > 0) {
-      buffer[0] = '\0';
-    }
-  }
-
-  return uv_ok_;
-}
-
-
 uv_err_t uv_resident_set_memory(size_t* rss) {
   struct task_basic_info t_info;
   mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
@@ -211,7 +300,8 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   uv_cpu_info_t* cpu_info;
 
   size = sizeof(model);
-  if (sysctlbyname("hw.model", &model, &size, NULL, 0) < 0) {
+  if (sysctlbyname("machdep.cpu.brand_string", &model, &size, NULL, 0) < 0 &&
+      sysctlbyname("hw.model", &model, &size, NULL, 0) < 0) {
     return uv__new_sys_error(errno);
   }
   size = sizeof(cpuspeed);

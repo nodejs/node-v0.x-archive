@@ -43,12 +43,13 @@
     # access is allowed for all CPUs.
     'v8_can_use_unaligned_accesses%': 'default',
 
-    # Setting 'v8_can_use_vfp_instructions' to 'true' will enable use of ARM VFP
+    # Setting 'v8_can_use_vfp2_instructions' to 'true' will enable use of ARM VFP
     # instructions in the V8 generated code. VFP instructions will be enabled
     # both for the snapshot and for the ARM target. Leaving the default value
     # of 'false' will avoid VFP instructions in the snapshot and use CPU feature
     # probing when running on the target.
-    'v8_can_use_vfp_instructions%': 'false',
+    'v8_can_use_vfp2_instructions%': 'false',
+    'v8_can_use_vfp3_instructions%': 'false',
 
     # Similar to vfp but on MIPS.
     'v8_can_use_fpu_instructions%': 'true',
@@ -69,12 +70,17 @@
 
     'v8_enable_disassembler%': 0,
 
-    'v8_object_print%': 0,
+    # Enable extra checks in API functions and other strategic places.
+    'v8_enable_extra_checks%': 1,
 
     'v8_enable_gdbjit%': 0,
 
+    'v8_object_print%': 0,
+
     # Enable profiling support. Only required on Windows.
     'v8_enable_prof%': 0,
+
+    'v8_enable_verify_heap%': 0,
 
     # Some versions of GCC 4.5 seem to need -fno-strict-aliasing.
     'v8_no_strict_aliasing%': 0,
@@ -95,6 +101,10 @@
 
     # For a shared library build, results in "libv8-<(soname_version).so".
     'soname_version%': '',
+
+    # Interpreted regexp engine exists as platform-independent alternative
+    # based where the regular expression is compiled to a bytecode.
+    'v8_interpreted_regexp%': 0,
   },
   'target_defaults': {
     'conditions': [
@@ -104,11 +114,20 @@
       ['v8_enable_disassembler==1', {
         'defines': ['ENABLE_DISASSEMBLER',],
       }],
-      ['v8_object_print==1', {
-        'defines': ['OBJECT_PRINT',],
+      ['v8_enable_extra_checks==1', {
+        'defines': ['ENABLE_EXTRA_CHECKS',],
       }],
       ['v8_enable_gdbjit==1', {
         'defines': ['ENABLE_GDB_JIT_INTERFACE',],
+      }],
+      ['v8_object_print==1', {
+        'defines': ['OBJECT_PRINT',],
+      }],
+      ['v8_enable_verify_heap==1', {
+        'defines': ['VERIFY_HEAP',],
+      }],
+      ['v8_interpreted_regexp==1', {
+        'defines': ['V8_INTERPRETED_REGEXP',],
       }],
       ['v8_target_arch=="arm"', {
         'defines': [
@@ -125,15 +144,20 @@
               'CAN_USE_UNALIGNED_ACCESSES=0',
             ],
           }],
-          [ 'v8_can_use_vfp_instructions=="true"', {
+          [ 'v8_can_use_vfp2_instructions=="true"', {
             'defines': [
-              'CAN_USE_VFP_INSTRUCTIONS',
+              'CAN_USE_VFP2_INSTRUCTIONS',
+            ],
+          }],
+          [ 'v8_can_use_vfp3_instructions=="true"', {
+            'defines': [
+              'CAN_USE_VFP3_INSTRUCTIONS',
             ],
           }],
           [ 'v8_use_arm_eabi_hardfloat=="true"', {
             'defines': [
               'USE_EABI_HARDFLOAT=1',
-              'CAN_USE_VFP_INSTRUCTIONS',
+              'CAN_USE_VFP2_INSTRUCTIONS',
             ],
             'target_conditions': [
               ['_toolset=="target"', {
@@ -152,12 +176,12 @@
           'V8_TARGET_ARCH_IA32',
         ],
       }],  # v8_target_arch=="ia32"
-      ['v8_target_arch=="mips"', {
+      ['v8_target_arch=="mipsel"', {
         'defines': [
           'V8_TARGET_ARCH_MIPS',
         ],
         'variables': {
-          'mipscompiler': '<!($(echo ${CXX:-$(which g++)}) -v 2>&1 | grep -q "^Target: mips-" && echo "yes" || echo "no")',
+          'mipscompiler': '<!($(echo ${CXX:-$(which g++)}) -v 2>&1 | grep -q "^Target: mips" && echo "yes" || echo "no")',
         },
         'conditions': [
           ['mipscompiler=="yes"', {
@@ -207,7 +231,7 @@
             'defines': ['_MIPS_ARCH_LOONGSON',],
           }],
         ],
-      }],  # v8_target_arch=="mips"
+      }],  # v8_target_arch=="mipsel"
       ['v8_target_arch=="x64"', {
         'defines': [
           'V8_TARGET_ARCH_X64',
@@ -220,6 +244,7 @@
             'StackReserveSize': '2097152',
           },
         },
+        'msvs_configuration_platform': 'x64',
       }],  # v8_target_arch=="x64"
       ['v8_use_liveobjectlist=="true"', {
         'defines': [
@@ -239,6 +264,7 @@
           'WIN32',
         ],
         'msvs_configuration_attributes': {
+          'OutputDirectory': '<(DEPTH)\\build\\$(ConfigurationName)',
           'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
           'CharacterSet': '1',
         },
@@ -264,7 +290,7 @@
       ['(OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris" \
          or OS=="netbsd" or OS=="mac" or OS=="android") and \
         (v8_target_arch=="arm" or v8_target_arch=="ia32" or \
-         v8_target_arch=="mips")', {
+         v8_target_arch=="mipsel")', {
         # Check whether the host compiler and target compiler support the
         # '-m32' option and set it if so.
         'target_conditions': [
@@ -281,9 +307,14 @@
           ['_toolset=="target"', {
             'variables': {
               'm32flag': '<!((echo | $(echo ${CXX_target:-${CXX:-$(which g++)}}) -m32 -E - > /dev/null 2>&1) && echo "-m32" || true)',
+              'clang%': 0,
             },
-            'cflags': [ '<(m32flag)' ],
-            'ldflags': [ '<(m32flag)' ],
+            'conditions': [
+              ['OS!="android" or clang==1', {
+                'cflags': [ '<(m32flag)' ],
+                'ldflags': [ '<(m32flag)' ],
+              }],
+            ],
             'xcode_settings': {
               'ARCHS': [ 'i386' ],
             },
@@ -304,6 +335,7 @@
           'ENABLE_DISASSEMBLER',
           'V8_ENABLE_CHECKS',
           'OBJECT_PRINT',
+          'VERIFY_HEAP',
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -323,8 +355,22 @@
         },
         'conditions': [
           ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
-            'cflags': [ '-Wno-unused-parameter',
+            'cflags': [ '-Wall', '<(werror)', '-W', '-Wno-unused-parameter',
                         '-Wnon-virtual-dtor', '-Woverloaded-virtual' ],
+          }],
+          ['OS=="android"', {
+            'variables': {
+              'android_full_debug%': 1,
+            },
+            'conditions': [
+              ['android_full_debug==0', {
+                # Disable full debug if we want a faster v8 in a debug build.
+                # TODO(2304): pass DISABLE_DEBUG_ASSERT instead of hiding DEBUG.
+                'defines!': [
+                  'DEBUG',
+                ],
+              }],
+            ],
           }],
         ],
       },  # Debug
@@ -332,16 +378,6 @@
         'conditions': [
           ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" \
             or OS=="android"', {
-            'cflags!': [
-              '-O2',
-              '-Os',
-            ],
-            'cflags': [
-              '-fdata-sections',
-              '-ffunction-sections',
-              '-fomit-frame-pointer',
-              '-O3',
-            ],
             'conditions': [
               [ 'gcc_version==44 and clang==0', {
                 'cflags': [
@@ -369,14 +405,16 @@
                 'InlineFunctionExpansion': '2',
                 'EnableIntrinsicFunctions': 'true',
                 'FavorSizeOrSpeed': '0',
-                'OmitFramePointers': 'true',
                 'StringPooling': 'true',
-
                 'conditions': [
                   ['OS=="win" and component=="shared_library"', {
                     'RuntimeLibrary': '2',  #/MD
                   }, {
                     'RuntimeLibrary': '0',  #/MT
+                  }],
+                  ['v8_target_arch=="x64"', {
+                    # TODO(2207): remove this option once the bug is fixed.
+                    'WholeProgramOptimization': 'true',
                   }],
                 ],
               },

@@ -206,7 +206,7 @@ def ReadMacros(lines):
           fun = eval("lambda " + ",".join(args) + ': ' + body)
           macros[name] = PythonMacro(args, fun)
         else:
-          raise ("Illegal line: " + line)
+          raise Exception("Illegal line: " + line)
   return (constants, macros)
 
 
@@ -227,7 +227,7 @@ static const struct _native natives[] = {
 
 %(native_lines)s\
 
-  { NULL, NULL } /* sentinel */
+  { NULL, NULL, 0 } /* sentinel */
 
 };
 
@@ -266,12 +266,16 @@ def JS2C(source, target):
   # Locate the macros file name.
   consts = {}
   macros = {}
+  macro_lines = []
 
   for s in source:
-    if 'macros.py' == (os.path.split(str(s))[1]):
-      (consts, macros) = ReadMacros(ReadLines(str(s)))
+    if (os.path.split(str(s))[1]).endswith('macros.py'):
+      macro_lines.extend(ReadLines(str(s)))
     else:
       modules.append(s)
+
+  # Process input from all *macro.py files
+  (consts, macros) = ReadMacros(macro_lines)
 
   # Build source code lines
   source_lines = [ ]

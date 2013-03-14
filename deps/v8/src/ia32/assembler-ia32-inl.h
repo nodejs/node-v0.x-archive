@@ -150,10 +150,7 @@ Handle<JSGlobalPropertyCell> RelocInfo::target_cell_handle() {
 
 JSGlobalPropertyCell* RelocInfo::target_cell() {
   ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
-  Address address = Memory::Address_at(pc_);
-  Object* object = HeapObject::FromAddress(
-      address - JSGlobalPropertyCell::kValueOffset);
-  return reinterpret_cast<JSGlobalPropertyCell*>(object);
+  return JSGlobalPropertyCell::FromValueAddress(Memory::Address_at(pc_));
 }
 
 
@@ -338,9 +335,9 @@ void Assembler::emit(Handle<Object> handle) {
 }
 
 
-void Assembler::emit(uint32_t x, RelocInfo::Mode rmode, unsigned id) {
-  if (rmode == RelocInfo::CODE_TARGET && id != kNoASTId) {
-    RecordRelocInfo(RelocInfo::CODE_TARGET_WITH_ID, static_cast<intptr_t>(id));
+void Assembler::emit(uint32_t x, RelocInfo::Mode rmode, TypeFeedbackId id) {
+  if (rmode == RelocInfo::CODE_TARGET && !id.IsNone()) {
+    RecordRelocInfo(RelocInfo::CODE_TARGET_WITH_ID, id.ToInt());
   } else if (rmode != RelocInfo::NONE) {
     RecordRelocInfo(rmode);
   }
@@ -387,6 +384,11 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   int32_t* p = reinterpret_cast<int32_t*>(pc);
   *p = target - (pc + sizeof(int32_t));
   CPU::FlushICache(p, sizeof(int32_t));
+}
+
+
+Address Assembler::target_address_from_return_address(Address pc) {
+  return pc - kCallTargetAddressOffset;
 }
 
 

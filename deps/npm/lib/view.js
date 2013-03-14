@@ -41,10 +41,8 @@ view.completion = function (opts, cb) {
 
 var npm = require("./npm.js")
   , registry = npm.registry
-  , ini = require("ini")
   , log = require("npmlog")
   , util = require("util")
-  , output
   , semver = require("semver")
 
 function view (args, silent, cb) {
@@ -184,7 +182,6 @@ function printData (data, name, cb) {
     , msg = ""
     , showVersions = versions.length > 1
     , showFields
-  function cb_ (er) { return cb(er, data) }
 
   versions.forEach(function (v, i) {
     var fields = Object.keys(data[v])
@@ -192,7 +189,12 @@ function printData (data, name, cb) {
     fields.forEach(function (f) {
       var d = cleanup(data[v][f])
       if (showVersions || showFields || typeof d !== "string") {
-        d = util.inspect(cleanup(data[v][f]), false, 5, true)
+        d = cleanup(data[v][f])
+        d = npm.config.get("json")
+          ? JSON.stringify(d, null, 2)
+          : util.inspect(d, false, 5, npm.color)
+      } else if (typeof d === "string" && npm.config.get("json")) {
+        d = JSON.stringify(d)
       }
       if (f && showFields) f += " = "
       if (d.indexOf("\n") !== -1) d = "\n" + d
@@ -200,8 +202,9 @@ function printData (data, name, cb) {
            + (showFields ? f : "") + d + "\n"
     })
   })
-  output = output || require("./utils/output.js")
-  output.write(msg, cb_)
+
+  console.log(msg)
+  cb(null, data)
 }
 function cleanup (data) {
   if (Array.isArray(data)) {

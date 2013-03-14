@@ -6,6 +6,21 @@
 
 Datagram sockets are available through `require('dgram')`.
 
+Important note: the behavior of `dgram.Socket#bind()` has changed in v0.10
+and is always asynchronous now.  If you have code that looks like this:
+
+    var s = dgram.createSocket('udp4');
+    s.bind(1234);
+    s.addMembership('224.0.0.114');
+
+You have to change it to this:
+
+    var s = dgram.createSocket('udp4');
+    s.bind(1234, function() {
+      s.addMembership('224.0.0.114');
+    });
+
+
 ## dgram.createSocket(type, [callback])
 
 * `type` String. Either 'udp4' or 'udp6'
@@ -108,13 +123,17 @@ a packet might travel, and that generally sending a datagram greater than
 the (receiver) `MTU` won't work (the packet gets silently dropped, without
 informing the source that the data did not reach its intended recipient).
 
-### dgram.bind(port, [address])
+### dgram.bind(port, [address], [callback])
 
 * `port` Integer
 * `address` String, Optional
+* `callback` Function, Optional
 
-For UDP sockets, listen for datagrams on a named `port` and optional `address`. If
-`address` is not specified, the OS will try to listen on all addresses.
+For UDP sockets, listen for datagrams on a named `port` and optional `address`.
+If `address` is not specified, the OS will try to listen on all addresses.
+
+The `callback` argument, if provided, is added as a one-shot `'listening'`
+event listener.
 
 Example of a UDP server listening on port 41234:
 
@@ -207,3 +226,15 @@ this.
 
 If `multicastInterface` is not specified, the OS will try to drop membership to all valid
 interfaces.
+
+### dgram.unref()
+
+Calling `unref` on a socket will allow the program to exit if this is the only
+active socket in the event system. If the socket is already `unref`d calling
+`unref` again will have no effect.
+
+### dgram.ref()
+
+Opposite of `unref`, calling `ref` on a previously `unref`d socket will *not*
+let the program exit if it's the only socket left (the default behavior). If
+the socket is `ref`d calling `ref` again will have no effect.

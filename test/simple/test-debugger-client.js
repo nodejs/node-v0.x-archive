@@ -22,11 +22,19 @@
 
 
 
+process.env.NODE_DEBUGGER_TIMEOUT = 2000;
 var common = require('../common');
 var assert = require('assert');
 var debug = require('_debugger');
 
+var debugPort = common.PORT + 1337;
+debug.port = debugPort;
 var spawn = require('child_process').spawn;
+
+setTimeout(function() {
+  if (nodeProcess) nodeProcess.kill('SIGTERM');
+  throw new Error('timeout');
+}, 10000).unref();
 
 
 var resCount = 0;
@@ -143,14 +151,26 @@ addTest(function(client, done) {
 
 
 var connectCount = 0;
+var script = 'setTimeout(function () { console.log("blah"); });' +
+             'setInterval(function () {}, 1000000);';
+
+var nodeProcess;
 
 function doTest(cb, done) {
-  var nodeProcess = spawn(process.execPath,
-      ['-e', 'setInterval(function () { console.log("blah"); }, 100);']);
+  var args = ['--debug=' + debugPort, '-e', script];
+  nodeProcess = spawn(process.execPath, args);
 
-  nodeProcess.stdout.once('data', function() {
+  nodeProcess.stdout.once('data', function(c) {
     console.log('>>> new node process: %d', nodeProcess.pid);
-    process._debugProcess(nodeProcess.pid);
+    var failed = true;
+    try {
+      process._debugProcess(nodeProcess.pid);
+      failed = false;
+    } finally {
+      // At least TRY not to leave zombie procs if this fails.
+      if (failed)
+        nodeProcess.kill('SIGTERM');
+    }
     console.log('>>> starting debugger session');
   });
 
@@ -158,15 +178,21 @@ function doTest(cb, done) {
   nodeProcess.stderr.setEncoding('utf8');
   var b = '';
   nodeProcess.stderr.on('data', function(data) {
+    console.error('got stderr data %j', data);
+    nodeProcess.stderr.resume();
     b += data;
-    if (didTryConnect == false && /debugger listening on port/.test(b)) {
+    if (didTryConnect == false &&
+        b.match(/debugger listening on port/)) {
       didTryConnect = true;
 
       setTimeout(function() {
         // Wait for some data before trying to connect
         var c = new debug.Client();
-        process.stdout.write('>>> connecting...');
+        console.error('>>> connecting...');
         c.connect(debug.port);
+        c.on('break', function(brk) {
+          c.reqContinue(function() {});
+        });
         c.on('ready', function() {
           connectCount++;
           console.log('ready!');
@@ -176,7 +202,7 @@ function doTest(cb, done) {
             done();
           });
         });
-      }, 100);
+      });
     }
   });
 }
@@ -194,7 +220,8 @@ function run() {
 
 run();
 
-process.on('exit', function() {
-  assert.equal(expectedConnections, connectCount);
+process.on('exit', function(code) {
+  if (!code)
+    assert.equal(expectedConnections, connectCount);
 });
 

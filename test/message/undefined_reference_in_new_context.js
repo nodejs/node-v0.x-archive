@@ -30,7 +30,7 @@ common.error('before');
 var Script = process.binding('evals').NodeScript;
 
 // undefined reference
-script = new Script('foo.bar = 5;');
+var script = new Script('foo.bar = 5;');
 script.runInNewContext();
 
 common.error('after');

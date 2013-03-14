@@ -1358,6 +1358,11 @@ void RegExpMacroAssemblerARM::CallCFunctionUsingStub(
 }
 
 
+bool RegExpMacroAssemblerARM::CanReadUnaligned() {
+  return CpuFeatures::IsSupported(UNALIGNED_ACCESSES) && !slow_safe();
+}
+
+
 void RegExpMacroAssemblerARM::LoadCurrentCharacterUnchecked(int cp_offset,
                                                             int characters) {
   Register offset = current_input_offset();
@@ -1370,9 +1375,9 @@ void RegExpMacroAssemblerARM::LoadCurrentCharacterUnchecked(int cp_offset,
   // and the operating system running on the target allow it.
   // If unaligned load/stores are not supported then this function must only
   // be used to load a single character at a time.
-#if !V8_TARGET_CAN_READ_UNALIGNED
-  ASSERT(characters == 1);
-#endif
+  if (!CanReadUnaligned()) {
+    ASSERT(characters == 1);
+  }
 
   if (mode_ == ASCII) {
     if (characters == 4) {

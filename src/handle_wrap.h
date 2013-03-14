@@ -46,12 +46,20 @@ namespace node {
 //   js/c++ boundary crossing. At the javascript layer that should all be
 //   taken care of.
 
+#define UNWRAP_NO_ABORT(type)                                               \
+  assert(!args.Holder().IsEmpty());                                         \
+  assert(args.Holder()->InternalFieldCount() > 0);                          \
+  type* wrap = static_cast<type*>(                                          \
+      args.Holder()->GetPointerFromInternalField(0));
+
 class HandleWrap {
   public:
     static void Initialize(v8::Handle<v8::Object> target);
     static v8::Handle<v8::Value> Close(const v8::Arguments& args);
     static v8::Handle<v8::Value> Ref(const v8::Arguments& args);
     static v8::Handle<v8::Value> Unref(const v8::Arguments& args);
+
+    inline uv_handle_t* GetHandle() { return handle__; };
 
   protected:
     HandleWrap(v8::Handle<v8::Object> object, uv_handle_t* handle);
@@ -68,7 +76,10 @@ class HandleWrap {
     // Using double underscore due to handle_ member in tcp_wrap. Probably
     // tcp_wrap should rename it's member to 'handle'.
     uv_handle_t* handle__;
-    bool unref_;
+    unsigned int flags_;
+
+    static const unsigned int kUnref = 1;
+    static const unsigned int kCloseCallback = 2;
 };
 
 

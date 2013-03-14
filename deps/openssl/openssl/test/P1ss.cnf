@@ -7,7 +7,7 @@ RANDFILE		= ./.rnd
 
 ####################################################################
 [ req ]
-default_bits		= 512
+default_bits		= 1024
 default_keyfile 	= keySS.pem
 distinguished_name	= req_distinguished_name
 encrypt_rsa_key		= no

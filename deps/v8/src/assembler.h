@@ -51,7 +51,6 @@ class ApiFunction;
 namespace internal {
 
 struct StatsCounter;
-const unsigned kNoASTId = -1;
 // -----------------------------------------------------------------------------
 // Platform independent assembler base class.
 
@@ -204,14 +203,19 @@ class RelocInfo BASE_EMBEDDED {
     EXTERNAL_REFERENCE,  // The address of an external C++ function.
     INTERNAL_REFERENCE,  // An address inside the same function.
 
+    // Marks a constant pool. Only used on ARM.
+    // It uses a custom noncompact encoding.
+    CONST_POOL,
+
     // add more as needed
     // Pseudo-types
-    NUMBER_OF_MODES,  // There are at most 14 modes with noncompact encoding.
+    NUMBER_OF_MODES,  // There are at most 15 modes with noncompact encoding.
     NONE,  // never recorded
     LAST_CODE_ENUM = DEBUG_BREAK,
     LAST_GCED_ENUM = GLOBAL_PROPERTY_CELL,
     // Modes <= LAST_COMPACT_ENUM are guaranteed to have compact encoding.
-    LAST_COMPACT_ENUM = CODE_TARGET_WITH_ID
+    LAST_COMPACT_ENUM = CODE_TARGET_WITH_ID,
+    LAST_STANDARD_NONCOMPACT_ENUM = INTERNAL_REFERENCE
   };
 
 
@@ -239,6 +243,9 @@ class RelocInfo BASE_EMBEDDED {
   }
   static inline bool IsComment(Mode mode) {
     return mode == COMMENT;
+  }
+  static inline bool IsConstPool(Mode mode) {
+    return mode == CONST_POOL;
   }
   static inline bool IsPosition(Mode mode) {
     return mode == POSITION || mode == STATEMENT_POSITION;
@@ -342,8 +349,7 @@ class RelocInfo BASE_EMBEDDED {
   static const char* RelocModeName(Mode rmode);
   void Print(FILE* out);
 #endif  // ENABLE_DISASSEMBLER
-#ifdef DEBUG
-  // Debugging
+#ifdef VERIFY_HEAP
   void Verify();
 #endif
 
@@ -362,19 +368,17 @@ class RelocInfo BASE_EMBEDDED {
   Mode rmode_;
   intptr_t data_;
   Code* host_;
-#ifdef V8_TARGET_ARCH_MIPS
-  // Code and Embedded Object pointers in mips are stored split
+  // Code and Embedded Object pointers on some platforms are stored split
   // across two consecutive 32-bit instructions. Heap management
   // routines expect to access these pointers indirectly. The following
-  // location provides a place for these pointers to exist natually
+  // location provides a place for these pointers to exist naturally
   // when accessed via the Iterator.
   Object* reconstructed_obj_ptr_;
   // External-reference pointers are also split across instruction-pairs
-  // in mips, but are accessed via indirect pointers. This location
+  // on some platforms, but are accessed via indirect pointers. This location
   // provides a place for that pointer to exist naturally. Its address
   // is returned by RelocInfo::target_reference_address().
   Address reconstructed_adr_ptr_;
-#endif  // V8_TARGET_ARCH_MIPS
   friend class RelocIterator;
 };
 
@@ -416,6 +420,7 @@ class RelocInfoWriter BASE_EMBEDDED {
   inline void WriteTaggedPC(uint32_t pc_delta, int tag);
   inline void WriteExtraTaggedPC(uint32_t pc_delta, int extra_tag);
   inline void WriteExtraTaggedIntData(int data_delta, int top_tag);
+  inline void WriteExtraTaggedConstPoolData(int data);
   inline void WriteExtraTaggedData(intptr_t data_delta, int top_tag);
   inline void WriteTaggedData(intptr_t data_delta, int tag);
   inline void WriteExtraTag(int extra_tag, int top_tag);
@@ -466,6 +471,7 @@ class RelocIterator: public Malloced {
   void ReadTaggedPC();
   void AdvanceReadPC();
   void AdvanceReadId();
+  void AdvanceReadConstPoolData();
   void AdvanceReadPosition();
   void AdvanceReadData();
   void AdvanceReadVariableLengthPCJump();

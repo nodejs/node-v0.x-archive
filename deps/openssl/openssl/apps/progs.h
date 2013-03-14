@@ -46,6 +46,7 @@ extern int engine_main(int argc,char *argv[]);
 extern int ocsp_main(int argc,char *argv[]);
 extern int prime_main(int argc,char *argv[]);
 extern int ts_main(int argc,char *argv[]);
+extern int srp_main(int argc,char *argv[]);
 
 #define FUNC_TYPE_GENERAL	1
 #define FUNC_TYPE_MD		2
@@ -146,8 +147,9 @@ FUNCTION functions[] = {
 	{FUNC_TYPE_GENERAL,"ocsp",ocsp_main},
 #endif
 	{FUNC_TYPE_GENERAL,"prime",prime_main},
-#if 0 /* ANDROID */
 	{FUNC_TYPE_GENERAL,"ts",ts_main},
+#ifndef OPENSSL_NO_SRP
+	{FUNC_TYPE_GENERAL,"srp",srp_main},
 #endif
 #ifndef OPENSSL_NO_MD2
 	{FUNC_TYPE_MD,"md2",dgst_main},

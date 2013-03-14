@@ -63,15 +63,16 @@
 #else  // _WIN32
 
 // Setup for Linux shared library export.
-#if defined(__GNUC__) && (__GNUC__ >= 4) && defined(V8_SHARED)
+#if defined(__GNUC__) && ((__GNUC__ >= 4) || \
+    (__GNUC__ == 3 && __GNUC_MINOR__ >= 3)) && defined(V8_SHARED)
 #ifdef BUILDING_V8_SHARED
 #define V8EXPORT __attribute__ ((visibility("default")))
 #else
 #define V8EXPORT
 #endif
-#else  // defined(__GNUC__) && (__GNUC__ >= 4)
+#else
 #define V8EXPORT
-#endif  // defined(__GNUC__) && (__GNUC__ >= 4)
+#endif
 
 #endif  // _WIN32
 
@@ -389,7 +390,7 @@ template <class T> class Persistent : public Handle<T> {
    */
   inline void MakeWeak(void* parameters, WeakReferenceCallback callback);
 
-  /** Clears the weak reference to this object.*/
+  /** Clears the weak reference to this object. */
   inline void ClearWeak();
 
   /**
@@ -401,14 +402,13 @@ template <class T> class Persistent : public Handle<T> {
    */
   inline void MarkIndependent();
 
-  /**
-   *Checks if the handle holds the only reference to an object.
-   */
+  /** Returns true if this handle was previously marked as independent. */
+  inline bool IsIndependent() const;
+
+  /** Checks if the handle holds the only reference to an object. */
   inline bool IsNearDeath() const;
 
-  /**
-   * Returns true if the handle's reference is weak.
-   */
+  /** Returns true if the handle's reference is weak.  */
   inline bool IsWeak() const;
 
   /**
@@ -416,6 +416,12 @@ template <class T> class Persistent : public Handle<T> {
    * interface description in v8-profiler.h for details.
    */
   inline void SetWrapperClassId(uint16_t class_id);
+
+  /**
+   * Returns the class ID previously assigned to this handle or 0 if no class
+   * ID was previously assigned.
+   */
+  inline uint16_t WrapperClassId() const;
 
  private:
   friend class ImplementationUtilities;
@@ -1017,6 +1023,11 @@ class Boolean : public Primitive {
  */
 class String : public Primitive {
  public:
+  enum Encoding {
+    UNKNOWN_ENCODING = 0x1,
+    TWO_BYTE_ENCODING = 0x0,
+    ASCII_ENCODING = 0x4
+  };
   /**
    * Returns the number of characters in this string.
    */
@@ -1064,7 +1075,8 @@ class String : public Primitive {
   enum WriteOptions {
     NO_OPTIONS = 0,
     HINT_MANY_WRITES_EXPECTED = 1,
-    NO_NULL_TERMINATION = 2
+    NO_NULL_TERMINATION = 2,
+    PRESERVE_ASCII_NULL = 4
   };
 
   // 16-bit character codes.
@@ -1177,6 +1189,14 @@ class String : public Primitive {
    protected:
     ExternalAsciiStringResource() {}
   };
+
+  /**
+   * If the string is an external string, return the ExternalStringResourceBase
+   * regardless of the encoding, otherwise return NULL.  The encoding of the
+   * string is returned in encoding_out.
+   */
+  inline ExternalStringResourceBase* GetExternalStringResourceBase(
+      Encoding* encoding_out) const;
 
   /**
    * Get the ExternalStringResource for an external string.  Returns
@@ -1341,6 +1361,8 @@ class String : public Primitive {
   };
 
  private:
+  V8EXPORT void VerifyExternalStringResourceBase(ExternalStringResourceBase* v,
+                                                 Encoding encoding) const;
   V8EXPORT void VerifyExternalStringResource(ExternalStringResource* val) const;
   V8EXPORT static void CheckCast(v8::Value* obj);
 };
@@ -1367,6 +1389,8 @@ class Integer : public Number {
  public:
   V8EXPORT static Local<Integer> New(int32_t value);
   V8EXPORT static Local<Integer> NewFromUnsigned(uint32_t value);
+  V8EXPORT static Local<Integer> New(int32_t value, Isolate*);
+  V8EXPORT static Local<Integer> NewFromUnsigned(uint32_t value, Isolate*);
   V8EXPORT int64_t Value() const;
   static inline Integer* Cast(v8::Value* obj);
  private:
@@ -1549,6 +1573,12 @@ class Object : public Value {
    * user-defined toString function. This one does not.
    */
   V8EXPORT Local<String> ObjectProtoToString();
+
+  /**
+   * Returns the function invoked as a constructor for this object.
+   * May be the null value.
+   */
+  V8EXPORT Local<Value> GetConstructor();
 
   /**
    * Returns the name of the function invoked as a constructor for this object.
@@ -2630,7 +2660,7 @@ bool V8EXPORT SetResourceConstraints(ResourceConstraints* constraints);
 typedef void (*FatalErrorCallback)(const char* location, const char* message);
 
 
-typedef void (*MessageCallback)(Handle<Message> message, Handle<Value> data);
+typedef void (*MessageCallback)(Handle<Message> message, Handle<Value> error);
 
 
 /**
@@ -2909,22 +2939,102 @@ typedef bool (*EntropySource)(unsigned char* buffer, size_t length);
  * resolving the location of a return address on the stack. Profilers that
  * change the return address on the stack can use this to resolve the stack
  * location to whereever the profiler stashed the original return address.
- * When invoked, return_addr_location will point to a location on stack where
- * a machine return address resides, this function should return either the
- * same pointer, or a pointer to the profiler's copy of the original return
- * address.
+ *
+ * \param return_addr_location points to a location on stack where a machine
+ *    return address resides.
+ * \returns either return_addr_location, or else a pointer to the profiler's
+ *    copy of the original return address.
+ *
+ * \note the resolver function must not cause garbage collection.
  */
 typedef uintptr_t (*ReturnAddressLocationResolver)(
     uintptr_t return_addr_location);
 
 
 /**
- * Interface for iterating though all external resources in the heap.
+ * FunctionEntryHook is the type of the profile entry hook called at entry to
+ * any generated function when function-level profiling is enabled.
+ *
+ * \param function the address of the function that's being entered.
+ * \param return_addr_location points to a location on stack where the machine
+ *    return address resides. This can be used to identify the caller of
+ *    \p function, and/or modified to divert execution when \p function exits.
+ *
+ * \note the entry hook must not cause garbage collection.
+ */
+typedef void (*FunctionEntryHook)(uintptr_t function,
+                                  uintptr_t return_addr_location);
+
+
+/**
+ * A JIT code event is issued each time code is added, moved or removed.
+ *
+ * \note removal events are not currently issued.
+ */
+struct JitCodeEvent {
+  enum EventType {
+    CODE_ADDED,
+    CODE_MOVED,
+    CODE_REMOVED
+  };
+
+  // Type of event.
+  EventType type;
+  // Start of the instructions.
+  void* code_start;
+  // Size of the instructions.
+  size_t code_len;
+
+  union {
+    // Only valid for CODE_ADDED.
+    struct {
+      // Name of the object associated with the code, note that the string is
+      // not zero-terminated.
+      const char* str;
+      // Number of chars in str.
+      size_t len;
+    } name;
+    // New location of instructions. Only valid for CODE_MOVED.
+    void* new_code_start;
+  };
+};
+
+/**
+ * Option flags passed to the SetJitCodeEventHandler function.
+ */
+enum JitCodeEventOptions {
+  kJitCodeEventDefault = 0,
+  // Generate callbacks for already existent code.
+  kJitCodeEventEnumExisting = 1
+};
+
+
+/**
+ * Callback function passed to SetJitCodeEventHandler.
+ *
+ * \param event code add, move or removal event.
+ */
+typedef void (*JitCodeEventHandler)(const JitCodeEvent* event);
+
+
+/**
+ * Interface for iterating through all external resources in the heap.
  */
 class V8EXPORT ExternalResourceVisitor {  // NOLINT
  public:
   virtual ~ExternalResourceVisitor() {}
   virtual void VisitExternalString(Handle<String> string) {}
+};
+
+
+/**
+ * Interface for iterating through all the persistent handles in the heap.
+ */
+class V8EXPORT PersistentHandleVisitor {  // NOLINT
+ public:
+  virtual ~PersistentHandleVisitor() {}
+  virtual void VisitPersistentHandle(Persistent<Value> value,
+                                     uint16_t class_id) {}
 };
 
 
@@ -2992,6 +3102,9 @@ class V8EXPORT V8 {
    *
    * The same message listener can be added more than once and in that
    * case it will be called more than once for each message.
+   *
+   * If data is specified, it will be passed to the callback when it is called.
+   * Otherwise, the exception object will be passed to the callback instead.
    */
   static bool AddMessageListener(MessageCallback that,
                                  Handle<Value> data = Handle<Value>());
@@ -3179,6 +3292,43 @@ class V8EXPORT V8 {
       ReturnAddressLocationResolver return_address_resolver);
 
   /**
+   * Allows the host application to provide the address of a function that's
+   * invoked on entry to every V8-generated function.
+   * Note that \p entry_hook is invoked at the very start of each
+   * generated function.
+   *
+   * \param entry_hook a function that will be invoked on entry to every
+   *   V8-generated function.
+   * \returns true on success on supported platforms, false on failure.
+   * \note Setting a new entry hook function when one is already active will
+   *   fail.
+   */
+  static bool SetFunctionEntryHook(FunctionEntryHook entry_hook);
+
+  /**
+   * Allows the host application to provide the address of a function that is
+   * notified each time code is added, moved or removed.
+   *
+   * \param options options for the JIT code event handler.
+   * \param event_handler the JIT code event handler, which will be invoked
+   *     each time code is added, moved or removed.
+   * \note \p event_handler won't get notified of existent code.
+   * \note since code removal notifications are not currently issued, the
+   *     \p event_handler may get notifications of code that overlaps earlier
+   *     code notifications. This happens when code areas are reused, and the
+   *     earlier overlapping code areas should therefore be discarded.
+   * \note the events passed to \p event_handler and the strings they point to
+   *     are not guaranteed to live past each call. The \p event_handler must
+   *     copy strings and other parameters it needs to keep around.
+   * \note the set of events declared in JitCodeEvent::EventType is expected to
+   *     grow over time, and the JitCodeEvent structure is expected to accrue
+   *     new members. The \p event_handler function must ignore event codes
+   *     it does not recognize to maintain future compatibility.
+   */
+  static void SetJitCodeEventHandler(JitCodeEventOptions options,
+                                     JitCodeEventHandler event_handler);
+
+  /**
    * Adjusts the amount of registered external memory.  Used to give
    * V8 an indication of the amount of externally allocated memory
    * that is kept alive by JavaScript objects.  V8 uses this to decide
@@ -3299,6 +3449,12 @@ class V8EXPORT V8 {
   static void VisitExternalResources(ExternalResourceVisitor* visitor);
 
   /**
+   * Iterates through all the persistent handles in the current isolate's heap
+   * that have class_ids.
+   */
+  static void VisitHandlesWithClassIds(PersistentHandleVisitor* visitor);
+
+  /**
    * Optional notification that the embedder is idle.
    * V8 uses the notification to reduce memory footprint.
    * This call can be used repeatedly if the embedder remains idle.
@@ -3336,10 +3492,12 @@ class V8EXPORT V8 {
                        WeakReferenceCallback);
   static void ClearWeak(internal::Object** global_handle);
   static void MarkIndependent(internal::Object** global_handle);
+  static bool IsGlobalIndependent(internal::Object** global_handle);
   static bool IsGlobalNearDeath(internal::Object** global_handle);
   static bool IsGlobalWeak(internal::Object** global_handle);
   static void SetWrapperClassId(internal::Object** global_handle,
                                 uint16_t class_id);
+  static uint16_t GetWrapperClassId(internal::Object** global_handle);
 
   template <class T> friend class Handle;
   template <class T> friend class Local;
@@ -3589,7 +3747,7 @@ class V8EXPORT Context {
    * with the debugger to provide additional information on the context through
    * the debugger API.
    */
-  void SetData(Handle<String> data);
+  void SetData(Handle<Value> data);
   Local<Value> GetData();
 
   /**
@@ -3612,6 +3770,13 @@ class V8EXPORT Context {
    * For more details see AllowCodeGenerationFromStrings(bool) documentation.
    */
   bool IsCodeGenerationFromStringsAllowed();
+
+  /**
+   * Sets the error description for the exception that is thrown when
+   * code generation from strings is not allowed and 'eval' or the 'Function'
+   * constructor are called.
+   */
+  void SetErrorMessageForCodeGenerationFromStrings(Handle<String> message);
 
   /**
    * Stack-allocated class which sets the execution context for all
@@ -3919,7 +4084,9 @@ class Internals {
   static const int kForeignAddressOffset = kApiPointerSize;
   static const int kJSObjectHeaderSize = 3 * kApiPointerSize;
   static const int kFullStringRepresentationMask = 0x07;
+  static const int kStringEncodingMask = 0x4;
   static const int kExternalTwoByteRepresentationTag = 0x02;
+  static const int kExternalAsciiRepresentationTag = 0x06;
 
   static const int kIsolateStateOffset = 0;
   static const int kIsolateEmbedderDataOffset = 1 * kApiPointerSize;
@@ -3928,7 +4095,7 @@ class Internals {
   static const int kNullValueRootIndex = 7;
   static const int kTrueValueRootIndex = 8;
   static const int kFalseValueRootIndex = 9;
-  static const int kEmptySymbolRootIndex = 128;
+  static const int kEmptySymbolRootIndex = 117;
 
   static const int kJSObjectType = 0xaa;
   static const int kFirstNonstringType = 0x80;
@@ -4048,6 +4215,13 @@ Persistent<T> Persistent<T>::New(Handle<T> that) {
 
 
 template <class T>
+bool Persistent<T>::IsIndependent() const {
+  if (this->IsEmpty()) return false;
+  return V8::IsGlobalIndependent(reinterpret_cast<internal::Object**>(**this));
+}
+
+
+template <class T>
 bool Persistent<T>::IsNearDeath() const {
   if (this->IsEmpty()) return false;
   return V8::IsGlobalNearDeath(reinterpret_cast<internal::Object**>(**this));
@@ -4091,6 +4265,11 @@ void Persistent<T>::MarkIndependent() {
 template <class T>
 void Persistent<T>::SetWrapperClassId(uint16_t class_id) {
   V8::SetWrapperClassId(reinterpret_cast<internal::Object**>(**this), class_id);
+}
+
+template <class T>
+uint16_t Persistent<T>::WrapperClassId() const {
+  return V8::GetWrapperClassId(reinterpret_cast<internal::Object**>(**this));
 }
 
 Arguments::Arguments(internal::Object** implicit_args,
@@ -4271,6 +4450,26 @@ String::ExternalStringResource* String::GetExternalStringResource() const {
   VerifyExternalStringResource(result);
 #endif
   return result;
+}
+
+
+String::ExternalStringResourceBase* String::GetExternalStringResourceBase(
+    String::Encoding* encoding_out) const {
+  typedef internal::Object O;
+  typedef internal::Internals I;
+  O* obj = *reinterpret_cast<O**>(const_cast<String*>(this));
+  int type = I::GetInstanceType(obj) & I::kFullStringRepresentationMask;
+  *encoding_out = static_cast<Encoding>(type & I::kStringEncodingMask);
+  ExternalStringResourceBase* resource = NULL;
+  if (type == I::kExternalAsciiRepresentationTag ||
+      type == I::kExternalTwoByteRepresentationTag) {
+    void* value = I::ReadField<void*>(obj, I::kStringResourceOffset);
+    resource = static_cast<ExternalStringResourceBase*>(value);
+  }
+#ifdef V8_ENABLE_CHECKS
+    VerifyExternalStringResourceBase(resource, *encoding_out);
+#endif
+  return resource;
 }
 
 

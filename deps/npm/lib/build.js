@@ -1,4 +1,3 @@
-
 // npm build command
 
 // everything about the installation after the creation of
@@ -20,7 +19,6 @@ var npm = require("./npm.js")
   , cmdShim = require("./utils/cmd-shim.js")
   , cmdShimIfExists = cmdShim.ifExists
   , asyncMap = require("slide").asyncMap
-  , output = require("./utils/output.js")
 
 module.exports = build
 build.usage = "npm build <folder>\n(this is plumbing)"
@@ -63,11 +61,17 @@ function build_ (global, didPre, didRB) { return function (folder, cb) {
 function writeBuiltinConf (folder, cb) {
   // the builtin config is "sticky". Any time npm installs itself,
   // it puts its builtin config file there, as well.
-  var ini = require("./utils/ini.js")
-  ini.saveConfig("builtin", path.resolve(folder, "npmrc"), cb)
+  if (!npm.config.usingBuiltin
+      || folder !== path.dirname(__dirname)) {
+    return cb()
+  }
+  npm.config.save("builtin", cb)
 }
 
 function linkStuff (pkg, folder, global, didRB, cb) {
+  // allow to opt out of linking binaries.
+  if (npm.config.get("bin-links") === false) return cb()
+
   // if it's global, and folder is in {prefix}/node_modules,
   // then bins are in {prefix}/bin
   // otherwise, then bins are in folder/../.bin
@@ -108,7 +112,7 @@ function rebuildBundles (pkg, folder, parent, gtop, cb) {
     chain(files.filter(function (file) {
       // rebuild if:
       // not a .folder, like .bin or .hooks
-      return file.charAt(0) !== "."
+      return !file.match(/^[\._-]/)
           // not some old 0.x style bundle
           && file.indexOf("@") === -1
           // either not a dep, or explicitly bundled
@@ -150,7 +154,8 @@ function linkBins (pkg, folder, parent, gtop, cb) {
           , out = npm.config.get("parseable")
                 ? dest + "::" + src + ":BINFILE"
                 : dest + " -> " + src
-        output.write(out, cb)
+        console.log(out)
+        cb()
       })
     })
   }, cb)

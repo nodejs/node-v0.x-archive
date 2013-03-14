@@ -125,11 +125,12 @@ TEST_IMPL(tcp_write_to_half_open_connection) {
                      connect_cb);
   ASSERT(r == 0);
 
-  r = uv_run(loop);
+  r = uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(write_cb_called > 0);
   ASSERT(read_cb_called > 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

@@ -67,11 +67,7 @@ NativeRegExpMacroAssembler::~NativeRegExpMacroAssembler() {
 
 
 bool NativeRegExpMacroAssembler::CanReadUnaligned() {
-#ifdef V8_TARGET_CAN_READ_UNALIGNED
-  return !slow_safe();
-#else
-  return false;
-#endif
+  return FLAG_enable_unaligned_accesses && !slow_safe();
 }
 
 const byte* NativeRegExpMacroAssembler::StringCharacterPosition(

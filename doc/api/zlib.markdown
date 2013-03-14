@@ -139,6 +139,21 @@ Returns a new [Unzip](#zlib_class_zlib_unzip) object with an
 [options](#zlib_options).
 
 
+## Class: zlib.Zlib
+
+Not exported by the `zlib` module. It is documented here because it is the base
+class of the compressor/decompressor classes.
+
+### zlib.flush(callback)
+
+Flush pending data. Don't call this frivolously, premature flushes negatively
+impact the effectiveness of the compression algorithm.
+
+### zlib.reset()
+
+Reset the compressor/decompressor to factory defaults. Only applicable to
+the inflate and deflate algorithms.
+
 ## Class: zlib.Gzip
 
 Compress data using gzip.
@@ -213,9 +228,10 @@ Decompress a raw Buffer with Unzip.
 Each class takes an options object.  All options are optional.  (The
 convenience methods use the default settings for all options.)
 
-Note that some options are only
-relevant when compressing, and are ignored by the decompression classes.
+Note that some options are only relevant when compressing, and are
+ignored by the decompression classes.
 
+* flush (default: `zlib.Z_NO_FLUSH`)
 * chunkSize (default: 16*1024)
 * windowBits
 * level (compression only)
@@ -223,8 +239,8 @@ relevant when compressing, and are ignored by the decompression classes.
 * strategy (compression only)
 * dictionary (deflate/inflate only, empty dictionary by default)
 
-See the description of `deflateInit2` and `inflateInit2`
-at <http://zlib.net/manual.html#Advanced> for more information on these.
+See the description of `deflateInit2` and `inflateInit2` at
+<http://zlib.net/manual.html#Advanced> for more information on these.
 
 ## Memory Usage Tuning
 

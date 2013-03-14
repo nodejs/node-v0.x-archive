@@ -46,17 +46,32 @@ Or
       res.end("hello world\n");
     }).listen(8000);
 
+
+### server.listen(port, [host], [backlog], [callback])
+### server.listen(path, [callback])
+### server.listen(handle, [callback])
+
+See [http.listen()][] for details.
+
+### server.close([callback])
+
+See [http.close()][] for details.
+
 ## https.request(options, callback)
 
-Makes a request to a secure web server.  All options from [http.request()][]
-are valid.
+Makes a request to a secure web server.
+
+`options` can be an object or a string. If `options` is a string, it is
+automatically parsed with [url.parse()](url.html#url.parse).
+
+All options from [http.request()][] are valid.
 
 Example:
 
     var https = require('https');
 
     var options = {
-      host: 'encrypted.google.com',
+      hostname: 'encrypted.google.com',
       port: 443,
       path: '/',
       method: 'GET'
@@ -77,11 +92,6 @@ Example:
     });
 
 The options argument has the following options
-
-- host: IP or domain of host to make request to. Defaults to `'localhost'`.
-- port: port of host to request to. Defaults to 443.
-- path: Path to request. Default `'/'`.
-- method: HTTP request method. Default `'GET'`.
 
 - `host`: A domain name or IP address of the server to issue the request to.
   Defaults to `'localhost'`.
@@ -115,14 +125,14 @@ The following options from [tls.connect()][] can also be specified. However, a
 - `rejectUnauthorized`: If `true`, the server certificate is verified against
   the list of supplied CAs. An `'error'` event is emitted if verification
   fails. Verification happens at the connection level, *before* the HTTP
-  request is sent. Default `false`.
+  request is sent. Default `true`.
 
 In order to specify these options, use a custom `Agent`.
 
 Example:
 
     var options = {
-      host: 'encrypted.google.com',
+      hostname: 'encrypted.google.com',
       port: 443,
       path: '/',
       method: 'GET',
@@ -140,7 +150,7 @@ Or does not use an `Agent`.
 Example:
 
     var options = {
-      host: 'encrypted.google.com',
+      hostname: 'encrypted.google.com',
       port: 443,
       path: '/',
       method: 'GET',
@@ -157,11 +167,14 @@ Example:
 
 Like `http.get()` but for HTTPS.
 
+`options` can be an object or a string. If `options` is a string, it is
+automatically parsed with [url.parse()](url.html#url.parse).
+
 Example:
 
     var https = require('https');
 
-    https.get({ host: 'encrypted.google.com', path: '/' }, function(res) {
+    https.get('https://encrypted.google.com/', function(res) {
       console.log("statusCode: ", res.statusCode);
       console.log("headers: ", res.headers);
 
@@ -186,8 +199,11 @@ Global instance of [https.Agent][] for all HTTPS client requests.
 
 [Agent]: #https_class_https_agent
 [globalAgent]: #https_https_globalagent
+[http.listen()]: http.html#http_server_listen_port_hostname_backlog_callback
+[http.close()]: http.html#http_server_close_callback
 [http.Agent]: http.html#http_class_http_agent
 [http.request()]: http.html#http_http_request_options_callback
 [https.Agent]: #https_class_https_agent
+[https.request()]: #https_https_request_options_callback
 [tls.connect()]: tls.html#tls_tls_connect_options_secureconnectlistener
 [tls.createServer()]: tls.html#tls_tls_createserver_options_secureconnectionlistener

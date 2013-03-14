@@ -5,8 +5,9 @@ completion.usage = "npm completion >> ~/.bashrc\n"
                  + "npm completion >> ~/.zshrc\n"
                  + "source <(npm completion)"
 
-var output = require("./utils/output.js")
-  , configDefs = require("./utils/config-defs.js")
+var npm = require("./npm.js")
+  , npmconf = require("npmconf")
+  , configDefs = npmconf.defs
   , configTypes = configDefs.types
   , shorthands = configDefs.shorthands
   , nopt = require("nopt")
@@ -15,7 +16,8 @@ var output = require("./utils/output.js")
     })
   , shorthandNames = Object.keys(shorthands)
   , allConfs = configNames.concat(shorthandNames)
-  , npm = require("./npm.js")
+  , once = require("once")
+
 
 completion.completion = function (opts, cb) {
   if (opts.w > 3) return cb()
@@ -149,6 +151,10 @@ function dumpScript (cb) {
     , path = require("path")
     , p = path.resolve(__dirname, "utils/completion.sh")
 
+  // The Darwin patch below results in callbacks first for the write and then
+  // for the error handler, so make sure we only call our callback once.
+  cb = once(cb)
+
   fs.readFile(p, "utf8", function (er, d) {
     if (er) return cb(er)
     d = d.replace(/^\#\!.*?\n/, "")
@@ -165,7 +171,7 @@ function dumpScript (cb) {
       // Really, one should not be tossing away EPIPE errors, or any
       // errors, so casually.  But, without this, `. <(npm completion)`
       // can never ever work on OS X.
-      if (er.errno === require("constants").EPIPE) er = null
+      if (er.errno === "EPIPE") er = null
       cb(er)
     })
 
@@ -200,7 +206,9 @@ function wrapCb (cb, opts) { return function (er, compls) {
   })
   console.error([er && er.stack, compls, opts.partialWord])
   if (er || compls.length === 0) return cb(er)
-  output.write(compls.join("\n"), 1, false, cb)
+
+  console.log(compls.join("\n"))
+  cb()
 }}
 
 // the current word has a dash.  Return the config names,

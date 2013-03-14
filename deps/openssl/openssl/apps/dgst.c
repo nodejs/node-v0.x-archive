@@ -127,6 +127,7 @@ int MAIN(int argc, char **argv)
 #endif
 	char *hmac_key=NULL;
 	char *mac_name=NULL;
+	int non_fips_allow = 0;
 	STACK_OF(OPENSSL_STRING) *sigopts = NULL, *macopts = NULL;
 
 	apps_startup();
@@ -215,6 +216,10 @@ int MAIN(int argc, char **argv)
 			out_bin = 1;
 		else if (strcmp(*argv,"-d") == 0)
 			debug=1;
+		else if (!strcmp(*argv,"-fips-fingerprint"))
+			hmac_key = "etaonrishdlcupfm";
+		else if (strcmp(*argv,"-non-fips-allow") == 0)
+			non_fips_allow=1;
 		else if (!strcmp(*argv,"-hmac"))
 			{
 			if (--argc < 1)
@@ -393,6 +398,13 @@ int MAIN(int argc, char **argv)
 			EVP_PKEY_CTX_free(mac_ctx);
 		if (r == 0)
 			goto end;
+		}
+
+	if (non_fips_allow)
+		{
+		EVP_MD_CTX *md_ctx;
+		BIO_get_md_ctx(bmd,&md_ctx);
+		EVP_MD_CTX_set_flags(md_ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
 		}
 
 	if (hmac_key)

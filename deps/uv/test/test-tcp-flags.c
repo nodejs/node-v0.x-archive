@@ -44,8 +44,9 @@ TEST_IMPL(tcp_flags) {
 
   uv_close((uv_handle_t*)&handle, NULL);
 
-  r = uv_run(loop);
+  r = uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

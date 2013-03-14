@@ -21,11 +21,7 @@
 
 #include "uv.h"
 #include "task.h"
-
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h> /* strlen */
-
 
 #define CONCURRENT_COUNT    10
 
@@ -84,10 +80,11 @@ TEST_IMPL(getaddrinfo_basic) {
                      NULL);
   ASSERT(r == 0);
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(getaddrinfo_cbs == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -112,11 +109,12 @@ TEST_IMPL(getaddrinfo_concurrent) {
     ASSERT(r == 0);
   }
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   for (i = 0; i < CONCURRENT_COUNT; i++) {
     ASSERT(callback_counts[i] == 1);
   }
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

@@ -88,7 +88,7 @@ static void on_connect_without_close(uv_connect_t *req, int status) {
 }
 
 
-void connection_fail(uv_connect_cb connect_cb) {
+static void connection_fail(uv_connect_cb connect_cb) {
   struct sockaddr_in client_addr, server_addr;
   int r;
 
@@ -107,7 +107,7 @@ void connection_fail(uv_connect_cb connect_cb) {
   r = uv_tcp_connect(&req, &tcp, server_addr, connect_cb);
   ASSERT(!r);
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(connect_cb_calls == 1);
   ASSERT(close_cb_calls == 1);
@@ -124,6 +124,7 @@ TEST_IMPL(connection_fail) {
   ASSERT(timer_close_cb_calls == 0);
   ASSERT(timer_cb_calls == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
@@ -144,5 +145,6 @@ TEST_IMPL(connection_fail_doesnt_auto_close) {
   ASSERT(timer_close_cb_calls == 1);
   ASSERT(timer_cb_calls == 1);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

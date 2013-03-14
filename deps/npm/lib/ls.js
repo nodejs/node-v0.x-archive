@@ -9,7 +9,6 @@ module.exports = exports = ls
 
 var npm = require("./npm.js")
   , readInstalled = require("read-installed")
-  , output = require("./utils/output.js")
   , log = require("npmlog")
   , path = require("path")
   , archy = require("archy")
@@ -37,6 +36,7 @@ function ls (args, silent, cb) {
   readInstalled(dir, npm.config.get("depth"), function (er, data) {
     var bfs = bfsify(data, args)
       , lite = getLite(bfs)
+
     if (er || silent) return cb(er, data, lite)
 
     var long = npm.config.get("long")
@@ -58,11 +58,17 @@ function ls (args, silent, cb) {
     } else if (data) {
       out = makeArchy(bfs, long, dir)
     }
-    output.write(out, function (er) { cb(er, data, lite) })
+    console.log(out)
+
+    // if any errors were found, then complain and exit status 1
+    if (lite.problems && lite.problems.length) {
+      er = lite.problems.join('\n')
+    }
+    cb(er, data, lite)
   })
 }
 
-// only include 
+// only include
 function filter (data, args) {
 
 }
@@ -89,19 +95,24 @@ function getLite (data, noname) {
                       + " " + (data.path || "") )
   }
 
-  if (data._from) {
-    var from = data._from
-    if (from.indexOf(data.name + "@") === 0) {
-      from = from.substr(data.name.length + 1)
-    }
-    var u = url.parse(from)
-    if (u.protocol) lite.from = from
-  }
+  if (data._from)
+    lite.from = data._from
+
+  if (data._resolved)
+    lite.resolved = data._resolved
 
   if (data.invalid) {
     lite.invalid = true
     lite.problems = lite.problems || []
     lite.problems.push( "invalid: "
+                      + data.name + "@" + data.version
+                      + " " + (data.path || "") )
+  }
+
+  if (data.peerInvalid) {
+    lite.peerInvalid = true
+    lite.problems = lite.problems || []
+    lite.problems.push( "peer invalid: "
                       + data.name + "@" + data.version
                       + " " + (data.path || "") )
   }
@@ -205,14 +216,18 @@ function makeArchy (data, long, dir) {
 }
 
 function makeArchy_ (data, long, dir, depth, parent, d) {
+  var color = npm.color
   if (typeof data === "string") {
     if (depth < npm.config.get("depth")) {
       // just missing
       var p = parent.link || parent.path
-      log.warn("unmet dependency", "%s in %s", d+" "+data, p)
-      data = "\033[31;40mUNMET DEPENDENCY\033[0m " + d + " " + data
+      var unmet = "UNMET DEPENDENCY"
+      if (color) {
+        unmet = "\033[31;40m" + unmet + "\033[0m"
+      }
+      data = unmet + " " + d + " " + data
     } else {
-      data = d+"@"+ data +" (max depth reached)"
+      data = d+"@"+ data
     }
     return data
   }
@@ -221,23 +236,36 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
   // the top level is a bit special.
   out.label = data._id || ""
   if (data._found === true && data._id) {
-    out.label = "\033[33;40m" + out.label.trim() + "\033[m "
+    var pre = color ? "\033[33;40m" : ""
+      , post = color ? "\033[m" : ""
+    out.label = pre + out.label.trim() + post + " "
   }
   if (data.link) out.label += " -> " + data.link
 
   if (data.invalid) {
     if (data.realName !== data.name) out.label += " ("+data.realName+")"
-    out.label += " \033[31;40minvalid\033[0m"
+    out.label += " " + (color ? "\033[31;40m" : "")
+              + "invalid"
+              + (color ? "\033[0m" : "")
+  }
+
+  if (data.peerInvalid) {
+    out.label += " " + (color ? "\033[31;40m" : "")
+              + "peer invalid"
+              + (color ? "\033[0m" : "")
   }
 
   if (data.extraneous && data.path !== dir) {
-    out.label += " \033[32;40mextraneous\033[0m"
+    out.label += " " + (color ? "\033[32;40m" : "")
+              + "extraneous"
+              + (color ? "\033[0m" : "")
   }
 
   if (long) {
     if (dir === data.path) out.label += "\n" + dir
     out.label += "\n" + getExtras(data, dir)
   } else if (dir === data.path) {
+    if (out.label) out.label += " "
     out.label += dir
   }
 
@@ -291,7 +319,6 @@ function makeParseable_ (data, long, dir, depth, parent, d) {
   if (typeof data === "string") {
     if (data.depth < npm.config.get("depth")) {
       var p = parent.link || parent.path
-      log.warn("unmet dependency", "%s in %s", d+" "+data, p)
       data = npm.config.get("long")
            ? path.resolve(parent.path, "node_modules", d)
            + ":"+d+"@"+JSON.stringify(data)+":INVALID:MISSING"
@@ -315,4 +342,5 @@ function makeParseable_ (data, long, dir, depth, parent, d) {
        + ":" + (data.realPath !== data.path ? data.realPath : "")
        + (data.extraneous ? ":EXTRANEOUS" : "")
        + (data.invalid ? ":INVALID" : "")
+       + (data.peerInvalid ? ":PEERINVALID" : "")
 }

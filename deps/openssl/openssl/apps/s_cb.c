@@ -237,8 +237,8 @@ int set_cert_stuff(SSL_CTX *ctx, char *cert_file, char *key_file)
 
 		/* If we are using DSA, we can copy the parameters from
 		 * the private key */
-		
-		
+
+
 		/* Now we know that a key and cert have been set against
 		 * the SSL context */
 		if (!SSL_CTX_check_private_key(ctx))
@@ -357,6 +357,12 @@ void MS_CALLBACK msg_cb(int write_p, int version, int content_type, const void *
 	case TLS1_VERSION:
 		str_version = "TLS 1.0 ";
 		break;
+	case TLS1_1_VERSION:
+		str_version = "TLS 1.1 ";
+		break;
+	case TLS1_2_VERSION:
+		str_version = "TLS 1.2 ";
+		break;
 	case DTLS1_VERSION:
 		str_version = "DTLS 1.0 ";
 		break;
@@ -430,6 +436,8 @@ void MS_CALLBACK msg_cb(int write_p, int version, int content_type, const void *
 
 	if (version == SSL3_VERSION ||
 	    version == TLS1_VERSION ||
+	    version == TLS1_1_VERSION ||
+	    version == TLS1_2_VERSION ||
 	    version == DTLS1_VERSION ||
 	    version == DTLS1_BAD_VER)
 		{
@@ -549,6 +557,9 @@ void MS_CALLBACK msg_cb(int write_p, int version, int content_type, const void *
 				case 114:
 					str_details2 = " bad_certificate_hash_value";
 					break;
+				case 115:
+					str_details2 = " unknown_psk_identity";
+					break;
 					}
 				}
 			}
@@ -597,6 +608,26 @@ void MS_CALLBACK msg_cb(int write_p, int version, int content_type, const void *
 					}
 				}
 			}
+
+#ifndef OPENSSL_NO_HEARTBEATS
+		if (content_type == 24) /* Heartbeat */
+			{
+			str_details1 = ", Heartbeat";
+			
+			if (len > 0)
+				{
+				switch (((const unsigned char*)buf)[0])
+					{
+				case 1:
+					str_details1 = ", HeartbeatRequest";
+					break;
+				case 2:
+					str_details1 = ", HeartbeatResponse";
+					break;
+					}
+				}
+			}
+#endif
 		}
 
 	BIO_printf(bio, "%s %s%s [length %04lx]%s%s\n", str_write_p, str_version, str_content_type, (unsigned long)len, str_details1, str_details2);
@@ -657,6 +688,22 @@ void MS_CALLBACK tlsext_cb(SSL *s, int client_server, int type,
 		extname = "status request";
 		break;
 
+		case TLSEXT_TYPE_user_mapping:
+		extname = "user mapping";
+		break;
+
+		case TLSEXT_TYPE_client_authz:
+		extname = "client authz";
+		break;
+
+		case TLSEXT_TYPE_server_authz:
+		extname = "server authz";
+		break;
+
+		case TLSEXT_TYPE_cert_type:
+		extname = "cert type";
+		break;
+
 		case TLSEXT_TYPE_elliptic_curves:
 		extname = "elliptic curves";
 		break;
@@ -665,17 +712,38 @@ void MS_CALLBACK tlsext_cb(SSL *s, int client_server, int type,
 		extname = "EC point formats";
 		break;
 
-		case TLSEXT_TYPE_session_ticket:
-		extname = "server ticket";
+		case TLSEXT_TYPE_srp:
+		extname = "SRP";
 		break;
 
-		case TLSEXT_TYPE_renegotiate:
-		extname = "renegotiate";
+		case TLSEXT_TYPE_signature_algorithms:
+		extname = "signature algorithms";
+		break;
+
+		case TLSEXT_TYPE_use_srtp:
+		extname = "use SRTP";
+		break;
+
+		case TLSEXT_TYPE_heartbeat:
+		extname = "heartbeat";
+		break;
+
+		case TLSEXT_TYPE_session_ticket:
+		extname = "session ticket";
+		break;
+
+		case TLSEXT_TYPE_renegotiate: 
+		extname = "renegotiation info";
 		break;
 
 #ifdef TLSEXT_TYPE_opaque_prf_input
 		case TLSEXT_TYPE_opaque_prf_input:
 		extname = "opaque PRF input";
+		break;
+#endif
+#ifdef TLSEXT_TYPE_next_proto_neg
+		case TLSEXT_TYPE_next_proto_neg:
+		extname = "next protocol";
 		break;
 #endif
 

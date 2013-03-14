@@ -800,7 +800,7 @@ class FastElementsAccessor
         }
       } else {
         // Otherwise, fill the unused tail with holes.
-        int old_length = FastD2I(array->length()->Number());
+        int old_length = FastD2IChecked(array->length()->Number());
         for (int i = length; i < old_length; i++) {
           backing_store->set_the_hole(i);
         }
@@ -1268,7 +1268,30 @@ class DictionaryElementsAccessor
       JSArray* array,
       Object* length_object,
       uint32_t length) {
-    if (length == 0) {
+    Heap* heap = array->GetHeap();
+    int capacity = dict->Capacity();
+    uint32_t new_length = length;
+    uint32_t old_length = static_cast<uint32_t>(array->length()->Number());
+    if (new_length < old_length) {
+      // Find last non-deletable element in range of elements to be
+      // deleted and adjust range accordingly.
+      for (int i = 0; i < capacity; i++) {
+        Object* key = dict->KeyAt(i);
+        if (key->IsNumber()) {
+          uint32_t number = static_cast<uint32_t>(key->Number());
+          if (new_length <= number && number < old_length) {
+            PropertyDetails details = dict->DetailsAt(i);
+            if (details.IsDontDelete()) new_length = number + 1;
+          }
+        }
+      }
+      if (new_length != length) {
+        MaybeObject* maybe_object = heap->NumberFromUint32(new_length);
+        if (!maybe_object->To(&length_object)) return maybe_object;
+      }
+    }
+
+    if (new_length == 0) {
       // If the length of a slow array is reset to zero, we clear
       // the array and flush backing storage. This has the added
       // benefit that the array returns to fast mode.
@@ -1276,45 +1299,22 @@ class DictionaryElementsAccessor
       MaybeObject* maybe_obj = array->ResetElements();
       if (!maybe_obj->ToObject(&obj)) return maybe_obj;
     } else {
-      uint32_t new_length = length;
-      uint32_t old_length = static_cast<uint32_t>(array->length()->Number());
-      if (new_length < old_length) {
-        // Find last non-deletable element in range of elements to be
-        // deleted and adjust range accordingly.
-        Heap* heap = array->GetHeap();
-        int capacity = dict->Capacity();
-        for (int i = 0; i < capacity; i++) {
-          Object* key = dict->KeyAt(i);
-          if (key->IsNumber()) {
-            uint32_t number = static_cast<uint32_t>(key->Number());
-            if (new_length <= number && number < old_length) {
-              PropertyDetails details = dict->DetailsAt(i);
-              if (details.IsDontDelete()) new_length = number + 1;
-            }
+      // Remove elements that should be deleted.
+      int removed_entries = 0;
+      Object* the_hole_value = heap->the_hole_value();
+      for (int i = 0; i < capacity; i++) {
+        Object* key = dict->KeyAt(i);
+        if (key->IsNumber()) {
+          uint32_t number = static_cast<uint32_t>(key->Number());
+          if (new_length <= number && number < old_length) {
+            dict->SetEntry(i, the_hole_value, the_hole_value);
+            removed_entries++;
           }
         }
-        if (new_length != length) {
-          MaybeObject* maybe_object = heap->NumberFromUint32(new_length);
-          if (!maybe_object->To(&length_object)) return maybe_object;
-        }
-
-        // Remove elements that should be deleted.
-        int removed_entries = 0;
-        Object* the_hole_value = heap->the_hole_value();
-        for (int i = 0; i < capacity; i++) {
-          Object* key = dict->KeyAt(i);
-          if (key->IsNumber()) {
-            uint32_t number = static_cast<uint32_t>(key->Number());
-            if (new_length <= number && number < old_length) {
-              dict->SetEntry(i, the_hole_value, the_hole_value);
-              removed_entries++;
-            }
-          }
-        }
-
-        // Update the number of elements.
-        dict->ElementsRemoved(removed_entries);
       }
+
+      // Update the number of elements.
+      dict->ElementsRemoved(removed_entries);
     }
     return length_object;
   }
@@ -1336,30 +1336,29 @@ class DictionaryElementsAccessor
     int entry = dictionary->FindEntry(key);
     if (entry != SeededNumberDictionary::kNotFound) {
       Object* result = dictionary->DeleteProperty(entry, mode);
-      if (result == heap->true_value()) {
-        MaybeObject* maybe_elements = dictionary->Shrink(key);
-        FixedArray* new_elements = NULL;
-        if (!maybe_elements->To(&new_elements)) {
-          return maybe_elements;
+      if (result == heap->false_value()) {
+        if (mode == JSObject::STRICT_DELETION) {
+          // Deleting a non-configurable property in strict mode.
+          HandleScope scope(isolate);
+          Handle<Object> holder(obj);
+          Handle<Object> name = isolate->factory()->NewNumberFromUint(key);
+          Handle<Object> args[2] = { name, holder };
+          Handle<Object> error =
+              isolate->factory()->NewTypeError("strict_delete_property",
+                                               HandleVector(args, 2));
+          return isolate->Throw(*error);
         }
-        if (is_arguments) {
-          FixedArray::cast(obj->elements())->set(1, new_elements);
-        } else {
-          obj->set_elements(new_elements);
-        }
+        return heap->false_value();
       }
-      if (mode == JSObject::STRICT_DELETION &&
-          result == heap->false_value()) {
-        // In strict mode, attempting to delete a non-configurable property
-        // throws an exception.
-        HandleScope scope(isolate);
-        Handle<Object> holder(obj);
-        Handle<Object> name = isolate->factory()->NewNumberFromUint(key);
-        Handle<Object> args[2] = { name, holder };
-        Handle<Object> error =
-            isolate->factory()->NewTypeError("strict_delete_property",
-                                             HandleVector(args, 2));
-        return isolate->Throw(*error);
+      MaybeObject* maybe_elements = dictionary->Shrink(key);
+      FixedArray* new_elements = NULL;
+      if (!maybe_elements->To(&new_elements)) {
+        return maybe_elements;
+      }
+      if (is_arguments) {
+        FixedArray::cast(obj->elements())->set(1, new_elements);
+      } else {
+        obj->set_elements(new_elements);
       }
     }
     return heap->true_value();

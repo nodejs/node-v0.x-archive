@@ -40,6 +40,8 @@ class Snapshot {
   // could be found.
   static bool Initialize(const char* snapshot_file = NULL);
 
+  static bool HaveASnapshotToStartFrom();
+
   // Create a new context using the internal partial snapshot.
   static Handle<Context> NewContextFromSnapshot();
 
@@ -75,13 +77,18 @@ class Snapshot {
   static const int code_space_used_;
   static const int map_space_used_;
   static const int cell_space_used_;
-  static const int large_space_used_;
+  static const int context_new_space_used_;
+  static const int context_pointer_space_used_;
+  static const int context_data_space_used_;
+  static const int context_code_space_used_;
+  static const int context_map_space_used_;
+  static const int context_cell_space_used_;
   static const int size_;
   static const int raw_size_;
   static const int context_size_;
   static const int context_raw_size_;
 
-  static bool Deserialize(const byte* content, int len);
+  static void ReserveSpaceForLinkedInSnapshot(Deserializer* deserializer);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(Snapshot);
 };

@@ -7,14 +7,13 @@ var cbCalled = false
   , rm = require("rimraf")
   , itWorked = false
   , path = require("path")
-  , ini = require("./ini.js")
   , wroteLogFile = false
   , exitCode = 0
 
 
 process.on("exit", function (code) {
   // console.error("exit", code)
-  if (!ini.resolved) return
+  if (!npm.config.loaded) return
   if (code) itWorked = false
   if (itWorked) log.info("ok")
   else {
@@ -69,8 +68,9 @@ function exit (code, noLog) {
 
 
 function errorHandler (er) {
+  var printStack = false
   // console.error("errorHandler", er)
-  if (!ini.resolved) {
+  if (!npm.config.loaded) {
     // logging won't work unless we pretend that it's ready
     er = er || new Error("Exit prior to config file resolving.")
     console.error(er.stack || er.message)
@@ -99,6 +99,7 @@ function errorHandler (er) {
     log.error("", ["\nIf you are behind a proxy, please make sure that the"
               ,"'proxy' config is set properly.  See: 'npm help config'"
               ].join("\n"))
+    printStack = true
     break
 
   case "EACCES":
@@ -106,6 +107,7 @@ function errorHandler (er) {
     log.error("", er)
     log.error("", ["\nPlease try running this command again as root/Administrator."
               ].join("\n"))
+    printStack = true
     break
 
   case "ELIFECYCLE":
@@ -154,9 +156,13 @@ function errorHandler (er) {
   case "EPUBLISHCONFLICT":
     er.code = "EPUBLISHCONFLICT"
     log.error("publish fail", ["Cannot publish over existing version."
-              ,"Bump the 'version' field, set the --force flag, or"
-              ,"    npm unpublish '"+er.pkgid+"'"
-              ,"and try again"
+              ,"Update the 'version' field in package.json and try again."
+              ,""
+              ,"If the previous version was published in error, see:"
+              ,"    npm help unpublish"
+              ,""
+              ,"To automatically increment version numbers, see:"
+              ,"    npm help version"
               ].join("\n"))
     break
 
@@ -195,6 +201,20 @@ function errorHandler (er) {
               ,"Move it away, and try again."].join("\n"))
     break
 
+  case "ENEEDAUTH":
+    log.error("need auth", [er.message
+              ,"You need to authorize this machine using `npm adduser`"
+              ].join("\n"))
+    break
+
+  case "EPEERINVALID":
+    var peerErrors = Object.keys(er.peersDepending).map(function (peer) {
+      return "Peer " + peer + " wants " + er.packageName + "@"
+        + er.peersDepending[peer]
+    })
+    log.error("peerinvalid", [er.message].concat(peerErrors).join("\n"))
+    break
+
   case "ENOTSUP":
     if (er.required) {
       log.error("notsup", [er.message
@@ -208,12 +228,13 @@ function errorHandler (er) {
     } // else passthrough
 
   default:
-    log.error("", er)
-    log.error("", ["You may report this log at:"
-              ,"    <http://github.com/isaacs/npm/issues>"
-              ,"or email it to:"
-              ,"    <npm-@googlegroups.com>"
-              ].join("\n"))
+    log.error("", er.stack || er.message || er)
+    log.error("", ["If you need help, you may report this log at:"
+                  ,"    <http://github.com/isaacs/npm/issues>"
+                  ,"or email it to:"
+                  ,"    <npm-@googlegroups.com>"
+                  ].join("\n"))
+    printStack = false
     break
   }
 
@@ -238,17 +259,20 @@ function errorHandler (er) {
     , "fstream_finish_call"
     , "fstream_linkpath"
     , "code"
-    , "message"
     , "errno"
+    , "stack"
+    , "fstream_stack"
     ].forEach(function (k) {
-      if (er[k]) log.error(k, er[k])
+      var v = er[k]
+      if (k === "stack") {
+        if (!printStack) return
+        if (!v) v = er.message
+      }
+      if (!v) return
+      if (k === "fstream_stack") v = v.join("\n")
+      log.error(k, v)
     })
 
-  if (er.fstream_stack) {
-    log.error("fstream_stack", er.fstream_stack.join("\n"))
-  }
-
-  if (er.errno && typeof er.errno !== "object") log.error(er.errno, "errno")
   exit(typeof er.errno === "number" ? er.errno : 1)
 }
 

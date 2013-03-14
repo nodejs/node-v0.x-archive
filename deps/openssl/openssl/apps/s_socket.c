@@ -238,11 +238,10 @@ int init_client(int *sock, char *host, int port, int type)
 	{
 	unsigned char ip[4];
 
+	memset(ip, '\0', sizeof ip);
 	if (!host_ip(host,&(ip[0])))
-		{
-		return(0);
-		}
-	return(init_client_ip(sock,ip,port,type));
+		return 0;
+	return init_client_ip(sock,ip,port,type);
 	}
 
 static int init_client_ip(int *sock, unsigned char ip[4], int port, int type)

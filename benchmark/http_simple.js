@@ -4,8 +4,6 @@ var path = require('path'),
 
 var port = parseInt(process.env.PORT || 8000);
 
-console.log('pid ' + process.pid);
-
 var fixed = makeString(20 * 1024, 'C'),
     storedBytes = {},
     storedBuffer = {},
@@ -18,13 +16,13 @@ if (useDomains) {
   var domain = require('domain');
   var gdom = domain.create();
   gdom.on('error', function(er) {
-    console.log('Error on global domain', er);
+    console.error('Error on global domain', er);
     throw er;
   });
   gdom.enter();
 }
 
-var server = http.createServer(function (req, res) {
+var server = module.exports = http.createServer(function (req, res) {
   if (useDomains) {
     var dom = domain.create();
     dom.add(req);
@@ -43,7 +41,6 @@ var server = http.createServer(function (req, res) {
     if (n <= 0)
       throw new Error('bytes called with n <= 0')
     if (storedBytes[n] === undefined) {
-      console.log('create storedBytes[n]');
       storedBytes[n] = makeString(n, 'C');
     }
     body = storedBytes[n];
@@ -53,7 +50,6 @@ var server = http.createServer(function (req, res) {
     if (n <= 0)
       throw new Error('buffer called with n <= 0');
     if (storedBuffer[n] === undefined) {
-      console.log('create storedBuffer[n]');
       storedBuffer[n] = new Buffer(n);
       for (var i = 0; i < n; i++) {
         storedBuffer[n][i] = 'C'.charCodeAt(0);
@@ -66,7 +62,6 @@ var server = http.createServer(function (req, res) {
     if (n <= 0)
       throw new Error('unicode called with n <= 0');
     if (storedUnicode[n] === undefined) {
-      console.log('create storedUnicode[n]');
       storedUnicode[n] = makeString(n, '\u263A');
     }
     body = storedUnicode[n];
@@ -96,13 +91,12 @@ var server = http.createServer(function (req, res) {
                             'Transfer-Encoding': 'chunked' });
     // send body in chunks
     var len = body.length;
-    var step = ~~(len / n_chunks) || len;
+    var step = Math.floor(len / n_chunks) || 1;
 
-    for (var i = 0; i < len; i += step) {
-      res.write(body.slice(i, i + step));
+    for (var i = 0, n = (n_chunks - 1); i < n; ++i) {
+      res.write(body.slice(i * step, i * step + step));
     }
-
-    res.end();
+    res.end(body.slice((n_chunks - 1) * step));
   } else {
     var content_length = body.length.toString();
 
@@ -121,9 +115,6 @@ function makeString(size, c) {
 }
 
 server.listen(port, function () {
-  console.log('Listening at http://127.0.0.1:'+port+'/');
-});
-
-process.on('exit', function() {
-  console.error('libuv counters', process.uvCounters());
+  if (module === require.main)
+    console.error('Listening at http://127.0.0.1:'+port+'/');
 });

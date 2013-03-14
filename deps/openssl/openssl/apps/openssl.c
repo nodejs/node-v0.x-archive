@@ -129,6 +129,9 @@
 #include "progs.h"
 #include "s_apps.h"
 #include <openssl/err.h>
+#ifdef OPENSSL_FIPS
+#include <openssl/fips.h>
+#endif
 
 /* The LHASH callbacks ("hash" & "cmp") have been replaced by functions with the
  * base prototypes (we cast each variable inside the function to the required
@@ -310,6 +313,19 @@ int main(int Argc, char *ARGV[])
 		CRYPTO_set_locking_callback(lock_dbg_cb);
 		}
 
+	if(getenv("OPENSSL_FIPS")) {
+#ifdef OPENSSL_FIPS
+		if (!FIPS_mode_set(1)) {
+			ERR_load_crypto_strings();
+			ERR_print_errors(BIO_new_fp(stderr,BIO_NOCLOSE));
+			EXIT(1);
+		}
+#else
+		fprintf(stderr, "FIPS mode not supported.\n");
+		EXIT(1);
+#endif
+		}
+
 	apps_startup();
 
 	/* Lets load up our environment a little */
@@ -328,10 +344,8 @@ int main(int Argc, char *ARGV[])
 		if (ERR_GET_REASON(ERR_peek_last_error())
 		    == CONF_R_NO_SUCH_FILE)
 			{
-#if 0 /* ANDROID */
 			BIO_printf(bio_err,
 				   "WARNING: can't open config file: %s\n",p);
-#endif
 			ERR_clear_error();
 			NCONF_free(config);
 			config = NULL;

@@ -428,5 +428,5 @@ var o = JSON.parse('{"__proto__":5}');
 assertEquals(Object.prototype, o.__proto__);  // __proto__ isn't changed.
 assertEquals(0, Object.keys(o).length);  // __proto__ isn't added as enumerable.
 
-
-
+var json = '{"stuff before slash\\\\stuff after slash":"whatever"}';
+assertEquals(json, JSON.stringify(JSON.parse(json)));

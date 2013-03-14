@@ -136,21 +136,6 @@ namespace internal {
 #endif
 #endif
 
-// Define unaligned read for the target architectures supporting it.
-#if defined(V8_TARGET_ARCH_X64) || defined(V8_TARGET_ARCH_IA32)
-#define V8_TARGET_CAN_READ_UNALIGNED 1
-#elif V8_TARGET_ARCH_ARM
-// Some CPU-OS combinations allow unaligned access on ARM. We assume
-// that unaligned accesses are not allowed unless the build system
-// defines the CAN_USE_UNALIGNED_ACCESSES macro to be non-zero.
-#if CAN_USE_UNALIGNED_ACCESSES
-#define V8_TARGET_CAN_READ_UNALIGNED 1
-#endif
-#elif V8_TARGET_ARCH_MIPS
-#else
-#error Target architecture is not supported by v8
-#endif
-
 // Support for alternative bool type. This is only enabled if the code is
 // compiled with USE_MYBOOL defined. This catches some nasty type bugs.
 // For instance, 'bool b = "false";' results in b == true! This is a hidden
@@ -203,6 +188,7 @@ typedef byte* Address;
 
 #define V8PRIxPTR V8_PTR_PREFIX "x"
 #define V8PRIdPTR V8_PTR_PREFIX "d"
+#define V8PRIuPTR V8_PTR_PREFIX "u"
 
 // Fix for Mac OS X defining uintptr_t as "unsigned long":
 #if defined(__APPLE__) && defined(__MACH__)
@@ -359,6 +345,20 @@ F FUNCTION_CAST(Address addr) {
 #else
 #define MUST_USE_RESULT
 #endif
+
+
+// Define DISABLE_ASAN macros.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define DISABLE_ASAN __attribute__((no_address_safety_analysis))
+#endif
+#endif
+
+
+#ifndef DISABLE_ASAN
+#define DISABLE_ASAN
+#endif
+
 
 // -----------------------------------------------------------------------------
 // Forward declarations for frequently used classes

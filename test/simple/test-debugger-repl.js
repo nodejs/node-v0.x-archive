@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
+process.env.NODE_DEBUGGER_TIMEOUT = 2000;
 var common = require('../common');
 var assert = require('assert');
 var spawn = require('child_process').spawn;
@@ -27,7 +27,8 @@ var debug = require('_debugger');
 
 var port = common.PORT + 1337;
 
-var script = common.fixturesDir + '/breakpoints.js';
+var script = process.env.NODE_DEBUGGER_TEST_SCRIPT ||
+             common.fixturesDir + '/breakpoints.js';
 
 var child = spawn(process.execPath, ['debug', '--port=' + port, script]);
 
@@ -42,13 +43,13 @@ child.stdout.on('data', function(data) {
     child.emit('line', line);
   });
 });
-child.stderr.pipe(process.stdout);
+child.stderr.pipe(process.stderr);
 
 var expected = [];
 
 child.on('line', function(line) {
-  line = line.replace(/^(debug> )+/, 'debug> ');
-  console.error('line> ' + line);
+  line = line.replace(/^(debug> *)+/, '');
+  console.log(line);
   assert.ok(expected.length > 0, 'Got unexpected line: ' + line);
 
   var expectedLine = expected[0].lines.shift();
@@ -64,23 +65,17 @@ child.on('line', function(line) {
 function addTest(input, output) {
   function next() {
     if (expected.length > 0) {
-      var res = child.stdin.write(expected[0].input + '\n'),
-          callback;
+      console.log('debug> ' + expected[0].input);
+      child.stdin.write(expected[0].input + '\n');
 
       if (!expected[0].lines) {
-        callback = expected[0].callback;
+        var callback = expected[0].callback;
         expected.shift();
-      }
 
-      if (callback) {
-        if (res !== true) {
-          child.stdin.on('drain', callback);
-        } else {
-          process.nextTick(callback);
-        }
+        callback && callback();
       }
     } else {
-      finish();
+      quit();
     }
   };
   expected.push({input: input, lines: output, callback: next});
@@ -101,7 +96,7 @@ addTest('n', [
 ]);
 
 // Watch
-addTest('watch("\'x\'"), true', [/true/]);
+addTest('watch("\'x\'")');
 
 // Continue
 addTest('c', [
@@ -118,7 +113,7 @@ addTest('watchers', [
 ]);
 
 // Unwatch
-addTest('unwatch("\'x\'"), true', [/true/]);
+addTest('unwatch("\'x\'")');
 
 // Step out
 addTest('o', [
@@ -143,53 +138,47 @@ addTest('c', [
   /\d/, /\d/, /\d/, /\d/, /\d/
 ]);
 
-addTest('c', [
-  /break in .*breakpoints.js:\d+/,
-  /\d/, /\d/, /\d/, /\d/, /\d/
-]);
+addTest('quit', []);
 
-addTest('repl', [
-  /Press Ctrl \+ C to leave debug repl/
-]);
+var childClosed = false;
+child.on('close', function(code) {
+  assert(!code);
+  childClosed = true;
+});
 
-addTest('now', [
-  /\w* \w* \d* \d* \d*:\d*:\d* GMT[+-]\d* (\w*)/
-]);
-
-function finish() {
-  process.exit(0);
-}
-
+var quitCalled = false;
 function quit() {
-  if (quit.called) return;
-  quit.called = true;
+  if (quitCalled || childClosed) return;
+  quitCalled = true;
   child.stdin.write('quit');
+  child.kill('SIGTERM');
 }
 
 setTimeout(function() {
+  console.error('dying badly buffer=%j', buffer);
   var err = 'Timeout';
   if (expected.length > 0 && expected[0].lines) {
     err = err + '. Expected: ' + expected[0].lines.shift();
   }
-  quit();
-  child.kill('SIGKILL');
 
-  // give the sigkill time to work.
-  setTimeout(function() {
+  child.on('close', function() {
+    console.error('child is closed');
     throw new Error(err);
-  }, 100);
+  });
 
-}, 5000);
+  quit();
+}, 5000).unref();
 
 process.once('uncaughtException', function(e) {
+  console.error('UncaughtException', e, e.stack);
   quit();
   console.error(e.toString());
   process.exit(1);
 });
 
 process.on('exit', function(code) {
+  console.error('process exit', code);
   quit();
-  if (code === 0) {
-    assert.equal(expected.length, 0);
-  }
+  if (code === 0)
+    assert(childClosed);
 });

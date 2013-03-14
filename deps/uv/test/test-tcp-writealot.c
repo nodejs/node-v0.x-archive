@@ -145,7 +145,7 @@ TEST_IMPL(tcp_writealot) {
   uv_tcp_t client;
   int r;
 
-  send_buffer = malloc(TOTAL_BYTES);
+  send_buffer = calloc(1, TOTAL_BYTES);
   ASSERT(send_buffer != NULL);
 
   r = uv_tcp_init(uv_default_loop(), &client);
@@ -154,7 +154,7 @@ TEST_IMPL(tcp_writealot) {
   r = uv_tcp_connect(&connect_req, &client, addr, connect_cb);
   ASSERT(r == 0);
 
-  uv_run(uv_default_loop());
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
   ASSERT(shutdown_cb_called == 1);
   ASSERT(connect_cb_called == 1);
@@ -166,5 +166,6 @@ TEST_IMPL(tcp_writealot) {
 
   free(send_buffer);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

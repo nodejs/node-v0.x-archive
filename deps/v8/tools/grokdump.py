@@ -27,17 +27,18 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import bisect
 import cmd
+import codecs
 import ctypes
+import disasm
 import mmap
 import optparse
 import os
-import disasm
-import sys
-import types
-import codecs
 import re
 import struct
+import sys
+import types
 
 
 USAGE="""usage: %prog [OPTIONS] [DUMP-FILE]
@@ -178,6 +179,11 @@ MINIDUMP_HEADER = Descriptor([
 MINIDUMP_LOCATION_DESCRIPTOR = Descriptor([
   ("data_size", ctypes.c_uint32),
   ("rva", ctypes.c_uint32)
+])
+
+MINIDUMP_STRING = Descriptor([
+  ("length", ctypes.c_uint32),
+  ("buffer", lambda t: ctypes.c_uint8 * (t.length + 2))
 ])
 
 MINIDUMP_DIRECTORY = Descriptor([
@@ -400,12 +406,44 @@ MINIDUMP_THREAD_LIST = Descriptor([
   ("threads", lambda t: MINIDUMP_THREAD.ctype * t.thread_count)
 ])
 
+MINIDUMP_RAW_MODULE = Descriptor([
+  ("base_of_image", ctypes.c_uint64),
+  ("size_of_image", ctypes.c_uint32),
+  ("checksum", ctypes.c_uint32),
+  ("time_date_stamp", ctypes.c_uint32),
+  ("module_name_rva", ctypes.c_uint32),
+  ("version_info", ctypes.c_uint32 * 13),
+  ("cv_record", MINIDUMP_LOCATION_DESCRIPTOR.ctype),
+  ("misc_record", MINIDUMP_LOCATION_DESCRIPTOR.ctype),
+  ("reserved0", ctypes.c_uint32 * 2),
+  ("reserved1", ctypes.c_uint32 * 2)
+])
+
+MINIDUMP_MODULE_LIST = Descriptor([
+  ("number_of_modules", ctypes.c_uint32),
+  ("modules", lambda t: MINIDUMP_RAW_MODULE.ctype * t.number_of_modules)
+])
+
 MINIDUMP_RAW_SYSTEM_INFO = Descriptor([
   ("processor_architecture", ctypes.c_uint16)
 ])
 
 MD_CPU_ARCHITECTURE_X86 = 0
 MD_CPU_ARCHITECTURE_AMD64 = 9
+
+class FuncSymbol:
+  def __init__(self, start, size, name):
+    self.start = start
+    self.end = self.start + size
+    self.name = name
+
+  def __cmp__(self, other):
+    if isinstance(other, FuncSymbol):
+      return self.start - other.start
+    return self.start - other
+
+  def Covers(self, addr):
+    return (self.start <= addr) and (addr < self.end)
 
 class MinidumpReader(object):
   """Minidump (.dmp) reader."""
@@ -430,7 +468,12 @@ class MinidumpReader(object):
     self.exception_context = None
     self.memory_list = None
     self.memory_list64 = None
+    self.module_list = None
     self.thread_map = {}
+
+    self.symdir = options.symdir
+    self.modules_with_symbols = []
+    self.symbols = []
 
     # Find MDRawSystemInfo stream and determine arch.
     for d in directories:
@@ -461,6 +504,11 @@ class MinidumpReader(object):
         for thread in thread_list.threads:
           DebugPrint(thread)
           self.thread_map[thread.id] = thread
+      elif d.stream_type == MD_MODULE_LIST_STREAM:
+        assert self.module_list is None
+        self.module_list = MINIDUMP_MODULE_LIST.Read(
+          self.minidump, d.location.rva)
+        assert ctypes.sizeof(self.module_list) == d.location.data_size
       elif d.stream_type == MD_MEMORY_LIST_STREAM:
         print >>sys.stderr, "Warning: This is not a full minidump!"
         assert self.memory_list is None
@@ -643,6 +691,66 @@ class MinidumpReader(object):
 
   def Register(self, name):
     return self.exception_context.__getattribute__(name)
+
+  def ReadMinidumpString(self, rva):
+    string = bytearray(MINIDUMP_STRING.Read(self.minidump, rva).buffer)
+    string = string.decode("utf16")
+    return string[0:len(string) - 1]
+
+  # Load FUNC records from a BreakPad symbol file
+  #
+  #    http://code.google.com/p/google-breakpad/wiki/SymbolFiles
+  #
+  def _LoadSymbolsFrom(self, symfile, baseaddr):
+    print "Loading symbols from %s" % (symfile)
+    funcs = []
+    with open(symfile) as f:
+      for line in f:
+        result = re.match(
+            r"^FUNC ([a-f0-9]+) ([a-f0-9]+) ([a-f0-9]+) (.*)$", line)
+        if result is not None:
+          start = int(result.group(1), 16)
+          size = int(result.group(2), 16)
+          name = result.group(4).rstrip()
+          bisect.insort_left(self.symbols,
+                             FuncSymbol(baseaddr + start, size, name))
+    print " ... done"
+
+  def TryLoadSymbolsFor(self, modulename, module):
+    try:
+      symfile = os.path.join(self.symdir,
+                             modulename.replace('.', '_') + ".pdb.sym")
+      self._LoadSymbolsFrom(symfile, module.base_of_image)
+      self.modules_with_symbols.append(module)
+    except Exception as e:
+      print "  ... failure (%s)" % (e)
+
+  # Returns true if address is covered by some module that has loaded symbols.
+  def _IsInModuleWithSymbols(self, addr):
+    for module in self.modules_with_symbols:
+      start = module.base_of_image
+      end = start + module.size_of_image
+      if (start <= addr) and (addr < end):
+        return True
+    return False
+
+  # Find symbol covering the given address and return its name in format
+  #     <symbol name>+<offset from the start>
+  def FindSymbol(self, addr):
+    if not self._IsInModuleWithSymbols(addr):
+      return None
+
+    i = bisect.bisect_left(self.symbols, addr)
+    symbol = None
+    if (0 < i) and self.symbols[i - 1].Covers(addr):
+      symbol = self.symbols[i - 1]
+    elif (i < len(self.symbols)) and self.symbols[i].Covers(addr):
+      symbol = self.symbols[i]
+    else:
+      return None
+    diff = addr - symbol.start
+    return "%s+0x%x" % (symbol.name, diff)
+
 
 
 # List of V8 instance types. Obtained by adding the code below to any .cc file.
@@ -1051,12 +1159,30 @@ class ConsString(String):
 
 
 class Oddball(HeapObject):
+  # Should match declarations in objects.h
+  KINDS = [
+    "False",
+    "True",
+    "TheHole",
+    "Null",
+    "ArgumentMarker",
+    "Undefined",
+    "Other"
+  ]
+
   def ToStringOffset(self):
     return self.heap.PointerSize()
+
+  def ToNumberOffset(self):
+    return self.ToStringOffset() + self.heap.PointerSize()
+
+  def KindOffset(self):
+    return self.ToNumberOffset() + self.heap.PointerSize()
 
   def __init__(self, heap, map, address):
     HeapObject.__init__(self, heap, map, address)
     self.to_string = self.ObjectField(self.ToStringOffset())
+    self.kind = self.SmiField(self.KindOffset())
 
   def Print(self, p):
     p.Print(str(self))
@@ -1065,7 +1191,10 @@ class Oddball(HeapObject):
     if self.to_string:
       return "Oddball(%08x, <%s>)" % (self.address, self.to_string.GetChars())
     else:
-      return "Oddball(%08x, kind=%s)" % (self.address, "???")
+      kind = "???"
+      if 0 <= self.kind < len(Oddball.KINDS):
+        kind = Oddball.KINDS[self.kind]
+      return "Oddball(%08x, kind=%s)" % (self.address, kind)
 
 
 class FixedArray(HeapObject):
@@ -1086,7 +1215,13 @@ class FixedArray(HeapObject):
     base_offset = self.ElementsOffset()
     for i in xrange(self.length):
       offset = base_offset + 4 * i
-      p.Print("[%08d] = %s" % (i, self.ObjectField(offset)))
+      try:
+        p.Print("[%08d] = %s" % (i, self.ObjectField(offset)))
+      except TypeError:
+        p.Dedent()
+        p.Print("...")
+        p.Print("}")
+        return
     p.Dedent()
     p.Print("}")
 
@@ -1394,7 +1529,7 @@ class InspectionPadawan(object):
       if known_map:
         return known_map
     found_obj = self.heap.FindObject(tagged_address)
-    if found_obj: return found_ob
+    if found_obj: return found_obj
     address = tagged_address - 1
     if self.reader.IsValidAddress(address):
       map_tagged_address = self.reader.ReadUIntPtr(address)
@@ -1450,6 +1585,24 @@ class InspectionShell(cmd.Cmd):
     self.heap = heap
     self.padawan = InspectionPadawan(reader, heap)
     self.prompt = "(grok) "
+
+  def do_da(self, address):
+    """
+     Print ASCII string starting at specified address.
+    """
+    address = int(address, 16)
+    string = ""
+    while self.reader.IsValidAddress(address):
+      code = self.reader.ReadU8(address)
+      if code < 128:
+        string += chr(code)
+      else:
+        break
+      address += 1
+    if string == "":
+      print "Not an ASCII string at %s" % self.reader.FormatIntPtr(address)
+    else:
+      print "%s\n" % string
 
   def do_dd(self, address):
     """
@@ -1510,15 +1663,6 @@ class InspectionShell(cmd.Cmd):
     """
     self.padawan.PrintKnowledge()
 
-  def do_km(self, address):
-    """
-     Teach V8 heap layout information to the inspector. Set the first
-     map-space page by passing any pointer into that page.
-    """
-    address = int(address, 16)
-    page_address = address & ~self.heap.PageAlignmentMask()
-    self.padawan.known_first_map_page = page_address
-
   def do_kd(self, address):
     """
      Teach V8 heap layout information to the inspector. Set the first
@@ -1528,6 +1672,15 @@ class InspectionShell(cmd.Cmd):
     page_address = address & ~self.heap.PageAlignmentMask()
     self.padawan.known_first_data_page = page_address
 
+  def do_km(self, address):
+    """
+     Teach V8 heap layout information to the inspector. Set the first
+     map-space page by passing any pointer into that page.
+    """
+    address = int(address, 16)
+    page_address = address & ~self.heap.PageAlignmentMask()
+    self.padawan.known_first_map_page = page_address
+
   def do_kp(self, address):
     """
      Teach V8 heap layout information to the inspector. Set the first
@@ -1536,6 +1689,17 @@ class InspectionShell(cmd.Cmd):
     address = int(address, 16)
     page_address = address & ~self.heap.PageAlignmentMask()
     self.padawan.known_first_pointer_page = page_address
+
+  def do_list(self, smth):
+    """
+     List all available memory regions.
+    """
+    def print_region(reader, start, size, location):
+      print "  %s - %s (%d bytes)" % (reader.FormatIntPtr(start),
+                                      reader.FormatIntPtr(start + size),
+                                      size)
+    print "Available memory regions:"
+    self.reader.ForEachMemoryRegion(print_region)
 
   def do_s(self, word):
     """
@@ -1560,27 +1724,34 @@ class InspectionShell(cmd.Cmd):
     """
     raise NotImplementedError
 
-  def do_list(self, smth):
+  def do_u(self, args):
     """
-     List all available memory regions.
+     u 0x<address> 0x<size>
+     Unassemble memory in the region [address, address + size)
     """
-    def print_region(reader, start, size, location):
-      print "  %s - %s (%d bytes)" % (reader.FormatIntPtr(start),
-                                      reader.FormatIntPtr(start + size),
-                                      size)
-    print "Available memory regions:"
-    self.reader.ForEachMemoryRegion(print_region)
-
+    args = args.split(' ')
+    start = int(args[0], 16)
+    size = int(args[1], 16)
+    lines = self.reader.GetDisasmLines(start, size)
+    for line in lines:
+      print FormatDisasmLine(start, self.heap, line)
+    print
 
 EIP_PROXIMITY = 64
 
 CONTEXT_FOR_ARCH = {
     MD_CPU_ARCHITECTURE_AMD64:
-      ['rax', 'rbx', 'rcx', 'rdx', 'rdi', 'rsi', 'rbp', 'rsp', 'rip'],
+      ['rax', 'rbx', 'rcx', 'rdx', 'rdi', 'rsi', 'rbp', 'rsp', 'rip',
+       'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15'],
     MD_CPU_ARCHITECTURE_X86:
       ['eax', 'ebx', 'ecx', 'edx', 'edi', 'esi', 'ebp', 'esp', 'eip']
 }
 
+KNOWN_MODULES = {'chrome.exe', 'chrome.dll'}
+
+def GetModuleName(reader, module):
+  name = reader.ReadMinidumpString(module.module_name_rva)
+  return str(os.path.basename(str(name).replace("\\", "/")))
 
 def AnalyzeMinidump(options, minidump_name):
   reader = MinidumpReader(options, minidump_name)
@@ -1599,6 +1770,13 @@ def AnalyzeMinidump(options, minidump_name):
     # TODO(vitalyr): decode eflags.
     print "    eflags: %s" % bin(reader.exception_context.eflags)[2:]
     print
+    print "  modules:"
+    for module in reader.module_list.modules:
+      name = GetModuleName(reader, module)
+      if name in KNOWN_MODULES:
+        print "    %s at %08X" % (name, module.base_of_image)
+        reader.TryLoadSymbolsFor(name, module)
+    print
 
     stack_top = reader.ExceptionSP()
     stack_bottom = exception_thread.stack.start + \
@@ -1611,6 +1789,9 @@ def AnalyzeMinidump(options, minidump_name):
     heap = V8Heap(reader, stack_map)
 
     print "Disassembly around exception.eip:"
+    eip_symbol = reader.FindSymbol(reader.ExceptionIP())
+    if eip_symbol is not None:
+      print eip_symbol
     disasm_start = reader.ExceptionIP() - EIP_PROXIMITY
     disasm_bytes = 2 * EIP_PROXIMITY
     if (options.full):
@@ -1639,8 +1820,10 @@ def AnalyzeMinidump(options, minidump_name):
       for slot in xrange(stack_top, stack_bottom, reader.PointerSize()):
         maybe_address = reader.ReadUIntPtr(slot)
         heap_object = heap.FindObject(maybe_address)
-        print "%s: %s" % (reader.FormatIntPtr(slot),
-                          reader.FormatIntPtr(maybe_address))
+        maybe_symbol = reader.FindSymbol(maybe_address)
+        print "%s: %s %s" % (reader.FormatIntPtr(slot),
+                             reader.FormatIntPtr(maybe_address),
+                             maybe_symbol or "")
         if heap_object:
           heap_object.Print(Printer())
           print
@@ -1654,6 +1837,8 @@ if __name__ == "__main__":
                     help="start an interactive inspector shell")
   parser.add_option("-f", "--full", dest="full", action="store_true",
                     help="dump all information contained in the minidump")
+  parser.add_option("--symdir", dest="symdir", default=".",
+                    help="directory containing *.pdb.sym file with symbols")
   options, args = parser.parse_args()
   if len(args) != 1:
     parser.print_help()

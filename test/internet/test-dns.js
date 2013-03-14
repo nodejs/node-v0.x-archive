@@ -219,9 +219,33 @@ TEST(function test_resolveSrv(done) {
   checkWrap(req);
 });
 
+TEST(function test_resolveNaptr(done) {
+  var req = dns.resolveNaptr('sip2sip.info', function(err, result) {
+    if (err) throw err;
+
+    assert.ok(result.length > 0);
+
+    for (var i = 0; i < result.length; i++) {
+      var item = result[i];
+      assert.ok(item);
+      assert.ok(typeof item === 'object');
+
+      assert.ok(typeof item.flags === 'string');
+      assert.ok(typeof item.service === 'string');
+      assert.ok(typeof item.regexp === 'string');
+      assert.ok(typeof item.replacement === 'string');
+      assert.ok(typeof item.order === 'number');
+      assert.ok(typeof item.preference === 'number');
+    }
+
+    done();
+  });
+
+  checkWrap(req);
+});
 
 TEST(function test_resolveCname(done) {
-  var req = dns.resolveCname('www.google.com', function(err, names) {
+  var req = dns.resolveCname('www.microsoft.com', function(err, names) {
     if (err) throw err;
 
     assert.ok(names.length > 0);
@@ -308,6 +332,7 @@ TEST(function test_lookup_failure(done) {
     assert.ok(err instanceof Error);
     assert.strictEqual(err.errno, dns.NOTFOUND);
     assert.strictEqual(err.errno, 'ENOTFOUND');
+    assert.ok(!/ENOENT/.test(err.message));
 
     done();
   });

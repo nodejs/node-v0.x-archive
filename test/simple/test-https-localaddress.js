@@ -42,20 +42,25 @@ var server = https.createServer(options, function (req, res) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('You are from: ' + req.connection.remoteAddress);
   });
+  req.resume();
 });
 
 server.listen(common.PORT, "127.0.0.1", function() {
-  var options = { host: 'localhost',
+  var options = {
+    host: 'localhost',
     port: common.PORT,
     path: '/',
     method: 'GET',
-    localAddress: '127.0.0.2' };
+    localAddress: '127.0.0.2',
+    rejectUnauthorized: false
+  };
 
   var req = https.request(options, function(res) {
     res.on('end', function() {
       server.close();
       process.exit();
     });
+    res.resume();
   });
   req.end();
 });

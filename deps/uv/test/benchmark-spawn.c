@@ -30,7 +30,7 @@ static int N = 1000;
 static int done;
 
 static uv_process_t process;
-static uv_process_options_t options = { 0 };
+static uv_process_options_t options;
 static char exepath[1024];
 static size_t exepath_size = 1024;
 static char* args[3];
@@ -44,10 +44,10 @@ static int process_open;
 static int pipe_open;
 
 
-static void spawn();
+static void spawn(void);
 
 
-void maybe_spawn() {
+static void maybe_spawn(void) {
   if (process_open == 0 && pipe_open == 0) {
     done++;
     if (done < N) {
@@ -71,7 +71,7 @@ static void exit_cb(uv_process_t* process, int exit_status, int term_signal) {
 }
 
 
-uv_buf_t on_alloc(uv_handle_t* handle, size_t suggested_size) {
+static uv_buf_t on_alloc(uv_handle_t* handle, size_t suggested_size) {
   uv_buf_t buf;
   buf.base = output + output_used;
   buf.len = OUTPUT_SIZE - output_used;
@@ -79,14 +79,14 @@ uv_buf_t on_alloc(uv_handle_t* handle, size_t suggested_size) {
 }
 
 
-void pipe_close_cb(uv_handle_t* pipe) {
+static void pipe_close_cb(uv_handle_t* pipe) {
   ASSERT(pipe_open == 1);
   pipe_open = 0;
   maybe_spawn();
 }
 
 
-void on_read(uv_stream_t* pipe, ssize_t nread, uv_buf_t buf) {
+static void on_read(uv_stream_t* pipe, ssize_t nread, uv_buf_t buf) {
   uv_err_t err = uv_last_error(loop);
 
   if (nread > 0) {
@@ -100,7 +100,7 @@ void on_read(uv_stream_t* pipe, ssize_t nread, uv_buf_t buf) {
 }
 
 
-static void spawn() {
+static void spawn(void) {
   uv_stdio_container_t stdio[2];
   int r;
 
@@ -149,7 +149,7 @@ BENCHMARK_IMPL(spawn) {
 
   spawn();
 
-  r = uv_run(loop);
+  r = uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   uv_update_time(loop);
@@ -158,5 +158,6 @@ BENCHMARK_IMPL(spawn) {
   LOGF("spawn: %.0f spawns/s\n",
        (double) N / (double) (end_time - start_time) * 1000.0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

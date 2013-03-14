@@ -6,7 +6,6 @@ var log = require("npmlog")
   , registry = npm.registry
   , readJson = require("read-package-json")
   , path = require("path")
-  , output = require("./utils/output.js")
 
 unpublish.usage = "npm unpublish <project>[@<version>]"
 
@@ -57,6 +56,7 @@ function unpublish (args, cb) {
     // read the package name and version out of that.
     var cwdJson = path.join(process.cwd(), "package.json")
     return readJson(cwdJson, function (er, data) {
+      if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
       if (er) return cb("Usage:\n"+unpublish.usage)
       gotProject(data.name, data.version, cb)
     })
@@ -67,7 +67,8 @@ function unpublish (args, cb) {
 function gotProject (project, version, cb_) {
   function cb (er) {
     if (er) return cb_(er)
-    output.write("- " + project + (version ? "@" + version : ""), cb_)
+    console.log("- " + project + (version ? "@" + version : ""))
+    cb_()
   }
 
   // remove from the cache first

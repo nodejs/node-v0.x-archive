@@ -2,7 +2,7 @@
 <html>
   <title>deprecate</title>
   <meta http-equiv="content-type" value="text/html;utf-8">
-  <link rel="stylesheet" type="text/css" href="../style.css">
+  <link rel="stylesheet" type="text/css" href="../static/style.css">
 
   <body>
     <div id="wrapper">
@@ -20,16 +20,18 @@ a deprecation warning to all who attempt to install it.</p>
 <p>It works on version ranges as well as specific versions, so you can do
 something like this:</p>
 
-<pre><code>npm deprecate my-thing@"&lt; 0.2.3" "critical bug fixed in v0.2.3"</code></pre>
+<pre><code>npm deprecate my-thing@&quot;&lt; 0.2.3&quot; &quot;critical bug fixed in v0.2.3&quot;</code></pre>
 
 <p>Note that you must be the package owner to deprecate something.  See the
 <code>owner</code> and <code>adduser</code> help topics.</p>
+
+<p>To un-deprecate a package, specify an empty string (<code>&quot;&quot;</code>) for the <code>message</code> argument.</p>
 
 <h2 id="SEE-ALSO">SEE ALSO</h2>
 
 <ul><li><a href="../doc/publish.html">publish(1)</a></li><li><a href="../doc/registry.html">registry(1)</a></li></ul>
 </div>
-<p id="footer">deprecate &mdash; npm@1.1.39</p>
+<p id="footer">deprecate &mdash; npm@1.2.14</p>
 <script>
 ;(function () {
 var wrapper = document.getElementById("wrapper")

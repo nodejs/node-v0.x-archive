@@ -287,7 +287,7 @@ static int pound_it(int concurrency,
   r = do_connect(concurrency, make_connect, arg);
   ASSERT(!r);
 
-  uv_run(loop);
+  uv_run(loop, UV_RUN_DEFAULT);
 
   end_time = uv_hrtime();
 
@@ -300,6 +300,7 @@ static int pound_it(int concurrency,
        closed_streams / secs,
        conns_failed);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 

@@ -67,7 +67,6 @@ owner.completion = function (opts, cb) {
 var npm = require("./npm.js")
   , registry = npm.registry
   , log = require("npmlog")
-  , output
   , readJson = require("read-package-json")
 
 function owner (args, cb) {
@@ -81,7 +80,12 @@ function owner (args, cb) {
 }
 
 function ls (pkg, cb) {
-  if (!pkg) return cb(owner.usage)
+  if (!pkg) return readLocalPkg(function (er, pkg) {
+    if (er) return cb(er)
+    if (!pkg) return cb(owner.usage)
+    ls(pkg, cb)
+  })
+
   registry.get(pkg, function (er, data) {
     var msg = ""
     if (er) {
@@ -91,13 +95,14 @@ function ls (pkg, cb) {
     var owners = data.maintainers
     if (!owners || !owners.length) msg = "admin party!"
     else msg = owners.map(function (o) { return o.name +" <"+o.email+">" }).join("\n")
-    output = output || require("./utils/output.js")
-    output.write(msg, function (er) { cb(er, owners) })
+    console.log(msg)
+    cb(er, owners)
   })
 }
 
 function add (user, pkg, cb) {
-  if (!pkg) readLocalPkg(function (er, pkg) {
+  if (!user) return cb(owner.usage)
+  if (!pkg) return readLocalPkg(function (er, pkg) {
     if (er) return cb(er)
     if (!pkg) return cb(new Error(owner.usage))
     add(user, pkg, cb)
@@ -120,7 +125,7 @@ function add (user, pkg, cb) {
 }
 
 function rm (user, pkg, cb) {
-  if (!pkg) readLocalPkg(function (er, pkg) {
+  if (!pkg) return readLocalPkg(function (er, pkg) {
     if (er) return cb(er)
     if (!pkg) return cb(new Error(owner.usage))
     rm(user, pkg, cb)

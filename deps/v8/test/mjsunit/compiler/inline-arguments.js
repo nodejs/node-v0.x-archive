@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Flags: --allow-natives-syntax --max-opt-count=100
 
 function A() {
 }
@@ -157,7 +157,30 @@ function test_toarr(toarr) {
 test_toarr(toarr1);
 test_toarr(toarr2);
 
+
 // Test that arguments access from inlined function uses correct values.
+(function () {
+  function inner(x, y) {
+    "use strict";
+    x = 10;
+    y = 20;
+    for (var i = 0; i < 1; i++) {
+      for (var j = 1; j <= arguments.length; j++) {
+        return arguments[arguments.length - j];
+      }
+    }
+  }
+
+  function outer(x, y) {
+    return inner(x, y);
+  }
+
+  %OptimizeFunctionOnNextCall(outer);
+  %OptimizeFunctionOnNextCall(inner);
+  assertEquals(2, outer(1, 2));
+})();
+
+
 (function () {
   function inner(x, y) {
     "use strict";
@@ -179,4 +202,67 @@ test_toarr(toarr2);
   assertEquals(2, outer(1, 2));
   %OptimizeFunctionOnNextCall(outer);
   assertEquals(2, outer(1, 2));
+})();
+
+
+// Test inlining and deoptimization of functions accessing and modifying
+// the arguments object in strict mode with mismatched arguments count.
+(function () {
+  "use strict";
+  function test(outerCount, middleCount, innerCount) {
+    var forceDeopt = { deopt:false };
+    function inner(x,y) {
+      x = 0; y = 0;
+      forceDeopt.deopt;
+      assertSame(innerCount, arguments.length);
+      for (var i = 0; i < arguments.length; i++) {
+        assertSame(30 + i, arguments[i]);
+      }
+    }
+
+    function middle(x,y) {
+      x = 0; y = 0;
+      if (innerCount == 1) inner(30);
+      if (innerCount == 2) inner(30, 31);
+      if (innerCount == 3) inner(30, 31, 32);
+      assertSame(middleCount, arguments.length);
+      for (var i = 0; i < arguments.length; i++) {
+        assertSame(20 + i, arguments[i]);
+      }
+    }
+
+    function outer(x,y) {
+      x = 0; y = 0;
+      if (middleCount == 1) middle(20);
+      if (middleCount == 2) middle(20, 21);
+      if (middleCount == 3) middle(20, 21, 22);
+      assertSame(outerCount, arguments.length);
+      for (var i = 0; i < arguments.length; i++) {
+        assertSame(10 + i, arguments[i]);
+      }
+    }
+
+    for (var step = 0; step < 4; step++) {
+      if (outerCount == 1) outer(10);
+      if (outerCount == 2) outer(10, 11);
+      if (outerCount == 3) outer(10, 11, 12);
+      if (step == 1) %OptimizeFunctionOnNextCall(outer);
+      if (step == 2) delete forceDeopt.deopt;
+    }
+
+    %DeoptimizeFunction(outer);
+    %DeoptimizeFunction(middle);
+    %DeoptimizeFunction(inner);
+    %ClearFunctionTypeFeedback(outer);
+    %ClearFunctionTypeFeedback(middle);
+    %ClearFunctionTypeFeedback(inner);
+  }
+
+  for (var a = 1; a <= 3; a++) {
+    for (var b = 1; b <= 3; b++) {
+      for (var c = 1; c <= 3; c++) {
+        test(a,b,c);
+      }
+    }
+  }
 })();

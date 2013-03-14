@@ -33,10 +33,11 @@ all share server ports.
 
 Running node will now share port 8000 between the workers:
 
-    % node server.js
-    Worker 2438 online
-    Worker 2437 online
-
+    % NODE_DEBUG=cluster node server.js
+    23521,Master Worker 23524 online
+    23521,Master Worker 23526 online
+    23521,Master Worker 23523 online
+    23521,Master Worker 23528 online
 
 This feature was introduced recently, and may change in future versions.
 Please try it out and provide feedback.
@@ -69,7 +70,7 @@ This causes potentially surprising behavior in three edge cases:
    the worker to use the supplied handle, rather than talk to the master
    process.  If the worker already has the handle, then it's presumed
    that you know what you are doing.
-3. `server.listen(0)` Normally, this will case servers to listen on a
+3. `server.listen(0)` Normally, this will cause servers to listen on a
    random port.  However, in a cluster, each worker will receive the
    same "random" port each time they do `listen(0)`.  In essence, the
    port is random the first time, but predictable thereafter.  If you
@@ -100,7 +101,7 @@ the worker pool for your application's needs.
     (Default=`false`)
 
 All settings set by the `.setupMaster` is stored in this settings object.
-This object is not supposed to be change or set manually, by you.
+This object is not supposed to be changed or set manually, by you.
 
 ## cluster.isMaster
 
@@ -177,8 +178,9 @@ on more than one address.
 
 * `worker` {Worker object}
 
-When a workers IPC channel has disconnected this event is emitted. This will happen
-when the worker dies, usually after calling `.destroy()`.
+When a workers IPC channel has disconnected this event is emitted.
+This will happen when the worker dies, usually after calling
+`.kill()`.
 
 When calling `.disconnect()`, there may be a delay between the
 `disconnect` and `exit` events.  This event can be used to detect if
@@ -222,8 +224,8 @@ call `.setupMaster()` with no arguments.
   * `silent` {Boolean} whether or not to send output to parent's stdio.
     (Default=`false`)
 
-The `setupMaster` is used to change the default 'fork' behavior. It takes
-one option object argument.
+`setupMaster` is used to change the default 'fork' behavior. The new settings
+are effective immediately and permanently, they cannot be changed later on.
 
 Example:
 
@@ -242,18 +244,6 @@ Example:
 
 Spawn a new worker process. This can only be called from the master process.
 
-## cluster.settings
-
-* {Object}
-  * `exec` {String} file path to worker file.  Default: `__filename`
-  * `args` {Array} string arguments passed to worker.
-    (Default=`process.argv.slice(2)`)
-  * `silent` {Boolean} whether or not to send output to parent's stdio.
-    (Default=`false`)
-
-All settings set by the `.setupMaster` is stored in this settings object.
-This object is not supposed to be change or set manually.
-
 ## cluster.disconnect([callback])
 
 * `callback` {Function} called when all workers are disconnected and handlers are closed
@@ -264,12 +254,29 @@ die graceful if no other event is waiting.
 
 The method takes an optional callback argument which will be called when finished.
 
+## cluster.worker
+
+* {Object}
+
+A reference to the current worker object. Not available in the master process.
+
+    var cluster = require('cluster');
+
+    if (cluster.isMaster) {
+      console.log('I am master');
+      cluster.fork();
+      cluster.fork();
+    } else if (cluster.isWorker) {
+      console.log('I am worker #' + cluster.worker.id);
+    }
+
 ## cluster.workers
 
 * {Object}
 
-In the cluster all living worker objects are stored in this object by there
-`id` as the key. This makes it easy to loop through all living workers.
+A hash that stores the active worker objects, keyed by `id` field. Makes it
+easy to loop through all the workers. It is only available in the master
+process.
 
     // Go through all workers
     function eachWorker(callback) {
@@ -317,8 +324,9 @@ See: [Child Process module](child_process.html)
 
 * {Boolean}
 
-This property is a boolean. It is set when a worker dies after calling `.destroy()`
-or immediately after calling the `.disconnect()` method. Until then it is `undefined`.
+This property is a boolean. It is set when a worker dies after calling
+`.kill()` or immediately after calling the `.disconnect()` method.
+Until then it is `undefined`.
 
 ### worker.send(message, [sendHandle])
 
@@ -342,7 +350,10 @@ This example will echo back all messages from the master:
       });
     }
 
-### worker.destroy()
+### worker.kill([signal='SIGTERM'])
+
+* `signal` {String} Name of the kill signal to send to the worker
+  process.
 
 This function will kill the worker, and inform the master to not spawn a
 new worker.  The boolean `suicide` lets you distinguish between voluntary
@@ -354,9 +365,11 @@ and accidental exit.
       }
     });
 
-    // destroy worker
-    worker.destroy();
+    // kill worker
+    worker.kill();
 
+This method is aliased as `worker.destroy()` for backwards
+compatibility.
 
 ### worker.disconnect()
 
@@ -369,11 +382,11 @@ the worker finally die.
 
 Because there might be long living connections, it is useful to implement a timeout.
 This example ask the worker to disconnect and after 2 seconds it will destroy the
-server. An alternative wound be to execute `worker.destroy()` after 2 seconds, but
+server. An alternative would be to execute `worker.kill()` after 2 seconds, but
 that would normally not allow the worker to do any cleanup if needed.
 
     if (cluster.isMaster) {
-      var worker = cluser.fork();
+      var worker = cluster.fork();
       var timeout;
 
       worker.on('listening', function(address) {
@@ -464,7 +477,7 @@ on the specified worker.
 
     cluster.fork().on('online', function() {
       // Worker is online
-    };
+    });
 
 ### Event: 'listening'
 
@@ -475,7 +488,7 @@ on the specified worker.
 
     cluster.fork().on('listening', function(address) {
       // Worker is listening
-    };
+    });
 
 ### Event: 'disconnect'
 
@@ -484,7 +497,7 @@ on the specified worker.
 
     cluster.fork().on('disconnect', function() {
       // Worker has disconnected
-    };
+    });
 
 ### Event: 'exit'
 
@@ -504,4 +517,4 @@ is terminated.  See [child_process event: 'exit'](child_process.html#child_proce
       } else {
         console.log("worker success!");
       }
-    };
+    });

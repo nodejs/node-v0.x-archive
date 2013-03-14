@@ -1,23 +1,26 @@
 *.swp
-*.o
-*.lo
-*.la
-*.a
+*.[oa]
+*.l[oa]
 *.opensdf
 *.orig
 *.sdf
 *.suo
 core
 vgcore.*
+.buildstamp
+
+/libuv.so
+/libuv.dylib
+
 /out/
 /build/gyp
 
-/test/run-tests
-/test/run-tests.exe
-/test/run-tests.dSYM
-/test/run-benchmarks
-/test/run-benchmarks.exe
-/test/run-benchmarks.dSYM
+/run-tests
+/run-tests.exe
+/run-tests.dSYM
+/run-benchmarks
+/run-benchmarks.exe
+/run-benchmarks.dSYM
 
 *.sln
 *.vcproj
@@ -29,5 +32,3 @@ UpgradeLog*.XML
 Debug
 Release
 ipch
-*.mk
-*.Makefile

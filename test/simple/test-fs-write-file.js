@@ -24,7 +24,7 @@ var assert = require('assert');
 var fs = require('fs');
 var join = require('path').join;
 
-var filename = join(common.fixturesDir, 'test.txt');
+var filename = join(common.tmpDir, 'test.txt');
 
 common.error('writing to ' + filename);
 
@@ -54,7 +54,7 @@ fs.writeFile(filename, s, function(e) {
 });
 
 // test that writeFile accepts buffers
-var filename2 = join(common.fixturesDir, 'test2.txt');
+var filename2 = join(common.tmpDir, 'test2.txt');
 var buf = new Buffer(s, 'utf8');
 common.error('writing to ' + filename2);
 
@@ -73,11 +73,18 @@ fs.writeFile(filename2, buf, function(e) {
 });
 
 // test that writeFile accepts numbers.
-var filename3 = join(common.fixturesDir, 'test3.txt');
+var filename3 = join(common.tmpDir, 'test3.txt');
 common.error('writing to ' + filename3);
 
-fs.writeFile(filename3, n, function(e) {
+var m = 0600;
+fs.writeFile(filename3, n, { mode: m }, function(e) {
   if (e) throw e;
+
+  // windows permissions aren't unix
+  if (process.platform !== 'win32') {
+    var st = fs.statSync(filename3);
+    assert.equal(st.mode & 0700, m);
+  }
 
   ncallbacks++;
   common.error('file3 written');

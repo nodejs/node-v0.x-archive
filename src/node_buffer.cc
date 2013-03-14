@@ -24,17 +24,15 @@
 #include "node_buffer.h"
 
 #include "v8.h"
+#include "v8-profiler.h"
 
 #include <assert.h>
-#include <stdlib.h> // malloc, free
 #include <string.h> // memcpy
-
-#ifdef __POSIX__
-# include <arpa/inet.h> // htons, htonl
-#endif
-
+#include <limits.h>
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
+
+#define BUFFER_CLASS_ID (0xBABE)
 
 namespace node {
 
@@ -64,6 +62,7 @@ using namespace v8;
 static Persistent<String> length_symbol;
 static Persistent<String> chars_written_sym;
 static Persistent<String> write_sym;
+static Persistent<Function> fast_buffer_constructor;
 Persistent<FunctionTemplate> Buffer::constructor_template;
 
 
@@ -137,14 +136,14 @@ Buffer* Buffer::New(size_t length) {
 }
 
 
-Buffer* Buffer::New(char* data, size_t length) {
+Buffer* Buffer::New(const char* data, size_t length) {
   HandleScope scope;
 
   Local<Value> arg = Integer::NewFromUnsigned(0);
   Local<Object> obj = constructor_template->GetFunction()->NewInstance(1, &arg);
 
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(obj);
-  buffer->Replace(data, length, NULL, NULL);
+  buffer->Replace(const_cast<char*>(data), length, NULL, NULL);
 
   return buffer;
 }
@@ -188,6 +187,7 @@ Buffer::Buffer(Handle<Object> wrapper, size_t length) : ObjectWrap() {
 
   length_ = 0;
   callback_ = NULL;
+  handle_.SetWrapperClassId(BUFFER_CLASS_ID);
 
   Replace(NULL, length, NULL, NULL);
 }
@@ -198,6 +198,8 @@ Buffer::~Buffer() {
 }
 
 
+// if replace doesn't have a callback, data must be copied
+// const_cast in Buffer::New requires this
 void Buffer::Replace(char *data, size_t length,
                      free_callback callback, void *hint) {
   HandleScope scope;
@@ -206,7 +208,8 @@ void Buffer::Replace(char *data, size_t length,
     callback_(data_, callback_hint_);
   } else if (length_) {
     delete [] data_;
-    V8::AdjustAmountOfExternalAllocatedMemory(-(sizeof(Buffer) + length_));
+    V8::AdjustAmountOfExternalAllocatedMemory(
+        -static_cast<intptr_t>(sizeof(Buffer) + length_));
   }
 
   length_ = length;
@@ -245,15 +248,125 @@ Handle<Value> Buffer::BinarySlice(const Arguments &args) {
 }
 
 
+static bool contains_non_ascii_slow(const char* buf, size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    if (buf[i] & 0x80) return true;
+  }
+  return false;
+}
+
+
+static bool contains_non_ascii(const char* src, size_t len) {
+  if (len < 16) {
+    return contains_non_ascii_slow(src, len);
+  }
+
+  const unsigned bytes_per_word = BITS_PER_LONG / CHAR_BIT;
+  const unsigned align_mask = bytes_per_word - 1;
+  const unsigned unaligned = reinterpret_cast<uintptr_t>(src) & align_mask;
+
+  if (unaligned > 0) {
+    const unsigned n = bytes_per_word - unaligned;
+    if (contains_non_ascii_slow(src, n)) return true;
+    src += n;
+    len -= n;
+  }
+
+#if BITS_PER_LONG == 64
+  typedef uint64_t word;
+  const uint64_t mask = 0x8080808080808080ll;
+#else
+  typedef uint32_t word;
+  const uint32_t mask = 0x80808080l;
+#endif
+
+  const word* srcw = reinterpret_cast<const word*>(src);
+
+  for (size_t i = 0, n = len / bytes_per_word; i < n; ++i) {
+    if (srcw[i] & mask) return true;
+  }
+
+  const unsigned remainder = len & align_mask;
+  if (remainder > 0) {
+    const size_t offset = len - remainder;
+    if (contains_non_ascii_slow(src + offset, remainder)) return true;
+  }
+
+  return false;
+}
+
+
+static void force_ascii_slow(const char* src, char* dst, size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    dst[i] = src[i] & 0x7f;
+  }
+}
+
+
+static void force_ascii(const char* src, char* dst, size_t len) {
+  if (len < 16) {
+    force_ascii_slow(src, dst, len);
+    return;
+  }
+
+  const unsigned bytes_per_word = BITS_PER_LONG / CHAR_BIT;
+  const unsigned align_mask = bytes_per_word - 1;
+  const unsigned src_unalign = reinterpret_cast<uintptr_t>(src) & align_mask;
+  const unsigned dst_unalign = reinterpret_cast<uintptr_t>(dst) & align_mask;
+
+  if (src_unalign > 0) {
+    if (src_unalign == dst_unalign) {
+      const unsigned unalign = bytes_per_word - src_unalign;
+      force_ascii_slow(src, dst, unalign);
+      src += unalign;
+      dst += unalign;
+      len -= src_unalign;
+    } else {
+      force_ascii_slow(src, dst, len);
+      return;
+    }
+  }
+
+#if BITS_PER_LONG == 64
+  typedef uint64_t word;
+  const uint64_t mask = ~0x8080808080808080ll;
+#else
+  typedef uint32_t word;
+  const uint32_t mask = ~0x80808080l;
+#endif
+
+  const word* srcw = reinterpret_cast<const word*>(src);
+  word* dstw = reinterpret_cast<word*>(dst);
+
+  for (size_t i = 0, n = len / bytes_per_word; i < n; ++i) {
+    dstw[i] = srcw[i] & mask;
+  }
+
+  const unsigned remainder = len & align_mask;
+  if (remainder > 0) {
+    const size_t offset = len - remainder;
+    force_ascii_slow(src + offset, dst + offset, remainder);
+  }
+}
+
+
 Handle<Value> Buffer::AsciiSlice(const Arguments &args) {
   HandleScope scope;
   Buffer *parent = ObjectWrap::Unwrap<Buffer>(args.This());
   SLICE_ARGS(args[0], args[1])
 
   char* data = parent->data_ + start;
-  Local<String> string = String::New(data, end - start);
+  size_t len = end - start;
 
-  return scope.Close(string);
+  if (contains_non_ascii(data, len)) {
+    char* out = new char[len];
+    force_ascii(data, out, len);
+    Local<String> rc = String::New(out, len);
+    delete[] out;
+    return scope.Close(rc);
+  }
+
+  return scope.Close(String::New(data, len));
 }
 
 
@@ -266,6 +379,7 @@ Handle<Value> Buffer::Utf8Slice(const Arguments &args) {
   return scope.Close(string);
 }
 
+
 Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
   HandleScope scope;
   Buffer *parent = ObjectWrap::Unwrap<Buffer>(args.This());
@@ -275,9 +389,26 @@ Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
   return scope.Close(string);
 }
 
-static const char *base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                  "abcdefghijklmnopqrstuvwxyz"
-                                  "0123456789+/";
+
+Handle<Value> Buffer::HexSlice(const Arguments &args) {
+  HandleScope scope;
+  Buffer* parent = ObjectWrap::Unwrap<Buffer>(args.This());
+  SLICE_ARGS(args[0], args[1])
+  char* src = parent->data_ + start;
+  uint32_t dstlen = (end - start) * 2;
+  if (dstlen == 0) return scope.Close(String::Empty());
+  char* dst = new char[dstlen];
+  for (uint32_t i = 0, k = 0; k < dstlen; i += 1, k += 2) {
+    static const char hex[] = "0123456789abcdef";
+    uint8_t val = static_cast<uint8_t>(src[i]);
+    dst[k + 0] = hex[val >> 4];
+    dst[k + 1] = hex[val & 15];
+  }
+  Local<String> string = String::New(dst, dstlen);
+  delete[] dst;
+  return scope.Close(string);
+}
+
 
 // supports regular and URL-safe base64
 static const int unbase64_table[] =
@@ -306,69 +437,65 @@ Handle<Value> Buffer::Base64Slice(const Arguments &args) {
   Buffer *parent = ObjectWrap::Unwrap<Buffer>(args.This());
   SLICE_ARGS(args[0], args[1])
 
-  int n = end - start;
-  int out_len = (n + 2 - ((n + 2) % 3)) / 3 * 4;
-  char *out = new char[out_len];
+  unsigned slen = end - start;
+  const char* src = parent->data_ + start;
 
-  uint8_t bitbuf[3];
-  int i = start; // data() index
-  int j = 0; // out index
-  char c;
-  bool b1_oob, b2_oob;
+  unsigned dlen = (slen + 2 - ((slen + 2) % 3)) / 3 * 4;
+  char* dst = new char[dlen];
 
-  while (i < end) {
-    bitbuf[0] = parent->data_[i++];
+  unsigned a;
+  unsigned b;
+  unsigned c;
+  unsigned i;
+  unsigned k;
+  unsigned n;
 
-    if (i < end) {
-      bitbuf[1] = parent->data_[i];
-      b1_oob = false;
-    }  else {
-      bitbuf[1] = 0;
-      b1_oob = true;
-    }
-    i++;
+  static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                              "abcdefghijklmnopqrstuvwxyz"
+                              "0123456789+/";
 
-    if (i < end) {
-      bitbuf[2] = parent->data_[i];
-      b2_oob = false;
-    }  else {
-      bitbuf[2] = 0;
-      b2_oob = true;
-    }
-    i++;
+  i = 0;
+  k = 0;
+  n = slen / 3 * 3;
 
+  while (i < n) {
+    a = src[i + 0] & 0xff;
+    b = src[i + 1] & 0xff;
+    c = src[i + 2] & 0xff;
 
-    c = bitbuf[0] >> 2;
-    assert(c < 64);
-    out[j++] = base64_table[(int)c];
-    assert(j < out_len);
+    dst[k + 0] = table[a >> 2];
+    dst[k + 1] = table[((a & 3) << 4) | (b >> 4)];
+    dst[k + 2] = table[((b & 0x0f) << 2) | (c >> 6)];
+    dst[k + 3] = table[c & 0x3f];
 
-    c = ((bitbuf[0] & 0x03) << 4) | (bitbuf[1] >> 4);
-    assert(c < 64);
-    out[j++] = base64_table[(int)c];
-    assert(j < out_len);
-
-    if (b1_oob) {
-      out[j++] = '=';
-    } else {
-      c = ((bitbuf[1] & 0x0F) << 2) | (bitbuf[2] >> 6);
-      assert(c < 64);
-      out[j++] = base64_table[(int)c];
-    }
-    assert(j < out_len);
-
-    if (b2_oob) {
-      out[j++] = '=';
-    } else {
-      c = bitbuf[2] & 0x3F;
-      assert(c < 64);
-      out[j++]  = base64_table[(int)c];
-    }
-    assert(j <= out_len);
+    i += 3;
+    k += 4;
   }
 
-  Local<String> string = String::New(out, out_len);
-  delete [] out;
+  if (n != slen) {
+    switch (slen - n) {
+    case 1:
+      a = src[i + 0] & 0xff;
+      dst[k + 0] = table[a >> 2];
+      dst[k + 1] = table[(a & 3) << 4];
+      dst[k + 2] = '=';
+      dst[k + 3] = '=';
+      break;
+
+    case 2:
+      a = src[i + 0] & 0xff;
+      b = src[i + 1] & 0xff;
+      dst[k + 0] = table[a >> 2];
+      dst[k + 1] = table[((a & 3) << 4) | (b >> 4)];
+      dst[k + 2] = table[(b & 0x0f) << 2];
+      dst[k + 3] = '=';
+      break;
+    }
+  }
+
+  Local<String> string = String::New(dst, dlen);
+  delete [] dst;
+
   return scope.Close(string);
 }
 
@@ -401,21 +528,19 @@ Handle<Value> Buffer::Copy(const Arguments &args) {
   Buffer *source = ObjectWrap::Unwrap<Buffer>(args.This());
 
   if (!Buffer::HasInstance(args[0])) {
-    return ThrowException(Exception::TypeError(String::New(
-            "First arg should be a Buffer")));
+    return ThrowTypeError("First arg should be a Buffer");
   }
 
-  Local<Object> target = args[0]->ToObject();
+  Local<Value> target = args[0];
   char* target_data = Buffer::Data(target);
   size_t target_length = Buffer::Length(target);
-  size_t target_start = args[1]->Uint32Value();
-  size_t source_start = args[2]->Uint32Value();
-  size_t source_end = args[3]->IsUint32() ? args[3]->Uint32Value()
-                                          : source->length_;
+  size_t target_start = args[1]->IsUndefined() ? 0 : args[1]->Uint32Value();
+  size_t source_start = args[2]->IsUndefined() ? 0 : args[2]->Uint32Value();
+  size_t source_end = args[3]->IsUndefined() ? source->length_
+                                              : args[3]->Uint32Value();
 
   if (source_end < source_start) {
-    return ThrowException(Exception::Error(String::New(
-            "sourceEnd < sourceStart")));
+    return ThrowRangeError("sourceEnd < sourceStart");
   }
 
   // Copy 0 bytes; we're done
@@ -424,18 +549,15 @@ Handle<Value> Buffer::Copy(const Arguments &args) {
   }
 
   if (target_start >= target_length) {
-    return ThrowException(Exception::Error(String::New(
-            "targetStart out of bounds")));
+    return ThrowRangeError("targetStart out of bounds");
   }
 
   if (source_start >= source->length_) {
-    return ThrowException(Exception::Error(String::New(
-            "sourceStart out of bounds")));
+    return ThrowRangeError("sourceStart out of bounds");
   }
 
   if (source_end > source->length_) {
-    return ThrowException(Exception::Error(String::New(
-            "sourceEnd out of bounds")));
+    return ThrowRangeError("sourceEnd out of bounds");
   }
 
   size_t to_copy = MIN(MIN(source_end - source_start,
@@ -474,8 +596,7 @@ Handle<Value> Buffer::Utf8Write(const Arguments &args) {
   }
 
   if (length > 0 && offset >= buffer->length_) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Offset is out of bounds")));
+    return ThrowTypeError("Offset is out of bounds");
   }
 
   size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
@@ -505,8 +626,7 @@ Handle<Value> Buffer::Ucs2Write(const Arguments &args) {
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(args.This());
 
   if (!args[0]->IsString()) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Argument must be a string")));
+    return ThrowTypeError("Argument must be a string");
   }
 
   Local<String> s = args[0]->ToString();
@@ -537,6 +657,72 @@ Handle<Value> Buffer::Ucs2Write(const Arguments &args) {
 }
 
 
+inline unsigned hex2bin(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  return static_cast<unsigned>(-1);
+}
+
+
+Handle<Value> Buffer::HexWrite(const Arguments& args) {
+  HandleScope scope;
+  Buffer* parent = ObjectWrap::Unwrap<Buffer>(args.This());
+
+  if (args[0]->IsString() == false) {
+    return ThrowTypeError("Argument must be a string");
+  }
+
+  Local<String> s = args[0].As<String>();
+
+  if (s->Length() % 2 != 0) {
+    return ThrowTypeError("Invalid hex string");
+  }
+
+  uint32_t start = args[1]->Uint32Value();
+  uint32_t size = args[2]->Uint32Value();
+  uint32_t end = start + size;
+
+  if (start >= parent->length_) {
+    Local<Integer> val = Integer::New(0);
+    constructor_template->GetFunction()->Set(chars_written_sym, val);
+    return scope.Close(val);
+  }
+
+  if (end < start || end > parent->length_) {  // Overflow + bounds check.
+    end = parent->length_;
+    size = parent->length_ - start;
+  }
+
+  if (size == 0) {
+    Local<Integer> val = Integer::New(0);
+    constructor_template->GetFunction()->Set(chars_written_sym, val);
+    return scope.Close(val);
+  }
+
+  char* dst = parent->data_ + start;
+  String::AsciiValue string(s);
+  const char* src = *string;
+  uint32_t max = string.length() / 2;
+
+  if (max > size) {
+    max = size;
+  }
+
+  for (uint32_t i = 0; i < max; ++i) {
+    unsigned a = hex2bin(src[i * 2 + 0]);
+    unsigned b = hex2bin(src[i * 2 + 1]);
+    if (!~a || !~b) return ThrowTypeError("Invalid hex string");
+    dst[i] = a * 16 + b;
+  }
+
+  constructor_template->GetFunction()->Set(chars_written_sym,
+                                           Integer::New(max * 2));
+
+  return scope.Close(Integer::New(max));
+}
+
+
 // var charsWritten = buffer.asciiWrite(string, offset);
 Handle<Value> Buffer::AsciiWrite(const Arguments &args) {
   HandleScope scope;
@@ -544,8 +730,7 @@ Handle<Value> Buffer::AsciiWrite(const Arguments &args) {
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(args.This());
 
   if (!args[0]->IsString()) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Argument must be a string")));
+    return ThrowTypeError("Argument must be a string");
   }
 
   Local<String> s = args[0]->ToString();
@@ -553,8 +738,7 @@ Handle<Value> Buffer::AsciiWrite(const Arguments &args) {
   size_t offset = args[1]->Int32Value();
 
   if (length > 0 && offset >= buffer->length_) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Offset is out of bounds")));
+    return ThrowTypeError("Offset is out of bounds");
   }
 
   size_t max_length = args[2]->IsUndefined() ? buffer->length_ - offset
@@ -583,8 +767,7 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(args.This());
 
   if (!args[0]->IsString()) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Argument must be a string")));
+    return ThrowTypeError("Argument must be a string");
   }
 
   String::AsciiValue s(args[0]);
@@ -595,8 +778,7 @@ Handle<Value> Buffer::Base64Write(const Arguments &args) {
   max_length = MIN(length, MIN(buffer->length_ - offset, max_length));
 
   if (max_length && offset >= buffer->length_) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Offset is out of bounds")));
+    return ThrowTypeError("Offset is out of bounds");
   }
 
   char a, b, c, d;
@@ -647,8 +829,7 @@ Handle<Value> Buffer::BinaryWrite(const Arguments &args) {
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(args.This());
 
   if (!args[0]->IsString()) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Argument must be a string")));
+    return ThrowTypeError("Argument must be a string");
   }
 
   Local<String> s = args[0]->ToString();
@@ -656,8 +837,7 @@ Handle<Value> Buffer::BinaryWrite(const Arguments &args) {
   size_t offset = args[1]->Int32Value();
 
   if (s->Length() > 0 && offset >= buffer->length_) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Offset is out of bounds")));
+    return ThrowTypeError("Offset is out of bounds");
   }
 
   char *p = (char*)buffer->data_ + offset;
@@ -675,13 +855,129 @@ Handle<Value> Buffer::BinaryWrite(const Arguments &args) {
 }
 
 
+static bool is_big_endian() {
+  const union { uint8_t u8[2]; uint16_t u16; } u = {{0, 1}};
+  return u.u16 == 1 ? true : false;
+}
+
+
+static void swizzle(char* buf, size_t len) {
+  char t;
+  for (size_t i = 0; i < len / 2; ++i) {
+    t = buf[i];
+    buf[i] = buf[len - i - 1];
+    buf[len - i - 1] = t;
+  }
+}
+
+
+template <typename T, bool ENDIANNESS>
+Handle<Value> ReadFloatGeneric(const Arguments& args) {
+  double offset_tmp = args[0]->NumberValue();
+  int64_t offset = static_cast<int64_t>(offset_tmp);
+  bool doAssert = !args[1]->BooleanValue();
+
+  if (doAssert) {
+    if (offset_tmp != offset || offset < 0)
+      return ThrowTypeError("offset is not uint");
+    size_t len = static_cast<size_t>(
+                    args.This()->GetIndexedPropertiesExternalArrayDataLength());
+    if (offset + sizeof(T) > len)
+      return ThrowRangeError("Trying to read beyond buffer length");
+  }
+
+  T val;
+  char* data = static_cast<char*>(
+                    args.This()->GetIndexedPropertiesExternalArrayData());
+  char* ptr = data + offset;
+
+  memcpy(&val, ptr, sizeof(T));
+  if (ENDIANNESS != is_big_endian())
+    swizzle(reinterpret_cast<char*>(&val), sizeof(T));
+
+  // TODO: when Number::New is updated to accept an Isolate, make the change
+  return Number::New(val);
+}
+
+
+Handle<Value> Buffer::ReadFloatLE(const Arguments& args) {
+  return ReadFloatGeneric<float, false>(args);
+}
+
+
+Handle<Value> Buffer::ReadFloatBE(const Arguments& args) {
+  return ReadFloatGeneric<float, true>(args);
+}
+
+
+Handle<Value> Buffer::ReadDoubleLE(const Arguments& args) {
+  return ReadFloatGeneric<double, false>(args);
+}
+
+
+Handle<Value> Buffer::ReadDoubleBE(const Arguments& args) {
+  return ReadFloatGeneric<double, true>(args);
+}
+
+
+template <typename T, bool ENDIANNESS>
+Handle<Value> WriteFloatGeneric(const Arguments& args) {
+  bool doAssert = !args[2]->BooleanValue();
+
+  if (doAssert) {
+    if (!args[0]->IsNumber())
+      return ThrowTypeError("value not a number");
+    if (!args[1]->IsUint32())
+      return ThrowTypeError("offset is not uint");
+  }
+
+  T val = static_cast<T>(args[0]->NumberValue());
+  size_t offset = args[1]->Uint32Value();
+  char* data = static_cast<char*>(
+                    args.This()->GetIndexedPropertiesExternalArrayData());
+  char* ptr = data + offset;
+
+  if (doAssert) {
+    size_t len = static_cast<size_t>(
+                    args.This()->GetIndexedPropertiesExternalArrayDataLength());
+    if (offset + sizeof(T) > len || offset + sizeof(T) < offset)
+      return ThrowRangeError("Trying to write beyond buffer length");
+  }
+
+  memcpy(ptr, &val, sizeof(T));
+  if (ENDIANNESS != is_big_endian())
+    swizzle(ptr, sizeof(T));
+
+  return Undefined();
+}
+
+
+Handle<Value> Buffer::WriteFloatLE(const Arguments& args) {
+  return WriteFloatGeneric<float, false>(args);
+}
+
+
+Handle<Value> Buffer::WriteFloatBE(const Arguments& args) {
+  return WriteFloatGeneric<float, true>(args);
+}
+
+
+Handle<Value> Buffer::WriteDoubleLE(const Arguments& args) {
+  return WriteFloatGeneric<double, false>(args);
+}
+
+
+Handle<Value> Buffer::WriteDoubleBE(const Arguments& args) {
+  return WriteFloatGeneric<double, true>(args);
+}
+
+
 // var nbytes = Buffer.byteLength("string", "utf8")
 Handle<Value> Buffer::ByteLength(const Arguments &args) {
   HandleScope scope;
 
   if (!args[0]->IsString()) {
-    return ThrowException(Exception::TypeError(String::New(
-            "Argument must be a string")));
+    return ThrowTypeError("Argument must be a string");
   }
 
   Local<String> s = args[0]->ToString();
@@ -695,14 +991,26 @@ Handle<Value> Buffer::MakeFastBuffer(const Arguments &args) {
   HandleScope scope;
 
   if (!Buffer::HasInstance(args[0])) {
-    return ThrowException(Exception::TypeError(String::New(
-            "First argument must be a Buffer")));
+    return ThrowTypeError("First argument must be a Buffer");
   }
 
   Buffer *buffer = ObjectWrap::Unwrap<Buffer>(args[0]->ToObject());
   Local<Object> fast_buffer = args[1]->ToObject();;
   uint32_t offset = args[2]->Uint32Value();
   uint32_t length = args[3]->Uint32Value();
+
+  if (offset > buffer->length_) {
+    return ThrowRangeError("offset out of range");
+  }
+
+  if (offset + length > buffer->length_) {
+    return ThrowRangeError("length out of range");
+  }
+
+  // Check for wraparound. Safe because offset and length are unsigned.
+  if (offset + length < offset) {
+    return ThrowRangeError("offset or length out of range");
+  }
 
   fast_buffer->SetIndexedPropertiesToExternalArrayData(buffer->data_ + offset,
                                                        kExternalUnsignedByteArray,
@@ -712,18 +1020,82 @@ Handle<Value> Buffer::MakeFastBuffer(const Arguments &args) {
 }
 
 
-bool Buffer::HasInstance(v8::Handle<v8::Value> val) {
+bool Buffer::HasInstance(Handle<Value> val) {
   if (!val->IsObject()) return false;
-  v8::Local<v8::Object> obj = val->ToObject();
+  Local<Object> obj = val->ToObject();
 
-  if (obj->GetIndexedPropertiesExternalArrayDataType() == kExternalUnsignedByteArray)
-    return true;
+  ExternalArrayType type = obj->GetIndexedPropertiesExternalArrayDataType();
+  if (type != kExternalUnsignedByteArray)
+    return false;
 
   // Also check for SlowBuffers that are empty.
   if (constructor_template->HasInstance(obj))
     return true;
 
-  return false;
+  assert(!fast_buffer_constructor.IsEmpty());
+  return obj->GetConstructor()->StrictEquals(fast_buffer_constructor);
+}
+
+
+Handle<Value> SetFastBufferConstructor(const Arguments& args) {
+  assert(args[0]->IsFunction());
+  fast_buffer_constructor = Persistent<Function>::New(args[0].As<Function>());
+  return Undefined();
+}
+
+
+class RetainedBufferInfo: public RetainedObjectInfo {
+public:
+  RetainedBufferInfo(Buffer* buffer);
+  virtual void Dispose();
+  virtual bool IsEquivalent(RetainedObjectInfo* other);
+  virtual intptr_t GetHash();
+  virtual const char* GetLabel();
+  virtual intptr_t GetSizeInBytes();
+private:
+  Buffer* buffer_;
+  static const char label[];
+};
+
+const char RetainedBufferInfo::label[] = "Buffer";
+
+
+RetainedBufferInfo::RetainedBufferInfo(Buffer* buffer): buffer_(buffer) {
+}
+
+
+void RetainedBufferInfo::Dispose() {
+  buffer_ = NULL;
+  delete this;
+}
+
+
+bool RetainedBufferInfo::IsEquivalent(RetainedObjectInfo* other) {
+  return label == other->GetLabel() &&
+         buffer_ == static_cast<RetainedBufferInfo*>(other)->buffer_;
+}
+
+
+intptr_t RetainedBufferInfo::GetHash() {
+  return reinterpret_cast<intptr_t>(buffer_);
+}
+
+
+const char* RetainedBufferInfo::GetLabel() {
+  return label;
+}
+
+
+intptr_t RetainedBufferInfo::GetSizeInBytes() {
+  return Buffer::Length(buffer_);
+}
+
+
+RetainedObjectInfo* WrapperInfo(uint16_t class_id, Handle<Value> wrapper) {
+  assert(class_id == BUFFER_CLASS_ID);
+  assert(Buffer::HasInstance(wrapper));
+  Buffer* buffer = Buffer::Unwrap<Buffer>(wrapper.As<Object>());
+  return new RetainedBufferInfo(buffer);
 }
 
 
@@ -754,6 +1126,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "asciiSlice", Buffer::AsciiSlice);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Slice", Buffer::Base64Slice);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "ucs2Slice", Buffer::Ucs2Slice);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "hexSlice", Buffer::HexSlice);
   // TODO NODE_SET_PROTOTYPE_METHOD(t, "utf16Slice", Utf16Slice);
   // copy
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "utf8Slice", Buffer::Utf8Slice);
@@ -763,6 +1136,15 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "binaryWrite", Buffer::BinaryWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Write", Buffer::Base64Write);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "ucs2Write", Buffer::Ucs2Write);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "hexWrite", Buffer::HexWrite);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "readFloatLE", Buffer::ReadFloatLE);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "readFloatBE", Buffer::ReadFloatBE);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "readDoubleLE", Buffer::ReadDoubleLE);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "readDoubleBE", Buffer::ReadDoubleBE);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "writeFloatLE", Buffer::WriteFloatLE);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "writeFloatBE", Buffer::WriteFloatBE);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "writeDoubleLE", Buffer::WriteDoubleLE);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "writeDoubleBE", Buffer::WriteDoubleBE);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "fill", Buffer::Fill);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "copy", Buffer::Copy);
 
@@ -774,6 +1156,10 @@ void Buffer::Initialize(Handle<Object> target) {
                   Buffer::MakeFastBuffer);
 
   target->Set(String::NewSymbol("SlowBuffer"), constructor_template->GetFunction());
+  target->Set(String::NewSymbol("setFastBufferConstructor"),
+              FunctionTemplate::New(SetFastBufferConstructor)->GetFunction());
+
+  HeapProfiler::DefineWrapperClass(BUFFER_CLASS_ID, WrapperInfo);
 }
 
 

@@ -61,9 +61,6 @@ class FSReqWrap: public ReqWrap<uv_fs_t> {
 };
 
 
-static Persistent<String> encoding_symbol;
-static Persistent<String> errno_symbol;
-static Persistent<String> buf_symbol;
 static Persistent<String> oncomplete_sym;
 
 
@@ -144,8 +141,6 @@ static void After(uv_fs_t *req) {
         break;
 
       case UV_FS_OPEN:
-        /* pass thru */
-      case UV_FS_SENDFILE:
         argv[1] = Integer::New(req->result);
         break;
 
@@ -301,46 +296,59 @@ Local<Object> BuildStatsObject(const uv_statbuf_t* s) {
   Local<Object> stats =
     stats_constructor_template->GetFunction()->NewInstance();
 
-  /* ID of device containing file */
-  stats->Set(dev_symbol, Integer::New(s->st_dev));
+  if (stats.IsEmpty()) return Local<Object>();
 
-  /* inode number */
-  stats->Set(ino_symbol, Integer::New(s->st_ino));
+  // The code below is very nasty-looking but it prevents a segmentation fault
+  // when people run JS code like the snippet below. It's apparently more
+  // common than you would expect, several people have reported this crash...
+  //
+  //   function crash() {
+  //     fs.statSync('.');
+  //     crash();
+  //   }
+  //
+  // We need to check the return value of Integer::New() and Date::New()
+  // and make sure that we bail out when V8 returns an empty handle.
+#define X(name)                                                               \
+  {                                                                           \
+    Local<Value> val = Integer::New(s->st_##name);                            \
+    if (val.IsEmpty()) return Local<Object>();                                \
+    stats->Set(name##_symbol, val);                                           \
+  }
+  X(dev)
+  X(mode)
+  X(nlink)
+  X(uid)
+  X(gid)
+  X(rdev)
+# if defined(__POSIX__)
+  X(blksize)
+# endif
+#undef X
 
-  /* protection */
-  stats->Set(mode_symbol, Integer::New(s->st_mode));
+#define X(name)                                                               \
+  {                                                                           \
+    Local<Value> val = Number::New(static_cast<double>(s->st_##name));        \
+    if (val.IsEmpty()) return Local<Object>();                                \
+    stats->Set(name##_symbol, val);                                           \
+  }
+  X(ino)
+  X(size)
+# if defined(__POSIX__)
+  X(blocks)
+# endif
+#undef X
 
-  /* number of hard links */
-  stats->Set(nlink_symbol, Integer::New(s->st_nlink));
-
-  /* user ID of owner */
-  stats->Set(uid_symbol, Integer::New(s->st_uid));
-
-  /* group ID of owner */
-  stats->Set(gid_symbol, Integer::New(s->st_gid));
-
-  /* device ID (if special file) */
-  stats->Set(rdev_symbol, Integer::New(s->st_rdev));
-
-  /* total size, in bytes */
-  stats->Set(size_symbol, Number::New(s->st_size));
-
-#ifdef __POSIX__
-  /* blocksize for filesystem I/O */
-  stats->Set(blksize_symbol, Integer::New(s->st_blksize));
-
-  /* number of blocks allocated */
-  stats->Set(blocks_symbol, Integer::New(s->st_blocks));
-#endif
-
-  /* time of last access */
-  stats->Set(atime_symbol, NODE_UNIXTIME_V8(s->st_atime));
-
-  /* time of last modification */
-  stats->Set(mtime_symbol, NODE_UNIXTIME_V8(s->st_mtime));
-
-  /* time of last status change */
-  stats->Set(ctime_symbol, NODE_UNIXTIME_V8(s->st_ctime));
+#define X(name)                                                               \
+  {                                                                           \
+    Local<Value> val = NODE_UNIXTIME_V8(s->st_##name);                        \
+    if (val.IsEmpty()) return Local<Object>();                                \
+    stats->Set(name##_symbol, val);                                           \
+  }
+  X(atime)
+  X(mtime)
+  X(ctime)
+#undef X
 
   return scope.Close(stats);
 }
@@ -486,7 +494,7 @@ static Handle<Value> Rename(const Arguments& args) {
   }
 }
 
-static Handle<Value> Truncate(const Arguments& args) {
+static Handle<Value> FTruncate(const Arguments& args) {
   HandleScope scope;
 
   if (args.Length() < 2 || !args[0]->IsInt32()) {
@@ -587,30 +595,6 @@ static Handle<Value> MKDir(const Arguments& args) {
   } else {
     SYNC_CALL(mkdir, *path, *path, mode)
     return Undefined();
-  }
-}
-
-static Handle<Value> SendFile(const Arguments& args) {
-  HandleScope scope;
-
-  if (args.Length() < 4 ||
-      !args[0]->IsUint32() ||
-      !args[1]->IsUint32() ||
-      !args[2]->IsUint32() ||
-      !args[3]->IsUint32()) {
-    return THROW_BAD_ARGS;
-  }
-
-  int out_fd = args[0]->Uint32Value();
-  int in_fd = args[1]->Uint32Value();
-  off_t in_offset = args[2]->Uint32Value();
-  size_t length = args[3]->Uint32Value();
-
-  if (args[4]->IsFunction()) {
-    ASYNC_CALL(sendfile, args[4], out_fd, in_fd, in_offset, length)
-  } else {
-    SYNC_CALL(sendfile, 0, out_fd, in_fd, in_offset, length)
-    return scope.Close(Integer::New(SYNC_RESULT));
   }
 }
 
@@ -941,10 +925,9 @@ void File::Initialize(Handle<Object> target) {
   NODE_SET_METHOD(target, "fdatasync", Fdatasync);
   NODE_SET_METHOD(target, "fsync", Fsync);
   NODE_SET_METHOD(target, "rename", Rename);
-  NODE_SET_METHOD(target, "truncate", Truncate);
+  NODE_SET_METHOD(target, "ftruncate", FTruncate);
   NODE_SET_METHOD(target, "rmdir", RMDir);
   NODE_SET_METHOD(target, "mkdir", MKDir);
-  NODE_SET_METHOD(target, "sendfile", SendFile);
   NODE_SET_METHOD(target, "readdir", ReadDir);
   NODE_SET_METHOD(target, "stat", Stat);
   NODE_SET_METHOD(target, "lstat", LStat);
@@ -965,10 +948,6 @@ void File::Initialize(Handle<Object> target) {
 
   NODE_SET_METHOD(target, "utimes", UTimes);
   NODE_SET_METHOD(target, "futimes", FUTimes);
-
-  errno_symbol = NODE_PSYMBOL("errno");
-  encoding_symbol = NODE_PSYMBOL("node:encoding");
-  buf_symbol = NODE_PSYMBOL("__buf");
 }
 
 void InitFs(Handle<Object> target) {

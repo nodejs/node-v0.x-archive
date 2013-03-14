@@ -312,7 +312,7 @@ TEST_IMPL(loop_handles) {
   ASSERT(r == 0);
   uv_unref((uv_handle_t*)&timer_handle);
 
-  r = uv_run(uv_default_loop());
+  r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
   ASSERT(loop_iteration == ITERATIONS);
@@ -332,5 +332,6 @@ TEST_IMPL(loop_handles) {
   ASSERT(idle_2_close_cb_called == idle_2_cb_started);
   ASSERT(idle_2_is_active == 0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

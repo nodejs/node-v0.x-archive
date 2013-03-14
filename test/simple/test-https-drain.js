@@ -47,8 +47,9 @@ var server = https.createServer(options, function(req, res) {
 server.listen(common.PORT, function() {
   var resumed = false;
   var req = https.request({
+    method: 'POST',
     port: common.PORT,
-    method: 'POST'
+    rejectUnauthorized: false
   }, function(res) {
     var timer;
     res.pause();

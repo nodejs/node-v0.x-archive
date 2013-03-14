@@ -73,7 +73,8 @@ namespace internal {
   V(DebuggerStatement)                   \
   V(StringDictionaryLookup)              \
   V(ElementsTransitionAndStore)          \
-  V(StoreArrayLiteralElement)
+  V(StoreArrayLiteralElement)            \
+  V(ProfileEntryHook)
 
 // List of code stubs only used on ARM platforms.
 #ifdef V8_TARGET_ARCH_ARM
@@ -162,8 +163,7 @@ class CodeStub BASE_EMBEDDED {
   bool FindCodeInCache(Code** code_out);
 
  protected:
-  static const int kMajorBits = 6;
-  static const int kMinorBits = kBitsPerInt - kSmiTagSize - kMajorBits;
+  static bool CanUseFPRegisters();
 
  private:
   // Nonvirtual wrapper around the stub-specific Generate function.  Call
@@ -222,8 +222,9 @@ class CodeStub BASE_EMBEDDED {
            MajorKeyBits::encode(MajorKey());
   }
 
-  class MajorKeyBits: public BitField<uint32_t, 0, kMajorBits> {};
-  class MinorKeyBits: public BitField<uint32_t, kMajorBits, kMinorBits> {};
+  class MajorKeyBits: public BitField<uint32_t, 0, kStubMajorKeyBits> {};
+  class MinorKeyBits: public BitField<uint32_t,
+      kStubMajorKeyBits, kStubMinorKeyBits> {};  // NOLINT
 
   friend class BreakPointIterator;
 };
@@ -498,7 +499,7 @@ class ICCompareStub: public CodeStub {
 
   virtual void FinishCode(Handle<Code> code) {
     code->set_compare_state(state_);
-    code->set_compare_operation(op_);
+    code->set_compare_operation(op_ - Token::EQ);
   }
 
   virtual CodeStub::Major MajorKey() { return CompareIC; }
@@ -1000,13 +1001,15 @@ class KeyedStoreElementStub : public CodeStub {
                         KeyedAccessGrowMode grow_mode)
       : is_js_array_(is_js_array),
         elements_kind_(elements_kind),
-        grow_mode_(grow_mode) { }
+        grow_mode_(grow_mode),
+        fp_registers_(CanUseFPRegisters()) { }
 
   Major MajorKey() { return KeyedStoreElement; }
   int MinorKey() {
     return ElementsKindBits::encode(elements_kind_) |
         IsJSArrayBits::encode(is_js_array_) |
-        GrowModeBits::encode(grow_mode_);
+        GrowModeBits::encode(grow_mode_) |
+        FPRegisters::encode(fp_registers_);
   }
 
   void Generate(MacroAssembler* masm);
@@ -1015,10 +1018,12 @@ class KeyedStoreElementStub : public CodeStub {
   class ElementsKindBits: public BitField<ElementsKind,    0, 8> {};
   class GrowModeBits: public BitField<KeyedAccessGrowMode, 8, 1> {};
   class IsJSArrayBits: public BitField<bool,               9, 1> {};
+  class FPRegisters: public BitField<bool,                10, 1> {};
 
   bool is_js_array_;
   ElementsKind elements_kind_;
   KeyedAccessGrowMode grow_mode_;
+  bool fp_registers_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyedStoreElementStub);
 };
@@ -1134,15 +1139,51 @@ class ElementsTransitionAndStoreStub : public CodeStub {
 
 class StoreArrayLiteralElementStub : public CodeStub {
  public:
-  explicit StoreArrayLiteralElementStub() {}
+  StoreArrayLiteralElementStub()
+        : fp_registers_(CanUseFPRegisters()) { }
 
  private:
+  class FPRegisters: public BitField<bool,                0, 1> {};
+
   Major MajorKey() { return StoreArrayLiteralElement; }
+  int MinorKey() { return FPRegisters::encode(fp_registers_); }
+
+  void Generate(MacroAssembler* masm);
+
+  bool fp_registers_;
+
+  DISALLOW_COPY_AND_ASSIGN(StoreArrayLiteralElementStub);
+};
+
+
+class ProfileEntryHookStub : public CodeStub {
+ public:
+  explicit ProfileEntryHookStub() {}
+
+  // The profile entry hook function is not allowed to cause a GC.
+  virtual bool SometimesSetsUpAFrame() { return false; }
+
+  // Generates a call to the entry hook if it's enabled.
+  static void MaybeCallEntryHook(MacroAssembler* masm);
+
+  // Sets or unsets the entry hook function. Returns true on success,
+  // false on an attempt to replace a non-NULL entry hook with another
+  // non-NULL hook.
+  static bool SetFunctionEntryHook(FunctionEntryHook entry_hook);
+
+ private:
+  static void EntryHookTrampoline(intptr_t function,
+                                  intptr_t stack_pointer);
+
+  Major MajorKey() { return ProfileEntryHook; }
   int MinorKey() { return 0; }
 
   void Generate(MacroAssembler* masm);
 
-  DISALLOW_COPY_AND_ASSIGN(StoreArrayLiteralElementStub);
+  // The current function entry hook.
+  static FunctionEntryHook entry_hook_;
+
+  DISALLOW_COPY_AND_ASSIGN(ProfileEntryHookStub);
 };
 
 } }  // namespace v8::internal

@@ -59,8 +59,31 @@ In busy processes, the programmer is _strongly encouraged_ to use the
 asynchronous versions of these calls. The synchronous versions will block
 the entire process until they complete--halting all connections.
 
-Relative path to filename can be used, remember however that this path will be relative
-to `process.cwd()`.
+Relative path to filename can be used, remember however that this path will be
+relative to `process.cwd()`.
+
+Most fs functions let you omit the callback argument. If you do, a default
+callback is used that rethrows errors. To get a trace to the original call
+site, set the NODE_DEBUG environment variable:
+
+    $ cat script.js
+    function bad() {
+      require('fs').readFile('/');
+    }
+    bad();
+
+    $ env NODE_DEBUG=fs node script.js
+    fs.js:66
+            throw err;
+                  ^
+    Error: EISDIR, read
+        at rethrow (fs.js:61:21)
+        at maybeCallback (fs.js:79:42)
+        at Object.fs.readFile (fs.js:153:18)
+        at bad (/path/to/script.js:2:17)
+        at Object.<anonymous> (/path/to/script.js:5:1)
+        <etc.>
+
 
 ## fs.rename(oldPath, newPath, [callback])
 
@@ -71,14 +94,23 @@ to the completion callback.
 
 Synchronous rename(2).
 
-## fs.truncate(fd, len, [callback])
+## fs.ftruncate(fd, len, [callback])
 
 Asynchronous ftruncate(2). No arguments other than a possible exception are
 given to the completion callback.
 
-## fs.truncateSync(fd, len)
+## fs.ftruncateSync(fd, len)
 
 Synchronous ftruncate(2).
+
+## fs.truncate(path, len, [callback])
+
+Asynchronous truncate(2). No arguments other than a possible exception are
+given to the completion callback.
+
+## fs.truncateSync(path, len)
+
+Synchronous truncate(2).
 
 ## fs.chown(path, uid, gid, [callback])
 
@@ -365,7 +397,7 @@ Read data from the file specified by `fd`.
 
 `buffer` is the buffer that the data will be written to.
 
-`offset` is offset within the buffer where writing will start.
+`offset` is offset within the buffer where reading will start.
 
 `length` is an integer specifying the number of bytes to read.
 
@@ -378,7 +410,12 @@ The callback is given the three arguments, `(err, bytesRead, buffer)`.
 
 Synchronous version of `fs.read`. Returns the number of `bytesRead`.
 
-## fs.readFile(filename, [encoding], [callback])
+## fs.readFile(filename, [options], [callback])
+
+* `filename` {String}
+* `options` {Object}
+  * `encoding` {String | Null} default = `null`
+  * `flag` {String} default = `'r'`
 
 Asynchronously reads the entire contents of a file. Example:
 
@@ -393,19 +430,28 @@ contents of the file.
 If no encoding is specified, then the raw buffer is returned.
 
 
-## fs.readFileSync(filename, [encoding])
+## fs.readFileSync(filename, [options])
 
 Synchronous version of `fs.readFile`. Returns the contents of the `filename`.
 
-If `encoding` is specified then this function returns a string. Otherwise it
-returns a buffer.
+If the `encoding` option is specified then this function returns a
+string. Otherwise it returns a buffer.
 
 
-## fs.writeFile(filename, data, [encoding], [callback])
+## fs.writeFile(filename, data, [options], [callback])
+
+* `filename` {String}
+* `data` {String | Buffer}
+* `options` {Object}
+  * `encoding` {String | Null} default = `'utf8'`
+  * `mode` {Number} default = `438` (aka `0666` in Octal)
+  * `flag` {String} default = `'w'`
 
 Asynchronously writes data to a file, replacing the file if it already exists.
-`data` can be a string or a buffer. The `encoding` argument is ignored if
-`data` is a buffer. It defaults to `'utf8'`.
+`data` can be a string or a buffer.
+
+The `encoding` option is ignored if `data` is a buffer. It defaults
+to `'utf8'`.
 
 Example:
 
@@ -414,15 +460,21 @@ Example:
       console.log('It\'s saved!');
     });
 
-## fs.writeFileSync(filename, data, [encoding])
+## fs.writeFileSync(filename, data, [options])
 
 The synchronous version of `fs.writeFile`.
 
-## fs.appendFile(filename, data, encoding='utf8', [callback])
+## fs.appendFile(filename, data, [options], [callback])
+
+* `filename` {String}
+* `data` {String | Buffer}
+* `options` {Object}
+  * `encoding` {String | Null} default = `'utf8'`
+  * `mode` {Number} default = `438` (aka `0666` in Octal)
+  * `flag` {String} default = `'a'`
 
 Asynchronously append data to a file, creating the file if it not yet exists.
-`data` can be a string or a buffer. The `encoding` argument is ignored if
-`data` is a buffer.
+`data` can be a string or a buffer.
 
 Example:
 
@@ -431,13 +483,13 @@ Example:
       console.log('The "data to append" was appended to file!');
     });
 
-## fs.appendFileSync(filename, data, encoding='utf8')
+## fs.appendFileSync(filename, data, [options])
 
 The synchronous version of `fs.appendFile`.
 
 ## fs.watchFile(filename, [options], listener)
 
-    Stability: 2 - Unstable.  Use fs.watch instead, if available.
+    Stability: 2 - Unstable.  Use fs.watch instead, if possible.
 
 Watch for changes on `filename`. The callback `listener` will be called each
 time the file is accessed.
@@ -474,7 +526,7 @@ no-op, not an error.
 
 ## fs.watch(filename, [options], [listener])
 
-    Stability: 2 - Unstable.  Not available on all platforms.
+    Stability: 2 - Unstable.
 
 Watch for changes on `filename`, where `filename` is either a file or a
 directory.  The returned object is a [fs.FSWatcher](#fs_class_fs_fswatcher).
@@ -508,9 +560,12 @@ to be notified of filesystem changes.
 * On Windows systems, this feature depends on `ReadDirectoryChangesW`.
 
 If the underlying functionality is not available for some reason, then
-`fs.watch` will not be able to function.  You can still use
-`fs.watchFile`, which uses stat polling, but it is slower and less
-reliable.
+`fs.watch` will not be able to function.  For example, watching files or
+directories on network file systems (NFS, SMB, etc.) often doesn't work
+reliably or at all.
+
+You can still use `fs.watchFile`, which uses stat polling, but it is slower and
+less reliable.
 
 #### Filename Argument
 
@@ -599,12 +654,19 @@ Returns a new ReadStream object (See `Readable Stream`).
       encoding: null,
       fd: null,
       mode: 0666,
-      bufferSize: 64 * 1024
+      bufferSize: 64 * 1024,
+      autoClose: true
     }
 
 `options` can include `start` and `end` values to read a range of bytes from
 the file instead of the entire file.  Both `start` and `end` are inclusive and
 start at 0. The `encoding` can be `'utf8'`, `'ascii'`, or `'base64'`.
+
+If `autoClose` is false, then the file descriptor won't be closed, even if
+there's an error.  It is your responsiblity to close it and make sure
+there's no file descriptor leak.  If `autoClose` is set to true (default
+behavior), on `error` or `end` the file descriptor will be closed
+automatically.
 
 An example to read the last 10 bytes of a file which is 100 bytes long:
 

@@ -157,9 +157,10 @@ static int MS_CALLBACK callb(int ok, X509_STORE_CTX *ctx);
 static int sign (X509 *x, EVP_PKEY *pkey,int days,int clrext, const EVP_MD *digest,
 						CONF *conf, char *section);
 static int x509_certify (X509_STORE *ctx,char *CAfile,const EVP_MD *digest,
-			 X509 *x,X509 *xca,EVP_PKEY *pkey,char *serial,
-			 int create,int days, int clrext, CONF *conf, char *section,
-						ASN1_INTEGER *sno);
+			 X509 *x,X509 *xca,EVP_PKEY *pkey,
+			 STACK_OF(OPENSSL_STRING) *sigopts,
+			 char *serial, int create ,int days, int clrext,
+			 CONF *conf, char *section, ASN1_INTEGER *sno);
 static int purpose_print(BIO *bio, X509 *cert, X509_PURPOSE *pt);
 static int reqfile=0;
 
@@ -172,6 +173,7 @@ int MAIN(int argc, char **argv)
 	X509_REQ *req=NULL;
 	X509 *x=NULL,*xca=NULL;
 	ASN1_OBJECT *objtmp;
+	STACK_OF(OPENSSL_STRING) *sigopts = NULL;
 	EVP_PKEY *Upkey=NULL,*CApkey=NULL;
 	ASN1_INTEGER *sno = NULL;
 	int i,num,badops=0;
@@ -271,13 +273,22 @@ int MAIN(int argc, char **argv)
 			if (--argc < 1) goto bad;
 			CAkeyformat=str2fmt(*(++argv));
 			}
+		else if (strcmp(*argv,"-sigopt") == 0)
+			{
+			if (--argc < 1)
+				goto bad;
+			if (!sigopts)
+				sigopts = sk_OPENSSL_STRING_new_null();
+			if (!sigopts || !sk_OPENSSL_STRING_push(sigopts, *(++argv)))
+				goto bad;
+			}
 		else if (strcmp(*argv,"-days") == 0)
 			{
 			if (--argc < 1) goto bad;
 			days=atoi(*(++argv));
 			if (days == 0)
 				{
-				BIO_printf(STDout,"bad number of days\n");
+				BIO_printf(bio_err,"bad number of days\n");
 				goto bad;
 				}
 			}
@@ -901,7 +912,7 @@ bad:
 				}
 			else if (text == i)
 				{
-				X509_print_ex(out,x,nmflag, certflag);
+				X509_print_ex(STDout,x,nmflag, certflag);
 				}
 			else if (startdate == i)
 				{
@@ -970,7 +981,8 @@ bad:
 				
 				assert(need_rand);
 				if (!x509_certify(ctx,CAfile,digest,x,xca,
-					CApkey, CAserial,CA_createserial,days, clrext,
+					CApkey, sigopts,
+					CAserial,CA_createserial,days, clrext,
 					extconf, extsect, sno))
 					goto end;
 				}
@@ -1081,6 +1093,8 @@ end:
 	X509_free(xca);
 	EVP_PKEY_free(Upkey);
 	EVP_PKEY_free(CApkey);
+	if (sigopts)
+		sk_OPENSSL_STRING_free(sigopts);
 	X509_REQ_free(rq);
 	ASN1_INTEGER_free(sno);
 	sk_ASN1_OBJECT_pop_free(trust, ASN1_OBJECT_free);
@@ -1131,8 +1145,11 @@ static ASN1_INTEGER *x509_load_serial(char *CAfile, char *serialfile, int create
 	}
 
 static int x509_certify(X509_STORE *ctx, char *CAfile, const EVP_MD *digest,
-	     X509 *x, X509 *xca, EVP_PKEY *pkey, char *serialfile, int create,
-	     int days, int clrext, CONF *conf, char *section, ASN1_INTEGER *sno)
+	     		X509 *x, X509 *xca, EVP_PKEY *pkey,
+			STACK_OF(OPENSSL_STRING) *sigopts,
+	  		char *serialfile, int create,
+	     		int days, int clrext, CONF *conf, char *section,
+			ASN1_INTEGER *sno)
 	{
 	int ret=0;
 	ASN1_INTEGER *bs=NULL;
@@ -1191,7 +1208,8 @@ static int x509_certify(X509_STORE *ctx, char *CAfile, const EVP_MD *digest,
                 if (!X509V3_EXT_add_nconf(conf, &ctx2, section, x)) goto end;
 		}
 
-	if (!X509_sign(x,pkey,digest)) goto end;
+	if (!do_X509_sign(bio_err, x, pkey, digest, sigopts))
+		goto end;
 	ret=1;
 end:
 	X509_STORE_CTX_cleanup(&xsc);

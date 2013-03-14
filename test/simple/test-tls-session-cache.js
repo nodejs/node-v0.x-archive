@@ -50,10 +50,35 @@ function doTest() {
     requestCert: true
   };
   var requestCount = 0;
+  var session;
+  var badOpenSSL = false;
 
   var server = tls.createServer(options, function(cleartext) {
+    cleartext.on('error', function(er) {
+      // We're ok with getting ECONNRESET in this test, but it's
+      // timing-dependent, and thus unreliable. Any other errors
+      // are just failures, though.
+      if (er.code !== 'ECONNRESET')
+        throw er;
+    });
     ++requestCount;
     cleartext.end();
+  });
+  server.on('newSession', function(id, data) {
+    assert.ok(!session);
+    session = {
+      id: id,
+      data: data
+    };
+  });
+  server.on('resumeSession', function(id, callback) {
+    assert.ok(session);
+    assert.equal(session.id.toString('hex'), id.toString('hex'));
+
+    // Just to check that async really works there
+    setTimeout(function() {
+      callback(null, session.data);
+    }, 100);
   });
   server.listen(common.PORT, function() {
     var client = spawn('openssl', [
@@ -61,18 +86,33 @@ function doTest() {
       '-connect', 'localhost:' + common.PORT,
       '-key', join(common.fixturesDir, 'agent.key'),
       '-cert', join(common.fixturesDir, 'agent.crt'),
-      '-reconnect'
+      '-reconnect',
+      '-no_ticket'
     ], {
-      customFds: [0, 1, 2]
+      stdio: [ 0, 1, 'pipe' ]
+    });
+    var err = '';
+    client.stderr.setEncoding('utf8');
+    client.stderr.on('data', function(chunk) {
+      err += chunk;
     });
     client.on('exit', function(code) {
-      assert.equal(code, 0);
+      if (/^unknown option/.test(err)) {
+        // using an incompatible version of openssl
+        assert(code);
+        badOpenSSL = true;
+      } else
+        assert.equal(code, 0);
       server.close();
     });
   });
 
   process.on('exit', function() {
-    // initial request + reconnect requests (5 times)
-    assert.equal(requestCount, 6);
+    if (!badOpenSSL) {
+      assert.ok(session);
+
+      // initial request + reconnect requests (5 times)
+      assert.equal(requestCount, 6);
+    }
   });
 }

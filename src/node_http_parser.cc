@@ -81,19 +81,19 @@ static char* current_buffer_data;
 static size_t current_buffer_len;
 
 
-#define HTTP_CB(name)                                               \
-	  static int name(http_parser* p_) {                              \
-	    Parser* self = container_of(p_, Parser, parser_);             \
-	    return self->name##_();                                       \
-	  }                                                               \
-	  int name##_()
+#define HTTP_CB(name)                                                         \
+  static int name(http_parser* p_) {                                          \
+    Parser* self = container_of(p_, Parser, parser_);                         \
+    return self->name##_();                                                   \
+  }                                                                           \
+  int name##_()
 
 
-#define HTTP_DATA_CB(name)                                          \
-  static int name(http_parser* p_, const char* at, size_t length) { \
-    Parser* self = container_of(p_, Parser, parser_);               \
-    return self->name##_(at, length);                               \
-  }                                                                 \
+#define HTTP_DATA_CB(name)                                                    \
+  static int name(http_parser* p_, const char* at, size_t length) {           \
+    Parser* self = container_of(p_, Parser, parser_);                         \
+    return self->name##_(at, length);                                         \
+  }                                                                           \
   int name##_(const char* at, size_t length)
 
 
@@ -269,17 +269,23 @@ public:
 
     // STATUS
     if (parser_.type == HTTP_RESPONSE) {
-      message_info->Set(status_code_sym, Integer::New(parser_.status_code));
+      message_info->Set(status_code_sym,
+                        Integer::New(parser_.status_code));
     }
 
     // VERSION
-    message_info->Set(version_major_sym, Integer::New(parser_.http_major));
-    message_info->Set(version_minor_sym, Integer::New(parser_.http_minor));
+    message_info->Set(version_major_sym,
+                      Integer::New(parser_.http_major));
+    message_info->Set(version_minor_sym,
+                      Integer::New(parser_.http_minor));
 
     message_info->Set(should_keep_alive_sym,
-        http_should_keep_alive(&parser_) ? True() : False());
+                      http_should_keep_alive(&parser_) ? True()
+                                                       : False());
 
-    message_info->Set(upgrade_sym, parser_.upgrade ? True() : False());
+    message_info->Set(upgrade_sym,
+                      parser_.upgrade ? True()
+                                      : False());
 
     Local<Value> argv[1] = { message_info };
 
@@ -558,8 +564,12 @@ void InitHttpParser(Handle<Object> target) {
   t->SetClassName(String::NewSymbol("HTTPParser"));
 
   PropertyAttribute attrib = (PropertyAttribute) (ReadOnly | DontDelete);
-  t->Set(String::NewSymbol("REQUEST"), Integer::New(HTTP_REQUEST), attrib);
-  t->Set(String::NewSymbol("RESPONSE"), Integer::New(HTTP_RESPONSE), attrib);
+  t->Set(String::NewSymbol("REQUEST"),
+         Integer::New(HTTP_REQUEST),
+         attrib);
+  t->Set(String::NewSymbol("RESPONSE"),
+         Integer::New(HTTP_RESPONSE),
+         attrib);
 
   NODE_SET_PROTOTYPE_METHOD(t, "execute", Parser::Execute);
   NODE_SET_PROTOTYPE_METHOD(t, "finish", Parser::Finish);

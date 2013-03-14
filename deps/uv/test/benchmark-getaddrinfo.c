@@ -21,16 +21,12 @@
 
 #include "uv.h"
 #include "task.h"
-
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h> /* strlen */
-
 
 #define CONCURRENT_CALLS 10
 #define TOTAL_CALLS 10000
 
-const char* name = "localhost";
+static const char* name = "localhost";
 
 static uv_loop_t* loop;
 
@@ -79,7 +75,7 @@ BENCHMARK_IMPL(getaddrinfo) {
     getaddrinfo_initiate(&handles[i]);
   }
 
-  uv_run(loop);
+  uv_run(loop, UV_RUN_DEFAULT);
 
   uv_update_time(loop);
   end_time = uv_now(loop);
@@ -90,5 +86,6 @@ BENCHMARK_IMPL(getaddrinfo) {
   LOGF("getaddrinfo: %.0f req/s\n",
        (double) calls_completed / (double) (end_time - start_time) * 1000.0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }

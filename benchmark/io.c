@@ -14,7 +14,7 @@
  
 static int c = 0;
 static int tsize = 1000 * 1048576;
-static const char path[] = "/tmp/wt.dat";
+static const char* path = "/tmp/wt.dat";
 static char buf[65536];
 
 static uint64_t now(void) {
@@ -45,7 +45,6 @@ static void writetest(int size, size_t bsize)
 
   for (i = 0; i < size; i += bsize) {
     int rv = write(fd, buf, bsize);
-    if (c++ % 2000 == 0) fprintf(stderr, ".");
     if (rv < 0) {
       perror("write failed");
       exit(254);
@@ -66,7 +65,7 @@ static void writetest(int size, size_t bsize)
   elapsed = (end - start) / 1e6;
   mbps = ((tsize/elapsed)) / 1048576;
 
-  fprintf(stderr, "\nWrote %d bytes in %03fs using %ld byte buffers: %03fmB/s\n", size, elapsed, bsize, mbps);
+  fprintf(stderr, "Wrote %d bytes in %03fs using %ld byte buffers: %03f\n", size, elapsed, bsize, mbps);
 }
 
 void readtest(int size, size_t bsize)
@@ -106,10 +105,12 @@ void cleanup() {
   unlink(path);
 }
 
-int main()
+int main(int argc, char** argv)
 {
   int i;
   int bsizes[] = {1024, 4096, 8192, 16384, 32768, 65536, 0};
+
+  if (argc > 1) path = argv[1];
 
   for (i = 0; bsizes[i] != 0; i++) {
     writetest(tsize, bsizes[i]);
