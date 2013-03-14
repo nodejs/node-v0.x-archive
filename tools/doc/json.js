@@ -160,7 +160,7 @@ function doJSON(input, filename, outfile, cb) {
   }
 
   if (outfile) {
-    writeOututToFile(root, filename, outfile, indexfile, writeToIndexFile);
+    writeOutputToFile(root, filename, outfile, indexfile, writeToIndexFile);
   }
   else {
     return cb(null, root)
@@ -168,17 +168,19 @@ function doJSON(input, filename, outfile, cb) {
 }
 
 // write output object to outfile
-function writeOututToFile(obj, sourcefile, outfile, indexfile, cb) {
+function writeOutputToFile(obj, sourcefile, outfile, indexfile, cb) {
   fs.writeFile(outfile, JSON.stringify(obj, null, 2), function(err) {
-    if(err) {
-      throw new Error('error saving file - '+ err);
-    }
-    cb(obj, sourcefile, path.join(path.dirname(outfile), indexfile));
+    cb(err, obj, sourcefile, path.join(path.dirname(outfile), indexfile));
   });
 }
 
 // make an entry into index file
-function writeToIndexFile(root, sourcefile, outfile) {
+function writeToIndexFile(err, root, sourcefile, outfile) {
+  // check if there was an error writing file
+  if (err) {
+    throw new Error('error writing file - '+ e);
+  }
+
   // default type of an index
   var obj = {"type":"index"};
   var entry = {"source":sourcefile};
