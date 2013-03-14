@@ -30,7 +30,7 @@ the following values:
 
  - `input` - the readable stream to listen to (Required).
 
- - `output` - the writable stream to write readline data to (Required).
+ - `output` - the writable stream to write readline data to (Optional).
 
  - `completer` - an optional function that is used for Tab autocompletion. See
    below for an example of using this.
@@ -100,6 +100,8 @@ to `true` to prevent the cursor placement being reset to `0`.
 This will also resume the `input` stream used with `createInterface` if it has
 been paused.
 
+If `output` is set to null or undefined, nothing is diplayed
+
 ### rl.question(query, callback)
 
 Prepends the prompt with `query` and invokes `callback` with the user's
@@ -108,6 +110,8 @@ with the user's response after it has been typed.
 
 This will also resume the `input` stream used with `createInterface` if
 it has been paused.
+
+If `output` is set to null or undefined, nothing is diplayed
 
 Example usage:
 
@@ -134,6 +138,8 @@ Writes `data` to `output` stream. `key` is an object literal to represent a key
 sequence; available if the terminal is a TTY.
 
 This will also resume the `input` stream if it has been paused.
+
+If `output` is set to null or undefined, nothing is diplayed
 
 Example:
 
