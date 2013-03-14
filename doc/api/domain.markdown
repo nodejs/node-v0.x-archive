@@ -386,21 +386,15 @@ with a single error handler in a single place.
 
 ### domain.dispose()
 
-The dispose method destroys a domain, and makes a best effort attempt to
-clean up any and all IO that is associated with the domain.  Streams are
-aborted, ended, closed, and/or destroyed.  Timers are cleared.
-Explicitly bound callbacks are no longer called.  Any error events that
-are raised as a result of this are ignored.
+```
+Stability: 0 - Deprecated
 
-The intention of calling `dispose` is generally to prevent cascading
-errors when a critical part of the Domain context is found to be in an
-error state.
+This function is **deprecated**; please recover from failed IO actions
+explicitly via error handlers set on the domain.
+```
 
-Once the domain is disposed the `dispose` event will emit.
-
-Note that IO might still be performed.  However, to the highest degree
-possible, once a domain is disposed, further errors from the emitters in
-that set will be ignored.  So, even if some remaining actions are still
-in flight, Node.js will not communicate further about them.
+Once `dispose` has been called, the domain will no longer be used by callbacks
+bound into the domain via `run`, `bind`, or `intercept`, and a `dispose` event
+is emitted.
 
 [EventEmitter]: events.html#events_class_events_eventemitter
