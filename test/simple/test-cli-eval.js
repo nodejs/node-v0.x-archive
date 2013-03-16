@@ -84,6 +84,19 @@ child.exec(nodejs + ' -e ""', function(status, stdout, stderr) {
   assert.equal(stderr, '');
 });
 
+// '-' should be the filename if it is the first argument
+child.exec(nodejs + ' -p -e "process.argv[1]" - foo bar baz', 
+    function(status, stdout, stderr) {
+      assert.equal(stderr, '');
+      assert.equal(stdout, "-\n");
+    });
+
+// '-' should force the interpreter to run without looking for a file
+child.exec(nodejs + ' -i - foo bar', {timeout:1000, killSignal:'SIGINT'}, 
+    function(status, stdout, stderr) {
+      assert.equal(stdout, "> ");
+    });
+
 // "\\-42" should be interpreted as an escaped expression, not a switch
 child.exec(nodejs + ' -p "\\-42"',
     function(err, stdout, stderr) {
