@@ -96,7 +96,6 @@ class FunctionEntry BASE_EMBEDDED {
 
  private:
   Vector<unsigned> backing_;
-  bool owns_data_;
 };
 
 

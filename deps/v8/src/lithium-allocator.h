@@ -399,40 +399,6 @@ class LiveRange: public ZoneObject {
 };
 
 
-class GrowableBitVector BASE_EMBEDDED {
- public:
-  GrowableBitVector() : bits_(NULL) { }
-
-  bool Contains(int value) const {
-    if (!InBitsRange(value)) return false;
-    return bits_->Contains(value);
-  }
-
-  void Add(int value, Zone* zone) {
-    EnsureCapacity(value, zone);
-    bits_->Add(value);
-  }
-
- private:
-  static const int kInitialLength = 1024;
-
-  bool InBitsRange(int value) const {
-    return bits_ != NULL && bits_->length() > value;
-  }
-
-  void EnsureCapacity(int value, Zone* zone) {
-    if (InBitsRange(value)) return;
-    int new_length = bits_ == NULL ? kInitialLength : bits_->length();
-    while (new_length <= value) new_length *= 2;
-    BitVector* new_bits = new(zone) BitVector(new_length, zone);
-    if (bits_ != NULL) new_bits->CopyFrom(*bits_);
-    bits_ = new_bits;
-  }
-
-  BitVector* bits_;
-};
-
-
 class LAllocator BASE_EMBEDDED {
  public:
   LAllocator(int first_virtual_register, HGraph* graph);
@@ -457,11 +423,14 @@ class LAllocator BASE_EMBEDDED {
 
   LPlatformChunk* chunk() const { return chunk_; }
   HGraph* graph() const { return graph_; }
+  Isolate* isolate() const { return graph_->isolate(); }
   Zone* zone() const { return zone_; }
 
   int GetVirtualRegister() {
-    if (next_virtual_register_ > LUnallocated::kMaxVirtualRegisters) {
+    if (next_virtual_register_ >= LUnallocated::kMaxVirtualRegisters) {
       allocation_ok_ = false;
+      // Maintain the invariant that we return something below the maximum.
+      return 0;
     }
     return next_virtual_register_++;
   }
@@ -478,6 +447,13 @@ class LAllocator BASE_EMBEDDED {
 #ifdef DEBUG
   void Verify() const;
 #endif
+
+  BitVector* assigned_registers() {
+    return assigned_registers_;
+  }
+  BitVector* assigned_double_registers() {
+    return assigned_double_registers_;
+  }
 
  private:
   void MeetRegisterConstraints();
@@ -571,6 +547,11 @@ class LAllocator BASE_EMBEDDED {
                           HBasicBlock* block,
                           HBasicBlock* pred);
 
+  inline void SetLiveRangeAssignedRegister(LiveRange* range,
+                                           int reg,
+                                           RegisterKind register_kind,
+                                           Zone* zone);
+
   // Return parallel move that should be used to connect ranges split at the
   // given position.
   LParallelMove* GetConnectingParallelMove(LifetimePosition pos);
@@ -608,9 +589,9 @@ class LAllocator BASE_EMBEDDED {
   ZoneList<LiveRange*> live_ranges_;
 
   // Lists of live ranges
-  EmbeddedVector<LiveRange*, Register::kNumAllocatableRegisters>
+  EmbeddedVector<LiveRange*, Register::kMaxNumAllocatableRegisters>
       fixed_live_ranges_;
-  EmbeddedVector<LiveRange*, DoubleRegister::kNumAllocatableRegisters>
+  EmbeddedVector<LiveRange*, DoubleRegister::kMaxNumAllocatableRegisters>
       fixed_double_live_ranges_;
   ZoneList<LiveRange*> unhandled_live_ranges_;
   ZoneList<LiveRange*> active_live_ranges_;
@@ -624,6 +605,9 @@ class LAllocator BASE_EMBEDDED {
 
   RegisterKind mode_;
   int num_registers_;
+
+  BitVector* assigned_registers_;
+  BitVector* assigned_double_registers_;
 
   HGraph* graph_;
 
