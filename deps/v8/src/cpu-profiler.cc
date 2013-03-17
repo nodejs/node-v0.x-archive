@@ -58,7 +58,7 @@ ProfilerEventsProcessor::ProfilerEventsProcessor(ProfileGenerator* generator)
 
 void ProfilerEventsProcessor::CallbackCreateEvent(Logger::LogEventsAndTags tag,
                                                   const char* prefix,
-                                                  String* name,
+                                                  Name* name,
                                                   Address start) {
   if (FilterOutCodeCreateEvent(tag)) return;
   CodeEventsContainer evt_rec;
@@ -74,7 +74,7 @@ void ProfilerEventsProcessor::CallbackCreateEvent(Logger::LogEventsAndTags tag,
 
 
 void ProfilerEventsProcessor::CodeCreateEvent(Logger::LogEventsAndTags tag,
-                                              String* name,
+                                              Name* name,
                                               String* resource_name,
                                               int line_number,
                                               Address start,
@@ -342,7 +342,7 @@ bool CpuProfiler::HasDetachedProfiles() {
 }
 
 
-void CpuProfiler::CallbackEvent(String* name, Address entry_point) {
+void CpuProfiler::CallbackEvent(Name* name, Address entry_point) {
   Isolate::Current()->cpu_profiler()->processor_->CallbackCreateEvent(
       Logger::CALLBACK_TAG, CodeEntry::kEmptyNamePrefix, name, entry_point);
 }
@@ -356,7 +356,7 @@ void CpuProfiler::CodeCreateEvent(Logger::LogEventsAndTags tag,
 
 
 void CpuProfiler::CodeCreateEvent(Logger::LogEventsAndTags tag,
-                           Code* code, String* name) {
+                           Code* code, Name* name) {
   Isolate* isolate = Isolate::Current();
   isolate->cpu_profiler()->processor_->CodeCreateEvent(
       tag,
@@ -372,7 +372,7 @@ void CpuProfiler::CodeCreateEvent(Logger::LogEventsAndTags tag,
 void CpuProfiler::CodeCreateEvent(Logger::LogEventsAndTags tag,
                                   Code* code,
                                   SharedFunctionInfo* shared,
-                                  String* name) {
+                                  Name* name) {
   Isolate* isolate = Isolate::Current();
   isolate->cpu_profiler()->processor_->CodeCreateEvent(
       tag,
@@ -425,7 +425,7 @@ void CpuProfiler::SharedFunctionInfoMoveEvent(Address from, Address to) {
 }
 
 
-void CpuProfiler::GetterCallbackEvent(String* name, Address entry_point) {
+void CpuProfiler::GetterCallbackEvent(Name* name, Address entry_point) {
   Isolate::Current()->cpu_profiler()->processor_->CallbackCreateEvent(
       Logger::CALLBACK_TAG, "get ", name, entry_point);
 }
@@ -441,7 +441,7 @@ void CpuProfiler::RegExpCodeCreateEvent(Code* code, String* source) {
 }
 
 
-void CpuProfiler::SetterCallbackEvent(String* name, Address entry_point) {
+void CpuProfiler::SetterCallbackEvent(Name* name, Address entry_point) {
   Isolate::Current()->cpu_profiler()->processor_->CallbackCreateEvent(
       Logger::CALLBACK_TAG, "set ", name, entry_point);
 }
@@ -491,7 +491,7 @@ void CpuProfiler::StartProcessorIfNotStarted() {
     isolate->logger()->logging_nesting_ = 0;
     generator_ = new ProfileGenerator(profiles_);
     processor_ = new ProfilerEventsProcessor(generator_);
-    NoBarrier_Store(&is_profiling_, true);
+    is_profiling_ = true;
     processor_->Start();
     // Enumerate stuff we already have in the heap.
     if (isolate->heap()->HasBeenSetUp()) {
@@ -552,7 +552,7 @@ void CpuProfiler::StopProcessor() {
     sampler->Stop();
     need_to_stop_sampler_ = false;
   }
-  NoBarrier_Store(&is_profiling_, false);
+  is_profiling_ = false;
   processor_->Stop();
   processor_->Join();
   delete processor_;
