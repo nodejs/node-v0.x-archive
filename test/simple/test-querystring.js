@@ -64,7 +64,7 @@ var qsTestCases = [
    'foo=1%26bar%3A2;baz=quux%3Bqix',
    {'foo': '1&bar:2', 'baz': 'quux;qix'}],
   ['this&that;bob=carol&ted=alice;eve=victor',
-   'this&that;bob=carol&ted=alice;eve=victor,
+   'this&that;bob=carol&ted=alice;eve=victor',
    {'this': '', 'that': '',
    'bob': 'carol', 'ted': 'alice',
    'eve': 'victor'}],
