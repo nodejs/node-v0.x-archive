@@ -57,7 +57,17 @@ var qsTestCases = [
       valueOf: 'bar',
       __defineGetter__: 'baz' }],
   // See: https://github.com/joyent/node/issues/3058
-  ['foo&bar=baz', 'foo=&bar=baz', { foo: '', bar: 'baz' }]
+  ['foo&bar=baz', 'foo=&bar=baz', { foo: '', bar: 'baz' }],
+  // See: https://github.com/joyent/node/issues/5055
+  ['foo=bar;foo=quux', 'foo=bar;foo=quux', {'foo': ['bar', 'quux']}],
+  ['foo=1%26bar:2;baz=quux%3bqix',
+   'foo=1%26bar%3A2;baz=quux%3Bqix',
+   {'foo': '1&bar:2', 'baz': 'quux;qix'}],
+  ['this&that;bob=carol&ted=alice;eve=victor',
+   'this&that;bob=carol&ted=alice;eve=victor,
+   {'this': '', 'that': '',
+   'bob': 'carol', 'ted': 'alice',
+   'eve': 'victor'}],
 ];
 
 // [ wonkyQS, canonicalQS, obj ]
