@@ -50,7 +50,7 @@ var srv = net.createServer(function(c) {
 
 var gotUpgrade = false;
 
-srv.listen(common.PORT, '127.0.0.1', function() {
+srv.listen(common.PORT, function() {
 
   var req = http.get({ port: common.PORT });
   req.on('upgrade', function(res, socket, upgradeHead) {

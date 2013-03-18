@@ -266,6 +266,19 @@ static int uv__bind(uv_tcp_t* handle,
     }
   }
 
+#ifdef IPV6_V6ONLY
+  if (family == AF_INET6) {
+    int on;
+
+    on = (tcp->flags & UV_HANDLE_TCP_DUALSTACK) ? 0 : 1;
+
+    /* TODO: how to handle errors? This may fail if there is no ipv4 stack */
+    /* available, or when run on XP/2003 which have no support for dualstack */
+    /* sockets. For now we're silently ignoring the error. */
+    setsockopt(handle->socket, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof on);
+  }
+#endif
+
   r = bind(handle->socket, addr, addrsize);
 
   if (r == SOCKET_ERROR) {
@@ -283,6 +296,14 @@ static int uv__bind(uv_tcp_t* handle,
   handle->flags |= UV_HANDLE_BOUND;
 
   return 0;
+}
+
+
+void uv_tcp_dualstack(uv_tcp_t* handle, int enable) {
+  if (enable)
+    handle->flags |= UV_HANDLE_TCP_DUALSTACK;
+  else
+    handle->flags &= ~UV_HANDLE_TCP_DUALSTACK;
 }
 
 

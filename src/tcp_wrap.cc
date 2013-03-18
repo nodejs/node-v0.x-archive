@@ -118,6 +118,8 @@ void TCPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setSimultaneousAccepts", SetSimultaneousAccepts);
 #endif
 
+  NODE_SET_PROTOTYPE_METHOD(t, "setDualstack", SetDualstack);
+
   tcpConstructor = Persistent<Function>::New(t->GetFunction());
 
   onconnection_sym = NODE_PSYMBOL("onconnection");
@@ -256,6 +258,19 @@ Handle<Value> TCPWrap::SetSimultaneousAccepts(const Arguments& args) {
 #endif
 
 
+Handle<Value> TCPWrap::SetDualstack(const Arguments& args) {
+  HandleScope scope;
+
+  UNWRAP(TCPWrap)
+
+  bool enable = args[0]->BooleanValue();
+
+  uv_tcp_dualstack(&wrap->handle_, enable);
+
+  return Undefined();
+}
+
+
 Handle<Value> TCPWrap::Bind(const Arguments& args) {
   HandleScope scope;
 
@@ -281,6 +296,8 @@ Handle<Value> TCPWrap::Bind6(const Arguments& args) {
 
   String::AsciiValue ip6_address(args[0]);
   int port = args[1]->Int32Value();
+
+  uv_tcp_dualstack(&wrap->handle_, 1);
 
   struct sockaddr_in6 address = uv_ip6_addr(*ip6_address, port);
   int r = uv_tcp_bind6(&wrap->handle_, address);

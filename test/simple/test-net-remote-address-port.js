@@ -28,7 +28,9 @@ var conns = 0, conns_closed = 0;
 
 var server = net.createServer(function(socket) {
   conns++;
-  assert.equal('127.0.0.1', socket.remoteAddress);
+  assert.ok('127.0.0.1' === socket.remoteAddress ||
+            '::1' === socket.remoteAddress ||
+            '::ffff:127.0.0.1' === socket.remoteAddress);
   assert.ok(socket.remotePort);
   assert.notEqual(socket.remotePort, common.PORT);
   socket.on('end', function() {
@@ -37,16 +39,18 @@ var server = net.createServer(function(socket) {
   socket.resume();
 });
 
-server.listen(common.PORT, 'localhost', function() {
+server.listen(common.PORT, function() {
   var client = net.createConnection(common.PORT, 'localhost');
   var client2 = net.createConnection(common.PORT);
   client.on('connect', function() {
-    assert.equal('127.0.0.1', client.remoteAddress);
+    assert.ok('127.0.0.1' === client.remoteAddress ||
+              '::1' === client.remoteAddress);
     assert.equal(common.PORT, client.remotePort);
     client.end();
   });
   client2.on('connect', function() {
-    assert.equal('127.0.0.1', client2.remoteAddress);
+    assert.ok('127.0.0.1' === client2.remoteAddress ||
+              '::1' === client2.remoteAddress);
     assert.equal(common.PORT, client2.remotePort);
     client2.end();
   });

@@ -44,7 +44,7 @@ server.on('request', function(req, res) {
   req.resume();
 });
 
-server.listen(common.PORT, '127.0.0.1', function() {
+server.listen(common.PORT, function() {
   for (var i = 0; i < 10; i++) {
     connections++;
 

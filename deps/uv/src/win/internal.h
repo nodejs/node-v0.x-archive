@@ -67,6 +67,7 @@
 #define UV_HANDLE_TCP_ACCEPT_STATE_CHANGING     0x10000000
 #define UV_HANDLE_TCP_SOCKET_CLOSED             0x20000000
 #define UV_HANDLE_SHARED_TCP_SOCKET             0x40000000
+#define UV_HANDLE_TCP_DUALSTACK                 0x80000000
 
 /* Only used by uv_pipe_t handles. */
 #define UV_HANDLE_NON_OVERLAPPED_PIPE           0x01000000

@@ -67,12 +67,33 @@ static int uv__bind(uv_tcp_t* tcp,
   if (setsockopt(tcp->io_watcher.fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
     return uv__set_sys_error(tcp->loop, errno);
 
+#ifdef IPV6_V6ONLY
+  if (domain == AF_INET6) {
+    on = (tcp->flags & UV_TCP_DUALSTACK) ? 0 : 1;
+    if (setsockopt(tcp->io_watcher.fd,
+                   IPPROTO_IPV6,
+                   IPV6_V6ONLY,
+                   &on,
+                   sizeof on) == -1) {
+      return uv__set_sys_error(tcp->loop, errno);
+    }
+  }
+#endif
+
   errno = 0;
   if (bind(tcp->io_watcher.fd, addr, addrsize) && errno != EADDRINUSE)
     return uv__set_sys_error(tcp->loop, errno);
 
   tcp->delayed_error = errno;
   return 0;
+}
+
+
+void uv_tcp_dualstack(uv_tcp_t* handle, int enable) {
+  if (enable)
+    handle->flags |= UV_TCP_DUALSTACK;
+  else
+    handle->flags &= ~UV_TCP_DUALSTACK;
 }
 
 
