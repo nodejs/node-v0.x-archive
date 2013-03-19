@@ -53,6 +53,8 @@ class TCPWrap : public StreamWrap {
   static v8::Handle<v8::Value> SetSimultaneousAccepts(const v8::Arguments& args);
 #endif
 
+  static v8::Handle<v8::Value> SetDualstack(const v8::Arguments& args);
+
   static void OnConnection(uv_stream_t* handle, int status);
   static void AfterConnect(uv_connect_t* req, int status);
 

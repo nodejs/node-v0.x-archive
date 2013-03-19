@@ -814,56 +814,30 @@ void AfterGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
     // Iterate over the IPv4 responses again this time creating javascript
     // strings for each IP and filling the results array.
     address = res;
-    while (address) {
+    for (address = res; address; address = address->ai_next) {
       assert(address->ai_socktype == SOCK_STREAM);
 
-      // Ignore random ai_family types.
+      // Juggle pointers
       if (address->ai_family == AF_INET) {
-        // Juggle pointers
         addr = (char*) &((struct sockaddr_in*) address->ai_addr)->sin_addr;
-        uv_err_t err = uv_inet_ntop(address->ai_family,
-                                    addr,
-                                    ip,
-                                    INET6_ADDRSTRLEN);
-        if (err.code != UV_OK)
-          continue;
-
-        // Create JavaScript string
-        Local<String> s = String::New(ip);
-        results->Set(n, s);
-        n++;
-      }
-
-      // Increment
-      address = address->ai_next;
-    }
-
-    // Iterate over the IPv6 responses putting them in the array.
-    address = res;
-    while (address) {
-      assert(address->ai_socktype == SOCK_STREAM);
-
-      // Ignore random ai_family types.
-      if (address->ai_family == AF_INET6) {
-        // Juggle pointers
+      } else if (address->ai_family == AF_INET6) {
         addr = (char*) &((struct sockaddr_in6*) address->ai_addr)->sin6_addr;
-        uv_err_t err = uv_inet_ntop(address->ai_family,
-                                    addr,
-                                    ip,
-                                    INET6_ADDRSTRLEN);
-        if (err.code != UV_OK)
-          continue;
-
-        // Create JavaScript string
-        Local<String> s = String::New(ip);
-        results->Set(n, s);
-        n++;
+      } else {
+        // Ignore random ai_family types.
+        continue;
       }
+      uv_err_t err = uv_inet_ntop(address->ai_family,
+                                  addr,
+                                  ip,
+                                  INET6_ADDRSTRLEN);
+      if (err.code != UV_OK)
+        continue;
 
-      // Increment
-      address = address->ai_next;
+      // Create JavaScript string
+      Local<String> s = String::New(ip);
+      results->Set(n, s);
+      n++;
     }
-
 
     argv[0] = results;
   }

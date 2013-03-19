@@ -650,6 +650,9 @@ UV_EXTERN int uv_tcp_open(uv_tcp_t* handle, uv_os_sock_t sock);
 /* Enable/disable Nagle's algorithm. */
 UV_EXTERN int uv_tcp_nodelay(uv_tcp_t* handle, int enable);
 
+/* Enable/disable ipv6 dual stack */
+UV_EXTERN void uv_tcp_dualstack(uv_tcp_t* handle, int enable);
+
 /*
  * Enable/disable TCP keep-alive.
  *

@@ -98,17 +98,18 @@
 
 /* handle flags */
 enum {
-  UV_CLOSING          = 0x01,   /* uv_close() called but not finished. */
-  UV_CLOSED           = 0x02,   /* close(2) finished. */
-  UV_STREAM_READING   = 0x04,   /* uv_read_start() called. */
-  UV_STREAM_SHUTTING  = 0x08,   /* uv_shutdown() called but not complete. */
-  UV_STREAM_SHUT      = 0x10,   /* Write side closed. */
-  UV_STREAM_READABLE  = 0x20,   /* The stream is readable */
-  UV_STREAM_WRITABLE  = 0x40,   /* The stream is writable */
-  UV_STREAM_BLOCKING  = 0x80,   /* Synchronous writes. */
-  UV_TCP_NODELAY      = 0x100,  /* Disable Nagle. */
-  UV_TCP_KEEPALIVE    = 0x200,  /* Turn on keep-alive. */
-  UV_TCP_SINGLE_ACCEPT = 0x400  /* Only accept() when idle. */
+  UV_CLOSING           = 0x01,  /* uv_close() called but not finished. */
+  UV_CLOSED            = 0x02,  /* close(2) finished. */
+  UV_STREAM_READING    = 0x04,  /* uv_read_start() called. */
+  UV_STREAM_SHUTTING   = 0x08,  /* uv_shutdown() called but not complete. */
+  UV_STREAM_SHUT       = 0x10,  /* Write side closed. */
+  UV_STREAM_READABLE   = 0x20,  /* The stream is readable */
+  UV_STREAM_WRITABLE   = 0x40,  /* The stream is writable */
+  UV_STREAM_BLOCKING   = 0x80,  /* Synchronous writes. */
+  UV_TCP_NODELAY       = 0x100, /* Disable Nagle. */
+  UV_TCP_KEEPALIVE     = 0x200, /* Turn on keep-alive. */
+  UV_TCP_SINGLE_ACCEPT = 0x400, /* Only accept() when idle. */
+  UV_TCP_DUALSTACK     = 0x800  /* Bind to both ipv4 and ipv6 address */
 };
 
 /* core */
