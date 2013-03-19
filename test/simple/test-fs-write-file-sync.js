@@ -23,7 +23,6 @@ var common = require('../common');
 var assert = require('assert');
 var path = require('path');
 var fs = require('fs');
-var success_count = 0;
 var mode_sync;
 var is_windows = process.platform === 'win32';
 
@@ -57,15 +56,18 @@ if (is_windows) {
 }
 
 var file1 = path.join(common.tmpDir, 'testWriteFileSync.txt');
+var file2 = path.join(common.tmpDir, 'testAppendFileSync.txt');
 
 // Remove the file if it exists
 try {
   fs.unlinkSync(file1);
+  fs.unlinkSync(file2);
 } catch(err) {
   if(err && err.code !== 'ENOENT') {
     throw err;
   }
 }
+
 fs.writeFileSync(file1, '123', {mode: mode_sync});
 
 var content = fs.readFileSync(file1, {encoding: 'utf-8'});
@@ -73,28 +75,19 @@ assert.equal('123', content);
 
 console.log(fs.statSync(file1).mode);
 
-if (is_windows) {
-  assert.ok((fs.statSync(file1).mode & 0777) & mode_sync);
-} else {
-  assert.equal(mode_sync, fs.statSync(file1).mode & 0777);
-}
+assert.equal(mode_sync, fs.statSync(file1).mode & 0777);
 
-fs.appendFileSync(file1, 'abc', {mode: mode_sync});
+// Test appendFileSync mode
+fs.appendFileSync(file2, 'abc', {mode: mode_sync});
 
-var content = fs.readFileSync(file1, {encoding: 'utf-8'});
-assert.equal('123abc', content);
+console.log(fs.statSync(file2).mode);
 
-console.log(fs.statSync(file1).mode);
-
-if (is_windows) {
-  assert.ok((fs.statSync(file1).mode & 0777) & mode_sync);
-} else {
-  assert.equal(mode_sync, fs.statSync(file1).mode & mode_sync);
-}
+assert.equal(mode_sync, fs.statSync(file1).mode & mode_sync);
 
 process.on('exit', function() {
   process.umask(mask);
   assert.equal(0, openCount);
   fs.unlinkSync(file1);
+  fs.unlinkSync(file2);
 });
 
