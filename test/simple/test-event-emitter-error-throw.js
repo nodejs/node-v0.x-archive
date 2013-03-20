@@ -55,3 +55,44 @@ var errorCatched = false;
     assert.equal(errorEmitted, 1);
   });
 })();
+
+(function testZeroListenerShadowErrorEmit() {
+  var shadowErrorEmitted = 0;
+  var e = new EE();
+
+  e.once('__error__', function(er) {
+    shadowErrorEmitted++;
+  });
+
+  assert.equal(EE.listenerCount(e, 'error'), 0);
+  assert.throws(function() {
+    e.emit('error');
+  }, function(er) {
+    // test that '__error__' has been emitted before the throw
+    assert.equal(shadowErrorEmitted, 1);
+    return true;
+  });
+})();
+
+(function testListenerShadowErrorEmit() {
+  var shadowErrorEmitted = 0;
+  var errorEmitted = 0;
+  var e = new EE();
+
+  e.once('error', function(er) {
+    errorEmitted++;
+    // test that '__error__' has been emitted before 'error'
+    assert.equal(shadowErrorEmitted, 1);
+  });
+
+  e.once('__error__', function(er) {
+    shadowErrorEmitted++;
+  });
+
+  assert.equal(EE.listenerCount(e, 'error'), 1);
+  e.emit('error');
+
+  process.on('exit', function() {
+    assert.equal(errorEmitted, 1);
+  });
+})();
