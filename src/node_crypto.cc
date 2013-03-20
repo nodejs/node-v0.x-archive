@@ -932,19 +932,24 @@ int Connection::HandleSSLError(const char* func, int rv, ZeroStatus zs) {
     BUF_MEM* mem;
     BIO *bio;
 
-    assert(err == SSL_ERROR_SSL || err == SSL_ERROR_SYSCALL);
+    if (err == SSL_ERROR_SSL || err == SSL_ERROR_SYSCALL) {
+      // XXX We need to drain the error queue for this thread or else OpenSSL
+      // has the possibility of blocking connections? This problem is not well
+      // understood. And we should be somehow propagating these errors up
+      // into JavaScript. There is no test which demonstrates this problem.
+      // https://github.com/joyent/node/issues/1719
+      if ((bio = BIO_new(BIO_s_mem()))) {
+        ERR_print_errors(bio);
+        BIO_get_mem_ptr(bio, &mem);
+        Local<Value> e = Exception::Error(String::New(mem->data, mem->length));
+        handle_->Set(String::New("error"), e);
+        BIO_free_all(bio);
+      }
+    } else {
+      assert(err == SSL_ERROR_ZERO_RETURN);
 
-    // XXX We need to drain the error queue for this thread or else OpenSSL
-    // has the possibility of blocking connections? This problem is not well
-    // understood. And we should be somehow propagating these errors up
-    // into JavaScript. There is no test which demonstrates this problem.
-    // https://github.com/joyent/node/issues/1719
-    if ((bio = BIO_new(BIO_s_mem()))) {
-      ERR_print_errors(bio);
-      BIO_get_mem_ptr(bio, &mem);
-      Local<Value> e = Exception::Error(String::New(mem->data, mem->length));
-      handle_->Set(String::New("error"), e);
-      BIO_free(bio);
+      // Notify JS-land about zero-return
+      handle_->Set(String::New("zeroReturn"), True());
     }
 
     return rv;
