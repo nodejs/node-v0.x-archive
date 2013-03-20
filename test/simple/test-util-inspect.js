@@ -172,7 +172,7 @@ function test_lines(input) {
     assert.equal(count_lines(without_color), count_lines(with_color));
 }
 
-test_lines([1, 2, 3, 4, 5]);
+test_lines([1, 2, 3, 4, 5, 6, 7]);
 test_lines(function () {
     var big_array = [];
     for (var i = 0; i < 100; i += 1) {
