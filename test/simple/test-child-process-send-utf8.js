@@ -23,7 +23,7 @@ var common = require('../common');
 var assert = require('assert');
 var fork = require('child_process').fork;
 
-var expected = 'ßßßß';
+var expected = Array(1e5).join('ßßßß');
 if (process.argv[2] === 'child') {
   process.send(expected);
 } else {
