@@ -16,7 +16,8 @@
         # No clue what these are for.
         'L_ENDIAN',
         'PURIFY',
-        '_REENTRANT'
+        '_REENTRANT',
+        'OPENSSL_NO_HEARTBEATS',
       ],
       'sources': [
         'openssl/ssl/bio_ssl.c',
