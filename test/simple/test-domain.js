@@ -145,6 +145,22 @@ expectCaught++;
 
 
 
+// timeouts call the callback directly from cc, so need to make sure the
+// domain will be used regardless
+setTimeout(function() {
+  var domain = require('domain');
+  var d = domain.create();
+  d.run(function() {
+    process.nextTick(function domainsSuck() {
+      console.trace('in nexttick', process.domain === d)
+      assert.equal(process.domain, d);
+    });
+  });
+});
+
+
+
+
 // catch thrown errors no matter how many times we enter the event loop
 // this only uses implicit binding, except for the first function
 // passed to d.run().  The rest are implicitly bound by virtue of being
