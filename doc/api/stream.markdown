@@ -270,9 +270,13 @@ SimpleProtocol.prototype._read = function(n) {
         return;
       }
       // now, because we got some extra data, unshift the rest
-      // back into the read queue so that our consumer will see it.
+      // back into the read queue of our source so that we can
+      // reread it as body.
       var b = chunk.slice(split);
-      this.unshift(b);
+      this._source.unshift(b);
+
+      // just push something to keep reading
+      this.push('');
 
       // and let them know that we are done parsing the header.
       this.emit('header', this.header);
