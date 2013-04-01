@@ -50,12 +50,13 @@
       'sources': [
         'common.gypi',
         'include/uv.h',
-        'include/uv-private/ngx-queue.h',
         'include/uv-private/tree.h',
         'src/fs-poll.c',
         'src/inet.c',
+        'src/queue.h',
         'src/uv-common.c',
         'src/uv-common.h',
+        'src/version.c'
       ],
       'conditions': [
         [ 'OS=="win"', {
@@ -100,9 +101,11 @@
           ],
           'link_settings': {
             'libraries': [
-              '-lws2_32.lib',
+              '-ladvapi32.lib',
+              '-liphlpapi.lib',
               '-lpsapi.lib',
-              '-liphlpapi.lib'
+              '-lshell32.lib',
+              '-lws2_32.lib'
             ],
           },
         }, { # Not Windows i.e. POSIX
@@ -112,7 +115,6 @@
             '-pedantic',
             '-Wall',
             '-Wextra',
-            '-Wstrict-aliasing',
             '-Wno-unused-parameter',
           ],
           'sources': [
@@ -177,6 +179,11 @@
           'defines': [
             '_DARWIN_USE_64_BIT_INODE=1',
           ]
+        }],
+        [ 'OS!="mac"', {
+          # Enable on all platforms except OS X. The antique gcc/clang that
+          # ships with Xcode emits waaaay too many false positives.
+          'cflags': [ '-Wstrict-aliasing' ],
         }],
         [ 'OS=="linux"', {
           'sources': [
@@ -422,5 +429,3 @@
     }
   ]
 }
-
-

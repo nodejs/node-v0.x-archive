@@ -19,9 +19,6 @@ encoding method.  Here are the different string encodings.
 
 * `'ascii'` - for 7 bit ASCII data only.  This encoding method is very fast, and
   will strip the high bit if set.
-  Note that this encoding converts a null character (`'\0'` or `'\u0000'`) into
-  `0x20` (character code of a space). If you want to convert a null character
-  into `0x00`, you should use `'utf8'`.
 
 * `'utf8'` - Multibyte encoded Unicode characters. Many web pages and other
   document formats use UTF-8.
@@ -101,10 +98,6 @@ The method will not write partial characters.
     len = buf.write('\u00bd + \u00bc = \u00be', 0);
     console.log(len + " bytes: " + buf.toString('utf8', 0, len));
 
-The number of characters written (which may be different than the number of
-bytes written) is set in `Buffer._charsWritten` and will be overwritten the
-next time `buf.write()` is called.
-
 
 ### buf.toString([encoding], [start], [end])
 
@@ -121,9 +114,8 @@ See `buffer.write()` example, above.
 
 ### buf.toJSON()
 
-Returns a JSON-representation of the Buffer instance, which is identical to the
-output for JSON Arrays. `JSON.stringify` implicitly calls this function when
-stringifying a Buffer instance.
+Returns a JSON-representation of the Buffer instance.  `JSON.stringify`
+implicitly calls this function when stringifying a Buffer instance.
 
 Example:
 
@@ -131,9 +123,13 @@ Example:
     var json = JSON.stringify(buf);
 
     console.log(json);
-    // '[116,101,115,116]'
+    // '{"type":"Buffer","data":[116,101,115,116]}'
 
-    var copy = new Buffer(JSON.parse(json));
+    var copy = JSON.parse(json, function(key, value) {
+        return value && value.type === 'Buffer'
+          ? new Buffer(value.data)
+          : value;
+      });
 
     console.log(copy);
     // <Buffer 74 65 73 74>

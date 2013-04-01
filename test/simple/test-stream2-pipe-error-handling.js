@@ -27,10 +27,10 @@ var stream = require('stream');
   var count = 1000;
 
   var source = new stream.Readable();
-  source._read = function(n, cb) {
+  source._read = function(n) {
     n = Math.min(count, n);
     count -= n;
-    cb(null, new Buffer(n));
+    source.push(new Buffer(n));
   };
 
   var unpipedDest;
@@ -40,7 +40,7 @@ var stream = require('stream');
   };
 
   var dest = new stream.Writable();
-  dest._write = function(chunk, cb) {
+  dest._write = function(chunk, encoding, cb) {
     cb();
   };
 
@@ -67,10 +67,10 @@ var stream = require('stream');
   var count = 1000;
 
   var source = new stream.Readable();
-  source._read = function(n, cb) {
+  source._read = function(n) {
     n = Math.min(count, n);
     count -= n;
-    cb(null, new Buffer(n));
+    source.push(new Buffer(n));
   };
 
   var unpipedDest;
@@ -80,7 +80,7 @@ var stream = require('stream');
   };
 
   var dest = new stream.Writable();
-  dest._write = function(chunk, cb) {
+  dest._write = function(chunk, encoding, cb) {
     cb();
   };
 

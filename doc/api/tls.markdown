@@ -76,6 +76,16 @@ handshake extensions allowing you:
     certificates.
 
 
+## tls.getCiphers()
+
+Returns an array with the names of the supported SSL ciphers.
+
+Example:
+
+    var ciphers = tls.getCiphers();
+    console.log(ciphers); // ['AES128-SHA', 'AES256-SHA', ...]
+
+
 ## tls.createServer(options, [secureConnectionListener])
 
 Creates a new [tls.Server][].  The `connectionListener` argument is
@@ -153,6 +163,10 @@ automatically set as a listener for the [secureConnection][] event.  The
     (You can use `crypto.createCredentials(...).context` to get proper
     SecureContext). If `SNICallback` wasn't provided - default callback with
     high-level API will be used (see below).
+
+  - `sessionTimeout`: An integer specifiying the seconds after which TLS
+    session identifiers and TLS session tickets created by the server are
+    timed out. See [SSL_CTX_set_timeout] for more details.
 
   - `sessionIdContext`: A string containing a opaque identifier for session
     resumption. If `requestCert` is `true`, the default is MD5 hash value
@@ -551,3 +565,4 @@ The numeric representation of the remote port. For example, `443`.
 [secureConnection]: #tls_event_secureconnection
 [Stream]: stream.html#stream_stream
 [tls.Server]: #tls_class_tls_server
+[SSL_CTX_set_timeout]: http://www.openssl.org/docs/ssl/SSL_CTX_set_timeout.html

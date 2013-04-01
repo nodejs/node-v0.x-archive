@@ -93,6 +93,20 @@ that writes to them are usually blocking.  They are blocking in the case
 that they refer to regular files or TTY file descriptors. In the case they
 refer to pipes, they are non-blocking like other streams.
 
+To check if Node is being run in a TTY context, read the `isTTY` property
+on `process.stderr`, `process.stdout`, or `process.stdin`:
+
+    $ node -p "Boolean(process.stdin.isTTY)"
+    true
+    $ echo "foo" | node -p "Boolean(process.stdin.isTTY)"
+    false
+
+    $ node -p "Boolean(process.stdout.isTTY)"
+    true
+    $ node -p "Boolean(process.stdout.isTTY)" | cat
+    false
+
+See [the tty docs](tty.html#tty_tty) for more information.
 
 ## process.stderr
 
@@ -379,9 +393,20 @@ The PID of the process.
 
     console.log('This process is pid ' + process.pid);
 
+
 ## process.title
 
 Getter/setter to set what is displayed in 'ps'.
+
+When used as a setter, the maximum length is platform-specific and probably
+short.
+
+On Linux and OS X, it's limited to the size of the binary name plus the
+length of the command line arguments because it overwrites the argv memory.
+
+v0.8 allowed for longer process title strings by also overwriting the environ
+memory but that was potentially insecure/confusing in some (rather obscure)
+cases.
 
 
 ## process.arch

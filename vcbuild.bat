@@ -84,10 +84,12 @@ if defined noperfctr set noperfctr_arg=--without-perfctr& set noperfctr_msi_arg=
 @rem Skip project generation if requested.
 if defined noprojgen goto msbuild
 
+if defined NIGHTLY set TAG=nightly-%NIGHTLY%
+
 @rem Generate the VS project.
 SETLOCAL
   if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
-  python configure %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch%
+  python configure %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
   if errorlevel 1 goto create-msvs-files-failed
   if not exist node.sln goto create-msvs-files-failed
   echo Project files generated.
@@ -130,9 +132,13 @@ if errorlevel 1 echo Failed to generate license.rtf&goto exit
 :msi
 @rem Skip msi generation if not requested
 if not defined msi goto run
-python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
-if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
-for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
+call :getnodeversion
+
+if not defined NIGHTLY goto msibuild
+set NODE_VERSION=%NODE_VERSION%.%NIGHTLY%
+
+:msibuild
+echo Building node-%NODE_VERSION%
 msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:Configuration=%config% /p:Platform=%msiplatform% /p:NodeVersion=%NODE_VERSION% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 
@@ -177,9 +183,7 @@ goto exit
 
 :upload
 echo uploading .exe .msi .pdb to nodejs.org
-python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
-if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
-for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
+call :getnodeversion
 @echo on
 ssh node@nodejs.org mkdir -p web/nodejs.org/dist/v%NODE_VERSION%
 scp Release\node.msi node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node-v%NODE_VERSION%.msi
@@ -204,3 +208,14 @@ echo   vcbuild.bat test           : builds debug build and runs tests
 goto exit
 
 :exit
+goto :EOF
+
+rem ***************
+rem   Subroutines
+rem ***************
+
+:getnodeversion
+set NODE_VERSION=
+for /F "usebackq tokens=*" %%i in (`python "%~dp0tools\getnodeversion.py"`) do set NODE_VERSION=%%i
+if not defined NODE_VERSION echo Cannot determine current version of node.js & exit /b 1
+goto :EOF

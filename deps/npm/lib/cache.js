@@ -80,6 +80,7 @@ var mkdir = require("mkdirp")
   , crypto = require("crypto")
   , retry = require("retry")
   , zlib = require("zlib")
+  , chmodr = require("chmodr")
 
 cache.usage = "npm cache add <tarball file>"
             + "\nnpm cache add <folder>"
@@ -139,6 +140,7 @@ function read (name, ver, forceBypass, cb) {
   }
 
   readJson(jsonFile, function (er, data) {
+    er = needName(er, data)
     er = needVersion(er, data)
     if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     if (er) return addNamed(name, ver, c)
@@ -408,7 +410,12 @@ function addRemoteGit (u, parsed, name, cb_) {
 
     p = path.join(npm.config.get("cache"), "_git-remotes", v)
 
-    checkGitDir(p, u, co, origUrl, cb)
+    checkGitDir(p, u, co, origUrl, function(er, data) {
+      chmodr(p, npm.modes.file, function(erChmod) {
+        if (er) return cb(er, data)
+        return cb(erChmod, data)
+      })
+    })
   })
 }
 
@@ -471,33 +478,30 @@ function archiveGitRemote (p, u, co, origUrl, cb) {
     stdout = (stdout + "\n" + stderr).trim()
     if (er) {
       log.error("git fetch -a origin ("+u+")", stdout)
-      return next(er)
+      return cb(er)
     }
     log.verbose("git fetch -a origin ("+u+")", stdout)
     tmp = path.join(npm.tmp, Date.now()+"-"+Math.random(), "tmp.tgz")
-    next()
+    resolveHead()
   })
 
-  exec(git, resolve, env, false, p, function (er, code, stdout, stderr) {
-    stdout = (stdout + "\n" + stderr).trim()
-    if (er) {
-      log.error("Failed resolving git HEAD (" + u + ")", stderr)
-      return next(er)
-    }
-    log.verbose("git rev-list -n1 " + co, stdout)
-    var parsed = url.parse(origUrl)
-    parsed.hash = stdout
-    resolved = url.format(parsed)
-    log.verbose('resolved git url', resolved)
-    next()
-  })
+  function resolveHead () {
+    exec(git, resolve, env, false, p, function (er, code, stdout, stderr) {
+      stdout = (stdout + "\n" + stderr).trim()
+      if (er) {
+        log.error("Failed resolving git HEAD (" + u + ")", stderr)
+        return cb(er)
+      }
+      log.verbose("git rev-list -n1 " + co, stdout)
+      var parsed = url.parse(origUrl)
+      parsed.hash = stdout
+      resolved = url.format(parsed)
+      log.verbose('resolved git url', resolved)
+      next()
+    })
+  }
 
-  function next (er) {
-    if (errState) return
-    if (er) return cb(errState = er)
-
-    if (++n < 2) return
-
+  function next () {
     mkdir(path.dirname(tmp), function (er) {
       if (er) return cb(er)
       var gzip = zlib.createGzip({ level: 9 })
@@ -570,13 +574,22 @@ function addNamed (name, x, data, cb_) {
   })
 }
 
-function addNameTag (name, tag, data, cb) {
-  if (typeof cb !== "function") cb = data, data = null
+function addNameTag (name, tag, data, cb_) {
+  if (typeof cb_ !== "function") cb_ = data, data = null
   log.info("addNameTag", [name, tag])
   var explicit = true
   if (!tag) {
     explicit = false
     tag = npm.config.get("tag")
+  }
+
+  function cb(er, data) {
+    // might be username/project
+    // in that case, try it as a github url.
+    if (er && tag.split("/").length === 2) {
+      return maybeGithub(tag, name, er, cb_)
+    }
+    return cb_(er, data)
   }
 
   registry.get(name, function (er, data, json, response) {
@@ -592,13 +605,6 @@ function addNameTag (name, tag, data, cb) {
     }
 
     er = installTargetsError(tag, data)
-
-    // might be username/project
-    // in that case, try it as a github url.
-    if (tag.split("/").length === 2) {
-      return maybeGithub(tag, name, er, cb)
-    }
-
     return cb(er)
   })
 }
@@ -717,6 +723,7 @@ function addNameVersion (name, ver, data, cb) {
       if (!er) readJson( path.join( npm.cache, name, ver
                                   , "package", "package.json" )
                        , function (er, data) {
+          er = needName(er, data)
           er = needVersion(er, data)
           if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
           if (er) return fetchit()
@@ -1006,6 +1013,7 @@ function addPlacedTarball_ (p, name, uid, gid, resolvedSum, cb) {
           return cb(er)
         }
         readJson(path.join(folder, "package.json"), function (er, data) {
+          er = needName(er, data)
           er = needVersion(er, data)
           if (er) {
             log.error("addPlacedTarball", "Couldn't read json in %j"
@@ -1052,6 +1060,7 @@ function addLocalDirectory (p, name, shasum, cb) {
   if (p.indexOf(npm.cache) === 0) return cb(new Error(
     "Adding a cache directory to the cache will make the world implode."))
   readJson(path.join(p, "package.json"), function (er, data) {
+    er = needName(er, data)
     er = needVersion(er, data)
     if (er) return cb(er)
     deprCheck(data)
@@ -1176,6 +1185,12 @@ function unlock (u, cb) {
   if (!myLocks[lf]) return process.nextTick(cb)
   myLocks[lf] = false
   lockFile.unlock(lockFileName(u), cb)
+}
+
+function needName(er, data) {
+  return er ? er
+       : (data && !data.name) ? new Error("No name provided")
+       : null
 }
 
 function needVersion(er, data) {

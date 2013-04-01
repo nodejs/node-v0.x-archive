@@ -73,6 +73,7 @@ class SecureContext : ObjectWrap {
   static v8::Handle<v8::Value> SetCiphers(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetOptions(const v8::Arguments& args);
   static v8::Handle<v8::Value> SetSessionIdContext(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetSessionTimeout(const v8::Arguments& args);
   static v8::Handle<v8::Value> Close(const v8::Arguments& args);
   static v8::Handle<v8::Value> LoadPKCS12(const v8::Arguments& args);
 
@@ -249,14 +250,14 @@ class Connection : ObjectWrap {
     }
 
 #ifdef OPENSSL_NPN_NEGOTIATED
-    if (!npnProtos_.IsEmpty()) npnProtos_.Dispose();
-    if (!selectedNPNProto_.IsEmpty()) selectedNPNProto_.Dispose();
+    if (!npnProtos_.IsEmpty()) npnProtos_.Dispose(node_isolate);
+    if (!selectedNPNProto_.IsEmpty()) selectedNPNProto_.Dispose(node_isolate);
 #endif
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-   if (!sniObject_.IsEmpty()) sniObject_.Dispose();
-   if (!sniContext_.IsEmpty()) sniContext_.Dispose();
-   if (!servername_.IsEmpty()) servername_.Dispose();
+   if (!sniObject_.IsEmpty()) sniObject_.Dispose(node_isolate);
+   if (!sniContext_.IsEmpty()) sniContext_.Dispose(node_isolate);
+   if (!servername_.IsEmpty()) servername_.Dispose(node_isolate);
 #endif
   }
 
@@ -274,6 +275,203 @@ class Connection : ObjectWrap {
 
   friend class ClientHelloParser;
   friend class SecureContext;
+};
+
+class CipherBase : public ObjectWrap {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
+
+ protected:
+  enum CipherKind {
+    kCipher,
+    kDecipher
+  };
+
+  v8::Handle<v8::Value> Init(char* cipher_type, char* key_buf, int key_buf_len);
+  v8::Handle<v8::Value> InitIv(char* cipher_type,
+                               char* key,
+                               int key_len,
+                               char* iv,
+                               int iv_len);
+  bool Update(char* data, int len, unsigned char** out, int* out_len);
+  bool Final(unsigned char** out, int *out_len);
+  bool SetAutoPadding(bool auto_padding);
+
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
+  static v8::Handle<v8::Value> InitIv(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Update(const v8::Arguments& args);
+  static v8::Handle<v8::Value> Final(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetAutoPadding(const v8::Arguments& args);
+
+  CipherBase(CipherKind kind) : cipher_(NULL),
+                                initialised_(false),
+                                kind_(kind) {
+  }
+
+  ~CipherBase() {
+    if (!initialised_) return;
+    EVP_CIPHER_CTX_cleanup(&ctx_);
+  }
+
+ private:
+  EVP_CIPHER_CTX ctx_; /* coverity[member_decl] */
+  const EVP_CIPHER* cipher_; /* coverity[member_decl] */
+  bool initialised_;
+  CipherKind kind_;
+};
+
+class Hmac : public ObjectWrap {
+ public:
+  static void Initialize (v8::Handle<v8::Object> target);
+
+ protected:
+  v8::Handle<v8::Value> HmacInit(char* hashType, char* key, int key_len);
+  bool HmacUpdate(char* data, int len);
+  bool HmacDigest(unsigned char** md_value, unsigned int* md_len);
+
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> HmacInit(const v8::Arguments& args);
+  static v8::Handle<v8::Value> HmacUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> HmacDigest(const v8::Arguments& args);
+
+  Hmac() : md_(NULL), initialised_(false) {
+  }
+
+  ~Hmac() {
+    if (!initialised_) return;
+    HMAC_CTX_cleanup(&ctx_);
+  }
+
+ private:
+  HMAC_CTX ctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
+  bool initialised_;
+};
+
+class Hash : public ObjectWrap {
+ public:
+  static void Initialize (v8::Handle<v8::Object> target);
+
+  bool HashInit(const char* hashType);
+  bool HashUpdate(char* data, int len);
+
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> HashUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> HashDigest(const v8::Arguments& args);
+
+  Hash() : md_(NULL), initialised_(false) {
+  }
+
+  ~Hash() {
+    if (!initialised_) return;
+    EVP_MD_CTX_cleanup(&mdctx_);
+  }
+
+ private:
+  EVP_MD_CTX mdctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
+  bool initialised_;
+};
+
+class Sign : public ObjectWrap {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
+
+  v8::Handle<v8::Value> SignInit(const char* sign_type);
+  bool SignUpdate(char* data, int len);
+  bool SignFinal(unsigned char** md_value,
+                 unsigned int *md_len,
+                 char* key_pem,
+                 int key_pem_len);
+
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SignInit(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SignUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SignFinal(const v8::Arguments& args);
+
+  Sign() : md_(NULL), initialised_(false) {
+  }
+
+  ~Sign() {
+    if (!initialised_) return;
+    EVP_MD_CTX_cleanup(&mdctx_);
+  }
+
+ private:
+  EVP_MD_CTX mdctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
+  bool initialised_;
+};
+
+class Verify : public ObjectWrap {
+ public:
+  static void Initialize (v8::Handle<v8::Object> target);
+
+  v8::Handle<v8::Value> VerifyInit(const char* verify_type);
+  bool VerifyUpdate(char* data, int len);
+  v8::Handle<v8::Value> VerifyFinal(char* key_pem,
+                                    int key_pem_len,
+                                    unsigned char* sig,
+                                    int siglen);
+
+ protected:
+  static v8::Handle<v8::Value> New (const v8::Arguments& args);
+  static v8::Handle<v8::Value> VerifyInit(const v8::Arguments& args);
+  static v8::Handle<v8::Value> VerifyUpdate(const v8::Arguments& args);
+  static v8::Handle<v8::Value> VerifyFinal(const v8::Arguments& args);
+
+  Verify() : md_(NULL), initialised_(false) {
+  }
+
+  ~Verify() {
+    if (!initialised_) return;
+    EVP_MD_CTX_cleanup(&mdctx_);
+  }
+
+ private:
+  EVP_MD_CTX mdctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
+  bool initialised_;
+
+};
+
+class DiffieHellman : public ObjectWrap {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
+
+  bool Init(int primeLength);
+  bool Init(unsigned char* p, int p_len);
+  bool Init(unsigned char* p, int p_len, unsigned char* g, int g_len);
+
+ protected:
+  static v8::Handle<v8::Value> DiffieHellmanGroup(const v8::Arguments& args);
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GenerateKeys(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetPrime(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetGenerator(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetPublicKey(const v8::Arguments& args);
+  static v8::Handle<v8::Value> GetPrivateKey(const v8::Arguments& args);
+  static v8::Handle<v8::Value> ComputeSecret(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetPublicKey(const v8::Arguments& args);
+  static v8::Handle<v8::Value> SetPrivateKey(const v8::Arguments& args);
+
+  DiffieHellman() : ObjectWrap(), initialised_(false), dh(NULL) {
+  }
+
+  ~DiffieHellman() {
+    if (dh != NULL) {
+      DH_free(dh);
+    }
+  }
+
+ private:
+  bool VerifyContext();
+
+  bool initialised_;
+  DH* dh;
 };
 
 void InitCrypto(v8::Handle<v8::Object> target);

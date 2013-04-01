@@ -45,7 +45,6 @@ typedef intptr_t ssize_t;
 #endif
 
 #include "tree.h"
-#include "ngx-queue.h"
 
 #define MAX_PIPENAME_LEN 256
 
@@ -206,8 +205,6 @@ typedef struct uv_buf_t {
 } uv_buf_t;
 
 typedef int uv_file;
-
-typedef struct _stati64 uv_statbuf_t;
 
 typedef SOCKET uv_os_sock_t;
 
@@ -446,7 +443,6 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
       HANDLE read_line_handle;                                                \
       uv_buf_t read_line_buffer;                                              \
       HANDLE read_raw_wait;                                                   \
-      DWORD original_console_mode;                                            \
       /* Fields used for translating win keystrokes into vt100 characters */  \
       char last_key[8];                                                       \
       unsigned char last_key_offset;                                          \

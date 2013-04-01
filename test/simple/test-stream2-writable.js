@@ -33,7 +33,7 @@ function TestWriter() {
   this.written = 0;
 }
 
-TestWriter.prototype._write = function(chunk, cb) {
+TestWriter.prototype._write = function(chunk, encoding, cb) {
   // simulate a small unpredictable latency
   setTimeout(function() {
     this.buffer.push(chunk.toString());
@@ -186,11 +186,10 @@ test('write no bufferize', function(t) {
     decodeStrings: false
   });
 
-  tw._write = function(chunk, cb) {
-    assert(Array.isArray(chunk));
-    assert(typeof chunk[0] === 'string');
-    chunk = new Buffer(chunk[0], chunk[1]);
-    return TestWriter.prototype._write.call(this, chunk, cb);
+  tw._write = function(chunk, encoding, cb) {
+    assert(typeof chunk === 'string');
+    chunk = new Buffer(chunk, encoding);
+    return TestWriter.prototype._write.call(this, chunk, encoding, cb);
   };
 
   var encodings =
@@ -279,7 +278,7 @@ test('end callback after .write() call', function (t) {
 test('encoding should be ignored for buffers', function(t) {
   var tw = new W();
   var hex = '018b5e9a8f6236ffe30e31baf80d2cf6eb';
-  tw._write = function(chunk, cb) {
+  tw._write = function(chunk, encoding, cb) {
     t.equal(chunk.toString('hex'), hex);
     t.end();
   };
@@ -310,4 +309,40 @@ test('duplexes are pipable', function(t) {
   d.pipe(process.stdout);
   assert(!gotError);
   t.end();
+});
+
+test('end(chunk) two times is an error', function(t) {
+  var w = new W();
+  w._write = function() {};
+  var gotError = false;
+  w.on('error', function(er) {
+    gotError = true;
+    t.equal(er.message, 'write after end');
+  });
+  w.end('this is the end');
+  w.end('and so is this');
+  process.nextTick(function() {
+    assert(gotError);
+    t.end();
+  });
+});
+
+test('dont end while writing', function(t) {
+  var w = new W();
+  var wrote = false;
+  w._write = function(chunk, e, cb) {
+    assert(!this.writing);
+    wrote = true;
+    this.writing = true;
+    setTimeout(function() {
+      this.writing = false;
+      cb();
+    });
+  };
+  w.on('finish', function() {
+    assert(wrote);
+    t.end();
+  });
+  w.write(Buffer(0));
+  w.end();
 });

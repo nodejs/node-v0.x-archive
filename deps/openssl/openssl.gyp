@@ -16,7 +16,13 @@
         # No clue what these are for.
         'L_ENDIAN',
         'PURIFY',
-        '_REENTRANT'
+        '_REENTRANT',
+
+        # Heartbeat is a TLS extension, that couldn't be turned off or
+        # asked to be not advertised. Unfortunately this is unacceptable for
+        # Microsoft's IIS, which seems to be ignoring whole ClientHello after
+        # seeing this extension.
+        'OPENSSL_NO_HEARTBEATS',
       ],
       'sources': [
         'openssl/ssl/bio_ssl.c',
@@ -824,6 +830,7 @@
                   'action': [
                     'ml.exe',
                     '/Zi',
+                    '/safeseh',
                     '/Fo', '<(INTERMEDIATE_DIR)/<(RULE_INPUT_ROOT).obj',
                     '/c', '<(RULE_INPUT_PATH)',
                   ],
@@ -881,7 +888,13 @@
           'defines': [
             'MK1MF_BUILD',
             'WIN32_LEAN_AND_MEAN'
-          ]
+          ],
+          'link_settings': {
+            'libraries': [
+              '-lgdi32.lib',
+              '-luser32.lib',
+            ]
+          }
         }, {
           'defines': [
             # ENGINESDIR must be defined if OPENSSLDIR is.

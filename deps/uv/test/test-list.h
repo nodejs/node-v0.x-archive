@@ -95,9 +95,12 @@ TEST_DECLARE   (shutdown_eof)
 TEST_DECLARE   (callback_stack)
 TEST_DECLARE   (error_message)
 TEST_DECLARE   (timer)
+TEST_DECLARE   (timer_init)
 TEST_DECLARE   (timer_again)
 TEST_DECLARE   (timer_start_twice)
 TEST_DECLARE   (timer_order)
+TEST_DECLARE   (timer_huge_timeout)
+TEST_DECLARE   (timer_huge_repeat)
 TEST_DECLARE   (idle_starvation)
 TEST_DECLARE   (loop_handles)
 TEST_DECLARE   (get_loadavg)
@@ -133,6 +136,7 @@ TEST_DECLARE   (process_title)
 TEST_DECLARE   (cwd_and_chdir)
 TEST_DECLARE   (get_memory)
 TEST_DECLARE   (hrtime)
+TEST_DECLARE   (getaddrinfo_fail)
 TEST_DECLARE   (getaddrinfo_basic)
 TEST_DECLARE   (getaddrinfo_concurrent)
 TEST_DECLARE   (getsockname_tcp)
@@ -336,9 +340,12 @@ TASK_LIST_START
   TEST_ENTRY  (error_message)
 
   TEST_ENTRY  (timer)
+  TEST_ENTRY  (timer_init)
   TEST_ENTRY  (timer_again)
   TEST_ENTRY  (timer_start_twice)
   TEST_ENTRY  (timer_order)
+  TEST_ENTRY  (timer_huge_timeout)
+  TEST_ENTRY  (timer_huge_repeat)
 
   TEST_ENTRY  (idle_starvation)
 
@@ -392,6 +399,7 @@ TASK_LIST_START
 
   TEST_ENTRY  (hrtime)
 
+  TEST_ENTRY  (getaddrinfo_fail)
   TEST_ENTRY  (getaddrinfo_basic)
   TEST_ENTRY  (getaddrinfo_concurrent)
 

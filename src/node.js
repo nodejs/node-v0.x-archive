@@ -35,6 +35,7 @@
         value: process.constructor
       }
     });
+    EventEmitter.call(process);
 
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
 
@@ -222,6 +223,8 @@
       var caught = false;
       if (process.domain) {
         var domain = process.domain;
+        var domainModule = NativeModule.require('domain');
+        var domainStack = domainModule._stack;
 
         // ignore errors on disposed domains.
         //
@@ -246,14 +249,24 @@
           caught = domain.emit('error', er);
 
           // Exit all domains on the stack.  Uncaught exceptions end the
-          // current tick and no domains should be left on the stack between
-          // ticks.  Since a domain exists, this require will not be loading
-          // it for the first time and should be safe.
+          // current tick and no domains should be left on the stack
+          // between ticks.
           var domainModule = NativeModule.require('domain');
-          domainModule._stack.length = 0;
+          domainStack.length = 0;
           domainModule.active = process.domain = null;
         } catch (er2) {
-          caught = false;
+          // The domain error handler threw!  oh no!
+          // See if another domain can catch THIS error,
+          // or else crash on the original one.
+          // If the user already exited it, then don't double-exit.
+          if (domain === domainModule.active)
+            domainStack.pop();
+          if (domainStack.length) {
+            var parentDomain = domainStack[domainStack.length - 1];
+            process.domain = domainModule.active = parentDomain;
+            caught = process._fatalException(er2);
+          } else
+            caught = false;
         }
       } else {
         caught = process.emit('uncaughtException', er);
@@ -318,12 +331,12 @@
     var index = 1;
     var depth = 2;
 
-    process._tickCallback = _tickCallback;
-    process._tickFromSpinner = _tickFromSpinner;
-    // needs to be accessible from cc land
-    process._tickDomainCallback = _tickDomainCallback;
     process.nextTick = nextTick;
+    // needs to be accessible from cc land
     process._nextDomainTick = _nextDomainTick;
+    process._tickCallback = _tickCallback;
+    process._tickDomainCallback = _tickDomainCallback;
+    process._tickFromSpinner = _tickFromSpinner;
 
     // the maximum number of times it'll process something like
     // nextTick(function f(){nextTick(f)})
@@ -358,7 +371,9 @@
       var msg = '(node) warning: Recursive process.nextTick detected. ' +
                 'This will break in the next version of node. ' +
                 'Please use setImmediate for recursive deferral.';
-      if (process.traceDeprecation)
+      if (process.throwDeprecation)
+        throw new Error(msg);
+      else if (process.traceDeprecation)
         console.trace(msg);
       else
         console.error(msg);
@@ -554,6 +569,7 @@
         break;
 
       case 'PIPE':
+      case 'TCP':
         var net = NativeModule.require('net');
         stream = new net.Socket({
           fd: fd,
@@ -639,6 +655,7 @@
           break;
 
         case 'PIPE':
+        case 'TCP':
           var net = NativeModule.require('net');
           stdin = new net.Socket({
             fd: fd,
@@ -708,7 +725,7 @@
       }
 
       if (r) {
-        throw errnoException(errno, 'kill');
+        throw errnoException(process._errno, 'kill');
       }
 
       return true;
@@ -716,10 +733,6 @@
   };
 
   startup.processSignalHandlers = function() {
-    // Not supported on Windows.
-    if (process.platform === 'win32')
-      return;
-
     // Load events module in order to access prototype elements on process like
     // process.addListener.
     var signalWraps = {};
@@ -746,7 +759,7 @@
         var r = wrap.start(signum);
         if (r) {
           wrap.close();
-          throw errnoException(errno, 'uv_signal_start');
+          throw errnoException(process._errno, 'uv_signal_start');
         }
 
         signalWraps[type] = wrap;

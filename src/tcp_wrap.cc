@@ -63,7 +63,7 @@ Local<Object> TCPWrap::Instantiate() {
   // called yet.
   assert(tcpConstructor.IsEmpty() == false);
 
-  HandleScope scope;
+  HandleScope scope(node_isolate);
   Local<Object> obj = tcpConstructor->NewInstance();
 
   return scope.Close(obj);
@@ -74,7 +74,7 @@ void TCPWrap::Initialize(Handle<Object> target) {
   HandleWrap::Initialize(target);
   StreamWrap::Initialize(target);
 
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   Local<FunctionTemplate> t = FunctionTemplate::New(New);
   t->SetClassName(String::NewSymbol("TCP"));
@@ -104,6 +104,7 @@ void TCPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "writeUtf8String", StreamWrap::WriteUtf8String);
   NODE_SET_PROTOTYPE_METHOD(t, "writeUcs2String", StreamWrap::WriteUcs2String);
 
+  NODE_SET_PROTOTYPE_METHOD(t, "open", Open);
   NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
   NODE_SET_PROTOTYPE_METHOD(t, "listen", Listen);
   NODE_SET_PROTOTYPE_METHOD(t, "connect", Connect);
@@ -118,7 +119,7 @@ void TCPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setSimultaneousAccepts", SetSimultaneousAccepts);
 #endif
 
-  tcpConstructor = Persistent<Function>::New(t->GetFunction());
+  tcpConstructor = Persistent<Function>::New(node_isolate, t->GetFunction());
 
   onconnection_sym = NODE_PSYMBOL("onconnection");
   oncomplete_sym = NODE_PSYMBOL("oncomplete");
@@ -130,7 +131,7 @@ void TCPWrap::Initialize(Handle<Object> target) {
 TCPWrap* TCPWrap::Unwrap(Local<Object> obj) {
   assert(!obj.IsEmpty());
   assert(obj->InternalFieldCount() > 0);
-  return static_cast<TCPWrap*>(obj->GetPointerFromInternalField(0));
+  return static_cast<TCPWrap*>(obj->GetAlignedPointerFromInternalField(0));
 }
 
 
@@ -145,7 +146,7 @@ Handle<Value> TCPWrap::New(const Arguments& args) {
   // normal function.
   assert(args.IsConstructCall());
 
-  HandleScope scope;
+  HandleScope scope(node_isolate);
   TCPWrap* wrap = new TCPWrap(args.This());
   assert(wrap);
 
@@ -168,7 +169,7 @@ TCPWrap::~TCPWrap() {
 
 
 Handle<Value> TCPWrap::GetSockName(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
   struct sockaddr_storage address;
 
   UNWRAP(TCPWrap)
@@ -180,7 +181,7 @@ Handle<Value> TCPWrap::GetSockName(const Arguments& args) {
 
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
-    return Null();
+    return Null(node_isolate);
   }
 
   const sockaddr* addr = reinterpret_cast<const sockaddr*>(&address);
@@ -189,7 +190,7 @@ Handle<Value> TCPWrap::GetSockName(const Arguments& args) {
 
 
 Handle<Value> TCPWrap::GetPeerName(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
   struct sockaddr_storage address;
 
   UNWRAP(TCPWrap)
@@ -201,7 +202,7 @@ Handle<Value> TCPWrap::GetPeerName(const Arguments& args) {
 
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
-    return Null();
+    return Null(node_isolate);
   }
 
   const sockaddr* addr = reinterpret_cast<const sockaddr*>(&address);
@@ -210,7 +211,7 @@ Handle<Value> TCPWrap::GetPeerName(const Arguments& args) {
 
 
 Handle<Value> TCPWrap::SetNoDelay(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -219,12 +220,12 @@ Handle<Value> TCPWrap::SetNoDelay(const Arguments& args) {
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
 
-  return Undefined();
+  return Undefined(node_isolate);
 }
 
 
 Handle<Value> TCPWrap::SetKeepAlive(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -235,13 +236,13 @@ Handle<Value> TCPWrap::SetKeepAlive(const Arguments& args) {
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
 
-  return Undefined();
+  return Undefined(node_isolate);
 }
 
 
 #ifdef _WIN32
 Handle<Value> TCPWrap::SetSimultaneousAccepts(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -251,13 +252,22 @@ Handle<Value> TCPWrap::SetSimultaneousAccepts(const Arguments& args) {
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
 
-  return Undefined();
+  return Undefined(node_isolate);
 }
 #endif
 
 
-Handle<Value> TCPWrap::Bind(const Arguments& args) {
+Handle<Value> TCPWrap::Open(const Arguments& args) {
   HandleScope scope;
+  UNWRAP(TCPWrap)
+  int fd = args[0]->IntegerValue();
+  uv_tcp_open(&wrap->handle_, fd);
+  return Null();
+}
+
+
+Handle<Value> TCPWrap::Bind(const Arguments& args) {
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -270,12 +280,12 @@ Handle<Value> TCPWrap::Bind(const Arguments& args) {
   // Error starting the tcp.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 
 Handle<Value> TCPWrap::Bind6(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -288,12 +298,12 @@ Handle<Value> TCPWrap::Bind6(const Arguments& args) {
   // Error starting the tcp.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 
 Handle<Value> TCPWrap::Listen(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -304,12 +314,12 @@ Handle<Value> TCPWrap::Listen(const Arguments& args) {
   // Error starting the tcp.
   if (r) SetErrno(uv_last_error(uv_default_loop()));
 
-  return scope.Close(Integer::New(r));
+  return scope.Close(Integer::New(r, node_isolate));
 }
 
 
 void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   TCPWrap* wrap = static_cast<TCPWrap*>(handle->data);
   assert(&wrap->handle_ == (uv_tcp_t*)handle);
@@ -327,7 +337,7 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
     // Unwrap the client javascript object.
     assert(client_obj->InternalFieldCount() > 0);
     TCPWrap* client_wrap = static_cast<TCPWrap*>(
-        client_obj->GetPointerFromInternalField(0));
+        client_obj->GetAlignedPointerFromInternalField(0));
 
     if (uv_accept(handle, (uv_stream_t*)&client_wrap->handle_)) return;
 
@@ -335,7 +345,7 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
     argv[0] = client_obj;
   } else {
     SetErrno(uv_last_error(uv_default_loop()));
-    argv[0] = Local<Value>::New(Null());
+    argv[0] = Local<Value>::New(node_isolate, Null(node_isolate));
   }
 
   MakeCallback(wrap->object_, onconnection_sym, ARRAY_SIZE(argv), argv);
@@ -346,7 +356,7 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
   ConnectWrap* req_wrap = (ConnectWrap*) req->data;
   TCPWrap* wrap = (TCPWrap*) req->handle->data;
 
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   // The wrap and request objects should still be there.
   assert(req_wrap->object_.IsEmpty() == false);
@@ -357,11 +367,11 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
   }
 
   Local<Value> argv[5] = {
-    Integer::New(status),
-    Local<Value>::New(wrap->object_),
-    Local<Value>::New(req_wrap->object_),
-    Local<Value>::New(v8::True()),
-    Local<Value>::New(v8::True())
+    Integer::New(status, node_isolate),
+    Local<Value>::New(node_isolate, wrap->object_),
+    Local<Value>::New(node_isolate, req_wrap->object_),
+    Local<Value>::New(node_isolate, v8::True(node_isolate)),
+    Local<Value>::New(node_isolate, v8::True(node_isolate))
   };
 
   MakeCallback(req_wrap->object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
@@ -371,7 +381,7 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
 
 
 Handle<Value> TCPWrap::Connect(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -393,7 +403,7 @@ Handle<Value> TCPWrap::Connect(const Arguments& args) {
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
     delete req_wrap;
-    return scope.Close(v8::Null());
+    return scope.Close(v8::Null(node_isolate));
   } else {
     return scope.Close(req_wrap->object_);
   }
@@ -401,7 +411,7 @@ Handle<Value> TCPWrap::Connect(const Arguments& args) {
 
 
 Handle<Value> TCPWrap::Connect6(const Arguments& args) {
-  HandleScope scope;
+  HandleScope scope(node_isolate);
 
   UNWRAP(TCPWrap)
 
@@ -420,7 +430,7 @@ Handle<Value> TCPWrap::Connect6(const Arguments& args) {
   if (r) {
     SetErrno(uv_last_error(uv_default_loop()));
     delete req_wrap;
-    return scope.Close(v8::Null());
+    return scope.Close(v8::Null(node_isolate));
   } else {
     return scope.Close(req_wrap->object_);
   }
@@ -435,7 +445,7 @@ Local<Object> AddressToJS(const sockaddr* addr) {
   static Persistent<String> ipv4_sym;
   static Persistent<String> ipv6_sym;
 
-  HandleScope scope;
+  HandleScope scope(node_isolate);
   char ip[INET6_ADDRSTRLEN];
   const sockaddr_in *a4;
   const sockaddr_in6 *a6;
@@ -458,7 +468,7 @@ Local<Object> AddressToJS(const sockaddr* addr) {
     port = ntohs(a6->sin6_port);
     info->Set(address_sym, String::New(ip));
     info->Set(family_sym, ipv6_sym);
-    info->Set(port_sym, Integer::New(port));
+    info->Set(port_sym, Integer::New(port, node_isolate));
     break;
 
   case AF_INET:
@@ -467,11 +477,11 @@ Local<Object> AddressToJS(const sockaddr* addr) {
     port = ntohs(a4->sin_port);
     info->Set(address_sym, String::New(ip));
     info->Set(family_sym, ipv4_sym);
-    info->Set(port_sym, Integer::New(port));
+    info->Set(port_sym, Integer::New(port, node_isolate));
     break;
 
   default:
-    info->Set(address_sym, String::Empty());
+    info->Set(address_sym, String::Empty(node_isolate));
   }
 
   return scope.Close(info);

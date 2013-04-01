@@ -18,6 +18,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
+OBJC ?= $(CC)
+
 E=
 CSTDFLAG=--std=c89 -pedantic -Wall -Wextra -Wno-unused-parameter
 CFLAGS += -g
@@ -53,8 +55,9 @@ OBJS += src/unix/udp.o
 OBJS += src/fs-poll.o
 OBJS += src/uv-common.o
 OBJS += src/inet.o
+OBJS += src/version.o
 
-ifeq (sunos,$(OS))
+ifeq (sunos,$(PLATFORM))
 CPPFLAGS += -D__EXTENSIONS__ -D_XOPEN_SOURCE=500
 LDFLAGS+=-lkstat -lnsl -lsendfile -lsocket
 # Library dependencies are not transitive.
@@ -62,13 +65,13 @@ RUNNER_LDFLAGS += $(LDFLAGS)
 OBJS += src/unix/sunos.o
 endif
 
-ifeq (aix,$(OS))
+ifeq (aix,$(PLATFORM))
 CPPFLAGS += -D_ALL_SOURCE -D_XOPEN_SOURCE=500
 LDFLAGS+= -lperfstat
 OBJS += src/unix/aix.o
 endif
 
-ifeq (darwin,$(OS))
+ifeq (darwin,$(PLATFORM))
 CPPFLAGS += -D_DARWIN_USE_64_BIT_INODE=1
 LDFLAGS += -framework Foundation \
            -framework CoreServices \
@@ -82,7 +85,7 @@ OBJS += src/unix/proctitle.o
 OBJS += src/unix/darwin-proctitle.o
 endif
 
-ifeq (linux,$(OS))
+ifeq (linux,$(PLATFORM))
 CSTDFLAG += -D_GNU_SOURCE
 LDFLAGS+=-ldl -lrt
 RUNNER_CFLAGS += -D_GNU_SOURCE
@@ -92,38 +95,38 @@ OBJS += src/unix/linux-core.o \
         src/unix/proctitle.o
 endif
 
-ifeq (freebsd,$(OS))
+ifeq (freebsd,$(PLATFORM))
 LDFLAGS+=-lkvm
 OBJS += src/unix/freebsd.o
 OBJS += src/unix/kqueue.o
 endif
 
-ifeq (dragonfly,$(OS))
+ifeq (dragonfly,$(PLATFORM))
 LDFLAGS+=-lkvm
 OBJS += src/unix/freebsd.o
 OBJS += src/unix/kqueue.o
 endif
 
-ifeq (netbsd,$(OS))
+ifeq (netbsd,$(PLATFORM))
 LDFLAGS+=-lkvm
 OBJS += src/unix/netbsd.o
 OBJS += src/unix/kqueue.o
 endif
 
-ifeq (openbsd,$(OS))
+ifeq (openbsd,$(PLATFORM))
 LDFLAGS+=-lkvm
 OBJS += src/unix/openbsd.o
 OBJS += src/unix/kqueue.o
 endif
 
-ifneq (,$(findstring cygwin,$(OS)))
+ifneq (,$(findstring cygwin,$(PLATFORM)))
 # We drop the --std=c89, it hides CLOCK_MONOTONIC on cygwin
 CSTDFLAG = -D_GNU_SOURCE
 LDFLAGS+=
 OBJS += src/unix/cygwin.o
 endif
 
-ifeq (sunos,$(OS))
+ifeq (sunos,$(PLATFORM))
 RUNNER_LDFLAGS += -pthreads
 else
 RUNNER_LDFLAGS += -pthread
@@ -142,10 +145,11 @@ include/uv-private/uv-unix.h: \
 	include/uv-private/uv-linux.h \
 	include/uv-private/uv-sunos.h
 
-src/unix/internal.h: src/unix/linux-syscalls.h
+src/unix/internal.h: src/unix/linux-syscalls.h src/uv-common.h
+src/uv-common.h: src/queue.h
 
 src/.buildstamp src/unix/.buildstamp test/.buildstamp:
-	mkdir -p $(dir $@)
+	mkdir -p $(@D)
 	touch $@
 
 src/unix/%.o src/unix/%.pic.o: src/unix/%.c include/uv.h include/uv-private/uv-unix.h src/unix/internal.h src/unix/.buildstamp
@@ -158,10 +162,7 @@ test/%.o: test/%.c include/uv.h test/.buildstamp
 	$(CC) $(CSTDFLAG) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 clean-platform:
-	-rm -f libuv.a libuv.$(SOEXT) test/run-{tests,benchmarks}.dSYM
-
-distclean-platform:
-	-rm -f libuv.a libuv.$(SOEXT) test/run-{tests,benchmarks}.dSYM
+	$(RM) test/run-{tests,benchmarks}.dSYM $(OBJS) $(OBJS:%.o=%.pic.o)
 
 %.pic.o %.o:  %.m
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $^ -o $@
+	$(OBJC) $(CPPFLAGS) $(CFLAGS) -c $^ -o $@

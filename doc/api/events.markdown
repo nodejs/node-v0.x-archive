@@ -87,9 +87,23 @@ Returns an array of listeners for the specified event.
 
 Execute each of the listeners in order with the supplied arguments.
 
+
+### Class Method: EventEmitter.listenerCount(emitter, event)
+
+Return the number of listeners for a given event.
+
+
 ### Event: 'newListener'
 
 * `event` {String} The event name
 * `listener` {Function} The event handler function
 
 This event is emitted any time someone adds a new listener.
+
+
+### Event: 'removeListener'
+
+* `event` {String} The event name
+* `listener` {Function} The event handler function
+
+This event is emitted any time someone removes a listener.
