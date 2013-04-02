@@ -101,7 +101,7 @@ h1 a, h2 a, h3 a, h4 a {
   height: auto;
   overflow: hidden;
   _zoom: 1;
-  width: 300px;
+  width: 350px;
   margin: 0 auto;
 }
 
@@ -120,7 +120,7 @@ h1 a, h2 a, h3 a, h4 a {
   -moz-transition: .2s all ease-in-out;
   transition: .2s all ease-in-out;
 
-  margin: 10px 4px;
+  margin: 8px 1px;
   display: inline-block;
   color: #46483e;
   background-color: #9a9f8b;
@@ -145,7 +145,7 @@ h1 a, h2 a, h3 a, h4 a {
 
 #intro .downloadbutton {
   background-color: #8BC84B;
-  width: 200px;
+  width: 300px;
   font-size: 14px;
   font-weight: bold;
   display: block;
