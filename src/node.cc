@@ -1516,12 +1516,11 @@ static uid_t uid_by_name(const char* name) {
   struct passwd pwd;
   struct passwd* pp;
   char buf[8192];
-  int rc;
 
   errno = 0;
   pp = NULL;
 
-  if ((rc = getpwnam_r(name, &pwd, buf, sizeof(buf), &pp)) == 0 && pp != NULL) {
+  if (getpwnam_r(name, &pwd, buf, sizeof(buf), &pp) == 0 && pp != NULL) {
     return pp->pw_uid;
   }
 
