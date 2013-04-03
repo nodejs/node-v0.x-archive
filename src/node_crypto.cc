@@ -20,6 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "node_crypto.h"
+#include "node_crypto_bio.h"
 #include "node_crypto_groups.h"
 #include "v8.h"
 
@@ -1201,8 +1202,8 @@ Handle<Value> Connection::New(const Arguments& args) {
   bool is_server = args[1]->BooleanValue();
 
   p->ssl_ = SSL_new(sc->ctx_);
-  p->bio_read_ = BIO_new(BIO_s_mem());
-  p->bio_write_ = BIO_new(BIO_s_mem());
+  p->bio_read_ = BIO_new(NodeBIO::GetMethod());
+  p->bio_write_ = BIO_new(NodeBIO::GetMethod());
 
   SSL_set_app_data(p->ssl_, p);
 
