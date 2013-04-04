@@ -29,6 +29,7 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #if defined(__alpha__)
 # define UV__O_CLOEXEC        0x200000
