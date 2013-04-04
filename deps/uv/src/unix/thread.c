@@ -351,7 +351,7 @@ int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
 }
 
 
-#if defined(__APPLE__) && defined(__MACH__)
+#if defined(__APPLE__) && defined(__MACH__) || defined(ANDROID)
 
 int uv_barrier_init(uv_barrier_t* barrier, unsigned int count) {
   barrier->n = count;
