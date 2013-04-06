@@ -283,8 +283,10 @@ int uv_cond_init(uv_cond_t* cond) {
   if (pthread_condattr_init(&attr))
     return -1;
 
+#if !defined(ANDROID)
   if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC))
     goto error2;
+#endif
 
   if (pthread_cond_init(cond, &attr))
     goto error2;
@@ -332,6 +334,11 @@ int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
   ts.tv_sec = timeout / NANOSEC;
   ts.tv_nsec = timeout % NANOSEC;
   r = pthread_cond_timedwait_relative_np(cond, mutex, &ts);
+#elseif defined(ANDROID)
+  timeout += uv__hrtime();
+  ts.tv_sec = timeout / NANOSEC;
+  ts.tv_nsec = timeout % NANOSEC;
+  r = pthread_cond_timedwait_monotonic(cond, mutex, &ts);
 #else
   timeout += uv__hrtime();
   ts.tv_sec = timeout / NANOSEC;
