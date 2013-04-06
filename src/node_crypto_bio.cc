@@ -279,7 +279,7 @@ void NodeBIO::Write(const char* data, size_t size) {
 
     // Got to next buffer if still has some bytes to write
     if (left != 0) {
-      if (write_head_->next_->write_pos_ == kBufferLength) {
+      if (write_head_->write_pos_ == kBufferLength) {
         Buffer* next = new Buffer();
         next->next_ = write_head_->next_;
         write_head_->next_ = next;
