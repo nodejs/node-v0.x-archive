@@ -110,6 +110,7 @@
         'src/node_buffer.h',
         'src/node_constants.h',
         'src/node_crypto.h',
+        'src/node_crypto_bio.h',
         'src/node_extensions.h',
         'src/node_file.h',
         'src/node_http_parser.h',
@@ -147,7 +148,7 @@
       'conditions': [
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
-          'sources': [ 'src/node_crypto.cc' ],
+          'sources': [ 'src/node_crypto.cc', 'src/node_crypto_bio.cc' ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {
               'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],
@@ -220,6 +221,9 @@
             'tools/msvs/genfiles/node_perfctr_provider.rc',
           ]
         } ],
+        [ 'v8_postmortem_support=="true"', {
+          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:postmortem-metadata' ],
+        }],
         [ 'node_shared_v8=="false"', {
           'sources': [
             'deps/v8/include/v8.h',
