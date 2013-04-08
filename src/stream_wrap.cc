@@ -288,25 +288,60 @@ Handle<Value> StreamWrap::WriteBuffer(const Arguments& args) {
 
   UNWRAP(StreamWrap)
 
-  // The first argument is a buffer.
-  assert(args.Length() >= 1 && Buffer::HasInstance(args[0]));
-  Local<Object> buffer_obj = args[0]->ToObject();
-  size_t offset = 0;
-  size_t length = Buffer::Length(buffer_obj);
+  assert(args.Length() >= 1);
+
+  // Determine buffer count
+  unsigned long count;
+  size_t length = 0;
+  bool is_writev = args[0]->IsArray();
+  if (!is_writev) {
+    assert(Buffer::HasInstance(args[0]));
+    // The first argument is a buffer.
+    count = 1;
+    length = Buffer::Length(args[0]);
+  } else {
+    // The first argument is multiple buffer.
+    assert(args[0]->IsArray());
+    count = args[0].As<v8::Array>()->Length();
+  }
+
+  uv_buf_t buf_[128];
+  uv_buf_t* buf = buf_;
+
+  // Allocate buffers if on-stack is not enough
+  if (count > ARRAY_SIZE(buf_))
+    buf = new uv_buf_t[count];
+
+  // Create Write request
   char* storage = new char[sizeof(WriteWrap)];
   WriteWrap* req_wrap = new (storage) WriteWrap();
 
-  req_wrap->object_->SetHiddenValue(buffer_sym, buffer_obj);
+  if (is_writev) {
+    v8::Local<v8::Array> chunks = args[0].As<v8::Array>();
+    for (unsigned long i = 0; i < count; i++) {
+      v8::Local<v8::Value> chunk = chunks->Get(i);
+      assert(Buffer::HasInstance(chunk));
+      buf[i].base = Buffer::Data(chunk);
+      buf[i].len = Buffer::Length(chunk);
+      length += buf[i].len;
+    }
+  } else {
+    // Simple non-writev case
+    buf[0].base = Buffer::Data(args[0]);
+    buf[0].len = length;
 
-  uv_buf_t buf;
-  buf.base = Buffer::Data(buffer_obj) + offset;
-  buf.len = length;
+    req_wrap->object_->SetHiddenValue(buffer_sym, args[0]);
+  }
 
   int r = uv_write(&req_wrap->req_,
                    wrap->stream_,
-                   &buf,
-                   1,
+                   buf,
+                   count,
                    StreamWrap::AfterWrite);
+
+  // Deallocate not on-stack buffers
+  if (buf != buf_)
+    delete[] buf;
 
   req_wrap->Dispatched();
   req_wrap->object_->Set(bytes_sym,
