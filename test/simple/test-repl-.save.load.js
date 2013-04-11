@@ -61,7 +61,8 @@ putIn.run(testFile);
 putIn.run(['.save ' + saveFileName]);
 
 // the file should have what I wrote
-assert.equal(fs.readFileSync(saveFileName, 'utf8'), testFile.join('\n') + '\n');
+assert.equal(fs.readFileSync(saveFileName, 'utf8')
+             , testFile.join('\n') + '\n\n');
 
 // make sure that the REPL data is "correct"
 // so when I load it back I know I'm good
