@@ -6,7 +6,7 @@ To use this module, do `require('readline')`. Readline allows reading of a
 stream (such as `process.stdin`) on a line-by-line basis.
 
 Note that once you've invoked this module, your node program will not
-terminate until you've closed the interface. Here's how to allow your
+terminate until you've closed the interface. Here’s how to allow your
 program to gracefully exit:
 
     var readline = require('readline');
@@ -89,7 +89,7 @@ stream.
 ### rl.setPrompt(prompt)
 
 Sets the prompt, for example when you run `node` on the command line, you see
-`> `, which is node's prompt.
+`> `, which is node’s prompt.
 
 ### rl.prompt([preserveCursor])
 
@@ -102,9 +102,9 @@ been paused.
 
 ### rl.question(query, callback)
 
-Prepends the prompt with `query` and invokes `callback` with the user's
+Prepends the prompt with `query` and invokes `callback` with the user’s
 response. Displays the query to the user, and then invokes `callback`
-with the user's response after it has been typed.
+with the user’s response after it has been typed.
 
 This will also resume the `input` stream used with `createInterface` if
 it has been paused.
@@ -257,7 +257,7 @@ Example of listening for `SIGCONT`:
 
 ## Example: Tiny CLI
 
-Here's an example of how to use all these together to craft a tiny command
+Here’s an example of how to use all these together to craft a tiny command
 line interface:
 
     var readline = require('readline'),

@@ -188,7 +188,7 @@ Note: **This function should usually be called by Readable consumers,
 NOT by implementors of Readable subclasses.**  It does not indicate
 the end of a `_read()` transaction in the way that
 `readable.push(chunk)` does.  If you find that you have to call
-`this.unshift(chunk)` in your Readable class, then there's a good
+`this.unshift(chunk)` in your Readable class, then there’s a good
 chance you ought to be using the
 [stream.Transform](#stream_class_stream_transform) class instead.
 
@@ -243,7 +243,7 @@ SimpleProtocol.prototype._read = function(n) {
   if (!this._inBody) {
     var chunk = this._source.read();
 
-    // if the source doesn't have data, we don't have data yet.
+    // if the source doesn’t have data, we don’t have data yet.
     if (chunk === null)
       return this.push('');
 
@@ -525,7 +525,7 @@ stream.
 
 ### Event: 'drain'
 
-Emitted when the stream's write queue empties and it's safe to write
+Emitted when the stream’s write queue empties and it’s safe to write
 without buffering again. Listen for it when `stream.write()` returns
 `false`.
 
@@ -543,14 +543,14 @@ event is emitted.
 
 * `source` {Readable Stream}
 
-Emitted when the stream is passed to a readable stream's pipe method.
+Emitted when the stream is passed to a readable stream’s pipe method.
 
 ### Event 'unpipe'
 
 * `source` {Readable Stream}
 
 Emitted when a previously established `pipe()` is removed using the
-source Readable stream's `unpipe()` method.
+source Readable stream’s `unpipe()` method.
 
 ## Class: stream.Duplex
 
@@ -564,7 +564,7 @@ extended with an underlying implementation of the `_read(size)`
 and `_write(chunk, encoding, callback)` methods as you would with a Readable or
 Writable stream class.
 
-Since JavaScript doesn't have multiple prototypal inheritance, this
+Since JavaScript doesn’t have multiple prototypal inheritance, this
 class prototypally inherits from Readable, and then parasitically from
 Writable.  It is thus up to the user to implement both the lowlevel
 `_read(n)` method as well as the lowlevel `_write(chunk, encoding, cb)` method

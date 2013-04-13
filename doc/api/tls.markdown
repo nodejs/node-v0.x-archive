@@ -57,10 +57,10 @@ exceeded. The limits are configurable:
   - `tls.CLIENT_RENEG_WINDOW`: renegotiation window in seconds, default is
                                10 minutes.
 
-Don't change the defaults unless you know what you are doing.
+Don’t change the defaults unless you know what you are doing.
 
 To test your server, connect to it with `openssl s_client -connect address:port`
-and tap `R<CR>` (that's the letter `R` followed by a carriage return) a few
+and tap `R<CR>` (that’s the letter `R` followed by a carriage return) a few
 times.
 
 
@@ -136,7 +136,7 @@ automatically set as a listener for the [secureConnection][] event.  The
     A `'clientError'` is emitted on the `tls.Server` object whenever a handshake
     times out.
 
-  - `honorCipherOrder` : When choosing a cipher, use the server's preferences
+  - `honorCipherOrder` : When choosing a cipher, use the server’s preferences
     instead of the client preferences.
 
     Note that if SSLv2 is used, the server will send its list of preferences
@@ -161,7 +161,7 @@ automatically set as a listener for the [secureConnection][] event.  The
     extension. Only one argument will be passed to it: `servername`. And
     `SNICallback` should return SecureContext instance.
     (You can use `crypto.createCredentials(...).context` to get proper
-    SecureContext). If `SNICallback` wasn't provided - default callback with
+    SecureContext). If `SNICallback` wasn’t provided - default callback with
     high-level API will be used (see below).
 
   - `sessionTimeout`: An integer specifying the seconds after which TLS
@@ -234,7 +234,7 @@ Size of slab buffer used by all tls servers and clients.
 Default: `10 * 1024 * 1024`.
 
 
-Don't change the defaults unless you know what you are doing.
+Don’t change the defaults unless you know what you are doing.
 
 
 ## tls.connect(options, [callback])
@@ -273,7 +273,7 @@ Creates a new client connection to the given `port` and `host` (old API) or
 
   - `NPNProtocols`: An array of string or `Buffer` containing supported NPN
     protocols. `Buffer` should have following format: `0x05hello0x05world`,
-    where first byte is next protocol name's length. (Passing array should
+    where first byte is next protocol name’s length. (Passing array should
     usually be much simpler: `['hello', 'world']`.)
 
   - `servername`: Servername for SNI (Server Name Indication) TLS extension.
@@ -418,8 +418,8 @@ storage.
 
 Emitted when client wants to resume previous TLS session. Event listener may
 perform lookup in external storage using given `sessionId`, and invoke
-`callback(null, sessionData)` once finished. If session can't be resumed
-(i.e. doesn't exist in storage) one may call `callback(null, null)`. Calling
+`callback(null, sessionData)` once finished. If session can’t be resumed
+(i.e. doesn’t exist in storage) one may call `callback(null, null)`. Calling
 `callback(err)` will terminate incoming connection and destroy socket.
 
 
@@ -449,13 +449,13 @@ more information.
 
 ### server.addContext(hostname, credentials)
 
-Add secure context that will be used if client request's SNI hostname is
+Add secure context that will be used if client request’s SNI hostname is
 matching passed `hostname` (wildcards can be used). `credentials` can contain
 `key`, `cert` and `ca`.
 
 ### server.maxConnections
 
-Set this property to reject connections when the server's connection count
+Set this property to reject connections when the server’s connection count
 gets high.
 
 ### server.connections
@@ -469,7 +469,7 @@ This is an encrypted stream.
 
 ### cryptoStream.bytesWritten
 
-A proxy to the underlying socket's bytesWritten accessor, this will return
+A proxy to the underlying socket’s bytesWritten accessor, this will return
 the total bytes written to the socket, *including the TLS overhead*.
 
 ## Class: tls.CleartextStream
@@ -485,7 +485,7 @@ A ClearTextStream is the `clear` member of a SecurePair object.
 ### Event: 'secureConnect'
 
 This event is emitted after a new connection has been successfully handshaked. 
-The listener will be called no matter if the server's certificate was
+The listener will be called no matter if the server’s certificate was
 authorized or not. It is up to the user to test `cleartextStream.authorized`
 to see if the server certificate was signed by one of the specified CAs.
 If `cleartextStream.authorized === false` then the error can be found in
@@ -499,12 +499,12 @@ specified CAs, otherwise `false`
 
 ### cleartextStream.authorizationError
 
-The reason why the peer's certificate has not been verified. This property
+The reason why the peer’s certificate has not been verified. This property
 becomes available only when `cleartextStream.authorized === false`.
 
 ### cleartextStream.getPeerCertificate()
 
-Returns an object representing the peer's certificate. The returned object has
+Returns an object representing the peer’s certificate. The returned object has
 some properties corresponding to the field of the certificate.
 
 Example:

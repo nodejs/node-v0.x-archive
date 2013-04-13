@@ -73,7 +73,7 @@ Return a string representation of `object`, which is useful for debugging.
 An optional *options* object may be passed that alters certain aspects of the
 formatted string:
 
- - `showHidden` - if `true` then the object's non-enumerable properties will be
+ - `showHidden` - if `true` then the object’s non-enumerable properties will be
    shown too. Defaults to `false`.
 
  - `depth` - tells `inspect` how many times to recurse while formatting the
@@ -84,7 +84,7 @@ formatted string:
    Defaults to `false`. Colors are customizable, see below.
 
  - `customInspect` - if `false`, then custom `inspect()` functions defined on the
-   objects being inspected won't be called. Defaults to `true`.
+   objects being inspected won’t be called. Defaults to `true`.
 
 Example of inspecting all properties of the `util` object:
 

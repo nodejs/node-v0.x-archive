@@ -16,7 +16,7 @@ automatically set as a listener for the ['connection'][] event.
     { allowHalfOpen: false
     }
 
-If `allowHalfOpen` is `true`, then the socket won't automatically send a FIN
+If `allowHalfOpen` is `true`, then the socket won’t automatically send a FIN
 packet when the other end of the socket sends a FIN packet. The socket becomes
 non-readable, but still writable. You should call the `end()` method explicitly.
 See ['end'][] event for more information.
@@ -70,7 +70,7 @@ For UNIX domain sockets, `options` argument should be an object which specifies:
 
 Common options are:
 
-  - `allowHalfOpen`: if `true`, the socket won't automatically send
+  - `allowHalfOpen`: if `true`, the socket won’t automatically send
     a FIN packet when the other end of the socket sends a FIN packet.
     Defaults to `false`.  See ['end'][] event for more information.
 
@@ -205,7 +205,7 @@ Example:
       console.log("opened server on %j", address);
     });
 
-Don't call `server.address()` until the `'listening'` event has been emitted.
+Don’t call `server.address()` until the `'listening'` event has been emitted.
 
 ### server.unref()
 
@@ -216,12 +216,12 @@ active server in the event system. If the server is already `unref`d calling
 ### server.ref()
 
 Opposite of `unref`, calling `ref` on a previously `unref`d server will *not*
-let the program exit if it's the only server left (the default behavior). If
+let the program exit if it’s the only server left (the default behavior). If
 the server is `ref`d calling `ref` again will have no effect.
 
 ### server.maxConnections
 
-Set this property to reject connections when the server's connection count gets
+Set this property to reject connections when the server’s connection count gets
 high.
 
 It is not recommended to use this option once a socket has been sent to a child
@@ -316,7 +316,7 @@ help users get up and running quickly. The computer cannot always keep up
 with the amount of data that is written to a socket - the network connection
 simply might be too slow. Node will internally queue up the data written to a
 socket and send it out over the wire when it is possible. (Internally it is
-polling on the socket's file descriptor for being writable).
+polling on the socket’s file descriptor for being writable).
 
 The consequence of this internal buffering is that memory may grow. This
 property shows the number of characters currently buffered to be written.
@@ -415,7 +415,7 @@ active socket in the event system. If the socket is already `unref`d calling
 ### socket.ref()
 
 Opposite of `unref`, calling `ref` on a previously `unref`d socket will *not*
-let the program exit if it's the only socket left (the default behavior). If
+let the program exit if it’s the only socket left (the default behavior). If
 the socket is `ref`d calling `ref` again will have no effect.
 
 ### socket.remoteAddress
