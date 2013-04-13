@@ -112,7 +112,6 @@ assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
 assert.doesNotThrow(makeBlock(a.deepEqual, [4], ['4']));
 assert.throws(makeBlock(a.deepEqual, {a: 4}, {a: 4, b: true}),
               a.AssertionError);
-assert.doesNotThrow(makeBlock(a.deepEqual, ['a'], {0: 'a'}));
 //(although not necessarily the same order),
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '1'}, {b: '1', a: 4}));
 var a1 = [1, 2, 3];
@@ -293,3 +292,7 @@ try {
   assert.equal(e.message, 'Missing expected exception..');
 }
 assert.ok(threw);
+
+// #4523
+assert.throws(makeBlock(a.deepEqual, [], {}), a.AssertionError, 'deepEqual prototypes');
+assert.doesNotThrow(makeBlock(a.deepEqual, [], []));
