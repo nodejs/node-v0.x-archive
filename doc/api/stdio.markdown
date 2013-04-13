@@ -11,7 +11,7 @@ provided by most web browsers, here the output is sent to stdout or stderr.
 
 The console functions are synchronous when the destination is a terminal or
 a file (to avoid lost messages in case of premature exit) and asynchronous
-when it's a pipe (to avoid blocking for long periods of time).
+when it’s a pipe (to avoid blocking for long periods of time).
 
 That is, in the following example, stdout is non-blocking while stderr
 is blocking:

@@ -9,7 +9,7 @@ will be notified, rather than losing the context of the error in the
 `process.on('uncaughtException')` handler, or causing the program to
 exit immediately with an error code.
 
-## Warning: Don't Ignore Errors!
+## Warning: Don’t Ignore Errors!
 
 <!-- type=misc -->
 
@@ -42,7 +42,7 @@ For example, this is not a good idea:
 
 var d = require('domain').create();
 d.on('error', function(er) {
-  // The error won't crash the process, but what it does is worse!
+  // The error won’t crash the process, but what it does is worse!
   // Though we've prevented abrupt process restarting, we are leaking
   // resources like crazy if this ever happens.
   // This is no better than process.on('uncaughtException')!
@@ -101,9 +101,9 @@ if (cluster.isMaster) {
     d.on('error', function(er) {
       console.error('error', er.stack);
 
-      // Note: we're in dangerous territory!
+      // Note: we’re in dangerous territory!
       // By definition, something unexpected occurred,
-      // which we probably didn't want.
+      // which we probably didn’t want.
       // Anything can happen now!  Be very careful!
 
       try {
@@ -111,13 +111,13 @@ if (cluster.isMaster) {
         var killtimer = setTimeout(function() {
           process.exit(1);
         }, 30000);
-        // But don't keep the process open just for that!
+        // But don’t keep the process open just for that!
         killtimer.unref();
 
         // stop taking new requests.
         server.close();
 
-        // Let the master know we're dead.  This will trigger a
+        // Let the master know we’re dead.  This will trigger a
         // 'disconnect' in the cluster master, and then it will fork
         // a new worker.
         cluster.worker.disconnect();
@@ -146,7 +146,7 @@ if (cluster.isMaster) {
   server.listen(PORT);
 }
 
-// This part isn't important.  Just an example routing thing.
+// This part isn’t important.  Just an example routing thing.
 // You'd put your fancy application logic here.
 function handleRequest(req, res) {
   switch(req.url) {
@@ -200,7 +200,7 @@ If you *want* to nest Domain objects as children of a parent Domain,
 then you must explicitly add them.
 
 Implicit binding routes thrown errors and `'error'` events to the
-Domain's `error` event, but does not register the EventEmitter on the
+Domain’s `error` event, but does not register the EventEmitter on the
 Domain, so `domain.dispose()` will not shut down the EventEmitter.
 Implicit binding only takes care of thrown errors and `'error'` events.
 
@@ -305,7 +305,7 @@ to the domain.
 
 Explicitly adds an emitter to the domain.  If any event handlers called by
 the emitter throw an error, or if the emitter emits an `error` event, it
-will be routed to the domain's `error` event, just like with implicit
+will be routed to the domain’s `error` event, just like with implicit
 binding.
 
 This also works with timers that are returned from `setInterval` and
@@ -329,7 +329,7 @@ specified emitter.
 
 The returned function will be a wrapper around the supplied callback
 function.  When the returned function is called, any errors that are
-thrown will be routed to the domain's `error` event.
+thrown will be routed to the domain’s `error` event.
 
 #### Example
 

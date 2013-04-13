@@ -19,7 +19,7 @@ HTTP message headers are represented by an object like this:
 
 Keys are lowercased. Values are not modified.
 
-In order to support the full spectrum of possible HTTP applications, Node's
+In order to support the full spectrum of possible HTTP applications, Node’s
 HTTP API is very low-level. It deals with stream handling and message
 parsing only. It parses a message into headers and body but it does not
 parse the actual headers or the body.
@@ -78,7 +78,7 @@ per connection (in the case of keep-alive connections).
 `function (request, response) { }`
 
 Emitted each time a request with an http Expect: 100-continue is received.
-If this event isn't listened for, the server will automatically respond
+If this event isn’t listened for, the server will automatically respond
 with a 100 Continue as appropriate.
 
 Handling this event involves calling `response.writeContinue` if the client
@@ -93,7 +93,7 @@ not be emitted.
 
 `function (request, socket, head) { }`
 
-Emitted each time a client requests a http CONNECT method. If this event isn't
+Emitted each time a client requests a http CONNECT method. If this event isn’t
 listened for, then clients requesting a CONNECT method will have their
 connections closed.
 
@@ -103,7 +103,7 @@ connections closed.
 * `head` is an instance of Buffer, the first packet of the tunneling stream,
   this may be empty.
 
-After this event is emitted, the request's socket will not have a `data`
+After this event is emitted, the request’s socket will not have a `data`
 event listener, meaning you will need to bind to it in order to handle data
 sent to the server on that socket.
 
@@ -111,7 +111,7 @@ sent to the server on that socket.
 
 `function (request, socket, head) { }`
 
-Emitted each time a client requests a http upgrade. If this event isn't
+Emitted each time a client requests a http upgrade. If this event isn’t
 listened for, then clients requesting an upgrade will have their connections
 closed.
 
@@ -121,7 +121,7 @@ closed.
 * `head` is an instance of Buffer, the first packet of the upgraded stream,
   this may be empty.
 
-After this event is emitted, the request's socket will not have a `data`
+After this event is emitted, the request’s socket will not have a `data`
 event listener, meaning you will need to bind to it in order to handle data
 sent to the server on that socket.
 
@@ -199,9 +199,9 @@ occurs.
 If there is a `'timeout'` event listener on the Server object, then it
 will be called with the timed-out socket as an argument.
 
-By default, the Server's timeout value is 2 minutes, and sockets are
+By default, the Server’s timeout value is 2 minutes, and sockets are
 destroyed automatically if they time out.  However, if you assign a
-callback to the Server's `'timeout'` event, then you are responsible
+callback to the Server’s `'timeout'` event, then you are responsible
 for handling socket timeouts.
 
 ### server.timeout
@@ -270,13 +270,13 @@ which has been transmitted are equal or not.
 * `msecs` {Number}
 * `callback` {Function}
 
-Sets the Socket's timeout value to `msecs`.  If a callback is
+Sets the Socket’s timeout value to `msecs`.  If a callback is
 provided, then it is added as a listener on the `'timeout'` event on
 the response object.
 
 If no `'timeout'` listener is added to the request, the response, or
 the server, then sockets are destroyed when they time out.  If you
-assign a handler on the request, the response, or the server's
+assign a handler on the request, the response, or the server’s
 `'timeout'` events, then it is your responsibility to handle timed out
 sockets.
 
@@ -321,7 +321,7 @@ in responses.
 
 ### response.getHeader(name)
 
-Reads out a header that's already been queued but not sent to the client.  Note
+Reads out a header that’s already been queued but not sent to the client.  Note
 that the name is case insensitive.  This can only be called before headers get
 implicitly flushed.
 
@@ -331,7 +331,7 @@ Example:
 
 ### response.removeHeader(name)
 
-Removes a header that's queued for implicit sending.
+Removes a header that’s queued for implicit sending.
 
 Example:
 
@@ -355,7 +355,7 @@ higher-level multi-part body encodings that may be used.
 
 The first time `response.write()` is called, it will send the buffered
 header information and the first body to the client. The second time
-`response.write()` is called, Node assumes you're going to be streaming
+`response.write()` is called, Node assumes you’re going to be streaming
 data, and sends that separately. That is, the response is buffered up to the
 first chunk of body.
 
@@ -454,7 +454,7 @@ Example:
     req.end();
 
 Note that in the example `req.end()` was called. With `http.request()` one
-must always call `req.end()` to signify that you're done with the request -
+must always call `req.end()` to signify that you’re done with the request -
 even if there is no data being written to the request body.
 
 If any error is encountered during the request (be that with DNS resolution,
@@ -501,13 +501,13 @@ current implementation now holds sockets for any number of hosts.
 
 The current HTTP Agent also defaults client requests to using
 Connection:keep-alive. If no pending HTTP requests are waiting on a socket
-to become free the socket is closed. This means that node's pool has the
+to become free the socket is closed. This means that node’s pool has the
 benefit of keep-alive when under load but still does not require developers
 to manually close the HTTP clients using keep-alive.
 
-Sockets are removed from the agent's pool when the socket emits either a
+Sockets are removed from the agent’s pool when the socket emits either a
 "close" event or a special "agentRemove" event. This means that if you intend
-to keep one HTTP request open for a long time and don't want it to stay in the
+to keep one HTTP request open for a long time and don’t want it to stay in the
 pool you can do something along the lines of:
 
     http.get(options, function(res) {
@@ -596,7 +596,7 @@ Emitted after a socket is assigned to this request.
 `function (response, socket, head) { }`
 
 Emitted each time a server responds to a request with a CONNECT method. If this
-event isn't being listened for, clients receiving a CONNECT method will have
+event isn’t being listened for, clients receiving a CONNECT method will have
 their connections closed.
 
 A client server pair that show you how to listen for the `connect` event.
@@ -659,7 +659,7 @@ A client server pair that show you how to listen for the `connect` event.
 `function (response, socket, head) { }`
 
 Emitted each time a server responds to a request with an upgrade. If this
-event isn't being listened for, clients receiving an upgrade header will have
+event isn’t being listened for, clients receiving an upgrade header will have
 their connections closed.
 
 A client server pair that show you how to listen for the `upgrade` event.
@@ -859,7 +859,7 @@ The 3-digit HTTP response status code. E.G. `404`.
 The `net.Socket` object associated with the connection.
 
 With HTTPS support, use request.connection.verifyPeer() and
-request.connection.getPeerCertificate() to obtain the client's
+request.connection.getPeerCertificate() to obtain the client’s
 authentication details.
 
 

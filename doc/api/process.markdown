@@ -9,7 +9,7 @@ It is an instance of [EventEmitter][].
 ## Event: 'exit'
 
 Emitted when the process is about to exit.  This is a good hook to perform
-constant time checks of the module's state (like for unit tests).  The main
+constant time checks of the module’s state (like for unit tests).  The main
 event loop will no longer be run after the 'exit' callback finishes, so
 timers may not be scheduled.
 
@@ -38,14 +38,14 @@ Example of listening for `uncaughtException`:
       console.log('This will still run.');
     }, 500);
 
-    // Intentionally cause an exception, but don't catch it.
+    // Intentionally cause an exception, but don’t catch it.
     nonexistentFunc();
     console.log('This will not run.');
 
 Note that `uncaughtException` is a very crude mechanism for exception
 handling.
 
-Don't use it, use [domains](domain.html) instead. If you do use it, restart
+Don’t use it, use [domains](domain.html) instead. If you do use it, restart
 your application after every unhandled exception!
 
 Do *not* use it as the node.js equivalent of `On Error Resume Next`. An
@@ -67,7 +67,7 @@ standard POSIX signal names such as SIGINT, SIGUSR1, etc.
 
 Example of listening for `SIGINT`:
 
-    // Start reading from stdin so we don't exit.
+    // Start reading from stdin so we don’t exit.
     process.stdin.resume();
 
     process.on('SIGINT', function() {
@@ -404,7 +404,7 @@ Getter/setter to set what is displayed in 'ps'.
 When used as a setter, the maximum length is platform-specific and probably
 short.
 
-On Linux and OS X, it's limited to the size of the binary name plus the
+On Linux and OS X, it’s limited to the size of the binary name plus the
 length of the command line arguments because it overwrites the argv memory.
 
 v0.8 allowed for longer process title strings by also overwriting the environ
@@ -414,14 +414,14 @@ cases.
 
 ## process.arch
 
-What processor architecture you're running on: `'arm'`, `'ia32'`, or `'x64'`.
+What processor architecture you’re running on: `'arm'`, `'ia32'`, or `'x64'`.
 
     console.log('This processor architecture is ' + process.arch);
 
 
 ## process.platform
 
-What platform you're running on:
+What platform you’re running on:
 `'darwin'`, `'freebsd'`, `'linux'`, `'sunos'` or `'win32'`
 
     console.log('This platform is ' + process.platform);
@@ -448,7 +448,7 @@ This will generate:
 ## process.nextTick(callback)
 
 On the next loop around the event loop call this callback.
-This is *not* a simple alias to `setTimeout(fn, 0)`, it's much more
+This is *not* a simple alias to `setTimeout(fn, 0)`, it’s much more
 efficient.  It typically runs before any other I/O events fire, but there
 are some exceptions.  See `process.maxTickDepth` below.
 
@@ -493,7 +493,7 @@ This API is hazardous.  If you do this:
     });
     bar();
 
-then it's not clear whether `foo()` or `bar()` will be called first.
+then it’s not clear whether `foo()` or `bar()` will be called first.
 
 This approach is much better:
 
@@ -531,7 +531,7 @@ allowing other forms of I/O to occur.
 
 ## process.umask([mask])
 
-Sets or reads the process's file mode creation mask. Child processes inherit
+Sets or reads the process’s file mode creation mask. Child processes inherit
 the mask from the parent process. Returns the old mask if `mask` argument is
 given, otherwise returns the current mask.
 

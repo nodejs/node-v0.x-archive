@@ -228,7 +228,7 @@ linkString)`.
 
 ## fs.readlinkSync(path)
 
-Synchronous readlink(2). Returns the symbolic link's string value.
+Synchronous readlink(2). Returns the symbolic link’s string value.
 
 ## fs.realpath(path, [cache], callback)
 
@@ -311,10 +311,10 @@ An exception occurs if the file does not exist.
 
   This is primarily useful for opening files on NFS mounts as it allows you to
   skip the potentially stale local cache. It has a very real impact on I/O
-  performance so don't use this mode unless you need it.
+  performance so don’t use this mode unless you need it.
 
-  Note that this doesn't turn `fs.open()` into a synchronous blocking call.
-  If that's what you want then you should be using `fs.openSync()`
+  Note that this doesn’t turn `fs.open()` into a synchronous blocking call.
+  If that’s what you want then you should be using `fs.openSync()`
 
 * `'rs+'` - Open file for reading and writing, telling the OS to open it
   synchronously. See notes for `'rs'` about using this with caution.
@@ -345,7 +345,7 @@ Exclusive mode (`O_EXCL`) ensures that `path` is newly created. `fs.open()`
 fails if a file by that name already exists. On POSIX systems, symlinks are
 not followed. Exclusive mode may or may not work with network file systems.
 
-On Linux, positional writes don't work when the file is opened in append mode.
+On Linux, positional writes don’t work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
 the end of the file.
 
@@ -391,7 +391,7 @@ Note that it is unsafe to use `fs.write` multiple times on the same file
 without waiting for the callback. For this scenario,
 `fs.createWriteStream` is strongly recommended.
 
-On Linux, positional writes don't work when the file is opened in append mode.
+On Linux, positional writes don’t work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
 the end of the file.
 
@@ -572,7 +572,7 @@ to be notified of filesystem changes.
 
 If the underlying functionality is not available for some reason, then
 `fs.watch` will not be able to function.  For example, watching files or
-directories on network file systems (NFS, SMB, etc.) often doesn't work
+directories on network file systems (NFS, SMB, etc.) often doesn’t work
 reliably or at all.
 
 You can still use `fs.watchFile`, which uses stat polling, but it is slower and
@@ -583,9 +583,9 @@ less reliable.
 <!--type=misc-->
 
 Providing `filename` argument in the callback is not supported
-on every platform (currently it's only supported on Linux and Windows).  Even
+on every platform (currently it’s only supported on Linux and Windows).  Even
 on supported platforms `filename` is not always guaranteed to be provided.
-Therefore, don't assume that `filename` argument is always provided in the
+Therefore, don’t assume that `filename` argument is always provided in the
 callback, and have some fallback logic if it is null.
 
     fs.watch('somedir', function (event, filename) {
@@ -603,7 +603,7 @@ Test whether or not the given path exists by checking with the file system.
 Then call the `callback` argument with either true or false.  Example:
 
     fs.exists('/etc/passwd', function (exists) {
-      util.debug(exists ? "it's there" : "no passwd!");
+      util.debug(exists ? "it’s there" : "no passwd!");
     });
 
 
@@ -673,9 +673,9 @@ Returns a new ReadStream object (See `Readable Stream`).
 the file instead of the entire file.  Both `start` and `end` are inclusive and
 start at 0. The `encoding` can be `'utf8'`, `'ascii'`, or `'base64'`.
 
-If `autoClose` is false, then the file descriptor won't be closed, even if
-there's an error.  It is your responsibility to close it and make sure
-there's no file descriptor leak.  If `autoClose` is set to true (default
+If `autoClose` is false, then the file descriptor won’t be closed, even if
+there’s an error.  It is your responsibility to close it and make sure
+there’s no file descriptor leak.  If `autoClose` is set to true (default
 behavior), on `error` or `end` the file descriptor will be closed
 automatically.
 
@@ -692,7 +692,7 @@ An example to read the last 10 bytes of a file which is 100 bytes long:
 
 * `fd` {Integer} file descriptor used by the ReadStream.
 
-Emitted when the ReadStream's file is opened.
+Emitted when the ReadStream’s file is opened.
 
 
 ## fs.createWriteStream(path, [options])
@@ -718,7 +718,7 @@ default mode `w`.
 
 * `fd` {Integer} file descriptor used by the WriteStream.
 
-Emitted when the WriteStream's file is opened.
+Emitted when the WriteStream’s file is opened.
 
 ### file.bytesWritten
 

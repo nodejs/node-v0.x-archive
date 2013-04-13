@@ -55,7 +55,7 @@ handles back and forth.
 
 When you call `server.listen(...)` in a worker, it serializes the
 arguments and passes the request to the master process.  If the master
-process already has a listening server matching the worker's
+process already has a listening server matching the worker’s
 requirements, then it passes the handle to the worker.  If it does not
 already have a listening server matching that requirement, then it will
 create one, and pass the handle to the child.
@@ -64,11 +64,11 @@ This causes potentially surprising behavior in three edge cases:
 
 1. `server.listen({fd: 7})` Because the message is passed to the master,
    file descriptor 7 **in the parent** will be listened on, and the
-   handle passed to the worker, rather than listening to the worker's
+   handle passed to the worker, rather than listening to the worker’s
    idea of what the number 7 file descriptor references.
 2. `server.listen(handle)` Listening on handles explicitly will cause
    the worker to use the supplied handle, rather than talk to the master
-   process.  If the worker already has the handle, then it's presumed
+   process.  If the worker already has the handle, then it’s presumed
    that you know what you are doing.
 3. `server.listen(0)` Normally, this will cause servers to listen on a
    random port.  However, in a cluster, each worker will receive the
@@ -85,11 +85,11 @@ design your program such that it does not rely too heavily on in-memory
 data objects for things like sessions and login.
 
 Because workers are all separate processes, they can be killed or
-re-spawned depending on your program's needs, without affecting other
+re-spawned depending on your program’s needs, without affecting other
 workers.  As long as there are some workers still alive, the server will
 continue to accept connections.  Node does not automatically manage the
 number of workers for you, however.  It is your responsibility to manage
-the worker pool for your application's needs.
+the worker pool for your application’s needs.
 
 ## cluster.settings
 
@@ -97,7 +97,7 @@ the worker pool for your application's needs.
   * `exec` {String} file path to worker file.  (Default=`__filename`)
   * `args` {Array} string arguments passed to worker.
     (Default=`process.argv.slice(2)`)
-  * `silent` {Boolean} whether or not to send output to parent's stdio.
+  * `silent` {Boolean} whether or not to send output to parent’s stdio.
     (Default=`false`)
 
 All settings set by the `.setupMaster` is stored in this settings object.
@@ -221,7 +221,7 @@ call `.setupMaster()` with no arguments.
   * `exec` {String} file path to worker file.  (Default=`__filename`)
   * `args` {Array} string arguments passed to worker.
     (Default=`process.argv.slice(2)`)
-  * `silent` {Boolean} whether or not to send output to parent's stdio.
+  * `silent` {Boolean} whether or not to send output to parent’s stdio.
     (Default=`false`)
 
 `setupMaster` is used to change the default 'fork' behavior. The new settings
@@ -289,7 +289,7 @@ process.
     });
 
 Should you wish to reference a worker over a communication channel, using
-the worker's unique id is the easiest way to find the worker.
+the worker’s unique id is the easiest way to find the worker.
 
     socket.on('data', function(id) {
       var worker = cluster.workers[id];

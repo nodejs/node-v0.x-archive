@@ -5,9 +5,9 @@
 Node provides a tri-directional `popen(3)` facility through the
 `child_process` module.
 
-It is possible to stream data through a child's `stdin`, `stdout`, and
+It is possible to stream data through a child’s `stdin`, `stdout`, and
 `stderr` in a fully non-blocking way.  (Note that some programs use
-line-buffered I/O internally.  That doesn't affect node.js but it means
+line-buffered I/O internally.  That doesn’t affect node.js but it means
 data you send to the child process is not immediately consumed.)
 
 To create a child process use `require('child_process').spawn()` or
@@ -83,7 +83,7 @@ Messages send by `.send(message, [sendHandle])` are obtained using the
 
 * {Stream object}
 
-A `Writable Stream` that represents the child process's `stdin`.
+A `Writable Stream` that represents the child process’s `stdin`.
 Closing this stream via `end()` often causes the child process to terminate.
 
 If the child stdio streams are shared with the parent, then this will
@@ -93,7 +93,7 @@ not be set.
 
 * {Stream object}
 
-A `Readable Stream` that represents the child process's `stdout`.
+A `Readable Stream` that represents the child process’s `stdout`.
 
 If the child stdio streams are shared with the parent, then this will
 not be set.
@@ -102,7 +102,7 @@ not be set.
 
 * {Stream object}
 
-A `Readable Stream` that represents the child process's `stderr`.
+A `Readable Stream` that represents the child process’s `stderr`.
 
 If the child stdio streams are shared with the parent, then this will
 not be set.
@@ -142,7 +142,7 @@ May emit an `'error'` event when the signal cannot be delivered. Sending a
 signal to a child process that has already exited is not an error but may
 have unforeseen consequences: if the PID (the process ID) has been reassigned
 to another process, the signal will be delivered to that process instead.
-What happens next is anyone's guess.
+What happens next is anyone’s guess.
 
 Note that while the function is called `kill`, the signal delivered to the
 child process may not actually kill it.  `kill` really just sends a signal
@@ -278,7 +278,7 @@ there is no IPC channel keeping it alive. When calling this method the
 * `args` {Array} List of string arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
-  * `stdio` {Array|String} Child's stdio configuration. (See below)
+  * `stdio` {Array|String} Child’s stdio configuration. (See below)
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
     for stdio.  (See below)
   * `env` {Object} Environment key-value pairs
@@ -387,9 +387,9 @@ index corresponds to a fd in the child.  The value is one of the following:
    process.on('message').
 3. `'ignore'` - Do not set this file descriptor in the child. Note that Node
    will always open fd 0 - 2 for the processes it spawns. When any of these is
-   ignored node will open `/dev/null` and attach it to the child's fd.
+   ignored node will open `/dev/null` and attach it to the child’s fd.
 4. `Stream` object - Share a readable or writable stream that refers to a tty,
-   file, socket, or a pipe with the child process. The stream's underlying
+   file, socket, or a pipe with the child process. The stream’s underlying
    file descriptor is duplicated in the child process to the fd that 
    corresponds to the index in the `stdio` array.
 5. Positive integer - The integer value is interpreted as a file descriptor 
@@ -410,7 +410,7 @@ Example:
 
     var spawn = require('child_process').spawn;
 
-    // Child will use parent's stdios
+    // Child will use parent’s stdios
     spawn('prg', [], { stdio: 'inherit' });
 
     // Spawn child sharing only stderr
@@ -426,7 +426,7 @@ after the parent exits.
 
 By default, the parent will wait for the detached child to exit.  To prevent
 the parent from waiting for a given `child`, use the `child.unref()` method,
-and the parent's event loop will not include the child in its reference count.
+and the parent’s event loop will not include the child in its reference count.
 
 Example of detaching a long-running process and redirecting its output to a
 file:
@@ -445,7 +445,7 @@ file:
 
 When using the `detached` option to start a long-running process, the process
 will not stay running in the background unless it is provided with a `stdio`
-configuration that is not connected to the parent.  If the parent's `stdio` is
+configuration that is not connected to the parent.  If the parent’s `stdio` is
 inherited, the child will remain attached to the controlling terminal.
 
 There is a deprecated option called `customFds` which allows one to specify
@@ -466,7 +466,7 @@ See also: `child_process.exec()` and `child_process.fork()`
 * `command` {String} The command to run, with space-separated arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
-  * `stdio` {Array|String} Child's stdio configuration. (See above)
+  * `stdio` {Array|String} Child’s stdio configuration. (See above)
     Only stdin is configurable, anything else will lead to unpredictable
     results.
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
@@ -524,7 +524,7 @@ the child process is killed.
 * `args` {Array} List of string arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
-  * `stdio` {Array|String} Child's stdio configuration. (See above)
+  * `stdio` {Array|String} Child’s stdio configuration. (See above)
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
     for stdio.  (See above)
   * `env` {Object} Environment key-value pairs
@@ -560,10 +560,10 @@ instance, the returned object has a communication channel built-in. See
 `child.send(message, [sendHandle])` for details.
 
 By default the spawned Node process will have the stdout, stderr associated
-with the parent's. To change this behavior set the `silent` property in the
+with the parent’s. To change this behavior set the `silent` property in the
 `options` object to `true`.
 
-The child process does not automatically exit once it's done, you need to call
+The child process does not automatically exit once it’s done, you need to call
 `process.exit()` explicitly. This limitation may be lifted in the future.
 
 These child Nodes are still whole new instances of V8. Assume at least 30ms

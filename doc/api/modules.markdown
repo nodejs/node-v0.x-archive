@@ -76,7 +76,7 @@ loop an **unfinished copy** of the `a.js` exports object is returned to the
 `b.js` module.  `b.js` then finishes loading, and its exports object is
 provided to the `a.js` module.
 
-By the time `main.js` has loaded both modules, they're both finished.
+By the time `main.js` has loaded both modules, they’re both finished.
 The output of this program would thus be:
 
     $ node main.js
@@ -99,7 +99,7 @@ plan accordingly.
 Node has several modules compiled into the binary.  These modules are
 described in greater detail elsewhere in this documentation.
 
-The core modules are defined in node's source in the `lib/` folder.
+The core modules are defined in node’s source in the `lib/` folder.
 
 Core modules are always preferentially loaded if their identifier is
 passed to `require()`.  For instance, `require('http')` will always
@@ -174,7 +174,7 @@ If this was in a folder at `./some-library`, then
 `require('./some-library')` would attempt to load
 `./some-library/lib/some-library.js`.
 
-This is the extent of Node's awareness of package.json files.
+This is the extent of Node’s awareness of package.json files.
 
 If there is no package.json file present in the directory, then node
 will attempt to load an `index.js` or `index.node` file out of that
@@ -220,7 +220,7 @@ would resolve to different files.
 In each module, the `module` free variable is a reference to the object
 representing the current module.  In particular
 `module.exports` is the same as the `exports` object.
-`module` isn't actually a global but rather local to each module.
+`module` isn’t actually a global but rather local to each module.
 
 ### module.exports
 
@@ -274,7 +274,7 @@ The `module.require` method provides a way to load a module as if
 
 Note that in order to do this, you must get a reference to the `module`
 object.  Since `require()` returns the `exports`, and the `module` is
-typically *only* available within a specific module's code, it must be
+typically *only* available within a specific module’s code, it must be
 explicitly exported in order to be used.
 
 
@@ -382,7 +382,7 @@ Additionally, node will search in the following locations:
 * 2: `$HOME/.node_libraries`
 * 3: `$PREFIX/lib/node`
 
-Where `$HOME` is the user's home directory, and `$PREFIX` is node's
+Where `$HOME` is the user’s home directory, and `$PREFIX` is node’s
 configured `node_prefix`.
 
 These are mostly for historic reasons.  You are highly encouraged to
@@ -410,14 +410,14 @@ by checking `require.main.filename`.
 
 <!-- type=misc -->
 
-The semantics of Node's `require()` function were designed to be general
+The semantics of Node’s `require()` function were designed to be general
 enough to support a number of sane directory structures. Package manager
 programs such as `dpkg`, `rpm`, and `npm` will hopefully find it possible to
 build native packages from Node modules without modification.
 
 Below we give a suggested directory structure that could work:
 
-Let's say that we wanted to have the folder at
+Let’s say that we wanted to have the folder at
 `/usr/lib/node/<some-package>/<some-version>` hold the contents of a
 specific version of a package.
 
@@ -445,7 +445,7 @@ that it can use.
 
 When the code in the `foo` package does `require('bar')`, it will get the
 version that is symlinked into `/usr/lib/node/foo/1.2.3/node_modules/bar`.
-Then, when the code in the `bar` package calls `require('quux')`, it'll get
+Then, when the code in the `bar` package calls `require('quux')`, it’ll get
 the version that is symlinked into
 `/usr/lib/node/bar/4.3.2/node_modules/quux`.
 
