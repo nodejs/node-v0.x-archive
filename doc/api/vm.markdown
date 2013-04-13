@@ -32,7 +32,7 @@ available. Furthermore, the `this` expression within the global scope
 of the context evaluates to the empty object (`{}`) instead of to
 your sandbox.
 
-Your sandbox's properties are also not shared directly with the script.
+Your sandbox’s properties are also not shared directly with the script.
 Instead, the properties of the sandbox are copied into the context at
 the beginning of execution, and then after execution, the properties
 are copied back out in an attempt to propagate any changes.
@@ -52,7 +52,7 @@ the example problem with `Array`.
 ## vm.runInThisContext(code, [filename])
 
 `vm.runInThisContext()` compiles `code`, runs it and returns the result. Running
-code does not have access to local scope. `filename` is optional, it's used only
+code does not have access to local scope. `filename` is optional, it’s used only
 in stack traces.
 
 Example of using `vm.runInThisContext` and `eval` to run the same code:
@@ -115,7 +115,7 @@ result. A (V8) context comprises a global object, together with a set of
 built-in objects and functions. Running code does not have access to local scope
 and the global object held within `context` will be used as the global object
 for `code`.
-`filename` is optional, it's used only in stack traces.
+`filename` is optional, it’s used only in stack traces.
 
 Example: compile and execute code in a existing context.
 
@@ -155,7 +155,7 @@ to seed the initial contents of the global object used by the context.
 `vm.Script` object representing this compiled code. This script can be run
 later many times using methods below. The returned script is not bound to any
 global object. It is bound before each run, just for that run. `filename` is
-optional, it's only used in stack traces.
+optional, it’s only used in stack traces.
 
 In case of syntax error in `code`, `createScript` prints the syntax error to stderr
 and throws an exception.
