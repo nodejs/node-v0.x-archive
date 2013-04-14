@@ -92,10 +92,10 @@ process.on('exit', function() {
   if (!exports.globalCheck) return;
   var knownGlobals = [setTimeout,
                       setInterval,
-                      setImmediate,
+                      //setImmediate,
                       clearTimeout,
                       clearInterval,
-                      clearImmediate,
+                      //clearImmediate,
                       console,
                       Buffer,
                       process,
