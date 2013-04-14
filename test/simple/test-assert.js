@@ -108,12 +108,14 @@ assert.throws(makeBlock(a.deepEqual, 4, '5'),
 // 7.5
 // having the same number of owned properties && the same set of keys
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4}, {a: 4}));
-assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: { c: 2 }}, {a: 4, b: { c: 2 }}));
+assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: { c: 2 }}, 
+                                           {a: 4, b: { c: 2 }}));
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
 assert.doesNotThrow(makeBlock(a.deepEqual, [4], ['4']));
 assert.throws(makeBlock(a.deepEqual, {a: 4}, {a: 4, b: true}),
               a.AssertionError);
-assert.doesNotThrow(makeBlock(a.deepEqual, ['a'], {0: 'a'}));
+assert.throws(makeBlock(a.deepEqual, ['a'], {0: 'a'}), 
+              a.AssertionError);
 //(although not necessarily the same order),
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '1'}, {b: '1', a: 4}));
 var a1 = [1, 2, 3];
