@@ -51,8 +51,8 @@ static Handle<Value> GetEndianness(const Arguments& args) {
 
 static Handle<Value> GetHostname(const Arguments& args) {
   HandleScope scope(node_isolate);
-  char s[255];
-  int r = gethostname(s, 255);
+  char s[256];
+  int r = gethostname(s, sizeof(s));
 
   if (r < 0) {
 #ifdef __POSIX__
@@ -62,6 +62,7 @@ static Handle<Value> GetHostname(const Arguments& args) {
 #endif // __MINGW32__
   }
 
+  s[sizeof(s)-1] = 0;
   return scope.Close(String::New(s));
 }
 
