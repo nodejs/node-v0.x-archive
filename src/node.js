@@ -42,8 +42,8 @@
       ObjectPrototype = Object.prototype,
       hasProto = bloodyProto in ObjectPrototype,
       defineProperty = Object.defineProperty,
-      getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor,
-      descriptor = hasProto && getOwnPropertyDescriptor && getOwnPropertyDescriptor(
+      getOPD = Object.getOwnPropertyDescriptor,
+      descriptor = hasProto && getOPD && getOPD(
         ObjectPrototype, bloodyProto
       ),
       set;
