@@ -78,11 +78,15 @@
               bloodyProto,
               {
                 get: function () {
-                  console.warn('[DEPRECATED] use Object.getPrototypeOf(object) instead');
+                  console.warn(
+                    '[DEPRECATED] use Object.getPrototypeOf(object) instead'
+                  );
                   return Object.getPrototypeOf(this);
                 },
                 set: function (proto) {
-                  console.warn('[DEPRECATED] use Object.setPrototypeOf(object, proto) instead');
+                  console.warn(
+                    '[DEPRECATED] use Object.setPrototypeOf(o, proto) instead'
+                  );
                   set.call(this, proto);
                 }
               }
