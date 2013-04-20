@@ -64,12 +64,14 @@
       }
     }
     if (!(setPrototypeOf in Object)) {
-      if (descriptor && descriptor.configurable && (set = descriptor.set)) {
+      if (descriptor && descriptor.configurable && (
+        set = descriptor.set
+      )) {
         try {
           set.call(descriptor, ObjectPrototype);
-          addProperty(Object, setPrototypeOf, function (target, proto) {
-            set.call(target, proto);
-            return target;
+          addProperty(Object, setPrototypeOf, function (t, proto) {
+            set.call(t, proto);
+            return t;
           });
           delete ObjectPrototype[bloodyProto];
           if (deprecateInsteadOfThrowing) {
@@ -79,13 +81,15 @@
               {
                 get: function () {
                   console.warn(
-                    '[DEPRECATED] use Object.getPrototypeOf(object) instead'
+                    '[DEPRECATED] use ' +
+                    'Object.getPrototypeOf(object) instead'
                   );
                   return Object.getPrototypeOf(this);
                 },
                 set: function (proto) {
                   console.warn(
-                    '[DEPRECATED] use Object.setPrototypeOf(o, proto) instead'
+                    '[DEPRECATED] use ' +
+                    'Object.setPrototypeOf(o, proto) instead'
                   );
                   set.call(this, proto);
                 }
