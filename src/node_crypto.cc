@@ -2835,7 +2835,7 @@ exit:
     return ThrowCryptoError(err);
   }
 
-  return scope.Close(r ? True() : False(node_isolate));
+  return scope.Close(r == 1 ? True() : False(node_isolate));
 }
 
 
