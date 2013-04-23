@@ -430,6 +430,18 @@ var parseTests = {
     'path': '/bar'
   },
 
+  // protocols that seperate the host from path with ':'
+  'ssh://user@foo.com:folder': {
+    'href': 'ssh://user@foo.com:folder',
+    'host': 'foo.com',
+    'auth': 'user',
+    'hostname': 'foo.com',
+    'protocol': 'ssh:',
+    'pathname': 'folder',
+    'path': 'folder',
+    'slashes': true
+  },
+
   // IDNA tests
   'http://www.日本語.com/' : {
     'href': 'http://www.xn--wgv71a119e.com/',
@@ -505,24 +517,23 @@ var parseTests = {
   },
 
   'http://bucket_name.s3.amazonaws.com/image.jpg': {
-    protocol: 'http:',
+    'protocol': 'http:',
     'slashes': true,
-    slashes: true,
-    host: 'bucket_name.s3.amazonaws.com',
-    hostname: 'bucket_name.s3.amazonaws.com',
-    pathname: '/image.jpg',
-    href: 'http://bucket_name.s3.amazonaws.com/image.jpg',
+    'host': 'bucket_name.s3.amazonaws.com',
+    'hostname': 'bucket_name.s3.amazonaws.com',
+    'pathname': '/image.jpg',
+    'href': 'http://bucket_name.s3.amazonaws.com/image.jpg',
     'path': '/image.jpg'
   },
 
   'git+http://github.com/joyent/node.git': {
-    protocol: 'git+http:',
-    slashes: true,
-    host: 'github.com',
-    hostname: 'github.com',
-    pathname: '/joyent/node.git',
-    path: '/joyent/node.git',
-    href: 'git+http://github.com/joyent/node.git'
+    'protocol': 'git+http:',
+    'slashes': true,
+    'host': 'github.com',
+    'hostname': 'github.com',
+    'pathname': '/joyent/node.git',
+    'path': '/joyent/node.git',
+    'href': 'git+http://github.com/joyent/node.git'
   },
 
   //if local1@domain1 is uses as a relative URL it may
