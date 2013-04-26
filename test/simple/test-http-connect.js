@@ -69,8 +69,7 @@ server.listen(common.PORT, function() {
     assert(!http.globalAgent.requests.hasOwnProperty(name));
 
     // Make sure this socket has detached.
-    assert(!socket.ondata);
-    assert(!socket.onend);
+    assert(!socket.parser);
     assert.equal(socket.listeners('connect').length, 0);
     assert.equal(socket.listeners('data').length, 0);
 

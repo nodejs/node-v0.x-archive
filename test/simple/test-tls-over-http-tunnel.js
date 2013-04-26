@@ -136,9 +136,8 @@ proxy.listen(proxyPort, function() {
     socket.removeAllListeners('error');
     socket.removeAllListeners('drain');
     socket.removeAllListeners('end');
-    socket.ondata = null;
-    socket.onend = null;
-    socket.ondrain = null;
+    if (socket.parser && socket.parser.detach)
+      socket.parser.detach();
 
     console.log('CLIENT: Making HTTPS request');
 
