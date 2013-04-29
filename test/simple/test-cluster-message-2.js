@@ -57,7 +57,7 @@ if (cluster.isMaster) {
 } else {
   var server = net.createServer(function(sock) {});
 
-  server.listen(42421, function () {
+  server.listen(common.PORT, function () {
     setTimeout(function () { cluster.worker.disconnect(); }, 1000);
   }).on('error', function (e) {
     setTimeout(function () { cluster.worker.disconnect(); }, 1000);
