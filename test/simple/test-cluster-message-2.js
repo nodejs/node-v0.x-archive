@@ -21,7 +21,8 @@
 
 // Testing: https://github.com/joyent/node/issues/5330
 // Send messages to workers while they start listening.
-// This test tries to trigger a race condition. Hence, its detection rate may be less than 100%.
+// This test tries to trigger a race condition.
+// Hence, its detection rate may be less than 100%.
 
 var common = require('../common');
 var assert = require('assert');
@@ -55,7 +56,7 @@ if (cluster.isMaster) {
     });
   }
 } else {
-  var server = net.createServer(function(sock) {});
+  var server = net.createServer(assert.fail);
 
   server.listen(common.PORT, function () {
     setTimeout(function () { cluster.worker.disconnect(); }, 50);

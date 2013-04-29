@@ -21,7 +21,8 @@
 
 // Testing: https://github.com/joyent/node/issues/5330
 // Send handles to the parent process.
-// This test tries to trigger a race condition. Hence, its detection rate may be less than 100%.
+// This test tries to trigger a race condition.
+// Hence, its detection rate may be less than 100%.
 
 var common = require('../common');
 var assert = require('assert');
@@ -43,10 +44,11 @@ if (cluster.isMaster) {
 } else {
   var server = net.createServer(function(sock) {
     var intervalId = setInterval(function () {
+      // This shouldn't trigger a race condition crashing Node.js on Linux
       process.send('crash-test1');
-      process.send('crash-test2', sock); // This shouldn't trigger a race condition crashing Node.js on Linux
+      process.send('crash-test2', sock); 
       process.send('crash-test3');
-      process.send('crash-test4', sock); // This shouldn't trigger a race condition crashing Node.js on Linux
+      process.send('crash-test4', sock);
       process.send('crash-test5');
     }, 1);
 
