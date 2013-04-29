@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // Testing: https://github.com/joyent/node/issues/5330
-// Send messages to workers while they start listening.
+// Send handles to the parent process.
 // This test tries to trigger a race condition. Hence, its detection rate may be less than 100%.
 
 var common = require('../common');
@@ -28,37 +28,39 @@ var assert = require('assert');
 var cluster = require('cluster');
 var net = require('net');
 
-var sendMessageIntervalId = null;
 var workers = {
-  toStart: 16,
-  exited: 0
+  toStart: 8
 };
 
 if (cluster.isMaster) {
-  sendMessageIntervalId = setInterval(function () {
-    for (var id in cluster.workers) {
-      // This shouldn't trigger a race condition crashing Node.js
-      cluster.workers[id].send({msg: 'crash-test'});
-    }
-  }, 1);
-
   for (var i = 0; i < workers.toStart; ++i) {
     var worker = cluster.fork();
     worker.on('exit', function(code, signal) {
       assert.equal(code, 0, 'Worker exited with an error code');
       assert(!signal, 'Worker exited by a signal');
-
-      workers.exited += 1;
-      if (workers.toStart === workers.exited) {
-        clearInterval(sendMessageIntervalId);
-      }
     });
   }
 } else {
-  var server = net.createServer(function(sock) {});
+  var server = net.createServer(function(sock) {
+    var intervalId = setInterval(function () {
+      process.send('crash-test1');
+      process.send('crash-test2', sock); // This shouldn't trigger a race condition crashing Node.js on Linux
+      process.send('crash-test3');
+      process.send('crash-test4', sock); // This shouldn't trigger a race condition crashing Node.js on Linux
+      process.send('crash-test5');
+    }, 1);
+
+    sock.on('close', function () {
+      clearInterval(intervalId);
+    });
+  });
 
   server.listen(common.PORT, function () {
-    setTimeout(function () { cluster.worker.disconnect(); }, 50);
+    var client = net.connect({ host: 'localhost', port: common.PORT });
+    client.on('close', function () { cluster.worker.disconnect(); });
+    setTimeout(function () {
+      client.end();
+    }, 50);
   }).on('error', function (e) {
     console.error(e);
     assert(false, 'server.listen failed');
