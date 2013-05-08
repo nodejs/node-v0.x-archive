@@ -15,13 +15,17 @@
     # Use at your own risk. Do *NOT* report bugs if this option is enabled.
     'node_unsafe_optimizations%': 0,
 
-    # Enable V8's post-mortem debugging only on unix flavors.
     'conditions': [
+      # Workaround for the legacy handling of android
+      ['android_build == 1', {
+        'OS': 'android',
+      }],
+      # Enable V8's post-mortem debugging only on unix flavors.
       ['OS == "win"', {
         'v8_postmortem_support': 'false'
       }, {
         'v8_postmortem_support': 'true'
-      }]
+      }],
     ],
   },
 
@@ -163,8 +167,12 @@
       }],
       [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', '-pthread', ],
-        'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
         'ldflags': [ '-pthread', '-rdynamic' ],
+      }],
+      [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris" or OS=="android"', {
+        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
+        'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
+        'ldflags': [ '-rdynamic' ],
         'target_conditions': [
           ['_type=="static_library"', {
             'standalone_static_library': 1, # disable thin archive which needs binutils >= 2.19
@@ -186,6 +194,10 @@
             'ldflags!': [ '-pthread' ],
           }],
         ],
+      }],
+      [ 'OS=="android"', {
+        'defines': ['ANDROID', '_GLIBCXX_USE_C99_MATH'],
+        'libraries': [ '-llog' ],
       }],
       ['OS=="mac"', {
         'defines': ['_DARWIN_USE_64_BIT_INODE=1'],

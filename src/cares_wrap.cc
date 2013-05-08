@@ -31,7 +31,8 @@
 #include "tree.h"
 #include "uv.h"
 
-#if defined(__OpenBSD__) || defined(__MINGW32__) || defined(_MSC_VER)
+#if defined(__OpenBSD__) || defined(__MINGW32__) \
+    || defined(_MSC_VER) || defined(ANDROID)
 # include <nameser.h>
 #else
 # include <arpa/nameser.h>
