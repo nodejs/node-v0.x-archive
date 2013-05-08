@@ -41,7 +41,6 @@ child.stderr.on('data', function(data) {
 
   if (line === 'all workers are running') {
     assertOutputLines();
-    child.kill();
     process.exit();
   } else {
     outputLines = outputLines.concat(lines);
@@ -62,6 +61,11 @@ function assertOutputLines() {
     'debugger listening on port ' + (port+1),
     'debugger listening on port ' + (port+2),
   ];
+
+  // Do not assume any particular order of output messages,
+  // since workers can take different amout of time to
+  // start up
+  outputLines.sort();
 
   assert.equal(outputLines.length, expectedLines.length)
   for (var i = 0; i < expectedLines.length; i++)

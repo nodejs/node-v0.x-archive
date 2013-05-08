@@ -24,10 +24,10 @@ var assert = require('assert');
 var spawn = require('child_process').spawn;
 
 var debugPort = common.PORT;
-var args = ['--debug-port=' + debugPort]
+var args = ['--debug-port=' + debugPort];
 var child = spawn(process.execPath, args);
 
-child.stderr.once('data', function(data) {
+child.stderr.on('data', function(data) {
   var lines = data.toString().replace(/\r/g, '').trim().split('\n');
   lines.forEach(processStderrLine);
 });
@@ -42,6 +42,10 @@ setTimeout(function() {
   process._debugProcess(child.pid);
 }, 100);
 
+process.on('exit', function() {
+  child.kill();
+});
+
 var outputLines = [];
 function processStderrLine(line) {
   console.log('> ' + line);
@@ -49,7 +53,6 @@ function processStderrLine(line) {
 
   if (/debugger listening/.test(line)) {
     assertOutputLines();
-    child.kill();
     process.exit();
   }
 }

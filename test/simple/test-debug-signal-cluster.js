@@ -74,6 +74,12 @@ function assertOutputLines() {
     'debugger listening on port ' + 5860,
   ];
 
+  // Do not assume any particular order of output messages,
+  // since workers can take different amout of time to
+  // start up
+  outputLines.sort();
+  expectedLines.sort();
+
   assert.equal(outputLines.length, expectedLines.length);
   for (var i = 0; i < expectedLines.length; i++)
     assert.equal(outputLines[i], expectedLines[i]);
