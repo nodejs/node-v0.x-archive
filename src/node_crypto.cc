@@ -421,10 +421,11 @@ int SSL_CTX_use_certificate_chain(SSL_CTX *ctx, BIO *in) {
         ret = 0;
         goto end;
       }
-      // Note that we must not free r if it was successfully
-      // added to the chain (while we must free the main
-      // certificate, since its reference count is increased
-      // by SSL_CTX_use_certificate).
+
+      if (ctx->extra_certs != NULL) {
+        sk_X509_pop_free(ctx->extra_certs, X509_free);
+        ctx->extra_certs = NULL;
+      }
     }
 
     // When the while loop ends, it's usually just EOF.
