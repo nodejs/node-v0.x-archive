@@ -447,10 +447,10 @@ This will generate:
 
 ## process.nextTick(callback)
 
-On the next loop around the event loop call this callback.
-This is *not* a simple alias to `setTimeout(fn, 0)`, it's much more
-efficient.  It typically runs before any other I/O events fire, but there
-are some exceptions.  See `process.maxTickDepth` below.
+Add this callback to the event queue and call it on the next iteration of
+the event loop. This is *not* a simple alias to `setTimeout(fn, 0)`; it's
+much more efficient.  It typically runs before any other I/O events fire,
+but there are some exceptions.  See `process.maxTickDepth` below.
 
     process.nextTick(function() {
       console.log('nextTick callback');
@@ -505,6 +505,15 @@ This approach is much better:
 
       fs.stat('file', cb);
     }
+
+The order of callback calls is guaranteed to reflect the order they were
+passed in to process.nextTick(). For example, given:
+
+    process.nextTick(function a(){});
+    process.nextTick(function b(){});
+
+`a()` and `b()` will be called in that order.
+
 
 ## process.maxTickDepth
 
