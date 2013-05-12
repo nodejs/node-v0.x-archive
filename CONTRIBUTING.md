@@ -17,7 +17,8 @@ $ git remote add upstream git://github.com/joyent/node.git
 
 Now decide if you want your feature or bug fix to go into the master branch
 or the stable branch.  As a rule of thumb, bug fixes go into the stable branch
-while new features go into the master branch.
+while new features go into the `master` branch. Documentation patches or
+improvements go into the `master` branch.
 
 The stable branch is effectively frozen; patches that change the node.js
 API/ABI or affect the run-time behavior of applications get rejected.
