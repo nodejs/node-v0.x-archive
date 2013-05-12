@@ -17,7 +17,8 @@ $ git remote add upstream git://github.com/joyent/node.git
 
 Now decide if you want your feature or bug fix to go into the master branch
 or the stable branch.  As a rule of thumb, bug fixes go into the stable branch
-while new features go into the master branch.
+while new features go into the master branch. Documentation patches or
+improvements go into the `master` branch.
 
 The stable branch is effectively frozen; patches that change the node.js
 API/ABI or affect the run-time behavior of applications get rejected.
@@ -72,6 +73,45 @@ changed and why.  Follow these guidelines when writing one:
    subsystem (e.g. "net: add localAddress and localPort to Socket").
 2. Keep the second line blank.
 3. Wrap all other lines at 72 columns.
+
+Here are some of the available subsystems (TODO: point to an official and comprehensive list)
+
+* assert
+* benchmark
+* blog
+* buffer
+* build
+* changelog
+* child_process
+* cluster
+* crypto
+* debugger
+* deps
+* dgram
+* doc
+* domain
+* dtrace
+* event
+* etw
+* handle_wraps
+* http
+* install
+* net
+* npm
+* os
+* path
+* querystring
+* repl
+* req_wrap
+* src
+* stream
+* test
+* tls
+* url
+* uv
+* v8
+* vm
+* ...
 
 A good commit log looks like this:
 
