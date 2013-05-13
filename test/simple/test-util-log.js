@@ -21,7 +21,7 @@
 
 
 var assert = require('assert');
-var util = require('../../lib/util.js');
+var util = require('util');
 
 assert.ok(process.stdout.writable);
 assert.ok(process.stderr.writable);
