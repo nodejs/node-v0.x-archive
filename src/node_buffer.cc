@@ -228,6 +228,22 @@ Local<Object> Use(char* data, uint32_t length) {
 }
 
 
+void DisposeSlice(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  assert(args[0]->IsObject());
+
+  Local<Object> obj = args[0].As<Object>();
+  char* data = static_cast<char*>(obj->GetIndexedPropertiesExternalArrayData());
+  size_t length = obj->GetIndexedPropertiesExternalArrayDataLength();
+
+  if (data != NULL || length > 0)
+    obj->SetIndexedPropertiesToExternalArrayData(NULL,
+                                                 v8::kExternalUnsignedByteArray,
+                                                 0);
+}
+
+
 template <encoding encoding>
 void StringSlice(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
@@ -608,6 +624,8 @@ void Initialize(Handle<Object> target) {
 
   target->Set(FIXED_ONE_BYTE_STRING(node_isolate, "setupBufferJS"),
               FunctionTemplate::New(SetupBufferJS)->GetFunction());
+  target->Set(String::New("disposeSlice"),
+              FunctionTemplate::New(DisposeSlice)->GetFunction());
 }
 
 
