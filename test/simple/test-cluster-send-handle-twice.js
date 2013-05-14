@@ -44,11 +44,11 @@ if (cluster.isMaster) {
     process.send('send-handle-2', socket);
   });
 
-  server.listen(common.PORT, function () {
+  server.listen(common.PORT, function() {
     var client = net.connect({ host: 'localhost', port: common.PORT });
-    client.on('close', function () { cluster.worker.disconnect(); });
-    setTimeout(function () { client.end(); }, 50);
-  }).on('error', function (e) {
+    client.on('close', function() { cluster.worker.disconnect(); });
+    setTimeout(function() { client.end(); }, 50);
+  }).on('error', function(e) {
     console.error(e);
     assert(false, 'server.listen failed');
     cluster.worker.disconnect();
