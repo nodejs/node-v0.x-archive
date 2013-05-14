@@ -753,6 +753,37 @@ void uv_process_endgame(uv_loop_t* loop, uv_process_t* handle) {
 }
 
 
+
+static HANDLE global_job_handle;
+static uv_once_t global_job_init_guard = UV_ONCE_INIT;
+
+
+
+static void uv__global_job_init() {
+  SECURITY_ATTRIBUTES attr;
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
+
+  memset(&attr, 0, sizeof attr);
+  attr.bInheritHandle = FALSE;
+
+  memset(&info, 0, sizeof info);
+  info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_BREAKAWAY_OK |
+      JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK |
+      JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION |
+      JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+  global_job_handle = CreateJobObjectW(&attr, NULL);
+  if (global_job_handle == NULL)
+    uv_fatal_error(GetLastError(), "CreateJobObjectW");
+
+  if (!SetInformationJobObject(global_job_handle,
+                               JobObjectExtendedLimitInformation,
+                               &info,
+                               sizeof info))
+    uv_fatal_error(GetLastError(), "SetInformationJobObject");
+}
+
+
 int uv_spawn(uv_loop_t* loop, uv_process_t* process,
     uv_process_options_t options) {
   int i;
@@ -907,6 +938,14 @@ int uv_spawn(uv_loop_t* loop, uv_process_t* process,
     /* Spawn succeeded */
     process->process_handle = info.hProcess;
     process->pid = info.dwProcessId;
+
+    /* If the process isn't spawned as detached, assign to the global job */
+    /* object so windows will kill it when the parent process dies. */
+    if (!(options.flags & UV_PROCESS_DETACHED)) {
+      uv_once(&global_job_init_guard, uv__global_job_init);
+      if (!AssignProcessToJobObject(global_job_handle, info.hProcess))
+         uv_fatal_error(GetLastError(), "AssignProcessToJobObject");
+    }
 
     /* Set IPC pid to all IPC pipes. */
     for (i = 0; i < options.stdio_count; i++) {
