@@ -32,13 +32,46 @@ function FakeInput() {
 inherits(FakeInput, EventEmitter);
 FakeInput.prototype.resume = function() {};
 FakeInput.prototype.pause = function() {};
-FakeInput.prototype.write = function() {};
+FakeInput.prototype.write = function(str) {this.emit('write', str)};
 FakeInput.prototype.end = function() {};
 
+var fi;
+var rli;
+var called;
+var echo;
+
+var functionKeyCodeRe = /(?:\x1b+)(O|N|\[|\[\[)(?:(\d+)(?:;(\d+))?([~^$])|(?:1;)?(\d+)?([a-zA-Z]))/g
+
+// check if input is echoed when line is refreshed (terminal must be true)
+fi = new FakeInput();
+rli = new readline.Interface({ input: fi, output: fi, terminal: true });
+rli.setPrompt('> ');
+echo = false;
+called = false;
+fi.emit('data', 'a');
+var res = '';
+fi.on('write', function(char) {
+  called = true;
+  res += char
+});
+rli._refreshLine();
+assert.equal(res.replace(functionKeyCodeRe, ''), '> a');
+
+
+// check if input is not echoed when line is refreshed with input echo off (terminal must be true)
+rli.setEcho(false);
+fi.emit('data', 'aa');
+rli._refreshLine();
+assert.ok(/> $/.test(res.replace(functionKeyCodeRe, '')));
+
+
+// check if input is echoed when line is refreshed with input echo back on (terminal must be true)
+rli.setEcho();
+rli._refreshLine();
+assert.ok(/> aaa$/.test(res.replace(functionKeyCodeRe, '')));
+
+
 [ true, false ].forEach(function(terminal) {
-  var fi;
-  var rli;
-  var called;
 
   // sending a full line
   fi = new FakeInput();
@@ -50,18 +83,33 @@ FakeInput.prototype.end = function() {};
   });
   fi.emit('data', 'asdf\n');
   assert.ok(called);
-
-  // sending a blank line
+  
+  // sending a full line
   fi = new FakeInput();
   rli = new readline.Interface({ input: fi, output: fi, terminal: terminal });
   called = false;
   rli.on('line', function(line) {
     called = true;
-    assert.equal(line, '');
+    assert.equal(line, 'asdf');
   });
-  fi.emit('data', '\n');
+  fi.emit('data', 'asdf\n');
   assert.ok(called);
-
+  
+  // check if input is echoed
+  fi = new FakeInput();
+  rli = new readline.Interface({ input: fi, output: fi, terminal: terminal });
+  rli.setPrompt('');
+  echo = false;
+  called = false;
+  fi.on('write', function(char) {
+    echo = true;
+    called = true;
+    assert.equal(char, 'a');
+  });
+  fi.emit('data', 'a');
+  assert.ok(called === terminal);
+  assert.ok(echo === terminal);
+  
   // sending a single character with no newline
   fi = new FakeInput();
   rli = new readline.Interface(fi, {});

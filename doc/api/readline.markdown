@@ -100,6 +100,11 @@ to `true` to prevent the cursor placement being reset to `0`.
 This will also resume the `input` stream used with `createInterface` if it has
 been paused.
 
+### rl.setEcho([enable])
+
+Enables or disables echoing (visibility) of input as it is typed in by user. Useful for
+password input and other stealthy appliances. Available if the terminal is a TTY.
+
 ### rl.question(query, callback)
 
 Prepends the prompt with `query` and invokes `callback` with the user's
