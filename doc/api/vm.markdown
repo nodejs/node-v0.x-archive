@@ -14,7 +14,7 @@ JavaScript code can be compiled and run immediately or compiled, saved, and run 
 
 The `vm` module has many known issues and edge cases. If you run into
 issues or unexpected behavior, please consult
-[the open issues on GitHub](https://github.com/joyent/node/issues/search?q=vm).
+[the open issues on GitHub](https://github.com/joyent/node/search?q=vm+state%3Aopen&type=Issues).
 Some of the biggest problems are described below.
 
 ### Sandboxes
