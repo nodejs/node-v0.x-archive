@@ -858,10 +858,12 @@ The 3-digit HTTP response status code. E.G. `404`.
 
 ### message.socket
 
-The `net.Socket` object associated with the connection.
+For HTTP, the `net.Socket` object associated with the connection.
 
-With HTTPS support, use request.connection.verifyPeer() and
-request.connection.getPeerCertificate() to obtain the client's
+For HTTPS, the `tls.CleartextStream` object associated with the connection.
+
+With HTTPS support, use request.socket.authorized and
+request.socket.getPeerCertificate() to obtain the client's
 authentication details.
 
 
