@@ -150,8 +150,8 @@ Handle<Value> StreamWrap::ReadStart(const Arguments& args) {
 
   UNWRAP(StreamWrap)
 
-  bool ipc_pipe = wrap->stream_->type == UV_NAMED_PIPE &&
-                  ((uv_pipe_t*)wrap->stream_)->ipc;
+  bool ipc_pipe = (args.Length()>0)?(args[0].IsTrue()):(wrap->stream_->type == UV_NAMED_PIPE &&
+                  ((uv_pipe_t*)wrap->stream_)->ipc);
   int r;
   if (ipc_pipe) {
     r = uv_read2_start(wrap->stream_, OnAlloc, OnRead2);
