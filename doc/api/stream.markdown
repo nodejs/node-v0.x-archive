@@ -457,6 +457,9 @@ extended with an underlying implementation of the
     returning false. Default=16kb
   * `decodeStrings` {Boolean} Whether or not to decode strings into
     Buffers before passing them to `_write()`.  Default=true
+  * `objectMode` {Boolean} Whether or not the `write(anyObj)` is
+    a valid operation. If set you can write arbitrary data instead
+    of only `Buffer` / `String` data.  Default=false
 
 In classes that extend the Writable class, make sure to call the
 constructor so that the buffering settings can be properly
