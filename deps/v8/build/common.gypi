@@ -29,7 +29,6 @@
 
 {
   'variables': {
-    'use_system_v8%': 0,
     'msvs_use_common_release': 0,
     'gcc_version%': 'unknown',
     'CXX%': '${CXX:-$(which g++)}',  # Used to assemble a shell command.
