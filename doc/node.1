@@ -62,6 +62,11 @@ and servers.
 
   --max-stack-size=val   set max v8 stack size (bytes)
 
+  --whitelist arg        control native function access
+
+  --show-whitelist-err   show values that are resolved but
+                         fail to pass the whitelist filter.
+
 
 .SH ENVIRONMENT VARIABLES
 
@@ -438,6 +443,80 @@ If set to 1 then colors will not be used in the REPL.
         type: string  default: v8.log
   --ll_prof (Enable low-level linux profiler.)
         type: bool  default: false
+
+.SH WHITELIST
+
+Whitelists are an attack vector reduction strategy
+implemented as a list of fully-qualified native value
+names that may be accessed from Javascript.
+
+If used, any natively generated value that is not in
+the defined whitelist will be reset to a default
+value for that datatype.
+
+In the whitelist, value names are terminated by ';',
+and no spacing or formatting is permitted in the
+whitelist string.
+
+Note that whitelisting is an advanced functionality
+that gives you detailed control over all interactions
+between the native and javascript components within
+NodeJS. If used incorrectly, a faulty whitelist may 
+cause errors within NodeJS internals or result in 
+NodeJS refusing to start altogether.
+
+.SH WHITELIST EXAMPLES
+
+To allow access to values in a module explicitly,
+identify the values with a fully-qualified name:
+
+  node --whitelist "evals.Context;evals.NodeScript;"
+
+To allow access to all values defined in a native module,
+use a wildcard for that module path:
+
+  node --whitelist "constants.*;"
+
+A minimal non-wildcarded list of values to get nodeJS
+to start in repl-mode is as follows:
+
+  buffer.setFastBufferConstructor;
+  buffer.SlowBuffer.makeFastBuffer;
+  evals.NodeScript.runInThisContext;
+  natives._linklist;
+  natives._stream_duplex;
+  natives._stream_readable;
+  natives._stream_writable;
+  natives.assert;
+  natives.buffer;
+  natives.config;
+  natives.console;
+  natives.domain;
+  natives.events;
+  natives.fs;
+  natives.module;
+  natives.net;
+  natives.path;
+  natives.repl;
+  natives.readline;
+  natives.stream;
+  natives.string_decoder;
+  natives.timers;
+  natives.tty;
+  natives.util;
+  natives.vm;
+  process._needTickCallback;
+  process._setupDomainUse;
+  process.argv;
+  process.binding;
+  process.cwd;
+  signal_wrap.Signal;
+  tty_wrap.isTTY;
+  tty_wrap.guessHandleType;
+  tty_wrap.TTY;
+
+It is not guaranteed that this set is sufficient to
+allow NodeJS to execute as expected in all use cases.
 
 .SH RESOURCES AND DOCUMENTATION
 
