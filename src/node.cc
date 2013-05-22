@@ -134,6 +134,8 @@ static bool use_debug_agent = false;
 static bool debug_wait_connect = false;
 static int debug_port=5858;
 static int max_stack_size = 0;
+static char *whitelist = NULL;
+static bool show_whitelist_err = false;
 bool using_domains = false;
 
 // used by C++ modules as well
@@ -1800,6 +1802,97 @@ Handle<Value> Hrtime(const v8::Arguments& args) {
   return scope.Close(tuple);
 }
 
+Handle<Value> WhitelistException(const Arguments&){
+  return ThrowException(Exception::Error(String::New(
+          "The whitelist does not permit this function to be called "
+          "from the current NodeJS instance.")));
+}
+
+static void FilterWhitelist(Local<String> basename,
+    Handle<Object> target, const char* matcher) {
+
+  if(matcher==NULL)
+    return;
+
+  Local<Array> properties = target->GetPropertyNames();
+
+  const char* superLocation = strstr(matcher,
+      *String::AsciiValue(String::Concat(basename, String::New(".*;"))));
+  if(superLocation != NULL && 
+          (superLocation==matcher || *(superLocation-1)==';')) {
+      //The whole (sub-)module is qualified.
+      return;
+  }
+
+  for(uint32_t i=0;i<properties->Length(); ++i){
+
+    Local<Value> key = properties->Get(i);
+    Local<Value> prop = target->Get(key);
+    Local<String> fullkey = String::Concat(
+            basename, String::Concat(
+                String::New("."), key->ToString()));
+
+    //Either qualify as part of a path, or as a complete path to a value.
+    const char* path_location = strstr(matcher,
+            *String::AsciiValue(String::Concat(fullkey, String::New("."))));
+    const char* leaf_location = strstr(matcher,
+            *String::AsciiValue(String::Concat(fullkey, String::New(";"))));
+
+    bool found = false;
+
+    if ( (leaf_location != NULL &&
+            (leaf_location==matcher || *(leaf_location-1)==';')) ||
+         (path_location != NULL &&
+            (path_location==matcher || *(path_location-1)==';'))) {
+        found = true;
+    }
+
+    if(!found) {
+      if(show_whitelist_err){
+        fprintf(stderr, "Value %s not in whitelist.\n",
+              *String::AsciiValue(fullkey));
+      }
+      //Could not find the fully qualified name in our matcher whitelist.
+      if(prop->IsObject()){
+        if(prop->IsFunction()) {
+          NODE_SET_METHOD(target, *String::AsciiValue(key), WhitelistException);
+        } else if(prop->IsArray()) {
+          target->Set(key, Array::New(0));
+        } else if(prop->IsDate()) {
+          target->Set(key, Date::New(0));
+        } else if(prop->IsBooleanObject()) {
+          target->Set(key, BooleanObject::New(false));
+        } else if(prop->IsNumberObject()) {
+          target->Set(key, NumberObject::New(0));
+        } else if(prop->IsStringObject()) {
+          target->Set(key, StringObject::New(String::New("")));
+        } else if(prop->IsRegExp()) {
+          target->Set(key, RegExp::New(String::New(""), RegExp::kNone));
+        } else {
+          target->Set(key, Object::New());
+        }
+      } else if(prop->IsBoolean()) {
+          target->Set(key, Boolean::New(false));
+      } else if(prop->IsNumber()) {
+        if(prop->IsInt32()) {
+          target->Set(key, Integer::New(0));
+        } else if(prop->IsUint32()) {
+          target->Set(key, Integer::NewFromUnsigned(0));
+        } else {
+          target->Set(key, Number::New(0));
+        }
+      } else if(prop->IsExternal()) {
+          target->Set(key, External::New(0));
+      } else if(prop->IsString()) {
+          target->Set(key, String::New(""));
+      } else {
+          target->Set(key, Undefined());
+      }
+    } else if(prop->IsObject()) {
+      FilterWhitelist(fullkey, prop->ToObject(), matcher);
+    }
+  }
+}
 
 typedef void (UV_DYNAMIC* extInit)(Handle<Object> exports);
 
@@ -1893,6 +1986,8 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   // Execute the C++ module
   mod->register_func(exports, module);
 
+  FilterWhitelist(String::New(symbol), exports, whitelist);
+
   // Tell coverity that 'handle' should not be freed when we return.
   // coverity[leaked_storage]
   return Undefined(node_isolate);
@@ -1945,7 +2040,6 @@ void FatalException(TryCatch &try_catch) {
   }
 }
 
-
 Persistent<Object> binding_cache;
 Persistent<Array> module_load_list;
 
@@ -1994,6 +2088,8 @@ static Handle<Value> Binding(const Arguments& args) {
 
     return ThrowException(Exception::Error(String::New("No such module")));
   }
+
+  FilterWhitelist(module, exports, whitelist);
 
   return scope.Close(exports);
 }
@@ -2428,6 +2524,10 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   // pre-set _events object for faster emit checks
   process->Set(String::NewSymbol("_events"), Object::New());
 
+  //Since process is never passed through Binding, we have to
+  //filter it manually.
+  FilterWhitelist(String::New("process"), process, whitelist);
+
   return process;
 }
 
@@ -2540,6 +2640,8 @@ static void PrintHelp() {
          "  --trace-deprecation  show stack traces on deprecations\n"
          "  --v8-options         print v8 command line options\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
+         "  --whitelist str      control native function access\n"
+         "  --show-whitelist-err print filtered values\n"
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
@@ -2577,6 +2679,18 @@ static void ParseArgs(int argc, char **argv) {
     } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
       PrintHelp();
       exit(0);
+    } else if (strcmp(arg, "--whitelist") == 0) {
+      if(i + 1 >= argc) {
+        fprintf(stderr, "Error: %s requires an argument\n", arg);
+        exit(13);
+      }
+      argv[i] = const_cast<char*>("");
+      whitelist = argv[++i];
+      argv[i] = const_cast<char*>("");
+      continue;
+    } else if (strcmp(arg, "--show-whitelist-err") == 0) {
+        argv[i] = const_cast<char*>("");
+        show_whitelist_err = true;
     } else if (strcmp(arg, "--eval") == 0   ||
                strcmp(arg, "-e") == 0       ||
                strcmp(arg, "--print") == 0  ||
