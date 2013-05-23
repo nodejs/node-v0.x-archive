@@ -97,6 +97,7 @@ v8::Handle<v8::Object> SetupProcessObject(int argc, char *argv[]);
 void Load(v8::Handle<v8::Object> process);
 void EmitExit(v8::Handle<v8::Object> process);
 
+// TODO(trevnorris): not sure how to handle this case
 #define NODE_PSYMBOL(s) \
   v8::Persistent<v8::String>::New(node_isolate, v8::String::NewSymbol(s))
 
@@ -152,6 +153,7 @@ NODE_EXTERN ssize_t DecodeWrite(char *buf,
 v8::Local<v8::Object> BuildStatsObject(const uv_stat_t* s);
 
 
+// TODO(trevnorris): this isn't used. can it be removed?
 static inline v8::Persistent<v8::Function>* cb_persist(
     const v8::Local<v8::Value> &v) {
   v8::Persistent<v8::Function> *fn = new v8::Persistent<v8::Function>();

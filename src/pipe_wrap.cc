@@ -114,7 +114,8 @@ void PipeWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setPendingInstances", SetPendingInstances);
 #endif
 
-  pipeConstructor = Persistent<Function>::New(node_isolate, t->GetFunction());
+  Persistent<Function> pc(node_isolate, t->GetFunction());
+  pipeConstructor = pc;
 
   target->Set(String::NewSymbol("Pipe"), pipeConstructor);
 }

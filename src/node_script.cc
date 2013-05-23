@@ -128,8 +128,8 @@ void CloneObject(Handle<Object> recv,
         })"
       ), String::New("binding:script"))->Run()
     );
-    cloneObjectMethod = Persistent<Function>::New(node_isolate,
-                                                  cloneObjectMethod_);
+    Persistent<Function> com(node_isolate, cloneObjectMethod_);
+    cloneObjectMethod = com;
   }
 
   cloneObjectMethod->Call(recv, 2, args);
@@ -140,7 +140,8 @@ void WrappedContext::Initialize(Handle<Object> target) {
   HandleScope scope(node_isolate);
 
   Local<FunctionTemplate> t = FunctionTemplate::New(WrappedContext::New);
-  constructor_template = Persistent<FunctionTemplate>::New(node_isolate, t);
+  Persistent<FunctionTemplate> ct(node_isolate, t);
+  constructor_template = ct;
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   constructor_template->SetClassName(String::NewSymbol("Context"));
 
@@ -165,7 +166,8 @@ Handle<Value> WrappedContext::New(const Arguments& args) {
 
 
 WrappedContext::WrappedContext() : ObjectWrap() {
-  context_ = Persistent<Context>::New(node_isolate, Context::New(node_isolate));
+  Persistent<Context> c_(node_isolate, Context::New(node_isolate));
+  context_ = c_;
 }
 
 
@@ -192,7 +194,8 @@ void WrappedScript::Initialize(Handle<Object> target) {
   HandleScope scope(node_isolate);
 
   Local<FunctionTemplate> t = FunctionTemplate::New(WrappedScript::New);
-  constructor_template = Persistent<FunctionTemplate>::New(node_isolate, t);
+  Persistent<FunctionTemplate> ct(node_isolate, t);
+  constructor_template = ct;
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   // Note: We use 'NodeScript' instead of 'Script' so that we do not
   // conflict with V8's Script class defined in v8/src/messages.js
@@ -454,7 +457,8 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
       return ThrowException(Exception::Error(
             String::New("Must be called as a method of Script.")));
     }
-    n_script->script_ = Persistent<Script>::New(node_isolate, script);
+    Persistent<Script> ns_(node_isolate, script);
+    n_script->script_ = ns_;
     result = args.This();
   }
 

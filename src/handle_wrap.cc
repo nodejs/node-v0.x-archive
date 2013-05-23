@@ -113,7 +113,8 @@ HandleWrap::HandleWrap(Handle<Object> object, uv_handle_t* h) {
   HandleScope scope(node_isolate);
   assert(object_.IsEmpty());
   assert(object->InternalFieldCount() > 0);
-  object_ = v8::Persistent<v8::Object>::New(node_isolate, object);
+  Persistent<Object> o_(node_isolate, object);
+  object_ = o_;
   object_->SetAlignedPointerInInternalField(0, this);
   ngx_queue_insert_tail(&handle_wrap_queue, &handle_wrap_queue_);
 }

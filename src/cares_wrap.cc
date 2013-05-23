@@ -275,7 +275,8 @@ class QueryWrap {
   QueryWrap() {
     HandleScope scope(node_isolate);
 
-    object_ = Persistent<Object>::New(node_isolate, Object::New());
+    Persistent<Object> o_(node_isolate, Object::New());
+    object_ = o_;
   }
 
   virtual ~QueryWrap() {
