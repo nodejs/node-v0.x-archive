@@ -61,7 +61,7 @@ typedef int mode_t;
 #include <sys/types.h>
 #include "zlib.h"
 
-#ifdef __POSIX__
+#if defined(__POSIX__) && !defined(ANDROID)
 # include <pwd.h> /* getpwnam() */
 # include <grp.h> /* getgrnam() */
 #endif
@@ -1413,7 +1413,7 @@ static Handle<Value> Umask(const Arguments& args) {
 }
 
 
-#ifdef __POSIX__
+#if defined(__POSIX__) && !defined(ANDROID)
 
 static const uid_t uid_not_found = static_cast<uid_t>(-1);
 static const gid_t gid_not_found = static_cast<gid_t>(-1);
@@ -1689,7 +1689,7 @@ static Handle<Value> InitGroups(const Arguments& args) {
   return Undefined(node_isolate);
 }
 
-#endif // __POSIX__
+#endif // __POSIX__ && !defined(ANDROID)
 
 
 v8::Handle<v8::Value> Exit(const v8::Arguments& args) {
@@ -1838,7 +1838,7 @@ Handle<Value> DLOpen(const v8::Arguments& args) {
   base = *path;
 
   /* Find the shared library filename within the full path. */
-#ifdef __POSIX__
+#if defined(__POSIX__)
   pos = strrchr(base, '/');
   if (pos != NULL) {
     base = pos + 1;
@@ -2021,7 +2021,7 @@ static void ProcessTitleSetter(Local<String> property,
 static Handle<Value> EnvGetter(Local<String> property,
                                const AccessorInfo& info) {
   HandleScope scope(node_isolate);
-#ifdef __POSIX__
+#if defined(__POSIX__)
   String::Utf8Value key(property);
   const char* val = getenv(*key);
   if (val) {
@@ -2050,7 +2050,7 @@ static Handle<Value> EnvSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
   HandleScope scope(node_isolate);
-#ifdef __POSIX__
+#if defined(__POSIX__)
   String::Utf8Value key(property);
   String::Utf8Value val(value);
   setenv(*key, *val, 1);
@@ -2071,7 +2071,7 @@ static Handle<Value> EnvSetter(Local<String> property,
 static Handle<Integer> EnvQuery(Local<String> property,
                                 const AccessorInfo& info) {
   HandleScope scope(node_isolate);
-#ifdef __POSIX__
+#if defined(__POSIX__)
   String::Utf8Value key(property);
   if (getenv(*key)) {
     return scope.Close(Integer::New(0, node_isolate));
@@ -2100,7 +2100,7 @@ static Handle<Integer> EnvQuery(Local<String> property,
 static Handle<Boolean> EnvDeleter(Local<String> property,
                                   const AccessorInfo& info) {
   HandleScope scope(node_isolate);
-#ifdef __POSIX__
+#if defined(__POSIX__)
   String::Utf8Value key(property);
   if (!getenv(*key)) return False(node_isolate);
   unsetenv(*key); // can't check return value, it's void on some platforms
@@ -2122,7 +2122,7 @@ static Handle<Boolean> EnvDeleter(Local<String> property,
 
 static Handle<Array> EnvEnumerator(const AccessorInfo& info) {
   HandleScope scope(node_isolate);
-#ifdef __POSIX__
+#if defined(__POSIX__)
   int size = 0;
   while (environ[size]) size++;
 
@@ -2389,7 +2389,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "umask", Umask);
 
-#ifdef __POSIX__
+#if defined(__POSIX__) && !defined(ANDROID)
   NODE_SET_METHOD(process, "getuid", GetUid);
   NODE_SET_METHOD(process, "setuid", SetUid);
 
@@ -2399,7 +2399,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   NODE_SET_METHOD(process, "getgroups", GetGroups);
   NODE_SET_METHOD(process, "setgroups", SetGroups);
   NODE_SET_METHOD(process, "initgroups", InitGroups);
-#endif // __POSIX__
+#endif // __POSIX__ && !defined(ANDROID)
 
   NODE_SET_METHOD(process, "_kill", Kill);
 
@@ -2689,7 +2689,7 @@ static void EnableDebug(bool wait_connect) {
 }
 
 
-#ifdef __POSIX__
+#if defined(__POSIX__)
 static void EnableDebugSignalHandler(uv_signal_t* handle, int) {
   // Break once process will return execution to v8
   v8::Debug::DebugBreak(node_isolate);
@@ -2962,7 +2962,7 @@ char** Init(int argc, char *argv[]) {
   // even when we need it to access it from another (debugger) thread.
   node_isolate = Isolate::GetCurrent();
 
-#ifdef __POSIX__
+#if defined(__POSIX__)
   // Ignore SIGPIPE
   RegisterSignalHandler(SIGPIPE, SIG_IGN);
   RegisterSignalHandler(SIGINT, SignalExit);
