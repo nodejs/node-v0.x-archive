@@ -168,6 +168,9 @@ local space in some cases.
 The `--no-bin-links` argument will prevent npm from creating symlinks for
 any binaries the package might contain.
 
+The `--nodedir=/path/to/node/source` argument will allow npm to find the
+node source code so that npm can compile native modules.
+
 See `npm-config(1)`.  Many of the configuration params have some
 effect on installation, since that's most of what npm does.
 

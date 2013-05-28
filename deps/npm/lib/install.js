@@ -27,6 +27,8 @@ install.usage = "npm install"
               + "\nIf no argument is supplied and ./npm-shrinkwrap.json is "
               + "\npresent, installs dependencies specified in the shrinkwrap."
               + "\nOtherwise, installs dependencies from ./package.json."
+              + "\n\nOptions
+              + "\n\n--nodedir=/path/to/node/source"
 
 install.completion = function (opts, cb) {
   // install can complete to a folder with a package.json, or any package.
