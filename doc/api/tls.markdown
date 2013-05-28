@@ -277,6 +277,10 @@ Creates a new client connection to the given `port` and `host` (old API) or
     usually be much simpler: `['hello', 'world']`.)
 
   - `servername`: Servername for SNI (Server Name Indication) TLS extension.
+  
+  - `secureProtocol`: The SSL method to use, e.g. `SSLv3_method` to force
+    SSL version 3. The possible values depend on your installation of
+    OpenSSL and are defined in the constant [SSL_METHODS][].
 
 The `callback` parameter will be added as a listener for the
 ['secureConnect'][] event.
@@ -574,3 +578,4 @@ The numeric representation of the local port.
 [Stream]: stream.html#stream_stream
 [tls.Server]: #tls_class_tls_server
 [SSL_CTX_set_timeout]: http://www.openssl.org/docs/ssl/SSL_CTX_set_timeout.html
+[SSL_METHODS]: http://www.openssl.org/docs/ssl/ssl.html#DEALING_WITH_PROTOCOL_METHODS
