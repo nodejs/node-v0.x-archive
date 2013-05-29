@@ -1160,15 +1160,26 @@ static int uv_pipe_write_impl(uv_loop_t* loop, uv_write_t* req,
   }
 
   if (handle->flags & UV_HANDLE_NON_OVERLAPPED_PIPE) {
-    req->write_buffer = bufs[0];
-    uv_insert_non_overlapped_write_req(handle, req);
-    if (handle->write_reqs_pending == 0) {
-      uv_queue_non_overlapped_write(handle);
-    }
+      DWORD bytes;
+      result = WriteFile(handle->handle,
+                         bufs[0].base,
+                         bufs[0].len,
+                         &bytes,
+                         NULL);
 
-    /* Request queued by the kernel. */
-    req->queued_bytes = uv_count_bufs(bufs, bufcnt);
-    handle->write_queue_size += req->queued_bytes;
+      if (!result) {
+          uv__set_sys_error(loop, GetLastError());
+          return -1;
+      } else {
+          /* Request completed immediately. */
+          req->queued_bytes = 0;
+      }
+
+      REGISTER_HANDLE_REQ(loop, handle, req);
+      handle->reqs_pending++;
+      handle->write_reqs_pending++;
+      POST_COMPLETION_FOR_REQ(loop, req);
+      return 0;
   } else {
     result = WriteFile(handle->handle,
                        bufs[0].base,
