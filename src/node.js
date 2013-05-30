@@ -285,7 +285,7 @@
       }
       // if we handled an error, then make sure any ticks get processed
       if (caught)
-        process._needTickCallback();
+        setImmediate(process._tickCallback);
       return caught;
     };
   };
@@ -316,7 +316,6 @@
   };
 
   startup.processNextTick = function() {
-    var _needTickCallback = process._needTickCallback;
     var lastThrew = false;
     var nextTickQueue = [];
     var needSpinner = true;
@@ -325,7 +324,7 @@
     // this infobox thing is used so that the C++ code in src/node.cc
     // can have easy accesss to our nextTick state, and avoid unnecessary
     // calls into process._tickCallback.
-    // order is [length, index, depth]
+    // order is [length, index]
     // Never write code like this without very good reason!
     var infoBox = process._tickInfoBox;
     var length = 0;
@@ -336,7 +335,11 @@
     process._nextDomainTick = _nextDomainTick;
     process._tickCallback = _tickCallback;
     process._tickDomainCallback = _tickDomainCallback;
-    process._tickFromSpinner = _tickFromSpinner;
+
+    function Tock(cb, domain) {
+      this.callback = cb;
+      this.domain = domain;
+    }
 
     function tickDone() {
       if (infoBox[length] !== 0) {
@@ -348,21 +351,8 @@
           infoBox[length] = nextTickQueue.length;
         }
       }
-      if (needSpinner) {
-        _needTickCallback();
-        needSpinner = false;
-      }
       inTick = false;
       infoBox[index] = 0;
-    }
-
-    function _tickFromSpinner() {
-      needSpinner = true;
-      // no callbacks to run
-      if (infoBox[length] === 0)
-        infoBox[index] = 0;
-      else
-        process._tickCallback();
     }
 
     // run callbacks that have no domain
@@ -396,7 +386,7 @@
 
       if (lastThrew) {
         lastThrew = false;
-        return _needTickCallback();
+        return;
       }
 
       if (inTick) return;
@@ -432,9 +422,7 @@
       if (process._exiting)
         return;
 
-      var obj = { callback: callback, domain: null };
-
-      nextTickQueue.push(obj);
+      nextTickQueue.push(new Tock(callback, null));
       infoBox[length]++;
     }
 
@@ -443,9 +431,7 @@
       if (process._exiting)
         return;
 
-      var obj = { callback: callback, domain: process.domain };
-
-      nextTickQueue.push(obj);
+      nextTickQueue.push(new Tock(callback, process.domain));
       infoBox[length]++;
     }
   };
