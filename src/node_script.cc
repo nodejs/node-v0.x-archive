@@ -342,15 +342,6 @@ void WrappedScript::EvalMachine(const FunctionCallbackInfo<Value>& args) {
     timeout = args[timeout_index]->Uint32Value();
   }
 
-  const int display_error_index = timeout_index +
-                                  (timeout_flag == noTimeout ? 0 : 1);
-  bool display_error = false;
-  if (args.Length() > display_error_index &&
-      args[display_error_index]->IsBoolean() &&
-      args[display_error_index]->BooleanValue() == true) {
-    display_error = true;
-  }
-
   Local<Context> context = Context::GetCurrent();
 
   Local<Array> keys;
@@ -389,10 +380,6 @@ void WrappedScript::EvalMachine(const FunctionCallbackInfo<Value>& args) {
     script = output_flag == returnResult ? Script::Compile(code, filename)
                                          : Script::New(code, filename);
     if (script.IsEmpty()) {
-      // FIXME UGLY HACK TO DISPLAY SYNTAX ERRORS.
-      if (display_error) DisplayExceptionLine(try_catch.Message());
-
-      // Hack because I can't get a proper stacktrace on SyntaxError
       try_catch.ReThrow();
       return;
     }
@@ -420,7 +407,6 @@ void WrappedScript::EvalMachine(const FunctionCallbackInfo<Value>& args) {
       return ThrowError("Script execution timed out.");
     }
     if (result.IsEmpty()) {
-      if (display_error) DisplayExceptionLine(try_catch.Message());
       try_catch.ReThrow();
       return;
     }
