@@ -344,9 +344,10 @@ void InitDTrace(Handle<Object> target) {
   };
 
   for (unsigned int i = 0; i < ARRAY_SIZE(tab); i++) {
-    tab[i].templ = Persistent<FunctionTemplate>::New(node_isolate,
+    Persistent<FunctionTemplate> tabi(node_isolate,
         FunctionTemplate::New(tab[i].func));
-    target->Set(String::NewSymbol(tab[i].name), tab[i].templ->GetFunction());
+    tab[i].templ = tabi;
+    target->Set(String::NewSymbol(tab[i].name), tabi->GetFunction());
   }
 
 #ifdef HAVE_ETW

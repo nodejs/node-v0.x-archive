@@ -38,7 +38,8 @@ void StatWatcher::Initialize(Handle<Object> target) {
   HandleScope scope(node_isolate);
 
   Local<FunctionTemplate> t = FunctionTemplate::New(StatWatcher::New);
-  constructor_template = Persistent<FunctionTemplate>::New(node_isolate, t);
+  Persistent<FunctionTemplate> ct(node_isolate, t);
+  constructor_template = ct;
   constructor_template->InstanceTemplate()->SetInternalFieldCount(1);
   constructor_template->SetClassName(String::NewSymbol("StatWatcher"));
 

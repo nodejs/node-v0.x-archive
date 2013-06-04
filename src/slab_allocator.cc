@@ -65,7 +65,8 @@ void SlabAllocator::Initialize() {
   offset_ = 0;
   last_ptr_ = NULL;
   initialized_ = true;
-  slab_sym_ = Persistent<String>::New(node_isolate, String::New(sym));
+  Persistent<String> ss_(node_isolate, String::NewSymbol(sym));
+  slab_sym_ = ss_;
 }
 
 
@@ -96,7 +97,8 @@ char* SlabAllocator::Allocate(Handle<Object> obj, unsigned int size) {
   if (slab_.IsEmpty() || offset_ + size > size_) {
     slab_.Dispose(node_isolate);
     slab_.Clear();
-    slab_ = Persistent<Object>::New(node_isolate, NewSlab(size_));
+    Persistent<Object> s_(node_isolate, NewSlab(size_));
+    slab_ = s_;
     offset_ = 0;
     last_ptr_ = NULL;
   }

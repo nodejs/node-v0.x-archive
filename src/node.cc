@@ -878,7 +878,8 @@ Handle<Value> SetupDomainUse(const Arguments& args) {
   Local<Function> ndt = ndt_v.As<Function>();
   process->Set(String::New("_tickCallback"), tdc);
   process->Set(String::New("nextTick"), ndt);
-  process_tickCallback = Persistent<Function>::New(node_isolate, tdc);
+  Persistent<Function> ptc(node_isolate, tdc);
+  process_tickCallback = ptc;
   return Undefined(node_isolate);
 }
 
@@ -972,7 +973,8 @@ MakeCallback(const Handle<Object> object,
       abort();
     }
     Local<Function> cb = cb_v.As<Function>();
-    process_tickCallback = Persistent<Function>::New(node_isolate, cb);
+    Persistent<Function> ptc(node_isolate, cb);
+    process_tickCallback = ptc;
   }
 
   TryCatch try_catch;
@@ -1913,7 +1915,8 @@ static Handle<Value> Binding(const Arguments& args) {
   node_module_struct* modp;
 
   if (binding_cache.IsEmpty()) {
-    binding_cache = Persistent<Object>::New(node_isolate, Object::New());
+    Persistent<Object> bc(node_isolate, Object::New());
+    binding_cache = bc;
   }
 
   Local<Object> exports;
@@ -2200,8 +2203,9 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   process_template->SetClassName(String::NewSymbol("process"));
 
-  process = Persistent<Object>::New(node_isolate,
-                                process_template->GetFunction()->NewInstance());
+  Persistent<Object> p(node_isolate,
+                       process_template->GetFunction()->NewInstance());
+  process = p;
 
   process->SetAccessor(String::New("title"),
                        ProcessTitleGetter,
@@ -2211,7 +2215,8 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   process->Set(String::NewSymbol("version"), String::New(NODE_VERSION));
 
   // process.moduleLoadList
-  module_load_list = Persistent<Array>::New(node_isolate, Array::New());
+  Persistent<Array> mll(node_isolate, Array::New());
+  module_load_list = mll;
   process->Set(String::NewSymbol("moduleLoadList"), module_load_list);
 
   // process.versions

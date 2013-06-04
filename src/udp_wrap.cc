@@ -119,8 +119,9 @@ void UDPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
   NODE_SET_PROTOTYPE_METHOD(t, "unref", HandleWrap::Unref);
 
-  constructor = Persistent<Function>::New(node_isolate,
-      Persistent<FunctionTemplate>::New(node_isolate, t)->GetFunction());
+  Persistent<FunctionTemplate> cft(node_isolate, t);
+  Persistent<Function> c(node_isolate, cft->GetFunction());
+  constructor = c;
   target->Set(String::NewSymbol("UDP"), constructor);
 }
 

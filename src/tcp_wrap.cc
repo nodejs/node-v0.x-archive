@@ -120,7 +120,8 @@ void TCPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "setSimultaneousAccepts", SetSimultaneousAccepts);
 #endif
 
-  tcpConstructor = Persistent<Function>::New(node_isolate, t->GetFunction());
+  Persistent<Function> tc(node_isolate, t->GetFunction());
+  tcpConstructor = tc;
 
   onconnection_sym = NODE_PSYMBOL("onconnection");
   oncomplete_sym = NODE_PSYMBOL("oncomplete");

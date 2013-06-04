@@ -74,9 +74,8 @@ void FSEventWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "start", Start);
   NODE_SET_PROTOTYPE_METHOD(t, "close", Close);
 
-  target->Set(String::NewSymbol("FSEvent"),
-              Persistent<FunctionTemplate>::New(node_isolate,
-                                                t)->GetFunction());
+  Persistent<FunctionTemplate> tft(node_isolate, t);
+  target->Set(String::NewSymbol("FSEvent"), tft->GetFunction());
 
   change_sym = NODE_PSYMBOL("change");
   onchange_sym = NODE_PSYMBOL("onchange");
