@@ -98,7 +98,7 @@ void Load(v8::Handle<v8::Object> process);
 void EmitExit(v8::Handle<v8::Object> process);
 
 #define NODE_PSYMBOL(s) \
-  v8::Persistent<v8::String>::New(node_isolate, v8::String::NewSymbol(s))
+  v8::Persistent<v8::String>::New(node::node_isolate, v8::String::NewSymbol(s))
 
 /* Converts a unixtime to V8 Date */
 #define NODE_UNIXTIME_V8(t) v8::Date::New(1000*static_cast<double>(t))
