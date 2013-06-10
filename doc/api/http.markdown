@@ -562,7 +562,9 @@ entirely discarded.  However, if you add a `'response'` event handler,
 then you **must** consume the data from the response object, either by
 calling `response.read()` whenever there is a `'readable'` event, or
 by adding a `'data'` handler, or by calling the `.resume()` method.
-Until the data is consumed, the `'end'` event will not fire.
+Until the data is consumed, the `'end'` event will not fire.  Also, until 
+the data is read it will consume memory that can eventually lead to a 
+'process out of memory' error.
 
 Note: Node does not check whether Content-Length and the length of the body
 which has been transmitted are equal or not.
