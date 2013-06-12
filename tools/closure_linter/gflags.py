@@ -476,7 +476,7 @@ def CutCommonSpacePrefix(text):
   useful to turn doc strings into help texts. This is because some
   people prefer to have the doc comment start already after the
   apostrophy and then align the following lines while others have the
-  apostrophies on a seperately line.
+  apostrophies on a separately line.
 
   The function also drops trailing empty lines and ignores empty lines
   following the initial content line while calculating the initial
@@ -951,7 +951,7 @@ class FlagValues:
     if not self._FlagIsRegistered(flag_obj):
       # If the Flag object indicated by flag_name is no longer
       # registered (please see the docstring of _FlagIsRegistered), then
-      # we delete the occurences of the flag object in all our internal
+      # we delete the occurrences of the flag object in all our internal
       # dictionaries.
       self.__RemoveFlagFromDictByModule(self.FlagsByModuleDict(), flag_obj)
       self.__RemoveFlagFromDictByModule(self.KeyFlagsByModuleDict(), flag_obj)
@@ -965,7 +965,7 @@ class FlagValues:
       flag_obj: A flag object.
     """
     for unused_module, flags_in_module in flags_by_module_dict.iteritems():
-      # while (as opposed to if) takes care of multiple occurences of a
+      # while (as opposed to if) takes care of multiple occurrences of a
       # flag in the list for the same module.
       while flag_obj in flags_in_module:
         flags_in_module.remove(flag_obj)
@@ -1032,7 +1032,7 @@ class FlagValues:
       prefix = shortest_matches[name]
       no_prefix = shortest_matches[no_name]
 
-      # Replace all occurences of this boolean with extended forms
+      # Replace all occurrences of this boolean with extended forms
       for arg_idx in range(1, len(argv)):
         arg = argv[arg_idx]
         if arg.find('=') >= 0: continue
@@ -1399,7 +1399,7 @@ class FlagValues:
                                % sub_filename)
       else:
         # Any line that's not a comment or a nested flagfile should get
-        # copied into 2nd position.  This leaves earlier arguements
+        # copied into 2nd position.  This leaves earlier arguments
         # further back in the list, thus giving them higher priority.
         flag_line_list.append(line.strip())
     return flag_line_list
