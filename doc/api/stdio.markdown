@@ -44,10 +44,11 @@ Same as `console.log` but prints to stderr.
 
 Same as `console.error`.
 
-## console.dir(obj)
+## console.dir(obj, [options])
 
 Uses `util.inspect` on `obj` and prints resulting string to stdout. This function
-bypasses any custom `inspect()` function on `obj`.
+bypasses any custom `inspect()` function on `obj`.  `options` is passed through
+to `util.inspect`.
 
 ## console.time(label)
 
