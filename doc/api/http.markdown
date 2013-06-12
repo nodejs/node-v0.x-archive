@@ -311,7 +311,7 @@ Boolean (read-only). True if headers were sent, false otherwise.
 
 ### response.sendDate
 
-When true, the Date header will be automatically generated and sent in 
+When true, the Date header will be automatically generated and sent in
 the response if it is not already present in the headers. Defaults to true.
 
 This should only be disabled for testing; HTTP requires the Date header
@@ -522,17 +522,17 @@ Alternatively, you could just opt out of pooling entirely using `agent:false`:
 
 ### agent.maxSockets
 
-By default set to 5. Determines how many concurrent sockets the agent can have 
-open per host.
+By default set to 5. Determines how many concurrent sockets the agent can have
+open per origin.
 
 ### agent.sockets
 
-An object which contains arrays of sockets currently in use by the Agent. Do not 
+An object which contains arrays of sockets currently in use by the Agent. Do not
 modify.
 
 ### agent.requests
 
-An object which contains queues of requests that have not yet been assigned to 
+An object which contains queues of requests that have not yet been assigned to
 sockets. Do not modify.
 
 ## http.globalAgent
