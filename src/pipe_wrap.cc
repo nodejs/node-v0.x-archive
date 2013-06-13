@@ -273,6 +273,10 @@ Handle<Value> PipeWrap::Open(const Arguments& args) {
 
   uv_pipe_open(&wrap->handle_, fd);
 
+  if (args.Length() > 1 && args[1]->IsTrue()) {
+    uv_stream_set_blocking((uv_stream_t*)&wrap->handle_, 1);
+  }
+
   return scope.Close(v8::Null());
 }
 

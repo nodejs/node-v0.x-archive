@@ -574,7 +574,8 @@
         stream = new net.Socket({
           fd: fd,
           readable: false,
-          writable: true
+          writable: true,
+          blocking: true
         });
 
         // FIXME Should probably have an option in net.Socket to create a
