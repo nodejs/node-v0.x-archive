@@ -130,8 +130,7 @@ informing the source that the data did not reach its intended recipient).
 * `callback` Function, Optional
 
 For UDP sockets, listen for datagrams on a named `port` and optional `address`.
-If `port` is not specified, the OS will try to assign a random port (it does the right thing for
-both `udp4` and `udp6` sockets).
+If `port` is not specified, the OS will try to assign a random port.
 If `address` is not specified, the OS will try to listen on all addresses.
 
 The `callback` argument, if provided, is added as a one-shot `'listening'`
