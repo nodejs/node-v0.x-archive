@@ -59,6 +59,8 @@
       'lib/sys.js',
       'lib/timers.js',
       'lib/tls.js',
+      'lib/_tls_legacy.js',
+      'lib/_tls_wrap.js',
       'lib/tty.js',
       'lib/url.js',
       'lib/util.js',
@@ -129,6 +131,7 @@
         'src/node_string.h',
         'src/node_version.h',
         'src/node_watchdog.h',
+        'src/node_wrap.h',
         'src/pipe_wrap.h',
         'src/queue.h',
         'src/tty_wrap.h',
@@ -158,7 +161,12 @@
       'conditions': [
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
-          'sources': [ 'src/node_crypto.cc', 'src/node_crypto_bio.cc' ],
+          'sources': [
+            'src/node_crypto.cc',
+            'src/node_crypto_bio.cc',
+            'src/tls_wrap.cc',
+            'src/tls_wrap.h'
+          ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {
               'dependencies': [ './deps/openssl/openssl.gyp:openssl' ],

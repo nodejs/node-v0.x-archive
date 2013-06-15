@@ -82,6 +82,12 @@ int NodeBIO::Read(BIO* bio, char* out, int len) {
 }
 
 
+char* NodeBIO::Peek(size_t* size) {
+  *size = read_head_->write_pos_ - read_head_->read_pos_;
+  return read_head_->data_ + read_head_->read_pos_;
+}
+
+
 int NodeBIO::Write(BIO* bio, const char* data, int len) {
   BIO_clear_retry_flags(bio);
 
@@ -203,8 +209,10 @@ size_t NodeBIO::Read(char* out, size_t size) {
       read_head_->write_pos_ = 0;
 
       // But not get beyond write_head_
-      if (bytes_read != expected)
+      if (length_ != bytes_read) {
+        assert(read_head_ != write_head_);
         read_head_ = read_head_->next_;
+      }
     }
   }
   assert(expected == bytes_read);
@@ -226,6 +234,11 @@ void NodeBIO::FreeEmpty() {
     return;
 
   while (cur != read_head_) {
+    // Skip embedded buffer
+    if (cur == &head_) {
+      cur = head_.next_;
+      continue;
+    }
     assert(cur != write_head_);
     assert(cur->write_pos_ == cur->read_pos_);
 
@@ -303,15 +316,46 @@ void NodeBIO::Write(const char* data, size_t size) {
 
     // Go to next buffer if there still are some bytes to write
     if (left != 0) {
-      if (write_head_->write_pos_ == kBufferLength) {
-        Buffer* next = new Buffer();
-        next->next_ = write_head_->next_;
-        write_head_->next_ = next;
-      }
+      TryAllocateForWrite();
       write_head_ = write_head_->next_;
     }
   }
   assert(left == 0);
+}
+
+
+char* NodeBIO::PeekWritable(size_t* size) {
+  size_t available = kBufferLength - write_head_->write_pos_;
+  if (*size != 0 && available > *size)
+    available = *size;
+  else
+    *size = available;
+
+  return write_head_->data_ + write_head_->write_pos_;
+}
+
+
+void NodeBIO::Commit(size_t size) {
+  write_head_->write_pos_ += size;
+  length_ += size;
+  assert(write_head_->write_pos_ <= kBufferLength);
+
+  // Allocate new buffer if write head is full,
+  // and there're no other place to go
+  TryAllocateForWrite();
+  write_head_ = write_head_->next_;
+}
+
+
+void NodeBIO::TryAllocateForWrite() {
+  // If write head is full, next buffer is either read head or not empty.
+  if (write_head_->write_pos_ == kBufferLength &&
+      (write_head_->next_ == read_head_ ||
+       write_head_->next_->write_pos_ != 0)) {
+    Buffer* next = new Buffer();
+    next->next_ = write_head_->next_;
+    write_head_->next_ = next;
+  }
 }
 
 
