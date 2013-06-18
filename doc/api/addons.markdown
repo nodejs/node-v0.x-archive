@@ -576,6 +576,8 @@ can probe private values after unwrapping the object:
 
     #include <node.h>
 
+    extern v8::Isolate* isolate;
+
     class MyObject : public node::ObjectWrap {
      public:
       static void Init();
@@ -599,6 +601,8 @@ The implementation of `myobject.cc` is similar as before:
     #include "myobject.h"
 
     using namespace v8;
+
+    Isolate* isolate = Isolate::GetCurrent();
 
     MyObject::MyObject() {};
     MyObject::~MyObject() {};
