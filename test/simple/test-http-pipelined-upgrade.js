@@ -37,13 +37,17 @@ var server = http.createServer(function(req, res) {
     res.end('Hello World\n');
   }, 500);
 });
-server.on('upgrade', function(req, sock, head) {
+server.on('upgrade', function(req, res) {
   common.debug('Server got upgrade request');
-  sock.end('HTTP/1.1 101 Switching Protocols\r\n' +
-             'Upgrade: dummy\r\n' +
-             'Connection: Upgrade\r\n' +
-             '\r\n\r\n');
-  server.close();
+  res.writeHead(101, {
+   'Upgrade': 'dummy',
+   'Connection': 'Upgrade'
+  });
+  res.switchProtocols(function(sock) {
+    common.debug('Server finished update request');
+    sock.end();
+    server.close();
+  });
 });
 server.listen(common.PORT, function() {
   var conn = net.createConnection(common.PORT);

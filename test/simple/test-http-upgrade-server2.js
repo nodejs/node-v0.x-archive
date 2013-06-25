@@ -29,7 +29,7 @@ var server = http.createServer(function(req, res) {
   throw new Error('This shouldn\'t happen.');
 });
 
-server.on('upgrade', function(req, socket, upgradeHead) {
+server.on('upgrade', function(req, res) {
   common.error('got upgrade event');
   // test that throwing an error from upgrade gets
   // is uncaught

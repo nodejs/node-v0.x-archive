@@ -49,22 +49,23 @@ function testServer() {
     res.end();
   });
 
-  server.on('upgrade', function(req, socket, upgradeHead) {
-    socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
-                 'Upgrade: WebSocket\r\n' +
-                 'Connection: Upgrade\r\n' +
-                 '\r\n\r\n');
+  server.on('upgrade', function(req, res) {
+    res.writeHead(101, {
+      'Upgrade': 'WebSocket',
+      'Connection': 'Upgrade'
+    });
+    res.switchProtocols(function(socket) {
+      request_upgradeHead = socket.read();
 
-    request_upgradeHead = upgradeHead;
-
-    socket.ondata = function(d, start, end) {
-      var data = d.toString('utf8', start, end);
-      if (data == 'kill') {
-        socket.end();
-      } else {
-        socket.write(data, 'utf8');
-      }
-    };
+      socket.ondata = function(d, start, end) {
+        var data = d.toString('utf8', start, end);
+        if (data == 'kill') {
+          socket.end();
+        } else {
+          socket.write(data, 'utf8');
+        }
+      };
+    });
   });
 }
 
