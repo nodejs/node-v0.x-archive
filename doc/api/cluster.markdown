@@ -264,7 +264,7 @@ Example:
     });
     cluster.fork();
 
-## cluster.fork([env], [options])
+## cluster.fork(env, [options])
 
 * `env` {Object} Key/value pairs to add to child process environment.
 * `options` {Object} 
