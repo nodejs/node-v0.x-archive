@@ -1127,7 +1127,7 @@ ssize_t DecodeWrite(char *buf,
   return StringBytes::Write(buf, buflen, val, encoding, NULL);
 }
 
-void DisplayExceptionLine (Handle<Message> message) {
+void DisplayExceptionLine(Handle<Message> message) {
   // Prevent re-entry into this function.  For example, if there is
   // a throw from a program in vm.runInThisContext(code, filename, true),
   // then we want to show the original failure, not the secondary one.
@@ -1194,11 +1194,11 @@ static void ReportException(Handle<Value> er, Handle<Message> message) {
 
   DisplayExceptionLine(message);
 
-  Local<Value> traceValue(er->ToObject()->Get(String::New("stack")));
-  String::Utf8Value trace(traceValue);
+  Local<Value> trace_value(er->ToObject()->Get(String::New("stack")));
+  String::Utf8Value trace(trace_value);
 
   // range errors have a trace member set to undefined
-  if (trace.length() > 0 && !traceValue->IsUndefined()) {
+  if (trace.length() > 0 && !trace_value->IsUndefined()) {
     fprintf(stderr, "%s\n", *trace);
   } else {
     // this really only happens for RangeErrors, since they're the only
@@ -1889,15 +1889,13 @@ void FatalException(Handle<Value> error, Handle<Message> message) {
 
   Local<Function> fatal_f = Local<Function>::Cast(fatal_v);
 
-  Handle<Value> argv[] = { error };
-
   TryCatch fatal_try_catch;
 
   // Do not call FatalException when _fatalException handler throws
   fatal_try_catch.SetVerbose(false);
 
   // this will return true if the JS layer handled it, false otherwise
-  Local<Value> caught = fatal_f->Call(process, ARRAY_SIZE(argv), argv);
+  Local<Value> caught = fatal_f->Call(process, 1, &error);
 
   if (fatal_try_catch.HasCaught()) {
     // the fatal exception function threw, so we must exit
@@ -1912,15 +1910,17 @@ void FatalException(Handle<Value> error, Handle<Message> message) {
 }
 
 
-void FatalException(TryCatch &try_catch) {
+void FatalException(TryCatch& try_catch) {
   HandleScope scope(node_isolate);
   // TODO do not call FatalException if try_catch is verbose
+  // (requires V8 API to expose getter for try_catch.is_verbose_)
   FatalException(try_catch.Exception(), try_catch.Message());
 }
 
 
 void OnMessage(Handle<Message> message, Handle<Value> error) {
-  // TODO - check if exception is set?
+  // The current version of V8 sends messages for errors only
+  // (thus `error` is always set).
   FatalException(error, message);
 }
 
@@ -2434,8 +2434,9 @@ void Load(Handle<Object> process_l) {
 
   TryCatch try_catch;
 
-  // try_catch must be not verbose to disable FatalException() handler
-  // Load exceptions cannot be ignored (handled) by _fatalException
+  // Disable verbose mode to stop FatalException() handler from trying
+  // to handle the exception. Errors this early in the start-up phase
+  // are not safe to ignore.
   try_catch.SetVerbose(false);
 
   Local<Value> f_value = ExecuteString(MainSource(),
@@ -2471,7 +2472,7 @@ void Load(Handle<Object> process_l) {
   // (FatalException(), break on uncaught exception in debugger)
   //
   // This is not strictly necessary since it's almost impossible
-  // to attach debugger fast enought to break on exception
+  // to attach the debugger fast enought to break on exception
   // thrown during process startup.
   try_catch.SetVerbose(true);
 

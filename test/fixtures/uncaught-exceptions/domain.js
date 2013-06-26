@@ -10,4 +10,3 @@ d.run(function() {
     throw new Error('in domain');
   });
 });
-

@@ -415,10 +415,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
                                          : Script::New(code, filename);
     if (script.IsEmpty()) {
       // FIXME UGLY HACK TO DISPLAY SYNTAX ERRORS.
-      if (display_error) {
-        HandleScope scope(node_isolate);
-        DisplayExceptionLine(try_catch.Message());
-      }
+      if (display_error) DisplayExceptionLine(try_catch.Message());
 
       // Hack because I can't get a proper stacktrace on SyntaxError
       return try_catch.ReThrow();
@@ -451,10 +448,7 @@ Handle<Value> WrappedScript::EvalMachine(const Arguments& args) {
             String::New("Script execution timed out.")));
     }
     if (result.IsEmpty()) {
-      if (display_error) {
-        HandleScope scope(node_isolate);
-        DisplayExceptionLine(try_catch.Message());
-      }
+      if (display_error) DisplayExceptionLine(try_catch.Message());
       return try_catch.ReThrow();
     }
   } else {
