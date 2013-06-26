@@ -366,7 +366,12 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
   assert(req_wrap->object_.IsEmpty() == false);
   assert(wrap->object_.IsEmpty() == false);
 
-  MakeCallback(req_wrap->object_, oncomplete_sym, 0, NULL);
+  if (status) {
+    SetErrno(uv_last_error(uv_default_loop()));
+  }
+  Local<Value> status_arg = Integer::New(status);
+
+  MakeCallback(req_wrap->object_, oncomplete_sym, 1, &status_arg);
   delete req_wrap;
 }
 
