@@ -62,7 +62,30 @@ if (cluster.isWorker) {
 
   // Disconnect worker when it is ready
   worker.once('listening', function() {
-    worker.disconnect();
+    // Open a connection to the server.
+    openConnection(function(sock) {
+      // Check that the open connection keeps the server from closing.
+      tryDisconnect(function() {
+        // Check that calling worker.disconnect() multiple times waits for open connections.
+        tryDisconnect(function() {
+          // Now allow the server to close.
+          sock.destroy();
+        });
+      });
+    });
+
+    function openConnection(cb) {
+      var net = require('net'),
+          sock = net.connect(common.PORT, '127.0.0.1', function() { cb(sock) });
+    }
+
+    function tryDisconnect(cb) {
+      worker.disconnect();
+      setTimeout(function() {
+        checkNotDisconnectedYet();
+        cb();
+      }, 1000);
+    }
   });
 
   // Check cluster events
@@ -88,6 +111,18 @@ if (cluster.isWorker) {
       process.exit(0);
     });
   });
+
+  function checkNotDisconnectedYet() {
+
+    var w = checks.worker;
+    var c = checks.cluster;
+
+    // events
+    assert.ok(!w.emitDisconnect, 'Disconnect event emited early');
+    assert.ok(!c.emitDisconnect, 'Disconnect event emited early');
+    assert.ok(!w.emitExit, 'Exit event emited early');
+    assert.ok(!c.emitExit, 'Exit event emited early');
+  }
 
   process.once('exit', function() {
 
