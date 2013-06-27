@@ -369,15 +369,9 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
   if (status) {
     SetErrno(uv_last_error(uv_default_loop()));
   }
+  Local<Value> status_arg = Integer::New(status);
 
-  Local<Value> argv[4] = {
-    Integer::New(status, node_isolate),
-    Local<Value>::New(node_isolate, wrap->object_),
-    Local<Value>::New(node_isolate, req_wrap->object_),
-    req_wrap->object_->GetHiddenValue(buffer_sym),
-  };
-
-  MakeCallback(req_wrap->object_, oncomplete_sym, ARRAY_SIZE(argv), argv);
+  MakeCallback(req_wrap->object_, oncomplete_sym, 1, &status_arg);
   delete req_wrap;
 }
 
