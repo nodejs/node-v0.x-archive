@@ -469,3 +469,29 @@ test('object transform (json stringify)', function(t) {
     t.end();
   })
 });
+
+test('object tranform (falsy values)', function(t) {
+  console.error('falsy values stream')
+  var stream = new Transform({ objectMode: true });
+  stream._transform = function(chunk, encoding, cb) {
+    cb(null, chunk);
+  }
+
+  var ended = false;
+  stream.on('end', function() {
+    ended = true;
+  });
+
+  var falsy = [ 0, '', []];
+  falsy.forEach(function(obj) {
+    stream.write(obj);
+    var res = stream.read();
+    t.equal(res, obj);
+  })
+  stream.end();
+
+  process.nextTick(function() {
+    t.ok(ended);
+    t.end();
+  })
+})
