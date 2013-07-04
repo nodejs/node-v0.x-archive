@@ -184,7 +184,7 @@ stream._read = function(n) {
 ### readable.unshift(chunk)
 
 * `chunk` {Buffer | null | String} Chunk of data to unshift onto the read queue
-* return {Boolean} Whether or not more pushes should be performed
+* return {Boolean} Whether or not more unshifts or pushes should be performed
 
 Note: **This function should usually be called by Readable consumers,
 NOT by implementors of Readable subclasses.**  It does not indicate
