@@ -184,7 +184,7 @@ stream._read = function(n) {
 ### readable.unshift(chunk)
 
 * `chunk` {Buffer | null | String} Chunk of data to unshift onto the read queue
-* return {Boolean} Whether or not more pushes should be performed
+* return {Boolean} Whether or not more unshifts or pushes should be performed
 
 Note: **This function should usually be called by Readable consumers,
 NOT by implementors of Readable subclasses.**  It does not indicate
@@ -618,7 +618,7 @@ There is no requirement that the output be the same size as the input,
 the same number of chunks, or arrive at the same time.  For example, a
 Hash stream will only ever have a single chunk of output which is
 provided when the input is ended.  A zlib stream will either produce
-much smaller or much larger than its input.
+much smaller or much larger output than its input.
 
 Rather than implement the `_read()` and `_write()` methods, Transform
 classes must implement the `_transform()` method, and may optionally
