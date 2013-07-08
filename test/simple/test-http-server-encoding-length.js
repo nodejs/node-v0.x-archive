@@ -44,29 +44,28 @@ var server = http.createServer(function(req, res) {
     var paths = ['/buf', '/'];
     
     function do_request(offset) {
-	      var options = {
-	          host: 'localhost',
-	          port: port,
-	          path: paths[offset],
-	          headers: {},
-	      };
-	      var req = http.request(options, function(res) {
-	          var chunks = [];
-	          
-	          res.on('data', function(chunk) {
-		            chunks.push(chunk);
-	          });
-	          res.on('end', function() {
-		            var concat = Buffer.concat(chunks);
-		            assert.ok(concat.toString('base64') === data, "Did not get expected data");
-		            if(++offset === paths.length) {
-		                server.close();
-		            } else {
-		                do_request(offset);
-		            }
-	          });
-	      });
-	      req.end();
+        var options = {
+            host: 'localhost',
+            port: port,
+            path: paths[offset],
+            headers: {},
+        };
+        var req = http.request(options, function(res) {
+            var chunks = [];
+            
+            res.on('data', function(chunk) {
+                chunks.push(chunk);
+            });
+            res.on('end', function() {
+                var concat = Buffer.concat(chunks);
+                assert.ok(concat.toString('base64') === data, "Did not get expected data");
+                if (++offset === paths.length)
+                    server.close();
+                else
+                    do_request(offset);
+            });
+        });
+        req.end();
     }
     do_request(0);
 });
