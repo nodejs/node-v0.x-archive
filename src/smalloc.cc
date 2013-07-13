@@ -220,7 +220,7 @@ void Alloc(Handle<Object> obj,
            size_t length,
            FreeCallback fn,
            void* hint) {
-  assert(data != NULL);
+  assert(data != NULL || length == 0);
 
   if (smalloc_sym.IsEmpty()) {
     smalloc_sym = String::New("_smalloc_p");
