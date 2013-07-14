@@ -383,6 +383,27 @@ a future `'readable'` event will be emitted when more is available.
 Calling `stream.read(0)` will always return `null`, and will trigger a
 refresh of the internal buffer, but otherwise be a no-op.
 
+### readable.firstBufferSize
+
+Note: **This property SHOULD be accessed by Readable stream users.**
+If a readable stream implementer changes how data is buffered in the
+readable object, the implementer should override the getter for this
+property.
+
+Equal to the length of the buffer at the front of the internal buffer
+list, or 0 if the internal buffer list is empty. Calling
+`stream.read(stream.firstBufferSize)` will return the first internal
+buffer without any buffer copies.
+
+Internally, readable streams keep a list of Buffer objects that are
+used to return the desired amount of data synchronously when read()
+is called. Calls to `read()` are most efficient if they do not require
+any buffer copies. If a caller of `read()` is able to handle an arbitrary
+amount of data, then it can be more efficient to call
+`stream.read(stream.firstBufferSize)` rather than `read()` with no
+arguments. (The latter will join all buffers in the buffer list,
+resulting in data copy.)
+
 ### readable.pipe(destination, [options])
 
 * `destination` {Writable Stream}

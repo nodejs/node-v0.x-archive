@@ -473,3 +473,60 @@ test('adding readable triggers data flow', function(t) {
     t.end();
   });
 });
+
+test('first buffer length', function(t) {
+  var r = new R();
+
+  r._read = function () {};
+  r.on("end", function () {
+    t.equal(r.firstBufferLength, 0);
+    t.end();
+  });
+
+  t.equal(r.firstBufferLength, 0);
+
+  r.push('xxx');
+  t.equal(r.firstBufferLength, 3);
+  r.push('xx');
+  t.equal(r.firstBufferLength, 3);
+  t.ok(r.read(2));
+  t.equal(r.firstBufferLength, 1);
+  t.ok(r.read(1));
+  t.equal(r.firstBufferLength, 2);
+  t.ok(r.read(r.firstBufferLength));
+  t.equal(r.firstBufferLength, 0);
+
+  r.push('xxxx');
+  r.push('xxx');
+  r.push(null);
+
+  t.equal(r.firstBufferLength, 4);
+  t.ok(r.read());
+  t.equal(r.firstBufferLength, 0);
+});
+
+test('first buffer length in object mode', function(t) {
+  var r = new R({objectMode: true});
+  var n, b, count;
+
+  r._read = function () {};
+  r.on("end", function () {
+    t.equal(r.firstBufferLength, 0);
+    t.end();
+  });
+
+  t.equal(r.firstBufferLength, 0);
+
+  r.push('xxx');
+  r.push('xxxxx');
+  r.push('xx');
+  r.push(null);
+
+  count = 0;
+  while (n = r.firstBufferLength, b = r.read()) {
+    count++;
+    t.equal(n, b.length);
+  }
+  t.equal(count, 3);
+  t.equal(n, 0);
+});
