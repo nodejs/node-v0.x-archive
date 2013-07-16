@@ -1346,6 +1346,81 @@ data, and [`stream.push(null)`][] will signal the end of stream data
 No streams in Node core are object mode streams.  This pattern is only
 used by userland streaming libraries.
 
+You should set `objectMode` in your stream child class constructor on
+the options object.  Setting `objectMode` mid-stream is not safe.
+
+### State Objects
+
+[Readable][] streams have a member object called `_readableState`.
+[Writable][] streams have a member object called `_writableState`.
+[Duplex][] streams have both.
+
+**These objects should generally not be modified in child classes.**
+However, if you have a Duplex or Transform stream that should be in
+`objectMode` on the readable side, and not in `objectMode` on the
+writable side, then you may do this in the constructor by setting the
+flag explicitly on the appropriate state object.
+
+```javascript
+var util = require('util');
+var StringDecoder = require('string_decoder').StringDecoder;
+var Transform = require('stream').Transform;
+util.inherits(JSONParseStream, Transform);
+
+// Gets \n-delimited JSON string data, and emits the parsed objects
+function JSONParseStream(options) {
+  if (!(this instanceof JSONParseStream))
+    return new JSONParseStream(options);
+
+  Transform.call(this, options);
+  this._writableState.objectMode = false;
+  this._readableState.objectMode = true;
+  this._buffer = '';
+  this._decoder = new StringDecoder('utf8');
+}
+
+JSONParseStream.prototype._transform = function(chunk, encoding, cb) {
+  this._buffer += this._decoder.write(chunk);
+  // split on newlines
+  var lines = this._buffer.split(/\r?\n/);
+  // keep the last partial line buffered
+  this._buffer = lines.pop();
+  for (var l = 0; l < lines.length; l++) {
+    var line = lines[l];
+    try {
+      var obj = JSON.parse(line);
+    } catch (er) {
+      this.emit('error', er);
+      return;
+    }
+    // push the parsed object out to the readable consumer
+    this.push(obj);
+  }
+  cb();
+};
+
+JSONParseStream.prototype._flush = function(cb) {
+  // Just handle any leftover
+  var rem = this._buffer.trim();
+  if (rem) {
+    try {
+      var obj = JSON.parse(rem);
+    } catch (er) {
+      this.emit('error', er);
+      return;
+    }
+    // push the parsed object out to the readable consumer
+    this.push(obj);
+  }
+  cb();
+};
+```
+
+The state objects contain other useful information for debugging the
+state of streams in your programs.  It is safe to look at them, but
+beyond setting option flags in the constructor, it is **not** safe to
+modify them.
+
 
 [EventEmitter]: events.html#events_class_events_eventemitter
 [Object mode]: #stream_object_mode
