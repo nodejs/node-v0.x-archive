@@ -1225,7 +1225,7 @@ data.  In that case, you can call `stream.read(0)`, which will always
 return null.
 
 If the internal read buffer is below the `highWaterMark`, and the
-stream is not currentling reading, then calling `read(0)` will trigger
+stream is not currently reading, then calling `read(0)` will trigger
 a low-level `_read` call.
 
 There is almost never a need to do this.  However, you will see some
