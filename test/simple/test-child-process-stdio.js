@@ -34,3 +34,8 @@ child = common.spawnPwd(options);
 
 assert.equal(child.stdout, null);
 assert.equal(child.stderr, null);
+
+options = {stdio: ['pipe', 'pipe', 'pipe', 'pipe']};
+child = common.spawnPwd(options);
+
+child.stdio[3].end();
