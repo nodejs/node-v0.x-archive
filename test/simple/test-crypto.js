@@ -915,3 +915,19 @@ assert.throws(function() {
   c.update('update', 'utf-8');
   c.final('utf8');  // Should not throw.
 })();
+
+// Decipher#final should not throw an error when both
+// EVP_CipherFinal_ex returns 0 and ERR_get_error() returns 0
+assert.doesNotThrow(function() {
+  var key = 'foo', input = 'hello world';
+
+  var c = crypto.createCipher('aes-256-gcm', key);
+  var result = c.update(input, 'utf8', 'base64');
+  result += c.final('base64');
+
+  var dc = crypto.createDecipher('aes-256-gcm', key);
+  var dresult = dc.update(result, 'base64', 'utf8');
+  dresult += dc.final('utf8');
+
+  assert.equal(input, dresult);
+});

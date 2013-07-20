@@ -2622,7 +2622,7 @@ class Decipher : public ObjectWrap {
     if (out_len <= 0 || r == 0) {
       delete [] out_value; // allocated even if out_len == 0
       out_value = NULL;
-      if (r == 0) return ThrowCryptoTypeError(ERR_get_error());
+      if (r == 0 && ERR_peek_error()) return ThrowCryptoTypeError(ERR_get_error());
     }
 
     outString = Encode(out_value, out_len, BUFFER);
