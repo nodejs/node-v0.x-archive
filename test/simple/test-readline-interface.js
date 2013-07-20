@@ -204,4 +204,27 @@ FakeInput.prototype.end = function() {};
 
   assert.deepEqual(fi.listeners('end'), []);
   assert.deepEqual(fi.listeners(terminal ? 'keypress' : 'data'), []);
-});
+
+  //can create a new readline Interface with a null output arugument
+  fi = new FakeInput();
+  rl1 = new readline.Interface({input: fi, output: null, terminal: terminal });
+
+  assert.doesNotThrow(function() {
+    r1.setPrompt("ddd> ");
+  });
+
+  assert.doesNotThrow(function() {
+    r1.prompt();
+  });
+
+  assert.doesNotThrow(function() {
+  r1.write('really shouldnt be seeing this');
+  });
+
+  assert.doesNotThrow(function() {
+    r1.question("What do you think of node.js? ", function(answer) {
+      console.log("Thank you for your valuable feedback:", answer);
+      r1.close();
+    })
+  });
+
