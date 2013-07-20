@@ -39,6 +39,27 @@ var Stream = require('stream').Stream;
   assert.strictEqual(gotErr, err);
 })();
 
+// This test matches the first, except the listener is attached before
+// pipe() is called, and it is removed again in the error callback
+(function testErrorListenerCatchesCleanup() {
+  var source = new Stream();
+  var dest = new Stream();
+
+  var gotErr = null;
+  source.on('error', onerror);
+
+  function onerror(err) {
+    source.removeListener('error', onerror);
+    gotErr = err;
+  }
+
+  source.pipe(dest);
+
+  var err = new Error('This stream turned into bacon.');
+  source.emit('error', err);
+  assert.strictEqual(gotErr, err);
+})();
+
 (function testErrorWithoutListenerThrows() {
   var source = new Stream();
   var dest = new Stream();

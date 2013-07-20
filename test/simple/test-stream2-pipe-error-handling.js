@@ -63,6 +63,51 @@ var stream = require('stream');
   assert.strictEqual(unpipedDest, dest);
 })();
 
+// This test matches the first, except the listener is attached before
+// pipe() is called, and it is removed again in the error callback
+(function testErrorListenerCatchesCleanup() {
+  var count = 1000;
+
+  var source = new stream.Readable();
+  source._read = function(n) {
+    n = Math.min(count, n);
+    count -= n;
+    source.push(new Buffer(n));
+  };
+
+  var unpipedDest;
+  source.unpipe = function(dest) {
+    unpipedDest = dest;
+    stream.Readable.prototype.unpipe.call(this, dest);
+  };
+
+  var dest = new stream.Writable();
+  dest._write = function(chunk, encoding, cb) {
+    cb();
+  };
+
+  var gotErr = null;
+  dest.on('error', onerror);
+
+  function onerror(err) {
+    dest.removeListener('error', onerror);
+    gotErr = err;
+  }
+
+  source.pipe(dest);
+
+  var unpipedSource;
+  dest.on('unpipe', function(src) {
+    unpipedSource = src;
+  });
+
+  var err = new Error('This stream turned into bacon.');
+  dest.emit('error', err);
+  assert.strictEqual(gotErr, err);
+  assert.strictEqual(unpipedSource, source);
+  assert.strictEqual(unpipedDest, dest);
+})();
+
 (function testErrorWithoutListenerThrows() {
   var count = 1000;
 
