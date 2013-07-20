@@ -40,12 +40,19 @@ maybe(test1);
 // important events to stdout when done over a pipe. Therefore we skip this
 // test for all openssl versions less than 1.0.0.
 function maybe(cb) {
-  exec('openssl version', function(err, data) {
+  exec('openssl version -v -p', function(err, data) {
     if (err) throw err;
     if (/OpenSSL 0\./.test(data)) {
       console.error('Skipping due to old OpenSSL version.');
       return;
     }
+    
+    //'openssl s_server' of VC-WIN needs keypress action to complete input 
+    if (process.platform === 'win32' && /VC-WIN/.test(data)) {
+      console.error('Skipping. Use openssl command of Cygwin or MinGW instead.');
+      return;
+    }
+
     cb();
   });
 }
