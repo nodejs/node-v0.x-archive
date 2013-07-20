@@ -2033,6 +2033,11 @@ static void EnvSetter(Local<String> property,
   info.GetReturnValue().Set(value);
 }
 
+static Handle<Value> ProcessPidGetter(Local<String> property,
+                                      const AccessorInfo& info) {
+  HandleScope scope(node_isolate);
+  return scope.Close(Integer::New(getpid()));
+}
 
 static void EnvQuery(Local<String> property,
                      const PropertyCallbackInfo<Integer>& info) {
@@ -2289,7 +2294,7 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
   Local<Object> env = envTemplate->NewInstance();
   process->Set(String::NewSymbol("env"), env);
 
-  process->Set(String::NewSymbol("pid"), Integer::New(getpid(), node_isolate));
+  process->SetAccessor(String::NewSymbol("pid"), ProcessPidGetter);
   process->Set(String::NewSymbol("features"), GetFeatures());
   process->SetAccessor(String::New("_needImmediateCallback"),
                        NeedImmediateCallbackGetter,
