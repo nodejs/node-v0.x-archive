@@ -459,16 +459,6 @@
     if (process._print_eval) console.log(result);
   }
 
-  function errnoException(errorno, syscall) {
-    // TODO make this more compatible with ErrnoException from src/node.cc
-    // Once all of Node is using this function the ErrnoException from
-    // src/node.cc should be removed.
-    var e = new Error(syscall + ' ' + errorno);
-    e.errno = e.code = errorno;
-    e.syscall = syscall;
-    return e;
-  }
-
   function createWritableStdioStream(fd) {
     var stream;
     var tty_wrap = process.binding('tty_wrap');
@@ -636,22 +626,23 @@
     };
 
     process.kill = function(pid, sig) {
-      var r;
+      var err;
 
       // preserve null signal
       if (0 === sig) {
-        r = process._kill(pid, 0);
+        err = process._kill(pid, 0);
       } else {
         sig = sig || 'SIGTERM';
         if (startup.lazyConstants()[sig]) {
-          r = process._kill(pid, startup.lazyConstants()[sig]);
+          err = process._kill(pid, startup.lazyConstants()[sig]);
         } else {
           throw new Error('Unknown signal: ' + sig);
         }
       }
 
-      if (r) {
-        throw errnoException(process._errno, 'kill');
+      if (err) {
+        var errnoException = NativeModule.require('util')._errnoException;
+        throw errnoException(err, 'kill');
       }
 
       return true;
@@ -682,10 +673,11 @@
         wrap.onsignal = function() { process.emit(type); };
 
         var signum = startup.lazyConstants()[type];
-        var r = wrap.start(signum);
-        if (r) {
+        var err = wrap.start(signum);
+        if (err) {
           wrap.close();
-          throw errnoException(process._errno, 'uv_signal_start');
+          var errnoException = NativeModule.require('util')._errnoException;
+          throw errnoException(err, 'uv_signal_start');
         }
 
         signalWraps[type] = wrap;

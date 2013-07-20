@@ -19,32 +19,43 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
+#include "node.h"
+#include "uv.h"
 
-if (process.argv[2] === 'child') {
-  process.exit(0);
-} else {
-  var spawn = require('child_process').spawn;
-  var child = spawn(process.execPath, [process.argv[1], 'child']);
+namespace node {
+namespace uv {
 
-  var error = {};
-  child.on('exit', function() {
-    child._handle = {
-      kill: function() {
-        process._errno = 42;
-        return -1;
-      }
-    };
-    child.once('error', function(err) {
-      error = err;
-    });
-    child.kill();
-  });
+using v8::FunctionCallbackInfo;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Object;
+using v8::String;
+using v8::Value;
 
-  process.on('exit', function() {
-    // we shouldn't reset errno since it accturlly isn't set
-    // because of the fake .kill method
-    assert.equal(error.syscall, 'kill');
-  });
+
+void ErrName(const FunctionCallbackInfo<Value>& args) {
+  v8::HandleScope handle_scope(node_isolate);
+  int err = args[0]->Int32Value();
+  if (err >= 0) return ThrowError("err >= 0");
+  const char* name = uv_err_name(err);
+  args.GetReturnValue().Set(String::New(name));
 }
+
+
+void Initialize(Handle<Object> target) {
+  v8::HandleScope handle_scope(node_isolate);
+  target->Set(String::New("errname"),
+              FunctionTemplate::New(ErrName)->GetFunction());
+#define V(name, _) target->Set(String::New("UV_" # name),                     \
+                               Integer::New(UV_ ## name, node_isolate));
+  UV_ERRNO_MAP(V)
+#undef V
+}
+
+
+}  // namespace uv
+}  // namespace node
+
+NODE_MODULE(node_uv, node::uv::Initialize)
