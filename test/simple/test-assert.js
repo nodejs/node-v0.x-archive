@@ -258,8 +258,10 @@ function testAssertionMessage(actual, expected) {
   try {
     assert.equal(actual, '');
   } catch (e) {
-    assert.equal(e.toString(),
-        ['AssertionError:', expected, '==', '""'].join(' '));
+    assert.equal(
+      e.toString(),
+      'AssertionError: assert.equal(' + expected + ', "")'
+    );
   }
 }
 testAssertionMessage(undefined, '"undefined"');
@@ -285,12 +287,16 @@ testAssertionMessage({a: NaN, b: Infinity, c: -Infinity},
 
 // #2893
 try {
-  assert.throws(function () {
+  function block() {
     assert.ifError(null);
-  });
+  }
+  assert.throws(block);
 } catch (e) {
   threw = true;
-  assert.equal(e.message, 'Missing expected exception..');
+  assert.equal(
+    e.message,
+    'assert.throws(' + JSON.stringify(block.toString()) + ')'
+  );
 }
 assert.ok(threw);
 
@@ -298,11 +304,17 @@ assert.ok(threw);
 try {
   assert.equal(1, 2);
 } catch (e) {
-  assert.equal(e.toString().split('\n')[0], 'AssertionError: 1 == 2')
+  assert.equal(
+    e.toString().split('\n')[0],
+    'AssertionError: assert.equal(1, 2)'
+  );
 }
 
 try {
   assert.equal(1, 2, 'oh no');
 } catch (e) {
-  assert.equal(e.toString().split('\n')[0], 'AssertionError: oh no')
+  assert.equal(
+    e.toString().split('\n')[0],
+    'AssertionError: assert.equal(1, 2, "oh no")'
+  );
 }
