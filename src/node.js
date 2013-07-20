@@ -312,6 +312,7 @@
       if (value === 'false') return false;
       return value;
     });
+    process.config.target_defaults.default_configuration = BUILDTYPE('');
   };
 
   startup.processNextTick = function() {

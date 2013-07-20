@@ -369,6 +369,7 @@
           'inputs': [
             '<@(library_files)',
             './config.gypi',
+            'src/natives_macros.py',
           ],
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/node_natives.h',
@@ -386,6 +387,8 @@
             }]
           ],
               'action': [
+                'env',
+                'BUILDTYPE=$(BUILDTYPE)',
                 '<(python)',
                 'tools/js2c.py',
                 '<@(_outputs)',
