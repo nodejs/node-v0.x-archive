@@ -78,7 +78,7 @@
     } else if (process._eval != null) {
       // User passed '-e' or '--eval' arguments to Node.
       evalScript('[eval]');
-    } else if (process.argv[1]) {
+    } else if (process.argv[1] && process.argv[1] !== '-' && !process._forceRepl) {
       // make process.argv[1] into a full path
       var path = NativeModule.require('path');
       process.argv[1] = path.resolve(process.argv[1]);
@@ -121,7 +121,6 @@
 
     } else {
       var Module = NativeModule.require('module');
-
       // If -i or --interactive were passed, or stdin is a TTY.
       if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
         // REPL
@@ -135,7 +134,31 @@
         if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
           opts.useColors = false;
         }
-        var repl = Module.requireRepl().start(opts);
+        var Repl = Module.requireRepl()
+        var repl;
+        if(process.argv[1] && process.argv[1] !== '-') {
+          // start REPL in a paused state so that file can be processed first
+          opts.paused = true;
+          repl = Repl.start(opts);
+          
+          // Process and execute code
+          var path = NativeModule.require('path');
+          process.argv[1] = path.resolve(process.argv[1]);
+          var code = '';
+          var Fs = NativeModule.require('fs');
+          var rs = Fs.createReadStream(process.argv[1]);
+          rs.setEncoding('utf8');
+          rs.on('data', function(d) {
+            //repl.rli.input._events.data(d+"\n");
+            code += d;
+          });
+          
+          rs.on('end', function() { 
+            repl.eval(code+"\n");
+            repl.displayPrompt();
+          });
+        }
+        else repl = Repl.start(opts);
         repl.on('exit', function() {
           process.exit();
         });
@@ -734,6 +757,10 @@
     // execute cwd\node.exe, or some %PATH%\node.exe on Windows,
     // and that every directory has its own cwd, so d:node.exe is valid.
     var argv0 = process.argv[0];
+
+    // Don't do anything if argv[0] is '-'
+    if (argv0 === '-') return;
+
     if (!isWindows && argv0.indexOf('/') !== -1 && argv0.charAt(0) !== '/') {
       var path = NativeModule.require('path');
       process.argv[0] = path.join(cwd, process.argv[0]);

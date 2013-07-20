@@ -2593,6 +2593,8 @@ static void ParseArgs(int argc, char **argv) {
       throw_deprecation = true;
     } else if (argv[i][0] != '-') {
       break;
+    } else if (strcmp(arg, "-") == 0) {
+      break; // allow "-" to pass through 
     }
   }
 
