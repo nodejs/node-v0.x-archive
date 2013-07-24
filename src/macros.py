@@ -1,11 +1,16 @@
-# This file is used by tools/js2c.py to preprocess out the DTRACE symbols in
-# builds that don't support DTrace. This is not used in builds that support
-# DTrace.
-macro DTRACE_HTTP_CLIENT_REQUEST(x) = ;
-macro DTRACE_HTTP_CLIENT_RESPONSE(x) = ;
-macro DTRACE_HTTP_SERVER_REQUEST(x) = ;
-macro DTRACE_HTTP_SERVER_RESPONSE(x) = ;
-macro DTRACE_NET_SERVER_CONNECTION(x) = ;
-macro DTRACE_NET_STREAM_END(x) = ;
-macro DTRACE_NET_SOCKET_READ(x) = ;
-macro DTRACE_NET_SOCKET_WRITE(x) = ;
+macro IS_BOOLEAN(arg)           = (typeof(arg) === 'boolean');
+macro IS_NULL(arg)              = (arg === null);
+macro IS_NULL_OR_UNDEFINED(arg) = (arg == null);
+macro IS_NUMBER(arg)            = (typeof(arg) === 'number');
+macro IS_STRING(arg)            = (typeof(arg) === 'string');
+macro IS_SYMBOL(arg)            = (typeof(arg) === 'symbol');
+macro IS_UNDEFINED(arg)         = (typeof(arg) === 'undefined');
+
+# These macros follow the semantics of V8's %_Is*() functions.
+macro IS_ARRAY(arg)             = (Array.isArray(arg));
+macro IS_DATE(arg)              = ((arg) instanceof Date);
+macro IS_FUNCTION(arg)          = (typeof(arg) === 'function');
+macro IS_OBJECT(arg)            = (typeof(arg) === 'object');
+macro IS_REGEXP(arg)            = ((arg) instanceof RegExp);
+
+macro IS_BUFFER(arg)            = ((arg) instanceof Buffer);
