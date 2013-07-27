@@ -19,35 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var binding = process.binding('contextify');
-var util = require('util');
+var common = require('../common');
+var assert = require('assert');
+var vm = require('vm');
 
-exports.createScript = function(code, filename) {
-  return new binding.ContextifyScript(code, filename);
-};
+var ctx = vm.createContext();
+ctx.getGlobal().window = ctx.getGlobal();
 
-exports.createContext = function(initSandbox) {
-  if (util.isUndefined(initSandbox)) {
-    initSandbox = {};
-  }
-
-  return new binding.ContextifyContext(initSandbox);
-};
-
-exports.runInContext = function(code, context, filename) {
-  var script = exports.createScript(code, filename);
-  return script.runInContext(context);
-};
-
-exports.runInNewContext = function(code, sandbox, filename) {
-  var script = exports.createScript(code, filename);
-  var context = exports.createContext(sandbox);
-  return script.runInContext(context);
-};
-
-exports.runInThisContext = function(code, filename) {
-  var script = exports.createScript(code, filename);
-  return script.runInThisContext();
-};
-
-exports.Script = binding.ContextifyScript;
+var thisVal = vm.runInContext('this;', ctx);
+var windowVal = vm.runInContext('window;', ctx);
+assert.strictEqual(thisVal, windowVal);

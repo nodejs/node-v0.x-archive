@@ -26,7 +26,7 @@ var vm = require('vm');
 var sbx = {};
 sbx.window = sbx;
 
-sbx = vm.createContext(sbx);
+sbx = vm.createContext(sbx).getGlobal();
 
 sbx.test = 123;
 
