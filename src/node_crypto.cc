@@ -3849,7 +3849,7 @@ Handle<Value> PBKDF2(const Arguments& args) {
   ssize_t iter = -1;
   pbkdf2_req* req = NULL;
 
-  if (args.Length() != 4 && args.Length() != 5) {
+  if (args.Length() != 6) {
     type_error = "Bad parameter";
     goto err;
   }
@@ -3911,6 +3911,7 @@ Handle<Value> PBKDF2(const Arguments& args) {
   if (args[4]->IsFunction()) {
     req->obj = Persistent<Object>::New(Object::New());
     req->obj->Set(String::New("ondone"), args[4]);
+    req->obj->Set(String::New("domain"), args[5]);
     uv_queue_work(uv_default_loop(),
                   &req->work_req,
                   EIO_PBKDF2,
