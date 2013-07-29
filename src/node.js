@@ -170,6 +170,7 @@
     global.Buffer = NativeModule.require('buffer').Buffer;
     process.domain = null;
     process._exiting = false;
+    process.binding('dtrace');
   };
 
   startup.globalTimeouts = function() {

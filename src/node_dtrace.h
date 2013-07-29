@@ -75,7 +75,23 @@ typedef struct {
 
 namespace node {
 
-void InitDTrace(Environment* env, v8::Handle<v8::Object> target);
+  enum TracingArgumentType {
+    ARGUMENT_TYPE_STRING = 1,
+    ARGUMENT_TYPE_JSON,
+    ARGUMENT_TYPE_INT64,
+    ARGUMENT_TYPE_UINT32,
+    ARGUMENT_TYPE_INT32,
+    ARGUMENT_TYPE_UINT16,
+    ARGUMENT_TYPE_INT16,
+    ARGUMENT_TYPE_UINT8,
+    ARGUMENT_TYPE_INT8,
+  };
+
+
+void InitDTrace(v8::Handle<v8::Object> target,
+                v8::Handle<v8::Value> unused,
+                v8::Handle<v8::Context> context,
+                void* priv);
 
 }  // namespace node
 
