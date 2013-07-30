@@ -2230,6 +2230,11 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
   // Only copy the data if we have to, because it's a string
   if (args[0]->IsString()) {
     enum encoding encoding = ParseEncoding(args[1], BINARY);
+
+    Local<String> str = args[0]->ToString();
+    if (encoding == HEX && str->Length() % 2 != 0)
+      return ThrowTypeError("Invalid hex string");
+
     size_t buflen = StringBytes::StorageSize(args[0], encoding);
     char* buf = new char[buflen];
     size_t written = StringBytes::Write(buf, buflen, args[0], encoding);

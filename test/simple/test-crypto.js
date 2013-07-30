@@ -681,6 +681,12 @@ assert.throws(function() {
 }, /buffer/);
 
 
+// Regression test for #5725: should throw but not assert in C++ land.
+assert.throws(function() {
+  crypto.createDecipher('aes-256-cbc', 'foo').update('0', 'hex');
+}, TypeError);
+
+
 // Test Diffie-Hellman with two parties sharing a secret,
 // using various encodings as we go along
 var dh1 = crypto.createDiffieHellman(256);
