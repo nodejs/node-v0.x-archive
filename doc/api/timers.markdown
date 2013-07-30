@@ -5,16 +5,36 @@
 All of the timer functions are globals.  You do not need to `require()`
 this module in order to use them.
 
+Timers set to run in the same tick of the event loop will all run in succession:
+
+    function cb(arg) {
+      return function() {
+        console.log(arg);
+        process.nextTick(function() {
+          console.log('nextTick - ' + arg);
+        });
+      }
+    }
+
+    setTimeout(cb('0'), 100);
+    setTimeout(cb('1'), 100);
+
+    // output:
+    // 0
+    // 1
+    // nextTick - 0
+    // nextTick - 1
+
 ## setTimeout(callback, delay, [arg], [...])
 
-To schedule execution of a one-time `callback` after `delay` milliseconds. Returns a
-`timeoutId` for possible use with `clearTimeout()`. Optionally you can
+To schedule execution of a one-time `callback` after `delay` milliseconds.
+Returns a `timeoutId` for possible use with `clearTimeout()`. Optionally you can
 also pass arguments to the callback.
 
-It is important to note that your callback will probably not be called in exactly
-`delay` milliseconds - Node.js makes no guarantees about the exact timing of when
-the callback will fire, nor of the ordering things will fire in. The callback will
-be called as close as possible to the time specified.
+It is important to note that your callback will probably not be called in
+exactly `delay` milliseconds - Node.js makes no guarantees about the exact
+timing of when the callback will fire, nor of the ordering things will fire in.
+The callback will be called as close as possible to the time specified.
 
 ## clearTimeout(timeoutId)
 
