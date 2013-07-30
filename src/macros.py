@@ -14,3 +14,13 @@ macro IS_OBJECT(arg)            = (typeof(arg) === 'object');
 macro IS_REGEXP(arg)            = ((arg) instanceof RegExp);
 
 macro IS_BUFFER(arg)            = ((arg) instanceof Buffer);
+
+# TODO(bnoordhuis) Replace with optimized versions someday.
+macro NUMBER_IS_FINITE(arg)     = isFinite(arg);
+macro NUMBER_IS_NAN(arg)        = isNaN(arg);
+
+macro TO_BOOLEAN(arg)           = (!!(arg));
+macro TO_INT32(arg)             = ((arg) >> 0);
+macro TO_NUMBER(arg)            = (+(arg));
+macro TO_STRING(arg)            = ('' + (arg));
+macro TO_UINT32(arg)            = ((arg) >>> 0);
