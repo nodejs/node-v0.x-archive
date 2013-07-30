@@ -12,7 +12,7 @@ var PORT = common.PORT;
 
 var bench = common.createBenchmark(main, {
   type: ['asc', 'utf', 'buf'],
-  kb: [64, 128, 256, 1024],
+  kb: [64, 128, 256, 1024, 10240],
   c: [100],
   method: ['write', 'end  '] // two spaces added to line up each row
 });
