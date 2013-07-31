@@ -30,17 +30,23 @@
 
 namespace node {
 
-v8::Handle<v8::String> MainSource() {
-  return v8::String::New(node_native, sizeof(node_native) - 1);
+using v8::Handle;
+using v8::HandleScope;
+using v8::Local;
+using v8::Object;
+using v8::String;
+
+Handle<String> MainSource() {
+  return String::New(node_native, sizeof(node_native) - 1);
 }
 
-void DefineJavaScript(v8::Handle<v8::Object> target) {
-  v8::HandleScope scope(node_isolate);
+void DefineJavaScript(Handle<Object> target) {
+  HandleScope scope(node_isolate);
 
   for (int i = 0; natives[i].name; i++) {
     if (natives[i].source != node_native) {
-      v8::Local<v8::String> name = v8::String::New(natives[i].name);
-      v8::Handle<v8::String> source = v8::String::New(natives[i].source,
+      Local<String> name = String::New(natives[i].name);
+      Handle<String> source = String::New(natives[i].source,
                                                       natives[i].source_len);
       target->Set(name, source);
     }

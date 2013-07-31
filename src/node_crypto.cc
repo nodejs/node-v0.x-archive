@@ -820,8 +820,10 @@ size_t ClientHelloParser::Write(const uint8_t* data, size_t len) {
       if (offset_ < 5)
         break;
 
-      if (data_[0] == kChangeCipherSpec || data_[0] == kAlert ||
-          data_[0] == kHandshake || data_[0] == kApplicationData) {
+      if (data_[0] == kChangeCipherSpec ||
+          data_[0] == kAlert ||
+          data_[0] == kHandshake ||
+          data_[0] == kApplicationData) {
         frame_len_ = (data_[3] << 8) + data_[4];
         state_ = kTLSHeader;
         body_offset_ = 5;

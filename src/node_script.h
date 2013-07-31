@@ -32,4 +32,5 @@ namespace node {
 void InitEvals(v8::Handle<v8::Object> target);
 
 }  // namespace node
+
 #endif  // SRC_NODE_SCRIPT_H_

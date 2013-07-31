@@ -2994,7 +2994,7 @@ static char **copy_argv(int argc, char **argv) {
     strlen_sum += strlen(argv[i]) + 1;
   }
 
-  argv_copy = reinterpret_cast<char**>(
+  argv_copy = static_cast<char**>(
       malloc(sizeof(*argv_copy) * (argc + 1) + strlen_sum));
   if (!argv_copy) {
     return NULL;

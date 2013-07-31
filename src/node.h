@@ -163,7 +163,7 @@ inline void NODE_SET_PROTOTYPE_METHOD(v8::Handle<v8::FunctionTemplate> recv,
 enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
-NODE_EXTERN void FatalException(const v8::TryCatch &try_catch);
+NODE_EXTERN void FatalException(const v8::TryCatch& try_catch);
 void DisplayExceptionLine(v8::Handle<v8::Message> message);
 
 NODE_EXTERN v8::Local<v8::Value> Encode(const void *buf, size_t len,

@@ -23,35 +23,35 @@
 #define SRC_NODE_EXTENSIONS_H_
 
 #ifdef HAVE_OPENSSL
-# define NODE_EXT_LIST_SSL(ITEM)        \
-    ITEM(node_crypto)                   \
+# define NODE_EXT_LIST_SSL(ITEM)                                              \
+    ITEM(node_crypto)                                                         \
     ITEM(node_tls_wrap)
 #else
 # define NODE_EXT_LIST_SSL(ITEM)
 #endif  // HAVE_OPENSSL
 
-#define NODE_EXT_LIST(START, ITEM, END) \
-    START                               \
-    ITEM(node_buffer)                   \
-    NODE_EXT_LIST_SSL(ITEM)             \
-    ITEM(node_evals)                    \
-    ITEM(node_fs)                       \
-    ITEM(node_http_parser)              \
-    ITEM(node_os)                       \
-    ITEM(node_smalloc)                  \
-    ITEM(node_zlib)                     \
-                                        \
-    ITEM(node_uv)                       \
-    ITEM(node_timer_wrap)               \
-    ITEM(node_tcp_wrap)                 \
-    ITEM(node_udp_wrap)                 \
-    ITEM(node_pipe_wrap)                \
-    ITEM(node_cares_wrap)               \
-    ITEM(node_tty_wrap)                 \
-    ITEM(node_process_wrap)             \
-    ITEM(node_fs_event_wrap)            \
-    ITEM(node_signal_wrap)              \
-                                        \
-    END                                 \
+#define NODE_EXT_LIST(START, ITEM, END)                                       \
+    START                                                                     \
+    ITEM(node_buffer)                                                         \
+    NODE_EXT_LIST_SSL(ITEM)                                                   \
+    ITEM(node_evals)                                                          \
+    ITEM(node_fs)                                                             \
+    ITEM(node_http_parser)                                                    \
+    ITEM(node_os)                                                             \
+    ITEM(node_smalloc)                                                        \
+    ITEM(node_zlib)                                                           \
+                                                                              \
+    ITEM(node_uv)                                                             \
+    ITEM(node_timer_wrap)                                                     \
+    ITEM(node_tcp_wrap)                                                       \
+    ITEM(node_udp_wrap)                                                       \
+    ITEM(node_pipe_wrap)                                                      \
+    ITEM(node_cares_wrap)                                                     \
+    ITEM(node_tty_wrap)                                                       \
+    ITEM(node_process_wrap)                                                   \
+    ITEM(node_fs_event_wrap)                                                  \
+    ITEM(node_signal_wrap)                                                    \
+                                                                              \
+    END                                                                       \
 
 #endif  // SRC_NODE_EXTENSIONS_H_
