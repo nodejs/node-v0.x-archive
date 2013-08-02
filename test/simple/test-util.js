@@ -70,6 +70,86 @@ assert.equal(false, util.isError({ name: 'Error', message: '' }));
 assert.equal(false, util.isError([]));
 assert.equal(false, util.isError(Object.create(Error.prototype)));
 
+// isPrimitive
+assert.equal(true, util.isPrimitive('a'));
+assert.equal(true, util.isPrimitive(5));
+assert.equal(true, util.isPrimitive(true));
+assert.equal(true, util.isPrimitive(undefined));
+assert.equal(true, util.isPrimitive(null));
+assert.equal(true, util.isPrimitive(NaN));
+assert.equal(true, util.isPrimitive(Infinity));
+assert.equal(false, util.isPrimitive([]));
+assert.equal(false, util.isPrimitive({}));
+assert.equal(false, util.isPrimitive(/abc/));
+assert.equal(false, util.isPrimitive(function() {}));
+assert.equal(false, util.isPrimitive(new Date()));
+
+// isNaN
+assert.equal(true, util.isNaN('a'));
+assert.equal(true, util.isNaN(undefined));
+assert.equal(true, util.isNaN(NaN));
+assert.equal(true, util.isNaN({}));
+assert.equal(true, util.isNaN(/abc/));
+assert.equal(true, util.isNaN(function() {}));
+assert.equal(true, util.isNaN([1,2,3]));
+assert.equal(false, util.isNaN([]));
+assert.equal(false, util.isNaN(new Date()));
+assert.equal(false, util.isNaN(5));
+assert.equal(false, util.isNaN('5'));
+assert.equal(false, util.isNaN('0xff'));
+assert.equal(false, util.isNaN(true));
+assert.equal(false, util.isNaN(null));
+assert.equal(false, util.isNaN(Infinity));
+
+// toNumber
+assert.equal(255, util.toNumber('0xff'));
+assert.equal(5, util.toNumber('5'));
+assert.equal(5.5, util.toNumber('5.5'));
+assert.equal(0, util.toNumber([]));
+assert.equal(Infinity, util.toNumber(Infinity));
+assert.equal(1, util.toNumber(true));
+assert.equal(0, util.toNumber(false));
+assert.equal(new Date().getTime(), util.toNumber(new Date()));
+assert.ok(util.isNaN(util.toNumber('a')));
+assert.ok(util.isNaN(util.toNumber(undefined)));
+assert.ok(util.isNaN(util.toNumber(NaN)));
+assert.ok(util.isNaN(util.toNumber({})));
+assert.ok(util.isNaN(util.toNumber(function() {})));
+assert.ok(util.isNaN(util.toNumber([1,2,3])));
+
+// toInt32
+assert.equal(255, util.toInt32('0xff'));
+assert.equal(-1, util.toInt32(4294967295));
+assert.equal(1410065408, util.toInt32(1e10));
+assert.equal(5, util.toInt32('5'));
+assert.equal(1, util.toInt32(true));
+assert.equal(0, util.toInt32([]));
+assert.equal(0, util.toInt32(Infinity));
+assert.equal(0, util.toInt32(false));
+assert.equal(0, util.toInt32(0));
+assert.equal(0, util.toInt32(undefined));
+assert.equal(0, util.toInt32(NaN));
+assert.equal(0, util.toInt32({}));
+assert.equal(0, util.toInt32(function() {}));
+assert.equal(0, util.toInt32([1,2,3]));
+
+// toUint32
+assert.equal(255, util.toUint32('0xff'));
+assert.equal(5, util.toUint32('5.5'));
+assert.equal(1410065408, util.toUint32(1e10));
+assert.equal(4294967291, util.toUint32(-5));
+assert.equal(1, util.toUint32(true));
+assert.equal(0, util.toUint32([]));
+assert.equal(0, util.toUint32(Infinity));
+assert.equal(0, util.toUint32(false));
+assert.equal(0, util.toUint32(0));
+assert.equal(0, util.toUint32(undefined));
+assert.equal(0, util.toUint32(NaN));
+assert.equal(0, util.toUint32({}));
+assert.equal(0, util.toUint32(function() {}));
+assert.equal(0, util.toUint32([1,2,3]));
+
+
 // _extend
 assert.deepEqual(util._extend({a:1}),             {a:1});
 assert.deepEqual(util._extend({a:1}, []),         {a:1});
