@@ -29,11 +29,13 @@ namespace node {
 inline void ClientHelloParser::Reset() {
   frame_len_ = 0;
   body_offset_ = 0;
-  found_hello_ = false;
+  extension_offset_ = 0;
   session_size_ = -1;
   session_id_ = NULL;
   tls_ticket_size_ = -1;
   tls_ticket_ = NULL;
+  servername_size_ = 0;
+  servername_ = NULL;
 }
 
 inline void ClientHelloParser::Start(ClientHelloParser::OnHelloCb onhello_cb,

@@ -48,7 +48,6 @@ using v8::Value;
 
 static Cached<String> onread_sym;
 static Cached<String> onerror_sym;
-static Cached<String> onsniselect_sym;
 static Cached<String> onhandshakestart_sym;
 static Cached<String> onhandshakedone_sym;
 static Cached<String> onclienthello_sym;
@@ -66,6 +65,8 @@ static Cached<String> version_sym;
 static Cached<String> ext_key_usage_sym;
 static Cached<String> sessionid_sym;
 static Cached<String> tls_ticket_sym;
+static Cached<String> servername_sym;
+static Cached<String> sni_context_sym;
 
 static Persistent<Function> tlsWrap;
 
@@ -173,7 +174,6 @@ TLSCallbacks::~TLSCallbacks() {
 #endif  // OPENSSL_NPN_NEGOTIATED
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-  servername_.Dispose();
   sni_context_.Dispose();
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 }
@@ -639,7 +639,6 @@ void TLSCallbacks::DoRead(uv_stream_t* handle,
 
   // Parse ClientHello first
   if (!hello_.IsEnded()) {
-    assert(session_callbacks_);
     size_t avail = 0;
     uint8_t* data = reinterpret_cast<uint8_t*>(enc_in->Peek(&avail));
     assert(avail == 0 || data != NULL);
@@ -769,6 +768,16 @@ void TLSCallbacks::EnableSessionCallbacks(
   UNWRAP(TLSCallbacks);
 
   wrap->session_callbacks_ = true;
+  EnableHelloParser(args);
+}
+
+
+void TLSCallbacks::EnableHelloParser(
+    const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  UNWRAP(TLSCallbacks);
+
   wrap->hello_.Start(OnClientHello, OnClientHelloParseEnd, wrap);
 }
 
@@ -783,6 +792,13 @@ void TLSCallbacks::OnClientHello(void* arg,
   hello_obj->Set(sessionid_sym,
       Buffer::New(reinterpret_cast<char*>(hello.session_id),
                   hello.session_size));
+  if (hello.servername == NULL) {
+    hello_obj->Set(servername_sym, False(node_isolate));
+  } else {
+    hello_obj->Set(servername_sym,
+        Buffer::New(reinterpret_cast<char*>(hello.servername),
+                    hello.servername_size));
+  }
   hello_obj->Set(tls_ticket_sym, Boolean::New(hello.has_ticket));
 
   Handle<Value> argv[1];
@@ -998,7 +1014,23 @@ void TLSCallbacks::LoadSession(const FunctionCallbackInfo<Value>& args) {
     if (wrap->next_sess_ != NULL)
       SSL_SESSION_free(wrap->next_sess_);
     wrap->next_sess_ = sess;
+
+    Local<Object> info = Object::New();
+#ifndef OPENSSL_NO_TLSEXT
+    if (sess->tlsext_hostname == NULL) {
+      info->Set(servername_sym, False(node_isolate));
+    } else {
+      info->Set(servername_sym, String::New(sess->tlsext_hostname));
+    }
+#endif
+    args.GetReturnValue().Set(info);
   }
+}
+
+void TLSCallbacks::EndParser(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  UNWRAP(TLSCallbacks);
 
   wrap->hello_.End();
 }
@@ -1142,8 +1174,10 @@ void TLSCallbacks::GetServername(const FunctionCallbackInfo<Value>& args) {
 
   UNWRAP(TLSCallbacks);
 
-  if (wrap->kind_ == kTLSServer && !wrap->servername_.IsEmpty()) {
-    args.GetReturnValue().Set(wrap->servername_);
+  const char* servername = SSL_get_servername(wrap->ssl_,
+                                              TLSEXT_NAMETYPE_host_name);
+  if (servername != NULL) {
+    args.GetReturnValue().Set(String::New(servername));
   } else {
     args.GetReturnValue().Set(false);
   }
@@ -1178,25 +1212,22 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
 
   const char* servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
 
-  if (servername) {
-    p->servername_.Reset(node_isolate, String::New(servername));
-
+  if (servername != NULL) {
     // Call the SNI callback and use its return value as context
     Local<Object> object = p->object();
-    if (object->Has(onsniselect_sym)) {
-      p->sni_context_.Dispose();
-
-      Local<Value> arg = PersistentToLocal(p->servername_);
-      Handle<Value> ret = MakeCallback(object, onsniselect_sym, 1, &arg);
-
-      // If ret is SecureContext
-      if (ret->IsUndefined())
-        return SSL_TLSEXT_ERR_NOACK;
-
-      p->sni_context_.Reset(node_isolate, ret);
-      SecureContext* sc = ObjectWrap::Unwrap<SecureContext>(ret.As<Object>());
-      SSL_set_SSL_CTX(s, sc->ctx_);
+    Local<Value> ctx;
+    if (object->Has(sni_context_sym)) {
+      ctx = object->Get(sni_context_sym);
     }
+
+    if (ctx.IsEmpty() || ctx->IsUndefined())
+      return SSL_TLSEXT_ERR_NOACK;
+
+    p->sni_context_.Dispose();
+    p->sni_context_.Reset(node_isolate, ctx);
+
+    SecureContext* sc = ObjectWrap::Unwrap<SecureContext>(ctx.As<Object>());
+    SSL_set_SSL_CTX(s, sc->ctx_);
   }
 
   return SSL_TLSEXT_ERR_OK;
@@ -1218,6 +1249,7 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "getSession", GetSession);
   NODE_SET_PROTOTYPE_METHOD(t, "setSession", SetSession);
   NODE_SET_PROTOTYPE_METHOD(t, "loadSession", LoadSession);
+  NODE_SET_PROTOTYPE_METHOD(t, "endParser", EndParser);
   NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", GetCurrentCipher);
   NODE_SET_PROTOTYPE_METHOD(t, "verifyError", VerifyError);
   NODE_SET_PROTOTYPE_METHOD(t, "setVerifyMode", SetVerifyMode);
@@ -1225,6 +1257,9 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t,
                             "enableSessionCallbacks",
                             EnableSessionCallbacks);
+  NODE_SET_PROTOTYPE_METHOD(t,
+                            "enableHelloParser",
+                            EnableHelloParser);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", GetNegotiatedProto);
@@ -1239,7 +1274,6 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
   tlsWrap.Reset(node_isolate, t->GetFunction());
 
   onread_sym = String::New("onread");
-  onsniselect_sym = String::New("onsniselect");
   onerror_sym = String::New("onerror");
   onhandshakestart_sym = String::New("onhandshakestart");
   onhandshakedone_sym = String::New("onhandshakedone");
@@ -1259,6 +1293,8 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
   ext_key_usage_sym = String::New("ext_key_usage");
   sessionid_sym = String::New("sessionId");
   tls_ticket_sym = String::New("tlsTicket");
+  servername_sym = String::New("servername");
+  sni_context_sym = String::New("sni_context");
 }
 
 }  // namespace node

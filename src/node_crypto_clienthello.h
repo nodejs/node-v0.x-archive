@@ -42,12 +42,14 @@ class ClientHelloParser {
     uint8_t session_size;
     uint8_t* session_id;
     bool has_ticket;
+    uint8_t servername_size;
+    uint8_t* servername;
   };
 
   typedef void (*OnHelloCb)(void* arg, const ClientHello& hello);
   typedef void (*OnEndCb)(void* arg);
 
-  void Parse(unsigned char* data, size_t avail);
+  void Parse(uint8_t* data, size_t avail);
 
   inline void Reset();
   inline void Start(OnHelloCb onhello_cb, OnEndCb onend_cb, void* onend_arg);
@@ -61,7 +63,7 @@ class ClientHelloParser {
   enum ParseState {
     kWaiting,
     kTLSHeader,
-    kSSLHeader,
+    kSSL2Header,
     kPaused,
     kEnded
   };
@@ -78,15 +80,30 @@ class ClientHelloParser {
     kClientHello = 1
   };
 
+  enum ExtensionType {
+    kServerName = 0,
+    kTLSSessionTicket = 35
+  };
+
+  bool ParseRecordHeader(uint8_t* data, size_t avail);
+  void ParseHeader(uint8_t* data, size_t avail);
+  void ParseExtension(ExtensionType type,
+                      uint8_t* data,
+                      size_t len);
+  bool ParseTLSClientHello(uint8_t* data, size_t avail);
+  bool ParseSSL2ClientHello(uint8_t* data, size_t avail);
+
   ParseState state_;
   OnHelloCb onhello_cb_;
   OnEndCb onend_cb_;
   void* cb_arg_;
   size_t frame_len_;
   size_t body_offset_;
-  bool found_hello_;
+  size_t extension_offset_;
   uint8_t session_size_;
   uint8_t* session_id_;
+  uint16_t servername_size_;
+  uint8_t* servername_;
   uint16_t tls_ticket_size_;
   uint8_t* tls_ticket_;
 };

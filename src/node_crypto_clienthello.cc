@@ -25,160 +25,227 @@
 
 namespace node {
 
-void ClientHelloParser::Parse(unsigned char* data, size_t avail) {
+void ClientHelloParser::Parse(uint8_t* data, size_t avail) {
   switch (state_) {
     case kWaiting:
-      // >= 5 bytes for header parsing
-      if (avail < 5)
+      if (!ParseRecordHeader(data, avail))
         break;
-
-      if (data[0] == kChangeCipherSpec ||
-          data[0] == kAlert ||
-          data[0] == kHandshake ||
-          data[0] == kApplicationData) {
-        frame_len_ = (data[3] << 8) + data[4];
-        state_ = kTLSHeader;
-        body_offset_ = 5;
-      } else {
-        frame_len_ = (data[0] << 8) + data[1];
-        state_ = kSSLHeader;
-        if (*data & 0x40) {
-          // header with padding
-          body_offset_ = 3;
-        } else {
-          // without padding
-          body_offset_ = 2;
-        }
-      }
-
-      // Sanity check (too big frame, or too small)
-      // Let OpenSSL handle it
-      if (frame_len_ >= kMaxTLSFrameLen)
-        return End();
-
       // Fall through
     case kTLSHeader:
-    case kSSLHeader:
-      // >= 5 + frame size bytes for frame parsing
-      if (avail < body_offset_ + frame_len_)
-        break;
-
-      // Skip unsupported frames and gather some data from frame
-
-      // TODO(indutny): Check protocol version
-      if (data[body_offset_] == kClientHello) {
-        found_hello_ = true;
-        uint8_t* body;
-        size_t session_offset;
-
-        if (state_ == kTLSHeader) {
-          // Skip frame header, hello header, protocol version and random data
-          session_offset = body_offset_ + 4 + 2 + 32;
-
-          if (session_offset + 1 < avail) {
-            body = data + session_offset;
-            session_size_ = *body;
-            session_id_ = body + 1;
-          }
-
-          size_t cipher_offset = session_offset + 1 + session_size_;
-
-          // Session OOB failure
-          if (cipher_offset + 1 >= avail)
-            return End();
-
-          uint16_t cipher_len =
-              (data[cipher_offset] << 8) + data[cipher_offset + 1];
-          size_t comp_offset = cipher_offset + 2 + cipher_len;
-
-          // Cipher OOB failure
-          if (comp_offset >= avail)
-            return End();
-
-          uint8_t comp_len = data[comp_offset];
-          size_t extension_offset = comp_offset + 1 + comp_len;
-
-          // Compression OOB failure
-          if (extension_offset > avail)
-            return End();
-
-          // Extensions present
-          if (extension_offset != avail) {
-            size_t ext_off = extension_offset + 2;
-
-            // Parse known extensions
-            while (ext_off < avail) {
-              // Extension OOB
-              if (avail - ext_off < 4)
-                return End();
-
-              uint16_t ext_type = (data[ext_off] << 8) + data[ext_off + 1];
-              uint16_t ext_len = (data[ext_off + 2] << 8) + data[ext_off + 3];
-
-              // Extension OOB
-              if (ext_off + ext_len + 4 > avail)
-                return End();
-
-              ext_off += 4;
-
-              // TLS Session Ticket
-              if (ext_type == 35) {
-                tls_ticket_size_ = ext_len;
-                tls_ticket_ = data + ext_off;
-              }
-
-              ext_off += ext_len;
-            }
-
-            // Extensions OOB failure
-            if (ext_off > avail)
-              return End();
-          }
-        } else if (state_ == kSSLHeader) {
-          // Skip header, version
-          session_offset = body_offset_ + 3;
-
-          if (session_offset + 4 < avail) {
-            body = data + session_offset;
-
-            int ciphers_size = (body[0] << 8) + body[1];
-
-            if (body + 4 + ciphers_size < data + avail) {
-              session_size_ = (body[2] << 8) + body[3];
-              session_id_ = body + 4 + ciphers_size;
-            }
-          }
-        } else {
-          // Whoa? How did we get here?
-          abort();
-        }
-
-        // Check if we overflowed (do not reply with any private data)
-        if (session_id_ == NULL ||
-            session_size_ > 32 ||
-            session_id_ + session_size_ > data + avail) {
-          return End();
-        }
-
-        // TODO(indutny): Parse other things?
-      }
-
-      // Not client hello - let OpenSSL handle it
-      if (!found_hello_)
-        return End();
-
-      state_ = kPaused;
-      ClientHello hello;
-      hello.session_id = session_id_;
-      hello.session_size = session_size_;
-      hello.has_ticket = tls_ticket_ != NULL && tls_ticket_size_ != 0;
-      onhello_cb_(cb_arg_, hello);
+    case kSSL2Header:
+      ParseHeader(data, avail);
+      break;
+    case kPaused:
+      // Just nop
       break;
     case kEnded:
       // WTF? Meh...
     default:
       break;
   }
+}
+
+
+bool ClientHelloParser::ParseRecordHeader(uint8_t* data, size_t avail) {
+  // >= 5 bytes for header parsing
+  if (avail < 5)
+    return false;
+
+  if (data[0] == kChangeCipherSpec ||
+      data[0] == kAlert ||
+      data[0] == kHandshake ||
+      data[0] == kApplicationData) {
+    frame_len_ = (data[3] << 8) + data[4];
+    state_ = kTLSHeader;
+    body_offset_ = 5;
+  } else {
+    frame_len_ = (data[0] << 8) + data[1];
+    state_ = kSSL2Header;
+    if (*data & 0x40) {
+      // header with padding
+      body_offset_ = 3;
+    } else {
+      // without padding
+      body_offset_ = 2;
+    }
+  }
+
+  // Sanity check (too big frame, or too small)
+  // Let OpenSSL handle it
+  if (frame_len_ >= kMaxTLSFrameLen) {
+    End();
+    return false;
+  }
+
+  return true;
+}
+
+
+void ClientHelloParser::ParseHeader(uint8_t* data, size_t avail) {
+  // >= 5 + frame size bytes for frame parsing
+  if (avail < body_offset_ + frame_len_)
+    return;
+
+  // Skip unsupported frames and gather some data from frame
+
+  // TODO(indutny): Check hello protocol version
+  if (data[body_offset_] == kClientHello) {
+    if (state_ == kTLSHeader) {
+      if (!ParseTLSClientHello(data, avail))
+        return End();
+    } else if (state_ == kSSL2Header) {
+      if (!ParseSSL2ClientHello(data, avail))
+        return End();
+    } else {
+      // We couldn't get here, but whatever
+      return End();
+    }
+
+    // Check if we overflowed (do not reply with any private data)
+    if (session_id_ == NULL ||
+        session_size_ > 32 ||
+        session_id_ + session_size_ > data + avail) {
+      return End();
+    }
+  }
+
+  state_ = kPaused;
+  ClientHello hello;
+  hello.session_id = session_id_;
+  hello.session_size = session_size_;
+  hello.has_ticket = tls_ticket_ != NULL && tls_ticket_size_ != 0;
+  hello.servername = servername_;
+  hello.servername_size = servername_size_;
+  onhello_cb_(cb_arg_, hello);
+}
+
+
+void ClientHelloParser::ParseExtension(ClientHelloParser::ExtensionType type,
+                                       uint8_t* data,
+                                       size_t len) {
+  // NOTE: In case of anything we're just returning back, ignoring the problem.
+  // That's because we're heavily relying on OpenSSL to solve any problem with
+  // incoming data.
+  switch (type) {
+    case kServerName:
+      {
+        if (len < 2)
+          return;
+        uint16_t server_names_len = (data[0] << 8) + data[1];
+        if (server_names_len + 2 > len)
+          return;
+        for (size_t offset = 2; offset < 2 + server_names_len; ) {
+          if (offset + 3 > len)
+            return;
+          uint8_t name_type = data[offset];
+          if (name_type != 0)
+            return;
+          uint16_t name_len = (data[offset + 1] << 8) + data[offset + 2];
+          offset += 3;
+          if (offset + name_len > len)
+            return;
+          servername_ = data + offset;
+          servername_size_ = name_len;
+          offset += name_len;
+        }
+      }
+      break;
+    case kTLSSessionTicket:
+      tls_ticket_size_ = len;
+      tls_ticket_ = data + len;
+      break;
+    default:
+      // Ignore
+      break;
+  }
+}
+
+
+bool ClientHelloParser::ParseTLSClientHello(uint8_t* data, size_t avail) {
+  uint8_t* body;
+
+  // Skip frame header, hello header, protocol version and random data
+  size_t session_offset = body_offset_ + 4 + 2 + 32;
+
+  if (session_offset + 1 < avail) {
+    body = data + session_offset;
+    session_size_ = *body;
+    session_id_ = body + 1;
+  }
+
+  size_t cipher_offset = session_offset + 1 + session_size_;
+
+  // Session OOB failure
+  if (cipher_offset + 1 >= avail)
+    return false;
+
+  uint16_t cipher_len =
+      (data[cipher_offset] << 8) + data[cipher_offset + 1];
+  size_t comp_offset = cipher_offset + 2 + cipher_len;
+
+  // Cipher OOB failure
+  if (comp_offset >= avail)
+    return false;
+
+  uint8_t comp_len = data[comp_offset];
+  size_t extension_offset = comp_offset + 1 + comp_len;
+
+  // Compression OOB failure
+  if (extension_offset > avail)
+    return false;
+
+  // Extensions present
+  if (extension_offset != avail) {
+    size_t ext_off = extension_offset + 2;
+
+    // Parse known extensions
+    while (ext_off < avail) {
+      // Extension OOB
+      if (avail - ext_off < 4)
+        return false;
+
+      uint16_t ext_type = (data[ext_off] << 8) + data[ext_off + 1];
+      uint16_t ext_len = (data[ext_off + 2] << 8) + data[ext_off + 3];
+      ext_off += 4;
+
+      // Extension OOB
+      if (ext_off + ext_len > avail)
+        return false;
+
+      ParseExtension(static_cast<ExtensionType>(ext_type),
+                     data + ext_off,
+                     ext_len);
+
+      ext_off += ext_len;
+    }
+
+    // Extensions OOB failure
+    if (ext_off > avail)
+      return false;
+  }
+
+  return true;
+}
+
+
+bool ClientHelloParser::ParseSSL2ClientHello(uint8_t* data, size_t avail) {
+  uint8_t* body;
+
+  // Skip header, version
+  size_t session_offset = body_offset_ + 3;
+
+  if (session_offset + 4 < avail) {
+    body = data + session_offset;
+
+    int ciphers_size = (body[0] << 8) + body[1];
+
+    if (body + 4 + ciphers_size < data + avail) {
+      session_size_ = (body[2] << 8) + body[3];
+      session_id_ = body + 4 + ciphers_size;
+    }
+  }
+
+  return true;
 }
 
 }  // namespace node
