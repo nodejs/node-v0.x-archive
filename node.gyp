@@ -26,6 +26,7 @@
       'lib/child_process.js',
       'lib/console.js',
       'lib/constants.js',
+      'lib/continuation_local_storage.js',
       'lib/crypto.js',
       'lib/cluster.js',
       'lib/dgram.js',
