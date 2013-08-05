@@ -42,6 +42,7 @@ var http = require('http'),
 http.createServer(function(req, res) {
   console.error(req.headers);
   assert.equal(req.headers.host, hostExpect);
+  assert.equal(req.headers['x-port'], PORT);
   res.writeHead(200);
   res.end('ok');
   this.close();
@@ -50,19 +51,37 @@ http.createServer(function(req, res) {
 https.createServer(options, function(req, res) {
   console.error(req.headers);
   assert.equal(req.headers.host, hostExpect);
+  assert.equal(req.headers['x-port'], SSLPORT);
   res.writeHead(200);
   res.end('ok');
   this.close();
 }).listen(SSLPORT);
 
-http
-  .get({ host: 'localhost',
-      port: PORT,
-      headers: { 'x-port': PORT } })
-  .on('response', function(res) {});
+http.get({
+  host: 'localhost',
+  headers: {
+    'x-port': PORT
+  }
+}, function(res) {
+  res.resume();
+});
 
-https
-  .get({ host: 'localhost',
-      port: SSLPORT,
-      headers: { 'x-port': SSLPORT } })
-  .on('response', function(res) {});
+https.get({
+  host: 'localhost',
+  headers: {
+    'x-port': SSLPORT
+  },
+  agent: new https.Agent({
+    rejectUnauthorized: false
+  })
+}, function(res) {
+  res.resume();
+});
+
+http.get('http://www.google.com/', function(res) {
+  res.resume();
+});
+
+https.get('https://www.google.com', function(res) {
+  res.resume();
+});
