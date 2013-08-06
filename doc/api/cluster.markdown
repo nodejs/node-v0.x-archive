@@ -126,6 +126,12 @@ values are `"rr"` and `"none"`.
     (Default=`process.argv.slice(2)`)
   * `silent` {Boolean} whether or not to send output to parent's stdio.
     (Default=`false`)
+  * `distribute` {Function} user-specified server connection distribution
+    function. Invoked with only one argument - `callback`, which it should
+    invoke in a following way: `callback(err, worker)`, where the `worker`
+    argument is an instance of `Worker` class and specifies to which worker
+    a request should be scheduled.
+    NOTE: Experimental. Works only with round-robin scheduling mode.
 
 All settings set by the `.setupMaster` is stored in this settings object.
 This object is not supposed to be changed or set manually, by you.
