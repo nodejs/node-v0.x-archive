@@ -1,25 +1,82 @@
-# Continuation Local Storage
+# Continuation-Local Storage
 
     Stability: 1 - Experimental
 
-Continuation-local storage provides a mechanism similar to thread-local storage
-in threaded programming, with closures wrapped around portions of a
-continuation chain taking the place of mutable cells bound to thread data
-structures. Contexts are created on namespaces and can be be nested.
+Continuation-local storage works like thread-local storage in threaded
+programming, but is based on chains of Node-style callbacks instead of threads.
+The standard Node convention of functions calling functions is very similar to
+something called ["continuation-passing style"][cps] in functional programming,
+and the name comes from the way this module allows you to set and get values
+that are scoped to the lifetime of these chains of function calls.
 
-Every namespace is created with a default context. The currently active
-context on a namespace is available via `namespace.active`.
+Suppose you're writing a module that fetches a user and adds it to a session
+before calling a function passed in by a user to continue execution:
+
+```javascript
+// setup.js
+
+var createNamespace = require('continuation_local_storage').createNamespace;
+var session = createNamespace('my session');
+
+var db = require('./lib/db.js');
+
+function start(options, next) {
+  db.fetchUserById(options.id, function (error, user) {
+    if (error) return next(error);
+
+    session.set('user', user);
+
+    next();
+  });
+}
+```
+
+Later on in the process of turning that user's data into an HTML page, you call
+another function (maybe defined in another module entirely) that wants to fetch
+the value you set earlier:
+
+```javascript
+// send_response.js
+
+var getNamespace = require('continuation_local_storage').getNamespace;
+var session = getNamespace('my session');
+
+var render = require('./lib/render.js')
+
+function finish(response) {
+  var user = session.get('user');
+  render({user: user}).pipe(response);
+}
+```
+
+When you set values in continuation-local storage, those values are accessible
+until all functions called from the original function – synchronously or
+asynchronously – have finished executing. This includes callbacks passed to
+`process.nextTick` and the [timer functions][] ([setImmediate][],
+[setTimeout][], and [setInterval][]), as well as callbacks passed to
+asynchronous functions that call native functions (such as those exported from
+the `fs`, `dns`, `zlib` and `crypto` modules).
 
 A simple rule of thumb is anywhere where you might have set a property on the
 `request` or `response` objects in an HTTP handler, you can (and should) now
-use continuation-local storage.
+use continuation-local storage. This API is designed to allow you extend the
+scope of a variable across a sequence of function calls, but with values
+specific to each sequence of calls.
 
-A simple, annotated example:
+Values are grouped into namespaces, created with `createNamespace()`. Sets of
+function calls are grouped together by calling them within the function passed
+to `.run()` on the namespace object. Calls to `.run()` can be nested, and each
+nested context this creates has its own copy of the set of values from the
+parent context. When a function is making multiple asynchronous calls, this
+allows each child call to get, set, and pass along its own context without
+overwriting the parent's.
+
+A simple, annotated example of how this nesting behaves:
 
 ```javascript
-var cls = require('contination_local_storage');
+var createNamespace = require('contination_local_storage').createNamespace;
 
-var writer = cls.createNamespace('writer');
+var writer = createNamespace('writer');
 writer.set('value', 0);
 
 function requestHandler() {
@@ -69,14 +126,17 @@ Look up an existing namespace.
 
 * return: dictionary of {Namespace} objects
 
-The set of available namespaces.
+Continuation-local storage has a performance cost, and so it isn't enabled
+until the module is loaded for the first time. Once the module is loaded, the
+current set of namespaces is available in `process.namespaces`, so library code
+that wants to use continuation-local storage only when it's active should test
+for the existence of `process.namespaces`.
 
 ## Class: Namespace
 
-Application-specific namespaces provide access to continuation-local
-properties. Once the execution of a continuation chain begins, creating new
-contexts and changing local values is analogous to mutating the value of a
-given attribute scoped to that particular continuation chain.
+Application-specific namespaces group values local to the set of functions
+whose calls originate from a callback passed to `namespace.run()` or
+`namespace.bind()`.
 
 ### namespace.active
 
@@ -96,22 +156,30 @@ Look up a value on the current continuation context. Recursively searches from
 the innermost to outermost nested continuation context for a value associated
 with a given key.
 
-### namespace.run(continuation)
+### namespace.run(callback)
 
-* return: the context associated with that continuation
+* return: the context associated with that callback
 
-Create a new context on which values can be set or mutated. Run the
-continuation in this new scope (passing the new context into the
-continuation).
+Create a new context on which values can be set or read. Run all the functions
+that are called (either directly, or indirectly through asynchronous functions
+that take callbacks themselves) from the provided callback within the scope of
+that namespace. The new context is passed as an argument to the callback
+whne it's called.
 
 ### namespace.bind(callback, [context])
 
-* return: a continuation wrapped up in a context closure
+* return: a callback wrapped up in a context closure
 
-Bind a function to the specified continuation context. Works analagously to
+Bind a function to the specified namespace. Works analogously to
 `Function.bind()` or `domain.bind()`. If context is omitted, it will default to
 the currently active context in the namespace.
 
 ## context
 
 A context is a plain object created using the enclosing context as its prototype.
+
+[timer functions]: timers.html
+[setImmediate]:    timers.html#timers_setimmediate_callback_arg
+[setTimeout]:      timers.html#timers_settimeout_callback_delay_arg
+[setInterval]:     timers.html#timers_setinterval_callback_delay_arg
+[cps]:             http://en.wikipedia.org/wiki/Continuation-passing_style
