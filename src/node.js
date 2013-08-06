@@ -165,6 +165,8 @@
     global.Buffer = NativeModule.require('buffer').Buffer;
     process.domain = null;
     process._exiting = false;
+    process.namespaces = null;
+    process._wrapContinuations = null;
   };
 
   startup.globalTimeouts = function() {

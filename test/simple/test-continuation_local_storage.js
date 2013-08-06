@@ -29,8 +29,8 @@ var run = 0;
 var expectRun = 0;
 
 // don't expose namespaces until module is loaded.
-assert(process.namespaces === undefined);
-assert(process._wrapContinuations === undefined);
+assert(!process.namespaces);
+assert(!process._wrapContinuations);
 
 var cls = require('continuation_local_storage');
 
