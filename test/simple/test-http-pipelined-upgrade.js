@@ -21,52 +21,59 @@
 
 var common = require('../common');
 var assert = require('assert');
-var http = require('http');
 var net = require('net');
+var http = require('http');
+
+var agent = new http.Agent({ maxSockets: 1 });
+
+var gotRegularResponse = false;
+var gotUpgradeResponse = false;
 
 var server = http.createServer(function(req, res) {
-  common.error('got req');
-  throw new Error('This shouldn\'t happen.');
+  common.debug('Server got regular request');
+  setTimeout(function() {
+    common.debug('Server finished regular request');
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Hello World\n');
+  }, 500);
 });
-
 server.on('upgrade', function(req, res) {
-  common.error('got upgrade event');
-  // test that throwing an error from upgrade gets
-  // is uncaught
-  throw new Error('upgrade error');
-});
-
-var gotError = false;
-
-process.on('uncaughtException', function(e) {
-  common.error('got \'clientError\' event');
-  assert.equal('upgrade error', e.message);
-  gotError = true;
-  process.exit(0);
-});
-
-
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-
-  c.on('connect', function() {
-    common.error('client wrote message');
-    c.write('GET /blah HTTP/1.1\r\n' +
-            'Upgrade: WebSocket\r\n' +
-            'Connection: Upgrade\r\n' +
-            '\r\n\r\nhello world');
+  common.debug('Server got upgrade request');
+  res.writeHead(101, {
+   'Upgrade': 'dummy',
+   'Connection': 'Upgrade'
   });
-
-  c.on('end', function() {
-    c.end();
-  });
-
-  c.on('close', function() {
-    common.error('client close');
+  res.switchProtocols(function(sock) {
+    common.debug('Server finished update request');
+    sock.end();
     server.close();
   });
 });
+server.listen(common.PORT, function() {
+  var conn = net.createConnection(common.PORT);
 
-process.on('exit', function() {
-  assert.ok(gotError);
+  conn.on('connect', function() {
+    conn.write('GET / HTTP/1.1\r\n' +
+               '\r\n' +
+               'GET / HTTP/1.1\r\n' +
+               'Upgrade: WebSocket\r\n' +
+               'Connection: Upgrade\r\n' +
+               '\r\n');
+  });
+
+  conn.setEncoding('utf8');
+  var data = '';
+  conn.on('data', function(chunk) {
+    data += chunk;
+  });
+
+  conn.on('end', function() {
+    conn.end();
+
+    var regularIndex = data.indexOf('Hello World');
+    var upgradeIndex = data.indexOf('Upgrade');
+    assert.notEqual(regularIndex, -1);
+    assert.notEqual(upgradeIndex, -1);
+    assert.ok(regularIndex < upgradeIndex);
+  });
 });

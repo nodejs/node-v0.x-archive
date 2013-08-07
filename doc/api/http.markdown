@@ -93,39 +93,37 @@ not be emitted.
 
 ### Event: 'connect'
 
-`function (request, socket, head) { }`
+`function (request, response) { }`
 
-Emitted each time a client requests a http CONNECT method. If this event isn't
-listened for, then clients requesting a CONNECT method will have their
-connections closed.
+Emitted each time a client requests a http CONNECT method. The arguments are
+the same as for the request event. If this event isn't listened for, then
+clients requesting a CONNECT method will have their connections closed.
 
-* `request` is the arguments for the http request, as it is in the request
-  event.
-* `socket` is the network socket between the server and client.
-* `head` is an instance of Buffer, the first packet of the tunneling stream,
-  this may be empty.
+The server will treat a CONNECT method as the final request on a connection.
+Completing the request with `response.end()` will send the response, before
+finally closing the connection.
 
-After this event is emitted, the request's socket will not have a `data`
-event listener, meaning you will need to bind to it in order to handle data
-sent to the server on that socket.
+To instead continue the connection, set the response parameters as usual, then
+use [switchProtocols](#http_response_switchprotocols_callback) instead of
+`response.end()`. This method will give away control of the socket after
+headers have been sent.
 
 ### Event: 'upgrade'
 
-`function (request, socket, head) { }`
+`function (request, response) { }`
 
-Emitted each time a client requests a http upgrade. If this event isn't
-listened for, then clients requesting an upgrade will have their connections
-closed.
+Emitted each time a client requests a http upgrade. The arguments are the same
+as for the request event. If this event isn't listened for, then clients
+requesting an upgrade will have their connections closed.
 
-* `request` is the arguments for the http request, as it is in the request
-  event.
-* `socket` is the network socket between the server and client.
-* `head` is an instance of Buffer, the first packet of the upgraded stream,
-  this may be empty.
+The server will treat an upgrade request as the final request on a connection.
+Completing the request with `response.end()` will send the response, before
+finally closing the connection.
 
-After this event is emitted, the request's socket will not have a `data`
-event listener, meaning you will need to bind to it in order to handle data
-sent to the server on that socket.
+To instead continue the connection, set the response parameters as usual, then
+use [switchProtocols](#http_response_switchprotocols_callback) instead of
+`response.end()`. This method will give away control of the socket after
+headers have been sent.
 
 ### Event: 'clientError'
 
@@ -395,6 +393,14 @@ If `data` is specified, it is equivalent to calling `response.write(data, encodi
 followed by `response.end()`.
 
 
+### response.switchProtocols(callback)
+
+This method is used instead of `response.end()` when successfully completing
+a request with an upgrade or the CONNECT method. The callback receives the
+socket as its only argument, which will resume sending and receiving after
+the HTTP headers.
+
+
 ## http.request(options, callback)
 
 Node maintains several connections per server to make HTTP requests.
@@ -616,16 +622,15 @@ A client server pair that show you how to listen for the `connect` event.
       res.writeHead(200, {'Content-Type': 'text/plain'});
       res.end('okay');
     });
-    proxy.on('connect', function(req, cltSocket, head) {
+    proxy.on('connect', function(req, res) {
       // connect to an origin server
       var srvUrl = url.parse('http://' + req.url);
       var srvSocket = net.connect(srvUrl.port, srvUrl.hostname, function() {
-        cltSocket.write('HTTP/1.1 200 Connection Established\r\n' +
-                        'Proxy-agent: Node-Proxy\r\n' +
-                        '\r\n');
-        srvSocket.write(head);
-        srvSocket.pipe(cltSocket);
-        cltSocket.pipe(srvSocket);
+        res.writeHead(200, { 'Proxy-agent': 'Node-Proxy' });
+        res.switchProtocols(function(cltSocket) {
+          srvSocket.pipe(cltSocket);
+          cltSocket.pipe(srvSocket);
+        });
       });
     });
 
@@ -677,13 +682,14 @@ A client server pair that show you how to listen for the `upgrade` event.
       res.writeHead(200, {'Content-Type': 'text/plain'});
       res.end('okay');
     });
-    srv.on('upgrade', function(req, socket, head) {
-      socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
-                   'Upgrade: WebSocket\r\n' +
-                   'Connection: Upgrade\r\n' +
-                   '\r\n');
-
-      socket.pipe(socket); // echo back
+    srv.on('upgrade', function(req, res) {
+      res.writeHead(101, {
+        'Connection': 'Upgrade',
+        'Upgrade': 'Echo'
+      });
+      res.switchProtocols(function(socket) {
+        socket.pipe(socket); // echo back
+      });
     });
 
     // now that server is running
@@ -695,7 +701,7 @@ A client server pair that show you how to listen for the `upgrade` event.
         hostname: '127.0.0.1',
         headers: {
           'Connection': 'Upgrade',
-          'Upgrade': 'websocket'
+          'Upgrade': 'Echo'
         }
       };
 

@@ -29,20 +29,21 @@ var clientGotConnect = false;
 var server = http.createServer(function(req, res) {
   assert(false);
 });
-server.on('connect', function(req, socket, firstBodyChunk) {
+server.on('connect', function(req, res) {
   assert.equal(req.method, 'CONNECT');
   assert.equal(req.url, 'google.com:443');
   common.debug('Server got CONNECT request');
   serverGotConnect = true;
 
-  socket.write('HTTP/1.1 200 Connection established\r\n\r\n');
-
-  var data = firstBodyChunk.toString();
-  socket.on('data', function(buf) {
-    data += buf.toString();
-  });
-  socket.on('end', function() {
-    socket.end(data);
+  res.writeHead(200, 'Connection Established');
+  res.switchProtocols(function(socket) {
+    var data = '';
+    socket.on('data', function(buf) {
+      data += buf.toString();
+    });
+    socket.on('end', function() {
+      socket.end(data);
+    });
   });
 });
 server.listen(common.PORT, function() {

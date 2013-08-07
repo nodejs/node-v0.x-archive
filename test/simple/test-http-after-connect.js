@@ -37,13 +37,15 @@ var server = http.createServer(function(req, res) {
     res.end(req.url);
   }, 50);
 });
-server.on('connect', function(req, socket, firstBodyChunk) {
+server.on('connect', function(req, res) {
   common.debug('Server got CONNECT request');
   serverConnected = true;
-  socket.write('HTTP/1.1 200 Connection established\r\n\r\n');
-  socket.resume();
-  socket.on('end', function() {
-    socket.end();
+  res.writeHead(200, 'Connection established');
+  res.switchProtocols(function(socket) {
+    socket.resume();
+    socket.on('end', function() {
+      socket.end();
+    });
   });
 });
 server.listen(common.PORT, function() {
