@@ -165,6 +165,8 @@
     global.Buffer = NativeModule.require('buffer').Buffer;
     process.domain = null;
     process._exiting = false;
+    process.namespaces = null;
+    process._wrapContinuations = null;
   };
 
   startup.globalTimeouts = function() {
@@ -415,6 +417,9 @@
       if (process._exiting)
         return;
 
+      if (process._wrapContinuations)
+        callback = process._wrapContinuations(callback);
+
       nextTickQueue.push({ callback: callback, domain: null });
       infoBox[length]++;
     }
@@ -423,6 +428,9 @@
       // on the way out, don't bother. it won't get fired anyway.
       if (process._exiting)
         return;
+
+      if (process._wrapContinuations)
+        callback = process._wrapContinuations(callback);
 
       nextTickQueue.push({ callback: callback, domain: process.domain });
       infoBox[length]++;
