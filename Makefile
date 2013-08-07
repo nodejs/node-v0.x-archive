@@ -28,20 +28,32 @@ endif
 
 ifeq ($(USE_NINJA),1)
 node: config.gypi
-	$(NINJA) -C out/Release/
+	$(NINJA) -C out/Release/ node
 	ln -fs out/Release/node node
 
 node_g: config.gypi
 	$(NINJA) -C out/Debug/
 	ln -fs out/Debug/node $@
+
+staticlib: config.gypi
+	$(NINJA) -C out/Release/ node_base
+
+staticlib_g: config.gypi
+	$(NINJA) -C out/Debug/ node_base
 else
 node: config.gypi out/Makefile
-	$(MAKE) -C out BUILDTYPE=Release V=$(V)
+	$(MAKE) -C out BUILDTYPE=Release V=$(V) node
 	ln -fs out/Release/node node
 
 node_g: config.gypi out/Makefile
 	$(MAKE) -C out BUILDTYPE=Debug V=$(V)
 	ln -fs out/Debug/node $@
+
+staticlib: config.gypi
+	$(MAKE) -C out BUILDTYPE=Release V=$(V) node_base
+
+staticlib_g: config.gypi
+	$(MAKE) -C out BUILDTYPE=Debug V=$(V) node_base
 endif
 
 out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/toolchain.gypi deps/v8/build/features.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi

@@ -73,17 +73,11 @@
 
   'targets': [
     {
-      'target_name': 'node',
-      'type': 'executable',
-
-      'dependencies': [
-        'node_js2c#host',
-      ],
+      'target_name': 'node_base',
+      'type': 'static_library',
 
       'include_dirs': [
         'src',
-        'tools/msvs/genfiles',
-        'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
 
@@ -98,7 +92,6 @@
         'src/node_file.cc',
         'src/node_http_parser.cc',
         'src/node_javascript.cc',
-        'src/node_main.cc',
         'src/node_os.cc',
         'src/node_script.cc',
         'src/node_stat_watcher.cc',
@@ -244,31 +237,29 @@
             'tools/msvs/genfiles/node_perfctr_provider.rc',
           ]
         } ],
-        [ 'v8_postmortem_support=="true"', {
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:postmortem-metadata' ],
-        }],
+
         [ 'node_shared_v8=="false"', {
           'sources': [
             'deps/v8/include/v8.h',
             'deps/v8/include/v8-debug.h',
           ],
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+          'include_dirs': [ 'deps/v8/include' ]
         }],
 
         [ 'node_shared_zlib=="false"', {
-          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+          'include_dirs': [ 'deps/zlib' ]
         }],
 
         [ 'node_shared_http_parser=="false"', {
-          'dependencies': [ 'deps/http_parser/http_parser.gyp:http_parser' ],
+          'include_dirs': [ 'deps/http_parser' ]
         }],
 
         [ 'node_shared_cares=="false"', {
-          'dependencies': [ 'deps/cares/cares.gyp:cares' ],
+          'include_dirs': [ 'deps/cares/include' ]
         }],
 
         [ 'node_shared_libuv=="false"', {
-          'dependencies': [ 'deps/uv/uv.gyp:libuv' ],
+          'include_dirs': [ 'deps/uv/include' ]
         }],
 
         [ 'OS=="win"', {
@@ -295,6 +286,53 @@
             'PLATFORM="darwin"',
           ],
         }],
+      ],
+      'msvs_settings': {
+        'VCLinkerTool': {
+          'SubSystem': 1, # /subsystem:console
+        },
+      },
+    },
+
+    {
+      'target_name': 'node',
+      'type': 'executable',
+      'dependencies': [
+        'node_base',
+        'node_js2c#host',
+      ],
+      'include_dirs': [
+        'src',
+        'tools/msvs/genfiles',
+        'deps/uv/src/ares',
+      ],
+      'sources': [
+        'src/node_main.cc',
+      ],
+      'conditions': [
+        [ 'v8_postmortem_support=="true"', {
+          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:postmortem-metadata' ],
+        }],
+        [ 'node_shared_v8=="false"', {
+          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+        }],
+
+        [ 'node_shared_zlib=="false"', {
+          'dependencies': [ 'deps/zlib/zlib.gyp:zlib' ],
+        }],
+
+        [ 'node_shared_http_parser=="false"', {
+          'dependencies': [ 'deps/http_parser/http_parser.gyp:http_parser' ],
+        }],
+
+        [ 'node_shared_cares=="false"', {
+          'dependencies': [ 'deps/cares/cares.gyp:cares' ],
+        }],
+
+        [ 'node_shared_libuv=="false"', {
+          'dependencies': [ 'deps/uv/uv.gyp:libuv' ],
+        }],
+
         [ 'OS=="freebsd"', {
           'libraries': [
             '-lutil',
@@ -322,6 +360,7 @@
         },
       },
     },
+
     # generate ETW header and resource files
     {
       'target_name': 'node_etw',
