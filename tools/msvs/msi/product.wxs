@@ -45,6 +45,7 @@
              Absent="disallow">
       <ComponentRef Id="NodeExecutable"/>
       <ComponentRef Id="NodeVarsScript"/>
+      <ComponentRef Id="NodeCmdScript"/>
       <ComponentRef Id="NodeStartMenuAndRegistryEntries"/>
       <ComponentGroupRef Id="Product.Generated"/>
 
@@ -117,6 +118,10 @@
 
       <Component Id="NodeVarsScript">
         <File Id="nodevars.bat" KeyPath="yes" Source="$(var.RepoDir)\tools\msvs\nodevars.bat"/>
+      </Component>
+
+      <Component Id="NodeCmdScript">
+        <File Id="njs.cmd" KeyPath="yes" Source="$(var.RepoDir)\tools\msvs\njs.cmd"/>
       </Component>
 
       <?if $(var.NoPerfCtr) != 1 ?>
