@@ -1512,27 +1512,27 @@ void Connection::GetPeerCertificate(const FunctionCallbackInfo<Value>& args) {
     }
 
     EVP_PKEY *pkey = NULL;
-    RSA *rsa = NULL;
-    if (NULL != (pkey = X509_get_pubkey(peer_cert)) &&
-        NULL != (rsa = EVP_PKEY_get1_RSA(pkey))) {
-        BN_print(bio, rsa->n);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(modulus_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
+    if ( NULL != (pkey = X509_get_pubkey(peer_cert)) ) { 
+      if ( EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA ) {
+        RSA *rsa = NULL;
+        if ( NULL != (rsa = EVP_PKEY_get1_RSA(pkey)) ) {
+          BN_print(bio, rsa->n);
+          BIO_get_mem_ptr(bio, &mem);
+          info->Set(modulus_symbol, String::New(mem->data, mem->length) );
+          (void) BIO_reset(bio);
 
-        BN_print(bio, rsa->e);
-        BIO_get_mem_ptr(bio, &mem);
-        info->Set(exponent_symbol, String::New(mem->data, mem->length) );
-        (void) BIO_reset(bio);
-    }
+          BN_print(bio, rsa->e);
+          BIO_get_mem_ptr(bio, &mem);
+          info->Set(exponent_symbol, String::New(mem->data, mem->length) );
+          (void) BIO_reset(bio);
 
-    if (pkey != NULL) {
+          RSA_free(rsa);
+          rsa = NULL;
+        }
+      }
+
       EVP_PKEY_free(pkey);
       pkey = NULL;
-    }
-    if (rsa != NULL) {
-      RSA_free(rsa);
-      rsa = NULL;
     }
 
     ASN1_TIME_print(bio, X509_get_notBefore(peer_cert));
