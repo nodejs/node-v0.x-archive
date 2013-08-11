@@ -24,7 +24,7 @@ var assert = require('assert');
 var vm = require('vm');
 
 var ctx = vm.createContext();
-ctx.getGlobal().window = ctx.getGlobal();
+ctx.window = ctx;
 
 var thisVal = vm.runInContext('this;', ctx);
 var windowVal = vm.runInContext('window;', ctx);

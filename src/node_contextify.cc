@@ -187,6 +187,9 @@ class ContextifyContext : ObjectWrap {
                                                      ctx->proxy_global_);
       rv = proxy_global->GetRealNamedProperty(property);
     }
+    if (!rv.IsEmpty() && rv == ctx->sandbox_) {
+      rv = PersistentToLocal(node_isolate, ctx->proxy_global_);
+    }
 
     args.GetReturnValue().Set(rv);
   }
@@ -309,11 +312,17 @@ class ContextifyScript : ObjectWrap {
 
   static void RunInContext(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
-    if (!ContextifyContext::InstanceOf(args[0]->ToObject())) {
+    if (!args[0]->IsObject()) {
       return ThrowTypeError("sandbox argument must be an object.");
     }
+
+    Local<Object> sandbox = args[0].As<Object>();
+    Local<String> hidden_name =
+        FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
+    Local<Object> hidden_context =
+        sandbox->GetHiddenValue(hidden_name).As<Object>();
     ContextifyContext* ctx =
-        ObjectWrap::Unwrap<ContextifyContext>(args[0]->ToObject());
+        ObjectWrap::Unwrap<ContextifyContext>(hidden_context);
     Persistent<Context> context;
     context.Reset(node_isolate, ctx->context_);
     Local<Context> lcontext = PersistentToLocal(node_isolate, context);
@@ -349,6 +358,18 @@ class ContextifyScript : ObjectWrap {
   }
 };
 
+
+static void AssociateContextifyContext(
+    const FunctionCallbackInfo<Value>& args) {
+
+  Local<Object> sandbox = args[0].As<Object>();
+  Local<Value> context = args[1];
+
+  Local<String> hidden_name =
+      FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
+  sandbox->SetHiddenValue(hidden_name, context);
+}
+
 Persistent<FunctionTemplate> ContextifyContext::js_tmpl;
 Persistent<FunctionTemplate> ContextifyContext::data_wrapper_tmpl;
 Persistent<Function> ContextifyContext::data_wrapper_ctor;
@@ -359,6 +380,9 @@ void InitContextify(Local<Object> target) {
   HandleScope scope(node_isolate);
   ContextifyContext::Init(target);
   ContextifyScript::Init(target);
+  NODE_SET_METHOD(target,
+                  "associateContextifyContext",
+                  AssociateContextifyContext);
 }
 
 }  // namespace node

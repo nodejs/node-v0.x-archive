@@ -56,3 +56,8 @@ var result = vm.runInThisContext(
 assert.strictEqual(global.vmResult, 'foo');
 assert.strictEqual(result, '[object process]');
 delete global.vmResult;
+
+// Test 4: vm.createContext
+var sandbox3 = {};
+var context2 = vm.createContext(sandbox3);
+assert.strictEqual(sandbox3, context2);
