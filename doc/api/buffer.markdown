@@ -132,6 +132,50 @@ buffer object.  It does not change when the contents of the buffer are changed.
     // 1234
     // 1234
 
+### buf.dispose()
+
+    Stability: 1 - Experimental
+
+Free memory from a Buffer instance and transform it into a zero-length buffer.
+Internally the number of slice references are tracked, and the memory will only
+be released once all references are removed.
+
+    var buf = new Buffer(5);
+
+    console.log(buf.length, buf);
+
+    buf.dispose();
+
+    console.log(buf.length, buf);
+
+    // 5  <Buffer 00 00 00 00 00>
+    // 0  <Buffer >
+
+This can be useful when you wish to do simple operations with incoming data
+(e.g. write to disk or pipe data elsewhere):
+
+    net.createServer(function(socket) {
+      socket.on('data', function(buf) {
+        // quick work w/ buf (e.g. writeFileSync)
+        buf.dispose();
+      });
+    });
+
+Though you **must** make sure all requests against the data are complete. This
+means you must be aware of any asynchronous events. In the following example a
+buffer is queued to be written to disk, but then memory is released before the
+asynchronous event is able to complete.
+
+    var fs = require('fs');
+    // to ensure the allocation is un-pooled
+    var b = require('buffer').SlowBuffer(10);
+    b.fill('a');
+
+    fs.writeFile('test.txt', b, function() { });
+
+    // disposing here means nothing will be written to disk
+    b.dispose();
+
 ### buf.write(string, [offset], [length], [encoding])
 
 * `string` String - data to be written to buffer
