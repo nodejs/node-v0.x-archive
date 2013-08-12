@@ -21,6 +21,7 @@
 
 #include "node.h"
 #include "node_internals.h"
+#include "node_watchdog.h"
 
 namespace node {
 
@@ -43,6 +44,7 @@ using v8::Script;
 using v8::String;
 using v8::TryCatch;
 using v8::Value;
+using v8::V8;
 
 
 class ContextifyContext : ObjectWrap {
@@ -315,6 +317,7 @@ class ContextifyScript : ObjectWrap {
     if (!args[0]->IsObject()) {
       return ThrowTypeError("sandbox argument must be an object.");
     }
+    uint64_t timeout = GetTimeout(args, 1);
 
     Local<Object> sandbox = args[0].As<Object>();
     Local<String> hidden_name =
@@ -330,25 +333,54 @@ class ContextifyScript : ObjectWrap {
 
     // Now that we've set up the current context to be the passed-in one, run
     // the code in the current context ("this context").
-    RunInThisContext(args);
+    RunInThisContextImpl(args, timeout);
+  }
+
+  static int64_t GetTimeout(const FunctionCallbackInfo<Value>& args, int i) {
+    return !args[i]->IsUndefined() ? args[i]->IntegerValue() : 0;
   }
 
 
   static void RunInThisContext(const FunctionCallbackInfo<Value>& args) {
+    int64_t timeout = GetTimeout(args, 0);
+    RunInThisContextImpl(args, timeout);
+  }
+
+
+  static void RunInThisContextImpl(const FunctionCallbackInfo<Value>& args,
+                                   int64_t timeout) {
+    if (timeout < 0) {
+      return ThrowRangeError("timeout must be a positive number");
+    }
+
     ContextifyScript* wrapped_script =
         ObjectWrap::Unwrap<ContextifyScript>(args.This());
     Local<Script> script = PersistentToLocal(node_isolate,
                                              wrapped_script->script_);
-    TryCatch trycatch;
+    TryCatch try_catch;
     if (script.IsEmpty()) {
-      trycatch.ReThrow();
+      try_catch.ReThrow();
       return;
     }
-    Local<Value> result = script->Run();
+
+    Local<Value> result;
+    if (timeout) {
+      Watchdog wd(timeout);
+      result = script->Run();
+    } else {
+      result = script->Run();
+    }
+
+    if (try_catch.HasCaught() && try_catch.HasTerminated()) {
+      V8::CancelTerminateExecution(args.GetIsolate());
+      return ThrowError("Script execution timed out.");
+    } 
+
     if (result.IsEmpty()) {
-      trycatch.ReThrow();
+      try_catch.ReThrow();
       return;
     }
+
     args.GetReturnValue().Set(result);
   }
 
