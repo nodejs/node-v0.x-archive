@@ -40,7 +40,9 @@ class ClientHelloParser {
 
   class ClientHello {
    public:
-    ClientHello() {
+    ClientHello() : session_id_(NULL),
+                    has_ticket_(false),
+                    servername_(NULL) {
     }
 
     inline uint8_t session_size() const { return session_size_; }
