@@ -7,6 +7,11 @@ var common = require('../common');
 var assert = require('assert');
 var HTTPParser = process.binding('http_parser').HTTPParser;
 
+var kOnHeaders = 0;
+var kOnHeadersComplete = 1;
+var kOnBody = 2;
+var kOnMessageComplete = 3;
+
 var headersComplete = 0;
 var messagesComplete = 0;
 
@@ -23,19 +28,19 @@ function demoBug(part1, part2) {
   parser.headers = [];
   parser.url = '';
 
-  parser.onHeaders = function(headers, url) {
+  parser[kOnHeaders] = function(headers, url) {
     parser.headers = parser.headers.concat(headers);
     parser.url += url;
   };
 
-  parser.onHeadersComplete = function(info) {
+  parser[kOnHeadersComplete] = function(info) {
     headersComplete++;
     console.log('url', info.url);
   };
 
-  parser.onBody = function(b, start, len) { };
+  parser[kOnBody] = function(b, start, len) { };
 
-  parser.onMessageComplete = function() {
+  parser[kOnMessageComplete] = function() {
     messagesComplete++;
   };
 
