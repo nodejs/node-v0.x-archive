@@ -35,7 +35,7 @@ Found'`.
 
 ## http.createServer([requestListener])
 
-Returns a new web server object.
+Returns a new instance of http.Server
 
 The `requestListener` is a function which is automatically
 added to the `'request'` event.
