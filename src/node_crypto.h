@@ -50,6 +50,7 @@ namespace node {
 namespace crypto {
 
 static X509_STORE* root_cert_store;
+extern int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx);
 
 // Forward declaration
 class Connection;
@@ -119,7 +120,38 @@ class SecureContext : ObjectWrap {
  private:
 };
 
-class Connection : ObjectWrap {
+template <class Base>
+class SSLWrap {
+ public:
+  explicit SSLWrap(SecureContext* sc) {
+    ssl_ = SSL_new(sc->ctx_);
+    assert(ssl_ != NULL);
+  }
+
+  ~SSLWrap() {
+    if (ssl_ != NULL)
+      SSL_free(ssl_);
+  }
+
+  inline SSL* ssl() const { return ssl_; }
+
+ protected:
+  static void AddMethods(v8::Handle<v8::FunctionTemplate> t);
+
+  static void GetPeerCertificate(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void IsSessionReused(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void IsInitFinished(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void VerifyError(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetCurrentCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ReceivedShutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  SSL* ssl_;
+};
+
+class Connection : public SSLWrap<Connection>, ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
@@ -142,17 +174,8 @@ class Connection : ObjectWrap {
   static void EncPending(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EncOut(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ClearIn(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void GetPeerCertificate(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void GetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void SetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void IsSessionReused(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void IsInitFinished(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void VerifyError(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void GetCurrentCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Shutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ReceivedShutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
 
@@ -207,7 +230,8 @@ class Connection : ObjectWrap {
     return conn;
   }
 
-  Connection() : ObjectWrap(), hello_offset_(0) {
+  explicit Connection(SecureContext* sc) : SSLWrap<Connection>(sc),
+                                           hello_offset_(0) {
     bio_read_ = bio_write_ = NULL;
     ssl_ = NULL;
     next_sess_ = NULL;
@@ -242,7 +266,6 @@ class Connection : ObjectWrap {
 
   BIO *bio_read_;
   BIO *bio_write_;
-  SSL *ssl_;
 
   ClientHelloParser hello_parser_;
 

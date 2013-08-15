@@ -81,9 +81,9 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
 TLSCallbacks::TLSCallbacks(Kind kind,
                            Handle<Object> sc,
                            StreamWrapCallbacks* old)
-    : StreamWrapCallbacks(old),
+    : SSLWrap<TLSCallbacks>(ObjectWrap::Unwrap<SecureContext>(sc)),
+      StreamWrapCallbacks(old),
       kind_(kind),
-      ssl_(NULL),
       enc_in_(NULL),
       enc_out_(NULL),
       clear_in_(NULL),
@@ -159,8 +159,6 @@ int TLSCallbacks::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
 
 
 TLSCallbacks::~TLSCallbacks() {
-  SSL_free(ssl_);
-  ssl_ = NULL;
   enc_in_ = NULL;
   enc_out_ = NULL;
   delete clear_in_;
@@ -200,64 +198,15 @@ void TLSCallbacks::InvokeQueued(int status) {
 }
 
 
-static int VerifyCallback(int preverify_ok, X509_STORE_CTX *ctx) {
-  // Quoting SSL_set_verify(3ssl):
-  //
-  //   The VerifyCallback function is used to control the behaviour when
-  //   the SSL_VERIFY_PEER flag is set. It must be supplied by the
-  //   application and receives two arguments: preverify_ok indicates,
-  //   whether the verification of the certificate in question was passed
-  //   (preverify_ok=1) or not (preverify_ok=0). x509_ctx is a pointer to
-  //   the complete context used for the certificate chain verification.
-  //
-  //   The certificate chain is checked starting with the deepest nesting
-  //   level (the root CA certificate) and worked upward to the peer's
-  //   certificate.  At each level signatures and issuer attributes are
-  //   checked.  Whenever a verification error is found, the error number is
-  //   stored in x509_ctx and VerifyCallback is called with preverify_ok=0.
-  //   By applying X509_CTX_store_* functions VerifyCallback can locate the
-  //   certificate in question and perform additional steps (see EXAMPLES).
-  //   If no error is found for a certificate, VerifyCallback is called
-  //   with preverify_ok=1 before advancing to the next level.
-  //
-  //   The return value of VerifyCallback controls the strategy of the
-  //   further verification process. If VerifyCallback returns 0, the
-  //   verification process is immediately stopped with "verification
-  //   failed" state. If SSL_VERIFY_PEER is set, a verification failure
-  //   alert is sent to the peer and the TLS/SSL handshake is terminated. If
-  //   VerifyCallback returns 1, the verification process is continued. If
-  //   VerifyCallback always returns 1, the TLS/SSL handshake will not be
-  //   terminated with respect to verification failures and the connection
-  //   will be established. The calling process can however retrieve the
-  //   error code of the last verification error using
-  //   SSL_get_verify_result(3) or by maintaining its own error storage
-  //   managed by VerifyCallback.
-  //
-  //   If no VerifyCallback is specified, the default callback will be
-  //   used.  Its return value is identical to preverify_ok, so that any
-  //   verification failure will lead to a termination of the TLS/SSL
-  //   handshake with an alert message, if SSL_VERIFY_PEER is set.
-  //
-  // Since we cannot perform I/O quickly enough in this callback, we ignore
-  // all preverify_ok errors and let the handshake continue. It is
-  // imparative that the user use Connection::VerifyError after the
-  // 'secure' callback has been made.
-  return 1;
-}
-
-
 void TLSCallbacks::InitSSL() {
-  assert(ssl_ == NULL);
-
   // Initialize SSL
-  ssl_ = SSL_new(sc_->ctx_);
   enc_in_ = BIO_new(NodeBIO::GetMethod());
   enc_out_ = BIO_new(NodeBIO::GetMethod());
 
   SSL_set_bio(ssl_, enc_in_, enc_out_);
 
   // NOTE: This could be overriden in SetVerifyMode
-  SSL_set_verify(ssl_, SSL_VERIFY_NONE, VerifyCallback);
+  SSL_set_verify(ssl_, SSL_VERIFY_NONE, crypto::VerifyCallback);
 
 #ifdef SSL_MODE_RELEASE_BUFFERS
   long mode = SSL_get_mode(ssl_);
@@ -664,74 +613,6 @@ int TLSCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
 }
 
 
-#define CASE_X509_ERR(CODE) case X509_V_ERR_##CODE: reason = #CODE; break;
-void TLSCallbacks::VerifyError(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  // XXX Do this check in JS land?
-  X509* peer_cert = SSL_get_peer_certificate(wrap->ssl_);
-  if (peer_cert == NULL) {
-    // We requested a certificate and they did not send us one.
-    // Definitely an error.
-    // XXX is this the right error message?
-    Local<String> s =
-        FIXED_ONE_BYTE_STRING(node_isolate, "UNABLE_TO_GET_ISSUER_CERT");
-    return args.GetReturnValue().Set(Exception::Error(s));
-  }
-  X509_free(peer_cert);
-
-  long x509_verify_error = SSL_get_verify_result(wrap->ssl_);
-
-  const char* reason = NULL;
-  Local<String> s;
-  switch (x509_verify_error) {
-  case X509_V_OK:
-    return args.GetReturnValue().SetNull();
-  CASE_X509_ERR(UNABLE_TO_GET_ISSUER_CERT)
-  CASE_X509_ERR(UNABLE_TO_GET_CRL)
-  CASE_X509_ERR(UNABLE_TO_DECRYPT_CERT_SIGNATURE)
-  CASE_X509_ERR(UNABLE_TO_DECRYPT_CRL_SIGNATURE)
-  CASE_X509_ERR(UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY)
-  CASE_X509_ERR(CERT_SIGNATURE_FAILURE)
-  CASE_X509_ERR(CRL_SIGNATURE_FAILURE)
-  CASE_X509_ERR(CERT_NOT_YET_VALID)
-  CASE_X509_ERR(CERT_HAS_EXPIRED)
-  CASE_X509_ERR(CRL_NOT_YET_VALID)
-  CASE_X509_ERR(CRL_HAS_EXPIRED)
-  CASE_X509_ERR(ERROR_IN_CERT_NOT_BEFORE_FIELD)
-  CASE_X509_ERR(ERROR_IN_CERT_NOT_AFTER_FIELD)
-  CASE_X509_ERR(ERROR_IN_CRL_LAST_UPDATE_FIELD)
-  CASE_X509_ERR(ERROR_IN_CRL_NEXT_UPDATE_FIELD)
-  CASE_X509_ERR(OUT_OF_MEM)
-  CASE_X509_ERR(DEPTH_ZERO_SELF_SIGNED_CERT)
-  CASE_X509_ERR(SELF_SIGNED_CERT_IN_CHAIN)
-  CASE_X509_ERR(UNABLE_TO_GET_ISSUER_CERT_LOCALLY)
-  CASE_X509_ERR(UNABLE_TO_VERIFY_LEAF_SIGNATURE)
-  CASE_X509_ERR(CERT_CHAIN_TOO_LONG)
-  CASE_X509_ERR(CERT_REVOKED)
-  CASE_X509_ERR(INVALID_CA)
-  CASE_X509_ERR(PATH_LENGTH_EXCEEDED)
-  CASE_X509_ERR(INVALID_PURPOSE)
-  CASE_X509_ERR(CERT_UNTRUSTED)
-  CASE_X509_ERR(CERT_REJECTED)
-  default:
-    s = OneByteString(node_isolate,
-                      X509_verify_cert_error_string(x509_verify_error));
-    break;
-  }
-
-  if (s.IsEmpty()) {
-    s = OneByteString(node_isolate, reason);
-  }
-
-  args.GetReturnValue().Set(Exception::Error(s));
-}
-#undef CASE_X509_ERR
-
-
 void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
@@ -758,16 +639,7 @@ void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
   }
 
   // Always allow a connection. We'll reject in javascript.
-  SSL_set_verify(wrap->ssl_, verify_mode, VerifyCallback);
-}
-
-
-void TLSCallbacks::IsSessionReused(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-  bool yes = SSL_session_reused(wrap->ssl_);
-  args.GetReturnValue().Set(yes);
+  SSL_set_verify(wrap->ssl_, verify_mode, crypto::VerifyCallback);
 }
 
 
@@ -825,201 +697,6 @@ void TLSCallbacks::OnClientHelloParseEnd(void* arg) {
 }
 
 
-void TLSCallbacks::GetPeerCertificate(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  Local<Object> info = Object::New();
-  X509* peer_cert = SSL_get_peer_certificate(wrap->ssl_);
-  if (peer_cert != NULL) {
-    BIO* bio = BIO_new(BIO_s_mem());
-    BUF_MEM* mem;
-    if (X509_NAME_print_ex(bio,
-                           X509_get_subject_name(peer_cert),
-                           0,
-                           X509_NAME_FLAGS) > 0) {
-      BIO_get_mem_ptr(bio, &mem);
-      info->Set(subject_sym,
-                OneByteString(node_isolate, mem->data, mem->length));
-    }
-    (void) BIO_reset(bio);
-
-    if (X509_NAME_print_ex(bio,
-                           X509_get_issuer_name(peer_cert),
-                           0,
-                           X509_NAME_FLAGS) > 0) {
-      BIO_get_mem_ptr(bio, &mem);
-      info->Set(issuer_sym,
-                OneByteString(node_isolate, mem->data, mem->length));
-    }
-    (void) BIO_reset(bio);
-
-    int index = X509_get_ext_by_NID(peer_cert, NID_subject_alt_name, -1);
-    if (index >= 0) {
-      X509_EXTENSION* ext;
-      int rv;
-
-      ext = X509_get_ext(peer_cert, index);
-      assert(ext != NULL);
-
-      rv = X509V3_EXT_print(bio, ext, 0, 0);
-      assert(rv == 1);
-
-      BIO_get_mem_ptr(bio, &mem);
-      info->Set(subjectaltname_sym,
-                OneByteString(node_isolate, mem->data, mem->length));
-
-      (void) BIO_reset(bio);
-    }
-
-    EVP_PKEY* pkey = NULL;
-    RSA* rsa = NULL;
-    if (NULL != (pkey = X509_get_pubkey(peer_cert)) &&
-        NULL != (rsa = EVP_PKEY_get1_RSA(pkey))) {
-      BN_print(bio, rsa->n);
-      BIO_get_mem_ptr(bio, &mem);
-      info->Set(modulus_sym,
-                OneByteString(node_isolate, mem->data, mem->length));
-      (void) BIO_reset(bio);
-
-      BN_print(bio, rsa->e);
-      BIO_get_mem_ptr(bio, &mem);
-      info->Set(exponent_sym,
-                OneByteString(node_isolate, mem->data, mem->length));
-      (void) BIO_reset(bio);
-    }
-
-    if (pkey != NULL) {
-      EVP_PKEY_free(pkey);
-      pkey = NULL;
-    }
-    if (rsa != NULL) {
-      RSA_free(rsa);
-      rsa = NULL;
-    }
-
-    ASN1_TIME_print(bio, X509_get_notBefore(peer_cert));
-    BIO_get_mem_ptr(bio, &mem);
-    info->Set(valid_from_sym,
-              OneByteString(node_isolate, mem->data, mem->length));
-    (void) BIO_reset(bio);
-
-    ASN1_TIME_print(bio, X509_get_notAfter(peer_cert));
-    BIO_get_mem_ptr(bio, &mem);
-    info->Set(valid_to_sym,
-              OneByteString(node_isolate, mem->data, mem->length));
-    BIO_free_all(bio);
-
-    unsigned int md_size, i;
-    unsigned char md[EVP_MAX_MD_SIZE];
-    if (X509_digest(peer_cert, EVP_sha1(), md, &md_size)) {
-      const char hex[] = "0123456789ABCDEF";
-      char fingerprint[EVP_MAX_MD_SIZE * 3];
-
-      for (i = 0; i < md_size; i++) {
-        fingerprint[3*i] = hex[(md[i] & 0xf0) >> 4];
-        fingerprint[(3*i)+1] = hex[(md[i] & 0x0f)];
-        fingerprint[(3*i)+2] = ':';
-      }
-
-      if (md_size > 0)
-        fingerprint[(3*(md_size-1))+2] = '\0';
-      else
-        fingerprint[0] = '\0';
-
-      info->Set(fingerprint_sym, OneByteString(node_isolate, fingerprint));
-    }
-
-    STACK_OF(ASN1_OBJECT)* eku = static_cast<STACK_OF(ASN1_OBJECT)*>(
-        X509_get_ext_d2i(peer_cert,
-                         NID_ext_key_usage,
-                         NULL,
-                         NULL));
-    if (eku != NULL) {
-      Local<Array> ext_key_usage = Array::New();
-      char buf[256];
-
-      for (int i = 0; i < sk_ASN1_OBJECT_num(eku); i++) {
-        memset(buf, 0, sizeof(buf));
-        OBJ_obj2txt(buf, sizeof(buf) - 1, sk_ASN1_OBJECT_value(eku, i), 1);
-        ext_key_usage->Set(i, OneByteString(node_isolate, buf));
-      }
-
-      sk_ASN1_OBJECT_pop_free(eku, ASN1_OBJECT_free);
-      info->Set(ext_key_usage_sym, ext_key_usage);
-    }
-
-    X509_free(peer_cert);
-  }
-
-  args.GetReturnValue().Set(info);
-}
-
-
-void TLSCallbacks::GetSession(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  SSL_SESSION* sess = SSL_get_session(wrap->ssl_);
-  if (!sess) return;
-
-  int slen = i2d_SSL_SESSION(sess, NULL);
-  assert(slen > 0);
-
-  if (slen > 0) {
-    unsigned char* sbuf = new unsigned char[slen];
-    unsigned char* p = sbuf;
-    i2d_SSL_SESSION(sess, &p);
-    Local<Value> s = Encode(sbuf, slen, BINARY);
-    args.GetReturnValue().Set(s);
-    delete[] sbuf;
-    return;
-  }
-
-  args.GetReturnValue().SetNull();
-}
-
-
-void TLSCallbacks::SetSession(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  if (wrap->started_)
-    return ThrowError("Already started.");
-
-  if (args.Length() < 1 ||
-      (!args[0]->IsString() && !Buffer::HasInstance(args[0]))) {
-    return ThrowTypeError("Bad argument");
-  }
-
-  size_t slen = Buffer::Length(args[0]);
-  char* sbuf = new char[slen];
-
-  ssize_t wlen = DecodeWrite(sbuf, slen, args[0], BINARY);
-  assert(wlen == static_cast<ssize_t>(slen));
-
-  const unsigned char* p = reinterpret_cast<const unsigned char*>(sbuf);
-  SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, wlen);
-
-  delete[] sbuf;
-
-  if (!sess) return;
-
-  int r = SSL_set_session(wrap->ssl_, sess);
-  SSL_SESSION_free(sess);
-
-  if (!r) {
-    return ThrowError("SSL_set_session error");
-  }
-}
-
-
 void TLSCallbacks::LoadSession(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
@@ -1058,28 +735,6 @@ void TLSCallbacks::EndParser(const FunctionCallbackInfo<Value>& args) {
   NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
 
   wrap->hello_.End();
-}
-
-
-void TLSCallbacks::GetCurrentCipher(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  const SSL_CIPHER* c;
-
-  c = SSL_get_current_cipher(wrap->ssl_);
-  if (c == NULL)
-    return;
-
-  const char* cipher_name = SSL_CIPHER_get_name(c);
-  const char* cipher_version = SSL_CIPHER_get_version(c);
-
-  Local<Object> info = Object::New();
-  info->Set(name_sym, OneByteString(node_isolate, cipher_name));
-  info->Set(version_sym, OneByteString(node_isolate, cipher_version));
-  args.GetReturnValue().Set(info);
 }
 
 
@@ -1275,21 +930,17 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
   t->SetClassName(FIXED_ONE_BYTE_STRING(node_isolate, "TLSWrap"));
 
   NODE_SET_PROTOTYPE_METHOD(t, "start", Start);
-  NODE_SET_PROTOTYPE_METHOD(t, "getPeerCertificate", GetPeerCertificate);
-  NODE_SET_PROTOTYPE_METHOD(t, "getSession", GetSession);
-  NODE_SET_PROTOTYPE_METHOD(t, "setSession", SetSession);
   NODE_SET_PROTOTYPE_METHOD(t, "loadSession", LoadSession);
   NODE_SET_PROTOTYPE_METHOD(t, "endParser", EndParser);
-  NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", GetCurrentCipher);
-  NODE_SET_PROTOTYPE_METHOD(t, "verifyError", VerifyError);
   NODE_SET_PROTOTYPE_METHOD(t, "setVerifyMode", SetVerifyMode);
-  NODE_SET_PROTOTYPE_METHOD(t, "isSessionReused", IsSessionReused);
   NODE_SET_PROTOTYPE_METHOD(t,
                             "enableSessionCallbacks",
                             EnableSessionCallbacks);
   NODE_SET_PROTOTYPE_METHOD(t,
                             "enableHelloParser",
                             EnableHelloParser);
+
+  SSLWrap<TLSCallbacks>::AddMethods(t);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", GetNegotiatedProto);

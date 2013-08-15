@@ -23,6 +23,7 @@
 #define SRC_TLS_WRAP_H_
 
 #include "node.h"
+#include "node_crypto.h"  // SSLWrap
 #include "node_crypto_clienthello.h"
 #include "queue.h"
 #include "stream_wrap.h"
@@ -39,7 +40,9 @@ namespace crypto {
   class SecureContext;
 }
 
-class TLSCallbacks : public StreamWrapCallbacks {
+using crypto::SSLWrap;
+
+class TLSCallbacks : public SSLWrap<TLSCallbacks>, public StreamWrapCallbacks {
  public:
   enum Kind {
     kTLSClient,
@@ -103,16 +106,9 @@ class TLSCallbacks : public StreamWrapCallbacks {
 
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void GetPeerCertificate(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void GetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void SetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EndParser(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void GetCurrentCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void VerifyError(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void IsSessionReused(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EnableSessionCallbacks(
       const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EnableHelloParser(
@@ -159,7 +155,6 @@ class TLSCallbacks : public StreamWrapCallbacks {
   crypto::SecureContext* sc_;
   v8::Persistent<v8::Object> sc_handle_;
   v8::Persistent<v8::Object> object_;
-  SSL* ssl_;
   BIO* enc_in_;
   BIO* enc_out_;
   NodeBIO* clear_in_;
