@@ -54,7 +54,6 @@ static Cached<String> onerror_sym;
 static Cached<String> onhandshakestart_sym;
 static Cached<String> onhandshakedone_sym;
 static Cached<String> onclienthello_sym;
-static Cached<String> onnewsession_sym;
 static Cached<String> subject_sym;
 static Cached<String> subjectaltname_sym;
 static Cached<String> modulus_sym;
@@ -92,9 +91,7 @@ TLSCallbacks::TLSCallbacks(Kind kind,
       pending_write_item_(NULL),
       started_(false),
       established_(false),
-      shutdown_(false),
-      session_callbacks_(false),
-      next_sess_(NULL) {
+      shutdown_(false) {
 
   // Persist SecureContext
   sc_ = ObjectWrap::Unwrap<SecureContext>(sc);
@@ -108,54 +105,10 @@ TLSCallbacks::TLSCallbacks(Kind kind,
   QUEUE_INIT(&write_item_queue_);
 
   // We've our own session callbacks
-  SSL_CTX_sess_set_get_cb(sc_->ctx_, GetSessionCallback);
-  SSL_CTX_sess_set_new_cb(sc_->ctx_, NewSessionCallback);
+  SSL_CTX_sess_set_get_cb(sc_->ctx_, SSLWrap<TLSCallbacks>::GetSessionCallback);
+  SSL_CTX_sess_set_new_cb(sc_->ctx_, SSLWrap<TLSCallbacks>::NewSessionCallback);
 
   InitSSL();
-}
-
-
-SSL_SESSION* TLSCallbacks::GetSessionCallback(SSL* s,
-                                              unsigned char* key,
-                                              int len,
-                                              int* copy) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* c = static_cast<TLSCallbacks*>(SSL_get_app_data(s));
-
-  *copy = 0;
-  SSL_SESSION* sess = c->next_sess_;
-  c->next_sess_ = NULL;
-
-  return sess;
-}
-
-
-int TLSCallbacks::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* c = static_cast<TLSCallbacks*>(SSL_get_app_data(s));
-  if (!c->session_callbacks_)
-    return 0;
-
-  // Check if session is small enough to be stored
-  int size = i2d_SSL_SESSION(sess, NULL);
-  if (size > SecureContext::kMaxSessionSize)
-    return 0;
-
-  // Serialize session
-  Local<Object> buff = Buffer::New(size);
-  unsigned char* serialized = reinterpret_cast<unsigned char*>(
-      Buffer::Data(buff));
-  memset(serialized, 0, size);
-  i2d_SSL_SESSION(sess, &serialized);
-
-  Local<Object> session = Buffer::New(reinterpret_cast<char*>(sess->session_id),
-                                      sess->session_id_length);
-  Handle<Value> argv[2] = { session, buff };
-  MakeCallback(c->object(), onnewsession_sym, ARRAY_SIZE(argv), argv);
-
-  return 0;
 }
 
 
@@ -320,7 +273,7 @@ void TLSCallbacks::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
 
 void TLSCallbacks::EncOut() {
   // Ignore cycling data if ClientHello wasn't yet parsed
-  if (!hello_.IsEnded())
+  if (!hello_parser_.IsEnded())
     return;
 
   // Write in progress
@@ -425,7 +378,7 @@ Handle<Value> TLSCallbacks::GetSSLError(int status, int* err) {
 
 void TLSCallbacks::ClearOut() {
   // Ignore cycling data if ClientHello wasn't yet parsed
-  if (!hello_.IsEnded())
+  if (!hello_parser_.IsEnded())
     return;
 
   HandleScope scope(node_isolate);
@@ -457,7 +410,7 @@ void TLSCallbacks::ClearOut() {
 
 bool TLSCallbacks::ClearIn() {
   // Ignore cycling data if ClientHello wasn't yet parsed
-  if (!hello_.IsEnded())
+  if (!hello_parser_.IsEnded())
     return false;
 
   HandleScope scope(node_isolate);
@@ -593,11 +546,11 @@ void TLSCallbacks::DoRead(uv_stream_t* handle,
   enc_in->Commit(nread);
 
   // Parse ClientHello first
-  if (!hello_.IsEnded()) {
+  if (!hello_parser_.IsEnded()) {
     size_t avail = 0;
     uint8_t* data = reinterpret_cast<uint8_t*>(enc_in->Peek(&avail));
     assert(avail == 0 || data != NULL);
-    return hello_.Parse(data, avail);
+    return hello_parser_.Parse(data, avail);
   }
 
   // Cycle OpenSSL's state
@@ -651,7 +604,7 @@ void TLSCallbacks::EnableSessionCallbacks(
   TLSCallbacks* wrap;
   NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
 
-  wrap->session_callbacks_ = true;
+  wrap->enable_session_callbacks();
   EnableHelloParser(args);
 }
 
@@ -662,7 +615,7 @@ void TLSCallbacks::EnableHelloParser(const FunctionCallbackInfo<Value>& args) {
   TLSCallbacks* wrap;
   NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
 
-  wrap->hello_.Start(OnClientHello, OnClientHelloParseEnd, wrap);
+  wrap->hello_parser_.Start(OnClientHello, OnClientHelloParseEnd, wrap);
 }
 
 
@@ -695,47 +648,6 @@ void TLSCallbacks::OnClientHello(void* arg,
 void TLSCallbacks::OnClientHelloParseEnd(void* arg) {
   TLSCallbacks* c = static_cast<TLSCallbacks*>(arg);
   c->Cycle();
-}
-
-
-void TLSCallbacks::LoadSession(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  if (args.Length() >= 1 && Buffer::HasInstance(args[0])) {
-    ssize_t slen = Buffer::Length(args[0]);
-    char* sbuf = Buffer::Data(args[0]);
-
-    const unsigned char* p = reinterpret_cast<unsigned char*>(sbuf);
-    SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, slen);
-
-    // Setup next session and move hello to the BIO buffer
-    if (wrap->next_sess_ != NULL)
-      SSL_SESSION_free(wrap->next_sess_);
-    wrap->next_sess_ = sess;
-
-    Local<Object> info = Object::New();
-#ifndef OPENSSL_NO_TLSEXT
-    if (sess->tlsext_hostname == NULL) {
-      info->Set(servername_sym, False(node_isolate));
-    } else {
-      info->Set(servername_sym,
-                OneByteString(node_isolate, sess->tlsext_hostname));
-    }
-#endif
-    args.GetReturnValue().Set(info);
-  }
-}
-
-void TLSCallbacks::EndParser(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  wrap->hello_.End();
 }
 
 
@@ -931,8 +843,6 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
   t->SetClassName(FIXED_ONE_BYTE_STRING(node_isolate, "TLSWrap"));
 
   NODE_SET_PROTOTYPE_METHOD(t, "start", Start);
-  NODE_SET_PROTOTYPE_METHOD(t, "loadSession", LoadSession);
-  NODE_SET_PROTOTYPE_METHOD(t, "endParser", EndParser);
   NODE_SET_PROTOTYPE_METHOD(t, "setVerifyMode", SetVerifyMode);
   NODE_SET_PROTOTYPE_METHOD(t,
                             "enableSessionCallbacks",
@@ -961,7 +871,6 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
       FIXED_ONE_BYTE_STRING(node_isolate, "onhandshakestart");
   onhandshakedone_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onhandshakedone");
   onclienthello_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onclienthello");
-  onnewsession_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onnewsession");
 
   subject_sym = FIXED_ONE_BYTE_STRING(node_isolate, "subject");
   issuer_sym = FIXED_ONE_BYTE_STRING(node_isolate, "issuer");

@@ -24,7 +24,6 @@
 
 #include "node.h"
 #include "node_crypto.h"  // SSLWrap
-#include "node_crypto_clienthello.h"
 #include "queue.h"
 #include "stream_wrap.h"
 #include "v8.h"
@@ -62,6 +61,11 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
               uv_buf_t buf,
               uv_handle_type pending);
   int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
+
+  // Just for compliance with Connection
+  inline v8::Local<v8::Object> handle() {
+    return object();
+  }
 
  protected:
   static const int kClearOutChunkSize = 1024;
@@ -105,20 +109,11 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
 
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void EndParser(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetVerifyMode(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EnableSessionCallbacks(
       const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EnableHelloParser(
       const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  // TLS Session API
-  static SSL_SESSION* GetSessionCallback(SSL* s,
-                                         unsigned char* key,
-                                         int len,
-                                         int* copy);
-  static int NewSessionCallback(SSL* s, SSL_SESSION* sess);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   static void GetNegotiatedProto(
@@ -165,9 +160,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   bool started_;
   bool established_;
   bool shutdown_;
-  bool session_callbacks_;
-  SSL_SESSION* next_sess_;
-  ClientHelloParser hello_;
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   v8::Persistent<v8::Object> npn_protos_;

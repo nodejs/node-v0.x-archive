@@ -86,12 +86,6 @@ class SecureContext : ObjectWrap {
   static void GetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-  static SSL_SESSION* GetSessionCallback(SSL* s,
-                                         unsigned char* key,
-                                         int len,
-                                         int* copy);
-  static int NewSessionCallback(SSL* s, SSL_SESSION* sess);
-
   SecureContext() : ObjectWrap() {
     ctx_ = NULL;
     ca_store_ = NULL;
@@ -124,35 +118,56 @@ class SecureContext : ObjectWrap {
 template <class Base>
 class SSLWrap {
  public:
-  explicit SSLWrap(SecureContext* sc) {
+  explicit SSLWrap(SecureContext* sc) : next_sess_(NULL),
+                                        session_callbacks_(false) {
     ssl_ = SSL_new(sc->ctx_);
     assert(ssl_ != NULL);
   }
 
   ~SSLWrap() {
-    if (ssl_ != NULL)
+    if (ssl_ != NULL) {
       SSL_free(ssl_);
+      ssl_ = NULL;
+    }
+    if (next_sess_ != NULL) {
+      SSL_SESSION_free(next_sess_);
+      next_sess_ = NULL;
+    }
   }
 
   inline SSL* ssl() const { return ssl_; }
+  inline void enable_session_callbacks() { session_callbacks_ = true; }
 
  protected:
   static void AddMethods(v8::Handle<v8::FunctionTemplate> t);
+
+  static SSL_SESSION* GetSessionCallback(SSL* s,
+                                         unsigned char* key,
+                                         int len,
+                                         int* copy);
+  static int NewSessionCallback(SSL* s, SSL_SESSION* sess);
 
   static void GetPeerCertificate(
       const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void IsSessionReused(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void IsInitFinished(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void VerifyError(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetCurrentCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ReceivedShutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void EndParser(const v8::FunctionCallbackInfo<v8::Value>& args);
 
+  SSL_SESSION* next_sess_;
   SSL* ssl_;
+  bool session_callbacks_;
+  ClientHelloParser hello_parser_;
+
+  friend class SecureContext;
 };
 
-class Connection : public SSLWrap<Connection>, ObjectWrap {
+class Connection : public SSLWrap<Connection>, public ObjectWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target);
 
@@ -175,7 +190,6 @@ class Connection : public SSLWrap<Connection>, ObjectWrap {
   static void EncPending(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EncOut(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void ClearIn(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Shutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -235,19 +249,14 @@ class Connection : public SSLWrap<Connection>, ObjectWrap {
                                            hello_offset_(0) {
     bio_read_ = bio_write_ = NULL;
     ssl_ = NULL;
-    next_sess_ = NULL;
     hello_parser_.Start(OnClientHello, OnClientHelloParseEnd, this);
+    enable_session_callbacks();
   }
 
   ~Connection() {
     if (ssl_ != NULL) {
       SSL_free(ssl_);
       ssl_ = NULL;
-    }
-
-    if (next_sess_ != NULL) {
-      SSL_SESSION_free(next_sess_);
-      next_sess_ = NULL;
     }
 
 #ifdef OPENSSL_NPN_NEGOTIATED
@@ -268,10 +277,7 @@ class Connection : public SSLWrap<Connection>, ObjectWrap {
   BIO *bio_read_;
   BIO *bio_write_;
 
-  ClientHelloParser hello_parser_;
-
   bool is_server_; /* coverity[member_decl] */
-  SSL_SESSION* next_sess_;
 
   uint8_t hello_data_[18432];
   size_t hello_offset_;

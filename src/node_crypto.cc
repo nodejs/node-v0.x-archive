@@ -109,6 +109,7 @@ static Cached<String> onhandshakedone_sym;
 static Cached<String> onclienthello_sym;
 static Cached<String> onnewsession_sym;
 static Cached<String> sessionid_sym;
+static Cached<String> servername_sym;
 
 static Persistent<FunctionTemplate> secure_context_constructor;
 
@@ -117,6 +118,13 @@ static uv_rwlock_t* locks;
 // Just to generate static methods
 template class SSLWrap<TLSCallbacks>;
 template void SSLWrap<TLSCallbacks>::AddMethods(Handle<FunctionTemplate> t);
+template SSL_SESSION* SSLWrap<TLSCallbacks>::GetSessionCallback(
+    SSL* s,
+    unsigned char* key,
+    int len,
+    int* copy);
+template int SSLWrap<TLSCallbacks>::NewSessionCallback(SSL* s,
+                                                       SSL_SESSION* sess);
 
 static void crypto_threadid_cb(CRYPTO_THREADID* tid) {
   CRYPTO_THREADID_set_numeric(tid, uv_thread_self());
@@ -282,60 +290,10 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
                                  SSL_SESS_CACHE_SERVER |
                                  SSL_SESS_CACHE_NO_INTERNAL |
                                  SSL_SESS_CACHE_NO_AUTO_CLEAR);
-  SSL_CTX_sess_set_get_cb(sc->ctx_, GetSessionCallback);
-  SSL_CTX_sess_set_new_cb(sc->ctx_, NewSessionCallback);
+  SSL_CTX_sess_set_get_cb(sc->ctx_, SSLWrap<Connection>::GetSessionCallback);
+  SSL_CTX_sess_set_new_cb(sc->ctx_, SSLWrap<Connection>::NewSessionCallback);
 
   sc->ca_store_ = NULL;
-}
-
-
-SSL_SESSION* SecureContext::GetSessionCallback(SSL* s,
-                                               unsigned char* key,
-                                               int len,
-                                               int* copy) {
-  HandleScope scope(node_isolate);
-
-  Connection* conn = static_cast<Connection*>(SSL_get_app_data(s));
-
-  *copy = 0;
-  SSL_SESSION* sess = conn->next_sess_;
-  conn->next_sess_ = NULL;
-
-  return sess;
-}
-
-
-int SecureContext::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
-  HandleScope scope(node_isolate);
-
-  Connection* conn = static_cast<Connection*>(SSL_get_app_data(s));
-
-  // Check if session is small enough to be stored
-  int size = i2d_SSL_SESSION(sess, NULL);
-  if (size > kMaxSessionSize) return 0;
-
-  // Serialize session
-  char* serialized = new char[size];
-  unsigned char* pserialized = reinterpret_cast<unsigned char*>(serialized);
-  memset(serialized, 0, size);
-  i2d_SSL_SESSION(sess, &pserialized);
-
-  Handle<Value> argv[2] = {
-    Buffer::New(reinterpret_cast<char*>(sess->session_id),
-                sess->session_id_length),
-    Buffer::Use(serialized, size)
-  };
-
-  if (onnewsession_sym.IsEmpty()) {
-    onnewsession_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onnewsession");
-  }
-
-  MakeCallback(conn->handle(node_isolate),
-               onnewsession_sym,
-               ARRAY_SIZE(argv),
-               argv);
-
-  return 0;
 }
 
 
@@ -819,11 +777,62 @@ void SSLWrap<Base>::AddMethods(Handle<FunctionTemplate> t) {
   NODE_SET_PROTOTYPE_METHOD(t, "getPeerCertificate", GetPeerCertificate);
   NODE_SET_PROTOTYPE_METHOD(t, "getSession", GetSession);
   NODE_SET_PROTOTYPE_METHOD(t, "setSession", SetSession);
+  NODE_SET_PROTOTYPE_METHOD(t, "loadSession", LoadSession);
   NODE_SET_PROTOTYPE_METHOD(t, "isSessionReused", IsSessionReused);
   NODE_SET_PROTOTYPE_METHOD(t, "isInitFinished", IsInitFinished);
   NODE_SET_PROTOTYPE_METHOD(t, "verifyError", VerifyError);
   NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", GetCurrentCipher);
   NODE_SET_PROTOTYPE_METHOD(t, "receivedShutdown", ReceivedShutdown);
+  NODE_SET_PROTOTYPE_METHOD(t, "endParser", EndParser);
+}
+
+
+template <class Base>
+SSL_SESSION* SSLWrap<Base>::GetSessionCallback(SSL* s,
+                                               unsigned char* key,
+                                               int len,
+                                               int* copy) {
+  HandleScope scope(node_isolate);
+
+  Base* w = static_cast<Base*>(SSL_get_app_data(s));
+
+  *copy = 0;
+  SSL_SESSION* sess = w->next_sess_;
+  w->next_sess_ = NULL;
+
+  return sess;
+}
+
+
+template <class Base>
+int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
+  HandleScope scope(node_isolate);
+
+  Base* w = static_cast<Base*>(SSL_get_app_data(s));
+
+  if (!w->session_callbacks_)
+    return 0;
+
+  // Check if session is small enough to be stored
+  int size = i2d_SSL_SESSION(sess, NULL);
+  if (size > SecureContext::kMaxSessionSize)
+    return 0;
+
+  // Serialize session
+  Local<Object> buff = Buffer::New(size);
+  unsigned char* serialized = reinterpret_cast<unsigned char*>(
+      Buffer::Data(buff));
+  memset(serialized, 0, size);
+  i2d_SSL_SESSION(sess, &serialized);
+
+  Local<Object> session = Buffer::New(reinterpret_cast<char*>(sess->session_id),
+                                      sess->session_id_length);
+  Handle<Value> argv[2] = { session, buff };
+  if (onnewsession_sym.IsEmpty())
+    onnewsession_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onnewsession");
+  MakeCallback(w->handle(), onnewsession_sym, ARRAY_SIZE(argv), argv);
+
+  return 0;
 }
 
 
@@ -1017,6 +1026,40 @@ void SSLWrap<Base>::SetSession(const FunctionCallbackInfo<Value>& args) {
 
 
 template <class Base>
+void SSLWrap<Base>::LoadSession(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  Base* w = ObjectWrap::Unwrap<Base>(args.This());
+
+  if (args.Length() >= 1 && Buffer::HasInstance(args[0])) {
+    ssize_t slen = Buffer::Length(args[0]);
+    char* sbuf = Buffer::Data(args[0]);
+
+    const unsigned char* p = reinterpret_cast<unsigned char*>(sbuf);
+    SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, slen);
+
+    // Setup next session and move hello to the BIO buffer
+    if (w->next_sess_ != NULL)
+      SSL_SESSION_free(w->next_sess_);
+    w->next_sess_ = sess;
+
+    Local<Object> info = Object::New();
+#ifndef OPENSSL_NO_TLSEXT
+    if (servername_sym.IsEmpty())
+      servername_sym = FIXED_ONE_BYTE_STRING(node_isolate, "servername");
+    if (sess->tlsext_hostname == NULL) {
+      info->Set(servername_sym, False(node_isolate));
+    } else {
+      info->Set(servername_sym,
+                OneByteString(node_isolate, sess->tlsext_hostname));
+    }
+#endif
+    args.GetReturnValue().Set(info);
+  }
+}
+
+
+template <class Base>
 void SSLWrap<Base>::IsSessionReused(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
   Base* w = ObjectWrap::Unwrap<Base>(args.This());
@@ -1031,6 +1074,16 @@ void SSLWrap<Base>::ReceivedShutdown(const FunctionCallbackInfo<Value>& args) {
   Base* w = ObjectWrap::Unwrap<Base>(args.This());
   bool yes = SSL_get_shutdown(w->ssl_) == SSL_RECEIVED_SHUTDOWN;
   args.GetReturnValue().Set(yes);
+}
+
+
+template <class Base>
+void SSLWrap<Base>::EndParser(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  Base* w = ObjectWrap::Unwrap<Base>(args.This());
+
+  w->hello_parser_.End();
 }
 
 
@@ -1317,7 +1370,6 @@ void Connection::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "encOut", Connection::EncOut);
   NODE_SET_PROTOTYPE_METHOD(t, "clearPending", Connection::ClearPending);
   NODE_SET_PROTOTYPE_METHOD(t, "encPending", Connection::EncPending);
-  NODE_SET_PROTOTYPE_METHOD(t, "loadSession", Connection::LoadSession);
   NODE_SET_PROTOTYPE_METHOD(t, "start", Connection::Start);
   NODE_SET_PROTOTYPE_METHOD(t, "shutdown", Connection::Shutdown);
   NODE_SET_PROTOTYPE_METHOD(t, "close", Connection::Close);
@@ -1804,29 +1856,6 @@ void Connection::ClearIn(const FunctionCallbackInfo<Value>& args) {
   conn->SetShutdownFlags();
 
   args.GetReturnValue().Set(bytes_written);
-}
-
-
-void Connection::LoadSession(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  Connection* conn = Connection::Unwrap(args.This());
-
-  if (args.Length() >= 1 && Buffer::HasInstance(args[0])) {
-    ssize_t slen = Buffer::Length(args[0].As<Object>());
-    char* sbuf = Buffer::Data(args[0].As<Object>());
-
-    const unsigned char* p = reinterpret_cast<unsigned char*>(sbuf);
-    SSL_SESSION* sess = d2i_SSL_SESSION(NULL, &p, slen);
-
-    // Setup next session and move hello to the BIO buffer
-    if (conn->next_sess_ != NULL) {
-      SSL_SESSION_free(conn->next_sess_);
-    }
-    conn->next_sess_ = sess;
-  }
-
-  conn->hello_parser_.End();
 }
 
 
