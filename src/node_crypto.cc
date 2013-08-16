@@ -3564,8 +3564,12 @@ void InitCrypto(Handle<Object> target) {
   ERR_load_crypto_strings();
 
   crypto_lock_init();
-  CRYPTO_set_locking_callback(crypto_lock_cb);
-  CRYPTO_THREADID_set_callback(crypto_threadid_cb);
+  if (CRYPTO_get_locking_callback() == NULL) {
+    CRYPTO_set_locking_callback(crypto_lock_cb);
+  }
+  if (CRYPTO_THREADID_get_callback() == NULL) {
+    CRYPTO_THREADID_set_callback(crypto_threadid_cb);
+  }
 
   // Turn off compression. Saves memory - do it in userland.
 #if !defined(OPENSSL_NO_COMP)
