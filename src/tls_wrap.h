@@ -64,7 +64,11 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
 
   // Just for compliance with Connection
   inline v8::Local<v8::Object> handle() {
-    return object();
+    return object(v8::Isolate::GetCurrent());
+  }
+
+  inline v8::Local<v8::Object> handle(v8::Isolate* isolate) {
+    return object(isolate);
   }
 
  protected:
@@ -103,8 +107,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   }
 
   v8::Handle<v8::Value> GetSSLError(int status, int* err);
-  static void OnClientHello(void* arg,
-                            const ClientHelloParser::ClientHello& hello);
   static void OnClientHelloParseEnd(void* arg);
 
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -137,8 +139,8 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   static int SelectSNIContextCallback(SSL* s, int* ad, void* arg);
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 
-  inline v8::Local<v8::Object> object() {
-    return PersistentToLocal(node_isolate, persistent());
+  inline v8::Local<v8::Object> object(v8::Isolate* isolate) {
+    return PersistentToLocal(isolate, persistent());
   }
 
   inline v8::Persistent<v8::Object>& persistent() {

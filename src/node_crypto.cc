@@ -69,6 +69,7 @@ namespace node {
 namespace crypto {
 
 using v8::Array;
+using v8::Boolean;
 using v8::Exception;
 using v8::False;
 using v8::FunctionCallbackInfo;
@@ -110,6 +111,7 @@ static Cached<String> onclienthello_sym;
 static Cached<String> onnewsession_sym;
 static Cached<String> sessionid_sym;
 static Cached<String> servername_sym;
+static Cached<String> tls_ticket_sym;
 
 static Persistent<FunctionTemplate> secure_context_constructor;
 
@@ -125,6 +127,9 @@ template SSL_SESSION* SSLWrap<TLSCallbacks>::GetSessionCallback(
     int* copy);
 template int SSLWrap<TLSCallbacks>::NewSessionCallback(SSL* s,
                                                        SSL_SESSION* sess);
+template void SSLWrap<TLSCallbacks>::OnClientHello(
+    void* arg,
+    const ClientHelloParser::ClientHello& hello);
 
 static void crypto_threadid_cb(CRYPTO_THREADID* tid) {
   CRYPTO_THREADID_set_numeric(tid, uv_thread_self());
@@ -830,9 +835,51 @@ int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
   Handle<Value> argv[2] = { session, buff };
   if (onnewsession_sym.IsEmpty())
     onnewsession_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onnewsession");
-  MakeCallback(w->handle(), onnewsession_sym, ARRAY_SIZE(argv), argv);
+  MakeCallback(w->handle(node_isolate),
+               onnewsession_sym,
+               ARRAY_SIZE(argv),
+               argv);
 
   return 0;
+}
+
+
+template <class Base>
+void SSLWrap<Base>::OnClientHello(void* arg,
+                                  const ClientHelloParser::ClientHello& hello) {
+  HandleScope scope(node_isolate);
+
+  Base* w = static_cast<Base*>(arg);
+
+  if (onclienthello_sym.IsEmpty())
+    onclienthello_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onclienthello");
+  if (sessionid_sym.IsEmpty())
+    sessionid_sym = FIXED_ONE_BYTE_STRING(node_isolate, "sessionId");
+  if (servername_sym.IsEmpty())
+    servername_sym = FIXED_ONE_BYTE_STRING(node_isolate, "servername");
+  if (tls_ticket_sym.IsEmpty())
+    tls_ticket_sym = FIXED_ONE_BYTE_STRING(node_isolate, "tlsTicket");
+
+  Local<Object> hello_obj = Object::New();
+  Local<Object> buff = Buffer::New(
+      reinterpret_cast<const char*>(hello.session_id()),
+                                    hello.session_size());
+  hello_obj->Set(sessionid_sym, buff);
+  if (hello.servername() == NULL) {
+    hello_obj->Set(servername_sym, String::Empty(node_isolate));
+  } else {
+    Local<String> servername = OneByteString(node_isolate,
+                                             hello.servername(),
+                                             hello.servername_size());
+    hello_obj->Set(servername_sym, servername);
+  }
+  hello_obj->Set(tls_ticket_sym, Boolean::New(hello.has_ticket()));
+
+  Handle<Value> argv[1] = { hello_obj };
+  MakeCallback(w->handle(node_isolate),
+               onclienthello_sym,
+               1,
+               argv);
 }
 
 
@@ -1179,29 +1226,6 @@ void SSLWrap<Base>::GetCurrentCipher(const FunctionCallbackInfo<Value>& args) {
   const char* cipher_version = SSL_CIPHER_get_version(c);
   info->Set(version_symbol, OneByteString(node_isolate, cipher_version));
   args.GetReturnValue().Set(info);
-}
-
-
-void Connection::OnClientHello(void* arg,
-                               const ClientHelloParser::ClientHello& hello) {
-  HandleScope scope(node_isolate);
-  Connection* conn = static_cast<Connection*>(arg);
-
-  if (onclienthello_sym.IsEmpty())
-    onclienthello_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onclienthello");
-  if (sessionid_sym.IsEmpty())
-    sessionid_sym = FIXED_ONE_BYTE_STRING(node_isolate, "sessionId");
-
-  Local<Object> obj = Object::New();
-  obj->Set(sessionid_sym,
-           Buffer::New(reinterpret_cast<const char*>(hello.session_id()),
-                       hello.session_size()));
-
-  Handle<Value> argv[1] = { obj };
-  MakeCallback(conn->handle(node_isolate),
-               onclienthello_sym,
-               ARRAY_SIZE(argv),
-               argv);
 }
 
 

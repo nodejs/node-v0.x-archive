@@ -146,6 +146,8 @@ class SSLWrap {
                                          int len,
                                          int* copy);
   static int NewSessionCallback(SSL* s, SSL_SESSION* sess);
+  static void OnClientHello(void* arg,
+                            const ClientHelloParser::ClientHello& hello);
 
   static void GetPeerCertificate(
       const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -218,8 +220,6 @@ class Connection : public SSLWrap<Connection>, public ObjectWrap {
   static int SelectSNIContextCallback_(SSL* s, int* ad, void* arg);
 #endif
 
-  static void OnClientHello(void* arg,
-                            const ClientHelloParser::ClientHello& hello);
   static void OnClientHelloParseEnd(void* arg);
 
   int HandleBIOError(BIO* bio, const char* func, int rv);
@@ -249,7 +249,9 @@ class Connection : public SSLWrap<Connection>, public ObjectWrap {
                                            hello_offset_(0) {
     bio_read_ = bio_write_ = NULL;
     ssl_ = NULL;
-    hello_parser_.Start(OnClientHello, OnClientHelloParseEnd, this);
+    hello_parser_.Start(SSLWrap<Connection>::OnClientHello,
+                        OnClientHelloParseEnd,
+                        this);
     enable_session_callbacks();
   }
 

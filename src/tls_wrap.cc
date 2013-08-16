@@ -65,9 +65,6 @@ static Cached<String> fingerprint_sym;
 static Cached<String> name_sym;
 static Cached<String> version_sym;
 static Cached<String> ext_key_usage_sym;
-static Cached<String> sessionid_sym;
-static Cached<String> tls_ticket_sym;
-static Cached<String> servername_sym;
 static Cached<String> sni_context_sym;
 
 static Persistent<Function> tlsWrap;
@@ -256,7 +253,7 @@ void TLSCallbacks::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
   if (where & SSL_CB_HANDSHAKE_START) {
     HandleScope scope(node_isolate);
     TLSCallbacks* c = static_cast<TLSCallbacks*>(SSL_get_app_data(ssl));
-    Local<Object> object = c->object();
+    Local<Object> object = c->object(node_isolate);
     if (object->Has(onhandshakestart_sym))
       MakeCallback(object, onhandshakestart_sym, 0, NULL);
   }
@@ -264,7 +261,7 @@ void TLSCallbacks::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
     HandleScope scope(node_isolate);
     TLSCallbacks* c = static_cast<TLSCallbacks*>(SSL_get_app_data(ssl));
     c->established_ = true;
-    Local<Object> object = c->object();
+    Local<Object> object = c->object(node_isolate);
     if (object->Has(onhandshakedone_sym))
       MakeCallback(object, onhandshakedone_sym, 0, NULL);
   }
@@ -327,7 +324,7 @@ void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
     Local<Value> arg = String::Concat(
         FIXED_ONE_BYTE_STRING(node_isolate, "write cb error, status: "),
         Integer::New(status, node_isolate)->ToString());
-    MakeCallback(callbacks->object(), onerror_sym, 1, &arg);
+    MakeCallback(callbacks->object(node_isolate), onerror_sym, 1, &arg);
     callbacks->InvokeQueued(status);
     return;
   }
@@ -403,7 +400,7 @@ void TLSCallbacks::ClearOut() {
     Handle<Value> argv = GetSSLError(read, &err);
 
     if (!argv.IsEmpty())
-      MakeCallback(object(), onerror_sym, 1, &argv);
+      MakeCallback(object(node_isolate), onerror_sym, 1, &argv);
   }
 }
 
@@ -436,7 +433,7 @@ bool TLSCallbacks::ClearIn() {
   int err;
   Handle<Value> argv = GetSSLError(written, &err);
   if (!argv.IsEmpty())
-    MakeCallback(object(), onerror_sym, 1, &argv);
+    MakeCallback(object(node_isolate), onerror_sym, 1, &argv);
 
   return false;
 }
@@ -498,7 +495,7 @@ int TLSCallbacks::DoWrite(WriteWrap* w,
     int err;
     Handle<Value> argv = GetSSLError(written, &err);
     if (!argv.IsEmpty()) {
-      MakeCallback(object(), onerror_sym, 1, &argv);
+      MakeCallback(object(node_isolate), onerror_sym, 1, &argv);
       return -1;
     }
 
@@ -615,33 +612,9 @@ void TLSCallbacks::EnableHelloParser(const FunctionCallbackInfo<Value>& args) {
   TLSCallbacks* wrap;
   NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
 
-  wrap->hello_parser_.Start(OnClientHello, OnClientHelloParseEnd, wrap);
-}
-
-
-void TLSCallbacks::OnClientHello(void* arg,
-                                 const ClientHelloParser::ClientHello& hello) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* c = static_cast<TLSCallbacks*>(arg);
-
-  Local<Object> hello_obj = Object::New();
-  Local<Object> buff = Buffer::New(
-      reinterpret_cast<const char*>(hello.session_id()),
-                                    hello.session_size());
-  hello_obj->Set(sessionid_sym, buff);
-  if (hello.servername() == NULL) {
-    hello_obj->Set(servername_sym, String::Empty(node_isolate));
-  } else {
-    Local<String> servername = OneByteString(node_isolate,
-                                             hello.servername(),
-                                             hello.servername_size());
-    hello_obj->Set(servername_sym, servername);
-  }
-  hello_obj->Set(tls_ticket_sym, Boolean::New(hello.has_ticket()));
-
-  Handle<Value> argv[1] = { hello_obj };
-  MakeCallback(c->object(), onclienthello_sym, 1, argv);
+  wrap->hello_parser_.Start(SSLWrap<TLSCallbacks>::OnClientHello,
+                            OnClientHelloParseEnd,
+                            wrap);
 }
 
 
@@ -812,7 +785,7 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
 
   if (servername != NULL) {
     // Call the SNI callback and use its return value as context
-    Local<Object> object = p->object();
+    Local<Object> object = p->object(node_isolate);
     Local<Value> ctx;
     if (object->Has(sni_context_sym)) {
       ctx = object->Get(sni_context_sym);
@@ -883,9 +856,6 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
   name_sym = FIXED_ONE_BYTE_STRING(node_isolate, "name");
   version_sym = FIXED_ONE_BYTE_STRING(node_isolate, "version");
   ext_key_usage_sym = FIXED_ONE_BYTE_STRING(node_isolate, "ext_key_usage");
-  sessionid_sym = FIXED_ONE_BYTE_STRING(node_isolate, "sessionId");
-  tls_ticket_sym = FIXED_ONE_BYTE_STRING(node_isolate, "tlsTicket");
-  servername_sym = FIXED_ONE_BYTE_STRING(node_isolate, "servername");
   sni_context_sym = FIXED_ONE_BYTE_STRING(node_isolate, "sni_context");
 }
 
