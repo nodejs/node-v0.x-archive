@@ -49,8 +49,9 @@
 namespace node {
 namespace crypto {
 
-static X509_STORE* root_cert_store;
 extern int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx);
+
+static X509_STORE* root_cert_store;
 
 // Forward declaration
 class Connection;

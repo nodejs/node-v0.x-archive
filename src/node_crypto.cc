@@ -873,10 +873,12 @@ void SSLWrap<Base>::GetPeerCertificate(
       (void) BIO_reset(bio);
     }
 
-    EVP_PKEY *pkey = NULL;
-    RSA *rsa = NULL;
-    if (NULL != (pkey = X509_get_pubkey(peer_cert)) &&
-        NULL != (rsa = EVP_PKEY_get1_RSA(pkey))) {
+    EVP_PKEY* pkey = X509_get_pubkey(peer_cert);
+    RSA* rsa = NULL;
+    if (pkey != NULL)
+      rsa = EVP_PKEY_get1_RSA(pkey);
+
+    if (rsa != NULL) {
         BN_print(bio, rsa->n);
         BIO_get_mem_ptr(bio, &mem);
         info->Set(modulus_symbol,
@@ -932,8 +934,8 @@ void SSLWrap<Base>::GetPeerCertificate(
       info->Set(fingerprint_symbol, OneByteString(node_isolate, fingerprint));
     }
 
-    STACK_OF(ASN1_OBJECT) *eku = (STACK_OF(ASN1_OBJECT) *)X509_get_ext_d2i(
-        peer_cert, NID_ext_key_usage, NULL, NULL);
+    STACK_OF(ASN1_OBJECT)* eku = reinterpret_cast<STACK_OF(ASN1_OBJECT)*>(
+        X509_get_ext_d2i(peer_cert, NID_ext_key_usage, NULL, NULL));
     if (eku != NULL) {
       Local<Array> ext_key_usage = Array::New();
       char buf[256];
@@ -962,7 +964,7 @@ void SSLWrap<Base>::GetSession(const FunctionCallbackInfo<Value>& args) {
   Base* w = ObjectWrap::Unwrap<Base>(args.This());
 
   SSL_SESSION* sess = SSL_get_session(w->ssl_);
-  if (!sess)
+  if (sess == NULL)
     return;
 
   int slen = i2d_SSL_SESSION(sess, NULL);
@@ -1003,7 +1005,7 @@ void SSLWrap<Base>::SetSession(const FunctionCallbackInfo<Value>& args) {
 
   delete[] sbuf;
 
-  if (!sess)
+  if (sess == NULL)
     return;
 
   int r = SSL_set_session(w->ssl_, sess);
@@ -1048,12 +1050,12 @@ void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
 
   Base* w = ObjectWrap::Unwrap<Base>(args.This());
 
-  // XXX Do this check in JS land?
+  // XXX(indutny) Do this check in JS land?
   X509* peer_cert = SSL_get_peer_certificate(w->ssl_);
   if (peer_cert == NULL) {
     // We requested a certificate and they did not send us one.
     // Definitely an error.
-    // XXX is this the right error message?
+    // XXX(indutny) is this the right error message?
     Local<String> s =
         FIXED_ONE_BYTE_STRING(node_isolate, "UNABLE_TO_GET_ISSUER_CERT");
     return args.GetReturnValue().Set(Exception::Error(s));
@@ -1065,39 +1067,39 @@ void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
   const char* reason = NULL;
   Local<String> s;
   switch (x509_verify_error) {
-  case X509_V_OK:
-    return args.GetReturnValue().SetNull();
-  CASE_X509_ERR(UNABLE_TO_GET_ISSUER_CERT)
-  CASE_X509_ERR(UNABLE_TO_GET_CRL)
-  CASE_X509_ERR(UNABLE_TO_DECRYPT_CERT_SIGNATURE)
-  CASE_X509_ERR(UNABLE_TO_DECRYPT_CRL_SIGNATURE)
-  CASE_X509_ERR(UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY)
-  CASE_X509_ERR(CERT_SIGNATURE_FAILURE)
-  CASE_X509_ERR(CRL_SIGNATURE_FAILURE)
-  CASE_X509_ERR(CERT_NOT_YET_VALID)
-  CASE_X509_ERR(CERT_HAS_EXPIRED)
-  CASE_X509_ERR(CRL_NOT_YET_VALID)
-  CASE_X509_ERR(CRL_HAS_EXPIRED)
-  CASE_X509_ERR(ERROR_IN_CERT_NOT_BEFORE_FIELD)
-  CASE_X509_ERR(ERROR_IN_CERT_NOT_AFTER_FIELD)
-  CASE_X509_ERR(ERROR_IN_CRL_LAST_UPDATE_FIELD)
-  CASE_X509_ERR(ERROR_IN_CRL_NEXT_UPDATE_FIELD)
-  CASE_X509_ERR(OUT_OF_MEM)
-  CASE_X509_ERR(DEPTH_ZERO_SELF_SIGNED_CERT)
-  CASE_X509_ERR(SELF_SIGNED_CERT_IN_CHAIN)
-  CASE_X509_ERR(UNABLE_TO_GET_ISSUER_CERT_LOCALLY)
-  CASE_X509_ERR(UNABLE_TO_VERIFY_LEAF_SIGNATURE)
-  CASE_X509_ERR(CERT_CHAIN_TOO_LONG)
-  CASE_X509_ERR(CERT_REVOKED)
-  CASE_X509_ERR(INVALID_CA)
-  CASE_X509_ERR(PATH_LENGTH_EXCEEDED)
-  CASE_X509_ERR(INVALID_PURPOSE)
-  CASE_X509_ERR(CERT_UNTRUSTED)
-  CASE_X509_ERR(CERT_REJECTED)
-  default:
-    s = OneByteString(node_isolate,
-                      X509_verify_cert_error_string(x509_verify_error));
-    break;
+    case X509_V_OK:
+      return args.GetReturnValue().SetNull();
+    CASE_X509_ERR(UNABLE_TO_GET_ISSUER_CERT)
+    CASE_X509_ERR(UNABLE_TO_GET_CRL)
+    CASE_X509_ERR(UNABLE_TO_DECRYPT_CERT_SIGNATURE)
+    CASE_X509_ERR(UNABLE_TO_DECRYPT_CRL_SIGNATURE)
+    CASE_X509_ERR(UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY)
+    CASE_X509_ERR(CERT_SIGNATURE_FAILURE)
+    CASE_X509_ERR(CRL_SIGNATURE_FAILURE)
+    CASE_X509_ERR(CERT_NOT_YET_VALID)
+    CASE_X509_ERR(CERT_HAS_EXPIRED)
+    CASE_X509_ERR(CRL_NOT_YET_VALID)
+    CASE_X509_ERR(CRL_HAS_EXPIRED)
+    CASE_X509_ERR(ERROR_IN_CERT_NOT_BEFORE_FIELD)
+    CASE_X509_ERR(ERROR_IN_CERT_NOT_AFTER_FIELD)
+    CASE_X509_ERR(ERROR_IN_CRL_LAST_UPDATE_FIELD)
+    CASE_X509_ERR(ERROR_IN_CRL_NEXT_UPDATE_FIELD)
+    CASE_X509_ERR(OUT_OF_MEM)
+    CASE_X509_ERR(DEPTH_ZERO_SELF_SIGNED_CERT)
+    CASE_X509_ERR(SELF_SIGNED_CERT_IN_CHAIN)
+    CASE_X509_ERR(UNABLE_TO_GET_ISSUER_CERT_LOCALLY)
+    CASE_X509_ERR(UNABLE_TO_VERIFY_LEAF_SIGNATURE)
+    CASE_X509_ERR(CERT_CHAIN_TOO_LONG)
+    CASE_X509_ERR(CERT_REVOKED)
+    CASE_X509_ERR(INVALID_CA)
+    CASE_X509_ERR(PATH_LENGTH_EXCEEDED)
+    CASE_X509_ERR(INVALID_PURPOSE)
+    CASE_X509_ERR(CERT_UNTRUSTED)
+    CASE_X509_ERR(CERT_REJECTED)
+    default:
+      s = OneByteString(node_isolate,
+                        X509_verify_cert_error_string(x509_verify_error));
+      break;
   }
 
   if (s.IsEmpty())

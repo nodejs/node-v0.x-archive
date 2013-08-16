@@ -40,9 +40,8 @@ namespace crypto {
   class SecureContext;
 }
 
-using crypto::SSLWrap;
-
-class TLSCallbacks : public SSLWrap<TLSCallbacks>, public StreamWrapCallbacks {
+class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
+                     public StreamWrapCallbacks {
  public:
   enum Kind {
     kTLSClient,
