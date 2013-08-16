@@ -130,6 +130,19 @@ template int SSLWrap<TLSCallbacks>::NewSessionCallback(SSL* s,
 template void SSLWrap<TLSCallbacks>::OnClientHello(
     void* arg,
     const ClientHelloParser::ClientHello& hello);
+template int SSLWrap<TLSCallbacks>::AdvertiseNextProtoCallback(
+    SSL* s,
+    const unsigned char** data,
+    unsigned int* len,
+    void* arg);
+template int SSLWrap<TLSCallbacks>::SelectNextProtoCallback(
+    SSL* s,
+    unsigned char** out,
+    unsigned char* outlen,
+    const unsigned char* in,
+    unsigned int inlen,
+    void* arg);
+
 
 static void crypto_threadid_cb(CRYPTO_THREADID* tid) {
   CRYPTO_THREADID_set_numeric(tid, uv_thread_self());
@@ -789,6 +802,11 @@ void SSLWrap<Base>::AddMethods(Handle<FunctionTemplate> t) {
   NODE_SET_PROTOTYPE_METHOD(t, "getCurrentCipher", GetCurrentCipher);
   NODE_SET_PROTOTYPE_METHOD(t, "receivedShutdown", ReceivedShutdown);
   NODE_SET_PROTOTYPE_METHOD(t, "endParser", EndParser);
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+  NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", GetNegotiatedProto);
+  NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", SetNPNProtocols);
+#endif  // OPENSSL_NPN_NEGOTIATED
 }
 
 
@@ -1229,6 +1247,121 @@ void SSLWrap<Base>::GetCurrentCipher(const FunctionCallbackInfo<Value>& args) {
 }
 
 
+#ifdef OPENSSL_NPN_NEGOTIATED
+template <class Base>
+int SSLWrap<Base>::AdvertiseNextProtoCallback(SSL* s,
+                                              const unsigned char** data,
+                                              unsigned int* len,
+                                              void* arg) {
+  Base* w = static_cast<Base*>(arg);
+
+  if (w->npn_protos_.IsEmpty()) {
+    // No initialization - no NPN protocols
+    *data = reinterpret_cast<const unsigned char*>("");
+    *len = 0;
+  } else {
+    Local<Object> obj = PersistentToLocal(node_isolate, w->npn_protos_);
+    *data = reinterpret_cast<const unsigned char*>(Buffer::Data(obj));
+    *len = Buffer::Length(obj);
+  }
+
+  return SSL_TLSEXT_ERR_OK;
+}
+
+
+template <class Base>
+int SSLWrap<Base>::SelectNextProtoCallback(SSL* s,
+                                           unsigned char** out,
+                                           unsigned char* outlen,
+                                           const unsigned char* in,
+                                           unsigned int inlen,
+                                           void* arg) {
+  Base* w = static_cast<Base*>(arg);
+
+  // Release old protocol handler if present
+  w->selected_npn_proto_.Dispose();
+
+  if (w->npn_protos_.IsEmpty()) {
+    // We should at least select one protocol
+    // If server is using NPN
+    *out = reinterpret_cast<unsigned char*>(const_cast<char*>("http/1.1"));
+    *outlen = 8;
+
+    // set status: unsupported
+    w->selected_npn_proto_.Reset(node_isolate, False(node_isolate));
+
+    return SSL_TLSEXT_ERR_OK;
+  }
+
+  Local<Object> obj = PersistentToLocal(node_isolate, w->npn_protos_);
+  const unsigned char* npn_protos =
+      reinterpret_cast<const unsigned char*>(Buffer::Data(obj));
+  size_t len = Buffer::Length(obj);
+
+  int status = SSL_select_next_proto(out, outlen, in, inlen, npn_protos, len);
+  Handle<Value> result;
+  switch (status) {
+    case OPENSSL_NPN_UNSUPPORTED:
+      result = Null(node_isolate);
+      break;
+    case OPENSSL_NPN_NEGOTIATED:
+      result = OneByteString(node_isolate, *out, *outlen);
+      break;
+    case OPENSSL_NPN_NO_OVERLAP:
+      result = False(node_isolate);
+      break;
+    default:
+      break;
+  }
+
+  if (!result.IsEmpty())
+    w->selected_npn_proto_.Reset(node_isolate, result);
+
+  return SSL_TLSEXT_ERR_OK;
+}
+
+
+template <class Base>
+void SSLWrap<Base>::GetNegotiatedProto(
+    const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  Base* w = ObjectWrap::Unwrap<Base>(args.This());
+
+  if (w->is_client()) {
+    if (w->selected_npn_proto_.IsEmpty() == false) {
+      args.GetReturnValue().Set(w->selected_npn_proto_);
+    }
+    return;
+  }
+
+  const unsigned char* npn_proto;
+  unsigned int npn_proto_len;
+
+  SSL_get0_next_proto_negotiated(w->ssl_, &npn_proto, &npn_proto_len);
+
+  if (!npn_proto)
+    return args.GetReturnValue().Set(false);
+
+  args.GetReturnValue().Set(
+      OneByteString(node_isolate, npn_proto, npn_proto_len));
+}
+
+
+template <class Base>
+void SSLWrap<Base>::SetNPNProtocols(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  Base* w = ObjectWrap::Unwrap<Base>(args.This());
+
+  if (args.Length() < 1 || !Buffer::HasInstance(args[0]))
+    return ThrowTypeError("Must give a Buffer as first argument");
+
+  w->npn_protos_.Reset(node_isolate, args[0].As<Object>());
+}
+#endif  // OPENSSL_NPN_NEGOTIATED
+
+
 void Connection::OnClientHelloParseEnd(void* arg) {
   Connection* conn = static_cast<Connection*>(arg);
 
@@ -1465,75 +1598,6 @@ int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx) {
   return 1;
 }
 
-#ifdef OPENSSL_NPN_NEGOTIATED
-
-int Connection::AdvertiseNextProtoCallback_(SSL *s,
-                                            const unsigned char** data,
-                                            unsigned int *len,
-                                            void *arg) {
-  Connection* conn = static_cast<Connection*>(SSL_get_app_data(s));
-
-  if (conn->npnProtos_.IsEmpty()) {
-    // No initialization - no NPN protocols
-    *data = reinterpret_cast<const unsigned char*>("");
-    *len = 0;
-  } else {
-    Local<Object> obj = PersistentToLocal(node_isolate, conn->npnProtos_);
-    *data = reinterpret_cast<const unsigned char*>(Buffer::Data(obj));
-    *len = Buffer::Length(obj);
-  }
-
-  return SSL_TLSEXT_ERR_OK;
-}
-
-int Connection::SelectNextProtoCallback_(SSL *s,
-                             unsigned char** out, unsigned char* outlen,
-                             const unsigned char* in,
-                             unsigned int inlen, void *arg) {
-  Connection* conn = static_cast<Connection*>(SSL_get_app_data(s));
-
-  // Release old protocol handler if present
-  conn->selectedNPNProto_.Dispose();
-
-  if (conn->npnProtos_.IsEmpty()) {
-    // We should at least select one protocol
-    // If server is using NPN
-    *out = reinterpret_cast<unsigned char*>(const_cast<char*>("http/1.1"));
-    *outlen = 8;
-
-    // set status unsupported
-    conn->selectedNPNProto_.Reset(node_isolate, False(node_isolate));
-
-    return SSL_TLSEXT_ERR_OK;
-  }
-
-  Local<Object> obj = PersistentToLocal(node_isolate, conn->npnProtos_);
-  const unsigned char* npnProtos =
-      reinterpret_cast<const unsigned char*>(Buffer::Data(obj));
-
-  int status = SSL_select_next_proto(out, outlen, in, inlen, npnProtos,
-                                     Buffer::Length(obj));
-
-  switch (status) {
-    case OPENSSL_NPN_UNSUPPORTED:
-      conn->selectedNPNProto_.Reset(node_isolate, Null(node_isolate));
-      break;
-    case OPENSSL_NPN_NEGOTIATED:
-      {
-        Local<String> string = OneByteString(node_isolate, *out, *outlen);
-        conn->selectedNPNProto_.Reset(node_isolate, string);
-        break;
-      }
-    case OPENSSL_NPN_NO_OVERLAP:
-      conn->selectedNPNProto_.Reset(node_isolate, False(node_isolate));
-      break;
-    default:
-      break;
-  }
-
-  return SSL_TLSEXT_ERR_OK;
-}
-#endif
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
@@ -1578,10 +1642,12 @@ void Connection::New(const FunctionCallbackInfo<Value>& args) {
 
   SecureContext* sc = ObjectWrap::Unwrap<SecureContext>(args[0]->ToObject());
 
-  Connection* conn = new Connection(sc);
-  conn->Wrap(args.This());
-
   bool is_server = args[1]->BooleanValue();
+
+  Connection* conn = new Connection(
+      sc,
+      is_server ? SSLWrap<Connection>::kServer : SSLWrap<Connection>::kClient);
+  conn->Wrap(args.This());
 
   conn->ssl_ = SSL_new(sc->ctx_);
   conn->bio_read_ = BIO_new(NodeBIO::GetMethod());
@@ -1589,20 +1655,23 @@ void Connection::New(const FunctionCallbackInfo<Value>& args) {
 
   SSL_set_app_data(conn->ssl_, conn);
 
-  if (is_server) SSL_set_info_callback(conn->ssl_, SSLInfoCallback);
+  if (is_server)
+    SSL_set_info_callback(conn->ssl_, SSLInfoCallback);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   if (is_server) {
     // Server should advertise NPN protocols
-    SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
-                                          AdvertiseNextProtoCallback_,
-                                          NULL);
+    SSL_CTX_set_next_protos_advertised_cb(
+        sc->ctx_,
+        SSLWrap<Connection>::AdvertiseNextProtoCallback,
+        NULL);
   } else {
     // Client should select protocol from advertised
     // If server supports NPN
-    SSL_CTX_set_next_proto_select_cb(sc->ctx_,
-                                     SelectNextProtoCallback_,
-                                     NULL);
+    SSL_CTX_set_next_proto_select_cb(
+        sc->ctx_,
+        SSLWrap<Connection>::SelectNextProtoCallback,
+        NULL);
   }
 #endif
 
@@ -1643,7 +1712,7 @@ void Connection::New(const FunctionCallbackInfo<Value>& args) {
   // Always allow a connection. We'll reject in javascript.
   SSL_set_verify(conn->ssl_, verify_mode, VerifyCallback);
 
-  if ((conn->is_server_ = is_server)) {
+  if (is_server) {
     SSL_set_accept_state(conn->ssl_);
   } else {
     SSL_set_connect_state(conn->ssl_);
@@ -1701,7 +1770,7 @@ void Connection::EncIn(const FunctionCallbackInfo<Value>& args) {
   int bytes_written;
   char* data = buffer_data + off;
 
-  if (conn->is_server_ && !conn->hello_parser_.IsEnded()) {
+  if (conn->is_server() && !conn->hello_parser_.IsEnded()) {
     // Just accumulate data, everything will be pushed to BIO later
     if (conn->hello_parser_.IsPaused()) {
       bytes_written = 0;
@@ -1751,7 +1820,7 @@ void Connection::ClearOut(const FunctionCallbackInfo<Value>& args) {
   if (!SSL_is_init_finished(conn->ssl_)) {
     int rv;
 
-    if (conn->is_server_) {
+    if (conn->is_server()) {
       rv = SSL_accept(conn->ssl_);
       conn->HandleSSLError("SSL_accept:ClearOut",
                            rv,
@@ -1852,7 +1921,7 @@ void Connection::ClearIn(const FunctionCallbackInfo<Value>& args) {
 
   if (!SSL_is_init_finished(conn->ssl_)) {
     int rv;
-    if (conn->is_server_) {
+    if (conn->is_server()) {
       rv = SSL_accept(conn->ssl_);
       conn->HandleSSLError("SSL_accept:ClearIn",
                            rv,
@@ -1890,7 +1959,7 @@ void Connection::Start(const FunctionCallbackInfo<Value>& args) {
 
   int rv = 0;
   if (!SSL_is_init_finished(conn->ssl_)) {
-    if (conn->is_server_) {
+    if (conn->is_server()) {
       rv = SSL_accept(conn->ssl_);
       conn->HandleSSLError("SSL_accept:Start",
                            rv,
@@ -1936,51 +2005,13 @@ void Connection::Close(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-#ifdef OPENSSL_NPN_NEGOTIATED
-void Connection::GetNegotiatedProto(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  Connection* conn = Connection::Unwrap(args.This());
-
-  if (conn->is_server_) {
-    const unsigned char* npn_proto;
-    unsigned int npn_proto_len;
-
-    SSL_get0_next_proto_negotiated(conn->ssl_, &npn_proto, &npn_proto_len);
-
-    if (!npn_proto) {
-      return args.GetReturnValue().Set(false);
-    }
-
-    args.GetReturnValue().Set(
-        OneByteString(node_isolate, npn_proto, npn_proto_len));
-  } else {
-    args.GetReturnValue().Set(conn->selectedNPNProto_);
-  }
-}
-
-
-void Connection::SetNPNProtocols(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  Connection* conn = Connection::Unwrap(args.This());
-
-  if (args.Length() < 1 || !Buffer::HasInstance(args[0])) {
-    return ThrowError("Must give a Buffer as first argument");
-  }
-
-  conn->npnProtos_.Reset(node_isolate, args[0].As<Object>());
-}
-#endif
-
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 void Connection::GetServername(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   Connection* conn = Connection::Unwrap(args.This());
 
-  if (conn->is_server_ && !conn->servername_.IsEmpty()) {
+  if (conn->is_server() && !conn->servername_.IsEmpty()) {
     args.GetReturnValue().Set(conn->servername_);
   } else {
     args.GetReturnValue().Set(false);

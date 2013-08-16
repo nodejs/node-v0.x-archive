@@ -118,8 +118,14 @@ class SecureContext : ObjectWrap {
 template <class Base>
 class SSLWrap {
  public:
-  explicit SSLWrap(SecureContext* sc) : next_sess_(NULL),
-                                        session_callbacks_(false) {
+  enum Kind {
+    kClient,
+    kServer
+  };
+
+  SSLWrap(SecureContext* sc, Kind kind) : kind_(kind),
+                                          next_sess_(NULL),
+                                          session_callbacks_(false) {
     ssl_ = SSL_new(sc->ctx_);
     assert(ssl_ != NULL);
   }
@@ -133,10 +139,17 @@ class SSLWrap {
       SSL_SESSION_free(next_sess_);
       next_sess_ = NULL;
     }
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+    npn_protos_.Dispose();
+    selected_npn_proto_.Dispose();
+#endif
   }
 
   inline SSL* ssl() const { return ssl_; }
   inline void enable_session_callbacks() { session_callbacks_ = true; }
+  inline bool is_server() const { return kind_ == kServer; }
+  inline bool is_client() const { return kind_ == kClient; }
 
  protected:
   static void AddMethods(v8::Handle<v8::FunctionTemplate> t);
@@ -161,10 +174,32 @@ class SSLWrap {
   static void ReceivedShutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EndParser(const v8::FunctionCallbackInfo<v8::Value>& args);
 
+#ifdef OPENSSL_NPN_NEGOTIATED
+  static void GetNegotiatedProto(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetNPNProtocols(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static int AdvertiseNextProtoCallback(SSL* s,
+                                        const unsigned char** data,
+                                        unsigned int* len,
+                                        void* arg);
+  static int SelectNextProtoCallback(SSL* s,
+                                     unsigned char** out,
+                                     unsigned char* outlen,
+                                     const unsigned char* in,
+                                     unsigned int inlen,
+                                     void* arg);
+#endif  // OPENSSL_NPN_NEGOTIATED
+
+  Kind kind_;
   SSL_SESSION* next_sess_;
   SSL* ssl_;
   bool session_callbacks_;
   ClientHelloParser hello_parser_;
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+  v8::Persistent<v8::Object> npn_protos_;
+  v8::Persistent<v8::Value> selected_npn_proto_;
+#endif  // OPENSSL_NPN_NEGOTIATED
 
   friend class SecureContext;
 };
@@ -195,23 +230,6 @@ class Connection : public SSLWrap<Connection>, public ObjectWrap {
   static void Shutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-  // NPN
-  static void GetNegotiatedProto(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void SetNPNProtocols(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static int AdvertiseNextProtoCallback_(SSL* s,
-                                         const unsigned char** data,
-                                         unsigned int* len,
-                                         void* arg);
-  static int SelectNextProtoCallback_(SSL* s,
-                                      unsigned char** out,
-                                      unsigned char* outlen,
-                                      const unsigned char* in,
-                                      unsigned int inlen,
-                                      void* arg);
-#endif
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   // SNI
@@ -245,8 +263,9 @@ class Connection : public SSLWrap<Connection>, public ObjectWrap {
     return conn;
   }
 
-  explicit Connection(SecureContext* sc) : SSLWrap<Connection>(sc),
-                                           hello_offset_(0) {
+  Connection(SecureContext* sc, SSLWrap::Kind kind)
+      : SSLWrap<Connection>(sc, kind),
+        hello_offset_(0) {
     bio_read_ = bio_write_ = NULL;
     ssl_ = NULL;
     hello_parser_.Start(SSLWrap<Connection>::OnClientHello,
@@ -261,11 +280,6 @@ class Connection : public SSLWrap<Connection>, public ObjectWrap {
       ssl_ = NULL;
     }
 
-#ifdef OPENSSL_NPN_NEGOTIATED
-    npnProtos_.Dispose();
-    selectedNPNProto_.Dispose();
-#endif
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
     sniObject_.Dispose();
     sniContext_.Dispose();
@@ -278,8 +292,6 @@ class Connection : public SSLWrap<Connection>, public ObjectWrap {
 
   BIO *bio_read_;
   BIO *bio_write_;
-
-  bool is_server_; /* coverity[member_decl] */
 
   uint8_t hello_data_[18432];
   size_t hello_offset_;

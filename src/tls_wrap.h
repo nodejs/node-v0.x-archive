@@ -42,11 +42,6 @@ namespace crypto {
 class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
                      public StreamWrapCallbacks {
  public:
-  enum Kind {
-    kTLSClient,
-    kTLSServer
-  };
-
   static void Initialize(v8::Handle<v8::Object> target);
 
   int DoWrite(WriteWrap* w,
@@ -117,22 +112,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   static void EnableHelloParser(
       const v8::FunctionCallbackInfo<v8::Value>& args);
 
-#ifdef OPENSSL_NPN_NEGOTIATED
-  static void GetNegotiatedProto(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void SetNPNProtocols(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static int AdvertiseNextProtoCallback(SSL* s,
-                                        const unsigned char** data,
-                                        unsigned int* len,
-                                        void* arg);
-  static int SelectNextProtoCallback(SSL* s,
-                                     unsigned char** out,
-                                     unsigned char* outlen,
-                                     const unsigned char* in,
-                                     unsigned int inlen,
-                                     void* arg);
-#endif  // OPENSSL_NPN_NEGOTIATED
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   static void GetServername(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetServername(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -147,7 +126,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
     return object_;
   }
 
-  Kind kind_;
   crypto::SecureContext* sc_;
   v8::Persistent<v8::Object> sc_handle_;
   v8::Persistent<v8::Object> object_;
@@ -162,11 +140,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   bool started_;
   bool established_;
   bool shutdown_;
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-  v8::Persistent<v8::Object> npn_protos_;
-  v8::Persistent<v8::Value> selected_npn_proto_;
-#endif  // OPENSSL_NPN_NEGOTIATED
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   v8::Persistent<v8::Value> sni_context_;

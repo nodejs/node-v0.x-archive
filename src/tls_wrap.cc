@@ -78,9 +78,8 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
 TLSCallbacks::TLSCallbacks(Kind kind,
                            Handle<Object> sc,
                            StreamWrapCallbacks* old)
-    : SSLWrap<TLSCallbacks>(ObjectWrap::Unwrap<SecureContext>(sc)),
+    : SSLWrap<TLSCallbacks>(ObjectWrap::Unwrap<SecureContext>(sc), kind),
       StreamWrapCallbacks(old),
-      kind_(kind),
       enc_in_(NULL),
       enc_out_(NULL),
       clear_in_(NULL),
@@ -118,11 +117,6 @@ TLSCallbacks::~TLSCallbacks() {
   sc_ = NULL;
   sc_handle_.Dispose();
   persistent().Dispose();
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-  npn_protos_.Dispose();
-  selected_npn_proto_.Dispose();
-#endif  // OPENSSL_NPN_NEGOTIATED
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   sni_context_.Dispose();
@@ -167,29 +161,31 @@ void TLSCallbacks::InitSSL() {
   SSL_set_app_data(ssl_, this);
   SSL_set_info_callback(ssl_, SSLInfoCallback);
 
-  if (kind_ == kTLSServer) {
+  if (is_server()) {
     SSL_set_accept_state(ssl_);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
     // Server should advertise NPN protocols
-    SSL_CTX_set_next_protos_advertised_cb(sc_->ctx_,
-                                          AdvertiseNextProtoCallback,
-                                          this);
+    SSL_CTX_set_next_protos_advertised_cb(
+        sc_->ctx_,
+        SSLWrap<TLSCallbacks>::AdvertiseNextProtoCallback,
+        this);
 #endif  // OPENSSL_NPN_NEGOTIATED
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
     SSL_CTX_set_tlsext_servername_callback(sc_->ctx_, SelectSNIContextCallback);
     SSL_CTX_set_tlsext_servername_arg(sc_->ctx_, this);
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-  } else if (kind_ == kTLSClient) {
+  } else if (is_client()) {
     SSL_set_connect_state(ssl_);
 
 #ifdef OPENSSL_NPN_NEGOTIATED
     // Client should select protocol from list of advertised
     // If server supports NPN
-    SSL_CTX_set_next_proto_select_cb(sc_->ctx_,
-                                     SelectNextProtoCallback,
-                                     this);
+    SSL_CTX_set_next_proto_select_cb(
+        sc_->ctx_,
+        SSLWrap<TLSCallbacks>::SelectNextProtoCallback,
+        this);
 #endif  // OPENSSL_NPN_NEGOTIATED
   } else {
     // Unexpected
@@ -213,7 +209,8 @@ void TLSCallbacks::Wrap(const FunctionCallbackInfo<Value>& args) {
 
   Local<Object> stream = args[0].As<Object>();
   Local<Object> sc = args[1].As<Object>();
-  Kind kind = args[2]->IsTrue() ? kTLSServer : kTLSClient;
+  Kind kind = args[2]->IsTrue() ? SSLWrap<TLSCallbacks>::kServer :
+                                  SSLWrap<TLSCallbacks>::kClient;
 
   TLSCallbacks* callbacks = NULL;
   WITH_GENERIC_STREAM(stream, {
@@ -240,7 +237,7 @@ void TLSCallbacks::Start(const FunctionCallbackInfo<Value>& args) {
   wrap->started_ = true;
 
   // Send ClientHello handshake
-  assert(wrap->kind_ == kTLSClient);
+  assert(wrap->is_client());
   wrap->ClearOut();
   wrap->EncOut();
 }
@@ -574,7 +571,7 @@ void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
     return ThrowTypeError("Bad arguments, expected two booleans");
 
   int verify_mode;
-  if (wrap->kind_ == kTLSServer) {
+  if (wrap->is_server()) {
     bool request_cert = args[0]->IsTrue();
     if (!request_cert) {
       // Note reject_unauthorized ignored.
@@ -624,119 +621,6 @@ void TLSCallbacks::OnClientHelloParseEnd(void* arg) {
 }
 
 
-#ifdef OPENSSL_NPN_NEGOTIATED
-int TLSCallbacks::AdvertiseNextProtoCallback(SSL* s,
-                                             const unsigned char** data,
-                                             unsigned int* len,
-                                             void* arg) {
-  TLSCallbacks* p = static_cast<TLSCallbacks*>(arg);
-
-  if (p->npn_protos_.IsEmpty()) {
-    // No initialization - no NPN protocols
-    *data = reinterpret_cast<const unsigned char*>("");
-    *len = 0;
-  } else {
-    Local<Object> obj = PersistentToLocal(node_isolate, p->npn_protos_);
-    *data = reinterpret_cast<const unsigned char*>(Buffer::Data(obj));
-    *len = Buffer::Length(obj);
-  }
-
-  return SSL_TLSEXT_ERR_OK;
-}
-
-
-int TLSCallbacks::SelectNextProtoCallback(SSL* s,
-                                          unsigned char** out,
-                                          unsigned char* outlen,
-                                          const unsigned char* in,
-                                          unsigned int inlen,
-                                          void* arg) {
-  TLSCallbacks* p = static_cast<TLSCallbacks*>(arg);
-
-  // Release old protocol handler if present
-  p->selected_npn_proto_.Dispose();
-
-  if (p->npn_protos_.IsEmpty()) {
-    // We should at least select one protocol
-    // If server is using NPN
-    *out = reinterpret_cast<unsigned char*>(const_cast<char*>("http/1.1"));
-    *outlen = 8;
-
-    // set status: unsupported
-    p->selected_npn_proto_.Reset(node_isolate, False(node_isolate));
-
-    return SSL_TLSEXT_ERR_OK;
-  }
-
-  Local<Object> obj = PersistentToLocal(node_isolate, p->npn_protos_);
-  const unsigned char* npn_protos =
-      reinterpret_cast<const unsigned char*>(Buffer::Data(obj));
-  size_t len = Buffer::Length(obj);
-
-  int status = SSL_select_next_proto(out, outlen, in, inlen, npn_protos, len);
-  Handle<Value> result;
-  switch (status) {
-    case OPENSSL_NPN_UNSUPPORTED:
-      result = Null(node_isolate);
-      break;
-    case OPENSSL_NPN_NEGOTIATED:
-      result = OneByteString(node_isolate, *out, *outlen);
-      break;
-    case OPENSSL_NPN_NO_OVERLAP:
-      result = False(node_isolate);
-      break;
-    default:
-      break;
-  }
-
-  if (!result.IsEmpty())
-    p->selected_npn_proto_.Reset(node_isolate, result);
-
-  return SSL_TLSEXT_ERR_OK;
-}
-
-
-void TLSCallbacks::GetNegotiatedProto(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  if (wrap->kind_ == kTLSClient) {
-    if (wrap->selected_npn_proto_.IsEmpty() == false) {
-      args.GetReturnValue().Set(wrap->selected_npn_proto_);
-    }
-    return;
-  }
-
-  const unsigned char* npn_proto;
-  unsigned int npn_proto_len;
-
-  SSL_get0_next_proto_negotiated(wrap->ssl_, &npn_proto, &npn_proto_len);
-
-  if (!npn_proto) {
-    return args.GetReturnValue().Set(false);
-  }
-
-  args.GetReturnValue().Set(
-      OneByteString(node_isolate, npn_proto, npn_proto_len));
-}
-
-
-void TLSCallbacks::SetNPNProtocols(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
-
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
-
-  if (args.Length() < 1 || !Buffer::HasInstance(args[0]))
-    return ThrowTypeError("Must give a Buffer as first argument");
-
-  wrap->npn_protos_.Reset(node_isolate, args[0].As<Object>());
-}
-#endif  // OPENSSL_NPN_NEGOTIATED
-
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 void TLSCallbacks::GetServername(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
@@ -766,7 +650,7 @@ void TLSCallbacks::SetServername(const FunctionCallbackInfo<Value>& args) {
   if (wrap->started_)
     return ThrowError("Already started.");
 
-  if (wrap->kind_ != kTLSClient)
+  if (!wrap->is_client())
     return;
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
@@ -825,11 +709,6 @@ void TLSCallbacks::Initialize(Handle<Object> target) {
                             EnableHelloParser);
 
   SSLWrap<TLSCallbacks>::AddMethods(t);
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-  NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", GetNegotiatedProto);
-  NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", SetNPNProtocols);
-#endif  // OPENSSL_NPN_NEGOTIATED
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   NODE_SET_PROTOTYPE_METHOD(t, "getServername", GetServername);
