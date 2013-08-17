@@ -680,9 +680,10 @@ these objects you should use appropriate methods. For most
 general uses [getTime()][MDN-Date-getTime] will return
 the number of milliseconds elapsed since _1 January 1970
 00:00:00 UTC_ and this integer should be sufficient for
-any comparison, however there additional methods which can
-be used for displaying fuzzy information. More details can
-be found in the [MDN JavaScript Reference][MDN-Date] page.
+any comparison, however there are additional methods which
+can be used for displaying fuzzy information. More details
+can be found in the [MDN JavaScript Reference][MDN-Date]
+page.
 
 [MDN-Date]: https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Date
 [MDN-Date-getTime]: https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Date/getTime
