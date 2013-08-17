@@ -1,0 +1,6 @@
+bar:1
+invalid ?= 1
+         ^
+SyntaxError: Unexpected token =
+    at context.run (*test*message*vm_syntax_error.js:*:*)
+    at foo:1:1
