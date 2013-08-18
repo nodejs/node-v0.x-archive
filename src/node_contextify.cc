@@ -138,6 +138,8 @@ class ContextifyContext : ObjectWrap {
         = FIXED_ONE_BYTE_STRING(node_isolate, "ContextifyContext");
     ljs_tmpl->SetClassName(class_name);
     target->Set(class_name, ljs_tmpl->GetFunction());
+
+    NODE_SET_METHOD(target, "makeContext", MakeContext);
   }
 
 
@@ -152,9 +154,37 @@ class ContextifyContext : ObjectWrap {
   }
 
 
-  static bool InstanceOf(Local<Value> value) {
-    return !value.IsEmpty() &&
-        PersistentToLocal(node_isolate, js_tmpl)->HasInstance(value);
+  static void MakeContext(const FunctionCallbackInfo<Value>& args) {
+    Local<Object> sandbox = args[0].As<Object>();
+
+    Local<FunctionTemplate> ljs_tmpl = PersistentToLocal(node_isolate, js_tmpl);
+    Local<Value> constructor_args[] = { sandbox };
+    Local<Object> contextify_context_object =
+        ljs_tmpl->GetFunction()->NewInstance(1, constructor_args);
+
+    Local<String> hidden_name =
+        FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
+    sandbox->SetHiddenValue(hidden_name, contextify_context_object);
+  }
+
+
+  static const Local<Context> ContextFromContextifiedSandbox(
+      const Local<Object>& sandbox) {
+    Local<String> hidden_name =
+        FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
+    Local<Object> hidden_context =
+        sandbox->GetHiddenValue(hidden_name).As<Object>();
+
+    if (hidden_context.IsEmpty()) {
+      ThrowTypeError("sandbox argument must have been converted to a context.");
+      return Local<Context>();
+    }
+
+    ContextifyContext* ctx =
+        ObjectWrap::Unwrap<ContextifyContext>(hidden_context);
+    Persistent<Context> context;
+    context.Reset(node_isolate, ctx->context_);
+    return PersistentToLocal(node_isolate, context);
   }
 
 
@@ -287,78 +317,122 @@ class ContextifyScript : ObjectWrap {
   }
 
 
+  // args: code, [filename]
   static void New(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
+
+    if (!args.IsConstructCall()) {
+      return ThrowError("Must call vm.Script as a constructor.");
+    }
 
     ContextifyScript *contextify_script = new ContextifyScript();
     contextify_script->Wrap(args.Holder());
     Local<String> code = args[0]->ToString();
-    Local<String> filename = !args[1]->IsUndefined()
-        ? args[1]->ToString()
-        : FIXED_ONE_BYTE_STRING(node_isolate, "evalmachine.<anonymous>");
+    Local<String> filename = GetFilenameArg(args, 1);
 
     Local<Context> context = Context::GetCurrent();
     Context::Scope context_scope(context);
 
-    TryCatch trycatch;
+    TryCatch try_catch;
 
     Local<Script> v8_script = Script::New(code, filename);
 
     if (v8_script.IsEmpty()) {
-      trycatch.ReThrow();
+      DisplayExceptionLine(try_catch.Message());
+      try_catch.ReThrow();
       return;
     }
     contextify_script->script_.Reset(node_isolate, v8_script);
   }
 
 
+  static bool InstanceOf(const Local<Value>& value) {
+    return !value.IsEmpty() &&
+        PersistentToLocal(node_isolate, script_tmpl)->HasInstance(value);
+  }
+
+
+  // args: [timeout]
+  static void RunInThisContext(const FunctionCallbackInfo<Value>& args) {
+    HandleScope scope(node_isolate);
+
+    // Assemble arguments
+    TryCatch try_catch;
+    uint64_t timeout = GetTimeoutArg(args, 0);
+    if (try_catch.HasCaught()) {
+      try_catch.ReThrow();
+      return;
+    }
+
+    // Do the eval within this context
+    EvalMachine(timeout, args, try_catch);
+  }
+
+  // args: sandbox, [timeout]
   static void RunInContext(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
+
+    // Assemble arguments
+    TryCatch try_catch;
     if (!args[0]->IsObject()) {
       return ThrowTypeError("sandbox argument must be an object.");
     }
-    uint64_t timeout = GetTimeout(args, 1);
-
     Local<Object> sandbox = args[0].As<Object>();
-    Local<String> hidden_name =
-        FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
-    Local<Object> hidden_context =
-        sandbox->GetHiddenValue(hidden_name).As<Object>();
-    ContextifyContext* ctx =
-        ObjectWrap::Unwrap<ContextifyContext>(hidden_context);
-    Persistent<Context> context;
-    context.Reset(node_isolate, ctx->context_);
-    Local<Context> lcontext = PersistentToLocal(node_isolate, context);
-    Context::Scope context_scope(lcontext);
+    uint64_t timeout = GetTimeoutArg(args, 1);
+    if (try_catch.HasCaught()) {
+      try_catch.ReThrow();
+      return;
+    }
 
-    // Now that we've set up the current context to be the passed-in one, run
-    // the code in the current context ("this context").
-    RunInThisContextImpl(args, timeout);
+    // Get the context from the sandbox
+    Local<Context> context =
+        ContextifyContext::ContextFromContextifiedSandbox(sandbox);
+    if (try_catch.HasCaught()) {
+      try_catch.ReThrow();
+      return;
+    }
+
+    // Do the eval within the context
+    Context::Scope context_scope(context);
+    EvalMachine(timeout, args, try_catch);
   }
 
-  static int64_t GetTimeout(const FunctionCallbackInfo<Value>& args, int i) {
-    return !args[i]->IsUndefined() ? args[i]->IntegerValue() : 0;
-  }
+  static int64_t GetTimeoutArg(const FunctionCallbackInfo<Value>& args,
+                               const int i) {
+    if (args[i]->IsUndefined()) {
+      return 0;
+    }
 
-
-  static void RunInThisContext(const FunctionCallbackInfo<Value>& args) {
-    int64_t timeout = GetTimeout(args, 0);
-    RunInThisContextImpl(args, timeout);
-  }
-
-
-  static void RunInThisContextImpl(const FunctionCallbackInfo<Value>& args,
-                                   int64_t timeout) {
+    int64_t timeout = args[i]->IntegerValue();
     if (timeout < 0) {
-      return ThrowRangeError("timeout must be a positive number");
+      ThrowRangeError("timeout must be a positive number");
+    }
+    return timeout;
+  }
+
+
+  static Local<String> GetFilenameArg(const FunctionCallbackInfo<Value>& args,
+                                      const int i) {
+    return !args[i]->IsUndefined()
+        ? args[i]->ToString()
+        : FIXED_ONE_BYTE_STRING(node_isolate, "evalmachine.<anonymous>");
+  }
+
+
+  static void EvalMachine(const int64_t timeout,
+                          const FunctionCallbackInfo<Value>& args,
+                          TryCatch& try_catch) {
+    if (!ContextifyScript::InstanceOf(args.This())) {
+      return ThrowTypeError(
+          "Script methods can only be called on script instances.");
     }
 
     ContextifyScript* wrapped_script =
         ObjectWrap::Unwrap<ContextifyScript>(args.This());
     Local<Script> script = PersistentToLocal(node_isolate,
                                              wrapped_script->script_);
-    TryCatch try_catch;
     if (script.IsEmpty()) {
+      DisplayExceptionLine(try_catch.Message());
       try_catch.ReThrow();
       return;
     }
@@ -374,9 +448,11 @@ class ContextifyScript : ObjectWrap {
     if (try_catch.HasCaught() && try_catch.HasTerminated()) {
       V8::CancelTerminateExecution(args.GetIsolate());
       return ThrowError("Script execution timed out.");
-    } 
+    }
 
     if (result.IsEmpty()) {
+      // Error occurred during execution of the script.
+      DisplayExceptionLine(try_catch.Message());
       try_catch.ReThrow();
       return;
     }
@@ -391,17 +467,6 @@ class ContextifyScript : ObjectWrap {
 };
 
 
-static void AssociateContextifyContext(
-    const FunctionCallbackInfo<Value>& args) {
-
-  Local<Object> sandbox = args[0].As<Object>();
-  Local<Value> context = args[1];
-
-  Local<String> hidden_name =
-      FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
-  sandbox->SetHiddenValue(hidden_name, context);
-}
-
 Persistent<FunctionTemplate> ContextifyContext::js_tmpl;
 Persistent<FunctionTemplate> ContextifyContext::data_wrapper_tmpl;
 Persistent<Function> ContextifyContext::data_wrapper_ctor;
@@ -412,9 +477,6 @@ void InitContextify(Local<Object> target) {
   HandleScope scope(node_isolate);
   ContextifyContext::Init(target);
   ContextifyScript::Init(target);
-  NODE_SET_METHOD(target,
-                  "associateContextifyContext",
-                  AssociateContextifyContext);
 }
 
 }  // namespace node
