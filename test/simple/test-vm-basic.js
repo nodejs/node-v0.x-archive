@@ -57,7 +57,14 @@ assert.strictEqual(global.vmResult, 'foo');
 assert.strictEqual(result, '[object process]');
 delete global.vmResult;
 
-// Test 4: vm.createContext
+// Test 4: vm.runInNewContext
+var result = vm.runInNewContext(
+  'vmResult = "foo"; typeof process;'
+);
+assert.strictEqual(global.vmResult, undefined);
+assert.strictEqual(result, 'undefined');
+
+// Test 5: vm.createContext
 var sandbox3 = {};
 var context2 = vm.createContext(sandbox3);
 assert.strictEqual(sandbox3, context2);

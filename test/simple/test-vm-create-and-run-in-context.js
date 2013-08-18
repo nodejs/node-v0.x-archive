@@ -22,19 +22,19 @@
 var common = require('../common');
 var assert = require('assert');
 
-var Script = require('vm').Script;
+var vm = require('vm');
 
-common.debug('run in a new empty context');
-var context = Script.createContext();
-var result = Script.runInContext('"passed";', context);
+console.error('run in a new empty context');
+var context = vm.createContext();
+var result = vm.runInContext('"passed";', context);
 assert.equal('passed', result);
 
-common.debug('create a new pre-populated context');
-context = Script.createContext({'foo': 'bar', 'thing': 'lala'});
+console.error('create a new pre-populated context');
+context = vm.createContext({'foo': 'bar', 'thing': 'lala'});
 assert.equal('bar', context.foo);
 assert.equal('lala', context.thing);
 
-common.debug('test updating context');
-result = Script.runInContext('var foo = 3;', context);
+console.error('test updating context');
+result = vm.runInContext('var foo = 3;', context);
 assert.equal(3, context.foo);
 assert.equal('lala', context.thing);

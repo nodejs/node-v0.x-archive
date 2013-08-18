@@ -21,36 +21,42 @@
 
 var common = require('../common');
 var assert = require('assert');
-var Script = require('vm').Script;
+var vm = require('vm');
 
 common.globalCheck = false;
 
-common.debug('run a string');
-var result = Script.runInThisContext('\'passed\';');
+console.error('run a string');
+var result = vm.runInNewContext('\'passed\';');
 assert.equal('passed', result);
 
-common.debug('thrown error');
+console.error('thrown error');
 assert.throws(function() {
-  Script.runInThisContext('throw new Error(\'test\');');
+  vm.runInNewContext('throw new Error(\'test\');');
 });
 
 hello = 5;
-Script.runInThisContext('hello = 2');
-assert.equal(2, hello);
+vm.runInNewContext('hello = 2');
+assert.equal(5, hello);
 
 
-common.debug('pass values');
+console.error('pass values in and out');
 code = 'foo = 1;' +
        'bar = 2;' +
-       'if (typeof baz !== \'undefined\') throw new Error(\'test fail\');';
+       'if (baz !== 3) throw new Error(\'test fail\');';
 foo = 2;
 obj = { foo: 0, baz: 3 };
-var baz = Script.runInThisContext(code);
-assert.equal(0, obj.foo);
-assert.equal(2, bar);
-assert.equal(1, foo);
+var baz = vm.runInNewContext(code, obj);
+assert.equal(1, obj.foo);
+assert.equal(2, obj.bar);
+assert.equal(2, foo);
 
-common.debug('call a function');
-f = function() { foo = 100 };
-Script.runInThisContext('f()');
-assert.equal(100, foo);
+console.error('call a function by reference');
+function changeFoo() { foo = 100 }
+vm.runInNewContext('f()', { f: changeFoo });
+assert.equal(foo, 100);
+
+console.error('modify an object by reference');
+var f = { a: 1 };
+vm.runInNewContext('f.a = 2', { f: f });
+assert.equal(f.a, 2);
+
