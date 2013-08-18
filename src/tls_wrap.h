@@ -58,10 +58,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
 
   // Just for compliance with Connection
-  inline v8::Local<v8::Object> handle() {
-    return object(v8::Isolate::GetCurrent());
-  }
-
   inline v8::Local<v8::Object> handle(v8::Isolate* isolate) {
     return object(isolate);
   }

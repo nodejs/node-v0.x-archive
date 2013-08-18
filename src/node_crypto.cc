@@ -850,7 +850,7 @@ int SSLWrap<Base>::NewSessionCallback(SSL* s, SSL_SESSION* sess) {
 
   Local<Object> session = Buffer::New(reinterpret_cast<char*>(sess->session_id),
                                       sess->session_id_length);
-  Handle<Value> argv[2] = { session, buff };
+  Local<Value> argv[] = { session, buff };
   if (onnewsession_sym.IsEmpty())
     onnewsession_sym = FIXED_ONE_BYTE_STRING(node_isolate, "onnewsession");
   MakeCallback(w->handle(node_isolate),
@@ -893,14 +893,15 @@ void SSLWrap<Base>::OnClientHello(void* arg,
   }
   hello_obj->Set(tls_ticket_sym, Boolean::New(hello.has_ticket()));
 
-  Handle<Value> argv[1] = { hello_obj };
+  Local<Value> argv[] = { hello_obj };
   MakeCallback(w->handle(node_isolate),
                onclienthello_sym,
-               1,
+               ARRAY_SIZE(argv),
                argv);
 }
 
 
+// TODO(indutny): Split it into multiple smaller functions
 template <class Base>
 void SSLWrap<Base>::GetPeerCertificate(
     const FunctionCallbackInfo<Value>& args) {
@@ -913,7 +914,9 @@ void SSLWrap<Base>::GetPeerCertificate(
   if (peer_cert != NULL) {
     BIO* bio = BIO_new(BIO_s_mem());
     BUF_MEM* mem;
-    if (X509_NAME_print_ex(bio, X509_get_subject_name(peer_cert), 0,
+    if (X509_NAME_print_ex(bio,
+                           X509_get_subject_name(peer_cert),
+                           0,
                            X509_NAME_FLAGS) > 0) {
       BIO_get_mem_ptr(bio, &mem);
       info->Set(subject_symbol,
@@ -993,6 +996,7 @@ void SSLWrap<Base>::GetPeerCertificate(
       const char hex[] = "0123456789ABCDEF";
       char fingerprint[EVP_MAX_MD_SIZE * 3];
 
+      // TODO(indutny): Unify it with buffer's code
       for (i = 0; i < md_size; i++) {
         fingerprint[3*i] = hex[(md[i] & 0xf0) >> 4];
         fingerprint[(3*i)+1] = hex[(md[i] & 0x0f)];
@@ -1008,16 +1012,16 @@ void SSLWrap<Base>::GetPeerCertificate(
       info->Set(fingerprint_symbol, OneByteString(node_isolate, fingerprint));
     }
 
-    STACK_OF(ASN1_OBJECT)* eku = reinterpret_cast<STACK_OF(ASN1_OBJECT)*>(
+    STACK_OF(ASN1_OBJECT)* eku = static_cast<STACK_OF(ASN1_OBJECT)*>(
         X509_get_ext_d2i(peer_cert, NID_ext_key_usage, NULL, NULL));
     if (eku != NULL) {
       Local<Array> ext_key_usage = Array::New();
       char buf[256];
 
+      int j = 0;
       for (int i = 0; i < sk_ASN1_OBJECT_num(eku); i++) {
-        memset(buf, 0, sizeof(buf));
-        OBJ_obj2txt(buf, sizeof(buf) - 1, sk_ASN1_OBJECT_value(eku, i), 1);
-        ext_key_usage->Set(i, OneByteString(node_isolate, buf));
+        if (OBJ_obj2txt(buf, sizeof(buf), sk_ASN1_OBJECT_value(eku, i), 1) >= 0)
+          ext_key_usage->Set(j++, OneByteString(node_isolate, buf));
       }
 
       sk_ASN1_OBJECT_pop_free(eku, ASN1_OBJECT_free);
@@ -1428,8 +1432,10 @@ int Connection::HandleSSLError(const char* func,
   ClearErrorOnReturn clear_error_on_return;
   (void) &clear_error_on_return;  // Silence unused variable warning.
 
-  if (rv > 0) return rv;
-  if ((rv == 0) && (zs == kZeroIsNotAnError)) return rv;
+  if (rv > 0)
+    return rv;
+  if (rv == 0 && zs == kZeroIsNotAnError)
+    return rv;
 
   int err = SSL_get_error(ssl_, rv);
 
@@ -1451,7 +1457,7 @@ int Connection::HandleSSLError(const char* func,
         FIXED_ONE_BYTE_STRING(node_isolate, "error"), exception);
     return rv;
 
-  } else if ((err == SSL_ERROR_SYSCALL) && (ss == kIgnoreSyscall)) {
+  } else if (err == SSL_ERROR_SYSCALL && ss == kIgnoreSyscall) {
     return 0;
 
   } else {
@@ -1466,7 +1472,8 @@ int Connection::HandleSSLError(const char* func,
     // understood. And we should be somehow propagating these errors up
     // into JavaScript. There is no test which demonstrates this problem.
     // https://github.com/joyent/node/issues/1719
-    if ((bio = BIO_new(BIO_s_mem()))) {
+    bio = BIO_new(BIO_s_mem());
+    if (bio != NULL) {
       ERR_print_errors(bio);
       BIO_get_mem_ptr(bio, &mem);
       Local<Value> exception =
@@ -1609,7 +1616,7 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
 
   if (servername) {
     conn->servername_.Reset(node_isolate,
-                         OneByteString(node_isolate, servername));
+                            OneByteString(node_isolate, servername));
 
     // Call the SNI callback and use its return value as context
     if (!conn->sniObject_.IsEmpty()) {
