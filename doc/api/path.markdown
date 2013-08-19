@@ -117,15 +117,21 @@ Examples:
     // returns
     '../../impl/bbb'
 
-## path.dirname(p)
+## path.dirname(p, [n])
 
 Return the directory name of a path.  Similar to the Unix `dirname` command.
+If `n` is specified, `dirname` is called `n` times with the given path.
+Defaults to 1.
 
 Example:
 
     path.dirname('/foo/bar/baz/asdf/quux')
     // returns
     '/foo/bar/baz/asdf'
+    
+   path.dirname('/foo/bar/baz/asdf/quux', 2)
+   // returns
+   '/foo/bar/baz'
 
 ## path.basename(p, [ext])
 
