@@ -69,7 +69,7 @@ static bool using_alloc_cb;
 
 
 // return size of external array type, or 0 if unrecognized
-static inline size_t ExternalArraySize(enum ExternalArrayType type) {
+size_t ExternalArraySize(enum ExternalArrayType type) {
   switch (type) {
     case v8::kExternalUnsignedByteArray:
       return sizeof(uint8_t);
@@ -96,7 +96,7 @@ static inline size_t ExternalArraySize(enum ExternalArrayType type) {
 
 // copyOnto(source, source_start, dest, dest_start, copy_length)
 void CopyOnto(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
+  HandleScope handle_scope(node_isolate);
 
   if (!args[0]->IsObject())
     return ThrowTypeError("source must be an object");
@@ -172,7 +172,7 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    dest._data = sliceOnto(source, dest, start, end);
 void SliceOnto(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
+  HandleScope handle_scope(node_isolate);
 
   Local<Object> source = args[0].As<Object>();
   Local<Object> dest = args[1].As<Object>();
@@ -212,7 +212,7 @@ void SliceOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    alloc(obj, n[, type]);
 void Alloc(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
+  HandleScope handle_scope(node_isolate);
 
   Local<Object> obj = args[0].As<Object>();
 
@@ -224,10 +224,14 @@ void Alloc(const FunctionCallbackInfo<Value>& args) {
   enum ExternalArrayType array_type;
 
   // it's faster to not pass the default argument then use Uint32Value
-  if (args[2]->IsUndefined())
+  if (args[2]->IsUndefined()) {
     array_type = kExternalUnsignedByteArray;
-  else
+  } else {
     array_type = static_cast<ExternalArrayType>(args[2]->Uint32Value());
+    size_t type_length = ExternalArraySize(array_type);
+    assert(type_length * length >= length);
+    length *= type_length;
+  }
 
   Alloc(obj, length, array_type);
   args.GetReturnValue().Set(obj);
@@ -235,14 +239,10 @@ void Alloc(const FunctionCallbackInfo<Value>& args) {
 
 
 void Alloc(Handle<Object> obj, size_t length, enum ExternalArrayType type) {
-  assert(length <= kMaxLength);
-
   size_t type_size = ExternalArraySize(type);
 
+  assert(length <= kMaxLength);
   assert(type_size > 0);
-  assert(length * type_size >= length);
-
-  length *= type_size;
 
   if (length == 0)
     return Alloc(obj, NULL, length, type);
@@ -250,7 +250,7 @@ void Alloc(Handle<Object> obj, size_t length, enum ExternalArrayType type) {
   char* data = static_cast<char*>(malloc(length));
   if (data == NULL) {
     FatalError("node::smalloc::Alloc(v8::Handle<v8::Object>, size_t,"
-        " ExternalArrayType)", "Out Of Memory");
+               " v8::ExternalArrayType)", "Out Of Memory");
   }
 
   Alloc(obj, data, length, type);
@@ -299,7 +299,7 @@ void AllocDispose(const FunctionCallbackInfo<Value>& args) {
 
 
 void AllocDispose(Handle<Object> obj) {
-  HandleScope scope(node_isolate);
+  HandleScope handle_scope(node_isolate);
 
   if (using_alloc_cb) {
     Local<Value> ext_v = obj->GetHiddenValue(smalloc_sym);
