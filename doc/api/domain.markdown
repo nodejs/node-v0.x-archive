@@ -387,7 +387,7 @@ with a single error handler in a single place.
 ### domain.dispose()
 
 ```
-Stability: 0 - Deprecated
+    Stability: 0 - Deprecated
 
 This function is **deprecated**; please recover from failed IO actions
 explicitly via error handlers set on the domain.
