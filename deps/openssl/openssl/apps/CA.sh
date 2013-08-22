@@ -19,7 +19,7 @@
 #                  environment variable so this can be driven from
 #                  a script.
 # 25-Jul-96 eay    Cleaned up filenames some more.
-# 11-Jun-96 eay    Fixed a few filename missmatches.
+# 11-Jun-96 eay    Fixed a few filename mismatches.
 # 03-May-96 eay    Modified to use 'ssleay cmd' instead of 'cmd'.
 # 18-Apr-96 tjh    Original hacking
 #
