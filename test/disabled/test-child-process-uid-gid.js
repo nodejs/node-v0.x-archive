@@ -57,8 +57,8 @@ if (!otherUid && !otherGid) throw new Error('failed getting passwd info.');
 
 console.error('name, id, gid = %j', [otherName, otherUid, otherGid]);
 
-var whoNumber = spawn('id', [], { uid: otherUid, gid: otherGid });
-var whoName = spawn('id', [], { uid: otherName, gid: otherGid });
+var whoNumber = spawn('id', { uid: otherUid, gid: otherGid });
+var whoName = spawn('id', { uid: otherName, gid: otherGid });
 
 whoNumber.stdout.buf = 'byNumber:';
 whoName.stdout.buf = 'byName:';

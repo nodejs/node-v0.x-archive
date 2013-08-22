@@ -67,9 +67,9 @@ exports.spawnCat = function(options) {
   var spawn = require('child_process').spawn;
 
   if (process.platform === 'win32') {
-    return spawn('more', [], options);
+    return spawn('more', options);
   } else {
-    return spawn('cat', [], options);
+    return spawn('cat', options);
   }
 };
 
@@ -80,7 +80,7 @@ exports.spawnPwd = function(options) {
   if (process.platform === 'win32') {
     return spawn('cmd.exe', ['/c', 'cd'], options);
   } else {
-    return spawn('pwd', [], options);
+    return spawn('pwd', options);
   }
 };
 
