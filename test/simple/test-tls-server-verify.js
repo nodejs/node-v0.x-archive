@@ -39,6 +39,7 @@ var testCases =
     [{ title: 'Do not request certs. Everyone is unauthorized.',
       requestCert: false,
       rejectUnauthorized: false,
+      renegotiate: false,
       CAs: ['ca1-cert'],
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: false },
@@ -51,6 +52,20 @@ var testCases =
     { title: 'Allow both authed and unauthed connections with CA1',
       requestCert: true,
       rejectUnauthorized: false,
+      renegotiate: false,
+      CAs: ['ca1-cert'],
+      clients:
+       [{ name: 'agent1', shouldReject: false, shouldAuth: true },
+        { name: 'agent2', shouldReject: false, shouldAuth: false },
+        { name: 'agent3', shouldReject: false, shouldAuth: false },
+        { name: 'nocert', shouldReject: false, shouldAuth: false }
+       ]
+    },
+
+    { title: 'Do not request certs at connection. Do that later',
+      requestCert: false,
+      rejectUnauthorized: false,
+      renegotiate: true,
       CAs: ['ca1-cert'],
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: true },
@@ -63,6 +78,7 @@ var testCases =
     { title: 'Allow only authed connections with CA1',
       requestCert: true,
       rejectUnauthorized: true,
+      renegotiate: false,
       CAs: ['ca1-cert'],
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: true },
@@ -75,6 +91,7 @@ var testCases =
     { title: 'Allow only authed connections with CA1 and CA2',
       requestCert: true,
       rejectUnauthorized: true,
+      renegotiate: false,
       CAs: ['ca1-cert', 'ca2-cert'],
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: true },
@@ -88,6 +105,7 @@ var testCases =
     { title: 'Allow only certs signed by CA2 but not in the CRL',
       requestCert: true,
       rejectUnauthorized: true,
+      renegotiate: false,
       CAs: ['ca2-cert'],
       crl: 'ca2-crl',
       clients:
@@ -197,7 +215,7 @@ function runClient(options, cb) {
       rejected = false;
     }
 
-    if (/_authed/g.test(out)) {
+    if (!authed && /_authed/g.test(out)) {
       console.error('  * authed');
       client.stdin.end('goodbye\n');
       authed = true;
@@ -247,7 +265,20 @@ function runTest(testIndex) {
 
   var connections = 0;
 
-  var server = tls.Server(serverOptions, function(c) {
+  var renegotiated = false;
+  var server = tls.Server(serverOptions, function handleConnection(c) {
+    if (tcase.renegotiate && !renegotiated) {
+      renegotiated = true;
+      setTimeout(function() {
+        console.error('- connected, renegotiating');
+        return c.renegotiate({
+          requestCert: true,
+          rejectUnauthorized: true
+        }, handleConnection.bind(null, c));
+      }, 500);
+      return;
+    }
+
     connections++;
     if (c.authorized) {
       console.error('- authed connection: ' +

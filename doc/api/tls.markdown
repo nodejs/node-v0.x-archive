@@ -578,6 +578,18 @@ See SSL_CIPHER_get_name() and SSL_CIPHER_get_version() in
 http://www.openssl.org/docs/ssl/ssl.html#DEALING_WITH_CIPHERS for more
 information.
 
+### tlsSocket.renegotiate(options, callback)
+
+Initiate TLS renegotiation process. The `options` might contain following
+fields: `rejectUnauthorized`, `requestCert`. `callback` will be executed,
+once the renegotiation will be completed.
+
+NOTE: Could be used to request peer's certificate after secure connection
+establishment.
+
+ANOTHER NOTE: When running it from server's side, socket will be destroyed
+with an error after `handshakeTimeout` timeout.
+
 ### tlsSocket.address()
 
 Returns the bound address, the address family name and port of the
