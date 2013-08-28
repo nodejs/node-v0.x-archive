@@ -14,6 +14,9 @@ NODE ?= ./node
 # or set the V environment variable to an empty string.
 V ?= 1
 
+# Default to build universal-binaries (ia32 and x64)
+UNIVERSAL ?= 1
+
 ifeq ($(USE_NINJA),1)
 ifneq ($(V),)
 NINJA := $(NINJA) -v
@@ -284,18 +287,24 @@ pkg: $(PKG)
 $(PKG): release-only
 	rm -rf $(PKGDIR)
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --without-snapshot --dest-cpu=ia32 --tag=$(TAG)
-	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)/32
-	rm -rf out/deps out/Release
+	@if [ "$(UNIVERSAL)" != "0" ]; then \
+		$(PYTHON) ./configure --without-snapshot --dest-cpu=ia32 --tag=$(TAG) \
+		$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)/32 \
+		rm -rf out/deps out/Release \
+	fi
 	$(PYTHON) ./configure --without-snapshot --dest-cpu=x64 --tag=$(TAG)
 	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)
 	SIGN="$(APP_SIGN)" PKGDIR="$(PKGDIR)" bash tools/osx-codesign.sh
-	lipo $(PKGDIR)/32/usr/local/bin/node \
-		$(PKGDIR)/usr/local/bin/node \
-		-output $(PKGDIR)/usr/local/bin/node-universal \
-		-create
+	@if [ "$(UNIVERSAL)" != "0" ]; then \
+		lipo $(PKGDIR)/32/usr/local/bin/node \
+			$(PKGDIR)/usr/local/bin/node \
+			-output $(PKGDIR)/usr/local/bin/node-universal \
+			-create \
+	fi
 	mv $(PKGDIR)/usr/local/bin/node-universal $(PKGDIR)/usr/local/bin/node
-	rm -rf $(PKGDIR)/32
+	@if [ "$(UNIVERSAL)" != "0" ]; then \
+		rm -rf $(PKGDIR)/32 \
+	fi
 	$(packagemaker) \
 		--id "org.nodejs.Node" \
 		--doc tools/osx-pkg.pmdoc \
