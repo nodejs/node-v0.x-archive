@@ -72,13 +72,12 @@ assert.doesNotThrow(
         watcher.close();
         ++watchSeenOne;
       });
+      watcher.on('ready', function() {
+        fs.writeFileSync(filepathOne, 'world');
+      });
+      watcher.emit('ready');
     }
 );
-
-setTimeout(function() {
-  fs.writeFileSync(filepathOne, 'world');
-}, 1000);
-
 
 process.chdir(testDir);
 
@@ -95,12 +94,12 @@ assert.doesNotThrow(
         watcher.close();
         ++watchSeenTwo;
       });
+      watcher.on('ready', function() {
+        fs.writeFileSync(filepathTwoAbs, 'pardner');
+      });
+      watcher.emit('ready');
     }
 );
-
-setTimeout(function() {
-  fs.writeFileSync(filepathTwoAbs, 'pardner');
-}, 1000);
 
 try { fs.unlinkSync(filepathThree); } catch (e) {}
 try { fs.mkdirSync(testsubdir, 0700); } catch (e) {}
@@ -118,13 +117,13 @@ assert.doesNotThrow(
         watcher.close();
         ++watchSeenThree;
       });
+      watcher.on('ready', function() {
+        var fd = fs.openSync(filepathThree, 'w');
+        fs.closeSync(fd);
+      });
+      watcher.emit('ready');
     }
 );
-
-setTimeout(function() {
-  var fd = fs.openSync(filepathThree, 'w');
-  fs.closeSync(fd);
-}, 1000);
 
 // https://github.com/joyent/node/issues/2293 - non-persistent watcher should
 // not block the event loop
