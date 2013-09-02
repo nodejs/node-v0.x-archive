@@ -275,6 +275,12 @@ UV_EXTERN uv_loop_t* uv_default_loop(void);
 UV_EXTERN int uv_run(uv_loop_t*, uv_run_mode mode);
 
 /*
+ * This function checks whether the reference count, the number of active
+ * handles or requests left in the event loop, is non-zero.
+ */
+UV_EXTERN int uv_loop_alive(uv_loop_t* loop);
+
+/*
  * This function will stop the event loop by forcing uv_run to end
  * as soon as possible, but not sooner than the next loop iteration.
  * If this function was called before blocking for i/o, the loop won't

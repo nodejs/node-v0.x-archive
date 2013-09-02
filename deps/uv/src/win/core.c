@@ -263,6 +263,11 @@ static int uv__loop_alive(uv_loop_t* loop) {
 }
 
 
+int uv_loop_alive(uv_loop_t* loop) {
+    return uv__loop_alive(loop);
+}
+
+
 int uv_run(uv_loop_t *loop, uv_run_mode mode) {
   int r;
   void (*poll)(uv_loop_t* loop, int block);

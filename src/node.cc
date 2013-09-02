@@ -3102,6 +3102,14 @@ void EmitExit(v8::Handle<v8::Object> process_l) {
   MakeCallback(process_l, "emit", ARRAY_SIZE(args), args);
 }
 
+
+void EmitBeforeExit(Handle<Object> process_l) {
+  // process.emit('beforeExit')
+  Local<Value> args[] = { String::New("beforeExit"), Integer::New(0, node_isolate) };
+  MakeCallback(process, "emit", ARRAY_SIZE(args), args);
+}
+
+
 static char **copy_argv(int argc, char **argv) {
   size_t strlen_sum;
   char **argv_copy;
@@ -3165,12 +3173,18 @@ int Start(int argc, char *argv[]) {
     // so your next reading stop should be node::Load()!
     Load(process_l);
 
-    // All our arguments are loaded. We've evaluated all of the scripts. We
-    // might even have created TCP servers. Now we enter the main eventloop. If
-    // there are no watchers on the loop (except for the ones that were
-    // uv_unref'd) then this function exits. As long as there are active
-    // watchers, it blocks.
-    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    do {
+        // All our arguments are loaded. We've evaluated all of the scripts. We
+        // might even have created TCP servers. Now we enter the main eventloop. If
+        // there are no watchers on the loop (except for the ones that were
+        // uv_unref'd) then this function exits. As long as there are active
+        // watchers, it blocks.
+        uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+
+        EmitBeforeExit(process_l);
+
+        // 'keepalive' event may have brought the loop back to life
+    } while(uv_loop_alive(uv_default_loop()));
 
     EmitExit(process_l);
     RunAtExit();
