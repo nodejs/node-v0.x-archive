@@ -1,4 +1,4 @@
-# Child Process
+ Child Process
 
     Stability: 3 - Stable
 
@@ -544,6 +544,7 @@ leaner than `child_process.exec`. It has the same options.
   * `env` {Object} Environment key-value pairs
   * `encoding` {String} (Default: 'utf8')
   * `execPath` {String} Executable used to create the child process
+  * `addStdio` {Array} Additional child stdio fds / channels.
 * Return: ChildProcess object
 
 This is a special case of the `spawn()` functionality for spawning Node
@@ -567,5 +568,10 @@ created for the child rather than the current `node` executable. This should be
 done with care and by default will talk over the fd represented an
 environmental variable `NODE_CHANNEL_FD` on the child process. The input and
 output on this fd is expected to be line delimited JSON objects.
+
+For valid types for the `addStdio` option, see the `stdio` options at
+ [`ChildProcess#spawn()`](#child_process_child_process_spawn_command_args_options)
+'ipc' must not be used here, as there may be at most *one* IPC stdio per ChildProcess,
+and `fork` already creates one internally.
 
 [EventEmitter]: events.html#events_class_events_eventemitter

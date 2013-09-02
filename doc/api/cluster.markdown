@@ -264,12 +264,17 @@ Example:
     });
     cluster.fork();
 
-## cluster.fork([env])
+## cluster.fork(env, [options])
 
 * `env` {Object} Key/value pairs to add to child process environment.
+* `options` {Object} 
+  * `addStdio` {Array} Additional child stdio fds / channels.
 * return {Worker object}
 
 Spawn a new worker process. This can only be called from the master process.
+
+For the `addStdio` options, see [ChildProcess#fork()](child_process.html#child_process_child_process_fork_modulepath_args_options).
+
 
 ## cluster.disconnect([callback])
 
