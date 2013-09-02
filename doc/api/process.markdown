@@ -590,3 +590,17 @@ a diff reading, useful for benchmarks and measuring intervals:
     }, 1000);
 
 [EventEmitter]: events.html#events_class_events_eventemitter
+
+
+## process.features
+
+A property exposing feature availability for the currently running process.
+
+Example of possible output:
+
+    { debug: false,
+      uv: true,
+      ipv6: true,
+      tls_npn: true,
+      tls_sni: true,
+      tls: true }
