@@ -78,7 +78,7 @@
     } else if (process._eval != null) {
       // User passed '-e' or '--eval' arguments to Node.
       evalScript('[eval]');
-    } else if (process.argv[1]) {
+    } else if (process.argv[1] && process.argv[1] !== '--') {
       // make process.argv[1] into a full path
       var path = NativeModule.require('path');
       process.argv[1] = path.resolve(process.argv[1]);
@@ -121,7 +121,7 @@
 
     } else {
       var Module = NativeModule.require('module');
-
+      if (process.argv[0] === '--') process._forceRepl = true;
       // If -i or --interactive were passed, or stdin is a TTY.
       if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
         // REPL
@@ -664,6 +664,10 @@
     // execute cwd\node.exe, or some %PATH%\node.exe on Windows,
     // and that every directory has its own cwd, so d:node.exe is valid.
     var argv0 = process.argv[0];
+
+    // Don't do anything if argv[0] is '--'
+    if (argv0 === '--') return;
+
     if (!isWindows && argv0.indexOf('/') !== -1 && argv0.charAt(0) !== '/') {
       var path = NativeModule.require('path');
       process.argv[0] = path.join(cwd, process.argv[0]);
