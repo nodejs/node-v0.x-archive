@@ -466,6 +466,7 @@ test('adding readable triggers data flow', function(t) {
     onReadable = true;
     r.read();
   });
+  t.ok(!onReadable);
 
   r.on('end', function() {
     t.equal(readCalled, 3);
