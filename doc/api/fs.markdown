@@ -575,6 +575,8 @@ no-op, not an error.
 Watch for changes on `filename`, where `filename` is either a file or a
 directory.  The returned object is a [fs.FSWatcher](#fs_class_fs_fswatcher).
 
+If the `FSWatcher` object cannot be created, an `ErrnoException` is thrown.
+
 The second argument is optional. The `options` if provided should be an object
 containing a boolean member `persistent`, which indicates whether the process
 should continue to run as long as files are being watched. The default is
