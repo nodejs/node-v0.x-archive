@@ -55,6 +55,8 @@
 
     startup.processChannel();
 
+    startup.processRawDebug();
+
     startup.resolveArgv0();
 
     // There are various modes that Node can run in. The most common two
@@ -248,9 +250,6 @@
 
   var assert;
   startup.processAssert = function() {
-    // Note that calls to assert() are pre-processed out by JS2C for the
-    // normal build of node. They persist only in the node_g build.
-    // Similarly for debug().
     assert = process.assert = function(x, msg) {
       if (!x) throw new Error(msg || 'assertion error');
     };
@@ -652,7 +651,17 @@
       cp._forkChild(fd);
       assert(process.send);
     }
-  }
+  };
+
+
+  startup.processRawDebug = function() {
+    var util = NativeModule.require('util');
+    var rawDebug = process._rawDebug;
+    process._rawDebug = function() {
+      rawDebug(util.format.apply(util, arguments));
+    };
+  };
+
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();
