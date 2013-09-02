@@ -3573,6 +3573,199 @@ void GetHashes(const FunctionCallbackInfo<Value>& args) {
 }
 
 
+void Certificate::Initialize(Handle<Object> target) {
+  HandleScope scope(node_isolate);
+
+  Local<FunctionTemplate> t = FunctionTemplate::New(New);
+
+  t->InstanceTemplate()->SetInternalFieldCount(1);
+
+  NODE_SET_PROTOTYPE_METHOD(t, "verifySpkac", VerifySpkac);
+  NODE_SET_PROTOTYPE_METHOD(t, "exportPublicKey", ExportPublicKey);
+  NODE_SET_PROTOTYPE_METHOD(t, "exportChallenge", ExportChallenge);
+
+  target->Set(String::NewSymbol("Certificate"), t->GetFunction());
+}
+
+
+Handle<Value> Certificate::New(const Arguments& args) {
+  HandleScope scope(node_isolate);
+
+  Certificate* certificate = new Certificate();
+  certificate->Wrap(args.This());
+  return args.This();
+}
+
+
+int Certificate::VerifySpkac(const char* data, int len) {
+  HandleScope scope(node_isolate);
+
+  int i = 0;
+  EVP_PKEY* pkey = NULL;
+  NETSCAPE_SPKI* spki = NULL;
+
+  spki = NETSCAPE_SPKI_b64_decode(data, len);
+  if (spki == NULL)
+    goto exit;
+
+  pkey = X509_PUBKEY_get(spki->spkac->pubkey);
+  if (pkey == NULL)
+    goto exit;
+
+  i = NETSCAPE_SPKI_verify(spki, pkey);
+  goto exit;
+
+exit:
+  if (spki != NULL)
+    NETSCAPE_SPKI_free(spki);
+  
+  if (pkey != NULL)
+    EVP_PKEY_free(pkey);
+
+  return i;
+}
+
+
+Handle<Value> Certificate::VerifySpkac(const Arguments& args) {
+  HandleScope scope(node_isolate);
+
+  Certificate* certificate = ObjectWrap::Unwrap<Certificate>(args.This());
+
+  if (args.Length() < 1)
+    return ThrowTypeError("Missing argument");
+
+  ASSERT_IS_BUFFER(args[0]);
+
+  size_t length = Buffer::Length(args[0]);
+  if (length == 0)
+    return Undefined(node_isolate);
+
+  char* data = Buffer::Data(args[0]);
+  assert(data != NULL);
+
+  int i = certificate->VerifySpkac(const_cast<const char*>(data), length);
+
+  return Boolean::New(i > 0);
+}
+
+
+const char* Certificate::ExportPublicKey(const char* data, int len) {
+  HandleScope scope(node_isolate);
+
+  char* buf = NULL;
+  EVP_PKEY* pkey = NULL;
+  NETSCAPE_SPKI* spki = NULL;
+
+  BIO* bio = BIO_new(BIO_s_mem());
+  if (bio == NULL)
+    goto exit;
+
+  spki = NETSCAPE_SPKI_b64_decode(data, len);
+  if (spki == NULL)
+    goto exit;
+
+  pkey = NETSCAPE_SPKI_get_pubkey(spki);
+  if (pkey == NULL)
+    goto exit;
+
+  if (PEM_write_bio_PUBKEY(bio, pkey) <= 0)
+    goto exit;
+
+  BUF_MEM* ptr;
+  BIO_get_mem_ptr(bio, &ptr);
+
+  buf = new char[ptr->length];
+  memcpy(buf, ptr->data, ptr->length);
+  buf[ptr->length - 1] = '\0';
+
+exit:
+  if (spki != NULL)
+    NETSCAPE_SPKI_free(spki);
+  
+  if (pkey != NULL)
+    EVP_PKEY_free(pkey);
+  
+  if (bio != NULL)
+    BIO_free_all(bio);
+
+  return buf;
+}
+
+
+Handle<Value> Certificate::ExportPublicKey(const Arguments& args) {
+  HandleScope scope(node_isolate);
+
+  Certificate* certificate = ObjectWrap::Unwrap<Certificate>(args.This());
+
+  if (args.Length() < 1)
+    return ThrowTypeError("Missing argument");
+
+  ASSERT_IS_BUFFER(args[0]);
+
+  size_t length = Buffer::Length(args[0]);
+  if (length == 0)
+    return Undefined(node_isolate);
+
+  char* data = Buffer::Data(args[0]);
+  assert(data != NULL);
+
+  const char* pkey = certificate->ExportPublicKey(const_cast<const char*>(data), length);
+  if (pkey == NULL)
+    return Undefined(node_isolate);
+
+  Local<Value> outString = Encode(pkey, strlen(pkey), BUFFER);
+
+  delete[] pkey;
+
+  return scope.Close(outString);
+}
+
+
+const char* Certificate::ExportChallenge(const char* data, int len) {
+  HandleScope scope(node_isolate);
+
+  NETSCAPE_SPKI* spki = NULL;
+
+  spki = NETSCAPE_SPKI_b64_decode(data, len);
+  if (spki == NULL)
+    return NULL;
+
+  const char* buf = NULL;
+  buf = reinterpret_cast<const char*>(ASN1_STRING_data(spki->spkac->challenge));
+
+  return buf;
+}
+
+
+Handle<Value> Certificate::ExportChallenge(const Arguments& args) {
+  HandleScope scope(node_isolate);
+
+  Certificate* crt = ObjectWrap::Unwrap<Certificate>(args.This());
+
+  if (args.Length() < 1)
+    return ThrowTypeError("Missing argument");
+
+  ASSERT_IS_BUFFER(args[0]);
+
+  size_t len = Buffer::Length(args[0]);
+  if (len == 0)
+    return Undefined(node_isolate);
+
+  char* data = Buffer::Data(args[0]);
+  assert(data != NULL);
+
+  const char* cert = crt->ExportChallenge(const_cast<const char*>(data), len);
+  if (cert == NULL)
+    return Undefined(node_isolate);
+
+  Local<Value> outString = Encode(cert, strlen(cert), BUFFER);
+
+  delete[] cert;
+
+  return scope.Close(outString);
+}
+
+
 void InitCrypto(Handle<Object> target) {
   HandleScope scope(node_isolate);
 
@@ -3605,6 +3798,7 @@ void InitCrypto(Handle<Object> target) {
   Hash::Initialize(target);
   Sign::Initialize(target);
   Verify::Initialize(target);
+  Certificate::Initialize(target);
 
   NODE_SET_METHOD(target, "PBKDF2", PBKDF2);
   NODE_SET_METHOD(target, "randomBytes", RandomBytes<false>);

@@ -490,6 +490,34 @@ class DiffieHellman : public ObjectWrap {
   DH* dh;
 };
 
+
+class Certificate : public ObjectWrap {
+ public:
+  static void Initialize(v8::Handle<v8::Object> target);
+
+  v8::Handle<v8::Value> CertificateInit(const char* sign_type);
+  int VerifySpkac(const char* data, int len);
+  const char* ExportPublicKey(const char* data, int len);
+  const char* ExportChallenge(const char* data, int len);
+
+ protected:
+  static v8::Handle<v8::Value> New(const v8::Arguments& args);
+  static v8::Handle<v8::Value> VerifySpkac(const v8::Arguments& args);
+  static v8::Handle<v8::Value> ExportPublicKey(const v8::Arguments& args);
+  static v8::Handle<v8::Value> ExportChallenge(const v8::Arguments& args);
+
+  Certificate() : initialised_(false) {
+  }
+
+  ~Certificate() {
+    if (!initialised_) return;
+  }
+
+ private:
+  bool initialised_;
+};
+
+
 void InitCrypto(v8::Handle<v8::Object> target);
 
 }  // namespace crypto
