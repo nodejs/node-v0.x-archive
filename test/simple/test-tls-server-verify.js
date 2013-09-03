@@ -273,7 +273,7 @@ function runTest(testIndex) {
         console.error('- connected, renegotiating');
         return c.renegotiate({
           requestCert: true,
-          rejectUnauthorized: true
+          rejectUnauthorized: false
         }, function(err) {
           assert(!err);
           handleConnection(c);
