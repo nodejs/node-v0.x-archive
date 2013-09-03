@@ -274,7 +274,10 @@ function runTest(testIndex) {
         return c.renegotiate({
           requestCert: true,
           rejectUnauthorized: true
-        }, handleConnection.bind(null, c));
+        }, function(err) {
+          assert(!err);
+          handleConnection(c);
+        });
       }, 500);
       return;
     }
