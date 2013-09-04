@@ -122,6 +122,7 @@ var testCases =
 
 
 var common = require('../common');
+var constants = require('constants');
 var assert = require('assert');
 var fs = require('fs');
 var tls = require('tls');
@@ -268,20 +269,31 @@ function runTest(testIndex) {
 
   var connections = 0;
 
+  /*
+   * If renegotiating - session might be resumed and openssl won't request
+   * client's certificate (probably because of bug in the openssl)
+   */
+  if (tcase.renegotiate) {
+    serverOptions.secureOptions =
+        constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
+  }
+
   var renegotiated = false;
   var server = tls.Server(serverOptions, function handleConnection(c) {
     if (tcase.renegotiate && !renegotiated) {
       renegotiated = true;
       setTimeout(function() {
         console.error('- connected, renegotiating');
+        c.write('\n_renegotiating\n');
         return c.renegotiate({
           requestCert: true,
           rejectUnauthorized: false
         }, function(err) {
           assert(!err);
+          c.write('\n_renegotiated\n');
           handleConnection(c);
         });
-      }, 500);
+      }, 200);
       return;
     }
 
