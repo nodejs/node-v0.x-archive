@@ -203,20 +203,23 @@ function runClient(options, cb) {
 
   var rejected = true;
   var authed = false;
+  var goodbye = false;
 
   client.stdout.setEncoding('utf8');
   client.stdout.on('data', function(d) {
     out += d;
 
-    if (/_unauthed/g.test(out)) {
+    if (!goodbye && /_unauthed/g.test(out)) {
       console.error('  * unauthed');
+      goodbye = true;
       client.stdin.end('goodbye\n');
       authed = false;
       rejected = false;
     }
 
-    if (!authed && /_authed/g.test(out)) {
+    if (!goodbye && /_authed/g.test(out)) {
       console.error('  * authed');
+      goodbye = true;
       client.stdin.end('goodbye\n');
       authed = true;
       rejected = false;
