@@ -233,7 +233,7 @@
         try {
           if (!process._exiting) {
             process._exiting = true;
-            process.emit('exit', 8);
+            process.emit('exit', 1);
           }
         } catch (er) {
           // nothing to be done about it at this point.
@@ -547,7 +547,7 @@
   startup.processKillAndExit = function() {
     process.exitCode = 0;
     process.exit = function(code) {
-      if (NativeModule.require('util').isNumber(code))
+      if (code || code === 0)
         process.exitCode = code;
 
       if (!process._exiting) {
