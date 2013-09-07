@@ -233,7 +233,7 @@
         try {
           if (!process._exiting) {
             process._exiting = true;
-            process.emit('exit', 1);
+            process.emit('exit', 8);
           }
         } catch (er) {
           // nothing to be done about it at this point.
@@ -545,12 +545,16 @@
   };
 
   startup.processKillAndExit = function() {
+    process.exitCode = 0;
     process.exit = function(code) {
+      if (NativeModule.require('util').isNumber(code))
+        process.exitCode = code;
+
       if (!process._exiting) {
         process._exiting = true;
-        process.emit('exit', code || 0);
+        process.emit('exit', process.exitCode || 0);
       }
-      process.reallyExit(code || 0);
+      process.reallyExit(process.exitCode || 0);
     };
 
     process.kill = function(pid, sig) {
