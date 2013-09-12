@@ -58,6 +58,7 @@ class ContextifyContext {
   Persistent<Object> sandbox_;
   Persistent<Context> context_;
   Persistent<Object> proxy_global_;
+  int references_;
 
  public:
   explicit ContextifyContext(Environment* env, Local<Object> sandbox)
@@ -65,8 +66,11 @@ class ContextifyContext {
       , sandbox_(env->isolate(), sandbox)
       , context_(env->isolate(), CreateV8Context(env))
       , proxy_global_(env->isolate(), context()->Global()) {
+    references_ = 2;
     sandbox_.MakeWeak(this, SandboxFreeCallback);
     sandbox_.MarkIndependent();
+    proxy_global_.MakeWeak(this, SandboxFreeCallback);
+    proxy_global_.MarkIndependent();
   }
 
 
@@ -173,7 +177,8 @@ class ContextifyContext {
   static void SandboxFreeCallback(Isolate* isolate,
                                   Persistent<Object>* target,
                                   ContextifyContext* context) {
-    delete context;
+    if (--context->references_ == 0)
+      delete context;
   }
 
 
