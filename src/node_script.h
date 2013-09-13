@@ -19,12 +19,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-var vm = require('vm');
+#ifndef SRC_NODE_SCRIPT_H_
+#define SRC_NODE_SCRIPT_H_
 
-console.error('beginning');
+#include "node.h"
+#include "node_object_wrap.h"
+#include "v8.h"
+#include "uv.h"
 
-vm.runInThisContext('throw new Error("boo!")', { filename: 'test.vm' });
+namespace node {
 
-console.error('end');
+void InitEvals(v8::Handle<v8::Object> target);
+
+}  // namespace node
+
+#endif  // SRC_NODE_SCRIPT_H_

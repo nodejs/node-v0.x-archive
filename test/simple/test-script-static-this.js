@@ -21,13 +21,36 @@
 
 var common = require('../common');
 var assert = require('assert');
-var vm = require('vm');
+var Script = require('vm').Script;
 
-var sandbox = { x: 3 };
+common.globalCheck = false;
 
-var ctx = vm.createContext(sandbox);
+common.debug('run a string');
+var result = Script.runInThisContext('\'passed\';');
+assert.equal('passed', result);
 
-assert.strictEqual(vm.runInContext('x;', ctx), 3);
-vm.runInContext('y = 4;', ctx);
-assert.strictEqual(sandbox.y, 4);
-assert.strictEqual(ctx.y, 4);
+common.debug('thrown error');
+assert.throws(function() {
+  Script.runInThisContext('throw new Error(\'test\');');
+});
+
+hello = 5;
+Script.runInThisContext('hello = 2');
+assert.equal(2, hello);
+
+
+common.debug('pass values');
+code = 'foo = 1;' +
+       'bar = 2;' +
+       'if (typeof baz !== \'undefined\') throw new Error(\'test fail\');';
+foo = 2;
+obj = { foo: 0, baz: 3 };
+var baz = Script.runInThisContext(code);
+assert.equal(0, obj.foo);
+assert.equal(2, bar);
+assert.equal(1, foo);
+
+common.debug('call a function');
+f = function() { foo = 100 };
+Script.runInThisContext('f()');
+assert.equal(100, foo);

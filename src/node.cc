@@ -25,6 +25,7 @@
 #include "node_file.h"
 #include "node_http_parser.h"
 #include "node_javascript.h"
+#include "node_script.h"
 #include "node_version.h"
 
 #if defined HAVE_PERFCTR

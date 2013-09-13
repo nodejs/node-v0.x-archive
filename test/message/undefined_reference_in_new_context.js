@@ -24,11 +24,13 @@
 
 var common = require('../common');
 var assert = require('assert');
-var vm = require('vm');
 
 console.error('before');
 
+var Script = process.binding('evals').NodeScript;
+
 // undefined reference
-vm.runInNewContext('foo.bar = 5;');
+var script = new Script('foo.bar = 5;');
+script.runInNewContext();
 
 console.error('after');
