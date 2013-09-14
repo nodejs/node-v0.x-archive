@@ -66,7 +66,7 @@ class ContextifyContext {
       , sandbox_(env->isolate(), sandbox)
       , context_(env->isolate(), CreateV8Context(env))
       , proxy_global_(env->isolate(), context()->Global())
-        // Wait for both sandbox_, proxy_global_, and context_ to die
+        // Wait for sandbox_, proxy_global_, and context_ to die
       , references_(3) {
     sandbox_.MakeWeak(this, WeakCallback);
     sandbox_.MarkIndependent();
