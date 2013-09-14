@@ -66,18 +66,23 @@ class ContextifyContext {
       , sandbox_(env->isolate(), sandbox)
       , context_(env->isolate(), CreateV8Context(env))
       , proxy_global_(env->isolate(), context()->Global())
-        // Wait for both sandbox_'s and proxy_global_'s death
-      , references_(2) {
+        // Wait for both sandbox_, proxy_global_, and context_ to die
+      , references_(3) {
     sandbox_.MakeWeak(this, SandboxFreeCallback);
     sandbox_.MarkIndependent();
-    proxy_global_.MakeWeak(this, SandboxFreeCallback);
+    context_.MakeWeak(this, ContextFreeCallback);
+    context_.MarkIndependent();
+    proxy_global_.MakeWeak(this, ProxyGlobalFreeCallback);
     proxy_global_.MarkIndependent();
   }
 
 
   ~ContextifyContext() {
+    context_.ClearWeak();
     context_.Dispose();
+    proxy_global_.ClearWeak();
     proxy_global_.Dispose();
+    sandbox_.ClearWeak();
     sandbox_.Dispose();
   }
 
@@ -178,7 +183,29 @@ class ContextifyContext {
   static void SandboxFreeCallback(Isolate* isolate,
                                   Persistent<Object>* target,
                                   ContextifyContext* context) {
+    assert(!context->sandbox_.IsEmpty());
+    context->sandbox_.ClearWeak();
     if (--context->references_ == 0)
+      delete context;
+  }
+
+
+  static void ContextFreeCallback(Isolate* isolate,
+                                  Persistent<Context>* target,
+                                  ContextifyContext* context) {
+    assert(!context->context_.IsEmpty());
+    context->context_.ClearWeak();
+    if (--context->references_ == 0)
+      delete context;
+  }
+
+
+  static void ProxyGlobalFreeCallback(Isolate* isolate,
+                                      Persistent<Object>* target,
+                                      ContextifyContext* context) {
+    assert(!context->proxy_global_.IsEmpty());
+    context->proxy_global_.ClearWeak();
+      if (--context->references_ == 0)
       delete context;
   }
 
