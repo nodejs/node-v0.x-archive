@@ -78,11 +78,8 @@ class ContextifyContext {
 
 
   ~ContextifyContext() {
-    context_.ClearWeak();
     context_.Dispose();
-    proxy_global_.ClearWeak();
     proxy_global_.Dispose();
-    sandbox_.ClearWeak();
     sandbox_.Dispose();
   }
 
