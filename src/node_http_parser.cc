@@ -205,12 +205,19 @@ class Parser : public WeakObject {
   HTTP_CB(on_message_begin) {
     num_fields_ = num_values_ = 0;
     url_.Reset();
+    status_message_.Reset();
     return 0;
   }
 
 
   HTTP_DATA_CB(on_url) {
     url_.Update(at, length);
+    return 0;
+  }
+
+
+  HTTP_DATA_CB(on_status) {
+    status_message_.Update(at, length);
     return 0;
   }
 
@@ -283,6 +290,8 @@ class Parser : public WeakObject {
     if (parser_.type == HTTP_RESPONSE) {
       message_info->Set(env()->status_code_string(),
                         Integer::New(parser_.status_code, node_isolate));
+      message_info->Set(env()->status_message_string(),
+                        status_message_.ToString());
     }
 
     // VERSION
@@ -373,6 +382,7 @@ class Parser : public WeakObject {
 
   void Save() {
     url_.Save();
+    status_message_.Save();
 
     for (int i = 0; i < num_fields_; i++) {
       fields_[i].Save();
@@ -539,6 +549,7 @@ class Parser : public WeakObject {
   void Init(enum http_parser_type type) {
     http_parser_init(&parser_, type);
     url_.Reset();
+    status_message_.Reset();
     num_fields_ = 0;
     num_values_ = 0;
     have_flushed_ = false;
@@ -556,6 +567,7 @@ class Parser : public WeakObject {
   StringPtr fields_[32];  // header fields
   StringPtr values_[32];  // header values
   StringPtr url_;
+  StringPtr status_message_;
   int num_fields_;
   int num_values_;
   bool have_flushed_;
@@ -570,6 +582,7 @@ class Parser : public WeakObject {
 const struct http_parser_settings Parser::settings = {
   Parser::on_message_begin,
   Parser::on_url,
+  Parser::on_status,
   Parser::on_header_field,
   Parser::on_header_value,
   Parser::on_headers_complete,
