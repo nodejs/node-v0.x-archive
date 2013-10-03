@@ -123,6 +123,7 @@
 
     } else {
       var Module = NativeModule.require('module');
+      var path = NativeModule.require('path');
 
       // If -i or --interactive were passed, or stdin is a TTY.
       if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
@@ -138,8 +139,35 @@
           opts.useColors = false;
         }
         var repl = Module.requireRepl().start(opts);
+
+        var home = (process.platform === 'win32' ?
+                    process.env.HOMEDRIVE + process.env.HOMEPATH :
+                    process.env.HOME);
+        if (home) {
+          var noderc = path.join(home, '.noderc.js');
+          var nodeHistory = path.join(home, '.node_history');
+        }
+        var pwd = path.resolve('.');
+        var pwdrc = path.join(pwd, '.noderc.js');
+        [noderc, pwdrc].forEach(function(file) {
+          try {
+            repl.loadContext(file);
+          } catch (e) {
+            if (e.code !== 'MODULE_NOT_FOUND') {
+              // rethrow any errors generated from noderc
+              throw e;
+            }
+          }
+        });
+
+        repl.loadHistory(nodeHistory, function(err) {
+          // if (err) console.log(err.stack);
+        });
         repl.on('exit', function() {
-          process.exit();
+          repl.saveHistory(nodeHistory, function(err) {
+            // if (err) console.log(err.stack);
+            process.exit();
+          });
         });
 
       } else {
