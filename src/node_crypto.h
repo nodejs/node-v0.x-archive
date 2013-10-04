@@ -434,7 +434,8 @@ class Sign : public WeakObject {
   bool SignFinal(unsigned char** md_value,
                  unsigned int *md_len,
                  const char* key_pem,
-                 int key_pem_len);
+                 int key_pem_len,
+                 char* passphrase);
 
  protected:
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);

@@ -2617,7 +2617,8 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
 bool Sign::SignFinal(unsigned char** md_value,
                      unsigned int *md_len,
                      const char* key_pem,
-                     int key_pem_len) {
+                     int key_pem_len,
+                     char* passphrase) {
   if (!initialised_) return false;
 
   BIO* bp = NULL;
@@ -2625,7 +2626,7 @@ bool Sign::SignFinal(unsigned char** md_value,
   bp = BIO_new(BIO_s_mem());
   if (!BIO_write(bp, key_pem, key_pem_len)) return false;
 
-  pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
+  pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, passphrase);
   if (pkey == NULL) return 0;
 
   EVP_SignFinal(&mdctx_, *md_value, md_len, pkey);
@@ -2645,19 +2646,24 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
   unsigned char* md_value;
   unsigned int md_len;
 
+  unsigned int len = args.Length();
   enum encoding encoding = BUFFER;
-  if (args.Length() >= 2) {
+  if (len >= 2) {
     encoding = ParseEncoding(args[1]->ToString(), BUFFER);
   }
 
+  String::Utf8Value passphrase(args[2]);
+
   ASSERT_IS_BUFFER(args[0]);
-  ssize_t len = Buffer::Length(args[0]);
+  ssize_t buf_len = Buffer::Length(args[0]);
   char* buf = Buffer::Data(args[0]);
 
   md_len = 8192;  // Maximum key size is 8192 bits
   md_value = new unsigned char[md_len];
 
-  bool r = sign->SignFinal(&md_value, &md_len, buf, len);
+  bool r = sign->SignFinal(&md_value, &md_len, buf, buf_len,
+                            len >= 3 ? *passphrase : NULL);
+
   if (!r) {
     delete[] md_value;
     md_value = NULL;
