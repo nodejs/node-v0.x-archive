@@ -2655,14 +2655,17 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
   String::Utf8Value passphrase(args[2]);
 
   ASSERT_IS_BUFFER(args[0]);
-  ssize_t buf_len = Buffer::Length(args[0]);
+  size_t buf_len = Buffer::Length(args[0]);
   char* buf = Buffer::Data(args[0]);
 
   md_len = 8192;  // Maximum key size is 8192 bits
   md_value = new unsigned char[md_len];
 
-  bool r = sign->SignFinal(&md_value, &md_len, buf, buf_len,
-                            len >= 3 ? *passphrase : NULL);
+  bool r = sign->SignFinal(&md_value,
+                           &md_len,
+                           buf,
+                           buf_len,
+                           len >= 3 && !args[2]->IsNull() ? *passphrase : NULL);
 
   if (!r) {
     delete[] md_value;
