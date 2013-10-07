@@ -19,52 +19,63 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if(process.argv.length >= 3 && process.argv[2] === 'testing-child-process-escaleshellarg') {
-	for(var index in process.argv) {
-		if(index > 3) {
-			process.stdout.write('\n');
-		}
-		if(index > 2) {
-			process.stdout.write(process.argv[index]);
-		}
-	}
-	process.exit(0);
+if (process.argv.length >= 3 && process.argv[2] === 'testing-child-process-escaleshellarg') {
+  for (var index in process.argv) {
+    if (index > 3) {
+      process.stdout.write('\n');
+    }
+    if (index > 2) {
+      process.stdout.write(process.argv[index]);
+    }
+  }
+  process.exit(0);
 }
 var assert = require('assert');
 var exec = require('child_process').exec;
 var escapeShellArg = require('child_process').escapeShellArg;
 
-var testParameters = ['simple', 'with some spaces', 'with "double quotes"', 'with <redirection> or |pipe|', 'with *some* $special \char/', '$1', '%1', 'Hi\tThere!', '/var/*', '\t'];
+var testParameters = [
+  'simple',
+  'with some spaces',
+  'with "double quotes"',
+  'with <redirection> or |pipe|',
+  'with *some* $special \char/',
+  '$1',
+  '%1',
+  'Hi\tThere!',
+  '/var/*',
+  '\t'
+];
 
 var error_count = 0;
 var mismatched_count = 0;
 var success_count = 0;
 
 testParameters.forEach(function(testParameter) {
-	var commandLine = 'node ' + escapeShellArg(__filename) + ' testing-child-process-escaleshellarg ' + escapeShellArg(testParameter);
-	exec(commandLine, function(error, stdout, stderr) {
-		if(error) {
-			error_count++;
-			console.log('error!: ' + error.code);
-			console.log('stdout: ' + JSON.stringify(stdout));
-			console.log('stderr: ' + JSON.stringify(stderr));
-			assert.equal(false, error.killed);
-		}
-		else {
-			var received = stdout.toString();
-			if(received !== testParameter) {
-				mismatched_count++;
-				console.log(commandLine + '\nSent parameter: >' + testParameter + '< received parameter >' + received + '<');
-			}
-			else {
-				success_count++;
-			}
-		}
-	});
+  var commandLine = 'node ' + escapeShellArg(__filename) + ' testing-child-process-escaleshellarg ' + escapeShellArg(testParameter);
+  exec(commandLine, function(error, stdout, stderr) {
+    if(error) {
+      error_count++;
+      console.log('error!: ' + error.code);
+      console.log('stdout: ' + JSON.stringify(stdout));
+      console.log('stderr: ' + JSON.stringify(stderr));
+      assert.equal(false, error.killed);
+    }
+    else {
+      var received = stdout.toString();
+      if (received !== testParameter) {
+        mismatched_count++;
+        console.log(commandLine + '\nSent parameter: >' + testParameter + '< received parameter >' + received + '<');
+      }
+      else {
+        success_count++;
+      }
+    }
+  });
 });
 
 process.on('exit', function() {
-	assert.equal(0, error_count);
-	assert.equal(0, mismatched_count);
-	assert.equal(testParameters.length, success_count);
+  assert.equal(0, error_count);
+  assert.equal(0, mismatched_count);
+  assert.equal(testParameters.length, success_count);
 });
