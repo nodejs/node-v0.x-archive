@@ -139,7 +139,7 @@ bool no_deprecation = false;
 // process-relative uptime base, initialized at start-up
 static double prog_start_time;
 
-static volatile bool debugger_running = false;
+volatile bool debugger_running = false;
 static uv_async_t dispatch_debug_messages_async;
 static uv_async_t emit_debug_enabled_async;
 
