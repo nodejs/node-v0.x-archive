@@ -435,7 +435,7 @@ class Sign : public WeakObject {
                  unsigned int *md_len,
                  const char* key_pem,
                  int key_pem_len,
-                 char* passphrase);
+                 const char* passphrase);
 
  protected:
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);

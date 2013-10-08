@@ -58,6 +58,17 @@
     }                                                         \
   } while (0)
 
+static int PEM_CALLBACK(char *buf, int size, int rwflag, void *u) {
+  if (u) {
+    int len = strlen((const char *)u);
+    len = len > size ? size : len;
+    memcpy(buf, u, len);
+    return len;
+  }
+
+  return 0;
+}
+
 static const char PUBLIC_KEY_PFX[] =  "-----BEGIN PUBLIC KEY-----";
 static const int PUBLIC_KEY_PFX_LEN = sizeof(PUBLIC_KEY_PFX) - 1;
 static const char PUBRSA_KEY_PFX[] =  "-----BEGIN RSA PUBLIC KEY-----";
@@ -2618,7 +2629,7 @@ bool Sign::SignFinal(unsigned char** md_value,
                      unsigned int *md_len,
                      const char* key_pem,
                      int key_pem_len,
-                     char* passphrase) {
+                     const char* passphrase) {
   if (!initialised_) return false;
 
   BIO* bp = NULL;
@@ -2626,7 +2637,10 @@ bool Sign::SignFinal(unsigned char** md_value,
   bp = BIO_new(BIO_s_mem());
   if (!BIO_write(bp, key_pem, key_pem_len)) return false;
 
-  pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, passphrase);
+  pkey = PEM_read_bio_PrivateKey(bp,
+                                 NULL,
+                                 PEM_CALLBACK,
+                                 const_cast<char*>(passphrase));
   if (pkey == NULL) return 0;
 
   EVP_SignFinal(&mdctx_, *md_value, md_len, pkey);
