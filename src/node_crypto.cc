@@ -2668,7 +2668,7 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
 
   unsigned int len = args.Length();
   enum encoding encoding = BUFFER;
-  if (len >= 2) {
+  if (len >= 2 && args[1]->IsString()) {
     encoding = ParseEncoding(args[1]->ToString(), BUFFER);
   }
 
