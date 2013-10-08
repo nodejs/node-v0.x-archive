@@ -2643,7 +2643,11 @@ bool Sign::SignFinal(unsigned char** md_value,
                                  NULL,
                                  PEM_CALLBACK,
                                  const_cast<char*>(passphrase));
-  if (pkey == NULL) return 0;
+
+  if (!pkey) {
+    BIO_free_all(bp);
+    return 0;
+  }
 
   EVP_SignFinal(&mdctx_, *md_value, md_len, pkey);
   EVP_MD_CTX_cleanup(&mdctx_);
