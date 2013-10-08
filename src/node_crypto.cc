@@ -351,7 +351,7 @@ static X509* LoadX509(Handle<Value> v) {
   BIO *bio = LoadBIO(v);
   if (!bio) return NULL;
 
-  X509 * x509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+  X509 * x509 = PEM_read_bio_X509(bio, NULL, PEM_CALLBACK, NULL);
   if (!x509) {
     BIO_free_all(bio);
     return NULL;
@@ -380,7 +380,9 @@ void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
 
   String::Utf8Value passphrase(args[1]);
 
-  EVP_PKEY* key = PEM_read_bio_PrivateKey(bio, NULL, NULL,
+  EVP_PKEY* key = PEM_read_bio_PrivateKey(bio,
+                                          NULL,
+                                          PEM_CALLBACK,
                                           len == 1 ? NULL : *passphrase);
 
   if (!key) {
@@ -407,7 +409,7 @@ int SSL_CTX_use_certificate_chain(SSL_CTX *ctx, BIO *in) {
   int ret = 0;
   X509 *x = NULL;
 
-  x = PEM_read_bio_X509_AUX(in, NULL, NULL, NULL);
+  x = PEM_read_bio_X509_AUX(in, NULL, PEM_CALLBACK, NULL);
 
   if (x == NULL) {
     SSLerr(SSL_F_SSL_CTX_USE_CERTIFICATE_CHAIN_FILE, ERR_R_PEM_LIB);
@@ -433,7 +435,7 @@ int SSL_CTX_use_certificate_chain(SSL_CTX *ctx, BIO *in) {
       ctx->extra_certs = NULL;
     }
 
-    while ((ca = PEM_read_bio_X509(in, NULL, NULL, NULL))) {
+    while ((ca = PEM_read_bio_X509(in, NULL, PEM_CALLBACK, NULL))) {
       r = SSL_CTX_add_extra_chain_cert(ctx, ca);
 
       if (!r) {
@@ -534,7 +536,7 @@ void SecureContext::AddCRL(const FunctionCallbackInfo<Value>& args) {
   BIO *bio = LoadBIO(args[0]);
   if (!bio) return;
 
-  X509_CRL *x509 = PEM_read_bio_X509_CRL(bio, NULL, NULL, NULL);
+  X509_CRL *x509 = PEM_read_bio_X509_CRL(bio, NULL, PEM_CALLBACK, NULL);
 
   if (x509 == NULL) {
     BIO_free_all(bio);
@@ -568,7 +570,7 @@ void SecureContext::AddRootCerts(const FunctionCallbackInfo<Value>& args) {
         return;
       }
 
-      X509 *x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
+      X509 *x509 = PEM_read_bio_X509(bp, NULL, PEM_CALLBACK, NULL);
 
       if (x509 == NULL) {
         BIO_free_all(bp);
@@ -2807,11 +2809,11 @@ bool Verify::VerifyFinal(const char* key_pem,
   // Split this out into a separate function once we have more than one
   // consumer of public keys.
   if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
-    pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
+    pkey = PEM_read_bio_PUBKEY(bp, NULL, PEM_CALLBACK, NULL);
     if (pkey == NULL)
       goto exit;
   } else if (strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
-    RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, NULL, NULL);
+    RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, PEM_CALLBACK, NULL);
     if (rsa) {
       pkey = EVP_PKEY_new();
       if (pkey) EVP_PKEY_set1_RSA(pkey, rsa);
@@ -2821,7 +2823,7 @@ bool Verify::VerifyFinal(const char* key_pem,
       goto exit;
   } else {
     // X.509 fallback
-    x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
+    x509 = PEM_read_bio_X509(bp, NULL, PEM_CALLBACK, NULL);
     if (x509 == NULL)
       goto exit;
 
