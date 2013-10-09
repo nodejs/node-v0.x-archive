@@ -2886,15 +2886,32 @@ static void EnableDebug(bool wait_connect) {
   node_isolate->Exit();
 }
 
+static void DisableDebug() {
+  node_isolate->Enter();
+
+  v8::Debug::SetDebugMessageDispatchHandler(NULL, false);
+  v8::Debug::CancelDebugBreak(node_isolate);
+  v8::Debug::DisableAgent();
+
+  fprintf(stderr, "debugger stopped listening on port %d\n", debug_port);
+  fflush(stderr);
+
+  debugger_running = false;
+  node_isolate->Exit();
+}
+
 
 #ifdef __POSIX__
 static void EnableDebugSignalHandler(uv_signal_t* handle, int) {
-  // Break once process will return execution to v8
-  v8::Debug::DebugBreak(node_isolate);
-
   if (!debugger_running) {
+    // Break once process will return execution to v8
+    v8::Debug::DebugBreak(node_isolate);
+
     fprintf(stderr, "Hit SIGUSR1 - starting debugger agent.\n");
     EnableDebug(false);
+  } else {
+    fprintf(stderr, "Hit SIGUSR1 - stopping debugger agent.\n");
+    DisableDebug();
   }
 }
 
@@ -3086,7 +3103,6 @@ static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
     debugger_running = false;
   }
 }
-
 
 void Init(int* argc,
           const char** argv,
