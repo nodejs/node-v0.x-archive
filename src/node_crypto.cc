@@ -2628,33 +2628,54 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-bool Sign::SignFinal(unsigned char** md_value,
-                     unsigned int *md_len,
-                     const char* key_pem,
+bool Sign::SignFinal(const char* key_pem,
                      int key_pem_len,
-                     const char* passphrase) {
-  if (!initialised_) return false;
+                     const char* passphrase,
+                     unsigned char** sig,
+                     unsigned int *sig_len) {
+  if (!initialised_) {
+    ThrowError("Sign not initalised");
+    return false;
+  }
 
   BIO* bp = NULL;
   EVP_PKEY* pkey = NULL;
+  bool fatal = true;
+
   bp = BIO_new(BIO_s_mem());
-  if (!BIO_write(bp, key_pem, key_pem_len)) return false;
+  if (bp == NULL)
+    goto exit;
+
+  if (!BIO_write(bp, key_pem, key_pem_len))
+    goto exit;
 
   pkey = PEM_read_bio_PrivateKey(bp,
                                  NULL,
                                  crypto_pem_cb,
                                  const_cast<char*>(passphrase));
 
-  if (!pkey) {
+  if (pkey == NULL)
+    goto exit;
+
+  if (EVP_SignFinal(&mdctx_, *sig, sig_len, pkey))
+    fatal = false;
+
+  initialised_ = false;
+
+ exit:
+  if (pkey != NULL)
+    EVP_PKEY_free(pkey);
+  if (bp != NULL)
     BIO_free_all(bp);
-    return 0;
+
+  EVP_MD_CTX_cleanup(&mdctx_);
+
+  if (fatal) {
+    unsigned long err = ERR_get_error();
+    err ? ThrowCryptoError(err) : ThrowError("PEM_read_bio_PrivateKey");
+    return false;
   }
 
-  EVP_SignFinal(&mdctx_, *md_value, md_len, pkey);
-  EVP_MD_CTX_cleanup(&mdctx_);
-  initialised_ = false;
-  EVP_PKEY_free(pkey);
-  BIO_free_all(bp);
   return true;
 }
 
@@ -2682,11 +2703,11 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
   md_len = 8192;  // Maximum key size is 8192 bits
   md_value = new unsigned char[md_len];
 
-  bool r = sign->SignFinal(&md_value,
-                           &md_len,
-                           buf,
+  bool r = sign->SignFinal(buf,
                            buf_len,
-                           len >= 3 && !args[2]->IsNull() ? *passphrase : NULL);
+                           len >= 3 && !args[2]->IsNull() ? *passphrase : NULL,
+                           &md_value,
+                           &md_len);
 
   if (!r) {
     delete[] md_value;
