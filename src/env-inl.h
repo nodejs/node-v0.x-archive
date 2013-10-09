@@ -122,6 +122,26 @@ inline void Environment::TickInfo::set_last_threw(uint32_t value) {
   fields_[kLastThrew] = value;
 }
 
+inline Environment::SmallocInfo::SmallocInfo() {
+  for (int i = 0; i < kFieldsCount; ++i) fields_[i] = 0;
+}
+
+inline uint32_t* Environment::SmallocInfo::fields() {
+  return fields_;
+}
+
+inline int Environment::SmallocInfo::fields_count() const {
+  return kFieldsCount;
+}
+
+inline void Environment::SmallocInfo::adjust_count(uint32_t value) {
+  fields_[kCount] += value;
+}
+
+inline void Environment::SmallocInfo::adjust_size(uint32_t value) {
+  fields_[kSize] += value;
+}
+
 inline Environment* Environment::New(v8::Local<v8::Context> context) {
   Environment* env = new Environment(context);
   context->SetAlignedPointerInEmbedderData(kContextEmbedderDataIndex, env);
@@ -230,6 +250,10 @@ inline Environment::DomainFlag* Environment::domain_flag() {
 
 inline Environment::TickInfo* Environment::tick_info() {
   return &tick_info_;
+}
+
+inline Environment::SmallocInfo* Environment::smalloc_info() {
+  return &smalloc_info_;
 }
 
 inline bool Environment::using_smalloc_alloc_cb() const {
