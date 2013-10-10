@@ -19,7 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
 var assert = require('assert');
 var os = require('os');
 var util = require('util');
@@ -67,7 +66,7 @@ gcore.on('exit', function (code) {
     }
 
     var lines = output.split('\n');
-    var found = 0, i, expected = 'OBEY: ' + obj.OBEY, nexpected = 2;
+    var found = 0, i, expected = 'OBEY: "' + obj.OBEY + '"', nexpected = 2;
 
     for (var i = 0; i < lines.length; i++) {
       if (lines[i].indexOf(expected) != -1)
