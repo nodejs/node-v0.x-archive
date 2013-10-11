@@ -27,7 +27,15 @@ var spawn = require('child_process').spawn;
 var cat = spawn('cat');
 var called;
 
-process.kill(cat.pid, 0);
+assert.ok(process.kill(cat.pid, 0));
+
+cat.on('exit', function() {
+  try {
+    process.kill(cat.pid, 0);
+    assert(false, 'cat process should not exist');
+  } catch(er) {
+  }
+});
 
 cat.stdout.on('data', function() {
   called = true;
