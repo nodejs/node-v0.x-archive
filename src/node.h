@@ -253,6 +253,10 @@ node_module_struct* get_builtin_module(const char *name);
  */
 NODE_EXTERN void AtExit(void (*cb)(void* arg), void* arg = 0);
 
+/* Accessor method for debug mode status
+ */
+NODE_EXTERN bool DebuggerRunning(v8::Isolate *isolate);
+
 }  // namespace node
 
 #endif  // SRC_NODE_H_

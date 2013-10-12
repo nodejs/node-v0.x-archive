@@ -139,7 +139,7 @@ bool no_deprecation = false;
 // process-relative uptime base, initialized at start-up
 static double prog_start_time;
 
-volatile bool debugger_running = false;
+static volatile bool debugger_running = false;
 static uv_async_t dispatch_debug_messages_async;
 static uv_async_t emit_debug_enabled_async;
 
@@ -2887,7 +2887,7 @@ static void EnableDebug(bool wait_connect) {
 }
 
 static void DisableDebug() {
-  node_isolate->Enter();
+  Isolate::Scope isolate_scope(node_isolate);
 
   v8::Debug::SetDebugMessageDispatchHandler(NULL, false);
   v8::Debug::CancelDebugBreak(node_isolate);
@@ -2897,21 +2897,20 @@ static void DisableDebug() {
   fflush(stderr);
 
   debugger_running = false;
-  node_isolate->Exit();
 }
 
 
 #ifdef __POSIX__
 static void EnableDebugSignalHandler(uv_signal_t* handle, int) {
-  if (!debugger_running) {
+  if (debugger_running) {
+    fprintf(stderr, "Hit SIGUSR1 - stopping debugger agent.\n");
+    DisableDebug();
+  } else {
     // Break once process will return execution to v8
     v8::Debug::DebugBreak(node_isolate);
 
     fprintf(stderr, "Hit SIGUSR1 - starting debugger agent.\n");
     EnableDebug(false);
-  } else {
-    fprintf(stderr, "Hit SIGUSR1 - stopping debugger agent.\n");
-    DisableDebug();
   }
 }
 
@@ -3104,6 +3103,7 @@ static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+
 void Init(int* argc,
           const char** argv,
           int* exec_argc,
@@ -3273,6 +3273,10 @@ void EmitExit(Environment* env) {
   exit(code);
 }
 
+bool DebuggerRunning(Isolate *isolate) {
+  Isolate::Scope isolate_scope(isolate);
+  return debugger_running;
+}  
 
 Environment* CreateEnvironment(Isolate* isolate,
                                int argc,
