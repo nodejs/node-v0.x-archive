@@ -2886,13 +2886,29 @@ static void EnableDebug(bool wait_connect) {
   node_isolate->Exit();
 }
 
+static void DisableDebug() {
+  Isolate::Scope isolate_scope(node_isolate);
+
+  v8::Debug::SetDebugMessageDispatchHandler(NULL, false);
+  v8::Debug::CancelDebugBreak(node_isolate);
+  v8::Debug::DisableAgent();
+
+  fprintf(stderr, "debugger stopped listening on port %d\n", debug_port);
+  fflush(stderr);
+
+  debugger_running = false;
+}
+
 
 #ifdef __POSIX__
 static void EnableDebugSignalHandler(uv_signal_t* handle, int) {
-  // Break once process will return execution to v8
-  v8::Debug::DebugBreak(node_isolate);
+  if (debugger_running) {
+    fprintf(stderr, "Hit SIGUSR1 - stopping debugger agent.\n");
+    DisableDebug();
+  } else {
+    // Break once process will return execution to v8
+    v8::Debug::DebugBreak(node_isolate);
 
-  if (!debugger_running) {
     fprintf(stderr, "Hit SIGUSR1 - starting debugger agent.\n");
     EnableDebug(false);
   }
@@ -3257,6 +3273,10 @@ void EmitExit(Environment* env) {
   exit(code);
 }
 
+bool DebuggerRunning(Isolate *isolate) {
+  Isolate::Scope isolate_scope(isolate);
+  return debugger_running;
+}  
 
 Environment* CreateEnvironment(Isolate* isolate,
                                int argc,

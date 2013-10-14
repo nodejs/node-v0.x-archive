@@ -52,12 +52,24 @@ function processStderrLine(line) {
   outputLines.push(line);
 
   if (/debugger listening/.test(line)) {
-    assertOutputLines();
+    assertEnableOutputLines();
+
+    if (process.platform !== 'win32') {
+      outputLines = [];
+      // Send signal to disable debugger
+      process._debugProcess(child.pid);
+    } else {
+      process.exit();
+    }
+  }
+
+  if (/debugger stopped listening/.test(line)) {
+    assertDisableOutputLines();
     process.exit();
   }
 }
 
-function assertOutputLines() {
+function assertEnableOutputLines() {
   var startLog = process.platform === 'win32'
                  ? 'Starting debugger agent.'
                  : 'Hit SIGUSR1 - starting debugger agent.';
@@ -67,6 +79,18 @@ function assertOutputLines() {
     'debugger listening on port ' + debugPort
   ];
 
+  assert.equal(outputLines.length, expectedLines.length);
+  for (var i = 0; i < expectedLines.length; i++)
+    assert.equal(outputLines[i], expectedLines[i]);
+
+}
+
+function assertDisableOutputLines() {
+  var expectedLines = [
+    'Hit SIGUSR1 - stopping debugger agent.',
+    'debugger stopped listening on port ' + debugPort
+  ];
+  
   assert.equal(outputLines.length, expectedLines.length);
   for (var i = 0; i < expectedLines.length; i++)
     assert.equal(outputLines[i], expectedLines[i]);
