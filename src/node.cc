@@ -2880,9 +2880,27 @@ static void EnableDebug(bool wait_connect) {
 }
 
 
+static void DisableDebug() {
+  Isolate::Scope isolate_scope(node_isolate);
+
+  v8::Debug::SetDebugMessageDispatchHandler(NULL, false);
+  v8::Debug::CancelDebugBreak(node_isolate);
+  v8::Debug::DisableAgent();
+
+  fprintf(stderr, "debugger stopped listening on port %d\n", debug_port);
+  fflush(stderr);
+
+  debugger_running = false;
+}
+
+
 // Called from the main thread.
 static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle, int status) {
-  if (debugger_running == false) {
+  if (debugger_running) {
+    fprintf(stderr, "Stopping debugger agent.\n");
+    DisableDebug();
+  }
+  else {
     fprintf(stderr, "Starting debugger agent.\n");
     EnableDebug(false);
   }
