@@ -2887,7 +2887,7 @@ static void DisableDebug() {
   v8::Debug::CancelDebugBreak(node_isolate);
   v8::Debug::DisableAgent();
 
-  fprintf(stderr, "debugger stopped listening on port %d\n", debug_port);
+  fprintf(stderr, "Debugger stopped listening on port %d\n", debug_port);
   fflush(stderr);
 
   debugger_running = false;
