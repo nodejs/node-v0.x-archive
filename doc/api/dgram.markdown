@@ -128,6 +128,11 @@ a packet might travel, and that generally sending a datagram greater than
 the (receiver) `MTU` won't work (the packet gets silently dropped, without
 informing the source that the data did not reach its intended recipient).
 
+** A Note about DNS resolving **
+
+If you reuse the same socket for concurrent message exchanges with different hosts, 
+do the DNS-resolving yourself as DNS errors are emitted on the socket `error` event.
+
 ### socket.bind(port, [address], [callback])
 
 * `port` Integer
