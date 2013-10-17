@@ -52,17 +52,41 @@ function processStderrLine(line) {
   outputLines.push(line);
 
   if (/Debugger listening/.test(line)) {
-    assertOutputLines();
+    assertEnableOutputLines();
+
+    if (process.platform !== 'win32') {
+      outputLines = [];
+      // Send signal to disable debugger
+      process._debugProcess(child.pid);
+    } else {
+      process.exit();
+    }
+  }
+
+  if (/Debugger stopped listening/.test(line)) {
+    assertDisableOutputLines();
     process.exit();
   }
 }
 
-function assertOutputLines() {
+function assertEnableOutputLines() {  
   var expectedLines = [
     'Starting debugger agent.',
     'Debugger listening on port ' + debugPort
   ];
 
+  assert.equal(outputLines.length, expectedLines.length);
+  for (var i = 0; i < expectedLines.length; i++)
+    assert.equal(outputLines[i], expectedLines[i]);
+
+}
+
+function assertDisableOutputLines() {
+  var expectedLines = [
+    'Stopping debugger agent.',
+    'Debugger stopped listening on port ' + debugPort
+  ];
+  
   assert.equal(outputLines.length, expectedLines.length);
   for (var i = 0; i < expectedLines.length; i++)
     assert.equal(outputLines[i], expectedLines[i]);
