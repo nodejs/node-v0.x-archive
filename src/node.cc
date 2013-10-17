@@ -3260,6 +3260,11 @@ void EmitExit(Environment* env) {
 }
 
 
+bool IsDebuggerRunning(Isolate* isolate) {
+  Isolate::Scope isolate_scope(isolate);
+  return debugger_running;
+}
+
 Environment* CreateEnvironment(Isolate* isolate,
                                int argc,
                                const char* const* argv,
