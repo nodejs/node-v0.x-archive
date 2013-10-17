@@ -63,7 +63,7 @@ function processStderrLine(line) {
     }
   }
 
-  if (/debugger stopped listening/.test(line)) {
+  if (/Debugger stopped listening/.test(line)) {
     assertDisableOutputLines();
     process.exit();
   }
