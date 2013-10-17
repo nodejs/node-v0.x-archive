@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 if (process.argv.length >= 3
-      && process.argv[2] === 'testing-child-process-escaleshellarg') {
+      && process.argv[2] === 'testing-child-process-escapeshellarg') {
   process.argv.forEach(function(arg, index) {
     if (index > 3) {
       process.stdout.write('\n');
@@ -54,7 +54,7 @@ var success_count = 0;
 
 testParameters.forEach(function(testParameter) {
   var commandLine = 'node ' + escapeShellArg(__filename)
-    + ' testing-child-process-escaleshellarg ' + escapeShellArg(testParameter);
+    + ' testing-child-process-escapeshellarg ' + escapeShellArg(testParameter);
   exec(commandLine, function(error, stdout, stderr) {
     if (error) {
       error_count++;
