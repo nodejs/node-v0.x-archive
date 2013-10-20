@@ -152,6 +152,11 @@ parser.add_option('--shared-openssl-libpath',
     dest='shared_openssl_libpath',
     help='a directory to search for the shared OpenSSL DLLs')
 
+parser.add_option('--shared-openssl-fips',
+    action='store_true',
+    dest='shared_openssl_fips',
+    help='enable FIPS mode for shared OpenSSL DLLs')
+
 parser.add_option('--shared-v8',
     action='store_true',
     dest='shared_v8',
@@ -609,6 +614,9 @@ def configure_openssl(o):
       o['include_dirs'] += [options.shared_openssl_includes]
     else:
       o['cflags'] += cflags.split()
+
+    if options.shared_openssl_fips:
+      o['defines'] += ['OPENSSL_FIPS']
 
 
 def configure_winsdk(o):

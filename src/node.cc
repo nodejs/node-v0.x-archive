@@ -33,6 +33,9 @@
 
 #if HAVE_OPENSSL
 #include "node_crypto.h"
+#ifdef OPENSSL_FIPS
+#include "crypto.h"
+#endif
 #endif
 
 #if defined HAVE_DTRACE || defined HAVE_ETW || defined HAVE_SYSTEMTAP
@@ -2420,6 +2423,14 @@ void SetupProcessObject(Environment* env,
       versions,
       "openssl",
       OneByteString(node_isolate, &OPENSSL_VERSION_TEXT[i], j - i));
+
+#ifdef OPENSSL_FIPS
+  if(!FIPS_mode_set(1)) {
+    fprintf(stderr,"OpenSSL shared library does not support FIPS mode");
+    exit(1);
+  } 
+#endif
+
 #endif
 
   // process.arch
