@@ -244,6 +244,27 @@ TEST(function test_resolveNaptr(done) {
   checkWrap(req);
 });
 
+TEST(function test_resolveSoa(done) {
+  var req = dns.resolveSoa('digitalocean.com', function(err, result) {
+    if (err) throw err;
+    
+    assert.ok(result);
+    assert.ok(typeof result === 'object');
+    
+    assert.ok(typeof result.nsname === 'string');
+    assert.ok(typeof result.hostmaster === 'string');
+    assert.ok(typeof result.serial === 'number');
+    assert.ok(typeof result.refresh === 'number');
+    assert.ok(typeof result.retry === 'number');
+    assert.ok(typeof result.expire === 'number');
+    assert.ok(typeof result.minttl === 'number');
+
+    done();
+  });
+  
+  checkWrap(req);
+});
+
 TEST(function test_resolveCname(done) {
   var req = dns.resolveCname('www.microsoft.com', function(err, names) {
     if (err) throw err;
