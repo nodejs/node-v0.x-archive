@@ -55,7 +55,8 @@ Resolves a hostname (e.g. `'google.com'`) into an array of the record types
 specified by rrtype. Valid rrtypes are `'A'` (IPV4 addresses, default),
 `'AAAA'` (IPV6 addresses), `'MX'` (mail exchange records), `'TXT'` (text
 records), `'SRV'` (SRV records), `'PTR'` (used for reverse IP lookups),
-`'NS'` (name server records), `'CNAME'` (canonical name records) and `SOA` (start of authority record).
+`'NS'` (name server records), `'CNAME'` (canonical name records) and 
+`SOA` (start of authority record).
 
 The callback has arguments `(err, addresses)`.  The type of each item
 in `addresses` is determined by the record type, and described in the
@@ -98,12 +99,14 @@ of SRV records are priority, weight, port, and name (e.g.,
 
 ## dns.resolveSoa(hostname, callback)
 
-The same as `dns.resolve()`, but only for start of authority record queries (`SOA` record).
+The same as `dns.resolve()`, but only for start of authority record queries 
+(`SOA` record).
 
-Result is an object and contains `SOA` properties. Property details are below with sample result.
+Result is an object and contains `SOA` properties. Property details are below 
+with sample result.
 ```
-{ nsname: 'kim.ns.cloudflare.com',
-  hostmaster: 'dns.cloudflare.com',
+{ nsname: 'ns.example.com',
+  hostmaster: 'root.example.com',
   serial: 2013101809,
   refresh: 10000,
   retry: 2400,
