@@ -3294,6 +3294,7 @@ bool IsDebuggerRunning(Isolate* isolate) {
   return debugger_running;
 }
 
+
 Environment* CreateEnvironment(Isolate* isolate,
                                int argc,
                                const char* const* argv,
