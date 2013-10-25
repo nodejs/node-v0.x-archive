@@ -2899,9 +2899,8 @@ static void DebugSignalHandlerAsyncCallback(uv_async_t* handle, int status) {
   if (debugger_running) {
     fprintf(stderr, "Stopping debugger agent.\n");
     DisableDebug();
-  }
-  else {
-    v8::Debug::DebugBreak(*static_cast<Isolate* volatile*>(&node_isolate));
+  } else {
+    v8::Debug::DebugBreak(node_isolate);
 
     fprintf(stderr, "Starting debugger agent.\n");
     EnableDebug(false);
