@@ -580,7 +580,7 @@ The supported boolean members are `persistent` and `recursive`. `persistent`
 indicates whether the process should continue to run as long as files are being
 watched. `recursive` indicates whether all subdirectories should be watched, or
 only the current directory. This applies when a directory is specified, and only
-on supported platforms.
+on supported platforms (See Caveats below).
 
 The default is `{ persistent: true, recursive: false }`.
 
@@ -594,6 +594,10 @@ the event.
 
 The `fs.watch` API is not 100% consistent across platforms, and is
 unavailable in some situations.
+
+The recursive option is currently supported on OS X. Only FSEvents supports this
+type of file watching so it is unlikely any additional platforms will be added
+soon.
 
 #### Availability
 
