@@ -271,8 +271,8 @@
           'dependencies': [ 'uv_dtrace_header' ],
           'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
           'conditions': [
-            ['OS != "mac"', {
-              'sources': ['src/unix/dtrace.c' ],
+            ['OS != "mac" and OS != "linux"', {
+              'sources': [ 'src/unix/dtrace.c' ],
             }],
           ],
         }],
