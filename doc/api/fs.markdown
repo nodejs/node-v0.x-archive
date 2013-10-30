@@ -212,7 +212,7 @@ Synchronous link(2).
 
 Asynchronous symlink(2). No arguments other than a possible exception are given
 to the completion callback.
-`type` argument can be either `'dir'`, `'file'`, or `'junction'` (default is `'file'`).  It is only 
+`type` argument can be either `'dir'`, `'file'`, or `'junction'` (default is `'file'`).  It is only
 used on Windows (ignored on other platforms).
 Note that Windows junction points require the destination path to be absolute.  When using
 `'junction'`, the `destination` argument will automatically be normalized to absolute path.
@@ -607,8 +607,8 @@ This feature depends on the underlying operating system providing a way
 to be notified of filesystem changes.
 
 * On Linux systems, this uses `inotify`.
-* On BSD systems (including older versions of OS X), this uses `kqueue`.
-* On more recent versions of OS X, this uses 'FSEvents'.
+* On BSD systems, this uses `kqueue`.
+* On OS X, this uses `kqueue` for files and 'FSEvents' for directories.
 * On SunOS systems (including Solaris and SmartOS), this uses `event ports`.
 * On Windows systems, this feature depends on `ReadDirectoryChangesW`.
 
