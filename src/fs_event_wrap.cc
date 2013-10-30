@@ -109,7 +109,7 @@ void FSEventWrap::Start(const FunctionCallbackInfo<Value>& args) {
 
   int flags = 0;
   if (args[1]->IsTrue())
-    flags = UV_FS_EVENT_RECURSIVE;
+    flags |= UV_FS_EVENT_RECURSIVE;
 
   int err = uv_fs_event_init(wrap->env()->event_loop(),
                              &wrap->handle_,
