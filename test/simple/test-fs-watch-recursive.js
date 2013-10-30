@@ -38,25 +38,25 @@ if (process.platform === 'darwin') {
     assert.ok(watchSeenOne > 0);
   });
 
-  // Clean up stale files (if any) from previous run.
-  try { fs.unlinkSync(filepathOne); } catch (e) { }
-  try { fs.rmdirSync(testsubdir); } catch (e) { }
+  function cleanup() {
+    try { fs.unlinkSync(filepathOne); } catch (e) { }
+    try { fs.rmdirSync(testsubdir); } catch (e) { }
+  };
 
   try { fs.mkdirSync(testsubdir, 0700); } catch (e) {}
   fs.writeFileSync(filepathOne, 'hello');
 
-  assert.doesNotThrow(
-      function() {
-        var watcher = fs.watch(testDir, {recursive: true});
-        watcher.on('change', function(event, filename) {
-          assert.ok('change' === event || 'rename' === event);
-          assert.equal(relativePathOne, filename);
+  assert.doesNotThrow(function() {
+    var watcher = fs.watch(testDir, {recursive: true});
+    watcher.on('change', function(event, filename) {
+      assert.ok('change' === event || 'rename' === event);
+      assert.equal(relativePathOne, filename);
 
-          watcher.close();
-          ++watchSeenOne;
-        });
-      }
-  );
+      watcher.close();
+      cleanup();
+      ++watchSeenOne;
+    });
+  });
 
   setTimeout(function() {
     fs.writeFileSync(filepathOne, 'world');
