@@ -46,14 +46,28 @@ inline AsyncWrap::AsyncWrap(Environment* env, v8::Handle<v8::Object> object)
   try_catch.SetVerbose(true);
 
   v8::Local<v8::Value> val = object.As<v8::Value>();
-  env->async_listener_run_function()->Call(env->process_object(), 1, &val);
+  v8::Local<v8::Value> ret =
+      env->async_listener_run_function()->Call(env->process_object(), 1, &val);
 
-  if (!try_catch.HasCaught())
+  if (!try_catch.HasCaught()) {
     async_flags_ |= ASYNC_LISTENERS;
+    if (ret->IsFunction()) {
+      async_flags_ |= DONE_CALLBACK;
+      done_callback_.Reset(env->isolate(), ret.As<v8::Function>());
+    }
+  }
 }
 
 
 inline AsyncWrap::~AsyncWrap() {
+  if (has_done_callback()) {
+    remove_flag(DONE_CALLBACK);
+
+    PersistentToLocal(env()->isolate(), done_callback_)->
+        Call(env()->process_object(), 0, NULL);
+
+    done_callback_.Reset();
+  }
 }
 
 
@@ -85,6 +99,11 @@ inline void AsyncWrap::remove_flag(unsigned int flag) {
 
 inline bool AsyncWrap::has_async_queue() {
   return async_flags() & ASYNC_LISTENERS;
+}
+
+
+inline bool AsyncWrap::has_done_callback() {
+  return async_flags() & DONE_CALLBACK;
 }
 
 
