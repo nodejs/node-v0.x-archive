@@ -21,22 +21,46 @@
 
 var common = require('../common');
 var assert = require('assert');
-var events = require('events');
-var domain = require('domain');
+var net = require('net');
 
-var errorCatched = false;
 
-var e = new events.EventEmitter();
+// TODO(trevnorris): Test has the flaw that it's not checking if the async
+// flag has been removed on the class instance. Though currently there's
+// no way to do that.
+var listener = process.addAsyncListener(function() { });
 
-var d = domain.create();
-d.add(e);
-d.on('error', function (er) {
-  assert(er instanceof Error, 'error created');
-  errorCatched = true;
+
+// Test timers
+
+setImmediate(function() {
+  assert.equal(this._asyncQueue.length, 0);
+}).removeAsyncListener(listener);
+
+setTimeout(function() {
+  assert.equal(this._asyncQueue.length, 0);
+}).removeAsyncListener(listener);
+
+setInterval(function() {
+  clearInterval(this);
+  assert.equal(this._asyncQueue.length, 0);
+}).removeAsyncListener(listener);
+
+
+// Test net
+
+var server = net.createServer(function(c) {
+  c._handle.removeAsyncListener(listener);
+  assert.equal(c._handle._asyncQueue.length, 0);
 });
 
-e.emit('error');
+server.listen(common.PORT, function() {
+  server._handle.removeAsyncListener(listener);
+  assert.equal(server._handle._asyncQueue.length, 0);
 
-process.on('exit', function () {
-  assert(errorCatched, 'error got caught');
+  var client = net.connect(common.PORT, function() {
+    client._handle.removeAsyncListener(listener);
+    assert.equal(client._handle._asyncQueue.length, 0);
+    client.end();
+    server.close();
+  });
 });

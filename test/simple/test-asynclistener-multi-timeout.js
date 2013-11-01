@@ -21,22 +21,51 @@
 
 var common = require('../common');
 var assert = require('assert');
-var events = require('events');
-var domain = require('domain');
 
-var errorCatched = false;
+var addListener = process.addAsyncListener;
+var removeListener = process.removeAsyncListener;
+var caught = [];
+var expect = [];
 
-var e = new events.EventEmitter();
+function asyncL(a) {}
 
-var d = domain.create();
-d.add(e);
-d.on('error', function (er) {
-  assert(er instanceof Error, 'error created');
-  errorCatched = true;
+var callbacksObj = {
+  error: function(value, er) {
+    process._rawDebug('caught', er.message);
+    caught.push(er.message);
+    return (expect.indexOf(er.message) !== -1);
+  }
+};
+
+var listener = process.createAsyncListener(asyncL, callbacksObj);
+
+process.on('exit', function(code) {
+  removeListener(listener);
+
+  if (code > 0)
+    return;
+
+  expect = expect.sort();
+  caught = caught.sort();
+
+  process._rawDebug('expect', expect);
+  process._rawDebug('caught', caught);
+  assert.deepEqual(caught, expect, 'caught all expected errors');
+  process._rawDebug('ok');
 });
 
-e.emit('error');
 
-process.on('exit', function () {
-  assert(errorCatched, 'error got caught');
+expect.push('immediate simple a');
+expect.push('immediate simple b');
+process.nextTick(function() {
+  addListener(listener);
+  // Tests for a setImmediate specific bug encountered while implementing
+  // AsyncListeners.
+  setImmediate(function() {
+    throw new Error('immediate simple a');
+  });
+  setImmediate(function() {
+    throw new Error('immediate simple b');
+  });
+  removeListener(listener);
 });

@@ -21,22 +21,61 @@
 
 var common = require('../common');
 var assert = require('assert');
-var events = require('events');
-var domain = require('domain');
 
-var errorCatched = false;
+var once = 0;
+function onAsync0() { }
+function onAsync1() { }
 
-var e = new events.EventEmitter();
+var results = [];
+var handlers = {
+  before: function() {
+    throw 1;
+  },
+  error: function(stor, err) {
+    // Must catch error thrown in before callback.
+    assert.equal(err, 1);
+    once++;
+    return true;
+  }
+}
 
-var d = domain.create();
-d.add(e);
-d.on('error', function (er) {
-  assert(er instanceof Error, 'error created');
-  errorCatched = true;
+var handlers1 = {
+  before: function() {
+    throw 2;
+  },
+  error: function(stor, err) {
+    // Must catch *other* handlers throw by error callback.
+    assert.equal(err, 1);
+    once++;
+    return true;
+  }
+}
+
+var listeners = [
+  process.addAsyncListener(onAsync0, handlers),
+  process.addAsyncListener(onAsync1, handlers1)
+];
+
+var uncaughtFired = false;
+process.on('uncaughtException', function(err) {
+  uncaughtFired = true;
+
+  // Both error handlers must fire.
+  assert.equal(once, 2);
 });
 
-e.emit('error');
+process.nextTick(function() { });
 
-process.on('exit', function () {
-  assert(errorCatched, 'error got caught');
+for (var i = 0; i < listeners.length; i++)
+  process.removeAsyncListener(listeners[i]);
+
+process.on('exit', function(code) {
+  // If the exit code isn't ok then return early to throw the stack that
+  // caused the bad return code.
+  if (code !== 0)
+    return;
+  // Make sure uncaughtException actually fired.
+  assert.ok(uncaughtFired);
+  console.log('ok');
 });
+

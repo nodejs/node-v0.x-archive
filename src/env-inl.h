@@ -69,24 +69,26 @@ inline v8::Isolate* Environment::IsolateData::isolate() const {
   return isolate_;
 }
 
-inline Environment::DomainFlag::DomainFlag() {
-  for (int i = 0; i < kFieldsCount; ++i) fields_[i] = 0;
+inline Environment::AsyncListener::AsyncListener() {
+  for (int i = 0; i < kFieldsCount; ++i)
+    fields_[i] = 0;
 }
 
-inline uint32_t* Environment::DomainFlag::fields() {
+inline uint32_t* Environment::AsyncListener::fields() {
   return fields_;
 }
 
-inline int Environment::DomainFlag::fields_count() const {
+inline int Environment::AsyncListener::fields_count() const {
   return kFieldsCount;
 }
 
-inline uint32_t Environment::DomainFlag::count() const {
+inline uint32_t Environment::AsyncListener::count() const {
   return fields_[kCount];
 }
 
 inline Environment::TickInfo::TickInfo() : in_tick_(false), last_threw_(false) {
-  for (int i = 0; i < kFieldsCount; ++i) fields_[i] = 0;
+  for (int i = 0; i < kFieldsCount; ++i)
+    fields_[i] = 0;
 }
 
 inline uint32_t* Environment::TickInfo::fields() {
@@ -161,7 +163,6 @@ inline Environment::Environment(v8::Local<v8::Context> context)
     : isolate_(context->GetIsolate()),
       isolate_data_(IsolateData::GetOrCreate(context->GetIsolate())),
       using_smalloc_alloc_cb_(false),
-      using_domains_(false),
       context_(context->GetIsolate(), context) {
   // We'll be creating new objects so make sure we've entered the context.
   v8::Context::Scope context_scope(context);
@@ -187,10 +188,9 @@ inline v8::Isolate* Environment::isolate() const {
   return isolate_;
 }
 
-inline bool Environment::in_domain() const {
+inline bool Environment::has_async_listeners() const {
   // The const_cast is okay, it doesn't violate conceptual const-ness.
-  return using_domains() &&
-         const_cast<Environment*>(this)->domain_flag()->count() > 0;
+  return const_cast<Environment*>(this)->async_listener()->count() > 0;
 }
 
 inline Environment* Environment::from_immediate_check_handle(
@@ -227,8 +227,8 @@ inline uv_loop_t* Environment::event_loop() const {
   return isolate_data()->event_loop();
 }
 
-inline Environment::DomainFlag* Environment::domain_flag() {
-  return &domain_flag_;
+inline Environment::AsyncListener* Environment::async_listener() {
+  return &async_listener_count_;
 }
 
 inline Environment::TickInfo* Environment::tick_info() {
@@ -241,14 +241,6 @@ inline bool Environment::using_smalloc_alloc_cb() const {
 
 inline void Environment::set_using_smalloc_alloc_cb(bool value) {
   using_smalloc_alloc_cb_ = value;
-}
-
-inline bool Environment::using_domains() const {
-  return using_domains_;
-}
-
-inline void Environment::set_using_domains(bool value) {
-  using_domains_ = value;
 }
 
 inline Environment* Environment::from_cares_timer_handle(uv_timer_t* handle) {

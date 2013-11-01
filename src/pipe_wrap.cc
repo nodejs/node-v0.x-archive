@@ -111,6 +111,8 @@ void PipeWrap::Initialize(Handle<Object> target,
   NODE_SET_PROTOTYPE_METHOD(t, "setPendingInstances", SetPendingInstances);
 #endif
 
+  AsyncWrap::AddMethods<PipeWrap>(t);
+
   target->Set(FIXED_ONE_BYTE_STRING(node_isolate, "Pipe"), t->GetFunction());
   env->set_pipe_constructor_template(t);
 }
@@ -192,11 +194,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   };
 
   if (status != 0) {
-    MakeCallback(env,
-                 pipe_wrap->object(),
-                 env->onconnection_string(),
-                 ARRAY_SIZE(argv),
-                 argv);
+    pipe_wrap->MakeCallback(env->onconnection_string(), ARRAY_SIZE(argv), argv);
     return;
   }
 
@@ -212,11 +210,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
 
   // Successful accept. Call the onconnection callback in JavaScript land.
   argv[1] = client_obj;
-  MakeCallback(env,
-               pipe_wrap->object(),
-               env->onconnection_string(),
-               ARRAY_SIZE(argv),
-               argv);
+  pipe_wrap->MakeCallback(env->onconnection_string(), ARRAY_SIZE(argv), argv);
 }
 
 // TODO(bnoordhuis) Maybe share this with TCPWrap?
@@ -251,11 +245,7 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
     Boolean::New(writable)
   };
 
-  MakeCallback(env,
-               req_wrap_obj,
-               env->oncomplete_string(),
-               ARRAY_SIZE(argv),
-               argv);
+  req_wrap->MakeCallback(env->oncomplete_string(), ARRAY_SIZE(argv), argv);
 
   delete req_wrap;
 }

@@ -451,11 +451,7 @@ void StreamWrap::AfterWrite(uv_write_t* req, int status) {
     req_wrap_obj
   };
 
-  MakeCallback(env,
-               req_wrap_obj,
-               env->oncomplete_string(),
-               ARRAY_SIZE(argv),
-               argv);
+  req_wrap->MakeCallback(env->oncomplete_string(), ARRAY_SIZE(argv), argv);
 
   req_wrap->~WriteWrap();
   delete[] reinterpret_cast<char*>(req_wrap);
@@ -499,11 +495,7 @@ void StreamWrap::AfterShutdown(uv_shutdown_t* req, int status) {
     req_wrap_obj
   };
 
-  MakeCallback(env,
-               req_wrap_obj,
-               env->oncomplete_string(),
-               ARRAY_SIZE(argv),
-               argv);
+  req_wrap->MakeCallback(env->oncomplete_string(), ARRAY_SIZE(argv), argv);
 
   delete req_wrap;
 }
@@ -574,7 +566,7 @@ void StreamWrapCallbacks::DoRead(uv_stream_t* handle,
   if (nread < 0)  {
     if (buf->base != NULL)
       free(buf->base);
-    MakeCallback(env, Self(), env->onread_string(), ARRAY_SIZE(argv), argv);
+    wrap()->MakeCallback(env->onread_string(), ARRAY_SIZE(argv), argv);
     return;
   }
 
@@ -603,21 +595,12 @@ void StreamWrapCallbacks::DoRead(uv_stream_t* handle,
     argv[2] = pending_obj;
   }
 
-  MakeCallback(env,
-               wrap()->object(),
-               env->onread_string(),
-               ARRAY_SIZE(argv),
-               argv);
+  wrap()->MakeCallback(env->onread_string(), ARRAY_SIZE(argv), argv);
 }
 
 
 int StreamWrapCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
   return uv_shutdown(&req_wrap->req_, wrap()->stream(), cb);
-}
-
-
-Handle<Object> StreamWrapCallbacks::Self() {
-  return wrap()->object();
 }
 
 }  // namespace node

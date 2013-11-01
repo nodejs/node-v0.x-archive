@@ -19,50 +19,48 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_REQ_WRAP_H_
-#define SRC_REQ_WRAP_H_
+var common = require('../common');
+var assert = require('assert');
 
-#include "async-wrap.h"
-#include "async-wrap-inl.h"
-#include "env.h"
-#include "env-inl.h"
-#include "queue.h"
-#include "util.h"
+function onAsync() {}
 
-namespace node {
-
-// defined in node.cc
-extern QUEUE req_wrap_queue;
-
-template <typename T>
-class ReqWrap : public AsyncWrap {
- public:
-  ReqWrap(Environment* env, v8::Handle<v8::Object> object)
-      : AsyncWrap(env, object) {
-    QUEUE_INSERT_TAIL(&req_wrap_queue, &req_wrap_queue_);
+var results = [];
+var asyncNoHandleError = {
+  error: function(stor) {
+    results.push(1);
   }
-
-
-  ~ReqWrap() {
-    QUEUE_REMOVE(&req_wrap_queue_);
-    // Assert that someone has called Dispatched()
-    assert(req_.data == this);
-    assert(!persistent().IsEmpty());
-    persistent().Dispose();
-  }
-
-  // Call this after the req has been dispatched.
-  void Dispatched() {
-    req_.data = this;
-  }
-
-  // TODO(bnoordhuis) Make these private.
-  QUEUE req_wrap_queue_;
-  T req_;  // *must* be last, GetActiveRequests() in node.cc depends on it
 };
 
+var asyncHandleError = {
+  error: function(stor) {
+    results.push(0);
+    return true;
+  }
+};
 
-}  // namespace node
+var listeners = [
+  process.addAsyncListener(onAsync, asyncHandleError),
+  process.addAsyncListener(onAsync, asyncNoHandleError)
+];
 
+// Even if an error handler returns true, both should fire.
+process.nextTick(function() {
+  throw new Error();
+});
 
-#endif  // SRC_REQ_WRAP_H_
+process.removeAsyncListener(listeners[0]);
+process.removeAsyncListener(listeners[1]);
+
+process.on('exit', function(code) {
+  // If the exit code isn't ok then return early to throw the stack that
+  // caused the bad return code.
+  if (code !== 0)
+    return;
+
+  // Mixed handling of errors should propagate to all listeners.
+  assert.equal(results[0], 0);
+  assert.equal(results[1], 1);
+  assert.equal(results.length, 2);
+
+  console.log('ok');
+});

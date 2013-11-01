@@ -19,50 +19,36 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_REQ_WRAP_H_
-#define SRC_REQ_WRAP_H_
+var common = require('../common');
+var assert = require('assert');
+var set = 0;
 
-#include "async-wrap.h"
-#include "async-wrap-inl.h"
-#include "env.h"
-#include "env-inl.h"
-#include "queue.h"
-#include "util.h"
+function onAsync0() { }
 
-namespace node {
-
-// defined in node.cc
-extern QUEUE req_wrap_queue;
-
-template <typename T>
-class ReqWrap : public AsyncWrap {
- public:
-  ReqWrap(Environment* env, v8::Handle<v8::Object> object)
-      : AsyncWrap(env, object) {
-    QUEUE_INSERT_TAIL(&req_wrap_queue, &req_wrap_queue_);
+var asyncNoHandleError = {
+  before: function() {
+    set++;
+  },
+  after: function() {
+    set++;
   }
+}
+
+var key = process.addAsyncListener(onAsync0, asyncNoHandleError);
+
+process.removeAsyncListener(key);
+
+process.nextTick(function() { });
+
+process.on('exit', function(code) {
+  // If the exit code isn't ok then return early to throw the stack that
+  // caused the bad return code.
+  if (code !== 0)
+    return;
+
+  // The async handler should never be called.
+  assert.equal(set, 0);
+  console.log('ok');
+});
 
 
-  ~ReqWrap() {
-    QUEUE_REMOVE(&req_wrap_queue_);
-    // Assert that someone has called Dispatched()
-    assert(req_.data == this);
-    assert(!persistent().IsEmpty());
-    persistent().Dispose();
-  }
-
-  // Call this after the req has been dispatched.
-  void Dispatched() {
-    req_.data = this;
-  }
-
-  // TODO(bnoordhuis) Make these private.
-  QUEUE req_wrap_queue_;
-  T req_;  // *must* be last, GetActiveRequests() in node.cc depends on it
-};
-
-
-}  // namespace node
-
-
-#endif  // SRC_REQ_WRAP_H_
