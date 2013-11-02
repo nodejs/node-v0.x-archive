@@ -22,7 +22,11 @@
 #include "node.h"
 
 #ifdef _WIN32
+#ifdef NODE_SHARED_LIBRARY
+extern "C" int node_wmain(int argc, wchar_t *wargv[]) {
+#else
 int wmain(int argc, wchar_t *wargv[]) {
+#endif
   // Convert argv to to UTF8
   char** argv = new char*[argc];
   for (int i = 0; i < argc; i++) {
@@ -61,7 +65,11 @@ int wmain(int argc, wchar_t *wargv[]) {
 }
 #else
 // UNIX
+#ifdef NODE_SHARED_LIBRARY
+extern "C" int node_main(int argc, char *argv[]) {
+#else
 int main(int argc, char *argv[]) {
+#endif
   return node::Start(argc, argv);
 }
 #endif

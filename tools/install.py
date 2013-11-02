@@ -120,6 +120,8 @@ def npm_files(action):
 
 def files(action):
   action(['out/Release/node'], 'bin/node')
+  if os.path.exists('out/Release/lib.target/libnode.so'):
+    action(['out/Release/lib.target/libnode.so'], 'lib/libnode.so')
 
   # install unconditionally, checking if the platform supports dtrace doesn't
   # work when cross-compiling and besides, there's at least one linux flavor

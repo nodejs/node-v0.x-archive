@@ -16,6 +16,8 @@
     'node_use_openssl%': 'true',
     'node_shared_openssl%': 'false',
     'node_use_mdb%': 'false',
+    'node_target': 'node',
+    'node_type': 'executable',
     'library_files': [
       'src/node.js',
       'lib/_debugger.js',
@@ -70,10 +72,25 @@
     ],
   },
 
+  'conditions': [
+    ['node_type=="shared_library"', {
+      'targets': [
+        {
+          'target_name': 'node',
+          'type': 'executable',
+          'sources': [ 'src/node_main_shared.c' ],
+          'ldflags': ['-L<(PRODUCT_DIR)/obj.target','-Wl,-rpath=<(node_prefix)/lib' ],
+          'libraries': ['-lnode'],
+          #'dependencies': [ 'libnode' ],
+        }
+      ]
+    }]
+  ],
+
   'targets': [
     {
-      'target_name': 'node',
-      'type': 'executable',
+      'target_name': '<(node_target)',
+      'type': '<(node_type)',
 
       'dependencies': [
         'node_js2c#host',
@@ -163,6 +180,11 @@
       ],
 
       'conditions': [
+        [ 'node_type=="shared_library"', {
+          'defines': [
+            'NODE_SHARED_LIBRARY=1'
+          ],
+        }],
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [
