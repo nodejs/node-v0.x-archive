@@ -2261,7 +2261,6 @@ void SetupProcessObject(Environment* env,
                         int exec_argc,
                         const char* const* exec_argv) {
   HandleScope scope(node_isolate);
-  int i, j;
 
   Local<Object> process = env->process_object();
 
