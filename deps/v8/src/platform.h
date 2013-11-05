@@ -60,13 +60,14 @@ int signbit(double x);
 #endif
 
 // Microsoft Visual C++ specific stuff.
-#if V8_CC_MSVC
+#if V8_CC_MSVC 
 
 #include "win32-headers.h"
 #include "win32-math.h"
 
 int strncasecmp(const char* s1, const char* s2, int n);
 
+#if _MSC_VER < 1800
 inline int lrint(double flt) {
   int intgr;
 #if V8_TARGET_ARCH_IA32
@@ -83,7 +84,7 @@ inline int lrint(double flt) {
 #endif
   return intgr;
 }
-
+#endif // _MSC_VER < 1800
 #endif  // V8_CC_MSVC
 
 namespace v8 {

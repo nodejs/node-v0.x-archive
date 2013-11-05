@@ -37,6 +37,7 @@
 #error Wrong environment, expected MSVC.
 #endif  // _MSC_VER
 
+#if _MSC_VER < 1800
 enum {
   FP_NAN,
   FP_INFINITE,
@@ -44,7 +45,6 @@ enum {
   FP_SUBNORMAL,
   FP_NORMAL
 };
-
 
 namespace std {
 
@@ -57,5 +57,10 @@ int fpclassify(double x);
 int signbit(double x);
 
 }  // namespace std
-
+#else
+namespace std {
+// Test for finite value - usually defined in math.h
+int isfinite(double x);
+}
+#endif
 #endif  // V8_WIN32_MATH_H_
