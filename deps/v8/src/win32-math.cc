@@ -39,7 +39,7 @@
 
 #include "checks.h"
 
-
+#if _MSC_VER < 1800
 namespace std {
 
 // Test for a NaN (not a number) value - usually defined in math.h
@@ -101,5 +101,12 @@ int signbit(double x) {
 }
 
 }  // namespace std
-
+#else
+namespace std {
+// Test for finite value - usually defined in math.h
+int isfinite(double x) {
+  return _finite(x);
+}
+}  // namespace std
+#endif // _MSC_VER < 1800
 #endif  // _MSC_VER

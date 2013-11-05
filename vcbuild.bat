@@ -15,7 +15,7 @@ if /i "%1"=="/?" goto help
 set config=Release
 set msiplatform=x86
 set target=Build
-set target_arch=ia32
+set target_arch=x64
 set debug_arg=
 set nosnapshot_arg=
 set noprojgen=
@@ -86,9 +86,12 @@ if defined noprojgen goto msbuild
 
 if defined NIGHTLY set TAG=nightly-%NIGHTLY%
 
+set GYP_MSVS_VERSION=2013
+
 @rem Generate the VS project.
 SETLOCAL
   if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
+  set WindowsSdkDir="C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A"
   python configure %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
   if errorlevel 1 goto create-msvs-files-failed
   if not exist node.sln goto create-msvs-files-failed
@@ -99,12 +102,22 @@ ENDLOCAL
 @rem Skip project generation if requested.
 if defined nobuild goto sign
 
+@rem Look for Visual Studio 2013
+if not defined VS120COMNTOOLS goto vc-set-2012
+if not exist "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2012
+call "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat"
+if not defined VCINSTALLDIR goto msbuild-not-found
+
+goto msbuild-found
+
+:vc-set-2012
 @rem Look for Visual Studio 2012
 if not defined VS110COMNTOOLS goto vc-set-2010
 if not exist "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2010
 call "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat"
 if not defined VCINSTALLDIR goto msbuild-not-found
 set GYP_MSVS_VERSION=2012
+echo "vc2012"
 goto msbuild-found
 
 :vc-set-2010
