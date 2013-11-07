@@ -260,6 +260,11 @@ void Alloc(Handle<Object> obj,
            size_t length,
            enum ExternalArrayType type) {
   assert(!obj->HasIndexedPropertiesInExternalArrayData());
+
+  Environment* env = Environment::GetCurrent(node_isolate);
+  env->smalloc_info()->adjust_size(length);
+  env->smalloc_info()->adjust_count(1);
+
   Persistent<Object> p_obj(node_isolate, obj);
   node_isolate->AdjustAmountOfExternalAllocatedMemory(length);
   p_obj.MakeWeak(data, TargetCallback);
@@ -273,6 +278,7 @@ void Alloc(Handle<Object> obj,
 void TargetCallback(Isolate* isolate,
                     Persistent<Object>* target,
                     char* data) {
+  Environment* env = Environment::GetCurrent(node_isolate);
   HandleScope handle_scope(isolate);
   Local<Object> obj = PersistentToLocal(isolate, *target);
   size_t len = obj->GetIndexedPropertiesExternalArrayDataLength();
@@ -283,9 +289,11 @@ void TargetCallback(Isolate* isolate,
   assert(array_size * len >= len);
   len *= array_size;
   if (data != NULL && len > 0) {
+    env->smalloc_info()->adjust_size(-len);
     isolate->AdjustAmountOfExternalAllocatedMemory(-len);
     free(data);
   }
+  env->smalloc_info()->adjust_count(-1);
   (*target).Dispose();
 }
 
@@ -362,6 +370,8 @@ void Alloc(Handle<Object> obj,
 
   Environment* env = Environment::GetCurrent(node_isolate);
   env->set_using_smalloc_alloc_cb(true);
+  env->smalloc_info()->adjust_size(length);
+  env->smalloc_info()->adjust_count(1);
 
   CallbackInfo* cb_info = new CallbackInfo;
   cb_info->cb = fn;
@@ -382,6 +392,7 @@ void Alloc(Handle<Object> obj,
 void TargetFreeCallback(Isolate* isolate,
                         Persistent<Object>* target,
                         CallbackInfo* cb_info) {
+  Environment* env = Environment::GetCurrent(node_isolate);
   HandleScope handle_scope(isolate);
   Local<Object> obj = PersistentToLocal(isolate, *target);
   char* data = static_cast<char*>(obj->GetIndexedPropertiesExternalArrayData());
@@ -394,10 +405,25 @@ void TargetFreeCallback(Isolate* isolate,
     assert(len * array_size > len);
     len *= array_size;
   }
+  env->smalloc_info()->adjust_size(-(len + sizeof(*cb_info)));
   isolate->AdjustAmountOfExternalAllocatedMemory(-(len + sizeof(*cb_info)));
+  env->smalloc_info()->adjust_count(-1);
   cb_info->p_obj.Dispose();
   cb_info->cb(data, cb_info->hint);
   delete cb_info;
+}
+
+
+void SetupSmalloc(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+
+  Local<Object> info_obj = args[0].As<Object>();
+  assert(info_obj->IsObject());
+
+  info_obj->SetIndexedPropertiesToExternalArrayData(
+      env->smalloc_info()->fields(),
+      v8::kExternalUnsignedIntArray,
+      env->smalloc_info()->fields_count());
 }
 
 
@@ -469,6 +495,8 @@ void Initialize(Handle<Object> exports,
 
   NODE_SET_METHOD(exports, "alloc", Alloc);
   NODE_SET_METHOD(exports, "dispose", AllocDispose);
+
+  NODE_SET_METHOD(exports, "_setupSmalloc", SetupSmalloc);
 
   exports->Set(FIXED_ONE_BYTE_STRING(node_isolate, "kMaxLength"),
                Uint32::NewFromUnsigned(kMaxLength, env->isolate()));

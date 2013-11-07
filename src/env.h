@@ -218,6 +218,28 @@ class Environment {
     DISALLOW_COPY_AND_ASSIGN(TickInfo);
   };
 
+  class SmallocInfo {
+   public:
+    inline uint32_t* fields();
+    inline int fields_count() const;
+    inline void adjust_count(uint32_t value);
+    inline void adjust_size(uint32_t value);
+
+   private:
+    friend class Environment;  // So we can call the constructor.
+    inline SmallocInfo();
+
+    enum Fields {
+      kCount,
+      kSize,
+      kFieldsCount
+    };
+
+    uint32_t fields_[kFieldsCount];
+
+    DISALLOW_COPY_AND_ASSIGN(SmallocInfo);
+  };
+
   static inline Environment* GetCurrent(v8::Isolate* isolate);
   static inline Environment* GetCurrent(v8::Local<v8::Context> context);
   static inline Environment* GetCurrentChecked(v8::Isolate* isolate);
@@ -243,6 +265,7 @@ class Environment {
 
   inline AsyncListener* async_listener();
   inline TickInfo* tick_info();
+  inline SmallocInfo* smalloc_info();
 
   static inline Environment* from_cares_timer_handle(uv_timer_t* handle);
   inline uv_timer_t* cares_timer_handle();
@@ -284,6 +307,7 @@ class Environment {
   uv_check_t idle_check_handle_;
   AsyncListener async_listener_count_;
   TickInfo tick_info_;
+  SmallocInfo smalloc_info_;
   uv_timer_t cares_timer_handle_;
   ares_channel cares_channel_;
   ares_task_list cares_task_list_;
