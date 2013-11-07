@@ -3149,6 +3149,19 @@ void AtExit(void (*cb)(void* arg), void* arg) {
 }
 
 
+void EmitBeforeExit(Environment* env) {
+  Context::Scope context_scope(env->context());
+  HandleScope handle_scope(env->isolate());
+  Local<Object> process_object = env->process_object();
+  Local<String> exit_code = FIXED_ONE_BYTE_STRING(env->isolate(), "exitCode");
+  Local<Value> args[] = {
+    FIXED_ONE_BYTE_STRING(env->isolate(), "beforeExit"),
+    process_object->Get(exit_code)->ToInteger()
+  };
+  MakeCallback(env, process_object, "emit", ARRAY_SIZE(args), args);
+}
+
+
 void EmitExit(Environment* env) {
   // process.emit('exit')
   Context::Scope context_scope(env->context());
@@ -3247,7 +3260,14 @@ int Start(int argc, char** argv) {
         CreateEnvironment(node_isolate, argc, argv, exec_argc, exec_argv);
     Context::Scope context_scope(env->context());
     HandleScope handle_scope(env->isolate());
-    uv_run(env->event_loop(), UV_RUN_DEFAULT);
+    bool more;
+    do {
+      more = uv_run(env->event_loop(), UV_RUN_ONCE);
+      if (more == false) {
+        EmitBeforeExit(env);
+        more = uv_run(env->event_loop(), UV_RUN_NOWAIT);
+      }
+    } while (more == true);
     EmitExit(env);
     RunAtExit(env);
     env->Dispose();
