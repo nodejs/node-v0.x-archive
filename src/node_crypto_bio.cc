@@ -192,16 +192,21 @@ long NodeBIO::Ctrl(BIO* bio, int cmd, long num, void* ptr) {
 
 
 void NodeBIO::TryMoveReadHead() {
-  // Move to next buffer
-  if (read_head_->read_pos_ == read_head_->write_pos_) {
-    read_head_->read_pos_ = 0;
-    read_head_->write_pos_ = 0;
+  // `read_pos_` and `write_pos_` means the position of the reader and writer
+  // inside the buffer, respectively. When they're equal - its safe to reset
+  // them, because both reader and writer will continue doing their stuff
+  // from new (zero) positions.
+  if (read_head_->read_pos_ != read_head_->write_pos_)
+    return;
 
-    // But not get beyond write_head_
-    if (read_head_ != write_head_) {
-      read_head_ = read_head_->next_;
-    }
-  }
+  // Reset positions
+  read_head_->read_pos_ = 0;
+  read_head_->write_pos_ = 0;
+
+  // Move read_head_ forward, just in case if there're still some data to
+  // read in the next buffer.
+  if (read_head_ != write_head_)
+    read_head_ = read_head_->next_;
 }
 
 
