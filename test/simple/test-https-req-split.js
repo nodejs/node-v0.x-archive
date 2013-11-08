@@ -71,4 +71,5 @@ server.listen(common.PORT, function() {
 
 process.on('exit', function() {
   assert(seen_req);
+  console.log('ok');
 });
