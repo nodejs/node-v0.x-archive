@@ -23,21 +23,21 @@
 #define SRC_ASYNC_WRAP_INL_H_
 
 #include "async-wrap.h"
+#include "base-object.h"
+#include "base-object-inl.h"
 #include "env.h"
 #include "env-inl.h"
 #include "util.h"
 #include "util-inl.h"
+
 #include "v8.h"
 #include <assert.h>
 
 namespace node {
 
 inline AsyncWrap::AsyncWrap(Environment* env, v8::Handle<v8::Object> object)
-    : object_(env->isolate(), object),
-      env_(env),
+    : BaseObject(env, object),
       async_flags_(NO_OPTIONS) {
-  assert(!object.IsEmpty());
-
   if (!env->has_async_listeners())
     return;
 
@@ -54,18 +54,17 @@ inline AsyncWrap::AsyncWrap(Environment* env, v8::Handle<v8::Object> object)
 
 
 inline AsyncWrap::~AsyncWrap() {
-  assert(persistent().IsEmpty());
 }
 
 
-template<typename TYPE>
+template <typename Type>
 inline void AsyncWrap::AddMethods(v8::Handle<v8::FunctionTemplate> t) {
   NODE_SET_PROTOTYPE_METHOD(t,
                             "addAsyncListener",
-                            AddAsyncListener<TYPE>);
+                            AddAsyncListener<Type>);
   NODE_SET_PROTOTYPE_METHOD(t,
                             "removeAsyncListener",
-                            RemoveAsyncListener<TYPE>);
+                            RemoveAsyncListener<Type>);
 }
 
 
@@ -86,21 +85,6 @@ inline void AsyncWrap::remove_flag(unsigned int flag) {
 
 inline bool AsyncWrap::has_async_queue() {
   return async_flags() & ASYNC_LISTENERS;
-}
-
-
-inline Environment* AsyncWrap::env() const {
-  return env_;
-}
-
-
-inline v8::Local<v8::Object> AsyncWrap::object() {
-  return PersistentToLocal(env()->isolate(), persistent());
-}
-
-
-inline v8::Persistent<v8::Object>& AsyncWrap::persistent() {
-  return object_;
 }
 
 
@@ -188,7 +172,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
 }
 
 
-template <typename TYPE>
+template <typename Type>
 inline void AsyncWrap::AddAsyncListener(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   v8::HandleScope handle_scope(args.GetIsolate());
@@ -201,14 +185,14 @@ inline void AsyncWrap::AddAsyncListener(
 
   env->async_listener_push_function()->Call(handle, 1, &listener);
 
-  TYPE* wrap = static_cast<TYPE*>(
+  Type* wrap = static_cast<Type*>(
       handle->GetAlignedPointerFromInternalField(0));
   assert(wrap != NULL);
   wrap->set_flag(ASYNC_LISTENERS);
 }
 
 
-template <typename TYPE>
+template <typename Type>
 inline void AsyncWrap::RemoveAsyncListener(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   v8::HandleScope handle_scope(args.GetIsolate());
@@ -223,7 +207,7 @@ inline void AsyncWrap::RemoveAsyncListener(
       env->async_listener_strip_function()->Call(handle, 1, &listener);
 
   if (ret->IsFalse()) {
-    TYPE* wrap = static_cast<TYPE*>(
+    Type* wrap = static_cast<Type*>(
         handle->GetAlignedPointerFromInternalField(0));
     assert(wrap != NULL);
     wrap->remove_flag(ASYNC_LISTENERS);
