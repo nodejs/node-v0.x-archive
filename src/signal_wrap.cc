@@ -66,8 +66,8 @@ class SignalWrap : public HandleWrap {
     // Therefore we assert that we are not trying to call this as a
     // normal function.
     assert(args.IsConstructCall());
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
     new SignalWrap(env, args.This());
   }
 
@@ -100,8 +100,8 @@ class SignalWrap : public HandleWrap {
   static void OnSignal(uv_signal_t* handle, int signum) {
     SignalWrap* wrap = CONTAINER_OF(handle, SignalWrap, handle_);
     Environment* env = wrap->env();
-    Context::Scope context_scope(env->context());
     HandleScope handle_scope(env->isolate());
+    Context::Scope context_scope(env->context());
 
     Local<Value> arg = Integer::New(signum, env->isolate());
     wrap->MakeCallback(env->onsignal_string(), 1, &arg);

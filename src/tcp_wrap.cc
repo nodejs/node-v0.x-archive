@@ -133,8 +133,8 @@ void TCPWrap::New(const FunctionCallbackInfo<Value>& args) {
   // Therefore we assert that we are not trying to call this as a
   // normal function.
   assert(args.IsConstructCall());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
   TCPWrap* wrap = new TCPWrap(env, args.This());
   assert(wrap);
 }
@@ -155,8 +155,8 @@ TCPWrap::~TCPWrap() {
 
 
 void TCPWrap::GetSockName(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
   struct sockaddr_storage address;
 
   TCPWrap* wrap = Unwrap<TCPWrap>(args.This());
@@ -178,8 +178,8 @@ void TCPWrap::GetSockName(const FunctionCallbackInfo<Value>& args) {
 
 
 void TCPWrap::GetPeerName(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
   struct sockaddr_storage address;
 
   TCPWrap* wrap = Unwrap<TCPWrap>(args.This());
@@ -297,8 +297,8 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
   assert(&tcp_wrap->handle_ == reinterpret_cast<uv_tcp_t*>(handle));
   Environment* env = tcp_wrap->env();
 
-  Context::Scope context_scope(env->context());
   HandleScope handle_scope(env->isolate());
+  Context::Scope context_scope(env->context());
 
   // We should not be getting this callback if someone as already called
   // uv_close() on the handle.
@@ -333,8 +333,8 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
   assert(req_wrap->env() == wrap->env());
   Environment* env = wrap->env();
 
-  Context::Scope context_scope(env->context());
   HandleScope handle_scope(env->isolate());
+  Context::Scope context_scope(env->context());
 
   // The wrap and request objects should still be there.
   assert(req_wrap->persistent().IsEmpty() == false);
@@ -356,8 +356,8 @@ void TCPWrap::AfterConnect(uv_connect_t* req, int status) {
 
 
 void TCPWrap::Connect(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   TCPWrap* wrap = Unwrap<TCPWrap>(args.This());
 
@@ -388,8 +388,8 @@ void TCPWrap::Connect(const FunctionCallbackInfo<Value>& args) {
 
 
 void TCPWrap::Connect6(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   TCPWrap* wrap = Unwrap<TCPWrap>(args.This());
 
