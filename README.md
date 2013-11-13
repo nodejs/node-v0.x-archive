@@ -26,10 +26,11 @@ non-standard name, run the following instead:
 
 Prerequisites (Windows only):
 
-    * Python 2.6 or 2.7
-    * Visual Studio 2010 or 2012
+    * [Python for Microsoft Windows 2.7x](http://www.python.org/getit/windows/)
+    * [Visual Studio Express 2013 for Windows Desktop](http://www.microsoft.com/visualstudio/eng/downloads#d-2013-express)
 
 Windows:
+Open a visual studio command prompt
 
     vcbuild nosign
 

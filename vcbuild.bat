@@ -88,7 +88,6 @@ if defined NIGHTLY set TAG=nightly-%NIGHTLY%
 
 @rem Generate the VS project.
 SETLOCAL
-  if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
   python configure %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
   if errorlevel 1 goto create-msvs-files-failed
   if not exist node.sln goto create-msvs-files-failed
@@ -99,19 +98,16 @@ ENDLOCAL
 @rem Skip project generation if requested.
 if defined nobuild goto sign
 
-@rem Look for Visual Studio 2012
+@rem Look for Visual Studio Command Prompt
+if not defined VS120COMNTOOLS goto vc-set-2012
+goto msbuild-found
+
+:vc-set-2012
 if not defined VS110COMNTOOLS goto vc-set-2010
-if not exist "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2010
-call "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat"
-if not defined VCINSTALLDIR goto msbuild-not-found
-set GYP_MSVS_VERSION=2012
 goto msbuild-found
 
 :vc-set-2010
 if not defined VS100COMNTOOLS goto msbuild-not-found
-if not exist "%VS100COMNTOOLS%\..\..\vc\vcvarsall.bat" goto msbuild-not-found
-call "%VS100COMNTOOLS%\..\..\vc\vcvarsall.bat"
-if not defined VCINSTALLDIR goto msbuild-not-found
 goto msbuild-found
 
 :msbuild-not-found
