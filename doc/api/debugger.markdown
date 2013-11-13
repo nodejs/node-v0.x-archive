@@ -1,8 +1,12 @@
 # Debugger
 
-    Stability: 3 - Stable
+    Stability: 0 - Deprecated
 
 <!-- type=misc -->
+
+Note: the built-in debugger is deprecated.  No new features will be added, bug
+fixes will be applied sparingly if at all.  Longer term, it will be moved out
+of node.js core and into a separate npm module.
 
 V8 comes with an extensive debugger which is accessible out-of-process via a
 simple [TCP protocol](http://code.google.com/p/v8/wiki/DebuggerProtocol).
