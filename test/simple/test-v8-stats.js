@@ -19,21 +19,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var EventEmitter = require('events');
-var binding = process.binding('v8');
+var common = require('../common');
+var assert = require('assert');
+var v8 = require('v8');
 
-module.exports = new EventEmitter;
-
-module.exports.on('newListener', function(name) {
-  if (name === 'gc' && EventEmitter.listenerCount(this, name) === 0) {
-    binding.startGarbageCollectionTracking(this.emit.bind(this, 'gc'));
-  }
+var s = v8.getHeapStatistics();
+var keys = [
+  'heap_size_limit',
+  'total_heap_size',
+  'total_heap_size_executable',
+  'total_physical_size',
+  'used_heap_size'];
+assert.deepEqual(Object.keys(s).sort(), keys);
+keys.forEach(function(key) {
+  assert.equal(typeof s[key], 'number');
 });
-
-module.exports.on('removeListener', function(name) {
-  if (name === 'gc' && EventEmitter.listenerCount(this, name) === 0) {
-    binding.stopGarbageCollectionTracking();
-  }
-});
-
-module.exports.getHeapStatistics = binding.getHeapStatistics;
