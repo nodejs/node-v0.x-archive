@@ -28,7 +28,8 @@ var assert = require('assert');
 var path = require('path'),
     fs = require('fs'),
     fn = path.join(common.fixturesDir, 'non-existent'),
-    existingFile = path.join(common.fixturesDir, 'exit.js');
+    existingFile = path.join(common.fixturesDir, 'exit.js'),
+    existingFile2 = path.join(common.fixturesDir, 'create-file.js');
 
 // ASYNC_CALL
 
@@ -47,6 +48,10 @@ fs.readlink(fn, function(err) {
 
 fs.link(fn, 'foo', function(err) {
   assert.ok(0 <= err.message.indexOf(fn));
+});
+
+fs.link(existingFile, existingFile2, function(err) {
+  assert.ok(0 <= err.message.indexOf(existingFile2));
 });
 
 fs.unlink(fn, function(err) {
