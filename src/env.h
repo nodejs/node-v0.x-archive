@@ -269,6 +269,9 @@ class Environment {
   inline bool using_smalloc_alloc_cb() const;
   inline void set_using_smalloc_alloc_cb(bool value);
 
+  inline bool cpu_profiler_active() const;
+  inline void set_cpu_profiler_active(bool value);
+
   // Strings are shared across shared contexts. The getters simply proxy to
   // the per-isolate primitive.
 #define V(PropertyName, StringValue)                                          \
@@ -340,6 +343,8 @@ class Environment {
     static inline IsolateData* GetOrCreate(v8::Isolate* isolate);
     inline void Put();
     inline uv_loop_t* event_loop() const;
+    inline bool cpu_profiler_active() const;
+    inline void set_cpu_profiler_active(bool value);
 
     // Defined in src/node_profiler.cc.
     void StartGarbageCollectionTracking(Environment* env);
@@ -377,6 +382,7 @@ class Environment {
     QUEUE gc_tracker_queue_;
     GCInfo gc_info_before_;
     GCInfo gc_info_after_;
+    bool cpu_profiler_active_;
 
     DISALLOW_COPY_AND_ASSIGN(IsolateData);
   };

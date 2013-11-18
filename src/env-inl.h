@@ -97,7 +97,8 @@ inline Environment::IsolateData::IsolateData(v8::Isolate* isolate)
     PropertyName ## _(isolate, FIXED_ONE_BYTE_STRING(isolate, StringValue)),
     PER_ISOLATE_STRING_PROPERTIES(V)
 #undef V
-    ref_count_(0) {
+      ref_count_(0),
+      cpu_profiler_active_(false) {
   QUEUE_INIT(&gc_tracker_queue_);
 }
 
@@ -107,6 +108,14 @@ inline uv_loop_t* Environment::IsolateData::event_loop() const {
 
 inline v8::Isolate* Environment::IsolateData::isolate() const {
   return isolate_;
+}
+
+inline bool Environment::IsolateData::cpu_profiler_active() const {
+  return cpu_profiler_active_;
+}
+
+inline void Environment::IsolateData::set_cpu_profiler_active(bool value) {
+  cpu_profiler_active_ = value;
 }
 
 inline Environment::AsyncListener::AsyncListener() {
@@ -282,6 +291,14 @@ inline bool Environment::using_smalloc_alloc_cb() const {
 
 inline void Environment::set_using_smalloc_alloc_cb(bool value) {
   using_smalloc_alloc_cb_ = value;
+}
+
+inline bool Environment::cpu_profiler_active() const {
+  return isolate_data()->cpu_profiler_active();
+}
+
+inline void Environment::set_cpu_profiler_active(bool value) {
+  isolate_data()->set_cpu_profiler_active(value);
 }
 
 inline Environment* Environment::from_cares_timer_handle(uv_timer_t* handle) {

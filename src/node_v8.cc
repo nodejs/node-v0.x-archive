@@ -25,22 +25,31 @@
 #include "util.h"
 #include "util-inl.h"
 #include "v8.h"
+#include "v8-profiler.h"
 
 namespace node {
 
 using v8::Context;
+using v8::CpuProfile;
+using v8::CpuProfileNode;
+using v8::CpuProfiler;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::GCCallbackFlags;
 using v8::GCType;
 using v8::Handle;
 using v8::HandleScope;
+using v8::HeapGraphEdge;
+using v8::HeapGraphNode;
+using v8::HeapProfiler;
+using v8::HeapSnapshot;
 using v8::HeapStatistics;
 using v8::Isolate;
 using v8::Local;
 using v8::Null;
 using v8::Number;
 using v8::Object;
+using v8::String;
 using v8::Uint32;
 using v8::Value;
 using v8::kGCTypeAll;
@@ -201,6 +210,305 @@ void StopGarbageCollectionTracking(const FunctionCallbackInfo<Value>& args) {
 }
 
 
+void CpuProfilerSetSamplingInterval(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
+  Environment* env = Environment::GetCurrent(isolate);
+  if (env->cpu_profiler_active() == true) {
+    return ThrowError("profiler already running");
+  }
+  isolate->GetCpuProfiler()->SetSamplingInterval(args[0]->Uint32Value());
+}
+
+
+void CpuProfilerStartCpuProfiling(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
+  Environment* env = Environment::GetCurrent(isolate);
+  if (env->cpu_profiler_active() == true) {
+    return ThrowError("profiler already running");
+  }
+  Local<String> title =
+      args[0]->IsString() ? args[0].As<String>() : String::Empty(isolate);
+  bool record_samples = args[1]->IsTrue();
+  isolate->GetCpuProfiler()->StartCpuProfiling(title, record_samples);
+  env->set_cpu_profiler_active(true);
+}
+
+
+void CpuProfilerStopCpuProfiling(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
+  Environment* env = Environment::GetCurrent(isolate);
+  if (env->cpu_profiler_active() == false) {
+    return ThrowError("profiler not running");
+  }
+  Local<String> title =
+      args[0]->IsString() ? args[0].As<String>() : String::Empty(isolate);
+  const CpuProfile* profile =
+      isolate->GetCpuProfiler()->StopCpuProfiling(title);
+  args.GetReturnValue().Set(profile->GetUid());
+  env->set_cpu_profiler_active(false);
+}
+
+
+void CpuProfilerDeleteAllCpuProfiles(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
+  isolate->GetCpuProfiler()->DeleteAllCpuProfiles();
+}
+
+
+void CpuProfilerGetProfileCount(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
+  args.GetReturnValue().Set(isolate->GetCpuProfiler()->GetProfileCount());
+}
+
+
+inline const CpuProfile* FindCpuProfile(Isolate* isolate, int index) {
+  CpuProfiler* profiler = isolate->GetCpuProfiler();
+  if (index < 0 || index >= profiler->GetProfileCount()) {
+    return NULL;
+  }
+  return profiler->GetCpuProfile(index);
+}
+
+
+inline const CpuProfileNode* FindCpuProfileNode(const CpuProfile* profile,
+                                                int index) {
+  if (index < 0 || index >= profile->GetSamplesCount()) {
+    return NULL;
+  }
+  return profile->GetSample(index);
+}
+
+
+inline const CpuProfileNode* FindCpuProfileNode(Isolate* isolate,
+                                                int profile_index,
+                                                int sample_index) {
+  const CpuProfile* profile = FindCpuProfile(isolate, profile_index);
+  if (profile == NULL) {
+    return NULL;
+  }
+  return FindCpuProfileNode(profile, sample_index);
+}
+
+
+inline const HeapSnapshot* FindHeapSnapshot(Isolate* isolate, int index) {
+  HeapProfiler* profiler = isolate->GetHeapProfiler();
+  if (index < 0 || index >= profiler->GetSnapshotCount()) {
+    return NULL;
+  }
+  return profiler->GetHeapSnapshot(index);
+}
+
+
+inline const HeapGraphNode* FindHeapGraphNode(Isolate* isolate,
+                                              int snapshot_index,
+                                              int node_index) {
+  const HeapSnapshot* snapshot = FindHeapSnapshot(isolate, snapshot_index);
+  if (snapshot == NULL) {
+    return NULL;
+  }
+  if (node_index < 0 || node_index >= snapshot->GetNodesCount()) {
+    return NULL;
+  }
+  return snapshot->GetNode(node_index);
+}
+
+
+inline const HeapGraphEdge* FindHeapGraphEdge(Isolate* isolate,
+                                              int snapshot_index,
+                                              int node_index,
+                                              int edge_index) {
+  const HeapGraphNode* node =
+      FindHeapGraphNode(isolate, snapshot_index, node_index);
+  if (node == NULL) {
+    return NULL;
+  }
+  if (edge_index < 0 || edge_index >= node->GetChildrenCount()) {
+    return NULL;
+  }
+  return node->GetChild(edge_index);
+}
+
+
+template <typename Type>
+const Type* Find(const FunctionCallbackInfo<Value>& args);
+
+
+template <>
+const CpuProfile* Find(const FunctionCallbackInfo<Value>& args) {
+  return FindCpuProfile(args.GetIsolate(), args[0]->Int32Value());
+}
+
+
+template <>
+const CpuProfileNode* Find(const FunctionCallbackInfo<Value>& args) {
+  return FindCpuProfileNode(args.GetIsolate(),
+                            args[0]->Int32Value(),
+                            args[1]->Int32Value());
+}
+
+
+template <>
+const HeapSnapshot* Find(const FunctionCallbackInfo<Value>& args) {
+  return FindHeapSnapshot(args.GetIsolate(), args[0]->Int32Value());
+}
+
+
+template <>
+const HeapGraphNode* Find(const FunctionCallbackInfo<Value>& args) {
+  return FindHeapGraphNode(args.GetIsolate(),
+                           args[0]->Int32Value(),
+                           args[1]->Int32Value());
+}
+
+
+template <>
+const HeapGraphEdge* Find(const FunctionCallbackInfo<Value>& args) {
+  return FindHeapGraphEdge(args.GetIsolate(),
+                           args[0]->Int32Value(),
+                           args[1]->Int32Value(),
+                           args[2]->Int32Value());
+}
+
+
+template <typename InType, typename OutType>
+OutType Coerce(Isolate*, InType value) {
+  return value;  // Identity function.
+}
+
+
+template <>
+double Coerce(Isolate*, int64_t value) {
+  return static_cast<double>(value);
+}
+
+
+template <>
+Local<String> Coerce(Isolate* isolate, const char* string) {
+  return String::NewFromUtf8(isolate, string);
+}
+
+
+template <>
+int Coerce(Isolate*, const CpuProfileNode* node) {
+  return node->GetNodeId();
+}
+
+
+template <>
+int Coerce(Isolate*, const HeapGraphNode* node) {
+  return node->GetId();
+}
+
+
+template <typename Type,
+          typename MethodType,
+          typename ReturnType,
+          const Type* (*Find)(const FunctionCallbackInfo<Value>&),
+          MethodType (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  HandleScope handle_scope(args.GetIsolate());
+  if (const Type* obj = Find(args)) {
+    args.GetReturnValue().Set(
+        Coerce<MethodType, ReturnType>(isolate, (obj->*Method)()));
+  } else {
+    ThrowRangeError("index out of range");
+  }
+}
+
+
+template <typename Type, int (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, int, int, Find<Type>, Method>(args);
+}
+
+
+template <typename Type, unsigned (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, unsigned, unsigned, Find<Type>, Method>(args);
+}
+
+
+// Only used for timestamps.  V8's profiler timestamps are measured in
+// microseconds since the Epoch.  Doubles have 53 bits of precision so
+// that should last us well into the second half of the 22nd century.
+//
+// If you, maintenance programmer from the far flung future, encounter this
+// comment while tracking down a bug caused by my assumption, know that I'm
+// sorry.
+//
+// If the Rapture of the Nerds has come to pass and we've all been uploaded
+// in the Introdus, ping me and I'll buy you the 22nd century equivalent of
+// a beer to make it up.  Brace yourself for plenty of "back in my day"
+// stories though!
+template <typename Type, int64_t (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, int64_t, double, Find<Type>, Method>(args);
+}
+
+
+template <typename Type, const char* (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, const char*, Local<String>, Find<Type>, Method>(args);
+}
+
+
+template <typename Type, Handle<String> (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, Handle<String>, Handle<String>, Find<Type>, Method>(args);
+}
+
+
+template <typename Type, Handle<Value> (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, Handle<Value>, Handle<Value>, Find<Type>, Method>(args);
+}
+
+
+template <typename Type, const CpuProfileNode* (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, const CpuProfileNode*, int, Find<Type>, Method>(args);
+}
+
+
+template <typename Type, const HeapGraphNode* (Type::*Method)() const>
+void Bind(const FunctionCallbackInfo<Value>& args) {
+  Bind<Type, const HeapGraphNode*, int, Find<Type>, Method>(args);
+}
+
+
+void CpuProfileNodeGetChild(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
+  const CpuProfileNode* node = FindCpuProfileNode(isolate,
+                                                  args[0]->Int32Value(),
+                                                  args[1]->Int32Value());
+  if (node != NULL) {
+    int child_index = args[2]->Int32Value();
+    if (child_index >= 0 && child_index < node->GetChildrenCount()) {
+      args.GetReturnValue().Set(node->GetChild(child_index)->GetNodeId());
+      return;
+    }
+  }
+  ThrowRangeError("index out of range");
+}
+
+
+void HeapProfilerTakeHeapSnapshot(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
+  Local<String> title =
+      args[0]->IsString() ? args[0].As<String>() : String::Empty(isolate);
+  const HeapSnapshot* snapshot =
+      isolate->GetHeapProfiler()->TakeHeapSnapshot(title);
+  args.GetReturnValue().Set(snapshot->GetUid());
+}
+
+
 void InitializeV8Bindings(Handle<Object> target,
                           Handle<Value> unused,
                           Handle<Context> context) {
@@ -211,6 +519,51 @@ void InitializeV8Bindings(Handle<Object> target,
                   "stopGarbageCollectionTracking",
                   StopGarbageCollectionTracking);
   NODE_SET_METHOD(target, "getHeapStatistics", GetHeapStatistics);
+  NODE_SET_METHOD(target,
+                  "CpuProfilerSetSamplingInterval",
+                  CpuProfilerSetSamplingInterval);
+  NODE_SET_METHOD(target,
+                  "CpuProfilerStartCpuProfiling",
+                  CpuProfilerStartCpuProfiling);
+  NODE_SET_METHOD(target,
+                  "CpuProfilerStopCpuProfiling",
+                  CpuProfilerStopCpuProfiling);
+  NODE_SET_METHOD(target,
+                  "CpuProfilerDeleteAllCpuProfiles",
+                  CpuProfilerDeleteAllCpuProfiles);
+  NODE_SET_METHOD(target,
+                  "CpuProfilerGetProfileCount",
+                  CpuProfilerGetProfileCount);
+#define V(Type, Method)                                                       \
+  NODE_SET_METHOD(target, #Type #Method, Bind<Type, &Type::Method>)
+  V(CpuProfile, GetTitle);
+  V(CpuProfile, GetTopDownRoot);
+  V(CpuProfile, GetSamplesCount);
+  V(CpuProfile, GetStartTime);
+  V(CpuProfile, GetEndTime);
+  V(CpuProfileNode, GetFunctionName);
+  V(CpuProfileNode, GetScriptId);
+  V(CpuProfileNode, GetScriptResourceName);
+  V(CpuProfileNode, GetLineNumber);
+  V(CpuProfileNode, GetColumnNumber);
+  V(CpuProfileNode, GetBailoutReason);
+  V(CpuProfileNode, GetHitCount);
+  V(CpuProfileNode, GetCallUid);
+  V(CpuProfileNode, GetChildrenCount);
+  V(HeapSnapshot, GetTitle);
+  V(HeapSnapshot, GetRoot);
+  V(HeapSnapshot, GetNodesCount);
+  V(HeapSnapshot, GetMaxSnapshotJSObjectId);
+  V(HeapGraphNode, GetName);
+  V(HeapGraphNode, GetId);
+  V(HeapGraphNode, GetSelfSize);
+  V(HeapGraphNode, GetChildrenCount);
+  V(HeapGraphNode, GetHeapValue);
+#undef V
+  NODE_SET_METHOD(target, "CpuProfileNodeGetChild", CpuProfileNodeGetChild);
+  NODE_SET_METHOD(target,
+                  "HeapProfilerTakeHeapSnapshot",
+                  HeapProfilerTakeHeapSnapshot);
 }
 
 }  // namespace node
