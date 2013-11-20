@@ -42,6 +42,9 @@ assert.equal(util.inspect(a), '[ \'foo\', , \'baz\' ]');
 assert.equal(util.inspect(a, true), '[ \'foo\', , \'baz\', [length]: 3 ]');
 assert.equal(util.inspect(new Array(5)), '[ , , , ,  ]');
 
+// represent negative zero correctly
+assert.equal(util.inspect(-0), '-0');
+
 // test for property descriptors
 var getter = Object.create(null, {
   a: {
