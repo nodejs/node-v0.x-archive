@@ -932,7 +932,7 @@ function assertSorted(list) {
 // Assume that we have at least AES-128-CBC.
 assert.notEqual(0, crypto.getCiphers().length);
 assert.notEqual(-1, crypto.getCiphers().indexOf('aes-128-cbc'));
-assert.equal(-1, crypto.getCiphers().indexOf('AES-128-CBC'));
+assert.notEqual(-1, crypto.getCiphers().indexOf('AES-128-CBC'));
 assertSorted(crypto.getCiphers());
 
 // Assume that we have at least AES256-SHA.
@@ -942,12 +942,11 @@ assert.notEqual(-1, tls.getCiphers().indexOf('aes256-sha'));
 assert.equal(-1, tls.getCiphers().indexOf('AES256-SHA'));
 assertSorted(tls.getCiphers());
 
-// Assert that we have sha and sha1 but not SHA and SHA1.
 assert.notEqual(0, crypto.getHashes().length);
-assert.notEqual(-1, crypto.getHashes().indexOf('sha1'));
+assert.notEqual(-1, crypto.getHashes().indexOf('SHA'));
 assert.notEqual(-1, crypto.getHashes().indexOf('sha'));
-assert.equal(-1, crypto.getHashes().indexOf('SHA1'));
-assert.equal(-1, crypto.getHashes().indexOf('SHA'));
+assert.notEqual(-1, crypto.getHashes().indexOf('DSA'));
+assert.equal(-1, crypto.getHashes().indexOf('dsa'));  // No lowercase variant.
 assertSorted(crypto.getHashes());
 
 // Base64 padding regression test, see #4837.
