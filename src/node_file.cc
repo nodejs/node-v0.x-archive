@@ -50,14 +50,22 @@ using namespace v8;
 
 class FSReqWrap: public ReqWrap<uv_fs_t> {
  public:
+  void* operator new(size_t size, char* storage) { return storage; }
+
   FSReqWrap(const char* syscall)
-    : syscall_(syscall) {
+    : syscall_(syscall),
+      dest_len_(0) {
   }
 
-  const char* syscall() { return syscall_; }
+  inline const char* syscall() { return syscall_; }
+  inline const char* dest() const { return dest_; }
+  inline unsigned int dest_len() const { return dest_len_; }
+  inline void dest_len(unsigned int dest_len) { dest_len_ = dest_len; }
 
  private:
   const char* syscall_;
+  unsigned int dest_len_;
+  char dest_[1];
 };
 
 
@@ -105,11 +113,11 @@ static void After(uv_fs_t *req) {
     } else if ((req->errorno == UV_EEXIST ||
                 req->errorno == UV_ENOTEMPTY ||
                 req->errorno == UV_EPERM) &&
-               req->new_path != NULL) {
+               req_wrap->dest_len() > 0) {
       argv[0] = UVException(req->errorno,
                             NULL,
                             req_wrap->syscall(),
-                            static_cast<const char*>(req->new_path));
+                            static_cast<const char*>(req_wrap->dest()));
     } else {
       argv[0] = UVException(req->errorno,
                             NULL,
@@ -220,10 +228,22 @@ struct fs_req_wrap {
 };
 
 
-#define ASYNC_CALL(func, callback, ...)                           \
-  FSReqWrap* req_wrap = new FSReqWrap(#func);                     \
-  int r = uv_fs_##func(uv_default_loop(), &req_wrap->req_,        \
-      __VA_ARGS__, After);                                        \
+#define ASYNC_DEST_CALL(func, callback, dest_path, ...)           \
+  FSReqWrap* req_wrap;                                            \
+  char* dest_str = dest_path;                                     \
+  int dest_len = dest_str == NULL ? 0 : strlen(dest_str);         \
+  char* storage = new char[sizeof(*req_wrap) + dest_len];         \
+  req_wrap = new (storage) FSReqWrap(#func);                      \
+  req_wrap->dest_len(dest_len);                                   \
+  if (dest_str != NULL) {                                         \
+    memcpy(const_cast<char*>(req_wrap->dest()),                   \
+           dest_str,                                              \
+           dest_len + 1);                                         \
+  }                                                               \
+  int r = uv_fs_##func(uv_default_loop(),                         \
+                       &req_wrap->req_,                           \
+                       __VA_ARGS__,                               \
+                       After);                                    \
   req_wrap->object_->Set(oncomplete_sym, callback);               \
   req_wrap->Dispatched();                                         \
   if (r < 0) {                                                    \
@@ -234,6 +254,9 @@ struct fs_req_wrap {
     After(req);                                                   \
   }                                                               \
   return scope.Close(req_wrap->object_);
+
+#define ASYNC_CALL(func, callback, ...)                           \
+  ASYNC_DEST_CALL(func, callback, NULL, __VA_ARGS__)              \
 
 #define SYNC_DEST_CALL(func, path, dest, ...)                     \
   fs_req_wrap req_wrap;                                           \
@@ -452,7 +475,7 @@ static Handle<Value> Symlink(const Arguments& args) {
   }
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(symlink, args[3], *dest, *path, flags)
+    ASYNC_DEST_CALL(symlink, args[3], *dest, *dest, *path, flags)
   } else {
     SYNC_DEST_CALL(symlink, *path, *dest, *dest, *path, flags)
     return Undefined();
@@ -472,7 +495,7 @@ static Handle<Value> Link(const Arguments& args) {
   String::Utf8Value new_path(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(link, args[2], *orig_path, *new_path)
+    ASYNC_DEST_CALL(link, args[2], *new_path, *orig_path, *new_path)
   } else {
     SYNC_DEST_CALL(link, *orig_path, *new_path, *orig_path, *new_path)
     return Undefined();
@@ -508,7 +531,7 @@ static Handle<Value> Rename(const Arguments& args) {
   String::Utf8Value new_path(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(rename, args[2], *old_path, *new_path)
+    ASYNC_DEST_CALL(rename, args[2], *new_path, *old_path, *new_path)
   } else {
     SYNC_DEST_CALL(rename, *old_path, *new_path, *old_path, *new_path)
     return Undefined();
