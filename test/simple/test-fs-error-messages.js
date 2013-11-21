@@ -29,7 +29,9 @@ var path = require('path'),
     fs = require('fs'),
     fn = path.join(common.fixturesDir, 'non-existent'),
     existingFile = path.join(common.fixturesDir, 'exit.js'),
-    existingFile2 = path.join(common.fixturesDir, 'create-file.js');
+    existingFile2 = path.join(common.fixturesDir, 'create-file.js'),
+    existingDir = path.join(common.fixturesDir, 'empty'),
+    existingDir2 = path.join(common.fixturesDir, 'keys');
 
 // ASYNC_CALL
 
@@ -60,6 +62,10 @@ fs.unlink(fn, function(err) {
 
 fs.rename(fn, 'foo', function(err) {
   assert.ok(0 <= err.message.indexOf(fn));
+});
+
+fs.rename(existingDir, existingDir2, function(err) {
+  assert.ok(0 <= err.message.indexOf(existingDir2));
 });
 
 fs.rmdir(fn, function(err) {
@@ -141,6 +147,14 @@ try {
 
 try {
   ++expected;
+  fs.linkSync(existingFile, existingFile2);
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf(existingFile2));
+}
+
+try {
+  ++expected;
   fs.unlinkSync(fn);
 } catch (err) {
   errors.push('unlink');
@@ -177,6 +191,14 @@ try {
 } catch (err) {
   errors.push('rename');
   assert.ok(0 <= err.message.indexOf(fn));
+}
+
+try {
+  ++expected;
+  fs.renameSync(existingDir, existingDir2);
+} catch (err) {
+  errors.push('rename');
+  assert.ok(0 <= err.message.indexOf(existingDir2));
 }
 
 try {

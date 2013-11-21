@@ -110,7 +110,10 @@ static void After(uv_fs_t *req) {
       argv[0] = UVException(req->errorno,
                             NULL,
                             req_wrap->syscall());
-    } else if (req->errorno == UV_EEXIST && req_wrap->dest_len() > 0) {
+    } else if ((req->errorno == UV_EEXIST ||
+                req->errorno == UV_ENOTEMPTY ||
+                req->errorno == UV_EPERM) &&
+               req_wrap->dest_len() > 0) {
       argv[0] = UVException(req->errorno,
                             NULL,
                             req_wrap->syscall(),
@@ -263,10 +266,14 @@ struct fs_req_wrap {
                             NULL);                                \
   if (result < 0) {                                               \
     int code = uv_last_error(uv_default_loop()).code;             \
-    if (dest != NULL && code == UV_EEXIST)                        \
+    if (dest != NULL &&                                           \
+        (code == UV_EEXIST ||                                     \
+         code == UV_ENOTEMPTY ||                                  \
+         code == UV_EPERM)) {                                     \
       return ThrowException(UVException(code, #func, "", dest));  \
-    else                                                          \
+    } else {                                                      \
       return ThrowException(UVException(code, #func, "", path));  \
+    }                                                             \
   }                                                               \
 
 #define SYNC_CALL(func, path, ...)                                \
@@ -524,9 +531,9 @@ static Handle<Value> Rename(const Arguments& args) {
   String::Utf8Value new_path(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(rename, args[2], *old_path, *new_path)
+    ASYNC_DEST_CALL(rename, args[2], *new_path, *old_path, *new_path)
   } else {
-    SYNC_CALL(rename, *old_path, *old_path, *new_path)
+    SYNC_DEST_CALL(rename, *old_path, *new_path, *old_path, *new_path)
     return Undefined();
   }
 }
