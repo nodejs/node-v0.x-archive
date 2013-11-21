@@ -36,6 +36,10 @@ Emitted when:
 2. The process could not be killed, or
 3. Sending a message to the child process failed for whatever reason.
 
+Note that after this event has been fired the child process is considered dead
+and no more events will triggered. E.g. if an error occurs the `exit`-event
+will not be triggered.
+
 See also [`ChildProcess#kill()`](#child_process_child_kill_signal) and
 [`ChildProcess#send()`](#child_process_child_send_message_sendhandle).
 
