@@ -125,6 +125,10 @@ automatically set as a listener for the [secureConnection][] event.  The
     `AES128-GCM-SHA256` is used when node.js is linked against OpenSSL 1.0.1
     or newer and the client speaks TLS 1.2, RC4 is used as a secure fallback.
 
+    **NOTE**: Cipher suites using ECDHE, including the default
+    highest-preference suite `ECDHE-RSA-AES128-SHA256`, are not currently
+    available.
+
     **NOTE**: Previous revisions of this section suggested `AES256-SHA` as an
     acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
     susceptible to BEAST attacks. Do *not* use it.
