@@ -121,7 +121,8 @@ if (process.argv[2] === 'child') {
     while (j--) {
       client = net.connect(common.PORT, '127.0.0.1');
       client.on('error', function() {
-        // This can happen if we kill the child too early. The client should still get a close event afterwards.
+        // This can happen if we kill the child too early.
+        // The client should still get a close event afterwards.
         console.error('[m] CLIENT: error event');
       });
       client.on('close', function() {
