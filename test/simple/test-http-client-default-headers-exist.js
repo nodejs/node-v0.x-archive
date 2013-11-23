@@ -40,10 +40,16 @@ var server = http.createServer(function(req, res) {
   assert((req.method in expectedHeaders),
          req.method + ' was an unexpected method');
 
-  Object.keys(req.headers).forEach(function(header) {
-    assert((expectedHeaders[req.method].indexOf(header.toLowerCase()) >= 0),
-           header + ' shoud not exist for method ' + req.method);
-  });
+
+  var validHeadersSeen = Object.keys(req.headers).reduce(function(arr, header) {
+    assert((expectedHeaders[req.method].indexOf(header.toLowerCase()) !== -1),
+           header + ' should not exist for method ' + req.method);
+    arr.push(header);
+    return arr;
+  }, []);
+
+  assert((validHeadersSeen.length === expectedHeaders[req.method].length),
+         'some headers were missing for method: ' + req.method);
 
   if (Object.keys(expectedHeaders).length === requestCount)
     server.close();
