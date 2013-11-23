@@ -31,6 +31,8 @@ var expectedHeaders = {
   'PUT': ['host', 'connection', 'transfer-encoding']
 };
 
+var expectedMethods = Object.keys(expectedHeaders);
+
 var requestCount = 0;
 
 var server = http.createServer(function(req, res) {
@@ -40,23 +42,21 @@ var server = http.createServer(function(req, res) {
   assert((req.method in expectedHeaders),
          req.method + ' was an unexpected method');
 
-
-  var validHeadersSeen = Object.keys(req.headers).reduce(function(arr, header) {
+  var requestHeaders = Object.keys(req.headers);
+  requestHeaders.forEach(function(header) {
     assert((expectedHeaders[req.method].indexOf(header.toLowerCase()) !== -1),
-           header + ' should not exist for method ' + req.method);
-    arr.push(header);
-    return arr;
-  }, []);
+           header + ' shoud not exist for method ' + req.method);
+  });
 
-  assert((validHeadersSeen.length === expectedHeaders[req.method].length),
+  assert((requestHeaders.length === expectedHeaders[req.method].length),
          'some headers were missing for method: ' + req.method);
 
-  if (Object.keys(expectedHeaders).length === requestCount)
+  if (expectedMethods.length === requestCount)
     server.close();
 });
 
 server.listen(common.PORT, function() {
-  Object.keys(expectedHeaders).forEach(function(method) {
+  expectedMethods.forEach(function(method) {
     http.request({
       method: method,
       port: common.PORT
