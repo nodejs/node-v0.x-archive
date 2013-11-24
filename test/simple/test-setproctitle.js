@@ -40,6 +40,17 @@ assert.notEqual(process.title, title);
 process.title = title;
 assert.equal(process.title, title);
 
+var frequentlyErrorStr = null;
+try {
+  for (var i=0; i<100; i++) 
+    process.title = title;
+} 
+catch (e) {
+  frequentlyErrorStr = e.toString();
+}
+console.log(frequentlyErrorStr);
+assert.equal(frequentlyErrorStr, 'Error: You set the process.title so frequently.');
+
 exec('ps -p ' + process.pid + ' -o args=', function(error, stdout, stderr) {
   assert.equal(error, null);
   assert.equal(stderr, '');
