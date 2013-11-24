@@ -2016,13 +2016,20 @@ static Handle<Value> ProcessTitleGetter(Local<String> property,
   return scope.Close(String::New(buffer));
 }
 
-
+static double proc_title_lastTime = 0;
 static void ProcessTitleSetter(Local<String> property,
                                Local<Value> value,
                                const AccessorInfo& info) {
   HandleScope scope;
   String::Utf8Value title(value);
-  // TODO: protect with a lock
+
+  double current;
+  uv_err_t err = uv_uptime(&current);
+  if (err.code == UV_OK && (current - proc_title_lastTime < 1)) {
+    ThrowException(Exception::Error(
+      String::New("You set the process.title so frequently.")));
+  };
+  proc_title_lastTime = current;
   uv_set_process_title(*title);
 }
 
