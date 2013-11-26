@@ -27,6 +27,7 @@
 #include "util.h"
 #include "uv.h"
 #include "v8.h"
+#include "queue.h"
 
 #include <stdint.h>
 
@@ -52,8 +53,8 @@ namespace node {
 // for the sake of convenience.
 #define PER_ISOLATE_STRING_PROPERTIES(V)                                      \
   V(address_string, "address")                                                \
-  V(atime_string, "atime")                                                    \
   V(async_queue_string, "_asyncQueue")                                        \
+  V(atime_string, "atime")                                                    \
   V(birthtime_string, "birthtime")                                            \
   V(blksize_string, "blksize")                                                \
   V(blocks_string, "blocks")                                                  \
@@ -75,9 +76,11 @@ namespace node {
   V(family_string, "family")                                                  \
   V(fatal_exception_string, "_fatalException")                                \
   V(fingerprint_string, "fingerprint")                                        \
+  V(flags_string, "flags")                                                    \
   V(gid_string, "gid")                                                        \
   V(handle_string, "handle")                                                  \
   V(headers_string, "headers")                                                \
+  V(heap_size_limit_string, "heap_size_limit")                                \
   V(heap_total_string, "heapTotal")                                           \
   V(heap_used_string, "heapUsed")                                             \
   V(immediate_callback_string, "_immediateCallback")                          \
@@ -85,6 +88,7 @@ namespace node {
   V(ipv4_string, "IPv4")                                                      \
   V(ipv6_string, "IPv6")                                                      \
   V(issuer_string, "issuer")                                                  \
+  V(mark_sweep_compact_string, "mark-sweep-compact")                          \
   V(method_string, "method")                                                  \
   V(mode_string, "mode")                                                      \
   V(modulus_string, "modulus")                                                \
@@ -111,6 +115,7 @@ namespace node {
   V(rdev_string, "rdev")                                                      \
   V(rename_string, "rename")                                                  \
   V(rss_string, "rss")                                                        \
+  V(scavenge_string, "scavenge")                                              \
   V(servername_string, "servername")                                          \
   V(session_id_string, "sessionId")                                           \
   V(should_keep_alive_string, "shouldKeepAlive")                              \
@@ -121,10 +126,16 @@ namespace node {
   V(subject_string, "subject")                                                \
   V(subjectaltname_string, "subjectaltname")                                  \
   V(syscall_string, "syscall")                                                \
+  V(timestamp_string, "timestamp")                                            \
   V(tls_ticket_string, "tlsTicket")                                           \
+  V(total_heap_size_executable_string, "total_heap_size_executable")          \
+  V(total_heap_size_string, "total_heap_size")                                \
+  V(total_physical_size_string, "total_physical_size")                        \
+  V(type_string, "type")                                                      \
   V(uid_string, "uid")                                                        \
   V(upgrade_string, "upgrade")                                                \
   V(url_string, "url")                                                        \
+  V(used_heap_size_string, "used_heap_size")                                  \
   V(valid_from_string, "valid_from")                                          \
   V(valid_to_string, "valid_to")                                              \
   V(version_major_string, "versionMajor")                                     \
@@ -141,6 +152,7 @@ namespace node {
   V(binding_cache_object, v8::Object)                                         \
   V(buffer_constructor_function, v8::Function)                                \
   V(context, v8::Context)                                                     \
+  V(gc_info_callback_function, v8::Function)                                  \
   V(module_load_list_array, v8::Array)                                        \
   V(pipe_constructor_template, v8::FunctionTemplate)                          \
   V(process_object, v8::Object)                                               \
@@ -227,6 +239,10 @@ class Environment {
   static inline Environment* New(v8::Local<v8::Context> context);
   inline void Dispose();
 
+  // Defined in src/node_profiler.cc.
+  void StartGarbageCollectionTracking(v8::Local<v8::Function> callback);
+  void StopGarbageCollectionTracking();
+
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
   inline bool has_async_listeners() const;
@@ -253,6 +269,9 @@ class Environment {
   inline bool using_smalloc_alloc_cb() const;
   inline void set_using_smalloc_alloc_cb(bool value);
 
+  inline bool cpu_profiler_active() const;
+  inline void set_cpu_profiler_active(bool value);
+
   // Strings are shared across shared contexts. The getters simply proxy to
   // the per-isolate primitive.
 #define V(PropertyName, StringValue)                                          \
@@ -267,10 +286,13 @@ class Environment {
 #undef V
 
  private:
+  class GCInfo;
   class IsolateData;
   inline explicit Environment(v8::Local<v8::Context> context);
   inline ~Environment();
   inline IsolateData* isolate_data() const;
+  void AfterGarbageCollectionCallback(const GCInfo* before,
+                                      const GCInfo* after);
 
   enum ContextEmbedderDataIndex {
     kContextEmbedderDataIndex = NODE_CONTEXT_EMBEDDER_DATA_INDEX
@@ -288,11 +310,32 @@ class Environment {
   ares_channel cares_channel_;
   ares_task_list cares_task_list_;
   bool using_smalloc_alloc_cb_;
+  QUEUE gc_tracker_queue_;
 
 #define V(PropertyName, TypeName)                                             \
   v8::Persistent<TypeName> PropertyName ## _;
   ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)
 #undef V
+
+  class GCInfo {
+   public:
+    inline GCInfo();
+    inline GCInfo(v8::Isolate* isolate,
+                  v8::GCType type,
+                  v8::GCCallbackFlags flags,
+                  uint64_t timestamp);
+    inline v8::GCType type() const;
+    inline v8::GCCallbackFlags flags() const;
+    // TODO(bnoordhuis) Const-ify once https://codereview.chromium.org/63693005
+    // lands and makes it way into a stable release.
+    inline v8::HeapStatistics* stats() const;
+    inline uint64_t timestamp() const;
+   private:
+    v8::GCType type_;
+    v8::GCCallbackFlags flags_;
+    v8::HeapStatistics stats_;
+    uint64_t timestamp_;
+  };
 
   // Per-thread, reference-counted singleton.
   class IsolateData {
@@ -300,6 +343,12 @@ class Environment {
     static inline IsolateData* GetOrCreate(v8::Isolate* isolate);
     inline void Put();
     inline uv_loop_t* event_loop() const;
+    inline bool cpu_profiler_active() const;
+    inline void set_cpu_profiler_active(bool value);
+
+    // Defined in src/node_profiler.cc.
+    void StartGarbageCollectionTracking(Environment* env);
+    void StopGarbageCollectionTracking(Environment* env);
 
 #define V(PropertyName, StringValue)                                          \
     inline v8::Local<v8::String> PropertyName() const;
@@ -307,8 +356,19 @@ class Environment {
 #undef V
 
    private:
+    inline static IsolateData* Get(v8::Isolate* isolate);
     inline explicit IsolateData(v8::Isolate* isolate);
     inline v8::Isolate* isolate() const;
+
+    // Defined in src/node_profiler.cc.
+    static void BeforeGarbageCollection(v8::Isolate* isolate,
+                                        v8::GCType type,
+                                        v8::GCCallbackFlags flags);
+    static void AfterGarbageCollection(v8::Isolate* isolate,
+                                       v8::GCType type,
+                                       v8::GCCallbackFlags flags);
+    void BeforeGarbageCollection(v8::GCType type, v8::GCCallbackFlags flags);
+    void AfterGarbageCollection(v8::GCType type, v8::GCCallbackFlags flags);
 
     uv_loop_t* const event_loop_;
     v8::Isolate* const isolate_;
@@ -319,6 +379,10 @@ class Environment {
 #undef V
 
     unsigned int ref_count_;
+    QUEUE gc_tracker_queue_;
+    GCInfo gc_info_before_;
+    GCInfo gc_info_after_;
+    bool cpu_profiler_active_;
 
     DISALLOW_COPY_AND_ASSIGN(IsolateData);
   };
