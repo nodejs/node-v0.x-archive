@@ -30,11 +30,9 @@ var called;
 assert.ok(process.kill(cat.pid, 0));
 
 cat.on('exit', function() {
-  try {
+  assert.throws(function() {
     process.kill(cat.pid, 0);
-    assert(false, 'cat process should not exist');
-  } catch(er) {
-  }
+  }, Error);
 });
 
 cat.stdout.on('data', function() {
