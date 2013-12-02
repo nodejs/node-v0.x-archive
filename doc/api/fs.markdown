@@ -353,6 +353,9 @@ On Linux, positional writes don't work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
 the end of the file.
 
+Note that on linux writes with specified offset to file
+that is opened in append mode will ignore specified offset.
+
 ## fs.openSync(path, flags, [mode])
 
 Synchronous version of `fs.open()`.
