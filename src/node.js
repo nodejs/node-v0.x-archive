@@ -596,7 +596,10 @@
         if (hasQueue)
           _loadAsyncQueue(tock);
         try {
-          callback();
+          if (!!tock.args)
+            callback.apply(null, tock.args)
+          else
+            callback();
           threw = false;
         } finally {
           if (threw)
@@ -618,7 +621,10 @@
 
       var obj = {
         callback: callback,
-        _asyncQueue: undefined
+        _asyncQueue: undefined,
+        args: arguments.length > 1 ?
+              Array.prototype.slice.call(arguments, 1) :
+              undefined
       };
 
       if (asyncFlags[kCount] > 0)
