@@ -300,6 +300,8 @@
         asyncQueue = asyncStack.pop();
       else
         asyncQueue = [];
+
+      asyncFlags[kCount] = asyncQueue.length;
     }
 
     // Run all the async listeners attached when an asynchronous event is
@@ -342,6 +344,7 @@
 
       asyncStack.push(asyncQueue);
       asyncQueue = queue.slice();
+
       // Since the async listener callback is required, the number of
       // objects in the asyncQueue implies the number of async listeners
       // there are to be processed.
@@ -380,8 +383,6 @@
 
       // Unload the current queue from the stack.
       popQueue();
-
-      asyncFlags[kCount] = asyncQueue.length;
 
       return asyncQueue.length > 0 || asyncStack.length > 0;
     }
@@ -566,6 +567,8 @@
     var kCount = 0;
 
     process.nextTick = nextTick;
+    process._nextTick = _nextTick;
+
     // Needs to be accessible from beyond this scope.
     process._tickCallback = _tickCallback;
 
@@ -612,17 +615,23 @@
     }
 
     function nextTick(callback) {
+      var context = {};
+
+      if (asyncFlags[kCount] > 0)
+        _runAsyncQueue(context);
+
+      _nextTick(callback, context._asyncQueue);
+    }
+
+    function _nextTick(callback, queue) {
       // on the way out, don't bother. it won't get fired anyway.
       if (process._exiting)
         return;
 
       var obj = {
         callback: callback,
-        _asyncQueue: undefined
+        _asyncQueue: queue
       };
-
-      if (asyncFlags[kCount] > 0)
-        _runAsyncQueue(obj);
 
       nextTickQueue.push(obj);
       tickInfo[kLength]++;
