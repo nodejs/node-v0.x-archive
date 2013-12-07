@@ -62,17 +62,31 @@ var server = https.createServer(options, function(req, res) {
 
 
 server.listen(common.PORT, function() {
-  var cmd = 'curl --insecure https://127.0.0.1:' + common.PORT + '/';
-  cmd += ' --cert ' + join(common.fixturesDir, 'foafssl.crt');
-  cmd += ' --key ' + join(common.fixturesDir, 'foafssl.key');
-  console.error('executing %j', cmd);
-  exec(cmd, function(err, stdout, stderr) {
-    if (err) throw err;
-    common.error(common.inspect(stdout));
-    assert.equal(body, stdout);
-    server.close();
+  var clientOpts = {
+    port: common.PORT,
+    method: 'GET',
+    rejectUnauthorized: false,
+    key: fs.readFileSync(join(common.fixturesDir, 'foafssl.key')),
+    cert: fs.readFileSync(join(common.fixturesDir, 'foafssl.crt')),
+  };
+
+  var req = https.request(clientOpts, function(res) {
+    var data = '';
+    res.on('data', function(d) {
+      data+=d;
+    });
+
+    res.on('end', function() {
+      assert.equal(body, data);
+      server.close();
+    });
   });
 
+  req.on('error', function(e) {
+    throw e;
+  });
+
+  req.end();
 });
 
 process.on('exit', function() {
