@@ -31,22 +31,20 @@ var tls = require('tls');
 
 var common = require('../common');
 
-var ciphers = 'NULL-SHA';
 var ended = 0;
 
 var server = tls.createServer({
   key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem'),
-  ciphers: ciphers
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 }, function(c) {
-  // close-notify
-  c.pair.ssl.shutdown();
-  c.pair.ssl.shutdown();
+  // Send close-notify without shutting down TCP socket
+  if (c.pair.ssl.shutdown() !== 1)
+    c.pair.ssl.shutdown();
 }).listen(common.PORT, function() {
   var c = tls.connect(common.PORT, {
-    ciphers: ciphers,
     rejectUnauthorized: false
   }, function() {
+    // Ensure that we receive 'end' event anyway
     c.on('end', function() {
       ended++;
       c.destroy();
