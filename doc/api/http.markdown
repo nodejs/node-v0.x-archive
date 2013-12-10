@@ -330,6 +330,12 @@ Example:
 After response header was sent to the client, this property indicates the
 status code which was sent out.
 
+### response.finished
+
+Default `response.finished = false` , 
+When `response.end()` be executed, `response.finished = true`.
+
+
 ### response.statusMessage
 
 When using implicit headers (not calling `response.writeHead()` explicitly), this property
