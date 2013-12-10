@@ -1175,9 +1175,15 @@ static void ReportException(Handle<Value> er, Handle<Message> message) {
   HandleScope scope(node_isolate);
 
   DisplayExceptionLine(message);
-
-  Local<Value> trace_value(
-      er->ToObject()->Get(FIXED_ONE_BYTE_STRING(node_isolate, "stack")));
+    
+  Local<Value> trace_value;
+    
+  if (er->IsUndefined()) {
+    trace_value = Undefined(node_isolate);
+  } else {
+    trace_value = er->ToObject()->Get(FIXED_ONE_BYTE_STRING(node_isolate, "stack"));
+  }
+ 
   String::Utf8Value trace(trace_value);
 
   // range errors have a trace member set to undefined
