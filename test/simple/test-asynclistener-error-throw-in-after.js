@@ -23,14 +23,13 @@ var common = require('../common');
 var assert = require('assert');
 
 var once = 0;
-function onAsync0() { }
 
 var results = [];
 var handlers = {
-  after: function() {
+  after: function asyncAfter() {
     throw 1;
   },
-  error: function(stor, err) {
+  error: function asyncError(stor, err) {
     // Error handler must be called exactly *once*.
     once++;
     assert.equal(err, 1);
@@ -38,7 +37,7 @@ var handlers = {
   }
 }
 
-var key = process.addAsyncListener(onAsync0, handlers);
+var key = process.addAsyncListener(handlers);
 
 var uncaughtFired = false;
 process.on('uncaughtException', function(err) {
