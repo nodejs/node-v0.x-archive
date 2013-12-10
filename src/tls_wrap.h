@@ -137,6 +137,10 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   bool established_;
   bool shutdown_;
 
+  // If true - delivered EOF to the js-land, either after `close_notify`, or
+  // after the `UV_EOF` on socket.
+  bool eof_;
+
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   v8::Persistent<v8::Value> sni_context_;
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
