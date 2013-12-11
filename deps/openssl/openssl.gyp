@@ -1027,9 +1027,6 @@
               '-lcrypt32.lib',
               '-luser32.lib',
             ],
-            'defines': [
-              'OPENSSL_SYS_MSDOS',
-            ]
           },
         }]
       ]
