@@ -63,14 +63,14 @@ var server = https.createServer(options, function(req, res) {
 server.listen(common.PORT, function() {
   var args = ['s_client',
               '-quiet',
-              '-connect', 'localhost:' + common.PORT,
+              '-connect', '127.0.0.1:' + common.PORT,
               '-cert', join(common.fixturesDir, 'foafssl.crt'),
               '-key', join(common.fixturesDir, 'foafssl.key')];
 
   var client = spawn(common.opensslCli, args);
 
   client.stdout.on('data', function(data) {
-    var message = '' + data;
+    var message = data.toString();
     var contents = message.split(CRLF + CRLF).pop();
     assert.equal(body, contents);
     server.close();
