@@ -1017,6 +1017,17 @@
             '-lsocket',
             '-lnsl',
           ]
+        }],
+        ['OS=="win"', {
+          'link_settings': {
+            'libraries': [
+              '-lws2_32.lib',
+              '-lgdi32.lib',
+              '-ladvapi32.lib',
+              '-lcrypt32.lib',
+              '-luser32.lib',
+            ]
+          },
         }]
       ]
     }
@@ -1051,7 +1062,6 @@
           'MK1MF_BUILD',
           'WIN32_LEAN_AND_MEAN',
           'OPENSSL_SYSNAME_WIN32',
-          'OPENSSL_SYS_WIN32',
         ],
       }, {
         'defines': [
