@@ -29,7 +29,6 @@ var assert = require('assert');
 var join = require('path').join;
 
 var fs = require('fs');
-
 var spawn = require('child_process').spawn;
 var https = require('https');
 
@@ -64,15 +63,15 @@ var server = https.createServer(options, function(req, res) {
 server.listen(common.PORT, function() {
   var args = ['s_client',
               '-quiet',
-              '-connect', 'localhost:'+common.PORT,
+              '-connect', 'localhost:' + common.PORT,
               '-cert', join(common.fixturesDir, 'foafssl.crt'),
               '-key', join(common.fixturesDir, 'foafssl.key')];
 
   var client = spawn(common.opensslCli, args);
 
-  client.stdout.on('data', function (data) {
+  client.stdout.on('data', function(data) {
     var message = '' + data;
-    var contents = message.split(CRLF+CRLF).pop();
+    var contents = message.split(CRLF + CRLF).pop();
     assert.equal(body, contents);
     server.close();
   });
