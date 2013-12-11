@@ -1026,6 +1026,9 @@
               '-ladvapi32.lib',
               '-lcrypt32.lib',
               '-luser32.lib',
+            ],
+            'defines': [
+              'OPENSSL_SYS_MSDOS',
             ]
           },
         }]
